@@ -1,0 +1,108 @@
+{
+  "id": "t01-fluid-toy",
+  "cycle": 11,
+  "auditedWith": "t02-fractal-toy (one auditor covered both; guards below are shared where noted)",
+  "guards": [
+    {
+      "script": "npm run smoke:fluid-toy",
+      "pass": true,
+      "falsified": true,
+      "note": "Renamed the interiorDamp param in fluid-toy/features/coupling.ts. RED: 'loadPreset roundtrip mismatch on cp_damp: expected 0.7 got 0'. Reverted. ENGINE_URL defaults to /fluid-toy.html."
+    },
+    {
+      "script": "npm run smoke:fluid-presets",
+      "pass": true,
+      "falsified": true,
+      "note": "Removed the bloomAmount dispatch from fluid-toy/presets/apply.ts. RED: 'Coral Gyre apply mismatch on bloom: expected 1.35 got 0'. Reverted."
+    },
+    {
+      "script": "npm run smoke:fluid-brush",
+      "pass": true,
+      "falsified": true,
+      "note": "WAS RED AT BASELINE on a clean tree (delta 0.41 vs threshold 5) — see finding 1. After the repair: green 6/6, and falsified twice — removing paintSplat from BOTH emitStrokeSplat and emitPressSplat gave delta 1.78 (red); removing it from emitStrokeSplat only gave delta 5.2, which the old threshold of 5 waved through and the new threshold of 40 catches (delta 7.55, red)."
+    },
+    {
+      "script": "npm run smoke:migrations",
+      "pass": true,
+      "falsified": true,
+      "note": "Not previously cited by the rule but defaults to /fluid-toy.html and is the only cover for fluid-toy/migrations.ts. Deleted the fluidSim.interiorDamp -> coupling.interiorDamp moveField. RED: 'coupling_interiorDamp expected 0.7, got 0.59'. Reverted. Now cited."
+    },
+    {
+      "script": "npm run smoke:pause-controls",
+      "pass": true,
+      "falsified": false,
+      "note": "Defaults to /fluid-toy.html but every assertion is on @engine/topbar/PauseControls — the sibling-app-guard trap. NOT cited as a fluid-toy guard; recorded in the rule as a boot canary. Also rewrites the tracked debug/fluid-pause-hover.png (restored with git checkout)."
+    },
+    {
+      "script": "npm run check:rule-guards",
+      "pass": false,
+      "falsified": false,
+      "note": "Same 4 pre-existing miscitations (3 deep-zoom smokes + test:bucket-convergence), none in this area, none re-reported. Re-run after the rule edit: no new issues, so smoke:migrations does resolve into sibling-apps.md's scoped import graph."
+    },
+    { "script": "npm run typecheck", "pass": true, "falsified": false, "note": "Exit 0 after every applied change; the pre-commit hook enforced it on the two TS-staging commits." },
+    { "script": "npm run orphans", "pass": true, "falsified": false, "note": "One unused file repo-wide (debug/render-harness.ts), not in either tree. No orphans in fluid-toy/." }
+  ],
+  "findings": [
+    {
+      "tier": "A", "severity": "high",
+      "file": "debug/smoke-fluid-brush.mts", "line": 68,
+      "summary": "smoke:fluid-brush — one of the three guards .claude/rules/sibling-apps.md cited for fluid-toy — could not pass, and its redness had been written off in the README as Chromium GPU flake.",
+      "change": "Step 2 now does what <FluidToggleButton/> does on click (setFluidSim({paused:false}) + setComposite({show:0})) before dragging. Header records the prerequisite with grep targets.",
+      "verification": "fluid-toy boots as a pure fractal explorer: `paused` defaults true (fluid-toy/features/fluidSim.ts) and composite's showParam has defaultIndex 1 = 'julia', fractal-only (features/composite.ts), so the dye buffer the brush writes is never composited. Measured on a clean tree: delta 0.41 against a threshold of 5. After the fix: 6/6 green at delta 187-206. Falsified by removing the paintSplat calls from emitStrokeSplat and emitPressSplat — red at delta 1.78 — then reverted.",
+      "guard": "npm run smoke:fluid-brush", "guardPass": true, "commit": "5f91de70"
+    },
+    {
+      "tier": "A", "severity": "medium",
+      "file": "debug/smoke-fluid-brush.mts", "line": 20,
+      "summary": "With the guard repaired, its `< 5` pixel threshold was still too loose to catch the regression it exists for.",
+      "change": "Both pixel assertions now use a named MIN_PAINT_DELTA = 40, with the calibration recorded beside it.",
+      "verification": "Removing paintSplat from emitStrokeSplat ONLY (leaving the pointer-down emitPressSplat mark alive) scored delta 5.2 and PASSED the old test. The same break under the new threshold scores 7.55 and goes red. Healthy runs measured 162-206 across 5 runs, so 40 sits ~4x under the observed floor and ~8x over the one-splat floor.",
+      "guard": "npm run smoke:fluid-brush", "guardPass": true, "commit": "1db5c5c5"
+    },
+    {
+      "tier": "A", "severity": "medium",
+      "file": "fluid-toy/CODE_MAP.md", "line": 95,
+      "summary": "CODE_MAP — a doc whose stated purpose is 'find any file without grep' — indexed eight files that live in engine/fractal/deepZoom/, and omitted bucket/ plus seven other files entirely.",
+      "change": "Deep-zoom section rewritten to say the pipeline moved (and why: shared with gradient-explorer, not forked), listing what is actually left (two re-export shims + diagnostics + benchmark). Added bucket/FluidBucketController.ts, five components, RenderDialog/exportRunner.ts, FluidPointerLayer.tsx and setup.ts, each described from its own file header.",
+      "verification": "Link-resolution probe over every ](path) in the file: 8 bad before, 0 after. A second probe diffs `git ls-files fluid-toy` against the document text — the only remaining unmentioned files are the ten under features/, which the doc covers collectively by design. The move confirmed by reading the re-export shims fluid-toy/deepZoom/dd.ts and laRuntime.ts.",
+      "guard": "link-resolution + git-ls-files coverage probe (node -e)", "guardPass": true, "commit": "e6b64c28"
+    },
+    {
+      "tier": "A", "severity": "medium",
+      "file": "fluid-toy/README.md", "line": 9,
+      "summary": "README cited a deleted reference tree, the moved deep-zoom pipeline, and listed smoke:orbit — which boots app-gmt.html — as a fluid-toy check.",
+      "change": "toy-fluid link replaced with the archaeology recipe that works; deepZoom tree listing corrected; smoke:orbit dropped and smoke:migrations added; the 'FLAKY — Chromium GPU watchdog' label on smoke:fluid-brush removed (it was red, not flaky); bucket/ and five components added; three line-count claims refreshed.",
+      "verification": "`git log --oneline --all -- toy-fluid` shows deletion at 50547f46 and `git show 50547f46^:toy-fluid/presets.ts` returns content, so the recipe is checked. `grep -n ENGINE_URL debug/smoke-orbit.mts` -> app-gmt.html; debug/smoke-migrations.mts -> fluid-toy.html, and smoke:migrations run green. Link probe: 2 bad before, 0 after; coverage probe: zero unmentioned files.",
+      "guard": "npm run smoke:migrations + link-resolution probe", "guardPass": true, "commit": "ca799f1b"
+    },
+    {
+      "tier": "A", "severity": "medium",
+      "file": ".claude/rules/sibling-apps.md", "line": 39,
+      "summary": "The governing rule's fluid-toy guard row omitted smoke:migrations, said nothing about which guards had ever been falsified, and did not warn that fluid-toy's pure-fractal boot makes naive pixel assertions impossible.",
+      "change": "smoke:migrations added to the fluid-toy row; both rows record this cycle's falsifications; smoke:orbit named as explicitly NOT a fluid-toy guard; smoke:pause-controls labelled a boot canary with its tracked-PNG side effect noted; a new warning block names the two boot defaults with grep targets.",
+      "verification": "check:rule-guards re-run after the edit: the same 4 pre-existing miscitations elsewhere, zero new ones — so smoke:migrations genuinely resolves into this rule's scoped import graph. smoke:migrations falsified by deleting one moveField (red, reverted). smoke:pause-controls' assertion targets read straight out of its source. Link probe over the rule: 0 bad.",
+      "guard": "npm run check:rule-guards + npm run smoke:migrations", "guardPass": true, "commit": "42aac0ba"
+    },
+    {
+      "tier": "A", "severity": "medium",
+      "file": "fluid-toy/presets/apply.ts", "line": 5,
+      "summary": "Eleven JSDoc citations across both toy trees no longer resolve; the worst has two files in the same folder telling opposite stories about where the preset data comes from.",
+      "change": "apply.ts's 'the reference toy-fluid/presets.ts still ships in the engine repo... we import its Preset data directly' replaced with what actually happens (deleted in 50547f46; the import three lines below reads ./data.ts). 'the 7 curated presets' corrected to 10 with a grep target in both features/presets.ts and components/PresetGrid.tsx. Six bare paths repointed, each off by one directory segment. The two surviving toy-fluid mentions are deliberate history and now carry the git show recipe.",
+      "verification": "Found and re-checked by a scan of every comment line in both trees for <dir>/<file>.ts-shaped tokens tested against the filesystem: 13 hits before, 2 after (both intentional). Preset count from `grep -c \"^        id: '\" fluid-toy/presets/data.ts` = 10, and PresetGrid maps PRESETS unfiltered. Deletion confirmed by git log/git show. typecheck, smoke:fluid-toy, smoke:fluid-presets, smoke:fractal-toy all exit 0.",
+      "guard": "npm run typecheck + smoke:fluid-toy + smoke:fluid-presets + smoke:fractal-toy", "guardPass": true, "commit": "49193d34"
+    },
+    {
+      "tier": "B", "severity": "low",
+      "file": "debug/helpers/webglHarness.ts", "line": 73,
+      "summary": "The shared WebGL harness's top-of-file JSDoc documents launch flags and a noWaitAfter policy that its own code does not use.",
+      "rationale": "CLAIM: the header block lists '--disable-gpu -> force SwiftShader, --use-gl=swiftshader, --enable-webgl, --disable-dev-shm-usage, --no-sandbox' as the launch args. EVIDENCE: chromium.launch() actually passes only --disable-gpu-sandbox, --disable-blink-features=AutomationControlled and --disable-features=IsolateOrigins,site-per-process, and the comment immediately above it says the opposite of the header ('SwiftShader turned out to boot far too slowly... default to hardware WebGL'). Separately the header's failure-mode 1 says 'always pass { noWaitAfter: true } on mouse.down/up', but dragPath passes neither. OPTIONS: (a) delete the stale list from the header and keep the accurate inline comment as the single source; (b) additionally add noWaitAfter to dragPath's down/up to match the documented policy — but that is a behaviour change to every smoke that drags, and the harness is currently reliable, so it wants a deliberate decision. RECOMMENDATION: (a) only. Left for the owner because the file is shared debug infrastructure outside t01/t02 and another auditor may have been in it. Note the mislabelling in fluid-toy's README ('FLAKY — Chromium GPU watchdog') is downstream of this header's authority; that half is already fixed."
+    },
+    {
+      "tier": "B", "severity": "low",
+      "file": "plans/context-protocol/subsystems.json", "line": 1,
+      "summary": "`npm run context:cost -- t01-fluid-toy` and `-- t02-fractal-toy` both report their entire Layer 2 as a single glob at 0 tokens, so the load plan they emit is docs-only and cannot scope source reading.",
+      "rationale": "CLAIM: for both subsystems the Layer 2 table contains one row, fluid-toy/* (resp. fractal-toy/*), costed at 0 tokens, and the footer therefore reads 'Cheap path is 100% of the full path' — i.e. the tool tells you the source is free and that you need not read it. EVIDENCE: the two command outputs, plus 76 tracked files in fluid-toy/ and 14 in fractal-toy/ (FluidEngine.ts alone is 2106 lines). Every other subsystem enumerates real files with real costs. The likely cause is that context-map.json keys on concrete paths and the glob never matched, which also explains the stale-map warning both invocations print. OPTIONS: (a) expand the two subsystems' entries into explicit file lists like the other subsystems; (b) teach context-cost.mjs to expand globs against the map and fail loudly on a zero-cost Layer 2 rather than printing it as a result; (c) leave it and rely on CODE_MAP.md, which is now accurate. RECOMMENDATION: (b) — a zero-token 'source of truth' layer is indistinguishable from a correct answer, which is the same failure class as a guard that cannot fail. Not applied: it is in the context-protocol tooling, not in either app, and `npm run context:map` (which would also refresh the tree-wide stale map) is a cross-cutting rebuild that should not run unattended."
+    }
+  ],
+  "notes": "Branch audit/overnight-2026-07-27 throughout; nothing pushed, main never touched, no file deleted, no agent spawned, no ADR edited (the only ADR reference in either tree, @see docs/adr/0065 in fluid-toy/useDeepZoomOrbit.ts, resolves). Every falsification edit was reverted with a targeted Edit and verified gone (grep -rn AUDIT-FALSIFY over both trees plus debug/ returns nothing). debug/fluid-pause-hover.png was rewritten by smoke:pause-controls and restored with git checkout. Effort split roughly 2/3 fluid-toy.\n\nNot re-reported per instructions: the four check:rule-guards miscitations outside this area; the smoke:orbit-in-fluid-toy-README item already queued as cycle-7 housekeeping (fixed rather than re-reported); the smoke:pause-controls tracked-PNG side effect already queued in cycle 2 (recorded in the rule so it is discoverable at the point of use).\n\nSELF-FLAGGED INACCURACY: commit dfbfc3c4's message says fluid-toy has 74 files; `git ls-files fluid-toy | wc -l` is 76. Code and doc changes in that commit are unaffected — it is a number in a commit body only, not amended rather than churn history.\n\nCARRY INTO THE GUARD SWEEP: fluid-toy's pure-fractal boot (paused + Fractal-only) silently kills any pixel assertion, and it had already caused one guard to be written off as GPU flake for long enough to reach the README. Any other smoke that boots fluid-toy.html and measures pixels is suspect for the same reason. NUL-byte scan over all 90 tracked files in both toy trees: clean."
+}

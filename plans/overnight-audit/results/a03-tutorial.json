@@ -1,0 +1,64 @@
+{
+  "id": "a03-tutorial",
+  "cycle": 11,
+  "provenance": "RECONSTRUCTED FROM COMMITS. The auditor's return JSON was lost when the orchestrator turn ended before the cycle was closed out. The three findings below are re-derived from the commit messages of 2df9ffcb, 50d18282 and 4f220b46, each of which states its own verification inline. Any Tier B or Tier V findings this auditor returned are LOST and are not represented here — treat this subsystem's non-applied surface as uncovered.",
+  "guards": [
+    {
+      "script": "npm run smoke:undo",
+      "pass": true,
+      "falsified": true,
+      "note": "BLIND TO THIS SUBSYSTEM. It is the only guard cited by .claude/rules/engine-plugins.md whose entry graph (app-gmt.html) reaches app-gmt/tutorial/**. Falsified by inverting the built-in `bool` trigger's comparator in engine/plugins/tutorial/triggers.ts (=== to !==): smoke:undo stayed fully green, 20/20 checks, 'no page errors (0)'. Reverted; git diff confirmed byte-identical. This is a 13th instance of the blind-guard class and check:rule-guards does NOT report it — engine-plugins.md scopes many files and smoke:undo reaches some of them, which is exactly the rule-granularity blind spot the gx01 auditor proved independently in debug/check-rule-guards.mjs the same cycle."
+    },
+    {
+      "script": "grep -rln tutorial debug/*.mts",
+      "pass": true,
+      "falsified": false,
+      "note": "No harness drives the tutorial at all. The only matches are Fragmentarium 'Tutorials/' corpus paths inside the frag-importer tests. This subsystem has zero runtime coverage."
+    },
+    {
+      "script": "npm run typecheck",
+      "pass": true,
+      "falsified": false,
+      "note": "Green after every applied change; enforced by the pre-commit hook on all three commits."
+    }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/tutorial/types.ts",
+      "line": null,
+      "summary": "Five separate false claims across the tutorial plugin's own JSDoc headers, including two that point apps at a `tutor` facade object that does not exist anywhere in the tree.",
+      "change": "Corrected all five: triggers.ts's 'nine generic kinds' (there are TEN, and `action` is built-in, not app-registered — app-gmt registers only `tab` + `mode`); types.ts's `tutor.registerTrigger(...)` -> the real `tutorTriggers.register(...)`; tutorial/lessons.ts's `tutor.registerLessons` -> the free `registerLesson` / `registerLessons`; Overlay.tsx's `positionTarget` placement field, collapsed long ago into the `position: PositionConfig` object; Tutorial.tsx crediting setTutorialStorageKey with appending the `-tutorials` suffix, when uiSlice assigns the key verbatim and installTutorial appends at the call site.",
+      "verification": "Each claim re-derived by grep against the tree. `registerBuiltinTriggers()` registers ten kinds (value, bool, delta, compound, or, keypress, keypress_all, delay, action, manual). `grep -rn registerTrigger` hits nothing but the comment being removed — no such symbol and no `tutor` object. `grep -rn positionTarget` finds only the port note and the stale header. typecheck green (comments only, no emit change).",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "2df9ffcb"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/tutorial/runner.ts",
+      "line": null,
+      "summary": "The runner's header claimed 'on step exit / unmount it cleans up timers + listeners and runs step.onExit'. Only the first half is true, and only on one of four paths — on unmount neither onExit nor the cleanup runs, leaking the active trigger's keydown listeners and timers.",
+      "change": "Header corrected to state the real teardown matrix per path. Documented rather than changed: altering when teardown fires is a behaviour decision, not a doc repair.",
+      "verification": "Traced all four effects. step->step is the only onExit call site (`grep -n onExit runner.ts` = two hits, both in that block). Lesson end: the entry effect bails at `if (!step) return`, the end-of-lesson effect calls completeTutorial(), the deactivation effect fires cleanupRef only — no onExit. skipTutorial takes the same deactivation path. Unmount: the entry effect's returned cleanup is a deliberate no-op and the deactivation effect returns nothing, so neither runs. Both are LATENT, not live: `grep -n onExit app-gmt/tutorial/lessons.ts` is empty, and AppGmt.tsx mounts <TutorialRunner /> unconditionally at the app root so it never unmounts.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "50d18282"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "engine/plugins/tutorial/runner.ts",
+      "line": null,
+      "summary": "All eight @invariant annotations in this subsystem name no command that would go red if they were false, so per CLAUDE.md they are assumptions, not invariants.",
+      "change": "All eight downgraded to @assumption, text byte-identical — only the marker changes. Sites: lessons.ts (seedMandelbulb needs a populated registry; lesson-2 chain detection), anchors.ts (get() returns first non-zero-rect entry), runner.ts (advancingRef cleared in a queueMicrotask; the step-entry effect's cleanup is an empty body; autoStartLesson chains completeTutorial + a 300ms setTimeout), triggers.ts (valuesEqual recurses with a key-count guard; delta snapshots go through JSON round-trip).",
+      "verification": "All eight checked against the code first and all eight are currently TRUE — this is a downgrade of evidence, not a correction of content. Unprovability established two ways: no harness drives the tutorial (`grep -rln tutorial debug/*.mts` matches only frag-importer corpus paths), and the one cited guard that reaches these files, smoke:undo, was falsified directly by inverting the `bool` trigger comparator and stayed green 20/20. Reverted; typecheck green.",
+      "guard": "npm run smoke:undo (falsification — proved it CANNOT fail here)",
+      "guardPass": true,
+      "commit": "4f220b46"
+    }
+  ],
+  "notes": "Cross-check worth carrying forward: this subsystem's blind-guard finding (smoke:undo cannot fail on tutorial behaviour, yet check:rule-guards reports engine-plugins.md as clean) is independently corroborated by the gx01 auditor's falsification of debug/check-rule-guards.mjs, which proved the checker matches guards against a rule's ENTIRE paths: set. Two auditors reached the same structural conclusion from opposite ends of the tree in the same cycle. See the cycle-11 entry in PROPOSALS.md."
+}

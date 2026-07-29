@@ -31,7 +31,7 @@
   .tile .v { font-family:var(--mono); font-size:1.55rem; font-weight:600; letter-spacing:-.02em; line-height:1.15; }
   .tile .k { color:var(--dim); font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; margin-top:.25rem; }
   .bar { height:5px; background:var(--line); border-radius:2px; overflow:hidden; margin:0 0 1.5rem; }
-  .bar > i { display:block; height:100%; width:85%; background:var(--accent); }
+  .bar > i { display:block; height:100%; width:97%; background:var(--accent); }
   /* Per-cycle progress through the night — endpoint emphasised, like a sparkline. */
   .cycles { display:flex; align-items:flex-end; gap:3px; height:38px; margin:0 0 1.75rem; }
   .cyc { flex:1; min-width:4px; background:var(--line); border-radius:1px; position:relative; }
@@ -73,29 +73,29 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Complete &middot; 10 cycles &middot; branch <code>audit/overnight-2026-07-27</code> &middot; 2026-07-28T06:19:39.023Z</p>
-  <p class="note" style="margin-top:-.4rem">owner ended the run (morning); 5 subsystems left unaudited</p>
+  <p class="sub">Running &middot; cycle 11 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; 2026-07-29T06:25:00.000Z</p>
+  
 
   <div class="tiles">
-    <div class="tile"><div class="v">28/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">158</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">103</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">91 self-verified &middot; 12 verifier-confirmed</span></div></div>
+    <div class="tile"><div class="v">32/33</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">183</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">123</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">111 self-verified &middot; 12 verifier-confirmed</span></div></div>
     <div class="tile"><div class="v" style="color:var(--warn)">16</div><div class="k">sent to a verifier</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">49</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">140<span style="font-size:.6em;color:var(--dim)">/141</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">54</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">158<span style="font-size:.6em;color:var(--dim)">/162</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:38%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:42%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 11 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:58%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:96%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:100%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:73%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:69%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:35%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:54%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:38%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:42%"></i></div><div class="cyc" title="cycle 11: 25 findings"><i style="height:96%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 12 cycles</p>
 
-  <section><h2>Guards failing <span class="count">1</span></h2>
+  <section><h2>Guards failing <span class="count">4</span></h2>
     <p class="note">Run these yourself before trusting anything downstream of them.</p>
-    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article>
+    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article><article class="finding sev-high"><header><code>npm run smoke:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gx-fractal-glitch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev"></span></header><p class="what">failed</p></article>
   </section>
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">91</span></h2>
+    <h2>Applied — self-verified <span class="count">111</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -476,6 +476,62 @@
     <p class="commit">commit <code>fb866b0d</code></p>
     
   </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">gradient-explorer/GradientExplorerApp.tsx:9</code>
+    </header>
+    <p class="what">The app-frame's top-of-file JSDoc — the layer CLAUDE.md calls freshest and most-trusted — carried two claims the same file disproves.</p>
+    <p class="change"><strong>Changed:</strong> Rewrote the header. Says only bootEngine is absent, states that EngineBridge + RenderLoopDriver ARE mounted and why, and replaces the dead 'first cut' paragraph with the real layout (mode panels dock right, Favients left, mobile branch below MOBILE_BREAKPOINT).</p>
+    <p class="verify"><strong>How it was verified:</strong> Claim 1 ('the heavy bootEngine / RenderLoop / EngineBridge path is intentionally absent'): the same file imports and renders &lt;EngineBridge /&gt; and &lt;RenderLoopDriver /&gt; ~300 lines down under a comment saying so, and .claude/rules/tick-and-animation.md independently lists gradient-explorer as one of the three RenderLoopDriver hosts. Claim 2 ('the Quality-Filters panel docks left and renders the QualityRangePad pads... Mode content is placeholder'): grep -rn QualityRangePad returns ONLY the JSDoc line being removed — no implementation exists anywhere; setup.ts docks all three mode panels dock:'right' and Favients dock:'left'; all three stages are real components this file imports.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>4d3b492e</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">gradient-explorer/fullscreen/modeRegistry.ts:13</code>
+    </header>
+    <p class="what">The fullscreen mode-seam contract listed three `kind`s when the type declares four, omitting the only one anything actually uses.</p>
+    <p class="change"><strong>Changed:</strong> Documented all four FullscreenModeKinds. Added 'cpuField' (what the geometry modes use), marked 'cpuRaster' as having zero consumers with a pointer to cpuField, corrected the glQuad and ownCanvas consumer lists, added @see modes/index.ts as the ground truth for registration.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep -rn &quot;kind: '&quot; gradient-explorer/fullscreen/modes/ returns cpuField (geometryModes), glQuad (splineMode), ownCanvas x3 (fractal/liquify/parallax) and NO cpuRaster anywhere. The header said cpuRaster was 'the 6 geometry modes' — wrong kind and wrong count; geometryModes.tsx builds four. grep -rn splitscreen returns only two comment mentions — never built. Liquify and Parallax, called 'future' here, both ship. Consequence, not cosmetic: a new mode author following this list picks the pre-quantising kind and loses the dither's banding recovery.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>c5b00e7e</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">.claude/rules/sibling-apps.md:35</code>
+    </header>
+    <p class="what">The gradient-explorer guard row omitted the only fast guard in the area, presented a 23%-flaky smoke as solid, and relied on a checker that structurally cannot police it.</p>
+    <p class="change"><strong>Changed:</strong> Cited npx tsx debug/test-liquify-mesh.mts as the fastest real guard for the liquify soft body; added a measured flakiness warning on smoke:liquify with the three failure strings so a red run is not mistaken for a regression; documented that check:rule-guards cannot verify per-row citations in a five-app rule.</p>
+    <p class="verify"><strong>How it was verified:</strong> Guard citation falsified before writing it (see the test-liquify-mesh guard entry). Flake rate measured over 13 consecutive clean runs. Checker blind spot falsified by injecting smoke:fluid-toy into the GX row — output unchanged. Self-correction recorded: the first form of this commit cited npm run test:palette and pushed the shared check:rule-guards baseline from 4 issues to 5, because the checker walks only a chained script's first command; 32dfd7fd re-cites the test module directly and the baseline was re-verified back at exactly 4.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d3e6ef2f, 32dfd7fd</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">debug/smoke-fluid-brush.mts:68</code>
+    </header>
+    <p class="what">smoke:fluid-brush — one of the three guards .claude/rules/sibling-apps.md cited for fluid-toy — could not pass, and its redness had been written off in the README as Chromium GPU flake.</p>
+    <p class="change"><strong>Changed:</strong> Step 2 now does what &lt;FluidToggleButton/&gt; does on click (setFluidSim({paused:false}) + setComposite({show:0})) before dragging. Header records the prerequisite with grep targets.</p>
+    <p class="verify"><strong>How it was verified:</strong> fluid-toy boots as a pure fractal explorer: `paused` defaults true (fluid-toy/features/fluidSim.ts) and composite's showParam has defaultIndex 1 = 'julia', fractal-only (features/composite.ts), so the dye buffer the brush writes is never composited. Measured on a clean tree: delta 0.41 against a threshold of 5. After the fix: 6/6 green at delta 187-206. Falsified by removing the paintSplat calls from emitStrokeSplat and emitPressSplat — red at delta 1.78 — then reverted.</p>
+    <p class="guard"><code>npm run smoke:fluid-brush</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>5f91de70</code></p>
+    
+  </article>
   <article class="finding sev-medium">
     <header>
       <span class="badge tA">A</span>
@@ -488,6 +544,48 @@
     <p class="verify"><strong>How it was verified:</strong> Grep-proved dead, then the replacement proved live. smoke-interact.mts:9 defaults to localhost:3400/demo.html; demo.html:69 loads /index.tsx; grep for app-gmt|engine-gmt in index.tsx returns nothing. smoke-engine-gmt.mts:19 defaults to app-gmt.html which loads /app-gmt/main.tsx, and it was run and passed. NOTE — the brief's own premise that smoke:boot points at the engine demo was checked and is now STALE: index.html at the repo root loads /app-gmt/main.tsx ('Canonical root = the GMT app'), so smoke:boot does cover app-gmt and was retained rather than dropped.</p>
     <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>df6d52fb</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>a03-tutorial</code>
+      <code class="file">engine/plugins/tutorial/types.ts</code>
+    </header>
+    <p class="what">Five separate false claims across the tutorial plugin's own JSDoc headers, including two that point apps at a `tutor` facade object that does not exist anywhere in the tree.</p>
+    <p class="change"><strong>Changed:</strong> Corrected all five: triggers.ts's 'nine generic kinds' (there are TEN, and `action` is built-in, not app-registered — app-gmt registers only `tab` + `mode`); types.ts's `tutor.registerTrigger(...)` -&gt; the real `tutorTriggers.register(...)`; tutorial/lessons.ts's `tutor.registerLessons` -&gt; the free `registerLesson` / `registerLessons`; Overlay.tsx's `positionTarget` placement field, collapsed long ago into the `position: PositionConfig` object; Tutorial.tsx crediting setTutorialStorageKey with appending the `-tutorials` suffix, when uiSlice assigns the key verbatim and installTutorial appends at the call site.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each claim re-derived by grep against the tree. `registerBuiltinTriggers()` registers ten kinds (value, bool, delta, compound, or, keypress, keypress_all, delay, action, manual). `grep -rn registerTrigger` hits nothing but the comment being removed — no such symbol and no `tutor` object. `grep -rn positionTarget` finds only the port note and the stale header. typecheck green (comments only, no emit change).</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>2df9ffcb</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>a03-tutorial</code>
+      <code class="file">engine/plugins/tutorial/runner.ts</code>
+    </header>
+    <p class="what">The runner's header claimed 'on step exit / unmount it cleans up timers + listeners and runs step.onExit'. Only the first half is true, and only on one of four paths — on unmount neither onExit nor the cleanup runs, leaking the active trigger's keydown listeners and timers.</p>
+    <p class="change"><strong>Changed:</strong> Header corrected to state the real teardown matrix per path. Documented rather than changed: altering when teardown fires is a behaviour decision, not a doc repair.</p>
+    <p class="verify"><strong>How it was verified:</strong> Traced all four effects. step-&gt;step is the only onExit call site (`grep -n onExit runner.ts` = two hits, both in that block). Lesson end: the entry effect bails at `if (!step) return`, the end-of-lesson effect calls completeTutorial(), the deactivation effect fires cleanupRef only — no onExit. skipTutorial takes the same deactivation path. Unmount: the entry effect's returned cleanup is a deliberate no-op and the deactivation effect returns nothing, so neither runs. Both are LATENT, not live: `grep -n onExit app-gmt/tutorial/lessons.ts` is empty, and AppGmt.tsx mounts &lt;TutorialRunner /&gt; unconditionally at the app root so it never unmounts.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>50d18282</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>a03-tutorial</code>
+      <code class="file">engine/plugins/tutorial/runner.ts</code>
+    </header>
+    <p class="what">All eight @invariant annotations in this subsystem name no command that would go red if they were false, so per CLAUDE.md they are assumptions, not invariants.</p>
+    <p class="change"><strong>Changed:</strong> All eight downgraded to @assumption, text byte-identical — only the marker changes. Sites: lessons.ts (seedMandelbulb needs a populated registry; lesson-2 chain detection), anchors.ts (get() returns first non-zero-rect entry), runner.ts (advancingRef cleared in a queueMicrotask; the step-entry effect's cleanup is an empty body; autoStartLesson chains completeTutorial + a 300ms setTimeout), triggers.ts (valuesEqual recurses with a key-count guard; delta snapshots go through JSON round-trip).</p>
+    <p class="verify"><strong>How it was verified:</strong> All eight checked against the code first and all eight are currently TRUE — this is a downgrade of evidence, not a correction of content. Unprovability established two ways: no harness drives the tutorial (`grep -rln tutorial debug/*.mts` matches only frag-importer corpus paths), and the one cited guard that reaches these files, smoke:undo, was falsified directly by inverting the `bool` trigger comparator and stayed green 20/20. Reverted; typecheck green.</p>
+    <p class="guard"><code>npm run smoke:undo (falsification — proved it CANNOT fail here)</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>4f220b46</code></p>
     
   </article>
   <article class="finding sev-medium">
@@ -1092,6 +1190,160 @@
     <p class="commit">commit <code>641e9289</code></p>
     
   </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">gradient-explorer/fullscreen/modeRegistry.ts:34</code>
+    </header>
+    <p class="what">Zero greppable annotations existed anywhere in this 29-file tree, while this file's four 'FROZEN' contracts sat in prose — invisible to the `grep -r @assumption` worklist.</p>
+    <p class="change"><strong>Changed:</strong> Annotated all four as @assumption (not @invariant — none can name a command that goes red), and stated that plainly in the section header. Also corrected an over-claim made one commit earlier about the purity pin.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep -rn '@invariant|@assumption|@bug|@stale' gradient-explorer/ returned 0 hits across all 29 files before; 5 after. The over-claim correction is the substantive half: debug/test-palette-rampgeometry.mts calls renderGeometry(ramp, g.id, P, W, H) in palette/core DIRECTLY with no mode object in scope, so it pins sampleGeometry and covers today's geometry modes only because geometryModes.tsx builds `field` as a bare delegation. A new mode whose own field body used Math.random would pass that harness untouched — so 'cpuField is pinned' is false as a general contract, and the annotation now says exactly what is and is not covered.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>cf18208d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">docs/modules/gradient-explorer/app.md:45</code>
+    </header>
+    <p class="what">All 17 ../../engine/NN_*.md links in the GX entry doc were dead — the docs reorg moved those files under docs/history/ and this file was not swept.</p>
+    <p class="change"><strong>Changed:</strong> Repointed to ../../history/engine/. Text otherwise untouched.</p>
+    <p class="verify"><strong>How it was verified:</strong> Enumerated every relative link and stat'd each target: 10 of 18 distinct targets dead before, 18 of 18 OK after. These links carry the entire 'Engine concepts these reference' column of the where-to-start table, so the doc's only route out to engine context was broken.</p>
+    <p class="guard"><code>link enumeration + stat (test -e over every extracted href)</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>826c3460</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">docs/modules/gradient-explorer/app.md:24</code>
+    </header>
+    <p class="what">Four claims in the GX entry doc are contradicted by source files the doc itself links to, including one where the doc contradicts itself 100 lines apart.</p>
+    <p class="change"><strong>Changed:</strong> Corrected: (1) the bootEngine/RenderLoop/EngineBridge sentence, which its own 'Deliberately NOT installed' paragraph already refuted; (2) 'Six files' — the directory holds 29, and the entire fullscreen/ surface was undescribed; (3) the Favients 'Palettes' browse action, which registerFeatures.ts deliberately leaves unset, plus the gen-a/gen-b move into the send-target registry; (4) four persistence calls setup.ts no longer makes.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each by grep against the cited source: RenderLoopDriver/EngineBridge rendered in GradientExplorerApp.tsx; find gradient-explorer -type f = 29; registerFeatures.ts's standing comment says the browse action is host-gated OFF and setFavientSelectMode(true) drops the legacy apply targets, while gradientTargets.ts holds r('gen-a', ...) / r('gen-b', ...); mountFavientsPanel is setup.ts's only persistence call and the four old names now appear only inside palette/installFavients.ts. Frontmatter `audited` / `last_verified_sha` left untouched deliberately — this corrected named claims, it was not a full re-audit.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>50d18282 (MIS-ATTRIBUTED — swept into the a03-tutorial auditor's commit; see notes)</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">.claude/rules/sibling-apps.md:21</code>
+    </header>
+    <p class="what">The rule's entry-doc table pointed at docs/modules/gradient-explorer/index.md, which has never existed; the directory holds app.md.</p>
+    <p class="change"><strong>Changed:</strong> Repointed to app.md.</p>
+    <p class="verify"><strong>How it was verified:</strong> Stat'd every relative link in the rule: 1 of 6 dead before, 6 of 6 OK after. The other four rows resolve, so the dead one read as coverage rather than as an obvious gap.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>6ea73527</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">debug/smoke-fluid-brush.mts:20</code>
+    </header>
+    <p class="what">With the guard repaired, its `&lt; 5` pixel threshold was still too loose to catch the regression it exists for.</p>
+    <p class="change"><strong>Changed:</strong> Both pixel assertions now use a named MIN_PAINT_DELTA = 40, with the calibration recorded beside it.</p>
+    <p class="verify"><strong>How it was verified:</strong> Removing paintSplat from emitStrokeSplat ONLY (leaving the pointer-down emitPressSplat mark alive) scored delta 5.2 and PASSED the old test. The same break under the new threshold scores 7.55 and goes red. Healthy runs measured 162-206 across 5 runs, so 40 sits ~4x under the observed floor and ~8x over the one-splat floor.</p>
+    <p class="guard"><code>npm run smoke:fluid-brush</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>1db5c5c5</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">fluid-toy/CODE_MAP.md:95</code>
+    </header>
+    <p class="what">CODE_MAP — a doc whose stated purpose is 'find any file without grep' — indexed eight files that live in engine/fractal/deepZoom/, and omitted bucket/ plus seven other files entirely.</p>
+    <p class="change"><strong>Changed:</strong> Deep-zoom section rewritten to say the pipeline moved (and why: shared with gradient-explorer, not forked), listing what is actually left (two re-export shims + diagnostics + benchmark). Added bucket/FluidBucketController.ts, five components, RenderDialog/exportRunner.ts, FluidPointerLayer.tsx and setup.ts, each described from its own file header.</p>
+    <p class="verify"><strong>How it was verified:</strong> Link-resolution probe over every ](path) in the file: 8 bad before, 0 after. A second probe diffs `git ls-files fluid-toy` against the document text — the only remaining unmentioned files are the ten under features/, which the doc covers collectively by design. The move confirmed by reading the re-export shims fluid-toy/deepZoom/dd.ts and laRuntime.ts.</p>
+    <p class="guard"><code>link-resolution + git-ls-files coverage probe (node -e)</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>e6b64c28</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">fluid-toy/README.md:9</code>
+    </header>
+    <p class="what">README cited a deleted reference tree, the moved deep-zoom pipeline, and listed smoke:orbit — which boots app-gmt.html — as a fluid-toy check.</p>
+    <p class="change"><strong>Changed:</strong> toy-fluid link replaced with the archaeology recipe that works; deepZoom tree listing corrected; smoke:orbit dropped and smoke:migrations added; the 'FLAKY — Chromium GPU watchdog' label on smoke:fluid-brush removed (it was red, not flaky); bucket/ and five components added; three line-count claims refreshed.</p>
+    <p class="verify"><strong>How it was verified:</strong> `git log --oneline --all -- toy-fluid` shows deletion at 50547f46 and `git show 50547f46^:toy-fluid/presets.ts` returns content, so the recipe is checked. `grep -n ENGINE_URL debug/smoke-orbit.mts` -&gt; app-gmt.html; debug/smoke-migrations.mts -&gt; fluid-toy.html, and smoke:migrations run green. Link probe: 2 bad before, 0 after; coverage probe: zero unmentioned files.</p>
+    <p class="guard"><code>npm run smoke:migrations + link-resolution probe</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ca799f1b</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">.claude/rules/sibling-apps.md:39</code>
+    </header>
+    <p class="what">The governing rule's fluid-toy guard row omitted smoke:migrations, said nothing about which guards had ever been falsified, and did not warn that fluid-toy's pure-fractal boot makes naive pixel assertions impossible.</p>
+    <p class="change"><strong>Changed:</strong> smoke:migrations added to the fluid-toy row; both rows record this cycle's falsifications; smoke:orbit named as explicitly NOT a fluid-toy guard; smoke:pause-controls labelled a boot canary with its tracked-PNG side effect noted; a new warning block names the two boot defaults with grep targets.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards re-run after the edit: the same 4 pre-existing miscitations elsewhere, zero new ones — so smoke:migrations genuinely resolves into this rule's scoped import graph. smoke:migrations falsified by deleting one moveField (red, reverted). smoke:pause-controls' assertion targets read straight out of its source. Link probe over the rule: 0 bad.</p>
+    <p class="guard"><code>npm run check:rule-guards + npm run smoke:migrations</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>42aac0ba</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">fluid-toy/presets/apply.ts:5</code>
+    </header>
+    <p class="what">Eleven JSDoc citations across both toy trees no longer resolve; the worst has two files in the same folder telling opposite stories about where the preset data comes from.</p>
+    <p class="change"><strong>Changed:</strong> apply.ts's 'the reference toy-fluid/presets.ts still ships in the engine repo... we import its Preset data directly' replaced with what actually happens (deleted in 50547f46; the import three lines below reads ./data.ts). 'the 7 curated presets' corrected to 10 with a grep target in both features/presets.ts and components/PresetGrid.tsx. Six bare paths repointed, each off by one directory segment. The two surviving toy-fluid mentions are deliberate history and now carry the git show recipe.</p>
+    <p class="verify"><strong>How it was verified:</strong> Found and re-checked by a scan of every comment line in both trees for &lt;dir&gt;/&lt;file&gt;.ts-shaped tokens tested against the filesystem: 13 hits before, 2 after (both intentional). Preset count from `grep -c &quot;^        id: '&quot; fluid-toy/presets/data.ts` = 10, and PresetGrid maps PRESETS unfiltered. Deletion confirmed by git log/git show. typecheck, smoke:fluid-toy, smoke:fluid-presets, smoke:fractal-toy all exit 0.</p>
+    <p class="guard"><code>npm run typecheck + smoke:fluid-toy + smoke:fluid-presets + smoke:fractal-toy</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>49193d34</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t02-fractal-toy</code>
+      <code class="file">docs/modules/fractal-toy/index.md:19</code>
+    </header>
+    <p class="what">The fractal-toy overview described a 'minimal 2D fractal demo (Mandelbrot, Julia)'. fractal-toy is a 3D raymarcher (Mandelbulb + Mandelbox, 4-DOF orbit camera, directional light + AO). Both toy overviews also credited the engine's RenderLoopDriver with driving their frames.</p>
+    <p class="change"><strong>Changed:</strong> Opening line rewritten to describe the real app, plus how formulas reach DDFS via registerFormula rather than featureRegistry. Both files' architecture lines corrected to name the actual frame owner. Both archive links given the missing history/ path segment.</p>
+    <p class="verify"><strong>How it was verified:</strong> Case-insensitive grep for mandelbrot|julia|2d over fractal-toy/ returns three hits, all prose in renderer/formulas/mandelbulb.ts explaining the Mandelbulb is the 3D extension OF the Mandelbrot set. `grep -rn RenderLoop fractal-toy/` returns nothing — FractalEngine owns its own requestAnimationFrame and calls viewport.frameTick() via onFrameEnd. `grep -rn TickRegistry fluid-toy/` also returns nothing, so 'fluidSim.ts advances the sim via TickRegistry' was wrong on both halves; useFluidEngine.ts owns the RAF. Link probe: 1 bad each before, 0 after.</p>
+    <p class="guard"><code>grep-proof + link-resolution probe</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>aa31c663</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>t02-fractal-toy</code>
+      <code class="file">fractal-toy/main.tsx:4</code>
+    </header>
+    <p class="what">Two dead doc citations, an @invariant that was a pointer rather than a provable claim, and a smoke header stating a default URL that contradicts its own code.</p>
+    <p class="change"><strong>Changed:</strong> docs/01_Architecture.md and docs/03_Plugin_Contract.md repointed to docs/history/engine/. The @invariant rewritten to name smoke:fractal-toy and the assertion string that would go red, per CLAUDE.md. 'the future toy-fluid port' corrected — it shipped. debug/smoke-fractal-toy.mts's header no longer claims it defaults to the main engine.</p>
+    <p class="verify"><strong>How it was verified:</strong> `ls docs/01_Architecture.md docs/03_Plugin_Contract.md` — both absent, both present under docs/history/engine/. The ENGINE_URL default read directly off the smoke's source (fractal-toy.html). The invariant's proof falsified this cycle by no-op'ing the LightingFeature registration: red with 'lighting slice missing'. typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:fractal-toy</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dfbfc3c4</code></p>
+    
+  </article>
   <article class="finding sev-low">
     <header>
       <span class="badge tA">A</span>
@@ -1372,6 +1624,34 @@
     <p class="commit">commit <code>4d982fff</code></p>
     
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">gradient-explorer/TopBarButtons.tsx:4</code>
+    </header>
+    <p class="what">The header said 'Two left-slot affordances' and documented two; the file exports three, and the undocumented one is the one another rule sends readers here to see.</p>
+    <p class="change"><strong>Changed:</strong> Documented all three, including FpsCounterDesktopOnly's right-slot registration and why main.tsx must topbar.unregister('fps') first.</p>
+    <p class="verify"><strong>How it was verified:</strong> main.tsx registers BackToGmtButton and FavientsTopBarButton at slot:'left' and FpsCounterDesktopOnly at slot:'right', order:-10, preceded by unregister('adaptive') and unregister('fps'). .claude/rules/engine-plugins.md cites this exact pair as the worked example of 'slot registries key by id GLOBALLY, not per slot' — so the export the rule points at was the one the header omitted.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b3db870d</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">gradient-explorer/fractalHandoff.ts:15</code>
+    </header>
+    <p class="what">An @see cited fullscreen/modes/fractalMode.ts; the module is .tsx and .ts has never existed.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the extension.</p>
+    <p class="verify"><strong>How it was verified:</strong> ls .../fractalMode.ts — no such file; fractalMode.tsx exists and exports getActiveFractalCoords. Stat'd every @see &lt;path&gt; in the tree — this was the only full repo-relative citation that fails to resolve. Eight others are sibling- or subtree-relative and do resolve from their own directory; left alone, but the mixed base is worth a convention pass some day.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b653a3ab</code></p>
+    
+  </article>
   </section>
   
   <section>
@@ -1605,7 +1885,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">49</span></h2>
+    <h2>Awaiting your judgement <span class="count">54</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -1663,6 +1943,20 @@
     
     
     <p class="rationale">See PROPOSALS.md. Independently corroborated by the verifier, which confirmed the scalar comes from X alone and that BaseVectorInput is linked-by-default but user-unlinkable. Mitigating: DEFAULT_BBOX_SIZE is [3,3,3] and autoFitBounds forces a cube, so the default and auto-fit paths never trip it.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">debug/smoke-gx-liquify-render.mts:36</code>
+    </header>
+    <p class="what">smoke:liquify fails ~23% of runs on an unmodified tree, at three different assertions — so it cannot distinguish a regression from its own noise.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: 3 failures in 13 consecutive clean runs at HEAD — '[1] liquify canvas missing', '[3] grab handle did not change the render', '[4] physics frame went blank'. EVIDENCE: every green run produces byte-identical numbers (push delta 3.77, grab delta 21.03, physics variety 51), so the underlying render is deterministic and the variance is in timing, not math. The smoke uses one-shot waitForTimeouts before every readback and has NEITHER the dep-optimize retry loop NOR the Vite dual-instance detector that its sibling smoke-gx-geom-handles.mts carries — and gx-handles was 13/13 clean here and goes red on a real break. preserveDrawingBuffer is true on both the liquify and compositor contexts, so this is not the classic WebGL readback race. OPTIONS: (a) port the retry loop + dual-instance guard from smoke-gx-geom-handles.mts and replace fixed waits with polling until the signature stabilises — cheap, and the sibling is a proven template; (b) treat '[4] physics frame went blank' as a possible real liquify divergence and instrument it before touching the smoke — the LiquifyMesh unit test asserts finiteness and boundedness over 600 frames and passes, which argues against a blowup but does not cover the GL display path; (c) leave it and rely on re-running. RECOMMENDATION: (a), escalating to (b) only if a hardened smoke still goes blank. Not applied because a guard rewrite is unreviewed code and there was no way to run enough post-change trials on a tree two other auditors were editing to beat a 23% baseline statistically. The flakiness IS now documented in .claude/rules/sibling-apps.md so nobody reads a red run as a regression in the meantime.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -1971,6 +2265,34 @@
     <p class="guard"><code>npm run test:frag:integration</code> <span class="ok">passed</span></p>
     
     <p class="rationale">See PROPOSALS.md. Spot-checked by an independent verifier, which confirmed both hard-stale rows by hand (Experimental/Knot.frag now errors provides_color; kosalos/KIFS.frag now errors no_de_function — both error KINDS matching), enumerated all 21 hidden ids and confirmed every one parses today, and confirmed the picker filter at FormulaWorkshop.tsx:450 and :511. It judged the probe's methodology sound, specifically its asymmetry: only the catalog-says-pass-but-errors-now direction is called 'hard', the reverse is 'candidate'. One correction: the 21 are hidden BY DEFAULT, not unreachable — a showIncompatible toggle reveals them.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">debug/check-rule-guards.mjs:1</code>
+    </header>
+    <p class="what">Two structural blind spots in the guard-citation checker, both found by falsification, both invisible from its output.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM 1 — rule-granularity: it matches guards against a rule's ENTIRE paths: set, so in a multi-app rule any guard touching any one app satisfies every row. Proved by moving npm run smoke:fluid-toy into sibling-apps.md's gradient-explorer row: output identical, still 4 issues. That rule scopes five apps and its own prose warns 'running a fluid-toy smoke proves nothing about mesh-export' — precisely the class it cannot see. CLAIM 2 — chained scripts: it resolves an npm script by its FIRST command only. test:palette is sixteen tsx invocations joined by &amp;&amp;; citing it produced a FALSE 5th issue naming debug/test-palette-stopfit.mts, having never reached debug/test-liquify-mesh.mts, the link that does cover the rule's files. OPTIONS: (a) split multi-app rules into one rule per app so path-granularity matches citation-granularity; (b) teach the checker to parse guards per table row / per section heading; (c) teach it to union the reachable sets of every &amp;&amp;-joined command in a script — small, and strictly removes false positives; (d) leave it and hand-check. RECOMMENDATION: (c) first (cheapest, removes a false-positive class outright), then (b). This is the run's own guard-health tooling and outside this subsystem, so nothing was changed in it — only sibling-apps.md now states the limitation. CORROBORATED INDEPENDENTLY: the a03-tutorial auditor falsified smoke:undo against engine/plugins/tutorial/triggers.ts the same cycle and found it cannot fail there, while check:rule-guards reports engine-plugins.md as clean — the same blind spot, reached from the opposite end of the tree.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gx01-gradient-explorer</code>
+      <code class="file">debug/smoke-gx-fractal-glitch.mts:25</code>
+    </header>
+    <p class="what">The sole guard for ADR-0065/0066 deep-zoom glitch-freedom is filed under gradient-explorer and could not be baselined; the rule that owns deep zoom cites three smokes that check:rule-guards says cannot fail.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: grep -rn gx-fractal-glitch .claude/rules/ returns exactly one hit — sibling-apps.md's gradient-explorer row. It genuinely reaches gradient-explorer code (boots gradient-explorer.html, mounts the fullscreen overlay, drives fullscreen/modes/fractalMode.tsx as an ownCanvas mode), so the citation is defensible. But its ASSERTIONS are entirely deep-zoom contracts — LA-on vs LA-off central colour distribution, auto-reference relocation, ADR-0066 periodic-nucleus adoption — and gmt-formulas-and-graph.md, which owns that area, does not cite it, while the three deep-zoom smokes it does cite are 3 of the 4 miscitations check:rule-guards reports. EVIDENCE on health: two attempts, both killed at the third view by a Vite full-reload from concurrent auditors; every assertion reached passed. OPTIONS: (a) also cite it from gmt-formulas-and-graph.md so a deep-zoom change surfaces the one guard that tests deep zoom — additive, no risk; (b) leave it and let the deep-zoom rule's citations get fixed independently. RECOMMENDATION: (a), and give this smoke a quiet tree in the guard sweep — it needs ~8 uninterrupted minutes and is the only ADR-0065/0066 coverage in the repo. Not applied because gmt-formulas-and-graph.md belongs to another subsystem and its four known miscitations were explicitly out of remit.</p>
   </article>
   <article class="finding sev-low">
     <header>
@@ -2300,6 +2622,34 @@ WHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a s
     <p class="commit">commit <code>fb866b0d</code></p>
     <p class="rationale">See PROPOSALS.md. TENTH instance of the miscited-guard pattern this run, and a stricter variant: not merely scoped wrong but structurally incapable of failing. The cycle-6 g03 result that lists guard: test:frag:scan / guardPass: true should be read as having no guard.</p>
   </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">debug/helpers/webglHarness.ts:73</code>
+    </header>
+    <p class="what">The shared WebGL harness's top-of-file JSDoc documents launch flags and a noWaitAfter policy that its own code does not use.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: the header block lists '--disable-gpu -&gt; force SwiftShader, --use-gl=swiftshader, --enable-webgl, --disable-dev-shm-usage, --no-sandbox' as the launch args. EVIDENCE: chromium.launch() actually passes only --disable-gpu-sandbox, --disable-blink-features=AutomationControlled and --disable-features=IsolateOrigins,site-per-process, and the comment immediately above it says the opposite of the header ('SwiftShader turned out to boot far too slowly... default to hardware WebGL'). Separately the header's failure-mode 1 says 'always pass { noWaitAfter: true } on mouse.down/up', but dragPath passes neither. OPTIONS: (a) delete the stale list from the header and keep the accurate inline comment as the single source; (b) additionally add noWaitAfter to dragPath's down/up to match the documented policy — but that is a behaviour change to every smoke that drags, and the harness is currently reliable, so it wants a deliberate decision. RECOMMENDATION: (a) only. Left for the owner because the file is shared debug infrastructure outside t01/t02 and another auditor may have been in it. Note the mislabelling in fluid-toy's README ('FLAKY — Chromium GPU watchdog') is downstream of this header's authority; that half is already fixed.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>t01-fluid-toy</code>
+      <code class="file">plans/context-protocol/subsystems.json:1</code>
+    </header>
+    <p class="what">`npm run context:cost -- t01-fluid-toy` and `-- t02-fractal-toy` both report their entire Layer 2 as a single glob at 0 tokens, so the load plan they emit is docs-only and cannot scope source reading.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: for both subsystems the Layer 2 table contains one row, fluid-toy/* (resp. fractal-toy/*), costed at 0 tokens, and the footer therefore reads 'Cheap path is 100% of the full path' — i.e. the tool tells you the source is free and that you need not read it. EVIDENCE: the two command outputs, plus 76 tracked files in fluid-toy/ and 14 in fractal-toy/ (FluidEngine.ts alone is 2106 lines). Every other subsystem enumerates real files with real costs. The likely cause is that context-map.json keys on concrete paths and the glob never matched, which also explains the stale-map warning both invocations print. OPTIONS: (a) expand the two subsystems' entries into explicit file lists like the other subsystems; (b) teach context-cost.mjs to expand globs against the map and fail loudly on a zero-cost Layer 2 rather than printing it as a result; (c) leave it and rely on CODE_MAP.md, which is now accurate. RECOMMENDATION: (b) — a zero-token 'source of truth' layer is indistinguishable from a correct answer, which is the same failure class as a guard that cannot fail. Not applied: it is in the context-protocol tooling, not in either app, and `npm run context:map` (which would also refresh the tree-wide stale map) is a cross-cutting rebuild that should not run unattended.</p>
+  </article>
   </section>
 
   <h2>Subsystems</h2>
@@ -2586,45 +2936,45 @@ WHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a s
     <td class="num prop">1</td>
     <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>a03-tutorial</code></td>
     <td>app-gmt</td>
     <td class="area">Tutorial overlay</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">3</td>
+    <td class="num applied">3</td>
     <td class="num esc">0</td>
     <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>gx01-gradient-explorer</code></td>
     <td>sibling-app</td>
     <td class="area">Gradient Explorer app shell (boot, picker stage, top bar) — consumes palette suite</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">12</td>
+    <td class="num applied">9</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">3</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>t01-fluid-toy</code></td>
     <td>sibling-app</td>
     <td class="area">fluid-toy sibling app</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">8</td>
+    <td class="num applied">6</td>
     <td class="num esc">0</td>
-    <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="num prop">2</td>
+    <td class="st">done</td>
   </tr>
-  <tr class="s-pending">
+  <tr class="s-done">
     <td><code>t02-fractal-toy</code></td>
     <td>sibling-app</td>
     <td class="area">fractal-toy sibling app</td>
-    <td class="num">0</td>
-    <td class="num applied">0</td>
+    <td class="num">2</td>
+    <td class="num applied">2</td>
     <td class="num esc">0</td>
     <td class="num prop">0</td>
-    <td class="st">pending</td>
+    <td class="st">done</td>
   </tr>
   <tr class="s-pending">
     <td><code>p01-palette-suite</code></td>

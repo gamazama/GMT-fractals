@@ -1,6 +1,6 @@
 {
   "started": "2026-07-28T22:34:48.988Z",
-  "cycle": 0,
+  "cycle": 11,
   "maxCycles": 24,
   "batchSize": 3,
   "maxConcurrentAgents": 3,
@@ -9,14 +9,14 @@
   "dashboardUrl": "https://claude.ai/code/artifact/d81d57c1-3384-4880-93e5-a89722063efe",
   "dashboardFile": "plans/overnight-audit/dashboard.html",
   "stopped": false,
-  "lastDashboard": "2026-07-28T06:19:39.023Z",
+  "lastDashboard": "2026-07-29T06:25:00.000Z",
   "plan": "max-subscription",
   "windowResets": [
     "2026-07-27T20:50:00Z",
     "2026-07-28T01:50:00Z",
     "2026-07-28T06:50:00Z"
   ],
-  "note": "RUN 2. Run 1 (2026-07-27) covered 28/33 subsystems in 10 cycles; its findings are in results/ and PROPOSALS.md — do NOT re-derive them. Five subsystems remain pending and are the priority. Protocol changed since run 1: ADRs are editable again (additive-only, hook classifies), check:rule-guards exists, a pre-commit hook typechecks every TS commit, and @invariant must name its proof or be downgraded to @assumption. Guard health is now step 0 of every subsystem, not an incidental find.",
+  "note": "RUN 2. Cycle 11 closed 4 of the 5 remaining subsystems (a03-tutorial, gx01-gradient-explorer, t01-fluid-toy, t02-fractal-toy). Only p01-palette-suite (61 files) remains on the worklist and wants a cycle of its own. After that the work is the cross-cutting sweeps listed at the bottom of PROTOCOL.md, in priority order: the full guard falsification sweep, the @invariant -> @assumption sweep, check:rule-guards follow-through, and the NUL-byte scan. Cycle 11 raised the priority of the first two: three separate falsifications this cycle found guards that could not fail, including the checker meant to catch that.",
   "dashboardPublish": false,
   "run": 2
 }

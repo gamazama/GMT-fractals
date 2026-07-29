@@ -1,0 +1,34 @@
+{
+  "id": "t02-fractal-toy",
+  "cycle": 11,
+  "auditedWith": "t01-fluid-toy (one auditor covered both; the full guard table lives in t01-fluid-toy.json)",
+  "guards": [
+    {
+      "script": "npm run smoke:fractal-toy",
+      "pass": true,
+      "falsified": true,
+      "note": "Replaced featureRegistry.register(LightingFeature) in fractal-toy/registerFeatures.ts with a no-op. RED: 'lighting slice missing'. Reverted. ENGINE_URL defaults to /fractal-toy.html."
+    },
+    { "script": "npm run typecheck", "pass": true, "falsified": false, "note": "Exit 0 after every applied change; enforced by the pre-commit hook." },
+    { "script": "npm run orphans", "pass": true, "falsified": false, "note": "No orphans in fractal-toy/." }
+  ],
+  "findings": [
+    {
+      "tier": "A", "severity": "medium",
+      "file": "docs/modules/fractal-toy/index.md", "line": 19,
+      "summary": "The fractal-toy overview described a 'minimal 2D fractal demo (Mandelbrot, Julia)'. fractal-toy is a 3D raymarcher (Mandelbulb + Mandelbox, 4-DOF orbit camera, directional light + AO). Both toy overviews also credited the engine's RenderLoopDriver with driving their frames.",
+      "change": "Opening line rewritten to describe the real app, plus how formulas reach DDFS via registerFormula rather than featureRegistry. Both files' architecture lines corrected to name the actual frame owner. Both archive links given the missing history/ path segment.",
+      "verification": "Case-insensitive grep for mandelbrot|julia|2d over fractal-toy/ returns three hits, all prose in renderer/formulas/mandelbulb.ts explaining the Mandelbulb is the 3D extension OF the Mandelbrot set. `grep -rn RenderLoop fractal-toy/` returns nothing — FractalEngine owns its own requestAnimationFrame and calls viewport.frameTick() via onFrameEnd. `grep -rn TickRegistry fluid-toy/` also returns nothing, so 'fluidSim.ts advances the sim via TickRegistry' was wrong on both halves; useFluidEngine.ts owns the RAF. Link probe: 1 bad each before, 0 after.",
+      "guard": "grep-proof + link-resolution probe", "guardPass": true, "commit": "aa31c663"
+    },
+    {
+      "tier": "A", "severity": "medium",
+      "file": "fractal-toy/main.tsx", "line": 4,
+      "summary": "Two dead doc citations, an @invariant that was a pointer rather than a provable claim, and a smoke header stating a default URL that contradicts its own code.",
+      "change": "docs/01_Architecture.md and docs/03_Plugin_Contract.md repointed to docs/history/engine/. The @invariant rewritten to name smoke:fractal-toy and the assertion string that would go red, per CLAUDE.md. 'the future toy-fluid port' corrected — it shipped. debug/smoke-fractal-toy.mts's header no longer claims it defaults to the main engine.",
+      "verification": "`ls docs/01_Architecture.md docs/03_Plugin_Contract.md` — both absent, both present under docs/history/engine/. The ENGINE_URL default read directly off the smoke's source (fractal-toy.html). The invariant's proof falsified this cycle by no-op'ing the LightingFeature registration: red with 'lighting slice missing'. typecheck exit 0.",
+      "guard": "npm run smoke:fractal-toy", "guardPass": true, "commit": "dfbfc3c4"
+    }
+  ],
+  "notes": "Smallest subsystem in the worklist and genuinely covered: 14 tracked files, all read. Its one guard was falsified and is healthy. Note this is the only sibling app whose @invariant now names its proof command — the pattern CLAUDE.md asks for, written out concretely, and worth copying when the @invariant -> @assumption sweep runs across the other 152 files. NUL-byte scan clean."
+}

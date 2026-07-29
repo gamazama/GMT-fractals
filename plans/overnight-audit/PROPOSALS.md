@@ -2252,3 +2252,168 @@ picks it up does not re-derive the scope from scratch.
 
 Verify any eventual fix by exporting a deliberately non-cubic box and measuring it
 in a DCC tool — that is the only check available in this tree.
+
+---
+
+# Cycle 11 — a03-tutorial · gx01-gradient-explorer · t01-fluid-toy · t02-fractal-toy
+
+Four subsystems closed; only `p01-palette-suite` remains on the worklist. 20 Tier A
+commits, 0 Tier V (nothing needed the verifier step this cycle), 5 Tier B below.
+
+## HIGH — `smoke:liquify` fails ~23% of runs on an unmodified tree
+
+_(cycle 11 · `debug/smoke-gx-liquify-render.mts`)_
+
+3 failures in 13 consecutive runs at HEAD, at **three different assertions** —
+`[1] liquify canvas missing`, `[3] grab handle did not change the render`,
+`[4] physics frame went blank`. A guard with that false-red rate cannot distinguish
+a regression from its own noise, so it was not falsified: **that is the finding.**
+
+Every green run produces byte-identical numbers (push delta 3.77, grab delta 21.03,
+variety 51), so the render is deterministic and the variance is timing, not math.
+The smoke uses one-shot `waitForTimeout`s before every readback and has **neither
+the dep-optimize retry loop nor the Vite dual-instance detector** its sibling
+`smoke-gx-geom-handles.mts` carries — and that sibling went 13/13 clean here and
+goes red on a real break. `preserveDrawingBuffer` is true on both contexts, so this
+is not the classic WebGL readback race.
+
+- **(a)** Port the retry loop + dual-instance guard from `smoke-gx-geom-handles.mts`
+  and replace fixed waits with polling until the signature stabilises. Cheap, and
+  the sibling is a proven template.
+- **(b)** Treat `[4] physics frame went blank` as a possible real liquify
+  divergence and instrument before touching the smoke. The `LiquifyMesh` unit test
+  asserts finiteness and boundedness over 600 frames and passes, which argues
+  against a blowup but does not cover the GL display path.
+- **(c)** Leave it and re-run on red.
+
+**Recommendation: (a)**, escalating to (b) only if a hardened smoke still goes
+blank. Not applied because a guard rewrite is unreviewed code and there was no way
+to beat a 23% baseline statistically on a tree two other auditors were editing. The
+flakiness **is** now recorded in `.claude/rules/sibling-apps.md` so a red run is not
+misread as a regression in the meantime.
+
+## MEDIUM — `check:rule-guards` has two structural blind spots, both proved by falsification
+
+_(cycle 11 · `debug/check-rule-guards.mjs`)_
+
+This is the run's own guard-health tooling, so it matters more than its size.
+
+**Blind spot 1 — rule granularity.** It matches guards against a rule's **entire**
+`paths:` set, so in a multi-app rule any guard touching any one app satisfies every
+row. Proved by moving `npm run smoke:fluid-toy` into `sibling-apps.md`'s
+*gradient-explorer* row and re-running: output **identical**, still exactly 4
+issues. That rule scopes five apps and its own prose warns *"running a fluid-toy
+smoke proves nothing about mesh-export"* — precisely the class it cannot see.
+
+**Blind spot 2 — chained scripts.** It resolves an npm script by its **first**
+command only. `test:palette` is sixteen `tsx` invocations joined by `&&`; citing it
+produced a **false 5th issue** naming `debug/test-palette-stopfit.mts`, having never
+reached `debug/test-liquify-mesh.mts` — the link that does cover the rule's files.
+
+**Independently corroborated the same cycle, from the opposite end of the tree.**
+The a03-tutorial auditor falsified `smoke:undo` against
+`engine/plugins/tutorial/triggers.ts` — inverting the built-in `bool` trigger's
+comparator left it fully green, 20/20 — while `check:rule-guards` reports
+`engine-plugins.md` as clean. Blind spot 1, seen live. That is a **13th** instance
+of the blind-guard class, and the first one the mechanical checker actively hid.
+
+- **(a)** Split multi-app rules into one rule per app so path-granularity matches
+  citation-granularity.
+- **(b)** Teach the checker to parse guards per table row / per section heading.
+- **(c)** Teach it to union the reachable sets of every `&&`-joined command.
+- **(d)** Leave it, hand-check.
+
+**Recommendation: (c) first** — smallest change, and it strictly removes a
+false-positive class — **then (b)**, which is what actually closes blind spot 1.
+Nothing in the checker was changed; only `sibling-apps.md` now states the limitation.
+
+## MEDIUM — the only ADR-0065/0066 guard in the repo is filed under the wrong subsystem
+
+_(cycle 11 · `debug/smoke-gx-fractal-glitch.mts`)_
+
+`grep -rn gx-fractal-glitch .claude/rules/` returns exactly one hit:
+`sibling-apps.md`'s gradient-explorer row. The citation is *defensible* — it does
+boot `gradient-explorer.html` and drive `fullscreen/modes/fractalMode.tsx`. But its
+**assertions are entirely deep-zoom contracts**: LA-on vs LA-off central colour
+distribution, auto-reference relocation, ADR-0066 periodic-nucleus adoption.
+
+Meanwhile `gmt-formulas-and-graph.md`, which owns deep zoom, does **not** cite it —
+and the three deep-zoom smokes it *does* cite are 3 of the 4 miscitations
+`check:rule-guards` reports. So the one guard that tests deep-zoom glitch-freedom is
+invisible to anyone changing deep zoom.
+
+- **(a)** Also cite it from `gmt-formulas-and-graph.md`. Additive, no risk.
+- **(b)** Leave it; fix the deep-zoom rule's citations independently.
+
+**Recommendation: (a)**, and give this smoke a **quiet tree** during the guard
+sweep — it needs ~8 uninterrupted minutes. It could not be baselined this cycle:
+two attempts, both killed at the third view by a Vite full-reload from concurrent
+auditors. Every assertion it *reached* passed (escaping-square and stripe-square
+both delta 0.000). Not applied because that rule belongs to another subsystem.
+
+## LOW — the shared WebGL harness header documents flags its own code does not pass
+
+_(cycle 11 · `debug/helpers/webglHarness.ts`)_
+
+The header lists `--disable-gpu` → force SwiftShader, `--use-gl=swiftshader`,
+`--enable-webgl`, `--disable-dev-shm-usage`, `--no-sandbox`. `chromium.launch()`
+passes only `--disable-gpu-sandbox`, `--disable-blink-features=AutomationControlled`
+and `--disable-features=IsolateOrigins,site-per-process` — and the comment
+immediately above it says the **opposite** of the header (*"SwiftShader turned out
+to boot far too slowly… default to hardware WebGL"*). Separately, failure-mode 1
+says *"always pass `{ noWaitAfter: true }` on mouse.down/up"*; `dragPath` passes
+neither.
+
+- **(a)** Delete the stale list, keep the accurate inline comment as the single source.
+- **(b)** Also add `noWaitAfter` to `dragPath` to match the documented policy — but
+  that changes behaviour for every smoke that drags, and the harness is currently
+  reliable.
+
+**Recommendation: (a) only.** Untouched because it is shared debug infrastructure
+outside t01/t02. Worth noting this header's authority is what put *"FLAKY —
+Chromium GPU watchdog"* into fluid-toy's README, masking a guard that was simply
+**red** — that half is now fixed.
+
+## LOW — `context:cost` reports both toy subsystems' source as 0 tokens
+
+_(cycle 11 · `plans/context-protocol/subsystems.json`)_
+
+`npm run context:cost -- t01-fluid-toy` and `-- t02-fractal-toy` each emit a Layer 2
+table with **one row** — `fluid-toy/*` (resp. `fractal-toy/*`) — costed at **0
+tokens**, so the footer reads *"Cheap path is 100% of the full path"*. The tool
+tells you the source is free and that you need not read it. There are 76 tracked
+files in `fluid-toy/` and 14 in `fractal-toy/`; `FluidEngine.ts` alone is 2106
+lines. Likely cause: `context-map.json` keys on concrete paths and the glob never
+matched — which also explains the stale-map warning both invocations print.
+
+- **(a)** Expand both entries into explicit file lists like every other subsystem.
+- **(b)** Teach `context-cost.mjs` to expand globs against the map and **fail
+  loudly** on a zero-cost Layer 2 rather than printing it as a result.
+- **(c)** Leave it; `CODE_MAP.md` is now accurate.
+
+**Recommendation: (b).** A zero-token "source of truth" layer is indistinguishable
+from a correct answer — the same failure class as a guard that cannot fail. Not
+applied: it is context-protocol tooling, and `npm run context:map` is a tree-wide
+rebuild that should not run unattended.
+
+## Three process items from this cycle
+
+**1. `CLAUDE.md` is factually wrong and no agent may fix it.** It states sibling-app
+overviews live at `docs/modules/{fluid-toy,fractal-toy,gradient-explorer,mesh-export,palette}/index.md`.
+Gradient Explorer's is `app.md`; palette's is `palette-suite.md`. **2 of the 5 named
+paths do not exist.** The gx01 auditor found this, verified it, and declined to
+touch it because `CLAUDE.md` is steering configuration — correctly. Your call.
+
+**2. Parallel auditors share one working tree, so `git add -A` is unsafe.** The
+a03 auditor staged broadly while the gx01 auditor had unstaged edits, and swept 54
+lines of `docs/modules/gradient-explorer/app.md` into commit `50d18282`
+(*"audit(a03-tutorial): the runner never calls onExit…"*). No content was lost and
+history was not rewritten, but that finding is mis-attributed in the log.
+`PROTOCOL.md` should require every commit to stage explicit paths.
+
+**3. Cycle 11's a03-tutorial record is reconstructed, not original.** The
+orchestrator turn ended before the cycle was closed out and that auditor's return
+JSON was lost. Its three Tier A findings were re-derived from commit messages that
+carry their verification inline, so the *applied* work is fully documented — but any
+**Tier B or Tier V findings it returned are gone.** Treat a03's non-applied surface
+as uncovered. `results/a03-tutorial.json` says so in a `provenance` field.
