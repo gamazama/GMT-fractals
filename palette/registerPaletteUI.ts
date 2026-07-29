@@ -1,14 +1,20 @@
 /**
  * Host-agnostic registration seam for the palette tools.
  *
- * Call this from a host app's side-effect `registerFeatures.ts` (the standalone
- * GMT Gradient Explorer OR an app-gmt panel) BEFORE the engine store is constructed —
- * the feature + component registries freeze on first store access.
+ * Call this from a host app's side-effect `registerFeatures.ts` BEFORE the engine store
+ * is constructed — the feature + component registries freeze on first store access.
+ *
+ * THREE hosts call it today (grep `registerPaletteUI(` outside this file):
+ *   • `app-gmt/registerFeatures.ts` — defaults, so the standalone Stops tab is ON.
+ *   • `gradient-explorer/registerFeatures.ts` — `{ standaloneStopsMode: false }`.
+ *   • `fluid-toy/registerFeatures.ts` — defaults. fluid-toy DOES mount the palette
+ *     suite (shelf, editor entrance, favients bridge); what it opts out of is narrower
+ *     — the picker-filter prefs, via `mountFavientsPanel({ paletteFilters: false })`.
  *
  * Keeping registration in one exported function (rather than module side-effects)
  * lets each host control timing while sharing the exact same feature defs +
- * custom-UI components. This is the "both in lockstep" seam: one definition,
- * two hosts.
+ * custom-UI components. This is the "all hosts in lockstep" seam: one definition,
+ * three hosts.
  */
 
 import React from 'react';
@@ -75,8 +81,10 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
 
   // The Stops editor's header Favients entrance (engine-core can't import palette,
   // so it renders whatever a host injects through this seam). Registering it here
-  // means every host that mounts the palette suite gets the entrance, and hosts
-  // that don't (fluid-toy) leave the slot empty — the old `hasFavients` behaviour.
+  // means every host that calls registerPaletteUI gets the entrance — ALL THREE do,
+  // fluid-toy included. A host that never calls it leaves the slot empty (the old
+  // `hasFavients` gating); there is no such host in-tree today, so treat "the slot is
+  // empty" as an untested path rather than shipped behaviour.
   setGradientEditorEntrance({
     id: 'favients',
     render: (ctx) => React.createElement(FavientsEditorEntrance, { config: ctx.config, featureId: ctx.featureId, paramKey: ctx.paramKey }),
