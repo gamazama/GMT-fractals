@@ -80,9 +80,11 @@ const approx = (a: number, b: number, e = 1e-2) => Math.abs(a - b) < e;
 {
   const files = ['ds_00.txt', 'ds_01.txt', 'ds_02.txt', 'ds_03.txt', 'ds_04.txt'];
   let ok = 0;
+  const dims: string[] = [];
   for (const f of files) {
     const s = parseMB3D(read(f));
     const h = s.header;
+    dims.push(`${h.width}x${h.height}`);
     const sane =
       s.raw.length >= MB3D_HEADER_BYTES + 8 &&
       h.mandId >= 20 && h.mandId < 100 &&
@@ -96,6 +98,14 @@ const approx = (a: number, b: number, e = 1e-2) => Math.abs(a - b) < e;
     else fails.push(`${f}: sane=${sane} roundtrip=${rt} (mandId=${h.mandId} ${h.width}x${h.height} its=${h.iterations} ver=${h.m3dVersion.toFixed(3)} iFCount=${s.addon?.formulaCount})`);
   }
   ck('ds sweep 5/5 sane + byte-exact round-trip', ok === files.length, ok);
+  // Both gold blocks above are SQUARE (5680x5680, 5000x5000), so width and
+  // height are interchangeable there and a swap of their header offsets is
+  // invisible — verified: pointing `width` at height's offset (dv.getInt32(8))
+  // left this file 24 passed / 0 failed, exit 0. The ds fixtures are 1400x840,
+  // so asserting them exactly is what actually pins the two offsets apart.
+  // The sane() predicate above only tests `> 0`, which cannot do that.
+  ck('ds dims exactly 1400x840 (pins width vs height offsets)',
+    dims.every((d) => d === '1400x840'), dims);
 }
 
 console.log(`\n==== MB3D parser: ${pass} passed, ${fails.length} failed ====`);
