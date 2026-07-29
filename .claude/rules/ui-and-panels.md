@@ -60,9 +60,25 @@ npm run smoke:boot        # renders the whole panel tree headlessly; fails on pa
 npm run smoke:interact    # DDFS state flow end-to-end (demo feature)
 ```
 
-**Known coverage gap — read before trusting a green run.** `npm run smoke:ui-primitives`
-is often cited here; it exercises **only** `clampToViewport` (`components/ui/viewportClamp.ts`)
-and renders no React component at all, so it guards nothing in this rule's scope.
-There is currently **no** guard that mounts a manifest-composed panel and asserts
-its structure — `smoke:boot` only proves the tree renders without throwing. Changes
-to `AutoFeaturePanel` / `PanelManifest` item handling need a manual pass.
+**Known coverage gap — read before trusting a green run.** `smoke:ui-primitives`
+is often cited here. It is a genuine guard, not a dead one, but it is narrow: it
+exercises `clampToViewport` (`components/ui/viewportClamp.ts`) and nothing else,
+renders no React component, and reaches **1 of the 129 files this rule scopes** —
+measured, not estimated (`check:rule-guards --verbose` prints the ratio). Its home
+is [`layers-zindex.md`](./layers-zindex.md), which scopes `components/ui/**`, and
+the citation was moved there on 2026-07-29.
+
+What *does* reach a manifest-composed panel, and exactly how far it goes:
+`smoke:engine-demo` mounts the demo dock and asserts two DDFS param labels plus at
+least one `ScalarInput` thumb actually rendered; `smoke:engine-demo-modulation`
+asserts `applyPanelManifest` swept an entry into `store.panels`. Both of those
+assertions were added by the 2026-07-29 guard sweep — before it, they were logged
+and never checked. Neither asserts manifest **structure**: item order, sections,
+separators, collapsibles and `component:` widget items are all unchecked, and both
+run against the demo entry, not app-gmt's manifest. `smoke:boot` only proves the
+tree renders without throwing. So changes to `AutoFeaturePanel` / `PanelManifest`
+item handling still need a manual pass.
+
+(Guard names in this paragraph are deliberately written without the `npm run`
+prefix: `check:rule-guards` parses that prefix out of the whole rule body, so
+prefixing a name here would mint a citation from a sentence explaining a gap.)

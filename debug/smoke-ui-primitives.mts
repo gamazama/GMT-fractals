@@ -5,6 +5,28 @@
  * clamp helper behind AnchoredMenu (used by the Gradient and Graph context
  * menus). The React components themselves are covered by `tsc` for types and
  * need a visual pass when each panel is migrated.
+ *
+ * SCOPE, measured (2026-07-29 guard sweep). Of `components/ui/**`'s 11 modules
+ * this reaches exactly one — `viewportClamp.ts`. `check:rule-guards --verbose`
+ * prints the same number from the other side: 1 of the 129 files
+ * `ui-and-panels.md` scopes. It is honest but narrow; do not read a green run
+ * as coverage of Layer / Modal / FloatingPanel / AnchoredMenu / layerStack.
+ *
+ * BLIND SPOT CLOSED (2026-07-29). The original seven cases left the y-axis
+ * *hard clamp* dead: every fixture's final y landed inside
+ * `viewport.height - size.height - padding`, so the `Math.min` on y never bound
+ * anything. Swapping that term to `size.width` — a plausible copy-paste slip
+ * from the x branch three lines above — passed all seven. A 13-mutation sweep
+ * over the same fixture set caught 11 of 12 real mutations and missed exactly
+ * that one. The two cases below marked BOTTOM-CLAMP are its cover: both are
+ * chosen so `size.width` (200) and `size.height` (300) give different answers
+ * (492 vs 592, and 492 vs 495), which is what makes them arithmetic rather than
+ * tautology. Falsified after adding: same swap now fails both, exit 1.
+ *
+ * The corpus is inline, so it cannot vanish the way an external fixture
+ * directory can; the one external input is the module under test, and losing it
+ * fails at ESM link time before any assertion runs (falsified by renaming the
+ * export — SyntaxError, exit 1).
  */
 import { clampToViewport } from '../components/ui/viewportClamp.ts';
 
@@ -42,6 +64,21 @@ check(
 
 // Custom padding is honoured on the clamp.
 check('custom padding', clampToViewport({ x: -50, y: 100 }, M, VP, { padding: 20 }), { x: 20, y: 100 });
+
+// BOTTOM-CLAMP. The vertical twin of 'no-flip clamps to far edge', which was
+// missing: flip:false + bottom overflow must hard-clamp to
+// height - size.height - padding = 800 - 300 - 8 = 492. Reads 592 if the clamp
+// uses size.width.
+check(
+    'no-flip clamps to bottom edge',
+    clampToViewport({ x: 100, y: 700 }, M, VP, { flip: false }),
+    { x: 100, y: VP.height - M.height - 8 },
+);
+
+// BOTTOM-CLAMP. Flipping is not on its own enough: an anchor below
+// `height - padding` flips to 495, which is still past the gutter, so the hard
+// clamp has to pull it back to 492. Reads 495 if the clamp uses size.width.
+check('flip past bottom still clamps', clampToViewport({ x: 100, y: 795 }, M, VP), { x: 100, y: 492 });
 
 if (failures > 0) {
     console.error(`\n${failures} clampToViewport case(s) failed`);

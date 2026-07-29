@@ -34,4 +34,16 @@ and `stopNavKeys` handle dismissal and key containment.
 ```
 npm run test:zindex
 npm run check:zindex
+npm run smoke:ui-primitives   # clampToViewport only — see the reach note below
 ```
+
+`smoke:ui-primitives` moved here from `ui-and-panels.md` on 2026-07-29: it imports
+`components/ui/viewportClamp.ts`, which this rule scopes and that one only reached
+at 1 file in 129. Know its reach before trusting it — it covers **1 of the 11
+modules in `components/ui/`**, the flip-then-clamp helper behind `AnchoredMenu`.
+`Layer`, `Modal`, `FloatingPanel`, `AnchoredMenu` itself, `layerStack`,
+`panelStack`, `layerHost` and `stopNavKeys` have no runtime guard at all — they are
+React hooks and components, so covering them needs mount infrastructure this repo
+does not have yet. `test:zindex` and `check:zindex` cover `zIndex.ts` and the raw
+`z-[N]` ban respectively; everything else in the directory is `tsc` plus a visual
+pass.
