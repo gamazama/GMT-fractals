@@ -187,6 +187,19 @@ is exhausted.
    regression from its baseline), **collects values but asserts nothing**, and
    **healthy but cited for the wrong thing** (~9 instances — a rule citing a smoke
    whose `ENGINE_URL` boots a sibling app that never imports the governed files).
+
+   **A fifth mode, found four times in the cycle-13 sweep and worth its own name:
+   GREEN BECAUSE THE INPUT VANISHED.** The guard is sound, the code is sound, and
+   the run is empty. `test:frag` printed `0 passed 0 failed` and exited 0 with its
+   entire ~580-file reference corpus missing; `test:frag:scan` reported a clean
+   library with the library gone; `test:shader` printed an all-pass sweep with 87%
+   of its formula matrix absent; `test:modulation-coverage`'s source scan shrank
+   from 10 elements to 3 and stayed green. In every case a rename, a moved
+   directory, or a dropped side-effect import would have silently reduced coverage
+   to near zero while the guard kept saying yes. So: **ask what the guard does when
+   its INPUTS disappear, not only when the code breaks.** The fix is cheap and
+   additive every time — count the fixtures/files/cases you actually ran and fail
+   on an empty or shrunken matrix, with the expected floor recorded in the source.
    `npm run check:rule-guards` now catches that last mode mechanically — run it
    once per cycle and treat any output as a finding. For the others: read the
    guard's `ENGINE_URL` default, confirm your files are in that entry's import

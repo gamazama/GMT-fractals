@@ -436,11 +436,11 @@
     "files": 85,
     "status": "in-progress",
     "cycle": 13,
-    "findings": 18,
-    "applied": 13,
+    "findings": 32,
+    "applied": 24,
     "escalated": 0,
-    "proposed": 5,
+    "proposed": 7,
     "priority": 34,
-    "note": "24 of 76 swept in 3 serial batches (74 falsifications). 8 guards found defective. 52 remain - all UNCITED by any applied finding, so lower stakes by construction."
+    "note": "32 of 76 swept in 4 serial batches (105 falsifications). 15 guards found defective. Batch 4 (rule-cited guards) had the worst hit rate: 7 of 8. 44 remain, none cited by any applied finding."
   }
 ]
