@@ -112,14 +112,33 @@ ok(wrapped !== null && wrapped.length === 1 && wrapped[0].color === '#ABCDEF', '
 const lenient = stopOps.normalizePaste([{ position: 0, color: 'ff0000' }, { position: 1, color: '#fff' }]);
 ok(lenient !== null && lenient.length === 2 && lenient[0].color === '#FF0000' && lenient[1].color === '#FFFFFF', 'normalizePaste accepts no-# and 3-digit hex (matches the sampler)');
 
-// ===== 4. oklab drift pin =====
+// ===== 4. oklab drift pin — DOES NOT WORK. Read before trusting it. =====
 // The P0a collapse routed the SAMPLER through colorUtils, which made
 // test-palette-stopfit's `generateGradientTextureBuffer == renderStopsToBuffer`
-// tautological (both are now the same code). But the oklab/blend math is still
-// duplicated in palette/core/oklab.ts (used by the stop-fitter / generator / facets).
-// Pin the two copies together explicitly so a coefficient/threshold change in either
-// fails loudly instead of silently desyncing the renderer from the fitter.
-console.log('[4] colorUtils oklab blend == palette/core/oklab (drift pin)');
+// tautological (both are now the same code). This block was written to cover the
+// oklab/blend math that is still duplicated in palette/core/oklab.ts (used by the
+// stop-fitter / generator / facets) — but IT IS TAUTOLOGICAL FOR THE SAME REASON.
+//
+// palette/core/oklab.ts does not define lerpOklab; it re-exports colorUtils' one
+// (grep `export { lerpOklab } from` there). So cuLerpOklab and okLerpOklab are the
+// SAME function object and the loop below compares a function against itself. It
+// reports "0 mismatches" across 448 samples no matter what anyone changes.
+//
+// The functions actually duplicated — srgbToLinear01 / linear01ToSrgb / rgbToOklab /
+// oklabToRgb — are NOT touched here, and colorUtils keeps its own copies
+// module-private so they cannot be imported for a direct comparison. Measured
+// 2026-07-29: perturbing rgbToOklab's first M-matrix coefficient by +0.0001 in
+// palette/core/oklab.ts leaves the whole `npm run test:palette` chain green, exit 0,
+// this assertion included. +0.01 is caught, but by test-palette-generator.mts's
+// tolerance round-trip, not by this block.
+//
+// Kept and left green deliberately: deleting it would remove the only marker that the
+// gap exists, and replacing it means writing a polar-oklab equivalent here, which is a
+// real algorithm and a reviewed change. Queued as Tier B (overnight audit, cycle 12);
+// the recommended fix is to export the primitives from utils/colorUtils.ts and
+// re-export them from palette/core/oklab.ts, so drift becomes impossible rather than
+// (not) detected.
+console.log('[4] colorUtils oklab blend == palette/core/oklab (drift pin — TAUTOLOGICAL, see comment)');
 {
   const grid = ['#000000', '#FFFFFF', '#FF0000', '#00FF80', '#1133AA', '#808080', '#FFAA00', '#220088'];
   let mismatch = 0;

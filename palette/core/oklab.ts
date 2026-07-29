@@ -2,11 +2,30 @@
  * OKLab / OKLCh colour core for the palette tools.
  *
  * Ported VERBATIM from GMT's utils/colorUtils.ts (same coefficients and the same
- * sRGB transfer functions) so the two can never diverge — the stop-fitter renders
- * against GMT's actual gradient pipeline, so its colour maths must match byte-for-byte.
- * A regression harness asserts the mirror equals generateGradientTextureBuffer.
+ * sRGB transfer functions) — the stop-fitter renders against GMT's actual gradient
+ * pipeline, so its colour maths must match byte-for-byte.
  *
- * Kept dependency-free (no THREE, no React) so `core/` stays a portable library.
+ * `srgbToLinear01` / `linear01ToSrgb` / `rgbToOklab` / `oklabToRgb` below are HAND COPIES:
+ * `utils/colorUtils.ts` keeps its own versions module-private and exports only `lerpOklab`
+ * (which this file re-exports rather than duplicating). So "can never diverge" is a
+ * property of nobody having edited them, not of anything checking.
+ *
+ * @assumption these four copies still agree with the private originals in
+ *   `utils/colorUtils.ts`. NOTHING PINS THEM, and the guard that says it does cannot.
+ *   `debug/test-palette-stopops.mts` section [4] is labelled "oklab drift pin" and compares
+ *   `lerpOklab` imported from both modules — but this file's `lerpOklab` IS colorUtils'
+ *   (grep the `export { lerpOklab } from` line below), so it compares a function against
+ *   itself across 448 samples and reports 0 mismatches unconditionally. Measured
+ *   2026-07-29: perturbing the first `rgbToOklab` M-matrix coefficient by +0.0001 (0.024%)
+ *   leaves the ENTIRE `npm run test:palette` chain green, exit 0, "44 passed, 0 failed" —
+ *   including that pin. A coarse +0.01 is caught, but only incidentally, by
+ *   `test-palette-generator.mts`'s tolerance round-trip ("reproduces slot A within 2
+ *   levels"); small drift slips under it. Queued as Tier B in the overnight audit —
+ *   the durable fix is to export the primitives from `utils/colorUtils.ts` and re-export
+ *   them here, the same collapse already applied to `gmtGradient.ts`.
+ *
+ * Kept dependency-free (no THREE, no React) — see the DOM caveat in `rampGeometry.ts`'s
+ * header: `palette/core/` is not uniformly DOM-free, though this file is.
  */
 
 export interface RGB {
