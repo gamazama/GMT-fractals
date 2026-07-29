@@ -4,7 +4,7 @@
   "maxCycles": 24,
   "batchSize": 3,
   "maxConcurrentAgents": 3,
-  "deadline": "2026-07-29T09:34:48.988Z",
+  "deadline": "2026-07-30T09:34:48.988Z",
   "branch": "audit/overnight-2026-07-27",
   "dashboardUrl": "https://claude.ai/code/artifact/d81d57c1-3384-4880-93e5-a89722063efe",
   "dashboardFile": "plans/overnight-audit/dashboard.html",
@@ -16,8 +16,9 @@
     "2026-07-28T01:50:00Z",
     "2026-07-28T06:50:00Z"
   ],
-  "note": "RUN 2 COMPLETE ON THE WORKLIST. Cycle 12 closed p01-palette-suite, the last of 33 subsystems. Nothing is pending. Remaining work is cross-cutting and listed at the bottom of PROTOCOL.md, in priority order: (1) the full guard falsification sweep - every test:*/smoke:*/check:* in package.json, break what it governs and confirm red; runs 1 and 2 have now found FIFTEEN guards that could not do the job they were named for, every one of them incidentally, so a systematic pass is the highest-value item left; (2) the @invariant -> @assumption sweep across ~152 files; (3) check:rule-guards follow-through on its 4 known miscitations, plus its two proven structural blind spots; (4) the NUL-byte scan, of which cycle 12 found a third instance. Also open: .claude/rules/palette.md has never existed and cycle 12 produced a merged draft for it across three result files.",
+  "note": "WORKLIST COMPLETE (33/33). Now in the cross-cutting GUARD SWEEP phase: falsify every test:*/smoke:*/check: in package.json. 85 total, 9 already falsified in runs 1-2, 76 to go. Executed SERIALLY - one agent at a time, quiet tree, dev server killed - because parallel agents killed a browser smoke twice in cycle 12. Batches prioritised by how many applied findings cite each guard as proof: smoke:engine-gmt is cited by 12 and was never falsified. Deadline extended to 2026-07-30 by the owner.",
   "dashboardPublish": false,
   "run": 2,
-  "worklistEmpty": true
+  "worklistEmpty": true,
+  "phase": "guard-sweep (serial, one agent at a time; owner cleared 2026-07-29 ~10:20 SAST)"
 }

@@ -428,5 +428,19 @@
     "proposed": 10,
     "priority": 33,
     "note": "89 tracked files / 14019 lines - the worklist count of 61 was stale. Split across 3 auditors: p01a core (35 files), p01b components (30), p01c stores+features (24). Their result files are results/p01a-palette-core.json, results/p01b-palette-components.json and results/p01c-palette-stores.json - there is no single results/p01-palette-suite.json. 27 applied = 26 Tier A + 1 Tier V confirmed by an independent verifier and applied by the orchestrator. 1 Tier C (CLAUDE.md, steering config, owner call)."
+  },
+  {
+    "id": "gs01-guard-sweep",
+    "tier": "cross-cutting",
+    "area": "Falsify all 85 test:*/smoke:*/check:* guards - break what each governs, confirm red, revert",
+    "files": 85,
+    "status": "in-progress",
+    "cycle": 13,
+    "findings": 18,
+    "applied": 13,
+    "escalated": 0,
+    "proposed": 5,
+    "priority": 34,
+    "note": "24 of 76 swept in 3 serial batches (74 falsifications). 8 guards found defective. 52 remain - all UNCITED by any applied finding, so lower stakes by construction."
   }
 ]
