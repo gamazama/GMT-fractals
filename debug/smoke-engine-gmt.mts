@@ -7,7 +7,12 @@
  * Asserts (see the bottom of the file): a canvas exists; `__gmtProxy`
  * reports `isBooted` + `hasCompiledShader`; `frameCount > 0` (RENDER_TICK →
  * FRAME_READY round-trips); the store carries the DDFS feature slices and the
- * default Mandelbulb formula; no page errors.
+ * default Mandelbulb formula; no page errors; and no console errors.
+ *
+ * Read the console-error assertion's comment before trusting
+ * `hasCompiledShader` to mean what it says — it does not. It is an optimistic
+ * latch, and the console stream is the only place a failed GLSL compile shows
+ * up on the main thread.
  *
  * NOT asserted: pixel content. The screenshot at `debug/engine-gmt-smoke.png`
  * is for human inspection only — headless SwiftShader output is not a
@@ -141,6 +146,30 @@ else {
 }
 if (errors.some((e) => !/\b(deprecation|DevTools)\b/i.test(e))) {
     failures.push('page errors present');
+}
+
+// `hasCompiledShader` above CANNOT see a failed shader compile, so it is not
+// the guard its name implies. It is a one-way latch that CompileScheduler sets
+// optimistically the moment it has issued the draw (grep for
+// `this.hasCompiledShader = true` in engine-gmt/engine/CompileScheduler.ts —
+// the assignment is deliberately BEFORE the yields, so a concurrent perform()
+// sees the new formula key). The driver reports a link failure asynchronously,
+// long after the latch is set. Measured 2026-07-29: a bare syntax error injected
+// into ShaderBuilder.buildFragment() left every probe value healthy — isBooted
+// true, hasCompiledShader true, frameCount 216 (HIGHER than a working boot,
+// because empty frames are cheap), all six store slices present, zero
+// pageerrors — and this smoke exited 0.
+//
+// The one main-thread signal is WorkerProxy's `case 'ERROR'` console.error
+// (grep `[WorkerProxy] Worker error:`), which renderWorker forwards from
+// CompileScheduler's COMPILE_FAILED. The smoke was already collecting it into
+// `logs` and asserting nothing on it. A `pageerror` listener never sees it —
+// it is a console record, not a thrown exception.
+const consoleErrors = logs.filter(
+    (l) => l.startsWith('[error]') && !/\b(deprecation|DevTools)\b/i.test(l),
+);
+if (consoleErrors.length > 0) {
+    failures.push(`console errors present (${consoleErrors.length}):\n      ` + consoleErrors.join('\n      '));
 }
 
 if (failures.length > 0) {
