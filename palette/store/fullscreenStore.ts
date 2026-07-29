@@ -4,15 +4,45 @@
  * Shell-scoped + session-only — like `pickerSearch` and the rest of the W4 well /
  * preview state. NOT DDFS, NOT persisted, NOT undoable: the selected geometry and its
  * shape params are pure VIEW choices over a gradient, never part of the document. The
- * previewed `config` is a snapshot handed in at open
- * time (from a hero toolbar button or a dropped gradient payload) — the overlay is
- * display-only and never writes it back.
+ * previewed `config` is a snapshot handed in at open time — the overlay is display-only
+ * and never writes it back.
  *
- * Held as a module-level `useSyncExternalStore` holder (not a DDFS slice) for the same
- * reason as `pickerSearch`: two unrelated surfaces drive it (an open affordance on a
- * result hero AND the engine drop-well), and it must survive nothing — a page load
- * resets it to closed. The snapshot OBJECT is replaced only on change so React's
+ * There is exactly ONE production open path: the `'fullscreen'` send-target registered in
+ * `gradient-explorer/gradientTargets.ts` calls `openFullscreen(p.config, p.name)`. Both the
+ * click path and the drag path resolve through that registry, so the dock has a single
+ * source of truth. The result heroes deliberately carry NO Fullscreen button — grep
+ * `CanonicalHero` ("this hero carries no Apply / Send-to / Fullscreen buttons").
+ *
+ * Held as a module-level `useSyncExternalStore` holder (not a DDFS slice) because BOTH
+ * React surfaces and non-React imperative consumers read it: an `ownCanvas` mode's
+ * `mount()` subscribes via `subscribeFullscreen()` + `getFullscreenState()` to push live
+ * knobs into its own renderer without a React render (grep `getFullscreenState` in
+ * `gradient-explorer/fullscreen/modes/`). And it must survive nothing — a page load resets
+ * it to closed. The snapshot OBJECT is replaced only on change so React's
  * `useSyncExternalStore` sees a stable reference between mutations (no render loop).
+ *
+ * ⚠ THIS FILE LIVES IN `palette/` BUT HAS NO `palette/` CONSUMERS. Its production importers
+ * are five files under `gradient-explorer/**` plus 14 `debug/*.mts` harnesses. Treat it as
+ * the Gradient Explorer's store that happens to sit here; moving or renaming it is a
+ * cross-app change, not a palette-local one (see the invariant below).
+ *
+ * @invariant The exported surface `openFullscreen` / `setFullscreenGeom` /
+ *   `getFullscreenState` / `setFullscreenGeomParams` / `resetFullscreenGeomParams` is the
+ *   TEST SEAM for the whole Gradient Explorer: all three GX browser smokes drive the app
+ *   through it by NAME, via `await import('/palette/store/fullscreenStore.ts')` +
+ *   `(s as any).<export>` — an untyped string path, so `npm run typecheck` structurally
+ *   cannot see the edge and a rename here stays green in tsc while breaking
+ *   `smoke:gx-handles`, `smoke:liquify` and `smoke:gx-fractal-glitch` at once.
+ *   — proven by: `npm run smoke:gx-handles` ("double-click did not reset archCy" when
+ *   `resetFullscreenGeomParams` is neutered; "handle layer did not mount" when
+ *   `setFullscreenGeomParams` stops emitting). Both falsified 2026-07-29: red at exit 1,
+ *   green again on revert.
+ *
+ * ⚠ Falsifying that guard needs a FRESH dev server. Editing this file HMR-invalidates it,
+ * and the smoke's bare-URL dynamic import then yields a second module instance — the smoke
+ * self-diagnoses ("overlay did not open after openFullscreen — likely the Vite
+ * dual-instance hazard") but the message hides whatever you were actually testing. Restart
+ * `npm run dev` after every edit here before reading a red run.
  *
  * @see palette/core/rampGeometry.ts (the pure mappings this drives)
  */
