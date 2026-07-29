@@ -13,6 +13,33 @@
  *
  * Lives in `palette/` (imports only palette + engine, never an app) so all three hosts
  * (app-gmt, fluid-toy, the Gradient Explorer) share it.
+ *
+ * CROSS-APP CONTRACT — `mountFavientsPanel()` is the single entry point all three use, and
+ * the `storageKey` argument is what keeps them from inheriting each other's dock state
+ * through same-origin `localStorage`. Grep `mountFavientsPanel(`:
+ *   • app-gmt  — `mountFavientsPanel()`, no args ⇒ the default `gmt.favients.panel`.
+ *   • fluid-toy — `{ storageKey: 'fluid-toy.favients.panel', paletteFilters: false }`.
+ *   • Gradient Explorer — `{ storageKey: 'gmt.gradientExplorer.favients.panel',
+ *     location: 'left', order: 0 }`.
+ * Adding a fourth host without its own `storageKey` silently gives it app-gmt's saved
+ * window state. The favourite COLLECTION is deliberately NOT split — `favientsStore` keys
+ * it `gmt.favients`, shared across every app on the origin.
+ *
+ * @invariant `mountFavientsPanel()` runs at app-gmt boot, at module scope in
+ *   `app-gmt/main.tsx` — so anything that throws inside it (or inside
+ *   `restoreFavientsPanel` / `watchFavientsPanel` / `restorePaletteFilters`) takes the
+ *   whole app down rather than degrading. — proven by: `npm run smoke:boot`, which boots
+ *   `index.html` → `/app-gmt/main.tsx` and exits 1 on any pageerror. Falsified 2026-07-29:
+ *   a `throw` planted at the top of `mountFavientsPanel` gave
+ *   "pageerror: FALSIFY: mountFavientsPanel", exit 1; reverted, exit 0 with "(none)".
+ *
+ * @assumption "Call AFTER `applyPanelManifest`" (below) is a real ordering requirement —
+ *   `restoreFavientsPanel` drives `movePanel` / `togglePanel` on a panel id that must
+ *   already be registered — but NOTHING enforces it and violating it fails SILENTLY.
+ *   Measured 2026-07-29: moving `mountFavientsPanel()` above `applyPanelManifest([...])`
+ *   in `app-gmt/main.tsx` left `npm run smoke:boot` green, exit 0, zero console errors.
+ *   The store actions are optional-chained, so a too-early call is a no-op that costs the
+ *   user their remembered position with no diagnostic anywhere.
  */
 
 import type { PanelDefinition } from '../engine/PanelManifest';
