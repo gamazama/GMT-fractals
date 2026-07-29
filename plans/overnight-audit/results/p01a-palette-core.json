@@ -1,0 +1,179 @@
+{
+  "id": "p01a-palette-core",
+  "cycle": 12,
+  "guards": [
+    { "script": "npm run test:palette", "pass": true, "subsystem": "p01a-palette-core", "note": "16 chained tsx harnesses; green at baseline and after every applied change. 44 passed, 0 failed on the last link." },
+    { "script": "npm run typecheck", "pass": true, "subsystem": "p01a-palette-core" },
+    { "script": "npm run orphans", "pass": true, "subsystem": "p01a-palette-core", "note": "knip reports exactly 1 unused file tree-wide (debug/render-harness.ts) and nothing under palette/. No orphan finding in this slice." }
+  ],
+  "guardFalsifications": [
+    { "guard": "tsx debug/test-palette-importformats.mts", "break": "rampFromAnchors output shrunk to 255", "result": "RED exit 1, 36 assertions" },
+    { "guard": "tsx debug/test-palette-importformats.mts", "break": "parseCss throws on non-gradient text", "result": "RED exit 1, 'parseCss no throw on nonsense'" },
+    { "guard": "tsx debug/test-palette-rampgeometry.mts", "break": "module-scope document.createElement in rampGeometry.ts", "result": "RED exit 1, ReferenceError before first assertion" },
+    { "guard": "tsx debug/test-palette-rampgeometry.mts", "break": "import * as React from 'react' in rampGeometry.ts", "result": "GREEN exit 0 — the host-agnostic half is unguarded" },
+    { "guard": "tsx debug/test-palette-rampgeometry.mts", "break": "radialScale fallback != GEOM_DEFAULTS.radialScale", "result": "RED exit 1, the named additive assertion" },
+    { "guard": "tsx debug/test-palette-rampgeometry.mts", "break": "NEW GeometryParams field with a mismatched GEOM_DEFAULTS fallback", "result": "GREEN exit 0 — new fields escape the additive gate" },
+    { "guard": "tsx debug/test-palette-stopfit.mts", "break": "fitRampToStops capped at 2 stops", "result": "RED exit 1, monotonic-fidelity assertions" },
+    { "guard": "tsx debug/test-palette-facets.mts", "break": "computeFacets lightness pinned to 0.5", "result": "RED exit 1, 'lightness spread should exceed 0.15'" },
+    { "guard": "tsx debug/test-palette-generator.mts", "break": "noise stage forced off in buildGradientRamp", "result": "RED exit 1, 'different seed => different noise'" },
+    { "guard": "tsx debug/test-palette-img2grad-overshoot.mts", "break": "removed resample.ts's `if (i > n - 2) i = n - 2` clamp (the original bug)", "result": "RED exit 1, the exact original TypeError" },
+    { "guard": "tsx debug/test-palette-img2grad.mts", "break": "same removal", "result": "GREEN exit 0 — the main img2grad harness does not cover it" },
+    { "guard": "npm run test:palette (whole chain)", "break": "rgbToOklab M-matrix coefficient +0.0001 in palette/core/oklab.ts", "result": "GREEN exit 0, 44 passed 0 failed — including the assertion named 'drift pin'" },
+    { "guard": "npm run test:palette (whole chain)", "break": "same coefficient +0.01", "result": "RED exit 1, but only at test-palette-generator.mts's tolerance round-trip, never at the pin" }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-palette-stopops.mts",
+      "summary": "The assertion labelled 'oklab drift pin' compares a function against itself and can never fail; the OKLab maths it was written to pin is unguarded, and a 0.024% coefficient drift passes the entire test:palette chain.",
+      "change": "Documented the gap at both sites. palette/core/oklab.ts's 'so the two can never diverge / a regression harness asserts the mirror' is now an @assumption naming exactly what was measured; the guard block carries a header explaining why it is tautological. The assertion itself was left in place and green — deleting it would remove the only marker that the gap exists, and replacing it means writing a polar-oklab equivalent inside the guard, which is a reviewed change, not a rename.",
+      "verification": "palette/core/oklab.ts does not define lerpOklab — it is `export { lerpOklab } from '../../utils/colorUtils'`, so both sides of the 448-sample loop are the same function object. colorUtils' export list contains lerpOklab and no other oklab primitive, so the four genuinely duplicated functions (srgbToLinear01, linear01ToSrgb, rgbToOklab, oklabToRgb) cannot even be imported for comparison. Measured by perturbation: +0.0001 on rgbToOklab's first M-matrix coefficient leaves the whole chain green exit 0 (44 passed, 0 failed), the pin included; +0.01 goes red exit 1 but at test-palette-generator.mts's 'reproduces slot A within 2 levels' (got 4.43), never at the pin. Both perturbations reverted, git diff clean.",
+      "guard": "npm run test:palette",
+      "guardPass": true,
+      "commit": "1e7802cf"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-palette-importformats.mts",
+      "summary": "The only guard covering palette/core/importFormats.ts held a raw NUL byte, so ripgrep classified it binary and skipped it — the guard was invisible to every grep-based pass, including run 1 of this audit.",
+      "change": "Replaced the literal 0x00 0x01 0x02 bytes in the fail-safe fuzz array (grep for 'garbage =') with \\x00\\x01\\x02 escapes. Runtime string unchanged.",
+      "verification": "Before: `rg -l importFormats debug/` returned nothing, exit 1, despite the file importing palette/core/importFormats.ts directly. After: returns the file, exit 0. Guard output byte-identical across the change (108 lines, diff clean, exit 0); escaped string verified length 3, char codes [0,1,2]. Tree-wide NUL scan over palette/ debug/ engine/ components/ app-gmt/ gradient-explorer/ store/ now reports zero files — this was the last one.",
+      "guard": "tsx debug/test-palette-importformats.mts (link 13 of npm run test:palette)",
+      "guardPass": true,
+      "commit": "37345901"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/core/rampGeometry.ts",
+      "summary": "The @invariant 'Host-agnostic + DOM-free — do not import React/THREE/canvas here' bundled a proven claim with an unprovable one under a single marker.",
+      "change": "Split it: DOM-free stays an @invariant and now names the command that goes red; the host-agnostic (no react/three import) half is downgraded to @assumption per CLAUDE.md.",
+      "verification": "Falsified in both directions. A module-scope document.createElement('canvas') makes debug/test-palette-rampgeometry.mts exit 1 with a ReferenceError before the first assertion (it runs on bare node, typeof document === 'undefined'). Adding `import * as React from 'react'` to the same file leaves it fully green, exit 0, '✓ ALL PASS' — react resolves under node exactly as in the browser, so no node-hosted harness can ever see that violation. Both reverted, git diff clean.",
+      "guard": "tsx debug/test-palette-rampgeometry.mts",
+      "guardPass": true,
+      "commit": "f2732d9b"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/core/rampGeometry.ts",
+      "summary": "The GeometryParams @invariant claimed 'Adding a field is additive' as an enforced contract; the harness pins only a hand-maintained list, so a new field escapes the gate entirely.",
+      "change": "Restated the invariant as what the harness actually proves, named the command and the assertion string, and added the actionable limit: a new field must be added to the harness's `cases` list or it is outside the gate. Recorded that splineSpread/splineDepth sit outside it benignly (sampleGeometry never reads them; only gradient-explorer/fullscreen/modes/splineMode.tsx does, and its fallbacks agree with GEOM_DEFAULTS).",
+      "verification": "Falsified in both directions. Giving radialScale a fallback other than GEOM_DEFAULTS.radialScale turns exactly the named assertion red — '✗ radial: omitted fields == explicit GEOM_DEFAULTS (additive)', exit 1. Adding a hypothetical linearGamma field to GeometryParams and GEOM_DEFAULTS and reading it in sampleGeometry with a deliberately mismatched fallback (defaults say 1, the read says 0.7) — the precise violation the contract forbids — leaves the harness at '✓ ALL PASS', exit 0. Nothing else in test:palette caught it either. Both reverted, git diff clean.",
+      "guard": "tsx debug/test-palette-rampgeometry.mts",
+      "guardPass": true,
+      "commit": "963f05c9"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "palette/core/rampGeometry.ts",
+      "summary": "rampGeometry.ts and importFormats.ts both asserted their pure/DOM-free contract 'mirrors palette/core/' as a directory-wide guarantee; six of the 36 files there are host-bound and always have been.",
+      "change": "Scoped both headers to their own module and named the exceptions, pointing readers at the grep instead of a guarantee that does not hold.",
+      "verification": "Per-file scan of palette/core/ for document / window / localStorage / HTMLCanvasElement / Image( / fetch, with every hit read in context to drop six prose false positives (editorConfig 'document provider', exportFormats 'Illustrator document', facets and generatorPipeline 'filter window', indesignIdml 'new document', importFormats 'no `File`'). Real: rampCanvas.ts (declares itself 'DOM-only' in its own header — a direct contradiction inside the same directory), favientsExport.ts, img2grad/decode.ts and favientDnd.ts (document.createElement), storage.ts (localStorage), catalogLoader.ts (fetch). typecheck exit 0, test:palette exit 0.",
+      "guard": "npm run typecheck + npm run test:palette",
+      "guardPass": true,
+      "commit": "a1e4ff4d"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "docs/modules/palette/palette-suite.md",
+      "summary": "The palette entry doc claimed vitest coverage (there is no vitest in the repo), 15 export formats (there are 16), that only .ai and .idml implement collection() (three do), and a DOM-free core.",
+      "change": "Corrected all three, documented the missing Ultra Fractal .ugr format and its wire contract, replaced '~40 stops' with the four real budgets, and recorded that collectionQualityWarnings() exempts .ugr while reducing it.",
+      "verification": "package.json dependency and script scan for vitest/jest returns NONE; no vitest.config; find for *.test.* / *.spec.* under palette/ is empty. EXPORT_FORMATS.length === 16 and .filter(f => f.collection) === [ai, idml, ugr], both evaluated under tsx. Budget constants read from source: GRD_MAX 40, AI_MAX 40 (re-exported as AI_STOP_LIMIT, reused by indesignIdml.ts), SVG_MAX 32, UGR_MAX_STOPS 64. All 11 markdown hrefs re-stat'ed and resolve.",
+      "guard": "stat of every extracted href + tsx evaluation of EXPORT_FORMATS",
+      "guardPass": true,
+      "commit": "0dff198c"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "docs/modules/palette/palette-suite.md",
+      "summary": "Three ../../engine/NN_*.md links were dead — the class the cycle-11 gradient-explorer auditor handed off — and the file count was ~48% low.",
+      "change": "Repointed all three at ../../history/engine/ and corrected '~60 files' to 89.",
+      "verification": "Stat'ed all 11 extracted hrefs from inside docs/modules/palette/ before and after. Before: 8 OK, 3 DEAD. After: 11 OK, 0 DEAD. `grep -rlo '\\.\\./\\.\\./engine/' docs/modules/` now returns empty, so the class is closed tree-wide. File count from `find palette -name '*.ts' -o -name '*.tsx' | wc -l` = 89.",
+      "guard": "stat of every extracted href",
+      "guardPass": true,
+      "commit": "93a0071c"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "docs/modules/palette/palette-suite.md",
+      "summary": "The doc described a gmtGradient.ts byte-exact mirror that was collapsed in P0a, and called oklab.ts's hand copies drift-free when nothing pins them.",
+      "change": "Corrected both entries to match their source files, and pointed the oklab entry at the new @assumption.",
+      "verification": "gmtGradient.ts is 21 lines and is a pure re-export; its own header records the P0a collapse and that 'there is exactly ONE sampler and it can no longer drift'. oklab.ts defines srgbToLinear01 / linear01ToSrgb / rgbToOklab / oklabToRgb itself and re-exports only lerpOklab; colorUtils' export list confirms no other oklab primitive is public. Drift measurement recorded in commit 1e7802cf. All hrefs re-stat'ed and resolve.",
+      "guard": "source read + grep of colorUtils' export list",
+      "guardPass": true,
+      "commit": "545d5bcc"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/core/importFormats.ts",
+      "summary": "The @invariant carried no proof clause, so a proven claim was indistinguishable from a believed one — and its two halves are guarded at very different strengths.",
+      "change": "Named the command and the assertion strings for both halves, and recorded the strength gap.",
+      "verification": "Falsified both directions. Shrinking rampFromAnchors' output to 255 turned 36 assertions red (parseGradientText gates on ramp.length === 256), exit 1. Making parseCss throw on non-gradient text turned section [5]'s 'parseCss no throw on nonsense' red, exit 1. The gap: parseGradientText is trivially no-throw (it wraps everything in try/catch), whereas the six exported parsers are unwrapped and are fed exactly ONE nonsense string each — a single sample per parser, not a fuzz sweep. Both reverted, git diff clean.",
+      "guard": "tsx debug/test-palette-importformats.mts",
+      "guardPass": true,
+      "commit": "a2f1ec49"
+    },
+    {
+      "tier": "A",
+      "severity": "low",
+      "file": "palette/core/exportFormats.ts",
+      "summary": "Both exporter JSDoc lists of which formats reduce stops were stale — reduceStopIndices names three of its six call sites, and collectionQualityWarnings' header names one of the two formats it covers while giving no hint that .ugr is lossy and exempt.",
+      "change": "Replaced the lists with the budgets named alongside their constants plus a note to grep the symbol; documented the real warning coverage and marked the '64 RDP nodes are near-lossless' belief as an @assumption.",
+      "verification": "grep reduceStopIndices across palette/ enumerates all six call sites and four budgets (GRD_MAX 40, AI_MAX 40, SVG_MAX 32, UGR_MAX_STOPS 64); indesignIdml.ts reaches it by importing AI_STOP_LIMIT. EXPORT_FORMATS.filter(f => f.collection) === [ai, idml, ugr] under tsx, while favientsExport.ts gates on `fmtKey !== 'ai' && fmtKey !== 'idml'`. typecheck exit 0, importformats harness exit 0.",
+      "guard": "npm run typecheck + tsx debug/test-palette-importformats.mts",
+      "guardPass": true,
+      "commit": "2576fab1"
+    },
+    {
+      "tier": "B",
+      "severity": "high",
+      "file": "palette/core/oklab.ts",
+      "summary": "The duplicated OKLab primitives in palette/core/oklab.ts have no working pin, and the durable fix is a collapse rather than a better test — but which shape to take is a design call.",
+      "rationale": "CLAIM. srgbToLinear01 / linear01ToSrgb / rgbToOklab / oklabToRgb are hand copies of module-private functions in utils/colorUtils.ts. The stop-fitter measures error against GMT's real gradient pipeline, so if the two ever disagree the fitter optimises against maths the renderer does not use, and every fitted gradient is subtly wrong in a way no harness reports.\n\nEVIDENCE. Measured 2026-07-29: perturbing rgbToOklab's first M-matrix coefficient by +0.0001 (0.024%) leaves the entire npm run test:palette chain green, exit 0, 44 passed 0 failed. +0.01 goes red but only at test-palette-generator.mts's tolerance round-trip ('reproduces slot A within 2 levels', got 4.43) — a tolerance small drift slips under. The assertion explicitly labelled 'oklab drift pin' reports 0 mismatches in both cases because it compares palette's re-exported lerpOklab against colorUtils' own, i.e. a function against itself.\n\nOPTIONS.\n(a) COLLAPSE — export srgbToLinear01 / linear01ToSrgb / rgbToOklab / oklabToRgb from utils/colorUtils.ts and re-export them from palette/core/oklab.ts, exactly the change already applied to gmtGradient.ts in P0a. Drift becomes structurally impossible instead of undetected, and the dead pin can then be deleted honestly rather than left as a marker. Widens colorUtils' public surface by four pure functions.\n(b) REAL PIN — keep the duplication and rewrite section [4] to compare colorUtils.lerpOklab against a lerp composed from palette's own rgbToOklab/oklabToRgb. Requires reimplementing the polar (LCh) interpolation inside the guard; if the reimplementation is not faithful the pin fails for the wrong reason, and if it is faithful it is a third copy of the maths.\n(c) TIGHTEN THE TOLERANCE on test-palette-generator.mts's round-trip so small drift is caught incidentally. Cheapest, but it makes an unrelated guard load-bearing for a contract it does not name, and it will go red for legitimate pipeline changes.\n(d) Leave it; the risk is only realised if someone edits one copy.\n\nRECOMMENDATION: (a). It is the change this codebase already chose once for the same problem, it removes the failure mode rather than detecting it, and it is the only option that lets the dead assertion be removed without losing coverage. Not applied here because it edits utils/colorUtils.ts, which is engine-core and outside this slice, and because deciding what belongs in colorUtils' public API is an architecture call.\n\nThe gap is documented in place either way — see the @assumption in palette/core/oklab.ts's header and the comment on section [4] of debug/test-palette-stopops.mts (commit 1e7802cf)."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "palette/core/gradientSeam.ts",
+      "summary": "Eight of the 35 files in palette/core/ cannot be reached by any link in the test:palette chain, and the most consequential of them is gradientSeam.ts — the doc's own 'single conversion point' to GMT.",
+      "rationale": "CLAIM. A transitive import walk from all 16 test:palette harnesses reaches 27 of the 35 .ts files under palette/core/. Unreachable: gradientSeam.ts, catalogLoader.ts, presetCatalog.ts, favientsExport.ts, favientDnd.ts, favientTargets.ts, rampCanvas.ts, storage.ts.\n\nEVIDENCE. Reachability was computed by resolving every relative `from '...'` specifier from each harness (script kept out of the repo). Reachability is also an upper bound, not coverage: indesignIdml.ts and indesignIdmlTemplate.ts are reachable only because exportFormats.ts imports them, and the importformats harness never calls buildIdmlSwatchLibrary; img2grad/decode.ts is reachable but is the DOM decoder and is never invoked under node. Of the 16 export formats, only 6 (map, gpl, ggr, cpt, json, css) are exercised, by round-trip.\n\nWHY gradientSeam.ts MATTERS MOST. palette-suite.md calls it the single conversion point from a 256-step ramp to a GMT GradientConfig and says 'Don't add a second ramp->stops path'. entryToGradientConfig / applyGradientConfig / applyEnvGradient encode real contracts — presets pass through as colorSpace 'linear' because that is what the fractal shader expects, applyEnvGradient forces 'srgb' because sky colour is displayed not radiance, SEAM_MAX_STOPS caps at 128 — and nothing checks any of them. A swapped colour space here miscolours every applied gradient and would not show up in any guard.\n\nOPTIONS. (a) Add a debug/test-palette-gradientseam.mts pinning the colour-space contracts and the SEAM_MAX_STOPS cap against a stubbed store, and append it to the test:palette chain. (b) Extend the importformats harness to build and re-parse the remaining text formats, closing the exporter half. (c) Accept the gap for the DOM-bound files (rampCanvas, favientsExport, favientDnd, catalogLoader) which need a browser smoke, and cover only the pure ones. (d) Leave it.\n\nRECOMMENDATION: (a) then (b). Both are new guard code, which is why neither was written unattended — a new harness that passes on first run has not been falsified, and falsifying it properly needs a quiet tree."
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "palette/core/favientsExport.ts",
+      "summary": "A .ugr collection export reduces to 64 RDP nodes but is silently exempt from the lossy-quality warning that .ai and .idml get.",
+      "rationale": "CLAIM. collectionQualityWarnings() gates on `if (fmtKey !== 'ai' && fmtKey !== 'idml') return []`, so exporting favourites as .ugr never warns — even though exportFormats.ts reduces it through the same reduceStopIndices at UGR_MAX_STOPS 64.\n\nEVIDENCE. EXPORT_FORMATS.filter(f => f.collection) evaluates to [ai, idml, ugr]. reduceStopIndices is called at line 345 with UGR_MAX_STOPS. aiLossyGradients measures reconstruction error at the 40-stop AI budget, so reusing it verbatim for .ugr would over-report; that is presumably why .ugr was excluded rather than an oversight, but nothing records the reasoning and nothing measures whether 64 nodes is actually safe.\n\nOPTIONS. (a) Thread the per-format budget into aiLossyGradients and warn for .ugr at its own budget — correct, and turns a guess into a measurement. (b) Measure once offline whether 64 RDP nodes stays under AI_LOSSY_DELTA for the catalog, and if so keep the exemption but say so with a number. (c) Leave it — .ugr consumers are fractal tools that resample anyway, and Ultra Fractal's editor arguably prefers few draggable nodes to fidelity.\n\nRECOMMENDATION: (b) first — it is a measurement, not a change, and it either justifies the current behaviour or turns this into (a). This is an export-fidelity product call, which is why it was not applied. The behaviour is now documented at the call site as an @assumption (commit 2576fab1)."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "debug/test-palette-img2grad.mts",
+      "summary": "The main img2grad harness stays fully green when a real crash bug is reintroduced into resample.ts; only the dedicated overshoot sweep catches it.",
+      "rationale": "CLAIM. Removing the `if (i > n - 2) i = n - 2;` clamp from palette/core/img2grad/resample.ts reintroduces exactly the bug that clamp exists to fix. debug/test-palette-img2grad-overshoot.mts goes red immediately with the original error ('THREW: ... Cannot read properties of undefined (reading L)'). debug/test-palette-img2grad.mts — the main harness, 20 assertions — stays at '✓ ALL PASS', exit 0.\n\nWHY IT MATTERS. The two harnesses sit next to each other in the chain and are named as though the second is a subset of the first. Anyone consolidating them, or dropping the '-overshoot' link as redundant, silently reopens a crash that reaches the user as a TypeError in the stop fitter. The overshoot sweep is 44 checks x 4 images x 11 colour counts x ~200 golden-hour steps x 3 spacings; the main harness uses a handful of fixed parameter sets, which is why it never lands on the overshooting combination.\n\nOPTIONS. (a) Add a one-line note to both harness headers saying the overshoot sweep is not redundant and which regression it pins. (b) Fold a few overshooting parameter combinations into the main harness so it fails too. (c) Leave it.\n\nRECOMMENDATION: (a), and it is nearly free. Not applied because both files are shared debug infrastructure and two other auditors were committing into this tree; a header edit there is better batched with the guard sweep."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "package.json",
+      "summary": "npm run test:palette's twelfth link, test-engine-dnd-kernels.mts, imports nothing from palette/ at all.",
+      "rationale": "CLAIM. Its only imports are ../store/dragFlight and ../store/sendTargetRegistry. It is an engine drag-and-drop kernel test living inside the palette chain, presumably because palette/core/favientDnd.ts is the main consumer — but favientDnd.ts is itself one of the eight core files no link reaches, so the association is conceptual rather than actual.\n\nWHY IT MATTERS. Citing 'npm run test:palette' as the guard for a palette change is already coarse (16 links, most irrelevant to any one change); a link that touches no palette file at all makes it coarser and mildly misleading in commit messages. It also inflates the apparent coverage of the palette suite.\n\nOPTIONS. (a) Leave it and name the specific link in guard citations instead of the chain — which the proposed palette rule below already does. (b) Move it to a test:engine-dnd script and cite that from a store-scoped rule. (c) Leave it and note the association in the chain.\n\nRECOMMENDATION: (a). Splitting the chain is churn; the real fix is citing links, not chains. Worth pairing with the known check:rule-guards limitation that a chained npm script resolves by its FIRST command only, so a rule citing test:palette only ever resolves debug/test-palette-stopfit.mts."
+    },
+    {
+      "tier": "C",
+      "severity": "low",
+      "file": "CLAUDE.md",
+      "summary": "CLAUDE.md's sibling-app overview paths are still wrong for palette; confirmed independently from this slice.",
+      "rationale": "It states overviews live at docs/modules/{fluid-toy,fractal-toy,gradient-explorer,mesh-export,palette}/index.md. docs/modules/palette/index.md does not exist — the file is palette-suite.md, and it is the one context:cost points at. The gx01 auditor reported the same thing for gradient-explorer (app.md) in cycle 11. Not touched: CLAUDE.md is steering configuration and no agent instruction authorises editing it. Owner's call."
+    }
+  ],
+  "notes": "SCOPE. palette/core/** (35 .ts files) plus docs/modules/palette/palette-suite.md. Read palette/components/** and palette/store/** only to check seams; modified neither.\n\nGUARD HEALTH (step 0, done first). npm run test:palette is 16 chained tsx harnesses; green at baseline, exit 0. Every one ends in a real exit contract — process.exit(failures === 0 ? 0 : 1) or an equivalent inline gate; test-palette-img2grad-overshoot.mts and test-engine-dnd-kernels.mts use inline conditions rather than an ok() helper, which makes them look assertion-free to a grep but they are healthy. Falsified thirteen times against seven harnesses; results in guardFalsifications above. Two came back GREEN when they should have gone red and became findings: the rampGeometry host-agnostic half, and the oklab drift pin. One more is a coverage boundary rather than a defect: the main img2grad harness misses the overshoot regression.\n\nDID NOT RE-DERIVE (already known): that check:rule-guards resolves a chained npm script by its FIRST command only, so a rule citing test:palette only ever reaches debug/test-palette-stopfit.mts; and its 4 pre-existing miscitations, none in this area.\n\nSEAM HANDOFFS ANSWERED (the two the gx01 auditor left for p01a):\n(1) sampleGeometry is NOT drifting toward statefulness — palette/core/rampGeometry.ts has zero module-scope `let`/`var`, no Map/Set/WeakMap, no cache of any kind; sampleGeometry allocates fresh Float32Arrays per call and is a pure function of (geom, params, w, h). The gradient-explorer contract that rides on the byte-identical double-render is safe today. The real fragility is elsewhere and is now annotated: a NEW GeometryParams field escapes the additive gate entirely (finding 963f05c9), so a GX mode adding a field can break byte-identity with the harness still green.\n(2) The core-side exports mountFavientsPanel() consumes are healthy but wholly unguarded: favientTargets.ts, favientDnd.ts and favientsExport.ts are three of the eight core files no test:palette link reaches. If the p01c auditor pins the two-host storageKey behaviour, note there is no core-side guard underneath it.\n\nOTHER SEAMS OBSERVED. palette/core/gmtGradient.ts is now a pure re-export of utils/colorUtils.ts, so any engine-core change to renderStopsToRamp/renderStopsToBuffer lands directly in the palette with no seam to notice it. palette/core/oklab.ts is the opposite — a live hand copy with a broken pin (Tier B above). Those two files are the whole engine/palette colour boundary and they behave in opposite ways.\n\nPROPOSED .claude/rules/palette.md — NOT WRITTEN (three auditors would collide; the orchestrator should assemble). Contents it should carry:\n  paths: palette/** (and note gradient-explorer/** delegates to palette/core/rampGeometry.ts for its geometry modes).\n  Entry-point JSDoc, in reading order: palette/registerPaletteUI.ts (the single boot seam, called before the store exists); palette/core/gradientSeam.ts (the ramp -> GradientConfig 'feed it' seam — the doc's stated single conversion point, and unguarded); palette/core/rampGeometry.ts (carries the two invariants and the additive-gate limit); palette/core/exportFormats.ts (the 16-format registry + the four stop budgets); palette/core/img2grad/index.ts (extract() pipeline); palette/core/oklab.ts (READ THE @assumption FIRST — the drift pin does not work).\n  Governing ADRs: NONE. `grep -rln 'palette/core' docs/adr/ docs/policy/` returns nothing and no ADR filename mentions palette or gradient. That is itself worth stating in the rule so nobody hunts for one — the entry doc docs/modules/palette/palette-suite.md is the only cross-cutting write-up, and it is now accurate.\n  Guards, cited as LINKS not as the chain (citing `npm run test:palette` is misleading: check:rule-guards resolves only its first command, and one link touches no palette file at all):\n    palette/core/stopFit.ts, gmtGradient.ts -> debug/test-palette-stopfit.mts\n    palette/core/oklab.ts, utils/stopOps.ts -> debug/test-palette-stopops.mts (BUT its section [4] cannot fail — see Tier B)\n    palette/core/channelCurve.ts -> debug/test-palette-channelcurve.mts\n    palette/core/facets.ts -> debug/test-palette-facets.mts; facetName.ts -> debug/test-palette-facetname.mts\n    palette/core/easings.ts -> debug/test-palette-easings.mts\n    palette/core/generatorPipeline.ts, colorBoxFit.ts -> debug/test-palette-generator.mts\n    palette/core/img2grad/** -> debug/test-palette-img2grad.mts AND debug/test-palette-img2grad-overshoot.mts (the second is NOT redundant — it is the only thing that catches the resample overshoot regression)\n    palette/core/selectionGeometry.ts -> debug/test-palette-selection.mts\n    palette/core/wallLayout.ts -> debug/test-palette-walllayout.mts\n    palette/core/importFormats.ts, exportFormats.ts -> debug/test-palette-importformats.mts (6 of 16 formats, by round-trip)\n    palette/core/rampGeometry.ts -> debug/test-palette-rampgeometry.mts (also the ONLY coverage of gradient-explorer's geometry modes, via delegation)\n    palette/core/editorConfig.ts -> debug/test-palette-editorstore.mts\n    gradient-explorer/fullscreen/modes/liquify/** -> debug/test-liquify-mesh.mts\n    palette/store/fullscreenStore.ts -> the three GX browser smokes (per the p01c auditor)\n  UNGUARDED, state explicitly: gradientSeam.ts, catalogLoader.ts, presetCatalog.ts, favientsExport.ts, favientDnd.ts, favientTargets.ts, rampCanvas.ts, storage.ts. Also indesignIdml.ts and img2grad/decode.ts are reachable but never invoked.\n\nDELIBERATELY NOT DONE. Did not write .claude/rules/palette.md (collision risk, as instructed). Did not append to PROPOSALS.md — three auditors share this tree and a concurrent append is how cycle 11 lost attribution; the Tier B rationales above are written to be pasted verbatim. Did not modify palette/components/**, palette/store/**, palette/features/**, gradient-explorer/** or utils/colorUtils.ts. Did not write a new guard for gradientSeam.ts (a new harness green on first run has not been falsified). Did not rewrite the tautological drift-pin assertion (needs a reviewed algorithm). Did not touch CLAUDE.md. Did not delete debug/render-harness.ts, the one file knip reports unused tree-wide. Left debug/engine-gmt-smoke.png alone.\n\nINCIDENT — one commit is mis-attributed, and it was NOT a broad stage. Commit a2f1ec49 ('audit(p01a-palette-core): importFormats @invariant...') also contains 13 lines of palette/components/ChannelGraphEditor.tsx, which belongs to the p01b auditor. I staged one explicit path and checked git status --porcelain immediately before committing — ChannelGraphEditor.tsx was UNSTAGED at that moment. The p01b auditor staged it in the window between my status check and my commit, and `git commit` commits the whole index. No content was lost and history was not rewritten. The fix, used for every commit after that one: `git commit -F <msg> -- <paths>`, which commits only the named paths regardless of index state. PROTOCOL.md's rule about explicit staging is necessary but NOT sufficient under concurrency — it should require the pathspec form. Separately, one commit failed outright with 'cannot lock ref HEAD' when another auditor committed concurrently; retrying immediately succeeded."
+}
