@@ -10,6 +10,27 @@
  *
  * Pre-existing GPU watchdog flakes don't apply here — there's no
  * canvas / WebGL in the engine demo.
+ *
+ * COVERAGE (2026-07-29 guard sweep). Three of the six things this header claims
+ * were computed, logged, and never asserted — the smoke printed the value and
+ * then printed its success banner regardless. All three now throw. Falsified by
+ * breaking the source and re-running:
+ *   - topbar     `TopBarHost` returns null -> was "topbar present: false", exit 0,
+ *                success banner. Now: "TopBar did not mount", exit 1.
+ *   - modulation `runTicks(dtSec)` gated out of engine/plugins/RenderLoop.tsx ->
+ *                was counter 0 -> 0, a console.warn, exit 0, and a banner reading
+ *                "modulation tick runs". Now: exit 1. It was a warn, and this
+ *                smoke collects console.error only, so nothing saw it.
+ *   - hint pill  same shape, but the probe was ALSO a tautology and had to be
+ *                tightened before asserting on it meant anything: it accepted
+ *                "Randomize" OR "Demo" anywhere in body text, and with the whole
+ *                `HudHost` returning null it still read true. Now scans for the
+ *                pill's own key label. Falsified after tightening: HudHost null
+ *                -> "hint pill text present: false", exit 1.
+ * Step 6 (undo) and step 1 (overlay pixels) were already load-bearing.
+ * Still NOT covered, deliberately: the header says the topbar "shows up with
+ * Save/Load/Undo/Redo", but step 2 only proves some <header> exists — it does
+ * not check a single topbar item.
  */
 import { chromium } from 'playwright';
 
@@ -53,8 +74,12 @@ async function main() {
     if (paintedPx < 1) throw new Error(`Demo overlay did not render (probe=${paintedPx})`);
 
     // 2) TopBar mounted (TopBarHost emits a fixed-positioned bar).
+    //    ASSERTED since 2026-07-29 — this probe was computed and logged but never
+    //    checked, so `TopBarHost` returning null left the smoke green with its
+    //    success banner. Falsified both ways: see the header's coverage note.
     const hasTopBar = await page.evaluate(() => !!document.querySelector('[data-topbar-host]') || !!document.querySelector('header'));
     console.log('topbar present:', hasTopBar);
+    if (!hasTopBar) throw new Error('TopBar did not mount (no [data-topbar-host] and no <header>)');
 
     // 3) Demo panel + AutoFeaturePanel param controls present. ScalarInput
     //    is a custom track+thumb widget — there is no <input type="range">
@@ -91,18 +116,32 @@ async function main() {
     const tickEnd = await page.evaluate(() => (window as any).__animTickCount ?? null);
     console.log('animTickCount t+500ms:', tickEnd);
     if (tickStart === null) throw new Error('window.__animTickCount missing — installModulation() did not run');
+    // ASSERTED since 2026-07-29. This was a console.warn, so a completely dead
+    // render loop (counter 0 -> 0) still exited 0 AND printed the closing banner's
+    // "modulation tick runs". TickRegistry's own 3s no-ticks safety net is a
+    // console.warn too (grep `has never been called` in engine/TickRegistry.ts) and
+    // this smoke only collects console.error — so nothing caught it. Baseline
+    // advances ~30 ticks per 500ms, so `> tickStart` has a wide margin.
     if (tickEnd === tickStart) {
-        console.warn('⚠ modulation tick did not advance — RenderLoopDriver may not be running for the engine demo');
-    } else {
-        console.log(`✓ modulation tick advanced ${tickEnd - tickStart} times in 500ms`);
+        throw new Error(
+            `modulation tick did not advance (${tickStart} -> ${tickEnd}) — RenderLoopDriver ` +
+            'is not calling runTicks(dt), so animation, overlays and timeline are all dead',
+        );
     }
+    console.log(`✓ modulation tick advanced ${tickEnd - tickStart} times in 500ms`);
 
-    // 5) Hint pill in HUD.
-    const hintPresent = await page.evaluate(() => {
-        const text = document.body.innerText;
-        return text.includes('Randomize') || text.includes('Demo');
-    });
+    // 5) Hint pill in HUD. ASSERTED since 2026-07-29 (was computed and logged
+    //    only), and the probe had to be TIGHTENED before the assertion meant
+    //    anything: it used to accept `Randomize` OR `Demo` anywhere in body
+    //    text, and `Demo` appears in the explainer panel and the dock title, so
+    //    the whole HudHost could return null with the probe still reading true.
+    //    Verified: with `return null` at the top of HudHost, the old probe was
+    //    still `true`. `Randomize color` is the pill's own key label (grep
+    //    registerHudHint in demo/setup.ts) and is not rendered anywhere else
+    //    while the cheatsheet is closed.
+    const hintPresent = await page.evaluate(() => document.body.innerText.includes('Randomize color'));
     console.log('hint pill text present:', hintPresent);
+    if (!hintPresent) throw new Error('HUD hint pill absent — no "Randomize color" key label in body text');
 
     // 6) Undo round-trip. historySlice's contract is interaction-bracketed:
     //    handleInteractionStart() snapshots, the user mutates state, then
