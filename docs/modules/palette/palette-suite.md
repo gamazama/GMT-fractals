@@ -29,8 +29,9 @@ depends_on: []
 
 # palette — the gradient/palette suite
 
-`palette/` is a **host-agnostic** module tree (pure TS core + React components, no DOM
-or store coupling in `core/`) that provides GMT's whole gradient-authoring domain:
+`palette/` is a **host-agnostic** module tree (pure TS core + React components, no *store*
+coupling in `core/` — but see the DOM caveat under Shared core) that provides GMT's whole
+gradient-authoring domain:
 browse a catalog (Picker), build gradients procedurally (Generator), extract them from
 images (Image / img2grad), save favourites (Favients), and export to 15 formats. It is
 mounted by the standalone [gradient-explorer](../gradient-explorer/app.md) shell **and**
@@ -84,8 +85,22 @@ catalog, the ingested image, the favourites collection) that doesn't fit DDFS pa
 
 ## Shared core
 
-The pure, host-agnostic foundation under `core/` (no DOM, no React, no store, no
-`Math.random`) — vitest-covered (`npm run test:palette`).
+The computation foundation under `core/` — no React, no store, no `Math.random` (the
+determinism half holds tree-wide: grep finds `Math.random` only inside comments saying it
+is not used).
+
+**`core/` is NOT uniformly DOM-free.** Six of its 36 files touch host APIs and always
+have: `rampCanvas.ts` (says "DOM-only" in its own header), `favientsExport.ts` and
+`img2grad/decode.ts` and `favientDnd.ts` (`document.createElement`), `storage.ts`
+(localStorage), `catalogLoader.ts` (`fetch`). The pure/DOM-free contract is a per-module
+property — `rampGeometry.ts`, `importFormats.ts`, `stopFit.ts`, `generatorPipeline.ts`,
+the img2grad math — not a directory guarantee. Grep for `document.createElement` before
+assuming a core module runs under node or in a worker.
+
+Covered by `npm run test:palette`: **sixteen `tsx debug/test-palette-*.mts` harnesses
+chained with `&&`**, not vitest — there is no vitest or jest dependency in this repo and
+no `*.test.ts` / `*.spec.ts` anywhere under `palette/`. They are plain node scripts that
+count failures and `process.exit(failures === 0 ? 0 : 1)`.
 
 ### `gmtGradient.ts` — the canonical gradient type
 Byte-exact mirror of GMT's `renderStopsToRamp(stops, blendSpace, colorSpace) →
@@ -233,9 +248,11 @@ Explorer, floating in app-gmt). **Entry:** `FavientsPanel.tsx` (`panel-favients`
   `registerFavientTarget({id, label, apply})`. The Explorer registers `Generator · Slot
   A/B` (→ `sendRampToSlot`); app-gmt registers coloring layers (→ `applyGradientConfig`).
   The panel's "Applying to ▾" dropdown + drop-targets read this list. **No engine coupling.**
-- **Export** (`favientsExport.ts`): per-gradient zip (.map/.ggr/.gpl/.cpt/.grd/CSS),
-  single-file collections (.ai/.idml hold all favourites as one swatch library), PNG
-  contact sheet, and `collectionQualityWarnings()` for lossy .ai/.idml stop reduction.
+- **Export** (`favientsExport.ts`): `buildCollectionZip()` runs *any* per-gradient format
+  over every favourite and zips the results (.map/.ggr/.gpl/.cpt/.grd/CSS/…);
+  `buildCollectionFile()` emits a single combined file for the three collection formats
+  (.ai/.idml/.ugr); PNG contact sheet; and `collectionQualityWarnings()` for lossy stop
+  reduction — **.ai and .idml only**, `.ugr` is exempt despite reducing to 64 nodes.
 
 ---
 
@@ -272,14 +289,26 @@ the export block.
 
 ## Exporters
 
-`exportFormats.ts` is the master **`EXPORT_FORMATS`** registry (15 formats): plain text
-(map / hex / CSS / SVG / JSON / JS / Python / CSV / GIMP .gpl & .ggr / Paint.NET / GMT
-.cpt / Adobe Illustrator **.ai**) and binary (Photoshop **.grd** v3 8BGR, InDesign
-**.idml**). Both **.ai** and **.idml** are full registered formats that also implement
+`exportFormats.ts` is the master **`EXPORT_FORMATS`** registry (**16 formats**, keys:
+`map hex css svg json js py csv gpl ggr cpt pdn grd ai idml ugr`): plain text (map / hex /
+CSS / SVG / JSON / JS / Python / CSV / GIMP .gpl & .ggr / Paint.NET / GMT .cpt / Adobe
+Illustrator **.ai** / Ultra Fractal **.ugr**) and binary (Photoshop **.grd** v3 8BGR,
+InDesign **.idml**). **Three** formats — **.ai**, **.idml** and **.ugr** — also implement
 `collection(items)` to emit one combined file from many gradients. A descriptor is
 `{ key, label, ext, binary?, build(ramp) => string|Uint8Array, collection?(items) }`.
-"Pro" formats cap stops via `reduceStopIndices()` (Douglas-Peucker, ~40 stops);
-`aiReductionError()` / `aiLossyGradients()` flag visibly-lossy gradients for UI warnings.
+
+Reduced formats cap stops via `reduceStopIndices()` (Douglas-Peucker with escalating
+tolerance), each at its own budget: `.grd`/`GRD_MAX` 40, `.ai`/`AI_MAX` 40 (re-exported as
+`AI_STOP_LIMIT` and reused by `indesignIdml.ts`), `.svg`/`SVG_MAX` 32, `.ugr`/`UGR_MAX_STOPS`
+64. `aiReductionError()` / `aiLossyGradients()` flag visibly-lossy gradients for UI
+warnings — but only for `.ai` and `.idml`; `collectionQualityWarnings()` returns empty for
+`.ugr` even though it reduces too.
+
+**Ultra Fractal `.ugr`** — the classic 1D flame-fractal palette format (Ultra Fractal,
+Apophysis/flam3, IFSRenderer). Named blocks over a 400-entry `index=…  color=…` ring,
+where the colour integer puts **R in the least-significant byte** (`R + G·256 + B·65536`,
+not `0xRRGGBB`). Emits RDP-reduced editable nodes mapped onto the 0..399 ring with
+`smooth=no`, endpoints always kept, rather than all 400 slots.
 
 **InDesign IDML** (`indesignIdml.ts` + `indesignIdmlTemplate.ts`): an IDML is a ZIP of
 XML parts; gradients import as real **gradient swatches**. `buildIdmlSwatchLibrary()`
@@ -303,5 +332,6 @@ re-zips in original part order over a base64 deflate(JSON) template. Limits: ≤
   becomes a generator source slot by appending an ad-hoc ramp-only catalog entry
   (deduped by content signature — `rampSig` — so re-sending the same ramp refreshes its
   entry rather than growing the catalog unbounded).
-- **Determinism is a contract** in `core/` (no `Math.random`, no DOM) so the vitest
-  harnesses (`npm run test:palette`) can assert byte-identical output.
+- **Determinism is a contract** in `core/`'s computation modules (no `Math.random`; DOM-free
+  in the pure ones — see the caveat under Shared core) so the harnesses behind
+  `npm run test:palette` can assert byte-identical output on plain node.
