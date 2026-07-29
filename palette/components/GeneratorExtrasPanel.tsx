@@ -1,12 +1,17 @@
 /**
  * GeneratorExtrasPanel — the custom-UI block pinned at the bottom of the
  * Generator dock tab (registered `palette-generator-extras`). Holds the actions
- * and export that aren't scalar dials: Reset all, Reseed noise, and the full
- * export suite. Format selection uses the GMT GenericDropdown (the proper DDFS
- * dropdown component); the dials above are native DDFS params.
+ * and export that aren't scalar dials: Reset all, and the full export suite.
+ * Format selection uses the GMT GenericDropdown (the proper DDFS dropdown
+ * component); the dials above are native DDFS params.
  *
- * Reads the shared generatorStore (export format + reset/reseed actions) and the
- * derived ramp (useGeneratorDerived) for the actual export bytes.
+ * Reseed noise is NOT here — it sits with the other mod actions in
+ * `GeneratorModifierActions.tsx` (registered `palette-modifier-actions`),
+ * alongside Bake → curve and Reset mods, so they read as one group under the
+ * Modify and Noise dials. Grep `reseedNoise`.
+ *
+ * Reads the shared generatorStore (export format + resetAll) and the derived ramp
+ * (useGeneratorDerived) for the actual export bytes.
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
