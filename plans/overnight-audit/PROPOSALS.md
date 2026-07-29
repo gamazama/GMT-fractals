@@ -2677,3 +2677,78 @@ live auditors is far more dangerous than a wrong subject line.
   `palette-suite.md`. Same class as the gradient-explorer path reported in cycle
   11 — 2 of the 5 named sibling-app paths do not exist. Still untouched, still
   yours: it is steering configuration.
+
+---
+
+# Cycle 13 — guard sweep, batch 1 (gs01)
+
+## MEDIUM — `hasCompiledShader` means "a compile was issued", and three call sites read it as "a compile succeeded"
+
+**Claim.** `engine-gmt/engine/CompileScheduler.ts` sets `this.hasCompiledShader =
+true` before the driver has reported the link result. It therefore reads `true`
+after a failed shader compile, and its consumers treat it as a success signal.
+
+**Evidence.** Found while falsifying `smoke:engine-gmt`. With a bare
+`AUDIT_GS01_BREAK_MARKER;` injected into the joined headers string in
+`ShaderBuilder.buildFragment()` — a hard GLSL syntax error — the app booted,
+`proxy.isBooted` and `proxy.hasCompiledShader` were both `true`, `frameCount`
+reached **216** (higher than a working boot's 7, because empty frames are cheap),
+all six store slices were present, and there were zero pageerrors. The only
+signal anywhere was a console.error: `[WorkerProxy] Worker error: Shader
+compile/link failed: … ERROR: 0:430: 'AUDIT_GS01_BREAK_MARKER' : syntax error`.
+
+The consumers, by grep target:
+
+- `GmtRendererTickDriver.tsx` — `if (!proxy.hasCompiledShader) return`, with a
+  comment calling it "a one-way latch";
+- `usePhysicsProbe.ts` — `if (!engine.hasCompiledShader || frameCount.current < 15)`;
+- `CompileScheduler.ts` itself — `needsCompile = !this.hasCompiledShader ||
+  this.deps.materials.shaderDirty`.
+
+**The catch, and why this is not a one-liner.** The early assignment is
+deliberate and carries its own comment: *"Mark compiled BEFORE yielding — a
+concurrent perform can start during the yields below and must see the updated
+formula key, otherwise it thinks the formula changed and does a redundant
+preview."* Moving it is a concurrency change on the compile path, not a rename.
+
+**Scope note.** The guard side is already fixed — `smoke:engine-gmt` now asserts
+on the console stream (commit `e04d7dc2`), and re-falsifying it produces exit 1
+with the compile error. So the audit's proof chain is sound whichever way this
+goes. This is purely about production behaviour: today a failed compile in the
+wild renders empty frames indefinitely with no in-app signal.
+
+**Options.**
+1. Leave the timing, rename to `hasIssuedCompile` so callers stop reading success
+   into it. Cheap and honest; ~6 call sites; no behaviour change at all.
+2. Add a separate `lastCompileFailed`, fed by the `COMPILE_FAILED` event that
+   `WorkerProxy` **already** re-emits on the main bus for `ModifyWithAIModal`.
+   Additive; does not touch the latch's timing or its concurrency role.
+3. Leave both. A compile failure in production almost always comes from an
+   AI-pasted or hand-authored formula, and `ModifyWithAIModal` already surfaces
+   that path.
+
+**Recommendation.** (2) — it is additive, reuses an event that already exists and
+already crosses the worker boundary, and it gives the renderer something true to
+gate on. Then (1) if the rename proves cheap. Not applied: it changes production
+semantics on a concurrency-sensitive path, and what the flag *should* mean is
+your call.
+
+## Housekeeping (gs01)
+
+- The **Vite dev server on :3400 was not running** at the start of this cycle, as
+  the task said. This auditor started one, used it for the five browser smokes,
+  and **stopped it at the end** — the tree is quiet again.
+- **No tracked artifact was written by any of the eight guards.**
+  `debug/engine-gmt-smoke.png` and `debug/scratch/fractal-toy-2f-fixed.png` are
+  both untracked, and `test:compat` ran in diff mode throughout, so
+  `debug/compat-snapshot.jsonl` was never rewritten (`git status` clean on it at
+  every step). Nothing to `git checkout` afterwards.
+- `npm run check:rule-guards` was run once, as the protocol requires. Exit 1 with
+  **the same 4 miscitations already documented in `PROTOCOL.md`** — 3 deep-zoom
+  smokes on `gmt-formulas-and-graph.md`, `test:bucket-convergence` on
+  `gmt-renderer.md`. No new ones, and none of these eight guards appear. Not
+  re-derived.
+- `mobile-layout.md` already states — correctly, and with its own falsification on
+  record — that `smoke:viewport` and `smoke:viewport-fixed` do not cover mobile
+  detection. Confirmed still accurate. No finding; a previous auditor got there
+  first and did it properly.
