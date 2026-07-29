@@ -24,9 +24,14 @@ const HeroPortalContext = createContext<HTMLElement | null>(null);
  *  or omits it entirely (desktop / app-gmt → heroes stay inline). */
 export const HeroPortalProvider = HeroPortalContext.Provider;
 
-/** True when the calling component is being rendered into a host hero rail (mobile). Lets
- *  the hero add rail-only affordances (e.g. a Save-to-favourites action) that don't belong
- *  on the inline desktop strip. */
+/** True when the calling component is being rendered into a host hero rail (mobile).
+ *
+ *  Used for SIZING, not for gating: `CanonicalHero` reads it at three sites (grep
+ *  `inRail` there) and every one picks between a bigger thumb-target / labelled variant
+ *  and a compact desktop one — the Save-to-favourites star and the enlarge toggle render
+ *  on every surface either way. It was once a rail-ONLY gate for the star; 3ceb5592 made
+ *  that affordance universal. If you want a genuinely rail-only child, that is `HeroSlot`'s
+ *  `railOnly` prop below, not this hook. */
 export const useInHeroRail = (): boolean => useContext(HeroPortalContext) != null;
 
 /** Wrap a mode's result hero. Portals it into the host rail when one is mounted, else
