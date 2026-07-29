@@ -436,11 +436,11 @@
     "files": 85,
     "status": "in-progress",
     "cycle": 13,
-    "findings": 51,
-    "applied": 39,
+    "findings": 67,
+    "applied": 55,
     "escalated": 0,
-    "proposed": 10,
+    "proposed": 12,
     "priority": 34,
-    "note": "48 of 76 swept in 6 serial batches (176 falsifications). 23 guards found defective. check:rule-guards taken from 4 issues to ZERO. Two NEW rules written for previously rule-orphaned subsystems: deep-zoom.md and interaction-session.md. 28 guards remain."
+    "note": "56 of 76 swept in 7 serial batches (215 falsifications). 29 guards found defective. check:rule-guards taken from 4 issues to ZERO and then REPAIRED (it could not import-check composite npm scripts) - still zero under the stricter check. Three NEW rules for rule-orphaned subsystems: deep-zoom.md, interaction-session.md, gmt-shader-chunks.md. 20 guards remain."
   }
 ]
