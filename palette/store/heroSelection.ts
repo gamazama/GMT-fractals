@@ -14,9 +14,17 @@
  * on `active`, + the dock) but KEEPS every surface's pick — the hero never blanks. See
  * `plans/p2-a-picker-interaction.md`.
  *
- * @invariant `key` MUST fully determine `payload` + `selfTargetId`: the identity guards
- *   below early-return on a `(mode,key)` match, so varying payload for the same key would
- *   leave a silently stale dock.
+ * @assumption `key` MUST fully determine `payload` + `selfTargetId`: `sameItem` below
+ *   compares ONLY `(mode, key)`, and both `setHeroPick` and `setHeroDrag` skip the write
+ *   when it matches — so re-picking the same key with a different payload silently keeps
+ *   the old one and the dock acts on a stale gradient. Was written as an `@invariant`;
+ *   downgraded 2026-07-29 because nothing can go red if a caller breaks it. No
+ *   `debug/*.mts` harness imports this module and no browser smoke touches a hero (`grep
+ *   -il hero debug/*.mts` is empty), so the claim rests entirely on every call site
+ *   deriving `key` from the same content the payload carries. To promote it back, a guard
+ *   would have to call `setHeroPick` twice with one `(mode,key)` and two different
+ *   `payload`s and assert `useActiveHeroSelection()` reflects the second — this module is
+ *   plain TS with a single `useSyncExternalStore` import, so a node harness can do it.
  * @see palette/store/pickerSearch.ts (the transient-store precedent)
  */
 
