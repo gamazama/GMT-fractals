@@ -42,7 +42,6 @@ region; dump once, measure many.
 ## Guards
 
 ```
-npm run test:bucket-convergence   # RenderPipeline accumulation + convergence fence
 npm run smoke:engine-gmt          # app-gmt boot: BOOTED, compile, FRAME_READY, store
 npm run test:shader               # long — full native config sweep
 ```
@@ -52,6 +51,39 @@ npm run test:shader               # long — full native config sweep
 FluidEngine.ts`, `FRAG_TSAA_BLEND`). fluid-toy never imports `RenderPipeline`;
 `engine/RenderPipeline.ts` has exactly one importer, the
 `engine-gmt/engine/RenderPipeline.ts` re-export shim. An engine-gmt TSAA /
-accumulation regression cannot fail it. Use `test:bucket-convergence` for that
-path. Same trap for `smoke:formula-switch` (fractal-toy.html) and
-`smoke:fractal-kind` (fluid-toy.html) — sibling apps, not engine-gmt.
+accumulation regression cannot fail it. Same trap for `smoke:formula-switch`
+(fractal-toy.html) and `smoke:fractal-kind` (fluid-toy.html) — sibling apps, not
+engine-gmt.
+
+### `test:bucket-convergence` is NOT a guard for this rule — removed above
+
+**Correction (2026-07-29 guard sweep — falsified, not inferred.)** This section
+used to end "Use `test:bucket-convergence` for that path", and that script used to
+head the Guards block. It covers neither that path nor any file this rule scopes,
+so it has been removed from the block. The harness imports `engine/RenderPipeline`
+**directly**, not through the `engine-gmt/engine/RenderPipeline.ts` shim — and a
+re-export points engine-gmt→core, never the reverse — so nothing under
+`engine-gmt/engine/**` is in its import graph. The rule-guard checker had been
+reporting this as one of its four known miscitations.
+
+Three breaks, each applied to the source and reverted, running both that harness
+and `tsc`:
+
+- Remove `convergencePending = false` from engine-core's `resetAccumulation`
+  (grep `resetAccumulation` in `engine/RenderPipeline.ts`) → harness **RED**, exit
+  1, "FIXED: resetAccumulation cleared the stale pending measurement". The harness
+  is healthy — it simply guards `engine/RenderPipeline.ts`, which is scoped by
+  [`render-and-shaders-core.md`](./render-and-shaders-core.md), where the same
+  citation is correct and where it stays.
+- Gut `GmtBucketHost.resetAccumulation()` — the per-bucket
+  `pipeline.resetAccumulation()` call, grep `resetAccumulation` in
+  `engine-gmt/engine/GmtBucketHost.ts` → harness **GREEN** *and* typecheck green.
+  That is an engine-gmt accumulation regression passing everything.
+- Repoint the shim's `export *` at another module → harness **GREEN**, typecheck
+  **RED** (6 errors). The shim holds no runtime logic, so typecheck is its only
+  meaningful cover.
+
+So: for engine-core accumulation/convergence, `test:bucket-convergence` is the
+guard and it works — run it from `render-and-shaders-core.md`. For
+`engine-gmt/engine/**` accumulation there is **no runtime guard at all** — treat
+`GmtBucketHost` and the bucket path as unguarded and verify changes by hand.
