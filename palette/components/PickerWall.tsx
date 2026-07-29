@@ -6,8 +6,14 @@
  *   • a group is split into CHUNKED canvases each capped at MAX_CANVAS_CSS_H so no
  *     single canvas exceeds the browser's max dimension (a huge ungrouped group in a
  *     narrow dock would otherwise be tens of thousands of px tall and hang the tab).
- *   • each canvas is drawn ONCE (drawImage from the shared 256×N sprite); the page
- *     scrolls in the DOM — no per-frame redraw.
+ *   • chunk canvases are VIRTUALIZED, not draw-once: an IntersectionObserver
+ *     (rootMargin 500px) mounts and paints a chunk near the viewport and UNMOUNTS it
+ *     once it scrolls away — toggling rather than latching, so a zoom step doesn't
+ *     repaint every chunk ever seen. The wrapper div keeps its box so scroll space is
+ *     reserved regardless. A chunk therefore repaints on each viewport re-entry, on a
+ *     zoom commit (zoom scales swatchW/H, which are deps), and on a selection change —
+ *     but never per frame, and never on a plain DOM scroll. Painting is one drawImage
+ *     per swatch from the shared 256×N sprite; treat this effect as a hot path.
  *   • hover draws the swatch ZOOMED in place (3×w · 2×h, crisp) + a stats tooltip.
  *   • the SELECTED swatch (selectedId) is drawn ENLARGED in place — oversized + centred on
  *     its cell, shadow-lifted above its neighbours, with a thin cyan ring. This is the
