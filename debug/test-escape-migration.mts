@@ -102,6 +102,18 @@ console.log('\n[7] v7 — modulation rule bands convert to Hz');
           { id: 'kick', target: 'coreMath.paramA', source: 'audio', freqStart: 0, freqEnd: 0.005 },
           { id: 'full', target: 'coreMath.paramB', source: 'audio', freqStart: 0, freqEnd: 1 },
           { id: 'lfo', target: 'coreMath.paramC', source: 'lfo' },
+          // NON-ZERO freqStart. Every fixture above starts at 0, and 0 × 48000 is 0,
+          // so the lowHz half of the conversion was unproven: replacing
+          // `r.lowHz = r.freqStart * LEGACY_NYQUIST_HZ` with `r.lowHz = r.freqStart`
+          // left this whole harness green (measured 2026-07-29). A degenerate
+          // fixture, in the batch-1 sense. This band is 0.05–0.25 → 2400–12000 Hz.
+          { id: 'mids', target: 'coreMath.paramD', source: 'audio', freqStart: 0.05, freqEnd: 0.25 },
+          // MIXED VINTAGE — a rule carrying BOTH an already-converted Hz band and a
+          // legacy fraction. This is the only shape the `already carries Hz` guard
+          // actually protects: on a plain replay the first pass has already deleted
+          // freqStart/freqEnd, so deleting that guard changed nothing and the harness
+          // stayed green. Here it must keep 300/900 and drop the legacy fields.
+          { id: 'mixed', target: 'coreMath.paramE', source: 'audio', lowHz: 300, highHz: 900, freqStart: 0.5, freqEnd: 0.9 },
         ],
       },
     },
@@ -116,6 +128,18 @@ console.log('\n[7] v7 — modulation rule bands convert to Hz');
     'the old fields are removed, not left alongside');
   assert(rules[2].lowHz === undefined,
     'a non-audio rule with no band is left untouched');
+  assert(rules[3].lowHz === 1200 && rules[3].highHz === 6000,
+    'a NON-ZERO freqStart is scaled too (0.05–0.25 → 1200–6000 Hz), not just freqEnd');
+  assert(rules[4].lowHz === 300 && rules[4].highHz === 900,
+    'a rule already carrying Hz keeps them when a legacy fraction sits alongside');
+  // Known and deliberate residue: the `continue` that protects the existing Hz
+  // band also skips the `delete r.freqStart / r.freqEnd` below it, so a
+  // mixed-vintage rule keeps its stale fractions. Harmless today — `grep -rn
+  // freqStart` across engine, engine-gmt, components, store and app-gmt finds
+  // NO reader outside the migration itself. Pinned as the CURRENT behaviour so
+  // that if the guard is ever restructured, the change is deliberate.
+  assert(rules[4].freqStart === 0.5 && rules[4].freqEnd === 0.9,
+    'and its stale legacy fields survive (documented residue, no reader anywhere)');
 
   // Idempotence matters here: the version tag is not persisted in GMF, so a
   // save/reload replays the whole chain. Double-converting would drop a
