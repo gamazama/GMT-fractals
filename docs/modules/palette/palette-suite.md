@@ -44,7 +44,7 @@ history + decisions:
 [palette-studio-port-plan.md](../../../plans/palette-studio-port-plan.md),
 [gradient-explorer-next-session-handoff.md](../../../plans/gradient-explorer-next-session-handoff.md).
 
-~60 files. State rides the engine's **DDFS** ([02_Feature_Registry.md](../../engine/02_Feature_Registry.md))
+89 `.ts`/`.tsx` files. State rides the engine's **DDFS** ([02_Feature_Registry.md](../../history/engine/02_Feature_Registry.md))
 where params are scalar/vec (so they get undo + keyframes + presets for free), and
 local **Zustand** stores hold the non-scalar state (channel-curve `Track[]`, the loaded
 catalog, the ingested image, the favourites collection) that doesn't fit DDFS params.
@@ -67,7 +67,7 @@ catalog, the ingested image, the favourites collection) that doesn't fit DDFS pa
 
 `registerPaletteUI()` is the single boot seam, called from a host's `registerFeatures.ts`
 **before** the store exists (the registries freeze on first store access — see
-[03_Plugin_Contract.md](../../engine/03_Plugin_Contract.md)). It registers:
+[03_Plugin_Contract.md](../../history/engine/03_Plugin_Contract.md)). It registers:
 
 - **3 DDFS features** (dock tabs): `paletteFilters` (Picker), `paletteGenerator`
   (Generator), `paletteImage` (Image).
@@ -77,7 +77,7 @@ catalog, the ingested image, the favourites collection) that doesn't fit DDFS pa
   `palette-noise-targets`, `palette-modify-toggles`, `palette-image-extras`, and
   `panel-favients` (the Favients shelf panel).
 - **A history provider** keyed `paletteGenerator` — bridges the generator's non-DDFS
-  Zustand state (curves + slots) into engine undo ([06_Undo_Transactions.md](../../engine/06_Undo_Transactions.md)).
+  Zustand state (curves + slots) into engine undo ([06_Undo_Transactions.md](../../history/engine/06_Undo_Transactions.md)).
 - **Seeds** the Favients shelf with built-in `GRADIENT_PRESETS` on first run.
 
 ---
