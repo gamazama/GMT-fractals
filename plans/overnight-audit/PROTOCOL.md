@@ -292,8 +292,31 @@ it did: the a03-tutorial auditor staged broadly and carried 54 lines of the gx01
 auditor's `docs/modules/gradient-explorer/app.md` work into commit `50d18282`,
 whose message is about the tutorial runner. No content was lost and history was not
 rewritten, but the finding is mis-attributed in the log permanently — the audit's
-own record of who proved what is now wrong at that commit. Use
-`git add <path> [<path>…]` and check `git status --porcelain` before committing.
+own record of who proved what is now wrong at that commit.
+
+**That rule is necessary but NOT sufficient, and cycle 12 proved it the same day
+it was written.** Parallel auditors share one working tree and therefore one git
+**index**. Two auditors did exactly as instructed — `git add` on a single explicit
+path, `git status --porcelain` checked immediately before committing — and it
+still happened: p01b added its one file while p01a already had one staged, and
+p01a's `git commit` took both. `add` + `commit` is not atomic across processes, so
+no discipline at the `add` step can close this.
+
+So commit with the **pathspec form**, which commits only the named paths whatever
+else is in the index:
+
+```
+git commit -F <msgfile> -- <path> [<path>…]
+```
+
+Then verify with `git log -1 --name-only` that the commit contains exactly your
+paths, and nothing else. Expect the occasional `cannot lock ref HEAD` when two
+auditors commit at the same instant — that is benign, retry immediately.
+
+The clean structural answer is one `git worktree` per auditor, hence one index
+each. That was not adopted because the auditors also need to run guards against a
+single dev server and a shared `node_modules`; if a future run can afford it, it
+removes this whole class.
 
 ## Throughput, not budget
 
