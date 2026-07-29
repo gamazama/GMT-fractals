@@ -104,12 +104,19 @@ const gradientName = (name: string): string => {
 };
 
 /**
- * The name a dragged-in gradient gets when added. Drag-to-Favients is the sole add-path
- * now (starring is gone), so a payload with no explicit name auto-derives a perceptual
- * label (e.g. "Warm Vivid Rainbow") via the shared `configToName` instead of landing
- * blank — the same fallback the `favients` send-target uses, so the panel's own insert
- * (an actual drag onto the shelf, which the passthrough dropbox hands off) names exactly
- * like the click-through flat-add.
+ * The name a dragged-in gradient gets when added. A payload with no explicit name
+ * auto-derives a perceptual label (e.g. "Warm Vivid Rainbow") via the shared
+ * `configToName` instead of landing blank — the same fallback the `favients` send-target
+ * uses, so the panel's own insert (an actual drag onto the shelf, which the passthrough
+ * dropbox hands off) names exactly like the click-through flat-add.
+ *
+ * Drag-to-shelf is NOT the sole add-path — grep `configToName` / `store.add` for the
+ * four that exist. Besides this one: the Save-to-Favients star on `CanonicalHero.tsx`
+ * (grep `toggleSave`), which that file calls the only add path on TOUCH; the
+ * `gradientFavients` bridge in `registerPaletteUI.ts` (grep `setGradientFavientsBridge`),
+ * reached from the Stops editor's "Send to Favients" and `FavientsEditorEntrance`'s
+ * second click; and this file's own System-menu file import (grep `Import · .`). All
+ * four dedupe and auto-name identically, which is the point this comment is making.
  */
 const addName = (p: FavientDragPayload): string => p.name?.trim() || configToName(p.config);
 
