@@ -90,6 +90,12 @@ registerUI();
 // in viewportSlice fires at sampleCap/2 = 32, so adaptive stops
 // kicking in well before the fractal fully settles, keeping unrelated
 // slider drags from flipping resolution.
+//
+// @stale The "256" is no longer true and this call is therefore a NO-OP today:
+// grep `sampleCap:` in store/slices/renderControlSlice.ts — the engine default
+// is already 64. Kept, not deleted, because it pins the value fluid-toy
+// actually wants if that default ever moves again. Noticed 2026-07-29 when a
+// guard-sweep break renamed the slice default and `smoke:tsaa` still read 64.
 useEngineStore.getState().setSampleCap(64);
 
 // Install @engine/viewport. Adaptive scales ONLY the fractal/canvas
