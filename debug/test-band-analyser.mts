@@ -161,6 +161,39 @@ console.log('\n[5] SuperFlux suppresses a drifting tone, keeps a real onset');
   assert(onsetPeak > driftPeak * 2,
     'a real onset reads at least twice a drifting tone',
     { onset: onsetPeak.toFixed(1), drift: driftPeak.toFixed(1) });
+
+  // ── The case above does NOT discriminate. Added 2026-07-29 after
+  // falsification: deleting the frequency max-filter outright (`prevMax =
+  // prev[k]`, i.e. plain per-band flux) leaves this whole block green.
+  //
+  // Measured at the 0.5%/hop drift above — deterministic, synthetic input, so
+  // these reproduce exactly: onsetPeak 165.8 either way; driftPeak 1.13 with
+  // the max-filter and 39.97 without. The filter really is doing its job — 35x
+  // of suppression — but the surviving ratio is still 4.15, comfortably over
+  // the 2x this asserts. The threshold is ~70x looser than the healthy code
+  // delivers, so it cannot see the mechanism it is named for disappear.
+  //
+  // Fixed by adding a HARDER stimulus rather than by tightening the number
+  // above: 2%/hop is a fast filter sweep (~5.4 octaves/sec), the hardest case
+  // plain flux still has to reject, and it separates cleanly —
+  //   with max-filter:    drift 3.74, ratio 44.3   (5.5x over the 8x gate)
+  //   without max-filter: drift 93.6, ratio 1.77   (4.5x under it)
+  // 8 sits in the middle of that gap with margin on both sides; 2 does not.
+  {
+    const sweep = mk({ smoothingTauSec: 0.001 });
+    let hz = 1000;
+    let sweepPeak = 0;
+    for (let i = 0; i < 60; i++) {
+      sweep.analyse(tone(hz), HOP);
+      if (i > 20) sweepPeak = Math.max(sweepPeak, ...Array.from(sweep.flux));
+      hz *= 1.02;
+    }
+    assert(onsetPeak > sweepPeak * 8,
+      'a fast SWEEP stays well under a real onset — this is what the frequency '
+      + 'max-filter buys, and it goes red when the filter is removed',
+      { onset: onsetPeak.toFixed(1), sweep: sweepPeak.toFixed(1),
+        ratio: (onsetPeak / sweepPeak).toFixed(2) });
+  }
 }
 
 console.log('\n[6] a geometry change drops the reference frame, not the config');
