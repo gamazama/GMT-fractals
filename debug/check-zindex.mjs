@@ -16,6 +16,21 @@
  * Also reports (informationally, non-failing) `createPortal(_, document.body)`
  * outside the layer host — those should route through `getLayerHost()`/`<Layer>`.
  *
+ * COMMENT LINES ARE NOT USAGES (2026-07-29 guard sweep). Lines whose first
+ * non-space characters are `*` or `//` are skipped at the match site. This was a
+ * correctness fix, not a convenience: `components/ui/zIndex.ts` and
+ * `components/ui/Layer.tsx` quote `z-[9999]` in their JSDoc to say what NOT to
+ * write, and the only way to stop that nagging had been to ALLOWLIST both files
+ * wholesale — which made the ratchet blind in the worst possible place.
+ * Falsified: a hardcoded `zIndex: 9999` planted on `Layer.tsx`'s portal div (so
+ * every `<Layer>` renders at 9999 regardless of tier, defeating the entire tier
+ * table) passed this check, `npm run test:zindex`, AND `npm run typecheck` — all
+ * three green. After the fix the same plant fails here with
+ * `components/ui/Layer.tsx:70  zIndex: 9999`, while the JSDoc mention on line 14
+ * stays correctly silent. Filtering on the line's leading characters cannot
+ * create a false NEGATIVE: real code does not begin a line with `*` or `//`, and
+ * a trailing comment leaves the line's start untouched.
+ *
  * Run: `npm run check:zindex`.  @see plans/z-index-system-design.md
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -30,9 +45,11 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'public', 'docs', 'plans', 'd
 //  (b) portal backlog: a body-portalled surface still on a raw number, to be
 //      migrated to z('tier') / <Layer> (marked ⌛). Remove on migration.
 const ALLOWLIST = new Set([
-    // doc text references the literal — not real usages
-    'components/ui/zIndex.ts',
-    'components/ui/Layer.tsx',
+    // NOTE: components/ui/zIndex.ts and components/ui/Layer.tsx used to sit here
+    // ("doc text references the literal — not real usages"). They are gone
+    // deliberately — comment lines are now filtered at the match site instead, so
+    // the two files that DEFINE the scale are checked like everything else.
+    // Allowlisting them wholesale meant a real `zIndex: 9999` in Layer.tsx passed.
     // (a) shell-local chrome (value is local to its own trap)
     'App.tsx',
     'app-gmt/LoadingScreen.tsx',
@@ -79,6 +96,7 @@ for (const file of files) {
     const rel = relative(ROOT, file).split(sep).join('/');
     const src = readFileSync(file, 'utf8');
 
+    const srcLines = src.split('\n');
     const hits = [];
     for (const re of [Z_TAILWIND, Z_INLINE, Z_PROP]) {
         re.lastIndex = 0;
@@ -86,6 +104,18 @@ for (const file of files) {
         while ((m = re.exec(src))) {
             if (Number(m[1]) >= 100) {
                 const line = src.slice(0, m.index).split('\n').length;
+                // Prose, not a usage. JSDoc continuation lines (`*`) and line
+                // comments (`//`) both quote `z-[9999]` when explaining what NOT
+                // to write. Before this, the only way to stop those two files
+                // nagging was to allowlist them WHOLESALE — and that made the
+                // check blind in exactly the worst place: a real hardcoded
+                // `zIndex: 9999` in Layer.tsx, the portal primitive every tier
+                // resolves through, passed silently (so did test:zindex and
+                // typecheck). Matching on the line's leading characters cannot
+                // cause a false NEGATIVE on real code: a code line does not
+                // start with `*` or `//`, and a trailing comment on a code line
+                // leaves the line's start untouched, so it still gets checked.
+                if (/^\s*(\*|\/\/)/.test(srcLines[line - 1] ?? '')) continue;
                 hits.push({ line, text: m[0], value: Number(m[1]) });
             }
         }
