@@ -14,8 +14,19 @@
  * resolves an ENTRY:
  *   - a browser smoke  -> its ENGINE_URL default -> the app whose HTML serves it
  *   - a node test      -> the test module itself
+ *   - a composite      -> the union of its `npm run` members' entries
  * walks the import graph from there, and reports guards whose reachable set does
  * not intersect the rule's own paths.
+ *
+ * The composite case was added 2026-07-29 by the guard sweep, and it had the
+ * tool's own bug in it: a script like `test:shader` or `test:gate` contains no
+ * filename, so the resolver found nothing, classified it 'opaque' and accepted
+ * it — unchecked, and not printed in either mode, so it looked identical to a
+ * verified citation. `gmt-renderer.md` cites `test:shader` and had been passing
+ * that way. Falsified in both directions: citing `test:shader` on
+ * `layers-zindex.md` now reports "test:shader (4 members) imports none of this
+ * rule's 12 scoped files" and exits 1, where the previous version exited 0 and
+ * said nothing.
  *
  * Reports rather than gates: a zero-overlap guard is usually a miscitation, but a
  * rule may legitimately cite a broad guard (typecheck, orphans) that covers
@@ -93,10 +104,34 @@ function parseRule(name) {
 }
 
 /** Resolve a guard to an import-graph entry, or explain why it has none. */
-function entryFor(script) {
+function entryFor(script, seen = new Set()) {
     const cmd = pkg.scripts?.[script];
     if (!cmd) return { kind: 'missing' };
     if (WHOLE_TREE.has(script)) return { kind: 'whole-tree' };
+
+    // A COMPOSITE — `npm run a && npm run b` — owns no source file, so the regex
+    // below found nothing and it fell through to 'opaque': accepted unchecked
+    // AND never printed, in either mode. That is precisely the failure this tool
+    // exists to catch, hiding inside the tool. `test:shader` is cited by
+    // gmt-renderer.md and was passing that way. A composite's reach is the union
+    // of its members' reach, so expand it; `seen` stops a self-referential
+    // script from recursing forever.
+    const members = [...cmd.matchAll(/npm run ([a-z0-9:_-]+)/gi)].map((m) => m[1]);
+    if (members.length && !seen.has(script)) {
+        seen.add(script);
+        const entries = new Set();
+        for (const m of members) {
+            const e = entryFor(m, seen);
+            // One whole-tree member (typecheck, orphans) covers everything, so
+            // the composite does too and there is nothing left to check.
+            if (e.kind === 'whole-tree') return { kind: 'whole-tree' };
+            for (const f of e.entries ?? []) entries.add(f);
+        }
+        if (entries.size) {
+            return { kind: 'node', entries: [...entries], file: `${script} (${members.length} members)` };
+        }
+        return { kind: 'opaque', cmd };
+    }
 
     const fileM = cmd.match(/([\w./-]+\.(?:mts|mjs|ts|js))/);
     if (!fileM) return { kind: 'opaque', cmd };
