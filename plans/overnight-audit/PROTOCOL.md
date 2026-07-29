@@ -149,14 +149,17 @@ never exceed 3.
    - runs the guards that cover its area,
    - classifies every finding into A / V / B before touching anything,
    - applies only Tier A itself,
-   - returns its findings as JSON. It does **not** spawn agents of its own.
+   - **writes `results/<id>.json` itself, before it returns** — see the durability
+     note under "Result file". This is not optional and not the orchestrator's job.
+   - returns its findings as JSON too. It does **not** spawn agents of its own.
 5. **Verify Tier V** as a *separate, subsequent* step — collect the V findings from
    both auditors, then spawn up to 2 verifiers as flat parallel `Agent` calls.
    Never inside the auditor step.
 6. **Apply confirmed Tier V**, typecheck, commit. The orchestrator does this
    itself, in its own turn — not via another agent.
-7. **Write results** to `results/<id>.json` (schema below), update `worklist.json`,
-   append a line to `journal.jsonl`.
+7. **Confirm every `results/<id>.json` exists** — the auditors wrote them in step 4.
+   Write any that is missing from the returned JSON, add the Tier V verdicts from
+   steps 5–6, then update `worklist.json` and append a line to `journal.jsonl`.
 8. **Rebuild the dashboard** — `node plans/overnight-audit/scripts/build-dashboard.mjs`
    — and commit it. **Do NOT publish it via the Artifact tool.** Owner decision,
    cycle 1: publishing triggers an interactive permission prompt, which stalls an
@@ -239,6 +242,24 @@ verification; "`test:param-mapping` covers the display-curve path and fails if t
 resolver is bypassed — ran it, green" is.
 
 ## Result file
+
+**The auditor writes this itself, before it returns.** Not the orchestrator
+afterwards.
+
+Why, and it is worth reading once: on 2026-07-29 the orchestrator turn ended the
+instant the last auditor's result was delivered and never produced another turn.
+Nothing external explains it — the machine logged events for another 2h39m and was
+demonstrably fine, and there was no rate limit, no error entry and no crash in the
+OS log. Cycle 11's committed work survived because it was in git. One auditor's
+**return value** existed only in that turn's context, and it is gone:
+`results/a03-tutorial.json` had to be reconstructed from commit messages, and the
+Tier B and Tier V findings that auditor produced are unrecoverable — real work,
+done correctly, lost to a mechanism that had nothing to do with the work.
+
+An auditor that writes its own result file costs the run nothing and makes the
+findings independent of the orchestrator surviving to the end of a long turn. Keep
+returning the JSON as well — that is the orchestrator's input for the verify step.
+The file on disk is the system of record.
 
 `results/<subsystem-id>.json`:
 
