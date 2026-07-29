@@ -180,6 +180,38 @@ export class UrlStateEncoder<T extends object> {
         return obj;
     }
 
+    /**
+     * READ BEFORE EDITING THE SKIP-LIST BELOW — it reaches far less than it looks.
+     *
+     * The `typeof base !== 'object'` bail on the third line returns the whole
+     * subtree VERBATIM whenever the base side has no counterpart. On the only
+     * live path (`utils/Sharing.ts` → `generateShareStringFromPreset`) the base is
+     * `getFullDefaultPreset(formula)`, which is a four-key literal whose
+     * `features` is `{}` — grep `getFullDefaultPreset` in utils/PresetLogic.ts.
+     * So `base.features[<anyFeatureId>]` is always `undefined`, every feature
+     * slice takes that bail, and recursion STOPS at the feature-id level.
+     * Consequences, both falsified 2026-07-29 with `npm run smoke:share-link`:
+     *
+     *   - Adding a feature id (`key === 'coloring'`) to the skip-list DOES work —
+     *     that key loop runs. Payload 2895 → 2668 chars, smoke exit 1,
+     *     "coloring.repeats round-tripped 3.7 (got 1)".
+     *   - Adding a param name (`key === 'repeats'`, `key === 'paramA'`) does
+     *     NOTHING — those keys live inside a slice the loop never descends into.
+     *     Payload byte-identical at 2895 chars, smoke exit 0. (Confirmed the edit
+     *     really reached the browser: `if (1) return ''` in encode() gives 0 chars.)
+     *
+     * Corollary: feature state is NOT diffed against defaults at all — every
+     * registered slice is emitted in full on every share. And the four named
+     * entries below are unreachable on this path, because `liveModulations`,
+     * `histogramData`, `interactionSnapshot` and the `*Stack` fields are store
+     * fields that `getPreset` never copies into a Preset (it builds from a fixed
+     * literal + `presetFieldRegistry` + `features`). They are defensive only.
+     *
+     * This cost the 2026-07-28 audit a night: a falsification that added
+     * `key === 'repeats'` here appeared to prove the guard blind, when in fact
+     * the break was a no-op. See the OPEN ANOMALY note in
+     * plans/overnight-audit/results/g08-save-load-gmf.json — now settled.
+     */
     private getDiff(current: JsonVal, base: JsonVal): JsonVal {
         if (this.isEqual(current, base)) return undefined;
         if (typeof current !== 'object' || current === null || typeof base !== 'object' || base === null) return current;
@@ -190,7 +222,8 @@ export class UrlStateEncoder<T extends object> {
         const curObj = current as Record<string, JsonVal>;
         const baseObj = base as Record<string, JsonVal>;
         Object.keys(curObj).forEach(key => {
-            // Ignore non-persistent properties
+            // Ignore non-persistent properties. Only reaches the preset root and
+            // the `features` map — never inside a slice. See the note above.
             if (key.startsWith('is') || key === 'histogramData' || key === 'interactionSnapshot' || key === 'liveModulations' || key.endsWith('Stack')) return;
             const res = this.getDiff(curObj[key], baseObj[key]);
             if (res !== undefined) {

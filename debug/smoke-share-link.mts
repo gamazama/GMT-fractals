@@ -7,12 +7,41 @@
  *
  * Guards the regression where OPENING a share link threw
  *   "Cannot read properties of undefined (reading 'coreMath.paramC')"
- * The share payload deliberately omits `liveModulations` (UrlStateEncoder
- * skip-list), so the freshly-hydrated store left that field undefined; the
- * coreMath param panel (AutoFeaturePanel) read the RAW store field and
- * indexed it (`liveModulations[trackId]`) on first render → crash. Fixed by
- * routing the panel through the safe `useLiveModulations()` accessor, which
- * returns the frozen EMPTY_LIVE_MODS singleton when the field is missing.
+ * The share payload carries no `liveModulations`, so the freshly-hydrated
+ * store left that field undefined; the coreMath param panel
+ * (AutoFeaturePanel) read the RAW store field and indexed it
+ * (`liveModulations[trackId]`) on first render → crash. Fixed by routing the
+ * panel through the safe `useLiveModulations()` accessor, which returns the
+ * frozen EMPTY_LIVE_MODS singleton when the field is missing.
+ *
+ * (The omission is NOT the UrlStateEncoder skip-list, as this header said
+ * until 2026-07-29. `getPreset` never copies `liveModulations` into a Preset
+ * in the first place — it builds from a fixed literal + presetFieldRegistry +
+ * features — so that skip-list entry is unreachable on this path.)
+ *
+ * ── FALSIFIED 2026-07-29 (guard sweep, batch 3) ──────────────────────────
+ * Three breaks, three mechanisms, each applied and reverted independently:
+ *   A. utils/UrlStateEncoder.ts — added `key === 'coloring'` to getDiff's
+ *      skip-list, i.e. a whole feature slice absent from the payload (the
+ *      exact failure mode the `coloring.repeats` assertion was added for).
+ *      → exit 1, payload 2895 → 2668, "coloring.repeats round-tripped 3.7
+ *        (got 1)". Non-degenerate: authored 3.7 vs default 1.
+ *   B. utils/UrlStateEncoder.ts — quantize `toFixed(5)` → `toFixed(1)`.
+ *      → exit 1, 2 failures: paramA got 0.4, roughness got 0.8.
+ *   C. app-gmt/main.tsx — gated out the `#s=` branch of resolveBootPreset,
+ *      i.e. the recipient never hydrates from the hash at all.
+ *      → exit 1, 3 failures: paramA got 8, roughness got 0.75, repeats got 2.
+ *        Those are the Mandelbulb template's OWN defaults, which also proves
+ *        the recipient page is genuinely fresh — no author-page leakage.
+ * Count-based (not throw-based), so every assertion runs on every invocation.
+ *
+ * SETTLES the OPEN ANOMALY recorded in cycle 8
+ * (plans/overnight-audit/results/g08-save-load-gmf.json): that falsification
+ * added `key === 'repeats'` to the same skip-list and this smoke stayed green
+ * with a byte-identical payload. The guard was never at fault — the break was
+ * a no-op. getDiff stops recursing at the feature-id level because the base
+ * template's `features` is `{}`, so a param name in that skip-list is never
+ * visited. Full mechanism in the JSDoc on UrlStateEncoder.getDiff.
  *
  * Flow:
  *   1. Author page: boot app-gmt, set distinctive coreMath/material values
