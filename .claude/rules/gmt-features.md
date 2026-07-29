@@ -24,10 +24,16 @@ Decisions: ADRs 0054-0055 (catalog), ADRs 0056-0057 (camera manager).
 
 ```
 npm run smoke:statelibrary-drop
-npm run smoke:orbit
+npm run smoke:orbit              # ~25s; see the caveat in navigation.md
 npm run test:partial-apply
 npm run test:session-hold
 ```
+
+`smoke:orbit` was permanently RED on unmodified `main` until 2026-07-29 (an 8 s
+poll window against a SwiftShader sample cost of 13–15 s). It is green now, and
+the window is the only thing that changed. It guards the camera gesture and the
+accumulation-hold release — **not** whether the renderer produced pixels; see the
+blind-spot note in [`navigation.md`](./navigation.md).
 
 `smoke:statelibrary-drop` is the camera-manager guard: it boots app-gmt at
 `localhost:3400/` and drives the Camera Manager's `savedCameras` list directly.
