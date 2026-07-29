@@ -69,7 +69,17 @@ export const getRenderScaleSource = (): RenderScaleSource | null => _renderScale
  *  Also wires a subscription to isUserInteracting so quality drops to
  *  interactionDownsample *immediately* on drag start — not at the next
  *  reportFps sample window (which is throttled to ~500ms). Keeps UI
- *  responsive during scrub gestures. */
+ *  responsive during scrub gestures.
+ *
+ *  @assumption That head start is the subscription's ONLY observable effect,
+ *  and no guard covers it. The subscription acts in manual mode alone
+ *  (`targetFps > 0` returns early), and there the very next reportFps
+ *  recomputes the same value from `tickAdaptiveResolution`'s manual branch
+ *  — so the write survives at most one frame before being re-derived.
+ *  Measured 2026-07-29 by falsifying `smoke:viewport`: deleting the
+ *  `setState({ qualityFraction })` below leaves that smoke GREEN, while
+ *  neutering the module's manual branch turns it RED. Do not treat
+ *  `smoke:viewport` (or anything else) as protection for these lines. */
 /**
  * @invariant Idempotent on subscription wiring (via `_installed` flag)
  *   but `setAdaptiveConfig` runs every call — a second

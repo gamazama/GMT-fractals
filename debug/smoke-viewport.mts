@@ -53,11 +53,28 @@ async function main() {
     console.log('baseline (adaptive suppressed):', q0);
     if (q0 < 0.99) throw new Error(`suppressed baseline should be 1.0, got ${q0}`);
 
-    // Force manual mode (targetFps=0) for a deterministic interaction drop:
-    // in manual mode the installViewport subscription drops quality to
-    // interactionDownsample immediately. In smart mode (default) the
-    // drop is whatever sqrt(target/still-fps) computes, which depends on
-    // actual headless FPS and is non-deterministic.
+    // Force manual mode (targetFps=0) for a deterministic interaction drop.
+    // In smart mode (default) the drop is whatever sqrt(target/still-fps)
+    // computes, which depends on actual headless FPS and is non-deterministic.
+    //
+    // WHAT PRODUCES THE 0.55 BELOW — measured 2026-07-29, because the comment
+    // that used to sit here named the wrong mechanism and would have let
+    // someone delete live code believing this smoke protected it.
+    // It is `tickAdaptiveResolution`'s manual branch (grep
+    // `Manual mode: fixed downsample factor` in engine/AdaptiveResolution.ts),
+    // reached via reportFps — NOT installViewport's isUserInteracting
+    // subscription. Falsified both ways: deleting the subscription's
+    // `setState({ qualityFraction })` leaves this smoke GREEN, while
+    // neutering the module's manual branch turns it RED here with
+    // "quality should be ≤ interactionDownsample (0.55) during drag, got 1".
+    // The subscription's write is real but transient — the next reportFps
+    // recomputes the same 0.55 from the module, so at the +100ms this smoke
+    // samples at, only the module's value is observable.
+    //
+    // So this smoke does NOT cover that subscription, and nothing else does
+    // either. It DOES cover the rest of installViewport: gating out the
+    // `setAdaptiveConfig(options)` call turns the cfg assertions above RED
+    // with "interactionDownsample wrong: 0.5".
     await page.evaluate(() => (window as any).__store.getState().setAdaptiveConfig({ targetFps: 0 }));
     await page.evaluate(() => (window as any).__store.getState().setAdaptiveSuppressed(false));
 
