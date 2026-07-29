@@ -103,15 +103,25 @@ no `*.test.ts` / `*.spec.ts` anywhere under `palette/`. They are plain node scri
 count failures and `process.exit(failures === 0 ? 0 : 1)`.
 
 ### `gmtGradient.ts` — the canonical gradient type
-Byte-exact mirror of GMT's `renderStopsToRamp(stops, blendSpace, colorSpace) →
-RGB[256]`. A gradient is a `GradientStop[]` (`{ position 0–1, color hex, bias?,
+**A pure re-export of `utils/colorUtils.ts`, not a mirror.** It used to be a
+hand-maintained byte-exact copy of GMT's sampler kept in sync by a regression harness;
+that duplication was collapsed in P0a, so there is exactly ONE sampler and it cannot
+drift. The file's own header says so — read it before assuming a copy exists.
+`renderStopsToRamp(stops, blendSpace, colorSpace) → RGB[256]`. A gradient is a
+`GradientStop[]` (`{ position 0–1, color hex, bias?,
 interpolation? }`) plus a blend space (`'oklab'` polar / `'rgb'`) and colour space
 (`'srgb'` / `'linear'` / `'aces_inverse'`). `renderStopsToBuffer()` returns the
 Uint8Array (RGBA 256×1) with the same float→byte truncation GMT uses, so palette
 previews match the fractal byte-for-byte.
 
 ### `oklab.ts` — colour math
-Ported verbatim from GMT's `utils/colorUtils.ts` so there's no drift. Key export:
+Ported verbatim from GMT's `utils/colorUtils.ts` — but unlike `gmtGradient.ts` this one
+**was never collapsed**, so `srgbToLinear01` / `linear01ToSrgb` / `rgbToOklab` /
+`oklabToRgb` are live hand copies (colorUtils keeps its own private and exports only
+`lerpOklab`, which this file re-exports). **Nothing pins them**: `test-palette-stopops.mts`
+section [4] calls itself the "oklab drift pin" but compares `lerpOklab` against itself, so
+it cannot fail. A +0.0001 coefficient change passes the whole `test:palette` chain. See
+the `@assumption` in `oklab.ts`'s header. Key export:
 **`oklabToRgbSafe(Lab)`** — Ottosson **chroma-clip** (binary-search chroma down at
 constant L + hue until in-gamut). Naïve per-channel clamping shifts hue toward grey;
 this sacrifices only vividness and preserves hue. img2grad uses it for out-of-gamut
