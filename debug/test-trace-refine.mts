@@ -13,6 +13,16 @@
  *      loop converges to the same silhouette map() found the hit on.
  *   D. Importer wiring — emitFusedHybrid maps bStepsafterDEStop → quality.refineSteps
  *      (floor 4 when enabled, 0 when off, cap REFINE_HARD_CAP).
+ *
+ * BLIND SPOT CLOSED (2026-07-29 guard sweep), in block D and nowhere else. Blocks
+ * A, B, B2, B3, C and E are all live — falsified by forcing `enableRefine` true in
+ * trace.ts (8 checks red), forcing `numericDE` true in de.ts (8 red) and moving
+ * REFINE_HARD_CAP from 8 to 6 in data/constants.ts (1 red). Block D was not:
+ * it asserted `refineSteps === undefined`, which is equally true when the importer
+ * produced NOTHING, so making emitFusedHybrid return `{ def: null, supported:
+ * false }` for its fixture scene passed all three checks at exit 0. A negative
+ * assertion needs its subject proved to exist first; block D now does that before
+ * asserting the absence.
  */
 import { getTraceGLSL } from '../engine-gmt/shaders/chunks/trace.ts';
 import { DE_MASTER } from '../engine-gmt/shaders/chunks/de.ts';
@@ -144,10 +154,33 @@ const REFINE_MARKERS = ['uRefineSteps', 'dPrev', 'REFINE_HARD_CAP', 'damped-bise
       raw: new Uint8Array(0),
     } as MB3DScene;
   };
+  const emitOf = (steps: number) => emitFusedHybrid(mkScene(steps));
   const refineOf = (steps: number) => {
-    const { def } = emitFusedHybrid(mkScene(steps));
+    const { def } = emitOf(steps);
     return (def?.defaultPreset as any)?.features?.quality?.refineSteps;
   };
+
+  // GUARD THE GUARD (added 2026-07-29). `refineSteps === undefined` is ALSO what you
+  // get when the importer produced nothing at all, so on its own the check below is
+  // satisfied by total failure. Measured: making emitFusedHybrid return
+  // `{ def: null, supported: false }` for this scene passed all three of the
+  // assertions underneath at exit 0. These pin that a def really was emitted and
+  // that the quality block it declined to put refineSteps into is populated —
+  // measured 8 keys (estimator, fudgeFactor, deBailout, distanceMetric, maxSteps,
+  // detail, mb3dDEsub, overstepTolerance). The floor is 4, well under.
+  for (const steps of [0, 4, 20]) {
+    const { def, ledger } = emitOf(steps);
+    ck(`importer emitted a def at all (steps ${steps})`, !!def, ledger.reasons);
+    ck(`importer reports the scene supported (steps ${steps})`, ledger.supported === true, ledger.supported);
+    const quality = (def?.defaultPreset as any)?.features?.quality;
+    ck(`quality block is populated (steps ${steps})`,
+      !!quality && typeof quality === 'object' && Object.keys(quality).length >= 4,
+      quality ? Object.keys(quality).length : quality);
+    // Absent, not merely undefined — an explicitly-set `refineSteps: undefined`
+    // would still round-trip into a preset key and is not the same contract.
+    ck(`refineSteps is ABSENT from the quality block (steps ${steps})`,
+      !!quality && !('refineSteps' in quality), quality && Object.keys(quality));
+  }
 
   // Regardless of the authored bStepsafterDEStop, the importer must NOT set refineSteps
   // (it stays undefined → engine default 0 → off → zero compile cost).
