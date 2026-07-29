@@ -16,6 +16,30 @@
  * GLSL, one is TS — keep them in sync; the constants below match the shader).
  *
  * Run: npx tsx debug/test-dither.mts   (or `npm run test:dither`)
+ *
+ * IT COULD NOT FAIL ON PRODUCT CODE (found and fixed 2026-07-29, guard sweep).
+ * Until that date the exit status depended on exactly one thing — the flat-gate
+ * loop at the bottom — and that loop ran against `ditherPixel` HERE, the local TS
+ * mirror, not against the shader it mirrors. Everything else was printed and
+ * discarded. Three breaks, each applied to real product code and reverted, all
+ * passed at exit 0:
+ *
+ *   - `DITHER_FLAT_HI` 0.004 -> 0.5 in ditherTail.ts, which half-gates real
+ *     gradients — the precise regression that file's own comment warns about.
+ *   - the flat gate DELETED from ditherTail.ts (`float gate = 1.0`), so islands
+ *     get dithered. The one assertion this file had is about exactly that, and it
+ *     did not notice, because it was reading the copy.
+ *   - error diffusion disabled inside `renderFieldDithered`, the one production
+ *     function this file imports. Its WIGGLE went 0.040 -> 0.287 and the number
+ *     was printed and ignored.
+ *
+ * Worse than blind: the surviving assertion was satisfied by the dither being
+ * ENTIRELY DEAD. `ampLSB = 0` gives a flat-region delta of 0, which is what it
+ * checks for.
+ *
+ * The metrics below now feed an ASSERTIONS section at the bottom rather than only
+ * the console. Thresholds are set from measured values, with the margin recorded
+ * at each one so a later reader can see how much slack there is.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,6 +48,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { renderFieldDithered } from '../palette/core/rampGeometry';
 import type { RGB } from '../palette/core/oklab';
+// Imported so the mirror below can be checked against the real thing. This is
+// also the only import edge from this harness into `engine/fractal/shaders/**`.
+import { DITHER_TAIL_GLSL } from '../engine/fractal/shaders/ditherTail';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -141,6 +168,15 @@ const ditherPixel = (
 };
 
 const q8 = (v: number) => clamp(Math.round(v * 255), 0, 255);
+
+// ── assertion plumbing (added 2026-07-29 — see the header) ─────────────────────────────────
+let failures = 0;
+const assert = (ok: boolean, msg: string, detail?: unknown) => {
+  if (ok) console.log(`  ok: ${msg}`, detail ?? '');
+  else { console.error(`  FAIL: ${msg}`, detail ?? ''); failures++; }
+};
+/** Numbers the metric sections below compute, stashed so the assertions can read them. */
+const measured: Record<string, number> = {};
 
 // ── test scenes: a continuous truth `(x,y)→rgb` + its analytic per-pixel slope ─────────────
 interface Scene { name: string; w: number; h: number; truth: (x: number, y: number) => [number, number, number]; slope: (x: number, y: number) => [number, number, number]; flatRegion?: [number, number, number, number]; }
@@ -277,7 +313,12 @@ console.log('  A smooth result has PLATEAU≈1 (no steps) and small WIGGLE.\n');
     console.log('    cap        PLATEAU   WIGGLE');
     for (const cap of [0, 1, 2, 4, 8]) {
       const a = colAvgs(cw, cap, cap !== 0);
-      console.log(`    ${(cap === 0 ? 'none' : `cap${cap}`).padEnd(8)}   ${String(maxPlateau(a)).padStart(7)}   ${wiggle(a, ideal).toFixed(3).padStart(6)}`);
+      const plat = maxPlateau(a);
+      // The full-screen width is where the acceptance test actually bites: a
+      // 1440px 5-15% ramp has ~56px bands, so undithered it plateaus for 57
+      // columns. Stashed for the assertion at the bottom.
+      if (cw === 1440 && (cap === 0 || cap === 8)) measured[`plateau1440_cap${cap}`] = plat;
+      console.log(`    ${(cap === 0 ? 'none' : `cap${cap}`).padEnd(8)}   ${String(plat).padStart(7)}   ${wiggle(a, ideal).toFixed(3).padStart(6)}`);
     }
   }
 }
@@ -339,15 +380,19 @@ console.log('\nWIGGLE→0 reference + RESOLUTION effect — dark 5%→15% gradie
   // (c) error diffusion (the SHIPPING geometry path) at native display width — the WIGGLE→0 ref
   const ed = edColAvgs(truthCol(DISP), ch);
   const ideal = idealLSB(DISP);
+  measured.wiggleNative = wiggle(nat, ideal);
+  measured.wiggleErrorDiffusion = wiggle(ed, ideal);
   console.log(`  display ${DISP}px; old backing-cap 1440; metrics in DISPLAY pixels:`);
   console.log(`    blue-noise cap8 @ native ${DISP}:  WIGGLE ${wiggle(nat, ideal).toFixed(3)}  (fractal/glQuad GL-tail path)`);
   console.log(`    blue-noise cap8 @ 1440→upscaled:   WIGGLE ${wiggle(up, ideal).toFixed(3)}  (← old upscale widened/blurred it)`);
   console.log(`    error diffusion @ native ${DISP}:   WIGGLE ${wiggle(ed, ideal).toFixed(3)}  (← SHIPPING geometry path, WIGGLE→0)`);
 }
 
-// ── flat-gate assertion: the island region must receive ZERO dither ──────────────────────────
-console.log('\nFLAT-GATE (island must be untouched):');
-let gateFail = 0;
+// ── ASSERTIONS ───────────────────────────────────────────────────────────────────────────────
+// Everything above prints. Everything below decides the exit status. See the header for what
+// this file could NOT fail on before these existed.
+
+console.log('\n[1] FLAT-GATE — the island must receive ZERO dither, and the gradient beside it must NOT');
 for (const sc of scenes) {
   if (!sc.flatRegion) continue;
   const [rx, ry, rw, rh] = sc.flatRegion;
@@ -357,9 +402,86 @@ for (const sc of scenes) {
     const d = ditherPixel(c, x, y, sc.slope(x, y), noise, 8);
     maxDelta = Math.max(maxDelta, Math.abs(q8(d[0]) - q8(c[0])));
   }
-  const ok = maxDelta === 0;
-  if (!ok) gateFail++;
-  console.log(`  ${ok ? '✓' : '✗'} ${sc.name}: flat region max 8-bit delta = ${maxDelta} (want 0)`);
+  assert(maxDelta === 0, `${sc.name}: flat region max 8-bit delta is 0`, maxDelta);
+
+  // The other half of the SAME scene. Without this the flat-gate check above is
+  // satisfied by the dither being entirely dead — `ampLSB = 0` gives a delta of
+  // 0 everywhere, which is exactly what it asks for.
+  let gradDelta = 0;
+  for (let y = ry; y < ry + rh; y++) for (let x = rx + rw; x < sc.w; x++) {
+    const c = sc.truth(x, y);
+    const d = ditherPixel(c, x, y, sc.slope(x, y), noise, 8);
+    gradDelta = Math.max(gradDelta, Math.abs(q8(d[0]) - q8(c[0])));
+  }
+  assert(gradDelta > 0, `${sc.name}: the gradient half IS dithered, so the gate is not just "off"`, gradDelta);
+}
+
+console.log('\n[2] MIRROR — the constants and the gate expression here match the shipping GLSL');
+{
+  // `ditherPixel` above is a hand-written TS copy of DITHER_TAIL_GLSL. Nothing used to check
+  // that the copy still matched, so every verdict this file reached was about the copy. These
+  // read the four calibrated constants back out of the shader source and compare.
+  const glslConst = (name: string): number | null => {
+    const m = DITHER_TAIL_GLSL.match(new RegExp(`const float ${name}\\s*=\\s*([0-9.eE+-]+)\\s*;`));
+    return m ? Number(m[1]) : null;
+  };
+  assert(glslConst('DITHER_FLAT_LO') === DITHER_FLAT_LO,
+    'DITHER_FLAT_LO matches', { glsl: glslConst('DITHER_FLAT_LO'), here: DITHER_FLAT_LO });
+  assert(glslConst('DITHER_FLAT_HI') === DITHER_FLAT_HI,
+    'DITHER_FLAT_HI matches', { glsl: glslConst('DITHER_FLAT_HI'), here: DITHER_FLAT_HI });
+  assert(glslConst('DITHER_MAX_LIGHT') === DITHER_MAX_LIGHT,
+    'DITHER_MAX_LIGHT matches', { glsl: glslConst('DITHER_MAX_LIGHT'), here: DITHER_MAX_LIGHT });
+  // The flat-gate loop above runs at cap 8, so the shader's DARK ceiling has to be 8 for that
+  // verdict to be about the shipping configuration at all.
+  assert(glslConst('DITHER_MAX_DARK') === 8,
+    'DITHER_MAX_DARK is the 8 this harness gates at', glslConst('DITHER_MAX_DARK'));
+  // Constants alone would not catch the gate being deleted, which was break 2 in the header.
+  assert(/gate\s*=\s*smoothstep\(DITHER_FLAT_LO,\s*DITHER_FLAT_HI,\s*s\)/.test(DITHER_TAIL_GLSL),
+    'the flat gate is still a smoothstep between the two thresholds');
+  assert(/tpdf\s*=\s*vec3\(bn\.r \+ bn\.g, bn\.b \+ bn\.a, bn\.a \+ bn\.r\)\s*-\s*1\.0/.test(DITHER_TAIL_GLSL),
+    'each channel still sums a DISTINCT independent pair — a shared pair would correlate them');
+}
+
+console.log('\n[3] BANDING — dither removes the low-frequency error on shallow ramps');
+{
+  // Measured with cap2: none -> cap2 is 0.82 -> 0.04 (20x), 0.34 -> 0.04 (8.5x) and
+  // 0.75 -> 0.07 (10x). A 4x threshold therefore has at least 2x of slack on the tightest
+  // scene. cap8 is deliberately NOT used here: on `dark wide` it makes BANDING worse
+  // (1.78 vs 0.82) because the amplitude exceeds the step it is breaking up — a real
+  // trade-off this harness exists to show, not a defect.
+  for (const name of ['dark wide 0→0.04', 'dark 0→0.1', 'mid wide 0.4→0.45']) {
+    const sc = scenes.find((s) => s.name === name)!;
+    const none = errorEnergies(sc, 0, false).banding;
+    const cap2 = errorEnergies(sc, 2, true).banding;
+    assert(cap2 * 4 < none, `${name}: cap2 banding is >4x below undithered`,
+      { none: none.toFixed(2), cap2: cap2.toFixed(2), ratio: (none / cap2).toFixed(1) });
+  }
+}
+
+console.log('\n[4] PLATEAU — the acceptance test, on a full-screen-width shallow ramp');
+{
+  // 1440px of 5-15% is ~0.018 LSB/px, so undithered the column averages sit flat for 57
+  // columns at a time; at cap8 the longest flat run is 6. 4x threshold, ~2.4x of slack.
+  const none = measured.plateau1440_cap0;
+  const cap8 = measured.plateau1440_cap8;
+  assert(Number.isFinite(none) && Number.isFinite(cap8), 'both plateau measurements were taken',
+    { none, cap8 });
+  assert(cap8 * 4 < none, 'cap8 shortens the longest flat run by >4x',
+    { none, cap8, ratio: (none / cap8).toFixed(1) });
+}
+
+console.log('\n[5] ERROR DIFFUSION — renderFieldDithered, the shipping geometry path');
+{
+  // This is the only PRODUCTION function this harness calls, and its result used to be printed
+  // and dropped. Measured: 0.040 healthy, 0.238 for the blue-noise tail at the same width, and
+  // 0.287 with error diffusion disabled inside renderFieldDithered. 0.10 sits between with 2.5x
+  // of headroom below and 2.9x above.
+  const ed = measured.wiggleErrorDiffusion;
+  const nat = measured.wiggleNative;
+  assert(Number.isFinite(ed) && Number.isFinite(nat), 'both WIGGLE measurements were taken', { ed, nat });
+  assert(ed < 0.10, 'error diffusion tracks the ideal line to under 0.10 LSB RMS', ed.toFixed(3));
+  assert(ed * 2 < nat, 'and is more than 2x smoother than the blue-noise tail at the same width',
+    { errorDiffusion: ed.toFixed(3), blueNoise: nat.toFixed(3) });
 }
 
 // ── visual montage: rows = scenes, cols = [truth · no-dither · blue-noise · error-diffusion] ──
@@ -397,5 +519,5 @@ const outPath = join(ROOT, 'debug', 'dither-lab.png');
 writeFileSync(outPath, encodePng(montage));
 console.log(`\nMontage → ${outPath}`);
 console.log('Columns: ' + variants.join(' · '));
-console.log(`\n${gateFail === 0 ? '✓ flat-gate holds' : `✗ ${gateFail} flat-gate FAILURE(S)`}`);
-process.exit(gateFail === 0 ? 0 : 1);
+console.log(`\n${failures === 0 ? '✓ all dither assertions passed' : `✗ ${failures} dither assertion(s) failed`}`);
+process.exit(failures === 0 ? 0 : 1);
