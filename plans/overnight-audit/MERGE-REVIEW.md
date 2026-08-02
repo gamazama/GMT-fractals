@@ -1482,7 +1482,8 @@ git diff main..HEAD -- . ':(exclude)plans/**' ':(exclude)docs/**' \
              )}
              {matches.map((m, i) => (
                  <button
--                    key={`${m.categoryId} ${m.key}`}
+-                    key={`${m.categoryId}<U+0000>${m.key}`}   <-- the raw 0x00 is written <U+0000> here on purpose; quoting it verbatim
+                                            made THIS file binary to grep too (found 2026-08-02)
 +                    key={`${m.categoryId}::${m.key}`}
                      ref={i === activeIndex ? activeItemRef : undefined}
                      onClick={m.disabled ? undefined : () => { onSelect(m.key); onClose(); }}
@@ -2116,3 +2117,52 @@ git diff main..HEAD -- . ':(exclude)plans/**' ':(exclude)docs/**' \
                          <Button onClick={onDiscard}       label="Discard" variant="danger"  icon={<TrashIcon />} />
 ```
 
+
+---
+
+## Addendum — triage session, 2026-08-02
+
+Four corrections from re-reading this document against the tree it describes.
+The body above is left as written; these amend it.
+
+**§1's framing is now larger than the change.** It says the pair of commits makes
+"a lot of previously inert animation start firing". Measured on the booted app
+today: **five** utilities resolve (`fade-in-up/down/left/right`, `pop-in`) across
+**16 call sites in 10 files** — LoadingScreen, AudioLinkControls, HelpBrowser,
+FormulaPicker, CategoryPickerMenu, PerformanceMonitor, KeyframeInspector,
+DraggableWindow, GraphContextMenu. All are opt-in surfaces; a default boot has
+exactly one carrier on screen. That is a five-minute check, not an audit.
+
+**`animate-fade-in` resolves to nothing, and that is fine.** `595cfe21` removed
+all 34 call sites; its message says it removed the keyframe too, but it did not —
+only the call sites went. Harmless in the build, because Tailwind never emits an
+unused utility, and a probe confirms `animationName: 'none'` for it against the
+five that resolve. The two dead lines are now marked `@stale` in `index.css`
+(`ac5061dc`) rather than left looking intentional.
+
+**The `@invariant` this change added to `index.css` would have failed its own
+proof.** It claimed "46 call sites across 36 components" and "7 expected"
+keyframes — both true when written, neither true after `9c5e49e2` and `595cfe21`
+landed hours later. Corrected in `ac5061dc` by measuring rather than adjusting the
+number, and the proof command now asserts non-zero instead of a count that churns.
+
+**The `forwards` fill-mode concern is measured, not assumed.** All five live
+animations persist their end state, which computes as `matrix(1,0,0,1,0,0)` —
+identity, but not `none`, so every carrier keeps a stacking context after
+settling. On a default app-gmt boot **no `position:fixed` descendant sits under
+any carrier**, so there is no layout consequence today. The condition that would
+change that is recorded at the site.
+
+**This file made itself invisible to grep.** The `components/CategoryPickerMenu.tsx`
+hunk in §5 quoted the removed line verbatim — including its literal `0x00` — so
+ripgrep classified this document binary and silently skipped everything from that
+line onward, which is 26 of its 62 file sections. The exact failure mode the audit
+documented three times, reproduced by the document recording the fix. The byte is
+now written `<U+0000>`. A tree-wide scan afterwards found **no source file
+carrying a NUL** (3,162 text-ish files; the five hits are `.fbx`, `.mkv` and a
+dev-server log, all legitimately binary).
+
+**Guards re-run on this tree, 2026-08-02, all exit 0:** `typecheck`,
+`check:rule-guards` (22 rules, 90 citations, zero issues), `smoke:boot`,
+`smoke:engine-gmt`, plus `smoke:help-menu`, `smoke:catalog-browse` and
+`smoke:canvas-menu` — the three that drive surfaces carrying the restored classes.
