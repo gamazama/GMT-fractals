@@ -168,12 +168,35 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
    UTILITY ANIMATIONS
 
    @invariant These keyframes MUST live here, not in an entry HTML file.
-     They are used by 46 call sites across 36 components, and every app
-     (app-gmt, gradient-explorer, fluid-toy, fractal-toy, mesh-export, demo)
-     reaches them only through this file. — proven by: npx tailwindcss -c
+     Every app (app-gmt, gradient-explorer, fluid-toy, fractal-toy, mesh-export,
+     demo) reaches them only through this file. — proven by: npx tailwindcss -c
      tailwind.config.js -i index.css -o out.css --content <file using
-     animate-fade-in>, then grep "@keyframes" out.css (7 expected, 0 if this
-     block is removed).
+     animate-fade-in-up>, then grep "@keyframes" out.css (non-zero expected,
+     0 if this block is removed).
+
+   Live call sites, measured 2026-08-02 (`grep -rn 'animate-fade-in-\|animate-
+     pop-in' --include=*.tsx --include=*.ts`): 16 across 10 files —
+     fade-in-up (LoadingScreen ×2, AudioLinkControls), fade-in-down
+     (HelpBrowser, FormulaPicker), fade-in-left (CategoryPickerMenu,
+     PerformanceMonitor, KeyframeInspector), fade-in-right, pop-in
+     (DraggableWindow, GraphContextMenu).
+
+   @stale `.animate-fade-in` below has ZERO call sites — 595cfe21 removed all
+     34 of them (an opacity animation of 16ms, one frame at 60Hz, that promoted
+     every carrier to its own compositing layer for no visual return) and its
+     message says it removed the keyframe too. It did not; only the call sites
+     went. Harmless in the build — Tailwind never emits an unused utility, and
+     a probe on the booted app confirms `animate-fade-in` resolves to
+     `animationName: 'none'` while the five live ones resolve — but the two
+     lines are dead and should go with the next pass through this file.
+
+   Note the fill-mode: all five live animations are `forwards`, so their end
+     state persists. For the four directionals that is translate(0) and for
+     pop-in scale(1) — computed as matrix(1,0,0,1,0,0), which is NOT `none`,
+     so each carrier keeps a stacking context after settling. Measured on a
+     default app-gmt boot 2026-08-02: no `position:fixed` descendant sits under
+     any carrier, so there is no layout consequence today. Check this again if
+     one of these classes is ever put on a panel that hosts a fixed child.
 
    They previously existed ONLY in demo.html's inline <style>, so every
    animate-* class in the deployed app resolved to nothing: the class landed
