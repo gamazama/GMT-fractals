@@ -886,6 +886,28 @@ let testList: { label: string; relPath: string; expectFail?: boolean }[];
 if (DISCOVER || RANDOM_N > 0 || (FILTER && (FILTER.includes('/') || FILTER.includes('\\')))) {
     testList = discoverFragFiles(REF);
     if (!JSON_OUT) console.log(c.cyan(`\nDiscovered ${testList.length} .frag files in ${REF}\n`));
+    // `discoverFragFiles` swallows a missing directory (`existsSync` → return []), and this
+    // mode is DELIBERATELY, PERMANENTLY RED — so a vanished corpus does not merely reduce it
+    // to zero coverage, it INVERTS the signal. Measured 2026-07-29 (guard sweep, batch 9):
+    // repointing REF at a directory that does not exist printed "Discovered 0 .frag files",
+    // "0 formula(s) queued", then "✓ 1 passed (1 total)" — the unconditional inline
+    // DEFAULT_SCRIPT case, the only one that survives a missing corpus — and EXIT 0. A reader
+    // who knows this sweep is supposed to be red would read that green run as the importer gap
+    // having closed. Same `walk()`-swallows-a-missing-directory defect batch 4 found in
+    // test:frag:scan. The curated matrix is unaffected: its per-file `relPath`s are gated, so
+    // it correctly reds at 5 passed / 60 failed under the same break.
+    // Floor is on the DISCOVERED total, before any filter/--random slice, so single-file and
+    // sampled runs are unaffected. Raise it as reference files are vendored in; if files were
+    // removed on purpose, lower it in the same commit.
+    const DISCOVER_FILE_FLOOR = 581; // measured 2026-07-29 over reference/Examples
+    if (testList.length < DISCOVER_FILE_FLOOR) {
+        console.error(`\n  ✗ only ${testList.length} .frag files discovered in ${REF} — expected at least ${DISCOVER_FILE_FLOOR}.`);
+        console.error(`    The corpus shrank rather than failing, and this sweep is permanently red by`);
+        console.error(`    design — so an empty run reports GREEN and reads as "the importer gap closed".`);
+        console.error(`    Did the reference tree move or get renamed? (If files were removed on purpose,`);
+        console.error(`    lower DISCOVER_FILE_FLOOR in the same commit.)\n`);
+        process.exit(1);
+    }
 } else {
     testList = REGISTERED_TESTS;
 }
