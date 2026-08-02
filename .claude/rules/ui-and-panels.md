@@ -68,6 +68,21 @@ measured, not estimated (`check:rule-guards --verbose` prints the ratio). Its ho
 is [`layers-zindex.md`](./layers-zindex.md), which scopes `components/ui/**`, and
 the citation was moved there on 2026-07-29.
 
+**`smoke:screenshot` is not a test of any of this** — deliberately written here
+without the `npm run` prefix, because it must not become a citation. It launches
+chromium at `localhost:3400/` (the GMT app; `/` and `/app-gmt.html` are the same
+entry), waits a flat 2500 ms, writes `debug/scratch/engine-boot.png` and closes.
+That is the entire program: no assertion, no `pageerror` handler, no console
+handler, no comparison against a stored baseline. Measured 2026-08-02 — pointed
+at `about:blank` it writes a 5.7 KB white PNG and exits 0; the only thing that
+reds it is failing to reach a page at all. It is a capture for a human to look
+at, and the PNG is gitignored (`debug/.gitignore` → `scratch/`), so it cannot
+dirty the tree. `docs/history/engine/05_Shared_UI.md` says under "Testing
+primitives" that primitives are *snapshot-tested* via that harness "when they
+render in the demo feature". That is wrong twice: there is no snapshot
+comparison anywhere in it, and it boots the GMT root entry, not the demo. The
+history tree is append-only, so the correction lives here.
+
 What *does* reach a manifest-composed panel, and exactly how far it goes:
 `smoke:engine-demo` mounts the demo dock and asserts two DDFS param labels plus at
 least one `ScalarInput` thumb actually rendered; `smoke:engine-demo-modulation`

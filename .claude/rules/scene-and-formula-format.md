@@ -53,6 +53,27 @@ null-derefs (`Benesi/MengersmoothPolyhedra.frag`,
 genuine importer gap, not noise. Nothing gates on them, so run the sweep before
 you conclude the importer handles a given family of formulas.
 
+`npm run test:frag:v` is the **same script** as `test:frag` with `--verbose`,
+which gates exactly one `console.log` of the generated GLSL — same 60-formula
+matrix, same counters, same exit contract, inherited rather than reimplemented
+because it is one file. Re-falsified 2026-08-02: forcing V3 detect to reject
+every formula (grep `No DE function detected`) gives 0 passed / 60 failed,
+exit 1, and repointing `REF` at a directory that does not exist gives exit 1 on
+both the `missing` and empty-matrix gates. It adds nothing as a second CI entry
+and everything when `test:frag` goes red — it prints the generated function for
+the formula that failed.
+
+`npm run smoke:gallery-link` was repaired the same day, and its old blind spot
+is the one to remember when reading a green run here: the block headed "the
+shared scene is live in the editor" was satisfied by app-gmt's own boot state.
+The editor and the fixture GMF are both Mandelbulb, and "iterations is a
+number" is true of the default 16 — so deleting the terminal
+`loadScene({ preset })` from `engine-gmt/gallery/loadGalleryScene.ts` left the
+whole smoke at exit 0 with its PASSED banner. It now snapshots the store before
+the remix and pins `coreMath.iterations` to the value the GMF declares. It
+still **skips at exit 0** on a build with no `VITE_SUPABASE_*`, deliberately —
+so a green run on a fresh checkout proves nothing about this path at all.
+
 `npm run test:frag:scan` is **a report, not a guard** — it has no assertion on
 its own results, so it prints its failures and exits 0 regardless. Do not cite it
 as passing evidence. **Confirmed by falsification 2026-07-29**: forcing
