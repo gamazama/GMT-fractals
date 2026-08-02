@@ -1,0 +1,197 @@
+{
+  "id": "gs01-guard-sweep-batch9",
+  "cycle": 13,
+  "phase": "GUARD SWEEP — batch 9 of 9, the final batch",
+  "note": "The tail of the 76-guard sweep: eleven scripts, several of which are not gates. Classifying each was the first job; a tool mis-cited as a guard is itself a finding.",
+  "guards": [
+    {
+      "script": "npm run test:liquify",
+      "classification": "gate",
+      "source": "debug/test-liquify-mesh.mts",
+      "engineUrl": "n/a — pure CPU under tsx, no browser, no dev server",
+      "kind": "node numerical harness over gradient-explorer/fullscreen/modes/liquify/{LiquifyMesh,catmullRom}.ts — the MLS-rigid handle solver, seven forward-warp brushes, the XPBD soft body, the Taubin smoother and the Catmull-Rom render upsampler. Runs in under a second.",
+      "citedBy": [
+        ".claude/rules/sibling-apps.md gradient-explorer row — but by FILE PATH only (`npx tsx debug/test-liquify-mesh.mts`); the npm script was cited nowhere until this batch"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "exit 0, 44 passed / 0 failed, <1s.",
+      "wallSeconds": 1,
+      "exitContractOk": true,
+      "exitContractNote": "`process.exit(fail === 0 ? 0 : 1)` with a counting `ok()` — correct, and no assertion is inside a conditional that could skip it silently.",
+      "inputsVanishCheck": "Structurally immune to the fifth failure mode: every fixture is a `new LiquifyMesh(n)` constructed inline, so the matrix cannot shrink, and the only external input is the module under test — losing it fails at ESM link time before any assertion runs.",
+      "falsified": true,
+      "break": "Four breaks, each applied and reverted with a targeted Edit. (D, control) `step()` gutted to an immediate return. (A) `smoothAll` gutted — the global Smooth slider dead. (B) `smoothRegion` gutted — the entire `smooth` brush dead. (C) the `cr` cubic in catmullRom.ts replaced by `p1 + (p2 - p1) * t`, i.e. plain bilinear upsampling.",
+      "result": "(D) RED, exit 1, '[4] settled mesh kept the deformation (not flat)' — the gate is live. (A) GREEN, 44/44, exit 0. (B) GREEN, 44/44, exit 0. (C) GREEN, 44/44, exit 0. After repair: (A) exit 1 at 48/2, (B) exit 1 at 48/2, (C) exit 1 at 49/1, each on its new assertion. Clean tree 50/0, exit 0.",
+      "verdict": "DEFECTIVE in three places — three whole features had only one-sided assertions behind them; repaired additively and re-falsified three ways",
+      "note": "Lesson 1 three times over in one file. Block [8] is headed 'the global Smooth slider is convergent' and its finite / bounded / never-INFLATES trio are all satisfied by a slider that does nothing. Block [3] deliberately skips the 'actually deformed' check for the corrective brushes (correct on a flat mesh, where they ARE no-ops) and [3b] then covered only `restore`, so `smooth` fell through the gap between them. Block [7] is headed 'Catmull-Rom render upsampling' and every one of its four assertions — S=1 identity, control-point pass-through, finiteness, flat-grid interior uniformity — is also satisfied by linear interpolation, because Catmull-Rom's distinguishing property is what it does BETWEEN the control points and nothing sampled there.",
+      "measurement": "Instrumented with a throwaway probe in the gitignored debug/scratch/ before choosing any bound. smoothAll over 400 frames at strength 1: deviation 41.75 -> 15.96 (ratio 0.382 vs the 0.9 bound, 2.4x margin), max vertex move 0.290 (29x margin on 0.01). smooth brush on a deliberately creased mesh: roughness 1.526 -> 0.898 (ratio 0.589 vs 0.9), max move 0.0564. Cubic-vs-linear deviation, restricted to cells whose full 4-point stencil is interior: warped 0.003912 (3.9x the 1e-3 floor), flat 1.0e-8 (100x under the 1e-6 ceiling). The interior restriction is load-bearing and was itself measured — the clamp-extended BOUNDARY cells do not reproduce linears (0.0106 there), so a whole-grid version of that check would have been wrong in the other direction.",
+      "repaired": true,
+      "repairCommit": "d14d3929"
+    },
+    {
+      "script": "npm run test:baseline",
+      "classification": "gate",
+      "source": "debug/native-config-sweep.mts --mode=baseline --fresh",
+      "engineUrl": "file://debug/validator.html (local static WebGL2 harness, not the dev server)",
+      "kind": "compiles all 54 eligible native formulas through the real engine ShaderFactory and gates on webglCompile.",
+      "citedBy": [
+        ".claude/rules/gmt-renderer.md — indirectly, as link 1 of `npm run test:shader`; now also named directly there"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "54 pass / 0 fail, 3.5s, exit 0.",
+      "wallSeconds": 5,
+      "exitContractOk": true,
+      "exitContractNote": "`process.exit(fail > 0 ? 1 : 0)`, plus the FORMULA_FLOOR=54 zero-coverage gate batch 4 added — a shrunken registry now fails instead of reporting a clean sweep.",
+      "falsified": true,
+      "break": "`#error BREAK_GS9_E` appended to the `de` block in engine-gmt/engine/ShaderBuilder.ts (grep DE_MASTER(this.formulaLoopBody).",
+      "result": "RED, exit 1, 0 pass / 54 fail, all on the webglCompile gate.",
+      "verdict": "HEALTHY — this is the real gate of the three; batch 4 already swept it as a member of test:shader and its findings are not re-derived here",
+      "note": "Coverage boundary unchanged from batch 4's measurement: stripEngineMain removes everything from the first `void main(` onward, so main's own body is never compiled."
+    },
+    {
+      "script": "npm run test:hybrid",
+      "classification": "gate (but a duplicate one)",
+      "source": "debug/native-config-sweep.mts --mode=hybrid --fresh",
+      "engineUrl": "file://debug/validator.html",
+      "citedBy": [
+        ".claude/rules/gmt-renderer.md — indirectly, as link 2 of `npm run test:shader`"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "54 pass / 0 fail, 3.5s, exit 0 — the same 54 as baseline, byte for byte.",
+      "wallSeconds": 5,
+      "exitContractOk": true,
+      "falsified": true,
+      "break": "Two ways. (1) Static: hashed ShaderFactory.generateFragmentShader output for all 54 eligible formulas under each of the three modes and compared. (2) Runtime: the same `#error` in the `de` block.",
+      "result": "(1) 54/54 BYTE-IDENTICAL to baseline; hybrid vs hybrid-adv also 0/54 differing. (2) RED at exactly 0 pass / 54 fail — the identical number baseline produces.",
+      "verdict": "DEFECTIVE AS A DISTINCT GUARD — it is an exact duplicate of test:baseline; documented rather than repaired",
+      "note": "`applyModeOverrides` writes geometry.hybridCompiled / hybridComplex / hybridMode and nothing that emits GLSL reads any of them: the interleaved emission was retired in P4.5 and the compiled box fold in P4.7, both superseded by weave. engine-gmt/utils/weaveMigration.ts now DELETES hybridComplex and forces hybridCompiled = false. Outside migration and one NewSceneModal write, the only surviving mentions are per-formula preset defaults. So the script is not broken — the gate under it is live — but it reads as coverage of a hybrid/box-fold path that no longer exists. This is the 'healthy but cited for the wrong thing' mode applied to a script's own name.",
+      "repaired": "documented — header of the sweep + gmt-renderer.md Guards block record the measurement and name test:weave-sweep as the successor coverage",
+      "repairCommit": "d3885b05",
+      "deliberatelyNotDone": "No assertion was added that the modes differ. It would be faithful to the intent and PERMANENTLY RED, which is its own failure mode. Removing the scripts is deletion; repointing them at weave flags is a product judgement. Both are Tier B in PROPOSALS.md."
+    },
+    {
+      "script": "npm run test:hybrid-adv",
+      "classification": "gate (but a duplicate one)",
+      "source": "debug/native-config-sweep.mts --mode=hybrid-adv --fresh",
+      "engineUrl": "file://debug/validator.html",
+      "citedBy": [
+        ".claude/rules/gmt-renderer.md — indirectly, as link 3 of `npm run test:shader`"
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "54 pass / 0 fail, 3.4s, exit 0.",
+      "wallSeconds": 5,
+      "exitContractOk": true,
+      "falsified": true,
+      "break": "Same two as test:hybrid.",
+      "result": "Byte-identical to both baseline and hybrid across all 54 formulas; reds identically at 0 pass / 54 fail.",
+      "verdict": "DEFECTIVE AS A DISTINCT GUARD — same defect as test:hybrid, same treatment",
+      "repairCommit": "d3885b05"
+    },
+    {
+      "script": "npm run test:compat:write",
+      "classification": "tool (snapshot writer) — with a partial gate in front of it",
+      "source": "debug/test-compat.mts --write",
+      "engineUrl": "n/a — node-only, no browser",
+      "kind": "regenerates debug/compat-snapshot.jsonl, the TRACKED baseline that `npm run test:compat` diffs against. Same script, same SNAPSHOT_PATH, same serialize(buildSnapshot()) — so it writes exactly what the reader reads. Verified directly: on a clean tree it reproduces the tracked file byte for byte (git status empty afterwards).",
+      "citedBy": [
+        "nothing — correctly, since it is not a gate. `npm run test:compat` (the reader) is cited by .claude/rules/gmt-formulas-and-graph.md and was swept healthy in batch 1; its findings are not re-derived here."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "55 formulas OK, 2 disabled compat rows, exit 0, ~1s; tracked snapshot unchanged.",
+      "wallSeconds": 2,
+      "exitContractOk": false,
+      "exitContractNote": "In write mode `main()` returns after writeFileSync, so the process always exits 0 once the structural checks pass. That is correct FOR A WRITER and is not the defect. The defect is that nothing stood between a degenerate run and the write.",
+      "inputsVanishCheck": "THE FINDING. Both halves derive their workload from live registries and a workload that never ran produces zero issues and zero rows. Dropping the harness's `import '../engine-gmt/formulas/index'` side effect took the registry 55 -> 7: the READER correctly went RED on snapshot drift, and then the WRITER truncated the tracked baseline to ZERO BYTES, printed 'snapshot: 0 disabled compat rows', and exited 0 — after which the reader printed 'snapshot matches' and exited 0 forever, on an empty file. The harness's own red-run message ('run with --write to update the baseline if the drift is intentional') routes you straight into that.",
+      "falsified": true,
+      "break": "(F) the formula barrel side-effect import commented out in the harness — registry 55 -> 7, snapshot rows 2 -> 0. (G) the sole `requires:` declaration commented out in engine-gmt/panels.ts (grep `rejects: { primary:`) — registry intact at 55, snapshot rows 2 -> 0. G is the second laundering path and does NOT involve the registry at all.",
+      "result": "Pre-repair: (F) reader exit 1, writer exit 0 having written a 0-byte baseline, reader then exit 0 forever. Post-repair: (F) exit 1 in BOTH modes on the formula floor, snapshot still 333 bytes, git status clean on it. (G) exit 1 in BOTH modes on the row floor, again writing nothing — without the floor the writer would have persisted G too, because the reader only catches G through drift and the writer is what destroys the thing drift is measured against.",
+      "verdict": "TOOL, and it was DEFECTIVE AS A TOOL — a writer with no floor in front of it. Repaired additively; the writer is still a writer and still cannot fail on a genuine drift, which is its job.",
+      "trackedArtifacts": "debug/compat-snapshot.jsonl IS TRACKED. Backed up before any run, `git checkout`ed after the break, and `git status` confirmed clean at every step and at the end.",
+      "repaired": true,
+      "repairCommit": "7d13eb91",
+      "repairNote": "Additive and modelled on the FORMULA_FLOOR batch 4 gave native-config-sweep: FORMULA_FLOOR = 55 checked before anything else runs, SNAPSHOT_ROW_FLOOR = 2 checked after the snapshot is built, both in BOTH modes, each message naming which direction to move it if the reduction is deliberate. No existing check, tolerance or output changed."
+    }
+  ],
+  "citationsAdded": [
+    {
+      "rule": ".claude/rules/sibling-apps.md",
+      "action": "gradient-explorer row: `npx tsx debug/test-liquify-mesh.mts` -> `npm run test:liquify` (script name plus the file path), with what it reaches, its sub-second runtime, and the four falsifications.",
+      "why": "The guard was named only by file path, so the npm script it is wired to appeared in no rule. That also mattered mechanically: the row's other route to this file is `test:palette`, and check:rule-guards resolves an npm script by its FIRST command only, so a `test:palette` citation never reaches debug/test-liquify-mesh.mts (recorded in PROPOSALS.md as blind spot 2). The direct citation is the only one that resolves.",
+      "checkRuleGuardsAfter": "0 issues — 22 rules, 88 citations (was 87)."
+    },
+    {
+      "rule": ".claude/rules/gmt-renderer.md",
+      "action": "Guards block += a paragraph naming all four links of `test:shader`, recording that the first three are one script under `--mode=` and now produce identical output, and pointing at `npm run test:weave-sweep` as the successor coverage for the hybrid area. Also names `npm run test:baseline` as the ~4s subset that gives everything the first three links do.",
+      "why": "The block said only '`test:shader` — long — full native config sweep'. A reader who had just touched the fold path and saw it green would have concluded the fold path was covered. It is not, and had not been since P4.7.",
+      "checkRuleGuardsAfter": "0 issues — 22 rules, 89 citations (was 88)."
+    },
+    {
+      "rule": ".claude/rules/gmt-formulas-and-graph.md",
+      "action": "Two paragraphs under Guards. (1) `test:compat:write` named as the baseline WRITER and explicitly not a remedy for a red `test:compat`, with what it writes, that the file is tracked, the measured zero-byte truncation, and what the two new floors do and do not cover. (2) The block's `npm run test:hybrid` line — commented 'hybrid BOX-FOLD config' — corrected against the same day's measurement, pointing at gmt-renderer.md for the numbers.",
+      "why": "A reader of this Guards block who sees test:compat go red has one obvious next move, and it was the destructive one. Separately this rule was the SECOND place asserting that test:hybrid covers the box fold; correcting only gmt-renderer.md would have left the false claim live.",
+      "checkRuleGuardsAfter": "0 issues — 22 rules, 89 citations (unchanged; the additions name scripts already cited by this rule)."
+    }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-liquify-mesh.mts",
+      "summary": "Three separate liquify features — the global Smooth slider, the smooth brush, and the Catmull-Rom upsampler itself — could each be gutted entirely with the guard staying green at 44/44, exit 0.",
+      "change": "Six additive assertions across blocks [3b], [7] and [8]: that `smoothAll` moves the mesh and relaxes the deformation; that the `smooth` brush moves the mesh and cuts high-frequency roughness on a deliberately creased fixture; and that the upsampler is genuinely cubic on a deformed grid while still reproducing linears exactly on a flat one. No existing assertion, bound or fixture was changed. Header records all three blind spots, the measured healthy values and the margins.",
+      "verification": "Each break green before and red after, on exactly its new assertion: dead smoothAll exit 1 at 48/2; dead smoothRegion exit 1 at 48/2; bilinear cr exit 1 at 49/1. Control break (dead step()) reds the pre-existing '[4] settled mesh kept the deformation' assertion, proving the gate was live rather than inert. All four reverted with targeted Edits; git diff over gradient-explorer/ empty, grep -rn BREAK_GS9 empty. Clean tree 50 passed / 0 failed. typecheck exit 0; check:rule-guards 0 issues.",
+      "guard": "npm run test:liquify",
+      "guardPass": true,
+      "commit": "d14d3929"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "debug/native-config-sweep.mts",
+      "summary": "test:hybrid and test:hybrid-adv compile byte-identical shaders to test:baseline, so test:shader spends three of its four links running the same 54 compiles while its names promise hybrid/box-fold coverage that was retired in P4.5/P4.7.",
+      "change": "Header of the sweep carries the measurement, why the flags are dead (weaveMigration.ts deletes hybridComplex and forces hybridCompiled=false), and that test:weave-sweep is the successor coverage. gmt-renderer.md's Guards block says the same from the rule side.",
+      "verification": "Static: hashed generateFragmentShader over all 54 eligible formulas per mode — 54/54 identical baseline vs hybrid, 54/54 vs hybrid-adv, 0/54 differing hybrid vs hybrid-adv. Runtime: `#error` appended to the `de` block reds all three at exactly 0 pass / 54 fail, exit 1. Break reverted, git diff over engine-gmt/ empty, grep BREAK_GS9 empty, all three back to 54/0. typecheck 0, check:rule-guards 0 issues.",
+      "guard": "npm run test:baseline",
+      "guardPass": true,
+      "commit": "d3885b05"
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "package.json",
+      "summary": "Whether to retire test:hybrid / test:hybrid-adv outright, repoint them at flags that still change emission, or keep them documented.",
+      "rationale": "Retiring is deletion, which this run never does; repointing at weave/interlace configs is a product judgement about what deserves a named mode, and test:weave-sweep may already cover it. Recommendation (a) retire, with (b) repoint as an optional follow-up. Appended to PROPOSALS.md with the full measurement."
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-compat.mts",
+      "summary": "test:compat:write truncated the tracked compat baseline to zero bytes and exited 0 when the formula registry shrank 55 -> 7, leaving test:compat permanently green on an empty file.",
+      "change": "FORMULA_FLOOR = 55 and SNAPSHOT_ROW_FLOOR = 2, both recorded with their measured values and checked in BOTH diff and write mode, so a vanished input fails instead of being persisted. Header rewritten to say --write is not a gate, what it destroyed under measurement, and when to reach for it.",
+      "verification": "Two breaks, both pre-measured. Registry 55->7: writer exit 0 with a 0-byte baseline before, exit 1 in both modes with the file untouched after. Sole `requires:` in panels.ts removed (registry intact): exit 1 in both modes after, and this is the path the reader alone never protected against, since the writer destroys the very rows drift is measured from. Both reverted; git diff over engine-gmt/ empty, grep BREAK_GS9 empty, debug/compat-snapshot.jsonl byte-identical to HEAD. Clean tree both modes exit 0. typecheck 0, check:rule-guards 0 issues.",
+      "guard": "npm run test:compat",
+      "guardPass": true,
+      "commit": "7d13eb91"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/test-frag-integration.mts",
+      "summary": "test:frag:integration:discover is deliberately permanently red, so a vanished corpus does not reduce it to zero coverage — it INVERTS the signal and reports green, which reads as \"the importer gap closed\".",
+      "change": "Additive floor (DISCOVER_FILE_FLOOR = 581) on the DISCOVERED total, before any filter or --random slice, so single-file and sampled runs are unaffected. No assertion changed.",
+      "verification": "Applied by the auditor before it was cut off; RE-VERIFIED INDEPENDENTLY by the orchestrator rather than trusting the code comment. REF repointed at a nonexistent directory -> exit 1 naming the floor. Pre-repair behaviour reproduced from the auditor note: \"Discovered 0 .frag files\", \"0 formula(s) queued\", \"1 passed (1 total)\", exit 0. Break reverted and confirmed absent (grep = 0); corpus measured at 583 .frag against the floor of 581; typecheck exit 0.",
+      "guard": "npx tsx debug/test-frag-integration.mts --discover",
+      "guardPass": true,
+      "commit": "dd93a25c"
+    }
+  ],
+  "summary": {},
+  "status": "INCOMPLETE — the batch-9 auditor was terminated by a session limit after 5 of its 11 guards. Recovered and closed out by the orchestrator on 2026-08-02.",
+  "unsweptAtCutoff": [
+    "smoke:all",
+    "smoke:gallery-link",
+    "smoke:screenshot",
+    "smoke:with-server",
+    "test:frag:v"
+  ]
+}
