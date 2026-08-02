@@ -1,0 +1,282 @@
+{
+  "id": "gs01-guard-sweep-batch9b",
+  "cycle": 13,
+  "phase": "GUARD SWEEP — batch 9b, the last five. THIS COMPLETES THE 76-GUARD SWEEP.",
+  "note": "The five batch 9 never reached before its session limit. Classifying first was the job: two of the five are not gates. Written incrementally after each guard.",
+  "guards": [
+    {
+      "script": "npm run test:frag:v",
+      "classification": "gate",
+      "source": "debug/test-frag-importer.mts --verbose",
+      "engineUrl": "n/a — node-only, no browser, no dev server",
+      "kind": "the SAME FILE as npm run test:frag with one flag. --verbose gates exactly one statement (if (VERBOSE) console.log(result.function)), so the two differ only in stdout volume — 9837 lines against roughly 600. Not a second harness: same assertions, counters and exit path.",
+      "citedBy": [
+        "not as a Guards-block entry before or after — test:frag IS this script and is cited by .claude/rules/scene-and-formula-format.md. A prose line naming the variant was added there; see citationsAdded."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "60 passed / 0 failed (60 total), exit 0, 15s. `npm run test:frag` on the same tree: 60 passed / 0 failed, exit 0 — identical counts, which is the point.",
+      "wallSeconds": 15,
+      "exitContractOk": true,
+      "exitContractNote": "process.exit(failed > 0 || missing > 0 || passed + failed === 0 ? 1 : 0) — the batch-3 repair, inherited in full because it is one file. Confirmed --verbose does not leak into FILTER (the picker skips any argv entry starting with -), so the matrix is 60 in both modes.",
+      "inputsVanishCheck": "COVERED, and re-proved here rather than taken on trust from the code comment: the missing counter and the empty-matrix gate both fire in verbose mode.",
+      "falsified": true,
+      "break": "Two breaks, each applied and reverted with a targeted Edit. (A) product code: `hasDE` forced false in engine-gmt/features/fragmentarium_import/v3/compat.ts (grep `No DE function detected`), so V3 detect rejects every formula — the same break batch 3 used against test:frag:scan. (B) vanishing input: REF repointed at reference/BREAK_GS9B_B, a directory that does not exist.",
+      "result": "(A) RED, exit 1, 0 passed / 60 failed, every line 'detect: No DE function detected (2D or include-based raytracer)'. (B) RED, exit 1, '0 passed 0 failed (0 total)' followed by BOTH new gates: '60 reference file(s) not found — the matrix silently shrank' and 'no formulas ran — this is zero coverage, not a pass'.",
+      "verdict": "HEALTHY — a genuine gate, and it did inherit batch 3's repair rather than bypassing it, because it is the same file rather than a fork of it",
+      "note": "The duplicate-guard question that sank test:hybrid does not apply: test:hybrid's NAME promised coverage of a path that no longer emits, whereas :v names exactly what it is and the header documents it as a usage variant. It buys nothing as a second CI entry and everything as the view you switch to when test:frag goes red. Its one inherited blind spot is unchanged: glslIssues stays advisory, so 60 GLSL parse errors still exit 0 (Tier B from batch 3)."
+    },
+    {
+      "script": "npm run smoke:screenshot",
+      "classification": "tool (visual capture)",
+      "source": "debug/smoke-screenshot.mts — 22 lines",
+      "engineUrl": "http://localhost:3400/ (module default)",
+      "kind": "launches chromium at 1400x900, waits a flat 2500ms, writes one PNG, closes. That is the whole program: no assertion, no pageerror or console handler, no size or content check, no baseline comparison.",
+      "citedBy": [
+        "no .claude/rules/** file, under any spelling. Named in CLAUDE.md's Automated Checks list, CONTRIBUTING.md and HANDOFF.md — all three word it accurately as a visual baseline."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "exit 0, 14s, wrote debug/scratch/engine-boot.png at 460305 bytes.",
+      "wallSeconds": 14,
+      "exitContractOk": "n/a for a tool — and correct for what it is: `main().catch(e => { console.error(e); process.exit(1) })` reds only when navigation or the browser itself fails.",
+      "trackedArtifacts": "NONE. debug/.gitignore line 1 is scratch/ (confirmed with git check-ignore -v), so the PNG is untracked and needs no checkout after a run.",
+      "falsified": "classified, not falsified — three probes rather than code breaks, because there is no assertion to make red",
+      "break": "(P1) ENGINE_URL at a path vite does not serve — inconclusive, vite's SPA fallback served the app anyway. (P2) ENGINE_URL=about:blank. (P3) ENGINE_URL at a dead port.",
+      "result": "(P2) exit 0, \"wrote debug/scratch/engine-boot.png\", 5738 bytes of white. (P3) exit 1, navigation error. The only thing that reds it is not reaching a page at all; a page that reached DOMContentLoaded and rendered nothing is a pass.",
+      "verdict": "TOOL, correctly named and correctly scoped — NOT turned into a gate, per the owner's standing preference against screenshot-baseline smokes. Its one genuine mis-description is in a doc (see the finding).",
+      "note": "Batch 8's smoke:gx-fractal-glitch lesson taken to the limit — that guard printed a glitch-free banner on a blank render because its detector was relative; this one prints \"wrote ...\" because it has no detector. Here that is the honest job description. Recorded because it is MEMBER 18 of smoke:all: 14 of that composite's minutes buy a PNG nobody diffs."
+    },
+    {
+      "script": "npm run smoke:with-server",
+      "classification": "wrapper (process harness)",
+      "source": "debug/runWithServer.mts",
+      "engineUrl": "n/a — it MINTS one. Boots vite on SMOKE_PORT (default 3499) and exports ENGINE_URL=http://localhost:<port> to the command it wraps.",
+      "kind": "boot vite, wait for the port, run the given command against it, tear vite down, exit with the command's code. Owns no assertion and is not supposed to; its whole contract is the exit code it forwards. Five debug harnesses document it as their invocation (bench-perf, bench-perf-timeline, measure-pt-compile, bench-pt, smoke-share-link).",
+      "citedBy": [
+        "no .claude/rules/** file. Correctly — it is not a gate, and a citation would be import-checked against runWithServer.mts, which imports nothing from the repo."
+      ],
+      "baselinePass": false,
+      "baselineNumbers": "THERE WAS NO GREEN BASELINE. `npm run smoke:with-server -- npx tsx <anything>` died with `Error: spawn EINVAL` at debug/runWithServer.mts:52 on Node v24.11.1. Bare `npm run smoke:with-server` exits 2 with usage, which is correct and was the only working path.",
+      "wallSeconds": 4,
+      "exitContractOk": true,
+      "exitContractNote": "AFTER the repair, and this is the brief's question: it does NOT swallow a failing exit code. An inner process.exit(7) makes the wrapper exit 7 — the exact code, not a normalised 1. A nonexistent inner command exits 1 without hanging. A missing -- payload still exits 2 with usage.",
+      "falsified": true,
+      "break": "Five probes on the repaired wrapper, two throwaway inner scripts in the scratchpad. (W1) inner exits 7. (W2) inner fetches app-gmt.html from the wrapper's own :3499 and exits 0. (W3) inner path does not exist. (W4) a real smoke: -- npx tsx debug/smoke-boot.mts. (W5) SMOKE_PORT=3400, already served.",
+      "result": "(W1) exit 7. (W2) exit 0 in 4s, inner printed ENGINE_URL=http://localhost:3499 and fetched 200. (W3) exit 1, no hang. (W4) exit 0. (W5) exit 0 against the FOREIGN server — the documented hazard. netstat shows no LISTENING socket on :3499 after any of them.",
+      "verdict": "WRAPPER, and it was COMPLETELY DEAD on Windows — three separate defects, all repaired and falsified; a fourth left documented as Tier B",
+      "note": "Three independent defects, any one fatal. (1) spawn(npx.cmd, {shell:false}) is rejected by Node >= 18.20.2 (CVE-2024-27980) — and it threw at the VITE spawn, at module scope OUTSIDE the try, so nothing cleaned up. (2) waitForPort probed 127.0.0.1 while vite binds ::1: after fixing (1) it still timed out at 30s while vite was serving. (3) kill() spawned taskkill asynchronously and every caller follows it with process.exit(), so the wrapper died first and left an orphan on [::1]:3499 that broke the NEXT run through --strictPort. Class note: never falsely green, just loudly and permanently red — which is why it survived. ADR-0073 and measure-pt-compile.mts had both written it down as a platform fact.",
+      "repaired": true,
+      "repairCommit": "954237d6",
+      "followUpCommit": "55e39f65"
+    },
+    {
+      "script": "npm run smoke:gallery-link",
+      "classification": "gate",
+      "source": "debug/smoke-gallery-link.mts",
+      "engineUrl": "http://localhost:3400/app-gmt.html (module default, with a .html suffix appended when ENGINE_URL has none)",
+      "kind": "browser (playwright). The whole ?gallery=<slug> deep-link flow: boot parse -> openGalleryAtSlug -> GalleryPage effect -> getGalleryItem (Supabase REST, MOCKED via route interception) -> lightbox -> Open & Remix -> loadGalleryScene -> loadGMFScene -> engineStore.loadScene. Offline and deterministic.",
+      "citedBy": [
+        ".claude/rules/scene-and-formula-format.md Guards block — ALREADY cited on entry. The brief's orphan premise does not hold for this one; the rule was extended with what this batch measured instead of gaining a new citation."
+      ],
+      "baselinePass": true,
+      "baselineNumbers": "exit 0, 7s, 6 assertions (9 after this batch).",
+      "wallSeconds": 7,
+      "exitContractOk": true,
+      "exitContractNote": "Counter-based and correct: a failing ok() pushes onto failures, the summary prints every failure by name, process.exit(1). One caveat that is not a defect — a build without VITE_SUPABASE_* takes an early process.exit(0) after printing a skip line, having asserted nothing.",
+      "inputsVanishCheck": "THE SKIP PATH IS the fifth failure mode, deliberately. .env.local carries the keys here so it was not taken; left alone rather than repaired because making it fatal is a product call. Recorded in the header, in the rule, and as Tier B. The GMF fixture cannot vanish silently — readFileSync throws.",
+      "falsified": true,
+      "break": "Two breaks in product code, each reverted with a targeted Edit. (G1) the terminal loadScene({ preset }) in engine-gmt/gallery/loadGalleryScene.ts made unreachable — the flow runs, the overlay closes, nothing is applied. (G2, control) params.get(\"gallery\") renamed in app-gmt/main.tsx.",
+      "result": "(G1) GREEN, exit 0, full PASSED banner — \"formula loaded from the GMF (Mandelbulb, got Mandelbulb)\" and \"coreMath hydrated (iterations=16)\". (G2) RED, exit 1, 3 failed — and the [loaded] block still printed three green ticks with nothing loaded. After repair: (G1) exit 1 on both new assertions (16 → 16; expected 2, got 16). Clean tree exit 0 at 16 → 2.",
+      "verdict": "DEFECTIVE — the half of the smoke that proves a scene actually LOADED could not fail; repaired additively and re-falsified",
+      "measurement": "Boot defaults measured with a scratchpad playwright probe, not guessed: app-gmt boots formula=Mandelbulb, coreMath.iterations=16. The fixture GMF declares iterations TWICE — 16 in its defaultPreset block (identical to the boot value, so useless) and 2 in the scene's own features.coreMath. 2 is the only value a non-load cannot produce, hence the LAST match and the \"fixture discriminates\" assertion in front of it.",
+      "note": "Batch 7 lesson 3 and batch 8 lesson 1 in the same two lines: the discriminating number was PRINTED (iterations=16 where 2 was correct) and asserted only for its type, while the other assertion compared the editor's default against a fixture that shares it. What stayed live: the mock, the deep-link parse, the lightbox and the overlay-closed check all red under G2.",
+      "repaired": true,
+      "repairCommit": "8729a0b5"
+    },
+    {
+      "script": "npm run smoke:all",
+      "classification": "gate (composite — 42 members)",
+      "source": "package.json — 42 `tsx debug/smoke-*.mts` invocations joined by &&. NOT the `npm run a && npm run b` form batch 7's test:gate was.",
+      "engineUrl": "per member; 38 of the 42 default to localhost:3400 (the port vite.config.ts pins) across five app entries — app-gmt, fluid-toy, fractal-toy, demo and the bare root.",
+      "kind": "the repo's whole-suite smoke. Owns no assertion; its health is entirely its members'. Excludes the two slowest guards (smoke:gx-fractal-glitch ~17 min, smoke:liquify) and includes one that asserts nothing at all (smoke:screenshot, member 18).",
+      "citedBy": [
+        "no .claude/rules/** file — and deliberately still none, see citationsConsidered. Named in CLAUDE.md's Automated Checks list only through its individual members."
+      ],
+      "baselinePass": false,
+      "baselineNumbers": "THE BASELINE WAS RED. exit 1 at 460s, stopped dead at member 28 of 42 (smoke-catalog-browse) on `net::ERR_CONNECTION_REFUSED at http://localhost:5173/app-gmt.html`. After repair: exit 0, 617s (10m17s), all 42 members, 769 lines.",
+      "wallSeconds": 617,
+      "exitContractOk": true,
+      "exitContractNote": "The chaining is sound, falsified in every position. FIRST: breaking the x-flip in components/ui/viewportClamp.ts reds the script in ONE SECOND with only member 1 run. MISSING: renaming member 2 to a nonexistent file gives exit 1 with ERR_MODULE_NOT_FOUND in 1s, not a skip. MID-CHAIN: the red baseline is the proof — a failure at member 28 propagates out through 27 successes. LAST: see lastPositionTest.",
+      "inputsVanishCheck": "THE FINDING, in the most literal form the sweep has seen — the input that vanished was the SERVER. Four members defaulted to :5173, vite's stock port, while this repo pins :3400. Nothing serves 5173, so the chain died at the first of them and members 29-42 — FOURTEEN of the 42, including smoke:interact, which CLAUDE.md lists among the repo's automated checks — never ran at all.",
+      "falsified": true,
+      "break": "Four chaining breaks (C1 first-position assertion failure, C2 missing member at position 2, the red baseline as the mid-chain case, C4 missing member at position 42) plus one per repaired member. All reverted; package.json diffed clean after each.",
+      "verdict": "DEFECTIVE — permanently red, and red for a reason that had nothing to do with the code it guards. Repaired to its first green run in this sweep's history; the chaining mechanism itself is healthy.",
+      "membersFound": {
+        "portDrift": "smoke-catalog-browse, -catalog-load, -picker-search-kb, -workshop-state all defaulted to :5173. Every other member says :3400, vite.config.ts line 164 says port: 3400, and their own headers say \"Requires app-gmt dev server\". Repointed.",
+        "deadTree": "smoke-catalog-load read an ABSOLUTE path into h:/GMT/workspace-gmt/dev/public/formulas/dec.json — the dev/ split deleted 2026-06-17. Dying at import time with ENOENT ever since, on any machine and at any port. Now repo-relative; the file is here at 157 KB and the smoke passes.",
+        "deadCopy": "smoke-picker-search-kb asserted a header reading \"Catalog — opens in Workshop\". That string is in no product file; the picker labels it Catalog (N). It reported \"no catalog results section\" while the section was on screen with 15 thumbnails. Matcher corrected to the live label and made to read the count, which is strictly stronger — an empty catalogSearchHits unmounts the pane.",
+        "noEntryPoint": "NONE of the four had an npm script of its own. smoke:all was their only entry point and could not reach past the first of them — which is why a path into a directory deleted six weeks earlier went unnoticed. Four scripts added."
+      },
+      "checkerBlindSpot": "check:rule-guards could see ONE of the 42 members. b574d315 taught it to expand npm-run composites; a chain of bare tsx calls still fell through to a regex taking the first filename. Citing smoke:all on audio-mod.md was \"cannot fail on these files\" under the old checker and resolves to 16/16 under the repaired one. Wrong both ways — it invents miscitations, and would wave through a citation verified against 1/42 of the real reach. Repaired at debe4c53.",
+      "lastPositionTest": "Member 42 (smoke-orbit) repointed at a file that does not exist: exit 1 after 581s and 782 lines against the green run's 769, i.e. all 41 predecessors ran to completion and the non-zero exit still reached the caller. Only possible AFTER the port repair — before it the chain could not get past member 28, so the exit contract of the whole tail of this script was untestable, which is itself part of the finding.",
+      "repaired": true,
+      "repairCommit": "4636662c"
+    }
+  ],
+  "citationsConsidered": [
+    "smoke:all — NOT cited, deliberately. Batch 7's test:gate reasoning with more force at 42 members: a rule wants the NARROWEST guard that can fail on its files, and a 42-member union reaches essentially the whole product tree, so it resolves green against almost any rule while telling a reader nothing. Every member of consequence is cited individually. Checked empirically now that the checker can resolve it — audio-mod.md comes back \"ok -> 16/16\", which is exactly why it is a poor citation.",
+    "smoke:screenshot — NOT cited; recorded as a prefix-free ANTI-citation instead. It has no assertion, yet a citation would RESOLVE, because it boots the GMT root entry and reaches most of components/**. That is batch 7's trap in its purest form. Citation count unchanged at 90 after the edit, which is the proof.",
+    "smoke:with-server — NOT cited. A process wrapper that imports nothing from the repo cannot be import-checked against any rule's scope. Its documentation belongs in the harnesses that use it and in ADR-0073, which is where it went."
+  ],
+  "citationsAdded": [
+    {
+      "rule": ".claude/rules/scene-and-formula-format.md",
+      "action": "Guards prose += two paragraphs. (1) npm run test:frag:v named as the same FILE as the already-cited test:frag with one flag, with both falsifications and what it is for. (2) smoke:gallery-link — already cited here — gains the blind spot repaired at 8729a0b5 and the part that did NOT change, that it skips at exit 0 without VITE_SUPABASE_*.",
+      "why": "test:frag:v appeared in no rule. More importantly, a reader of this Guards block seeing smoke:gallery-link green had no way to know that until 2026-08-02 that green was compatible with the scene never loading.",
+      "checkRuleGuardsAfter": "0 issues — 22 rules, 90 citations (was 89). The +1 is test:frag:v; smoke:gallery-link was already cited.",
+      "falsifiedTheCitation": "Appended `npm run test:fft` to the same Guards block: 'cannot fail on these files (1) — scene-and-formula-format.md :: test:fft', exit 1. Removed, back to exit 0.",
+      "commit": "929eb97d"
+    },
+    {
+      "rule": ".claude/rules/ui-and-panels.md",
+      "action": "\"Known coverage gap\" block += smoke:screenshot as an anti-citation (prefix-free, on purpose), with the about:blank measurement and the fact that its PNG is gitignored. Also corrects docs/history/engine/05_Shared_UI.md's claim that primitives are snapshot-tested by it.",
+      "why": "A tool mis-described as a gate, in a doc CLAUDE.md routes UI-primitive readers to. The history tree is append-only, so the correction has to live in the rule that scopes the code.",
+      "checkRuleGuardsAfter": "0 issues — 90 citations, UNCHANGED, which is the point: the prefix-free spelling minted nothing.",
+      "commit": "929eb97d"
+    },
+    {
+      "rule": ".claude/rules/sibling-apps.md",
+      "action": "Not a new citation — a correction. The gradient-explorer row carried the checker's first-command-only behaviour as a standing caveat about test:palette. Fixed as of debe4c53; the row now says so and cites entriesForFile as the grep target, keeping the direct test:liquify citation as the narrower guard.",
+      "why": "A rule describing a tool limitation that no longer exists sends the next reader down a path that has been closed.",
+      "checkRuleGuardsAfter": "0 issues — 90 citations, unchanged.",
+      "commit": "debe4c53"
+    }
+  ],
+  "findings": [
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "package.json",
+      "summary": "smoke:all was permanently red at member 28 of 42 because four members defaulted to port 5173 while the repo pins 3400, so 14 members — including smoke:interact, which CLAUDE.md lists as an automated check — never ran at all.",
+      "change": "The four ENGINE_URL defaults repointed at :3400 (headers corrected to name vite.config.ts). Plus the two rotted members behind the port: smoke-catalog-load's absolute path into the deleted dev/ tree made repo-relative, and smoke-picker-search-kb's matcher for removed UI copy corrected to the live Catalog (N) label and made to read the count. Four npm scripts added so each member is individually runnable.",
+      "verification": "smoke:all exit 1 at 460s stopping at member 28 before; exit 0 at 617s, all 42 members, 769 lines after — its first green run in this sweep. Each repaired member also run standalone, 4 of 4 exit 0. The corrected picker assertion falsified against product code: forcing catalogSearchHits to [] gives \"catalog section: ABSENT\" exit 1; reverted, back to \"Catalog (19)\" exit 0. Tracked PNGs restored; typecheck 0; check:rule-guards 0.",
+      "guard": "npm run smoke:all",
+      "guardPass": true,
+      "commit": "4636662c"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/runWithServer.mts",
+      "summary": "smoke:with-server could not run at all on Windows — three independent defects, any one of them fatal, and the first threw at module scope before vite was even started.",
+      "change": "spawn goes through the shell on win32 (Node >= 18.20.2 rejects a .cmd shim with shell:false); waitForPort probes localhost rather than 127.0.0.1, because vite binds ::1; kill() uses spawnSync so taskkill runs before process.exit(). Header records the exit contract and the one hazard left documented.",
+      "verification": "Falsified five ways on the repaired wrapper. Inner process.exit(7) -> wrapper exits 7, so a failing inner command is NOT swallowed. Inner exit 0 -> 0, having fetched app-gmt.html (200) from the wrapper's own :3499. Nonexistent inner command -> exit 1, no hang. Bare invocation -> exit 2 with usage, unchanged. A real smoke through it -> exit 0 in 4s. netstat shows :3499 closed after every path. typecheck 0.",
+      "guard": "npm run smoke:with-server",
+      "guardPass": true,
+      "commit": "954237d6"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/smoke-gallery-link.mts",
+      "summary": "The block headed 'the shared scene is live in the editor' was satisfied by app-gmt's own boot state, so deleting the terminal loadScene({ preset }) from the gallery load path left the whole smoke at exit 0 with its PASSED banner.",
+      "change": "A pre-remix snapshot of the store; an assertion that the fixture discriminates at all; that the remix MOVED the store; and that it moved coreMath.iterations to the value the GMF declares (parsed from the file, not hardcoded). No existing assertion or tolerance touched.",
+      "verification": "Break green before, red after on exactly the new assertions ('coreMath.iterations 16 → 16', 'expected 2, got 16'). Control in the other half: params.get('gallery') renamed in app-gmt/main.tsx reds the three deep-link assertions. Boot defaults measured with a scratch probe (Mandelbulb, 16) before choosing anything. Clean run exit 0 at 16 → 2; typecheck 0.",
+      "guard": "npm run smoke:gallery-link",
+      "guardPass": true,
+      "commit": "8729a0b5"
+    },
+    {
+      "tier": "A",
+      "severity": "high",
+      "file": "debug/check-rule-guards.mjs",
+      "summary": "The rule-guard checker resolved a chain of bare `tsx` calls to its FIRST member only — smoke:all's 42 members became 1, test:palette's 16 became 1 — which invents miscitations in one direction and would verify a citation against 1/42 of a guard's real reach in the other.",
+      "change": "entryFor unions the members of a direct-file chain via a new entriesForFile() helper factored out of the single-file path, so a browser member still resolves to whatever its URL serves. Completes the repair b574d315 started for the npm-run form.",
+      "verification": "Falsified both directions on real citations. Positive: npm run smoke:all on audio-mod.md was \"cannot fail on these files (1)\" exit 1 under the checker one commit earlier (run directly to confirm), and is \"ok -> 16/16 scoped files reachable\" exit 0 after. Negative: npm run test:palette on gmt-shader-chunks.md is still reported, now with the member count — \"test:palette (16 members) imports none of this rule's 21 scoped files\", exit 1. Baseline 0 issues / 90 citations before and after; probes removed, git diff clean.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "debe4c53"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": "docs/adr/0073-compile-time-measurement-protocol.md",
+      "summary": "ADR-0073's Consequences bullet and debug/measure-pt-compile.mts both record 'runWithServer.mts dies with spawn EINVAL' as a standing Windows fact and route around it; 954237d6 made that false.",
+      "change": "An additive dated Update block under the ADR heading (decision unchanged — the measurement protocol, the cache pitfalls and the localhost vs 127.0.0.1 note all still stand), and the harness comment corrected in place with the wait kept.",
+      "verification": "Cited by grep target, not line number (`spawnCmd` in debug/runWithServer.mts). The Update block only adds lines, so it passes the append-only hook mechanically. typecheck 0.",
+      "guard": "npm run typecheck",
+      "guardPass": true,
+      "commit": "55e39f65"
+    },
+    {
+      "tier": "A",
+      "severity": "medium",
+      "file": ".claude/rules/ui-and-panels.md",
+      "summary": "docs/history/engine/05_Shared_UI.md tells a reader of components/ui that primitives are snapshot-tested by smoke:screenshot. There is no snapshot comparison anywhere in that harness and it boots the GMT root entry, not the demo.",
+      "change": "The \"Known coverage gap\" block gains smoke:screenshot as a prefix-free anti-citation with the about:blank measurement and the correction to the history claim. Also cites test:frag:v in scene-and-formula-format.md and records smoke:gallery-link's repaired blind spot there.",
+      "verification": "check:rule-guards 0 issues, 89 -> 90 citations; the +1 is test:frag:v and the smoke:screenshot mention correctly minted none. Falsified the checker on the edited rule by appending npm run test:fft: exit 1; removed, exit 0. Measured: about:blank -> a 5738-byte white PNG at exit 0; a dead port -> exit 1.",
+      "guard": "npm run check:rule-guards",
+      "guardPass": true,
+      "commit": "929eb97d"
+    },
+    {
+      "tier": "B",
+      "severity": "medium",
+      "file": "package.json",
+      "summary": "smoke:all's && chain means the first red erases the signal from every member after it, and there is no summary of how many of the 42 ran.",
+      "rationale": "Appended to PROPOSALS.md with the measurement. Options: leave it; run all members and report 'N of 42 failed' via a small driver; or split fast/browser. Recommendation is the driver, because the failure found here — four dead members hiding behind one another, one pointing into a directory deleted six weeks earlier — is exactly the one it prevents."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "debug/runWithServer.mts",
+      "summary": "With SMOKE_PORT already served by something else, --strictPort makes the wrapper's own vite exit and it silently runs the smoke against the foreign listener, printing its usual 'vite ready at <url>'.",
+      "rationale": "Measured at SMOKE_PORT=3400 against a hand-started npm run dev: exit 0, the inner command fetched from a server the wrapper did not start, and the 'vite exited before ready' warning lost the race and never printed. Harmless when the squatter is this repo's dev server, which is why it is documented in the header rather than made fatal — whether it should be fatal is the owner's call. In PROPOSALS.md."
+    },
+    {
+      "tier": "B",
+      "severity": "low",
+      "file": "debug/smoke-gallery-link.mts",
+      "summary": "A build without VITE_SUPABASE_* makes this smoke print a skip and exit 0 having asserted nothing — the fifth failure mode by construction, and it is a member of smoke:all.",
+      "rationale": "Deliberate and defensible (a fresh checkout is not a regression), so it was recorded in the harness header and in scene-and-formula-format.md rather than changed. Options: a distinct exit code, or an opt-in REQUIRE_GALLERY=1. In PROPOSALS.md alongside the other two deliberate exit-0 paths."
+    }
+  ],
+  "summary": {
+    "guardsSwept": 5,
+    "falsifications": 18,
+    "classification": "3 gates (test:frag:v, smoke:gallery-link, smoke:all), 1 tool (smoke:screenshot), 1 wrapper (smoke:with-server)",
+    "healthy": 1,
+    "toolsCorrectlyScoped": 1,
+    "defectiveAndRepaired": 3,
+    "commits": [
+      "954237d6 smoke:with-server could not run at all on Windows — three defects",
+      "55e39f65 retire the 'runWithServer dies with EINVAL' caveat (ADR-0073 + measure-pt-compile)",
+      "8729a0b5 smoke:gallery-link passed with the remix load deleted",
+      "929eb97d cite test:frag:v; record what smoke:screenshot is not",
+      "debe4c53 check:rule-guards saw 1 of smoke:all's 42 members",
+      "4636662c smoke:all could not reach 14 of its 42 members"
+    ],
+    "checkRuleGuards": {
+      "onEntry": "0 issues, 22 rules, 89 citations",
+      "onExit": "0 issues, 22 rules, 90 citations"
+    },
+    "headline": "The two items the brief flagged as highest-risk were both worse than suspected, and in the opposite direction to the rest of the sweep. smoke:all was PERMANENTLY RED — four members pointed at vite's stock port 5173 while this repo pins 3400, so it died at member 28 and FOURTEEN of its 42 never ran, among them smoke:interact, which CLAUDE.md lists as an automated check. Behind that port sat two members that had rotted undisturbed: one reading an absolute path into the dev/ tree deleted 2026-06-17, one asserting UI copy that exists nowhere in the repo. None of those four had an npm script of its own. And smoke:with-server could not execute a single line of its job on this platform — spawn EINVAL at module scope — a breakage so old that ADR-0073 and a harness comment had both written it down as a platform fact. Neither ever went falsely green; both were loudly, permanently red, which is exactly why they survived.",
+    "chainingVerdict": "HEALTHY, falsified in all four positions. FIRST: 1s, exit 1, only member 1's output — it short-circuits. MISSING member: 1s, exit 1, ERR_MODULE_NOT_FOUND — not skipped. MID (28 of 42): exit 1 through 27 successful predecessors. LAST (42 of 42): exit 1 after 581s and 782 lines, through all 41. Nothing is swallowed. The last was only testable AFTER the port repair — before it, the exit contract of this script's entire tail was unreachable.",
+    "finalGuardRun": "test:frag:v 60/60 exit 0 in 15s; smoke:gallery-link exit 0 in 7s at iterations 16 → 2; smoke:screenshot exit 0 in 14s; smoke:with-server exit 0 in 4s through a real smoke; smoke:all exit 0 in 617s across all 42 members. Plus typecheck 0 and check:rule-guards 0.",
+    "hygiene": "Tree clean apart from the untracked debug/engine-gmt-smoke.png that predates this batch; grep -rn BREAK_GS9B empty. Tracked artifacts smoke:all rewrites (debug/fluid-tsaa-on.png, -off.png, fluid-pause-hover.png) git checkout-ed after every run and clean. smoke:screenshot writes only to gitignored debug/scratch/. Dev server on :3400 started by this batch and stopped at the end; :3499 confirmed closed after every smoke:with-server probe. No repo file created except this result JSON; scratch probes lived in the scratchpad.",
+    "sweepComplete": {
+      "thisBatch": "5 — smoke:all, smoke:with-server, test:frag:v, smoke:gallery-link, smoke:screenshot. The five batch 9 never reached.",
+      "runningTotal": "75 guards across nine batches by the sweep's own accounting (f7ee4194 recorded 65 after eight batches, batch 9 added 5, this batch 5), 269+ falsifications, 44 found defective.",
+      "gateVersusTool": "This is the number that says how much the repo actually guards, and it is high. Of the 75, essentially all are genuine gates that can move an exit status. The exceptions, each identified as such by the batch that swept it, are FIVE: test:frag:scan ('a report, not a guard'), test:dither ('a metrics lab, not a test' — since repaired INTO a gate), test:compat:write (a snapshot writer), smoke:screenshot (a visual capture) and smoke:with-server (a process wrapper). smoke:tsaa is a sixth borderline case — batch 8 found it to be a boot canary plus a screenshot capture rather than the TSAA guard its name implies, and repaired the canary half. So roughly 93% of the sweep's surface is gate rather than tool, and the failure mode the sweep kept finding was never 'this is not really a test' — it was a real gate with an assertion a vanished, blank, zeroed or default subject satisfied.",
+      "defectRate": "44 of 75, a shade under 60%. Batch 9b's three are the last of them, and they broke the pattern: all three were red-and-ignored rather than green-and-blind.",
+      "notOnTheWORKLIST": "Worth knowing, because it bounds the claim. package.json carries 91 guard-shaped scripts today (including the four this batch created). NINE real guards were never on the sweep's worklist and have never been falsified by it: smoke:boot, smoke:undo, smoke:fluid-brush, smoke:fluid-presets, smoke:fluid-toy, smoke:fractal-toy, smoke:migrations, smoke:gx-handles and test:palette. Eight of the nine are members of smoke:all so are at least exercised; smoke:gx-handles is not. So the sweep is complete against its worklist, and the worklist was not the whole of package.json."
+    },
+    "lessonsCarriedForward": [
+      "A GUARD THAT IS LOUDLY RED CAN HIDE LONGER THAN ONE THAT IS FALSELY GREEN. Both of this batch's worst findings had been failing in the open for weeks — one documented in an ADR as a platform limitation to route around. When a doc says \"X does not work here\", check the date and check it again.",
+      "A COMPOSITE'S EXIT CONTRACT IS UNTESTABLE PAST ITS FIRST FAILURE. smoke:all's tail could not be falsified at all until the port drift was fixed. Fix the earliest red first, then test the contract.",
+      "PORTS AND PATHS ARE INPUTS TOO. The fifth failure mode's usual form is a vanished corpus; here it was a vanished SERVER (nothing listens on 5173) and a vanished DIRECTORY (an absolute path into a tree deleted six weeks earlier).",
+      "A GUARD WITH NO NPM SCRIPT OF ITS OWN WILL ROT. Four harnesses reachable only through a 42-member chain accumulated two independent failures and nobody could have seen either without editing package.json.",
+      "CHECK WHETHER THE CHECKER CAN SEE WHAT YOU ARE CITING. check:rule-guards has now been found blind to composites twice, in two syntaxes, in two batches. Any citation greenlit before debe4c53 for a bare-tsx chain was verified against its first member only."
+    ]
+  },
+  "status": "COMPLETE — 5 of 5 swept. THIS CLOSES THE GUARD SWEEP."
+}

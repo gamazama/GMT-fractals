@@ -2931,3 +2931,64 @@ version — the measurement is now recorded in the sweep's header and in
 `gmt-renderer.md`, so the duplication is visible rather than implied. Deliberately
 NOT applied: an assertion that the modes differ. It would be true to the intent and
 **permanently red**, which is its own failure mode.
+
+---
+
+## MEDIUM — `smoke:all`'s `&&` chain means one red hides every member after it (gs01 batch 9b)
+
+**Tier B — product/CI judgement, not applied.**
+
+`smoke:all` is 42 `tsx debug/*.mts` invocations joined by `&&`. The chaining itself
+is sound and was falsified three ways in batch 9b: a broken member 1 reds the whole
+thing in 1 second with only that member run; a member whose file does not exist reds
+with `ERR_MODULE_NOT_FOUND` rather than being skipped; and a failure at member 28
+propagates out through 27 successful predecessors as exit 1.
+
+That last one is also the problem. On entry to this batch the chain stopped dead at
+member 28 (`smoke-catalog-browse`) because four members defaulted to port **5173**
+while the repo's vite is pinned to **3400** — so **14 of the 42 never ran at all**,
+including `smoke:interact`, which CLAUDE.md lists among the repo's automated checks.
+The port drift, and a member reading a file out of the `dev/` tree deleted on
+2026-06-17, are fixed (commits below). The structural point stands: with `&&`, the
+first red erases the signal from everything downstream, and there is no summary line
+saying how many members ran.
+
+- **(a)** Leave it. `&&` is the standard idiom, a red chain is a red chain, and the
+  operator ordering (cheap node harnesses first, slow browser smokes later) already
+  means the common failure surfaces early.
+- **(b)** Run every member, collect failures, exit non-zero at the end with a
+  "N of 42 members failed: …" summary. Strictly more information per run, at the cost
+  of always paying the full ~8 minutes. A shell-portable version of this on Windows
+  is not a one-liner — it wants a small `debug/run-smokes.mts` driver, which is
+  itself new code to maintain.
+- **(c)** Split into `smoke:all:fast` (the node harnesses) and `smoke:all:browser`,
+  so a browser-side red does not hide a node-side one and vice versa.
+
+**Recommendation: (b)**, because the failure this batch found is exactly the one (b)
+prevents — four dead members hiding behind one another, undetected for long enough
+that one of them was pointing into a directory deleted six weeks earlier. (c) is a
+cheaper half-measure worth taking if (b) is not wanted.
+
+## LOW — three deliberate exit-0 paths worth a decision (gs01 batch 9b)
+
+**Tier B — all three are intentional; the question is whether they should stay.**
+
+1. **`smoke:gallery-link` skips at exit 0 with no `VITE_SUPABASE_*`.** The build
+   disables the gallery, the smoke prints `⊘ gallery not configured … skipping` and
+   exits 0 having asserted nothing. Deliberate (a fresh checkout is not a
+   regression), but it is the sweep's fifth failure mode by construction, and as a
+   member of `smoke:all` the `⊘` is one line in an 8-minute log. Option: a distinct
+   exit code, or an opt-in `REQUIRE_GALLERY=1`.
+2. **`smoke:with-server` runs against a foreign server if `SMOKE_PORT` is taken.**
+   `--strictPort` makes its own vite exit, `waitForPort` connects to whatever is
+   already listening, and it prints its usual "vite ready at <url>". Measured at
+   `SMOKE_PORT=3400` against a hand-started `npm run dev`: exit 0, the inner command
+   fetched from a server the wrapper did not start. Harmless when the squatter is
+   this repo's dev server, which is why it was documented rather than made fatal.
+   Option: fail if our vite child exited before the port opened.
+3. **`smoke:screenshot` is a capture, not a gate**, and correctly named as one
+   everywhere except `docs/history/engine/05_Shared_UI.md`, which calls it a snapshot
+   test of the UI primitives. Pointed at `about:blank` it writes a 5.7 KB white PNG
+   and exits 0. The history tree is append-only so the correction was written into
+   `ui-and-panels.md` instead. Option: nothing, or retire the 05_Shared_UI claim in a
+   future doc pass. It costs `smoke:all` ~14s and gates nothing.
