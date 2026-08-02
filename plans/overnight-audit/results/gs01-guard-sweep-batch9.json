@@ -180,7 +180,7 @@
       "summary": "test:frag:integration:discover is deliberately permanently red, so a vanished corpus does not reduce it to zero coverage — it INVERTS the signal and reports green, which reads as \"the importer gap closed\".",
       "change": "Additive floor (DISCOVER_FILE_FLOOR = 581) on the DISCOVERED total, before any filter or --random slice, so single-file and sampled runs are unaffected. No assertion changed.",
       "verification": "Applied by the auditor before it was cut off; RE-VERIFIED INDEPENDENTLY by the orchestrator rather than trusting the code comment. REF repointed at a nonexistent directory -> exit 1 naming the floor. Pre-repair behaviour reproduced from the auditor note: \"Discovered 0 .frag files\", \"0 formula(s) queued\", \"1 passed (1 total)\", exit 0. Break reverted and confirmed absent (grep = 0); corpus measured at 583 .frag against the floor of 581; typecheck exit 0.",
-      "guard": "npx tsx debug/test-frag-integration.mts --discover",
+      "guard": "npm run test:frag:integration:discover (npx tsx debug/test-frag-integration.mts --discover)",
       "guardPass": true,
       "commit": "dd93a25c"
     }

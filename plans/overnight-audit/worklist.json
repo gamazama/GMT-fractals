@@ -434,13 +434,13 @@
     "tier": "cross-cutting",
     "area": "Falsify all 85 test:*/smoke:*/check:* guards - break what each governs, confirm red, revert",
     "files": 85,
-    "status": "in-progress",
+    "status": "done",
     "cycle": 13,
-    "findings": 79,
-    "applied": 66,
+    "findings": 90,
+    "applied": 75,
     "escalated": 0,
-    "proposed": 14,
+    "proposed": 17,
     "priority": 34,
-    "note": "65 of 76 swept in 8 serial batches (251 falsifications). 37 guards found defective. Batch 8 was the first with NO healthy guard - all eight defective, seven of them satisfiable by a vanished/blank/zeroed subject. smoke:gx-fractal-glitch got its FIRST GREEN BASELINE in its history (blocked by concurrent auditors in cycles 11-12) and was then found unable to fail on a blank render. 11 guards remain."
+    "note": "COMPLETE. All 76 worklist guards falsified across 9 serial batches (269+ falsifications); the other 9 of the original 85 were falsified during the cycle-11/12 subsystem audits. 44 found defective. check:rule-guards taken from 4 issues to ZERO and repaired TWICE (blind to npm-run composites, then to bare-tsx chains). Three new rules written for rule-orphaned subsystems. Four new npm scripts created for harnesses that had no entry point of their own."
   }
 ]

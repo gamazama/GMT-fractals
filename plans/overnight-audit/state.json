@@ -1,6 +1,6 @@
 {
   "started": "2026-07-28T22:34:48.988Z",
-  "cycle": 12,
+  "cycle": 13,
   "maxCycles": 24,
   "batchSize": 3,
   "maxConcurrentAgents": 3,
@@ -9,16 +9,16 @@
   "dashboardUrl": "https://claude.ai/code/artifact/d81d57c1-3384-4880-93e5-a89722063efe",
   "dashboardFile": "plans/overnight-audit/dashboard.html",
   "stopped": false,
-  "lastDashboard": "2026-07-29T08:30:00.000Z",
+  "lastDashboard": "2026-08-02T18:40:00.000Z",
   "plan": "max-subscription",
   "windowResets": [
     "2026-07-27T20:50:00Z",
     "2026-07-28T01:50:00Z",
     "2026-07-28T06:50:00Z"
   ],
-  "note": "WORKLIST COMPLETE (33/33). Now in the cross-cutting GUARD SWEEP phase: falsify every test:*/smoke:*/check: in package.json. 85 total, 9 already falsified in runs 1-2, 76 to go. Executed SERIALLY - one agent at a time, quiet tree, dev server killed - because parallel agents killed a browser smoke twice in cycle 12. Batches prioritised by how many applied findings cite each guard as proof: smoke:engine-gmt is cited by 12 and was never falsified. Deadline extended to 2026-07-30 by the owner.",
+  "note": "WORKLIST COMPLETE (33/33 subsystems) AND GUARD SWEEP COMPLETE (76/76 guards). Every guard package.json shipped has been deliberately broken and watched. Remaining cross-cutting work from PROTOCOL.md: the @invariant -> @assumption sweep (~152 files), and the NUL-byte scan (3 instances found so far, all incidental).",
   "dashboardPublish": false,
   "run": 2,
   "worklistEmpty": true,
-  "phase": "guard-sweep (serial, one agent at a time; owner cleared 2026-07-29 ~10:20 SAST)"
+  "phase": "guard-sweep COMPLETE"
 }

@@ -73,29 +73,29 @@
 </style>
 <div class="wrap">
   <h1>GMT overnight audit</h1>
-  <p class="sub">Running &middot; cycle 12 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; 2026-07-29T08:30:00.000Z</p>
+  <p class="sub">Running &middot; cycle 13 of 24 &middot; branch <code>audit/overnight-2026-07-27</code> &middot; 2026-08-02T18:40:00.000Z</p>
   
 
   <div class="tiles">
-    <div class="tile"><div class="v">33/33</div><div class="k">subsystems audited</div></div>
-    <div class="tile"><div class="v">221</div><div class="k">findings</div></div>
-    <div class="tile"><div class="v" style="color:var(--ok)">149</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">137 self-verified &middot; 12 verifier-confirmed</span></div></div>
+    <div class="tile"><div class="v">34/34</div><div class="k">subsystems audited</div></div>
+    <div class="tile"><div class="v">304</div><div class="k">findings</div></div>
+    <div class="tile"><div class="v" style="color:var(--ok)">215</div><div class="k">changes applied<br><span style="font-size:.85em;opacity:.75">203 self-verified &middot; 12 verifier-confirmed</span></div></div>
     <div class="tile"><div class="v" style="color:var(--warn)">17</div><div class="k">sent to a verifier</div></div>
-    <div class="tile"><div class="v" style="color:var(--accent)">64</div><div class="k">awaiting you</div></div>
-    <div class="tile"><div class="v">172<span style="font-size:.6em;color:var(--dim)">/177</span></div><div class="k">guards passing</div></div>
+    <div class="tile"><div class="v" style="color:var(--accent)">81</div><div class="k">awaiting you</div></div>
+    <div class="tile"><div class="v">172<span style="font-size:.6em;color:var(--dim)">/251</span></div><div class="k">guards passing</div></div>
   </div>
   <div class="bar"><i></i></div>
-  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:39%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:66%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:68%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:50%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:47%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:29%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:24%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:37%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:26%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:29%"></i></div><div class="cyc" title="cycle 11: 25 findings"><i style="height:66%"></i></div><div class="cyc" title="cycle 12: 38 findings"><i style="height:100%"></i></div></div>
-     <p class="cyc-label">findings per cycle &middot; 13 cycles</p>
+  <div class="cycles"><div class="cyc" title="cycle 0: 0 findings"><i style="height:0%"></i></div><div class="cyc" title="cycle 1: 15 findings"><i style="height:18%"></i></div><div class="cyc" title="cycle 2: 25 findings"><i style="height:30%"></i></div><div class="cyc" title="cycle 3: 26 findings"><i style="height:31%"></i></div><div class="cyc" title="cycle 4: 19 findings"><i style="height:23%"></i></div><div class="cyc" title="cycle 5: 18 findings"><i style="height:22%"></i></div><div class="cyc" title="cycle 6: 11 findings"><i style="height:13%"></i></div><div class="cyc" title="cycle 7: 9 findings"><i style="height:11%"></i></div><div class="cyc" title="cycle 8: 14 findings"><i style="height:17%"></i></div><div class="cyc" title="cycle 9: 10 findings"><i style="height:12%"></i></div><div class="cyc" title="cycle 10: 11 findings"><i style="height:13%"></i></div><div class="cyc" title="cycle 11: 25 findings"><i style="height:30%"></i></div><div class="cyc" title="cycle 12: 38 findings"><i style="height:46%"></i></div><div class="cyc" title="cycle 13: 83 findings"><i style="height:100%"></i></div></div>
+     <p class="cyc-label">findings per cycle &middot; 14 cycles</p>
 
-  <section><h2>Guards failing <span class="count">5</span></h2>
+  <section><h2>Guards failing <span class="count">79</span></h2>
     <p class="note">Run these yourself before trusting anything downstream of them.</p>
-    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article><article class="finding sev-high"><header><code>npm run smoke:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gx-fractal-glitch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev">p01b-palette-components</span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev"></span></header><p class="what">failed</p></article>
+    <article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev">g04-navigation</span></header><p class="what">PRE-EXISTING RED, not caused by this audit. 'accumulation did not advance after orbit settled (1 -&gt; 1)' at debug/smoke-orbit.mts:87. Proven pre-existing by reverting Navigation.tsx to pristine and re-running: byte-identical failure, same sceneOffset delta 4.127, same assertion.</p></article><article class="finding sev-high"><header><code>npm run smoke:engine-gmt</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:viewport</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:statelibrary-drop</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:compat</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:modulation-parity</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:viewport-fixed</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:hud-hint</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:gmf</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:bucket-convergence</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:engine-demo</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:session-hold</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:zindex</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:zindex</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:camera</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:help-menu</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:param-mapping</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:share-link</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:frag</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:frag:integration</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:mesh-grid</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:binder-registry</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:track-binding</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:audio-signal</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:band-analyser</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:orbit</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:frag:scan</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:modulation-coverage</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:shader</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:partial-apply</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:modulated-setter</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:migrations</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:deep-zoom-la</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:deep-zoom-nucleus</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:deep-zoom-orbit</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:mb3d-decompiler</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:mb3d</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:mb3d:weave</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:pause-controls</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:weave-sweep</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:interaction</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:interaction:coverage</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:interaction:wiring</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:anim-play</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:anim-orbit</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:anim-vec2</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:interact</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:canvas-menu</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:ui-primitives</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:fft</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:filterbank</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:band-math</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:gate</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:audio-fps-remap</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:dither</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:refine</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gx-fractal-glitch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:tsaa</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:formula-switch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:fractal-kind</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:bc-drag</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:canvas-pan-zoom</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:particle-bounce</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:engine-demo-modulation</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:baseline</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:hybrid</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:hybrid-adv</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:compat:write</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run test:frag:v</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:screenshot</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:with-server</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gallery-link</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:all</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:liquify</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run smoke:gx-fractal-glitch</code><span class="sev"></span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev">p01b-palette-components</span></header><p class="what">failed</p></article><article class="finding sev-high"><header><code>npm run check:rule-guards</code><span class="sev"></span></header><p class="what">failed</p></article>
   </section>
 
   
   <section>
-    <h2>Applied — self-verified <span class="count">137</span></h2>
+    <h2>Applied — self-verified <span class="count">203</span></h2>
     <p class="note">Changed and confirmed green by an existing guard script. Each names the guard that proves it.</p>
     
   <article class="finding sev-high">
@@ -474,6 +474,482 @@
     <p class="verify"><strong>How it was verified:</strong> Falsification both directions plus an independent verifier pass. Exit wiring was already proven live by two red runs. After the fix, exit 0. To prove expectFail cannot mask a regression, marking the passing Mandelbox entry expectFail turned the guard red with 'expected rejection ... but the importer accepted it'; reverting the flag returned it to green. The VERIFIER then re-ran the 307-failure sweep itself and reproduced the numbers exactly, so the narrowing is characterised by measurement rather than by assertion — see notes.</p>
     <p class="guard"><code>npm run test:frag:integration</code> <span class="ok">passed</span></p>
     <p class="commit">commit <code>fb866b0d</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch1</code>
+      <code class="file">debug/smoke-engine-gmt.mts</code>
+    </header>
+    <p class="what">smoke:engine-gmt — the guard 13 applied findings cite as proof — could not fail on a broken shader. `hasCompiledShader` is an optimistic latch CompileScheduler sets right after issuing the draw, not a compile result; the driver reports link failure asynchronously, long after. A fragment shader with a hard syntax error booted, latched the flag true, and rendered empty frames faster than a working one, and the smoke exited 0 with its success banner.</p>
+    <p class="change"><strong>Changed:</strong> Added a console-error assertion alongside the existing pageerror one. The failure DOES reach the main thread as WorkerProxy's `case 'ERROR'` console.error (forwarded from CompileScheduler's COMPILE_FAILED); the smoke was already collecting it into `logs` and asserting nothing on it. A pageerror listener never sees it — it is a console record, not a thrown exception. Additive: no existing assertion narrowed. Header JSDoc updated to stop implying hasCompiledShader means what it says.</p>
+    <p class="verify"><strong>How it was verified:</strong> Injected `AUDIT_GS01_BREAK_MARKER;` into the joined headers string in ShaderBuilder.buildFragment(). Pre-fix: exit 0, success banner, isBooted true, hasCompiledShader true, frameCount 216, six store slices, 0 pageerrors. Post-fix, same break: exit 1 with `console errors present (1): [error] [WorkerProxy] Worker error: Shader compile/link failed: ... ERROR: 0:430: 'AUDIT_GS01_BREAK_MARKER' : syntax error`. Break reverted, git diff clean, marker grep empty. Repaired guard run twice on the clean tree: exit 0 both. typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:engine-gmt</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>e04d7dc2</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch1</code>
+      <code class="file">debug/test-modulation-parity.mts:125</code>
+    </header>
+    <p class="what">test:modulation-parity block [4] — the check written for the most specific historical bug in the file's header (the export's falsy `if (!juliaX)` fallback replacing a legitimate zero with the store's base) could not detect that bug returning. juliaX's DDFS default is 0.0, so the offset that lands the axis on zero is itself zero and both the correct `?? base` and the buggy `|| base` yield 0. The sibling 'untouched axes keep their base' assertion degenerated to 0 === 0 the same way: 2 of the block's 3 assertions were tautologies.</p>
+    <p class="change"><strong>Changed:</strong> Seed juliaX 0.7 / juliaY -0.3 before the run, restore the slice in a finally. Comment now names the DDFS default and its grep target so the seeding does not read as incidental.</p>
+    <p class="verify"><strong>How it was verified:</strong> Restored the falsy `||` in flushModulationComposites. Pre-fix: whole block printed ok, exit 0, '✓ all assertions passed'. Post-fix, same break: exit 1, 'FAIL: an axis driven to 0 stays 0 instead of snapping back to base (base 0.7) 0.7'. Break reverted, git diff clean, marker grep empty, repaired harness exit 0 with all 16 assertions ok. Separately confirmed the rest of the guard is live: re-cloning the scratch vec per axis in the vecAxis branch (the other historical bug) gives exit 1, 'FAIL: BOTH axes moved — the later axis did not reset the earlier { x: 0, y: 0.5 }'. That break reverted too. typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:modulation-parity</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>bdfa246f</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch2</code>
+      <code class="file">debug/smoke-engine-demo.mts</code>
+    </header>
+    <p class="what">Three of the six things smoke:engine-demo header claims to verify were computed, logged and never asserted — topbar mount, modulation tick, HUD hint pill. Worst case: with the render loop completely dead (animTickCount 0 -&gt; 0) the smoke printed a console.warn, exited 0, and printed a closing banner reading &quot;modulation tick runs&quot;. It was a warn and the smoke collects console.error only; TickRegistry own 3s no-ticks safety net is also a console.warn, so nothing anywhere caught a dead render loop.</p>
+    <p class="change"><strong>Changed:</strong> Added three throwing assertions, all additive — no existing assertion narrowed. Step 4 warn became a throw. Step 5 probe had to be TIGHTENED first: it accepted &quot;Randomize&quot; OR &quot;Demo&quot; anywhere in body text and read true with the whole HudHost returning null, so asserting on it as-written would have shipped a tautology; it now scans for the pill own key label. Header rewritten with a COVERAGE block recording each falsification and naming what is still uncovered.</p>
+    <p class="verify"><strong>How it was verified:</strong> Three breaks, each applied and reverted independently, run against the guard before and after the repair. TopBarHost returns null: before exit 0 + success banner (&quot;topbar present: false&quot;), after exit 1 &quot;TopBar did not mount&quot;. runTicks(dtSec) gated out of RenderLoop.tsx: before exit 0 + banner claiming the tick runs, after exit 1 &quot;modulation tick did not advance (0 -&gt; 0)&quot;. HudHost returns null: old probe still true (proving the tautology), tightened probe false, exit 1. Every break reverted, git diff clean on all three source files, AUDIT_GS01B2 marker grep empty across engine/engine-gmt/components/debug/store/app-gmt/demo/fluid-toy/fractal-toy. Repaired smoke run twice on the clean tree: exit 0 both. typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:engine-demo</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>42ab7084</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch2</code>
+      <code class="file">debug/check-zindex.mjs</code>
+    </header>
+    <p class="what">check:zindex allowlisted components/ui/zIndex.ts and components/ui/Layer.tsx wholesale, because both quote z-[9999] in JSDoc when explaining what not to write. That exempted the two files the entire layer system is built on. A hardcoded zIndex: 9999 on Layer.tsx portal div — which makes every &lt;Layer&gt; render at 9999 regardless of tier, collapsing the tier table — passed check:zindex, test:zindex and typecheck, i.e. both guards .claude/rules/layers-zindex.md cites plus the compiler.</p>
+    <p class="change"><strong>Changed:</strong> Skip matches on comment lines (first non-space characters * or //) at the match site, and remove the two files from the ALLOWLIST so they are checked like everything else. Header records the falsification and why the filter cannot produce a false negative. Chose line-leading detection over comment-stripping deliberately: naive // stripping would eat real code following a string containing https://.</p>
+    <p class="verify"><strong>How it was verified:</strong> Four plants, each applied and reverted. Before the change: Modal.tsx z-[9999] -&gt; exit 1 and useDismiss.ts zIndex: 4242 -&gt; exit 1 (detector sound, both regex forms live, and the rule two path globs both reached); Layer.tsx zIndex: 9999 -&gt; exit 0 GREEN, with test:zindex exit 0 and typecheck exit 0 as well; same for zIndex.ts. After the change: Layer.tsx plant -&gt; exit 1 &quot;components/ui/Layer.tsx:70  zIndex: 9999&quot; while the JSDoc mention on line 14 stayed silent; zIndex.ts plant -&gt; exit 1 &quot;components/ui/zIndex.ts:148  zIndex: 8888&quot;. Scan paths verified by hand with an independent replication of the walker: reaches all 11 components/ui/** files and hooks/useDismiss.ts. Clean tree after: exit 0, violations 0, backlog 20/14 -&gt; 16/12. All plants reverted, git diff clean, marker grep empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run check:zindex</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>46e0fff0</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">debug/test-frag-importer.mts</code>
+    </header>
+    <p class="what">test:frag reported green with the entire reference corpus missing. Cycle 10 revived its exit contract, but the revival gated only `failed`, and a missing reference file is neither a pass nor a failure — `test()` prints a yellow warning and returns without incrementing either counter. Repointing REF at a directory that does not exist printed 60 'File not found' warnings, then '0 passed  0 failed  (0 total)', and exited 0. The corpus is ~580 vendored files under engine-gmt/features/fragmentarium_import/reference/, and .claude/rules/scene-and-formula-format.md cites this guard for the Formula Workshop.</p>
+    <p class="change"><strong>Changed:</strong> Additive only — `failed &gt; 0` is unchanged. Added a `missing` counter incremented at the existing existsSync bail, plus an empty-matrix check, each reported on its own line, and both added to the exit expression. Exit-contract comment now records the falsification and the measured extent of the deliberately-advisory GLSL channel.</p>
+    <p class="verify"><strong>How it was verified:</strong> Four breaks, each applied and reverted independently, run before and after the repair. Corpus moved: before exit 0 with 0/0/0, after exit 1 with '60 reference file(s) not found — the matrix silently shrank' + 'no formulas ran — this is zero coverage, not a pass'. ONE path renamed: before exit 0 with '59 passed  0 failed', after exit 1 with '1 reference file(s) not found', so partial shrinkage fails too. Filter matching nothing: exit 1 naming the filter. Original coverage intact: neutering detectFormulaV3's hasDE gives exit 1 with 0 passed / 60 failed against the repaired guard, same as before. Clean tree 60 passed / 0 failed / exit 0; typecheck exit 0; git diff clean on engine-gmt/; AUDIT_GS01B3 grep empty.</p>
+    <p class="guard"><code>npm run test:frag</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>71d5d4c1</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">debug/test-frag-integration.mts</code>
+    </header>
+    <p class="what">test:frag:integration's header sells the run as 'detect -&gt; transform -&gt; parameter build -&gt; shader assembly -&gt; GLSL validation' and the scene-and-formula-format rule cites it unqualified, but `status = 'warn'` never reaches `process.exit(failed &gt; 0 ? 1 : 0)`. Every GLSL parse error, getDist scope issue and paramIssues category — RENAME_FAIL and DEAD_PARAM included, which the file's own section 5 labels 'importer bug' — is computed, printed and then ignored by the exit code. Neutering the AST renamer, so every generated shader references undeclared Fragmentarium names and cannot compile, gives 61 GLSL issues and exit 0; test:frag is green on that break too.</p>
+    <p class="change"><strong>Changed:</strong> Doc-only. Header rewritten with a 'WHAT A GREEN RUN ACTUALLY PROVES' block listing gated vs reported-only outcomes with the falsification numbers behind each, and a pointer at the exit statement. Records that the narrowing itself holds (both expectFail directions are live) so nobody re-litigates that half, and states why the gate was not widened here.</p>
+    <p class="verify"><strong>How it was verified:</strong> Four falsifications, each applied and reverted independently. detectFormulaV3 hasDE=true -&gt; exit 1, 60 passed / 4 failed, the four expectFail entries reporting 'expected rejection ... but the importer accepted it'. hasDE=false -&gt; exit 1, 4 passed / 61 failed, only the expectFail entries surviving. AST renamer gated out in v3/generate/rename.ts -&gt; exit 0, 4 passed / 61 warnings, 61 GLSL issues ('undefined variable: &quot;Scale&quot;', '&quot;MinRad2&quot;', '&quot;pos&quot;'), 0 param issues, and test:frag also exit 0 with 60/0 and no GLSL issues reported. Hard GLSL syntax error on every generated function -&gt; exit 0, 61 GLSL issues. All reverted, git diff clean on engine-gmt/, marker grep empty. Clean tree 64 passed / 1 warning / 0 failed exit 0; typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:frag:integration</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>1dc61d24</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">debug/test-band-analyser.mts:5</code>
+    </header>
+    <p class="what">test:band-analyser block [5] — the block titled &quot;SuperFlux suppresses a drifting tone, keeps a real onset&quot;, covering a mechanism bandAnalyser.ts carries an @invariant about — could not detect that mechanism being removed. Deleting the frequency max-filter outright (`prevMax = prev[k]`, i.e. plain per-band flux) left the entire harness green. The assertion is loose rather than dead: at the fixture's 0.5%/hop drift the filter buys 35x of suppression, but the surviving onset/drift ratio is still 4.15 against a 2x gate, roughly 70x below what the healthy code delivers.</p>
+    <p class="change"><strong>Changed:</strong> Added a SECOND drift case at 2%/hop — a fast filter sweep, ~5.4 octaves/sec, the hardest case plain flux still has to reject — with an 8x gate. Strictly additive: the original 0.5%/hop 2x assertion is untouched. The comment records every measured figure and why the stimulus was hardened instead of the threshold tightened.</p>
+    <p class="verify"><strong>How it was verified:</strong> Measured before repairing, with a throwaway probe replicating block [5] at five drift rates, run against both the clean tree and the broken one: onsetPeak 165.8 in both; driftPeak at 0.5%/hop 1.13 with the max-filter and 39.97 without (ratios 146.85 and 4.15, both passing a 2x gate); at 2%/hop 3.74 and 93.6 (ratios 44.3 and 1.77). After the repair: max-filter removed -&gt; exit 1, &quot;a fast SWEEP stays well under a real onset { onset: 165.8, sweep: 93.6, ratio: 1.77 }&quot;; clean tree exit 0. Original coverage confirmed intact by re-running two unrelated breaks post-repair (first-hop suppression removed -&gt; exit 1, 2 failures; flux reverted from rate to per-hop delta -&gt; exit 1, 2 failures). Block [3] separately confirmed live against the bug it is named for: a fixed per-call coefficient of 0.2 and of 0.05 both give exit 1. All breaks reverted, git diff clean on engine/, AUDIT_GS01B3 grep empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:band-analyser</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>6228fce3</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/smoke-orbit.mts</code>
+    </header>
+    <p class="what">smoke:orbit — cited in three rules and the only browser guard that drives a real camera gesture through Navigation.tsx — had never been green, so it could not distinguish a regression from its own baseline. The cause is a poll window of 8000 ms against a SwiftShader post-settle sample cost of 13.2-15.2 s, measured over 6 consecutive clean trials.</p>
+    <p class="change"><strong>Changed:</strong> Raised the accumulation poll window to a named ACCUM_TIMEOUT_MS = 45_000 (~3x the worst observed) and recorded the measurement, the reason post-settle is slower than boot, and the falsification results in the source header. No assertion was changed, removed or narrowed. The guard now reports the elapsed time on success so the margin stays visible. navigation.md and gmt-features.md dropped their 'currently RED — read the output, not the exit code' warnings and gained the measured caveat instead.</p>
+    <p class="verify"><strong>How it was verified:</strong> Baseline reproduced byte-identically from cycle 7 (exit 1, 'accumulation did not advance after orbit settled (1 -&gt; 1)', delta 4.127). Latency measured with a throwaway probe driving the smoke's exact sequence: 6/6 trials advanced, 13221 / 14731 / 15249 / 13487 / 14451 / 13478 ms. Repaired guard green, exit 0, 13.5 s. Falsified in both directions AFTER the repair, each break applied and reverted independently: absorbOrbitPosition gated out in Navigation.tsx -&gt; exit 1 on assertion 1; holdActive forced true in FractalEngine.ts -&gt; exit 1 on assertion 2 after consuming the full 45 s. git diff clean, AUDIT_GS01B4 grep empty, typecheck exit 0, check:rule-guards steady at 3 pre-existing issues.</p>
+    <p class="guard"><code>npm run smoke:orbit</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>77bd469c</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/smoke-gx-liquify-render.mts</code>
+    </header>
+    <p class="what">smoke:liquify measured 3 failures in 13 consecutive runs on an unmodified tree (~23%) at three different assertions, so it could not distinguish a regression from its own noise. Cycle 12 diagnosed it but could not fix it — two other auditors were editing the tree, and there was no way to run enough post-change trials to beat a 23% baseline statistically.</p>
+    <p class="change"><strong>Changed:</strong> Ported both hardening mechanisms from the healthy sibling debug/smoke-gx-geom-handles.mts (13/13 clean in the same measurement): a dep-optimize retry loop around the first page.evaluate, and the dual-instance overlay check, which turns '[1] liquify canvas missing' from a mystery into a message naming the cause and the fix. Replaced the one-shot fixed waits before every readback with polling — wait for the render to CHANGE, then wait for it to SETTLE (two consecutive identical signatures), then assert on the settled value; physics never settles so [4] polls for a live frame instead. Nothing narrowed. .claude/rules/sibling-apps.md's flakiness warning rewritten to match.</p>
+    <p class="verify"><strong>How it was verified:</strong> 10/10 consecutive clean runs after the change, every one reporting the same 3.77 / 21.03 / 51 as before it — the numbers are unchanged, only the timing discipline is. Falsified with three breaks in gradient-explorer/fullscreen/modes/liquify/, each applied and reverted independently, one per assertion: the push case's offset zeroed in LiquifyMesh.warp -&gt; exit 1 '[2] push brush did not change the render (delta=0.00)'; moveHandle's position write dropped -&gt; exit 1 '[3] grab handle did not change the render (delta=0.00)'; gl.drawElements removed from LiquifyRenderer -&gt; exit 1 '[1] rendered gradient looks blank/uniform (variety=1)'. All reverted, git diff clean on gradient-explorer/, AUDIT_GS01B4 grep empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:liquify</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>3690d09b</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/native-config-sweep.mts</code>
+    </header>
+    <p class="what">test:shader reported a clean all-pass sweep with 87% of its matrix missing. Both scripts in the chain derive their case list from registry.getAll(), and the exit code reads only `fail` — a matrix that never ran scores zero failures. Commenting out `import '../engine-gmt/formulas/index.ts'`, the side-effect import that registers every native formula and exactly the sort of line an import reshuffle drops, took the config sweep from 54 formulas to 7 and the weave sweep from 2704 pairs to 49. Both printed all-pass and exited 0. The weave matrix is quadratic in the formula count, so a shrink there is worse than it looks.</p>
+    <p class="change"><strong>Changed:</strong> Additive: a recorded floor on the eligible-formula count in both scripts (54 and 52, today's measured values), checked before any case runs, with a message saying which direction to move it. --formula / --pair / --primary single-case modes are unaffected — the floor is on the registry, not the selected cases. The pre-existing 'Nothing to do (use --fresh)' exit 0 is deliberately left alone: that one is a legitimately-resumed run, not an empty registry. Also recorded in the header what the sweep does NOT compile, measured rather than assumed.</p>
+    <p class="verify"><strong>How it was verified:</strong> The compile gate was proven live first: a hard GLSL syntax error appended to the `de` block in engine-gmt/engine/ShaderBuilder.ts gives exit 1, 0 pass / 54 fail, every failure on webglCompile. Two earlier breaks were the WRONG breaks and are recorded as such so they are not rediscovered — removing the uCameraPosition declaration, and appending the same syntax error AFTER main, both stayed green, because stripEngineMain deletes from the first `void main(` to the last `}`. That boundary was then measured: for Mandelbulb the Main shader is 106834 chars, the first `void main(` is 98.6% of the way in, and `main` is the only function-like definition at or after it, so positions 1-16 of the assembly order are all compiled. The registry break was run before and after the repair: exit 0 both scripts before, exit 1 both after, each naming the count it got and the count it expected. Clean tree green both ways afterwards. All breaks reverted, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:shader</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f191f6cb</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/test-escape-migration.mts</code>
+    </header>
+    <p class="what">test:migrations block [7], which covers the ADR-0106 nyquist-fraction-to-Hz conversion, made two claims that could not fail. Every audio fixture started at freqStart: 0, and 0 x 24000 is 0, so replacing `r.lowHz = r.freqStart * LEGACY_NYQUIST_HZ` with `r.lowHz = r.freqStart` — the low half of the conversion gone entirely — left the whole harness green; only freqEnd was ever proven. And the migration's explicit idempotence guard could be deleted outright with the harness still green, because the replay fixture cannot reach it: the first pass deletes freqStart/freqEnd, so on the second pass there is nothing left to re-convert.</p>
+    <p class="change"><strong>Changed:</strong> Two fixtures added, no assertion changed. A 'mids' rule at 0.05-0.25 pins the low half at 1200-6000 Hz. A 'mixed' rule carrying lowHz 300 / highHz 900 alongside freqStart 0.5 / freqEnd 0.9 pins the guard — that mixed-vintage shape is the only one it actually protects.</p>
+    <p class="verify"><strong>How it was verified:</strong> Both breaks run before and after the repair: the lowHz scale drop was exit 0 before and exit 1 after on the new non-zero-band assertion; the idempotence-guard removal was exit 0 before and exit 1 after on two assertions of the mixed-vintage rule. Original coverage confirmed intact by re-running the v1 break (the `delete q.escape` that reroutes a stray quality.escape) -&gt; exit 1 with the same 2 failures as before. Clean tree exit 0, 24 assertions. All breaks reverted, git diff clean on app-gmt/, AUDIT_GS01B4 grep empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:migrations</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>feb93da5</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch5</code>
+      <code class="file">debug/smoke-deep-zoom-la.mts</code>
+    </header>
+    <p class="what">smoke:deep-zoom-la passed on an LA table that had been structurally destroyed — three independent ways — and was blind to every imaginary-part sign error in the LA math because all of its fixtures sat on the real axis.</p>
+    <p class="change"><strong>Changed:</strong> Additive only; no assertion removed, narrowed or loosened. Added MIN_NODES_CHECKED and MIN_LA_STAGES floors with the observed values recorded in source (100/167 nodes, 4 stages @ 1000 iters, 6 @ 5000); ran case B a second time on the period-3 complex nucleus c=(-0.1225611668766536, 0.7448617666197442) plus an assertion that the fixture really does carry nonzero Ref.im; converted case C's silent else-branch into a failing check; added case D, exact-equality unit checks on stepLA and compositeLA using hand-computed distinctive values (no component 0, 1 or repeated). Header records all three coverage floors, the falsification results and the measured margin.</p>
+    <p class="verify"><strong>How it was verified:</strong> Five breaks applied and reverted independently against pristine main. Before: (A) RED, (B)/(C)/(D) GREEN at exit 0. After: all five RED with distinct failing assertions, quoted in the guard entry. Every hardcoded expectation in case D was pre-verified against the live source with a throwaway probe before being written, so the guard cannot be permanently red on a value I got wrong. git diff clean after revert, AUDIT_GS01B5 grep empty, npm run typecheck exit 0, repaired guard green in 0.8s.</p>
+    <p class="guard"><code>npm run smoke:deep-zoom-la</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>68ea7ca6</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch5</code>
+      <code class="file">.claude/rules/deep-zoom.md</code>
+    </header>
+    <p class="what">The last three check:rule-guards miscitations in the repo: gmt-formulas-and-graph.md cited all three deep-zoom smokes, none of which imports any of that rule engine-gmt scope, while engine/fractal/deepZoom/** was scoped by no rule at all.</p>
+    <p class="change"><strong>Changed:</strong> Moved, not dropped. New .claude/rules/deep-zoom.md scopes engine/fractal/deepZoom/** and carries the three smokes plus smoke:gx-fractal-glitch (reach proven 12/12; the only guard asserting ADR-0065/0066 glitch-freedom end to end). gmt-formulas-and-graph.md keeps a pointer to the new rule in place of the old paragraph. The new rule records three facts measured during this sweep rather than restating code: app-gmt reaches 0 of the 12 files while gradient-explorer and fluid-toy reach all 12; fluid-toy carries partial sibling forks a fix here does not reach; and a real-axis reference orbit makes imaginary-part sign errors unreachable.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards went from 3 issues / exit 1 to &quot;All rule guard citations reach the files their rule scopes.&quot; / exit 0 — zero for the first time in this audit. --verbose confirms the four new citations resolve at 4/12, 7/12, 4/12 and 12/12, and that the five guards remaining on gmt-formulas-and-graph.md still reach 53-55/55. Reach figures produced with the checker own reachability module. All three smokes were independently falsified in this batch first, so the citations point at guards proven to work. Prose names the smokes without the npm run prefix so no new citations were minted.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>6b3f0601</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch5</code>
+      <code class="file">plans/mb3d/decompiler/check-sync.mjs</code>
+    </header>
+    <p class="what">check:mb3d-decompiler — one of the two static analysers check:rule-guards cannot import-check — guarded 4 of the 11 files shared with its canonical copy, omitting a generator of committed output, and its byte-exact compare was one git checkout away from false-redding every file it does guard.</p>
+    <p class="change"><strong>Changed:</strong> Added gen-sample-scenes.mjs to FILES (it regenerates the committed engine-gmt/utils/mb3d/sampleScenes.ts, same class as generate-library.mjs); made the comparison EOL-insensitive while REPORTING line-ending-only differences rather than hiding them; added a clean MISSING-in-repo branch in place of an unhandled readFileSync ENOENT; pinned plans/mb3d/decompiler/*.mjs to LF in .gitattributes, the same fix already present there for debug/compat-snapshot.jsonl. Header records the hand-verification and states that a skip warning means NOT CHECKED.</p>
+    <p class="verify"><strong>How it was verified:</strong> Every file present in both trees diffed by hand — 12 repo files against 31 canonical, 11 shared — which found gen-sample-scenes.mjs already drifted (repo 3566 bytes CRLF vs canonical 3511 LF, exactly its 55 line endings, no content change). Five breaks, each applied and reverted: editing a guarded file RED before and after; editing an unguarded shared file GREEN (the gap); editing gen-sample-scenes.mjs RED after the repair; CRLF conversion now IN SYNC with a caveat instead of a false DRIFTED; a moved repo file now a clean MISSING message at exit 1. Guard green, typecheck exit 0.</p>
+    <p class="guard"><code>npm run check:mb3d-decompiler</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>cfd69dac</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">debug/test-interaction-coverage.mts</code>
+    </header>
+    <p class="what">The P3b coverage gate — the guard whose entire job is catching a producer that never declares into the InteractionSession — could not see hooks/, utils/ or store/, and a real live scrub producer in hooks/ was de-wireable with all three interaction guards green at exit 0.</p>
+    <p class="change"><strong>Changed:</strong> SCAN_DIRS widened to include hooks/utils/store (687 → 762 files); hooks/useDopeSheetInteraction.ts added to SCRUB_PRODUCERS; hooks/useGraphInteraction.ts added to SCRUB_EXCEPTION with its delegation reason; three vanishing-input floors added (SCAN_FILE_FLOOR 700, SCRUB_WRITER_FLOOR 5, DRAGVALUE_IMPORTER_FLOOR 1) with the measured per-directory breakdown recorded in source; header section explaining why sibling-app trees are deliberately excluded.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: stubbing out useDopeSheetInteraction's useInteractionGesture(INTERACTION_SOURCES.scrub) left test:interaction, test:interaction:coverage and test:interaction:wiring ALL green, exit 0. After: the same break reds with 'hooks/useDopeSheetInteraction.ts: missing INTERACTION_SOURCES.scrub'. Four more falsifications on the repaired guard: dropping 'hooks' from SCAN_DIRS reds the scrub floor (3 vs 5) while the file floor correctly stays quiet at 747; renaming engine-gmt reds the file floor (385 vs 700); a new setIsScrubbing(true) in hooks/useRenderPause.ts reds where it was previously invisible; a new unallowlisted useDragValue importer still reds. All reverted, git diff clean, typecheck 0.</p>
+    <p class="guard"><code>npm run test:interaction:coverage</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>8f93ad3d</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">debug/smoke-anim-orbit.mts</code>
+    </header>
+    <p class="what">smoke:anim-orbit passed on a completely frozen LFO — every assertion was one-sided, so an offset of exactly zero read as a healthy orbit.</p>
+    <p class="change"><strong>Changed:</strong> Added a magnitude-and-motion check exploiting the fixture's quadrature property: hypot(dx, dy) = R independently of sample time, asserted across six samples spread over 720ms, plus a max-pairwise-separation floor proving the phase advances.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: forcing ModulationEngine's Sine case to rawWave = 0 left the smoke at exit 0 printing '✓ two-LFO orbit writes liveModulations (relative add)' with live juliaC identical to base. After: that break reds with radii all 0.0000; killing only the phase-0.25 partner reds on all three runs with radii scattered as R|sin theta|; freezing the LFO phase reds on the SPREAD assertion alone with radii still exactly 0.2000, isolating the one case a single sample can never see. Five clean runs green, spread 0.3826-0.4000 against a 0.08 floor. A 2-sample variant was measured first and rejected at 1.5x margin.</p>
+    <p class="guard"><code>npm run smoke:anim-orbit</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>db9a809f</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-fft.mts</code>
+    </header>
+    <p class="what">Every SpectrumFrame fixture was a phase-0 sine, whose windowed transform is purely imaginary, so discarding the real half of the magnitude entirely (`Math.hypot(re,im)` -&gt; `Math.abs(im)`) passed all ten assertions at exit 0.</p>
+    <p class="change"><strong>Changed:</strong> Block [4] now repeats the level assertion with the same tone phase-shifted by 0.7 rad. An on-bin tone's level is phase-invariant so the expected value is unchanged, but the measured max|Re|/max|Im| ratio moves from 1.8e-8 to 0.84 and both halves of the magnitude become load-bearing. Header records the measurement, the mutation results and the block-[3]/[4] margins.</p>
+    <p class="verify"><strong>How it was verified:</strong> Measured with a gitignored probe (debug/_probe-fft-margins.mts) before touching anything: at N=2048 bin 100, max|Re| = 9.244e-6 vs max|Im| = 5.120e+2 for the phase-0 tone, and 3.298e+2 vs 3.916e+2 with a 0.7 rad offset, with the reported level identical at -13.5556 in both. Before: `mag = Math.abs(im[k])` -&gt; exit 0, all 10 ok.</p>
+    <p class="guard"><code>npm run test:fft</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ff0d8d00</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-filterbank.mts</code>
+    </header>
+    <p class="what">Block [2] filled every band with one value, and for a constant array the RMS, the mean and the max are the same number — so `aggregate` returning a plain mean passed all 18 assertions, in the block titled 'aggregate is RMS over the range, flux is the mean'.</p>
+    <p class="change"><strong>Changed:</strong> Block [2] now also runs an alternating 0.2/0.8 level pattern and an alternating 3/21 flux pattern over the 21 bands of 100-1000Hz, asserting aggregate == 0.570714 (RMS) rather than 0.485714 (mean) and aggregateFlux == 11.571429 (mean) rather than 21 (max) or 243 (sum). Both are preceded by an explicit `Math.abs(rms - mean) &gt; 0.05` assertion so the fixture cannot silently degenerate back to flat.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `aggregate` rewritten to sum levels and divide by count -&gt; exit 0, all 18 ok, confirmed applied by `git diff --stat` showing 2 insertions 2 deletions. After: exit 1, 'aggregate is the RMS of the range, not its mean' with got 0.485714, rms 0.570714, mean 0.485714.</p>
+    <p class="guard"><code>npm run test:filterbank</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f23184ec</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-filterbank.mts</code>
+    </header>
+    <p class="what">matches() gates the FilterBank rebuild in WorkletAnalysis, and its bandsPerOctave comparison — the only one of the three settings a user changes at runtime — was covered by nothing; deleting it left the guard green.</p>
+    <p class="change"><strong>Changed:</strong> Block [9] gains `assert(!b.matches({ sampleRate: SR, fftSize: 4096, bandsPerOctave: 12 }))`, with a comment naming the consequence: a false match leaves the band table stale after a resolution change.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: the `&amp;&amp; this.bandsPerOctave === o.bandsPerOctave` clause deleted from filterBank.ts -&gt; test:filterbank exit 0, all 18 ok (diff confirmed applied). After: exit 1, 'nor a changed bandsPerOctave — a false match here leaves the band table stale'.</p>
+    <p class="guard"><code>npm run test:filterbank</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f23184ec</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-band-math.mts</code>
+    </header>
+    <p class="what">Block [3]'s resolution-limited check was satisfied by an EMPTY result set — `flagged.length ? Math.max(...) : 0` scores 0 when nothing is flagged, and 0 is under every limit — so hardcoding `resolutionLimited: false` on every band passed at exit 0 while the message printed '(0 of 56)'.</p>
+    <p class="change"><strong>Changed:</strong> Two properties added that close both directions: the 25 Hz band must be flagged at every tested fftSize (all-false gives 0/0/0 and fails), and the flagged count must strictly fall as the transform grows (all-true gives 56/56/56 and fails). Measured healthy counts 19 / 13 / 7 recorded in source.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `resolutionLimited: false` -&gt; exit 0, all 34 ok. After: exit 1, 4 FAIL. Control in the other direction: `resolutionLimited: true` -&gt; exit 1, 4 FAIL, which the original also missed for two of the four. Counts measured first with a gitignored probe (19/13/7/1 at 2048/4096/8192/16384, lowest band flagged at all four).</p>
+    <p class="guard"><code>npm run test:band-math</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d862ea98</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/check-rule-guards.mjs</code>
+    </header>
+    <p class="what">The rule-guard checker could not import-check a COMPOSITE npm script — `npm run a &amp;&amp; npm run b` contains no filename, so it resolved to 'opaque', was accepted unconditionally, and was printed in neither normal nor --verbose output. gmt-renderer.md cites test:shader and had been passing that way since the checker landed.</p>
+    <p class="change"><strong>Changed:</strong> `entryFor` now expands `npm run` members recursively (guarded by a `seen` set against self-reference) and takes the union of their entries; one whole-tree member short-circuits the composite to whole-tree. Header JSDoc gains the composite case and the story of why it was missing.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified in BOTH directions on one citation. Appended `npm run test:shader` to layers-zindex.md: repaired checker -&gt; 'cannot fail on these files (1) — test:shader (4 members) imports none of this rule's 12 scoped files', exit 1; the original checker restored from git, same citation -&gt; exit 0 with no output whatsoever.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b574d315</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-dither.mts</code>
+    </header>
+    <p class="what">test:dither could not fail on ANY product code: its single assertion ran against the harness's own TS mirror of the shader, and that assertion was additionally satisfied by the dither being entirely dead.</p>
+    <p class="change"><strong>Changed:</strong> Five assertion groups over values the file already computed: the flat gate in BOTH directions (island untouched AND the gradient beside it dithered, delta 7); the four calibrated constants plus the gate and tpdf expressions read back out of DITHER_TAIL_GLSL; a &gt;4x banding drop at cap2 on the three shallow ramps (21.6x / 9.7x / 10.3x); a &gt;4x plateau reduction at cap8 on a 1440px ramp (57 -&gt; 6); and renderFieldDithered's WIGGLE under 0.10 and &gt;2x below the blue-noise tail (0.040 vs 0.238).</p>
+    <p class="verify"><strong>How it was verified:</strong> Three breaks were GREEN before and RED after: DITHER_FLAT_HI 0.004 -&gt; 0.5 (exit 1 on the constant); the flat gate deleted from ditherTail.ts (exit 1 on the gate expression - the very contract the only assertion was named for); error diffusion disabled in renderFieldDithered (exit 1 on both WIGGLE assertions, 0.287).</p>
+    <p class="guard"><code>npm run test:dither</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d8137ccb</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-gx-fractal-glitch.mts</code>
+    </header>
+    <p class="what">The square-detector is a RELATIVE comparison, so it passed with exit 0 and its full success banner on a completely blank render — and its 0.18 delta bound is looser than the actual glitch it was written to catch (measured 0.099).</p>
+    <p class="change"><strong>Changed:</strong> Each view carries an absolute `maxDominant` ceiling, asserted on BOTH the LA-on and LA-off capture and checked BEFORE the negative assertions, with the measured healthy value recorded per view (0.019 / 0.101 / 0.338). Ceilings 0.25 / 0.35 / 0.60. The MAX_DOMINANT_DELTA comment claiming 'the broken blocks pushed this well past 0.3' is corrected with the measured 0.099. No existing assertion or tolerance was changed.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: display shader forced to a constant colour, guard exit 0, 18 min, all three views dominant 1.000/1.000 delta 0.000, success banner printed. After: same break, exit 1 at view 1 in 52s, 'central box is dominated by ONE colour (LA-on 1.000, LA-off 1.000 &gt; 0.25)'. Independently, the bug-1 break (auto-reference gate inverted, orbitLen 588) now reds on the ceiling at 0.500/0.612 in 44s, with delta 0.112 still under the bound. Both breaks reverted with targeted Edits; git status shows only the guard file; grep -rn BREAK_GS8 empty. Clean tree: exit 0, all three views, numbers identical to baseline. typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:gx-fractal-glitch</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>3b80da2e</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-fractal-kind.mts</code>
+    </header>
+    <p class="what">Of the four contracts its header lists, it checked one — and attributed that one to the wrong owner; the KIND_MODES index-to-string map that every save file depends on was unguarded, and swapping its first two entries left the guard green.</p>
+    <p class="change"><strong>Changed:</strong> Boot assertion keeps its check and gains the correct owner in its message (DEFAULT_VIEWS[0], not the DDFS default). Three new assertions: JuliaFeature.params.kind.default read via a dynamic import (unobservable from the store, because the view seed overwrites it), the kindFromIndex(0)/(1) contract, and FluidEngine.params.kind at boot and after each flip.</p>
+    <p class="verify"><strong>How it was verified:</strong> defaultIndex 1-&gt;0 was GREEN before this change and is RED after — a scratch probe read the param's own default as 0 while the store read 1, identifying seedDefaultViews as the real writer. KIND_MODES first two entries swapped was GREEN before and is RED after. Dropping `kind` from syncJuliaToEngine reds the new routing assertion. DEFAULT_VIEWS[0].kind 1-&gt;0 reds the boot assertion. Four breaks, all reverted; clean run exit 0; typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:fractal-kind</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>2b558cbc</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-bc-drag.mts</code>
+    </header>
+    <p class="what">Every numeric comparison was NaN-blind, so deleting either param the smoke tests left it exit 0 — including one run where it printed the missing field's absence in its own output and then declared it correct.</p>
+    <p class="change"><strong>Changed:</strong> A `finite()` helper applied to the two defaults, both ends of the B+drag ratio, and all four juliaC components. No tolerance or existing assertion touched.</p>
+    <p class="verify"><strong>How it was verified:</strong> dyeInject renamed off fluidSim.ts: before, `defaults: {&quot;brushSize&quot;:0.15}` then '✓ defaults: ... dyeInject=1.5', exit 0; after, exit 1 naming the missing param. `size` renamed off brush.ts: before, 'size undefined → 0.290' then '✓ B+drag right enlarged the brush', exit 0; after, exit 1. Pre-existing gesture assertions falsified and live: resize sign inversion reds 0.15 -&gt; 0.0775, dropping pickCMove's setJulia reds 'moved by 0'. All reverted; clean run exit 0; typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:bc-drag</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>0d4f1d13</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-canvas-pan-zoom.mts</code>
+    </header>
+    <p class="what">The wheel event was dispatched at the exact canvas centre, where the cursor-anchoring term is multiplied by zero — deleting anchoring outright produced byte-identical output and exit 0; and the pan assertion looked only at centerX.</p>
+    <p class="change"><strong>Changed:</strong> A second wheel event at (0.75w, 0.25h) asserting the centre is pulled toward the cursor in +x and +y, and a centerY assertion on the drag. The centred wheel is kept — it is what pins the zoom direction.</p>
+    <p class="verify"><strong>How it was verified:</strong> dx = dy = 0 in gestures/wheel.ts: GREEN before, RED after with 'wheel is not cursor-anchored ... got dx=0 dy=0'. dVert zeroed in gestures/pan.ts: GREEN before (centerY 0.178 -&gt; 0), RED after. Pre-existing assertions falsified and live: rightDragged forced false reds the menu-suppression check, zoom sign flip reds 'wheel up should zoom IN ... 1.5646 &gt; 1.5'. Clean run exit 0 with dx=0.0517 dy=0.0606; typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:canvas-pan-zoom</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>cfea3002</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-particle-bounce.mts</code>
+    </header>
+    <p class="what">With the wall-bounce branch disabled outright the guard passed 5 runs out of 6 — its `slowed` counter was measuring particle drag, not bouncing, and its `insideWall` check only fires if particles happen to still be in the band at the capture instant.</p>
+    <p class="change"><strong>Changed:</strong> A penetration assertion — how far past the spawn point, along the spawn-to-wall direction, the deepest particle got — bounded at 1.5x the MEASURED gap so it rescales with the anchor search. Also captured `initial` inside the injecting page.evaluate instead of a later one. Neither existing counter removed or loosened; the header now records what each can and cannot see.</p>
+    <p class="verify"><strong>How it was verified:</strong> Bounce disabled: exit 0 in 5 of 6 runs before, exit 1 in 5 of 5 after, each naming the penetration. Healthy after: exit 0 in 4 of 4, max penetration 0.0111 of 0.0450 allowed. Separation measured over 5+5 runs with no overlap — healthy 0.0023-0.0041, broken 0.0971-0.1144, gap 0.0300. Bounce normal sign flipped: GREEN before, RED 2 of 2 after. WALL_THRESHOLD raised to 99: RED. `initial` speed now reads 0.1500 every run instead of drifting 0.086-0.114. typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:particle-bounce</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d8c1bf9e</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9</code>
+      <code class="file">debug/test-liquify-mesh.mts</code>
+    </header>
+    <p class="what">Three separate liquify features — the global Smooth slider, the smooth brush, and the Catmull-Rom upsampler itself — could each be gutted entirely with the guard staying green at 44/44, exit 0.</p>
+    <p class="change"><strong>Changed:</strong> Six additive assertions across blocks [3b], [7] and [8]: that `smoothAll` moves the mesh and relaxes the deformation; that the `smooth` brush moves the mesh and cuts high-frequency roughness on a deliberately creased fixture; and that the upsampler is genuinely cubic on a deformed grid while still reproducing linears exactly on a flat one. No existing assertion, bound or fixture was changed. Header records all three blind spots, the measured healthy values and the margins.</p>
+    <p class="verify"><strong>How it was verified:</strong> Each break green before and red after, on exactly its new assertion: dead smoothAll exit 1 at 48/2; dead smoothRegion exit 1 at 48/2; bilinear cr exit 1 at 49/1. Control break (dead step()) reds the pre-existing '[4] settled mesh kept the deformation' assertion, proving the gate was live rather than inert. All four reverted with targeted Edits; git diff over gradient-explorer/ empty, grep -rn BREAK_GS9 empty. Clean tree 50 passed / 0 failed. typecheck exit 0; check:rule-guards 0 issues.</p>
+    <p class="guard"><code>npm run test:liquify</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d14d3929</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9</code>
+      <code class="file">debug/test-compat.mts</code>
+    </header>
+    <p class="what">test:compat:write truncated the tracked compat baseline to zero bytes and exited 0 when the formula registry shrank 55 -&gt; 7, leaving test:compat permanently green on an empty file.</p>
+    <p class="change"><strong>Changed:</strong> FORMULA_FLOOR = 55 and SNAPSHOT_ROW_FLOOR = 2, both recorded with their measured values and checked in BOTH diff and write mode, so a vanished input fails instead of being persisted. Header rewritten to say --write is not a gate, what it destroyed under measurement, and when to reach for it.</p>
+    <p class="verify"><strong>How it was verified:</strong> Two breaks, both pre-measured. Registry 55-&gt;7: writer exit 0 with a 0-byte baseline before, exit 1 in both modes with the file untouched after. Sole `requires:` in panels.ts removed (registry intact): exit 1 in both modes after, and this is the path the reader alone never protected against, since the writer destroys the very rows drift is measured from. Both reverted; git diff over engine-gmt/ empty, grep BREAK_GS9 empty, debug/compat-snapshot.jsonl byte-identical to HEAD. Clean tree both modes exit 0. typecheck 0, check:rule-guards 0 issues.</p>
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7d13eb91</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9</code>
+      <code class="file">debug/test-frag-integration.mts</code>
+    </header>
+    <p class="what">test:frag:integration:discover is deliberately permanently red, so a vanished corpus does not reduce it to zero coverage — it INVERTS the signal and reports green, which reads as &quot;the importer gap closed&quot;.</p>
+    <p class="change"><strong>Changed:</strong> Additive floor (DISCOVER_FILE_FLOOR = 581) on the DISCOVERED total, before any filter or --random slice, so single-file and sampled runs are unaffected. No assertion changed.</p>
+    <p class="verify"><strong>How it was verified:</strong> Applied by the auditor before it was cut off; RE-VERIFIED INDEPENDENTLY by the orchestrator rather than trusting the code comment. REF repointed at a nonexistent directory -&gt; exit 1 naming the floor. Pre-repair behaviour reproduced from the auditor note: &quot;Discovered 0 .frag files&quot;, &quot;0 formula(s) queued&quot;, &quot;1 passed (1 total)&quot;, exit 0. Break reverted and confirmed absent (grep = 0); corpus measured at 583 .frag against the floor of 581; typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:frag:integration:discover (npx tsx debug/test-frag-integration.mts --discover)</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dd93a25c</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">package.json</code>
+    </header>
+    <p class="what">smoke:all was permanently red at member 28 of 42 because four members defaulted to port 5173 while the repo pins 3400, so 14 members — including smoke:interact, which CLAUDE.md lists as an automated check — never ran at all.</p>
+    <p class="change"><strong>Changed:</strong> The four ENGINE_URL defaults repointed at :3400 (headers corrected to name vite.config.ts). Plus the two rotted members behind the port: smoke-catalog-load's absolute path into the deleted dev/ tree made repo-relative, and smoke-picker-search-kb's matcher for removed UI copy corrected to the live Catalog (N) label and made to read the count. Four npm scripts added so each member is individually runnable.</p>
+    <p class="verify"><strong>How it was verified:</strong> smoke:all exit 1 at 460s stopping at member 28 before; exit 0 at 617s, all 42 members, 769 lines after — its first green run in this sweep. Each repaired member also run standalone, 4 of 4 exit 0. The corrected picker assertion falsified against product code: forcing catalogSearchHits to [] gives &quot;catalog section: ABSENT&quot; exit 1; reverted, back to &quot;Catalog (19)&quot; exit 0. Tracked PNGs restored; typecheck 0; check:rule-guards 0.</p>
+    <p class="guard"><code>npm run smoke:all</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>4636662c</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">debug/runWithServer.mts</code>
+    </header>
+    <p class="what">smoke:with-server could not run at all on Windows — three independent defects, any one of them fatal, and the first threw at module scope before vite was even started.</p>
+    <p class="change"><strong>Changed:</strong> spawn goes through the shell on win32 (Node &gt;= 18.20.2 rejects a .cmd shim with shell:false); waitForPort probes localhost rather than 127.0.0.1, because vite binds ::1; kill() uses spawnSync so taskkill runs before process.exit(). Header records the exit contract and the one hazard left documented.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified five ways on the repaired wrapper. Inner process.exit(7) -&gt; wrapper exits 7, so a failing inner command is NOT swallowed. Inner exit 0 -&gt; 0, having fetched app-gmt.html (200) from the wrapper's own :3499. Nonexistent inner command -&gt; exit 1, no hang. Bare invocation -&gt; exit 2 with usage, unchanged. A real smoke through it -&gt; exit 0 in 4s. netstat shows :3499 closed after every path. typecheck 0.</p>
+    <p class="guard"><code>npm run smoke:with-server</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>954237d6</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">debug/smoke-gallery-link.mts</code>
+    </header>
+    <p class="what">The block headed 'the shared scene is live in the editor' was satisfied by app-gmt's own boot state, so deleting the terminal loadScene({ preset }) from the gallery load path left the whole smoke at exit 0 with its PASSED banner.</p>
+    <p class="change"><strong>Changed:</strong> A pre-remix snapshot of the store; an assertion that the fixture discriminates at all; that the remix MOVED the store; and that it moved coreMath.iterations to the value the GMF declares (parsed from the file, not hardcoded). No existing assertion or tolerance touched.</p>
+    <p class="verify"><strong>How it was verified:</strong> Break green before, red after on exactly the new assertions ('coreMath.iterations 16 → 16', 'expected 2, got 16'). Control in the other half: params.get('gallery') renamed in app-gmt/main.tsx reds the three deep-link assertions. Boot defaults measured with a scratch probe (Mandelbulb, 16) before choosing anything. Clean run exit 0 at 16 → 2; typecheck 0.</p>
+    <p class="guard"><code>npm run smoke:gallery-link</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>8729a0b5</code></p>
+    
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">debug/check-rule-guards.mjs</code>
+    </header>
+    <p class="what">The rule-guard checker resolved a chain of bare `tsx` calls to its FIRST member only — smoke:all's 42 members became 1, test:palette's 16 became 1 — which invents miscitations in one direction and would verify a citation against 1/42 of a guard's real reach in the other.</p>
+    <p class="change"><strong>Changed:</strong> entryFor unions the members of a direct-file chain via a new entriesForFile() helper factored out of the single-file path, so a browser member still resolves to whatever its URL serves. Completes the repair b574d315 started for the npm-run form.</p>
+    <p class="verify"><strong>How it was verified:</strong> Falsified both directions on real citations. Positive: npm run smoke:all on audio-mod.md was &quot;cannot fail on these files (1)&quot; exit 1 under the checker one commit earlier (run directly to confirm), and is &quot;ok -&gt; 16/16 scoped files reachable&quot; exit 0 after. Negative: npm run test:palette on gmt-shader-chunks.md is still reported, now with the member count — &quot;test:palette (16 members) imports none of this rule's 21 scoped files&quot;, exit 1. Baseline 0 issues / 90 citations before and after; probes removed, git diff clean.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>debe4c53</code></p>
     
   </article>
   <article class="finding sev-high">
@@ -1250,6 +1726,412 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch1</code>
+      <code class="file">debug/smoke-viewport.mts</code>
+    </header>
+    <p class="what">smoke:viewport's inline comment credited installViewport's isUserInteracting subscription with the 0.55 quality drop it measures. That mechanism provably does not produce the measured value — deleting the subscription's setState leaves the smoke green. Since .claude/rules/engine-plugins.md lists this smoke as a guard for engine/plugins/Viewport.tsx, a cleanup could have deleted those lines and seen every listed guard stay green.</p>
+    <p class="change"><strong>Changed:</strong> Corrected the comment to name tickAdaptiveResolution's manual branch (the mechanism actually under test), recorded both falsification directions inline, and added an @assumption at the subscription in engine/plugins/Viewport.tsx stating that its one-frame head start is its only observable effect and that no guard covers it. @assumption not @invariant, per CLAUDE.md: no command would go red if the claim were wrong.</p>
+    <p class="verify"><strong>How it was verified:</strong> Three falsifications, each applied and reverted independently. Removing the subscription's setState → exit 0, GREEN. Neutering AdaptiveResolution's manual branch → exit 1, 'quality should be &lt;= interactionDownsample (0.55) during drag, got 1'. Gating out installViewport's setAdaptiveConfig(options) → exit 1, 'interactionDownsample wrong: 0.5'. git diff clean after each; marker grep empty. Guard exit 0 and typecheck exit 0 after the doc edits.</p>
+    <p class="guard"><code>npm run smoke:viewport</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b75a1948</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch1</code>
+      <code class="file">debug/test-compat.mts</code>
+    </header>
+    <p class="what">test:compat's header sells its snapshot half at the structural half's scale ('55 formulas'), but the snapshot's entire input surface is one `requires:` declaration in engine-gmt/panels.ts. No feature declares a feature-level `requires` tree-wide, so evaluateCompat's requires.primary/.secondary/.pair/rejects.secondary branches are never exercised and a capability-protocol regression confined to them passes green. Four applied findings cite this guard, two about the capability surface specifically.</p>
+    <p class="change"><strong>Changed:</strong> Added a 'READ BEFORE TRUSTING A GREEN RUN' block to the header stating the two halves' different reach, naming the grep target for the sole requires declaration, listing the three falsifications and their exact failure strings, and noting that the `!caps` structural branch is unreachable because FractalRegistry throws at register().</p>
+    <p class="verify"><strong>How it was verified:</strong> Three falsifications, each applied and reverted. Second shape token on Mandelbulb -&gt; exit 1 '[shape-token-count] expected exactly 1 shape:* token, got 2'. Sole panels.ts requires changed to reject shape:modular -&gt; exit 1 'snapshot DRIFT detected' with both rows replaced. JuliaMorph shape token flipped -&gt; exit 1, drift, its row gone. git diff clean after each, marker grep empty. test:compat exit 0 and typecheck exit 0 after the edit; the harness never wrote compat-snapshot.jsonl.</p>
+    <p class="guard"><code>npm run test:compat</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b0e1dd0d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch2</code>
+      <code class="file">.claude/rules/gmt-renderer.md</code>
+    </header>
+    <p class="what">gmt-renderer.md headed its Guards block with `test:bucket-convergence` (described as 'RenderPipeline accumulation + convergence fence') and instructed readers to 'use test:bucket-convergence for that path' when warning that smoke:tsaa cannot catch an engine-gmt accumulation regression. The harness cannot fail on any of the 27 files that rule scopes: it imports engine/RenderPipeline directly, and the only link to engine-gmt/engine/** is a re-export shim whose edge points engine-gmt→core. A real engine-gmt accumulation regression passes it green.</p>
+    <p class="change"><strong>Changed:</strong> Removed the citation from the Guards block and replaced the false 'use it for that path' sentence with a dated correction section recording all three falsifications and their exact outcomes. The citation is untouched in render-and-shaders-core.md, which scopes engine/RenderPipeline.ts and where it is correct — so no real coverage was removed anywhere, only a false claim of it. The section also now states plainly that engine-gmt/engine/** accumulation has NO runtime guard, which was the substantive discovery.</p>
+    <p class="verify"><strong>How it was verified:</strong> Four falsifications, each applied and reverted independently. Removing `convergencePending = false` from engine-core's resetAccumulation → harness RED, exit 1, 'FIXED: resetAccumulation cleared the stale pending measurement'. Wrong-channel offset in pollConvergenceResult's readback scan → harness RED, exit 1, on the two poll assertions (proves they are not degenerate). Gutting GmtBucketHost.resetAccumulation()'s pipeline call → harness GREEN exit 0 AND typecheck GREEN exit 0. Repointing the shim's `export *` → harness GREEN, typecheck RED with 6 errors. Every break reverted, `git diff` clean, `grep -rn AUDIT_GS01B2` across engine/engine-gmt/components/debug/store/app-gmt/fluid-toy/fractal-toy empty. check:rule-guards 4 issues → 3; typecheck exit 0.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="bad">FAILED</span></p>
+    <p class="commit">commit <code>6046dcc2</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch2</code>
+      <code class="file">debug/test-param-mapping.mts</code>
+    </header>
+    <p class="what">test:param-mapping block [9] raw-add detector matched `\w\s*\+\s*offset` only, so commuting the operands defeated it. Replacing applyTarget composeModulatedValue(b, offset, routing.curve) with `offset + b` — which defeats slider-space compose for every curved param — left this guard green and test:modulation-parity green too.</p>
+    <p class="change"><strong>Changed:</strong> Broadened the pattern to accept either operand order. Strictly broader; no existing assertion narrowed. Comment now records the falsification and explains why the two sibling checks cannot cover it — block [6] calls composeModulatedValue directly rather than through an applier, and the &quot;every applier calls the shared compose&quot; substring test is satisfied by the surviving import line alone.</p>
+    <p class="verify"><strong>How it was verified:</strong> Checked for false positives first: the only `offset +` occurrences in the two applier files are three comment lines, and the block strips comments before testing; clean tree stays exit 0. After the repair, `offset + b` -&gt; exit 1 &quot;and none still adds an offset raw [ engine/features/modulation/applyTarget.ts ]&quot;, and `b + offset` -&gt; exit 1 identically, so prior coverage is intact. Rest of the harness independently confirmed live: cube exponent 3 -&gt; 2.97 in paramMapping.ts -&gt; exit 1 &quot;iterations pow-3: lifted curve is identical to the original 0.3697272312276638&quot;; a widget-local createLogMapping planted in components/inputs/ScalarInput.tsx -&gt; exit 1 on block [5]. All breaks reverted, git diff clean, AUDIT_GS01B2 marker grep empty. test:modulation-parity exit 0, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:param-mapping</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>e2ba7eeb</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">utils/UrlStateEncoder.ts</code>
+    </header>
+    <p class="what">The cycle-8 OPEN ANOMALY on smoke:share-link is settled: the guard is healthy and the break was a no-op. UrlStateEncoder.getDiff stops recursing at the feature-id level, because the base template it diffs against (getFullDefaultPreset) has `features: {}`, so every feature slice hits the `typeof base !== 'object' -&gt; return current` bail and is copied wholesale. A param name added to the skip-list is never visited; a feature id is. Two corollaries: feature state is not diffed against defaults at all, and the four named skip-list entries (liveModulations, histogramData, interactionSnapshot, *Stack) are unreachable on this path because getPreset never copies them into a Preset.</p>
+    <p class="change"><strong>Changed:</strong> Doc-only, no assertion touched. Added a 'READ BEFORE EDITING THE SKIP-LIST' JSDoc block on getDiff naming the grep target (getFullDefaultPreset in utils/PresetLogic.ts), recording both no-op breaks and the working one with their exact payload sizes, and stating the two corollaries. Corrected smoke-share-link.mts's header, which credited the skip-list for the liveModulations omission (wrong mechanism — getPreset never puts it in the Preset), and added a FALSIFIED block recording all three real breaks plus the anomaly resolution so nobody re-opens it.</p>
+    <p class="verify"><strong>How it was verified:</strong> Five runs, every break applied and reverted independently. Reproduced the anomaly first: `key === 'repeats'` -&gt; exit 0, payload 2895; `key === 'paramA'` -&gt; exit 0, payload byte-identical 2895. Proved edits reach the browser: `if (1) return ''` in encode() -&gt; exit 1, 0 chars. Then three real falsifications: `key === 'coloring'` -&gt; exit 1, payload 2895 -&gt; 2668, 'coloring.repeats round-tripped 3.7 (got 1)'; quantize toFixed(5) -&gt; toFixed(1) -&gt; exit 1, 2 failures (0.4 / 0.8); `#s=` branch gated out of app-gmt/main.tsx -&gt; exit 1, 3 failures at template defaults 8 / 0.75 / 2. All reverted, git diff clean on utils/UrlStateEncoder.ts and app-gmt/main.tsx, AUDIT_GS01B3 grep empty. Guard exit 0 and typecheck exit 0 after the edits.</p>
+    <p class="guard"><code>npm run smoke:share-link</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7634a8ee</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">.claude/rules/sibling-apps.md</code>
+    </header>
+    <p class="what">sibling-apps.md listed mesh-export's guards as &quot;none&quot; and stated in prose that the only automated checks reaching that tree are static (typecheck, orphans). test:mesh-grid has existed since cycle 8, imports mesh-export/algorithms/dc-core directly, reads vdb-writer.ts as text, and is a real gate — but it was cited in no rule and no doc, so a reader changing dc-core.ts had no reason to run the one thing that would catch them. Separately, the guard's own @invariant claimed assertions 3-4 &quot;deliberately pin a KNOWN-WRONG behaviour&quot;; that stopped being true on 2026-07-28 when the divergence was fixed, and block 3's inline text had contradicted it ever since.</p>
+    <p class="change"><strong>Changed:</strong> Added the citation to the mesh-export row plus a body paragraph naming exactly which two files the guard reaches and what it does not. Narrowed rather than deleted the surrounding warning: gpu/, pipeline/ and the GLB/STL writers really are still unguarded and the rule still says so. Rewrote the harness @invariant to describe the current contract, name its proving command per CLAUDE.md, and keep the superseded wording visible with the date it went false.</p>
+    <p class="verify"><strong>How it was verified:</strong> Three falsifications, each applied and reverted independently. gridToWorld reverted to the corner-sampled form -&gt; exit 1, 9 failures, &quot;the N/(N-1) oversize bug is back&quot;, divergence 0.1875 / 0.0234375 / 0.0029296875 at N = 8 / 64 / 512. Dropping only the &quot;- 0.5&quot; from worldToGrid -&gt; exit 1, 3 failures in block 2 alone with block 3 still green. VDB translation row reverted to bare boundsMin -&gt; exit 1, 1 failure in block 4 alone. All reverted, git diff clean on mesh-export/. check:rule-guards went 69 -&gt; 70 resolved citations with issues unchanged at 3 (the pre-existing deep-zoom ones), so the new citation resolves and is not a miscitation. test:mesh-grid exit 0, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:mesh-grid</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>01982cc6</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/scan-frag-parse.mts</code>
+    </header>
+    <p class="what">test:frag:scan printed a clean-looking report with the entire formula library gone. Its walk() swallows a missing directory, so repointing PUB_DIR at a path that does not exist gave 'Scanning 0 frags', three zero counts and exit 0 — indistinguishable from a healthy run. Worse, that scan line printed a HARDCODED 'public/formulas/frag/' whatever directory it had actually walked, so the output named a directory it had not read. Separately, the record that it has no assertion is CONFIRMED: forcing hasDE = false in the V3 detector, so every one of the 200 library formulas is rejected, moved its counts from 2 / 42 / 2 to 156 / 0 / 44 and still exited 0.</p>
+    <p class="change"><strong>Changed:</strong> Additive only, no failure count gated. (1) An EXIT CONTRACT block in the header stating plainly that this is a report and not a gate, with the falsification numbers behind that claim and a pointer to the rule that agrees. (2) The scan line now prints the resolved PUB_DIR. (3) A zero-corpus gate: exit 1 when the walk finds no .frag files, with a message saying that is zero coverage rather than a clean report. .claude/rules/scene-and-formula-format.md updated to match, since 'exits 0 regardless' is no longer literally true.</p>
+    <p class="verify"><strong>How it was verified:</strong> Both breaks applied and reverted independently. Corpus directory repointed at a path that does not exist: exit 0 pre-repair with three zero counts, exit 1 post-repair with 'no .frag files under ... this is zero coverage, not a clean report'. hasDE forced false in engine-gmt/features/fragmentarium_import/v3/compat.ts: exit 0 with counts 156 / 0 / 44, confirming the importer half genuinely cannot fail. Clean tree after the repair: exit 0, 200 frags, counts unchanged at 2 / 42 / 2. git diff clean on engine-gmt/, AUDIT_GS01B4 grep empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:frag:scan</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>e118fedb</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/test-modulation-coverage.mts:210</code>
+    </header>
+    <p class="what">test:modulation-coverage's block [8] — the source scan that catches keyframeable-but-not-modulation-aware vector widgets, a JSX-prop bug no store poking reaches — reads a hardcoded five-file list, and had both of the failure modes an allowlist has. A NEW panel with a keyframeable Vector*Input is simply not scanned and the check stays green having never looked at it. And the scan can SHRINK: renaming only the space-delimited `&lt;Vector3Input ` usages and leaving the newline-delimited ones took it from 10 elements to 3 with every assertion still green.</p>
+    <p class="change"><strong>Changed:</strong> Additive only, original assertion untouched. Added a discovery pass that walks the tree for keyframeable Vector*Input consumers and fails if any file outside the scanned list holds one; a printed element count so coverage is visible in the output; and a recorded floor of 10 replacing the weaker `scanned &gt; 0`, with a message telling the reader which direction to move it and why.</p>
+    <p class="verify"><strong>How it was verified:</strong> Both new assertions falsified independently. A keyframeable Vector3Input added to components/PerformanceMonitor.tsx (outside the list): green before, exit 1 after, naming that file. The partial rename that used to pass: green before at 3 elements, exit 1 after with 'the Vector*Input scan did not shrink (expected &gt;= 10)'. The move-a-file direction was already safe and was checked rather than assumed — adding a non-existent sixth path throws ENOENT and exits 1. Original coverage confirmed intact post-repair by re-running two earlier breaks: liveValue dropped from a Vector4Input -&gt; exit 1 on the original block-[8] assertion; the lighting-branch break -&gt; exit 1 with the same 3 failures. Clean tree exit 0, scan reports 10 elements across 5 files. All breaks reverted, marker greps empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:modulation-coverage</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>6bd830b7</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/test-partial-apply.mts</code>
+    </header>
+    <p class="what">test:partial-apply block [4] — 'empty featureIds opens no transaction' — could not fail. It read `fakeStore._txOpen === false` after the call returned, and applyPartialPreset closes its transaction in a `finally`, so that latch is false whether or not one was ever opened. Deleting the `if (featureIds.length === 0) return;` early exit outright left the entire harness green.</p>
+    <p class="change"><strong>Changed:</strong> Additive: the fake store now COUNTS beginParamTransaction calls, block [4] asserts the count did not move for an empty selection, and an anti-vacuity assertion requires a non-empty selection to move it by exactly one — otherwise the new check would pass because nothing is being counted. The original _txOpen assertion is kept alongside as 'and none left open'; nothing was removed. Three @see citations pointing into `dev/`, the split tree deleted 2026-06-17, were repointed at the surviving paths.</p>
+    <p class="verify"><strong>How it was verified:</strong> Blocks [1]-[3] and [6] proven live and isolating first: dropping the userScoped/preserveOnApply skip reds [3] alone; dropping the onUpdate==='compile' skip reds [6] alone; dropping the `?? config.default` fallback reds three assertions across [1] and [2]. The empty-featureIds break was run before and after the repair: exit 0 before, exit 1 after with 'no transaction OPENED for empty selection (begins: 4 -&gt; 5)'. Clean tree exit 0 printing 4 -&gt; 4 for the empty selection and 4 -&gt; 5 for a real one. Original coverage confirmed intact post-repair by re-running the preserveOnApply break -&gt; exit 1 on its own assertion. All breaks reverted, git diff clean on engine-gmt/, AUDIT_GS01B4 grep empty, typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:partial-apply</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>16ef3248</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch5</code>
+      <code class="file">debug/test-mb3d-parse.mts</code>
+    </header>
+    <p class="what">test:mb3d could not distinguish the MB3D header width offset from the height offset, because both gold fixtures are square.</p>
+    <p class="change"><strong>Changed:</strong> One additive assertion pinning the five digitalstew fixtures at exactly 1400x840 (they are non-square, unlike the gold blocks), with the falsification recorded beside it. No existing assertion touched.</p>
+    <p class="verify"><strong>How it was verified:</strong> Reading width from height offset (dv.getInt32(8) instead of (4)) left the harness 24 passed / 0 failed at exit 0. After the repair both that and the mirror swap are RED at exit 1 with the wrong dims printed. Two further breaks confirmed the rest was sound (codec shift 12-&gt;11: 11 passed / 18 failed; addon offset a+4-&gt;a+5: 22 passed / 6 failed). typecheck exit 0.</p>
+    <p class="guard"><code>npm run test:mb3d</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>389975f6</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">debug/smoke-interact.mts</code>
+    </header>
+    <p class="what">smoke:interact mutated four DDFS params and asserted two; the unasserted pair (vec2 and color) are exactly the two sanitiser branches that construct a new object, and it had no page-error gate.</p>
+    <p class="change"><strong>Changed:</strong> Assertions for position and color on both the store side and the preset round-trip, with the mutated values lifted into one asymmetric MUTATED literal; pageerror/console.error gate matching every sibling smoke.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: making createFeatureSlice's vec2 branch write Vector2(0, 0), hard-coding its color branch, and making DemoOverlay throw on every render ALL left the smoke at exit 0. After: each reds with a specific message. The serialisation half isolates independently — breaking only PresetLogic.sanitizeFeatureState reds the round-trip assertions while the store-side ones stay quiet, and dropping y alone is caught because the fixture is asymmetric. Three clean runs, no error-gate noise; typecheck 0.</p>
+    <p class="guard"><code>npm run smoke:interact</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>cc804194</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">debug/smoke-anim-play.mts</code>
+    </header>
+    <p class="what">smoke:anim-play's value assertion was `!== 2` on a 2 → 6 track, so any wrong number passed — its sibling smoke:anim-vec2 already range-checked the same shape.</p>
+    <p class="change"><strong>Changed:</strong> Added the matching range assertion with the keyframe values lifted to named TRACK_MIN/TRACK_MAX constants beside the addKeyframe calls that seed them.</p>
+    <p class="verify"><strong>How it was verified:</strong> Multiplying the DDFS scalar binder's write by 100 landed julia.power at 593.32 and the smoke exited 0; after the change the same break reds with 'outside the track's [2, 6] keyframe range'. Range rather than exact value because the sample instant is timing-dependent (measured currentFrame 22 → 4.93 and 30.5 → 6 on the same tree); residual limit recorded in source. Three more falsifications map the guard's mechanisms cleanly onto its two siblings.</p>
+    <p class="guard"><code>npm run smoke:anim-play</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>a89052e2</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">.claude/rules/interaction-session.md</code>
+    </header>
+    <p class="what">The InteractionSession subsystem (ADR-0061) was scoped by no rule, so the three guards that are its only automated coverage were cited nowhere and could not be cited without minting a miscitation.</p>
+    <p class="change"><strong>Changed:</strong> New path-scoped rule covering the machine, the hook, the slice, the token table and the worker read path, with a Guards block citing all three and the invariants the sweep established.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards ZERO before and after — 21 rules, 74 citations, exactly +1/+3. --verbose confirms all three are import-checked rather than exempted. Falsified the checker on this rule by adding test:mesh-grid to its Guards block: 1 issue, 'imports none of this rule's 5 scoped files'; removed, back to zero.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>b07fb0e6</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">.claude/rules/sibling-apps.md</code>
+    </header>
+    <p class="what">smoke:canvas-menu is the only guard reaching fluid-toy/pointer/contextMenu.ts and no rule's Guards block cited it; smoke:interact boots demo.html and was missing from the demo/ row.</p>
+    <p class="change"><strong>Changed:</strong> Added both, with smoke:canvas-menu's three falsifications recorded inline in the row's established style.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards stays at ZERO; --verbose shows smoke:canvas-menu 74/150 and smoke:interact 7/150 scoped files reachable. Both placements checked by hand against each smoke's ENGINE_URL, since this rule's header records that the checker cannot police per-row placement.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>251468e9</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/smoke-ui-primitives.mts</code>
+    </header>
+    <p class="what">The y-axis hard clamp in clampToViewport was untested: swapping its `size.height` term to `size.width` — a menu that stops in the wrong place near the bottom edge — passed all 7 cases at exit 0.</p>
+    <p class="change"><strong>Changed:</strong> Two BOTTOM-CLAMP fixtures added. 'no-flip clamps to bottom edge' is the missing vertical twin of the existing x case (flip:false, y=700 -&gt; 492). 'flip past bottom still clamps' covers the subtler path where flipping alone is not enough: an anchor at y=795 flips to 495, still past the gutter, so the hard clamp pulls it to 492.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `size.height` -&gt; `size.width` in the y clamp, guard exit 0, all 7 PASS. After: same break, exit 1, 2 FAIL with got=(100,592) want=(100,492) and got=(100,495) want=(100,492). Reverted with a targeted Edit; `git status --porcelain` shows only the guard file, `grep -rn AUDITMARK components/ debug/` empty. typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:ui-primitives</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dd9965c3</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">.claude/rules/ui-and-panels.md:63</code>
+    </header>
+    <p class="what">The rule's 'Known coverage gap' block was wrong in both directions — it understated the guard ('guards nothing in this rule's scope' when it guards 1 of 129 scoped files) and it overstated the manifest gap, claiming no guard asserts a manifest-composed panel's structure when batch 2 of this same sweep made two of them do exactly that.</p>
+    <p class="change"><strong>Changed:</strong> Block rewritten. (1) 'guards nothing in this rule's scope' -&gt; 'reaches 1 of the 129 files this rule scopes', with the command that prints the ratio named.</p>
+    <p class="verify"><strong>How it was verified:</strong> Reach measured, not asserted: `check:rule-guards --verbose` printed `ui-and-panels.md :: smoke:ui-primitives -&gt; 1/129 scoped files reachable` before the move.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>dd9965c3</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-fft.mts</code>
+    </header>
+    <p class="what">SpectrumFrame's binCount contract — half the transform, the AnalyserNode frequencyBinCount convention — was asserted by nothing in the repo, and doubling it passed all five audio guards.</p>
+    <p class="change"><strong>Changed:</strong> Two assertions added in block [3]: `sf.binCount === N &gt;&gt; 1` and `sf.db.length === N &gt;&gt; 1`, with a comment naming bandMath.ts's independent `const binCount = fftSize / 2` as the thing that can drift out of step.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `this.binCount = fftSize` in spectrumFrame.ts -&gt; test:fft exit 0, and test:band-analyser, test:audio-signal, test:filterbank, test:band-math ALL exit 0 as well. After: test:fft exit 1, 2 FAIL, both printing 1024 where 512 was wanted. Reverted with a targeted revert; git diff clean.</p>
+    <p class="guard"><code>npm run test:fft</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>ff0d8d00</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-filterbank.mts</code>
+    </header>
+    <p class="what">Block [8]'s 'peaks reset' proved only that the follower array was reallocated when its LENGTH changed — it rebuilds at a different bandsPerOctave — so a rebuild that preserved same-length follower state passed.</p>
+    <p class="change"><strong>Changed:</strong> A same-settings rebuild is now asserted separately: band count unchanged (56 -&gt; 56) and normalized still reads 1.0 (reset) rather than 0.33 (carried).</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `this.peaks = new Float32Array(n)` -&gt; `if (this.peaks.length !== n) this.peaks = new Float32Array(n)` passed at exit 0. After: exit 1, 'a same-SIZE rebuild resets the follower too', 0.3464.</p>
+    <p class="guard"><code>npm run test:filterbank</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f23184ec</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-band-math.mts</code>
+    </header>
+    <p class="what">The band ceiling was asserted against nyquist rather than BANK_MAX_HZ — 9.6 kHz of slack at 48 kHz — so dropping the ceiling clamp entirely let the bank run to 22.8 kHz and still pass.</p>
+    <p class="change"><strong>Changed:</strong> The assertion now compares against BANK_MAX_HZ, and a second table at a 24 kHz sample rate pins the other half of `Math.min(BANK_MAX_HZ, nyquist * 0.95)`.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `const fMax = nyquist` -&gt; exit 0. After: exit 1, 2 FAIL, printing top centres 22807.0 and 11403.5. The weaker break `Math.min(BANK_MAX_HZ, nyquist)` -&gt; exit 1 with exactly 1 FAIL, proving the 0.95 guard is now covered on its own.</p>
+    <p class="guard"><code>npm run test:band-math</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d862ea98</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/smoke-audio-fps-remap.mts</code>
+    </header>
+    <p class="what">Every frame index in the fixture was 120 and the only ratio was 0.5, so the remap's rounding was never load-bearing (Math.round -&gt; Math.floor passed the whole file) and the keyframe could not be told apart from the audio clip at any step.</p>
+    <p class="change"><strong>Changed:</strong> A deck-1 clip seeded at frame 91 — distinct from every keyframe, and odd, so 91 x 0.5 = 45.5 and the rounding modes disagree. Asserted through all six steps (46 after match, 91 after undo, 46 after redo, 92 after the round-trip, 92 unchanged in keep mode), which also widens the undo check from 'the FPS snapshot exists' to 'it covers every deck'.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: `Math.round` -&gt; `Math.floor` -&gt; exit 0, PASS. After: exit 1 on four assertions, 'odd-frame clip expected 46 (round(45.5)), got 45'. New break for the widened undo check: the FPS snapshot narrowed to index 0 -&gt; exit 1, 'undo deck-1 startFrame expected 91, got null'.</p>
+    <p class="guard"><code>npm run smoke:audio-fps-remap</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7260f9eb</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">debug/test-trace-refine.mts</code>
+    </header>
+    <p class="what">Block D asserted the MB3D importer does not auto-enable refineSteps by checking it is undefined — which is equally true when the importer emits nothing at all, so a total failure passed all three checks.</p>
+    <p class="change"><strong>Changed:</strong> Each of the three authored bStepsafterDEStop values now first asserts that a def was emitted, that the ledger reports the scene supported, and that the quality block is populated (measured 8 keys; floor 4) — and then that refineSteps is ABSENT from it rather than merely undefined, since an explicitly-set undefined would still round-trip as a preset key.</p>
+    <p class="verify"><strong>How it was verified:</strong> Before: emitFusedHybrid's supported return path changed to `{ def: null, supported: false }` -&gt; exit 0, all 71 checks passed. After: exit 1, 12 failed. The quality block's actual contents were measured first with a gitignored probe rather than assumed.</p>
+    <p class="guard"><code>npm run test:refine</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>5796a5cd</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">.claude/rules/gmt-shader-chunks.md</code>
+    </header>
+    <p class="what">engine-gmt/shaders/** — the 21 GLSL chunks every GMT fragment shader is assembled from — was scoped only by fork-rules.md, a rule about forking policy that cites no guards at all, so editing the raymarcher named nothing that could catch a mistake.</p>
+    <p class="change"><strong>Changed:</strong> New rule scoping engine-gmt/shaders/**, citing test:refine and test:shader, with entry points, six ADRs and the two silently-breakable contracts (compile gates must collapse to byte-identical source; map/mapDist are twins from one DE_MASTER body).</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards 0 issues before and after; 21 rules/78 citations -&gt; 22 rules/81. --verbose confirms test:refine 9/21 and test:shader 19/21 scoped files reachable. Falsified by appending npm run test:fft: 'imports none of this rule's 21 scoped files', exit 1; removed, back to 0.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>69c970c4</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch7</code>
+      <code class="file">.claude/rules/render-and-shaders-core.md</code>
+    </header>
+    <p class="what">The five engine-core GLSL files under engine/fractal/shaders/ — including ditherTail.ts, which both the fractal display pass and the Gradient Explorer compositor include — were scoped by no rule whatsoever.</p>
+    <p class="change"><strong>Changed:</strong> paths widened with engine/fractal/shaders/** (4 -&gt; 9 scoped files); a Guards block added citing test:dither; a section recording what those five files are and ditherTail's shared-constant contract across the two trees.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards 0 issues after; --verbose shows test:dither -&gt; 2/9 and the pre-existing prose citation test:bucket-convergence -&gt; 1/9, so widening did not orphan it. Falsified by appending npm run test:band-math: 'imports none of this rule's 9 scoped files', exit 1; removed, back to 0.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>69c970c4</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-tsaa.mts</code>
+    </header>
+    <p class="what">Every value smoke:tsaa collected was printed and never checked — the probe, the console stream, and the result of the one setter it calls.</p>
+    <p class="change"><strong>Changed:</strong> Assert the probe (accumulation is a boolean and defaults true, sampleCap finite and &gt; 1, canvas sized); wire console.error into `errors` alongside pageerror (it was pushed into a `logs` array nothing read); read `accumulation` back after setAccumulation(false). Header now states plainly that it is a boot canary plus a screenshot capture, that a dead TSAA blend and a null blue-noise texture both pass, and that the two PNGs it writes are tracked.</p>
+    <p class="verify"><strong>How it was verified:</strong> setAccumulation made to drop its argument -&gt; exit 1, 'did not land in the store — accumulation is true'. fluid-toy's boot setSampleCap(64) changed to 1 -&gt; exit 1, 'sampleCap is 1, expected a finite number &gt; 1'. Measured 0 console errors on a healthy boot before wiring that up, so it is not a new red. Clean run exit 0, typecheck exit 0, both tracked PNGs git checkout-ed after every run.</p>
+    <p class="guard"><code>npm run smoke:tsaa</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>e2a91d8d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-formula-switch.mts</code>
+    </header>
+    <p class="what">The guard's header credited an IS_COMPILING event and framesRendered that it never checks and that do not exist on fractal-toy, and its uniform checks were presence-only — satisfiable by a program that merged both formulas' uniforms.</p>
+    <p class="change"><strong>Changed:</strong> Header corrected to claim what is actually asserted. Added three absence assertions (uFoldLimit absent before the switch, uPower absent under Mandelbox, uFoldLimit absent after switching back) via a shared activeUniformNames() helper that prints the whole list on failure. The dead IS_COMPILING block is annotated @stale in place — removal left to the owner.</p>
+    <p class="verify"><strong>How it was verified:</strong> Scratch probe: window.FractalEvents and window.__fractalEvents both undefined on fractal-toy.html, __compileSeen false after a switch that did happen, no framesRendered field. Uniform sets measured disjoint before the absence checks were added. Falsified by leaking uFoldLimit into the Mandelbulb program (reds the new precondition) and uPower into the Mandelbox program (reds the new absence check); three pre-existing assertions falsified too. Clean run exit 0, typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:formula-switch</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f4d6859c</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-engine-demo-modulation.mts</code>
+    </header>
+    <p class="what">The assertion named for the relative min/max LFO path was satisfied by baseValue itself — 120 sits inside its [75, 205] bound — so a dead offset, the exact regression it exists to catch, passed it.</p>
+    <p class="change"><strong>Changed:</strong> Sample nine times across more than one 0.5s period instead of once, keep the [75, 205] bound on every sample, and require the swing to reach both sides of base (max &gt;= 170, min &lt;= 105).</p>
+    <p class="verify"><strong>How it was verified:</strong> Disabling the relative branch in ModulationEngine printed `liveModulations[demo.size]: 120` and PASSED that assertion before (the run only died later on the unrelated noise-spread check); after, it reds there with 'highest sample 120.0, expected &gt;=170'. Bounds set from 5 measured runs: 80.0-82.6 low, 197.6-199.7 high, theoretical [80, 200]. Pre-existing assertions falsified and live: skipping installModulation() reds the tick check; DemoOverlay reading demo.position.x reds 'centroid sweep 0.0px'. Clean runs exit 0; typecheck exit 0.</p>
+    <p class="guard"><code>npm run smoke:engine-demo-modulation</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>f67d8092</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch9</code>
+      <code class="file">debug/native-config-sweep.mts</code>
+    </header>
+    <p class="what">test:hybrid and test:hybrid-adv compile byte-identical shaders to test:baseline, so test:shader spends three of its four links running the same 54 compiles while its names promise hybrid/box-fold coverage that was retired in P4.5/P4.7.</p>
+    <p class="change"><strong>Changed:</strong> Header of the sweep carries the measurement, why the flags are dead (weaveMigration.ts deletes hybridComplex and forces hybridCompiled=false), and that test:weave-sweep is the successor coverage. gmt-renderer.md's Guards block says the same from the rule side.</p>
+    <p class="verify"><strong>How it was verified:</strong> Static: hashed generateFragmentShader over all 54 eligible formulas per mode — 54/54 identical baseline vs hybrid, 54/54 vs hybrid-adv, 0/54 differing hybrid vs hybrid-adv. Runtime: `#error` appended to the `de` block reds all three at exactly 0 pass / 54 fail, exit 1. Break reverted, git diff over engine-gmt/ empty, grep BREAK_GS9 empty, all three back to 54/0. typecheck 0, check:rule-guards 0 issues.</p>
+    <p class="guard"><code>npm run test:baseline</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>d3885b05</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">docs/adr/0073-compile-time-measurement-protocol.md</code>
+    </header>
+    <p class="what">ADR-0073's Consequences bullet and debug/measure-pt-compile.mts both record 'runWithServer.mts dies with spawn EINVAL' as a standing Windows fact and route around it; 954237d6 made that false.</p>
+    <p class="change"><strong>Changed:</strong> An additive dated Update block under the ADR heading (decision unchanged — the measurement protocol, the cache pitfalls and the localhost vs 127.0.0.1 note all still stand), and the harness comment corrected in place with the wait kept.</p>
+    <p class="verify"><strong>How it was verified:</strong> Cited by grep target, not line number (`spawnCmd` in debug/runWithServer.mts). The Update block only adds lines, so it passes the append-only hook mechanically. typecheck 0.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>55e39f65</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">.claude/rules/ui-and-panels.md</code>
+    </header>
+    <p class="what">docs/history/engine/05_Shared_UI.md tells a reader of components/ui that primitives are snapshot-tested by smoke:screenshot. There is no snapshot comparison anywhere in that harness and it boots the GMT root entry, not the demo.</p>
+    <p class="change"><strong>Changed:</strong> The &quot;Known coverage gap&quot; block gains smoke:screenshot as a prefix-free anti-citation with the about:blank measurement and the correction to the history claim. Also cites test:frag:v in scene-and-formula-format.md and records smoke:gallery-link's repaired blind spot there.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards 0 issues, 89 -&gt; 90 citations; the +1 is test:frag:v and the smoke:screenshot mention correctly minted none. Falsified the checker on the edited rule by appending npm run test:fft: exit 1; removed, exit 0. Measured: about:blank -&gt; a 5738-byte white PNG at exit 0; a dead port -&gt; exit 1.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>929eb97d</code></p>
+    
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">medium</span>
       <code>gx01-gradient-explorer</code>
       <code class="file">gradient-explorer/fullscreen/modeRegistry.ts:34</code>
     </header>
@@ -1880,6 +2762,48 @@
     <header>
       <span class="badge tA">A</span>
       <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/test-modulation-coverage.mts:230</code>
+    </header>
+    <p class="what">The block-[8] element regex `&lt;Vector[234]Input[\s\S]*?\/&gt;` also matched the TYPE annotation `React.FC&lt;Vector2InputProps&gt;` and then ran on to the first `/&gt;` inside the component body — so it classified components/vector-input/index.tsx, the widget's own definition file, as a consumer. Batch-2 lesson 6 (a text assertion is one spelling away from blind) in its false-positive direction.</p>
+    <p class="change"><strong>Changed:</strong> Tightened to `&lt;Vector[234]Input(?=[\s/&gt;])[\s\S]*?\/&gt;` and recorded at the site why the lookahead is load-bearing.</p>
+    <p class="verify"><strong>How it was verified:</strong> Found by the discovery pass added in the same commit, which is a fair advertisement for adding one — it reported the definition file as an unscanned consumer on its first run. The scanned element count is unchanged at 10 before and after the tightening, so nothing real was being matched by the loose form; only the discovery walk, which reads files the five-file list does not, was affected. Clean tree exit 0 after.</p>
+    <p class="guard"><code>npm run test:modulation-coverage</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>6bd830b7</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">.claude/rules/ddfs.md</code>
+    </header>
+    <p class="what">The rule governing the entire Data-Driven Feature System had no Guards block, which reads as 'nothing covers this at runtime'.</p>
+    <p class="change"><strong>Changed:</strong> Added a Guards block citing typecheck and smoke:interact, plus the two limits a reader needs: the registry-freeze and duplicate-id invariants have no runtime guard (and DuplicateFeatureError only throws in a production build), and int/bool/enum/gradient/image params round-trip unguarded.</p>
+    <p class="verify"><strong>How it was verified:</strong> check:rule-guards ZERO; --verbose 'ddfs.md :: smoke:interact -&gt; 5/6 scoped files reachable'.</p>
+    <p class="guard"><code>npm run check:rule-guards</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>400eba6d</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">fluid-toy/main.tsx</code>
+    </header>
+    <p class="what">setSampleCap(64) is introduced as an override of a 256 default that no longer exists — the engine default is already 64, so the call is a no-op and the comment misdirects.</p>
+    <p class="change"><strong>Changed:</strong> @stale annotation naming the real default and where to grep it. Call kept, not deleted: it still pins the value fluid-toy wants if that default moves again.</p>
+    <p class="verify"><strong>How it was verified:</strong> grep `sampleCap:` in store/slices/renderControlSlice.ts -&gt; 64. Found by a break that renamed that default and left smoke:tsaa's probe still reading 64. Comment-only; typecheck exit 0, smoke:tsaa exit 0 after.</p>
+    <p class="guard"><code>npm run typecheck</code> <span class="ok">passed</span></p>
+    <p class="commit">commit <code>7ceb6007</code></p>
+    
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tA">A</span>
+      <span class="sev">low</span>
       <code>gx01-gradient-explorer</code>
       <code class="file">gradient-explorer/TopBarButtons.tsx:4</code>
     </header>
@@ -2263,7 +3187,7 @@
   </section>
   
   <section>
-    <h2>Awaiting your judgement <span class="count">64</span></h2>
+    <h2>Awaiting your judgement <span class="count">81</span></h2>
     <p class="note">Not applied. These need a human call — design intent, product behaviour, or a tradeoff the run should not make alone.</p>
     
   <article class="finding sev-high">
@@ -2321,6 +3245,34 @@
     
     
     <p class="rationale">See PROPOSALS.md. Independently corroborated by the verifier, which confirmed the scalar comes from X alone and that BaseVectorInput is linked-by-default but user-unlinkable. Mitigating: DEFAULT_BBOX_SIZE is [3,3,3] and autoFitBounds forces a cube, so the default and auto-fit paths never trip it.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">debug/test-frag-integration.mts</code>
+    </header>
+    <p class="what">Nothing in the repo fails when the Fragmentarium importer emits shaders that cannot compile. Gutting the AST renamer in engine-gmt/features/fragmentarium_import/v3/generate/rename.ts — so every imported formula's uniforms keep their original Fragmentarium names and every generated shader references undeclared identifiers — leaves test:frag:integration exit 0 (61 GLSL issues, all classified `warn`) and test:frag exit 0 (60 passed, 0 GLSL issues, because its parse check is syntax-only and unrenamed identifiers are still syntactically valid). Both are cited by .claude/rules/scene-and-formula-format.md for this subsystem.</p>
+    
+    
+    
+    
+    <p class="rationale">Found by falsifying test:frag:integration. The doc side is now fixed (commit 1dc61d24 states plainly what a green run does and does not prove), so no finding rests on a false premise — this is about whether the gate should widen. THE CATCH, and it is why this is not a one-liner: the baseline is not clean. RecFold has carried `Full-shader: Undeclared identifiers: Encountered undefined variable: &quot;OrbitStrength&quot;` since before this sweep, so flipping `warn` to `fail` makes the guard RED ON ARRIVAL — the exact permanently-red state cycle 10 narrowed it out of, and a guard that has never been green cannot distinguish a regression from its baseline. Options: (1) leave it, relying on the corrected header — cheapest and honest, but the hole stays open; (2) gate on `paramIssues` only, whose baseline IS 0 — free today and covers the RENAME_FAIL / DEAD_PARAM / invalid-range categories the file itself calls importer bugs, but it would NOT have caught the renamer break, which produced 0 param issues; (3) gate on GLSL issues against a recorded baseline count of 1, so any NEW parse error fails — catches the renamer break outright, but it is an allowlist, and batch 2's check:zindex finding is precisely about an allowlist exempting the files that mattered; (4) fix RecFold's OrbitStrength gap first, then gate on `glslTotal &gt; 0` with no allowance at all. RECOMMENDATION: (4) if RecFold turns out to be a real importer gap worth closing — it is one formula and it makes the gate honest with no exemption machinery; otherwise (3) with the single baseline entry named and dated in the source. (2) is a poor substitute on its own since it misses the demonstrated break. Not applied: it changes the exit semantics of a guard a rule cites, and which subset to gate is your call.</p>
+  </article>
+  <article class="finding sev-high">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">high</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/smoke-orbit.mts</code>
+    </header>
+    <p class="what">A green smoke:orbit does not prove anything was rendered. `accumulationCount` is not a render counter in app-gmt: whenever progressive tiling is active, engine-gmt/engine/FractalEngine.ts assigns `pipeline.accumulationCount = band.sampleCount` from the band scheduler, OUTSIDE RenderPipeline.render(). A hard `return` at the top of engine/RenderPipeline.ts's render() — the whole accumulation pipeline dead — leaves the smoke exit 0.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: with render() dead, the guard passes with 'accumulation 7 -&gt; 8' and does so in 0.0 s, versus ~13 s on a clean tree — the broken build reads 50x healthier because it does no work. This is batch-1 lesson 1 (a probe flag not meaning what its name says) in the same shape as smoke:engine-gmt's hasCompiledShader, and the pre-drag counter raced to 64 instead of 2. EVIDENCE: the assignment is grep `band.sampleCount` in FractalEngine.ts; RenderPipeline.render()'s own auto-increment is explicitly skipped when `_blendOverride` is set, and its comment says so. No other readable proxy channel discriminates — measured on the same break: frameCount 128 -&gt; 186 (it is the worker's tick count, and gate-skipped frames are the only thing it drops), convergenceValue 1.0 both ways, isBooted and hasCompiledShader true both ways. Only pixels differ: an element screenshot of the render canvas is a 562882-byte PNG on a clean tree and 127196 bytes on the break. OPTIONS: (a) add an additive pixel assertion — screenshot the render canvas element immediately before the drag and again after the settle, and require the two to differ, since a dead pipeline leaves the viewport unchanged while a live one repaints it (the element screenshot clips to the canvas box, so the constantly-updating UI chrome is not captured); (b) assert a MINIMUM elapsed time for the accumulation step — cheap and it directly encodes 'broken renders faster', but it would false-red on a real GPU where a healthy sample is genuinely sub-second, so it is wrong; (c) leave it and rely on the header/rule note now recording the limit. RECOMMENDATION: (a), but NOT unattended and NOT in the same pass as the timeout fix. It is a new assertion on a browser smoke, and cycle 12's smoke:liquify finding is precisely what happens when one of those ships without a measured false-red rate — it would need at least 8 consecutive clean runs at ~25 s each before adoption, and a decision about what to do at high accumulation counts where consecutive samples converge and the pixel delta shrinks toward zero. Not applied: adding an unmeasured assertion to a guard three rules cite is how a guard that was just made trustworthy becomes flaky instead.</p>
   </article>
   <article class="finding sev-high">
     <header>
@@ -2693,6 +3645,132 @@ RECOMMENDATION: (a) then (b). Both are pure-function extractions into modules th
     <p class="guard"><code>npm run test:frag:integration</code> <span class="ok">passed</span></p>
     
     <p class="rationale">See PROPOSALS.md. Spot-checked by an independent verifier, which confirmed both hard-stale rows by hand (Experimental/Knot.frag now errors provides_color; kosalos/KIFS.frag now errors no_de_function — both error KINDS matching), enumerated all 21 hidden ids and confirmed every one parses today, and confirmed the picker filter at FormulaWorkshop.tsx:450 and :511. It judged the probe's methodology sound, specifically its asymmetry: only the catalog-says-pass-but-errors-now direction is called 'hard', the reverse is 'candidate'. One correction: the 21 are hidden BY DEFAULT, not unreachable — a showIncompatible toggle reveals them.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch1</code>
+      <code class="file">engine-gmt/engine/CompileScheduler.ts</code>
+    </header>
+    <p class="what">`hasCompiledShader` is a latch meaning 'a compile was issued', not 'a compile succeeded' — it is set before the driver reports the link result, so it reads true after a failed compile. Its consumers treat it as a success signal: GmtRendererTickDriver gates the tick on `if (!proxy.hasCompiledShader) return` (calling it 'a one-way latch'), usePhysicsProbe gates on `!engine.hasCompiledShader`, and CompileScheduler itself computes `needsCompile = !this.hasCompiledShader || shaderDirty`.</p>
+    
+    
+    
+    
+    <p class="rationale">Found while falsifying smoke:engine-gmt: with a hard GLSL syntax error injected, hasCompiledShader stayed true, frameCount reached 216, and the app rendered empty frames indefinitely with no in-app signal beyond a console.error. The guard side is now fixed (commit e04d7dc2 asserts on the console stream), so the audit's proof chain is sound either way — this is about production behaviour. THE CATCH: the early assignment is deliberate and commented ('Mark compiled BEFORE yielding — a concurrent perform can start during the yields below and must see the updated formula key, otherwise it thinks the formula changed and does a redundant preview'). So this is not a one-line fix; it is a question about what the flag should mean. Options: (1) leave it, and rename to hasIssuedCompile so callers stop reading success into it — cheap, honest, touches ~6 call sites; (2) add a separate lastCompileFailed flag fed by the existing COMPILE_FAILED event, which WorkerProxy already re-emits on the main bus for ModifyWithAIModal — additive, no change to the latch's timing or its concurrency role; (3) leave both alone, on the grounds that a compile failure in production almost always comes from an AI-pasted or hand-authored formula, and ModifyWithAIModal already surfaces that path. RECOMMENDATION: (2), then (1) if the rename proves cheap. Not applied — it changes production semantics on a concurrency-sensitive path, and the owner should pick the meaning.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch2</code>
+      <code class="file">engine-gmt/engine/GmtBucketHost.ts</code>
+    </header>
+    <p class="what">engine-gmt's bucket/accumulation path has no runtime guard of any kind. Gutting GmtBucketHost.resetAccumulation() — the per-bucket `this.engine?.pipeline.resetAccumulation()` call — leaves test:bucket-convergence green, typecheck green, and (by the rule's own analysis) smoke:tsaa green since fluid-toy never imports RenderPipeline.</p>
+    
+    
+    
+    
+    <p class="rationale">Found while answering the citation half of the test:bucket-convergence falsification. The doc side is now fixed (commit 6046dcc2 states the gap plainly instead of claiming coverage), so no finding rests on a false premise — this is about whether the gap should be closed. THE CATCH: the natural fix is to extend test-bucket-convergence.mts to drive GmtBucketHost, but that host wants a live FractalEngine with a worker and a GL context, which is exactly why the existing harness mocks at the RenderPipeline seam instead. Options: (1) leave it, and rely on the rule text now saying 'unguarded, verify by hand' — cheapest, and honest; (2) add a node-level harness that constructs GmtBucketHost against a stub `engine` object with only `pipeline` on it, asserting the per-bucket transition calls through — narrow, cheap, and would have caught break (D), but it tests one delegation rather than the bucket path; (3) extend smoke:engine-gmt to drive a short bucket render in-browser and assert on accumulation counts — real coverage, materially more work, and bucket renders are slow. RECOMMENDATION: (2) as a floor, since the delegation is precisely the thing that broke silently, then (3) only if bucket-seam regressions recur. Not applied: it is new coverage rather than a repair, which the protocol puts in the owner's hands.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch2</code>
+      <code class="file">debug/test-param-mapping.mts</code>
+    </header>
+    <p class="what">The only thing keeping the shared modulation dispatcher honest about slider-space compose is a TEXT match on the applier source. Block [6] proves composeModulatedValue itself composes correctly, but calls it directly — so no assertion anywhere observes that applyTarget actually routes through it. The regex is now broader (commit e2ba7eeb) but it is still a text match, and a third spelling would evade it again.</p>
+    
+    
+    
+    
+    <p class="rationale">Found by falsifying block [9]. The applied fix closes the specific hole that was proven, so nothing rests on a false premise — this is about whether the check should be behavioural instead of textual. THE CATCH: making it behavioural means driving applyTarget with a CURVED target and asserting the result matches composeModulatedValue rather than plain addition, which needs a fixture with a curved routing — and per this batch own findings a fixture whose curve is effectively linear would make the new assertion vacuous, so it has to be chosen deliberately (the cube/log params in block [1] are the obvious candidates). Options: (1) leave the broadened regex — cheapest, and it now catches both natural spellings; (2) add a behavioural assertion alongside it that runs applyTarget against a curved target and compares to composeModulatedValue, keeping the regex as a cheap belt-and-braces; (3) replace the regex with the behavioural check — cleaner to read, but loses the ability to flag a raw add on a path the fixture does not happen to exercise. RECOMMENDATION: (2). Not applied: it is new coverage requiring a fixture design choice, not a repair of something proven broken.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch3</code>
+      <code class="file">debug/test-frag-importer.mts</code>
+    </header>
+    <p class="what">test:frag's `glslIssues` channel is advisory by design and the baseline is 0, so gating it would be free today — but doing so is a judgement call because the sibling checks inside validateGLSL are heuristics. Prefixing every generated function with a hard GLSL syntax error gives 60 parse errors, 60 passed, 0 failed, exit 0.</p>
+    
+    
+    
+    
+    <p class="rationale">Found while falsifying test:frag. The harness footer already says plainly that glslIssues is 'a warning channel, not a pass/fail signal', so unlike the integration suite this is a stated choice rather than a false claim — nothing was misleading and the doc side needed no correction beyond recording the measurement (done in commit 71d5d4c1). THE CATCH: validateGLSL mixes an objective check with heuristic ones. The parse check is objective — the generated code either parses or it does not. But its siblings hedge in their own wording (`getDist references 'X' which may be out of scope`), and gating a heuristic is how a guard gets weakened later, which is worse than not gating at all. Options: (1) leave it advisory; (2) gate ONLY on issues whose string starts with 'GLSL parse error:', leaving the scope and naming heuristics advisory — narrow, objective, baseline 0, no allowlist needed; (3) gate on everything validateGLSL returns — simplest to read, but adopts the heuristics as contract. RECOMMENDATION: (2). Note it interacts with the test:frag:integration proposal above: the integration suite's full-shader strict parse is strictly stronger than this syntax-only one (it catches undeclared identifiers, which is what the renamer break produced), so if that gate lands, this one is a cheap belt-and-braces rather than the main defence. Not applied: it changes the exit semantics of a guard a rule cites.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/scan-frag-parse.mts</code>
+    </header>
+    <p class="what">test:frag:scan's 'both fail' category — formulas the Formula Workshop cannot open on EITHER import path, which its own output labels 'unrenderable on selection — should be hidden' — has a baseline of exactly two files, and both are deliberate. That makes a real green-baseline gate available where none looked available.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: the two both-fail entries are Claude/Mandelbulb.frag and Claude/Quaternion.frag, and V4 rejects both with kind 'donotrun' — 'marked #donotrun (library file, not a standalone formula)'. They are include-target library files, not formulas the picker is meant to open, so their failure is correct behaviour rather than an importer gap. EVIDENCE: the classifier is grep '#donotrun' in engine-gmt/features/fragmentarium_import/v4/ingest/frag.ts, which emits that error kind; the scan prints both filenames with both error strings. The gate would have caught the falsification break outright — forcing hasDE = false took both-fail from 2 to 44. OPTIONS: (a) skip files V4 classifies 'donotrun' before scoring, which makes the both-fail baseline a natural 0 and lets the script gate `bothFail === 0` with NO allowlist at all — the cleanest form, and it also makes the report match what a Workshop user can actually select; (b) keep scanning them and allowlist the two by NAME, dated in source — works, but batch 2's check:zindex finding is exactly about an allowlist quietly exempting the files that mattered, and this one would grow; (c) gate on a count ceiling (bothFail &lt;= 2) — an allowlist with the names removed, strictly worse than (b); (d) leave it ungated. RECOMMENDATION: (a). It needs one decision I should not make unattended: whether the report is supposed to describe the library as authored or the library as the picker presents it. If #donotrun files are filtered from the Workshop picker then (a) is strictly more accurate as well as gateable; if they are offered, then a user CAN click them and get an error, and the right fix is upstream in the picker rather than in this script. Not applied: it changes what the report measures, and the answer depends on picker behaviour I did not verify.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch4</code>
+      <code class="file">debug/test-escape-migration.mts</code>
+    </header>
+    <p class="what">Five of the seven registered scene migrations have no fixture in the only guard that covers migrations, and the rule that cites it calls migrations 'the risk'.</p>
+    
+    
+    
+    
+    <p class="rationale">CLAIM: `listMigrations()` returns 7 entries — v1 escape-radius-to-coloring, v2 engineSettings-to-shaderCompiler, v3 legacy-weave-absorption, v4 faithful-marcher-unification, v5 solid-sky-backdrop, v6 fog-tint-inversion, v7 modulation-band-to-hz. test:migrations exercises v1 and v7. v2-v6 are never invoked with a scene that triggers them, so any of them could be gutted with the guard green. EVIDENCE: the harness's own header enumerates its blocks and they map onto v1 and v7 only; its filename (test-escape-migration.mts) says as much. .claude/rules/scene-and-formula-format.md's Migrations section says 'every field added to a scene has to survive a round-trip from an older file' and 'append to the chain, don't renumber' — neither is mechanically checked. WHAT IS ALREADY TRUE, measured with a throwaway probe so the proposal starts from facts: the chain's versions are contiguous 1-7 with no duplicates, and applyMigrations is idempotent across five representative scenes (bare Mandelbulb, legacy MandelTerrain, stray quality.escape, audio bands, and the real BioCube.gmf) — once-vs-twice deep-equal in every case. Note the probe's FIRST form reported BioCube as non-idempotent and that was a probe defect, not a code defect: it compared JSON strings built with different key orders. OPTIONS: (a) add one fixture per uncovered migration — most coverage, most work, and each needs its own falsification to be worth anything; (b) add two cheap generic assertions instead, both with a green baseline today: version contiguity / no duplicate versions (which mechanically enforces the rule's own 'append, don't renumber'), and chain-wide idempotence over the fixtures already present (the property the harness itself calls load-bearing, since the version tag is not persisted in GMF so a save/reload replays the whole chain); (c) both, (b) first. RECOMMENDATION: (c) — (b) is small, generic and immediately green, and it makes the NEXT untested migration cheaper to catch, while (a) is the only thing that actually covers v2-v6 and is best done one migration at a time by whoever remembers what each was for. Not applied: (a) is five new fixtures whose expected values I would be inferring from the migration code they are meant to check, which is how a test becomes a restatement of the implementation; (b) is defensible unattended but belongs with (a) rather than shipped alone as a proxy for coverage.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">store/slices/createInteractionSlice.ts</code>
+    </header>
+    <p class="what">`_session` is a module-level singleton, so test-interaction-wiring.mts's three slice harnesses share one machine and its assertions are order-dependent — the inertness case's `getLastActivityTime() === -Infinity` holds only because it runs before the wired-not-dead case opens a gesture.</p>
+    
+    
+    
+    
+    <p class="rationale">Correct today and verified so. Not applied because the fix is a rewrite of a healthy guard (a resettable machine, or a factory instead of a module singleton), which this batch's brief forbids, and the singleton is deliberate — the JSDoc says it mirrors viewportSlice's `_adaptive` ref for hot-path reasons. Options: (a) leave it and rely on the caveat now recorded in .claude/rules/interaction-session.md's invariants, which is what was done; (b) export a test-only reset from the slice and call it in makeSliceHarness, which makes the tests order-independent at the cost of a test-shaped export on a hot-path module; (c) move the ref into a closure the slice factory owns, which is the clean fix but changes runtime behaviour for any app composing more than one store. Recommendation: (a) now, (b) if a fourth harness case is ever added — the risk is not the current tests failing, it is a future case being inserted above the inertness one and silently invalidating it.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-particle-bounce.mts</code>
+    </header>
+    <p class="what">Residual after the repair: the smoke's outcome still depends on how many RAF frames land inside its fixed 1200ms settle window, and that varies run to run.</p>
+    
+    
+    <p class="guard"><code>npm run smoke:particle-bounce</code> <span class="bad">FAILED</span></p>
+    
+    <p class="rationale">CLAIM: the fixed `waitForTimeout(1200)` is a proxy for 'enough frames to reach the wall and reflect'. EVIDENCE: across 22 runs in this batch, healthy max-penetration ranged 0.0023-0.0111 and the WALL_THRESHOLD=99 break reached only 0.0320 where the bounce-disabled break reached 0.0971-0.1144 — same break, different frame counts. The penetration bound has enough margin that this no longer flips the verdict (5/5 and 4/4 clean), but the underlying variance is still there. OPTIONS: (a) leave it — the margin is now ~4x either way and it has not flipped since the repair; (b) replace the fixed wait with a poll on a frame counter, the way smoke:liquify was hardened in batch 4, so the window is measured in frames rather than milliseconds; (c) drive the particle step deterministically from the test instead of riding the RAF loop. RECOMMENDATION: (b) if this ever goes red without an obvious cause; not worth doing pre-emptively, but worth knowing before anyone calls a future red 'flake'.</p>
+  </article>
+  <article class="finding sev-medium">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">medium</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">package.json</code>
+    </header>
+    <p class="what">smoke:all's &amp;&amp; chain means the first red erases the signal from every member after it, and there is no summary of how many of the 42 ran.</p>
+    
+    
+    
+    
+    <p class="rationale">Appended to PROPOSALS.md with the measurement. Options: leave it; run all members and report 'N of 42 failed' via a small driver; or split fast/browser. Recommendation is the driver, because the failure found here — four dead members hiding behind one another, one pointing into a directory deleted six weeks earlier — is exactly the one it prevents.</p>
   </article>
   <article class="finding sev-medium">
     <header>
@@ -3124,6 +4202,90 @@ WHAT REMAINS is small and cosmetic: the dead groupFilter entry still renders a s
     <header>
       <span class="badge tB">B</span>
       <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch5</code>
+      <code class="file">debug/native-weave-sweep.mts</code>
+    </header>
+    <p class="what">Without --fresh, test:weave-sweep exits 0 with &quot;Nothing to do&quot; when every requested pair is already in the results jsonl — a manual --pair run can report success while testing nothing.</p>
+    
+    
+    
+    
+    <p class="rationale">Hit live during this sweep: running the harness with --pair=Mandelbulb,AmazingBox printed &quot;--resume: skipping 1 already-tested pairs&quot; then &quot;Nothing to do (use --fresh to re-run)&quot; and exited 0, having compiled nothing. The npm script passes --fresh, so test:weave-sweep as cited in the rules is NOT affected — the jsonl is wiped every run and FORMULA_FLOOR covers the shrunk-matrix case properly. The exposure is a human or agent running the harness directly with --pair or --primary to check one cell, reading exit 0, and concluding it compiles. Options: (a) leave it — resume is deliberate and the guard as shipped is sound; (b) exit 1 when a resume skips everything, which makes the no-op loud but breaks anyone scripting resume as idempotent; (c) keep exit 0 but print the total-skip as a warning to stderr. Recommend (c) — it removes the silent-success reading without changing any exit contract. Not applied: it is a behaviour change to a documented workflow.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch6</code>
+      <code class="file">debug/smoke-anim-play.mts</code>
+    </header>
+    <p class="what">The repaired range assertion still cannot catch a wrong value that lands inside [2, 6] — an inverted or rescaled interpolation that stays within the keyframe endpoints passes.</p>
+    
+    
+    
+    
+    <p class="rationale">Tightening it needs a deterministic sample point, and there isn't one: playback position at the 700ms mark varied from frame 22 to frame 49 across observed runs. Options: (a) leave the range and the recorded limitation, which is what was done; (b) pause playback at a known frame before sampling and assert the exact interpolated value, which is deterministic but changes what the smoke exercises (it would stop proving that free-running playback drives the param); (c) sample repeatedly and assert monotonicity, which catches inversion but adds ~1s and some flake surface. Recommendation: (b) as a SECOND assertion alongside the existing one rather than a replacement — seek to frame 15, assert julia.power === 4 exactly — but that is a design choice about what the smoke is for, hence Tier B.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch8</code>
+      <code class="file">debug/smoke-formula-switch.mts</code>
+    </header>
+    <p class="what">The dead IS_COMPILING listener block is annotated @stale in place rather than removed, because removal is the owner's call.</p>
+    
+    
+    <p class="guard"><code>npm run smoke:formula-switch</code> <span class="bad">FAILED</span></p>
+    
+    <p class="rationale">CLAIM: the block sets __compileSeen = false, tries to attach a listener via window.FractalEvents, and nothing ever reads the flag. EVIDENCE: a scratch probe against fractal-toy.html read window.FractalEvents and window.__fractalEvents as undefined, and __compileSeen as false after a switch that demonstrably happened (formula went to Mandelbox). OPTIONS: (a) delete the block — it is five lines of provable no-op; (b) leave the @stale annotation, which is what was done; (c) expose FractalEvents on window in the fractal-toy entry and make the listener real, which would add a genuine second proof of the rebuild alongside the uniform swap. RECOMMENDATION: (a) is safe and (c) is the only one that adds coverage; either is a two-minute change, but both are deletions or product edits made for a test's benefit, so neither was done unattended.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch9</code>
+      <code class="file">package.json</code>
+    </header>
+    <p class="what">Whether to retire test:hybrid / test:hybrid-adv outright, repoint them at flags that still change emission, or keep them documented.</p>
+    
+    
+    
+    
+    <p class="rationale">Retiring is deletion, which this run never does; repointing at weave/interlace configs is a product judgement about what deserves a named mode, and test:weave-sweep may already cover it. Recommendation (a) retire, with (b) repoint as an optional follow-up. Appended to PROPOSALS.md with the full measurement.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">debug/runWithServer.mts</code>
+    </header>
+    <p class="what">With SMOKE_PORT already served by something else, --strictPort makes the wrapper's own vite exit and it silently runs the smoke against the foreign listener, printing its usual 'vite ready at &lt;url&gt;'.</p>
+    
+    
+    
+    
+    <p class="rationale">Measured at SMOKE_PORT=3400 against a hand-started npm run dev: exit 0, the inner command fetched from a server the wrapper did not start, and the 'vite exited before ready' warning lost the race and never printed. Harmless when the squatter is this repo's dev server, which is why it is documented in the header rather than made fatal — whether it should be fatal is the owner's call. In PROPOSALS.md.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
+      <code>gs01-guard-sweep-batch9b</code>
+      <code class="file">debug/smoke-gallery-link.mts</code>
+    </header>
+    <p class="what">A build without VITE_SUPABASE_* makes this smoke print a skip and exit 0 having asserted nothing — the fifth failure mode by construction, and it is a member of smoke:all.</p>
+    
+    
+    
+    
+    <p class="rationale">Deliberate and defensible (a fresh checkout is not a regression), so it was recorded in the harness header and in scene-and-formula-format.md rather than changed. Options: a distinct exit code, or an opt-in REQUIRE_GALLERY=1. In PROPOSALS.md alongside the other two deliberate exit-0 paths.</p>
+  </article>
+  <article class="finding sev-low">
+    <header>
+      <span class="badge tB">B</span>
+      <span class="sev">low</span>
       <code>p01a-palette-core</code>
       <code class="file">debug/test-palette-img2grad.mts</code>
     </header>
@@ -3550,6 +4712,16 @@ RECOMMENDATION: (a). Splitting the chain is churn; the real fix is citing links,
     <td class="num applied">27</td>
     <td class="num esc">1</td>
     <td class="num prop">10</td>
+    <td class="st">done</td>
+  </tr>
+  <tr class="s-done">
+    <td><code>gs01-guard-sweep</code></td>
+    <td>cross-cutting</td>
+    <td class="area">Falsify all 85 test:*/smoke:*/check:* guards - break what each governs, confirm red, revert</td>
+    <td class="num">90</td>
+    <td class="num applied">75</td>
+    <td class="num esc">0</td>
+    <td class="num prop">17</td>
     <td class="st">done</td>
   </tr></tbody>
   </table></div>
