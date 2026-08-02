@@ -25,8 +25,11 @@ const BASE_URL = process.env.ENGINE_URL ?? 'http://localhost:3400';
 const APP_URL = BASE_URL + '/app-gmt.html';
 const TIMEOUT = 90_000;
 
-// Wait for the dev server port before launching the browser (we start vite
-// separately on Windows since runWithServer's spawn dies with EINVAL).
+// Wait for the dev server port before launching the browser. This used to be
+// load-bearing on Windows because runWithServer's spawn died with EINVAL and
+// vite had to be hand-started; that was fixed 2026-08-02 (grep `spawnCmd` in
+// debug/runWithServer.mts), so the Usage line above works as written now. The
+// wait stays — it is exactly as useful against a hand-started `npm run dev`.
 async function waitForPort(url: string, deadlineMs: number) {
     const m = url.match(/:(\d+)/);
     const port = m ? parseInt(m[1], 10) : 80;

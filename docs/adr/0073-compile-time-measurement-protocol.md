@@ -4,6 +4,21 @@
 **Status:** Accepted
 **Scope:** `debug/measure-pt-compile.mts`, `debug/measure-pt-switches.mts`, `engine-gmt/engine/CompileScheduler.ts` (instrumentation), `docs/policy/shader-compile-optimization.md`
 
+> **Update 2026-08-02 (`runWithServer.mts` no longer dies on Windows; decision unchanged):**
+> the Consequences bullet below says the scripts are "Windows-pinned in one
+> respect: `debug/runWithServer.mts` dies with `spawn EINVAL`, so they wait for
+> an externally-started `npm run dev`". That was true and is now fixed — grep
+> `spawnCmd` in `debug/runWithServer.mts`. Three defects were repaired in the
+> cycle-13 guard sweep: the `npx.cmd` + `shell: false` spawn that Node's
+> CVE-2024-27980 hardening rejects, a `waitForPort` probe on `127.0.0.1` against
+> a vite that binds `::1`, and an async `taskkill` that never ran because
+> `process.exit()` beat it (which orphaned the server). `npm run smoke:with-server
+> -- npx tsx debug/measure-pt-compile.mts` works now, and the wrapper propagates
+> the inner command's exit code verbatim. **The measurement protocol itself is
+> unchanged** — cold/warm discipline, the cache pitfalls and the `localhost` vs
+> `127.0.0.1` note all still apply, and the harnesses' own `ENGINE_URL` defaults
+> are untouched, so hand-starting `npm run dev` remains equally valid.
+
 ## Context
 
 PT shader cold compiles run ~10–20s (D3D11/ANGLE). A multi-session effort to cut
