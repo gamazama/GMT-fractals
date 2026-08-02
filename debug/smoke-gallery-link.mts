@@ -25,6 +25,25 @@
  * NOTE: page.evaluate / waitForFunction bodies are strings on purpose —
  * tsx/esbuild adds a `__name` helper to named inner functions that the
  * browser eval context doesn't have.
+ *
+ * WHAT THE "[loaded]" BLOCK CAN AND CANNOT SEE (guard sweep, batch 9b,
+ * 2026-08-02). It could not see the load at all. Deleting the terminal
+ * `loadScene({ preset })` from engine-gmt/gallery/loadGalleryScene.ts — the last
+ * step of the flow this header diagrams — left the smoke at exit 0 with its
+ * full "PASSED" banner. Both of its assertions were satisfied by the editor's
+ * own boot state: app-gmt boots on Mandelbulb and so does this GMF, and
+ * "iterations is a number" is true of the default 16. The one discriminating
+ * quantity, 16 → 2, was PRINTED in that same line and asserted only for its
+ * type. Fixed by snapshotting the store before the remix and pinning
+ * coreMath.iterations to the value the GMF declares; falsified both ways.
+ *
+ * KNOWN, DELIBERATE SKIP: a build without VITE_SUPABASE_* disables the gallery,
+ * and this smoke then prints "⊘ gallery not configured" and exits 0 having
+ * asserted nothing. That is intentional (a fresh checkout is not a regression)
+ * but it is the sweep's fifth failure mode by construction — including as a
+ * member of `smoke:all`, where the ⊘ is one line in a 40-smoke log. If you need
+ * this path to be load-bearing in CI, make that skip a distinct exit code; that
+ * is a product call, queued in PROPOSALS.md rather than taken here.
  */
 import { chromium, type Route } from 'playwright';
 import { readFileSync } from 'fs';
@@ -62,6 +81,23 @@ async function main() {
     const gmf = readFileSync(GMF_PATH, 'utf8');
     const formulaMatch = gmf.match(/"formula"\s*:\s*"([^"]+)"/);
     const expectedFormula = formulaMatch ? formulaMatch[1] : 'Mandelbulb';
+
+    // A value the EDITOR'S DEFAULTS CANNOT PRODUCE. The formula check below
+    // cannot carry this block on its own: app-gmt boots on Mandelbulb, and so
+    // does this GMF, so `formula === expectedFormula` is true whether or not the
+    // remix load ever ran. Measured 2026-08-02 — with `loadScene({ preset })`
+    // removed from loadGalleryScene.ts the whole smoke printed its success
+    // banner at exit 0.
+    //
+    // This GMF declares "iterations" twice: 16 in its `defaultPreset` block
+    // (which is also app-gmt's boot value) and 2 in the SCENE's own
+    // `features.coreMath` at the end of the file. The scene's is the one a load
+    // must produce, hence the LAST match. If that structure ever changes the
+    // parse does not silently degrade — the discriminating-fixture assertion
+    // below fails and prints both numbers.
+    const iterMatches = [...gmf.matchAll(/"iterations"\s*:\s*(-?\d+)/g)];
+    const expectedIterations = iterMatches.length
+        ? Number(iterMatches[iterMatches.length - 1][1]) : NaN;
 
     const item = {
         id: 'smoke-gallery-1', slug: SLUG, title: 'Smoke Test Scene',
@@ -127,6 +163,15 @@ async function main() {
         process.exit(0);
     }
 
+    // Snapshot the editor BEFORE the remix so "the scene loaded" can be told
+    // apart from "the editor was already like that".
+    const before = await page.evaluate(`(function(){
+        var s = window.__store.getState();
+        return { formula: s.formula, iterations: s.coreMath && s.coreMath.iterations };
+    })()`) as { formula: string; iterations: number };
+    ok(Number.isFinite(expectedIterations) && expectedIterations !== before.iterations,
+        `fixture discriminates: the GMF's coreMath.iterations (${expectedIterations}) differs from the editor's pre-remix value (${before.iterations})`);
+
     let lightboxShown = true;
     try {
         await page.locator('button:has-text("Open & Remix")').first()
@@ -174,6 +219,13 @@ async function main() {
     })()`) as any;
     ok(loaded.formula === expectedFormula, `formula loaded from the GMF (${expectedFormula}, got ${loaded.formula})`);
     ok(loaded.hasCoreMath && typeof loaded.iterations === 'number', `coreMath hydrated (iterations=${loaded.iterations})`);
+    // The two above are both satisfied by an editor that loaded nothing. These
+    // two are not: the first proves the remix MOVED the store, the second proves
+    // it moved it to the value this GMF declares.
+    ok(loaded.iterations !== before.iterations,
+        `the remix changed the editor's state (coreMath.iterations ${before.iterations} → ${loaded.iterations})`);
+    ok(loaded.iterations === expectedIterations,
+        `coreMath.iterations came from the GMF (expected ${expectedIterations}, got ${loaded.iterations})`);
 
     ok(errors.length === 0, `no page/console errors across the gallery flow (${errors.length})`);
     if (errors.length) console.log('  errors:\n    ' + errors.join('\n    '));
