@@ -3,9 +3,45 @@
 Nothing here has been applied. Each entry gives the claim, the evidence, the
 options and a recommendation, so you can decide without re-reading the code.
 
+> ## Staleness pass — 2026-08-02
+>
+> The backlog accumulated over 13 cycles and later cycles resolved some of what
+> earlier ones escalated. Every one of the **56** severity-tagged sections (11 HIGH,
+> 28 MEDIUM, 17 LOW) was re-checked against the code it names — by grep or by
+> reading the file, not by assuming.
+>
+> **10 now carry a closing block. 46 are still open — 2 of those are half-closed.**
+>
+> Closed sections carry a dated `> **CLOSED …**` block naming the commit. Nothing
+> was deleted — what was once open is worth keeping, and in four cases the *way* it
+> closed differs from the recommendation this file gave, which is itself the record.
+>
+> Closed: share-link aliases (`8f59b143`) · saved-camera delete (`c718d120`) ·
+> `animate-*` (`e6e1a468` + `9c5e49e2` + `595cfe21`) · `smoke:orbit` (`77bd469c`) ·
+> dual contouring (`45c99b58`) · stepped-export audio (`1b053e3b`) ·
+> `smoke:liquify` (`3690d09b`) · ADR-0065/0066 guard filing (`6b3f0601`) ·
+> reflections (owner review, no param move) · non-cubic export bounds (owner
+> review, deferred to mesh-export v2).
+>
+> Partial: the worker-stub captures (measured and masked, `d525c72c`, but the sweep
+> is unapplied) · `check:rule-guards` (blind spot 2 closed by `b574d315`, blind
+> spot 1 open).
+>
+> Also closed outside the 56: all eleven paste-ready ADR corrections (`bf259975`),
+> the systemic guard-citation sweep (`check:rule-guards` now reads zero issues over
+> 22 rules and 90 citations), the cycle-1 ADR-permission item (`1f3cf260`), and
+> cycle 8's `smoke:share-link` open anomaly (already marked, batch-3 housekeeping).
+>
+> Verdicts for the 46 open items: `plans/overnight-audit/TRIAGE-2026-08-02.md`.
+
 ---
 
 ## ⚠️ First: two ADR commits predate your "ADRs are Tier B" ruling
+
+> **CLOSED 2026-08-02 — `1f3cf260`:** the ban was lifted, not worked around. The
+> hook now classifies ADR edits mechanically (additive passes, deletion asks), so
+> both commits are sanctioned retroactively and stay. `PROTOCOL.md` carries the
+> amendment.
 
 You ruled mid-cycle-1 that the run must never edit `docs/adr/**` (the `guard.mjs`
 hook escalates every ADR write to a permission prompt, which stalls an unattended
@@ -135,6 +171,12 @@ rather than the log-aware `p2v` the `move` branch uses.
 
 ## ADR corrections — paste-ready (the run is not permitted to edit `docs/adr/`)
 
+> **CLOSED 2026-08-02 — `bf259975`:** all eleven paste-ready blocks queued across
+> cycles 1–10 were applied by hand on 2026-07-28. Verified: ADRs 0003, 0006, 0014,
+> 0015, 0020, 0022, 0024, 0035, 0038, 0050 and 0051 each carry at least one
+> `> **Update …**` block today. The text below is kept as the record of what was
+> pasted — do not paste it again.
+
 ### ADR-0015 — says Bezier is unsupported on log tracks; it has been supported since the ADR's own subject commit
 
 _(cycle 2)_ ADR-0015 was captured retroactively on 2026-05-20 from
@@ -189,6 +231,14 @@ _(cycle 1, restated here now that ADRs are Tier B — see the LOW item further d
 ---
 
 ## HIGH — Share links silently drop Droste (and one materials param)
+
+> **CLOSED 2026-08-02 — `8f59b143`:** option 1 was taken. Droste's feature
+> `shortId` is now `'ds'` (`engine-gmt/features/droste/index.ts`) and
+> `envMapColorSpace`'s param `shortId` is now `'ev'`
+> (`engine-gmt/features/materials.ts`), each with a comment at the site recording
+> why the *other* side kept the original alias — so old links decode unchanged and
+> merely gain the previously-dropped state, exactly as the wire-format analysis
+> below predicted.
 
 **Files:** `engine-gmt/features/droste/index.ts:27`,
 `engine-gmt/features/drawing/index.ts:42`, `engine-gmt/features/materials.ts`
@@ -671,6 +721,14 @@ Insert under `## Consequences`:
 
 ## MEDIUM — Deleting a saved camera or view is immediate and unrecoverable
 
+> **CLOSED 2026-08-02 — `c718d120`:** none of the three options as written — delete
+> now routes onto the **normal param-undo stack** (not the camera one, and not a
+> toast), wired app-side because `createStateLibrarySlice` deliberately owns no
+> undo. Uses the two-part shape `palette/store/paramUndoBracket.ts` already uses: a
+> registered history provider for `savedCameras` + `activeCameraId`, plus a param
+> transaction bracketing the mutation. Falsified by disabling the bracket — the
+> delete happened and undo no longer restored it.
+
 _(cycle 4 · `components/StateLibraryPanel.tsx:309`)_
 
 The trash button calls `onDelete(snap.id)` straight from `onClick`. Both consumers
@@ -893,6 +951,22 @@ surface.
 
 ## HIGH — Five engine-core modules are permanently bound to the no-op worker stub
 
+> **STILL OPEN, but downgraded 2026-08-02 — `d525c72c`:** the honest caveat below
+> was taken seriously and the second consequence was measured on the running app.
+> `historySlice`'s `engine.resetAccumulation()` on undo **is** dead, but the effect
+> happens anyway through the ordinary param-change path: bracketing a `setCoreMath`
+> in a param transaction, letting accumulation reach 3 and calling `undo()` reverts
+> the value and drops `accumulationCount` 3 → 1. So undo does not leave a stale
+> buffer — masked, not live, which is why nobody has noticed. Recorded as latent
+> rather than harmless: the call site is dead code that *looks* load-bearing, so
+> anyone reasoning about undo's reset semantics from source lands on the wrong
+> mechanism, and removing the redundant path as an optimisation would make this
+> live with no test to catch it. Also scoped correctly while there — the ~20
+> engine-gmt sites are **not** part of this bug (that module's `getProxy()` is a
+> lazy singleton with no `setProxy`, so capture is safe). **The five-capture sweep
+> was not applied, and `loadScene`'s post-boot branch was NOT re-measured** — that
+> half is the one that may be user-visible.
+
 _(cycle 5 · `store/engineStore.ts:29` — proven at runtime)_
 
 `engine-gmt/renderer/install.ts:32` imports `store/engineStore`, so ESM guarantees
@@ -960,6 +1034,19 @@ it was never called at all.
 ---
 
 ## MEDIUM — Every custom `animate-*` utility is undefined in production
+
+> **CLOSED 2026-08-02 — `e6e1a468` + `9c5e49e2` + `595cfe21`:** resolved in three
+> steps, and the net result is closer to option (d) than to the recommended (b).
+> `e6e1a468` defined the keyframes in `index.css` (7 `@keyframes` there today, none
+> before). `9c5e49e2` then removed `animate-slider-entry` **entirely** rather than
+> eyeballing the accordions — which retires the `overflow:hidden` / `max-height`
+> stacking-context concern, the two dead guards in `AutoFeaturePanel.tsx` /
+> `GlobalContextMenu.tsx`, and the `AnchoredMenu` measurement hazard in one move.
+> `595cfe21` dropped bare `animate-fade-in` from 34 sites: at 16ms it was one frame
+> at 60Hz, imperceptible, but it promoted every carrier to its own compositing
+> layer on mount. The directional variants and `pop-in` survive and now resolve in
+> production for the first time — **that is the part that still needs your eyes**,
+> and it is §1 of `MERGE-REVIEW.md`.
 
 _(cycle 5 · `index.css` — confirmed on three independent lines)_
 
@@ -1408,6 +1495,19 @@ actually needs to post before `initWorkerMode`.
 
 ## HIGH — `smoke:orbit` is permanently red, so camera navigation has no working guard
 
+> **CLOSED 2026-08-02 — `77bd469c`:** neither option 1 nor 2 — the assertion was
+> right and so was the code. Headless Chromium falls back to SwiftShader, where one
+> 1200×800 path-trace sample after the gesture settles costs **13.2–15.2 s**
+> measured over 6 clean trials, against an 8 s poll window. Only
+> `ACCUM_TIMEOUT_MS` changed; **no assertion was touched**, so nothing was silenced.
+> Falsified in both directions after the fix — gating out `absorbOrbitPosition`
+> reds assertion 1, forcing `holdActive` true reds assertion 2. The manual
+> orbit-and-release check this item asked of you is **no longer needed**. One
+> caveat now recorded in `navigation.md`: a green `smoke:orbit` still does not
+> prove anything was *rendered* — `accumulationCount` comes from the band scheduler
+> outside `RenderPipeline.render()`, so a hard `return` at the top of `render()`
+> leaves it exit 0 and faster.
+
 _(cycle 7 · `debug/smoke-orbit.mts:87`)_
 
 `smoke:orbit` is the **only** browser guard that drives a real camera gesture
@@ -1458,6 +1558,17 @@ is independent of which option you pick.
 ---
 
 ## The guard-citation problem is now systemic — worth one deliberate sweep
+
+> **CLOSED 2026-08-02 — `e293fb28` + the cycle-13 guard sweep:** the sweep was done
+> properly, and the script this section wished for exists —
+> `npm run check:rule-guards` (`debug/check-rule-guards.mjs`) parses each rule's
+> `paths:` frontmatter and Guards block, resolves each cited script to the entry
+> points its `ENGINE_URL` actually serves, and reports any that cannot reach the
+> rule's scoped files. **It reads zero issues today**: 22 rules, 90 guard citations
+> resolved, with only 2 static-analyser citations correctly flagged as
+> not-import-checkable. Every row in the table below was repaired. One structural
+> gap remains and is tracked separately — see cycle 11's `check:rule-guards` item,
+> blind spot 1.
 
 Six instances across seven cycles, and cycle 7 produced the worst case yet:
 **every one of the seven guards** `.claude/rules/navigation.md` listed is
@@ -1522,6 +1633,16 @@ fail if a cited smoke's entry point cannot reach any scoped path.
 
 ## HIGH — A non-cubic export box silently produces distorted geometry
 
+> **DECIDED 2026-07-28 (owner review) — see "DEFERRED — Per-axis export bounds"
+> further down:** confirmed real, deferred to the v2 mesh-export integration. The
+> reason is worth carrying: it is **not** the one-line `float` → `vec3` change this
+> section implies — `voxelSize` derives from the uniform and is consumed as a
+> scalar in a dozen places (SDF magnitude, contour thresholds, the Newton solve's
+> `uVoxelSize`), and with non-cubic voxels an SDF distance is still isotropic in
+> world space, so the threshold needs a defensible scalar rather than a per-axis
+> one. Combined with `mesh-export/` having no runtime guard, nothing would catch a
+> wrong fix. Recorded as `@bug PRODUCTION:` at the uniform declaration.
+
 _(cycle 8 · `mesh-export/gpu/gpu-pipeline.ts:275`)_
 
 The GPU SDF sampler has a **single scalar** `uBoundsRange` used for all three
@@ -1575,6 +1696,16 @@ on the shader block stating that the sampled region is a cube of side
 ---
 
 ## MEDIUM — Dual contouring is corner-sampled; the GPU is cell-centred
+
+> **CLOSED 2026-08-02 — `45c99b58`:** fixed. `gridToWorld` is cell-centred and
+> `worldToGrid` is its exact inverse (`* N - 0.5`). The owner's call on 2026-07-28
+> was that meshes should be accurate to the SDF they were sampled from — so future
+> exports change size, and anything exported before this is one voxel larger.
+> The guard-first design paid off exactly as intended: `test:mesh-grid` had pinned
+> the wrong behaviour with instructions to flip assertions 3–4, it fired on the
+> fix, and it was flipped and strengthened in the same commit (six sample indices
+> instead of two endpoints, and it now distinguishes a corner-sampled regression
+> from an unrecognised third convention). Falsified both ways.
 
 _(cycle 8 · `mesh-export/algorithms/dc-core.ts:120` — confirmed by probe, deliberately NOT fixed)_
 
@@ -1805,6 +1936,16 @@ the GLSL).
 
 ## MEDIUM — Export with Step > 1 desyncs audio from the first second
 
+> **CLOSED 2026-08-02 — `1b053e3b`:** none of the four options — the owner changed
+> what Step *means* instead of compensating downstream. The encoder now runs at
+> `timelineFps / frameStep`, so a stepped export keeps its real-world duration and
+> Step becomes what it is for: a cheaper preview, fewer frames, same timing. The
+> full-length audio then lines up by construction — no time-compression (no pitch
+> shift), no truncation (no dropped tail), nothing to warn about. Applied to
+> fluid-toy's runner too, so Step does not mean two different things in two apps.
+> The `@bug PRODUCTION:` marker on `mixAudioClipsForExport` was replaced with an
+> invariant recording why being `frameStep`-agnostic is now correct.
+
 _(cycle 9 · `engine/animation/audioExportMix.ts:20`)_
 
 The export pump renders `totalFrames = floor((end − start) / frameStep) + 1`
@@ -1938,6 +2079,18 @@ Insert directly under the `# ADR-0051: …` heading:
 # Cycle 10 — final cycle
 
 ## HIGH — Reflection settings have no visible home in the app
+
+> **CLOSED 2026-07-28 (owner review) — see "CORRECTED — Reflections" further down:**
+> the finding was overstated, not merely resolved. `reflectionMode` and
+> `bounceShadows` are driven by the **Quality dropdown** via
+> `SUBSYSTEM_REFLECTIONS` in `engine-gmt/types/viewport.ts`; `steps` and
+> `accurateColors` are already reachable in the Shader Compiler panel. The proposed
+> fix would also have been broken — the five non-mode params carry
+> `condition: { param: 'reflectionMode' }` and `reflectionMode` is compile-gated, so
+> they would have landed in a panel with no way to reveal them. **Outcome: no param
+> move.** What remains is cosmetic and still true today: the dead
+> `groupFilter: 'shading'` item at `engine-gmt/panels.ts:356` renders a stray group
+> description with nothing beneath it. One-line deletion whenever someone passes.
 
 _(cycle 10 · `engine-gmt/panels.ts:337` — observed in the browser, marked with `@bug PRODUCTION:`, fix is yours)_
 
@@ -2262,6 +2415,12 @@ commits, 0 Tier V (nothing needed the verifier step this cycle), 5 Tier B below.
 
 ## HIGH — `smoke:liquify` fails ~23% of runs on an unmodified tree
 
+> **CLOSED 2026-08-02 — `3690d09b`:** option (a), on a quiet tree during the guard
+> sweep. Ported both mechanisms from the healthy sibling
+> `smoke-gx-geom-handles.mts` — dep-optimize retry loop and Vite dual-instance
+> detector — and replaced the fixed waits with settle-polling. Escalation to (b)
+> was not needed: the blank physics frame was timing, not a liquify divergence.
+
 _(cycle 11 · `debug/smoke-gx-liquify-render.mts`)_
 
 3 failures in 13 consecutive runs at HEAD, at **three different assertions** —
@@ -2293,6 +2452,19 @@ flakiness **is** now recorded in `.claude/rules/sibling-apps.md` so a red run is
 misread as a regression in the meantime.
 
 ## MEDIUM — `check:rule-guards` has two structural blind spots, both proved by falsification
+
+> **PARTIALLY CLOSED 2026-08-02 — `b574d315` + `debe4c53`:** recommendation (c) was
+> taken and blind spot 2 is gone. `entriesForFile` (grep it in
+> `debug/check-rule-guards.mjs`) now resolves a chained script to the **union** of
+> its members' reachable sets, so `test:palette`'s sixteen links and `smoke:all`'s
+> 42 members all resolve instead of only the first. The false 5th issue is gone and
+> the checker reads 0 issues over 22 rules / 90 citations.
+>
+> **Blind spot 1 is still open.** `parseRule` still regexes every `npm run X` in a
+> rule file into one flat list and matches it against the rule's entire `paths:`
+> set, so in a multi-app rule any guard touching any one app still satisfies every
+> row. Recommendation (b) — parse guards per table row / per section heading — was
+> not attempted. Read the rest of this section for blind spot 1 only.
 
 _(cycle 11 · `debug/check-rule-guards.mjs`)_
 
@@ -2328,6 +2500,13 @@ false-positive class — **then (b)**, which is what actually closes blind spot 
 Nothing in the checker was changed; only `sibling-apps.md` now states the limitation.
 
 ## MEDIUM — the only ADR-0065/0066 guard in the repo is filed under the wrong subsystem
+
+> **CLOSED 2026-08-02 — `6b3f0601`:** better than option (a). Rather than adding a
+> second citation to `gmt-formulas-and-graph.md`, the sweep gave deep zoom **its
+> own rule** — `.claude/rules/deep-zoom.md`, which did not exist before and which
+> the run-2 notes flagged as a rule-orphaned subsystem. It cites
+> `smoke:gx-fractal-glitch` as its slow renderer and names it as the only one of
+> the four that actually renders. `check:rule-guards` resolves it cleanly.
 
 _(cycle 11 · `debug/smoke-gx-fractal-glitch.mts`)_
 
