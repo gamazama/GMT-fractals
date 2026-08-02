@@ -103,6 +103,24 @@ function parseRule(name) {
     return { name, paths, guards };
 }
 
+/**
+ * Import-graph entries for ONE harness file. A browser smoke's real subject is
+ * whatever its URL serves, so it resolves to that app's entry points; a node
+ * harness resolves to itself. Returns [] when the URL maps to no known app,
+ * which is how a member of a composite is skipped without sinking the whole
+ * union (an `unknown-url` is still reported for single-file scripts below).
+ */
+function entriesForFile(file, cmd) {
+    const src = rd(file);
+    const envM = cmd.match(/ENGINE_URL=(\S+)/);
+    const url = envM?.[1]
+        ?? src.match(/ENGINE_URL\s*\|\|\s*['"]([^'"]+)['"]/)?.[1]
+        ?? src.match(/['"](https?:\/\/localhost:\d+[^'"]*)['"]/)?.[1];
+    if (!url) return [file];
+    const app = appForUrl(url);
+    return app ? APP_ENTRYPOINTS[app] : [];
+}
+
 /** Resolve a guard to an import-graph entry, or explain why it has none. */
 function entryFor(script, seen = new Set()) {
     const cmd = pkg.scripts?.[script];
@@ -129,6 +147,28 @@ function entryFor(script, seen = new Set()) {
         }
         if (entries.size) {
             return { kind: 'node', entries: [...entries], file: `${script} (${members.length} members)` };
+        }
+        return { kind: 'opaque', cmd };
+    }
+
+    // A DIRECT-FILE COMPOSITE — `tsx debug/a.mts && tsx debug/b.mts` — has no
+    // `npm run` for the branch above to find, so the single-file regex below
+    // matched only the FIRST filename and the other members were invisible.
+    // `smoke:all` is 42 members and resolved to member 1; `test:palette` is 16
+    // and resolved to member 1, which is why a `test:palette` citation could
+    // never reach debug/test-liquify-mesh.mts (batch 9 recorded that as a known
+    // blind spot and could not fix it from where it stood). Wrong in both
+    // directions: it invents miscitations for guards that DO reach the files,
+    // and it waves through a citation verified against 1/42 of the real reach.
+    // Same treatment as the `npm run` case — the union of the members.
+    const fileMs = [...new Set(
+        [...cmd.matchAll(/([\w./-]+\.(?:mts|mjs|ts|js))/g)].map((m) => m[1].replace(/^\.\//, '')),
+    )].filter((f) => tracked.has(f));
+    if (fileMs.length > 1) {
+        const entries = new Set();
+        for (const f of fileMs) for (const e of entriesForFile(f, cmd)) entries.add(e);
+        if (entries.size) {
+            return { kind: 'node', entries: [...entries], file: `${script} (${fileMs.length} members)` };
         }
         return { kind: 'opaque', cmd };
     }
