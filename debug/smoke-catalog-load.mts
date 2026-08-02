@@ -9,14 +9,22 @@
  * Covers both the DEC path (source from cached dec.json, sync) and the frag
  * path (source fetched from public/formulas/frag/, async).
  *
- * Requires app-gmt dev server. ENGINE_URL overrides (default :5173/app-gmt.html).
+ * Requires app-gmt dev server. ENGINE_URL overrides (default :3400/app-gmt.html, the port vite.config.ts pins).
  */
 import { chromium } from 'playwright';
 import * as fs from 'fs';
+import * as path from 'path';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:5173/app-gmt.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 
-const dec = JSON.parse(fs.readFileSync('h:/GMT/workspace-gmt/dev/public/formulas/dec.json', 'utf8'));
+// Repo-relative, NOT an absolute path. This read used to point at
+// h:/GMT/workspace-gmt/dev/public/formulas/dec.json — the `dev/` split that was
+// retired on 2026-06-17 and no longer exists on disk — so this smoke had been
+// dying at import time with ENOENT ever since, on any machine and at any port.
+// It was invisible because it has no npm script of its own and `smoke:all`,
+// the only thing that names it, short-circuits three members earlier.
+const DEC_PATH = path.resolve(import.meta.dirname, '../public/formulas/dec.json');
+const dec = JSON.parse(fs.readFileSync(DEC_PATH, 'utf8'));
 const decEntry = dec.find((d: any) => d.id === 'fractal_de8') ?? dec[0];
 const decToken = (decEntry.code as string).split('\n').map(s => s.trim()).find(s => s.length > 12) ?? 'float';
 

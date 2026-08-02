@@ -6,11 +6,11 @@
  * TEST 2 — no-work-clean: with NO meaningful edit (default template untouched),
  *   close + reopen → source is the default template, not a stale draft.
  *
- * Requires app-gmt dev server. ENGINE_URL overrides (default :5173/app-gmt.html).
+ * Requires app-gmt dev server. ENGINE_URL overrides (default :3400/app-gmt.html, the port vite.config.ts pins).
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:5173/app-gmt.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 const MARKER = 'float de(vec3 p){ return length(p)-0.654321; }';
 
 async function main() {

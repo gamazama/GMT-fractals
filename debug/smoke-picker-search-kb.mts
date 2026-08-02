@@ -4,11 +4,11 @@
  * shortcuts controller (engine/plugins/Shortcuts, window keydown).
  *
  * Uses the Workshop Frag browse picker (catalog-only) as the test surface.
- * Requires app-gmt dev server. ENGINE_URL overrides (default :5173/app-gmt.html).
+ * Requires app-gmt dev server. ENGINE_URL overrides (default :3400/app-gmt.html, the port vite.config.ts pins).
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:5173/app-gmt.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 
 async function main() {
     const browser = await chromium.launch();
@@ -87,15 +87,29 @@ async function main() {
         const shell = document.querySelector('.formula-picker-shell');
         return !!shell && shell.querySelectorAll('img').length >= 1;
     }, null, { timeout: 10000 }).catch(() => {});
+    // The section header used to read "Catalog — opens in Workshop"; the
+    // picker now labels it `Catalog (N)` (FormulaPicker.tsx, grep
+    // `catalogSearchHits.length > 0`). That copy is gone from the whole repo —
+    // grep "opens in Workshop" returns nothing outside this file — so the old
+    // matcher had become a dead citation and this smoke reported "no catalog
+    // results section" while the section was on screen with 15 thumbnails in
+    // it. Corrected 2026-08-02 to match the live label AND to read the count
+    // out of it, which is strictly more than the old string proved: an empty
+    // `catalogSearchHits` unmounts the pane entirely, so a zero result cannot
+    // satisfy this the way a bare "the header exists" check could.
     const searchProbe = await page.evaluate(() => {
         const shell = document.querySelector('.formula-picker-shell');
-        if (!shell) return { catalogLabel: false, imgs: 0 };
-        const hasCatalogLabel = Array.from(shell.querySelectorAll('div')).some(d => /Catalog\s*—\s*opens in Workshop/i.test(d.textContent || ''));
-        const imgs = shell.querySelectorAll('img').length;
-        return { catalogLabel: hasCatalogLabel, imgs };
+        if (!shell) return { catalogCount: -1, imgs: 0 };
+        let catalogCount = -1;
+        for (const d of Array.from(shell.querySelectorAll('div'))) {
+            const m = /^Catalog\s*\((\d+)\)$/.exec((d.textContent || '').trim());
+            if (m) { catalogCount = Number(m[1]); break; }
+        }
+        return { catalogCount, imgs: shell.querySelectorAll('img').length };
     });
-    console.log(`search 'bulb' → catalog section: ${searchProbe.catalogLabel}, thumbnail <img>: ${searchProbe.imgs}`);
-    if (!searchProbe.catalogLabel) { console.log('FAIL: no catalog results section for "bulb"'); pass = false; }
+    console.log(`search 'bulb' → catalog section: ${searchProbe.catalogCount >= 0 ? `Catalog (${searchProbe.catalogCount})` : 'ABSENT'}, thumbnail <img>: ${searchProbe.imgs}`);
+    if (searchProbe.catalogCount < 0) { console.log('FAIL: no catalog results section for "bulb"'); pass = false; }
+    else if (searchProbe.catalogCount < 1) { console.log(`FAIL: catalog results section is empty (${searchProbe.catalogCount} hits) for "bulb"`); pass = false; }
     if (searchProbe.imgs < 1) { console.log('FAIL: no catalog thumbnails in search results'); pass = false; }
 
     await page.evaluate(() => (window as any).__shortcuts.unregister('__kbtest'));

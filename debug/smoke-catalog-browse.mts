@@ -3,11 +3,11 @@
  * the Fragmentarium source link in the header + thumbnail cards, and picking a
  * card loads it into the editor.
  *
- * Requires app-gmt dev server. ENGINE_URL overrides (default :5173/app-gmt.html).
+ * Requires app-gmt dev server. ENGINE_URL overrides (default :3400/app-gmt.html, the port vite.config.ts pins).
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:5173/app-gmt.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 
 async function main() {
     const browser = await chromium.launch();
