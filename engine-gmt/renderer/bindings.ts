@@ -89,9 +89,18 @@ export const bindGmtRenderer = (): (() => void) => {
         const s = useEngineStore.getState() as {
             setIsBucketRendering?: (v: boolean) => void;
             setIsExporting?: (v: boolean) => void;
+            setActiveRenderSampleCap?: (v: number | null) => void;
         };
         s.setIsBucketRendering?.(data.isRendering);
         s.setIsExporting?.(data.isRendering);
+        // Release the topbar's sample readout on the FALSE edge only. Whoever
+        // claimed it (the bucket panel, the export runner) sets the number; this
+        // is the belt-and-braces release so an abort or a crash cannot strand the
+        // topbar reporting a render budget with no render behind it. Deliberately
+        // NOT set on the true edge: the export runner emits BUCKET_STATUS true
+        // once per FRAME, so writing a cap here would overwrite the export's own
+        // budget with the bucket slider's value on every frame.
+        if (!data.isRendering) s.setActiveRenderSampleCap?.(null);
     }));
 
     return () => { unsubs.forEach((u) => u()); };

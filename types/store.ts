@@ -111,6 +111,16 @@ export interface EngineStoreState extends FeatureStateMap {
   
   isPaused: boolean;         // Manual pause
   sampleCap: number;         // Stop accumulation after N samples (0 = infinite)
+  /** Sample budget of the render that currently OWNS the accumulator — a video /
+   *  image-sequence export's per-frame samples, or a bucket render's
+   *  samplesPerBucket. `null` whenever the viewport owns it, which is the normal
+   *  case. Read it instead of `sampleCap` when showing render progress: during an
+   *  export `accumulationCount` counts the EXPORT's samples, so pairing it with
+   *  the viewport's `sampleCap` produced readouts like "2000 / 512 samples".
+   *  A generic seam on purpose — engine-core's topbar must not know what a GMT
+   *  video export is. Whoever takes the accumulator sets it and clears it in a
+   *  `finally`. */
+  activeRenderSampleCap: number | null;
   accumulationCount: number; // Current sample count reported by the render loop
   
   isUserInteracting: boolean; // Global flag for slider/gizmo interaction
@@ -323,6 +333,8 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setRenderMode: (v: 'Direct' | 'PathTracing') => void;
     setIsPaused: (v: boolean) => void;
     setSampleCap: (v: number) => void;
+    /** See `activeRenderSampleCap`. Pass null to hand the readout back to the viewport. */
+    setActiveRenderSampleCap: (v: number | null) => void;
     reportAccumulation: (count: number) => void;
     
     setIsBucketRendering: (v: boolean) => void;

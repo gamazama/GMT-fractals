@@ -247,6 +247,11 @@ const runImageSequenceExport = async (
     const passLabels = passesToExport.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' + ');
 
     try {
+        // Hand the topbar this render's sample budget. `accumulationCount` is one
+        // shared channel, so while the export owns the accumulator the topbar was
+        // counting EXPORT samples against the VIEWPORT's Auto-Stop cap. Cleared in
+        // the finally below — see activeRenderSampleCap in types/store.ts.
+        useEngineStore.getState().setActiveRenderSampleCap(cfg.vidSamples ?? null);
         status.setProgress(0);
         status.setElapsedTime(0);
         status.setEtaRange({ min: 0, max: 0 });
@@ -297,6 +302,7 @@ const runImageSequenceExport = async (
         alert(`Image sequence export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
         status.setIsRendering(false);
+        useEngineStore.getState().setActiveRenderSampleCap(null);
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
 
         animationEngine.scrub(savedFrame);
@@ -351,6 +357,11 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
     let ramFileCount = 0; // RAM-mode downloads written, for the completion toast
 
     try {
+        // Hand the topbar this render's sample budget. `accumulationCount` is one
+        // shared channel, so while the export owns the accumulator the topbar was
+        // counting EXPORT samples against the VIEWPORT's Auto-Stop cap. Cleared in
+        // the finally below — see activeRenderSampleCap in types/store.ts.
+        useEngineStore.getState().setActiveRenderSampleCap(cfg.vidSamples ?? null);
         for (let p = 0; p < passesToExport.length; p++) {
             if (flags.cancelledRef.current) break;
 
@@ -496,6 +507,7 @@ export const runVideoExport: RenderDialogRunner<AppGmtExtra> = async (pluginDeps
         alert(`Export failed.\n\nError: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
         status.setIsRendering(false);
+        useEngineStore.getState().setActiveRenderSampleCap(null);
         FractalEvents.emit(FRACTAL_EVENTS.BUCKET_STATUS, { isRendering: false, progress: 0 });
 
         animationEngine.scrub(savedFrame);

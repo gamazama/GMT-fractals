@@ -33,14 +33,24 @@ export const PauseControls: React.FC = () => {
     const accumCount     = useEngineStore((s) => s.accumulationCount);
     const setIsPaused    = useEngineStore((s) => s.setIsPaused);
     const setSampleCap   = useEngineStore((s) => s.setSampleCap);
+    // Sample budget of whichever render owns the accumulator. Non-null only while
+    // an export / bucket render is running; see the field's JSDoc in types/store.ts.
+    const renderCap      = useEngineStore((s) => s.activeRenderSampleCap);
 
     const isGlobalInteraction = useEngineStore(selectIsGlobalInteraction);
     const isCameraInteracting = useAnimationStore((s) => s.isCameraInteracting);
     const isScrubbing         = useAnimationStore((s) => s.isScrubbing);
     const isEffectivePaused   = isPaused && !isCameraInteracting && !isGlobalInteraction && !isScrubbing;
 
-    const progress = sampleCap > 0 ? Math.min(1, accumCount / sampleCap) : 0;
-    const isDone   = sampleCap > 0 && accumCount >= sampleCap;
+    // Show the budget of the render that is actually producing the samples being
+    // counted. `accumulationCount` is a single shared channel — during an export
+    // it carries the EXPORT's samples — so pairing it with the viewport's
+    // `sampleCap` read as e.g. "2000 / 512 samples" and pegged the bar. Reported
+    // from production 2026-08-31.
+    const isRenderCap  = renderCap !== null && renderCap > 0;
+    const effectiveCap = isRenderCap ? renderCap! : sampleCap;
+    const progress = effectiveCap > 0 ? Math.min(1, accumCount / effectiveCap) : 0;
+    const isDone   = effectiveCap > 0 && accumCount >= effectiveCap;
 
     const [showMenu, setShowMenu] = useState(false);
     const hoverTimeout = useRef<number | null>(null);
@@ -101,13 +111,18 @@ export const PauseControls: React.FC = () => {
                         onChange={setSampleCap}
                         overrideInputText={sampleCap === 0 ? 'Infinite' : sampleCap.toFixed(0)}
                     />
-                    {sampleCap > 0 && (
+                    {effectiveCap > 0 && (
                         <div className="text-[8px] text-fg-dim text-center mt-1.5">
-                            {accumCount} / {sampleCap} samples
+                            {accumCount} / {effectiveCap} samples
                             {isDone && <span className="text-ok ml-1">✓ done</span>}
                         </div>
                     )}
-                    {sampleCap === 0 && (
+                    {isRenderCap && (
+                        <div className="text-[8px] text-fg-faint text-center mt-1">
+                            render budget — the slider above applies to the viewport
+                        </div>
+                    )}
+                    {!isRenderCap && sampleCap === 0 && (
                         <div className="text-[8px] text-fg-faint text-center mt-1">0 = never stop</div>
                     )}
                 </Popover>

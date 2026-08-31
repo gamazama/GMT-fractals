@@ -396,6 +396,15 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
     // Suppress adaptive resolution only while a bucket render is in flight —
     // not for the popover lifecycle. Prevents the open/close adaptive-resize
     // bounce from resetting the viewport accumulator.
+    // Hand the topbar this render's per-bucket sample budget so its progress bar
+    // measures the bucket render instead of the viewport's Auto-Stop cap — the
+    // same shared-`accumulationCount` problem the export path has. Cleared by
+    // stopBucketRender / the BUCKET_STATUS false binding. See
+    // `activeRenderSampleCap` in types/store.ts.
+    const claimSampleReadout = () => {
+        state.setActiveRenderSampleCap?.(state.samplesPerBucket || null);
+    };
+
     const suppressAdaptiveForRender = () => {
         if (!didSuppressAdaptiveRef.current) {
             state.setAdaptiveSuppressed(true);
@@ -406,6 +415,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
     const handleStartRefine = () => withRenderAction(() => {
         clearPreviewForRender();
         suppressAdaptiveForRender();
+        claimSampleReadout();
         // Refine View is always a single-tile render at viewport resolution.
         controller.startBucketRender(false, {
             bucketSize: state.bucketSize,
@@ -421,6 +431,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
     const handleExport = () => withRenderAction(() => {
         clearPreviewForRender();
         suppressAdaptiveForRender();
+        claimSampleReadout();
         controller.startBucketRender(true, {
             bucketSize: state.bucketSize,
             outputWidth,

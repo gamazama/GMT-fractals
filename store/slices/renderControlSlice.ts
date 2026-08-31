@@ -29,13 +29,13 @@ export type RenderControlSlice = Pick<EngineStoreState,
     'isExporting' | 'adaptiveSuppressed' | 'renderRegion' | 'previewRegion' |
     'isBucketRendering' | 'bucketSize' |
     'outputWidth' | 'outputHeight' | 'tileCols' | 'tileRows' | 'matchViewportAspect' |
-    'isPaused' | 'sampleCap' | 'accumulationCount' | 'samplesPerBucket'
+    'isPaused' | 'sampleCap' | 'accumulationCount' | 'samplesPerBucket' | 'activeRenderSampleCap'
 > & Pick<EngineActions,
     'setAALevel' | 'setMSAASamples' | 'setAAMode' | 'setAccumulation' | 'setPreviewMode' | 'setRenderMode' |
     'setIsExporting' | 'setAdaptiveSuppressed' | 'setRenderRegion' | 'setPreviewRegion' |
     'setIsBucketRendering' | 'setBucketSize' |
     'setOutputWidth' | 'setOutputHeight' | 'setTileCols' | 'setTileRows' | 'setMatchViewportAspect' |
-    'setIsPaused' | 'setSampleCap' | 'reportAccumulation' | 'setSamplesPerBucket'
+    'setIsPaused' | 'setSampleCap' | 'reportAccumulation' | 'setSamplesPerBucket' | 'setActiveRenderSampleCap'
 >;
 
 export const createRenderControlSlice: StateCreator<
@@ -55,6 +55,7 @@ export const createRenderControlSlice: StateCreator<
     isPaused: false,
     sampleCap: 64,
     accumulationCount: 0,
+    activeRenderSampleCap: null,
 
     isExporting: false,
     adaptiveSuppressed: false,
@@ -104,6 +105,7 @@ export const createRenderControlSlice: StateCreator<
     setRenderMode: (v) => set({ renderMode: v }),
     setIsPaused: (v) => set({ isPaused: v }),
     setSampleCap: (v) => set({ sampleCap: v }),
+    setActiveRenderSampleCap: (v) => set({ activeRenderSampleCap: v }),
     reportAccumulation: (count) => {
         if (get().accumulationCount === count) return;
         set({ accumulationCount: count });
