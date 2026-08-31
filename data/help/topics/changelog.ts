@@ -37,6 +37,25 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
+## 0.9.8.2 — Repairs
+> September 1, 2026
+
+A maintenance release. Most of it is a codebase-wide audit you will never see, but it turned up real defects along the way — several worth knowing about if you have older scenes, exported meshes, or shared links.
+
+- **Older scenes no longer break the Camera Manager.** Loading a scene saved before late April and opening the panel took the whole app down, losing unsaved work. Those cameras load properly now.
+- **Mesh exports were half a voxel off.** Every \`.vdb\` GMT has written was shifted half a cell against its fractal. Re-export anything that needs to line up precisely with other geometry.
+- **Share links were dropping Droste settings and the Environment Profile.** Two features were competing for the same slot. Existing links open exactly as before; new ones carry both.
+- **Video export used the wrong frame rate when frame step was set.** Rendering every 2nd frame now plays at half rate, as it should.
+- **Mirror reflections no longer show hard stair-stepped edges.** Bright highlights on polished curved surfaces broke into 2-pixel steps that never smoothed out however long you accumulated. The grey band down the seam of reflected environment maps is gone too.
+- **New: Reflection Filtering** (Engine settings, off by default) calms reflection shimmer while you navigate. It adds about 1.5s to shader compile and changes little in a finished still, so it is opt-in.
+- **Restarting an image sequence mid-timeline numbers the files correctly.** Starting at frame 690 saved them from \`00000\`, and a second run could overwrite the first.
+- **The sample progress bar shows the right total during a render** instead of counting against the viewport's limit and sitting at 100%.
+- **The Audio panel no longer halves your frame rate** when it is open with audio running.
+- **Panel and menu animations work again** — they were defined in a file the built app never loaded. Sliders and switches deliberately stay instant.
+- **Undo keeps audio clips**, the FPS remap keeps your decks, a crashed export reports instead of hanging, and a blank-named saved camera can be renamed again.
+
+---
+
 ## 0.9.8.1 — Audio modulation
 > July 25, 2026
 

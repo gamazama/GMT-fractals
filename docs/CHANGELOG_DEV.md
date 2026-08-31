@@ -1,6 +1,137 @@
-# GMT Development Changelog (v0.9.6 dev)
+# GMT Development Changelog
 
-Chronological log of significant changes during the v0.9.6 development cycle (engine-extraction trunk; merges to `main` once stable).
+Chronological log of significant changes, newest first. Began with the v0.9.6
+engine-extraction cycle and continues past it. User-facing release notes live in
+[`docs/releases/`](releases/); this file is the engineering record.
+
+## 2026-09-01
+
+### Mirror reflections had hard stair-stepped edges
+
+**User-facing**
+- Reflections on polished, curved surfaces showed **hard 2-pixel stepping along bright highlights** — visible at any resolution, and it did not go away no matter how long a render accumulated. Fixed. Reported from a production render; the reporting scene now renders clean.
+- The same fix removes a 2-pixel band of flat grey that ran down the seam of every mirrored environment map.
+
+**Where**
+- [`engine-gmt/shaders/chunks/lighting/env.ts`](../engine-gmt/shaders/chunks/lighting/env.ts) — `sampleEnvBicubic`'s four taps fetched with `texture()`, i.e. **implicit derivative-selected LOD**, on a mipmapped env texture. Its tap coordinates `c0`/`c1` jump **+0.8 texels at every base-texel boundary** while the sample coordinate moves ~0: the Sigg & Hadwiger construction keeps the *result* continuous through compensating `g0`/`g1` weights, not the *coordinates*. The hardware read that saw-tooth as its minification estimate — about 2.4 mips of LOD noise, quantised to 2×2 quads. Taps now use `textureLod(..., 0.0)`, which is what the function's header comment always claimed. The equirect seam is the same cause: `atan` wraps, the derivative saturates, the LOD pins to the top mip.
+- Two measurements pinned it: a quad is 2 device pixels wide at **any** resolution (matching the artifact, and ruling out anything geometry- or epsilon-driven), and `uJitter` translates the whole UV field per frame so it never changes the *difference* between neighbouring pixels — every accumulated sample repeated the same wrong quad-level decision.
+- The near-base branch runs far more often than intended: its gate is `roughness * uEnvMaxMip < 1`, a **roughness** test with no pixel footprint in it, so it fires on every near-mirror reflection — the maximally *minified* case, not the magnified one the filter was written for (`c56da07e`, 2026-07-10). Left as-is and recorded as an `@assumption`; harmless now the taps are explicit-LOD.
+- Cost: **0.04% GPU time per draw** and **no measurable compile cost** (mean −28ms, SEM 224, t=−0.13). Both measured, not estimated.
+- New guard [`debug/test-env-sampling.mts`](../debug/test-env-sampling.mts) (`npm run test:env-sampling`) — the chunk behind every sky and reflection pixel had no text-level guard at all. `typecheck` cannot see inside a GLSL string and `test:shader` only proves the program *compiles*; an implicit-LOD fetch compiles perfectly and renders wrong.
+- [`docs/adr/0069`](adr/0069-env-reflection-blur-texturelod.md) and [`0072`](adr/0072-camera-blur-sky-softening.md) carry dated update blocks.
+
+### Optional footprint filtering for reflections (off by default)
+
+**User-facing**
+- New **Reflection Filtering** checkbox in Engine settings, **off by default**. It filters the environment map by how fast the reflection sweeps across a surface, which reduces shimmer on thin highlights while you orbit. It costs about **1.5 seconds of extra shader compile**, and on a fully-accumulated still the difference is very small — so it is opt-in, aimed at the live preview.
+
+**Where**
+- [`engine-gmt/shaders/chunks/lighting/env.ts`](../engine-gmt/shaders/chunks/lighting/env.ts) — `envConeLod` converts an angular cone into the equirect texel span it covers and returns the mip that filters it; the sample takes `max(roughness * uEnvMaxMip, envConeLod(...))`. This closes the minification term ADR-0069 deferred in June, without giving up the single `textureLod` fetch that ADR chose.
+- The cone comes from **curvature, not pixel size**: `reflect()` doubles the normal's rate of change, so the pixel's own angular size (0.0017 rad on the reporting scene) contributes LOD 0.00 and the term only bites past ~0.002 rad of normal change per pixel. Measured directly by re-estimating the normal one pixel-footprint along the surface and taking `|Δn|` — no Laplacian, because fractal DEs are Lipschitz bounds rather than true SDFs, and no screen-space derivatives, because `calculateShading` runs inside `if (hit)` where `fwidth` is undefined at every silhouette.
+- `g_envConeAngle` is a global rather than a parameter because `sampleMiss` is *generated* in `ShaderBuilder.buildMissHandler` and reached through `sampleMissEnvPre` — and it is the dominant env sample for a mirror. Same pattern as `g_missSelfFogCover` in the same generated function.
+- [`engine-gmt/features/reflections/index.ts`](../engine-gmt/features/reflections/index.ts) — the `coneAA` compile gate. **OFF emits byte-identical source** to the pre-feature build, verified against the pushed tree; same contract `test:refine` enforces for `enableRefine`.
+- A probe render painting the pixels where the cone term wins lights up thin high-curvature creases and ridges and nothing else — the intended target.
+- Compile cost **+1541ms** (SEM 119, t=12.9, 95% CI 1249–1832), paired over 7 interleaved cold reps. That is why it defaults off.
+
+### Compile-cost measurement was unreliable below one second
+
+**Where**
+- [`docs/policy/shader-compile-optimization.md`](policy/shader-compile-optimization.md) §5.2.1 — the policy already warned that the cold-compile noise floor is ~1s. A median of 3 runs sits under it and misled in **both directions**: it invented +407ms for a change that costs nothing, and understated a real +1541ms by 40%. Two independent 7-rep runs of the same zero-cost change gave median deltas of +175ms and **−284ms**. The fix is interleaved paired reps with a fresh process per compile, reported as mean difference with SEM and a t-test — that drops the SEM to ~120–220ms.
+- Also recorded there: **`npm run bench:shader` does not pass `--disable-gpu-shader-disk-cache`**, so the `compileTiming` it prints can come back warm. It is a runtime benchmark; compile numbers cannot be read off it.
+
+### The GPU shader benchmark had been broken
+
+**Where**
+- [`debug/bench-shader.mts`](../debug/bench-shader.mts) — a diagnostic line still read `MB3D_FAITHFUL` and `presetApplied.appliedMb3dFaithful`, neither of which exists since ADR-0092 made the MB3D-faithful step *the* marcher and removed the toggle. Every run threw a `ReferenceError` after capturing the shader and before measuring anything, so `bench:shader` produced no timings at all.
+
+---
+
+## 2026-08-31
+
+### Image-sequence renders renumbered from zero when restarted mid-timeline
+
+**User-facing**
+- Restarting a render at frame 690 saved the files as `00000`, `00001`… instead of `00690`, `00691`… Worse, two runs over different ranges produced the **same filenames**, so the second silently overwrote the first in the same folder. Frame files are now named by their timeline frame.
+
+**Where**
+- [`engine-gmt/engine/worker/exportFrameNaming.ts`](../engine-gmt/engine/worker/exportFrameNaming.ts) — new, extracted so a node harness can reach the mapping (`WorkerExporter` imports THREE + mediabunny and is unreachable from node).
+- [`engine-gmt/engine/worker/WorkerExporter.ts`](../engine-gmt/engine/worker/WorkerExporter.ts) — `exportRunner` already computed `startFrame + i * frameStep` and then discarded it, passing the pass index `i` instead. Not fixed at the call site: `i` is correct for the progress percentage and for the video muxer's frame timestamps, and changing it there would desync the container. Naming is the only consumer that wants the timeline frame, so the mapping lives at the naming site and all five filename cases read one variable.
+- [`debug/test-export-naming.mts`](../debug/test-export-naming.mts) (`npm run test:export-naming`) — 9 assertions; falsified by replacing the mapping body with `return frameIndex`, which reds 7 of 9 while a range starting at 0 stays green as a control.
+
+### Sample progress showed the viewport's budget during a render
+
+**User-facing**
+- During a hi-res or video render the topbar play/pause progress bar counted the render's samples against the **viewport's** Auto-Stop cap — a 2000-sample render against a 512 cap read "2000 / 512" with the bar pegged at 100% almost immediately. It now shows the render's own budget, and says which one it is showing.
+
+**Where**
+- `accumulationCount` is one shared channel: `GmtRendererTickDriver` pushes the worker's count into the store every reporting window with no export gate. Fixed with a seam rather than by teaching the topbar about exports — [`engine/plugins/topbar/PauseControls.tsx`](../engine/plugins/topbar/PauseControls.tsx) is engine-core and must not know what a GMT video export is, so whichever render owns the accumulator publishes its budget as the generic `activeRenderSampleCap` ([`types/store.ts`](../types/store.ts), [`store/slices/renderControlSlice.ts`](../store/slices/renderControlSlice.ts)).
+- Claimed by [`RenderPopup/exportRunner.ts`](../engine-gmt/components/timeline/RenderPopup/exportRunner.ts) and [`BucketRenderPanel.tsx`](../engine/plugins/topbar/BucketRenderPanel.tsx); released on the false edge of `BUCKET_STATUS` in [`engine-gmt/renderer/bindings.ts`](../engine-gmt/renderer/bindings.ts), since export emits a true status once per frame.
+
+### The audio panel halved the frame rate
+
+**User-facing**
+- GMT ran at ~30fps with the window focused and ~60fps unfocused whenever the **Audio panel was open with audio running**. Both panels now update at a fixed 30fps and the level readout only re-renders when the value actually changes, so the render loop keeps its slot.
+
+**Where**
+- The 30/60 split was the diagnosis: 30 is exactly half of 60, so frames were missing the vsync deadline rather than the renderer being slow — and unfocused being *faster* only makes sense if the cost is main-thread rAF work the browser stops servicing. Rendering is in a worker and held its rate throughout.
+- [`engine/features/audioMod/AudioSpectrum.tsx`](../engine/features/audioMod/AudioSpectrum.tsx) — the draw was unthrottled, a full canvas repaint every frame whose expensive part is a `save`/`clip`/`fillText`/`restore` **per modulation rule**. Now capped at 30fps.
+- [`engine/features/audioMod/AudioPanel.tsx`](../engine/features/audioMod/AudioPanel.tsx) — the peak readout called `setPeak` with a fresh float every frame, so React re-rendered the panel at 60Hz for a two-decimal number. Quantised to 0.01 and skipped when unchanged.
+
+---
+
+## 2026-08-02
+
+### Audit backlog triage
+
+Documentation and planning only; no shipping behaviour changed except the one item below.
+
+**Where**
+- [`plans/overnight-audit/PROPOSALS.md`](../plans/overnight-audit/PROPOSALS.md) — staleness pass over 56 proposals; 10 had already been closed by later work and are now marked in place with dated blocks.
+- [`plans/overnight-audit/TRIAGE-2026-08-02.md`](../plans/overnight-audit/TRIAGE-2026-08-02.md) — the 46 genuinely-open items sorted into 11 do-now / 30 do-later / 5 won't-do.
+- [`index.css`](../index.css) — an `@invariant` claiming "46 call sites across 36 components" and "7 expected keyframes" was wrong on every number (actual: 16 sites, 10 files, 6 keyframes). Corrected, and `.animate-fade-in` marked `@stale` — it has zero call sites left.
+- [`plans/overnight-audit/MERGE-REVIEW.md`](../plans/overnight-audit/MERGE-REVIEW.md) — contained a literal NUL byte, which made ripgrep classify the file as **binary from line 1485** and skip it, hiding 26 of its 62 sections from every grep.
+
+---
+
+## 2026-07-27 – 2026-07-29
+
+### Overnight code audit
+
+252 commits over three days. The great majority are documentation, greppable annotations and guard work: **22 new path-scoped rule files**, 10 new guard scripts, and a sweep that audited 33 of 33 subsystems and deliberately broke **all 76 existing guard scripts** to see which ones went red. **44 did not.** The dominant defect was not "no test exists" but *a test that could not fail* — most often green because its input had vanished. The shipping surface is small by comparison: roughly **529 lines of real logic across ~62 files**, against 1,868 lines of comments and JSDoc added.
+
+The bug fixes below are the reason the merge is worth doing. Each has a commit naming its verification.
+
+**User-facing**
+- **Loading an old scene, then opening the Camera Manager, destroyed the session.** Pre-2026-04-25 scene files carry flat-shaped `savedCameras` with no migration; opening the panel unmounted the entire React root — white screen, frames frozen, unsaved work gone. (There is no `ErrorBoundary` anywhere in the codebase, which is why any render throw is fatal.)
+- **Every `.vdb` GMT has ever exported was translated half a voxel off.** Corner-sampled where it should have been centre-sampled.
+- **Droste settings and Env Profile were silently dropped from every share link.** `drawing` and `droste` both claimed `shortId: 'dr'`, and one overwrote the other; same for `'ec'`. Existing links are unaffected — they never carried this state, which was the bug — and now round-trip it.
+- **Video export wrote the wrong frame rate whenever frame-step was in use.** Stepping every Nth frame means the output plays at `fps/N`; it was writing the unstepped rate. *This changes exported video timing.*
+- **Undo dropped audio clips**, and the FPS remap lost decks.
+- **A worker crash during export left the export hanging forever** instead of failing.
+- **A saved camera with a blank label could never be renamed.** An empty span is `display: block`, generates no line box, collapses to height 0, and `elementFromPoint` at its centre returns the parent — so the double-click had no target. Blanks were reachable and persisted into saved scenes.
+
+**Where**
+- [`engine-gmt/store/cameraSlice.ts`](../engine-gmt/store/cameraSlice.ts), [`engine-gmt/types/fractal.ts`](../engine-gmt/types/fractal.ts), [`components/StateLibraryPanel.tsx`](../components/StateLibraryPanel.tsx) — flat rows migrate to `{ id, label, thumbnail, createdAt, state }` at load. Verified by driving the real load path with a real filechooser and a real 2026-04-15 file, plus a control run with a modern row proving the shape was responsible. Note `state` widened to `Record<string, any>` — deliberate, since old rows carry arbitrary keys, but a real loosening.
+- [`mesh-export/algorithms/dc-core.ts`](../mesh-export/algorithms/dc-core.ts), [`vdb-writer.ts`](../mesh-export/algorithms/vdb-writer.ts) — `gridMin + (gx / (N - 1)) * range` → `gridMin + ((gx + 0.5) / N) * range`. The guard (`test:mesh-grid`) was written **before** the fix, failed on both translation rows with the exact diagnosis, then passed — and found one row where it expected two, independently confirming a de-duplication.
+- [`engine-gmt/features/droste/index.ts`](../engine-gmt/features/droste/index.ts) (`'dr'`→`'ds'`), [`engine-gmt/features/materials.ts`](../engine-gmt/features/materials.ts) (`'ec'`→`'ev'`), [`engine/FeatureSystem.ts`](../engine/FeatureSystem.ts) — which now **throws** on a duplicate feature or param `shortId` at registration, so a third collision fails loudly instead of silently dropping state.
+- [`RenderPopup/exportRunner.ts`](../engine-gmt/components/timeline/RenderPopup/exportRunner.ts) and [`fluid-toy/components/RenderDialog/exportRunner.ts`](../fluid-toy/components/RenderDialog/exportRunner.ts) — `fps: cfg.fps` → `fps: cfg.fps / Math.max(1, cfg.frameStep)`.
+- [`store/animation/sequenceSlice.ts`](../store/animation/sequenceSlice.ts), [`playbackSlice.ts`](../store/animation/playbackSlice.ts) — `audioClips` deep-copied into the undo entry.
+- [`engine-gmt/engine/worker/WorkerProxy.ts`](../engine-gmt/engine/worker/WorkerProxy.ts), [`WorkerDepthReadback.ts`](../engine-gmt/engine/worker/WorkerDepthReadback.ts) — export promises gained a rejection path; also handles `gl.WAIT_FAILED` on the depth fence and a `HalfFloatType` readback branch.
+- [`components/CategoryPickerMenu.tsx`](../components/CategoryPickerMenu.tsx) — a React key separator was a raw `0x00`, which made ripgrep treat the file as binary and skip it, hiding it from the entire first audit pass.
+
+**New failure paths worth knowing about** — each makes previously-silent corruption loud, and each can in principle throw where nothing threw before: duplicate `shortId` registration ([`engine/FeatureSystem.ts`](../engine/FeatureSystem.ts)); a z-index tier intersecting the reserved 200–299 panel headroom ([`components/ui/zIndex.ts`](../components/ui/zIndex.ts)); `RenderPipeline` disposing `_compileTarget` when its texture type no longer matches.
+
+### UI animations now actually run — needs a visual pass before merge
+
+**User-facing**
+- The seven `@keyframes` behind every `animate-*` class existed **only inside `demo.html`'s inline `<style>`**, so in the deployed app every one of those classes resolved to nothing. Porting them into `index.css` makes a lot of previously-inert animation start firing: menus, popovers, toasts, the formula picker, the shader-compiler badge, the LFO list, the render dialog.
+- Per the 2026-07-28 product call, inputs should *not* animate in, so `animate-slider-entry` was removed from all six input components and `animate-fade-in` from ~18 other call sites.
+
+**Where**
+- [`index.css`](../index.css), [`demo.html`](../demo.html), plus ~24 files with a class removal each. `GlobalContextMenu` also lost a `[&_.animate-slider-entry]:!animate-none` override that was cancelling an animation which no longer exists.
+- **This is the one change in the branch that a test cannot judge.** The audit deliberately added no screenshot-baseline smokes. Boot the app, open some panels and menus, and decide whether the surviving animations are the ones you want; anything that feels wrong is a class removal in one file, not a redesign.
+
+---
 
 ## 2026-06-01
 
