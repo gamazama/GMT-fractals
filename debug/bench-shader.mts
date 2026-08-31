@@ -735,8 +735,13 @@ async function captureLiveSnapshot(): Promise<Snapshot> {
     if (VOLUMETRIC !== null) {
         console.log(`[bench-shader] volumetric diag: applied=${JSON.stringify({ pt: presetApplied.appliedPtVolumetric, runtime: presetApplied.appliedVolEnabled, density: presetApplied.appliedVolDensity, emissive: presetApplied.appliedVolEmissive, lights: presetApplied.appliedVolLights })}`);
     }
-    if (MB3D_FAITHFUL !== null || MB3D_STEPDIV !== null || MB3D_DESUB !== null) {
-        console.log(`[bench-shader] mb3d-faithful diag: applied=${JSON.stringify({ faithful: presetApplied.appliedMb3dFaithful, stepDiv: presetApplied.appliedMb3dStepDiv, deSub: presetApplied.appliedMb3dDesub })}`);
+    // No `faithful` flag any more: ADR-0092 made the MB3D-faithful step THE
+    // marcher and deleted the toggle. This line still read MB3D_FAITHFUL and
+    // presetApplied.appliedMb3dFaithful, neither of which exists — a
+    // ReferenceError that aborted EVERY bench-shader run before the timing
+    // phase. Fixed 2026-08-31.
+    if (MB3D_STEPDIV !== null || MB3D_DESUB !== null) {
+        console.log(`[bench-shader] mb3d diag: applied=${JSON.stringify({ stepDiv: presetApplied.appliedMb3dStepDiv, deSub: presetApplied.appliedMb3dDesub })}`);
     }
     if (!presetApplied.ok) {
         console.log(`[bench-shader] WARNING: ${presetApplied.reason} — using whatever state the engine had`);
