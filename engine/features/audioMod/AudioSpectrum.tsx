@@ -89,8 +89,25 @@ export const AudioSpectrum: React.FC = () => {
         if (!ctx) return;
 
         let rafId = 0;
+        // Draw budget. This canvas shares the main thread with the render loop's
+        // tick driver, and it used to redraw EVERY frame — with a save/clip/
+        // fillText/restore per modulation rule, which is the expensive part. With
+        // the audio panel open and audio running that was enough to push GMT from
+        // 60fps to 30 (owner-reported 2026-08-31: "~30fps focused, ~60fps
+        // unfocused" — unfocused is faster precisely because the browser stops
+        // servicing rAF, which is the tell that this loop is the cost).
+        //
+        // 30Hz is well above what a level display needs to read as continuous, and
+        // skipping alternate frames hands those back to the renderer. The rAF is
+        // kept (rather than a setInterval) so the draw still lands inside a frame
+        // and stops when the tab is hidden.
+        const DRAW_INTERVAL_MS = 1000 / 30;
+        let lastDrawMs = 0;
 
-        const draw = () => {
+        const draw = (nowMs?: number) => {
+            const t = nowMs ?? performance.now();
+            if (t - lastDrawMs < DRAW_INTERVAL_MS) { rafId = requestAnimationFrame(draw); return; }
+            lastDrawMs = t;
             if (!audioState?.isEnabled) {
                 cancelAnimationFrame(rafId);
                 return;
@@ -231,7 +248,7 @@ export const AudioSpectrum: React.FC = () => {
 
             rafId = requestAnimationFrame(draw);
         };
-        
+
         draw();
         return () => cancelAnimationFrame(rafId);
     }, [rules, selectedId, bandsPerOctave, audioState?.isEnabled]);

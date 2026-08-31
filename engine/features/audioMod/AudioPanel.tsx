@@ -181,7 +181,20 @@ const LiveInputControls: React.FC = () => {
             raf = requestAnimationFrame(loop);
             if (t - last < 50) return;   // 20 Hz is plenty for a meter
             last = t;
-            setPeak(audioAnalysisEngine.getPeakLevel());
+            // Quantise before writing to React state. The 20Hz gate above bounds
+            // how OFTEN we sample, but a raw float from a live input changes on
+            // essentially every sample, so this used to re-render the whole panel
+            // subtree 20×/sec — a real main-thread cost next to the render loop,
+            // and half of why GMT dropped to 30fps with the audio panel open
+            // (owner-reported 2026-08-31; the other half was AudioSpectrum's
+            // unthrottled draw).
+            //
+            // 1/100 is finer than the meter can show (it drives a scaleX) and
+            // preserves both derived thresholds exactly — `hot` at 0.98 and
+            // `quiet` at 0.15 are both on the quantisation grid. Steady or silent
+            // input now costs zero re-renders instead of 20/sec.
+            const next = Math.round(audioAnalysisEngine.getPeakLevel() * 100) / 100;
+            setPeak((prev) => (prev === next ? prev : next));
         };
         raf = requestAnimationFrame(loop);
         return () => cancelAnimationFrame(raf);
