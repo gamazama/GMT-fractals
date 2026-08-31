@@ -6,6 +6,7 @@
  */
 
 import * as THREE from 'three';
+import { exportFrameFileTag } from './exportFrameNaming';
 import type { FractalEngine } from '../FractalEngine';
 import type { VideoExportConfig, ExportPass } from '../../../engine/codec/VideoExportTypes';
 import type { EngineRenderState } from '../FractalEngine';
@@ -550,7 +551,21 @@ export class WorkerExporter {
     private async writeFrameFiles(sess: ExportSession, frameIndex: number, passBuffers: Map<ExportPass, Uint8Array>) {
         if (!sess.dirHandle) return;
         try {
-            const frameNum = String(frameIndex).padStart(5, '0');
+            // Name files by the TIMELINE frame, not the pass index.
+            //
+            // `frameIndex` is the 0-based position within this export run — correct
+            // for the progress percentage and for the video muxer's frame
+            // timestamps, and deliberately left alone there. But it is the wrong
+            // number to stamp on a file: a render restarted at frame 690 wrote
+            // frame_00000 onward, so the numbering silently disagreed with the
+            // timeline and a re-run over a different range OVERWROTE the earlier
+            // files in the same directory. Reported from production 2026-08-31.
+            //
+            // The session already carries the range (see `start()`, which derives
+            // totalFrames from exactly these two), so this needs no new wire field.
+            const frameNum = exportFrameFileTag(
+                frameIndex, sess.config.startFrame, sess.config.frameStep,
+            );
             const base = sess.config.imageSequenceBaseName || 'frame';
             const ext = sess.formatDef.ext;
             const mime = sess.formatDef.mime;

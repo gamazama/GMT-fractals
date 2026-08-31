@@ -86,6 +86,7 @@
     "test:compat": "tsx debug/test-compat.mts",
     "test:compat:write": "tsx debug/test-compat.mts --write",
     "test:dither": "tsx debug/test-dither.mts",
+    "test:export-naming": "tsx debug/test-export-naming.mts",
     "test:fft": "tsx debug/test-fft.mts",
     "test:filterbank": "tsx debug/test-filterbank.mts",
     "test:frag": "tsx debug/test-frag-importer.mts",
