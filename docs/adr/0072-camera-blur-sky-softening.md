@@ -14,6 +14,24 @@
 **Status:** Accepted
 **Scope:** `engine-gmt/shaders/chunks/main.ts` (Direct background), `engine-gmt/shaders/chunks/pathtracer.ts` (PT bounce-0 sky)
 
+> **Update 2026-08-31 (bicubic taps must be explicit-LOD; decision unchanged):** the
+> 4-tap bicubic base filter named at the end of the 2026-07-10 update fetched with
+> `texture()` — implicit, derivative-selected LOD — on a MIPMAPPED env texture. Its
+> tap coordinates c0/c1 jump +0.8 texels at every base-texel boundary: the Sigg &
+> Hadwiger construction keeps the RESULT continuous through compensating g0/g1
+> weights, not the coordinates. The hardware read that saw-tooth as its
+> minification estimate — about 2.4 mips of LOD noise, quantised to 2x2 quads.
+> Owner reported it 2026-08-31 as hard stair-stepped edges in mirror reflections;
+> it also produced a 2px band of flat average colour along the equirect seam, where
+> `atan` wraps and the derivative saturates. Taps now use `textureLod(..., 0.0)`,
+> which is what this filter's header comment always claimed it did. Measured cost
+> on the reporting scene: 0.04% of GPU time per draw, smaller than the spread
+> between two runs of the same build (`bench:shader` A/B on d3d11, branch proven
+> live by a magenta canary). Note also that the gate `lod < 1` is a ROUGHNESS test
+> carrying no pixel footprint, so it fires on near-mirror reflections — the
+> maximally MINIFIED case, not the magnified one this filter targets. That is
+> recorded as an @assumption in `npm run test:env-sampling`, which guards the taps.
+
 ## Context
 
 Camera blur is thin-lens DoF via stochastic aperture jitter on the camera ray

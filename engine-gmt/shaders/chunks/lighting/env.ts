@@ -16,6 +16,13 @@ vec3 proceduralSunDir() { return normalize(vec3(1.0, 4.0, 2.0)); }
 // plain bilinear shows diamond-shaped texel artifacts; the B-spline smooths
 // them into clean gradients. Only used in the near-base regime (lod < 1) —
 // mip-blurred lookups stay single-tap trilinear.
+//
+// NOTE the gate  lod < 1  is  roughness * uEnvMaxMip < 1  — a ROUGHNESS test,
+// not a magnification test; it carries no pixel footprint. So it also fires on
+// every near-mirror reflection (roughness < ~0.08-0.1), which is the maximally
+// MINIFIED case, not the magnified one this filter was written for. Harmless
+// only because the taps below are explicit-LOD. @see docs/adr/0072 (update
+// 2026-08-31) and docs/adr/0069 (the minification term still missing).
 vec3 sampleEnvBicubic(vec2 uv) {
     vec2 ts = vec2(textureSize(uEnvMapTexture, 0));
     vec2 coord = uv * ts - 0.5;
@@ -32,12 +39,23 @@ vec3 sampleEnvBicubic(vec2 uv) {
     // Each tap lands between two texels so the hardware bilinear does the
     // inner interpolation; +0.5 centres on texels. Horizontal wrap comes from
     // the sampler (wrapS = Repeat on env textures — the equirect seam).
+    //
+    // c0/c1 are DELIBERATELY DISCONTINUOUS in uv: at every base-texel boundary
+    // both jump by +0.8 texels while coord moves ~0 (w1/g0 steps 1.0 -> 0.8 as
+    // ix advances). The B-spline RESULT stays continuous because g0/g1 step
+    // compensatingly — but a derivative taken from these COORDINATES does not.
+    // Hence textureLod below, never texture(): an implicit-LOD fetch hands the
+    // hardware that 0.8-texel saw-tooth as its minification estimate, which on
+    // a mirror is ~2.4 mips of LOD noise quantised to 2x2 quads — the hard
+    // stair-stepped reflection edges reported 2026-08-31.
+    // @invariant the four taps request LOD 0 explicitly — proven by:
+    //   npm run test:env-sampling  ("bicubic taps carry an explicit LOD")
     vec2 c0 = (ix - 1.0 + w1 / g0 + 0.5) / ts;
     vec2 c1 = (ix + 1.0 + w3 / g1 + 0.5) / ts;
-    return texture(uEnvMapTexture, vec2(c0.x, c0.y)).rgb * (g0.x * g0.y)
-         + texture(uEnvMapTexture, vec2(c1.x, c0.y)).rgb * (g1.x * g0.y)
-         + texture(uEnvMapTexture, vec2(c0.x, c1.y)).rgb * (g0.x * g1.y)
-         + texture(uEnvMapTexture, vec2(c1.x, c1.y)).rgb * (g1.x * g1.y);
+    return textureLod(uEnvMapTexture, vec2(c0.x, c0.y), 0.0).rgb * (g0.x * g0.y)
+         + textureLod(uEnvMapTexture, vec2(c1.x, c0.y), 0.0).rgb * (g1.x * g0.y)
+         + textureLod(uEnvMapTexture, vec2(c0.x, c1.y), 0.0).rgb * (g0.x * g1.y)
+         + textureLod(uEnvMapTexture, vec2(c1.x, c1.y), 0.0).rgb * (g1.x * g1.y);
 }
 
 // Single-site image-path sample. Every GetEnvMap-body instance fxc inlines used

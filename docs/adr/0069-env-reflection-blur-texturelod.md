@@ -21,6 +21,21 @@
 > remains the only path to mid-range (not just top-end) box-mip correction if
 > ever needed.
 
+> **Update 2026-08-31 (minification term still absent; decision unchanged):** the
+> Consequences bullet accepting the loss of derivative minification AA ("not
+> meaningfully lost for env-at-infinity sampling") holds for slowly-varying normals
+> and fails for a near-mirror over high-curvature geometry, where the reflected
+> direction sweeps far per pixel and minification dominates. Owner reported hard
+> stair-stepped mirror reflections. The visible cause turned out to be a SEPARATE
+> defect in the near-base bicubic added 2026-07-10 — see ADR-0072's update of this
+> date — now fixed. This ADR's own tradeoff is untouched: grep `envSampleCore` and
+> the LOD is still `roughness * uEnvMaxMip` with no footprint term, so mirrors are
+> sharp rather than footprint-filtered. Closing that means threading a pixel
+> footprint through `GetEnvMap`, or supplying analytic gradients to `textureGrad`
+> (which keeps LOD selection in fixed function and needs no screen-space
+> derivatives — relevant because `calculateShading` runs inside `if (hit)`, where
+> `fwidth` would be undefined). Deliberately deferred, not forgotten.
+
 ## Context
 
 `GetEnvMap(dir, roughness)` blurred environment reflections by roughness using

@@ -51,6 +51,7 @@ legacy plain sphere step and `uMb3dStepDiv` must never come back), ADR-0093
 
 ```
 npm run test:refine
+npm run test:env-sampling  # env-map sampling contract (ADR-0069 / ADR-0072)
 npm run test:shader        # long — full native config sweep, compiles the real programs
 ```
 
@@ -60,3 +61,13 @@ checks). Falsified 2026-07-29 five ways: forcing `enableRefine` true in `trace.t
 from 8 to 6 in `data/constants.ts` (1 red), and — after a repair, because it did
 not previously fail — making `emitFusedHybrid` return no def (12 red). `test:shader`
 reaches 19 of 21 and actually compiles, so it catches GLSL that merely parses.
+
+`test:env-sampling` reads `chunks/lighting/env.ts` — the chunk behind every sky and
+reflection pixel, and unguarded at the text level until 2026-08-31. It exists because
+`typecheck` cannot see inside a GLSL string and `test:shader` only proves the program
+COMPILES: an implicit-LOD fetch compiles perfectly and renders wrong. That is exactly
+what shipped — `sampleEnvBicubic` fetched with `texture()` on a mipmapped env texture,
+and its deliberately discontinuous tap coordinates became 2x2-quad LOD noise, seen as
+hard stair-stepped mirror reflections. Falsified three ways 2026-08-31, including
+emptying `sampleEnvBicubic`'s body — the "green because the input vanished" case, which
+it catches by proving the four fetches exist before asserting what kind they are.
