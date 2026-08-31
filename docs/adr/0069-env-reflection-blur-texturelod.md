@@ -68,6 +68,30 @@
 > mostly in the UNCONVERGED preview, which a converged A/B cannot show. Guarded by
 > `npm run test:env-sampling` blocks E and F.
 
+> **Update 2026-09-01b (compile cost measured; coneAA now defaults OFF):** the
+> update above quoted only RUNTIME cost. The compile cost was never measured and
+> the param carried an invented `estCompileMs: 150`. Measured cold on d3d11 with
+> the ANGLE shader disk cache disabled, median of 3 fresh browsers per variant:
+> **8620ms off -> 9574ms on, +954ms (+11.1%)**. That is the expected shape — one
+> `GetNormal` is 4 `DE_Dist` inlines, i.e. a whole new DE call site, and
+> `accurateColors` costs 600ms for one. `estCompileMs` corrected to 950.
+>
+> Consequence: **coneAA defaults OFF.** A second of extra compile on every mode
+> toggle is not worth a difference a converged render of the reference scene
+> cannot show. The gate stays, the OFF form stays byte-identical, and anyone who
+> wants it in the live preview can switch it on. Note `bench:shader` does NOT
+> pass `--disable-gpu-shader-disk-cache`, so its own `compileTiming` can come back
+> warm; use the launch args from `measure-direct-costmap.mts` for compile numbers.
+>
+> The cheap version, if this is ever wanted on by default: the tetrahedron
+> `GetNormal` already evaluates the four DE taps whose SUM is the discrete
+> Laplacian (first order cancels — the four tetrahedron offsets sum to zero), so
+> curvature could come out of the existing call for ~free instead of a second
+> one. It needs `getSurfaceMaterial` to emit curvature as an extra out, which
+> touches the path-tracer's single-estimator arrangement (ADR-0075), and the
+> Laplacian-to-curvature step assumes a true SDF where fractal DEs are only
+> Lipschitz bounds. Not attempted; recorded so the option is not rediscovered.
+
 ## Context
 
 `GetEnvMap(dir, roughness)` blurred environment reflections by roughness using

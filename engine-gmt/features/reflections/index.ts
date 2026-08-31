@@ -376,14 +376,20 @@ export const ReflectionsFeature: FeatureDefinition = {
         },
 
         coneAA: {
-            type: 'boolean', default: true, label: 'Reflection Filtering', shortId: 'ca',
+            type: 'boolean', default: false, label: 'Reflection Filtering', shortId: 'ca',
             group: 'engine_settings',
             ui: 'checkbox',
             condition: { param: 'reflectionMode', neq: REFL_MODE_OFF },
-            description: "Filter the environment map by how fast the reflection sweeps across the surface. Without it, mirrors on curved geometry alias bright highlights into hard stair-stepped edges. Costs one extra normal estimate per pixel.",
+            description: "Filter the environment map by how fast the reflection sweeps across the surface, so mirrors on curved geometry stop aliasing bright highlights. Adds ~1s of compile and one extra normal estimate per pixel; the gain is mostly in the live preview, since accumulation already smooths much of it.",
             onUpdate: 'compile',
             noAccumReset: true,
-            estCompileMs: 150
+            // MEASURED cold 2026-09-01, d3d11 with the ANGLE disk cache off,
+            // median of 3 fresh browsers per variant: 8620ms off -> 9574ms on.
+            // One GetNormal = 4 DE_Dist inlines, i.e. a new DE call site — the
+            // same shape of cost as accurateColors' 600ms for one DE() site.
+            // Default OFF because that second of compile buys a difference that
+            // a converged render of the reference scene cannot show.
+            estCompileMs: 950
         },
 
         // Master Switch (Compile Time) — hidden, controlled by engine toggle
@@ -409,7 +415,7 @@ export const ReflectionsFeature: FeatureDefinition = {
 
         if (mode !== REFL_MODE_RAYMARCH) {
             // ENV mode (or legacy SSR=2.0) — Fresnel-weighted env sampling with fog
-            builder.addShadingLogic(reflEnvShading(state.coneAA !== false));
+            builder.addShadingLogic(reflEnvShading(state.coneAA === true));
             return;
         }
 
@@ -427,7 +433,7 @@ export const ReflectionsFeature: FeatureDefinition = {
                 builder.addDefine('REFL_BOUNCE_SHADOWS', '1');
             }
 
-            builder.addShadingLogic(reflRaymarchShading(state.coneAA !== false));
+            builder.addShadingLogic(reflRaymarchShading(state.coneAA === true));
         }
     }
 };
