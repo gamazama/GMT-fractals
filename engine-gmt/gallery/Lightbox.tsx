@@ -113,6 +113,7 @@ export const Lightbox: React.FC<Props> = ({ item, items, loading, loadError, onC
         <Modal
             onClose={onClose}
             z={Z.overlayNested}
+            dismissOnBackdrop
             dismissOnEscape={false}
             backdropClassName="bg-surface backdrop-blur-md"
             className="p-0"

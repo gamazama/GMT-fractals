@@ -120,7 +120,9 @@ export const registerDefaultPresetFields = () => {
                 });
                 set({
                     savedCameras: rows as any,
-                    activeCameraId: rows[0]?.id || null,
+                    // NOT rows[0]: force-selecting camera 1 on load marks the
+                    // slot modified (*Camera 1) against a pose nothing chose.
+                    activeCameraId: null,
                 });
             }
         },

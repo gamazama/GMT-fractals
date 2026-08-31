@@ -957,7 +957,7 @@ function ModalShell({ onClose, children }: { onClose?: () => void; children: Rea
     // stacking (Z.modal — the documented tier for FormulaPicker, replacing the
     // old ad-hoc z-[9998]).
     return (
-        <Modal onClose={() => onClose?.()} z={Z.modal} backdropClassName="bg-black/60 backdrop-blur-sm">
+        <Modal onClose={() => onClose?.()} z={Z.modal} dismissOnBackdrop backdropClassName="bg-black/60 backdrop-blur-sm">
             <div
                 className="formula-picker-shell bg-surface border border-line/10 rounded-lg shadow-[0_20px_60px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col"
                 style={{ width: 'min(760px, 100%)', height: 'min(640px, 100%)' }}

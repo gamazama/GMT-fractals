@@ -745,7 +745,7 @@ export const NewSceneModal: React.FC = () => {
              *  proceed. We don't offer a Save-from-here button — keeps the
              *  flow shallow and avoids re-implementing the existing save UI. */}
             {confirmDiscard && (
-                <Modal onClose={() => setConfirmDiscard(false)} z={Z.modalNested}>
+                <Modal onClose={() => setConfirmDiscard(false)} z={Z.modalNested} dismissOnBackdrop>
                     <div className="bg-surface border border-warn/30 rounded-md shadow-2xl w-[420px] p-4 space-y-3">
                         <h3 className="text-[12px] font-bold text-warn">
                             Discard current scene?

@@ -21,7 +21,10 @@ export interface ModalProps {
     open?: boolean;
     /** Stacking tier. Default Z.modal; pass Z.overlayNested for modal-over-overlay. */
     z?: number;
-    /** Close when the backdrop (not the card) is pressed. Default true. */
+    /** Close when the backdrop (not the card) is pressed. Default FALSE.
+     *  Deliberately opt-in: a stray backdrop click must not discard work. The
+     *  three dialogs that genuinely want it pass `dismissOnBackdrop` explicitly
+     *  (NewSceneModal's discard confirm, FormulaPicker, Lightbox). */
     dismissOnBackdrop?: boolean;
     /** Close on Escape. Default true. */
     dismissOnEscape?: boolean;
@@ -38,7 +41,7 @@ export const Modal: React.FC<ModalProps> = ({
     children,
     open = true,
     z = Z.modal,
-    dismissOnBackdrop = true,
+    dismissOnBackdrop = false,
     dismissOnEscape = true,
     backdropClassName = 'bg-black/70',
     className = 'p-6',

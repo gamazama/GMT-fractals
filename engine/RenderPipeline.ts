@@ -520,11 +520,19 @@ export class RenderPipeline {
         }
     }
     
+    /** Set the sample budget. Does NOT reset accumulation, deliberately.
+     *
+     *  Lowering the cap below the current count used to call resetAccumulation(),
+     *  which threw away a converged buffer once per step while dragging Auto-Stop
+     *  downward. It also contradicted the documented contract at the other end of
+     *  the wire — grep setPreviewSampleCap in installAccumulationBindings.ts:
+     *  "changing the cap mid-render does NOT reset accumulation; if the new cap
+     *  is below the current count, the controller stops adding samples but keeps
+     *  the existing buffer." render() already no-ops once accumulationCount >=
+     *  sampleCap, so the image simply freezes, which is what that comment
+     *  describes and what a user dragging the slider expects. */
     public setSampleCap(cap: number) {
         this.sampleCap = cap;
-        if (cap > 0 && this.accumulationCount > cap) {
-            this.resetAccumulation();
-        }
     }
 
     public getSampleCap(): number {
