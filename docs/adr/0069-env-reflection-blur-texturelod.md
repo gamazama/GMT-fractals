@@ -92,6 +92,20 @@
 > Laplacian-to-curvature step assumes a true SDF where fractal DEs are only
 > Lipschitz bounds. Not attempted; recorded so the option is not rediscovered.
 
+> **Update 2026-09-01c (compile cost re-measured properly; +1541ms, not +954ms):**
+> the 954ms figure above was a median of 3 cold runs, which is below the ~1s
+> noise floor this repo's own compile policy warns about. Re-measured PAIRED over
+> 7 interleaved reps, fresh browser each: mean **+1541ms**, SEM 119, t=12.9, 95%
+> CI 1249..1832 — unambiguously real, and 40% larger than the first estimate.
+> `estCompileMs` corrected 950 -> 1550. The default-OFF decision stands and is
+> now better supported, not weaker.
+>
+> The same re-measurement CLEARED the 2026-08-31 bicubic fix: `texture()` ->
+> `textureLod(..., 0.0)` costs mean -28ms, SEM 224, t=-0.13, CI -576..+520 — no
+> measurable compile cost, as expected for the same four fetches through a
+> different builtin with no new call site. Method and worked numbers are now in
+> docs/policy/shader-compile-optimization.md §5.2.1.
+
 ## Context
 
 `GetEnvMap(dir, roughness)` blurred environment reflections by roughness using

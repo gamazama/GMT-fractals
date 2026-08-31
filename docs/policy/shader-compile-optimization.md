@@ -579,6 +579,41 @@ The methodology the execution sessions run. Built on the diagnostics in §6.
 - **Isolate one switch at a time** (measure-pt-switches): baseline + each gate
   alone. The delta is that gate's marginal cost.
 
+### 5.2.1 Resolving below the 1s noise floor (paired reps)
+
+Added 2026-09-01 after the noise floor above bit twice in one session, in both
+directions. A single cold delta — or a median of three — cannot see a change
+smaller than about a second, and `estCompileMs` values are often in that range.
+
+When you need a number below the floor, **interleave the two variants and pair
+the reps**, one fresh browser process per compile so every repetition is
+genuinely cold (this does not conflict with §5.1's "never average repeats of one
+variant", which is about repeats *within* a process hitting the program cache).
+Then report the mean paired difference with its SEM and a t-test, not medians.
+
+Two worked results from that session, same machine, same hour:
+
+| change | median of 3 | paired, n=7 | verdict |
+|---|---|---|---|
+| bicubic `texture()` -> `textureLod(...,0.0)` | +407ms | mean **-28ms**, SEM 224, t=-0.13, CI -576..+520 | no cost |
+| reflections `coneAA` (one extra `GetNormal`) | +954ms | mean **+1541ms**, SEM 119, t=12.9, CI 1249..1832 | real |
+
+The median-of-3 was wrong both times: it invented +407ms for a change that costs
+nothing, and understated a real +1541ms by 40%. Two independent 7-rep runs of the
+first change gave median deltas of +175ms and **-284ms** — opposite signs, which
+is what a true zero looks like at this noise level. Pairing collapsed the SEM to
+~120-220ms, which is what makes sub-second effects legible at all.
+
+Harness pattern: the launch args from `debug/measure-direct-costmap.mts`
+(`--use-angle=d3d11 --disable-gpu-shader-disk-cache` + the throttling
+suppressors), and the compile+link+`LINK_STATUS` timing from
+`shader-bench.html` — the status query MUST be inside the timed region, since
+ANGLE defers HLSL translation until then.
+
+Note `npm run bench:shader` does **not** pass `--disable-gpu-shader-disk-cache`,
+so the `compileTiming` it prints can come back warm. It is a runtime benchmark;
+do not read compile numbers off it.
+
 ### 5.3 Validate (falsify before believing)
 
 - **Always measure before/after; revert non-wins immediately.** A session-1

@@ -380,16 +380,20 @@ export const ReflectionsFeature: FeatureDefinition = {
             group: 'engine_settings',
             ui: 'checkbox',
             condition: { param: 'reflectionMode', neq: REFL_MODE_OFF },
-            description: "Filter the environment map by how fast the reflection sweeps across the surface, so mirrors on curved geometry stop aliasing bright highlights. Adds ~1s of compile and one extra normal estimate per pixel; the gain is mostly in the live preview, since accumulation already smooths much of it.",
+            description: "Filter the environment map by how fast the reflection sweeps across the surface, so mirrors on curved geometry stop aliasing bright highlights. Adds ~1.5s of compile and one extra normal estimate per pixel; the gain is mostly in the live preview, since accumulation already smooths much of it.",
             onUpdate: 'compile',
             noAccumReset: true,
-            // MEASURED cold 2026-09-01, d3d11 with the ANGLE disk cache off,
-            // median of 3 fresh browsers per variant: 8620ms off -> 9574ms on.
-            // One GetNormal = 4 DE_Dist inlines, i.e. a new DE call site — the
-            // same shape of cost as accurateColors' 600ms for one DE() site.
-            // Default OFF because that second of compile buys a difference that
+            // MEASURED cold 2026-09-01, d3d11 with the ANGLE disk cache off.
+            // PAIRED over 7 interleaved reps, fresh browser each: mean +1541ms,
+            // SEM 119, t=12.9, 95% CI 1249..1832. (A first pass took the median
+            // of 3 and got +954 — 40% low. Compile timing on this box carries
+            // ~±800ms of run-to-run spread, so medians of small samples are not
+            // usable; pair the reps. See docs/policy/shader-compile-optimization.md.)
+            // One GetNormal = 4 DE_Dist inlines, i.e. a whole new DE call site —
+            // more than accurateColors' 600ms for one DE() site, as expected.
+            // Default OFF: 1.5s of compile on every mode toggle buys a difference
             // a converged render of the reference scene cannot show.
-            estCompileMs: 950
+            estCompileMs: 1550
         },
 
         // Master Switch (Compile Time) — hidden, controlled by engine toggle
