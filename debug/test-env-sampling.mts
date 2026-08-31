@@ -24,10 +24,21 @@
  *      claim it is correct — it fires on mirrors, which are minified. See the
  *      @assumption in block D.
  *
- * FALSIFIED 2026-08-31 — each mutation applied, run, reverted, re-run green:
+ * FALSIFIED 2026-08-31 / 2026-09-01 — each mutation applied, run, reverted,
+ * re-run green:
  *   - taps back to `texture(uEnvMapTexture, ...)`       -> 4 red (3 in A, 1 in B)
  *   - `GetEnvMap` passing `baseFilter` through as a var -> 1 red (C)
  *   - `sampleEnvBicubic` body emptied to `return vec3(0.0)` -> 4 red (A)
+ *   - `envConeLod` loses its `coneAngle <= 0` early-out -> 1 red (E)
+ *   - cone LOD unfolded from one uEnvAvgColor branch    -> 2 red (E)
+ *   - `envConeLod` body emptied to `return 0.0`         -> 3 red (E)
+ *   - the coneAA gate ignored, so OFF still emits       -> 8 red (F)
+ *   - `g_envConeAngle = 0.0` reset removed              -> 1 red (F)
+ *
+ * A mutation must stay VALID TypeScript. The first attempt at the "gate ignored"
+ * case produced a syntax error: the run exited 1 having executed no checks at
+ * all, which reads as RED on the exit code while proving nothing about the
+ * guard. Check the named failures, not just the exit status.
  *
  * That third one is the point. "No implicit-LOD fetch present" is VACUOUSLY
  * TRUE when the function is gone — it is the audit's most common guard defect
@@ -37,6 +48,7 @@
  * below must keep that ordering.
  */
 import { LIGHTING_ENV } from '../engine-gmt/shaders/chunks/lighting/env.ts';
+import { reflEnvShading, reflRaymarchShading } from '../engine-gmt/features/reflections/index.ts';
 
 let pass = 0;
 const fails: string[] = [];
@@ -118,6 +130,55 @@ function fetches(body: string, sampler: string) {
     const f = fetches(src, 'uEnvMapTexture');
     ck('B: chunk fetches uEnvMapTexture at all', f.total > 0, f.total);
     ck('B: every uEnvMapTexture fetch in the chunk is explicit-LOD', f.implicit === 0, f);
+}
+
+// ── E. Cone footprint: the minification term ADR-0069 deferred ──────────────
+{
+    const cone = fnBody('float envConeLod');
+    ck('E: envConeLod is present', cone !== null);
+    ck('E: g_envConeAngle is declared at global scope, defaulting to 0',
+       /float g_envConeAngle\s*=\s*0\.0\s*;/.test(src));
+    if (cone) {
+        // Zero must be a true no-op or every non-reflection caller (sky, fog,
+        // ambient IBL) silently changes filter width.
+        ck('E: envConeLod returns 0 for a zero cone', /coneAngle <= 0\.0.*return 0\.0/s.test(cone));
+        ck('E: pole singularity is floored', /max\(sqrt\(max\(0\.0, 1\.0 - dir\.y \* dir\.y\)\), 0\.05\)/.test(cone));
+        ck('E: texel span floored at 1 so magnification cannot go negative', /max\(max\(du, dv\), 1\.0\)/.test(cone));
+    }
+    const core = fnBody('vec3 envSampleCore') || '';
+    // Both uEnvAvgColor branches, or the sentinel path silently loses the term.
+    const folds = (core.match(/envConeLod\(dir, g_envConeAngle\)/g) || []).length;
+    ck('E: cone LOD folded into BOTH uEnvAvgColor branches', folds === 2, folds);
+    ck('E: folded with max(), not replacing the roughness term',
+       core.includes('max(roughness * uEnvMaxMip, envConeLod(dir, g_envConeAngle))'));
+}
+
+// ── F. coneAA compile gate collapses to byte-identical source ───────────────
+{
+    // Same contract test:refine enforces for enableRefine: OFF must emit the
+    // ORIGINAL source, not a disabled branch. Same source => same pixels =>
+    // zero compile cost, and it is what makes the toggle safe to ship default-on.
+    const rayOff = reflRaymarchShading(false), rayOn = reflRaymarchShading(true);
+    const envOff = reflEnvShading(false), envOn = reflEnvShading(true);
+    const MARKERS = ['g_envConeAngle', 'GetNormal(p_ray + t1', 'nOff'];
+
+    // Existence first: prove ON actually emits the thing before asserting OFF lacks it.
+    ck('F: coneAA=true raymarch emits the estimator', MARKERS.every((m) => rayOn.includes(m)), MARKERS.filter((m) => !rayOn.includes(m)));
+    ck('F: coneAA=true env emits the estimator', MARKERS.every((m) => envOn.includes(m)), MARKERS.filter((m) => !envOn.includes(m)));
+    for (const m of MARKERS) {
+        ck(`F: coneAA=false raymarch omits "${m}"`, !rayOff.includes(m));
+        ck(`F: coneAA=false env omits "${m}"`, !envOff.includes(m));
+    }
+    // The global must be released, or a later sky/fog sample inherits a
+    // reflection's filter width for the rest of the pixel.
+    ck('F: coneAA=true raymarch resets the global on exit', rayOn.includes('g_envConeAngle = 0.0;'));
+    ck('F: coneAA=true env resets the global on exit', envOn.includes('g_envConeAngle = 0.0;'));
+    // Collapse must be seamless: the lines the estimator sits between have to
+    // end up adjacent again, exactly as they were before the gate existed.
+    ck('F: coneAA=false raymarch collapses with no seam left behind',
+       rayOff.includes('vec3 currRd = reflDir;\n\n        // ONE fog-radiance sample'));
+    ck('F: coneAA=false env collapses with no seam left behind',
+       envOff.includes('ENVIRONMENT MAP ---\n    vec3 envColor'));
 }
 
 // ── C. baseFilter DCE contract (compile cost) ───────────────────────────────

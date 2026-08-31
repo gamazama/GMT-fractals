@@ -17,11 +17,38 @@ export const REFL_MODE_RAYMARCH = 3.0;  // Full raymarched reflections
 //   reflDir, reflectionLighting (output), stochasticSeed, d, uReflection, uSpecular
 // ---------------------------------------------------------------------------
 
-/** Environment map only — Fresnel-weighted env sampling with fog. Zero extra cost. */
-const REFL_ENV_SHADING = `
-    // --- REFLECTIONS: ENVIRONMENT MAP ---
+/** Environment map only — Fresnel-weighted env sampling with fog. Zero extra cost
+ *  unless coneAA is on, which adds one GetNormal (4 DE taps) for the env-map
+ *  minification footprint. coneAA=false emits BYTE-IDENTICAL source to the
+ *  pre-2026-09-01 block. @see docs/adr/0069 (update 2026-09-01) */
+export const reflEnvShading = (coneAA: boolean) => `
+    // --- REFLECTIONS: ENVIRONMENT MAP ---${coneAA ? `
+    {
+        float pixelSizeScale = uPixelSizeBase / uInternalScale;
+        float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * length(p_ray);
+    // Angular footprint of the REFLECTED cone, for env-map minification.
+    // A mirror off curved geometry sweeps the reflected direction far faster
+    // than the pixel's own angular size: reflect() doubles the normal's rate
+    // of change, so CURVATURE, not pixel size, sets the filter width. Measured
+    // directly — re-estimate the normal one pixel-footprint along the surface
+    // and take |dn|, which IS the normal change across one pixel. No SDF or
+    // Laplacian assumption (fractal DEs are Lipschitz bounds, not true SDFs),
+    // and no screen-space derivatives: fwidth is undefined here because
+    // calculateShading runs inside if (hit). Costs one GetNormal = 4 DE taps.
+    {
+        vec3 t1 = cross(n, v);
+        float tl = length(t1);
+        // Degenerate at normal incidence (n parallel to v) — any tangent will do.
+        t1 = (tl > 1.0e-6) ? t1 / tl : normalize(cross(n, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-6));
+        float ceps = max(reflPixelFootprint, length(p_fractal) * PRECISION_RATIO_HIGH);
+        vec3 nOff = GetNormal(p_ray + t1 * reflPixelFootprint, ceps);
+        // x2 for reflect(); + the pixel's own angular size as the floor.
+        g_envConeAngle = 2.0 * length(nOff - n) + pixelSizeScale;
+    }
+    }` : ''}
     vec3 envColor = applyEnvFog(GetEnvMap(reflDir, roughness) * uEnvStrength, reflDir);
-    reflectionLighting = envColor * F * uSpecular;
+    reflectionLighting = envColor * F * uSpecular;${coneAA ? `
+    g_envConeAngle = 0.0;` : ''}
 `;
 
 /** Full raymarched reflections — traces a reflection ray, shades the hit point.
@@ -35,7 +62,7 @@ const REFL_ENV_SHADING = `
  *  2+ bounces — all for a situational mirror-in-mirror gain PT already covers.
  *  @see docs/adr/0068-raymarched-reflection-importance-sampling.md
  *  @see docs/adr/0096-reflection-bounces-fog-colors.md (2026-07-10 update blocks) */
-const REFL_RAYMARCH_SHADING = `
+export const reflRaymarchShading = (coneAA: boolean) => `
     // --- REFLECTIONS: RAYMARCHED ---
     {
         // Adaptive bias: scales with pixel size at camera distance to avoid self-intersection.
@@ -46,7 +73,26 @@ const REFL_RAYMARCH_SHADING = `
         float reflPixelFootprint = (uCamType > 0.5 && uCamType < 1.5) ? pixelSizeScale : pixelSizeScale * cameraDist_refl;
         float reflBias = max(reflPixelFootprint * 2.0, length(p_fractal) * PRECISION_RATIO_HIGH * 2.0);
         vec3 currRo = p_ray + n * reflBias;
-        vec3 currRd = reflDir;
+        vec3 currRd = reflDir;${coneAA ? `
+        // Angular footprint of the REFLECTED cone, for env-map minification.
+        // A mirror off curved geometry sweeps the reflected direction far faster
+        // than the pixel's own angular size: reflect() doubles the normal's rate
+        // of change, so CURVATURE, not pixel size, sets the filter width. Measured
+        // directly — re-estimate the normal one pixel-footprint along the surface
+        // and take |dn|, which IS the normal change across one pixel. No SDF or
+        // Laplacian assumption (fractal DEs are Lipschitz bounds, not true SDFs),
+        // and no screen-space derivatives: fwidth is undefined here because
+        // calculateShading runs inside if (hit). Costs one GetNormal = 4 DE taps.
+        {
+            vec3 t1 = cross(n, v);
+            float tl = length(t1);
+            // Degenerate at normal incidence (n parallel to v) — any tangent will do.
+            t1 = (tl > 1.0e-6) ? t1 / tl : normalize(cross(n, vec3(0.0, 0.0, 1.0)) + vec3(1.0e-6));
+            float ceps = max(reflPixelFootprint, length(p_fractal) * PRECISION_RATIO_HIGH);
+            vec3 nOff = GetNormal(p_ray + t1 * reflPixelFootprint, ceps);
+            // x2 for reflect(); + the pixel's own angular size as the floor.
+            g_envConeAngle = 2.0 * length(nOff - n) + pixelSizeScale;
+        }` : ''}
 
         // ONE fog-radiance sample shared by every fogged term in this block
         // (segment fog, env fills, miss env, simpleEnv) — each used to inline its
@@ -229,7 +275,8 @@ const REFL_RAYMARCH_SHADING = `
         vec3 simpleEnv = mix(GetEnvMap(reflDir, roughness) * uEnvStrength, reflFogLit, reflFogW);
         simpleEnv *= currentThroughput;
 
-        reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);
+        reflectionLighting = mix(simpleEnv, reflectionLighting, uReflStrength);${coneAA ? `
+        g_envConeAngle = 0.0;` : ''}
     }
 `;
 
@@ -241,6 +288,7 @@ export interface ReflectionsState {
     roughnessThreshold: number;
     mixStrength: number;
     accurateColors: boolean; // True trap-colour at reflected hits (compile gate, ADR-0096)
+    coneAA: boolean; // Env-map minification AA from the reflected cone footprint (compile gate)
 }
 
 export const ReflectionsFeature: FeatureDefinition = {
@@ -327,6 +375,17 @@ export const ReflectionsFeature: FeatureDefinition = {
             estCompileMs: 600  // measured cold 2026-07-10 post-optimization (§2.6.2): +0.5s — one full DE() call site at the march exit; ~noise floor
         },
 
+        coneAA: {
+            type: 'boolean', default: true, label: 'Reflection Filtering', shortId: 'ca',
+            group: 'engine_settings',
+            ui: 'checkbox',
+            condition: { param: 'reflectionMode', neq: REFL_MODE_OFF },
+            description: "Filter the environment map by how fast the reflection sweeps across the surface. Without it, mirrors on curved geometry alias bright highlights into hard stair-stepped edges. Costs one extra normal estimate per pixel.",
+            onUpdate: 'compile',
+            noAccumReset: true,
+            estCompileMs: 150
+        },
+
         // Master Switch (Compile Time) — hidden, controlled by engine toggle
         enabled: {
             type: 'boolean', default: true, label: 'Enable Reflections', shortId: 're', group: 'main',
@@ -350,7 +409,7 @@ export const ReflectionsFeature: FeatureDefinition = {
 
         if (mode !== REFL_MODE_RAYMARCH) {
             // ENV mode (or legacy SSR=2.0) — Fresnel-weighted env sampling with fog
-            builder.addShadingLogic(REFL_ENV_SHADING);
+            builder.addShadingLogic(reflEnvShading(state.coneAA !== false));
             return;
         }
 
@@ -368,7 +427,7 @@ export const ReflectionsFeature: FeatureDefinition = {
                 builder.addDefine('REFL_BOUNCE_SHADOWS', '1');
             }
 
-            builder.addShadingLogic(REFL_RAYMARCH_SHADING);
+            builder.addShadingLogic(reflRaymarchShading(state.coneAA !== false));
         }
     }
 };

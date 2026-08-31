@@ -74,6 +74,34 @@ vec3 envImageSample(vec2 uv, float lod, bool baseFilter) {
     return textureLod(uEnvMapTexture, uv, max(lod, 0.0)).rgb;
 }
 
+// Angular footprint (radians) of the ray cone currently being sampled. Set by
+// the reflection block before its env samples and reset to 0 after. Zero means
+// "no footprint information available" and the LOD falls back to the roughness
+// term alone — the behaviour every caller had before 2026-09-01.
+//
+// A global rather than a parameter because sampleMiss is GENERATED in
+// ShaderBuilder.buildMissHandler and reached through sampleMissEnvPre: a
+// parameter would churn three signatures across two files plus the builder, and
+// sampleMiss is the DOMINANT env sample for a mirror. Same pattern, same file
+// family, as g_missSelfFogCover. @see docs/adr/0069 (update 2026-09-01)
+float g_envConeAngle = 0.0;
+
+// Mip demanded by an angular cone on the equirectangular map. A cone of
+// half-angle a spans a/(2*PI*sinT) of the u axis and a/PI of the v axis; the
+// wider of the two, measured in TEXELS, is the minification factor, and log2 of
+// it is the mip that filters it. sinT is the horizontal circle radius —
+// longitude compresses toward the poles, so the same angle covers more u there.
+// Floored at 0.05 so the pole singularity cannot demand the whole chain, and the
+// texel span floored at 1 so magnification never returns a negative mip.
+float envConeLod(vec3 dir, float coneAngle) {
+    if (coneAngle <= 0.0) return 0.0;
+    vec2 ts = vec2(textureSize(uEnvMapTexture, 0));
+    float sinT = max(sqrt(max(0.0, 1.0 - dir.y * dir.y)), 0.05);
+    float du = coneAngle * INV_TAU / sinT * ts.x;
+    float dv = coneAngle * INV_PI * ts.y;
+    return log2(max(max(du, dv), 1.0));
+}
+
 // Core env sample — shared by GetEnvMap (baseFilter on) and fogRadiance
 // (baseFilter off). Callers MUST pass a constant baseFilter so fxc can DCE.
 vec3 envSampleCore(vec3 dir, float roughness, bool baseFilter) {
@@ -110,12 +138,15 @@ vec3 envSampleCore(vec3 dir, float roughness, bool baseFilter) {
         // sentinel uEnvAvgColor.r < 0 (pixel extraction failed) falls back to
         // capping the LOD short of the bad mips. @see docs/adr/0069
         if (uEnvAvgColor.r >= 0.0) {
-            float lod = roughness * uEnvMaxMip;
+            // max(), not +: roughness blur and minification are both statements
+            // about how wide the filter must be, and the wider one wins. ADR-0069
+            // supplied only the roughness half; g_envConeAngle supplies the other.
+            float lod = max(roughness * uEnvMaxMip, envConeLod(dir, g_envConeAngle));
             col = envImageSample(uv, lod, baseFilter);
             float avgMix = smoothstep(uEnvMaxMip - 4.0, uEnvMaxMip, lod);
             col = mix(col, uEnvAvgColor, avgMix);
         } else {
-            col = envImageSample(uv, roughness * max(0.0, uEnvMaxMip - 4.0), baseFilter);
+            col = envImageSample(uv, max(roughness * max(0.0, uEnvMaxMip - 4.0), envConeLod(dir, g_envConeAngle)), baseFilter);
         }
 
         // Apply Color Profile (Linear/ACES)

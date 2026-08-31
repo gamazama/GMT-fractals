@@ -36,6 +36,38 @@
 > derivatives — relevant because `calculateShading` runs inside `if (hit)`, where
 > `fwidth` would be undefined). Deliberately deferred, not forgotten.
 
+> **Update 2026-09-01 (the deferred minification term is implemented; decision
+> unchanged):** the previous update said closing this needed a footprint threaded
+> through `GetEnvMap` or analytic gradients. Implemented as the former, and as a
+> LOD floor rather than `textureGrad`: grep `envConeLod`, which converts an
+> angular cone into the equirect texel span it covers and returns the mip that
+> filters it, and `g_envConeAngle`, the cone the reflection block publishes. The
+> sample takes `max(roughness * uEnvMaxMip, envConeLod(...))` — roughness blur and
+> minification are both claims about how wide the filter must be, and the wider
+> wins. This keeps the single `textureLod` fetch this ADR chose; no SampleGrad.
+>
+> The cone comes from CURVATURE, not pixel size: `reflect()` doubles the normal's
+> rate of change, so on a fractal mirror the reflected direction sweeps orders of
+> magnitude faster than the pixel's own angular size (measured on the reporting
+> scene: pixel angle 0.0017 rad contributes LOD 0.00, and the term only bites past
+> ~0.002 rad of normal change per pixel). It is measured directly — re-estimate
+> the normal one pixel-footprint along the surface and take |dn| — rather than via
+> a Laplacian, because fractal DEs are Lipschitz bounds and not true SDFs. No
+> screen-space derivatives are involved, which matters because `calculateShading`
+> runs inside `if (hit)` where `fwidth` would be undefined at every silhouette.
+>
+> Costs one `GetNormal` = 4 DE taps, on a compile gate (`reflections.coneAA`,
+> "Reflection Filtering") whose OFF form is byte-identical to the pre-feature
+> source. Measured 0.5-0.7% of GPU time per draw on the reporting scene
+> (`bench:shader`, d3d11). A probe render painting the pixels where the cone term
+> wins shows it firing on thin high-curvature creases and ridges and nowhere else
+> — the right target. Honest limit: on a 256-frame CONVERGED render of that scene
+> the visible difference is near zero (mean |diff| 0.000/255, max 37 on a few
+> hundred pixels), because accumulation jitter already anti-aliases much of it and
+> the 2026-08-31 bicubic fix removed the gross artifact. The expected benefit is
+> mostly in the UNCONVERGED preview, which a converged A/B cannot show. Guarded by
+> `npm run test:env-sampling` blocks E and F.
+
 ## Context
 
 `GetEnvMap(dir, roughness)` blurred environment reflections by roughness using
