@@ -9,6 +9,10 @@
  * This sweeps Golden hour finely across its full range (× a range of colour counts)
  * over several synthetic images, asserting every extracted ramp is 256 finite RGB and
  * that fitRampToStops never throws.
+ *
+ * NOT covered by test-palette-img2grad.mts, despite sitting next to it: removing the
+ * `if (i > n - 2) i = n - 2;` clamp this exists to guard reds ONLY this sweep, and the
+ * main harness stays green. This one is load-bearing on its own.
  */
 
 import { ingestPixels, extract, type Img2GradParams } from '../palette/core/img2grad';

@@ -415,7 +415,9 @@ const GradientExplorerApp: React.FC = () => {
           )}
 
           {/* Timeline — params keyed via the slider diamonds animate here. Desktop-only:
-              animation editing isn't a phone task (matches app-gmt + the engine convention),
+              animation editing isn't a phone task (the same call app-gmt makes, though GE
+              mounts only the sticky shell — not MobileScrollIntro — so this is a parallel
+              decision rather than shared machinery; @see docs/adr/0039),
               and it would otherwise eat scarce bottom space on mobile. */}
           {!isMobile && <TimelineHost />}
 

@@ -5,6 +5,11 @@
  * deterministic port never does that: same image + settings ⇒ byte-identical ramp.
  *
  * Run: npx tsx debug/test-palette-img2grad.mts
+ *
+ * NOT a superset of test-palette-img2grad-overshoot.mts, despite sitting next to
+ * it: deleting the `if (i > n - 2) i = n - 2;` clamp in resample()'s at() reds
+ * ONLY the overshoot sweep and leaves this one green. Do not consolidate them —
+ * folding this pair together silently reopens a real TypeError.
  */
 
 import { ingestPixels } from '../palette/core/img2grad/ingest';

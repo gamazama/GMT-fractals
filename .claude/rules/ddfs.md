@@ -27,9 +27,15 @@ Decisions: ADRs 0007-0014, 0036-0037.
   because Vite HMR legitimately produces fresh def objects. Don't read a quiet dev
   console as proof there is no collision — that path fails loudly only in a
   production build.
-- **Features are isolated.** State lives at `store[featureId]`. Reading another
-  feature's state requires `dependsOn: ['otherId']` in the feature def. Undeclared
-  access throws in dev, warns in prod.
+- **Features are isolated — by convention, not by enforcement.** State lives at
+  `store[featureId]`. Reading another feature's state requires `dependsOn:
+  ['otherId']` in the feature def. `dependsOn` drives registration ORDER and a
+  register-time existence check; **nothing intercepts an undeclared read at
+  runtime.** (Corrected 2026-09-01 — this bullet previously claimed "undeclared
+  access throws in dev, warns in prod". Grep `dependsOn` in
+  `engine/FeatureSystem.ts`: the only uses are the topological sort and the
+  registration check.) Declare it anyway; the ordering is real and the
+  declaration is what makes the dependency greppable.
 - **Every DDFS param is animatable and undoable by construction.** Adding a param
   gets you keyframes + undo + preset round-trip with no per-feature wiring.
 - Coordination between features uses bridges or derived values — never ad-hoc store

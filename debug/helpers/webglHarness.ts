@@ -72,12 +72,12 @@ export interface TestPage {
  * Launch browser + context + page with WebGL-friendly defaults and
  * return a Page that works reliably against our canvas apps.
  *
- * Launch args:
- *   --disable-gpu                → force SwiftShader. Stable on CI.
- *   --use-gl=swiftshader         → explicit software WebGL backend.
- *   --enable-webgl               → some distros disable WebGL by default.
- *   --disable-dev-shm-usage      → avoid /dev/shm issues on Linux CI.
- *   --no-sandbox                 → CI environments where sandbox fails.
+ * Runs on HARDWARE WebGL, not SwiftShader. The launch args live at the
+ * chromium.launch() call below and are deliberately NOT duplicated here: this
+ * header used to list --disable-gpu, --use-gl=swiftshader, --enable-webgl,
+ * --disable-dev-shm-usage and --no-sandbox, none of which were ever passed —
+ * and the first two asserted the opposite of what the harness actually does,
+ * directly contradicting the comment a few lines below them.
  */
 export const launchWebglTestPage = async (opts: LaunchOptions = {}): Promise<TestPage> => {
     const errors: string[] = opts.errorSink ?? [];
@@ -85,9 +85,6 @@ export const launchWebglTestPage = async (opts: LaunchOptions = {}): Promise<Tes
     // to boot far too slowly against the fluid-sim init cost, and the
     // Chromium defaults are actually reliable once the pointer-capture
     // autowait trap is handled with `noWaitAfter`).
-    //
-    //   --disable-dev-shm-usage   avoids /dev/shm issues on some Linux.
-    //   --no-sandbox              some CI environments require this.
     // Launch flags — empirically tuned for a canvas app with a RAF loop
     // that keeps the page "busy":
     //

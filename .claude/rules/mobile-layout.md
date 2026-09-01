@@ -5,6 +5,7 @@ paths:
   - "engine/components/MobileScrollIntro.tsx"
   - "engine/components/MobileViewportShell.tsx"
   - "engine/HardwareDetection.ts"
+  - "palette/store/favientsPanelPersist.ts"
 ---
 
 # Mobile layout
