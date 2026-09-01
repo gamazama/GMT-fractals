@@ -950,7 +950,6 @@
     "files_claimed": [
       "palette/components/ChannelGraphEditor.tsx",
       "palette/components/ChannelTrackSidebar.tsx",
-      "palette/components/FavStar.tsx",
       "palette/components/FavientsIcon.tsx",
       "palette/components/FavientsPanel.tsx",
       "palette/components/GenParamSlider.tsx",
@@ -969,7 +968,6 @@
       "palette/components/NoiseTargetsControl.tsx",
       "palette/components/PickerControls.tsx",
       "palette/components/PickerWall.tsx",
-      "palette/components/QualityRangePad.tsx",
       "palette/components/QualityRangePadConnected.tsx",
       "palette/components/SelectionOverlay.tsx",
       "palette/core/catalogLoader.ts",

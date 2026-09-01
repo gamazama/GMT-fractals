@@ -20,7 +20,6 @@ export const DebugToolsFeature: FeatureDefinition = {
         renderOrder: 100
     },
     menuItems: [
-        { label: 'GLSL Debugger', toggleParam: 'shaderDebuggerOpen', icon: 'Code', advancedOnly: true },
         { label: 'State Debugger', toggleParam: 'stateDebuggerOpen', icon: 'Info', advancedOnly: true },
         { label: 'Interaction Session', toggleParam: 'interactionSessionOpen', icon: 'Activity', advancedOnly: true }
     ],
