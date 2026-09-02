@@ -92,6 +92,28 @@ const defaultSlotOpts = (
     return o;
 };
 
+/**
+ * The ONE answer to "how many slots". Both the number-key shortcuts and the
+ * menu's slot rows read it, so they cannot disagree: until 2026-09-02 the
+ * shortcuts used `cfg.count ?? 9` and the menu used `(… && count) || 9`, so
+ * `count: 0` or `slotShortcuts: false` bound no keys but still rendered nine
+ * menu rows advertising `Ctrl+N saves`. 0 means "no slot shortcuts" and the
+ * menu skips its slot section entirely.
+ *
+ * @assumption No guard reaches the menu's slot rows: app-gmt passes
+ *   `menu: null` and fluid-toy passes `count: 9`, so both agree today by
+ *   construction and the divergence only bit a hypothetical third library.
+ *   `smoke:statelibrary-drop` covers the camera manager's list, not this menu.
+ */
+export const resolveSlotCount = (o: boolean | SlotShortcutOptions | undefined): number => {
+    if (o === false) return 0;
+    if (o === true || o === undefined) return 9;
+    return o.count ?? 9;
+};
+
+const resolveSaveModifier = (o: boolean | SlotShortcutOptions | undefined): string =>
+    (typeof o === 'object' && o.saveModifier) || 'Mod';
+
 /** Bundles the slice install + shortcut registration + menu wiring +
  *  saved-toast topbar slot. Apps that supply `menu` get the toast for
  *  free, anchored next to the menu button. Apps that opt out (menu:
@@ -134,9 +156,9 @@ function registerSlotShortcuts<T>(
     opts: InstallStateLibraryOptions<T>,
     cfg: SlotShortcutOptions,
 ): void {
-    const count = cfg.count ?? 9;
+    const count = resolveSlotCount(opts.slotShortcuts);
     const category = cfg.category ?? 'Camera';
-    const saveMod = cfg.saveModifier ?? 'Mod';
+    const saveMod = resolveSaveModifier(opts.slotShortcuts);
     const savePrefix = cfg.savePrefix ?? `Save to slot`;
     const recallPrefix = cfg.recallPrefix ?? `Recall slot`;
 
@@ -227,13 +249,19 @@ function registerLibraryMenu<T>(
     }
 
     // Slot 1..N entries — click recalls (falls back to save when empty).
-    if (m.slotItems !== false) {
+    // Mirrors the shortcut count exactly; with shortcuts off there is no slot
+    // section, because each row advertises the key binding that saves to it.
+    const count = resolveSlotCount(opts.slotShortcuts);
+    if (m.slotItems !== false && count > 0) {
         menu.registerItem(m.menuId, {
             id: `${m.menuId}-sep-slots`,
             type: 'separator',
         });
         const labelPrefix = m.slotLabelPrefix ?? 'Slot';
-        const count = (typeof opts.slotShortcuts === 'object' && opts.slotShortcuts?.count) || 9;
+        const saveMod = resolveSaveModifier(opts.slotShortcuts);
+        // 'Mod' is the platform modifier; the title keeps the familiar
+        // 'Ctrl' wording for it, as it always has.
+        const saveModLabel = saveMod === 'Mod' ? 'Ctrl' : saveMod;
         for (let n = 1; n <= count; n++) {
             const slotIndex = n - 1;
             menu.registerItem(m.menuId, {
@@ -244,7 +272,7 @@ function registerLibraryMenu<T>(
                     return arr?.[slotIndex] ? `${labelPrefix} ${n} ✓` : `${labelPrefix} ${n}`;
                 },
                 shortcut: `${n}`,
-                title: `Click to recall • Ctrl+${n} saves`,
+                title: `Click to recall • ${saveModLabel}+${n} saves`,
                 onSelect: () => {
                     const arr = (useEngineStore.getState() as any)[opts.arrayKey] as any[];
                     const target = arr?.[slotIndex];
