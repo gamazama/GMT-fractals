@@ -28,6 +28,21 @@
  * rule's 12 scoped files" and exits 1, where the previous version exited 0 and
  * said nothing.
  *
+ * Per-row scoping was added 2026-09-02 (blind spot 1 of the same finding). A
+ * guards table whose first column names a path — sibling-apps.md's
+ * `| \`fluid-toy/\` | npm run smoke:fluid-toy, … |` — now holds that row's
+ * citations to the frontmatter globs under that path only; citations outside
+ * such rows stay rule-wide. Falsified the way the finding was: moving
+ * `npm run smoke:fluid-toy` into sibling-apps.md's gradient-explorer row now
+ * reports "sibling-apps.md [gradient-explorer/] :: smoke:fluid-toy — boots
+ * fluid-toy.html; that entry's import graph contains none of the N files this
+ * scopes" and exits 1, where the previous version's output was identical to
+ * the clean run. The first clean run after the change caught a real one:
+ * sibling-apps.md's fluid-toy row said "**Not** `npm run smoke:orbit`" as a
+ * warning, and the parser read it as a citation — correctly, since nothing
+ * distinguishes a negative mention from a positive one. Write negatives
+ * without the `npm run` prefix; the row now does.
+ *
  * Reports rather than gates: a zero-overlap guard is usually a miscitation, but a
  * rule may legitimately cite a broad guard (typecheck, orphans) that covers
  * everything without importing anything. Those are listed as EXEMPT, not failures.
@@ -99,8 +114,26 @@ function parseRule(name) {
             }
         }
     }
-    const guards = [...new Set([...text.matchAll(/npm run ([a-z0-9:_-]+)/gi)].map((m) => m[1]))];
-    return { name, paths, guards };
+    // Per-row scoping. A guards table whose first column names a path
+    // (`| \`fluid-toy/\` | npm run … |`) scopes the citations in that row to
+    // the frontmatter globs under that path; citations outside such rows stay
+    // rule-wide. Without this, a multi-app rule's citations were matched
+    // against its ENTIRE paths: set, so one fluid-toy smoke "covered"
+    // mesh-export — blind spot 1 of the 2026-07-29 finding, closed 2026-09-02.
+    const rows = [];
+    const rowGuards = new Set();
+    for (const line of text.split('\n')) {
+        const m = line.match(/^\|\s*`([^`]+?)`\s*\|(.*)\|\s*$/);
+        if (!m) continue;
+        const guards = [...new Set([...m[2].matchAll(/npm run ([a-z0-9:_-]+)/gi)].map((x) => x[1]))];
+        if (!guards.length) continue;
+        const prefix = m[1].replace(/\/+$/, '') + '/';
+        rows.push({ prefix, scope: paths.filter((g) => g.startsWith(prefix)), guards });
+        for (const g of guards) rowGuards.add(g);
+    }
+    const all = [...new Set([...text.matchAll(/npm run ([a-z0-9:_-]+)/gi)].map((m) => m[1]))];
+    const guards = all.filter((g) => !rowGuards.has(g));
+    return { name, paths, guards, rows };
 }
 
 /**
@@ -210,18 +243,17 @@ const orphanRules = [];
 const scanners = [];
 let checked = 0;
 
-for (const rule of rules) {
-    if (!rule.paths.length) { orphanRules.push({ rule: rule.name, why: 'no paths: globs — this rule never auto-loads' }); continue; }
-    const res = rule.paths.map(globToRe);
-    const scoped = [...tracked].filter((f) => res.some((r) => r.test(f)));
-    if (!scoped.length) { orphanRules.push({ rule: rule.name, why: `paths: match 0 tracked files (${rule.paths.join(', ')})` }); continue; }
-
+/**
+ * Check one set of guards against one set of scoped files. `label` is the rule
+ * name, or `rule [row-prefix/]` for a table row scoped to a sub-path.
+ */
+function evaluate(label, scoped, guards) {
     const live = [];
-    for (const g of rule.guards) {
+    for (const g of guards) {
         const e = entryFor(g);
-        if (e.kind === 'missing') { problems.push({ rule: rule.name, guard: g, kind: 'missing', detail: 'not a script in package.json' }); continue; }
+        if (e.kind === 'missing') { problems.push({ rule: label, guard: g, kind: 'missing', detail: 'not a script in package.json' }); continue; }
         if (e.kind === 'whole-tree' || e.kind === 'opaque') { live.push(g); continue; }
-        if (e.kind === 'unknown-url') { problems.push({ rule: rule.name, guard: g, kind: 'unknown-url', detail: `ENGINE_URL ${e.url} maps to no known app entry` }); continue; }
+        if (e.kind === 'unknown-url') { problems.push({ rule: label, guard: g, kind: 'unknown-url', detail: `ENGINE_URL ${e.url} maps to no known app entry` }); continue; }
 
         const reach = reachFor(e.entries);
         // A static analyser (check:zindex, check:mb3d-decompiler) reads its targets as
@@ -231,21 +263,47 @@ for (const rule of rules) {
         // is more robust than sniffing the source for readdirSync: test:frag:integration
         // scans a directory AND imports the importer, and must still be import-checked.
         if (e.kind === 'node' && ![...reach].some((f) => !TOOLING.test(f))) {
-            live.push(g); scanners.push({ rule: rule.name, guard: g, file: e.file }); continue;
+            live.push(g); scanners.push({ rule: label, guard: g, file: e.file }); continue;
         }
         checked++;
         const hit = scoped.filter((f) => reach.has(f));
         if (!hit.length) {
             problems.push({
-                rule: rule.name, guard: g, kind: 'no-overlap',
+                rule: label, guard: g, kind: 'no-overlap',
                 detail: e.kind === 'browser'
-                    ? `boots ${e.url} (${e.app}); that entry's import graph contains none of this rule's ${scoped.length} scoped files`
-                    : `${e.file} imports none of this rule's ${scoped.length} scoped files`,
+                    ? `boots ${e.url} (${e.app}); that entry's import graph contains none of the ${scoped.length} files this scopes`
+                    : `${e.file} imports none of the ${scoped.length} files this scopes`,
             });
-        } else { live.push(g); if (VERBOSE) console.log(`  ok  ${rule.name} :: ${g} -> ${hit.length}/${scoped.length} scoped files reachable`); }
+        } else { live.push(g); if (VERBOSE) console.log(`  ok  ${label} :: ${g} -> ${hit.length}/${scoped.length} scoped files reachable`); }
     }
-    if (!live.length && rule.guards.length) {
-        problems.push({ rule: rule.name, guard: '(all)', kind: 'rule-uncovered', detail: `all ${rule.guards.length} cited guards fail to reach this rule's files` });
+    if (!live.length && guards.length) {
+        problems.push({ rule: label, guard: '(all)', kind: 'rule-uncovered', detail: `all ${guards.length} cited guards fail to reach these files` });
+    }
+}
+
+for (const rule of rules) {
+    if (!rule.paths.length) { orphanRules.push({ rule: rule.name, why: 'no paths: globs — this rule never auto-loads' }); continue; }
+    const res = rule.paths.map(globToRe);
+    const scoped = [...tracked].filter((f) => res.some((r) => r.test(f)));
+    if (!scoped.length) { orphanRules.push({ rule: rule.name, why: `paths: match 0 tracked files (${rule.paths.join(', ')})` }); continue; }
+
+    // Rule-wide citations are held to the whole paths: set, as before.
+    evaluate(rule.name, scoped, rule.guards);
+
+    // A guards-table row is held to the sub-path it names, and only that.
+    for (const row of rule.rows) {
+        const label = `${rule.name} [${row.prefix}]`;
+        if (!row.scope.length) {
+            problems.push({ rule: label, guard: '(row)', kind: 'row-unscoped', detail: `the table row names ${row.prefix} but no paths: glob starts with it` });
+            continue;
+        }
+        const rowRes = row.scope.map(globToRe);
+        const rowScoped = [...tracked].filter((f) => rowRes.some((r) => r.test(f)));
+        if (!rowScoped.length) {
+            problems.push({ rule: label, guard: '(row)', kind: 'row-unscoped', detail: `its globs (${row.scope.join(', ')}) match 0 tracked files` });
+            continue;
+        }
+        evaluate(label, rowScoped, row.guards);
     }
 }
 
@@ -266,6 +324,7 @@ for (const [kind, label, colour] of [
     ['no-overlap', 'cannot fail on these files', R],
     ['missing', 'script does not exist', Y],
     ['unknown-url', 'URL maps to no app', Y],
+    ['row-unscoped', 'guards-table row names a path the rule does not scope', Y],
 ]) {
     const list = byKind(kind);
     if (!list.length) continue;
