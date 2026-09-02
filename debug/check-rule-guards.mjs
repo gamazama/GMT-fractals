@@ -184,6 +184,21 @@ function entryFor(script, seen = new Set()) {
         return { kind: 'opaque', cmd };
     }
 
+    // The smoke:all DRIVER — `tsx debug/run-smokes.mts` — owns the member list
+    // as a const array in its own source (see its header). Expand it the same
+    // way as a direct-file composite, or the 40-odd members it runs would be
+    // invisible here and a `smoke:all` citation would resolve to a harness
+    // that imports nothing.
+    if (/^tsx debug\/run-smokes\.mts\s*$/.test(cmd.trim())) {
+        const src = rd('debug/run-smokes.mts');
+        const listed = [...src.matchAll(/^\s*'(debug\/[^']+\.mts)',\s*$/gm)].map((m) => m[1]);
+        const entries = new Set();
+        for (const f of listed) if (existsSync(join(REPO_ROOT, f))) for (const e of entriesForFile(f, '')) entries.add(e);
+        return entries.size
+            ? { kind: 'node', entries: [...entries], file: `${script} (driver, ${listed.length} members)` }
+            : { kind: 'opaque', cmd };
+    }
+
     // A DIRECT-FILE COMPOSITE — `tsx debug/a.mts && tsx debug/b.mts` — has no
     // `npm run` for the branch above to find, so the single-file regex below
     // matched only the FIRST filename and the other members were invisible.
