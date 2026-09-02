@@ -592,22 +592,18 @@ const Navigation: React.FC<NavigationProps> = ({
   // when idle, picks fire at near-mousemove rate. No fixed time cap.
   // A 10 px movement gate skips picks while the cursor is parked.
   //
-  // @bug PRODUCTION: UNCONFIRMED — suspected cause of GMT rendering ~30fps
-  //   while focused and ~60fps while another window has focus (owner-observed
-  //   2026-07-25; visibly faster, same resolution, so not a counter artifact).
-  //   30 is exactly half of 60, the signature of frames missing the vsync
-  //   deadline rather than a gradual slowdown. This pick is a worker
-  //   `readPixels` — a GPU SYNC POINT that stalls the pipeline until the frame
-  //   completes — fired at near-mousemove rate with no time cap, and only
-  //   while the cursor is over the canvas, which correlates exactly with the
-  //   window being focused. The 10px gate should suppress a parked cursor, but
-  //   a resting hand produces continuous sub-pixel jitter and the gate may
-  //   measure from the last EVENT rather than the last PICK.
-  //   TEST: keep GMT focused, move the mouse off the canvas. Jumping to 60
-  //   confirms it is the pick, not focus. Orbit mode only — this effect
-  //   early-returns otherwise, which is a second check.
-  //   If confirmed: rate-cap the picks, or gate on orbit intent rather than
-  //   bare hover. Not investigated further; nothing changed here.
+  // @assumption this pick is NOT what halves the frame rate. An earlier
+  //   revision of this comment blamed the "~30fps focused, ~60fps unfocused"
+  //   drop (owner-observed 2026-07-25) on this readPixels sync point firing
+  //   at mousemove rate. The owner has since tied the drop to the audio side:
+  //   it appears when system-audio capture is running, which rides a
+  //   screen-share surface (`getDisplayMedia` in AudioTransport.ts) and adds
+  //   audio-process overhead. `b3e8b321` halved the audio panel's draw loop;
+  //   the drop persists (owner 2026-09-02) and is tracked as `@bug PRODUCTION:`
+  //   on `connectSystemAudio` in `engine/features/audioMod/AudioTransport.ts`.
+  //   The uncapped pick rate is at most a secondary cost. The cheap
+  //   discriminator still stands: keep GMT focused, Orbit mode, move the
+  //   mouse off the canvas — if that alone restores 60, this pick matters.
   //
   // Result is cached in WORLD space so it stays valid across gestures
   // even when sceneOffset shifts (treadmill absorb, mode switch, etc.).

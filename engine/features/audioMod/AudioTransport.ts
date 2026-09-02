@@ -24,6 +24,18 @@
  *   `AudioContext.destination` — to prevent feedback. System-audio capture is
  *   connected to BOTH so the user hears it. Loading a track also disables an
  *   active mic; connecting the mic only PAUSES decks (asymmetric).
+ * @bug PRODUCTION: with system-audio capture running, GMT renders at ~30fps
+ *   while its window is focused and ~60fps while another window has focus
+ *   (owner-observed 2026-07-25, still present 2026-09-02). `b3e8b321` cut the
+ *   audio panel's canvas redraw to 30Hz (AudioSpectrum.tsx) on the theory
+ *   that the panel's rAF work was the cost; that helped but did not close
+ *   it. The remaining suspects are the capture itself — the mandatory
+ *   screen-share video surface described in the invariant below, plus the
+ *   worklet/transport overhead — rather than anything in the renderer.
+ *   Reproduce: connectSystemAudio, focus GMT, watch the fps counter; switch
+ *   focus to another window and watch it recover. A fair test uses the
+ *   mic path with a virtual audio device as the control: same analysis,
+ *   no screen-share surface. If the control holds 60, the surface is it.
  * @invariant System-audio capture COSTS GPU and cannot be made not to. The
  *   spec requires a video surface — audio-only `getDisplayMedia` is still an
  *   unimplemented request as of 2026 — so Chrome starts a screen-capture

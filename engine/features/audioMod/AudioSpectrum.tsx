@@ -96,6 +96,9 @@ export const AudioSpectrum: React.FC = () => {
         // 60fps to 30 (owner-reported 2026-08-31: "~30fps focused, ~60fps
         // unfocused" — unfocused is faster precisely because the browser stops
         // servicing rAF, which is the tell that this loop is the cost).
+        // This change helped but did not close it — the drop persists with
+        // system-audio capture running (owner 2026-09-02); see the
+        // `@bug PRODUCTION:` on `connectSystemAudio` in AudioTransport.ts.
         //
         // 30Hz is well above what a level display needs to read as continuous, and
         // skipping alternate frames hands those back to the renderer. The rAF is
