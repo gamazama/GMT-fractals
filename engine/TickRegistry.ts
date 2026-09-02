@@ -31,6 +31,14 @@
  *   GmtRendererTickDriver footgun, but is NOT a defence against a future
  *   cross-context driver (e.g. worker-side RAF) landing on staggered timing.
  *   See ADR-0003.
+ * @invariant A tick that throws does not stop the ticks after it in the same
+ *   frame, keeps being called on later frames, and is named in the console
+ *   exactly once per tick name.
+ *   — proven by: npm run test:tick-registry ("later ticks still ran every
+ *   frame", "the throwing tick was reported once"). Falsified 2026-09-02
+ *   against the bare dispatch loop: the harness died on the first throw
+ *   with `Error: boom` before any assertion ran.
+ *
  * @invariant Phases run in numeric order via stable Array.sort comparing
  *   `phase` only. Within a phase, registration order is preserved.
  *   See ADR-0001.
@@ -93,7 +101,7 @@ export function registerTick(
     // silent rendering-loop bug — flag it loudly after 3s.
     if (_firstRegisterTime === 0) {
         _firstRegisterTime = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-        if (import.meta.env.DEV && typeof setTimeout !== 'undefined') {
+        if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && typeof setTimeout !== 'undefined') {
             setTimeout(() => {
                 if (_lastTickTime === 0 && !_warnedNoTicks) {
                     console.warn(
@@ -126,12 +134,17 @@ export function registerTick(
 let _warnedDoubleRun = false;
 const DOUBLE_RUN_WINDOW_MS = 1;
 
+// Tick names that have already been reported for throwing (once per name,
+// not per frame). Never cleared: a tick that throws once usually throws
+// every frame, and one line per name is the whole point.
+const _warnedThrowingTicks = new Set<string>();
+
 /** Run all registered ticks in phase order. Called once per frame by the
  *  active tick driver. */
 export function runTicks(delta: number): void {
     const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
     if (_lastTickTime !== 0 && now - _lastTickTime < DOUBLE_RUN_WINDOW_MS) {
-        if (import.meta.env.DEV && !_warnedDoubleRun) {
+        if (typeof import.meta !== 'undefined' && import.meta.env?.DEV && !_warnedDoubleRun) {
             console.warn(
                 '[TickRegistry] runTicks() called twice within ' + DOUBLE_RUN_WINDOW_MS + 'ms — ' +
                 'two tick drivers are mounted simultaneously. The duplicate call is being ' +
@@ -150,7 +163,25 @@ export function runTicks(delta: number): void {
         _needsSort = false;
     }
     for (let i = 0; i < _entries.length; i++) {
-        _entries[i].fn(delta);
+        const entry = _entries[i];
+        try {
+            entry.fn(delta);
+        } catch (err) {
+            // One tick's throw must not take out every tick after it. The
+            // driver calls runTicks inline BEFORE serialising the camera and
+            // dispatching the worker frame, so an uncaught throw here freezes
+            // the image and the timeline and presents as "the renderer hung"
+            // rather than "a gizmo is broken". Keep going and name the culprit
+            // once per tick name; the failure stays visible in the console.
+            if (!_warnedThrowingTicks.has(entry.name)) {
+                _warnedThrowingTicks.add(entry.name);
+                console.error(
+                    '[TickRegistry] tick "' + entry.name + '" threw; the rest of the frame ' +
+                    'still runs and this tick keeps being called. First error:',
+                    err,
+                );
+            }
+        }
     }
 }
 

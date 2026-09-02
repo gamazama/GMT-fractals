@@ -117,6 +117,7 @@
     "test:refine": "tsx debug/test-trace-refine.mts",
     "test:session-hold": "tsx debug/test-session-hold.mts",
     "test:shader": "npm run test:baseline && npm run test:hybrid && npm run test:hybrid-adv && npm run test:weave-sweep",
+    "test:tick-registry": "tsx debug/test-tick-registry.mts",
     "test:weave-sweep": "tsx debug/native-weave-sweep.mts --fresh",
     "test:worklet-analysis": "tsx debug/test-worklet-analysis.mts",
     "test:zindex": "tsx debug/test-zindex.mts",

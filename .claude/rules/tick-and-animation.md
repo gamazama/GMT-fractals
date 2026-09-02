@@ -51,6 +51,8 @@ top-of-file JSDoc is the contract.
 ## Guards
 
 ```
+npm run test:tick-registry   # node-only: phase order, a throwing tick is isolated and
+                             # reported once, disposer, the 1 ms double-run guard
 npm run smoke:anim-play
 npm run smoke:anim-orbit
 npm run smoke:anim-vec2
