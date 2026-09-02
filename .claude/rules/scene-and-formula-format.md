@@ -2,6 +2,8 @@
 paths:
   - "engine-gmt/utils/FormulaFormat.ts"
   - "utils/SceneFormat.ts"
+  - "utils/UrlStateEncoder.ts"
+  - "utils/Sharing.ts"
   - "engine-gmt/features/fragmentarium_import/**"
 ---
 
@@ -30,6 +32,7 @@ npm run test:migrations
 npm run smoke:migrations
 npm run test:frag
 npm run test:frag:integration
+npm run test:share-dictionary   # node-only, ~1 s: the share dictionary and a full-slice round-trip
 npm run smoke:share-link
 npm run smoke:gallery-link
 ```

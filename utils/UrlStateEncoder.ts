@@ -1,8 +1,110 @@
+/**
+ * Share-link state codec: diff against a default template, quantize, alias
+ * long keys through a dictionary, deflate, base64url. `utils/Sharing.ts` is
+ * the only production caller (grep `new UrlStateEncoder`), and the dictionary
+ * it passes is `featureRegistry.getDictionary()` (engine/FeatureSystem.ts).
+ *
+ * ── Dictionary contract ────────────────────────────────────────────────────
+ * A `Dict` maps long key → short alias per object level; nested levels hang
+ * off `children`. `applyDictionary` writes `result[alias] = value` on encode
+ * and inverts ONE `alias → longKey` map on decode, so two siblings that share
+ * an alias collapse onto a single wire entry: the later writer's value
+ * replaces the earlier's, no error, and the loser's state is simply absent on
+ * the far side. Two such collisions shipped and went unnoticed until
+ * 2026-07-27 — droste vs drawing on feature alias 'dr', and materials
+ * emissionMode vs envMapColorSpace on param alias 'ec' (both fixed in
+ * 8f59b143, which also gave `getDictionary()` its own detector).
+ *
+ * @invariant Within one dictionary level every alias is claimed by exactly one
+ *   long key, and on encode no two source keys ever write the same wire key.
+ *   Checked twice here: statically by `findDictionaryCollisions` when an
+ *   encoder is constructed (memoised per dictionary object — the registry
+ *   memoises its dictionary, so this runs once per build, not once per
+ *   share), and dynamically by the write-time backstop in `applyDictionary`,
+ *   which also sees the case a static walk cannot: an alias equal to the name
+ *   of an UN-aliased sibling present in the data (un-aliased keys are absent
+ *   from the dictionary and pass through verbatim). On a hit: throw in DEV,
+ *   `console.warn` once per distinct collision in prod — a prod throw would
+ *   take every share link down with it, the warn keeps the pre-detector
+ *   behaviour plus a signal. Never silent.
+ *   — proven by: npm run test:share-dictionary ("dictionary has no alias
+ *   collisions" and "every root key and every feature slice round-tripped
+ *   value-for-value").
+ *
+ * Node-reachable on purpose — no DOM, no three: `debug/test-share-dictionary.mts`
+ * builds the real GMT dictionary and round-trips a synthetic preset through
+ * this class with no server and no browser. Keep it that way.
+ */
 import pako from 'pako';
-import * as THREE from 'three';
 
-type DictEntry = string | { _alias: string; children?: Dict };
-type Dict = Record<string, DictEntry>;
+export type DictEntry = string | { _alias: string; children?: Dict };
+export type Dict = Record<string, DictEntry>;
+
+/** One alias claimed by two sibling long keys at the same dictionary level. */
+export interface DictCollision {
+    /** '' for the root level, 'features' for the feature map, 'features.<id>'
+     *  for one feature's params. */
+    scope: string;
+    alias: string;
+    /** The two long keys claiming `alias`, in dictionary order — the second
+     *  overwrites the first on both encode and decode. */
+    keys: [string, string];
+}
+
+/**
+ * Pure, side-effect-free walk of a dictionary. Returns every alias that two
+ * sibling long keys claim at the same level, recursing into `children`. With
+ * three claimants it reports two collisions (each later key vs the first).
+ * The node harness uses this directly; the encoder uses it via the memoised
+ * constructor check below.
+ */
+export function findDictionaryCollisions(dict: Dict, scope = ''): DictCollision[] {
+    const out: DictCollision[] = [];
+    const claimed = new Map<string, string>();
+    for (const longKey of Object.keys(dict)) {
+        const entry = dict[longKey];
+        const alias = typeof entry === 'string' ? entry : entry._alias;
+        const prior = claimed.get(alias);
+        if (prior !== undefined) out.push({ scope, alias, keys: [prior, longKey] });
+        else claimed.set(alias, longKey);
+        if (typeof entry !== 'string' && entry.children) {
+            out.push(...findDictionaryCollisions(entry.children, scope ? `${scope}.${longKey}` : longKey));
+        }
+    }
+    return out;
+}
+
+// Guarded form: `import.meta.env` is undefined under node/tsx, where these
+// detectors take the prod branch (warn once) and the harness asserts on data.
+const IS_DEV = typeof import.meta !== 'undefined' && !!import.meta.env?.DEV;
+const warnedCollisions = new Set<string>();
+const validatedDicts = new WeakSet<Dict>();
+
+/** DEV: throw one Error naming every problem. Prod: `console.warn` each distinct
+ *  message once per session, then continue with the lossy dictionary. */
+function reportCollisions(problems: string[]): void {
+    if (problems.length === 0) return;
+    if (IS_DEV) throw new Error(problems.join('\n'));
+    for (const p of problems) {
+        if (warnedCollisions.has(p)) continue;
+        warnedCollisions.add(p);
+        console.warn(p);
+    }
+}
+
+/** Static check, memoised per dictionary object. A dictionary is only recorded
+ *  as validated when it is clean, so a lossy one is re-reported (DEV: re-thrown)
+ *  on every construction rather than silenced after the first. */
+function assertDictionaryUnique(dict: Dict): void {
+    if (validatedDicts.has(dict)) return;
+    const collisions = findDictionaryCollisions(dict);
+    if (collisions.length === 0) { validatedDicts.add(dict); return; }
+    reportCollisions(collisions.map(c =>
+        `[UrlStateEncoder] share-link dictionary collision at ${c.scope || '<root>'}: ` +
+        `'${c.keys[0]}' and '${c.keys[1]}' both alias to '${c.alias}' — the later one ` +
+        `overwrites the earlier on encode and decode, so its state is dropped from every share link.`,
+    ));
+}
 // Represents any JSON-serializable value flowing through diff/merge/quantize
 type JsonVal = string | number | boolean | null | undefined | JsonVal[] | { [key: string]: JsonVal };
 
@@ -14,6 +116,7 @@ export class UrlStateEncoder<T extends object> {
     constructor(defaultState: T, dictionary: Dict | null = null) {
         this.defaultState = defaultState;
         this.dictionary = dictionary;
+        if (dictionary) assertDictionaryUnique(dictionary);
     }
 
     public encode(currentState: T, _advancedMode?: boolean): string {
@@ -93,6 +196,9 @@ export class UrlStateEncoder<T extends object> {
         const result: Record<string, JsonVal> = {};
         
         if (toShort) {
+            // Write-time backstop for the dictionary contract in the file header:
+            // remembers which source key wrote each wire key at this level.
+            const written = new Map<string, string>();
             Object.keys(obj).forEach(key => {
                 let targetKey = key;
                 let subDict = null;
@@ -101,6 +207,14 @@ export class UrlStateEncoder<T extends object> {
                     if (typeof entry === 'string') targetKey = entry;
                     else { targetKey = entry._alias; subDict = entry.children; }
                 }
+                const prior = written.get(targetKey);
+                if (prior !== undefined) {
+                    reportCollisions([
+                        `[UrlStateEncoder] share-link key collision on encode: '${prior}' and '${key}' ` +
+                        `both write wire key '${targetKey}', so '${prior}' is dropped from this share link.`,
+                    ]);
+                }
+                written.set(targetKey, key);
                 const value = obj[key];
                 if (subDict && value && typeof value === 'object' && !Array.isArray(value)) {
                     result[targetKey] = this.applyDictionary(value, subDict, true);

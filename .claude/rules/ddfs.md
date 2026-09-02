@@ -60,6 +60,8 @@ DDFS at runtime". Something does:
 
 ```
 npm run typecheck
+npm run test:share-dictionary   # node-only: getDictionary() collision-free, memoised, and every
+                                # feature slice round-trips through UrlStateEncoder
 npm run smoke:interact
 ```
 

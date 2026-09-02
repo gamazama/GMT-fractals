@@ -513,6 +513,9 @@ export class DuplicateFeatureError extends Error {
 class FeatureRegistry {
     private features = new Map<string, FeatureDefinition>();
     private sortedCache: FeatureDefinition[] | null = null;
+    /** Memoised `getDictionary()` result; invalidated wherever `features`
+     *  is mutated (both `features.set` sites in `register()`). */
+    private dictCache: any = null;
     private frozen = false;
     /** Captured at freeze() time in dev so FeatureRegistryFrozenError can
      *  point at the module that prematurely triggered store construction
@@ -539,6 +542,7 @@ class FeatureRegistry {
                 );
                 this.features.set(def.id, def);
                 this.sortedCache = null;
+                this.dictCache = null;
                 return;
             }
             // Prod: hard fail. Production has no HMR, so this is always a real conflict.
@@ -563,6 +567,7 @@ class FeatureRegistry {
         }
         this.features.set(def.id, def);
         this.sortedCache = null; // Invalidate cache
+        this.dictCache = null;
     }
 
     /** Freeze the registry. Subsequent `register()` calls for NEW ids throw
@@ -627,16 +632,36 @@ class FeatureRegistry {
 
     /**
      * @invariant Per-feature dictionary entries are keyed by `shortId` ONLY.
-     *   Params without `shortId` are absent from preset aliases.
-     * @invariant Aliases must be UNIQUE — globally across features, and
-     *   within one feature's params. `UrlStateEncoder.applyDictionary`
-     *   writes `result[alias] = value` on encode and builds a single
+     *   Params without `shortId` are absent from preset aliases and travel
+     *   under their own name.
+     * @invariant Wire keys must be UNIQUE — feature aliases (`shortId || id`)
+     *   globally, and within one feature every param's wire key
+     *   (`shortId || name`). `UrlStateEncoder.applyDictionary` writes
+     *   `result[alias] = value` on encode and builds a single
      *   `alias -> longKey` reverse map on decode, so a collision silently
-     *   drops one side's entire state from every share link. ENFORCED: this
-     *   method throws on either kind of duplicate.
-     *   — proven by: npm run smoke:share-link, whose feature-parity check
-     *   round-trips droste through `generateShareStringFromPreset` +
-     *   `parseShareString` and compares every value.
+     *   drops one side's entire state from every share link. ENFORCED here:
+     *   throw in DEV, `console.warn` once in prod (a prod throw would take
+     *   every share link down; the warn keeps the pre-detector behaviour plus
+     *   a signal — `utils/Sharing.ts` catches and returns '' on a throw, so
+     *   nothing else would be lost, but nothing would be shared either).
+     *   Checked against the WIRE key, not the shortId alone: a shortId equal
+     *   to the name of an un-aliased sibling collides just the same, because
+     *   un-aliased params pass through the encoder verbatim.
+     *   — proven by: npm run test:share-dictionary ("dictionary has no alias
+     *   collisions" and "every root key and every feature slice round-tripped
+     *   value-for-value"). Until 2026-09-02 this cited a droste parity check
+     *   in `smoke:share-link` that never existed — that smoke samples three
+     *   params, none of them droste.
+     * @invariant The result is MEMOISED and deep-frozen. The cache is
+     *   invalidated wherever `register()` mutates `features` (same sites as
+     *   `sortedCache`), not on `freeze()`: node harnesses never construct a
+     *   store, and dev HMR replaces a def after freeze. `utils/Sharing.ts`
+     *   calls this on every share encode/decode, so without the cache the
+     *   collision walk would run per share. Frozen so a caller cannot poison
+     *   the shared object (`UrlStateEncoder` keys its own reverse-map cache on
+     *   its identity).
+     *   — proven by: npm run test:share-dictionary ("getDictionary() is
+     *   memoised" and "the memoised dictionary is frozen").
      *
      *   History, because the failure mode is worth remembering: two collisions
      *   shipped undetected. `drawing` and `droste` both claimed feature
@@ -649,6 +674,8 @@ class FeatureRegistry {
      *   exactly as they did and merely gain the missing values.
      */
     public getDictionary() {
+        if (this.dictCache) return this.dictCache;
+
         const dict: any = {
             'formula': 'f',
             'cameraPos': 'cp', // Preset-format-only; absorbed into sceneOffset on load
@@ -664,48 +691,50 @@ class FeatureRegistry {
         };
 
         // Collision detection. Aliases are a wire format: two features sharing a
-        // shortId, or two params sharing one inside the same feature, silently
-        // collapse onto a single dictionary entry and the loser's state vanishes
-        // from every share link — a failure that surfaces as a user reporting a
-        // lost scene, months later, with no error anywhere. Both cases had
-        // actually shipped (droste/drawing on 'dr'; materials emissionMode and
-        // envMapColorSpace on 'ec'). Throwing here mirrors UniformSchema, which
-        // took the same boot-time-throw approach to duplicate uniform names in
-        // 36ad672c; see the ADR-0020 Update block.
+        // shortId, or two params sharing one wire key inside the same feature,
+        // silently collapse onto a single dictionary entry and the loser's state
+        // vanishes from every share link — a failure that surfaces as a user
+        // reporting a lost scene, months later, with no error anywhere. Both
+        // cases had actually shipped (droste/drawing on 'dr'; materials
+        // emissionMode and envMapColorSpace on 'ec'). All problems are gathered
+        // first so one report names every clash, not just the first.
+        const problems: string[] = [];
         const seenFeatureAliases = new Map<string, string>();
 
         this.features.forEach(feat => {
             const featAlias = feat.shortId || feat.id;
             const clash = seenFeatureAliases.get(featAlias);
             if (clash) {
-                throw new Error(
-                    `[FeatureSystem] duplicate share-link alias '${featAlias}': features ` +
-                    `'${clash}' and '${feat.id}' both claim it. Feature shortIds are global ` +
-                    `keys in the share-link dictionary, so one would silently overwrite the ` +
-                    `other and its state would be dropped from every generated link. Give ` +
-                    `one of them a free shortId.`,
+                problems.push(
+                    `duplicate share-link alias '${featAlias}': features '${clash}' and '${feat.id}' ` +
+                    `both claim it. Feature shortIds are global keys in the share-link dictionary, ` +
+                    `so one silently overwrites the other and its state is dropped from every ` +
+                    `generated link. Give one of them a free shortId.`,
                 );
             }
             seenFeatureAliases.set(featAlias, feat.id);
 
             const paramMap: any = {};
-            const seenParamAliases = new Map<string, string>();
+            // Keyed by the key a param actually occupies on the wire: its shortId
+            // when it has one, its own name otherwise (un-aliased params are not
+            // in the dictionary and pass through verbatim). Comparing shortIds
+            // against shortIds alone misses a shortId equal to an un-aliased
+            // sibling's name, which collides just the same.
+            const seenWireKeys = new Map<string, string>();
 
             Object.entries(feat.params).forEach(([key, config]) => {
-                if (config.shortId) {
-                    const pClash = seenParamAliases.get(config.shortId);
-                    if (pClash) {
-                        throw new Error(
-                            `[FeatureSystem] duplicate share-link alias '${config.shortId}' ` +
-                            `within feature '${feat.id}': params '${pClash}' and '${key}' both ` +
-                            `claim it, so one would be dropped from every share link. Param ` +
-                            `shortIds need only be unique within their own feature — pick ` +
-                            `another free one.`,
-                        );
-                    }
-                    seenParamAliases.set(config.shortId, key);
-                    paramMap[key] = config.shortId;
+                const wireKey = config.shortId || key;
+                const pClash = seenWireKeys.get(wireKey);
+                if (pClash) {
+                    problems.push(
+                        `duplicate share-link wire key '${wireKey}' within feature '${feat.id}': ` +
+                        `params '${pClash}' and '${key}' both occupy it, so one is dropped from ` +
+                        `every share link. Param shortIds need only be unique within their own ` +
+                        `feature (and must not equal a sibling's name) — pick another free one.`,
+                    );
                 }
+                seenWireKeys.set(wireKey, key);
+                if (config.shortId) paramMap[key] = config.shortId;
             });
 
             dict.features.children[feat.id] = {
@@ -714,7 +743,23 @@ class FeatureRegistry {
             };
         });
 
-        return dict;
+        if (problems.length) {
+            const message = `[FeatureSystem] share-link dictionary is not collision-free:\n  - ${problems.join('\n  - ')}`;
+            if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) throw new Error(message);
+            // Prod: once — the result is memoised below, so this block does not
+            // run again until a registration invalidates the cache.
+            console.warn(message);
+        }
+
+        const deepFreeze = (o: any): any => {
+            if (o && typeof o === 'object' && !Object.isFrozen(o)) {
+                Object.freeze(o);
+                Object.values(o).forEach(deepFreeze);
+            }
+            return o;
+        };
+        this.dictCache = deepFreeze(dict);
+        return this.dictCache;
     }
 
     /**
