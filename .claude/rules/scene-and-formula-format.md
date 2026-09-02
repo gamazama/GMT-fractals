@@ -32,6 +32,7 @@ npm run test:migrations
 npm run smoke:migrations
 npm run test:frag
 npm run test:frag:integration
+npm run test:frag:catalog-drift   # node-only, ~10 s: no catalog `pass` row errors under its pipeline today
 npm run test:share-dictionary   # node-only, ~1 s: the share dictionary and a full-slice round-trip
 npm run smoke:share-link
 npm run smoke:gallery-link

@@ -221,9 +221,11 @@ interface WorkshopProps {
  *
  * @invariant Pipeline selector is `'auto' | 'v3' | 'v4'`. Effective pipeline
  * resolves via `getRecommendedPipeline` (catalog auto-pick), defaulting to
- * `'v4'` for unknown IDs (custom paste). The dice predicate filters out
- * catalog entries with `recommended === 'none'` unless the user opts into
- * "show broken". See ADR-0058.
+ * `'v4'` for unknown IDs (custom paste). The dice predicate skips catalog
+ * entries with `recommended === 'none'`, and the browse pickers show them
+ * GREYED (disabledIds + tooltip), unless the user opts into "show broken",
+ * which enables both. Until 2026-09-02 the pickers hid them outright. See
+ * ADR-0058.
  *
  * @invariant Re-edit lifecycle: when `editFormula` prop is set, the Workshop
  * reads `registry.get(id)?.importSource` and rehydrates state from `glsl`,
@@ -513,16 +515,33 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
 
     // ── Unified catalog browser (thumbnails, category/folder grouping) ──
     // The Frag/DEC browse buttons open <FormulaPicker> scoped to that source.
-    // Shows ALL importable formulas (thumbnail where available; respects the
-    // "show broken" toggle), so the import tool isn't limited to the curated set.
+    // Shows ALL importable formulas (thumbnail where available; catalog rows
+    // recommended 'none' are greyed until "show broken"), so the import tool
+    // isn't limited to the curated set.
     const catalogData = useCatalogData({ thumbnailedOnly: false });
+    // "weavable only" FILTERS (it is a deliberate narrowing). Catalog rows
+    // recommended 'none' are NOT filtered any more — they are greyed via
+    // `disabledIds` with a tooltip, and "show broken" re-enables them. Hiding
+    // them was the actual user harm the audit measured: 21 shipped formulas
+    // invisible on three-month-old data, all 21 parsing today.
     const visibleCatalog = useMemo(() => {
-        if (!catalogData.ready) return catalogData;
-        const keep = (it: { id: string }) =>
-            (showIncompatible || getFormulaCompat(it.id)?.recommended !== 'none')
-            && (!weavableOnly || isFormulaWeavable(it.id));
+        if (!catalogData.ready || !weavableOnly) return catalogData;
+        const keep = (it: { id: string }) => isFormulaWeavable(it.id);
         return { ...catalogData, frag: catalogData.frag.filter(keep), dec: catalogData.dec.filter(keep) };
-    }, [catalogData, showIncompatible, weavableOnly]);
+    }, [catalogData, weavableOnly]);
+    const brokenIds = useMemo(() => {
+        const ids = new Set<string>();
+        if (!catalogData.ready || showIncompatible) return ids;
+        for (const it of [...catalogData.frag, ...catalogData.dec]) {
+            if (getFormulaCompat(it.id)?.recommended === 'none') ids.add(it.id);
+        }
+        return ids;
+    }, [catalogData, showIncompatible]);
+    const brokenReason = useCallback((id: string) =>
+        brokenIds.has(id)
+            ? 'The catalog snapshot found neither pipeline could render this. It may work now — tick "show broken" to try it.'
+            : undefined,
+    [brokenIds]);
     const fragCatalogGroups = useMemo(
         () => (browseMode === 'folder' ? folderGroups(visibleCatalog, 'frag') : categoryGroups(visibleCatalog, 'frag')),
         [visibleCatalog, browseMode],
@@ -907,6 +926,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                 specialEntries={NO_SPECIAL_ENTRIES}
                                 headerLinks={FRAG_HEADER_LINKS}
                                 catalogGroups={fragCatalogGroups}
+                                disabledIds={brokenIds}
+                                disabledReason={brokenReason}
                                 onCommit={(c) => {
                                     if (c.action === 'catalog') handleBrowseSelect(`${c.source}:${c.id}`);
                                     setBrowseFragOpen(false);
@@ -945,6 +966,8 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                                 specialEntries={NO_SPECIAL_ENTRIES}
                                 headerLinks={DEC_HEADER_LINKS}
                                 catalogGroups={decCatalogGroups}
+                                disabledIds={brokenIds}
+                                disabledReason={brokenReason}
                                 onCommit={(c) => {
                                     if (c.action === 'catalog') handleBrowseSelect(`${c.source}:${c.id}`);
                                     setBrowseDECOpen(false);
@@ -970,7 +993,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                     browse pickers, which search the catalog with thumbnails.) */}
                 <div className="px-3 pb-1.5 flex items-center gap-2">
                     <label
-                        title="Show formulas that neither Iteration nor Standalone mode can render (for debugging). Off by default."
+                        title="Enable the formulas the catalog snapshot marked as rendering under neither pipeline. They are greyed out by default; many parse today and may well work."
                         className="flex items-center gap-1 text-[10px] text-fg-dim hover:text-fg-tertiary cursor-pointer select-none shrink-0"
                     >
                         <input

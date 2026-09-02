@@ -266,6 +266,18 @@ export function getFormulaCompat(id: string): FormulaCompat | undefined {
  * changes). After changing either pipeline or adding library formulas the
  * pass/fail data needs a new harness run or auto-pick will be stale. See
  * ADR-0058.
+ *
+ * @invariant No catalog row says `pass` for a pipeline that hard-errors on
+ *   that source today. Three months of silent drift (87 rows differing in
+ *   some column, two of them this hard kind) is why this is now gated.
+ *   — proven by: npm run test:frag:catalog-drift ("HARD staleness: N catalog
+ *   row(s) say pass for a pipeline that errors today", listing them).
+ *   Falsified 2026-09-02 against the catalog as generated: red on
+ *   `Experimental/Knot.frag` and `kosalos/KIFS.frag` (v4). Both rows were
+ *   demoted in place and the change appended to the file's `corrections`
+ *   array; the frozen artifact is otherwise untouched. Soft drift (a row
+ *   says fail/skip, parses today) is reported by the same guard, not gated:
+ *   parsing is not rendering.
  */
 export function getRecommendedPipeline(id: string): RecommendedPipeline {
     return _compat?.[id]?.recommended ?? 'v4';
