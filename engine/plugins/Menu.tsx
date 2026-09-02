@@ -176,7 +176,7 @@ const subscribe = (fn: () => void) => {
 // which is a Menu plugin implementation detail, not user state.
 
 /**
- * @invariant Counter, not boolean — two `MobileMenuHost` mounts in the
+ * @assumption Counter, not boolean — two `MobileMenuHost` mounts in the
  *   same render tree (StrictMode dev double-mount) increment/decrement
  *   symmetrically; one bool would false-clear on the second mount's
  *   cleanup.
@@ -272,7 +272,7 @@ export const menu = {
 let _installed = false;
 let _unsubStore: (() => void) | null = null;
 /**
- * @invariant `queueMicrotask(_notify)` defer is load-bearing — Zustand
+ * @assumption `queueMicrotask(_notify)` defer is load-bearing — Zustand
  *   fires subscribers synchronously during `setState`; immediate
  *   `_notify` calls `setState` on MenuAnchor's `useSyncExternalStore`
  *   while React is still committing, triggering "Cannot update a
@@ -454,7 +454,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
 // Monotonic revision bumped every _notify() so useSyncExternalStore has
 // a cheap, stable "has anything changed" snapshot.
 /**
- * @invariant `_bumpRev` MUST be the FIRST entry in `_subscribers`. `_notify`
+ * @assumption `_bumpRev` MUST be the FIRST entry in `_subscribers`. `_notify`
  *   iterates the Set in insertion order, and this `add` runs at module
  *   evaluation — before any component can mount and call `subscribe()`. So the
  *   revision is already incremented by the time React's `handleStoreChange`

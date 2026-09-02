@@ -121,7 +121,7 @@ export const setSlice = <K extends AppSliceId>(
 // reference-equality re-render gate, forcing the consumer component to
 // re-render on every store update.
 //
-// @invariant Module-frozen singleton fallback — using `?? {}` inline in
+// @assumption Module-frozen singleton fallback — using `?? {}` inline in
 //   the selector would create a fresh object every render and defeat
 //   zustand's reference-equality re-render gate.
 const EMPTY_LIVE_MODS: Readonly<Partial<Record<LfoTarget, number>>> = Object.freeze({});
@@ -150,7 +150,7 @@ export const useLiveModulations = (): Partial<Record<LfoTarget, number>> => {
  * Returns `undefined` when no axis is modulated, so the widget renders as an
  * ordinary control rather than an indicator pinned at zero.
  *
- * @invariant Axes with no entry fall back to `base`, never to 0 — only
+ * @assumption Axes with no entry fall back to `base`, never to 0 — only
  *   modulated targets appear in `liveModulations`, so a one-axis link would
  *   otherwise report the other axes as zero.
  * @param additive `liveModulations` normally holds the ABSOLUTE modulated
@@ -197,7 +197,7 @@ export const subscribeSlice = <K extends AppSliceId>(
  * keeps reading the raw slice value — a recurring footgun).
  */
 /**
- * @invariant Scalars look up `featureId.key`; vec-shaped fields override
+ * @assumption Scalars look up `featureId.key`; vec-shaped fields override
  *   per axis via `featureId.key_x|y|z|w`. Returns the same slice
  *   reference if nothing was touched (zustand-friendly).
  */

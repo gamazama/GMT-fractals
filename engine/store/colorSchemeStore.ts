@@ -25,7 +25,7 @@
  * themes the whole suite. A one-time migration maps the legacy `gmt.colorScheme` enum onto
  * the axes for existing users.
  *
- * @invariant Engine-core — host-agnostic; never imports an app.
+ * @assumption Engine-core — host-agnostic; never imports an app.
  * @see plans/color-scheme-spec.md, index.css, docs/adr/0080-runtime-color-scheme-system.md
  */
 import { create } from 'zustand';

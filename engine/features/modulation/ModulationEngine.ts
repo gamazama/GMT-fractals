@@ -1,19 +1,19 @@
 /**
  * ModulationEngine — LFO + rule-driven signal pipeline.
  *
- * @invariant LFO master switch (`lfosEnabled === false`) gates BOTH writes
+ * @assumption LFO master switch (`lfosEnabled === false`) gates BOTH writes
  *   AND reads. `updateOscillators` returns early before refreshing any
  *   `lfoValues`; the rule-side gate inside `update()` must also skip
  *   LFO-sourced rules, or they read stale cached `lfoValues` and hang at
  *   their final modulated value.
- * @invariant LFO phase is unit-period (0..1), NOT radians — see the `t` in
+ * @assumption LFO phase is unit-period (0..1), NOT radians — see the `t` in
  *   `updateOscillators`: `((time / period) + phase) % 1`. Noise samples at
  *   `time / period` (no phase added). Larger `period` = slower wiggle.
- * @invariant `offsets` buffer is APPENDED to inside `update()`, never
+ * @assumption `offsets` buffer is APPENDED to inside `update()`, never
  *   cleared. Caller (AnimationSystem live path, `applyModulationsAt`
  *   export path) MUST call `resetOffsets()` before `update()`, or rules
  *   accumulate across frames.
- * @invariant Two rules targeting the same param ACCUMULATE into
+ * @assumption Two rules targeting the same param ACCUMULATE into
  *   `offsets[target]`; `gain * signal + offset` is added to whatever
  *   was there.
  */
@@ -97,7 +97,7 @@ class ModulationEngine {
      * Is any modulation currently driving this param — the scalar itself or any
      * vec axis of it?
      *
-     * @invariant This is the guard against the DOUBLE-WRITER flicker. Both the
+     * @assumption This is the guard against the DOUBLE-WRITER flicker. Both the
      *   DDFS auto-setter (on slider move) and AnimationSystem's tick (once per
      *   frame) write the same uniform. The setter wrote the RAW base while the
      *   tick wrote base+offset, so during a drag the uniform alternated between
@@ -221,7 +221,7 @@ class ModulationEngine {
             // downstream — and it was undoing that work, re-smearing on the
             // main thread the timing the audio thread had just preserved.
             //
-            // @invariant The per-frame coefficients are converted to TIME
+            // @assumption The per-frame coefficients are converted to TIME
             //   CONSTANTS at the 60fps they were tuned against, so every saved
             //   rule keeps the response its author dialled in and only stops
             //   drifting with frame rate. `attackTauSec` is the whole mapping.
@@ -268,7 +268,7 @@ class ModulationEngine {
     /**
      * Record which uniforms live modulation is currently driving.
      *
-     * @invariant These uniforms have TWO writers — this engine (every frame,
+     * @assumption These uniforms have TWO writers — this engine (every frame,
      *   base+offset) and the worker's `syncConfigUniforms`, which rewrites every
      *   uniform-backed param from the RAW BASE config whenever any config
      *   update lands. A slider drag emits a config update per pointermove, so

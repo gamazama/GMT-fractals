@@ -47,7 +47,7 @@ interface Migration {
 }
 
 /**
- * @invariant Module-scope state; the first `apply` or `list` after any
+ * @assumption Module-scope state; the first `apply` or `list` after any
  *   `registerMigration` re-sorts in place.
  */
 const _migrations: Migration[] = [];
@@ -78,7 +78,7 @@ export const listMigrations = (): ReadonlyArray<Migration> => {
  * migrations ran).
  */
 /**
- * @invariant `m.apply` throws are caught and logged; the migration
+ * @assumption `m.apply` throws are caught and logged; the migration
  *   chain continues with the unchanged preset. Returning falsy is
  *   treated as "no change", not "void output":
  *   `preset = m.apply(preset) ?? preset`.

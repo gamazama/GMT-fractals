@@ -11,9 +11,9 @@
  * across `AudioPanel`, `AudioSpectrum`, `AudioStrip`, `audioClipSync`,
  * `audioTick` and the debug suites keep the surface they had.
  *
- * @invariant Delegation only. If logic accumulates here it belongs in one of
+ * @assumption Delegation only. If logic accumulates here it belongs in one of
  *   the two halves.
- * @invariant There is no main-thread analysis fallback, deliberately. The
+ * @assumption There is no main-thread analysis fallback, deliberately. The
  *   AnalyserNode implementation existed as an A/B arm (ADR-0110), the A/B was
  *   concluded in the owner's favour, and it was deleted rather than kept as a
  *   safety net. A silent fallback to a worse implementation HIDES the bug that
@@ -21,7 +21,7 @@
  *   instead. AudioWorklet has been universally supported since well before
  *   this shipped, so the realistic failure is our own code, which is exactly
  *   the case a fallback would have masked.
- * @invariant `init()` wires analysis to the transport's `analysisBus` via the
+ * @assumption `init()` wires analysis to the transport's `analysisBus` via the
  *   constructor hook, so transport entry points that self-init (`loadTrack`,
  *   `connectMicrophone`, `connectSystemAudio`) bring analysis up with them.
  *

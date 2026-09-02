@@ -23,7 +23,7 @@
  * The host owns the RAF loop (TSAA accumulates across frames; a fractal-
  * affecting change resets the accumulator via an internal param hash).
  *
- * @invariant Host-agnostic: no React / store / DDFS / fluid imports here.
+ * @assumption Host-agnostic: no React / store / DDFS / fluid imports here.
  * @see engine/fractal/shaders/fractalKernel.ts (the shared kernel)
  * @see fluid-toy/fluid/FluidEngine.ts (the other consumer of the kernel)
  */

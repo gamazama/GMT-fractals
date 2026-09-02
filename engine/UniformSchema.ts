@@ -1,5 +1,5 @@
 /**
- * @invariant Importing a *value* from this module (`UNIFORM_SCHEMA`,
+ * @assumption Importing a *value* from this module (`UNIFORM_SCHEMA`,
  *   `UNIFORM_DEFAULTS`, `createUniforms`) triggers `registerFeatures()` at
  *   module top level. A type-only import — e.g. `UniformDefinition` — is
  *   elided by tsc AND esbuild under this tsconfig (no `verbatimModuleSyntax`),
@@ -9,7 +9,7 @@
  *   module takes `featureRegistry` from there; evaluating this module during
  *   FeatureSystem's own evaluation would hit `featureRegistry` in TDZ).
  *
- * @invariant Uniform-name collisions THROW at module load — both
+ * @assumption Uniform-name collisions THROW at module load — both
  *   feature-vs-base and feature-vs-feature. See the two checks below
  *   `featureUniforms`. Nothing is silently filtered and `UNIFORM_DEFAULTS`
  *   is never reached with a duplicate name. (Replaced a silent

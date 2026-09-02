@@ -95,7 +95,7 @@ const defaultFileStem = (): string => {
 };
 
 /**
- * @invariant Captures option values into `_getCanvas` / `_parseScene` /
+ * @assumption Captures option values into `_getCanvas` / `_parseScene` /
  *   `_serializeScene` / `_fileExtension` / `_snapshotAnchor` /
  *   `_onBeforeSerialize` BEFORE the `_installed` short-circuit. Reinstall
  *   updates captured deps even though registration is skipped — this
@@ -104,7 +104,7 @@ const defaultFileStem = (): string => {
  *   value at install time (the `Save Scene (${_fileExtension})` label)
  *   keep the first install's text, while items that read the module-level
  *   value at render time (`LoadSceneMenuItem`) follow the reinstall.
- * @invariant PNG/JPG export menu items + SnapshotButton are gated on
+ * @assumption PNG/JPG export menu items + SnapshotButton are gated on
  *   `_getCanvas` AT install time. Registering `getCanvas` AFTER install
  *   will not back-fill these items — apps must uninstall + reinstall,
  *   or pass `getCanvas` up-front.
@@ -234,7 +234,7 @@ export const uninstallSceneIO = () => {
  * the only entry point).
  */
 /**
- * @invariant Pure decoder only — returns a parsed Preset but does NOT
+ * @assumption Pure decoder only — returns a parsed Preset but does NOT
  *   apply it. Callers MUST follow with
  *   `useEngineStore.getState().loadScene({ preset })` — calling
  *   `loadPreset` directly skips the compile gate, post-boot config

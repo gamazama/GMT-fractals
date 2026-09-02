@@ -77,7 +77,7 @@ export const RedoButton: React.FC = () => {
 // ── Install ─────────────────────────────────────────────────────────────
 
 /**
- * @invariant `uninstallShortcuts()` clears the shortcut registry but
+ * @assumption `uninstallShortcuts()` clears the shortcut registry but
  *   does NOT reset Undo's `_installed` flag. A subsequent
  *   `installUndo()` after a bare `uninstallShortcuts()` is a no-op —
  *   the five Undo bindings never come back. Call `uninstallUndo()` FIRST.
@@ -92,7 +92,7 @@ export interface InstallUndoOptions {
 }
 
 /**
- * @invariant `Mod+Shift+Z` is registered unconditionally despite the
+ * @assumption `Mod+Shift+Z` is registered unconditionally despite the
  *   'Redo (Mac)' label — on Win/Linux it expands to `Ctrl+Shift+Z` and
  *   fires the engine-core redo. App-gmt's camera-undo binding at
  *   `priority:10` shadows it intentionally.

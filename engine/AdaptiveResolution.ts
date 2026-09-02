@@ -201,9 +201,9 @@ export function getAdaptiveGrace(stillFps: number): number {
 }
 
 /**
- * @invariant `state.scale` is bounded `[1.0, 1 / max(0.01, minQuality)]`
+ * @assumption `state.scale` is bounded `[1.0, 1 / max(0.01, minQuality)]`
  *   on every smart-mode assignment.
- * @invariant `gateOnAccumOnly` disables BOTH the `isInteracting`
+ * @assumption `gateOnAccumOnly` disables BOTH the `isInteracting`
  *   activity write AND the `isInteracting` clause of `activitySignal`,
  *   leaving only the accumulation-drop signal (`timeSinceActivity <
  *   grace`). Used by fluid-toy whose accumulator is not invalidated by
@@ -212,10 +212,10 @@ export function getAdaptiveGrace(stillFps: number): number {
  *   explicit `isInteracting` signal (GMT, whose InteractionSession
  *   declares every gesture). The two are mutually exclusive in practice;
  *   neither affects deep-accum protection or full-res cost sampling.
- * @invariant `holdUntilMs` only blocks downscale — comparison is
+ * @assumption `holdUntilMs` only blocks downscale — comparison is
  *   strict `nextScale > state.scale`; upscale is always permitted
  *   during hold.
- * @invariant `fullResAccum` resets to 0 whenever `scale > 1.001` —
+ * @assumption `fullResAccum` resets to 0 whenever `scale > 1.001` —
  *   deep-accum protection only re-arms after sustained full-res
  *   render.
  */

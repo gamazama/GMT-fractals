@@ -33,16 +33,16 @@ interface MobileScrollIntroProps {
 }
 
 /**
- * @invariant Must render BEFORE `<MobileViewportShell>` in DOM order
+ * @assumption Must render BEFORE `<MobileViewportShell>` in DOM order
  *   (see top-of-file comment lines 7-9). The sticky-shell-after-scroll
  *   mechanism depends on this banner contributing pre-shell scroll
  *   height; reversing order breaks the address-bar collapse trick.
- * @invariant Banner uses `100svh` (small viewport); shell uses
+ * @assumption Banner uses `100svh` (small viewport); shell uses
  *   `100dvh` (dynamic viewport). The pairing gives the body scroll
  *   capacity exceeding the visible viewport by at least the
  *   address-bar height — that IS the collapse mechanism. Both heights
  *   are load-bearing; do not interchange with `vh`. See ADR-0039.
- * @invariant Carries `scrollSnapAlign: 'start'` — the open-state snap
+ * @assumption Carries `scrollSnapAlign: 'start'` — the open-state snap
  *   target for the host body's `scroll-snap-type: y mandatory`. Pairs
  *   with the sticky shell's snap-start so the body's only scroll rests
  *   either here (splash) or on the fullscreen shell, never between.

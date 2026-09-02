@@ -8,10 +8,10 @@
  * bottleneck, so the simpler thing that can be read and tested wins. Revisit
  * only if Safari/Firefox profiling says otherwise.
  *
- * @invariant No module-scope state, no DOM. This is imported by an
+ * @assumption No module-scope state, no DOM. This is imported by an
  *   AudioWorklet processor, which has neither — and Vite inlines it into the
  *   worklet chunk. @see docs/adr/0110-audio-analysis-in-a-worklet.md
- * @invariant Real input is fed as a complex transform with a zeroed imaginary
+ * @assumption Real input is fed as a complex transform with a zeroed imaginary
  *   part rather than via the pack-into-N/2 real-FFT trick. That costs ~2x and
  *   is a deliberate trade: the naive form is verifiable against a textbook DFT
  *   (`debug/test-fft.mts` does exactly that), and glitches on the audio thread

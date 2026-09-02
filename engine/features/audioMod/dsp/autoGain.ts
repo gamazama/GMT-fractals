@@ -6,13 +6,13 @@
  * has hit before: they drift, and an A/B between them stops isolating the one
  * thing it is meant to test.
  *
- * @invariant Silence FREEZES both the follower and the gain. Gating on the
+ * @assumption Silence FREEZES both the follower and the gain. Gating on the
  *   RELEASED peak instead of the live input is the trap: through a gap between
  *   tracks the follower keeps decaying, the gain is recomputed against an
  *   ever-smaller peak, and it ratchets to the ceiling before the peak finally
  *   drops under the floor — so the next downbeat arrives at maximum boost and
  *   detonates. This shipped once already.
- * @invariant Attack is instantaneous, release is timed. A peak is a peak; the
+ * @assumption Attack is instantaneous, release is timed. A peak is a peak; the
  *   release rate is what sets how fast the rig adapts to a quieter track.
  */
 

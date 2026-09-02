@@ -24,10 +24,10 @@
  * returns a PLAN rather than performing the writes, and each caller executes
  * it its own way.
  *
- * @invariant Pure. No event emits, no store writes, no proxy access — which is
+ * @assumption Pure. No event emits, no store writes, no proxy access — which is
  *   what lets `debug/test-modulation-parity.mts` run one plan and compare the
  *   two executions.
- * @invariant Branch order and fall-through mirror `classifyModulationTarget`;
+ * @assumption Branch order and fall-through mirror `classifyModulationTarget`;
  *   dispatch is on `routing.branch`, never on a re-tested prefix.
  * @see docs/adr/0109-one-modulation-dispatcher.md
  */
@@ -263,7 +263,7 @@ export function planModulationTarget(
 /**
  * Uniform writes for the composites, once every target has been planned.
  *
- * @invariant Must run AFTER the whole target loop. A vec's axes and julia's
+ * @assumption Must run AFTER the whole target loop. A vec's axes and julia's
  *   components are separate targets; emitting mid-loop is what dropped the
  *   earlier axes.
  */

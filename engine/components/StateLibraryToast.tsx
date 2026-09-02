@@ -29,9 +29,9 @@ interface StateLibraryToastProps {
 }
 
 /**
- * @invariant Returns null when no toast is pending — no internal timer;
+ * @assumption Returns null when no toast is pending — no internal timer;
  *   the slice owns toast lifetime via `setTimeout`.
- * @invariant `toastFieldKey(arrayKey)` is the only contract between
+ * @assumption `toastFieldKey(arrayKey)` is the only contract between
  *   toast and slice. A typo in `arrayKey` at EITHER call site produces
  *   a dead toast with no runtime error.
  */

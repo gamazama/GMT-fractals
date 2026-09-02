@@ -103,7 +103,7 @@ type Slice = Record<string, unknown> | undefined;
  * `renderState` (see `applyLiveMod` in GmtRendererTickDriver). A uniformless
  * param on one of these still reaches the renderer.
  *
- * @invariant Adding a feature here is a CLAIM that the host actually merges it.
+ * @assumption Adding a feature here is a CLAIM that the host actually merges it.
  *   The coverage gate trusts this set — listing a feature whose slice ships raw
  *   would mark dead targets as healthy.
  */

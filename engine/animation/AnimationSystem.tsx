@@ -6,7 +6,7 @@
  * oscillators + modulation rules (`modulationEngine`), then one pass over
  * every modulated target.
  *
- * @invariant Neither branch SELECTION nor branch BODIES live here. Every
+ * @assumption Neither branch SELECTION nor branch BODIES live here. Every
  *   target is classified by `classifyModulationTarget`
  *   (engine/features/modulation/targetRouting.ts) and executed by
  *   `planModulationTarget` (engine/features/modulation/applyTarget.ts) — the
@@ -37,7 +37,7 @@ import { FractalEvents, FRACTAL_EVENTS } from '../FractalEvents';
 
 // Resolved PER TICK, never captured at module scope.
 //
-// @invariant `getProxy()` returns the lazily-created stub until the host app
+// @assumption `getProxy()` returns the lazily-created stub until the host app
 //   calls `setProxy()` (engine-gmt does it in `installGmtRenderer`). A
 //   module-scope capture races that install: whichever module evaluates first
 //   wins, and if this one did, every `engine.modulations` write below landed on
@@ -107,10 +107,10 @@ function flushRecordBuffer() {
 }
 
 /**
- * @invariant Cleanup pass blocks the early-return: while
+ * @assumption Cleanup pass blocks the early-return: while
  *   `activeTargetsRef.current.size > 0` the tick still runs one pass to
  *   clear the previous frame's stale uniforms and emit baselines.
- * @invariant Uniforms flow via `FractalEvents.emit(FRACTAL_EVENTS.UNIFORM,
+ * @assumption Uniforms flow via `FractalEvents.emit(FRACTAL_EVENTS.UNIFORM,
  *   …)` NOT `engine.setUniform` — engine-core's WorkerProxy is a stub;
  *   only hosts with a real bridge receive them.
  */
@@ -233,19 +233,19 @@ export const tick = (delta: number) => {
     // more than interpolation — envelopes, thresholds and flux step as they
     // would have if the tick had actually run there.
     //
-    // @invariant Runs BEFORE step 4/5, never after. `combinedOffsets` below is
+    // @assumption Runs BEFORE step 4/5, never after. `combinedOffsets` below is
     //   a live REFERENCE to `modulationEngine.offsets`, so a sub-pass running
     //   afterwards would mutate the object the live pass had already read and
     //   leave `currentTargets` describing a different frame's targets.
-    // @invariant Sub-frames take ONLY `plan.records`. Uniforms, engine
+    // @assumption Sub-frames take ONLY `plan.records`. Uniforms, engine
     //   modulations and liveModulations belong to the present — emitting a past
     //   frame's uniform would flicker the viewport backwards through the gap.
     //   The plan is a description; the caller chooses what to execute.
-    // @invariant A frame the ring cannot cover is SKIPPED, not guessed — it
+    // @assumption A frame the ring cannot cover is SKIPPED, not guessed — it
     //   falls back to the repeat below. A wrong value dressed as a measurement
     //   is worse than an honest repeat. Misses cluster at the oldest end, so
     //   what survives is a suffix; `backfillFrom` is where it starts.
-    // @invariant Entries are staged, not pushed, and emitted in ASCENDING frame
+    // @assumption Entries are staged, not pushed, and emitted in ASCENDING frame
     //   order after the live pass. `batchAddKeyframesMultiRange` has a fast
     //   path only while frames increase — writing the gap after `currentFrame`
     //   would send every back-filled frame down a filter+sort path its own

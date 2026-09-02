@@ -16,7 +16,7 @@
  * everything else, modulation included. A curve the modulation path cannot see is
  * a param that modulates with the wrong feel.
  *
- * @invariant A param's curve must be resolvable from DDFS config (`scale`) or
+ * @assumption A param's curve must be resolvable from DDFS config (`scale`) or
  *   from `VIRTUAL_TARGET_SCALES` for non-DDFS targets. Do NOT reintroduce a
  *   widget-local `createXMapping(...)` constant — `debug/test-param-mapping.mts`
  *   fails on new ones, and modulation would silently skip that param.
@@ -194,11 +194,11 @@ const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi 
  *     travel = offset / (max - min)
  *     final  = fromDisplay( toDisplay(base) + travel × trackLength )
  *
- * @invariant Units are PRESERVED. `offset` stays in value units, so Gain,
+ * @assumption Units are PRESERVED. `offset` stays in value units, so Gain,
  *   Offset and LFO amplitude/min/max keep their meaning and linear params are
  *   bit-identical to before. This compensates curved params up to what linear
  *   params already do — it does not redefine the controls.
- * @invariant The result is CLAMPED to `[min, max]`. Outside the display domain
+ * @assumption The result is CLAMPED to `[min, max]`. Outside the display domain
  *   a curve is meaningless (log of a negative, a pow root of a negative), so
  *   unlike the linear path this cannot push a param past its slider range.
  * @see docs/adr/0108-modulation-in-slider-space.md

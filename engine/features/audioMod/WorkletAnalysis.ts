@@ -7,7 +7,7 @@
  * only producer. `ModulationEngine` and `AudioSpectrum` read the bank exactly
  * as they did before either existed.
  *
- * @invariant The band TABLE is built locally, never received. Both sides
+ * @assumption The band TABLE is built locally, never received. Both sides
  *   derive it from `(sampleRate, fftSize, bandsPerOctave)` via
  *   `bandMath.buildBandTable`, so `filterBank.rebuild()` here and the
  *   analyser's table in the worklet agree by construction. Shipping the table
@@ -204,7 +204,7 @@ export class WorkletAnalysis {
      * useful knob, so it maps through the relation that gave the old value its
      * meaning: `tau = -dt / ln(s)` at dt = 1/60, the rate it was tuned at.
      *
-     * @invariant Response and Detail share ONE latency budget instead of
+     * @assumption Response and Detail share ONE latency budget instead of
      *   stacking. The FFT window is itself a smoother — a 4096 window averages
      *   85ms of audio and lands its energy centroid ~43ms in the past — so
      *   adding a 75ms one-pole on top used to make ~118ms of total lag, and

@@ -5,17 +5,17 @@
  * as a plain `FeatureDefinition` literal; the engine derives state
  * slices, setters, uniform definitions, and CONFIG events.
  *
- * @invariant `featureRegistry` is a module singleton — every importer
+ * @assumption `featureRegistry` is a module singleton — every importer
  *   sees the same instance.
- * @invariant `register()` is HMR-safe for same-object re-register;
+ * @assumption `register()` is HMR-safe for same-object re-register;
  *   different object with same id is dev-warn / prod-throw.
- * @invariant After `freeze()` new registrations throw in dev, warn-
+ * @assumption After `freeze()` new registrations throw in dev, warn-
  *   and-no-op in prod. Dev freeze captures the stack so a later
  *   `FeatureRegistryFrozenError` points at the import that prematurely
  *   triggered store construction.
- * @invariant Dependency cycles do NOT throw — `getAll()` logs
+ * @assumption Dependency cycles do NOT throw — `getAll()` logs
  *   `console.error` and falls back to registration order.
- * @invariant `validateComponentRefs` is opt-in (not called from
+ * @assumption `validateComponentRefs` is opt-in (not called from
  *   `freeze()` — component registry is populated later). Soft-warns;
  *   never throws.
  */
@@ -307,7 +307,7 @@ export interface FeatureDefinition {
      * switch instead of overwriting it from the file (or resetting it to
      * `ParamConfig.default` when the file omits the feature entirely).
      *
-     * @invariant Must be FALSE when the rig is idle. That is what keeps a boot
+     * @assumption Must be FALSE when the rig is idle. That is what keeps a boot
      *   / share-link load working: on a fresh session the slice is at its
      *   defaults, the predicate reads false, and the file's saved rig hydrates
      *   normally. An unconditional `() => true` would make scene-borne session
@@ -631,7 +631,7 @@ class FeatureRegistry {
     }
 
     /**
-     * @invariant Per-feature dictionary entries are keyed by `shortId` ONLY.
+     * @assumption Per-feature dictionary entries are keyed by `shortId` ONLY.
      *   Params without `shortId` are absent from preset aliases and travel
      *   under their own name.
      * @invariant Wire keys must be UNIQUE — feature aliases (`shortId || id`)
@@ -763,7 +763,7 @@ class FeatureRegistry {
     }
 
     /**
-     * @invariant GLSL type normalisation: `color` → `vec3`, `boolean` →
+     * @assumption GLSL type normalisation: `color` → `vec3`, `boolean` →
      *   `float` (1.0/0.0), `image`/`gradient` → `sampler2D` with null
      *   default. `extraUniforms` are appended unchanged.
      */

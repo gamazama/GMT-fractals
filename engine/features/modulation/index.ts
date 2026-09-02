@@ -1,7 +1,7 @@
 /**
  * Modulation feature — the durable store of modulation-link routing.
  *
- * @invariant `rules[].target` is one of THREE durable routing-string stores
+ * @assumption `rules[].target` is one of THREE durable routing-string stores
  *   (with `animationStore.sequence.tracks` and `engineStore.animations`). Any
  *   code that renames DDFS param ids — weave rebuilds are the live case — must
  *   update all three or links silently drive the wrong param.
@@ -48,7 +48,7 @@ export interface ModulationRule {
     
     /** Audio band, in REAL Hz — not a fraction of nyquist.
      *
-     *  @invariant Hz is device-independent. The previous representation was a
+     *  @assumption Hz is device-independent. The previous representation was a
      *    fraction of nyquist, so the same rule selected a different frequency
      *    range on a 44.1 kHz device than on a 48 kHz one, and a share link
      *    could not mean one thing. It also baked a LINEAR FFT axis into
@@ -110,7 +110,7 @@ export const ModulationFeature: FeatureDefinition = {
     // So `audio` still holds (see its feature def) and `modulation` no longer
     // does. Loading a scene now applies its rules while the input keeps running.
     //
-    // @invariant A scene carrying no modulation data resets rules to empty, by
+    // @assumption A scene carrying no modulation data resets rules to empty, by
     //   ordinary preset semantics. Every scene saved by `getPreset` serialises
     //   the slice, so in practice this only affects files predating the feature.
     // @see docs/adr/0103-live-session-state-survives-scene-load.md

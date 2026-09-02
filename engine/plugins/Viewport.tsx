@@ -81,7 +81,7 @@ export const getRenderScaleSource = (): RenderScaleSource | null => _renderScale
  *  neutering the module's manual branch turns it RED. Do not treat
  *  `smoke:viewport` (or anything else) as protection for these lines. */
 /**
- * @invariant Idempotent on subscription wiring (via `_installed` flag)
+ * @assumption Idempotent on subscription wiring (via `_installed` flag)
  *   but `setAdaptiveConfig` runs every call — a second
  *   `installViewport({ targetFps: 60 })` WILL apply the config without
  *   double-subscribing.

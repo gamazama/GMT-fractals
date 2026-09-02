@@ -6,11 +6,11 @@
  * AudioWorklet global scope can import this file, and Vite inlines it into the
  * processor chunk.
  *
- * @invariant This module has NO module-scope side effects. `filterBank.ts`
+ * @assumption This module has NO module-scope side effects. `filterBank.ts`
  *   instantiates a singleton at import time; if the worklet imported from
  *   there it would construct a second, pointless FilterBank on the audio
  *   thread. Keep this file free of instances so that stays impossible.
- * @invariant The band table is a pure function of
+ * @assumption The band table is a pure function of
  *   `(sampleRate, fftSize, bandsPerOctave)`. That is what lets the main thread
  *   and the worklet derive identical geometry independently, so only band
  *   VALUES need to cross the wire — ~60 floats instead of the table.
@@ -22,14 +22,14 @@
 /**
  * Map a magnitude in dBFS onto the 0..1 display/modulation scale.
  *
- * @invariant This is the ONLY place the dB window is applied, and it defines
+ * @assumption This is the ONLY place the dB window is applied, and it defines
  *   the scale every downstream threshold is calibrated against —
  *   `NORMALIZE_SILENCE_FLOOR`, `NORMALIZE_MIN_PEAK`, `AGC_FLOOR`, every rule's
  *   `thresholdMin/Max`, and the spectrum's bar heights. It replaced
  *   `getByteFrequencyData`'s identical [minDecibels, maxDecibels] → [0,255]
  *   ramp, which is why none of those constants needed retuning: same window,
  *   same endpoints, 256 quantisation levels traded for float.
- * @invariant It travels WITH the kernels. Splitting the window from the
+ * @assumption It travels WITH the kernels. Splitting the window from the
  *   weighting across a thread boundary would silently shift every threshold.
  */
 export const dbToUnit = (db: number, dbFloor: number, dbCeiling: number): number => {
@@ -86,7 +86,7 @@ export interface BandTable {
  * neighbours overlap by 50% and every frequency is covered by exactly two
  * bands. Edge bands extend by one band-width so they are not half-windows.
  *
- * @invariant Kernels are normalised to UNIT SUM, not unit energy. These
+ * @assumption Kernels are normalised to UNIT SUM, not unit energy. These
  *   weights average POWER, so sum(w)=1 makes the result a weighted mean of
  *   power and keeps the 0..1 scale identical to the rectangular mean it
  *   replaced. A unit-ENERGY kernel (sum(w²)=1) would scale every level by the
@@ -184,7 +184,7 @@ export function buildBandTable(
  * 3 dB/octave. +3 cancels exactly that, making pink noise read flat. Note the
  * slope comes from the mean-vs-sum statistic, not from the source.
  *
- * @invariant Referenced at `BANK_MIN_HZ`, so the tilt only ever BOOSTS. A
+ * @assumption Referenced at `BANK_MIN_HZ`, so the tilt only ever BOOSTS. A
  *   mid-referenced tilt (neutral at 1 kHz) would attenuate 25 Hz by ~16 dB at
  *   the default slope, gutting the kick — the single most important band for a
  *   VJ rig. Lows stay exactly where they are and the highs come up to meet

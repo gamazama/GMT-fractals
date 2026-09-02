@@ -85,14 +85,14 @@ const CONTROLS_OFFSET_Y = 40;
 const LAYOUT_PADDING = 12;
 
 /**
- * @invariant Sole authoritative writer of `canvasPixelSize` in
+ * @assumption Sole authoritative writer of `canvasPixelSize` in
  *   ViewportFrame-based apps (app-gmt, fractal-toy, fluid-toy). The
  *   legacy `components/ViewportArea.tsx` shell has its own equivalent
  *   ResizeObserver writer, but it is mounted only by the root demo
  *   `App.tsx`; the two shells never mount together. Mount-time seed uses
  *   `getBoundingClientRect()` so consumers see non-zero size before the
  *   first ResizeObserver callback.
- * @invariant Fixed-mode inner container forces `boxSizing: content-box`
+ * @assumption Fixed-mode inner container forces `boxSizing: content-box`
  *   to defeat Tailwind preflight; without this the 1px outline shrinks
  *   saved images by 2px per axis.
  */

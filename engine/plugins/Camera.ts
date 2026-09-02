@@ -69,7 +69,7 @@ const getSlots = (): (CameraSlot | null)[] => {
 const setSlots = (slots: (CameraSlot | null)[]) => {
     // Use raw set — slot state is UI meta, not a DDFS feature.
     //
-    // @invariant Written via `(useEngineStore as any).setState` — the
+    // @assumption Written via `(useEngineStore as any).setState` — the
     //   `as any` cast bypasses TypeScript collision detection. A future
     //   DDFS feature named `cameraSlots` would silently overwrite.
     //   Keeping the unprefixed key is intentional (wire-format is
@@ -80,9 +80,9 @@ const setSlots = (slots: (CameraSlot | null)[]) => {
 };
 
 /**
- * @invariant `SLOT_COUNT = 10` but index 0 is unused; valid slots are
+ * @assumption `SLOT_COUNT = 10` but index 0 is unused; valid slots are
  *   1..9. Both `saveSlot` and `recallSlot` reject `n < 1 || n >= SLOT_COUNT`.
- * @invariant `saveSlot` / `recallSlot` return false silently with no
+ * @assumption `saveSlot` / `recallSlot` return false silently with no
  *   console warning when no adapter is registered — a missing
  *   `camera.register()` call is hard to spot. `captureState()` and
  *   `applyState()` also run inline without try/catch; a thrown adapter
@@ -179,7 +179,7 @@ export const installCamera = (options: InstallCameraOptions = {}) => {
 };
 
 /**
- * @invariant Does NOT clear `cameraSlots` from the store — only nukes
+ * @assumption Does NOT clear `cameraSlots` from the store — only nukes
  *   shortcuts and the adapter. Data persists; re-install (or preset
  *   load) recovers it unchanged (followup q-065).
  */

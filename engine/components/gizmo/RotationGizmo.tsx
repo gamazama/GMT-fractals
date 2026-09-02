@@ -104,7 +104,7 @@ function project(
 /** SVG paths for a unit great circle perpendicular to `axisIdx` in `frame`,
  *  split into a FRONT arc (z ≥ 0, toward the viewer — drawn bold) and a BACK
  *  arc (dim), plus the full circle for the hit stroke.
- *  @invariant The parameterization (u, v per axis) is the drag contract:
+ *  @assumption The parameterization (u, v per axis) is the drag contract:
  *  RotationGizmoOverlay measures pointer angles in the SAME basis
  *  (x-ring: u=ŷ v=ẑ, y-ring: u=ẑ v=x̂, z-ring: u=x̂ v=ŷ), which makes
  *  +θ along the drawn ring equal +δ on the edited component. */

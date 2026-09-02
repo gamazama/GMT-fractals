@@ -38,7 +38,7 @@ export class ShaderBuilder {
     }
 
     /**
-     * @invariant Keyed on `name` alone, and `Map.set` is last-wins — NOT
+     * @assumption Keyed on `name` alone, and `Map.set` is last-wins — NOT
      *   idempotent on `(name, type)`. Two features that add the same uniform
      *   name with different `type` or `arraySize` produce one declaration
      *   carrying whichever was added last, silently, with no dev warning.
@@ -89,7 +89,7 @@ export class ShaderBuilder {
      *   up" without a superseding ADR.
      */
     /**
-     * @invariant Multi-valued; does NOT dedup. Repeat `addSection(name, code)`
+     * @assumption Multi-valued; does NOT dedup. Repeat `addSection(name, code)`
      *   with identical strings accumulates duplicates (unlike `addHeader` /
      *   `addPreamble` / `addFunction` which dedup on exact-duplicate string).
      */
@@ -121,7 +121,7 @@ export class ShaderBuilder {
     /**
      * Render uniform declarations block.
      *
-     * @invariant Emits from this builder's own `addUniform(name, type,
+     * @assumption Emits from this builder's own `addUniform(name, type,
      *   arraySize?)` entries, so `arraySize` is the only `UniformDefinition`-
      *   shaped field that survives. `comment` is dropped, and — the one that
      *   matters — so is `backingOnly`: this block ALWAYS emits the GLSL

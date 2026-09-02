@@ -6,7 +6,7 @@ import { AudioClip } from '../../store/animation/types';
  *  that's 40ms per tick, well under 0.5s — so naturally-paced ticks never
  *  trip this even when the GPU is struggling.
  *
- *  @invariant 0.5s threshold is calibrated against a 25Hz RAF (~40ms/tick).
+ *  @assumption 0.5s threshold is calibrated against a 25Hz RAF (~40ms/tick).
  *    If ANIMATE ticks slower than ~2Hz, false scrub-seeks will appear. */
 const SCRUB_JUMP_SEC = 0.5;
 
@@ -37,13 +37,13 @@ export function _resetAudioClipSync() {
  *  well under the scrub threshold, so they don't trigger seeks. Deck free-runs
  *  through them, timeline catches up on the next render. */
 /**
- * @invariant Module globals (`prevFrame`, `prevPlaying`, `ownedDecks`)
+ * @assumption Module globals (`prevFrame`, `prevPlaying`, `ownedDecks`)
  *   persist across HMR. Tests must call `_resetAudioClipSync()` between
  *   cases.
- * @invariant Out-of-range during play only pauses an owned deck
+ * @assumption Out-of-range during play only pauses an owned deck
  *   (`ownedDecks.has(deckIndex)`) — prevents pausing decks the timeline
  *   never claimed from the AudioMod UI.
- * @invariant The playing→paused TRANSITION (`justPaused`) is what clears deck
+ * @assumption The playing→paused TRANSITION (`justPaused`) is what clears deck
  *   ownership, and it does so regardless of range — after the timeline pauses,
  *   a play started from the AudioMod UI is not reclaimed. Steady-state pause
  *   never touches ownership; out-of-range on its own never clears it.

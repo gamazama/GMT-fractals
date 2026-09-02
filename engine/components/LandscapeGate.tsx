@@ -14,7 +14,7 @@ import { SmartphoneRotateIcon } from '../../components/Icons';
 import { Layer } from '../../components/ui';
 
 /**
- * @invariant Consumes raw `isDeviceMobile`, NOT the preference-aware
+ * @assumption Consumes raw `isDeviceMobile`, NOT the preference-aware
  *   `isMobile`. Force-Mobile-on-desktop must NOT trigger the rotate
  *   prompt — telling a desktop user with a portrait window to rotate
  *   is nonsensical. Asymmetric gating policy is load-bearing across

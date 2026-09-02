@@ -49,7 +49,7 @@ export interface ShortcutDef {
      * Fire even when an <input>/<textarea>/contenteditable has focus.
      * Default false.
      *
-     * @invariant The name reads as the INVERSE of its semantics —
+     * @assumption The name reads as the INVERSE of its semantics —
      *   default `false` MEANS the input guard IS applied.
      *   `ignoreInputs: true` bypasses the guard.
      */

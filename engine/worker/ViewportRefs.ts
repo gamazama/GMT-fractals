@@ -31,7 +31,7 @@ let _isOrthoActive = false;
 /**
  * Call from inside R3F Canvas to register the active camera.
  *
- * @invariant Module-level singleton state — multiple `<Canvas>` instances
+ * @assumption Module-level singleton state — multiple `<Canvas>` instances
  *   would clobber each other; no per-canvas isolation.
  */
 export function setViewportCamera(camera: THREE.Camera) {
@@ -41,7 +41,7 @@ export function setViewportCamera(camera: THREE.Camera) {
 /**
  * Call from inside R3F Canvas to register the canvas DOM element.
  *
- * @invariant Module-level singleton state — multiple `<Canvas>` instances
+ * @assumption Module-level singleton state — multiple `<Canvas>` instances
  *   would clobber each other; no per-canvas isolation.
  */
 export function setViewportCanvas(canvas: HTMLCanvasElement) {
@@ -68,11 +68,11 @@ export function getViewportCanvas(): HTMLCanvasElement | null {
  * `.project()` produces correct screen-space positions for overlays.
  */
 /**
- * @invariant Reads engineStore via `(as any)` cast. If `optics` is
+ * @assumption Reads engineStore via `(as any)` cast. If `optics` is
  *   absent, the snapshot silently treats the camera as perspective
  *   (`isOrtho = false`). The ortho-mode test is `camType > 0.5 &&
  *   camType < 1.5` — brittle if more camera types are added.
- * @invariant Lazy display-camera allocation, never freed.
+ * @assumption Lazy display-camera allocation, never freed.
  *   `_displayPerspCamera` and `_displayOrthoCamera` are allocated on
  *   first use and survive for the module's lifetime — fine for a
  *   singleton, but tests iterating ViewportRefs should know.
@@ -131,7 +131,7 @@ export function snapshotDisplayCamera(cam: THREE.Camera) {
  * live camera before first snapshot.
  */
 /**
- * @invariant Falls back to live `_camera` before first snapshot —
+ * @assumption Falls back to live `_camera` before first snapshot —
  *   overlays consuming the result before SNAPSHOT has run will get the
  *   live perspective camera (wrong projection if ortho is active).
  */
@@ -153,7 +153,7 @@ export function getDisplayCamera(): THREE.Camera | null {
 // badge's "Auto" (pointer on canvas) vs "Always" (pointer off canvas) label.
 // `engine/plugins/viewport/AdaptiveResolutionBadge.tsx` does not consume it.
 //
-// @invariant Ref-backed, NOT a Zustand selector — it is still read from a
+// @assumption Ref-backed, NOT a Zustand selector — it is still read from a
 //   per-frame hot path (`reportFps`, driven in GMT by
 //   `engine-gmt/renderer/GmtRendererTickDriver.tsx`) and must not trigger
 //   React reconciliation on hover. Consequence: the engine-gmt topbar badge

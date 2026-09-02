@@ -19,14 +19,14 @@
  * Navigation's useFrame stays separate at R3F priority 0 (runs before
  * this registry) because it handles camera physics tied to React hooks/refs.
  *
- * @invariant Singleton, single-instance. Module-scope state means two engine
+ * @assumption Singleton, single-instance. Module-scope state means two engine
  *   boots in the same JS realm would share one tick list. The multi-engine
  *   shape is NOT supported — fork the worker instead. See ADR-0004.
- * @invariant delta is SECONDS, not milliseconds. Every caller passes seconds
+ * @assumption delta is SECONDS, not milliseconds. Every caller passes seconds
  *   (RenderLoopDriver divides by 1000; GmtRendererTickDriver uses R3F useFrame
  *   delta which is already seconds). A future driver passing ms would silently
  *   break every time-dependent tick. See ADR-0002.
- * @invariant Exactly one tick driver per realm. The double-run guard at
+ * @assumption Exactly one tick driver per realm. The double-run guard at
  *   DOUBLE_RUN_WINDOW_MS=1 catches the historical RenderLoopDriver +
  *   GmtRendererTickDriver footgun, but is NOT a defence against a future
  *   cross-context driver (e.g. worker-side RAF) landing on staggered timing.
@@ -39,7 +39,7 @@
  *   against the bare dispatch loop: the harness died on the first throw
  *   with `Error: boom` before any assertion ran.
  *
- * @invariant Phases run in numeric order via stable Array.sort comparing
+ * @assumption Phases run in numeric order via stable Array.sort comparing
  *   `phase` only. Within a phase, registration order is preserved.
  *   See ADR-0001.
  *

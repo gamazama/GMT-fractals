@@ -3,7 +3,7 @@
  *  the File itself is only needed transiently (to re-decode for export, or
  *  re-compute peaks). Module-level singleton — lifetime = page lifetime.
  *
- *  @invariant Map is typed `0 | 1` only — three or more decks would require
+ *  @assumption Map is typed `0 | 1` only — three or more decks would require
  *    the registry to be refactored. */
 
 const cache = new Map<0 | 1, File>();

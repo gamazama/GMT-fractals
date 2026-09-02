@@ -168,7 +168,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
     // subsequent fit calcs — so changing output dims multiple times in one session always
     // fits against the original viewport, not the progressively-shrinking Fixed mode canvas.
     /**
-     * @invariant Resolution-swap snapshots the PRE-SWAP viewport pixel
+     * @assumption Resolution-swap snapshots the PRE-SWAP viewport pixel
      *   size at mount and uses that snapshot for all subsequent fit
      *   calcs — without this, repeated output-dim edits drift against
      *   the progressively-shrinking Fixed canvas.

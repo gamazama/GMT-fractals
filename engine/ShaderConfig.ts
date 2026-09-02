@@ -9,7 +9,7 @@
  * the engine needing to know about them.
  */
 /**
- * @invariant `[key: string]: any` index signature defeats typo detection —
+ * @assumption `[key: string]: any` index signature defeats typo detection —
  *   `config.fromula` does NOT error. Apps that widen via declaration
  *   merging restore typo safety on their own well-typed fields.
  */

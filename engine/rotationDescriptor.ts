@@ -12,7 +12,7 @@
  * engine-core param defs (FeatureSystem.ParamConfig), pure UI primitives
  * (components/vector-input), and engine-gmt formula defs (FractalParameter).
  *
- * @invariant `order` names a CONVENTION, not just an axis sequence — each value
+ * @assumption `order` names a CONVENTION, not just an axis sequence — each value
  * corresponds to one named conversion in rotationMath.ts and they produce
  * visually different results for the same angles. Never collapse them.
  */

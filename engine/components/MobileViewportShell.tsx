@@ -40,12 +40,12 @@ const MOBILE_STYLE: React.CSSProperties = {
 const DESKTOP_STYLE: React.CSSProperties = {};
 
 /**
- * @invariant Mobile branch uses `100dvh` (dynamic — tracks live
+ * @assumption Mobile branch uses `100dvh` (dynamic — tracks live
  *   viewport including keyboard open/close). `vh` would leave a black
  *   band after the mobile keyboard dismisses. Mobile branch applies
  *   `env(safe-area-inset-*)` padding on all four edges via the frozen
  *   `MOBILE_STYLE` object; desktop branch uses an empty style.
- * @invariant `MOBILE_STYLE` carries `scrollSnapAlign: 'start'`, the
+ * @assumption `MOBILE_STYLE` carries `scrollSnapAlign: 'start'`, the
  *   collapsed-state snap target for the host body's `scroll-snap-type:
  *   y mandatory`. It pairs with `MobileScrollIntro`'s snap-start: without
  *   both, the body's scroll could rest half-collapsed or drift past the

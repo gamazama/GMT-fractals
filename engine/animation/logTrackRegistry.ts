@@ -27,7 +27,7 @@
  * `TrackUtils.updateNeighbors` and `timelineUtils` all thread
  * `isLogTrack(trackId)` into `AnimationMath.calculateTangents`.
  *
- * @invariant Any NEW code that computes tangents for a track must pass
+ * @assumption Any NEW code that computes tangents for a track must pass
  *   `isLogTrack(trackId)` through to `AnimationMath.calculateTangents`.
  *   Handles authored in linear-value space and then evaluated as
  *   log-units give a curve nobody asked for.

@@ -6,13 +6,13 @@
  * `analysisProcessor.ts` is then a thin shell: ring buffer, hop counter,
  * message port.
  *
- * @invariant Levels are SMOOTHED here, at hop rate, with a dt-correct
+ * @assumption Levels are SMOOTHED here, at hop rate, with a dt-correct
  *   one-pole. That replaces `AnalyserNode.smoothingTimeConstant`, which is
  *   applied per read CALL with no time compensation — so its effective time
  *   constant moved with the caller's rate. Here the rate is the audio thread's
  *   and the coefficient is derived from the actual hop duration, so the
  *   smoothing means the same thing regardless of what the main thread is doing.
- * @invariant Flux is a RATE (level change per SECOND), not a per-frame delta.
+ * @assumption Flux is a RATE (level change per SECOND), not a per-frame delta.
  *   A delta is only meaningful if the interval is fixed, and the whole point of
  *   moving here is that it no longer is. As a rate, one kick reads the same
  *   strength whether the consumer polls at 60Hz or once a second, and
@@ -28,7 +28,7 @@
  *   256 samples, so this is a constant; the rate form still earns its keep by
  *   removing the 44.1k-vs-48k hop difference and by making the threshold mean
  *   "level per second" instead of "level per whatever interval elapsed".
- * @invariant The SuperFlux frequency max-filter happens HERE (it is per-band
+ * @assumption The SuperFlux frequency max-filter happens HERE (it is per-band
  *   and rule-independent); aggregating over a rule's band range stays on the
  *   main thread, where the rules live.
  *
@@ -65,7 +65,7 @@ export class BandAnalyser {
     /**
      * Loudest BIN this hop, on the 0..1 scale — what the global AGC follows.
      *
-     * @invariant Computed over raw bins, NOT over bands, to match the
+     * @assumption Computed over raw bins, NOT over bands, to match the
      *   main-thread path exactly. Bands are kernel-averaged, so a band peak
      *   sits below a bin peak and the AGC would boost harder on this backend
      *   than on the other. Keeping the two identical is what makes the A/B a

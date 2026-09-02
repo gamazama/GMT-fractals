@@ -1,7 +1,7 @@
 /**
  * Audio feature — the audio-modulation rig's DDFS state.
  *
- * @invariant While `isEnabled` is true this slice is LIVE SESSION state: a
+ * @assumption While `isEnabled` is true this slice is LIVE SESSION state: a
  *   scene load / formula switch leaves it untouched. See `holdsLiveSession`
  *   below. The `modulation` slice used to be held alongside it and no longer
  *   is — the rules are scene content, the input is equipment.

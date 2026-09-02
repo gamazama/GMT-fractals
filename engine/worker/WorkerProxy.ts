@@ -76,7 +76,7 @@ export class WorkerProxy implements AccumulationController {
     private _onCrash: ((reason: string) => void) | null = null;
 
     /**
-     * @invariant Public mutable field — direct writes are the supported
+     * @assumption Public mutable field — direct writes are the supported
      *   API, not action dispatch. It is consumed on the MAIN thread, not by
      *   the worker: in GMT, `engine-gmt/store/cameraSlice.ts` stashes every
      *   CAMERA_TELEPORT here, and `engine-gmt/renderer/GmtRendererTickDriver.tsx`
@@ -97,7 +97,7 @@ export class WorkerProxy implements AccumulationController {
      * `UniformManager.syncFrame`, which composes them into matrices and packed
      * arrays rather than reading a per-param uniform.
      *
-     * @invariant Public mutable field — `AnimationSystem` REPLACES it every
+     * @assumption Public mutable field — `AnimationSystem` REPLACES it every
      *   frame (not mutates), and the real proxy forwards it on every
      *   `sendRenderTick`. For years this field was written but never
      *   transported, so these targets modulated in a render export (where
@@ -127,7 +127,7 @@ export class WorkerProxy implements AccumulationController {
     ) {}
 
     /**
-     * @invariant Stub synthesises immediate `isBooted = true` and invokes
+     * @assumption Stub synthesises immediate `isBooted = true` and invokes
      *   `onBooted` synchronously so generic UI doesn't spin forever on a
      *   "compiling" indicator. Real subclasses replacing this method must
      *   preserve the semantic if generic dev/ code waits on `onBooted`.
@@ -180,7 +180,7 @@ export class WorkerProxy implements AccumulationController {
     get isPaused() { return this._shadow.isPaused; }
     set isPaused(v: boolean) { this._shadow.isPaused = v; }
     /**
-     * @invariant Setters accept values but are silently dropped; getters
+     * @assumption Setters accept values but are silently dropped; getters
      *   return hard false. UI code that toggles them on the stub loses
      *   the write.
      */
@@ -282,7 +282,7 @@ export class WorkerProxy implements AccumulationController {
     // ─── Export (inert — reject immediately) ───────────────────────────
 
     /**
-     * @invariant Reject rather than no-op — callers must `.catch` or use
+     * @assumption Reject rather than no-op — callers must `.catch` or use
      *   `try/await`, otherwise the rejection surfaces as an unhandled
      *   promise. `cancelExport` flips `_isExporting = false` WITHOUT
      *   rejecting in-flight promises.
@@ -352,7 +352,7 @@ export class WorkerProxy implements AccumulationController {
 let _proxy: WorkerProxy | null = null;
 
 /**
- * @invariant Must run before any caller has captured a reference from
+ * @assumption Must run before any caller has captured a reference from
  *   `getProxy()` — otherwise different consumers can capture different
  *   references (stub vs real). Install at host-app boot.
  *
@@ -402,7 +402,7 @@ export function setProxy(proxy: WorkerProxy): void {
 }
 
 /**
- * @invariant `getProxy()` lazily creates a stub if no `setProxy()` has
+ * @assumption `getProxy()` lazily creates a stub if no `setProxy()` has
  *   fired — a forgotten install silently downgrades to no-op rather
  *   than crashing. Symptoms: perpetual unbooted state, picks return
  *   null, exports reject. `gpuInfo` returning the literal

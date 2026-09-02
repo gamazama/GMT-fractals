@@ -11,14 +11,14 @@
  * a glitch in it is audible, so as little logic as possible should live where
  * it cannot be tested.
  *
- * @invariant `process()` allocates NOTHING. Every buffer is sized at config
+ * @assumption `process()` allocates NOTHING. Every buffer is sized at config
  *   time and reused. Allocation on the audio thread invites a GC pause, and a
  *   GC pause here is a click.
- * @invariant The batch is COPIED by structured clone rather than transferred.
+ * @assumption The batch is COPIED by structured clone rather than transferred.
  *   Transferring would neuter the staging buffer and force a fresh allocation
  *   per post — see the invariant above. ~2KB per post at 60Hz is a memcpy
  *   nobody will ever measure.
- * @invariant Input is summed to mono. The transport already asks for
+ * @assumption Input is summed to mono. The transport already asks for
  *   `channelCount: 1` on live capture, but decks are stereo, and analysing
  *   only the left channel would miss anything panned right.
  *

@@ -36,7 +36,7 @@ void main() {
 `;
 
 /**
- * @invariant `writeIndex` semantics are inverted — the field points to the
+ * @assumption `writeIndex` semantics are inverted — the field points to the
  *   NEXT target to write, so "previous frame" is the target OPPOSITE
  *   `writeIndex`. `getPrevious*` helpers and `getOutputTexture()` invert
  *   this; new callers must NOT assume `writeIndex == the just-written slot`.
@@ -181,7 +181,7 @@ export class RenderPipeline {
      * Get a render target for compile-time context (so the pre-warmed program
      * matches the one the live render will use).
      *
-     * @invariant The compile target MUST mirror MRT float type — and is now
+     * @assumption The compile target MUST mirror MRT float type — and is now
      *   rebuilt when it does not, because `updateQuality` → `resize` →
      *   `initTargets` re-allocates the MRT at a new type whenever
      *   `bufferPrecision` crosses 0.5, while this 1x1 FBO used to be created
@@ -540,7 +540,7 @@ export class RenderPipeline {
     }
     
     /**
-     * @invariant MUST clear `convergencePending`. Convergence is measured
+     * @assumption MUST clear `convergencePending`. Convergence is measured
      *   per-accumulation-run but the fence/target are pipeline-global; not
      *   clearing here lets a previous run's pending measurement block + feed a
      *   stale result to the next run (see test:bucket-convergence).
@@ -792,14 +792,14 @@ void main() { gl_FragColor = texture2D(tSrc, vUv); }`,
 
 
     /**
-     * @invariant Bucket scissor must be set AFTER `setRenderTarget`. three.js
+     * @assumption Bucket scissor must be set AFTER `setRenderTarget`. three.js
      *   `setRenderTarget` overwrites GL scissor with the target's stored
      *   values; any refactor that hoists `setScissor` will silently break
      *   bucket rendering.
-     * @invariant `render()` is a no-op when `isHolding=true` OR `sampleCap`
+     * @assumption `render()` is a no-op when `isHolding=true` OR `sampleCap`
      *   is reached. `clearTargets` / `resetAccumulation` / `resize` still
      *   function — the gate is only on the draw call.
-     * @invariant The `sampleCap` gate is the LIVE-VIEWPORT auto-stop only
+     * @assumption The `sampleCap` gate is the LIVE-VIEWPORT auto-stop only
      *   (topbar "Auto-Stop (Samples)"). It must NOT apply during a bucket /
      *   high-res render: there the BucketRunner is the sole authority on
      *   per-bucket sample count (`samplesPerBucket` alone — per-bucket

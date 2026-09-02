@@ -1,7 +1,7 @@
 /**
  * @module engine/AnimationEngine
  *
- * @invariant `tick()` / `scrub()` are silent no-ops until
+ * @assumption `tick()` / `scrub()` are silent no-ops until
  *   `connect(animStore, fractalStore)` has been called — apps that skip
  *   `bindStoreToEngine()` see no playback rather than a crash.
  */
@@ -78,7 +78,7 @@ export class AnimationEngine {
     }
 
     /**
-     * @invariant `binderRegistry.lookup` wins over `this.binders` per-id
+     * @assumption `binderRegistry.lookup` wins over `this.binders` per-id
      *   cache; checked first so a binder registered AFTER a DDFS-derived
      *   lookup still takes effect.
      */
@@ -288,10 +288,10 @@ export class AnimationEngine {
     }
 
     /**
-     * @invariant Non-float tracks (`track.type !== 'float'`) are silently
+     * @assumption Non-float tracks (`track.type !== 'float'`) are silently
      *   dropped — bool/enum/string/image tracks get no step/interpolation
      *   behaviour from the engine.
-     * @invariant `ignoreCamera = isPlaying && isRecording && recordCamera`
+     * @assumption `ignoreCamera = isPlaying && isRecording && recordCamera`
      *   skips ALL `camera.*` tracks in record-camera mode; `camera.position`
      *   and `camera.offset` are also hardcoded-skipped unconditionally
      *   (legacy carve-out).
@@ -357,7 +357,7 @@ export class AnimationEngine {
     }
 
     /**
-     * @invariant Log tracks evaluate in log-value space, Bezier included.
+     * @assumption Log tracks evaluate in log-value space, Bezier included.
      *   A `Linear`/`Step` key lerps in `log(v)`; a `Bezier` key solves the
      *   curve in `(frame, log(v))` and `exp()`s back, so tangent y-values on
      *   a log track are LOG-UNITS, not absolute value-units. Auto-tangents

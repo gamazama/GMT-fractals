@@ -22,11 +22,11 @@
  * the SuperFlux max-filter, guaranteed to drift from the one that actually
  * runs. It has been deleted.
  *
- * @invariant No DSP lives here. If you find yourself adding a windowing,
+ * @assumption No DSP lives here. If you find yourself adding a windowing,
  *   weighting or flux calculation to this file, it belongs in `dsp/` where the
  *   worklet can reach it — otherwise it will be a second implementation again,
  *   and the tests covering it will be testing code nothing executes.
- * @invariant Band GEOMETRY comes from `bandMath.buildBandTable`, the same
+ * @assumption Band GEOMETRY comes from `bandMath.buildBandTable`, the same
  *   function the worklet calls, from the same three numbers. That is what lets
  *   both sides agree without shipping the table across the wire.
  *
@@ -50,7 +50,7 @@ export interface FilterBankOptions {
  * quiet in absolute terms — hi-hats are always far below a kick — still uses
  * the full 0..1 range.
  *
- * @invariant OFF is the better setting; this mode is retained as an option,
+ * @assumption OFF is the better setting; this mode is retained as an option,
  *   not because it is good. A field A/B (2026-07-25) found that per-band
  *   adaptive gain of ANY kind costs more fidelity than it buys. Dividing each
  *   band by its own recent level removes the spectrum's shape, and that shape
@@ -63,11 +63,11 @@ export interface FilterBankOptions {
  *   answered by a FIXED spectral tilt, which corrects the average 1/f shape
  *   without touching dynamics at all.
  *   @see docs/adr/0105-per-band-adaptive-gain-rejected.md
- * @invariant Silence FREEZES the follower. Releasing through a gap would let
+ * @assumption Silence FREEZES the follower. Releasing through a gap would let
  *   the peak decay toward zero, the divisor shrink, and the gain ratchet up —
  *   so the next downbeat arrives at maximum boost and detonates. (The global
  *   AGC shipped with exactly this bug; same fix, same reason.)
- * @invariant A band whose peak never clears `MIN_PEAK` is normalised against
+ * @assumption A band whose peak never clears `MIN_PEAK` is normalised against
  *   MIN_PEAK rather than its own peak, so near-silent bands stay near-silent
  *   instead of amplifying their own noise floor to full scale.
  */

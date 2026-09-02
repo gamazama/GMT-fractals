@@ -6,7 +6,7 @@
  * does not exist any more. What remains is presentation: compact Hz labels for
  * the 8-9px panel readouts, and the dancefloor band presets.
  *
- * @invariant Nothing here is on the analysis path. `filterBank.bandRangeForHz`
+ * @assumption Nothing here is on the analysis path. `filterBank.bandRangeForHz`
  *   maps a rule's Hz span onto bands directly; if you find yourself adding a
  *   normalised-position helper back into this file, the rule representation
  *   has probably regressed.
@@ -33,7 +33,7 @@ export const formatBand = (lowHz: number, highHz: number): string =>
  * the vocal/synth body; Highs is hats and air. `Full` stays for the
  * "just react to everything" case.
  *
- * @invariant `Full`'s top is FINITE (and above `BANK_MAX_HZ`, so it still
+ * @assumption `Full`'s top is FINITE (and above `BANK_MAX_HZ`, so it still
  *   selects every band). It used to be `Infinity`, which was fine while these
  *   were converted to a fraction before storage — but `JSON.stringify(Infinity)`
  *   is `null`, so storing it directly would have written a broken rule.

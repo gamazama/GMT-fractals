@@ -175,7 +175,7 @@ const installedActionNames = new Set<string>();
 /** Patches a state-library slice onto the engineStore. Idempotent —
  *  calling twice is a no-op (warns in dev). */
 /**
- * @invariant Re-installing an `arrayKey` is a warn-and-no-op (never
+ * @assumption Re-installing an `arrayKey` is a warn-and-no-op (never
  *   clobbers saved snapshots), regardless of whether the action names
  *   match. Reusing any action name across two different libraries
  *   throws in dev / warn-and-no-ops in prod — a shared name would
@@ -287,7 +287,7 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
         },
 
         /**
-         * @invariant `update` with no patch overwrites snapshot state with
+         * @assumption `update` with no patch overwrites snapshot state with
          *   current live state and awaits `captureThumbnail` inline —
          *   rapid double-click of the Save button can race two captures
          *   into the array; no de-dup guard. `activeIdKey` does NOT
@@ -322,7 +322,7 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
         },
 
         /**
-         * @invariant Deep-clones via `JSON.parse(JSON.stringify(src))`,
+         * @assumption Deep-clones via `JSON.parse(JSON.stringify(src))`,
          *   inserts adjacent, AND re-applies — duplicating an inactive
          *   snapshot makes it active and triggers apply (side effect).
          */
@@ -366,7 +366,7 @@ export function installStateLibrarySlice<T>(opts: StateLibraryOptions<T>): void 
         },
 
         /**
-         * @invariant `slotIndex > arr.length` rejects with a warning
+         * @assumption `slotIndex > arr.length` rejects with a warning
          *   toast rather than appending out-of-order. `slotIndex <
          *   arr.length` overwrites; `slotIndex === arr.length` appends.
          */

@@ -18,7 +18,7 @@
  * (`AGC_FLOOR`, `NORMALIZE_MIN_PEAK`, every rule's `thresholdMin/Max`) assume
  * the Blackman reading.
  *
- * @invariant `WINDOW_CAL_DB` re-levels Hann onto Blackman's scale so a given
+ * @assumption `WINDOW_CAL_DB` re-levels Hann onto Blackman's scale so a given
  *   tone reads the SAME dBFS as it did through the AnalyserNode. This makes
  *   the worklet A/B a test of the architecture rather than of levels — if the
  *   spectrum sits at a different height after the switch, something is wrong,

@@ -11,7 +11,7 @@ import { DEFAULT_HARD_CAP, MOBILE_HARD_CAP } from '../data/constants';
  * it to true and the resize listener in `hooks/useMobileLayout.ts` pushes
  * that into the store.
  *
- * @invariant This is the INTENDED home of the 768px / `(pointer: coarse)`
+ * @assumption This is the INTENDED home of the 768px / `(pointer: coarse)`
  *   predicate, but it is NOT yet the only copy — do not trust the threshold
  *   here as globally authoritative. Exactly two call sites import it
  *   (`hooks/useMobileLayout.ts` and `detectHardwareProfile` below); eight
@@ -51,10 +51,10 @@ export function isMobileViewport(): boolean {
  * worker-side use, but NO in-tree caller passes a context today — every
  * caller lands in the no-GL heuristic fallback.
  *
- * @invariant Not cached — each call *with a GL context* allocates and
+ * @assumption Not cached — each call *with a GL context* allocates and
  *   deletes a 1x1 RGBA32F framebuffer + texture. Safe to call repeatedly
  *   but not free; detect once at boot.
- * @invariant `compilerHardCap` flattens both mobile tiers to
+ * @assumption `compilerHardCap` flattens both mobile tiers to
  *   `MOBILE_HARD_CAP` (256); desktop uses `DEFAULT_HARD_CAP` (2000).
  *   Units are raymarch/DE loop iteration count, not pixels.
  */

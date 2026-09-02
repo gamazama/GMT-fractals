@@ -6,12 +6,12 @@
  * `installModulation()`'s generic path never called it. Registering separately
  * makes the ordering explicit and lets any app opt in.
  *
- * @invariant Registered at `TICK_PHASE.SNAPSHOT`, which runs BEFORE
+ * @assumption Registered at `TICK_PHASE.SNAPSHOT`, which runs BEFORE
  *   `ANIMATE`. The modulation dispatch reads `filterBank` during ANIMATE, so
  *   analysis has to have filled it already. The old in-line arrangement got
  *   this right by accident of statement order; a separate registration has to
  *   state it.
- * @invariant AGC, band count and tilt are passed per tick rather than latched,
+ * @assumption AGC, band count and tilt are passed per tick rather than latched,
  *   so the store's live value always wins — including for a rig whose panel is
  *   closed or one restored by a scene load.
  *

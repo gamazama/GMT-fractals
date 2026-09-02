@@ -10,17 +10,17 @@
  * follow is a node reference, which is why this class exposes exactly one —
  * `analysisBus`.
  *
- * @invariant `analysisBus` is the single tap point. Both signal paths
+ * @assumption `analysisBus` is the single tap point. Both signal paths
  *   (`masterGain` from the decks, `inputGain` from live capture) sum into it,
  *   and anything that wants to analyse the mix attaches THERE rather than to
  *   the two sources separately. It is a unity-gain node, so inserting it
  *   changed no levels — it exists to make "the thing being analysed" one
  *   object, so an AnalyserNode and a worklet can both hang off it during the
  *   A/B without duplicating the fan-in.
- * @invariant `init()` is idempotent — short-circuits on second call. Every
+ * @assumption `init()` is idempotent — short-circuits on second call. Every
  *   public entry point that can be the first thing a user touches
  *   (`connectMicrophone` / `connectSystemAudio` / `loadTrack`) calls it first.
- * @invariant Mic is connected to the analysis path ONLY — NOT to
+ * @assumption Mic is connected to the analysis path ONLY — NOT to
  *   `AudioContext.destination` — to prevent feedback. System-audio capture is
  *   connected to BOTH so the user hears it. Loading a track also disables an
  *   active mic; connecting the mic only PAUSES decks (asymmetric).
@@ -36,7 +36,7 @@
  *   focus to another window and watch it recover. A fair test uses the
  *   mic path with a virtual audio device as the control: same analysis,
  *   no screen-share surface. If the control holds 60, the surface is it.
- * @invariant System-audio capture COSTS GPU and cannot be made not to. The
+ * @assumption System-audio capture COSTS GPU and cannot be made not to. The
  *   spec requires a video surface — audio-only `getDisplayMedia` is still an
  *   unimplemented request as of 2026 — so Chrome starts a screen-capture
  *   session, and stopping the video track does not fully tear it down while
@@ -45,17 +45,17 @@
  *   route audio into a VIRTUAL INPUT DEVICE (VB-Cable / VoiceMeeter /
  *   BlackHole) or a hardware line-in and use `connectMicrophone` instead:
  *   same code path, no video surface, no GPU.
- * @invariant Live capture requests `echoCancellation`, `noiseSuppression` and
+ * @assumption Live capture requests `echoCancellation`, `noiseSuppression` and
  *   `autoGainControl` explicitly OFF. Chrome/Edge default all three ON for
  *   `getUserMedia({audio: true})`; on a line feed from a mixer they duck the
  *   signal, notch the spectrum and pump the levels, which is indistinguishable
  *   from "the audio modulation is broken". Never fall back to a bare
  *   `{audio: true}`.
- * @invariant `inputGain` sits between the live source and `analysisBus` — NOT
+ * @assumption `inputGain` sits between the live source and `analysisBus` — NOT
  *   on `masterGain`. masterGain feeds `destination`, so boosting a quiet
  *   line-in there would also boost monitoring volume; and the mic deliberately
  *   bypasses masterGain, so it had no gain stage at all before this node.
- * @invariant `getTrackInfo().duration` returns 0 (NOT 1) when metadata has not
+ * @assumption `getTrackInfo().duration` returns 0 (NOT 1) when metadata has not
  *   yet loaded. The `|| 1` fallback used to lock AudioStrip clips to 1-second
  *   slices; do not reintroduce it.
  *
@@ -273,7 +273,7 @@ export class AudioTransport {
                 // none of the frames, so ask for the cheapest stream that will
                 // be granted and stop the track the moment it exists.
                 //
-                // @invariant Cap the FRAME RATE, not the resolution. Constraining
+                // @assumption Cap the FRAME RATE, not the resolution. Constraining
                 //   width/height makes the compositor downscale every frame,
                 //   which costs MORE GPU than leaving it native — the opposite
                 //   of the intent. 1fps is the lever that actually helps.

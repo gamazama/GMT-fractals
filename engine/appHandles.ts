@@ -75,7 +75,7 @@ const _globalBucket = (): Record<string, unknown> => {
 };
 
 /**
- * @invariant `globalThis.__appHandles[name]` is dev-only — gated by
+ * @assumption `globalThis.__appHandles[name]` is dev-only — gated by
  *   `import.meta.env.DEV`. Production smoke tests cannot enumerate
  *   handles.
  */

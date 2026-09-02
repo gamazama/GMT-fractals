@@ -18,7 +18,7 @@ export interface VideoExportConfig {
      * time-lapse. Every consumer here wants the output rate (container framerate,
      * per-frame timestamp and duration), so the division belongs at the caller.
      *
-     * @invariant Sample the TIMELINE at `timelineFps` and encode at
+     * @assumption Sample the TIMELINE at `timelineFps` and encode at
      *   `timelineFps / frameStep`. Getting this wrong desyncs audio: the mixer is
      *   given the full timeline span, so if the video is compressed N-fold the
      *   audio track is N× longer and drifts linearly from frame 0.

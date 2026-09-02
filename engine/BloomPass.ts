@@ -337,7 +337,7 @@ export class BloomPass {
     }
 
     /**
-     * @invariant Does NOT dispose the shared fullscreen geometry — the
+     * @assumption Does NOT dispose the shared fullscreen geometry — the
      *   comment below records the rule. Future code that reaches into
      *   `this.mesh.geometry` and disposes it will break every other
      *   consumer of the shared fullscreen pass.

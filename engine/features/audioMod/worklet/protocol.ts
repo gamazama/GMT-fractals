@@ -4,16 +4,16 @@
  * Imported by BOTH sides, so it must stay free of DOM and of AudioWorklet
  * globals. Types only plus two small helpers.
  *
- * @invariant The payload is BANDS, not bins. ~56 levels + 56 flux values per
+ * @assumption The payload is BANDS, not bins. ~56 levels + 56 flux values per
  *   snapshot rather than 2048 raw bins. That is the load-bearing shape
  *   decision: it keeps messages small, and it is the only form every candidate
  *   future backend (multirate-octave, gammatone IIR, sparse sliding DFT) can
  *   actually produce. A bin array would fit today's FFT and nothing else.
- * @invariant The band TABLE never crosses the wire — only values do. Both
+ * @assumption The band TABLE never crosses the wire — only values do. Both
  *   sides derive identical geometry from `(sampleRate, fftSize,
  *   bandsPerOctave)` via `bandMath.buildBandTable`, so shipping it would be
  *   redundant and would create two sources of truth.
- * @invariant Snapshots carry a timestamp because the main thread reads at an
+ * @assumption Snapshots carry a timestamp because the main thread reads at an
  *   irregular rate and one consumer — modulation recording's per-frame
  *   back-fill — needs to index by time rather than take the latest. See
  *   ADR-0110 for why that consumer is not hypothetical.

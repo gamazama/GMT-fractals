@@ -90,7 +90,7 @@ export function deriveTrackBinding(input: TrackBindingInput): TrackBinding {
  * base value from the DDFS slice. Axis count is inferred from the
  * binding's trackKeys length.
  *
- * @invariant Axes with no entry fall back to `base`, NOT to 0. Only
+ * @assumption Axes with no entry fall back to `base`, NOT to 0. Only
  *   modulated targets appear in `liveModulations`, so modulating X of a vec3
  *   yields entries for `_x` alone. Defaulting the rest to 0 made the widget
  *   report Y and Z as zero and paint a live indicator on them — the base
