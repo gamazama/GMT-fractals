@@ -148,6 +148,11 @@ export type WorkerToMainMessage =
     // ─── Video Export ───
     | { type: 'EXPORT_READY' }
     | { type: 'EXPORT_FRAME_DONE'; frameIndex: number; progress: number; measuredDistance: number }
+    // Liveness pulse posted from INSIDE the export sample loop, about once per
+    // second of GPU time after a pipeline drain (`EXPORT_HEARTBEAT_MS` in
+    // WorkerExporter). Carries no result — the proxy's per-frame stall watchdog
+    // re-arms on it. `sample` = samples finished so far (1-based) of `samples`.
+    | { type: 'EXPORT_HEARTBEAT'; frameIndex: number; sample: number; samples: number }
     | { type: 'EXPORT_COMPLETE'; blob: ArrayBuffer | null }
     | { type: 'EXPORT_ERROR'; message: string }
     // ─── Bucket Render ───

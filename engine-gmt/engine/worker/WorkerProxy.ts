@@ -39,6 +39,21 @@ const LOW_LATENCY_PRESENT: boolean = (() => {
     } catch { return true; }
 })();
 
+/**
+ * Default no-progress window for one `renderExportFrame`: how long the main
+ * thread tolerates silence from the render worker mid-frame before declaring
+ * the frame dead. It is a STALL detector, not a duration cap. The worker posts
+ * EXPORT_HEARTBEAT roughly once per second of GPU time (see
+ * `EXPORT_HEARTBEAT_MS` in WorkerExporter) and every beat re-arms the window,
+ * so a legitimate multi-minute 4K path-traced frame never trips it — only a
+ * frame that goes silent does (a dropped EXPORT_RENDER_FRAME, a worker wedged
+ * outside its sample loop). 60 s is ~30× the longest single draw Windows TDR
+ * (2 s) permits before the context is lost anyway, so a false trip needs the
+ * whole pipeline to freeze without a CONTEXT_LOST. Override per call via
+ * `renderExportFrame(..., { stallMs })`; `0` disables the watchdog.
+ */
+export const EXPORT_FRAME_STALL_MS = 60_000;
+
 export class WorkerProxy implements AccumulationController {
     // ─── Stub properties ─────────────────────────────────────────────
     // These exist on FractalEngine but not on WorkerProxy.  UI code guards
@@ -119,9 +134,16 @@ export class WorkerProxy implements AccumulationController {
      * Separate from `_exportError` on purpose: `_exportError` is owned by
      * whichever of startExport/finishExport is currently awaiting, and the frame
      * pump runs *between* those two, so a frame failure has no rejecter of its
-     * own without this. See `_handleWorkerCrash`.
+     * own without this. See `_handleWorkerCrash` and `_tripExportFrameWatchdog`.
      */
     private _exportFrameFail: ((msg: string) => void) | null = null;
+    /**
+     * Stall watchdog for the in-flight `renderExportFrame` — see
+     * EXPORT_FRAME_STALL_MS. Armed when the frame is posted, re-armed on every
+     * EXPORT_HEARTBEAT, cleared by whatever settles the frame (FRAME_DONE,
+     * EXPORT_ERROR, crash, or its own trip). Null when no frame is in flight.
+     */
+    private _exportFrameWatch: { frameIndex: number; stallMs: number; timer: ReturnType<typeof setTimeout> } | null = null;
 
     // ─── Worker Init ─────────────────────────────────────────────────────
 
@@ -406,6 +428,10 @@ export class WorkerProxy implements AccumulationController {
                 this._shadow.lastMeasuredDistance = msg.measuredDistance;
                 if (this._exportFrameDone) this._exportFrameDone({ frameIndex: msg.frameIndex, progress: msg.progress, measuredDistance: msg.measuredDistance });
                 break;
+            case 'EXPORT_HEARTBEAT':
+                // Liveness only — the frame is still rendering. Re-arm the stall window.
+                this._kickExportFrameWatchdog();
+                break;
             case 'EXPORT_COMPLETE':
                 this._isExporting = false;
                 if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
@@ -420,7 +446,7 @@ export class WorkerProxy implements AccumulationController {
                 // worker posts EXPORT_ERROR for a failed frame render
                 // ('Frame render failed: …'), but by then `_exportError` belongs
                 // to startExport's already-settled promise, so calling it is a
-                // silent no-op and `renderExportFrame` — which has no timeout —
+                // silent no-op and `renderExportFrame` — which then had no timeout —
                 // hung forever. Probe-confirmed against this class.
                 if (this._exportFrameFail) { const f = this._exportFrameFail; this._exportFrameFail = null; f(msg.message); }
                 else if (this._exportError) { const f = this._exportError; this._exportError = null; f(msg.message); }
@@ -556,6 +582,7 @@ export class WorkerProxy implements AccumulationController {
         this._pendingTimeouts.clear();
         if (this._exportStartTimer) { clearTimeout(this._exportStartTimer); this._exportStartTimer = null; }
         if (this._exportFinishTimer) { clearTimeout(this._exportFinishTimer); this._exportFinishTimer = null; }
+        this._disarmExportFrameWatchdog();
     }
 
     // ─── Error Recovery ────────────────────────────────────────────────
@@ -1027,7 +1054,22 @@ export class WorkerProxy implements AccumulationController {
 
     /**
      * Send a single frame to the worker for rendering + encoding.
-     * Returns a promise that resolves when the frame is done.
+     *
+     * Resolves on EXPORT_FRAME_DONE. Rejects on EXPORT_ERROR, on a worker
+     * crash, or when the stall watchdog trips — no EXPORT_HEARTBEAT and no
+     * FRAME_DONE for `opts.stallMs` (default EXPORT_FRAME_STALL_MS). A trip
+     * also `cancelExport()`s so the worker session does not outlive the
+     * promise; the caller's failure path only has to report.
+     *
+     * @invariant With the watchdog armed the promise settles within `stallMs`
+     *   of the last worker progress message — it can no longer pend forever on
+     *   a dropped EXPORT_FRAME_DONE. Proven by: npm run
+     *   smoke:export-watchdog ("A1 silent frame rejects within the
+     *   window"). Falsified 2026-09-02 by removing the arm below: A1 and A2
+     *   stayed PENDING.
+     * @invariant Heartbeats extend the window, they do not count against it —
+     *   a frame that keeps beating is never aborted however long it takes.
+     *   Proven by the same smoke ("A2 stays pending while beating").
      */
     renderExportFrame(
         frameIndex: number,
@@ -1035,20 +1077,65 @@ export class WorkerProxy implements AccumulationController {
         camera: SerializedCamera,
         offset: SerializedOffset,
         renderState: Partial<EngineRenderState>,
-        modulations: Record<string, number>
+        modulations: Record<string, number>,
+        opts?: { stallMs?: number }
     ): Promise<{ frameIndex: number; progress: number; measuredDistance: number }> {
+        const stallMs = opts?.stallMs ?? EXPORT_FRAME_STALL_MS;
         return new Promise((resolve, reject) => {
             this._exportFrameDone = (data) => {
+                this._disarmExportFrameWatchdog();
                 this._exportFrameDone = null; this._exportFrameFail = null; resolve(data);
             };
             this._exportFrameFail = (msg) => {
+                this._disarmExportFrameWatchdog();
                 this._exportFrameDone = null; this._exportFrameFail = null; reject(new Error(msg));
             };
+            // A previous frame's timer must never outlive its own promise.
+            this._disarmExportFrameWatchdog();
+            if (stallMs > 0) {
+                this._exportFrameWatch = {
+                    frameIndex, stallMs,
+                    timer: setTimeout(() => this._tripExportFrameWatchdog(frameIndex, stallMs), stallMs),
+                };
+            }
             this.post({
                 type: 'EXPORT_RENDER_FRAME',
                 frameIndex, time, camera, offset, renderState, modulations
             });
         });
+    }
+
+    /** Restart the stall window for the in-flight export frame. No-op when unarmed. */
+    private _kickExportFrameWatchdog() {
+        const w = this._exportFrameWatch;
+        if (!w) return;
+        clearTimeout(w.timer);
+        w.timer = setTimeout(() => this._tripExportFrameWatchdog(w.frameIndex, w.stallMs), w.stallMs);
+    }
+
+    private _disarmExportFrameWatchdog() {
+        if (this._exportFrameWatch) {
+            clearTimeout(this._exportFrameWatch.timer);
+            this._exportFrameWatch = null;
+        }
+    }
+
+    /**
+     * The window elapsed with no worker progress. Tear the session down AND
+     * reject: rejecting alone would leave `exporter.active` true worker-side,
+     * so the user's next export would be refused with 'Export already in
+     * progress' until a reload. If the worker is wedged the CANCEL is handled
+     * once it unblocks; if it dropped the frame the CANCEL is a no-op. Either
+     * way `isExporting` drops now, releasing the movement lock. No retry —
+     * the runner reports the failure and the user decides.
+     */
+    private _tripExportFrameWatchdog(frameIndex: number, stallMs: number) {
+        this._exportFrameWatch = null;
+        const fail = this._exportFrameFail;
+        if (!fail) return; // settled between the timer firing and this running
+        this.cancelExport();
+        const secs = Math.round(stallMs / 1000);
+        fail(`Export frame ${frameIndex} stalled — no progress from the render worker for ${secs || stallMs / 1000} s`);
     }
 
     /**

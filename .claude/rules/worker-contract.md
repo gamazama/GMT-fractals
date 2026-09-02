@@ -30,6 +30,20 @@ Decisions: ADRs 0034-0035, 0041-0042, ADR-0045 (bucket render + export).
   `@bug PRODUCTION:` on `setProxy` in `engine/worker/WorkerProxy.ts`. Call
   `getProxy()` inside the function that needs it.
 
+## Guards
+
+```
+npm run smoke:export-watchdog   # boots app-gmt: the per-frame export stall watchdog
+                                # (WorkerProxy) and the EXPORT_HEARTBEAT it keys on
+                                # (WorkerExporter), plus one real frame on the live worker
+```
+
+`renderExportFrame` had no timeout until 2026-09-02: a dropped EXPORT_FRAME_DONE
+left the export dialog pending forever. The watchdog is a NO-PROGRESS window
+(60 s default, `opts.stallMs`), not a ceiling — a frame that keeps beating is
+never aborted however long a 4K path-traced frame takes. Heartbeats come from
+inside the sample loop about once per second of GPU time.
+
 ## Main thread must mirror worker reality
 
 Two render-loop stall bugs both came from main-thread gates that had drifted from

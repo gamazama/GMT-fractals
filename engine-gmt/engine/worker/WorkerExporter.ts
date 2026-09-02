@@ -16,6 +16,18 @@ import { halton } from '../../../engine/codec/halton';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass } from '../utils/FullscreenQuad';
 
+/**
+ * Target spacing, in milliseconds of GPU time, between the EXPORT_HEARTBEAT
+ * posts made inside one export frame (see `renderOnePass`). Each beat costs one
+ * pipeline drain, so this trades drains against how quickly the main thread
+ * learns a frame is still alive. The proxy's stall window
+ * (`EXPORT_FRAME_STALL_MS`, 60 s) is many multiples of this, so the schedule
+ * only has to be roughly right: at 1 s the drain overhead is ~0.1 % on the
+ * frames where a watchdog matters (≥ 50 ms per sample) and the schedule
+ * self-tunes to ~1 drain per second on cheap ones.
+ */
+export const EXPORT_HEARTBEAT_MS = 1000;
+
 // ─── Export Session State ────────────────────────────────────────────
 
 interface ExportSession {
@@ -369,8 +381,30 @@ export class WorkerExporter {
      * @invariant Pixel-buffer Y-flip is IN PLACE. For odd height,
      *   `halfH = floor(h/2)` correctly leaves the middle row untouched
      *   (it is its own mirror). Do not change to `ceil`.
+     *
+     * Heartbeat. This loop is synchronous and posts nothing on its own, so a
+     * frame that takes minutes looked identical to a frame that was dropped —
+     * the main thread's `renderExportFrame` had nothing to time out against
+     * without aborting real work. The loop now posts EXPORT_HEARTBEAT on a
+     * sample schedule: always once after sample 0 (which measures the cost of
+     * one sample), then every ~EXPORT_HEARTBEAT_MS of measured GPU time.
+     * @invariant Every frame with `samples >= 2` posts at least one
+     *   EXPORT_HEARTBEAT before its EXPORT_FRAME_DONE — proven by: npm run
+     *   smoke:export-watchdog ("B: live worker posted ≥1
+     *   EXPORT_HEARTBEAT"). Falsified 2026-09-02 by removing the postMsg: B
+     *   reported 0 beats.
+     * @assumption The 1-px `readRenderTargetPixels` before each beat drains
+     *   the GPU queue on real drivers (ANGLE/D3D11, Metal), so a beat means
+     *   `sample` samples are genuinely complete rather than merely queued.
+     *   Without that drain the loop could enqueue every draw in milliseconds,
+     *   beat once, and then go silent through the end-of-frame readback for
+     *   as long as the GPU takes — exactly the false trip the watchdog exists
+     *   to avoid. readPixels is a full sync by spec and the focus probe relies
+     *   on the same call, but the queue-depth behaviour has not been measured
+     *   on a real GPU; the smoke runs on SwiftShader, which has no meaningful
+     *   asynchronous queue.
      */
-    private renderOnePass(sess: ExportSession): THREE.WebGLRenderTarget {
+    private renderOnePass(sess: ExportSession, frameIndex: number): THREE.WebGLRenderTarget {
         // Clear accumulation ping-pong
         this.renderer.setRenderTarget(sess.accumA);
         this.renderer.clear();
@@ -378,6 +412,10 @@ export class WorkerExporter {
         this.renderer.clear();
 
         const N = sess.config.samples;
+        // Heartbeat schedule — see the JSDoc above and EXPORT_HEARTBEAT_MS.
+        let nextBeatAfter = 1;   // beat once sample 0 is done: that measures a sample's cost
+        let beatIssuedAt = performance.now();
+        let beatSample = 0;
         for (let s = 0; s < N; s++) {
             const writeBuffer = s % 2 === 0 ? sess.accumA : sess.accumB;
             const readBuffer = s % 2 === 0 ? sess.accumB : sess.accumA;
@@ -400,6 +438,20 @@ export class WorkerExporter {
 
             this.renderer.setRenderTarget(writeBuffer);
             this.renderer.render(this.engine.mainScene, this.engine.mainCamera);
+
+            const done = s + 1;
+            if (done === nextBeatAfter && done < N) {
+                // Drain so `done` samples are really finished (see @assumption above),
+                // then measure and schedule the next beat ~EXPORT_HEARTBEAT_MS out.
+                // No beat after the last sample: the full readback + FRAME_DONE follow.
+                this.renderer.readRenderTargetPixels(writeBuffer, 0, 0, 1, 1, sess.depthBuf);
+                const now = performance.now();
+                const perSample = Math.max(0.05, (now - beatIssuedAt) / (done - beatSample));
+                nextBeatAfter = done + Math.max(1, Math.floor(EXPORT_HEARTBEAT_MS / perSample));
+                beatIssuedAt = now;
+                beatSample = done;
+                this.postMsg({ type: 'EXPORT_HEARTBEAT', frameIndex, sample: done, samples: N });
+            }
         }
 
         const lastWrite = (N - 1) % 2 === 0 ? sess.accumA : sess.accumB;
@@ -448,7 +500,7 @@ export class WorkerExporter {
      * Video mode — single pass per frame, encode via VideoEncoder, progress postMsg after.
      */
     private renderFrameVideo(sess: ExportSession, frameIndex: number) {
-        const lastWrite = this.renderOnePass(sess);
+        const lastWrite = this.renderOnePass(sess, frameIndex);
 
         // Focus-lock depth probe — only meaningful on the beauty (and depth) pass. During the
         // alpha pass the main shader writes binary 0/1 coverage into the alpha channel, so
@@ -505,7 +557,7 @@ export class WorkerExporter {
             const passCode = pass === 'alpha' ? 1.0 : pass === 'depth' ? 2.0 : 0.0;
             this.engine.mainUniforms.uOutputPass.value = passCode;
 
-            lastWrite = this.renderOnePass(sess);
+            lastWrite = this.renderOnePass(sess, frameIndex);
 
             // Focus-lock probe on the beauty pass only (alpha writes binary coverage to alpha;
             // depth writes distance too but we don't need to re-probe it every pass).

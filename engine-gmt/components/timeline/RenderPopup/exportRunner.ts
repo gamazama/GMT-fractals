@@ -163,6 +163,11 @@ const runFramePump = async (
             geometry:            (storeState as any).geometry ?? null,
         };
 
+        // Rejects on a worker crash, an EXPORT_ERROR, or the proxy's stall
+        // watchdog (no worker progress for EXPORT_FRAME_STALL_MS — a dropped
+        // frame, not a slow one: the worker beats about once per second of GPU
+        // time while a frame renders). All three land in the enclosing catch,
+        // which alerts, and `finally` releases the dialog.
         const frameResult = await engine.renderExportFrame(
             i, time, serializedCamera, serializedOffset, renderState,
             { ...engine.modulations },
