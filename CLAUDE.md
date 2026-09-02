@@ -126,6 +126,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 ### Automated Checks
 - `npm run typecheck` — tsc, should exit 0.
 - `npm run check:rule-guards` — verifies every guard a `.claude/rules/` file cites can actually reach the files that rule scopes. Reports rather than gates; static analysers are listed separately because they read files as text and have no import edges to check.
+- `npm run check:text-bytes` — no tracked text file carries a NUL or stray control byte. One NUL makes grep call a source file binary and every grep-driven audit goes blind to it; the overnight audit lost a component and a guard that way. ~1 s.
 - `npm run orphans` — knip; lists unused files (real import-graph walk, not grep). Run before deleting "looks unused" code — grep gives false positives because the engine-core / engine-gmt trees both expose siblings with the same name. Config: [knip.json](knip.json).
 - `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
 - `npm run smoke:interact` — state-flow + preset round-trip (demo feature).
