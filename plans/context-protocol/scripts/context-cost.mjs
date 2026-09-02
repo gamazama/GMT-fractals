@@ -86,13 +86,44 @@ function byPath(entries) {
   return m;
 }
 
+// A subsystem may claim a glob (`fluid-toy/*`) rather than concrete files.
+// The map keys on concrete paths, so a glob has to be expanded against it or
+// it silently costs 0 — which is what happened to both toy subsystems until
+// 2026-09-02: a one-row Layer 2 at 0 tokens over 76 real files.
+function globToRe(g) {
+  // Built character by character: `**` spans directories, `*` stays inside
+  // one segment, everything else is literal.
+  let re = '^';
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (c === '*') {
+      if (g[i + 1] === '*') { re += '.*'; i++; } else { re += '[^/]*'; }
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return new RegExp(re + '$');
+}
+function expandPath(p, index) {
+  if (!p.includes('*')) return index.has(p) ? [p] : [];
+  // `dir/*` is used to mean "everything under dir" in subsystems.json.
+  const re = globToRe(p.endsWith('/*') ? p.slice(0, -1) + '**' : p);
+  return [...index.keys()].filter((k) => re.test(k)).sort();
+}
+
 function tokensFor(paths, index) {
   let sum = 0;
   const rows = [];
+  const seen = new Set();
   for (const p of paths) {
-    const e = index.get(p);
-    if (e) { sum += e.tokens; rows.push(e); }
-    else rows.push({ path: p, tokens: 0, loadPolicy: 'missing', heavy: false });
+    const hits = expandPath(p, index);
+    if (!hits.length) { rows.push({ path: p, tokens: 0, loadPolicy: 'missing', heavy: false }); continue; }
+    for (const h of hits) {
+      if (seen.has(h)) continue;
+      seen.add(h);
+      const e = index.get(h);
+      sum += e.tokens; rows.push(e);
+    }
   }
   return { sum, rows };
 }
@@ -232,6 +263,20 @@ function render(plan, map, opts) {
   const orientTokens = map.totals.orientation_tokens;
   const arch = tokensFor(plan.archPaths, index);
   const source = tokensFor(plan.sourcePaths, index);
+
+  // A zero-token "source of truth" layer is indistinguishable from a correct
+  // answer — the same failure class as a guard that cannot fail. Refuse to
+  // print it as a result.
+  if (plan.sourcePaths.length && source.sum === 0) {
+    const listed = plan.sourcePaths.map((p) => '  - ' + p).join('\n');
+    console.error(
+      '\ncontext:cost — Layer 2 costed 0 tokens for "' + plan.title + '".\n' +
+      'The target\'s source list matched nothing in context-map.json:\n' + listed + '\n' +
+      'Either the map is stale (npm run context:map) or the subsystem\'s files_claimed are wrong ' +
+      '(plans/context-protocol/subsystems.json).\n',
+    );
+    process.exit(1);
+  }
 
   if (opts.json) {
     return JSON.stringify({
