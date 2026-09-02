@@ -8,7 +8,9 @@
  * without pulling in the engine store. The provider pair registered in
  * registerPaletteUI uses exactly these.
  *
- * Run: npx tsx debug/test-palette-editorstore.mts
+ * Run: npx tsx debug/test-palette-editorconfig.mts
+ *      (named test-palette-editorstore.mts until 2026-09-02 — it tests
+ *      palette/core/editorConfig, not any store, and the filename said otherwise)
  */
 
 import {

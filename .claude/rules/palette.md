@@ -71,7 +71,8 @@ here, write the first ADR.
 
 ```
 npm run smoke:boot           # the registration path, to throw-depth
-npm run test:palette         # 17 chained harnesses over palette/core/**
+npm run test:palette         # 18 chained harnesses over palette/core/** and the Favients store
+npm run test:palette-favients  # favientsStore: the load/import gate, dedupe, __proto__ labels, undo write-through
 npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
 ```

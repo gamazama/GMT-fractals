@@ -8990,7 +8990,7 @@
       "reachableFrom": []
     },
     {
-      "path": "debug/test-palette-editorstore.mts",
+      "path": "debug/test-palette-editorconfig.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
       "loadPolicy": "on-demand",
