@@ -106,6 +106,7 @@
     "test:mb3d": "tsx debug/test-mb3d-parse.mts",
     "test:mb3d:weave": "tsx debug/test-mb3d-weave.mts",
     "test:mesh-grid": "tsx debug/test-mesh-grid-convention.mts",
+    "test:modular-parity": "tsx debug/test-modular-slot-parity.mts",
     "test:migrations": "tsx debug/test-escape-migration.mts",
     "test:modulated-setter": "tsx debug/test-modulated-setter.mts",
     "test:modulation-coverage": "tsx debug/test-modulation-coverage.mts",

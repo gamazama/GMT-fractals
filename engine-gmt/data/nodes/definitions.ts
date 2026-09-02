@@ -32,8 +32,11 @@ nodeRegistry.register({
         { id: 'scale', label: 'Scale', min: 0.1, max: 5.0, step: 0.01, default: 2.0, hardMin: 0.001 }
     ],
     glsl: (ctx) => `
-${ctx.indent}${ctx.varName}_p *= ${ctx.getParam('scale')};
-${ctx.indent}${ctx.varName}_dr *= abs(${ctx.getParam('scale')});
+${ctx.indent}{
+${ctx.indent}    float scale = ${ctx.getParam('scale')};
+${ctx.indent}    ${ctx.varName}_p *= scale;
+${ctx.indent}    ${ctx.varName}_dr *= abs(scale);
+${ctx.indent}}
 `
 });
 
@@ -279,8 +282,9 @@ nodeRegistry.register({
     ],
     glsl: (ctx) => `
 ${ctx.indent}{
-${ctx.indent}    float c_tw = cos(${ctx.getParam('amount')} * ${ctx.varName}_p.z);
-${ctx.indent}    float s_tw = sin(${ctx.getParam('amount')} * ${ctx.varName}_p.z);
+${ctx.indent}    float a_tw = ${ctx.getParam('amount')};
+${ctx.indent}    float c_tw = cos(a_tw * ${ctx.varName}_p.z);
+${ctx.indent}    float s_tw = sin(a_tw * ${ctx.varName}_p.z);
 ${ctx.indent}    mat2 m_tw = mat2(c_tw, -s_tw, s_tw, c_tw);
 ${ctx.indent}    ${ctx.varName}_p.xy = m_tw * ${ctx.varName}_p.xy;
 ${ctx.indent}}
@@ -297,8 +301,9 @@ nodeRegistry.register({
     ],
     glsl: (ctx) => `
 ${ctx.indent}{
-${ctx.indent}    float c_bn = cos(${ctx.getParam('amount')} * ${ctx.varName}_p.y);
-${ctx.indent}    float s_bn = sin(${ctx.getParam('amount')} * ${ctx.varName}_p.y);
+${ctx.indent}    float a_bn = ${ctx.getParam('amount')};
+${ctx.indent}    float c_bn = cos(a_bn * ${ctx.varName}_p.y);
+${ctx.indent}    float s_bn = sin(a_bn * ${ctx.varName}_p.y);
 ${ctx.indent}    mat2 m_bn = mat2(c_bn, -s_bn, s_bn, c_bn);
 ${ctx.indent}    ${ctx.varName}_p.xz = m_bn * ${ctx.varName}_p.xz;
 ${ctx.indent}}
@@ -372,10 +377,13 @@ nodeRegistry.register({
         { id: 'k', label: 'Smoothness', min: 0.01, max: 2.0, step: 0.01, default: 0.5 }
     ],
     glsl: (ctx) => `
-${ctx.indent}float h = clamp(0.5 + 0.5 * (${ctx.in2}_d - ${ctx.varName}_d) / ${ctx.getParam('k')}, 0.0, 1.0);
-${ctx.indent}${ctx.varName}_d = mix(${ctx.in2}_d, ${ctx.varName}_d, h) - ${ctx.getParam('k')} * h * (1.0 - h);
-${ctx.indent}${ctx.varName}_p = mix(${ctx.in2}_p, ${ctx.varName}_p, h);
-${ctx.indent}${ctx.varName}_dr = mix(${ctx.in2}_dr, ${ctx.varName}_dr, h);
+${ctx.indent}{
+${ctx.indent}    float k_su = ${ctx.getParam('k')};
+${ctx.indent}    float h_su = clamp(0.5 + 0.5 * (${ctx.in2}_d - ${ctx.varName}_d) / k_su, 0.0, 1.0);
+${ctx.indent}    ${ctx.varName}_d = mix(${ctx.in2}_d, ${ctx.varName}_d, h_su) - k_su * h_su * (1.0 - h_su);
+${ctx.indent}    ${ctx.varName}_p = mix(${ctx.in2}_p, ${ctx.varName}_p, h_su);
+${ctx.indent}    ${ctx.varName}_dr = mix(${ctx.in2}_dr, ${ctx.varName}_dr, h_su);
+${ctx.indent}}
 `
 });
 
@@ -388,9 +396,12 @@ nodeRegistry.register({
         { id: 'factor', label: 'Factor', min: 0.0, max: 1.0, step: 0.01, default: 0.5 }
     ],
     glsl: (ctx) => `
-${ctx.indent}${ctx.varName}_d = mix(${ctx.varName}_d, ${ctx.in2}_d, ${ctx.getParam('factor')});
-${ctx.indent}${ctx.varName}_p = mix(${ctx.varName}_p, ${ctx.in2}_p, ${ctx.getParam('factor')});
-${ctx.indent}${ctx.varName}_dr = mix(${ctx.varName}_dr, ${ctx.in2}_dr, ${ctx.getParam('factor')});
+${ctx.indent}{
+${ctx.indent}    float f_mx = ${ctx.getParam('factor')};
+${ctx.indent}    ${ctx.varName}_d = mix(${ctx.varName}_d, ${ctx.in2}_d, f_mx);
+${ctx.indent}    ${ctx.varName}_p = mix(${ctx.varName}_p, ${ctx.in2}_p, f_mx);
+${ctx.indent}    ${ctx.varName}_dr = mix(${ctx.varName}_dr, ${ctx.in2}_dr, f_mx);
+${ctx.indent}}
 `
 });
 

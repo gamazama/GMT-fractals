@@ -32,6 +32,8 @@ ADRs 0089-0091 (WeaveSpec core), ADR-0092 (faithful marcher).
 ## Guards
 
 ```
+npm run test:modular-parity # node-only: every node def reads each input once, in
+                           # order; compileGraph/updateModularUniforms slot parity per pipeline
 npm run test:compat        # iterates the LIVE registry (barrel + registerFeatures):
                            # capabilities present, exactly one shape: token, params array
 npm run smoke:engine-gmt   # boots app-gmt.html end-to-end; asserts a lit Mandelbulb pixel
@@ -88,8 +90,10 @@ Modular too; `native-weave-sweep` likewise ("Modular — no GLSL to rewrite").
 `compileGraph` when `formula === 'Modular'` — so it proves the module parses,
 never that it compiles a graph correctly.
 
-So `compileGraph` / `updateModularUniforms` / `topologicalSort` /
-`isStructureEqual` have ZERO executable coverage. Two live `@bug PRODUCTION:`
-annotations in `utils/GraphCompiler.ts` and `utils/graphAlg.ts` are the direct
-consequence. Verify changes here by hand, or add a node-only harness — the whole
-path is pure functions with no WebGL dependency, so one is cheap.
+`test:modular-parity` (node-only, added 2026-09-02) is the only executable
+coverage of `compileGraph` / `updateModularUniforms` / `topologicalSort` /
+`pipelineToGraph`, and it checks slot parity only — not the emitted GLSL.
+`isStructureEqual` still has none; the live `@bug PRODUCTION:` in
+`utils/graphAlg.ts` (edge-blind diff) is the direct consequence. Verify other
+changes here by hand, or extend that harness — the whole path is pure
+functions with no WebGL dependency, so assertions are cheap.

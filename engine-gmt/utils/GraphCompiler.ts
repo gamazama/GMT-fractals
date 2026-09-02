@@ -227,21 +227,23 @@ ${body}
  * allocating slots — it just increments a counter on each unbound call, so a
  * template that reads the same param twice burns two slots. The packer
  * iterates `def.inputs` in declaration order and writes one value per input.
- * NO assertion enforces this. See followup q-117.
+ * — proven by: npm run test:modular-parity ("<def>: template reads [...] but
+ * declares [...]" per registered definition; "compiler emitted slots up to
+ * index N but the packer writes M" per pipeline; and the realistic
+ * Scale→Mandelbulb→AddConstant case asserting each node reads its own value).
+ * Falsified 2026-09-02 against the pre-fix definitions: 17 assertions red —
+ * Scale, Twist, Bend, SmoothUnion and Mix in block 1, every pipeline
+ * containing one of them in block 2, and Mandelbulb reading power = 0.1
+ * (Scale's neighbour slot) instead of 8 in block 3.
  *
- * @bug PRODUCTION: the invariant above is VIOLATED by 5 of the 26 registered
- * node definitions in `engine-gmt/data/nodes/definitions.ts`, each of which
- * interpolates the same `getParam(...)` more than once into its template:
- * `Scale` (scale ×2), `Twist` (amount ×2), `Bend` (amount ×2),
- * `SmoothUnion` (k ×2) and `Mix` (factor ×3). Each surplus call allocates a
- * slot the packer never writes, so the node reads a neighbour's value (or 0)
- * AND every node compiled after it is shifted. Shipped example:
- * `MANDELBOX_PIPELINE` (BoxFold, SphereFold, Scale, AddConstant) compiles
- * `v_3_dr *= abs(uModularParams[4])` and `v_4_p += c.xyz * uModularParams[5]`
- * while the packer only fills slots 0-4 — AddConstant multiplies `c` by 0.0,
- * so the preset never adds its constant. Fix: hoist each `ctx.getParam(...)`
- * into a local const and interpolate the local. Reproduce with
- * `compileGraph` + `updateModularUniforms` on `MANDELBOX_PIPELINE`.
+ * Until 2026-09-02 those five definitions violated this — each interpolated
+ * the same `getParam(...)` two or three times — so a Scale in front of a
+ * Mandelbulb made the bulb read its power from the wrong slot and shifted
+ * every node after it. Fixed by hoisting each read into a local, the pattern
+ * `IFSScale` already used. Saved Modular scenes containing those nodes render
+ * differently after the fix: they now read the values their sliders show.
+ * `MANDELBOX_PIPELINE` (the example the old annotation cited) has zero
+ * importers and is not reachable from the UI.
  *
  * @invariant Param overflow degrades silently — compiler returns the GLSL
  * literal `"0.0"`; packer's `setP` drops writes past `MAX_MODULAR_PARAMS`.
