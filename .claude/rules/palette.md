@@ -71,7 +71,8 @@ here, write the first ADR.
 
 ```
 npm run smoke:boot           # the registration path, to throw-depth
-npm run test:palette         # 16 chained harnesses over palette/core/**
+npm run test:palette         # 17 chained harnesses over palette/core/**
+npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
 ```
 

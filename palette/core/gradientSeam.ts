@@ -7,6 +7,16 @@
  *     via stopFit (the unified-HLC fitter) — exactly GMT's interchange representation.
  *   applyGradientConfig — set the coloring feature's gradient (layer 1 or 2). No-ops
  *     (returns false) when the host has no coloring feature, e.g. the standalone studio.
+ *
+ * @invariant Coloring writes are forced to colorSpace 'linear' and env writes to
+ *   'srgb' whatever the incoming config says; preset stops pass through untouched;
+ *   ramp-only entries are fitted with at most SEAM_MAX_STOPS stops and enough to
+ *   keep a stop per band edge on a banded palette.
+ *   — proven by: npm run test:palette-gradientseam ("layer 1 write forced to
+ *   linear", "env write forced to srgb", "64-band ramp fitted to N stops, expected
+ *   at least 64"). Falsified 2026-09-02: forcing 'srgb' in applyGradientConfig
+ *   reds three assertions across both layers and applyEntryToColoring;
+ *   SEAM_MAX_STOPS = 8 reds the band-edge floor (fitted to 8).
  */
 
 import type { CatalogEntry } from './presetCatalog';
