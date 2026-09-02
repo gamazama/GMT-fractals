@@ -16,11 +16,15 @@
  *   the main thread does, its message queue delivers a burst — writing into a
  *   fixed ring means the burst costs O(ring), and the oldest entries (which
  *   nobody can use any more) fall out on their own.
+ *   — proven by: npm run test:worklet-analysis ("nearest to t=0 is hop 89 —
+ *   the ring holds exactly 512, hops 1..88 are gone").
  * @invariant Levels take the LATEST snapshot; flux takes the MAX since the last
  *   read. Levels are already smoothed at hop rate, so the newest value carries
  *   the gap. Flux is deliberately unsmoothed — it is an event measure, and
  *   averaging it across a gap would dilute one kick by the gap's length, so a
  *   max is the only aggregation that preserves "an onset happened".
+ *   — proven by: npm run test:worklet-analysis ("levels are hop 3's, not hop
+ *   1's", "band A: max 30 in the middle hop, not the last hop's 7").
  *
  * @see docs/adr/0110-audio-analysis-in-a-worklet.md
  */
@@ -50,7 +54,7 @@ const loadWorkletUrl = async (): Promise<string> => {
 /** How much history to keep for the recorder's per-frame back-fill. At ~187
  *  hops/sec this is a little over two seconds — comfortably longer than the
  *  worst tick throttle (1Hz), which is the gap it exists to cover. */
-const RING_SNAPSHOTS = 512;
+export const RING_SNAPSHOTS = 512;
 
 /** The Detail setting the Response curve was calibrated against. Response's
  *  budget is measured from here, so 4096 reproduces the old tau exactly and
@@ -83,8 +87,10 @@ export class WorkletAnalysis {
     private ring: BandSnapshot[] = [];
     private ringWrite = 0;
     private ringCount = 0;
-    /** Ring index already consumed by `takeMaxFlux`. */
-    private fluxCursor = 0;
+    /** Hops written since `takeMaxFlux` last drained. A COUNT, not a ring
+     *  index — an index difference modulo the ring aliases at exactly one lap
+     *  (see `takeMaxFlux`). */
+    private hopsSinceFluxRead = 0;
     private latest: BandSnapshot | null = null;
     private lastPeak = 0;
     private droppedTotal = 0;
@@ -152,7 +158,7 @@ export class WorkletAnalysis {
             this.ring = [];
             this.ringWrite = 0;
             this.ringCount = 0;
-            this.fluxCursor = 0;
+            this.hopsSinceFluxRead = 0;
             this.latest = null;
         }
     }
@@ -183,6 +189,7 @@ export class WorkletAnalysis {
             this.latest = slot;
             this.ringWrite = (this.ringWrite + 1) % RING_SNAPSHOTS;
             if (this.ringCount < RING_SNAPSHOTS) this.ringCount++;
+            this.hopsSinceFluxRead++;
         }
     }
 
@@ -289,53 +296,55 @@ export class WorkletAnalysis {
     /**
      * Drain unread snapshots into `out` as a per-band maximum.
      *
-     * @bug PRODUCTION: the modulo below ALIASES at exactly `RING_SNAPSHOTS`
-     *   unread hops. `(ringWrite - cursor + 512) % 512` is 0 both when nothing
-     *   is unread and when the writer has lapped the reader by exactly one full
-     *   ring, so a whole ring of onsets drains as nothing. Measured with a probe
-     *   against this class: 512 unread hops all carrying flux 30 produced a max
-     *   `fluxRate` of 0. Reachability is narrow — it needs a ~2.73s main-thread
-     *   stall landing on an exact multiple of 512 hops; at 600 unread it degrades
-     *   gracefully, draining the newest 88 (the only ones still in the ring).
-     *   Narrow, but ADR-0110 documents long tick stalls as precisely the scenario
-     *   this receiver exists to survive.
+     * `unread` is a COUNT of hops written since the last drain, clamped to
+     * what the ring still holds, and the walk starts that many entries behind
+     * the write index. It used to be a ring-index difference,
+     * `(ringWrite - cursor + RING) % RING`, and that ALIASED at exactly one
+     * lap: 0 both when nothing is unread and when the writer has lapped the
+     * reader by exactly RING_SNAPSHOTS hops, so a whole ring of onsets drained
+     * as nothing. The overnight audit (cycle 4) measured it against this
+     * class: 512 unread hops all carrying flux 30 produced a max `fluxRate` of
+     * 0. Reachability was narrow — a ~2.73s main-thread stall landing on an
+     * exact multiple of 512 hops — but ADR-0110 names long tick stalls as
+     * precisely the scenario this receiver exists to survive. Past a lap it
+     * was also partial: at 600 unread it walked only the 88 hops written after
+     * the lap and skipped the 424 older ones the ring still held. Both
+     * resolved 2026-09-02 (audit item L769); `test:worklet-analysis` [6] and
+     * [7] pin them. A dead line — `if (unread === 0 && this.latest) unread =
+     * 0;` — sat here as the only in-tree trace that the hole had been noticed;
+     * the guard is that trace now, so it went with the fix.
      *
-     *   The `if (unread === 0 && this.latest) unread = 0;` line below is
-     *   provably DEAD — the guard establishes `unread` is 0 and the body assigns
-     *   0 — but it is left in place deliberately, because its shape ("we
-     *   computed zero unread, yet we do have data") reads as a half-written fix
-     *   for exactly the aliasing above; the intended body was most likely
-     *   `unread = this.ringCount`. Deleting it would erase the only in-tree
-     *   trace that the hole was ever noticed. Do NOT "clean it up" without
-     *   resolving the aliasing — see PROPOSALS.md (overnight audit, cycle 4).
+     * Two shortcuts that were NOT the fix, kept because the guard proves them
+     * wrong: `unread = ringCount` when the difference reads 0 cannot tell an
+     * idle tick from a full lap, so it re-drains the whole ring on every tick
+     * with nothing new (measured: the idle tick after a full-ring drain read
+     * 30); `unread = 1` reads `ring[ringWrite]`, which is the OLDEST survivor
+     * — the slot about to be overwritten — not the newest (measured: an onset
+     * in the newest hop alone still read 0).
      *
-     *   NOT the fix: `unread = 1`. When the cursor has caught up,
-     *   `ring[ringWrite]` is the slot about to be OVERWRITTEN — the OLDEST
-     *   entry, not the newest (newest is `ring[ringWrite - 1]`, which is what
-     *   `this.latest` points at). Measured: that would inject a value 2.84s
-     *   stale.
+     * The routine no-new-snapshot tick is an HONEST zero, not a dropped
+     * transient: the onset was delivered at full max on the tick its batch
+     * landed, and `ModulationEngine`'s per-rule attack/decay envelope carries
+     * the pulse forward across ticks. Batches arrive at ~53/s, so zero-drain
+     * ticks are routine (~12% at 60Hz, ~63% at 144Hz), not a smell.
      *
-     *   Note the routine no-new-snapshot tick is an HONEST zero, not a dropped
-     *   transient: the onset was already delivered at full max on the tick its
-     *   batch landed, and `ModulationEngine`'s per-rule attack/decay envelope
-     *   carries the pulse forward across ticks. Batches arrive at ~53/s, so
-     *   zero-drain ticks are routine (~12% at 60Hz, ~63% at 144Hz), not a smell.
-     *
-     * @invariant This whole file has NO guard coverage of any kind — no debug
-     *   suite imports `WorkletAnalysis`. All five audio suites pass identically
-     *   whether the dead line reads `= 0`, `= 1`, or is absent. A guard would
-     *   have to feed synthetic `AnalysisBatchMessage` payloads into `onBatch`
-     *   and assert on `filterBank.fluxRate` after `update()`.
+     * @invariant Flux is the per-band MAX over every hop written since the
+     *   last drain that the ring still holds — at exactly one lap and beyond
+     *   it — and a tick with nothing new reads 0.
+     *   — proven by: npm run test:worklet-analysis ("512 unread hops of flux
+     *   30 drain as 30, not 0", "an onset at hop 200 (held, older than the
+     *   lap) is seen after 600 unread hops", "no new snapshot → fluxRate is 0
+     *   everywhere").
      */
     private takeMaxFlux(out: Float32Array) {
         const n = out.length;
         out.fill(0);
-        let idx = this.fluxCursor;
-        // How many entries are unread, bounded by what the ring still holds.
-        let unread = (this.ringWrite - idx + RING_SNAPSHOTS) % RING_SNAPSHOTS;
-        if (unread === 0 && this.latest) unread = 0;
-        if (unread > this.ringCount) unread = this.ringCount;
-
+        // Past a full lap the oldest hops have been overwritten; only the
+        // newest `ringCount` are still there to read.
+        const unread = Math.min(this.hopsSinceFluxRead, this.ringCount);
+        // Oldest unread entry. `unread <= RING_SNAPSHOTS`, so one added ring
+        // length keeps the operand non-negative.
+        let idx = (this.ringWrite - unread + RING_SNAPSHOTS) % RING_SNAPSHOTS;
         for (let i = 0; i < unread; i++) {
             const s = this.ring[idx];
             if (s && s.flux.length === n) {
@@ -343,7 +352,7 @@ export class WorkletAnalysis {
             }
             idx = (idx + 1) % RING_SNAPSHOTS;
         }
-        this.fluxCursor = this.ringWrite;
+        this.hopsSinceFluxRead = 0;
     }
 
     /**
@@ -369,10 +378,12 @@ export class WorkletAnalysis {
      * reach back that far, so the caller can stop rather than fill with
      * whatever the oldest entry happens to be.
      *
-     * @invariant Does NOT touch the AGC or the flux cursor. This is a rewind
-     *   for one frame's capture, not a tick — advancing either would corrupt
-     *   the live path's state, and `takeMaxFlux` would then skip snapshots the
-     *   real read still needs.
+     * @invariant Does NOT touch the AGC or the flux read mark
+     *   (`hopsSinceFluxRead`). This is a rewind for one frame's capture, not a
+     *   tick — advancing either would corrupt the live path's state, and
+     *   `takeMaxFlux` would then skip snapshots the real read still needs.
+     *   — proven by (the flux half): npm run test:worklet-analysis ("the live
+     *   tick still drains all three hops — the back-fill moved no cursor").
      */
     public applySnapshotAt(t: number, maxAgeSec: number): boolean {
         const s = this.snapshotAt(t);

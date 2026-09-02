@@ -43,6 +43,7 @@ explicitly — a value that looks right at 60fps will be wrong at 30 or 144.
 npm run test:filterbank
 npm run test:band-math
 npm run test:band-analyser
+npm run test:worklet-analysis
 npm run test:audio-signal
 npm run test:fft
 npm run test:session-hold
