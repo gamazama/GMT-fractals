@@ -71,10 +71,10 @@ export class GmtBucketHost implements BucketRenderHost {
     }
 
     /**
-     * @invariant Aspect override (`cam.aspect = outputW/outputH`)
+     * @assumption Aspect override (`cam.aspect = outputW/outputH`)
      *   requires `UniformManager.syncFrame` to SKIP the `cam.aspect`
      *   re-sync while `state.isBucketRendering` is true.
-     * @invariant `uFullOutputResolution` is seeded ONCE here and held
+     * @assumption `uFullOutputResolution` is seeded ONCE here and held
      *   constant across image tiles; only reset in `endRender`.
      */
     public beginRender(outputW: number, outputH: number): void {
@@ -123,7 +123,7 @@ export class GmtBucketHost implements BucketRenderHost {
     }
 
     /**
-     * @invariant Writes `RegionMin`/`RegionMax` on materials and applies a
+     * @assumption Writes `RegionMin`/`RegionMax` on materials and applies a
      *   pipeline SCISSOR over the bucket pixel rect. The shader has a vUv-based
      *   discard too, but scissor is the actual perf-saving mechanism —
      *   the discard still costs a history fetch + MRT write per pixel.
@@ -159,7 +159,7 @@ export class GmtBucketHost implements BucketRenderHost {
     }
 
     /**
-     * @invariant Bloom resolution branches on `fullOutput > originalSize`
+     * @assumption Bloom resolution branches on `fullOutput > originalSize`
      *   (output-upscaled), NOT on whether tiling is active.
      *   `exportMaterial.uEncodeOutput = 1.0` is mandatory for the bucket
      *   readback path — the export material's shader has both encoded
@@ -200,7 +200,7 @@ export class GmtBucketHost implements BucketRenderHost {
     }
 
     /**
-     * @invariant Must call `gl.getContext().flush()` — three.js doesn't
+     * @assumption Must call `gl.getContext().flush()` — three.js doesn't
      *   always flush after a single render to the default framebuffer;
      *   removing the flush can leave the canvas blank on Refine View.
      */
@@ -228,7 +228,7 @@ export class GmtBucketHost implements BucketRenderHost {
     }
 
     /**
-     * @invariant Pipeline scissor AND region uniforms must BOTH be
+     * @assumption Pipeline scissor AND region uniforms must BOTH be
      *   reset here — otherwise the next viewport frame's region mask
      *   discards everything outside the last bucket.
      *   `savedPixelSizeBase_` must be cleared (while >0 it forces

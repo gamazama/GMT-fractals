@@ -39,17 +39,17 @@ export class WorkerDepthReadback {
      * Checks the async fence from the previous readback, issues a new one every 3rd frame,
      * and resolves any pending focus pick.
      *
-     * @invariant Async readback reads from `pipeline.getPreviousRenderTarget()`,
+     * @assumption Async readback reads from `pipeline.getPreviousRenderTarget()`,
      *   NOT the current one — reading the in-flight render target would
      *   race the active render.
-     * @invariant PBO size and read type follow the render target's ACTUAL
+     * @assumption PBO size and read type follow the render target's ACTUAL
      *   `texture.type` — 8 bytes for half-float (RGBA + HALF_FLOAT), 16
      *   bytes for float (RGBA + FLOAT). Do NOT derive them from
      *   `quality.bufferPrecision`: `RenderPipeline.accumFormat()` picks
      *   HalfFloatType whenever full float isn't linearly filterable, so the
      *   requested precision and the allocated type can disagree. Mismatched
      *   sizes/types silently corrupt the readback.
-     * @invariant Depth is read from the alpha channel of the
+     * @assumption Depth is read from the alpha channel of the
      *   accumulation RT. Anything else in alpha (e.g. coverage during
      *   alpha-pass export) would clobber `engine.lastMeasuredDistance`.
      *   The export path explicitly skips the probe during alpha export;
@@ -199,7 +199,7 @@ export class WorkerDepthReadback {
     }
 
     /**
-     * @invariant Focus-pick state machine has exactly TWO states —
+     * @assumption Focus-pick state machine has exactly TWO states —
      *   `FocusPickState` is `pending | ready`; there is no `snapshot`
      *   state, the snapshot is the `pending → ready` transition.
      *   `pending` (set here) → on the next tick the entire depth buffer

@@ -12,18 +12,18 @@
  * `RMCalculateStartPos` Calc.pas, `CalcStepWidth` DivUtils.pas. See
  * `plans/mb3d/camera-import-spec.md`.
  *
- * @invariant hVGrads is ROW-MAJOR (Math3D.pas TMatrix3 = array[0..2,0..2]). Row 0
+ * @assumption hVGrads is ROW-MAJOR (Math3D.pas TMatrix3 = array[0..2,0..2]). Row 0
  *   = screen-X gradient (camera RIGHT, +), row 1 = screen-Y gradient (camera UP
  *   is its NEGATION — screen-Y runs top→down in MB3D), row 2 = depth gradient
  *   (camera FORWARD / view dir, +). The stored rows are scaled by ~stepWidth·25/24
  *   (a bCalc3D FOV factor) — NORMALIZE each row to unit length before use; never
  *   trust the stored magnitude.
- * @invariant HANDEDNESS — with {right=+row0̂, up=−row1̂, view=+row2̂}, right×up =
+ * @assumption HANDEDNESS — with {right=+row0̂, up=−row1̂, view=+row2̂}, right×up =
  *   −view, which is exactly THREE's right-handed camera convention (local +X×+Y =
  *   +Z = −viewDir). So NO world-Z negation is applied anywhere (positions and the
  *   pivot are used directly); the only sign correction is up = −row1̂. An earlier
  *   "negate world-Z + lookAt" version double-flipped — the ray-gen is the truth.
- * @invariant Degenerate fallback — a zoom ≤ 0, a missing/short hVGrads, a
+ * @assumption Degenerate fallback — a zoom ≤ 0, a missing/short hVGrads, a
  *   non-orthonormal basis, a non-finite pose, or a non-positive orbit distance
  *   returns the centered default (never a black/stuck camera). Stereo / pano
  *   headers are out of scope (mono perspective assumed).

@@ -54,7 +54,7 @@ export const reflEnvShading = (coneAA: boolean) => `
 /** Full raymarched reflections — traces a reflection ray, shades the hit point.
  *  VNDF importance sampling + firefly clamp + env/AO fill at the hit.
  *
- *  @invariant SINGLE bounce by design — never wrap this shade body in a loop.
+ *  @assumption SINGLE bounce by design — never wrap this shade body in a loop.
  *  Direct-mode multi-bounce was removed (owner call, 2026-07-10): PT owns bounce
  *  recursion (uPTBounces), and the Direct bounce wrapper both tripped an fxc
  *  nested-loop pathology (+34s cold compile at ONE trip; §2.6.2 of

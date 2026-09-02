@@ -54,16 +54,16 @@ const buildLiveNodeIds = (inputsByTarget: Map<string, GraphEdge[]>): Set<string>
 /**
  * Compile a Modular pipeline into the GLSL body of `formula_Modular()`.
  *
- * @invariant DCE walks BACKWARD from synthetic `root-end` via `stack.pop()`
+ * @assumption DCE walks BACKWARD from synthetic `root-end` via `stack.pop()`
  * (LIFO ⇒ DFS, NOT BFS). Unreachable nodes produce no GLSL and consume no
  * `uModularParams` slots. Empty active set → identity body.
  *
- * @invariant Disabled nodes still emit the propagation triple
+ * @assumption Disabled nodes still emit the propagation triple
  * `v_<id>_p/_d/_dr` from `in1` (so downstream variable lookups resolve) but
  * DO NOT call `def.glsl` and DO NOT consume `uModularParams` slots. The
  * packer mirrors this skip predicate — see `updateModularUniforms`.
  *
- * @invariant The two synthetic roots are hard-coded string literals at EIGHT
+ * @assumption The two synthetic roots are hard-coded string literals at EIGHT
  * sites across THREE files — `grep -rn "root-start\|root-end" engine-gmt/`
  * before renaming (ADR-0051 says "three places"; that counts only the three
  * in `compileGraph` and misses the rest):
@@ -78,7 +78,7 @@ const buildLiveNodeIds = (inputsByTarget: Map<string, GraphEdge[]>): Set<string>
  *   - `components/panels/flow/FlowEditor.tsx` ×4 — the two ReactFlow root
  *     nodes and the persisted-root-position lookup.
  *
- * @invariant `distOverride` window is `(-1.0, 999.0)`; `v_start_d` is seeded
+ * @assumption `distOverride` window is `(-1.0, 999.0)`; `v_start_d` is seeded
  * to `1000.0` so non-SDF graphs naturally fall outside and never override
  * the iterative DE. SDF Primitive nodes write `< 999.0` to engage
  * `distOverride`.
@@ -214,7 +214,7 @@ ${body}
 /**
  * Pack per-frame parameter values into the flat `uModularParams` array.
  *
- * @invariant Slot-order parity with `compileGraph` is LOAD-BEARING. Both share
+ * @assumption Slot-order parity with `compileGraph` is LOAD-BEARING. Both share
  * `buildInputsByTarget` + `buildLiveNodeIds`, walk `pipeline` in the same
  * input order, apply identical skip predicates (`!liveNodeIds.has(node.id)`,
  * `!node.enabled`), and treat `condition.active` as two leading slots (`cmod`
@@ -245,7 +245,7 @@ ${body}
  * `MANDELBOX_PIPELINE` (the example the old annotation cited) has zero
  * importers and is not reachable from the UI.
  *
- * @invariant Param overflow degrades silently — compiler returns the GLSL
+ * @assumption Param overflow degrades silently — compiler returns the GLSL
  * literal `"0.0"`; packer's `setP` drops writes past `MAX_MODULAR_PARAMS`.
  * No exception, no console warning.
  */

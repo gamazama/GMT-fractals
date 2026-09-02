@@ -7,7 +7,7 @@ import type { ShaderConfig } from './ShaderConfig';
 export type { ShaderConfig } from './ShaderConfig';
 
 /**
- * @invariant `buildShader` calls `feat.inject()` for EVERY registered
+ * @assumption `buildShader` calls `feat.inject()` for EVERY registered
  *   feature regardless of enabled state. Features that have a
  *   `toggleParam` MUST defensively emit empty stubs when disabled, or
  *   other code that references their functions (`calculateShading`,

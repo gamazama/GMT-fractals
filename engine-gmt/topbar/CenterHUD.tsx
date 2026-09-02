@@ -91,7 +91,7 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
 
     // Sync active light popup ref for gizmo range circle + store for tutorial trigger.
     //
-    // @invariant Module-mutable singleton — bypasses the store on purpose
+    // @assumption Module-mutable singleton — bypasses the store on purpose
     //   so per-frame gizmo reads don't trigger React renders. If a future
     //   "edit light from dock panel" interaction wants the same gizmo
     //   highlight, `LightPanelControls` must also write here.

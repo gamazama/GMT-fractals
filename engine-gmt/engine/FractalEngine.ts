@@ -128,7 +128,7 @@ export interface EngineRenderState {
     /** Uniform names live modulation is currently driving (main-thread
      *  `modulationEngine.getOwnedUniforms()`).
      *
-     *  @invariant `syncConfigUniforms` must SKIP these. It rewrites every
+     *  @assumption `syncConfigUniforms` must SKIP these. It rewrites every
      *  uniform-backed param from the raw base config, and a slider drag emits a
      *  config update per pointermove — so without the skip the base write lands
      *  between modulation ticks and the uniform alternates base / base+offset,
@@ -139,7 +139,7 @@ export interface EngineRenderState {
 }
 
 // Precompute 2048 jitter values using Halton sequence for faster access.
-// @invariant Module-scope, shared across all FractalEngine instances —
+// @assumption Module-scope, shared across all FractalEngine instances —
 //   safe because it is READ-ONLY.
 const PRECOMPUTED_JITTER: THREE.Vector2[] = [];
 for (let i = 1; i <= 2048; i++) {
@@ -149,7 +149,7 @@ for (let i = 1; i <= 2048; i++) {
 }
 
 /**
- * @invariant `engine.renderer` and `engine.pipeline` are NULL on the main
+ * @assumption `engine.renderer` and `engine.pipeline` are NULL on the main
  *   thread under worker mode. Code MUST guard via `engine.isBooted` or
  *   use the shadow state on `WorkerProxy`. Matches the "What NOT to Do"
  *   rule in `CLAUDE.md` / `docs/history/gmt/01_System_Architecture.md`.
@@ -397,7 +397,7 @@ export class FractalEngine {
     }
 
     /**
-     * @invariant Deliberately does NOT set `dirty = true` — would
+     * @assumption Deliberately does NOT set `dirty = true` — would
      *   infinite-loop with `update()`. The `dirty` flag is for "config
      *   changed, recompile" semantics; accumulation reset is a separate
      *   concern (RenderPipeline.reset on the next render).
@@ -1223,7 +1223,7 @@ export class FractalEngine {
 let _engine: FractalEngine | null = null;
 
 /**
- * @invariant `getEngine()` is lazy, BUT the bottom-of-module
+ * @assumption `getEngine()` is lazy, BUT the bottom-of-module
  *   `export const engine = getEngine()` forces construction on import.
  *   New code should prefer `getEngine()` rather than importing `engine`
  *   directly so test harnesses can swap the singleton.

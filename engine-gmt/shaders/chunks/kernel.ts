@@ -3,7 +3,7 @@
  * ShaderBuilder into the kernel chunk builders (DE_MASTER reads `numericDE`; getTraceGLSL
  * reads `refine`) instead of loose positional booleans.
  *
- * @invariant Every gate is a TS-level emission gate, NOT a GLSL #define: when a gate is
+ * @assumption Every gate is a TS-level emission gate, NOT a GLSL #define: when a gate is
  * false/absent, ZERO GLSL for that feature is emitted and the kernel source is
  * byte-identical to the ungated kernel (shader-cache friendly, zero compile/runtime cost
  * when off). Do not convert these to #ifdef without superseding ADRs 0084/0085.

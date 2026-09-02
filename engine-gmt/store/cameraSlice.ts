@@ -83,7 +83,7 @@ const getSetOptics = (s: any): ((update: Partial<OpticsState>) => void) | null =
 /**
  * Capture: read GMT's live camera state into a snapshot payload.
  *
- * @invariant OWNERSHIP — every object this returns must be freshly
+ * @assumption OWNERSHIP — every object this returns must be freshly
  * allocated. The generic factory does NOT clone: `captureSnap` in
  * `engine/store/createStateLibrarySlice.ts` stores `opts.capture()` by
  * reference as `snap.state`. Handing back a live store object (e.g.
@@ -93,7 +93,7 @@ const getSetOptics = (s: any): ((update: Partial<OpticsState>) => void) | null =
  * `optics` is a shallow spread because `OpticsState` is flat scalars — if a
  * nested field is ever added, deep-copy it here.
  *
- * @invariant CAPTURE/APPLY SYMMETRY — the payload is
+ * @assumption CAPTURE/APPLY SYMMETRY — the payload is
  * `{ position, rotation, sceneOffset, targetDistance, optics }` and
  * `applyCameraState` restores all five: the first is pinned to the origin by
  * the VirtualSpace treadmill (the whole world position lives in the
@@ -102,7 +102,7 @@ const getSetOptics = (s: any): ((update: Partial<OpticsState>) => void) | null =
  * a field here without a matching read in `applyCameraState` is silent data
  * loss on recall.
  *
- * @invariant PRECISION — the world position is summed to a double by
+ * @assumption PRECISION — the world position is summed to a double by
  * `CameraUtils.getUnifiedFromEngine()` and re-split via `VirtualSpace.split`
  * (`high = Math.fround(v)`, `low = v - high`), so `x + xL` reconstructs the
  * captured value exactly at double precision. Storing only `x` (the f32 high
@@ -133,11 +133,11 @@ const captureCameraState = (): SavedCameraPayload => {
 /**
  * Apply: push a saved snapshot into GMT's live camera state.
  *
- * @invariant Emits `CAMERA_TRANSITION` FIRST, then `setStates` the three
+ * @assumption Emits `CAMERA_TRANSITION` FIRST, then `setStates` the three
  * camera fields, then probes for `setOptics`, then `engine.resetAccumulation()`.
  * Order matters — event listeners may pre-warm shaders before the store flip.
  *
- * @invariant OWNERSHIP — `state` IS the saved camera's own payload
+ * @assumption OWNERSHIP — `state` IS the saved camera's own payload
  * (`snap.state`), not a copy: `applySnap` in
  * `engine/store/createStateLibrarySlice.ts` passes it straight through. The
  * `setState` below therefore installs the snapshot's own `rotation` and
@@ -204,7 +204,7 @@ export const flushCameraToStore = (): void => {
  * CameraManagerPanel.tsx. Exported so the panel can render an
  * up-to-date dirty marker as the user navigates.
  *
- * @invariant Tolerances: position L1 ≤ 0.0001 (sums high+low parts),
+ * @assumption Tolerances: position L1 ≤ 0.0001 (sums high+low parts),
  * rotation quaternion L1 ≤ 0.001, optics `camType` ±0.1, `orthoScale` ±0.01,
  * `camFov` ±0.1.
  */
@@ -410,20 +410,20 @@ const stepBackFromCurrent = (): void => {
  * helpers and composes the engine-core `installStateLibrary<T>` factory
  * with GMT capture/apply/isModified/suggestLabel/captureThumbnail/onReset.
  *
- * @invariant Load-order critical. Must run BEFORE any component reads
+ * @assumption Load-order critical. Must run BEFORE any component reads
  * `s.savedCameras.length`. `CameraManagerPanel` reads `s.savedCameras`
  * directly and would crash on `undefined.length` otherwise.
  * `app-gmt/main.tsx:148` satisfies this by calling `installGmtCameraSlice()`
  * immediately after `registerGmtUi()`; there is NO runtime guard.
  *
- * @invariant Opts out of the auto-generated topbar menu via `menu: null` —
+ * @assumption Opts out of the auto-generated topbar menu via `menu: null` —
  * `engine-gmt/topbar.tsx:278-355` wires the Camera menu by hand (Undo Move,
  * Redo Move, Reset Position, View Manager, Camera Slots 1-9). Slot 1-9 click
  * handlers route to the SAME `savedCameras[slotIndex]` + `selectCamera` /
  * `saveToSlot` actions the `Mod+1..9` / `1..9` slot shortcuts hit, so menu
  * clicks and hotkeys agree by construction. See ADR-0057.
  *
- * @invariant Wraps engine-core history-slice's `undoCamera` / `redoCamera`
+ * @assumption Wraps engine-core history-slice's `undoCamera` / `redoCamera`
  * so each call also fires `CAMERA_TELEPORT` to warp the R3F camera to the
  * restored pose synchronously after the diff applies. Engine-core's history
  * slice is synchronous.
@@ -545,7 +545,7 @@ export const installGmtCameraSlice = (): void => {
     // a registered provider supplies capture/restore, and a param transaction
     // brackets the mutation so the end-of-transaction diff pushes one entry.
     //
-    // @invariant Thumbnails ride along inside the snapshot. That is an accepted
+    // @assumption Thumbnails ride along inside the snapshot. That is an accepted
     //   cost, not an oversight — they are icon-sized data URLs and MAX_STACK is
     //   50, so the worst case is bounded and small. Owner call 2026-07-28. If
     //   thumbnails ever grow to full-size captures, revisit this before the

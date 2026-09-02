@@ -50,12 +50,12 @@ import { DebugToolsFeature }   from '../../engine/features/debug_tools';
  * GMT-local — read the import path, not the section comment, before assuming
  * a def is shared.
  *
- * @invariant Registration ORDER matters. `LightSpheresFeature` MUST register
+ * @assumption Registration ORDER matters. `LightSpheresFeature` MUST register
  * after `LightingFeature` (lighting declares the uniform arrays light_spheres
  * consumes); `LightSpheresFeature.dependsOn = ['lighting']` enforces it at
  * the FeatureSystem level.
  *
- * @invariant Engine-core features are imported BY MODULE IDENTITY from
+ * @assumption Engine-core features are imported BY MODULE IDENTITY from
  * `engine/features/*` — re-registration of the same ref short-circuits at
  * FeatureSystem (`existing === def`). Carrying GMT copies historically
  * produced 6 "Replacing definition" warnings AND broke `uToneMapping`

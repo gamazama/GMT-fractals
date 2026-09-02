@@ -11,7 +11,7 @@
  * `modulo` (interlace / Hybrid Box-style): the phase function reads RUNTIME uniforms
  * (interval / start / optional cap) — live-editable and keyframable, no recompile.
  *
- * @invariant Only mode 0 (ALTERNATE) is a pure ordering. Modes 1 (interpolate),
+ * @assumption Only mode 0 (ALTERNATE) is a pure ordering. Modes 1 (interpolate),
  *   2 (DEcombine/CSG) and 3 (KIFS) change the DE/blend semantics, not just the
  *   order — front-ends must gate emission on `mode === 0`. @see docs/adr/0083
  */

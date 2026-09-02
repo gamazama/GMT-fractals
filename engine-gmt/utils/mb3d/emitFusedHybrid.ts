@@ -45,7 +45,7 @@ export interface EmitFusedOptions {
    *  (the DDFS `weave` feature — live AND keyframable, schedule edits never
    *  recompile). Layers are checked in slot order, first beat wins (the ADR-0089
    *  arbitration rule). Requires 2–6 active slots; anything else is a ledger reason.
-   *  @invariant opts absent (or kind ≠ modulo) = the counts path, byte-identical
+   *  @assumption opts absent (or kind ≠ modulo) = the counts path, byte-identical
    *  to the pre-P3b emit (probe: debug/probe-weave-refactor.mts). */
   schedule?: { kind: 'modulo'; baseRow?: number };
   /** LOOP DIVIDERS (P4.7): counts-schedule block boundaries — the block ending

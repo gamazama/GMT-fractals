@@ -190,7 +190,7 @@ export interface GmtTopbarOptions {
 }
 
 /**
- * @invariant One-shot side-effect. MUST be called AFTER `installTopBar`,
+ * @assumption One-shot side-effect. MUST be called AFTER `installTopBar`,
  *   `installMenu`, `installCamera`, and `installBucketRender` have
  *   installed their slots; this function only populates them.
  *   Engine-core defaults (project-name, FPS, adaptive) are unregistered

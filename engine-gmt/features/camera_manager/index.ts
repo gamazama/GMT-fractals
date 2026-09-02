@@ -5,7 +5,7 @@ import { FeatureDefinition } from '../../engine/FeatureSystem';
 // State is handled by cameraSlice, so no params here.
 
 /**
- * @invariant `params: {}` is intentional — Camera Manager state lives in
+ * @assumption `params: {}` is intentional — Camera Manager state lives in
  * `engine-gmt/store/cameraSlice.ts`, NOT in the DDFS feature slice. Adding
  * params here without considering the duplication WILL create a shadow
  * store. `tabConfig.label` 'Camera Manager' must match the `panelId` passed

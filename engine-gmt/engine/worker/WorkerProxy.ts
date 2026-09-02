@@ -90,7 +90,7 @@ export class WorkerProxy implements AccumulationController {
     /**
      * When true, FRAME_READY won't overwrite _localOffset until the worker catches up.
      *
-     * @invariant Drift-converged clear ONLY — no timeout fallback. A
+     * @assumption Drift-converged clear ONLY — no timeout fallback. A
      *   previous 2s auto-clear caused an F15 fly-mode bug where stale
      *   FRAME_READY data overwrote a fresh teleport. The guard clears
      *   when the worker's reported offset converges within 0.001 of the
@@ -501,7 +501,7 @@ export class WorkerProxy implements AccumulationController {
      * Measured 2026-07-27 on an app-gmt boot: the outbox is EMPTY at both
      * creation sites — nothing posts before `initWorkerMode` today.
      *
-     * @invariant Flushed exactly once per worker, at creation, before INIT.
+     * @assumption Flushed exactly once per worker, at creation, before INIT.
      */
     private _outbox: Array<{ msg: MainToWorkerMessage; transfer?: Transferable[] }> = [];
 
@@ -674,7 +674,7 @@ export class WorkerProxy implements AccumulationController {
     get sceneOffset() { return this._localOffset; }
     get lastGeneratedFrag() { return this._lastGeneratedFrag; }
     /**
-     * @invariant Mirror of the worker's sample index, refreshed ONLY on FRAME_READY.
+     * @assumption Mirror of the worker's sample index, refreshed ONLY on FRAME_READY.
      * The convergence-stop gate (GmtRendererTickDriver) reads this to decide whether
      * the path-traced image is settled. Any reset (compile, RESET_ACCUM, offset
      * teleport) MUST drop this to 0 via invalidateConvergedMirror() — otherwise it
@@ -747,7 +747,7 @@ export class WorkerProxy implements AccumulationController {
     get bootSent() { return this._bootSent; }
 
     /**
-     * @invariant Automatically `restart()`s when `_bootSent` is already
+     * @assumption Automatically `restart()`s when `_bootSent` is already
      *   true — the sole way to cancel a Firefox synchronous-compile
      *   pipeline mid-flight. Requires `_container` and `_lastInitArgs`
      *   to have been stashed during the first init. See ADR-0041.
@@ -981,13 +981,13 @@ export class WorkerProxy implements AccumulationController {
     // ─── Worker communication ────────────────────────────────────────────
 
     /**
-     * @invariant `modulations` ships on EVERY tick, including when empty. The
+     * @assumption `modulations` ships on EVERY tick, including when empty. The
      *   dict is the frame's COMPLETE set and the worker replaces its copy
      *   wholesale — sending it only when non-empty would leave a target that
      *   stopped being modulated frozen at its last offset, since nothing else
      *   ever clears the worker's dict. Same drop-out hazard `setOwnedUniforms`
      *   guards for uniform names.
-     * @invariant Must be read AFTER the ANIMATE tick phase has run, which is
+     * @assumption Must be read AFTER the ANIMATE tick phase has run, which is
      *   where `AnimationSystem` fills the dict. GmtRendererTickDriver's
      *   `runTicks()` precedes its dispatch block, so this holds.
      */

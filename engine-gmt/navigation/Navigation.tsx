@@ -98,7 +98,7 @@
  *   - precision math? VirtualSpace + the absorb logic. Read
  *     `absorbOrbitPosition` and the absorb-gen comment first.
  *
- * @invariant Any code that drives the camera pose / sceneOffset per-frame
+ * @assumption Any code that drives the camera pose / sceneOffset per-frame
  *   WITHOUT an open camera InteractionSession (orbit drag, WASD fly, wheel
  *   zoom, and the smooth `transitionRef` lerp all register one) and WITHOUT
  *   being an `isSceneAnimating` animation (timeline playback / LFO) will fall

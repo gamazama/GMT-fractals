@@ -7,9 +7,9 @@
  * formula(s)?" — replaces six ad-hoc visibility patterns (see audit
  * in plans/capability-protocol.md).
  *
- * @invariant Pure function. No store imports. No memoization. Callers
+ * @assumption Pure function. No store imports. No memoization. Callers
  *   handle memo if they want it. No side effects.
- * @invariant Unknown feature ids are silently skipped (allows new
+ * @assumption Unknown feature ids are silently skipped (allows new
  *   features to register without forcing simultaneous protocol updates).
  *
  * @see dev/plans/capability-protocol.md

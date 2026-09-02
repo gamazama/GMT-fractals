@@ -52,7 +52,7 @@ export interface ModulationSourceState {
 /**
  * Is ANY modulation source actually driving params this frame?
  *
- * @invariant Must mirror ModulationEngine's two master gates exactly. That
+ * @assumption Must mirror ModulationEngine's two master gates exactly. That
  *   engine skips LFO work when `!lfosEnabled` (updateOscillators' early
  *   return) and skips a rule when `rule.source === 'audio' && !audioEnabled`
  *   — and per-entry when `!anim.enabled` / `!rule.enabled`. A predicate that

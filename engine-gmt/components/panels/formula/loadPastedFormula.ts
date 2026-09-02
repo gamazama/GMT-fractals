@@ -18,7 +18,7 @@
  *    returns the (possibly uniquified) def.
  *  - On legacy JSON (no def): switches the active formula and returns null.
  *
- * @invariant The repair sequence here MUST stay byte-for-byte identical across
+ * @assumption The repair sequence here MUST stay byte-for-byte identical across
  *  callers — it IS the fix for the modal-vs-clipboard black-render divergence.
  *  Don't inline a partial copy at a call site.
  *

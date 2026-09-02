@@ -8,7 +8,7 @@
  * rotation sync, the MB3D const packer / live binder (utils/mb3d/constPacker.ts),
  * the canvas rotation gizmo, and the vector-input widgets.
  *
- * @invariant Each function mirrors ONE authority implementation VERBATIM and is
+ * @assumption Each function mirrors ONE authority implementation VERBATIM and is
  * named for its convention (see engine/rotationDescriptor.ts EulerOrder). They
  * are NOT interchangeable:
  *  - mb3dEulerToMat3    ≡ MB3D BuildRotMatrix (Math3D.pas:2478), R = Rx·Ry·Rz,

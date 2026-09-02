@@ -190,7 +190,7 @@ export class ShaderBuilder {
     }
 
     /**
-     * @invariant Keyed on `name` alone and `Map.set` is last-wins — NOT
+     * @assumption Keyed on `name` alone and `Map.set` is last-wins — NOT
      *   idempotent on `(name, type)`. Two features adding the same name with
      *   different `type`/`arraySize` yield ONE declaration carrying whichever
      *   was added last, silently. Deliberately weaker than the schema layer:
@@ -198,7 +198,7 @@ export class ShaderBuilder {
      *   check only spans `BASE_SCHEMA` + `getUniformDefinitions()` — it cannot
      *   see builder-time `addUniform` calls made from `inject()`. Mirrors
      *   `engine/ShaderBuilder.ts`'s `addUniform`.
-     * @invariant GMT-SPECIFIC: this builder APPENDS to an already-complete
+     * @assumption GMT-SPECIFIC: this builder APPENDS to an already-complete
      *   declaration block — `buildUniformsString()` starts from the static
      *   `UNIFORMS` chunk (every non-`backingOnly` schema entry) and
      *   `buildMeshSDFLibrary()` starts from `MESH_GLSL_UNIFORMS` plus its
@@ -212,7 +212,7 @@ export class ShaderBuilder {
      *   Mesh variant, whose prefix is the much smaller `MESH_GLSL_UNIFORMS`;
      *   `engine-gmt/features/weave.ts:142-155` gates its whole `addUniform`
      *   loop on `variant === 'Mesh'` for precisely this reason.
-     * @invariant Neither emit site checks `backingOnly` — like engine-core, an
+     * @assumption Neither emit site checks `backingOnly` — like engine-core, an
      *   `addUniform` entry ALWAYS produces a GLSL declaration. The flag is
      *   honoured only by `engine-gmt/shaders/chunks/uniforms.ts`.
      */
@@ -227,7 +227,7 @@ export class ShaderBuilder {
     /**
      * Adds global code at global scope, before functions (e.g. for pre-calculation).
      *
-     * @invariant Dedupes by string-equality (`includes(code)`). Two
+     * @assumption Dedupes by string-equality (`includes(code)`). Two
      *   features emitting semantically identical but TEXTUALLY different
      *   strings BOTH inject → duplicate function definitions → GL
      *   compile error. Convention: each feature emits a single canonical
@@ -425,7 +425,7 @@ vec3 sampleMiss(vec3 ro, vec3 rd, float roughness, float envScale) {
      * Returns a GLSL library (no #version, no void main) for the mesh SDF pass.
      * The GPU pipeline wraps this with #version 300 es + pass-specific uniforms + void main.
      *
-     * @invariant Emits no `#version`, no `void main` — Mesh variant
+     * @assumption Emits no `#version`, no `void main` — Mesh variant
      *   returns a GLSL LIBRARY, not a complete shader. Callers (mesh-
      *   export `gpu-pipeline.ts`) wrap it. Reached via either
      *   `variant === 'Mesh'` on `buildFragment` or

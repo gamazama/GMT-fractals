@@ -29,12 +29,12 @@
  *    null (→ friendly toast) so the loader never mis-routes prose into
  *    `JSON.parse`.
  *
- * @invariant `buildFormulaBrief` MUST NOT strip `shader.capabilities` /
+ * @assumption `buildFormulaBrief` MUST NOT strip `shader.capabilities` /
  *  `preambleVars`. There is NO body auto-detect for self-contained formulas —
  *  losing the `shape:self-contained` token mis-derives `shape:per-iteration`
  *  on reload and black-screens the render.
  *
- * @invariant `buildFormulaBrief` REFUSES `def.id === 'Modular'`: a Modular
+ * @assumption `buildFormulaBrief` REFUSES `def.id === 'Modular'`: a Modular
  *  formula's GLSL lives in the node graph, not the shader blocks, so a minimised
  *  Modular GMF loads but renders blank.
  *

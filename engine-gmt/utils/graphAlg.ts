@@ -39,19 +39,19 @@ export const hasCycle = (nodes: GraphNode[], edges: {source: string, target: str
  * Sorts graph nodes topologically.
  * Used to convert a Graph into a Linear Pipeline for the legacy shader engine.
  *
- * @invariant Does NOT detect cycles — passing a cyclic graph yields a partial
+ * @assumption Does NOT detect cycles — passing a cyclic graph yields a partial
  * pipeline (nodes inside the cycle drop out because their in-degree never
  * reaches 0).
- * @invariant The `hasCycle()` guard is applied by the UI, NOT the store:
+ * @assumption The `hasCycle()` guard is applied by the UI, NOT the store:
  * `hasCycle` has exactly one caller, `FlowEditor`'s `onConnect`
  * (`components/panels/flow/FlowEditor.tsx`), which rejects the connection and
  * logs "Cycle detected!". `modularSlice.setGraph` / `refreshPipeline` never
  * call it, so any non-`onConnect` path into the store — scene load,
  * `setPipeline`, programmatic `setGraph` — can seat a cyclic graph, and the
  * only symptom is silently missing nodes.
- * @invariant Tie-break is alphabetical (`queue.sort()` each pop), so compile
+ * @assumption Tie-break is alphabetical (`queue.sort()` each pop), so compile
  * order is deterministic across runs.
- * @invariant `nodes.find(n => n.id === u)` inside the loop is O(N²);
+ * @assumption `nodes.find(n => n.id === u)` inside the loop is O(N²);
  * acceptable at current preset counts (< ~50 nodes).
  */
 export const topologicalSort = (nodes: GraphNode[], edges: {source: string, target: string}[]): PipelineNode[] => {

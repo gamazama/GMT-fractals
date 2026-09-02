@@ -128,13 +128,13 @@ export class ConfigManager {
     }
 
     /**
-     * @invariant Returns a 4-flag diff (`rebuildNeeded`, `uniformUpdate`,
+     * @assumption Returns a 4-flag diff (`rebuildNeeded`, `uniformUpdate`,
      *   `modeChanged`, `needsAccumReset`). For the Modular formula, a
      *   `pipelineRevision` bump forces `rebuildNeeded`; bare `pipeline`
      *   updates without a revision bump set `uniformUpdate` +
      *   `needsAccumReset` only — so structural changes recompile but
      *   param-only changes stay runtime.
-     * @invariant Compile-log batching: 50ms `setTimeout` coalesces a
+     * @assumption Compile-log batching: 50ms `setTimeout` coalesces a
      *   synchronous chain of `update()` calls into ONE grouped log even
      *   if a shader rebuild happens between them. `pendingLogChanges`
      *   is shared across the chain.

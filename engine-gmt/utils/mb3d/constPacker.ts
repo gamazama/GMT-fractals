@@ -8,7 +8,7 @@
  * matrices, etc.). This reproduces that exactly so we can bake the right literal
  * at each `Cm<offset>` for a given scene's slot.
  *
- * @invariant Offsets must match the decompiler's `Cm<n>` tokens: the buffer is
+ * @assumption Offsets must match the decompiler's `Cm<n>` tokens: the buffer is
  *   walked downward from the base, `Cm8 = 0.5` (a fixed prelude), then each
  *   option writes 8 bytes (.DOUBLE) or 4 (.SINGLE / matrix element).
  */
@@ -29,7 +29,7 @@ const PID180 = DEG_TO_RAD;
  * cross-check seeds these exact values (xcheck.mjs `PALIGNED16` / `seedConsts`); this
  * is the app-side twin that bakes them into the slot GLSL.
  *
- * @invariant Offsets 0/8 (abs AND-mask 0x7FFF…) and 80/88 (sign XOR-mask 0x8000…) are
+ * @assumption Offsets 0/8 (abs AND-mask 0x7FFF…) and 80/88 (sign XOR-mask 0x8000…) are
  *   bit-patterns, NOT in this table — the decompiler turns `fmul`/`andpd`/`xorpd`
  *   against them into abs()/negate (U6), so they never reach the body as a `Cp` token.
  *   An offset not in this table → the slot is treated as missing (none occur in corpus).

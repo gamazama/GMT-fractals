@@ -10,7 +10,7 @@
  *    RepeatFrom clamped to a non-empty slot at or before EndTo),
  *  - the fixed 6-slot iterCount table.
  *
- * @invariant Only mode 0 (ALTERNATE) is a pure ordering. Modes 1 (interpolate),
+ * @assumption Only mode 0 (ALTERNATE) is a pure ordering. Modes 1 (interpolate),
  *   2 (DEcombine/CSG) and 3 (KIFS) change the DE/blend semantics, not just the
  *   order, and are flagged unsupported by the caller — this module still returns
  *   an order for them but the emit path must gate on `mode === 0`.

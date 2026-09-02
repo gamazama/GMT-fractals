@@ -29,7 +29,7 @@
  *    dead. A reorder was worse — the link survived but drove a DIFFERENT
  *    formula's slot.
  *
- * @invariant Renames are applied as a SIMULTANEOUS permutation (a 0↔1 bank
+ * @assumption Renames are applied as a SIMULTANEOUS permutation (a 0↔1 bank
  * swap must not chain), and a rename DESTINATION occupied by a track/LFO that
  * is not itself being renamed (a stale occupant — its own slot/layer was
  * removed) is displaced: removed and counted, never silently left to drive

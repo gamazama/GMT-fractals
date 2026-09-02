@@ -84,14 +84,14 @@ export const CoreMathFeature: FeatureDefinition = {
         vec4C: { type: 'vec4', default: new THREE.Vector4(0, 0, 0, 0), label: 'Vec4 C', shortId: 'v4c', uniform: 'uVec4C', min: -10, max: 10, step: 0.001, group: 'params' }
     },
     /**
-     * @invariant The cutting-plane preamble globals (`cp_dmin/cp_scale/cp_trap`)
+     * @assumption The cutting-plane preamble globals (`cp_dmin/cp_scale/cp_trap`)
      * declared via `builder.addPreamble(CP_PREAMBLE)` MUST be kept in sync
      * with `engine/SDFShaderBuilder.ts`'s mirror — mesh-export coupling.
      * `addPreamble` dedupes by exact string, so identical declarations from
      * multiple call paths are safe; drift in the literal text breaks mesh
      * export silently. See ADR-0052 (and the inline MIRROR comment at line 107).
      *
-     * @invariant Modular special-casing: when `formula === 'Modular'`,
+     * @assumption Modular special-casing: when `formula === 'Modular'`,
      * CoreMath adds the `PIPELINE_REV` define (forces recompile on graph
      * structural edits), declares `uModularParams[MAX_MODULAR_PARAMS]`, calls
      * `compileGraph(pipeline, graph.edges)` to produce `formula_Modular()`,

@@ -258,7 +258,7 @@ export class MaterialController {
      * This compiles in <1s on Windows/Chrome (fxc DCEs all formula copies from lighting paths).
      * Returns true if a new preview shader was actually generated.
      *
-     * @invariant Returns FALSE when lighting is already off (preview == full).
+     * @assumption Returns FALSE when lighting is already off (preview == full).
      *   CompileScheduler drops to single-stage in that case — there is no
      *   preview material to swap to.
      */
@@ -349,7 +349,7 @@ export class MaterialController {
      * Two-stage compile: Swap the async-compiled full material into the active slot.
      * Called after renderer.compileAsync() resolves.
      *
-     * @invariant Disposes the OLD material before reassigning
+     * @assumption Disposes the OLD material before reassigning
      *   `materialDirect` / `materialPT`. Anything that cached a reference
      *   to the old material (outside the `mainMaterial` getter) is at
      *   risk. The scheduler reassigns the mesh via `sceneCtrl.setMaterial`.
@@ -392,14 +392,14 @@ export class MaterialController {
     }
 
     /**
-     * @invariant Propagates to FOUR uniform maps (`mainUniforms`,
+     * @assumption Propagates to FOUR uniform maps (`mainUniforms`,
      *   `histogramUniforms`, `displayMaterial.uniforms`,
      *   `exportMaterial.uniforms`) and handles plain-object fallbacks for
      *   `postMessage`-stripped THREE types — Vector3 arriving as
      *   `{x,y,z}`, Matrix3/Matrix4 arriving as `{elements:[…]}`. New
      *   uniform types must add fallback paths or worker→main writes
      *   silently no-op.
-     * @invariant Skips when the target uniform map lacks the key —
+     * @assumption Skips when the target uniform map lacks the key —
      *   adding a new uniform to `mainUniforms` does not automatically
      *   reach display/export materials unless they share refs.
      */

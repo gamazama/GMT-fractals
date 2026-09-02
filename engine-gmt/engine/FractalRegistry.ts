@@ -37,9 +37,9 @@ class FractalRegistry {
     /**
      * Register a formula definition by `def.id`.
      *
-     * @invariant No membership check — replacement is silent. Re-registering
+     * @assumption No membership check — replacement is silent. Re-registering
      * the same id silently overwrites the prior definition.
-     * @invariant `def.shader.capabilities` MUST be declared by the producer.
+     * @assumption `def.shader.capabilities` MUST be declared by the producer.
      * P8 of the capability protocol removed the `deriveLegacy` shim that
      * previously auto-populated this from legacy `shader.*` flags. Producers:
      * - Native formulas: declare explicitly (see engine-gmt/formulas/*.ts).
@@ -63,7 +63,7 @@ class FractalRegistry {
     /**
      * Point an alias key at an already-registered definition.
      *
-     * @invariant Silently no-ops on unknown target (logs `console.warn`).
+     * @assumption Silently no-ops on unknown target (logs `console.warn`).
      * Order of alias declarations matters — `engine-gmt/formulas/index.ts`
      * declares all five legacy aliases AFTER `formulas.forEach(register)` so
      * they always resolve. The alias is stored as the SAME `FractalDefinition`
@@ -84,7 +84,7 @@ class FractalRegistry {
     }
 
     /**
-     * @invariant Deduplicates aliases via `Array.from(new Set(values()))` —
+     * @assumption Deduplicates aliases via `Array.from(new Set(values()))` —
      * consumers iterating over `getAll()` see each definition exactly once
      * even when multiple keys point at it.
      */
@@ -94,7 +94,7 @@ class FractalRegistry {
     }
 
     /**
-     * @invariant Widens `Map.keys()` to `FormulaType[]` via cast — NO runtime
+     * @assumption Widens `Map.keys()` to `FormulaType[]` via cast — NO runtime
      * check, and the returned array routinely contains strings that are NOT
      * members of `FormulaType`:
      *  - the 5 alias IDs (`UberMenger`, `FoldingBrot`, `HyperTorus`,

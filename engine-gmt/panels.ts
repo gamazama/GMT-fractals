@@ -17,14 +17,14 @@ import type { PanelManifest } from '../engine/PanelManifest';
 import { registry } from './engine/FractalRegistry';
 
 /**
- * @invariant `order` is logical (10/20/30…) with deliberate gaps so
+ * @assumption `order` is logical (10/20/30…) with deliberate gaps so
  *   inserts don't renumber. Dock sorts by order within a dock; ties
  *   at the same order resolve in undefined registration sequence.
- * @invariant `items: [...]` is used everywhere — GMT does not use the
+ * @assumption `items: [...]` is used everywhere — GMT does not use the
  *   `features:` shorthand because every panel needs at least one of
  *   groupFilter / whitelistParams / compilable / accordion / conditional.
  *   Sibling apps (fluid-toy, fractal-toy) DO use the shorthand.
- * @invariant Camera Manager: `id: 'Camera Manager'` is the canonical
+ * @assumption Camera Manager: `id: 'Camera Manager'` is the canonical
  *   PanelId used by cameraSlice; `label: 'View Camera Manager'` is the
  *   user-visible string. The two diverge intentionally — the label was
  *   renamed from 'View Manager' in 8d6d11d0 (2026-05-31, "Naming

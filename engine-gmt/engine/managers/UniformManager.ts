@@ -93,7 +93,7 @@ export class UniformManager {
     /**
      * Single canonical per-frame uniform writeback. See ADR-0044.
      *
-     * @invariant Step ordering is load-bearing: adaptive resize →
+     * @assumption Step ordering is load-bearing: adaptive resize →
      *   image-tile sync → camera basis → uPixelSizeBase → virtual-space
      *   → time + env rotation → fog → lights → rotations.
      *   `uPixelSizeBase` derivation needs the POST-adaptive viewportY
@@ -108,10 +108,10 @@ export class UniformManager {
      *   and note `FractalEngine.syncCameraFromMatrix` writes a NON-zero
      *   `uCameraPosition` on the worker's boot camera sync, so "always
      *   zero" is not repo-wide either; per-frame `syncFrame` re-pins it.
-     * @invariant `runtimeState.adaptiveSuppressed` (bucket dialog or
+     * @assumption `runtimeState.adaptiveSuppressed` (bucket dialog or
      *   export in flight) hard-forces full res. Without it, the FBO
      *   resizes mid-export and briefly displays the cleared buffer.
-     * @invariant `uLightDir[i]` stores direction TOWARD the light —
+     * @assumption `uLightDir[i]` stores direction TOWARD the light —
      *   negated and normalized before write. Every shader consumer
      *   (NdotL, shadows, volumetrics) uses it without per-consumer
      *   negation. Reversing the convention forces touch-ups in every

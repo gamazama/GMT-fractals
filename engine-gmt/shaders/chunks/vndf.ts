@@ -14,7 +14,7 @@
  * reflect(incoming, H), the single-sample specular weight collapses to the
  * bounded F * G1(L) — no grazing-angle fireflies.
  *
- * @invariant Self-contained: inlines a branchless Duff 2017 ONB and uses no
+ * @assumption Self-contained: inlines a branchless Duff 2017 ONB and uses no
  *   external helpers (no buildTangentBasis, no TAU define), so it can be emitted
  *   under any function name into either the PT chunk or the Direct shading chunk
  *   — which are mutually exclusive shaders — without symbol collisions.

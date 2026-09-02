@@ -215,11 +215,11 @@ interface WorkshopProps {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 /**
- * @invariant `PREVIEW_ID = 'frag_workshop_preview'` is reserved. Every Preview
+ * @assumption `PREVIEW_ID = 'frag_workshop_preview'` is reserved. Every Preview
  * registers it (replacing the prior registration, not orphaning); on close
  * the Workshop restores `previousFormulaRef`.
  *
- * @invariant Pipeline selector is `'auto' | 'v3' | 'v4'`. Effective pipeline
+ * @assumption Pipeline selector is `'auto' | 'v3' | 'v4'`. Effective pipeline
  * resolves via `getRecommendedPipeline` (catalog auto-pick), defaulting to
  * `'v4'` for unknown IDs (custom paste). The dice predicate skips catalog
  * entries with `recommended === 'none'`, and the browse pickers show them
@@ -227,7 +227,7 @@ interface WorkshopProps {
  * which enables both. Until 2026-09-02 the pickers hid them outright. See
  * ADR-0058.
  *
- * @invariant Re-edit lifecycle: when `editFormula` prop is set, the Workshop
+ * @assumption Re-edit lifecycle: when `editFormula` prop is set, the Workshop
  * reads `registry.get(id)?.importSource` and rehydrates state from `glsl`,
  * `selectedFunction`, `loopMode`, `mappings`. V3-imported formulas stamp
  * `importSource`; V4-imported formulas OMIT it — re-editing a V4 formula is

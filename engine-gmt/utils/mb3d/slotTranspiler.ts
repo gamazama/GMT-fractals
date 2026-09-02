@@ -16,7 +16,7 @@
  *    reports a `params` schema + `coreMath` defaults, so the imported Scale / Min R
  *    / Fold etc. show up as editable sliders.
  *
- * @invariant We transpile MB3D's real math, NOT GMT's same-named formula — the
+ * @assumption We transpile MB3D's real math, NOT GMT's same-named formula — the
  *   audit proved most GMT formulas DIFFER from MB3D's. Intern formulas #0..#4
  *   have a FIXED option order.
  */

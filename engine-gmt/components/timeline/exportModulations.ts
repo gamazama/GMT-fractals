@@ -19,7 +19,7 @@ import {
  * function adds the GMT-specific uniform-mapping pass on top so the worker
  * (which doesn't read slices directly) sees per-target uniform values.
  *
- * @invariant The dispatch is `planModulationTarget` — the SAME function
+ * @assumption The dispatch is `planModulationTarget` — the SAME function
  *   AnimationSystem's tick runs. This file used to carry its own copy of the
  *   branch chain, and every drift between the two was an export that disagreed
  *   with the preview: vec axes outside `coreMath`/`geometry` were dropped, each

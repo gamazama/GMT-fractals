@@ -7,17 +7,17 @@
  * MB3D→GMT `parse → map → emit` pipeline; it produces a plain `MB3DScene` and
  * intentionally carries NO GMT types.
  *
- * @invariant The text block encodes a packed `TMandHeader10` (840 bytes,
+ * @assumption The text block encodes a packed `TMandHeader10` (840 bytes,
  *   32-bit-pointer layout) immediately followed by a `THeaderCustomAddon`
  *   (8-byte head + up to 6 × 188-byte formula slots), as ONE contiguous
  *   stream in MB3D's CUSTOM little-endian base64 — NOT RFC4648. Header and
  *   addon are split purely by BYTE COUNT (840 bytes), with no delimiter.
- * @invariant The 840-byte layout is fixed regardless of the saving machine's
+ * @assumption The 840-byte layout is fixed regardless of the saving machine's
  *   pointer width — the 7 pointer fields (`PHCustomF[0..5]`, `PCFAddon`,
  *   28 bytes at offset 382) are placeholders, never real addresses (MB3D
  *   bit-packs author strings into them on save when `MandId >= 41`). Do not
  *   interpret them as data.
- * @invariant The custom base64 packs 6-bit groups LITTLE-ENDIAN (group 0 is the
+ * @assumption The custom base64 packs 6-bit groups LITTLE-ENDIAN (group 0 is the
  *   least-significant), the opposite of standard base64, and has no pad char.
  *
  * Spec derived from thargor6/mb3d `TypeDefinitions.pas` (TMandHeader10),

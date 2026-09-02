@@ -58,7 +58,7 @@ export class BucketRenderer {
     }
 
     /**
-     * @invariant Ignores the `_gl` argument — the renderer is sourced
+     * @assumption Ignores the `_gl` argument — the renderer is sourced
      *   from the host's engine ref. Signature kept for pre-extraction
      *   compatibility (FractalEngine, renderWorker, handleRenderTick
      *   call this with their renderer).

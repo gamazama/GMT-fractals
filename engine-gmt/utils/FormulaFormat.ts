@@ -250,7 +250,7 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  * Parse a GMF string into a FractalDefinition. Falls back to JSON FractalDefinition
  * if no `<Metadata>` tag is present.
  *
- * @invariant Tag extraction is LINE-ANCHORED (`^<TAG>…^</TAG>`, `m` flag):
+ * @assumption Tag extraction is LINE-ANCHORED (`^<TAG>…^</TAG>`, `m` flag):
  * real blocks are emitted at column 0, so the regex skips the GMF_API_DOCS
  * banner that mentions the same tag names inside an indented comment. Do NOT
  * relax the anchors — a bare `<TAG>…</TAG>` matched the banner's `<Metadata>`
@@ -272,7 +272,7 @@ export const generateGMF = (def: FractalDefinition, preset: Partial<Preset>): st
  * self-heal legacy files retroactively). Prefer a Capability token over a
  * new field. Guarded by the "shaderMeta:" block in `npm run test:gmf`.
  *
- * @invariant This parse boundary is where the RETIRED legacy booleans
+ * @assumption This parse boundary is where the RETIRED legacy booleans
  * (`selfContainedSDE`, `usesSharedRotation`, `supportsCuttingPlane`) remain
  * load-bearing: old .gmf files (and hand/AI-authored ones — the GMF_API_DOCS
  * banner teaches `shaderMeta.selfContainedSDE` as the authoring interface)
@@ -416,11 +416,11 @@ export const isGMFFormat = (content: string): boolean => {
  * Embeds the formula definition (shader + metadata) AND the full scene preset.
  * The scene preset lives in a separate <Scene> block after the shader blocks.
  *
- * @invariant Silently downgrades to plain `JSON.stringify(preset)` when
+ * @assumption Silently downgrades to plain `JSON.stringify(preset)` when
  * `registry.get(preset.formula)` returns undefined — NO log, NO telemetry.
  * Forks that need telemetry on unknown formulas at save-time must wrap this.
  *
- * @invariant The formula payload embeds `def.defaultPreset` (NOT the live
+ * @assumption The formula payload embeds `def.defaultPreset` (NOT the live
  * preset); the current preset is appended in `<Scene>`. See ADR-0053.
  */
 export const saveGMFScene = (preset: Preset): string => {
@@ -447,12 +447,12 @@ export const saveGMFScene = (preset: Preset): string => {
  *   - Formula-only GMF (v1): no <Scene> block → uses defaultPreset from metadata
  *   - Legacy JSON: plain JSON preset (backward compatibility)
  *
- * @invariant Does NOT register the formula — caller (System Menu / drag-drop
+ * @assumption Does NOT register the formula — caller (System Menu / drag-drop
  * handler) checks registry and registers if needed. Callers that apply the
  * returned `preset` without first ensuring the formula is registered will
  * fail at compile (no formula → empty shader → black screen). See ADR-0053.
  *
- * @invariant v1 formula-only GMF (no `<Scene>` block) synthesises a preset
+ * @assumption v1 formula-only GMF (no `<Scene>` block) synthesises a preset
  * from `def.defaultPreset` falling back to `{ formula: def.id }`. Legacy JSON
  * path returns `{ preset }` with no `def`.
  */

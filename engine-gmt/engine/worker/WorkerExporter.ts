@@ -374,11 +374,11 @@ export class WorkerExporter {
      * result into `sess.exportTarget`. Reads the flipped 8-bit RGBA pixels into `sess.pixelBuffer`
      * and returns the accumulation target that holds the HDR result (for preview blit + focus-lock).
      *
-     * @invariant `config.samples >= 1` required. Clears `accumA` then
+     * @assumption `config.samples >= 1` required. Clears `accumA` then
      *   writes to it at s=0. Bloom is applied on BEAUTY only — alpha
      *   and depth passes write greyscale luminance to the alpha channel
      *   and bloom would smear it.
-     * @invariant Pixel-buffer Y-flip is IN PLACE. For odd height,
+     * @assumption Pixel-buffer Y-flip is IN PLACE. For odd height,
      *   `halfH = floor(h/2)` correctly leaves the middle row untouched
      *   (it is its own mirror). Do not change to `ceil`.
      *
@@ -541,7 +541,7 @@ export class WorkerExporter {
      * I/O overlaps with frame-N+1's GPU work; cancel/finish await the chain.
      */
     /**
-     * @invariant `uOutputPass` MUST be reset to 0 before the preview
+     * @assumption `uOutputPass` MUST be reset to 0 before the preview
      *   blit, so the viewport always shows beauty even when the
      *   rendered passes were alpha/depth.
      */
@@ -757,7 +757,7 @@ export class WorkerExporter {
     // ─── Encoded Chunk Handler ───────────────────────────────────────
 
     /**
-     * @invariant First-chunk PTS normalization is PER-TRACK — video
+     * @assumption First-chunk PTS normalization is PER-TRACK — video
      *   and audio offsets are independent because audio enters the
      *   encoder later and has its own priming delay. Duration is
      *   hardcoded to `1/fps` because Firefox does not echo the source
@@ -953,7 +953,7 @@ export class WorkerExporter {
     // ─── Cleanup ────────────────────────────────────────────────────
 
     /**
-     * @invariant One-shot teardown — `if (!this.session) return` at the
+     * @assumption One-shot teardown — `if (!this.session) return` at the
      *   top is what makes `cancel()` and `finish()` both safe to call.
      *   Idempotent.
      */
