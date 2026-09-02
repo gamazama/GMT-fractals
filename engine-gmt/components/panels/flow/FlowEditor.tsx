@@ -23,7 +23,7 @@ import ReactFlow, {
 import type { Connection, NodeTypes } from 'reactflow';
 import { FractalState, FractalActions, NodeType, GraphNode } from '../../../types';
 import { ShaderNode, StartNode, EndNode } from './ShaderNode';
-import { hasCycle } from '../../../utils/graphAlg';
+import { hasCycle, structureKey, topologicalSort } from '../../../utils/graphAlg';
 import { nanoid } from 'nanoid';
 import { GraphContextMenu, GraphMenuState } from './GraphContextMenu'; // Keep for "Add Node" menu only
 import { nodeRegistry } from '../../../engine/NodeRegistry';
@@ -78,6 +78,12 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
     const lastRevision = useRef(state.pipelineRevision);
     const lastGraph = useRef<typeof state.graph | null>(null);
     const ignoreNextUpdate = useRef(false);
+    // True while the live graph would compile to a different shader than the
+    // one running. Drives the COMPILE button's pulse; see modularSlice.setGraph.
+    const shaderStale = useMemo(
+        () => structureKey(topologicalSort(state.graph.nodes, state.graph.edges), state.graph.edges) !== state.compiledStructureKey,
+        [state.graph, state.compiledStructureKey],
+    );
     const skipNextOnNodesDelete = useRef(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +139,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
         const revChanged = state.pipelineRevision !== lastRevision.current;
         // Also re-sync when graph reference changes without a revision bump —
         // this catches undo of position-only changes (node drag) and structural
-        // changes when autoCompile is off, where pipelineRevision stays the same.
+        // edits, which wait for COMPILE and leave pipelineRevision unchanged.
         const graphChanged = lastGraph.current !== null && state.graph !== lastGraph.current;
         if (!isInitialized || revChanged || graphChanged) {
             const { nodes: flowNodes, edges: flowEdges } = storeToFlow(state.graph);
@@ -564,12 +570,10 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                         </select>
                     </div>
 
-                    {/* Toggles */}
-                    <label className="flex items-center gap-1.5 bg-surface-sunken border border-line/20 rounded px-2 shadow-lg cursor-pointer text-[10px] text-fg-muted font-bold hover:border-line/20 hover:text-fg-tertiary transition-colors select-none">
-                        <input type="checkbox" checked={state.autoCompile} onChange={(e) => actions.setAutoCompile(e.target.checked)} className="cursor-pointer accent-cyan-500" />
-                        Auto Compile
-                    </label>
-                    <button onClick={actions.refreshPipeline} className={`text-[10px] font-bold px-3 py-1.5 rounded border shadow-lg transition-all ${state.autoCompile ? 'bg-surface-header text-fg-faint border-line/20' : 'bg-purple-600 hover:bg-purple-500 text-fg border-purple-400 animate-pulse'}`} title="Force Recompile Shader">COMPILE</button>
+                    {/* Pulses while the graph differs from what the shader was compiled
+                        from. There is no auto-compile: structural edits wait for this
+                        button (modularSlice.setGraph). */}
+                    <button onClick={actions.refreshPipeline} className={`text-[10px] font-bold px-3 py-1.5 rounded border shadow-lg transition-all ${shaderStale ? 'bg-purple-600 hover:bg-purple-500 text-fg border-purple-400 animate-pulse' : 'bg-surface-header text-fg-faint hover:text-fg border-line/20'}`} title={shaderStale ? 'Compile the edited graph' : 'Force Recompile Shader'}>COMPILE</button>
                 </div>
             </ReactFlow>
             

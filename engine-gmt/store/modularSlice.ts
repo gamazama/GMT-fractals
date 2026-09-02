@@ -1,6 +1,7 @@
 /**
- * GMT modular-builder slice — `pipeline`, `graph`, `pipelineRevision`
- * state + `setGraph` / `setPipeline` / `refreshPipeline` actions.
+ * GMT modular-builder slice — `pipeline`, `graph`, `pipelineRevision`,
+ * `compiledStructureKey` state + `setGraph` / `setPipeline` /
+ * `refreshPipeline` actions.
  *
  * Backs the Modular formula's node-graph editor (FlowEditor panel).
  * Without this installed, selecting the Modular formula crashes
@@ -17,7 +18,7 @@ import type { FractalGraph, PipelineNode } from '../types';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import {
     pipelineToGraph,
-    isStructureEqual,
+    structureKey,
     isPipelineEqual,
     topologicalSort,
 } from '../utils/graphAlg';
@@ -28,24 +29,31 @@ export const installGmtModularSlice = (): void => {
     const set = useEngineStore.setState as (partial: any) => void;
     const get = useEngineStore.getState as () => any;
 
+    const initialGraph = pipelineToGraph(JULIA_REPEATER_PIPELINE);
     set({
         // --- State ---
         pipeline: JULIA_REPEATER_PIPELINE,
         pipelineRevision: 1,
-        graph: pipelineToGraph(JULIA_REPEATER_PIPELINE),
+        graph: initialGraph,
+        // Fingerprint of the graph the current shader was compiled from. The
+        // FlowEditor's COMPILE button pulses while the live graph's key differs.
+        compiledStructureKey: structureKey(JULIA_REPEATER_PIPELINE, initialGraph.edges),
 
         // --- Actions ---
         setGraph: (g: FractalGraph) => {
             const sortedPipeline = topologicalSort(g.nodes, g.edges);
             const s = get();
-            const structureChanged = !isStructureEqual(s.pipeline, sortedPipeline);
-            const contentChanged = structureChanged || !isPipelineEqual(s.pipeline, sortedPipeline);
+            // Structural edits (nodes, wiring, bindings, condition toggles)
+            // change the GLSL and wait for an explicit COMPILE (refreshPipeline).
+            // There is no auto-compile: the control that claimed otherwise was
+            // never implemented and was removed 2026-09-02. Content edits
+            // (slider values) push uniforms immediately, but only while the
+            // structure matches what is compiled — otherwise the values would
+            // land in the wrong slots (ADR-0050).
+            const structureChanged = structureKey(sortedPipeline, g.edges) !== s.compiledStructureKey;
+            const contentChanged = !isPipelineEqual(s.pipeline, sortedPipeline);
 
-            if (structureChanged && s.autoCompile) {
-                const nextRev = s.pipelineRevision + 1;
-                set({ graph: g, pipeline: sortedPipeline, pipelineRevision: nextRev });
-                FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: sortedPipeline, graph: g, pipelineRevision: nextRev } as any);
-            } else if (structureChanged) {
+            if (structureChanged) {
                 set({ graph: g });
             } else if (contentChanged) {
                 set({ graph: g, pipeline: sortedPipeline });
@@ -58,7 +66,7 @@ export const installGmtModularSlice = (): void => {
         setPipeline: (p: PipelineNode[]) => {
             const nextRev = get().pipelineRevision + 1;
             const newGraph = pipelineToGraph(p);
-            set({ pipeline: p, graph: newGraph, pipelineRevision: nextRev });
+            set({ pipeline: p, graph: newGraph, pipelineRevision: nextRev, compiledStructureKey: structureKey(p, newGraph.edges) });
             FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: p, graph: newGraph, pipelineRevision: nextRev } as any);
         },
 
@@ -66,7 +74,7 @@ export const installGmtModularSlice = (): void => {
             const s = get();
             const sorted = topologicalSort(s.graph.nodes, s.graph.edges);
             const nextRev = s.pipelineRevision + 1;
-            set({ pipeline: sorted, pipelineRevision: nextRev });
+            set({ pipeline: sorted, pipelineRevision: nextRev, compiledStructureKey: structureKey(sorted, s.graph.edges) });
             FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { pipeline: sorted, graph: s.graph, pipelineRevision: nextRev } as any);
         },
     });

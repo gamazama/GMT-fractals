@@ -79,7 +79,7 @@ floors now fail in both modes, so a vanished input can no longer be persisted �
 but a genuine drift still can, which is the tool's job. Read the diff mode's output
 first and decide the drift is correct.
 
-**Nothing above guards the modular graph.** `test:hybrid` / `test:hybrid-adv` are
+**Nothing above except `test:modular-parity` guards the modular graph.** `test:hybrid` / `test:hybrid-adv` are
 `debug/native-config-sweep.mts --mode=hybrid`, where "hybrid" means the hybrid
 box-fold geometry config — and that sweep's `eligibleFormulas()` does
 `.filter(def => def.id !== 'Modular')` for EVERY mode, so `test:baseline` skips
@@ -92,8 +92,7 @@ never that it compiles a graph correctly.
 
 `test:modular-parity` (node-only, added 2026-09-02) is the only executable
 coverage of `compileGraph` / `updateModularUniforms` / `topologicalSort` /
-`pipelineToGraph`, and it checks slot parity only — not the emitted GLSL.
-`isStructureEqual` still has none; the live `@bug PRODUCTION:` in
-`utils/graphAlg.ts` (edge-blind diff) is the direct consequence. Verify other
-changes here by hand, or extend that harness — the whole path is pure
-functions with no WebGL dependency, so assertions are cheap.
+`pipelineToGraph` / `structureKey`, and it checks slot parity and the
+structural fingerprint only — not the emitted GLSL. Verify other changes
+here by hand, or extend that harness — the whole path is pure functions
+with no WebGL dependency, so assertions are cheap.

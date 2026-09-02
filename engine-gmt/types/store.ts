@@ -183,7 +183,8 @@ export interface EngineStoreState extends FeatureStateMap {
   graph: FractalGraph;
   pipeline: PipelineNode[];
   pipelineRevision: number;
-  autoCompile: boolean;
+  /** `structureKey()` of the graph the current shader was compiled from. */
+  compiledStructureKey: string;
 
   isTimelineHovered: boolean;
   
@@ -306,7 +307,6 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
     setGraph: (g: FractalGraph) => void;
     setPipeline: (v: PipelineNode[]) => void;
     refreshPipeline: () => void;
-    setAutoCompile: (v: boolean) => void;
     loadPreset: (p: Preset) => void;
     loadScene: (args: { def?: FractalDefinition; preset: Preset }) => void;
 

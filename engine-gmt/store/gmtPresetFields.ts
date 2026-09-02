@@ -13,6 +13,7 @@
 
 import { presetFieldRegistry } from '../../utils/PresetFieldRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
+import { pipelineToGraph, structureKey } from '../utils/graphAlg';
 import { normalizeLights } from '../features/lighting';
 
 // Runs after applyPresetState, so this single handler covers both the legacy
@@ -80,8 +81,19 @@ presetFieldRegistry.register({
         if (!Array.isArray(p.pipeline)) return;
         const store = getStore();
         const nextRev = (store?.pipelineRevision ?? 0) + 1;
-        const update: any = { pipeline: p.pipeline, pipelineRevision: nextRev };
-        if (p.graph) update.graph = p.graph;
+        // A file without a graph gets the same default layout setPipeline
+        // would build, so the live graph never disagrees with the pipeline.
+        const graph = p.graph ?? pipelineToGraph(p.pipeline);
+        const update: any = {
+            pipeline: p.pipeline,
+            pipelineRevision: nextRev,
+            graph,
+            // The CONFIG below compiles this exact structure, so record it as
+            // the compiled fingerprint (see modularSlice); otherwise the
+            // FlowEditor's COMPILE pulses on every loaded Modular scene and
+            // slider edits are treated as structural until a recompile.
+            compiledStructureKey: structureKey(p.pipeline, graph.edges),
+        };
         set(update);
         FractalEvents.emit(FRACTAL_EVENTS.CONFIG, {
             pipeline: p.pipeline,

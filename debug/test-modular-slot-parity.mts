@@ -12,7 +12,7 @@
 import { nodeRegistry } from '../engine-gmt/engine/NodeRegistry';
 import '../engine-gmt/data/nodes/definitions';
 import { compileGraph, updateModularUniforms } from '../engine-gmt/utils/GraphCompiler';
-import { topologicalSort, pipelineToGraph } from '../engine-gmt/utils/graphAlg';
+import { topologicalSort, pipelineToGraph, structureKey } from '../engine-gmt/utils/graphAlg';
 import { TUTORIAL_PIPELINE, MANDELBOX_PIPELINE, JULIA_REPEATER_PIPELINE } from '../engine-gmt/data/initialPipelines';
 import { MAX_MODULAR_PARAMS } from '../data/constants';
 import type { PipelineNode } from '../engine-gmt/types';
@@ -115,5 +115,39 @@ console.log('\nBlock 3 — Scale(2) → Mandelbulb(power 8) → AddConstant(1): 
     check('AddConstant.scale', slotOf(/v_c_p \+= c\.xyz \* uModularParams\[(\d+)\]/, 'AddConstant'), 1.0);
 }
 
-console.log(failures === 0 ? '\nPASS — slot parity holds for every definition and pipeline' : `\nFAIL — ${failures} assertion(s) failed`);
+// ── Block 4: structureKey sees what compileGraph sees ──
+console.log('\nBlock 4 — structureKey: edges and bindings count, params and edge ids do not');
+{
+    const nodes = P([
+        { id: 'a', type: 'Sphere', enabled: true, params: { r: 1.0 } },
+        { id: 'b', type: 'Box', enabled: true, params: { x: 1, y: 1, z: 1 } },
+        { id: 'u', type: 'Subtract', enabled: true, params: {} },
+    ]);
+    const edges = (h: 'a' | 'b') => [
+        { id: 'e1', source: 'root-start', target: 'a' },
+        { id: 'e2', source: 'root-start', target: 'b' },
+        { id: 'e3', source: 'a', target: 'u', targetHandle: h },
+        { id: 'e4', source: 'b', target: 'u', targetHandle: h === 'a' ? 'b' : 'a' },
+        { id: 'e5', source: 'u', target: 'root-end' },
+    ];
+    const base = structureKey(nodes, edges('a'));
+    if (base !== structureKey(nodes, edges('b'))) ok('structureKey: edge-only change flips the key (a/b feed swap)');
+    else fail('structureKey: swapping which node feeds the a/b handle did NOT change the key');
+    if (base !== structureKey(nodes, edges('a').filter(e => e.id !== 'e5'))) ok('structureKey: edge-only change flips the key (output edge deleted)');
+    else fail('structureKey: deleting the root-end edge did NOT change the key');
+    const retuned = P([{ ...nodes[0], params: { r: 2.5 } }, nodes[1], nodes[2]]);
+    if (structureKey(retuned, edges('a')) === base) ok('structureKey: params-only change keeps it');
+    else fail('structureKey: a slider retune changed the key — sliders would trigger recompiles');
+    if (structureKey(nodes, edges('a').map(e => ({ ...e, id: 'x-' + e.id }))) === base) ok('structureKey: edge ids are irrelevant');
+    else fail('structureKey: renaming edge ids changed the key');
+    const b1 = P([{ id: 'r', type: 'Rotate', enabled: true, params: {}, bindings: { x: 'ParamA', z: 'ParamC' } }]);
+    const b2 = P([{ id: 'r', type: 'Rotate', enabled: true, params: {}, bindings: { z: 'ParamC', x: 'ParamA' } }]);
+    const b3 = P([{ id: 'r', type: 'Rotate', enabled: true, params: {}, bindings: { x: 'ParamB', z: 'ParamC' } }]);
+    if (structureKey(b1, []) === structureKey(b2, [])) ok('structureKey: bindings key order is irrelevant');
+    else fail('structureKey: bindings insertion order changed the key');
+    if (structureKey(b1, []) !== structureKey(b3, [])) ok('structureKey: a bindings value change flips the key');
+    else fail('structureKey: rebinding x from ParamA to ParamB did NOT change the key');
+}
+
+console.log(failures === 0 ? '\nPASS — slot parity and structural fingerprint hold' : `\nFAIL — ${failures} assertion(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
