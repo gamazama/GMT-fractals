@@ -190,7 +190,7 @@ interface SliderProps extends Omit<BaseSliderProps, 'onContextMenu' | 'headerRig
  * Slider - Main slider component with animation keyframe support
  * Maintains exact same API as before, now using unified ScalarInput
  *
- * @invariant Silently degrades without `trackId` — `useTrackAnimation
+ * @assumption Silently degrades without `trackId` — `useTrackAnimation
  *   (undefined, ...)` returns `status: 'none'` with a no-op toggle.
  *   No visible warning; animation wiring is opt-in.
  */

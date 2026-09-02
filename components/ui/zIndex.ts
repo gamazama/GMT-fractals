@@ -37,9 +37,9 @@
  * @see docs/adr/0060-floating-panel-primitives.md (the original Z scale)
  * @see docs/adr/0081-floating-panel-click-to-front-stacking.md (panel ranks)
  * @see plans/z-index-system-design.md (the holistic model + migration)
- * @invariant `panel` (100–199) is reserved for click-to-front ranks; no tier or
+ * @assumption `panel` (100–199) is reserved for click-to-front ranks; no tier or
  *   rank may squat in (100, 199]. `popover` starts at 300 to keep 200–299 clear.
- * @invariant `takeover` (90) stays UNDER `panel` so a full-screen browse scrim
+ * @assumption `takeover` (90) stays UNDER `panel` so a full-screen browse scrim
  *   (Palette Picker) keeps floating panels reachable on top of it.
  */
 

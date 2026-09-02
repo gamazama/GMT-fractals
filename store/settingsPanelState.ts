@@ -6,7 +6,7 @@
  * {@link SettingsPanel}. Decoupled so engine-core hosts the panel without the
  * menu/topbar importing it directly.
  *
- * @invariant Engine-core (store/) — host-agnostic.
+ * @assumption Engine-core (store/) — host-agnostic.
  */
 import { useSyncExternalStore } from 'react';
 import { createSingleSlot } from './createSingleSlot';

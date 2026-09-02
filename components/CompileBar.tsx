@@ -10,7 +10,7 @@
  * different verb ("Build to apply" / "Build"). Chrome is the `warn` token set.
  *
  * @see data/theme.ts (warn / compileBar tokens) · ADR-0080
- * @invariant components/ — generic, no app/store imports.
+ * @assumption components/ — generic, no app/store imports.
  */
 import React from 'react';
 import { AlertIcon } from './Icons';

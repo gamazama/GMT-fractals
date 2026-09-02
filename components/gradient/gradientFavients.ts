@@ -19,7 +19,7 @@
  * Side-effect-free at import; the setter touches no store, so it is safe to call
  * before `createEngineStore()` (the registries-freeze boundary).
  *
- * @invariant One slot, last-writer-wins.
+ * @assumption One slot, last-writer-wins.
  */
 
 import type { GradientConfig } from '../../types';

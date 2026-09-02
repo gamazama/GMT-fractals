@@ -13,7 +13,7 @@
  * (bias lives on the outgoing segment). Callers pass a position-sorted array for the
  * adjacency-sensitive ops (`setBias`, `distribute`).
  *
- * @invariant Every op returns a NEW array and never mutates its input; ids of
+ * @assumption Every op returns a NEW array and never mutates its input; ids of
  * untouched stops are preserved so the host's selection/keying survives a transform.
  */
 

@@ -167,7 +167,7 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
 /* ─────────────────────────────────────────────────────────────────────────
    UTILITY ANIMATIONS
 
-   @invariant These keyframes MUST live here, not in an entry HTML file.
+   @assumption These keyframes MUST live here, not in an entry HTML file.
      Every app (app-gmt, gradient-explorer, fluid-toy, fractal-toy, mesh-export,
      demo) reaches them only through this file. — proven by: npx tailwindcss -c
      tailwind.config.js -i index.css -o out.css --content <file using

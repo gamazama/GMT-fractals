@@ -15,7 +15,7 @@ import {
  * coreSettings). All recolour on any brightness (replaces the old duplicate themes).
  * Reads/writes colorSchemeStore.
  *
- * @invariant Engine-core (components/) — consumes the colorScheme store only.
+ * @assumption Engine-core (components/) — consumes the colorScheme store only.
  */
 const HUE_TRACK =
     'linear-gradient(to right, hsl(0 90% 55%), hsl(60 90% 55%), hsl(120 90% 55%), ' +

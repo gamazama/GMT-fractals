@@ -1,24 +1,24 @@
 /**
  * useMobileLayout — mobile-detection state + hooks for the engine.
  *
- * @invariant Importing this module IS the install step — no
+ * @assumption Importing this module IS the install step — no
  *   `installMobile()` plugin exists. The module-level resize listener
  *   (the `if (typeof window !== 'undefined')` block below) is installed
  *   at first import. If no module ever imports this file, the engine
  *   store's `isDeviceMobile` / `isPortrait` flags stay at whatever the
  *   `store/slices/uiSlice.ts` initializer seeded.
- * @invariant The 768px breakpoint this module consumes lives in
+ * @assumption The 768px breakpoint this module consumes lives in
  *   `engine/HardwareDetection.ts` (`isMobileViewport`); this module
  *   imports it rather than re-implementing it. q-083 fixed. NOTE that
  *   the *boot* value of `isDeviceMobile` does NOT come through here — the
  *   uiSlice initializer inlines its own copy of the same test, so the two
  *   must stay in step. `isMobileViewport`'s JSDoc lists every surviving
  *   copy.
- * @invariant Orientation uses strict `innerHeight > innerWidth`
+ * @assumption Orientation uses strict `innerHeight > innerWidth`
  *   (`detectIsPortrait`). A square viewport counts as LANDSCAPE and will
  *   NOT trigger `LandscapeGate` — confirmed by driving a headless 700x700
  *   viewport, which reports `isPortrait: false`.
- * @invariant Resize listener is never removed (intentional — module-
+ * @assumption Resize listener is never removed (intentional — module-
  *   level singleton lives for app lifetime, see the inline comment on the
  *   `addEventListener` call). Under Vite HMR each module re-evaluation
  *   leaks one extra listener for the dev session; bounded by the
@@ -66,7 +66,7 @@ if (typeof window !== 'undefined') {
  * available. Reads from the store, which is kept in sync by the
  * module-level resize listener above.
  *
- * @invariant Non-reactive — reads `useEngineStore.getState()` without
+ * @assumption Non-reactive — reads `useEngineStore.getState()` without
  *   subscribing. Safe inside menu/topbar `when:` predicates re-evaluated
  *   by the host on every relevant store update. UNSAFE inside React
  *   renders: relies on snapshot, will not re-render on preference /

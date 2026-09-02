@@ -11,7 +11,7 @@
  * hosts + send-targets) — id-keyed, stable getAll() snapshot, subscribe. Registration
  * happens at module load / install time, before the panel mounts.
  *
- * @invariant Engine-core (store/) — host-agnostic; never imports an app. Apps and
+ * @assumption Engine-core (store/) — host-agnostic; never imports an app. Apps and
  *   plugins register their prefs into it.
  */
 

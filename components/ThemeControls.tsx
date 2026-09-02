@@ -13,7 +13,7 @@ import { THUMB } from './HueControl';
  * The Surface-tint and High-contrast toggles are plain boolean settings (rendered by the
  * SettingsPanel), and the surface-tint hue slider is `SurfaceHueControl` (HueControl.tsx).
  *
- * @invariant Engine-core (components/) — consumes the colorScheme store only.
+ * @assumption Engine-core (components/) — consumes the colorScheme store only.
  */
 
 /** Does the live state match this preset's three axes? (for active highlighting) */

@@ -45,7 +45,7 @@ class ComponentRegistry {
 }
 
 /**
- * @invariant Module-singleton; no per-app instances, no test isolation.
+ * @assumption Module-singleton; no per-app instances, no test isolation.
  *   `register()` warns and overwrites — last-registered wins. Plugin
  *   load order matters; no namespacing.
  */

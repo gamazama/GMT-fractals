@@ -12,11 +12,11 @@ import { z, type Tier } from './zIndex';
  * `panel` band is just one instance. `panelStack.ts` re-exports the `'panel'`
  * instance for the existing `FloatingPanel` call sites unchanged.
  *
- * @invariant Session-local only — never persisted. "Which surface did I touch
+ * @assumption Session-local only — never persisted. "Which surface did I touch
  *   last" is correct to reset on reload; default order falls out of mount order.
- * @invariant Only participating surfaces enrol. Static/anchored surfaces pass a
+ * @assumption Only participating surfaces enrol. Static/anchored surfaces pass a
  *   fixed rank (0) and are absent from the order.
- * @invariant The `panel` band consumes 100–199 in full — see {@link z} / zIndex.ts.
+ * @assumption The `panel` band consumes 100–199 in full — see {@link z} / zIndex.ts.
  *
  * @see docs/adr/0081-floating-panel-click-to-front-stacking.md
  */

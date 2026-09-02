@@ -333,7 +333,7 @@ const sampleSorted = (
 };
 
 /**
- * @invariant The CANONICAL single-position gradient sampler (engine-core). It is
+ * @assumption The CANONICAL single-position gradient sampler (engine-core). It is
  * the per-texel function `renderStopsToRamp` loops over — sampling at `i/255`
  * for `i in [0,256)` reproduces the ramp byte-for-byte. Bias + step/smooth/cubic
  * aware, so a colour read from here matches the baked ramp exactly (this fixes the

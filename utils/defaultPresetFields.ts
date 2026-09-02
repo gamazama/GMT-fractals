@@ -85,7 +85,7 @@ export const registerDefaultPresetFields = () => {
         },
         deserialize: (p, set) => {
             if (p.savedCameras && Array.isArray(p.savedCameras) && p.savedCameras.length > 0) {
-                // @invariant Rows MUST be normalised to the StateSnapshot shape
+                // @assumption Rows MUST be normalised to the StateSnapshot shape
                 //   (`{ id, label, state, createdAt }`) before they reach the store.
                 //
                 //   Commit 19e605a8 (2026-04-25, "Camera Manager: extract

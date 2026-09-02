@@ -16,7 +16,7 @@ import { openSettings, closeSettings, useSettingsOpen } from '../store/settingsP
  * secondary-hue controls (and autosave) are registered. The colour scheme
  * persists across all same-origin GMT apps via localStorage.
  *
- * @invariant Engine-core (components/) — consumes the settings slot + panel only.
+ * @assumption Engine-core (components/) — consumes the settings slot + panel only.
  */
 export const SettingsButton: React.FC = () => (
     <button onClick={openSettings} className="icon-btn" title="Settings" aria-label="Settings">

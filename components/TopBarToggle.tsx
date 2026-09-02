@@ -31,7 +31,7 @@ export interface TopBarToggleProps {
  * RenderRegion) — those are a different size family; folding them would contort
  * the fixed skeleton.
  *
- * @invariant Engine-core (components/) — must not import app/engine-gmt. Apps and
+ * @assumption Engine-core (components/) — must not import app/engine-gmt. Apps and
  *   plugins import this and pass their own colour classes in.
  */
 export const TopBarToggle: React.FC<TopBarToggleProps> = ({

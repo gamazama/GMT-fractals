@@ -52,12 +52,12 @@ export interface ActiveSnapshotFeaturesProps {
 }
 
 /**
- * @invariant Collapses to null when both `!activeId` AND
+ * @assumption Collapses to null when both `!activeId` AND
  *   `inactiveLabel === null`. Default behaviour hides the footer
  *   entirely when no snapshot is active; supply an `inactiveLabel`
  *   string to keep the header visible as a "free camera" / "no view"
  *   hint.
- * @invariant The Deselect button only renders when BOTH `activeId` is
+ * @assumption The Deselect button only renders when BOTH `activeId` is
  *   truthy AND `onDeselect` was provided.
  */
 export const ActiveSnapshotFeatures: React.FC<ActiveSnapshotFeaturesProps> = ({

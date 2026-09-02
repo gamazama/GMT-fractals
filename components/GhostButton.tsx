@@ -19,7 +19,7 @@ import React from 'react';
  * `className`, so each converted call site renders byte-identically — a dedup of the
  * shared chrome, not a restyle. Forwards all native button props (onClick, disabled, …).
  *
- * @invariant Engine-core (components/) — generic, no app/store imports.
+ * @assumption Engine-core (components/) — generic, no app/store imports.
  */
 export type GhostButtonVariant = 'neutral' | 'danger' | 'primary';
 

@@ -10,7 +10,7 @@
  * `'0'`/`'1'` booleans and enum prefs vs palette's JSON blobs. Both layers build
  * on these three functions so the guard itself lives in one place.
  *
- * @invariant Host-agnostic; never imports an app. palette/ builds on it (app→core
+ * @assumption Host-agnostic; never imports an app. palette/ builds on it (app→core
  *   is the allowed import direction; the reverse is not).
  * @see palette/core/storage.ts, store/slices/uiSlice.ts (consumers)
  */

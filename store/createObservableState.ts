@@ -15,7 +15,7 @@
  * sites don't change). Unlike `createSingleSlot`, `set` does NOT dedup — callers already
  * guard per-field before patching, so a patch that reaches `set` is always a real change.
  *
- * @invariant Host-agnostic; holders built on it never import an app. Lives in `store/`
+ * @assumption Host-agnostic; holders built on it never import an app. Lives in `store/`
  *   so apps (gradient-explorer, palette, …) import it down-tier.
  * @see store/createSingleSlot.ts (the single-value twin)
  * @see store/createListRegistry.ts (the id-keyed, multi-item twin)

@@ -16,7 +16,7 @@
  * request briefly so an accordion mounting just after can consume it. The latch has a
  * short TTL so a request no accordion claims doesn't open a section much later.
  *
- * @invariant Fire-and-forget; the owning accordion reacts (live or on mount), others
+ * @assumption Fire-and-forget; the owning accordion reacts (live or on mount), others
  *   no-op. The latch is consumed once and expires fast (PENDING_TTL_MS).
  */
 

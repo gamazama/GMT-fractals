@@ -16,7 +16,7 @@ export type ClipboardCopyState = 'idle' | 'copied' | 'failed';
  * and other copy buttons. The pending timeout is tracked in a ref so a re-copy or unmount
  * cancels a stale reset.
  *
- * @invariant Engine-core hook (hooks/) — no store, no app/engine-gmt imports.
+ * @assumption Engine-core hook (hooks/) — no store, no app/engine-gmt imports.
  */
 export function useClipboardCopy(resetMs = 1800) {
     const [state, setState] = useState<ClipboardCopyState>('idle');

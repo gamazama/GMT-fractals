@@ -8,7 +8,7 @@ export interface StoreCallbacks {
 }
 
 /**
- * @invariant Missing provider is SILENT. Primitives rendered outside
+ * @assumption Missing provider is SILENT. Primitives rendered outside
  *   `StoreCallbacksProvider` still work but lose undo + context-menu
  *   integration without any warning. Hosts must wrap their tree in the
  *   provider explicitly.

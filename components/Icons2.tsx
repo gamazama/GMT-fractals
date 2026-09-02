@@ -11,7 +11,7 @@ import React from 'react';
  * varies (10px affordance vs 32px scroll cue), so it's the prop; everything else is fixed
  * for a consistent look.
  *
- * @invariant Engine-core tier (components/) — must not import app or engine-gmt code.
+ * @assumption Engine-core tier (components/) — must not import app or engine-gmt code.
  *   Direction is fine the other way: engine/, engine-gmt/, and apps may import this.
  */
 

@@ -136,7 +136,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     const [subtitle] = useState(pickRandomName);
 
     /**
-     * @invariant `hasBootedRef` is a one-way latch. Once a boot has fired
+     * @assumption `hasBootedRef` is a one-way latch. Once a boot has fired
      *   this component never auto-boots again. Formula-switch and file-load
      *   paths force a reboot only when this latch is set
      *   (see handleSelectFormula / handleFile).
@@ -208,7 +208,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             }
             if (rendererRef.current) rendererRef.current.render(time, p / 100.0);
 
-            // @invariant Fade when the engine is READY (`isReady` = worker
+            // @assumption Fade when the engine is READY (`isReady` = worker
             // booted + compiled + dispatching frames). Normally we also wait for
             // `cp.phase === 'done'` so a fast compile animates the bar to 100%
             // instead of snapping from 73% → gone. But that 'done' signal can

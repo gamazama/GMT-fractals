@@ -215,7 +215,7 @@ export const AppGmt: React.FC = () => {
     // .getLiveValue) — making the Key Cam dirty check always fire and
     // the button always render red after any navigation.
     /**
-     * @invariant Delegates to the store action — never inline-mutates
+     * @assumption Delegates to the store action — never inline-mutates
      *   cameraSlice. The store action keeps `engine.virtualSpace.state`
      *   and the Key Cam dirty check in lockstep via OFFSET_SET.
      */

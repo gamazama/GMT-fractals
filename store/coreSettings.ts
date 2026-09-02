@@ -5,7 +5,7 @@
  * register from their own install paths; this covers the engine-core ones whose
  * source of truth lives in engine-core stores.
  *
- * @invariant Engine-core (store/) — host-agnostic; idempotent.
+ * @assumption Engine-core (store/) — host-agnostic; idempotent.
  */
 import { createElement } from 'react';
 import { registerSetting } from './settingsRegistry';

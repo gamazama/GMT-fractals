@@ -4,7 +4,7 @@
  * registries → iterates `getAll()` to seed state + install one auto-
  * setter per feature.
  *
- * @invariant Auto-setter name `set${FeatureId with capitalised first
+ * @assumption Auto-setter name `set${FeatureId with capitalised first
  *   letter}` is a load-bearing STRING convention with NO type
  *   enforcement. It is re-derived independently at ~20 call sites
  *   spanning engine-core, engine-gmt, app-gmt and palette — find them
@@ -17,14 +17,14 @@
  *   scalabilitySlice, and the five panel components that write params
  *   (AutoFeaturePanel, FeatureSection, CompilableFeatureSection,
  *   CompileDropdownSection, RuntimeSection).
- * @invariant Track-id convention `${featureId}.${paramKey}` (scalars)
+ * @assumption Track-id convention `${featureId}.${paramKey}` (scalars)
  *   and `${featureId}.${paramKey}_<axis>` (UNDERSCORE axes) is the
  *   second load-bearing string contract. See engine/animation/
  *   trackBinding.ts for the authoritative form.
- * @invariant `image`-typed params are deliberately excluded from the
+ * @assumption `image`-typed params are deliberately excluded from the
  *   `config` event payload (data URLs can be many MB). Restored via
  *   the `texture` event channel.
- * @invariant The setter has NO `oldValue !== newValue` gate on
+ * @assumption The setter has NO `oldValue !== newValue` gate on
  *   EMISSION. Every key in `updates` triggers the full sanitise +
  *   CONFIG/uniform emit path; whether that warrants a recompile is
  *   decided downstream in `ConfigManager.areValuesEqual`. It does
@@ -32,7 +32,7 @@
  *   gates `shouldReset` and flips `noAccumReset` on the emitted
  *   uniform event, so re-writing a param's existing value never
  *   clears the path-trace buffer.
- * @invariant `onSet` extras only land for keys not present in the
+ * @assumption `onSet` extras only land for keys not present in the
  *   user-provided `updates` — preset loads override defaults the
  *   `onSet` would otherwise compute.
  */

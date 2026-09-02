@@ -12,7 +12,7 @@ import React from 'react';
  * the caller's via `className`, so each call site renders byte-identically to
  * its former inline `<div>` — a dedup of the colour language, not a restyle.
  *
- * @invariant Engine-core (components/) — generic visual token, no app/store imports.
+ * @assumption Engine-core (components/) — generic visual token, no app/store imports.
  */
 export const WarningNote: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
     <div className={`rounded border border-warn/30 bg-warn/15 ${className}`.trim()}>{children}</div>

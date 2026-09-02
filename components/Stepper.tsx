@@ -13,7 +13,7 @@
  * matching how the panels already wrap their setters. `min` is only the blank-field
  * fallback, not an enforced floor.
  *
- * @invariant components/ — generic, no app/engine-gmt imports.
+ * @assumption components/ — generic, no app/engine-gmt imports.
  */
 import React from 'react';
 import { PlusIcon } from './Icons';

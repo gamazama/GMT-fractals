@@ -5,7 +5,7 @@
  * module-load time so the shared `featureRegistry` is fully populated
  * before the first STORE ACCESS anywhere in the app.
  *
- * @invariant The freeze trigger is store *access*, not module load.
+ * @assumption The freeze trigger is store *access*, not module load.
  *   `store/engineStore.ts` keeps `_store` lazy behind `ensureStore()`;
  *   `createFeatureSlice` (which calls `featureRegistry.freeze()`) is
  *   reachable only from `storeFactory` → `_makeStore()` → `ensureStore()`,

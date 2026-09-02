@@ -93,7 +93,7 @@ export interface StateLibraryPanelProps<T> {
 }
 
 /**
- * @invariant Only the drag-handle child is draggable; the row itself is
+ * @assumption Only the drag-handle child is draggable; the row itself is
  *   NOT. Without this split, row click would race against the HTML5
  *   drag-start and frequently swallow the click. Drag handlers
  *   `stopPropagation` on `dragStart`.
@@ -105,10 +105,10 @@ export interface StateLibraryPanelProps<T> {
  *   (`if (e.defaultPrevented) return`). Guarded by
  *   `npm run smoke:statelibrary-drop`, which asserts reorder AND
  *   file-drop passthrough so a fix for one can't silently break the other.
- * @invariant Slot-shortcut hint is hardcoded to the first 9 rows. Rows
+ * @assumption Slot-shortcut hint is hardcoded to the first 9 rows. Rows
  *   at index >= 9 render no `Ctrl+N` hint regardless of how many
  *   snapshots exist. Matches the slice's `count: 9` default.
- * @invariant `isModified` is consulted ONLY for the active row —
+ * @assumption `isModified` is consulted ONLY for the active row —
  *   non-active rows never render the modified marker even if dirty.
  *   The cyan highlight already identifies which row is "live"; the
  *   asterisk only adds value there.
@@ -124,7 +124,7 @@ export interface StateLibraryPanelProps<T> {
  *   unwrapped. One mis-click on the hover-revealed trash icon destroys a
  *   saved camera permanently. Fixing it is a product call (confirm-on-delete
  *   vs. undo vs. accept) — see PROPOSALS.md (overnight audit, cycle 4).
- * @invariant Rename submits on Enter or blur; Escape clears `editId`
+ * @assumption Rename submits on Enter or blur; Escape clears `editId`
  *   without firing `onRename` — cancel semantics are key-driven, not
  *   button-driven.
  */

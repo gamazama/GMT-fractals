@@ -15,7 +15,7 @@
  * change identity each set, so they always notify — the prior hand-rolled flag had this
  * dedup, the bridges didn't need it).
  *
- * @invariant Host-agnostic; seams built on it never import an app. The named
+ * @assumption Host-agnostic; seams built on it never import an app. The named
  *   `setX`/`getX`/`subscribeX` exports stay (thin wrappers) so call sites don't change.
  * @see store/createListRegistry.ts (the multi-slot, id-keyed twin)
  */

@@ -192,7 +192,7 @@ export const CompilableFeatureSection: React.FC<CompilableFeatureSectionProps> =
     // says on but the shader was never built. CompileScheduler picks up
     // the resulting config delta and emits is_compiling.
     /**
-     * @invariant Atomic compile flip: writes `{compileParam: true,
+     * @assumption Atomic compile flip: writes `{compileParam: true,
      *   runtimeToggleParam: true}` in ONE setter call so first-time enable
      *   cannot land in the "uniform on, shader unbuilt" intermediate
      *   state. `handleUnload` mirrors this for the off-direction.

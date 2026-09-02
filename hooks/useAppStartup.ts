@@ -75,9 +75,9 @@ export const useAppStartup = (options?: UseAppStartupOptions) => {
     const hydratedRef = useRef(false);
 
     /**
-     * @invariant Re-entrancy guard: `bootRequestedRef` blocks double-fire
+     * @assumption Re-entrancy guard: `bootRequestedRef` blocks double-fire
      *   unless `force=true`. Formula switches + file loads pass force=true.
-     * @invariant 50 ms `setTimeout` yields a React tick so any in-flight
+     * @assumption 50 ms `setTimeout` yields a React tick so any in-flight
      *   `loadScene` writes settle before the worker reads `ShaderConfig`.
      *   DO NOT remove without revisiting LoadingScreen's
      *   `handleSelectFormula → bootEngineRef.current(true)` race.

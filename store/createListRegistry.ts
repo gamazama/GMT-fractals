@@ -20,7 +20,7 @@
  * test-reset path uses `clear()`; one that needs single-item lookup can read `getAll()`
  * (no `get(id)` is exposed until a consumer needs it — don't add unused surface).
  *
- * @invariant Host-agnostic; the engine registries that use it never import an app.
+ * @assumption Host-agnostic; the engine registries that use it never import an app.
  * @see store/sendTargetRegistry.ts, engine/plugins/TopBar.tsx, engine/plugins/Hud.tsx (consumers)
  */
 

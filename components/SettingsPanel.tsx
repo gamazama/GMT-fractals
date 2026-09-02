@@ -19,7 +19,7 @@ import { safeLocalGet, safeLocalKeys, safeLocalRemove } from '../store/safeLocal
  * 'Interface') then sub-sections (`section`). The Files tab also hosts the raw
  * localStorage inspector. Each subsystem owns its pref's get/set.
  *
- * @invariant Engine-core (components/) — consumes the registry + safeLocal* guard +
+ * @assumption Engine-core (components/) — consumes the registry + safeLocal* guard +
  *   the FloatingPanel primitive; no app/domain imports. Apps register prefs + mount this.
  */
 interface Props {

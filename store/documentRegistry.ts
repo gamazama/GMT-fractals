@@ -13,14 +13,14 @@
  * `documents: { [id]: snap }` key, ALONGSIDE (never replacing) the DDFS preset.
  * On load, each `documents[id]` is dispatched to its provider's `restore`.
  *
- * @invariant Host-agnostic: this module imports nothing app-specific. Hosts
+ * @assumption Host-agnostic: this module imports nothing app-specific. Hosts
  *   register INTO it (palette registers a `favients` provider; heavy stores
  *   register their own in their Phase-1 streams). The engine never imports a
  *   host store.
- * @invariant Back-compat: scenes saved before this existed (no `documents`
+ * @assumption Back-compat: scenes saved before this existed (no `documents`
  *   key) load fine — `restoreDocuments(undefined)` is a no-op, so providers
  *   simply keep their current state.
- * @invariant SECURITY — `restoreDocuments` is a deserialization surface fed by
+ * @assumption SECURITY — `restoreDocuments` is a deserialization surface fed by
  *   untrusted shared scene files. It NEVER iterates the untrusted snapshot's
  *   keys; it iterates the (trusted) registered provider ids and pulls each
  *   snapshot via an own-property check. Each `restore`/`serialize` is wrapped

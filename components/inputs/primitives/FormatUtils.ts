@@ -171,7 +171,7 @@ const DISPLAY_SPAN = 100;
  * radius of 1) stay pure log — 0 there is meaningless. Pass `{ reserveZero }`
  * to override the heuristic per call site.
  *
- * @invariant when reserving: fromDisplay(0) === 0 at the far-left edge.
+ * @assumption when reserving: fromDisplay(0) === 0 at the far-left edge.
  */
 export const createLogMapping = (
     min: number,

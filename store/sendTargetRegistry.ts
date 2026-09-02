@@ -20,10 +20,10 @@
  *  lets the menu visually separate host destinations (coloring layers) from
  *  intra-app mode destinations (Generator slot, Stops edit).
  *
- * @invariant Host-agnostic: imports nothing app-specific. Hosts register INTO it.
- * @invariant Idempotent by id (re-registering replaces) — mirrors
+ * @assumption Host-agnostic: imports nothing app-specific. Hosts register INTO it.
+ * @assumption Idempotent by id (re-registering replaces) — mirrors
  *   `registerHistoryProvider`.
- * @invariant `DropTargetLayer` derives its visible set from `targetsForPayload`, so
+ * @assumption `DropTargetLayer` derives its visible set from `targetsForPayload`, so
  *   the node harness covers the consumer's contents + self-filtering by construction.
  *
  * @see components/DropTargetLayer.tsx (the drag/drop affordance over this registry)
