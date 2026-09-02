@@ -13,6 +13,7 @@ import '../index.css';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import GradientExplorerApp from './GradientExplorerApp';
 import { wireGradientExplorer } from './setup';
 
@@ -87,7 +88,9 @@ const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');
 
 ReactDOM.createRoot(rootElement).render(
-  <React.StrictMode>
-    <GradientExplorerApp />
-  </React.StrictMode>,
+  <AppErrorBoundary>
+    <React.StrictMode>
+      <GradientExplorerApp />
+    </React.StrictMode>
+  </AppErrorBoundary>,
 );

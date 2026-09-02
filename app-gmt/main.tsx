@@ -39,6 +39,7 @@ import '../engine-gmt/store/gmtPresetFields';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
@@ -720,16 +721,27 @@ if (!rootElement) throw new Error('Could not find root element to mount to');
 // the mount is not delayed; a shared-link open pays a brief pre-loader blank in
 // exchange for a correct first compile instead of a raster/no-sky boot.
 void resolveBootPreset().then((bootPreset) => {
+    // A throw here happens BEFORE React mounts, so the root AppErrorBoundary
+    // cannot catch it (see its @assumption). Catch it ourselves and hand it in
+    // as initialError so the same fallback page shows instead of a blank one.
+    let bootError: unknown = null;
     if (bootPreset) {
-        // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener stashes
-        // it on proxy.pendingTeleport for GmtRendererTickDriver to replay at boot.
-        useEngineStore.getState().loadScene({ preset: bootPreset });
+        try {
+            // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener stashes
+            // it on proxy.pendingTeleport for GmtRendererTickDriver to replay at boot.
+            useEngineStore.getState().loadScene({ preset: bootPreset });
+        } catch (err) {
+            console.error('[app-gmt] Boot preset failed to load (pre-mount):', err);
+            bootError = err;
+        }
     } else {
         console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
     }
     ReactDOM.createRoot(rootElement).render(
-        <React.StrictMode>
-            <AppGmt />
-        </React.StrictMode>,
+        <AppErrorBoundary initialError={bootError}>
+            <React.StrictMode>
+                <AppGmt />
+            </React.StrictMode>
+        </AppErrorBoundary>,
     );
 });

@@ -36,6 +36,7 @@ import '../index.css';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { FractalToyApp } from './FractalToyApp';
 import { registerUI } from '../engine/features/ui';
 import { setupFractalToy } from './setup';
@@ -168,7 +169,9 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <React.StrictMode>
-    <FractalToyApp />
-  </React.StrictMode>
+  <AppErrorBoundary>
+    <React.StrictMode>
+      <FractalToyApp />
+    </React.StrictMode>
+  </AppErrorBoundary>
 );

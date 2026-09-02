@@ -2,6 +2,7 @@
 import '../index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { MeshExportApp } from './components/MeshExportApp';
 
 const rootElement = document.getElementById('root');
@@ -11,7 +12,9 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <React.StrictMode>
-    <MeshExportApp />
-  </React.StrictMode>
+  <AppErrorBoundary>
+    <React.StrictMode>
+      <MeshExportApp />
+    </React.StrictMode>
+  </AppErrorBoundary>
 );

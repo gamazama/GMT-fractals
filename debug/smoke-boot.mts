@@ -37,6 +37,16 @@ async function main() {
     // Give the app an extra second to hit any deferred runtime errors.
     await page.waitForTimeout(2000);
 
+    // The root AppErrorBoundary (engine/components/AppErrorBoundary.tsx) catches
+    // render throws so they are no longer pageerrors; it publishes the caught
+    // error here so this smoke still goes red on them.
+    const boundaryError = await page.evaluate(() => {
+        const e = (window as { __lastBoundaryError?: unknown }).__lastBoundaryError;
+        if (e == null) return null;
+        return e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    });
+    if (boundaryError) errors.push(`boundary caught: ${boundaryError}`);
+
     const title = await page.title().catch(() => '<no title>');
     const bodyText = await page.evaluate(() => document.body.innerText.slice(0, 400));
 

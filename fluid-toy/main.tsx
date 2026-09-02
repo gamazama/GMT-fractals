@@ -30,6 +30,7 @@ import '../index.css';
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { FluidToyApp } from './FluidToyApp';
 import { registerUI } from '../engine/features/ui';
 import { safeLocalGet, safeLocalRemove } from '../store/safeLocalStorage';
@@ -385,7 +386,9 @@ if (!rootElement) throw new Error('Could not find root element to mount to');
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <React.StrictMode>
-    <FluidToyApp />
-  </React.StrictMode>
+  <AppErrorBoundary>
+    <React.StrictMode>
+      <FluidToyApp />
+    </React.StrictMode>
+  </AppErrorBoundary>
 );
