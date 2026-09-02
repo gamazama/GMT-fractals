@@ -24,18 +24,37 @@
  *   `AudioContext.destination` — to prevent feedback. System-audio capture is
  *   connected to BOTH so the user hears it. Loading a track also disables an
  *   active mic; connecting the mic only PAUSES decks (asymmetric).
- * @bug PRODUCTION: with system-audio capture running, GMT renders at ~30fps
- *   while its window is focused and ~60fps while another window has focus
- *   (owner-observed 2026-07-25, still present 2026-09-02). `b3e8b321` cut the
- *   audio panel's canvas redraw to 30Hz (AudioSpectrum.tsx) on the theory
- *   that the panel's rAF work was the cost; that helped but did not close
- *   it. The remaining suspects are the capture itself — the mandatory
- *   screen-share video surface described in the invariant below, plus the
- *   worklet/transport overhead — rather than anything in the renderer.
+ * @bug PRODUCTION: with audio running, GMT renders at ~30fps while its
+ *   window is focused and ~60fps while another window has focus
+ *   (owner-observed 2026-07-25, still present 2026-09-02). A plain audio FILE
+ *   on a deck shows it too (owner, 2026-09-02), so the screen-share surface
+ *   of system-audio capture is at most an extra cost, not the cause. The
+ *   owner's rule: nothing on the audio side may use or contend the GPU — it
+ *   belongs to the render. What the audio path did to the GPU, and what
+ *   changed on 2026-09-02:
+ *     - every frame the modulation tick published a new liveModulations
+ *       map into the store, and the panel router subscribes to the whole
+ *       store, so every open panel re-rendered and repainted 60×/s — GPU
+ *       raster + composite next to the worker's WebGL. app-gmt now publishes
+ *       at 20 Hz for the UI (setLiveModulationPublishInterval in main.tsx);
+ *       the render path reads getLiveModulationsNow() per frame, unchanged.
+ *     - the spectrum canvas rasterised on the GPU 30×/s; it is CPU-raster
+ *       now (willReadFrequently) and draws only while on screen.
+ *     - the deck status poll re-rendered its row 10×/s on identical data.
+ *   `b3e8b321` had already cut the spectrum redraw to 30Hz. Not yet measured
+ *   on the owner's GPU; the remaining suspect if it persists is the pointer
+ *   pre-pick readback (Navigation.tsx) compounding with the above.
  *   Reproduce: connectSystemAudio, focus GMT, watch the fps counter; switch
  *   focus to another window and watch it recover. A fair test uses the
  *   mic path with a virtual audio device as the control: same analysis,
  *   no screen-share surface. If the control holds 60, the surface is it.
+ *   Open the app with `?perf` first (engine-gmt/renderer/perfProbe.ts): it
+ *   prints one line per second with the main-thread rAF rate, long tasks,
+ *   ticks dispatched, frames delivered and hover picks, so the reading says
+ *   WHICH half dropped — the main thread (raf 30) or the worker (raf 60,
+ *   frames 30) — and whether the pointer was over the canvas at the time.
+ *   Run the matrix: audio none / mic / system × focused / unfocused ×
+ *   pointer over / off the canvas, `window.__perfProbe.copy()` after each.
  * @assumption System-audio capture COSTS GPU and cannot be made not to. The
  *   spec requires a video surface — audio-only `getDisplayMedia` is still an
  *   unimplemented request as of 2026 — so Chrome starts a screen-capture

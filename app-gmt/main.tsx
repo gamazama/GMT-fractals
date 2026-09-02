@@ -37,6 +37,7 @@ import '../engine/plugins/camera/presetField';
 // GMT-specific preset fields (lights top-level array) — must precede store init.
 import '../engine-gmt/store/gmtPresetFields';
 
+import { setLiveModulationPublishInterval } from '../engine/animation/AnimationSystem';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
@@ -684,6 +685,14 @@ mountFavientsPanel();
 // routes through compileGate.queue so the CompilingIndicator animates,
 // and pre-emits compile_estimate.
 
+// Live-modulation store publish at 20 Hz. Every open panel re-renders on
+// each publish (PanelRouter subscribes to the whole store, and the modulated
+// sliders' indicators read the map), and at 60 Hz that was a measurable
+// main-thread + repaint cost alongside the render loop whenever audio
+// modulated anything — even a plain audio file. The render path reads
+// `getLiveModulationsNow()` per frame and is unaffected.
+setLiveModulationPublishInterval(50);
+
 // Expose for dev-tools probing.
 if (typeof window !== 'undefined') {
     (window as any).__store = useEngineStore;
@@ -691,6 +700,11 @@ if (typeof window !== 'undefined') {
     (window as any).__fractalEvents = FractalEvents;
     (window as any).__fractalEventNames = FRACTAL_EVENTS;
     (window as any).__fractalRegistry = registry;
+    // `?perf` — the frame-rate diagnostic (engine-gmt/renderer/perfProbe.ts).
+    // Loaded on demand so it costs nothing otherwise.
+    let wantPerf = false;
+    try { wantPerf = new URLSearchParams(window.location.search).has('perf'); } catch { /* no URL */ }
+    if (wantPerf) void import('../engine-gmt/renderer/perfProbe').then((m) => m.installPerfProbe(getProxy()));
 }
 
 // Deep-link parse — if the page was opened with `?gallery=<slug>` (typically

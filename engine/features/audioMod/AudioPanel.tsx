@@ -30,7 +30,14 @@ const AudioDeck = ({ index, label, onClose, isActive }: { index: 0 | 1, label: s
         if (!isActive || !status.hasTrack) return;
         const interval = setInterval(() => {
             const info = audioAnalysisEngine.getTrackInfo(index);
-            setStatus(info);
+            // A fresh object every 100 ms re-rendered the deck 10×/s even when
+            // nothing moved; write only when a displayed field changed.
+            setStatus((prev) => {
+                const a = prev as unknown as Record<string, unknown>;
+                const b = info as unknown as Record<string, unknown>;
+                const same = Object.keys(b).every((k) => a[k] === b[k]) && Object.keys(a).length === Object.keys(b).length;
+                return same ? prev : info;
+            });
             setIsPlaying(info.isPlaying);
         }, 100);
         return () => clearInterval(interval);

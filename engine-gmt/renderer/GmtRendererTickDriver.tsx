@@ -39,6 +39,7 @@ import { reportAccumulationToStore } from '../../store/slices/installAccumulatio
 import { buildRenderInteractionState, hasLiveModulationSource } from './renderInteractionState';
 import { modulationEngine } from '../../engine/features/modulation/ModulationEngine';
 import { applyLiveMod } from '../../engine/typedSlices';
+import { getLiveModulationsNow } from '../../engine/animation/AnimationSystem';
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 
 // ── Tick Registration — SNAPSHOT phase ──────────────────────────────────
@@ -336,10 +337,13 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         // path allocates nothing. Read once here and reused for renderState
         // below, so the main-thread camera and the worker cannot disagree about
         // this frame's FOV.
+        // `getLiveModulationsNow()`, not the store copy: app-gmt throttles the
+        // store publish to 20 Hz for the UI (main.tsx), and the render must
+        // see THIS frame's values or a modulated FOV would step at 20 Hz.
         const optics = applyLiveMod(
             (useEngineStore.getState() as any).optics ?? {},
             'optics',
-            (useEngineStore.getState() as any).liveModulations ?? {},
+            getLiveModulationsNow(),
         );
 
         // Sync R3F camera FOV with optics — raycaster/gizmo projections

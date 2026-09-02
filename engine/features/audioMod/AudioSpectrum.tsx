@@ -85,10 +85,23 @@ export const AudioSpectrum: React.FC = () => {
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas || !audioState?.isEnabled) return;
-        const ctx = canvas.getContext('2d');
+        // Software raster on purpose. Chrome's default 2D canvas rasterises on
+        // the GPU, in the same GPU process the render worker's WebGL context
+        // lives in; `willReadFrequently` moves this 400×150 surface to CPU
+        // raster (the compositor then just uploads a small bitmap), so the
+        // spectrum no longer competes with the fractal for GPU time. The
+        // owner's rule for the audio path: the GPU belongs to the render.
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
         if (!ctx) return;
 
         let rafId = 0;
+        // Draw only while the canvas is actually on screen (panel scrolled
+        // away, collapsed, or the tab hidden = no draws at all).
+        let visible = true;
+        const io = typeof IntersectionObserver !== 'undefined'
+            ? new IntersectionObserver((entries) => { visible = entries.some(e => e.isIntersecting); }, { threshold: 0 })
+            : null;
+        io?.observe(canvas);
         // Draw budget. This canvas shares the main thread with the render loop's
         // tick driver, and it used to redraw EVERY frame — with a save/clip/
         // fillText/restore per modulation rule, which is the expensive part. With
@@ -109,7 +122,7 @@ export const AudioSpectrum: React.FC = () => {
 
         const draw = (nowMs?: number) => {
             const t = nowMs ?? performance.now();
-            if (t - lastDrawMs < DRAW_INTERVAL_MS) { rafId = requestAnimationFrame(draw); return; }
+            if (!visible || t - lastDrawMs < DRAW_INTERVAL_MS) { rafId = requestAnimationFrame(draw); return; }
             lastDrawMs = t;
             if (!audioState?.isEnabled) {
                 cancelAnimationFrame(rafId);
@@ -253,7 +266,7 @@ export const AudioSpectrum: React.FC = () => {
         };
 
         draw();
-        return () => cancelAnimationFrame(rafId);
+        return () => { cancelAnimationFrame(rafId); io?.disconnect(); };
     }, [rules, selectedId, bandsPerOctave, audioState?.isEnabled]);
 
     const handleMouseDown = (e: React.MouseEvent) => {

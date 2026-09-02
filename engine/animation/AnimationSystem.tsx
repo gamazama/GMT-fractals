@@ -115,6 +115,28 @@ function flushRecordBuffer() {
  *   only hosts with a real bridge receive them.
  */
 // Exported tick function for orchestrator pattern
+// ── Live modulation publish ──────────────────────────────────────────────
+// The tick resolves every modulated target's absolute value each frame. Two
+// consumers want it at two different rates: the RENDER path (the host's tick
+// driver merging optics etc. into renderState) needs this frame's values, so
+// it reads `getLiveModulationsNow()`; the UI (purple slider indicators, and
+// every whole-store subscriber such as the panel router) only needs ~20 Hz,
+// and re-rendering every open panel 60×/s while audio modulates anything was
+// a real main-thread and repaint cost next to the render loop. Hosts opt into
+// the throttle with `setLiveModulationPublishInterval(ms)`; the default (0)
+// keeps the historical publish-on-every-change behaviour, so fluid-toy and
+// the demo, whose sim reads the store map per frame, are unchanged.
+let _latestLiveModulations: Record<string, number> = {};
+let _publishIntervalMs = 0;
+let _lastPublishMs = 0;
+/** This frame's resolved live-modulation map (base + offsets per target).
+ *  Always current; unlike the store copy it is never throttled. */
+export const getLiveModulationsNow = (): Record<string, number> => _latestLiveModulations;
+/** Minimum spacing between store publishes of `liveModulations`, in ms.
+ *  0 = publish on every change (default). A target appearing or vanishing
+ *  always publishes immediately so indicators never lag on structure. */
+export const setLiveModulationPublishInterval = (ms: number): void => { _publishIntervalMs = Math.max(0, ms); };
+
 export const tick = (delta: number) => {
     const engine = getProxy();
     const animStore = useAnimationStore.getState();
@@ -436,10 +458,12 @@ export const tick = (delta: number) => {
     // call when null), this caused enough cascading renders during
     // rapid pointer events to trip React's "Maximum update depth"
     // guard inside fluid-toy's pan handler.
+    _latestLiveModulations = liveModulations as Record<string, number>;
     const oldMods = storeState.liveModulations ?? {};
     const newKeys = Object.keys(liveModulations);
     const oldKeys = Object.keys(oldMods);
-    let changed = newKeys.length !== oldKeys.length;
+    const keysChanged = newKeys.length !== oldKeys.length;
+    let changed = keysChanged;
     if (!changed) {
         for (let i = 0; i < newKeys.length; i++) {
             const k = newKeys[i];
@@ -450,7 +474,14 @@ export const tick = (delta: number) => {
         }
     }
     if (changed) {
-        useEngineStore.getState().setLiveModulations(liveModulations);
+        // Throttled for the UI when the host asked for it (see the publish
+        // block above). A settled value still lands: the store lags by at
+        // most one interval and the next tick past it finds `changed` true.
+        const nowMs = performance.now();
+        if (_publishIntervalMs === 0 || keysChanged || nowMs - _lastPublishMs >= _publishIntervalMs) {
+            _lastPublishMs = nowMs;
+            useEngineStore.getState().setLiveModulations(liveModulations);
+        }
     }
     
     // Publish the uniforms this tick owns (after the vec + julia flushes, so
