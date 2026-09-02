@@ -157,10 +157,16 @@ export function StateLibraryPanel<T>({
     };
 
     const handleRenameSubmit = () => {
-        if (editId) {
-            onRename(editId, editName);
-            setEditId(null);
-        }
+        if (!editId) return;
+        // Blank or whitespace-only input is a cancel, not a rename: a blank
+        // label used to be written here from both Enter and onBlur, and it
+        // degrades every surface that prints the label (the slot toast became
+        // a pill reading " saved"). Trimming is deliberate too — surrounding
+        // whitespace in a saved-camera name is never intentional and only
+        // shows up as misaligned pills. Decided 2026-09-02 (PROPOSALS cycle 4).
+        const next = editName.trim();
+        if (next) onRename(editId, next);
+        setEditId(null);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -308,12 +314,12 @@ export function StateLibraryPanel<T>({
                                             row found no re-entry point, and the `*` modified-marker escape
                                             hatch self-destructs (the row's onClick re-applies the snapshot,
                                             clearing `modified` on the first click of the double-click).
-                                            Blanks are reachable — handleRenameSubmit accepts an empty value
-                                            from both Enter and onBlur — and they persist into saved scenes
-                                            via the `savedCameras` preset field. Guarding at render fixes
-                                            existing data and every producer at once; `[actions.add]` uses
-                                            `??`, which does not catch `''`. See PROPOSALS.md (cycle 4) for
-                                            the input-side guard, which is a separate product call. */}
+                                            Blanks were reachable — handleRenameSubmit accepted an empty
+                                            value from both Enter and onBlur until 2026-09-02 (it now treats
+                                            blank as cancel) — and existing ones persist in saved scenes via
+                                            the `savedCameras` preset field. Guarding at render fixes that
+                                            data and every other producer at once; `[actions.add]` uses
+                                            `??`, which does not catch `''`. */}
                                         {modified ? `*${snap.label || 'Untitled'}` : (snap.label || 'Untitled')}
                                     </span>
                                 )}
