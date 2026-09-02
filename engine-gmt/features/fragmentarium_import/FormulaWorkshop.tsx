@@ -229,8 +229,19 @@ interface WorkshopProps {
  * reads `registry.get(id)?.importSource` and rehydrates state from `glsl`,
  * `selectedFunction`, `loopMode`, `mappings`. V3-imported formulas stamp
  * `importSource`; V4-imported formulas OMIT it — re-editing a V4 formula is
- * not currently supported because V4 has no per-param mapping UI. See
- * ADR-0058 Consequences.
+ * not currently supported because V4 has no per-param mapping UI, so opening
+ * one for re-edit shows an empty Workshop. See ADR-0058 Consequences.
+ *
+ * @assumption The V4 branches of `handlePreview` / `handleImport` run BEFORE
+ * the V3-only `!detected || !selectedFunctionName` guard and switch to
+ * `r.def.id` (V4's sanitised id), never the raw name. Until 2026-09-02 the
+ * guard came first, so the two shipped library frags V3 cannot analyse but V4
+ * can (`Benesi/MengersmoothPolyhedra.frag`,
+ * `Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag`, per
+ * `npm run test:frag:scan`) had Preview and Import as silent no-ops. No guard
+ * mounts the Workshop, which is why this is an assumption: verify by hand by
+ * picking one of those two frags in Auto mode and pressing Preview, then
+ * Import — the store's `formula` must switch to the sanitised id.
  *
  * @invariant Slot uniqueness is enforced at Import (V3 only). V4 skips this —
  * slot assignment is internal to `processFormula`. Formula names are
@@ -718,18 +729,23 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
 
     // ── Preview ──
     const handlePreview = useCallback(() => {
-        if (!detected || !selectedFunctionName) return;
         setError(null);
         try {
-            // V4 path: bypass the V3 transform chain entirely.
+            // V4 path: bypass the V3 transform chain entirely. It needs neither
+            // `detected` nor `selectedFunctionName`, so it sits ABOVE the V3
+            // guard — until 2026-09-02 the guard came first and a V4 preview of
+            // a source V3 could not analyse was a silent no-op (no error, no
+            // console output) while the buttons stayed enabled.
             if (useV4Pipeline) {
                 const r = buildAndRegisterV4(PREVIEW_ID, 'Workshop Preview', source);
                 if (!r.ok) { setError('V4 preview failed: ' + r.error); return; }
-                setFormula(PREVIEW_ID as any);
+                // r.def.id, not PREVIEW_ID: V4's sanitizeId decides the registered key.
+                setFormula(r.def.id as any);
                 applyFormulaDefaults(r.defaultPreset);
                 return;
             }
 
+            if (!detected || !selectedFunctionName) return;
             const result = runTransform(detected, selectedFunctionName, loopMode, PREVIEW_ID, mappings);
             if (!result) { setError('Could not analyze the selected function.'); return; }
 
@@ -752,22 +768,29 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
 
     // ── Import ──
     const handleImport = useCallback(() => {
-        if (!detected || !selectedFunctionName || !formulaName.trim()) return;
         setError(null);
 
         // V4 path: processFormula handles slot assignment internally — no
-        // per-param mapping UI needed. Skips V3 validation entirely.
+        // per-param mapping UI needed. Skips V3 validation entirely, so it
+        // must not sit behind the V3 guard below (see handlePreview).
         if (useV4Pipeline) {
+            if (!formulaName.trim()) return;
             try {
                 const r = buildAndRegisterV4(formulaName, formulaName, source);
                 if (!r.ok) { setError('V4 import failed: ' + r.error); return; }
                 setSuccess(true);
-                setTimeout(() => { setFormula(formulaName as any); applyFormulaDefaults(r.defaultPreset); onClose(); }, 1000);
+                // r.def.id, not formulaName: V4's sanitizeId rewrites e.g.
+                // "Simple_Kleinian-Slow-DE-02----l" and the registry keys on the
+                // rewritten id, so switching to the raw name would miss.
+                const registeredId = r.def.id;
+                setTimeout(() => { setFormula(registeredId as any); applyFormulaDefaults(r.defaultPreset); onClose(); }, 1000);
             } catch (e) {
                 setError('V4 import failed: ' + (e instanceof Error ? e.message : String(e)));
             }
             return;
         }
+
+        if (!detected || !selectedFunctionName || !formulaName.trim()) return;
 
         try {
             // Validate slot uniqueness
@@ -1118,8 +1141,10 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                     </section>
                 )}
 
-                {/* Section 3: Parameters & Mapping */}
-                {detected && selectedFunctionName && (
+                {/* Section 3: Parameters & Mapping. Also shown on the V4 path when
+                    V3 detected nothing, so the user can still name the import —
+                    V4 assigns slots itself, so there is no mapping table to show. */}
+                {((detected && selectedFunctionName) || useV4Pipeline) && (
                     <section className="space-y-2 border border-line/10 rounded-lg p-2.5 bg-line/[0.02]">
                         <h3 className="text-[10px] font-semibold text-fg-dim">3 · Parameters</h3>
 
@@ -1133,10 +1158,14 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                             />
                         </div>
 
-                        {mappings.length > 0 ? (
-                            <ParamTable mappings={mappings} onMappingChange={handleMappingChange} />
+                        {detected && selectedFunctionName ? (
+                            mappings.length > 0 ? (
+                                <ParamTable mappings={mappings} onMappingChange={handleMappingChange} />
+                            ) : (
+                                <p className="text-[10px] text-fg-faint italic">No uniforms detected — formula has no user parameters.</p>
+                            )
                         ) : (
-                            <p className="text-[10px] text-fg-faint italic">No uniforms detected — formula has no user parameters.</p>
+                            <p className="text-[10px] text-fg-faint italic">Standalone pipeline: parameters are assigned automatically at import.</p>
                         )}
                     </section>
                 )}
@@ -1219,7 +1248,7 @@ export const FormulaWorkshop: React.FC<WorkshopProps> = ({ onClose, editFormula,
                 <div className="flex items-center gap-2">
                     <button
                         onClick={handlePreview}
-                        disabled={!canImport && !useV4Pipeline}
+                        disabled={useV4Pipeline ? !formulaName.trim() : !canImport}
                         className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-fg-tertiary hover:text-fg bg-line/5 hover:bg-line/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-line/10"
                     >
                         Preview
