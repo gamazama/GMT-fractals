@@ -894,7 +894,7 @@ if (DISCOVER || RANDOM_N > 0 || (FILTER && (FILTER.includes('/') || FILTER.inclu
     // DEFAULT_SCRIPT case, the only one that survives a missing corpus — and EXIT 0. A reader
     // who knows this sweep is supposed to be red would read that green run as the importer gap
     // having closed. Same `walk()`-swallows-a-missing-directory defect batch 4 found in
-    // test:frag:scan. The curated matrix is unaffected: its per-file `relPath`s are gated, so
+    // report:frag:scan. The curated matrix is unaffected: its per-file `relPath`s are gated, so
     // it correctly reds at 5 passed / 60 failed under the same break.
     // Floor is on the DISCOVERED total, before any filter/--random slice, so single-file and
     // sampled runs are unaffected. Raise it as reference files are vendored in; if files were

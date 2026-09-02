@@ -6,7 +6,9 @@
  * Reports which formulas fail each path. The union of failures tells us
  * what the Workshop user sees as parse errors on click.
  *
- * Usage: npx tsx debug/scan-frag-parse.mts   (or `npm run test:frag:scan`)
+ * Usage: npx tsx debug/scan-frag-parse.mts   (or `npm run report:frag:scan`;
+ *        it was `test:frag:scan` until 2026-09-02 — renamed because a `test:*`
+ *        name promised a gate this file has never been)
  *
  * ─── EXIT CONTRACT — READ BEFORE CITING THIS AS A GUARD ─────────────────
  * This is a REPORT, not a pass/fail gate on the importer. It has no
@@ -38,6 +40,7 @@ import * as path from 'path';
 import { detectFormulaV3 } from '../engine-gmt/features/fragmentarium_import/v3/compat';
 import { processFormula as v4ProcessFormula } from '../engine-gmt/features/fragmentarium_import/v4';
 
+console.log('\x1b[33m[report:frag:scan] REPORT ONLY — this script has no assertions and always exits 0. Never cite it as a guard.\x1b[0m\n');
 const PUB_DIR = path.resolve(import.meta.dirname, '..', 'public/formulas/frag');
 
 function walk(dir: string): string[] {

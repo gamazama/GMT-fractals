@@ -240,7 +240,7 @@ interface WorkshopProps {
  * guard came first, so the two shipped library frags V3 cannot analyse but V4
  * can (`Benesi/MengersmoothPolyhedra.frag`,
  * `Kashaders/With_CRrenderer/Simple_Kleinian-Slow-DE-02----l.frag`, per
- * `npm run test:frag:scan`) had Preview and Import as silent no-ops. No guard
+ * `npm run report:frag:scan`) had Preview and Import as silent no-ops. No guard
  * mounts the Workshop, which is why this is an assumption: verify by hand by
  * picking one of those two frags in Auto mode and pressing Preview, then
  * Import — the store's `formula` must switch to the sanitised id.

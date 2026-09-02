@@ -78,7 +78,7 @@ the remix and pins `coreMath.iterations` to the value the GMF declares. It
 still **skips at exit 0** on a build with no `VITE_SUPABASE_*`, deliberately —
 so a green run on a fresh checkout proves nothing about this path at all.
 
-`npm run test:frag:scan` is **a report, not a guard** — it has no assertion on
+`report:frag:scan` (named `test:frag:scan` until 2026-09-02) is **a report, not a guard** — it has no assertion on
 its own results, so it prints its failures and exits 0 regardless. Do not cite it
 as passing evidence. **Confirmed by falsification 2026-07-29**: forcing
 `hasDE = false` in `engine-gmt/features/fragmentarium_import/v3/compat.ts`, so V3
