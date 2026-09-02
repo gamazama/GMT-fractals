@@ -61,6 +61,7 @@ flag to Navigation.
 ## Guards
 
 ```
+npm run test:shortcuts-teardown  # node-only: uninstallShortcuts is the inverse of install
 npm run smoke:undo
 npm run smoke:camera
 npm run smoke:viewport

@@ -248,6 +248,10 @@ const resolve = (normalized: string): ShortcutDef | null => {
 
 let _installed = false;
 let _listener: ((e: KeyboardEvent) => void) | null = null;
+// The root the live listener is attached to. Stashed so uninstall can detach
+// from the SAME target install used; nulled on uninstall so the module never
+// retains a detached node.
+let _root: Window | Document | HTMLElement | null = null;
 
 export interface InstallShortcutsOptions {
     /** Event target. Default: window. */
@@ -259,16 +263,29 @@ export interface InstallShortcutsOptions {
 }
 
 /**
- * @invariant Idempotent via `_installed` guard — options passed on a
- *   SECOND call are silently dropped. A second
- *   `installShortcuts({domRoot: customRoot})` after a first bare call
- *   leaves the listener on `window` with no warning.
+ * @invariant Idempotent via `_installed` guard — the first install wins.
+ *   Options passed on a SECOND call are dropped, but no longer silently: a
+ *   `console.warn` names the ignored keys, because a second
+ *   `installShortcuts({domRoot: customRoot})` after a first bare call leaves
+ *   the listener on `window`, and that is a wiring bug worth hearing about.
+ *   — proven by: npm run test:shortcuts-teardown ("a second install with
+ *   options is ignored and warned about").
  */
 export const installShortcuts = (options: InstallShortcutsOptions = {}) => {
-    if (_installed) return;
+    if (_installed) {
+        const dropped = Object.keys(options);
+        if (dropped.length > 0) {
+            console.warn(
+                '[Shortcuts] installShortcuts() called again; the first install wins and ' +
+                'these options are ignored: ' + dropped.join(', '),
+            );
+        }
+        return;
+    }
     _installed = true;
 
     const root = options.domRoot ?? window;
+    _root = root;
     const capture = options.capture ?? false;
     const ignoreSelector = options.ignoreSelector ?? DEFAULT_IGNORE_SELECTOR;
 
@@ -303,47 +320,38 @@ export const installShortcuts = (options: InstallShortcutsOptions = {}) => {
 };
 
 /**
- * Tear down the global keydown listener and reset registry + scope stack.
+ * Tear down the keydown listener and reset registry, scope stack, capture
+ * count and scope subscribers — the inverse of `installShortcuts`.
  *
- * @bug PRODUCTION: this is NOT the inverse of `installShortcuts`, in two ways.
- *   Both are LATENT today — `uninstallShortcuts` has zero callers repo-wide, and
- *   all five `installShortcuts` call sites use the default `window` root — so
- *   nothing can currently trigger either. They are contract defects waiting for
- *   the first caller that uses the API as documented.
+ * @invariant Detaches from the root install attached to (not `window`
+ *   literally), resets `_keyboardCaptureCount` to 0 and clears
+ *   `_scopeSubscribers`, so a re-install starts from nothing. Until
+ *   2026-09-02 this removed from `window` regardless of `domRoot` (a
+ *   custom-root install was never detached) and left the capture count
+ *   stranded, which would have swallowed every single-key shortcut for the
+ *   life of the page — both latent, since nothing calls this yet.
+ *   — proven by: npm run test:shortcuts-teardown ("uninstall detaches from
+ *   the root install used", "capture count is reset by uninstall").
+ *   Falsified 2026-09-02 against the previous body: the harness died with
+ *   `ReferenceError: window is not defined` on the first uninstall.
  *
- *   1. **The removal target is hardcoded.** `installShortcuts` attaches to
- *      `options.domRoot ?? window` but stores neither the root nor the capture
- *      flag (both are function-local `const`s). This function removes from
- *      `window` literally. Install with a Document or HTMLElement `domRoot` — a
- *      declared, typed, documented option — and the listener is never detached,
- *      while `_listener = null` discards the only handle to it. Note the double
- *      remove below (false AND true) already covers both capture phases, so the
- *      capture axis is fine; only the root is unrecoverable.
- *   2. **`_keyboardCaptureCount` is not reset.** A capturing surface live at
- *      teardown leaves the counter above zero for the life of the page, and the
- *      dispatcher's early-return for unmodified single-character keys sits above
- *      the input-focus and `when()` checks — so every such shortcut is silently
- *      swallowed. (Its one consumer, FormulaPicker, releases in an effect
- *      cleanup, so React unmount always balances it; only this gap can strand
- *      the count.)
+ *   `window.__shortcuts` is deliberately NOT deleted: `debug/smoke-undo.mts`
+ *   uses its presence as the "installShortcuts ran" probe.
  *
- *   Also un-reset, and deliberately excluded from the list above because they
- *   may be intentional: `_scopeSubscribers` is never cleared, and
- *   `window.__shortcuts` is never deleted — `debug/smoke-undo.mts` uses its
- *   presence as the "installShortcuts ran" probe, so removing it would break
- *   that guard.
- *
- *   Fix is ~6 lines (stash root at install, remove from it here, null it, reset
- *   the counter) but changes behaviour in one exotic case: with two capturing
- *   surfaces live, the reset un-captures the still-focused one. Queued rather
- *   than applied — see PROPOSALS.md (overnight audit, cycle 3).
+ *   Behaviour note: with two capturing surfaces live at teardown, the reset
+ *   un-captures the still-focused one. Exotic, and the right call for a full
+ *   teardown.
  */
 export const uninstallShortcuts = () => {
-    if (_listener) {
-        window.removeEventListener('keydown', _listener, false);
-        window.removeEventListener('keydown', _listener, true);
-        _listener = null;
+    if (_listener && _root) {
+        // Both phases rather than a stored flag — strictly more robust.
+        (_root as any).removeEventListener('keydown', _listener, false);
+        (_root as any).removeEventListener('keydown', _listener, true);
     }
+    _listener = null;
+    _root = null;
+    _keyboardCaptureCount = 0;
+    _scopeSubscribers.clear();
     _registry.clear();
     _scopeStack.length = 0;
     _scopeStack.push('global');
