@@ -81,6 +81,7 @@ export const MEMBERS = [
     'debug/smoke-orbit.mts',
     'debug/smoke-export-watchdog.mts',
     'debug/smoke-compile-failed.mts',
+    'debug/smoke-mobile-layout.mts',
 ];
 
 const argv = process.argv.slice(2);

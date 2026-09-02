@@ -59,6 +59,9 @@ the 768px threshold and watching both stay green. Use them as generic
 no-regression cover only:
 
 ```
+npm run smoke:mobile-layout   # gradient-explorer.html in a Pixel 5 context and a desktop one:
+                              # boot seed of isDeviceMobile/isPortrait, the sticky-vs-fixed shell
+                              # branch, and the resize listener across 768px / orientation
 npm run typecheck
 npm run smoke:boot
 ```
