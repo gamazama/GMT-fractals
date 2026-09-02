@@ -172,6 +172,9 @@ export class WorkerProxy implements AccumulationController {
     get lastMeasuredDistance() { return this._shadow.lastMeasuredDistance; }
     set lastMeasuredDistance(v: number) { this._shadow.lastMeasuredDistance = v; }
     get hasCompiledShader() { return this._shadow.hasCompiledShader; }
+    /** engine-gmt's proxy reports the last compile cycle's error here; the
+     *  stub has no worker and never fails a compile. */
+    get lastCompileFailed(): string | null { return null; }
     get dirty() { return this._shadow.dirty; }
     set dirty(v: boolean) { this._shadow.dirty = v; }
     get isPaused() { return this._shadow.isPaused; }

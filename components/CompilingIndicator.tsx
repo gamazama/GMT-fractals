@@ -19,10 +19,22 @@ import { useCompileProgress, selectProgress } from '../store/CompileProgressStor
  *   - Call `compileGate.flush()` once the spinner DOM has painted, so
  *     the GPU-blocking work runs only after the user sees the spinner
  */
+/** The most useful single line of a GLSL compile log: the first `ERROR:`
+ *  line if there is one, else the first non-empty line, without the
+ *  "Shader compile failed:" prefix the worker bridge adds. */
+function firstErrorLine(error: string | null): string {
+    if (!error) return '';
+    const lines = error.replace(/^Shader compile(?:\/link)? failed:\s*/i, '').split('\n').map(l => l.trim()).filter(Boolean);
+    const err = lines.find(l => /^ERROR:/i.test(l));
+    return (err ?? lines[0] ?? '').slice(0, 160);
+}
+
 export const CompilingIndicator: React.FC = () => {
     const phase = useCompileProgress(s => s.phase);
     const message = useCompileProgress(s => s.message);
     const cycleId = useCompileProgress(s => s.cycleId);
+    const error = useCompileProgress(s => s.error);
+    const dismissFailure = useCompileProgress(s => s.dismissFailure);
 
     // Local UI state — purely view-side.
     const [progress, setProgress] = useState(0);
@@ -83,6 +95,34 @@ export const CompilingIndicator: React.FC = () => {
             });
         }
     }, [cycleId]);
+
+    // A failed compile is persistent and dismissable — it does not fade like
+    // `done`, because the image behind it is now empty frames and the user
+    // needs to know why. Pointer events are re-enabled on the pill only.
+    if (phase === 'failed') {
+        return (
+            <Layer tier="compileProgress" className="inset-0 pointer-events-none">
+                <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-auto" data-compile-failed="">
+                    <div
+                        className="bg-surface/90 backdrop-blur-sm border border-danger/50 px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg max-w-[560px]"
+                        title={error ?? undefined}
+                    >
+                        <span className="text-[9px] font-bold text-danger shrink-0">Shader compile failed</span>
+                        <span className="text-[9px] font-mono text-fg-muted truncate">{firstErrorLine(error)}</span>
+                        <button
+                            type="button"
+                            onClick={dismissFailure}
+                            className="text-[10px] leading-none text-fg-dim hover:text-fg px-1 shrink-0"
+                            title="Dismiss"
+                            aria-label="Dismiss compile error"
+                        >
+                            ×
+                        </button>
+                    </div>
+                </div>
+            </Layer>
+        );
+    }
 
     const isVisible = phase === 'compiling' || phase === 'done';
     const showBar = isVisible && !hiding;

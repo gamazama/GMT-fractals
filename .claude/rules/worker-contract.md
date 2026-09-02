@@ -33,6 +33,8 @@ Decisions: ADRs 0034-0035, 0041-0042, ADR-0045 (bucket render + export).
 ## Guards
 
 ```
+npm run smoke:compile-failed    # boots app-gmt: a failed compile sets proxy.lastCompileFailed
+                                # (ERROR postMessage → COMPILE_FAILED) and a good one clears it
 npm run smoke:export-watchdog   # boots app-gmt: the per-frame export stall watchdog
                                 # (WorkerProxy) and the EXPORT_HEARTBEAT it keys on
                                 # (WorkerExporter), plus one real frame on the live worker

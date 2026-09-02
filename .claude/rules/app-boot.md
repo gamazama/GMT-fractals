@@ -31,6 +31,9 @@ the event entirely.
 
 ```
 npm run smoke:engine-gmt   # app-gmt.html — asserts isBooted + hasCompiledShader + frameCount > 0
+npm run smoke:compile-failed  # app-gmt.html — a broken formula puts CompileProgressStore in
+                              # `failed`, the indicator shows it, proxy.lastCompileFailed is set,
+                              # and a good compile clears both
 npm run smoke:boot         # `/` — index.html serves app-gmt/main.tsx; pageerror/console.error gate only
 ```
 

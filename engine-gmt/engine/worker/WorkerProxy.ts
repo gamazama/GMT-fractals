@@ -64,6 +64,10 @@ export class WorkerProxy implements AccumulationController {
     readonly pipeline: import('../RenderPipeline').RenderPipeline | null = null;
 
     private _worker: Worker | null = null;
+    // Main-thread-only (NOT part of `_shadow`, which FRAME_READY replaces
+    // wholesale): the reason the most recent compile cycle failed, or null.
+    private _lastCompileFailed: string | null = null;
+    private _compileCycleFailed = false;
     private _shadow: WorkerShadowState = {
         isBooted: false, isCompiling: false, hasCompiledShader: false,
         isPaused: false, dirty: false, lastCompileDuration: 0,
@@ -304,6 +308,12 @@ export class WorkerProxy implements AccumulationController {
             case 'COMPILING': {
                 this._shadow.isCompiling = !!msg.status;
                 this._shadow.hasCompiledShader = !msg.status || this._shadow.hasCompiledShader;
+                // `lastCompileFailed` tracks the CYCLE: cleared when a cycle ends
+                // without an ERROR in between (COMPILE_FAILED reaches us before
+                // IS_COMPILING:false on a failed cycle — renderWorker registers
+                // the bridges in that order on purpose).
+                if (msg.status) this._compileCycleFailed = false;
+                else if (!this._compileCycleFailed) this._lastCompileFailed = null;
                 // Compile resets accumulation worker-side (CompileScheduler), but posts
                 // no frame — drop the converged-mirror so the gate keeps requesting ticks
                 // through the whole compile and renders the instant the new shader lands.
@@ -398,8 +408,10 @@ export class WorkerProxy implements AccumulationController {
                     // was only console.error'd; re-emit it on the main bus so UI
                     // such as the "Modify with AI" modal can show the GLSL log
                     // and offer a one-click "copy error for LLM".
+                    this._compileCycleFailed = true;
+                    this._lastCompileFailed = msg.message || 'unknown worker error';
                     FractalEvents.emit(FRACTAL_EVENTS.COMPILE_FAILED, {
-                        reason: msg.message || 'unknown worker error'
+                        reason: this._lastCompileFailed
                     });
                 }
                 break;
@@ -680,6 +692,21 @@ export class WorkerProxy implements AccumulationController {
     get centerIsSky() { return this._shadow.centerIsSky; }
     set centerIsSky(v: boolean) { this._shadow.centerIsSky = v; }
     get hasCompiledShader() { return this._shadow.hasCompiledShader; }
+    /**
+     * The worker's error for the most recent compile cycle, or null after a
+     * cycle that ended clean. `hasCompiledShader` means a compile was ISSUED
+     * (it is set before the link result on purpose — see CompileScheduler);
+     * this is the "did it actually succeed" half, kept separate so the
+     * latch's concurrency role is untouched.
+     *
+     * @invariant Non-null from the worker's ERROR postMessage (post-boot)
+     *   until the next compile cycle ends without one.
+     *   — proven by: npm run smoke:compile-failed ("proxy.lastCompileFailed
+     *   names the broken marker", "proxy.lastCompileFailed is null again
+     *   after a good compile"). Falsified 2026-09-02 by removing the
+     *   assignment in the ERROR case: the first assertion went red.
+     */
+    get lastCompileFailed(): string | null { return this._lastCompileFailed; }
     get dirty() { return this._shadow.dirty; }
     set dirty(v: boolean) { if (v) this.post({ type: 'SET_DIRTY' }); }
     get isPaused() { return this._shadow.isPaused; }

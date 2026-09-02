@@ -57,9 +57,13 @@ export class CompileScheduler {
     /** True while a compile is queued or executing. External
      *  `engine.isCompiling` reads this. */
     isCompiling = false;
-    /** Set after the first successful compile so subsequent compiles
-     *  can `keepCurrent` (keep the existing shader on screen while the
-     *  new one builds asynchronously). */
+    /** Set once a compile has been ISSUED — before the link result, on
+     *  purpose (see the `generation` invariant below) — so subsequent
+     *  compiles can `keepCurrent` (keep the existing shader on screen while
+     *  the new one builds asynchronously). It therefore reads `true` after
+     *  a FAILED compile too. For "did the last compile succeed" read
+     *  `proxy.lastCompileFailed` on the main thread, fed by the
+     *  COMPILE_FAILED event this scheduler emits. */
     hasCompiledShader = false;
     /** Most recent compile duration in seconds. */
     lastDuration = 0;
