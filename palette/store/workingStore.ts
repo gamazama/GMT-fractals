@@ -26,8 +26,13 @@
  * `collectCurrent` call it. Nothing here collects on a mere pick.
  *
  * Undo + Save/Load: `captureWorkingHistory` / `serializeWorkingDocument` (registered by
- * installWorking) snapshot `{ input, name, bakedFrom }`; the palette-row prefs (rule / count
- * / follow) are per-viewer preferences in localStorage and ride neither.
+ * installWorking) snapshot `{ input, name, bakedFrom }`; the palette-row prefs (positions /
+ * last layout rule / follow) are per-viewer preferences in localStorage and ride neither.
+ *
+ * The palette row (owner review 2026-09-03) is an ARRAY OF POSITIONS the user drags along
+ * the ramp: a swatch is a `t`, its colour is whatever the ramp shows there. The rules
+ * (Even / Perceptual / Stops) are layouts applied on demand; `+` inserts at the largest
+ * gap; `×` removes. See palette/core/paletteSample.ts "Positions as STATE".
  *
  * @see docs/adr/0111-working-pipeline-input-slot.md
  *
@@ -64,7 +69,7 @@ import {
   type WorkingInput,
   type WorkingDerivedCore,
 } from '../core/workingPipeline';
-import { samplePalette, clampCount, type PaletteRule, type PaletteSwatch } from '../core/paletteSample';
+import { layoutPositions, swatchesAt, insertAtLargestGap, movePosition, clampCount, PALETTE_MIN, PALETTE_MAX, type PaletteRule, type PaletteSwatch } from '../core/paletteSample';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import type { ChannelTracks } from '../components/ChannelGraphEditor';
 import type { GradientConfig, JsonValue } from '../../types';
@@ -90,9 +95,10 @@ export interface WorkingState {
   /** User-typed name; null = derive it from the input. */
   name: string | null;
   bakedFrom: BakedFrom | null;
-  /** Palette-row prefs (per viewer, not undoable). */
+  /** Palette-row prefs (per viewer, not undoable): the swatch positions along the ramp and
+   *  the last layout rule applied (UI highlight only — positions are the truth). */
+  positions: number[];
   rule: PaletteRule;
-  count: number;
   /** Browse follow mode: Working tracks the Browse candidate live (off by default). */
   follow: boolean;
 
@@ -109,8 +115,16 @@ export interface WorkingState {
   /** Collect the current output into Recent (the shell calls this on leaving Build /
    *  Extract and on export / share / wallpaper). */
   collectCurrent: () => void;
-  setRule: (rule: PaletteRule) => void;
+  /** Re-lay the current number of swatches by a rule (Even / Perceptual / Stops). */
+  layoutPalette: (rule: PaletteRule) => void;
+  /** Re-lay with N swatches under the last rule. */
   setCount: (n: number) => void;
+  /** "+": one more swatch at the midpoint of the largest gap. */
+  addSwatch: () => void;
+  /** "×" on a swatch. Keeps at least PALETTE_MIN. */
+  removeSwatch: (index: number) => void;
+  /** Drag: move one swatch to `t`; returns its index after re-sorting. */
+  moveSwatch: (index: number, t: number) => number;
   setFollow: (on: boolean) => void;
 }
 
@@ -189,23 +203,34 @@ export const deriveWorkingNow = (): WorkingDerivedCore | null => {
 // --- prefs ------------------------------------------------------------------------
 const PREFS_KEY = 'gmt.ge.working.prefs';
 const RULES: PaletteRule[] = ['stops', 'even', 'perceptual'];
-const loadPrefs = (): { rule: PaletteRule; count: number; follow: boolean } => {
-  const d = { rule: 'even' as PaletteRule, count: 6, follow: false };
+const DEFAULT_POSITIONS = [0, 0.2, 0.4, 0.6, 0.8, 1];
+const validPositions = (v: unknown): number[] | null => {
+  if (!Array.isArray(v) || v.length < PALETTE_MIN || v.length > PALETTE_MAX) return null;
+  if (!v.every((x) => typeof x === 'number' && Number.isFinite(x))) return null;
+  return (v as number[]).map((x) => Math.max(0, Math.min(1, x))).sort((a, b) => a - b);
+};
+const loadPrefs = (): { positions: number[]; rule: PaletteRule; follow: boolean } => {
+  const d = { positions: DEFAULT_POSITIONS.slice(), rule: 'even' as PaletteRule, follow: false };
   try {
     const raw = safeLocalGet(PREFS_KEY);
     if (!raw) return d;
     const o = JSON.parse(raw) as Record<string, unknown>;
     return {
+      positions: validPositions(o.positions) ?? d.positions,
       rule: RULES.includes(o.rule as PaletteRule) ? (o.rule as PaletteRule) : d.rule,
-      count: typeof o.count === 'number' ? clampCount(o.count) : d.count,
       follow: o.follow === true,
     };
   } catch {
     return d;
   }
 };
-const savePrefs = (s: Pick<WorkingState, 'rule' | 'count' | 'follow'>): void => {
-  safeLocalSet(PREFS_KEY, JSON.stringify({ rule: s.rule, count: s.count, follow: s.follow }));
+const savePrefs = (s: Pick<WorkingState, 'positions' | 'rule' | 'follow'>): void => {
+  safeLocalSet(PREFS_KEY, JSON.stringify({ positions: s.positions, rule: s.rule, follow: s.follow }));
+};
+/** The ramp + config the layouts sample from right now (empty when nothing is in hand). */
+const layoutSourceNow = (): { ramp: RGB[]; config: GradientConfig | null } => {
+  const d = deriveWorkingNow();
+  return d ? { ramp: d.ramp, config: d.config } : { ramp: [], config: null };
 };
 
 // --- store ------------------------------------------------------------------------
@@ -267,13 +292,32 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     collect(d.config, s.name ?? autoWorkingName(s.input, s.bakedFrom), sourceOf(s.input));
   },
 
-  setRule: (rule) => {
-    set({ rule });
+  layoutPalette: (rule) => {
+    const { ramp, config } = layoutSourceNow();
+    set({ rule, positions: layoutPositions(rule, get().positions.length, ramp, config) });
     savePrefs(get());
   },
   setCount: (n) => {
-    set({ count: clampCount(n) });
+    const { ramp, config } = layoutSourceNow();
+    set({ positions: layoutPositions(get().rule, clampCount(n), ramp, config) });
     savePrefs(get());
+  },
+  addSwatch: () => {
+    if (get().positions.length >= PALETTE_MAX) return;
+    set({ positions: insertAtLargestGap(get().positions) });
+    savePrefs(get());
+  },
+  removeSwatch: (index) => {
+    const p = get().positions;
+    if (p.length <= PALETTE_MIN || index < 0 || index >= p.length) return;
+    set({ positions: p.filter((_, i) => i !== index) });
+    savePrefs(get());
+  },
+  moveSwatch: (index, t) => {
+    const r = movePosition(get().positions, index, t);
+    set({ positions: r.positions });
+    savePrefs(get());
+    return r.index;
   },
   setFollow: (follow) => {
     set({ follow });
@@ -373,8 +417,7 @@ export const useWorkingDerived = (): WorkingDerived => {
   const input = useWorkingStore((s) => s.input);
   const nameState = useWorkingStore((s) => s.name);
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
-  const rule = useWorkingStore((s) => s.rule);
-  const count = useWorkingStore((s) => s.count);
+  const positions = useWorkingStore((s) => s.positions);
   const buildBase = useBuildBase();
   const extracted = useImageDerived();
   const stopsConfig = usePaletteEditorStore((s) => s.config);
@@ -405,7 +448,7 @@ export const useWorkingDerived = (): WorkingDerived => {
     () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim) : null),
     [resolved, params, curves, noiseSeed, detail],
   );
-  const palette = useMemo(() => (core ? samplePalette(core.ramp, rule, count, core.config) : []), [core, rule, count]);
+  const palette = useMemo(() => (core ? swatchesAt(core.ramp, positions) : []), [core, positions]);
   const name = useMemo(
     () => nameState ?? autoWorkingName(input, bakedFrom),
     // slotA / slotB / genMode only feed the `build` auto-name; listed so it stays fresh.

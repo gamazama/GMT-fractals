@@ -28,12 +28,16 @@ import { PickerThemeChips, PickerBundleToggles } from '../../palette/components/
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { AnchoredMenu } from '../../components/ui';
 
+// No "hand" entry: the rest state (pick on click, right-drag pans) is implicit and never
+// highlighted — a highlighted default read as a stuck mode (owner review 2026-09-03).
+// Clicking the active tool again returns to the rest state.
 const TOOLS = [
-  { id: null, glyph: '✋', label: 'Hand', title: 'Pan and zoom — right-drag pans, middle-drag zooms' },
+  { id: 'zoom', glyph: '🔍', label: 'Zoom', title: 'Zoom — drag to zoom around the grab point · right-drag pans · Fit resets' },
   { id: 'rect', glyph: '▭', label: 'Box', title: 'Box select, then keep or cut' },
   { id: 'lasso', glyph: '◌', label: 'Lasso', title: 'Draw a free shape, then keep or cut' },
   { id: 'paint', glyph: '✎', label: 'Paint', title: 'Paint over the ones you want — [ ] resize' },
 ] as const;
+type ToolId = (typeof TOOLS)[number]['id'];
 
 /** Faint dotted ground behind the swatches, so the wall reads as a canvas, not a list. */
 const GROUND: React.CSSProperties = {
@@ -48,6 +52,22 @@ export const BrowseStage: React.FC = () => {
   /** Viewport anchor for the popover (the button's bottom-left), or null = closed. */
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const [arrangeOpen, setArrangeOpen] = useState(false);
+  // The zoom tool is not a selection tool (it never carves), so it lives here; the two are
+  // mutually exclusive — picking either clears the other.
+  const [zoomTool, setZoomTool] = useState(false);
+  const activeTool: ToolId | null = zoomTool ? 'zoom' : (m.tool as ToolId | null);
+  const pickTool = useCallback(
+    (id: ToolId) => {
+      if (id === 'zoom') {
+        m.setTool(null);
+        setZoomTool((z) => !z);
+        return;
+      }
+      setZoomTool(false);
+      m.setTool(m.tool === id ? null : id);
+    },
+    [m],
+  );
   const btnRef = useRef<HTMLButtonElement>(null);
   const closeFilters = useCallback(() => setAnchor(null), []);
 
@@ -194,7 +214,7 @@ export const BrowseStage: React.FC = () => {
         ref={m.wallHostRef}
         data-gx-keepselect=""
         style={GROUND}
-        className={`flex-1 min-h-0 relative border-t border-line/10 ${m.tool ? '' : 'cursor-grab'}`}
+        className={`flex-1 min-h-0 relative border-t border-line/10 ${zoomTool && !m.tool ? 'cursor-zoom-in' : ''}`}
       >
         {!m.loaded ? (
           <div className="h-full flex items-center justify-center text-[13px] text-fg-faint">Loading gradient library…</div>
@@ -210,6 +230,7 @@ export const BrowseStage: React.FC = () => {
             gap={m.gap}
             onZoomChange={m.onZoomChange}
             resetZoomSignal={m.resetZoomSignal}
+            zoomTool={zoomTool && !m.tool}
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}
@@ -238,11 +259,11 @@ export const BrowseStage: React.FC = () => {
         {/* floating tool palette */}
         <div ref={m.toolbarRef} className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${pill}`}>
           {TOOLS.map((t) => {
-            const on = m.tool === t.id;
+            const on = activeTool === t.id;
             return (
               <button
                 key={t.label}
-                onClick={() => m.setTool(t.id)}
+                onClick={() => pickTool(t.id)}
                 title={t.title}
                 aria-label={t.label}
                 aria-pressed={on}
@@ -254,6 +275,12 @@ export const BrowseStage: React.FC = () => {
           })}
         </div>
 
+        {/* one-line caption while the zoom tool is active */}
+        {zoomTool && !m.tool && (
+          <div className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${pill}`}>
+            drag to zoom · right-drag pans · Fit resets · click the tool again to stop
+          </div>
+        )}
         {/* one-line caption, only while a carve tool is active */}
         {m.tool && (
           <div className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${pill}`}>

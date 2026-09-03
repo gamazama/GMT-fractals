@@ -122,3 +122,51 @@ export const rampDistance = (a: RGB[], b: RGB[], samples = 16): number => {
   }
   return d;
 };
+
+// ── Positions as STATE (owner review 2026-09-03) ───────────────────────────────────────
+// The v2 hero keeps the palette as an array of sample positions the user can drag along
+// the ramp; the rules above are LAYOUTS that produce such an array, not modes. A swatch is
+// therefore a position, and its colour is whatever the ramp shows there right now.
+
+/** Positions of a rule layout (the `t` of each swatch), for N swatches. */
+export const layoutPositions = (rule: PaletteRule, n: number, ramp: RGB[], config?: GradientConfig | null): number[] =>
+  samplePalette(ramp.length ? ramp : [{ r: 0, g: 0, b: 0 }], rule, n, config).map((s) => s.t);
+
+/** Colour every position off the ramp (nearest texel). */
+export const swatchesAt = (ramp: RGB[], positions: readonly number[]): PaletteSwatch[] => {
+  if (!ramp.length) return [];
+  const last = ramp.length - 1;
+  return positions.map((t) => {
+    const c = Math.max(0, Math.min(1, t));
+    return { t: c, color: ramp[Math.round(c * last)] };
+  });
+};
+
+/** Insert one position at the midpoint of the largest gap (ends included), so "+" always
+ *  lands where the palette is thinnest. Returns a new sorted array; the input is untouched. */
+export const insertAtLargestGap = (positions: readonly number[]): number[] => {
+  const sorted = positions.map((t) => Math.max(0, Math.min(1, t))).sort((a, b) => a - b);
+  if (sorted.length === 0) return [0.5];
+  // Gaps: [0, first], between neighbours, [last, 1].
+  let bestStart = 0;
+  let bestEnd = sorted[0];
+  let best = sorted[0] - 0;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const g = sorted[i + 1] - sorted[i];
+    if (g > best) { best = g; bestStart = sorted[i]; bestEnd = sorted[i + 1]; }
+  }
+  if (1 - sorted[sorted.length - 1] > best) { bestStart = sorted[sorted.length - 1]; bestEnd = 1; }
+  const out = sorted.slice();
+  out.push((bestStart + bestEnd) / 2);
+  return out.sort((a, b) => a - b);
+};
+
+/** Move one position, keeping the array sorted; returns the new array and the moved index. */
+export const movePosition = (positions: readonly number[], index: number, t: number): { positions: number[]; index: number } => {
+  const c = Math.max(0, Math.min(1, t));
+  const out = positions.slice();
+  if (index < 0 || index >= out.length) return { positions: out, index };
+  out[index] = c;
+  const order = out.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
+  return { positions: order.map(([v]) => v), index: order.findIndex(([, i]) => i === index) };
+};

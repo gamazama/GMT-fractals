@@ -94,13 +94,17 @@ shows the blend live. Same mechanism arms slot A, or the palette row ("add colou
 
 ## 5. Surfaces
 
-### 5.1 Working hero (top, every screen)
-- Ramp (~56 px) with **stop handles** beneath — the shared `AdvancedGradientEditor` handle layer;
-  its per-stop inspector (colour, position, bias, interpolation) lives in the edit drawer (§6b), not over
-  the strip.
-- **Palette row** beneath: N swatches with hex, derived by a rule — **Stops** (one per stop),
-  **Even N**, **Perceptual N** (equal OKLab arc length). A count control sets N. Grabbing a swatch
-  converts it into a real stop (palette is a view until touched, authoring after).
+### 5.1 Working hero (top, every screen) — REVISED 2026-09-03 after the owner review
+- **The stops editor IS the hero.** The hero ramp is the shared `AdvancedGradientEditor` strip
+  itself — draggable stop handles, add / delete, per-stop colour — always editable. The first edit
+  on a live or picked input is the bake (§2). There is no second editor anywhere.
+- **The palette row sits ON TOP of the ramp.** N swatches; each is a sample position `t` on the
+  ramp and is **draggable left/right** (dragging changes which colour it shows). **+** adds a
+  swatch, **×** on a swatch removes it; no numeric count. Rules (Even / Perceptual / Stops) are
+  starting layouts; a drag makes the layout custom. Click copies hex.
+- **Curves and Adjust integrate into the hero block**, as expanders under the ramp on the same
+  surface (not a separate tabbed drawer). Adjust uses the standard GMT sliders.
+- Chips/toggles: name (editable) · Live/Edited · Follow · Mix with · ★.
 - Chips/toggles: name (editable) · Live/Baked · Follow · **Shape** · **Adjust** · Mix with · ★.
 - The palette face is the "global palette mode": every gradient in the app exposes the same row
   (Recent/Kept items on hover, candidates always).
@@ -264,6 +268,8 @@ Mock A showed the whole pipeline on every screen: seven persistent regions, two 
 Regions on screen after the first Use, desktop 1280x800: top bar 48, hero 248 including the preview row (about 170 without it), source row 57, wall 400 (50 %), My Gradients row 47. On the phone the same stack fits in 390x800 with no horizontal overflow and the source tabs move to the bottom.
 - 2026-09-03 — mock A (every surface at once) rejected as complex and squished; mock B (one thing at a time, one hero with a preview state, edit drawer, Filters popover, silent My Gradients row) APPROVED as the layout reference. No right panel in v2.
 - 2026-09-03 — Phase 2 runs one stream at a time (owner), S1 Browse first.
+- 2026-09-03 — S1 Browse committed (`a8f6e12c`); S2 hero built on the revised §5.1 (editor-as-hero, palette on top, expanders) + the two Browse follow-ups.
+- 2026-09-03 — Owner review of Phase 1 + S1 (the direction for S2 and the S1 follow-up): (a) the STOPS EDITOR IS THE HERO — the hero ramp is the editable stops strip itself, not a display strip with a second editor in a drawer; Stops & palette / Curves / Adjust integrate INTO the hero block rather than a separate tabbed drawer; (b) the PALETTE ROW SITS ON TOP of the ramp, its swatches are draggable left/right along the ramp (a swatch is a sample position; dragging it changes its colour), and the count is set with + and x icons, never a numeric field; (c) Adjust "looks quite good" but should use the standard GMT sliders (not the dense variant); (d) Browse canvas: a ZOOM tool is missing from the tool palette, and the Hand tool reads as stuck on and conflicts with picking (no highlighted default; pointer cursor for picking, grab only while panning).
 - 2026-09-03 — Phase 1 foundation built on `ge-v2` (§11): one Working pipeline (ADR-0111), Recent auto-collect, variants that bypass loadPreset (ADR-0112), the v2 shell as `gradient-explorer-next.html`. Guards: `test:palette` (21 links) + `smoke:ge-next`.
 
 ## 11. Frozen interfaces (Phase 1, 2026-09-03) — streams code against THESE
@@ -288,4 +294,11 @@ Everything below exists on branch `ge-v2`, typechecks, and has a node harness wh
 **f. Variants — `palette/store/variantsStore.ts` + `palette/core/variantsCore.ts` + `palette/core/rampTween.ts` (ADR-0112).** `useVariantsStore { variants, activeId, capture(name?, ramp?) -> Variant, restore(id), update(id, ramp?), rename(id, name), remove(id), duplicate(id) }`, `getVariants()`. `Variant = { id, name, createdAt, features: Record<string,unknown>, documents: Record<string,JsonValue> (never `favients`), ramp: number[] | null (256×3 ints) }`. Core: `VARIANT_FEATURES = ['paletteGenerator','paletteImage','paletteFilters']`, `VARIANTS_STORAGE_KEY = 'gmt.ge.variants'`, `MAX_VARIANTS = 12`, `deepClone`, `stripFavients`, `nextVariantName`, `capVariants`, `roundRamp` / `rampFromInts`, `isWellFormedVariant`, `parseVariants` / `serializeVariants`, `featureSetterName`. `tweenRamp(a, b, t) -> RGB[]` (OKLab per texel; t clamped; b resampled by t). Guards: `npx tsx debug/test-palette-variants.mts` (63 assertions incl. "a whole switch is exactly one param-undo entry", falsified by dropping the favients strip: 5 red) and `npx tsx debug/test-palette-tween.mts`. UI: `gradient-explorer/v2/VariantsMenu.tsx` (click = switch, shift-click = tween slider previewing through a plain setState, Bake = `use`).
 **Known gaps (carried in the store header):** a variant does not carry the shell's active SOURCE tab, so switching to a variant captured in Browse while standing in Build restores the working gradient but leaves the Build stage on screen (add `source` to the snapshot in Phase 2 if it bites); `restoreImageDocument` is async, so an image-carrying variant lands its image one decode late and OUTSIDE the switch's undo entry; localStorage quota failures on image-heavy variants are silent; the DDFS setter merges rather than replaces, so a param added after a capture keeps its current value on restore.
 
-**What the skeleton deliberately leaves to the streams:** the per-mode heroes still rendered inside PickerStage / GeneratorStage / ImageStage (S1, S3); Browse search + Filters popover (S1); the channel graph editor in the Curves tab and the per-stop inspector (S2); Modify/Noise `dynamicVisible: isMixed` hides Adjust while the Build recipe is ColorBox (S3); keyframe diamonds still render on AutoFeaturePanel sliders (S3/S5 decide: a panel prop or a shell-level flag); the drawer + preview row squeeze the stage on short windows (S2/S6); armed slot B for Mix with (S3); Export / Share / Variants UI (S5 / foundation); phone layout (S6).
+**g. S2 — the hero IS the stops editor (2026-09-03, after the owner review).**
+- `components/AdvancedGradientEditor.tsx` gained two ADDITIVE props: `chrome?: 'full' | 'strip'` (strip = no header row; the blend/output-space indicators and the clipboard menu move onto the inspector's first line; the inspector is always reachable; no host entrance) and `stripHeight?: number` (default 32). Every existing host still renders `full`.
+- `gradient-explorer/v2/WorkingHero.tsx`: name row (name · state chip · Follow · Mix with · ★ · Curves ▾ · Adjust ▾) → `PaletteRow` ON TOP → the editor in strip chrome as the ramp (60 px) → the candidate preview row → the expander (Curves = `ChannelGraphEditor` over the working base with the prospective-fit ghost; Adjust = the Modify + Noise groups through `AutoFeaturePanel`, default variant = the standard GMT sliders). The drawer is gone.
+- Editor wiring: the editor shows `derived.config` until the input is the stops document; `onEditStart` / `edit` / `onChange` call `beginEdit()` first (the bake), then the (d) seam. A bare knot click therefore bakes too — accepted: "touching the stops makes them yours", and the chip offers return to source.
+- **Palette positions as state** (`palette/core/paletteSample.ts` "Positions as STATE"): `layoutPositions(rule, n, ramp, config?)`, `swatchesAt(ramp, positions)`, `insertAtLargestGap(positions)`, `movePosition(positions, i, t)`. Store: `positions: number[]`, `rule` (last layout, UI only), actions `layoutPalette(rule)` · `setCount(n)` · `addSwatch()` · `removeSwatch(i)` · `moveSwatch(i, t) -> index`; prefs key unchanged. `gradient-explorer/v2/PaletteRow.tsx`: drag scrubs a swatch along the ramp (clamped to its neighbours; a marker shows on the ramp), click copies hex, `+` inserts at the largest gap, `×` on hover removes, Even / Perceptual / Stops are layout buttons.
+- Browse follow-ups: `PickerWall` gained the additive `zoomTool?: boolean` prop (left-drag runs the middle-drag zoom gesture); the tool palette is Zoom · Box · Lasso · Paint with NO highlighted rest state (clicking the active tool returns to rest), pointer cursor for picking, `cursor-zoom-in` only with the zoom tool.
+
+**What the skeleton deliberately leaves to the streams:** the per-mode heroes still rendered inside PickerStage / GeneratorStage / ImageStage (S1, S3); Browse search + Filters popover (S1); (S2 done: the hero is the editor, curves + inspector inside it); Modify/Noise `dynamicVisible: isMixed` hides Adjust while the Build recipe is ColorBox (S3); keyframe diamonds still render on AutoFeaturePanel sliders (S3/S5 decide: a panel prop or a shell-level flag); the drawer + preview row squeeze the stage on short windows (S2/S6); armed slot B for Mix with (S3); Export / Share / Variants UI (S5 / foundation); phone layout (S6).

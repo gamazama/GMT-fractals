@@ -75,6 +75,19 @@ interface AdvancedGradientEditorProps {
      *  header entrance so its Favients button can resolve the matching send target. */
     featureId?: string;
     paramKey?: string;
+    /**
+     * Chrome (additive, 2026-09-03, Gradient Explorer v2 hero — plans/ge-v2-design.md §5.1):
+     *   'full'  (default) — the header row (expand toggle, blend/output space indicators, the
+     *            host entrance, the clipboard menu) above the strip; the inspector collapses
+     *            behind the toggle. Every existing host renders this.
+     *   'strip' — NO header row: the strip + knot track are the whole top edge, the inspector
+     *            is always available below (it shows when a knot is selected), and the
+     *            blend/output-space indicators + the clipboard menu move onto the inspector's
+     *            first line. The host entrance is not rendered (the v2 hero has its own star).
+     */
+    chrome?: 'full' | 'strip';
+    /** Height of the colour strip in px (default 32, the panel size). The v2 hero uses ~60. */
+    stripHeight?: number;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -99,7 +112,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey }) => {
+const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32 }) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -183,7 +196,9 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
     useEffect(() => { knotsRef.current = knots; }, [knots]);
 
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [isExpandedState, setIsExpanded] = useState(true);
+    // Strip chrome has no toggle: the inspector is always reachable.
+    const isExpanded = chrome === 'strip' ? true : isExpandedState;
     const [isBiasHandlesVisible, setIsBiasHandlesVisible] = useState(true);
     
     const dragPayloadRef = useRef<DragPayload | null>(null);
@@ -613,6 +628,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 }
             }}
         >
+            {chrome === 'full' && (
             <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
                     <div
@@ -655,21 +671,22 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     >
                         <MenuIcon />
                     </button>
-
-                    {presetMenu && (
-                        <PresetMenu
-                            x={presetMenu.x}
-                            y={presetMenu.y}
-                            onClose={() => setPresetMenu(null)}
-                            options={buildMenuItems()}
-                        />
-                    )}
                 </div>
             </div>
+            )}
+            {presetMenu && (
+                <PresetMenu
+                    x={presetMenu.x}
+                    y={presetMenu.y}
+                    onClose={() => setPresetMenu(null)}
+                    options={buildMenuItems()}
+                />
+            )}
 
             <div className="relative px-2" onContextMenu={openTrackContextMenu}>
                 <div
-                    className="h-8 w-full rounded-t border border-line/20 relative mb-0 cursor-pointer overflow-hidden"
+                    className="w-full rounded-t border border-line/20 relative mb-0 cursor-pointer overflow-hidden"
+                    style={{ height: stripHeight }}
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
                     title="Double-click to select all"
                 >
@@ -805,6 +822,26 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
             {isExpanded && (
                 <div className="flex flex-col gradient-interactive-element overflow-hidden">
+                    {chrome === 'strip' && (
+                        <div className="flex items-center gap-3 mt-1.5 px-2 text-[10px] text-fg-dim">
+                            <span>blend</span>
+                            <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleBlendSpace} title="Blend space (RGB → HSV → HSV Far → Oklab)">
+                                {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
+                            </button>
+                            <span>output</span>
+                            <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleColorSpace} title="Output colour profile">
+                                {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
+                            </button>
+                            <span className="flex-1" />
+                            <button
+                                className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
+                                onClick={handlePresetsClick}
+                                title="Stops menu — copy, paste, reverse, distribute…"
+                            >
+                                <MenuIcon />
+                            </button>
+                        </div>
+                    )}
                     {selectedNodes.length > 0 ? (
                         <>
                              <div className="mb-px mt-2">

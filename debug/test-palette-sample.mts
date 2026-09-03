@@ -18,6 +18,10 @@ import {
   sampleAtStops,
   rampDistance,
   clampCount,
+  layoutPositions,
+  swatchesAt,
+  insertAtLargestGap,
+  movePosition,
   PALETTE_MIN,
   PALETTE_MAX,
 } from '../palette/core/paletteSample';

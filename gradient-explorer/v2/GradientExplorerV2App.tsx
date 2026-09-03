@@ -1,10 +1,10 @@
 /**
  * GradientExplorerV2App — the streamlined shell (plans/ge-v2-design.md §6b, mock B).
  *
- * Top to bottom: a six-item top bar · the Working hero (hidden until the first pick) ·
- * the edit drawer (opens from the hero) · the stage with three source tabs · the silent
- * My Gradients row (hidden until Recent has something). No Dock, no side panel, no
- * timeline, no scene name.
+ * Top to bottom: a six-item top bar · the Working hero (hidden until the first pick; it IS
+ * the stops editor, with the palette row on top and Curves / Adjust expanders inside it) ·
+ * the stage with three source tabs · the silent My Gradients row (hidden until Recent has
+ * something). No Dock, no side panel, no drawer, no timeline, no scene name.
  *
  * Source switching is where the pipeline rules live (§2):
  *   • entering Build / Extract sets the working INPUT to that live source;
@@ -36,7 +36,6 @@ import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName }
 import { useGeneratorStore } from '../../palette/store/generatorStore';
 import { useFavientsStore } from '../../palette/store/favientsStore';
 import { WorkingHero } from './WorkingHero';
-import { EditDrawer, type DrawerTab } from './EditDrawer';
 import { VariantsMenu } from './VariantsMenu';
 
 export type SourceId = 'browse' | 'build' | 'extract';
@@ -55,7 +54,6 @@ const workingNameNow = (): string => {
 
 export const GradientExplorerV2App: React.FC = () => {
   const [source, setSourceState] = useState<SourceId>('browse');
-  const [drawer, setDrawer] = useState<DrawerTab | null>(null);
   const [mineOpen, setMineOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   const derived = useWorkingDerived();
@@ -96,11 +94,10 @@ export const GradientExplorerV2App: React.FC = () => {
       if (e.key !== 'Escape') return;
       if (variantsOpen) setVariantsOpen(false);
       else if (candidate) deselectActiveHero();
-      else if (drawer) setDrawer(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [candidate, drawer, variantsOpen]);
+  }, [candidate, variantsOpen]);
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
@@ -130,8 +127,7 @@ export const GradientExplorerV2App: React.FC = () => {
         <SettingsButton />
       </header>
 
-      <WorkingHero derived={derived} candidate={candidate} source={source} onEdit={() => setDrawer('stops')} onMixWith={mixWith} />
-      {drawer && !derived.empty && <EditDrawer tab={drawer} onTab={setDrawer} onClose={() => setDrawer(null)} derived={derived} />}
+      <WorkingHero derived={derived} candidate={candidate} source={source} onMixWith={mixWith} />
 
       {/* stage */}
       <div className="flex-1 min-h-0 flex flex-col relative">

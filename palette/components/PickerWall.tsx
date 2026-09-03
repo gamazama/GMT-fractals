@@ -105,6 +105,11 @@ export interface PickerWallProps {
   resetZoomSignal?: number;
   /** Active spatial-selection tool (null = normal pick/drag interaction). */
   selectionTool?: SelectionTool | null;
+  /** Zoom tool (additive, 2026-09-03, Gradient Explorer v2 Browse): while true and no
+   *  selection tool is active, a LEFT-drag runs the same zoom gesture middle-drag runs.
+   *  Nothing else changes — picks still need a click without movement, and middle/right
+   *  keep their meanings. Default false (every existing host). */
+  zoomTool?: boolean;
   /** Carve committed: the INSIDE id-set + whether to isolate (keep inside) or cut (drop inside). */
   onSelectionCommit?: (insideIds: string[], op: 'isolate' | 'cut') => void;
   /** User cancelled (right-click / Esc-equivalent) — the host should deselect the tool. */
@@ -460,6 +465,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onZoomChange,
   resetZoomSignal,
   selectionTool = null,
+  zoomTool = false,
   onSelectionCommit,
   onSelectionCancel,
   onDeselect,
@@ -862,17 +868,19 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       }
       return;
     }
-    if (e.button !== 1 && e.button !== 2) return; // 1 = middle (zoom), 2 = right (pan)
+    // The zoom tool makes a left-drag a zoom gesture (same path as middle-drag).
+    const button = zoomTool && !selectionTool && e.button === 0 ? 1 : e.button;
+    if (button !== 1 && button !== 2) return; // 1 = middle (zoom), 2 = right (pan)
     const el = scrollRef.current;
     if (!el) return;
     e.preventDefault();
     // Zoom moves the wall out from under the viewport-pinned carve coords → cancel it
     // (keep the tool active so the user can re-draw at the new zoom).
-    if (e.button === 1 && (sel.current.active || sel.current.phase !== 'idle')) clearSelectionState();
+    if (button === 1 && (sel.current.active || sel.current.phase !== 'idle')) clearSelectionState();
     commit.current = null;
     dragging.current = true;
     setHover(null);
-    if (e.button === 2) {
+    if (button === 2) {
       drag.current = { mode: 'pan', sx: e.clientX, sy: e.clientY, scrollLeft: el.scrollLeft, scrollTop: el.scrollTop };
       el.style.cursor = 'grabbing';
     } else {
