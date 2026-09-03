@@ -41,9 +41,16 @@
  *     - the spectrum canvas rasterised on the GPU 30×/s; it is CPU-raster
  *       now (willReadFrequently) and draws only while on screen.
  *     - the deck status poll re-rendered its row 10×/s on identical data.
- *   `b3e8b321` had already cut the spectrum redraw to 30Hz. Not yet measured
- *   on the owner's GPU; the remaining suspect if it persists is the pointer
- *   pre-pick readback (Navigation.tsx) compounding with the above.
+ *   `b3e8b321` had already cut the spectrum redraw to 30Hz.
+ *   OWNER VERDICT 2026-09-02, after testing: enabling audio still drops the
+ *   GPU consistently. The mitigations above are not the whole story, and
+ *   reasoning from the source has run out: the only honest next step is real
+ *   profiling on the owner's machine — Chrome DevTools' Performance panel
+ *   with the GPU track, or a purpose-built probe beyond `?perf` (which sees
+ *   the main thread and the worker's delivered frames, not GPU time).
+ *   Remaining suspects for that session: the pointer pre-pick readback
+ *   (Navigation.tsx), the worklet→main message traffic, and whatever the
+ *   compositor does with the audio panel while it repaints.
  *   Reproduce: connectSystemAudio, focus GMT, watch the fps counter; switch
  *   focus to another window and watch it recover. A fair test uses the
  *   mic path with a virtual audio device as the control: same analysis,
