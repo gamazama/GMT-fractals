@@ -1,0 +1,796 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gradient Explorer v2 — layout mock</title>
+<style>
+  :root {
+    --bg: #0b0d10; --dock: #12151a; --section: #181c22; --line: rgba(255,255,255,.08);
+    --fg: #d8dce2; --muted: #8d95a1; --dim: #5d6572; --accent: #4fd1e6; --accent-dim: rgba(79,209,230,.18);
+    --star: #f5c542; --danger: #e5646c;
+    --rail-w: 64px; --panel-w: 280px; --strip-h: 92px; --topbar-h: 44px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--fg); font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input[type=range] { accent-color: var(--accent); }
+  .frame { position: relative; width: 100%; height: 100vh; background: var(--bg); display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--topbar-h) auto 1fr var(--strip-h); overflow: hidden; }
+  .frame > * { min-width: 0; }
+
+  /* ── top bar ─────────────────────────────────────────────── */
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 0 12px; min-width: 0; overflow: hidden; background: var(--dock); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 700; letter-spacing: .02em; }
+  .brand span { color: var(--muted); font-weight: 500; margin-left: 6px; }
+  .variants { display: flex; align-items: center; gap: 6px; margin-left: 10px; }
+  .variants .lbl { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+  .vslot { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); font-weight: 600; }
+  .vslot.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .vslot.second { border-color: #b78cff; color: #b78cff; background: rgba(183,140,255,.15); }
+  .tween { display: none; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .tween.on { display: flex; }
+  .tween input { width: 110px; }
+  .spacer { flex: 1; }
+  .tb-btn { height: 28px; padding: 0 10px; border-radius: 6px; color: var(--muted); border: 1px solid transparent; }
+  .tb-btn:hover { background: rgba(255,255,255,.06); color: var(--fg); }
+  .tb-btn.primary { border-color: var(--line); color: var(--fg); }
+  .icon { width: 28px; padding: 0; text-align: center; }
+
+  /* ── working hero ─────────────────────────────────────────── */
+  .hero { padding: 8px 16px 6px; background: var(--dock); border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 0 16px; }
+  .hero-top { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .hero-top .name { font-weight: 600; background: transparent; border: 0; color: var(--fg); font-size: 14px; min-width: 120px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 11px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.live { color: #7fe3a1; border-color: rgba(127,227,161,.4); }
+  .chip.baked { color: #f3b562; border-color: rgba(243,181,98,.4); }
+  .chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+  .chip.star.on { color: var(--star); border-color: var(--star); background: rgba(245,197,66,.14); }
+  .ramp-wrap { position: relative; }
+  .ramp { height: 56px; border-radius: 6px; border: 1px solid var(--line); cursor: grab; }
+  .stops { position: relative; height: 16px; }
+  .stop { position: absolute; top: 2px; width: 12px; height: 12px; transform: translateX(-50%) rotate(45deg); border: 2px solid #fff; border-radius: 2px; box-shadow: 0 0 0 1px #000; cursor: ew-resize; }
+  .stop.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+  .palette { display: flex; gap: 4px; height: 40px; }
+  .sw { flex: 1; border-radius: 4px; position: relative; cursor: pointer; border: 1px solid rgba(0,0,0,.4); }
+  .sw span { position: absolute; left: 4px; bottom: 3px; font: 600 10px/1 ui-monospace, monospace; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; letter-spacing: .02em; }
+  .sw:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hero-side { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-width: 210px; }
+  .row { display: flex; align-items: center; gap: 6px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { padding: 3px 9px; font-size: 11px; color: var(--muted); }
+  .seg button.on { background: var(--accent-dim); color: var(--accent); }
+  .num { width: 46px; height: 24px; background: var(--section); border: 1px solid var(--line); border-radius: 5px; color: var(--fg); text-align: center; }
+  .btn { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); color: var(--fg); font-size: 12px; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.acc { background: var(--accent); color: #062126; border-color: var(--accent); font-weight: 600; }
+  .btn.acc:hover { filter: brightness(1.1); color: #062126; }
+
+  /* ── body ─────────────────────────────────────────────────── */
+  .body { display: grid; grid-template-columns: var(--rail-w) 1fr var(--panel-w); min-height: 0; }
+  .body.panel-closed { grid-template-columns: var(--rail-w) 1fr 0; }
+  .rail { background: var(--dock); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: stretch; padding-top: 6px; }
+  .rail button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; font-size: 11px; color: var(--muted); border-left: 2px solid transparent; }
+  .rail button .ic { font-size: 18px; line-height: 1; }
+  .rail button.on { color: var(--accent); border-left-color: var(--accent); background: rgba(79,209,230,.06); }
+  .stage { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .src { display: none; flex-direction: column; min-height: 0; flex: 1; }
+  .src.on { display: flex; }
+
+  /* candidate strip (every source) */
+  .cand { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 8px 16px 6px; border-bottom: 1px solid var(--line); align-items: center; }
+  .cand .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin-bottom: 4px; display: flex; gap: 8px; align-items: baseline; }
+  .cand .lbl b { color: var(--fg); text-transform: none; letter-spacing: 0; font-size: 13px; }
+  .cand .cramp { height: 36px; border-radius: 6px; border: 1px solid var(--line); cursor: grab; }
+  .cand .cramp.empty { border-style: dashed; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 12px; }
+  .cand .acts { display: flex; gap: 6px; align-items: center; }
+  .cpal { display: flex; gap: 3px; height: 12px; margin-top: 3px; }
+  .cpal i { flex: 1; border-radius: 2px; }
+
+  /* narrowing bar */
+  .narrow { display: flex; align-items: center; gap: 8px; padding: 5px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; background: var(--section); }
+  .search { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--dock); min-width: 170px; }
+  .search input { background: transparent; border: 0; color: var(--fg); outline: 0; width: 140px; }
+  .hues { display: flex; gap: 4px; }
+  .hue { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; }
+  .hue.on { border-color: #fff; }
+  .look { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+  .look input { width: 62px; }
+  .srcs { display: flex; gap: 4px; }
+  .srcchip { height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+  .srcchip.on { color: var(--fg); border-color: rgba(255,255,255,.3); }
+  .srcchip.lazy { border-style: dashed; }
+  .count { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  .count b { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .count a { color: var(--accent); cursor: pointer; }
+
+  /* the wall as a canvas */
+  .wallwrap { position: relative; flex: 1; min-height: 0; overflow: auto; background:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 14px 14px, #0e1014; cursor: grab; }
+  .wall { padding: 10px 16px 16px 84px; }
+  .band { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; position: relative; }
+  .band::before { content: attr(data-label); position: absolute; left: -72px; top: 0; width: 64px; text-align: right; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .tile { width: 36px; height: 20px; border-radius: 2px; cursor: pointer; }
+  .tile:hover { outline: 2px solid #fff; outline-offset: 0; }
+  .tile.sel { outline: 2px solid var(--accent); }
+  .tile.dim { opacity: .12; }
+  .tools { position: absolute; top: 10px; right: 14px; display: flex; flex-direction: column; gap: 4px; background: rgba(18,21,26,.92); border: 1px solid var(--line); border-radius: 8px; padding: 4px; backdrop-filter: blur(6px); }
+  .tools button { width: 30px; height: 30px; border-radius: 6px; color: var(--muted); font-size: 14px; }
+  .tools button.on { background: var(--accent-dim); color: var(--accent); }
+  .zoom { position: absolute; bottom: 10px; right: 14px; display: flex; gap: 6px; align-items: center; background: rgba(18,21,26,.92); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .zoom a { color: var(--accent); cursor: pointer; }
+  .caption { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: rgba(18,21,26,.92); border: 1px solid var(--line); border-radius: 14px; padding: 4px 12px; font-size: 12px; color: var(--muted); display: none; }
+  .caption.on { display: block; }
+  .armed { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: #2a1d4d; border: 1px solid #b78cff; color: #d9c6ff; border-radius: 14px; padding: 4px 12px; font-size: 12px; display: none; z-index: 2; }
+  .armed.on { display: block; }
+  .arrange { font-size: 11px; color: var(--muted); }
+  .arrange a { color: var(--fg); border-bottom: 1px dotted var(--dim); cursor: pointer; }
+
+  /* build */
+  .buildbody { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; }
+  .recipes { display: flex; gap: 4px; margin-bottom: 14px; }
+  .recipes button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .recipes button.on { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+  .slots { display: grid; grid-template-columns: 1fr 150px; gap: 10px 16px; align-items: center; max-width: 820px; }
+  .slot { }
+  .slot .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .slot .lbl b { color: var(--fg); text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .slot .sramp { height: 44px; border-radius: 6px; border: 1px solid var(--line); cursor: grab; }
+  .slot .sramp.armed { border: 2px dashed #b78cff; display: flex; align-items: center; justify-content: center; color: #d9c6ff; font-size: 12px; background: rgba(183,140,255,.08); }
+  .blend { grid-row: 1 / span 3; grid-column: 2; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; }
+  .blend .lbl { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .blend .sl { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); width: 100%; }
+  .blend .sl input { flex: 1; }
+  .blend .sl span { width: 12px; text-align: center; color: var(--fg); font-weight: 600; }
+  .swaprow { grid-column: 1; display: flex; gap: 8px; justify-content: center; }
+  .feeding { font-size: 11px; color: #7fe3a1; display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+
+  /* extract */
+  .exbody { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .photo { aspect-ratio: 4 / 3; border-radius: 8px; border: 1px solid var(--line); position: relative; overflow: hidden;
+    background: radial-gradient(circle at 30% 30%, #f8b26a 0, #d15a3a 30%, transparent 55%), radial-gradient(circle at 75% 60%, #2c5f9e 0, #172a4b 40%, transparent 70%), linear-gradient(180deg, #6b2a4d, #101a2e); }
+  .photo .path { position: absolute; left: 20%; top: 70%; width: 60%; height: 2px; background: #fff; transform: rotate(-24deg); transform-origin: left; }
+  .photo .h { position: absolute; width: 14px; height: 14px; border: 2px solid #fff; border-radius: 50%; background: rgba(0,0,0,.5); }
+  .methods { display: flex; gap: 6px; margin-bottom: 10px; }
+  .methods button { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .methods button.on { color: var(--accent); border-color: var(--accent); background: var(--accent-dim); }
+  .dom { display: flex; gap: 6px; margin: 10px 0; }
+  .dom i { width: 40px; height: 40px; border-radius: 6px; border: 1px solid var(--line); cursor: grab; }
+  .hint { color: var(--dim); font-size: 12px; }
+
+  /* right panel */
+  .panel { background: var(--dock); border-left: 1px solid var(--line); overflow: auto; min-width: 0; }
+  .body.panel-closed .panel { display: none; }
+  .sec { border-bottom: 1px solid var(--line); }
+  .sec.hidden { display: none; }
+  .sec > header { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); cursor: pointer; }
+  .sec > header .tw { color: var(--dim); font-size: 10px; transition: transform .15s; }
+  .sec.open > header .tw { transform: rotate(90deg); }
+  .sec > header .sub { text-transform: none; letter-spacing: 0; color: var(--dim); margin-left: auto; font-size: 11px; }
+  .sec .bodyp { display: none; padding: 4px 12px 12px; }
+  .sec.open .bodyp { display: block; }
+  .prow { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 12px; color: var(--muted); }
+  .prow label { width: 92px; }
+  .prow input[type=range] { flex: 1; }
+  .prow output { width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+  .prow select { background: var(--section); color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; flex: 1; }
+  .curves { width: 100%; height: 130px; background: var(--section); border: 1px solid var(--line); border-radius: 6px; }
+  .tracks { display: flex; gap: 4px; margin-top: 6px; }
+  .tracks button { flex: 1; padding: 4px; border-radius: 5px; border: 1px solid var(--line); font-size: 11px; color: var(--muted); }
+  .tracks button.on { color: var(--fg); border-color: rgba(255,255,255,.3); }
+  .stopcol { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); }
+
+  /* my gradients strip */
+  .mine { background: var(--dock); border-top: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .mine header { display: flex; align-items: center; gap: 10px; padding: 6px 16px 0; font-size: 11px; color: var(--muted); }
+  .mine header b { color: var(--fg); font-size: 12px; }
+  .mine header .exp { margin-left: auto; color: var(--dim); }
+  .mine .zones { display: flex; gap: 0; padding: 6px 16px 8px; overflow-x: auto; align-items: flex-start; }
+  .zone { display: flex; flex-direction: column; gap: 4px; padding-right: 14px; margin-right: 14px; border-right: 1px solid var(--line); }
+  .zone:last-child { border-right: 0; }
+  .zone .zl { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); white-space: nowrap; display: flex; gap: 6px; }
+  .zone .zl.auto { color: #7fbfd6; }
+  .zone .items { display: flex; gap: 4px; min-height: 34px; }
+  .mi { width: 58px; height: 34px; border-radius: 4px; border: 1px solid var(--line); cursor: grab; position: relative; }
+  .mi.star::after { content: "★"; position: absolute; right: 3px; top: 1px; font-size: 10px; color: var(--star); text-shadow: 0 0 2px #000; }
+  .mi.empty { border-style: dashed; display: flex; align-items: center; justify-content: center; color: var(--dim); font-size: 11px; width: 92px; cursor: default; }
+  .mi:hover { outline: 2px solid var(--accent); }
+  .newgroup { color: var(--dim); font-size: 11px; align-self: center; white-space: nowrap; }
+
+  /* overlays */
+  .ovl { position: absolute; inset: 0; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .ovl.on { display: flex; }
+  .dlg { width: min(720px, 92%); max-height: 86%; overflow: auto; background: var(--dock); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .dlg h3 { margin: 0 0 12px; font-size: 14px; display: flex; align-items: center; }
+  .dlg h3 button { margin-left: auto; color: var(--muted); }
+  .fmtgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .fmtgrid h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .fmtgrid button { display: block; width: 100%; text-align: left; padding: 5px 8px; border-radius: 5px; border: 1px solid transparent; color: var(--fg); font-size: 12px; }
+  .fmtgrid button:hover { border-color: var(--line); background: var(--section); }
+  .fmtgrid button.new::after { content: "new"; color: var(--accent); font-size: 10px; margin-left: 6px; }
+  .wp { position: absolute; inset: 0; z-index: 20; display: none; flex-direction: column; }
+  .wp.on { display: flex; }
+  .wp .canvas { flex: 1; }
+  .wp .bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--dock); border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .wp .bar .lbl { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .toast { position: absolute; left: 50%; bottom: calc(var(--strip-h) + 14px); transform: translateX(-50%); background: #1d2229; border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font-size: 12px; display: none; z-index: 30; }
+  .toast.on { display: block; }
+
+  /* phone-only bits */
+  .tabs, .peek { display: none; }
+
+  /* ── viewport toggle (outside the mock) ───────────────────── */
+  #vp { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 2px; background: #222; border: 1px solid #444; border-radius: 6px; padding: 2px; }
+  #vp button { padding: 2px 8px; font-size: 11px; color: #aaa; border-radius: 4px; }
+  #vp button.on { background: #444; color: #fff; }
+  body.tablet .frame { width: 900px; height: 1100px; margin: 40px auto; border: 1px solid #333; max-height: calc(100vh - 80px); }
+  body.tablet .frame .body { grid-template-columns: var(--rail-w) 1fr 0; }
+  body.tablet .frame .panel { position: absolute; right: 0; top: 0; bottom: 0; width: var(--panel-w); z-index: 5; box-shadow: -8px 0 24px rgba(0,0,0,.5); display: none; }
+  body.tablet .frame .body.panel-open .panel { display: block; }
+  body.tablet .frame .body { position: relative; }
+
+  body.phone .frame { width: 390px; height: 800px; margin: 40px auto; border: 1px solid #333; border-radius: 24px; grid-template-rows: var(--topbar-h) auto 1fr 56px 52px; --strip-h: 0px; }
+  body.phone .rail, body.phone .mine, body.phone .hero-side, body.phone .cand .acts .more, body.phone .look, body.phone .srcs, body.phone .arrange { display: none; }
+  body.phone .body { grid-template-columns: 1fr 0; }
+  body.phone .panel { position: absolute; left: 0; right: 0; bottom: 0; top: 40%; width: auto; z-index: 5; border-top: 1px solid var(--line); border-radius: 14px 14px 0 0; display: none; }
+  body.phone .body.panel-open .panel { display: block; }
+  body.phone .body { position: relative; }
+  body.phone .hero { padding: 8px 12px 6px; grid-template-columns: 1fr; }
+  body.phone .ramp { height: 40px; }
+  body.phone .palette { height: 30px; }
+  body.phone .sw span { display: none; }
+  body.phone .hero-top { flex-wrap: wrap; gap: 6px; }
+  body.phone .hero-top .name { min-width: 0; flex: 1; }
+  body.phone .cand { grid-template-columns: 1fr; padding: 8px 12px; }
+  body.phone .wall { padding-left: 52px; }
+  body.phone .band::before { left: -46px; width: 40px; }
+  body.phone .tile { width: 30px; height: 18px; }
+  body.phone .narrow { padding: 6px 12px; gap: 6px; }
+  body.phone .search { min-width: 0; flex: 1; }
+  body.phone .search input { width: 100%; }
+  body.phone .count { margin-left: 0; width: 100%; }
+  body.phone .tabs { display: flex; background: var(--dock); border-top: 1px solid var(--line); }
+  body.phone .tabs button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); padding: 6px 0 4px; }
+  body.phone .tabs button.on { color: var(--accent); }
+  body.phone .tabs button .ic { font-size: 16px; }
+  body.phone .peek { display: flex; align-items: center; gap: 6px; padding: 0 12px; background: var(--dock); border-top: 1px solid var(--line); }
+  body.phone .peek .grip { width: 36px; height: 4px; border-radius: 2px; background: var(--dim); position: absolute; left: 50%; transform: translateX(-50%); margin-top: -24px; }
+  body.phone .peek b { font-size: 11px; color: var(--muted); white-space: nowrap; margin-right: 4px; }
+  body.phone .peek .mi { width: 44px; height: 28px; flex: none; }
+  body.phone .peek .row { overflow-x: auto; gap: 4px; }
+  body.phone .exbody { grid-template-columns: 1fr; }
+  body.phone .slots { grid-template-columns: 1fr; }
+  body.phone .blend { grid-row: auto; grid-column: 1; flex-direction: row; }
+  body.phone .toast { bottom: 120px; }
+  body.phone .variants .lbl, body.phone .brand span, body.phone .cpal, body.phone .tb-btn[title="Redo"] { display: none; }
+  body.phone .topbar { gap: 8px; padding: 0 10px; }
+  body.phone .vslot { width: 22px; height: 22px; font-size: 11px; }
+  body.phone .cand .acts { gap: 4px; }
+  body.phone .cand .acts .btn { height: 24px; padding: 0 8px; font-size: 11px; }
+  body.phone .cand .cramp { height: 32px; }
+  body.phone .tb-btn.txt { display: none; }
+</style>
+</head>
+<body>
+<div id="vp">
+  <button class="on" data-vp="desktop">Desktop</button>
+  <button data-vp="tablet">Tablet</button>
+  <button data-vp="phone">Phone</button>
+</div>
+
+<div class="frame" id="frame">
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="brand">GMT<span>Gradient Explorer</span></div>
+    <div class="variants">
+      <span class="lbl">Variants</span>
+      <button class="vslot on" data-v="0">A</button>
+      <button class="vslot" data-v="1">B</button>
+      <button class="vslot" data-v="2">C</button>
+      <button class="vslot" title="New variant">+</button>
+      <div class="tween" id="tween">tween <input type="range" min="0" max="100" value="50" id="tweenv"> <button class="btn" style="height:22px;padding:0 8px">Bake</button></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="tb-btn icon" title="Undo">↶</button>
+    <button class="tb-btn icon" title="Redo">↷</button>
+    <button class="tb-btn txt" id="btnShare">Share</button>
+    <button class="tb-btn txt" id="btnExport">Export</button>
+    <button class="tb-btn primary" id="btnWallpaper">Wallpaper</button>
+    <button class="tb-btn icon" title="Settings">⚙</button>
+  </header>
+
+  <!-- WORKING HERO -->
+  <section class="hero">
+    <div class="hero-top">
+      <input class="name" id="wname" value="Turbo">
+      <span class="chip live" id="liveChip">● live</span>
+      <button class="chip" id="follow" title="Follow the Browse candidate through Shape and Adjust">⛓ Follow</button>
+      <span class="spacer"></span>
+      <button class="chip" id="tgShape">Shape</button>
+      <button class="chip" id="tgAdjust">Adjust</button>
+      <button class="chip" id="mixwith">Mix with…</button>
+      <button class="chip star" id="wstar">★</button>
+    </div>
+    <div class="ramp-wrap">
+      <div class="ramp" id="wramp" title="Drag me onto any target"></div>
+      <div class="stops" id="wstops"></div>
+      <div class="palette" id="wpal"></div>
+    </div>
+    <div class="hero-side">
+      <div class="row"><span class="lbl" style="font-size:11px;color:var(--dim);width:54px">Palette</span>
+        <div class="seg" id="rule"><button class="on" data-r="even">Even</button><button data-r="stops">Stops</button><button data-r="perc">Perceptual</button></div>
+        <input class="num" id="ncount" type="number" min="2" max="16" value="6"></div>
+      <div class="row" style="font-size:11px;color:var(--dim)">click a swatch → copy hex · drag a swatch here → add a stop</div>
+    </div>
+  </section>
+
+  <!-- BODY -->
+  <div class="body panel-closed" id="body">
+    <nav class="rail">
+      <button class="on" data-src="browse"><span class="ic">▦</span>Browse</button>
+      <button data-src="build"><span class="ic">⧉</span>Build</button>
+      <button data-src="extract"><span class="ic">◩</span>Extract</button>
+    </nav>
+
+    <section class="stage">
+      <div class="armed" id="armedBanner">Pick a gradient for slot <b>B</b> · Esc cancels</div>
+
+      <!-- BROWSE -->
+      <div class="src on" id="src-browse">
+        <div class="cand">
+          <div>
+            <div class="lbl">Candidate <b id="cname">click a swatch below</b> <span id="csrc"></span></div>
+            <div class="cramp empty" id="cramp">nothing picked yet</div>
+            <div class="cpal" id="cpal"></div>
+          </div>
+          <div class="acts">
+            <button class="btn acc" id="useBtn">Use ↑</button>
+            <button class="btn" id="cmix">Mix with</button>
+            <button class="btn" id="cstar">★</button>
+            <button class="btn more" id="morelike">More like this</button>
+          </div>
+        </div>
+        <div class="narrow">
+          <div class="search">🔍 <input placeholder="Search name · theme · source" id="q"></div>
+          <div class="hues" id="hues"></div>
+          <div class="look">dark<input type="range" min="0" max="100" value="0" id="lkL">light</div>
+          <div class="look">muted<input type="range" min="0" max="100" value="0" id="lkC">vivid</div>
+          <div class="look">simple<input type="range" min="0" max="100" value="0" id="lkS">complex</div>
+          <div class="look">cool<input type="range" min="0" max="100" value="50" id="lkW">warm</div>
+          <div class="srcs">
+            <button class="srcchip on">uiGradients</button><button class="srcchip on">ColorBrewer</button><button class="srcchip on">Matplotlib</button><button class="srcchip on">PyPalettes</button><button class="srcchip lazy">+ Softology</button><button class="srcchip lazy">+ cpt-city</button>
+          </div>
+          <div class="count"><span><b id="cnt">3,076</b> of 3,076</span><a id="clearAll">clear</a>
+            <span class="arrange">· <a id="arrangeChip">by category · rows by lightness · sorted by hue ▾</a></span></div>
+        </div>
+        <div class="wallwrap" id="wallwrap">
+          <div class="wall" id="wall"></div>
+          <div class="tools" id="tools">
+            <button class="on" data-tool="hand" title="Hand — pan / zoom">✋</button>
+            <button data-tool="rect" title="Rect — draw a box, then keep or cut">▭</button>
+            <button data-tool="lasso" title="Lasso">◌</button>
+            <button data-tool="paint" title="Paint">✎</button>
+          </div>
+          <div class="zoom">zoom <b>100%</b> · <a>fit</a></div>
+          <div class="caption" id="caption">draw around the ones you like, then <b>keep</b> or <b>cut</b></div>
+        </div>
+      </div>
+
+      <!-- BUILD -->
+      <div class="src" id="src-build">
+        <div class="cand">
+          <div>
+            <div class="lbl">Result <b id="bname">Blend of Turbo and Inferno</b></div>
+            <div class="cramp" id="bramp"></div>
+            <div class="cpal" id="bpal"></div>
+          </div>
+          <div class="acts"><span class="feeding" style="margin:0">● feeding Working live</span><button class="btn" id="bstar">★</button></div>
+        </div>
+        <div class="buildbody">
+          <div class="recipes"><button class="on">Blend</button><button>Sweep</button></div>
+          <div class="slots">
+            <div class="slot"><div class="lbl">Source A <b id="aname">Turbo</b></div><div class="sramp" id="aramp"></div></div>
+            <div class="blend">
+              <div class="lbl">blend A → B</div>
+              <div class="sl"><span>L</span><input type="range" min="0" max="100" value="50" data-ch="L"></div>
+              <div class="sl"><span>C</span><input type="range" min="0" max="100" value="50" data-ch="C"></div>
+              <div class="sl"><span>h</span><input type="range" min="0" max="100" value="50" data-ch="h"></div>
+            </div>
+            <div class="swaprow"><button class="btn" id="swap">⇅ Swap</button><button class="btn">Reset</button></div>
+            <div class="slot"><div class="lbl">Source B <b id="bnameB">Inferno</b></div><div class="sramp" id="brampB"></div></div>
+          </div>
+          <div class="hint" style="margin-top:14px">Drop any gradient on a slot, or click a slot to pick from My Gradients and the built-ins. Shape and Adjust live on the Working hero above.</div>
+        </div>
+      </div>
+
+      <!-- EXTRACT -->
+      <div class="src" id="src-extract">
+        <div class="cand">
+          <div>
+            <div class="lbl">Result <b>Dominant · 6 colours</b></div>
+            <div class="cramp" id="eramp"></div>
+            <div class="cpal" id="epal"></div>
+          </div>
+          <div class="acts"><span class="feeding" style="margin:0">● feeding Working live</span><button class="btn">★</button></div>
+        </div>
+        <div class="exbody">
+          <div class="photo"><div class="path"></div><div class="h" style="left:calc(20% - 7px);top:calc(70% - 7px)"></div><div class="h" style="left:calc(74% - 7px);top:calc(46% - 7px)"></div></div>
+          <div>
+            <div class="methods"><button class="on">Dominant</button><button>Tones</button><button>Path</button></div>
+            <div class="hint">Dominant colours, ordered into a smooth ramp. Drag a swatch into the Working palette to keep just that colour.</div>
+            <div class="dom" id="dom"></div>
+            <div class="hint">Drop, paste, or pick an image · works from anywhere in the app.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANEL -->
+    <aside class="panel" id="panel">
+      <div class="sec open" id="secSource">
+        <header><span class="tw">▶</span>Source <span class="sub" id="secSourceSub">Browse · Arrange</span></header>
+        <div class="bodyp" id="secSourceBody">
+          <div class="prow"><label>Group by</label><select><option>Category</option><option>Source</option><option>None</option></select></div>
+          <div class="prow"><label>Rows by</label><select><option>Lightness</option><option>Chroma</option><option>Hue</option></select></div>
+          <div class="prow"><label>Sort within</label><select><option>Hue</option><option>Lightness</option><option>Name</option></select></div>
+          <div class="prow"><label>Swatch size</label><input type="range" min="20" max="80" value="36"><output>36</output></div>
+          <div class="prow"><label>Padding</label><input type="range" min="0" max="12" value="3"><output>3</output></div>
+        </div>
+      </div>
+      <div class="sec" id="secStop">
+        <header><span class="tw">▶</span>Stop <span class="sub" id="stopSub"></span></header>
+        <div class="bodyp">
+          <div class="prow"><label>Colour</label><div class="stopcol" id="stopcol"></div><output id="stophex" style="width:auto"></output></div>
+          <div class="prow"><label>Position</label><input type="range" min="0" max="100" id="stoppos"><output id="stopposo"></output></div>
+          <div class="prow"><label>Bias</label><input type="range" min="-100" max="100" value="0"><output>0</output></div>
+          <div class="prow"><label>Interpolation</label><select><option>Smooth</option><option>Linear</option><option>Step</option><option>Cubic</option></select></div>
+        </div>
+      </div>
+      <div class="sec" id="secShape">
+        <header><span class="tw">▶</span>Shape <span class="sub">curves L · C · h</span></header>
+        <div class="bodyp">
+          <svg class="curves" viewBox="0 0 256 130" preserveAspectRatio="none">
+            <g stroke="rgba(255,255,255,.06)"><line x1="0" y1="32" x2="256" y2="32"/><line x1="0" y1="65" x2="256" y2="65"/><line x1="0" y1="97" x2="256" y2="97"/><line x1="64" y1="0" x2="64" y2="130"/><line x1="128" y1="0" x2="128" y2="130"/><line x1="192" y1="0" x2="192" y2="130"/></g>
+            <path d="M0,110 C60,100 90,20 128,24 S200,90 256,30" fill="none" stroke="#e8edf2" stroke-width="2"/>
+            <path d="M0,95 C50,60 100,55 150,70 S220,110 256,90" fill="none" stroke="#f08a5d" stroke-width="2"/>
+            <path d="M0,20 C70,30 120,90 180,80 S230,40 256,60" fill="none" stroke="#5dadf0" stroke-width="2"/>
+            <g fill="#e8edf2"><circle cx="0" cy="110" r="3"/><circle cx="128" cy="24" r="3"/><circle cx="256" cy="30" r="3"/></g>
+          </svg>
+          <div class="tracks"><button class="on">Lightness</button><button class="on">Chroma</button><button class="on">Hue</button></div>
+          <div class="prow" style="margin-top:8px"><label>Fit</label><button class="btn" style="height:22px;padding:0 8px">Fit from source</button><button class="btn" style="height:22px;padding:0 8px">Reset</button></div>
+          <div class="prow"><label>Detail</label><input type="range" min="2" max="32" value="8"><output>8</output></div>
+          <div class="prow"><label>Smooth</label><input type="range" min="0" max="10" value="5"><output>5</output></div>
+          <div class="hint">Detail and Smooth are the fit recipe. Edited points are never re-fit without asking.</div>
+        </div>
+      </div>
+      <div class="sec" id="secAdjust">
+        <header><span class="tw">▶</span>Adjust <span class="sub">hue · chroma · contrast…</span></header>
+        <div class="bodyp">
+          <div class="prow"><label>Hue rotate</label><input type="range" min="-180" max="180" value="0" data-adj="hue"><output>0</output></div>
+          <div class="prow"><label>Chroma ×</label><input type="range" min="0" max="250" value="100" data-adj="chroma"><output>1.00</output></div>
+          <div class="prow"><label>Contrast</label><input type="range" min="20" max="250" value="100" data-adj="contrast"><output>1.00</output></div>
+          <div class="prow"><label>Posterize</label><input type="range" min="0" max="16" value="0"><output>off</output></div>
+          <div class="prow"><label>Repeats</label><input type="range" min="1" max="8" value="1"><output>1</output></div>
+          <div class="prow"><label>Phase</label><input type="range" min="0" max="100" value="0"><output>0</output></div>
+          <div class="prow"><label>Mirror</label><input type="checkbox"></div>
+          <div class="prow"><label>Reverse</label><input type="checkbox" data-adj="reverse"></div>
+          <div class="prow"><label>Noise</label><input type="range" min="0" max="100" value="0"><output>0</output></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- MY GRADIENTS (desktop strip) -->
+  <footer class="mine" id="mine">
+    <header><b>My Gradients</b><span>fills itself as you work · drag into a group to organise</span><span class="exp">▴ expand</span></header>
+    <div class="zones">
+      <div class="zone"><div class="zl auto">Recent · today <span id="rcnt"></span></div><div class="items" id="recent"></div></div>
+      <div class="zone"><div class="zl">★ Starred</div><div class="items" id="starred"></div></div>
+      <div class="zone"><div class="zl">Warm sunsets</div><div class="items" id="grp1"></div></div>
+      <div class="zone"><div class="zl">Client · Acme</div><div class="items" id="grp2"></div></div>
+      <div class="zone"><div class="newgroup">+ New group</div></div>
+    </div>
+  </footer>
+
+  <!-- PHONE: peek + tabs -->
+  <div class="peek" id="peek"><div class="grip"></div><b>My Gradients</b><div class="row" id="peekrow"></div></div>
+  <nav class="tabs">
+    <button class="on" data-src="browse"><span class="ic">▦</span>Browse</button>
+    <button data-src="build"><span class="ic">⧉</span>Build</button>
+    <button data-src="extract"><span class="ic">◩</span>Extract</button>
+  </nav>
+
+  <!-- EXPORT DIALOG -->
+  <div class="ovl" id="exportDlg">
+    <div class="dlg">
+      <h3>Export <span style="color:var(--muted);font-weight:400;margin-left:8px" id="expname">Turbo</span><button data-close>✕</button></h3>
+      <div class="fmtgrid">
+        <div><h4>Design apps</h4><button class="new">Adobe .ase</button><button>Photoshop .grd</button><button>Illustrator .ai</button><button>InDesign .idml</button><button>GIMP .gpl</button><button>GIMP .ggr</button><button>Paint.NET</button></div>
+        <div><h4>Code</h4><button>CSS variables</button><button>SVG</button><button>JSON</button><button>JS array</button><button>Python</button><button>CSV</button><button class="new">Tailwind config</button><button class="new">Design tokens</button></div>
+        <div><h4>Fractal software</h4><button>Fractint .map</button><button>Ultra Fractal .ugr</button><button>.cpt table</button></div>
+        <div><h4>Image</h4><button>PNG strip</button><button>Contact sheet</button><button>Wallpaper…</button></div>
+      </div>
+      <div class="hint" style="margin-top:12px">The same dialog exports a whole group from My Gradients as one file or a zip. Your last format is remembered.</div>
+    </div>
+  </div>
+
+  <!-- WALLPAPER -->
+  <div class="wp" id="wp">
+    <div class="canvas" id="wpcanvas"></div>
+    <div class="bar">
+      <span class="lbl">Mode</span>
+      <div class="seg"><button class="on">Linear</button><button>Radial</button><button>Conic</button><button>Arched</button><button>Spline</button><button>Fractal</button><button>Liquify</button><button>Parallax</button><button>Gradient map</button></div>
+      <span class="lbl">Size</span>
+      <div class="seg"><button>Phone</button><button>Square</button><button class="on">1080p</button><button>4K</button><button>Custom</button></div>
+      <label style="font-size:12px;color:var(--muted)"><input type="checkbox" checked> dither</label>
+      <label style="font-size:12px;color:var(--muted)"><input type="checkbox"> supersample ×2</label>
+      <span class="spacer"></span>
+      <button class="btn acc">Export PNG</button>
+      <button class="btn" data-close>Close</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ────────────────────────── colour maths (OKLab) ────────────────────────── */
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const toLin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const toSrgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+function oklabToRgb(L, a, b) {
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+  const r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  const bb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  return [clamp01(toSrgb(r)), clamp01(toSrgb(g)), clamp01(toSrgb(bb))];
+}
+const hex = ([r, g, b]) => '#' + [r, g, b].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+const labHex = (c) => hex(oklabToRgb(c[0], c[1], c[2]));
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerpLab = (p, q, t) => [lerp(p[0], q[0], t), lerp(p[1], q[1], t), lerp(p[2], q[2], t)];
+
+/* a gradient = { name, src, stops:[{t,lab}] } ; ramp(g) = 64 lab samples */
+const N = 64;
+function ramp(g) {
+  const st = g.stops;
+  const out = [];
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    let k = 0;
+    while (k < st.length - 2 && st[k + 1].t < t) k++;
+    const a = st[k], b = st[k + 1];
+    const u = b.t === a.t ? 0 : clamp01((t - a.t) / (b.t - a.t));
+    const s = u * u * (3 - 2 * u); // smooth
+    out.push(lerpLab(a.lab, b.lab, s));
+  }
+  return out;
+}
+const css = (labs, step = 4) => 'linear-gradient(90deg,' + labs.filter((_, i) => i % step === 0 || i === labs.length - 1).map(labHex).join(',') + ')';
+
+/* seeded random so the wall is stable across reloads */
+let seed = 1337;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const lch = (L, C, h) => [L, C * Math.cos(h), C * Math.sin(h)];
+const NAMES = ['Turbo', 'Inferno', 'Viridis', 'Magma', 'Cividis', 'Aurora', 'Ember', 'Glacier', 'Saffron', 'Lagoon', 'Dusk', 'Nebula', 'Moss', 'Coral', 'Slate', 'Kingdra', 'Peach', 'Orchid', 'Cobalt', 'Tundra'];
+const SRC = ['uiGradients', 'ColorBrewer', 'Matplotlib', 'PyPalettes'];
+function makeGradient(bandL) {
+  const n = 2 + Math.floor(rnd() * 4);
+  const h0 = rnd() * Math.PI * 2;
+  const spread = rnd() * 3;
+  const C = 0.04 + rnd() * 0.22;
+  const stops = [];
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : i / (n - 1);
+    const L = clamp01(bandL + (rnd() - 0.5) * 0.35);
+    stops.push({ t, lab: lch(L, C * (0.5 + rnd()), h0 + spread * t + (rnd() - 0.5)) });
+  }
+  return { name: NAMES[Math.floor(rnd() * NAMES.length)] + ' ' + Math.floor(rnd() * 900 + 100), src: SRC[Math.floor(rnd() * SRC.length)], stops };
+}
+const meanL = (g) => ramp(g).reduce((s, c) => s + c[0], 0) / N;
+const meanC = (g) => ramp(g).reduce((s, c) => s + Math.hypot(c[1], c[2]), 0) / N;
+const meanH = (g) => { const r = ramp(g)[32]; return Math.atan2(r[2], r[1]); };
+const rampDist = (a, b) => { const ra = ramp(a), rb = ramp(b); let d = 0; for (let i = 0; i < N; i += 4) d += Math.hypot(ra[i][0] - rb[i][0], ra[i][1] - rb[i][1], ra[i][2] - rb[i][2]); return d; };
+
+/* ────────────────────────── state ────────────────────────── */
+const S = {
+  source: 'browse',
+  candidate: null,
+  working: null,            // input gradient
+  workingName: 'Turbo',
+  baked: false,
+  follow: false,
+  adj: { hue: 0, chroma: 1, contrast: 1, reverse: false },
+  rule: 'even', n: 6,
+  selStop: null,
+  slotA: null, slotB: null, armed: null,
+  blend: { L: 0.5, C: 0.5, h: 0.5 },
+  recent: [], starred: [],
+  variants: [null, null, null], vsel: [0], vsecond: null,
+};
+
+/* built-ins */
+const TURBO = { name: 'Turbo', src: 'Matplotlib', stops: [{ t: 0, lab: lch(0.35, 0.16, 4.7) }, { t: 0.3, lab: lch(0.8, 0.17, 3.4) }, { t: 0.55, lab: lch(0.9, 0.2, 1.9) }, { t: 0.8, lab: lch(0.7, 0.2, 0.7) }, { t: 1, lab: lch(0.45, 0.19, 0.4) }] };
+const INFERNO = { name: 'Inferno', src: 'Matplotlib', stops: [{ t: 0, lab: lch(0.08, 0.02, 4.8) }, { t: 0.35, lab: lch(0.4, 0.2, 5.6) }, { t: 0.7, lab: lch(0.7, 0.19, 0.8) }, { t: 1, lab: lch(0.97, 0.12, 1.7) }] };
+S.working = TURBO; S.slotA = TURBO; S.slotB = INFERNO;
+
+/* ────────────────────────── pipeline ────────────────────────── */
+function blendGradient(A, B, bl) {
+  const ra = ramp(A), rb = ramp(B);
+  const stops = [];
+  for (let i = 0; i < N; i += 7) {
+    const a = ra[i], b = rb[i];
+    const La = a[0], Lb = b[0], Ca = Math.hypot(a[1], a[2]), Cb = Math.hypot(b[1], b[2]);
+    let ha = Math.atan2(a[2], a[1]), hb = Math.atan2(b[2], b[1]);
+    let dh = hb - ha; if (dh > Math.PI) dh -= 2 * Math.PI; if (dh < -Math.PI) dh += 2 * Math.PI;
+    stops.push({ t: i / (N - 1), lab: lch(lerp(La, Lb, bl.L), lerp(Ca, Cb, bl.C), ha + dh * bl.h) });
+  }
+  stops[stops.length - 1].t = 1;
+  return { name: 'Blend of ' + A.name + ' and ' + B.name, src: 'Build', stops };
+}
+function adjust(labs) {
+  const { hue, chroma, contrast, reverse } = S.adj;
+  const th = (hue * Math.PI) / 180;
+  let out = labs.map(([L, a, b]) => {
+    const C = Math.hypot(a, b) * chroma, h = Math.atan2(b, a) + th;
+    return [clamp01((L - 0.5) * contrast + 0.5), C * Math.cos(h), C * Math.sin(h)];
+  });
+  if (reverse) out = out.reverse();
+  return out;
+}
+const workingInput = () => (S.source === 'build' ? blendGradient(S.slotA, S.slotB, S.blend) : S.source === 'extract' ? EXTRACT : S.working);
+const workingRamp = () => adjust(ramp(workingInput()));
+
+function paletteOf(labs, g) {
+  const n = S.n;
+  if (S.rule === 'stops' && g) return g.stops.map((s) => labs[Math.round(s.t * (N - 1))]);
+  if (S.rule === 'perc') {
+    const cum = [0]; for (let i = 1; i < N; i++) cum.push(cum[i - 1] + Math.hypot(labs[i][0] - labs[i - 1][0], labs[i][1] - labs[i - 1][1], labs[i][2] - labs[i - 1][2]));
+    const tot = cum[N - 1]; const out = [];
+    for (let k = 0; k < n; k++) { const target = (k / (n - 1)) * tot; let i = 0; while (i < N - 1 && cum[i] < target) i++; out.push(labs[i]); }
+    return out;
+  }
+  return Array.from({ length: n }, (_, k) => labs[Math.round((k / (n - 1)) * (N - 1))]);
+}
+
+/* ────────────────────────── render ────────────────────────── */
+const $ = (id) => document.getElementById(id);
+function renderHero() {
+  const g = workingInput(); const labs = workingRamp();
+  $('wramp').style.background = css(labs, 2);
+  $('wname').value = S.source === 'browse' ? S.workingName : g.name;
+  const chip = $('liveChip');
+  chip.className = 'chip ' + (S.baked ? 'baked' : 'live'); chip.textContent = S.baked ? '◆ baked · return to live' : '● live';
+  $('follow').classList.toggle('on', S.follow);
+  const st = $('wstops'); st.innerHTML = '';
+  g.stops.forEach((s, i) => { const d = document.createElement('div'); d.className = 'stop' + (S.selStop === i ? ' sel' : ''); d.style.left = (s.t * 100) + '%'; d.style.background = labHex(labs[Math.round(s.t * (N - 1))]); d.title = 'stop ' + (i + 1); d.onclick = (e) => { e.stopPropagation(); S.selStop = i; S.baked = true; openSec('secStop'); renderAll(); }; st.appendChild(d); });
+  const pal = $('wpal'); pal.innerHTML = '';
+  paletteOf(labs, g).forEach((c) => { const d = document.createElement('div'); d.className = 'sw'; const h = labHex(c); d.style.background = h; d.innerHTML = '<span>' + h + '</span>'; d.title = 'click → copy ' + h; d.onclick = () => toast('copied ' + h); pal.appendChild(d); });
+  if (S.selStop != null && g.stops[S.selStop]) { const s = g.stops[S.selStop]; const h = labHex(labs[Math.round(s.t * (N - 1))]); $('stopcol').style.background = h; $('stophex').textContent = h; $('stoppos').value = Math.round(s.t * 100); $('stopposo').textContent = Math.round(s.t * 100) + '%'; $('stopSub').textContent = 'stop ' + (S.selStop + 1) + ' of ' + g.stops.length; }
+  $('wstar').classList.toggle('on', S.starred.includes(g));
+  $('expname').textContent = $('wname').value;
+  $('wpcanvas').style.background = css(labs, 2);
+}
+function miniPal(el, labs) { el.innerHTML = ''; paletteOf(labs, null).forEach((c) => { const i = document.createElement('i'); i.style.background = labHex(c); el.appendChild(i); }); }
+function renderCandidate() {
+  const c = S.candidate; const el = $('cramp');
+  if (!c) { el.className = 'cramp empty'; el.style.background = ''; el.textContent = 'nothing picked yet'; $('cname').textContent = 'click a swatch below'; $('csrc').textContent = ''; $('cpal').innerHTML = ''; return; }
+  el.className = 'cramp'; el.textContent = ''; el.style.background = css(ramp(c)); $('cname').textContent = c.name; $('csrc').textContent = c.src; miniPal($('cpal'), ramp(c));
+  $('cstar').style.color = S.starred.includes(c) ? 'var(--star)' : '';
+}
+function renderBuild() {
+  const A = S.slotA, B = S.slotB;
+  $('aramp').style.background = css(ramp(A)); $('aname').textContent = A.name;
+  const bEl = $('brampB');
+  if (S.armed === 'B') { bEl.className = 'sramp armed'; bEl.style.background = ''; bEl.textContent = 'armed — pick any gradient'; $('bnameB').textContent = '…'; }
+  else { bEl.className = 'sramp'; bEl.textContent = ''; bEl.style.background = css(ramp(B)); $('bnameB').textContent = B.name; }
+  const res = blendGradient(A, S.armed ? A : B, S.blend); $('bramp').style.background = css(ramp(res)); $('bname').textContent = res.name; miniPal($('bpal'), ramp(res));
+  $('armedBanner').classList.toggle('on', !!S.armed);
+}
+const EXTRACT = { name: 'Dominant · 6 colours', src: 'Extract', stops: [{ t: 0, lab: lch(0.18, 0.05, 4.3) }, { t: 0.25, lab: lch(0.3, 0.09, 5.4) }, { t: 0.5, lab: lch(0.45, 0.12, 0.2) }, { t: 0.75, lab: lch(0.62, 0.17, 0.9) }, { t: 1, lab: lch(0.85, 0.13, 1.3) }] };
+function renderExtract() { $('eramp').style.background = css(ramp(EXTRACT)); miniPal($('epal'), ramp(EXTRACT)); const d = $('dom'); d.innerHTML = ''; EXTRACT.stops.forEach((s) => { const i = document.createElement('i'); i.style.background = labHex(s.lab); i.title = labHex(s.lab); d.appendChild(i); }); }
+function mi(g, star) { const d = document.createElement('div'); d.className = 'mi' + (star ? ' star' : ''); d.style.background = css(ramp(g)); d.title = g.name + ' · click to use · drag to a group'; d.onclick = () => { S.candidate = g; S.working = g; S.workingName = g.name; S.baked = false; S.selStop = null; setSource('browse'); renderAll(); }; return d; }
+function renderMine() {
+  const r = $('recent'); r.innerHTML = ''; if (!S.recent.length) { const e = document.createElement('div'); e.className = 'mi empty'; e.textContent = 'fills as you work'; r.appendChild(e); } S.recent.slice(0, 12).forEach((g) => r.appendChild(mi(g, S.starred.includes(g))));
+  $('rcnt').textContent = S.recent.length ? '· ' + S.recent.length : '';
+  const s = $('starred'); s.innerHTML = ''; if (!S.starred.length) { const e = document.createElement('div'); e.className = 'mi empty'; e.textContent = 'press ★'; s.appendChild(e); } S.starred.forEach((g) => s.appendChild(mi(g, true)));
+  const p = $('peekrow'); p.innerHTML = ''; [...S.recent, ...S.starred].slice(0, 8).forEach((g) => p.appendChild(mi(g, S.starred.includes(g))));
+}
+function renderPanel() {
+  $('secSourceSub').textContent = { browse: 'Browse · Arrange', build: 'Build · Blend', extract: 'Extract · Dominant' }[S.source];
+  const b = $('secSourceBody');
+  if (S.source === 'build') b.innerHTML = '<div class="prow"><label>Recipe</label><select><option>Blend</option><option>Sweep</option></select></div><div class="prow"><label>Noise seed</label><input type="range" min="0" max="99" value="7"><output>7</output></div><div class="hint">Blend dials sit on the canvas between A and B.</div>';
+  else if (S.source === 'extract') b.innerHTML = '<div class="prow"><label>Colours</label><input type="range" min="3" max="16" value="6"><output>6</output></div><div class="prow"><label>Frequency ↔ saliency</label><input type="range" min="0" max="100" value="45"><output>.45</output></div><div class="prow"><label>Golden hour</label><input type="range" min="-100" max="100" value="0"><output>0</output></div><div class="prow"><label>Even ↔ dwell</label><input type="range" min="0" max="100" value="35"><output>.35</output></div>';
+  else b.innerHTML = '<div class="prow"><label>Group by</label><select><option>Category</option><option>Source</option><option>None</option></select></div><div class="prow"><label>Rows by</label><select><option>Lightness</option><option>Chroma</option><option>Hue</option></select></div><div class="prow"><label>Sort within</label><select><option>Hue</option><option>Lightness</option><option>Name</option></select></div><div class="prow"><label>Swatch size</label><input type="range" min="20" max="80" value="36"><output>36</output></div><div class="prow"><label>Padding</label><input type="range" min="0" max="12" value="3"><output>3</output></div>';
+}
+function renderAll() { $('secStop').classList.toggle('hidden', S.selStop == null); renderHero(); renderCandidate(); renderBuild(); renderExtract(); renderMine(); renderPanel(); }
+
+/* ────────────────────────── wall ────────────────────────── */
+const BANDS = [[0.9, 1.0, 40], [0.8, 0.9, 120], [0.7, 0.8, 190], [0.6, 0.7, 240], [0.5, 0.6, 210], [0.4, 0.5, 150], [0.3, 0.4, 90], [0.2, 0.3, 50]];
+const TILES = [];
+(function buildWall() {
+  const wall = $('wall');
+  BANDS.forEach(([lo, hi, n]) => {
+    const band = document.createElement('div'); band.className = 'band'; band.dataset.label = lo.toFixed(1) + '–' + hi.toFixed(1) + ' · ' + n;
+    for (let i = 0; i < n; i++) { const g = makeGradient((lo + hi) / 2); const t = document.createElement('div'); t.className = 'tile'; t.style.background = css(ramp(g)); t.title = g.name; t.onclick = () => pick(g, t); TILES.push({ g, el: t, L: meanL(g), C: meanC(g), H: meanH(g), n: g.stops.length }); band.appendChild(t); }
+    wall.appendChild(band);
+  });
+})();
+function pick(g, el) {
+  TILES.forEach((t) => t.el.classList.remove('sel')); el.classList.add('sel');
+  if (S.armed === 'B') { S.slotB = g; S.armed = null; setSource('build'); toast('Slot B ← ' + g.name); renderAll(); return; }
+  S.candidate = g;
+  if (S.follow) { S.working = g; S.workingName = g.name; S.baked = false; S.selStop = null; }
+  renderAll();
+}
+function applyFilters() {
+  const L = +$('lkL').value / 100, C = +$('lkC').value / 100, Sx = +$('lkS').value / 100, W = +$('lkW').value / 100, q = $('q').value.trim().toLowerCase();
+  const hueOn = [...document.querySelectorAll('.hue.on')].map((h) => +h.dataset.h);
+  let shown = 0;
+  TILES.forEach((t) => {
+    let ok = true;
+    if (L > 0 && t.L < L * 0.9) ok = false;
+    if (C > 0 && t.C < C * 0.2) ok = false;
+    if (Sx > 0 && t.n < 2 + Sx * 3) ok = false;
+    if (Math.abs(W - 0.5) > 0.05) { const warm = Math.cos(t.H) > 0; if ((W > 0.5) !== warm) ok = false; }
+    if (hueOn.length) { let d = Infinity; hueOn.forEach((h) => { let dd = Math.abs(((t.H - h) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI); d = Math.min(d, dd); }); if (d > 0.5) ok = false; }
+    if (q && !t.g.name.toLowerCase().includes(q) && !t.g.src.toLowerCase().includes(q)) ok = false;
+    t.el.classList.toggle('dim', !ok); if (ok) shown++;
+  });
+  $('cnt').textContent = shown.toLocaleString();
+}
+['lkL', 'lkC', 'lkS', 'lkW', 'q'].forEach((id) => $(id).addEventListener('input', applyFilters));
+(function hues() { const h = $('hues'); for (let i = 0; i < 8; i++) { const b = document.createElement('button'); b.className = 'hue'; const ang = (i / 8) * Math.PI * 2; b.dataset.h = ang; b.style.background = labHex(lch(0.7, 0.16, ang)); b.title = 'hue family'; b.onclick = () => { b.classList.toggle('on'); applyFilters(); }; h.appendChild(b); } })();
+$('clearAll').onclick = () => { ['lkL', 'lkC', 'lkS'].forEach((id) => ($(id).value = 0)); $('lkW').value = 50; $('q').value = ''; document.querySelectorAll('.hue.on').forEach((h) => h.classList.remove('on')); applyFilters(); TILES.forEach((t) => (t.el.style.order = '')); };
+$('morelike').onclick = () => { if (!S.candidate) return toast('pick a gradient first'); const c = S.candidate; TILES.forEach((t) => (t.el.style.order = Math.round(rampDist(t.g, c) * 100))); document.querySelectorAll('.band').forEach((b) => (b.style.display = 'contents')); toast('wall re-sorted by similarity to ' + c.name + ' · clear to restore'); };
+document.querySelectorAll('.tools button').forEach((b) => (b.onclick = () => { document.querySelectorAll('.tools button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); $('caption').classList.toggle('on', b.dataset.tool !== 'hand'); $('wallwrap').style.cursor = b.dataset.tool === 'hand' ? 'grab' : 'crosshair'; }));
+
+/* ────────────────────────── actions ────────────────────────── */
+function setSource(s) { S.source = s; document.querySelectorAll('[data-src]').forEach((b) => b.classList.toggle('on', b.dataset.src === s)); document.querySelectorAll('.src').forEach((el) => el.classList.toggle('on', el.id === 'src-' + s)); if (s !== 'browse' && S.source !== 'browse') openSec('secSource'); renderAll(); }
+document.querySelectorAll('[data-src]').forEach((b) => (b.onclick = () => setSource(b.dataset.src)));
+function pushRecent(g) { if (!S.recent.includes(g)) S.recent.unshift(g); if (S.recent.length > 60) S.recent.pop(); }
+$('useBtn').onclick = () => { if (!S.candidate) return toast('pick a gradient first'); S.working = S.candidate; S.workingName = S.candidate.name; S.baked = false; S.selStop = null; pushRecent(S.candidate); renderAll(); toast(S.candidate.name + ' → Working'); };
+$('cmix').onclick = () => { if (!S.candidate) return toast('pick a gradient first'); S.slotA = S.working; S.slotB = S.candidate; pushRecent(S.candidate); setSource('build'); };
+$('mixwith').onclick = () => { S.slotA = workingInput(); S.armed = 'B'; setSource('browse'); toast('Slot A ← ' + S.slotA.name + ' · now pick B'); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.armed) { S.armed = null; renderAll(); } });
+const star = (g) => { if (!g) return; if (S.starred.includes(g)) S.starred.splice(S.starred.indexOf(g), 1); else { S.starred.push(g); pushRecent(g); } renderAll(); };
+$('cstar').onclick = () => star(S.candidate); $('wstar').onclick = () => star(workingInput()); $('bstar').onclick = () => star(blendGradient(S.slotA, S.slotB, S.blend));
+$('follow').onclick = () => { S.follow = !S.follow; if (S.follow && S.candidate) { S.working = S.candidate; S.workingName = S.candidate.name; } renderAll(); };
+$('liveChip').onclick = () => { if (S.baked) { S.baked = false; S.selStop = null; renderAll(); } };
+$('swap').onclick = () => { [S.slotA, S.slotB] = [S.slotB, S.slotA]; renderAll(); };
+document.querySelectorAll('.blend input').forEach((i) => (i.oninput = () => { S.blend[i.dataset.ch] = +i.value / 100; renderAll(); }));
+document.querySelectorAll('#rule button').forEach((b) => (b.onclick = () => { document.querySelectorAll('#rule button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); S.rule = b.dataset.r; renderHero(); }));
+$('ncount').oninput = () => { S.n = Math.max(2, Math.min(16, +$('ncount').value || 6)); renderAll(); };
+document.querySelectorAll('[data-adj]').forEach((i) => (i.oninput = () => { const k = i.dataset.adj; if (k === 'hue') S.adj.hue = +i.value; if (k === 'chroma') S.adj.chroma = +i.value / 100; if (k === 'contrast') S.adj.contrast = +i.value / 100; if (k === 'reverse') S.adj.reverse = i.checked; const o = i.parentElement.querySelector('output'); if (o) o.textContent = k === 'hue' ? i.value : (+i.value / 100).toFixed(2); renderHero(); }));
+
+/* panel sections + toggles */
+function openSec(id, force) { const sec = $(id); const open = force == null ? !sec.classList.contains('open') : force; sec.classList.toggle('open', open); const any = [...document.querySelectorAll('.sec')].some((s) => s.classList.contains('open')); $('body').classList.toggle('panel-closed', !any); $('body').classList.toggle('panel-open', any); $('tgShape').classList.toggle('on', $('secShape').classList.contains('open')); $('tgAdjust').classList.toggle('on', $('secAdjust').classList.contains('open')); }
+document.querySelectorAll('.sec > header').forEach((h) => (h.onclick = () => openSec(h.parentElement.id)));
+$('tgShape').onclick = () => openSec('secShape'); $('tgAdjust').onclick = () => openSec('secAdjust');
+$('arrangeChip').onclick = () => openSec('secSource', true);
+openSec('secSource', false);
+
+/* variants */
+document.querySelectorAll('.vslot[data-v]').forEach((b) => (b.onclick = (e) => { const v = +b.dataset.v; if (e.shiftKey && !S.vsel.includes(v)) { S.vsecond = v; } else { S.vsel = [v]; S.vsecond = null; } document.querySelectorAll('.vslot[data-v]').forEach((x) => { x.classList.toggle('on', S.vsel.includes(+x.dataset.v)); x.classList.toggle('second', S.vsecond === +x.dataset.v); }); $('tween').classList.toggle('on', S.vsecond != null); if (S.vsecond == null) toast('Variant ' + b.textContent + ' · shift-click another to tween'); }));
+
+/* overlays */
+$('btnExport').onclick = () => $('exportDlg').classList.add('on');
+$('btnWallpaper').onclick = () => $('wp').classList.add('on');
+$('btnShare').onclick = () => toast('link copied · gmt-fractals.com/gradient/#…');
+document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => { $('exportDlg').classList.remove('on'); $('wp').classList.remove('on'); }));
+$('exportDlg').onclick = (e) => { if (e.target === $('exportDlg')) $('exportDlg').classList.remove('on'); };
+document.querySelectorAll('.fmtgrid button').forEach((b) => (b.onclick = () => { toast('exported ' + b.textContent.replace('new', '')); $('exportDlg').classList.remove('on'); }));
+let tt; function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), 1800); }
+
+/* viewport toggle */
+document.querySelectorAll('#vp button').forEach((b) => (b.onclick = () => { document.querySelectorAll('#vp button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); document.body.className = b.dataset.vp === 'desktop' ? '' : b.dataset.vp; }));
+const applyHash = () => { const h = location.hash.slice(1) || 'desktop'; const b = document.querySelector('#vp [data-vp=' + h + ']'); if (b) b.click(); }; window.addEventListener('hashchange', applyHash); applyHash();
+
+/* seed some session history so the strip is not empty on first look */
+S.recent = [TILES[15].g, TILES[240].g, INFERNO]; S.starred = [TILES[400].g];
+applyFilters(); renderAll();
+</script>
+</body>
+</html>

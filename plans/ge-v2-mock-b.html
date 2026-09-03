@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gradient Explorer v2 — mock B (one thing at a time)</title>
+<style>
+  :root {
+    --bg: #0c0e12; --dock: #12151b; --section: #191d24; --line: rgba(255,255,255,.09);
+    --fg: #e2e6ec; --muted: #98a1ad; --dim: #66707d; --accent: #5ad4e8; --accent-dim: rgba(90,212,232,.16);
+    --star: #f5c542; --topbar-h: 48px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--fg); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; }
+  input[type=range] { accent-color: var(--accent); }
+  .frame { position: relative; width: 100%; height: 100vh; background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+  .frame > * { min-width: 0; }
+  .hidden { display: none !important; }
+
+  /* top bar — six things */
+  .topbar { height: var(--topbar-h); flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--dock); }
+  .brand { font-weight: 700; font-size: 15px; letter-spacing: .01em; margin-right: auto; }
+  .brand span { color: var(--muted); font-weight: 500; margin-left: 8px; }
+  .tb { height: 32px; padding: 0 12px; border-radius: 8px; color: var(--muted); }
+  .tb:hover { background: rgba(255,255,255,.06); color: var(--fg); }
+  .tb.primary { color: var(--fg); border: 1px solid var(--line); }
+  .tb.icon { width: 32px; padding: 0; }
+
+  /* hero — appears after the first pick */
+  .hero { flex: none; padding: 14px 24px 12px; background: var(--dock); border-bottom: 1px solid var(--line); }
+  .hrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .hrow .name { font-size: 16px; font-weight: 600; background: transparent; border: 0; color: var(--fg); min-width: 80px; padding: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+  .chip.live { color: #86e3a6; border-color: rgba(134,227,166,.35); }
+  .chip.edited { color: #f3b562; border-color: rgba(243,181,98,.35); }
+  .chip.star.on { color: var(--star); border-color: var(--star); }
+  .chip.ghost { border-color: transparent; color: var(--dim); }
+  .chip:hover { color: var(--fg); border-color: rgba(255,255,255,.3); }
+  .btn { height: 30px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); color: var(--fg); font-size: 13px; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.acc { background: var(--accent); color: #05242a; border-color: var(--accent); font-weight: 600; }
+  .btn.acc:hover { filter: brightness(1.08); color: #05242a; }
+  .btn.sm { height: 26px; padding: 0 10px; font-size: 12px; }
+  .ramp { height: 60px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; position: relative; }
+  .ramp:hover { border-color: rgba(255,255,255,.35); }
+  .ramp .editHint { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #fff; background: rgba(0,0,0,.45); padding: 3px 8px; border-radius: 6px; opacity: 0; transition: opacity .15s; }
+  .ramp:hover .editHint { opacity: 1; }
+  .stops { position: relative; height: 14px; }
+  .stop { position: absolute; top: 1px; width: 11px; height: 11px; transform: translateX(-50%) rotate(45deg); border: 2px solid #fff; border-radius: 2px; box-shadow: 0 0 0 1px #000; cursor: ew-resize; }
+  .stop.sel { border-color: var(--accent); }
+  .palette { display: flex; gap: 6px; height: 34px; margin-top: 2px; }
+  .sw { flex: 1; border-radius: 6px; cursor: pointer; position: relative; border: 1px solid rgba(0,0,0,.35); }
+  .sw:hover { outline: 2px solid #fff; outline-offset: 1px; }
+  .sw:hover::after { content: attr(data-hex); position: absolute; left: 50%; top: -26px; transform: translateX(-50%); background: #000; color: #fff; font: 600 11px/1 ui-monospace, monospace; padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
+  /* preview row: the candidate, ghosted beneath working */
+  .preview { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; }
+  .preview .pramp { height: 36px; border-radius: 8px; border: 1px dashed rgba(255,255,255,.35); opacity: .92; }
+  .preview .plbl { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .preview .plbl b { color: var(--fg); font-weight: 600; font-size: 13px; }
+  .preview .acts { display: flex; gap: 6px; }
+
+  /* edit drawer — opens by clicking the ramp */
+  .drawer { flex: none; background: var(--section); border-bottom: 1px solid var(--line); padding: 10px 24px 14px; }
+  .drawer .tabs { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
+  .drawer .tabs button { padding: 6px 12px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+  .drawer .tabs button.on { background: var(--accent-dim); color: var(--accent); }
+  .drawer .tabs .x { margin-left: auto; color: var(--dim); }
+  .dt { display: none; }
+  .dt.on { display: block; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+  /* the real slider anatomy: label · bar · value */
+  .sl { display: flex; align-items: center; gap: 10px; height: 30px; font-size: 13px; }
+  .sl label { width: 110px; color: var(--muted); }
+  .sl .bar { flex: 1; height: 22px; border-radius: 5px; background: var(--dock); border: 1px solid var(--line); position: relative; cursor: ew-resize; }
+  .sl .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-dim); border-right: 2px solid var(--accent); border-radius: 5px 0 0 5px; }
+  .sl output { width: 52px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+  .sl input[type=range] { position: absolute; inset: 0; width: 100%; opacity: 0; margin: 0; cursor: ew-resize; }
+  .curves { height: 170px; border-radius: 8px; background: var(--dock); border: 1px solid var(--line); width: 100%; }
+  .stoprow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .stopcol { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { padding: 5px 12px; font-size: 13px; color: var(--muted); }
+  .seg button.on { background: var(--accent-dim); color: var(--accent); }
+  .num { width: 54px; height: 30px; background: var(--dock); border: 1px solid var(--line); border-radius: 6px; color: var(--fg); text-align: center; }
+  .hint { color: var(--dim); font-size: 12px; }
+
+  /* stage: source tabs + one control on the same row */
+  .stage { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+  .srcbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 24px; }
+  .srctab { padding: 8px 16px; border-radius: 10px; font-size: 15px; color: var(--muted); }
+  .srctab.on { color: var(--fg); background: rgba(255,255,255,.07); }
+  .srcbar .right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .search { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--dock); width: 300px; }
+  .search input { background: transparent; border: 0; color: var(--fg); outline: 0; flex: 1; min-width: 0; }
+  .search .cnt { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .filterbtn { position: relative; }
+  .filterbtn .badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--accent); color: #05242a; font-size: 11px; font-weight: 700; display: none; align-items: center; justify-content: center; padding: 0 5px; }
+  .filterbtn .badge.on { display: inline-flex; }
+  .src { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  .src.on { display: flex; }
+
+  /* the wall */
+  .wallwrap { position: relative; flex: 1; min-height: 0; overflow: auto; cursor: grab; background: radial-gradient(circle at 1px 1px, rgba(255,255,255,.045) 1px, transparent 1px) 0 0 / 16px 16px, #0e1015; }
+  .wall { padding: 8px 24px 20px 96px; }
+  .band { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; position: relative; }
+  .band::before { content: attr(data-label); position: absolute; left: -80px; top: 2px; width: 68px; text-align: right; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .tile { width: 44px; height: 24px; border-radius: 3px; cursor: pointer; }
+  .tile:hover { outline: 2px solid #fff; }
+  .tile.sel { outline: 2px solid var(--accent); }
+  .tile.dim { opacity: .1; }
+  .tools { position: absolute; top: 10px; right: 18px; display: flex; gap: 2px; background: rgba(18,21,27,.9); border: 1px solid var(--line); border-radius: 10px; padding: 3px; backdrop-filter: blur(6px); }
+  .tools button { width: 32px; height: 32px; border-radius: 8px; color: var(--muted); font-size: 15px; }
+  .tools button.on { background: var(--accent-dim); color: var(--accent); }
+  .zoom { position: absolute; bottom: 12px; right: 18px; font-size: 12px; color: var(--dim); background: rgba(18,21,27,.9); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; }
+  .armed { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: #2a1d4d; border: 1px solid #b78cff; color: #e2d4ff; border-radius: 14px; padding: 5px 14px; font-size: 13px; z-index: 3; }
+
+  /* filters popover */
+  .pop { position: absolute; z-index: 10; background: var(--dock); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+  #filters { right: 24px; top: 54px; width: 460px; }
+  .pop h4 { margin: 0 0 8px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .hues { display: flex; gap: 6px; margin-bottom: 12px; }
+  .hue { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; }
+  .hue.on { border-color: #fff; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chips button { height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .chips button.on { color: var(--fg); border-color: rgba(255,255,255,.35); }
+  .chips button.lazy { border-style: dashed; }
+  .pop .foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--dim); }
+  .pop .foot a { color: var(--accent); cursor: pointer; }
+  .pop .foot .arr { margin-left: auto; }
+  .pop .foot .arr a { color: var(--muted); border-bottom: 1px dotted var(--dim); }
+
+  /* build */
+  .buildbody { flex: 1; min-height: 0; overflow: auto; padding: 10px 24px 20px; }
+  .slot { max-width: 900px; margin-bottom: 14px; }
+  .slot .lbl { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--dim); margin-bottom: 6px; }
+  .slot .lbl b { color: var(--fg); font-size: 14px; font-weight: 600; }
+  .slot .sramp { height: 48px; border-radius: 10px; border: 1px solid var(--line); cursor: grab; }
+  .slot .sramp.armed { border: 2px dashed #b78cff; display: flex; align-items: center; justify-content: center; color: #e2d4ff; background: rgba(183,140,255,.08); }
+  .blend { max-width: 900px; margin: 6px 0 14px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 20px; }
+  .blend .sl label { width: 84px; }
+  .feeding { font-size: 12px; color: #86e3a6; }
+
+  /* extract */
+  .exbody { flex: 1; min-height: 0; overflow: auto; padding: 10px 24px 20px; display: grid; grid-template-columns: minmax(0, 520px) 1fr; gap: 24px; }
+  .photo { aspect-ratio: 4 / 3; border-radius: 12px; border: 1px solid var(--line); position: relative; overflow: hidden;
+    background: radial-gradient(circle at 30% 30%, #f8b26a 0, #d15a3a 30%, transparent 55%), radial-gradient(circle at 75% 60%, #2c5f9e 0, #172a4b 40%, transparent 70%), linear-gradient(180deg, #6b2a4d, #101a2e); }
+  .photo .path { position: absolute; left: 20%; top: 70%; width: 60%; height: 2px; background: #fff; transform: rotate(-24deg); transform-origin: left; }
+  .photo .h { position: absolute; width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%; background: rgba(0,0,0,.5); }
+  .dom { display: flex; gap: 8px; margin: 14px 0; }
+  .dom i { width: 44px; height: 44px; border-radius: 8px; border: 1px solid var(--line); cursor: grab; }
+
+  /* my gradients — a silent row */
+  .mine { flex: none; background: var(--dock); border-top: 1px solid var(--line); }
+  .mine .peek { display: flex; align-items: center; gap: 6px; padding: 6px 24px; height: 46px; }
+  .mine .peek .lbl { font-size: 12px; color: var(--dim); margin-right: 6px; white-space: nowrap; }
+  .mine .peek .exp { margin-left: auto; color: var(--dim); font-size: 12px; white-space: nowrap; }
+  .mi { width: 60px; height: 30px; border-radius: 6px; border: 1px solid var(--line); cursor: grab; flex: none; position: relative; }
+  .mi.star::after { content: "★"; position: absolute; right: 3px; top: 0; font-size: 11px; color: var(--star); text-shadow: 0 0 2px #000; }
+  .mi:hover { outline: 2px solid var(--accent); }
+  .mine .full { display: none; padding: 4px 24px 14px; }
+  .mine.open .full { display: block; }
+  .grp { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .grp .g { width: 120px; font-size: 12px; color: var(--muted); flex: none; }
+  .grp .add { color: var(--dim); font-size: 12px; margin-left: 6px; }
+
+  /* overlays */
+  .ovl { position: absolute; inset: 0; background: rgba(0,0,0,.7); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .ovl.on { display: flex; }
+  .dlg { width: min(680px, 92%); background: var(--dock); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .dlg h3 { margin: 0 0 14px; font-size: 16px; display: flex; align-items: center; }
+  .dlg h3 button { margin-left: auto; color: var(--muted); }
+  .fmtgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .fmtgrid h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .fmtgrid button { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+  .fmtgrid button:hover { background: var(--section); }
+  .wp { position: absolute; inset: 0; z-index: 20; display: none; flex-direction: column; }
+  .wp.on { display: flex; }
+  .wp .canvas { flex: 1; }
+  .wp .bar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--dock); border-top: 1px solid var(--line); flex-wrap: wrap; }
+  .toast { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); background: #1d2229; border: 1px solid var(--line); border-radius: 10px; padding: 9px 16px; font-size: 13px; display: none; z-index: 30; }
+  .toast.on { display: block; }
+  #variants { right: 16px; top: 46px; width: 260px; }
+  .vrow { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+  .vslot { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); font-weight: 600; }
+  .vslot.on { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+  .vslot.second { border-color: #b78cff; color: #b78cff; }
+  .welcome { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); text-align: center; color: var(--muted); font-size: 13px; pointer-events: none; z-index: 2; background: rgba(12,14,18,.9); border: 1px solid var(--line); border-radius: 12px; padding: 8px 16px; backdrop-filter: blur(6px); }
+  .welcome b { display: block; color: var(--fg); font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+
+  /* phone */
+  .tabs { display: none; }
+  #vp { position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 100; display: flex; gap: 2px; background: #222; border: 1px solid #444; border-radius: 6px; padding: 2px; }
+  #vp button { padding: 2px 8px; font-size: 11px; color: #aaa; border-radius: 4px; }
+  #vp button.on { background: #444; color: #fff; }
+  body.phone .frame { width: 390px; height: min(800px, 100vh); margin: 0 auto; border: 1px solid #333; border-radius: 24px; }
+  body.phone .brand span, body.phone .tb.txt, body.phone .srcbar .srctab, body.phone .tools, body.phone .mine .peek .lbl, body.phone .ramp .editHint, body.phone #morelike { display: none; }
+  body.phone .preview .plbl { display: none; }
+  body.phone .preview .pramp { height: 30px; }
+  body.phone .topbar { padding: 0 12px; }
+  body.phone .hero { padding: 10px 14px 8px; }
+  body.phone .ramp { height: 44px; }
+  body.phone .palette { height: 26px; gap: 4px; }
+  body.phone .preview { grid-template-columns: 1fr; gap: 8px; }
+  body.phone .preview .acts .btn.sm { height: 28px; }
+  body.phone .srcbar { padding: 8px 12px; }
+  body.phone .srcbar .right { margin-left: 0; width: 100%; }
+  body.phone .search { width: 100%; }
+  body.phone .wall { padding: 6px 12px 14px 60px; }
+  body.phone .band::before { left: -52px; width: 44px; }
+  body.phone .tile { width: 36px; height: 20px; }
+  body.phone #filters { left: 12px; right: 12px; width: auto; }
+  body.phone .drawer { padding: 8px 14px 12px; }
+  body.phone .grid2 { grid-template-columns: 1fr; }
+  body.phone .blend { grid-template-columns: 1fr; }
+  body.phone .exbody { grid-template-columns: 1fr; padding: 8px 12px; }
+  body.phone .mine .peek { padding: 6px 12px; height: 44px; overflow-x: auto; }
+  body.phone .mi { width: 48px; height: 26px; }
+  body.phone .tabs { display: flex; flex: none; background: var(--dock); border-top: 1px solid var(--line); height: 54px; }
+  body.phone .tabs button { flex: 1; font-size: 13px; color: var(--muted); }
+  body.phone .tabs button.on { color: var(--accent); }
+  body.phone .buildbody { padding: 8px 12px; }
+  body.phone .toast { bottom: 110px; }
+</style>
+</head>
+<body>
+<div id="vp"><button class="on" data-vp="desktop">Desktop</button><button data-vp="phone">Phone</button></div>
+
+<div class="frame" id="frame">
+  <header class="topbar">
+    <div class="brand">GMT<span>Gradient Explorer</span></div>
+    <button class="tb icon" title="Undo">↶</button>
+    <button class="tb txt" id="btnVariants">Variants</button>
+    <button class="tb txt" id="btnShare">Share</button>
+    <button class="tb txt" id="btnExport">Export</button>
+    <button class="tb primary" id="btnWallpaper">Wallpaper</button>
+    <button class="tb icon" title="Settings">⚙</button>
+  </header>
+
+  <!-- HERO: hidden until the first pick -->
+  <section class="hero hidden" id="hero">
+    <div class="hrow">
+      <input class="name" id="wname" value="">
+      <span class="chip live" id="stateChip">● live</span>
+      <span style="flex:1"></span>
+      <button class="chip" id="mixwith">Mix with…</button>
+      <button class="chip star" id="wstar">★</button>
+    </div>
+    <div class="ramp" id="wramp" title="Click to edit stops, curves and adjustments"><span class="editHint">click to edit</span></div>
+    <div class="stops" id="wstops"></div>
+    <div class="palette" id="wpal"></div>
+    <div class="preview hidden" id="preview">
+      <div>
+        <div class="plbl">Previewing <b id="pname"></b> <span id="psrc"></span></div>
+        <div class="pramp" id="pramp"></div>
+      </div>
+      <div class="acts">
+        <button class="btn acc sm" id="useBtn">Use ↑</button>
+        <button class="btn sm" id="pmix">Mix with</button>
+        <button class="btn sm" id="pstar">★</button>
+        <button class="btn sm" id="morelike">More like this</button>
+        <button class="btn sm" id="pdismiss" title="Esc">✕</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- EDIT DRAWER: opens by clicking the ramp -->
+  <section class="drawer hidden" id="drawer">
+    <div class="tabs">
+      <button class="on" data-dt="stops">Stops &amp; palette</button>
+      <button data-dt="curves">Curves</button>
+      <button data-dt="adjust">Adjust</button>
+      <button class="x" id="drawerClose">✕ close</button>
+    </div>
+    <div class="dt on" id="dt-stops">
+      <div class="stoprow">
+        <span class="hint">Palette from</span>
+        <div class="seg" id="rule"><button class="on" data-r="even">Even</button><button data-r="stops">Stops</button><button data-r="perc">Perceptual</button></div>
+        <input class="num" id="ncount" type="number" min="2" max="16" value="6">
+        <span class="hint">colours · click a swatch to copy its hex · drag a swatch onto the ramp to add a stop</span>
+      </div>
+      <div class="stoprow hidden" id="stopInspector" style="margin-top:12px">
+        <div class="stopcol" id="stopcol"></div>
+        <output id="stophex" style="font-family:ui-monospace,monospace"></output>
+        <div class="sl" style="width:260px"><label>Position</label><div class="bar"><i id="stopposi"></i><input type="range" min="0" max="100" id="stoppos"></div><output id="stopposo"></output></div>
+        <div class="sl" style="width:220px"><label>Bias</label><div class="bar"><i style="width:50%"></i><input type="range" min="-100" max="100" value="0"></div><output>0</output></div>
+        <div class="seg"><button class="on">Smooth</button><button>Linear</button><button>Step</button><button>Cubic</button></div>
+        <button class="btn sm">Delete stop</button>
+      </div>
+    </div>
+    <div class="dt" id="dt-curves">
+      <svg class="curves" viewBox="0 0 800 170" preserveAspectRatio="none">
+        <g stroke="rgba(255,255,255,.06)"><line x1="0" y1="42" x2="800" y2="42"/><line x1="0" y1="85" x2="800" y2="85"/><line x1="0" y1="127" x2="800" y2="127"/><line x1="200" y1="0" x2="200" y2="170"/><line x1="400" y1="0" x2="400" y2="170"/><line x1="600" y1="0" x2="600" y2="170"/></g>
+        <path d="M0,140 C180,130 280,30 400,34 S640,120 800,40" fill="none" stroke="#e8edf2" stroke-width="2.5"/>
+        <path d="M0,120 C160,80 320,70 480,90 S700,140 800,115" fill="none" stroke="#f08a5d" stroke-width="2.5"/>
+        <path d="M0,30 C220,40 380,120 560,105 S720,55 800,80" fill="none" stroke="#5dadf0" stroke-width="2.5"/>
+        <g fill="#e8edf2"><circle cx="0" cy="140" r="4"/><circle cx="400" cy="34" r="4"/><circle cx="800" cy="40" r="4"/></g>
+      </svg>
+      <div class="stoprow" style="margin-top:10px">
+        <div class="seg"><button class="on">Lightness</button><button class="on">Chroma</button><button class="on">Hue</button></div>
+        <button class="btn sm">Fit from source</button><button class="btn sm">Reset</button>
+        <div class="sl" style="width:240px"><label>Detail</label><div class="bar"><i style="width:25%"></i><input type="range"></div><output>8</output></div>
+        <div class="sl" style="width:240px"><label>Smooth</label><div class="bar"><i style="width:50%"></i><input type="range"></div><output>5</output></div>
+      </div>
+    </div>
+    <div class="dt" id="dt-adjust">
+      <div class="grid2">
+        <div class="sl"><label>Hue rotate</label><div class="bar"><i style="width:50%"></i><input type="range" min="-180" max="180" value="0" data-adj="hue"></div><output>0°</output></div>
+        <div class="sl"><label>Posterize</label><div class="bar"><i style="width:0"></i><input type="range" min="0" max="16" value="0"></div><output>off</output></div>
+        <div class="sl"><label>Chroma</label><div class="bar"><i style="width:40%"></i><input type="range" min="0" max="250" value="100" data-adj="chroma"></div><output>1.00</output></div>
+        <div class="sl"><label>Repeats</label><div class="bar"><i style="width:0"></i><input type="range" min="1" max="8" value="1"></div><output>1</output></div>
+        <div class="sl"><label>Contrast</label><div class="bar"><i style="width:35%"></i><input type="range" min="20" max="250" value="100" data-adj="contrast"></div><output>1.00</output></div>
+        <div class="sl"><label>Phase</label><div class="bar"><i style="width:0"></i><input type="range" min="0" max="100" value="0"></div><output>0</output></div>
+        <div class="sl"><label>Noise</label><div class="bar"><i style="width:0"></i><input type="range" min="0" max="100" value="0"></div><output>0</output></div>
+        <div class="sl"><label>Mirror · Reverse</label><label style="width:auto"><input type="checkbox"> mirror</label><label style="width:auto"><input type="checkbox" data-adj="reverse"> reverse</label></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STAGE -->
+  <div class="stage" id="stage">
+    <div class="srcbar">
+      <button class="srctab on" data-src="browse">Browse</button>
+      <button class="srctab" data-src="build">Build</button>
+      <button class="srctab" data-src="extract">Extract</button>
+      <div class="right" id="browseCtl">
+        <div class="search">🔍 <input placeholder="Search 3,076 gradients" id="q"><span class="cnt" id="cnt"></span></div>
+        <button class="btn filterbtn" id="filterBtn">Filters <span class="badge" id="fbadge">0</span></button>
+      </div>
+      <div class="right hidden" id="buildCtl"><div class="seg"><button class="on">Blend</button><button>Sweep</button></div></div>
+      <div class="right hidden" id="extractCtl"><div class="seg"><button class="on">Dominant</button><button>Tones</button><button>Path</button></div><button class="btn">Choose image…</button></div>
+    </div>
+
+    <div class="pop hidden" id="filters">
+      <h4>Hue</h4><div class="hues" id="hues"></div>
+      <h4>Look</h4>
+      <div class="sl"><label>Dark ↔ light</label><div class="bar"><i id="lkLi" style="width:0"></i><input type="range" min="0" max="100" value="0" id="lkL"></div><output id="lkLo">any</output></div>
+      <div class="sl"><label>Muted ↔ vivid</label><div class="bar"><i id="lkCi" style="width:0"></i><input type="range" min="0" max="100" value="0" id="lkC"></div><output id="lkCo">any</output></div>
+      <div class="sl"><label>Simple ↔ complex</label><div class="bar"><i id="lkSi" style="width:0"></i><input type="range" min="0" max="100" value="0" id="lkS"></div><output id="lkSo">any</output></div>
+      <div class="sl"><label>Cool ↔ warm</label><div class="bar"><i id="lkWi" style="width:50%"></i><input type="range" min="0" max="100" value="50" id="lkW"></div><output id="lkWo">any</output></div>
+      <h4 style="margin-top:12px">Sources</h4>
+      <div class="chips"><button class="on">uiGradients</button><button class="on">ColorBrewer</button><button class="on">Matplotlib</button><button class="on">PyPalettes</button><button class="lazy">+ Softology</button><button class="lazy">+ cpt-city</button></div>
+      <div class="foot"><span id="fcount"></span><a id="clearAll">clear all</a><span class="arr"><a>by category · rows by lightness · sorted by hue ▾</a></span></div>
+    </div>
+
+    <div class="pop hidden" id="variants">
+      <h4>Variants</h4>
+      <div class="vrow"><button class="vslot on" data-v="0">A</button><button class="vslot" data-v="1">B</button><button class="vslot" data-v="2">C</button><button class="vslot" title="Snapshot everything as a new variant">+</button></div>
+      <div class="hint">Click to switch · shift-click a second to tween</div>
+      <div class="sl hidden" id="tween" style="margin-top:8px"><label>A ↔ B</label><div class="bar"><i style="width:50%"></i><input type="range"></div><button class="btn sm">Bake</button></div>
+    </div>
+
+    <!-- BROWSE -->
+    <div class="src on" id="src-browse">
+      <div class="wallwrap" id="wallwrap">
+        <div class="welcome" id="welcome"><b>Click any gradient</b>It previews above. Use it, mix it, or keep looking.</div>
+        <div class="wall" id="wall"></div>
+        <div class="tools"><button class="on" data-tool="hand" title="Pan and zoom">✋</button><button data-tool="rect" title="Box select, then keep or cut">▭</button><button data-tool="lasso" title="Lasso">◌</button><button data-tool="paint" title="Paint">✎</button></div>
+        <div class="zoom">100% · fit</div>
+        <div class="armed hidden" id="armedBanner">Pick a gradient for slot <b>B</b> · Esc cancels</div>
+      </div>
+    </div>
+
+    <!-- BUILD -->
+    <div class="src" id="src-build">
+      <div class="buildbody">
+        <div class="slot"><div class="lbl">A <b id="aname">Turbo</b></div><div class="sramp" id="aramp"></div></div>
+        <div class="blend">
+          <div class="sl"><label>Lightness</label><div class="bar"><i id="bLi" style="width:50%"></i><input type="range" min="0" max="100" value="50" data-ch="L"></div><output id="bLo">50%</output></div>
+          <div class="sl"><label>Vividness</label><div class="bar"><i id="bCi" style="width:50%"></i><input type="range" min="0" max="100" value="50" data-ch="C"></div><output id="bCo">50%</output></div>
+          <div class="sl"><label>Hue</label><div class="bar"><i id="bhi" style="width:50%"></i><input type="range" min="0" max="100" value="50" data-ch="h"></div><output id="bho">50%</output></div>
+        </div>
+        <div class="slot"><div class="lbl">B <b id="bnameB">Inferno</b> <button class="btn sm" id="swap" style="margin-left:auto">⇅ Swap</button></div><div class="sramp" id="brampB"></div></div>
+        <div class="feeding">● the blend is your working gradient above · edit it there</div>
+        <p class="hint" style="margin-top:14px">Drop any gradient on a slot, or click a slot to choose from My Gradients and the built-ins.</p>
+      </div>
+    </div>
+
+    <!-- EXTRACT -->
+    <div class="src" id="src-extract">
+      <div class="exbody">
+        <div class="photo"><div class="path"></div><div class="h" style="left:calc(20% - 8px);top:calc(70% - 8px)"></div><div class="h" style="left:calc(74% - 8px);top:calc(46% - 8px)"></div></div>
+        <div>
+          <div class="sl"><label>Colours</label><div class="bar"><i style="width:30%"></i><input type="range"></div><output>6</output></div>
+          <div class="sl"><label>Common ↔ standout</label><div class="bar"><i style="width:45%"></i><input type="range"></div><output>0.45</output></div>
+          <div class="sl"><label>Golden hour</label><div class="bar"><i style="width:50%"></i><input type="range"></div><output>0</output></div>
+          <div class="dom" id="dom"></div>
+          <div class="feeding">● the extraction is your working gradient above</div>
+          <p class="hint">Drop or paste an image anywhere in the app. Drag a colour above to keep just that colour.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MY GRADIENTS: a silent row, appears when there is something in it -->
+  <footer class="mine hidden" id="mine">
+    <div class="peek"><span class="lbl">My Gradients</span><div id="peekrow" style="display:flex;gap:6px;overflow:hidden"></div><button class="exp" id="mineExp">▴ groups</button></div>
+    <div class="full">
+      <div class="grp"><span class="g">Recent · today</span><div id="recent" style="display:flex;gap:6px"></div></div>
+      <div class="grp"><span class="g">★ Starred</span><div id="starred" style="display:flex;gap:6px"></div></div>
+      <div class="grp"><span class="g">Warm sunsets</span><div id="grp1" style="display:flex;gap:6px"></div><span class="add">+ new group</span></div>
+    </div>
+  </footer>
+
+  <nav class="tabs"><button class="on" data-src="browse">Browse</button><button data-src="build">Build</button><button data-src="extract">Extract</button></nav>
+
+  <div class="ovl" id="exportDlg"><div class="dlg">
+    <h3>Export <span style="color:var(--muted);font-weight:400;margin-left:10px" id="expname"></span><button data-close>✕</button></h3>
+    <div class="fmtgrid">
+      <div><h4>Design apps</h4><button>Adobe .ase</button><button>Photoshop .grd</button><button>Illustrator .ai</button><button>InDesign .idml</button><button>GIMP .gpl</button><button>GIMP .ggr</button><button>Paint.NET</button></div>
+      <div><h4>Code</h4><button>CSS variables</button><button>SVG</button><button>JSON</button><button>JS array</button><button>Python</button><button>CSV</button><button>Tailwind</button><button>Design tokens</button></div>
+      <div><h4>Fractal software</h4><button>Fractint .map</button><button>Ultra Fractal .ugr</button><button>.cpt table</button></div>
+      <div><h4>Image</h4><button>PNG strip</button><button>Contact sheet</button><button>Wallpaper…</button></div>
+    </div>
+  </div></div>
+  <div class="wp" id="wp"><div class="canvas" id="wpcanvas"></div><div class="bar">
+    <div class="seg"><button class="on">Linear</button><button>Radial</button><button>Conic</button><button>Arched</button><button>Spline</button><button>Fractal</button><button>Liquify</button><button>Parallax</button><button>Gradient map</button></div>
+    <div class="seg"><button>Phone</button><button>Square</button><button class="on">1080p</button><button>4K</button><button>Custom</button></div>
+    <span style="flex:1"></span><button class="btn acc">Export PNG</button><button class="btn" data-close>Close</button>
+  </div></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+/* ── colour maths ─────────────────────────────────────────── */
+const clamp01 = (x) => Math.min(1, Math.max(0, x));
+const toSrgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+function oklabToRgb(L, a, b) {
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b, m_ = L - 0.1055613458 * a - 0.0638541728 * b, s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+  return [clamp01(toSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)), clamp01(toSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)), clamp01(toSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s))];
+}
+const hex = (c) => '#' + c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+const labHex = (c) => hex(oklabToRgb(c[0], c[1], c[2]));
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerpLab = (p, q, t) => [lerp(p[0], q[0], t), lerp(p[1], q[1], t), lerp(p[2], q[2], t)];
+const N = 64;
+function ramp(g) { const st = g.stops, out = []; for (let i = 0; i < N; i++) { const t = i / (N - 1); let k = 0; while (k < st.length - 2 && st[k + 1].t < t) k++; const a = st[k], b = st[k + 1]; const u = b.t === a.t ? 0 : clamp01((t - a.t) / (b.t - a.t)); const s = u * u * (3 - 2 * u); out.push(lerpLab(a.lab, b.lab, s)); } return out; }
+const css = (labs, step = 4) => 'linear-gradient(90deg,' + labs.filter((_, i) => i % step === 0 || i === labs.length - 1).map(labHex).join(',') + ')';
+let seed = 1337; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const lch = (L, C, h) => [L, C * Math.cos(h), C * Math.sin(h)];
+const NAMES = ['Turbo', 'Inferno', 'Viridis', 'Magma', 'Aurora', 'Ember', 'Glacier', 'Saffron', 'Lagoon', 'Dusk', 'Nebula', 'Moss', 'Coral', 'Slate', 'Kingdra', 'Peach', 'Orchid', 'Cobalt', 'Tundra'];
+const SRC = ['uiGradients', 'ColorBrewer', 'Matplotlib', 'PyPalettes'];
+function makeGradient(bandL) { const n = 2 + Math.floor(rnd() * 4), h0 = rnd() * Math.PI * 2, spread = rnd() * 3, C = 0.04 + rnd() * 0.22, stops = []; for (let i = 0; i < n; i++) { const t = i / (n - 1); stops.push({ t, lab: lch(clamp01(bandL + (rnd() - 0.5) * 0.35), C * (0.5 + rnd()), h0 + spread * t + (rnd() - 0.5)) }); } return { name: NAMES[Math.floor(rnd() * NAMES.length)] + ' ' + Math.floor(rnd() * 900 + 100), src: SRC[Math.floor(rnd() * SRC.length)], stops }; }
+const meanL = (g) => ramp(g).reduce((s, c) => s + c[0], 0) / N, meanC = (g) => ramp(g).reduce((s, c) => s + Math.hypot(c[1], c[2]), 0) / N, meanH = (g) => { const r = ramp(g)[32]; return Math.atan2(r[2], r[1]); };
+const rampDist = (a, b) => { const ra = ramp(a), rb = ramp(b); let d = 0; for (let i = 0; i < N; i += 4) d += Math.hypot(ra[i][0] - rb[i][0], ra[i][1] - rb[i][1], ra[i][2] - rb[i][2]); return d; };
+
+/* ── state ─────────────────────────────────────────────────── */
+const TURBO = { name: 'Turbo', src: 'Matplotlib', stops: [{ t: 0, lab: lch(0.35, 0.16, 4.7) }, { t: 0.3, lab: lch(0.8, 0.17, 3.4) }, { t: 0.55, lab: lch(0.9, 0.2, 1.9) }, { t: 0.8, lab: lch(0.7, 0.2, 0.7) }, { t: 1, lab: lch(0.45, 0.19, 0.4) }] };
+const INFERNO = { name: 'Inferno', src: 'Matplotlib', stops: [{ t: 0, lab: lch(0.08, 0.02, 4.8) }, { t: 0.35, lab: lch(0.4, 0.2, 5.6) }, { t: 0.7, lab: lch(0.7, 0.19, 0.8) }, { t: 1, lab: lch(0.97, 0.12, 1.7) }] };
+const EXTRACT = { name: 'From photo', src: 'Extract', stops: [{ t: 0, lab: lch(0.18, 0.05, 4.3) }, { t: 0.25, lab: lch(0.3, 0.09, 5.4) }, { t: 0.5, lab: lch(0.45, 0.12, 0.2) }, { t: 0.75, lab: lch(0.62, 0.17, 0.9) }, { t: 1, lab: lch(0.85, 0.13, 1.3) }] };
+const S = { source: 'browse', candidate: null, working: null, edited: false, adj: { hue: 0, chroma: 1, contrast: 1, reverse: false }, rule: 'even', n: 6, selStop: null, slotA: TURBO, slotB: INFERNO, armed: null, blend: { L: .5, C: .5, h: .5 }, recent: [], starred: [], vsecond: null };
+
+function blendGradient(A, B, bl) { const ra = ramp(A), rb = ramp(B), stops = []; for (let i = 0; i < N; i += 7) { const a = ra[i], b = rb[i]; const Ca = Math.hypot(a[1], a[2]), Cb = Math.hypot(b[1], b[2]); let ha = Math.atan2(a[2], a[1]), hb = Math.atan2(b[2], b[1]); let dh = hb - ha; if (dh > Math.PI) dh -= 2 * Math.PI; if (dh < -Math.PI) dh += 2 * Math.PI; stops.push({ t: i / (N - 1), lab: lch(lerp(a[0], b[0], bl.L), lerp(Ca, Cb, bl.C), ha + dh * bl.h) }); } stops[stops.length - 1].t = 1; return { name: A.name + ' × ' + B.name, src: 'Build', stops }; }
+function adjust(labs) { const { hue, chroma, contrast, reverse } = S.adj, th = hue * Math.PI / 180; let out = labs.map(([L, a, b]) => { const C = Math.hypot(a, b) * chroma, h = Math.atan2(b, a) + th; return [clamp01((L - .5) * contrast + .5), C * Math.cos(h), C * Math.sin(h)]; }); return reverse ? out.reverse() : out; }
+const liveInput = () => (S.source === 'build' ? blendGradient(S.slotA, S.armed ? S.slotA : S.slotB, S.blend) : S.source === 'extract' ? EXTRACT : S.working);
+function paletteOf(labs, g) { const n = S.n; if (S.rule === 'stops' && g) return g.stops.map((s) => labs[Math.round(s.t * (N - 1))]); if (S.rule === 'perc') { const cum = [0]; for (let i = 1; i < N; i++) cum.push(cum[i - 1] + Math.hypot(labs[i][0] - labs[i - 1][0], labs[i][1] - labs[i - 1][1], labs[i][2] - labs[i - 1][2])); const tot = cum[N - 1], out = []; for (let k = 0; k < n; k++) { const tg = (k / (n - 1)) * tot; let i = 0; while (i < N - 1 && cum[i] < tg) i++; out.push(labs[i]); } return out; } return Array.from({ length: n }, (_, k) => labs[Math.round((k / (n - 1)) * (N - 1))]); }
+
+/* ── render ────────────────────────────────────────────────── */
+const $ = (id) => document.getElementById(id);
+const show = (id, on) => $(id).classList.toggle('hidden', !on);
+function renderHero() {
+  const g = liveInput();
+  const previewOnly = !g && S.candidate; // nothing committed yet: the pick itself is the hero
+  const shown = !!(g || S.candidate);
+  show('hero', shown); show('welcome', !shown && S.source === 'browse');
+  if (!shown) return;
+  const main = g || S.candidate; const labs = adjust(ramp(main));
+  $('wramp').style.background = css(labs, 2); $('wname').value = main.name;
+  const chip = $('stateChip');
+  if (previewOnly) { chip.className = 'chip ghost'; chip.textContent = 'previewing · Use to keep'; }
+  else if (S.source !== 'browse') { chip.className = 'chip live'; chip.textContent = '● live from ' + (S.source === 'build' ? 'Build' : 'Extract'); }
+  else if (S.edited) { chip.className = 'chip edited'; chip.textContent = '◆ edited · return to source'; }
+  else { chip.className = 'chip live'; chip.textContent = '● working'; }
+  const st = $('wstops'); st.innerHTML = '';
+  main.stops.forEach((s, i) => { const d = document.createElement('div'); d.className = 'stop' + (S.selStop === i ? ' sel' : ''); d.style.left = (s.t * 100) + '%'; d.style.background = labHex(labs[Math.round(s.t * (N - 1))]); d.onclick = (e) => { e.stopPropagation(); if (previewOnly) commit(); S.selStop = i; S.edited = true; openDrawer('stops'); renderAll(); }; st.appendChild(d); });
+  const pal = $('wpal'); pal.innerHTML = '';
+  paletteOf(labs, main).forEach((c) => { const d = document.createElement('div'); d.className = 'sw'; const h = labHex(c); d.style.background = h; d.dataset.hex = h; d.onclick = () => toast('copied ' + h); pal.appendChild(d); });
+  const showPreview = !!(g && S.candidate && S.candidate !== S.working && S.source === 'browse');
+  show('preview', showPreview);
+  if (showPreview) { $('pname').textContent = S.candidate.name; $('psrc').textContent = S.candidate.src; $('pramp').style.background = css(ramp(S.candidate)); }
+  if (previewOnly) { $('useBtn').classList.remove('hidden'); }
+  $('wstar').classList.toggle('on', S.starred.includes(main));
+  if (S.selStop != null && main.stops[S.selStop]) { const s = main.stops[S.selStop]; const h = labHex(labs[Math.round(s.t * (N - 1))]); $('stopcol').style.background = h; $('stophex').textContent = h; $('stoppos').value = Math.round(s.t * 100); $('stopposi').style.width = Math.round(s.t * 100) + '%'; $('stopposo').textContent = Math.round(s.t * 100) + '%'; }
+  show('stopInspector', S.selStop != null);
+  $('expname').textContent = main.name; $('wpcanvas').style.background = css(labs, 2);
+  // preview-only hero still needs its actions: reuse the preview row's buttons in place
+  if (previewOnly) { show('preview', true); $('pname').textContent = S.candidate.name; $('psrc').textContent = S.candidate.src; $('pramp').style.background = css(ramp(S.candidate)); $('pramp').style.display = 'none'; } else { $('pramp').style.display = ''; }
+}
+function renderBuild() { $('aramp').style.background = css(ramp(S.slotA)); $('aname').textContent = S.slotA.name; const b = $('brampB'); if (S.armed === 'B') { b.className = 'sramp armed'; b.style.background = ''; b.textContent = 'armed · pick any gradient'; $('bnameB').textContent = '…'; } else { b.className = 'sramp'; b.textContent = ''; b.style.background = css(ramp(S.slotB)); $('bnameB').textContent = S.slotB.name; } show('armedBanner', !!S.armed); }
+function renderExtract() { const d = $('dom'); d.innerHTML = ''; EXTRACT.stops.forEach((s) => { const i = document.createElement('i'); i.style.background = labHex(s.lab); i.title = labHex(s.lab); d.appendChild(i); }); }
+function mi(g) { const d = document.createElement('div'); d.className = 'mi' + (S.starred.includes(g) ? ' star' : ''); d.style.background = css(ramp(g)); d.title = g.name; d.onclick = () => { S.candidate = g; setSource('browse'); }; return d; }
+function renderMine() { const all = [...new Set([...S.recent, ...S.starred])]; show('mine', all.length > 0); if (!all.length) return; const p = $('peekrow'); p.innerHTML = ''; all.slice(0, 14).forEach((g) => p.appendChild(mi(g))); const r = $('recent'); r.innerHTML = ''; S.recent.forEach((g) => r.appendChild(mi(g))); const s = $('starred'); s.innerHTML = ''; S.starred.forEach((g) => s.appendChild(mi(g))); }
+function renderAll() { renderHero(); renderBuild(); renderExtract(); renderMine(); }
+
+/* ── wall ──────────────────────────────────────────────────── */
+const BANDS = [[0.9, 1.0, 36], [0.8, 0.9, 110], [0.7, 0.8, 170], [0.6, 0.7, 220], [0.5, 0.6, 200], [0.4, 0.5, 140], [0.3, 0.4, 80], [0.2, 0.3, 44]];
+const TILES = [];
+(function () { const wall = $('wall'); BANDS.forEach(([lo, hi, n]) => { const band = document.createElement('div'); band.className = 'band'; band.dataset.label = lo.toFixed(1) + '–' + hi.toFixed(1) + ' · ' + n; for (let i = 0; i < n; i++) { const g = makeGradient((lo + hi) / 2); const t = document.createElement('div'); t.className = 'tile'; t.style.background = css(ramp(g)); t.title = g.name; t.onclick = () => pick(g, t); TILES.push({ g, el: t, L: meanL(g), C: meanC(g), H: meanH(g), n: g.stops.length }); band.appendChild(t); } wall.appendChild(band); }); })();
+function pick(g, el) { TILES.forEach((t) => t.el.classList.remove('sel')); el.classList.add('sel'); if (S.armed === 'B') { S.slotB = g; S.armed = null; pushRecent(g); setSource('build'); toast('B ← ' + g.name); return; } S.candidate = g; renderAll(); }
+function applyFilters() {
+  const L = +$('lkL').value / 100, C = +$('lkC').value / 100, Sx = +$('lkS').value / 100, W = +$('lkW').value / 100, q = $('q').value.trim().toLowerCase();
+  const hueOn = [...document.querySelectorAll('.hue.on')].map((h) => +h.dataset.h); let shown = 0;
+  TILES.forEach((t) => { let ok = true; if (L > 0 && t.L < L * .9) ok = false; if (C > 0 && t.C < C * .2) ok = false; if (Sx > 0 && t.n < 2 + Sx * 3) ok = false; if (Math.abs(W - .5) > .05 && ((W > .5) !== (Math.cos(t.H) > 0))) ok = false; if (hueOn.length) { let d = Infinity; hueOn.forEach((h) => { d = Math.min(d, Math.abs(((t.H - h) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI)); }); if (d > .5) ok = false; } if (q && !t.g.name.toLowerCase().includes(q) && !t.g.src.toLowerCase().includes(q)) ok = false; t.el.classList.toggle('dim', !ok); if (ok) shown++; });
+  const active = (L > 0) + (C > 0) + (Sx > 0) + (Math.abs(W - .5) > .05) + (hueOn.length > 0);
+  $('fbadge').textContent = active; $('fbadge').classList.toggle('on', active > 0);
+  $('cnt').textContent = shown === TILES.length && !q ? '' : shown.toLocaleString() + ' match';
+  $('fcount').textContent = shown.toLocaleString() + ' of ' + TILES.length.toLocaleString();
+  [['L', 'lkL'], ['C', 'lkC'], ['S', 'lkS'], ['W', 'lkW']].forEach(([k, id]) => { const v = +$(id).value; $(id + 'i').style.width = v + '%'; $(id + 'o').textContent = (k === 'W' ? Math.abs(v - 50) <= 5 : v === 0) ? 'any' : v + '%'; });
+}
+['lkL', 'lkC', 'lkS', 'lkW', 'q'].forEach((id) => $(id).addEventListener('input', applyFilters));
+(function () { const h = $('hues'); for (let i = 0; i < 10; i++) { const b = document.createElement('button'); b.className = 'hue'; const ang = (i / 10) * Math.PI * 2; b.dataset.h = ang; b.style.background = labHex(lch(0.7, 0.16, ang)); b.onclick = () => { b.classList.toggle('on'); applyFilters(); }; h.appendChild(b); } })();
+$('clearAll').onclick = () => { ['lkL', 'lkC', 'lkS'].forEach((id) => ($(id).value = 0)); $('lkW').value = 50; $('q').value = ''; document.querySelectorAll('.hue.on').forEach((h) => h.classList.remove('on')); TILES.forEach((t) => (t.el.style.order = '')); applyFilters(); };
+$('filterBtn').onclick = () => $('filters').classList.toggle('hidden');
+$('morelike').onclick = () => { const c = S.candidate; if (!c) return; TILES.forEach((t) => (t.el.style.order = Math.round(rampDist(t.g, c) * 100))); document.querySelectorAll('.band').forEach((b) => (b.style.display = 'contents')); toast('sorted by similarity to ' + c.name); };
+document.querySelectorAll('.tools button').forEach((b) => (b.onclick = () => { document.querySelectorAll('.tools button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); $('wallwrap').style.cursor = b.dataset.tool === 'hand' ? 'grab' : 'crosshair'; if (b.dataset.tool !== 'hand') toast('draw around the ones you like, then keep or cut'); }));
+
+/* ── actions ───────────────────────────────────────────────── */
+function setSource(s) { S.source = s; document.querySelectorAll('[data-src]').forEach((b) => b.classList.toggle('on', b.dataset.src === s)); document.querySelectorAll('.src').forEach((el) => el.classList.toggle('on', el.id === 'src-' + s)); show('browseCtl', s === 'browse'); show('buildCtl', s === 'build'); show('extractCtl', s === 'extract'); $('filters').classList.add('hidden'); if (s !== 'browse') { S.candidate = null; } renderAll(); }
+document.querySelectorAll('[data-src]').forEach((b) => (b.onclick = () => setSource(b.dataset.src)));
+function pushRecent(g) { if (!S.recent.includes(g)) S.recent.unshift(g); if (S.recent.length > 60) S.recent.pop(); }
+function commit() { if (!S.candidate) return; S.working = S.candidate; S.edited = false; S.selStop = null; pushRecent(S.candidate); S.candidate = null; TILES.forEach((t) => t.el.classList.remove('sel')); }
+$('useBtn').onclick = () => { const n = S.candidate && S.candidate.name; commit(); renderAll(); toast(n + ' is now your working gradient'); };
+$('pdismiss').onclick = () => { S.candidate = null; TILES.forEach((t) => t.el.classList.remove('sel')); renderAll(); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.armed) S.armed = null; else if (S.candidate) { S.candidate = null; TILES.forEach((t) => t.el.classList.remove('sel')); } $('filters').classList.add('hidden'); $('variants').classList.add('hidden'); renderAll(); } if (e.key === 'Enter' && S.candidate) $('useBtn').click(); });
+$('pmix').onclick = () => { if (!S.candidate) return; S.slotA = S.working || S.candidate; S.slotB = S.candidate; pushRecent(S.candidate); setSource('build'); };
+$('mixwith').onclick = () => { const cur = liveInput() || S.candidate; if (!cur) return; S.slotA = cur; S.armed = 'B'; setSource('browse'); toast('A ← ' + cur.name + ' · now pick B'); };
+const star = (g) => { if (!g) return; if (S.starred.includes(g)) S.starred.splice(S.starred.indexOf(g), 1); else { S.starred.push(g); pushRecent(g); } renderAll(); };
+$('pstar').onclick = () => star(S.candidate); $('wstar').onclick = () => star(liveInput() || S.candidate);
+$('stateChip').onclick = () => { if (S.edited) { S.edited = false; S.selStop = null; renderAll(); } };
+$('swap').onclick = () => { [S.slotA, S.slotB] = [S.slotB, S.slotA]; renderAll(); };
+document.querySelectorAll('.blend input').forEach((i) => (i.oninput = () => { S.blend[i.dataset.ch] = +i.value / 100; $('b' + i.dataset.ch + 'i').style.width = i.value + '%'; $('b' + i.dataset.ch + 'o').textContent = i.value + '%'; renderAll(); }));
+document.querySelectorAll('#rule button').forEach((b) => (b.onclick = () => { document.querySelectorAll('#rule button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); S.rule = b.dataset.r; renderHero(); }));
+$('ncount').oninput = () => { S.n = Math.max(2, Math.min(16, +$('ncount').value || 6)); renderHero(); };
+document.querySelectorAll('[data-adj]').forEach((i) => (i.oninput = () => { const k = i.dataset.adj; if (k === 'hue') S.adj.hue = +i.value; if (k === 'chroma') S.adj.chroma = +i.value / 100; if (k === 'contrast') S.adj.contrast = +i.value / 100; if (k === 'reverse') S.adj.reverse = i.checked; const bar = i.parentElement.querySelector('i'); if (bar) bar.style.width = ((+i.value - +i.min) / (+i.max - +i.min) * 100) + '%'; const o = i.closest('.sl').querySelector('output'); if (o) o.textContent = k === 'hue' ? i.value + '°' : (+i.value / 100).toFixed(2); S.edited = S.source === 'browse'; renderHero(); }));
+
+/* drawer */
+function openDrawer(tab) { show('drawer', true); document.querySelectorAll('.drawer .tabs [data-dt]').forEach((b) => b.classList.toggle('on', b.dataset.dt === tab)); document.querySelectorAll('.dt').forEach((d) => d.classList.toggle('on', d.id === 'dt-' + tab)); }
+$('wramp').onclick = () => { if (!$('drawer').classList.contains('hidden')) { show('drawer', false); return; } if (!liveInput() && S.candidate) { commit(); renderAll(); } openDrawer('stops'); };
+document.querySelectorAll('.drawer .tabs [data-dt]').forEach((b) => (b.onclick = () => openDrawer(b.dataset.dt)));
+$('drawerClose').onclick = () => show('drawer', false);
+
+/* my gradients */
+$('mineExp').onclick = () => { const m = $('mine'); m.classList.toggle('open'); $('mineExp').textContent = m.classList.contains('open') ? '▾ hide groups' : '▴ groups'; };
+
+/* variants + overlays */
+$('btnVariants').onclick = () => $('variants').classList.toggle('hidden');
+document.querySelectorAll('.vslot[data-v]').forEach((b) => (b.onclick = (e) => { if (e.shiftKey) { S.vsecond = +b.dataset.v; } else { document.querySelectorAll('.vslot[data-v]').forEach((x) => x.classList.remove('on', 'second')); b.classList.add('on'); S.vsecond = null; } document.querySelectorAll('.vslot[data-v]').forEach((x) => x.classList.toggle('second', S.vsecond === +x.dataset.v)); show('tween', S.vsecond != null); }));
+$('btnExport').onclick = () => $('exportDlg').classList.add('on');
+$('btnWallpaper').onclick = () => $('wp').classList.add('on');
+$('btnShare').onclick = () => toast('link copied');
+document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => { $('exportDlg').classList.remove('on'); $('wp').classList.remove('on'); }));
+$('exportDlg').onclick = (e) => { if (e.target === $('exportDlg')) $('exportDlg').classList.remove('on'); };
+document.querySelectorAll('.fmtgrid button').forEach((b) => (b.onclick = () => { toast('exported ' + b.textContent); $('exportDlg').classList.remove('on'); }));
+let tt; function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('on'), 1800); }
+
+/* viewport */
+document.querySelectorAll('#vp button').forEach((b) => (b.onclick = () => { document.querySelectorAll('#vp button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); document.body.className = b.dataset.vp === 'desktop' ? '' : b.dataset.vp; }));
+const applyHash = () => { const h = location.hash.slice(1) || 'desktop'; const b = document.querySelector('#vp [data-vp=' + h + ']'); if (b) b.click(); }; window.addEventListener('hashchange', applyHash); applyHash();
+
+applyFilters(); renderAll();
+</script>
+</body>
+</html>
