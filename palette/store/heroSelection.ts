@@ -48,6 +48,10 @@ export interface HeroSelection {
 
 let picks: Partial<Record<HeroMode, HeroSelection>> = {};
 let active: HeroMode | null = null;
+/** Bumped on EVERY setHeroPick call, including the same-item no-op, so a host can see a
+ *  repeat click on the item already in hand (the v2 shell: first click previews, second
+ *  click keeps/bakes — owner, 2026-09-03). Additive: nothing else reads it. */
+let serial = 0;
 let optionsOpen = false;
 const listeners = new Set<() => void>();
 const emit = (): void => listeners.forEach((l) => l());
@@ -65,7 +69,11 @@ const sameItem = (a: HeroSelection | undefined, b: HeroSelection): boolean =>
  * churning the dock + every hero); re-picking while the dock is closed re-opens it.
  */
 export const setHeroPick = (sel: HeroSelection): void => {
-  if (active === sel.mode && sameItem(picks[sel.mode], sel) && optionsOpen) return;
+  serial++;
+  if (active === sel.mode && sameItem(picks[sel.mode], sel) && optionsOpen) {
+    emit();
+    return;
+  }
   if (!sameItem(picks[sel.mode], sel)) picks = { ...picks, [sel.mode]: sel };
   active = sel.mode;
   optionsOpen = true;
@@ -113,6 +121,9 @@ export const useHeroPick = (mode: HeroMode): HeroSelection | null =>
 /** The pick the dock acts on (the active surface's pick). */
 export const useActiveHeroSelection = (): HeroSelection | null =>
   useSyncExternalStore(subscribe, activeSelection, activeSelection);
+
+/** The pick serial: changes on every click, even a repeat of the item in hand. */
+export const usePickSerial = (): number => useSyncExternalStore(subscribe, () => serial, () => serial);
 
 /** Which surface is active — distinguishes the active glow from a dormant (still-shown) pick. */
 export const useActiveHeroMode = (): HeroMode | null =>

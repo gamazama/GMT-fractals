@@ -152,10 +152,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
       title={bakedFrom ? 'Undo the bake and go back to the source that produced this gradient' : 'Edited stops'}
       onClick={() => useWorkingStore.getState().returnToSource()}
     >
-      ◆ edited{bakedFrom ? ' · return to source' : ''}
+      ◆ editing{bakedFrom ? ' · return to source' : ''}
     </button>
   ) : (
-    <span className={chip(false, 'live')}>● working</span>
+    <span className={chip(false, 'live')} title="A preview: click the same gradient again, or edit a stop, to keep it">● preview</span>
   );
 
   return (

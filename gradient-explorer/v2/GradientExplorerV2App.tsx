@@ -36,7 +36,7 @@ import { ExtractStage } from './ExtractStage';
 import { FavientsPanel } from '../../palette/components/FavientsPanel';
 import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
-import { useActiveHeroSelection, deselectActiveHero } from '../../palette/store/heroSelection';
+import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
@@ -91,6 +91,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const [variantsOpen, setVariantsOpen] = useState(false);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
+  const pickSerial = usePickSerial();
   const recentCount = useFavientsStore((s) => s.favients.length);
   const armed = useArmedSlot();
   useGlobalContextMenu();
@@ -106,7 +107,9 @@ export const GradientExplorerV2App: React.FC = () => {
 
   // A pick IS a Use (owner, end of 2026-09-03): a wall or shelf click becomes the working
   // gradient at once (one undo step back to the previous one) and opens a new Recent
-  // session. The same gradient picked again is a no-op.
+  // session. That is the PREVIEW; the SAME gradient clicked again KEEPS it — bakes it into
+  // the editable stops document (owner, later that day: "apply / bake the preview on the
+  // 2nd click"). A third click, or a click on it once baked, is a no-op.
   //
   // ARMED TARGETS (§3): when a Mix slot is armed (entering Mix arms B; clicking a slot arms
   // it — see BuildStage), the NEXT pick fills that slot instead — checked first, so an
@@ -131,11 +134,16 @@ export const GradientExplorerV2App: React.FC = () => {
       return;
     }
     const w = useWorkingStore.getState();
-    if (w.input.kind === 'gradient' && favientSig(w.input.config) === favientSig(p.config)) return;
+    const sig = favientSig(p.config);
+    if (w.input.kind === 'gradient' && favientSig(w.input.config) === sig) {
+      w.beginEdit();
+      return;
+    }
+    if (w.input.kind === 'stops' && w.bakedFrom?.input.kind === 'gradient' && favientSig(w.bakedFrom.input.config) === sig) return;
     const fromRecent = candidate.mode === 'favients';
     w.use(p.config, p.name, p.source ?? (fromRecent ? 'My Gradients' : 'Browse'), { fromRecent });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidate?.key, candidate?.mode]);
+  }, [candidate?.key, candidate?.mode, pickSerial]);
 
   // My Gradients follows the work (owner S3 review): every change to the derived output or
   // the name lands in the session's Recent entry, debounced past a drag.
@@ -227,7 +235,7 @@ export const GradientExplorerV2App: React.FC = () => {
             <span className="ml-4 text-[12px] text-accent-300">Pick a gradient for Mix slot {armed} · Esc cancels</span>
           )}
           {!armed && derived.empty && source === 'browse' && (
-            <span className="ml-4 text-[12px] text-fg-dim">Click any gradient below. It previews above; Use it, mix it, or keep looking.</span>
+            <span className="ml-4 text-[12px] text-fg-dim">Click a gradient to preview it above · click it again to keep and edit it.</span>
           )}
         </div>
         <div className="flex-1 min-h-0 flex flex-col relative">
