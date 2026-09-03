@@ -25,7 +25,7 @@
  * same ids it already holds and a drag survives the swap.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { deselectActiveHero, type HeroSelection } from '../../palette/store/heroSelection';
@@ -59,18 +59,21 @@ const btn = (accent = false): string =>
     accent ? 'bg-accent-400 text-black border-accent-400 font-semibold hover:brightness-110' : 'border-line/20 text-fg hover:border-accent-400 hover:text-accent-300'
   }`;
 
-/** Measure an element's width (for the palette drag scale and the curve editor). */
-const useWidth = (): [React.RefObject<HTMLDivElement>, number] => {
-  const ref = useRef<HTMLDivElement>(null);
+/** Measure an element's width (for the palette drag scale and the curve editor). A callback
+ *  ref, not an effect: the hero mounts its ramp AFTER the first render (it is hidden until a
+ *  pick), so an effect with an empty dep list would observe nothing and the width would stay
+ *  at its seed — which is exactly the "squashed curves" the owner saw. */
+const useWidth = (): [(el: HTMLDivElement | null) => void, number] => {
   const [w, setW] = useState(640);
-  useEffect(() => {
-    const el = ref.current;
+  const ro = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: HTMLDivElement | null) => {
+    ro.current?.disconnect();
+    ro.current = null;
     if (!el) return;
     const update = () => setW(Math.max(200, el.clientWidth));
     update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
+    ro.current = new ResizeObserver(update);
+    ro.current.observe(el);
   }, []);
   return [ref, w];
 };
@@ -108,10 +111,23 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMix
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [follow, source, candKey]);
 
+  // Display space: a catalog config may carry colorSpace 'linear' (a GMT texture hint), and
+  // rendering with it yields linear-light bytes that read dark on screen. Swatches and
+  // strips are display, so always render sRGB here (the pipeline does the same).
   const candRamp = useMemo(
-    () => (cand ? renderStopsToRamp(cand.config.stops, cand.config.blendSpace, cand.config.colorSpace) : null),
+    () => (cand ? renderStopsToRamp(cand.config.stops, cand.config.blendSpace, 'srgb') : null),
     [cand],
   );
+  // A click on the swatch that already IS the working gradient would otherwise do nothing
+  // visible; say so.
+  useEffect(() => {
+    if (!cand || previewOnly || follow) return;
+    const inp = useWorkingStore.getState().input;
+    if (inp.kind === 'gradient' && favientSig(inp.config) === favientSig(cand.config)) {
+      showToast(`${cand.name} is already your working gradient`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candKey]);
   const mainConfig: GradientConfig | null = previewOnly ? cand!.config : derived.config;
   const mainRamp: RGB[] | null = previewOnly ? candRamp : derived.ramp;
   const mainName = previewOnly ? cand!.name : derived.name;

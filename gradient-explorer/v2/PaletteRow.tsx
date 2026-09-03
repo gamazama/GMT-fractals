@@ -95,7 +95,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
         const hex = hexOf(sw.color);
         const isDrag = dragging === i;
         return (
-          <div key={i} className="relative flex-1 min-w-0 group">
+          <div key={i} className={`relative flex-1 min-w-0 group ${dragging != null && !isDrag ? 'pointer-events-none' : ''}`}>
             <button
               className={`w-full h-full rounded-md border border-black/40 ${readOnly ? 'cursor-pointer' : 'cursor-ew-resize'} ${
                 isDrag ? 'outline outline-2 outline-accent-400' : 'hover:outline hover:outline-2 hover:outline-white'

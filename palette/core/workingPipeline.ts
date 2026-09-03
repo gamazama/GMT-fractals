@@ -68,9 +68,15 @@ export const isIdentityAdjust = (p: GeneratorParams): boolean =>
   p.contrast === 1 &&
   p.noise === 0;
 
-/** Base channels of a stops config (rendered through the canonical sampler, then decomposed). */
+/**
+ * Base channels of a stops config (rendered through the canonical sampler, then decomposed).
+ * Always rendered in DISPLAY space ('srgb'): a config's `colorSpace` is a GMT texture hint
+ * ('linear' means "the shader wants linear-light bytes"), and decomposing linear bytes as if
+ * they were sRGB darkens everything downstream — the palette swatches read darker than the
+ * editor strip, which renders display space itself (owner review 2026-09-03).
+ */
 export const channelsOfConfig = (c: GradientConfig): Channels =>
-  decomposeRamp(renderStopsToRamp(c.stops, c.blendSpace, c.colorSpace));
+  decomposeRamp(renderStopsToRamp(c.stops, c.blendSpace, 'srgb'));
 
 /** Base channels of a bare ramp (an Extract result, an imported file). */
 export const channelsOfRamp = (ramp: RGB[]): Channels => decomposeRamp(ramp);
@@ -116,7 +122,7 @@ export const runWorkingPipeline = (
   if (passthrough && verbatim) {
     return {
       base,
-      ramp: renderStopsToRamp(verbatim.stops, verbatim.blendSpace, verbatim.colorSpace),
+      ramp: renderStopsToRamp(verbatim.stops, verbatim.blendSpace, 'srgb'),
       final: built.final,
       config: verbatim,
       passthrough: true,

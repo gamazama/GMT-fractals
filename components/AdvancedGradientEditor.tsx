@@ -862,7 +862,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                                     className="mb-px"
                                  />
                                  
-                                 {selectedNodes.length === 1 && (
+                                 {chrome === 'full' && selectedNodes.length === 1 && (
                                      <Slider 
                                         label="Position" 
                                         value={selectedNodes[0].position * 100} 
@@ -871,13 +871,13 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                                     />
                                  )}
 
-                                 <Slider
+                                 {chrome === 'full' && (<Slider
                                     label="Bias (Midpoint)"
                                     value={commonBias === -1 ? 50 : commonBias * 100}
                                     min={0} max={100} step={1}
                                     onChange={(val) => handleSliderPropertyChange('bias', val / 100)}
                                     overrideInputText={commonBias === -1 ? "Mixed" : undefined}
-                                 />
+                                 />)}
                              </div>
                         </>
                     ) : (
