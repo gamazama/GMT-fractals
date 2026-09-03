@@ -38,11 +38,20 @@ In this order — each is the entry point to a layer:
 
 ## Decisions
 
-**There are none.** No ADR and no policy doc mentions the palette — verified
-2026-09-01, `grep -rl 'palette/core\|palette suite' docs/adr/ docs/policy/`
-returns nothing. Stated here so nobody goes hunting. The cross-cutting write-up
-is `docs/modules/palette/palette-suite.md`; if you make a load-bearing choice
-here, write the first ADR.
+Two, both from the Gradient Explorer v2 work (2026-09-03); before that there were
+none (verified 2026-09-01, `grep -rl 'palette/core\|palette suite' docs/adr/
+docs/policy/` returned nothing).
+
+- `docs/adr/0111-working-pipeline-input-slot.md` — ONE pipeline over an input
+  slot for every source (`palette/core/workingPipeline.ts`,
+  `palette/store/workingStore.ts`); stops pass through verbatim under the identity
+  pipeline; bake folds and resets rather than freezing.
+- `docs/adr/0112-variants-bypass-the-scene-loader.md` — variants snapshot the
+  authored slices + documents (minus `favients`) and restore through the feature
+  setters inside one undo bracket, never `loadPreset` (it wipes undo, mutates the
+  preset, clobbers project settings, and re-merges the shelf with a toast).
+
+The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 
 ## What's load-bearing
 
@@ -61,11 +70,15 @@ here, write the first ADR.
   (aliased `genEdit` / `editorEdit` / `favEdit`). Discrete gestures self-bracket;
   drags open on pointerdown and close on window pointerup. Snapshots come from
   history providers registered in `registerPaletteUI.ts`.
-- **This tree has ZERO annotation markers.** No `@invariant`, `@assumption`,
-  `@bug` or `@see` anywhere under `palette/`. Every drift the audit found here
-  was a prose header claim that nothing could check — which is exactly why they
-  went unnoticed. New load-bearing claims go in as annotations naming a proof
-  command, not as prose.
+- **Annotation markers arrived with v2 (2026-09-03); before that this tree had
+  ZERO.** `palette/core/workingPipeline.ts`, `palette/core/paletteSample.ts` and
+  `palette/store/favientsStore.ts` (`collectRecent`) carry `@invariant`s that
+  name their harness and were falsified the day they were written;
+  `palette/store/workingStore.ts` carries an `@assumption` and both new stores
+  carry `@see` to ADR-0111 / ADR-0112. Everything older is still a prose header
+  claim nothing can check — which is exactly why the audit found drift there.
+  New load-bearing claims go in as annotations naming a proof command, not as
+  prose.
 
 ## Guards
 
@@ -99,6 +112,9 @@ tells the reader which harness covers what:
 | `core/img2grad/**` | `debug/test-palette-img2grad.mts` **and** `-overshoot.mts` |
 | `core/selectionGeometry.ts` | `debug/test-palette-selection.mts` |
 | `core/wallLayout.ts` | `debug/test-palette-walllayout.mts` |
+| `core/paletteSample.ts` (v2 palette face, More like this) | `debug/test-palette-sample.mts` |
+| `core/workingPipeline.ts` (v2 Working pipeline) | `debug/test-palette-working.mts` |
+| `store/favientsStore.ts` `collectRecent` (v2 Recent zone) | `debug/test-palette-favients.mts` section [6] |
 
 The two img2grad harnesses are **not** redundant — the overshoot sweep is the
 only thing that catches the `resample()` overshoot regression, proven by removing
@@ -118,7 +134,10 @@ the run stay green. A green `test:palette` is never evidence about a component.
   you changed: **restart `npm run dev` first.**
 - **The Favients COLLECTION is shared across apps (`gmt.favients`); the PANEL
   window state is split per host by `storageKey`.** A new host that does not
-  supply its own key silently inherits app-gmt's.
+  supply its own key silently inherits app-gmt's. Since 2026-09-03 the collection
+  also carries the v2 auto-managed **Recent** group (`RECENT_GROUP`), so a
+  gradient used in the Explorer shows up under a read-only "Recent" divider in
+  app-gmt's and fluid-toy's shelves too — by design, not a leak.
 - **Mounting before `applyPanelManifest` fails silently** — `smoke:boot` stays
   green. Annotated `@assumption` at the call site, not `@invariant`, precisely
   because nothing catches it.

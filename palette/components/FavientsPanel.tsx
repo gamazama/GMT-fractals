@@ -23,6 +23,8 @@ import {
   favientSig,
   newGroupId,
   DEFAULT_GROUP,
+  RECENT_LABEL,
+  isRecentGroup,
   type Favient,
 } from '../store/favientsStore';
 import {
@@ -591,11 +593,21 @@ const Placeholder: React.FC<{ w: number; h: number; list?: boolean }> = ({ w, h,
     <div className="shrink-0 rounded-[2px] border border-dashed border-accent-300/70 bg-accent-300/10" style={{ width: w, height: h }} />
   );
 
-const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; autoFocus: boolean }> = ({ label, onRename, autoFocus }) => {
+/** `fixed` = an auto-managed group (Recent): same divider chrome, static label, no rename.
+ *  The user still drags OUT of it into their own groups — that is the organising gesture —
+ *  they just don't get to name a group the app fills and caps. */
+const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; autoFocus: boolean; fixed?: boolean }> = ({ label, onRename, autoFocus, fixed }) => {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (autoFocus) ref.current?.focus();
-  }, [autoFocus]);
+    if (autoFocus && !fixed) ref.current?.focus();
+  }, [autoFocus, fixed]);
+  if (fixed)
+    return (
+      <div className="flex items-center gap-2 mt-2.5 mb-1 px-0.5">
+        <span className="text-[10px] uppercase tracking-wide text-fg-tertiary w-28">{label}</span>
+        <div className="flex-1 h-px bg-line/10" />
+      </div>
+    );
   return (
     <div className="flex items-center gap-2 mt-2.5 mb-1 px-0.5">
       <input
@@ -1040,9 +1052,10 @@ export const FavientsPanel: React.FC = () => {
                 <div key={block.group}>
                   {block.group !== DEFAULT_GROUP && (
                     <GroupDivider
-                      label={groupLabel}
+                      label={isRecentGroup(block.group) ? RECENT_LABEL : groupLabel}
                       onRename={(v) => renameGroup(block.group, v)}
                       autoFocus={focusGroup === block.group}
+                      fixed={isRecentGroup(block.group)}
                     />
                   )}
                   <div

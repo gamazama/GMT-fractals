@@ -25,6 +25,8 @@ export const APP_ENTRYPOINTS = {
   'fractal-toy': ['fractal-toy/main.tsx'],
   'mesh-export': ['mesh-export/main.tsx'],
   'gradient-explorer': ['gradient-explorer/main.tsx'],
+  // v2 shell, built beside the old one until parity (plans/ge-v2-design.md §7).
+  'gradient-explorer-next': ['gradient-explorer/v2/main.tsx'],
   'demo': ['index.tsx'],
 };
 
