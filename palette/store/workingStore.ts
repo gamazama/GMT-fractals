@@ -22,8 +22,10 @@
  * covers it too (one `paramEdit` bracket per action).
  *
  * Recent auto-collect: the store does NOT import the favourites store. A host registers a
- * `RecentCollector` (see palette/installWorking.ts); `use`, `beginEdit` and
- * `collectCurrent` call it. Nothing here collects on a mere pick.
+ * `RecentCollector` (see palette/installWorking.ts); `beginEdit` and `collectCurrent` call
+ * it. `use` does NOT (since 2026-09-03 a Browse pick IS a Use, and a mere pick must never
+ * land in Recent): the shell collects on bake, mix, star, export, share, wallpaper, and on
+ * leaving a live source.
  *
  * Undo + Save/Load: `captureWorkingHistory` / `serializeWorkingDocument` (registered by
  * installWorking) snapshot `{ input, name, bakedFrom }`; the palette-row prefs (positions /
@@ -104,7 +106,7 @@ export interface WorkingState {
 
   /** Replace the input. One undo entry. Clears any fold memory. */
   setInput: (input: WorkingInput) => void;
-  /** "Use": a fixed gradient becomes the input (cloned) and is collected into Recent. */
+  /** "Use": a fixed gradient becomes the input (cloned). One undo entry; NOT collected. */
   use: (config: GradientConfig, name: string, source: string) => void;
   setName: (name: string | null) => void;
   /** Fold the live pipeline into editable stops (no-op when already editing an untouched
@@ -245,7 +247,6 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
   use: (config, name, source) => {
     const c = cloneConfig(config);
     paramEdit(() => set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null }));
-    collect(c, name, source);
   },
 
   setName: (name) => paramEdit(() => set({ name: name && name.trim() ? name : null })),

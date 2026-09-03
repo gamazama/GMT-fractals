@@ -19,8 +19,11 @@
  * until their pieces land.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
+import { useGlobalContextMenu } from '../../hooks/useGlobalContextMenu';
+import GlobalContextMenu from '../../components/GlobalContextMenu';
+import { StoreCallbacksProvider, type StoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { ToastHost } from '../../engine/components/ToastHost';
 import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
@@ -34,7 +37,7 @@ import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
 import { useGeneratorStore } from '../../palette/store/generatorStore';
-import { useFavientsStore } from '../../palette/store/favientsStore';
+import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 
@@ -59,6 +62,28 @@ export const GradientExplorerV2App: React.FC = () => {
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const recentCount = useFavientsStore((s) => s.favients.length);
+  useGlobalContextMenu();
+  const contextMenu = useEngineStore((s) => s.contextMenu);
+  const closeContextMenu = useEngineStore((s) => s.closeContextMenu);
+  const openHelp = useEngineStore((s) => s.openHelp);
+  // The shared stops editor brackets undo and opens its right-click menus through this
+  // context (the old shell provides the same three callbacks).
+  const storeCallbacks = useMemo<StoreCallbacks>(() => {
+    const st = useEngineStore.getState();
+    return { handleInteractionStart: st.handleInteractionStart, handleInteractionEnd: st.handleInteractionEnd, openContextMenu: st.openContextMenu };
+  }, []);
+
+  // A pick IS a Use (owner, end of 2026-09-03): a wall or shelf click becomes the working
+  // gradient at once (one undo step back to the previous one); nothing lands in Recent for
+  // a mere pick. The same gradient picked again is a no-op.
+  useEffect(() => {
+    if (!candidate) return;
+    const p = candidate.payload;
+    const w = useWorkingStore.getState();
+    if (w.input.kind === 'gradient' && favientSig(w.input.config) === favientSig(p.config)) return;
+    w.use(p.config, p.name, p.source ?? (candidate.mode === 'favients' ? 'My Gradients' : 'Browse'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate?.key, candidate?.mode]);
 
   const switchSource = useCallback(
     (next: SourceId) => {
@@ -78,26 +103,22 @@ export const GradientExplorerV2App: React.FC = () => {
 
   const mixWith = useCallback(() => {
     const d = deriveWorkingNow();
-    if (d) useGeneratorStore.getState().sendRampToSlot('A', d.ramp, workingNameNow());
-    if (candidate) {
-      const p = candidate.payload;
-      useGeneratorStore.getState().sendRampToSlot('B', deriveRampOf(p.config), p.name);
-      deselectActiveHero();
+    if (d) {
+      useWorkingStore.getState().collectCurrent();
+      useGeneratorStore.getState().sendRampToSlot('A', d.ramp, workingNameNow());
     }
     switchSource('build');
-    showToast(candidate ? 'Blending A and B — drag the sliders' : 'Slot A is set — pick a gradient for B');
-  }, [candidate, switchSource]);
+    showToast('Slot A is set — pick a gradient for B');
+  }, [switchSource]);
 
-  // Esc dismisses a candidate preview or closes the drawer.
+  // Esc closes the variants popover.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (variantsOpen) setVariantsOpen(false);
-      else if (candidate) deselectActiveHero();
+      if (e.key === 'Escape' && variantsOpen) setVariantsOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [candidate, variantsOpen]);
+  }, [variantsOpen]);
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
@@ -108,6 +129,7 @@ export const GradientExplorerV2App: React.FC = () => {
   };
 
   return (
+    <StoreCallbacksProvider value={storeCallbacks}>
     <div className="fixed inset-0 bg-black text-fg select-none flex flex-col overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
       {/* top bar */}
       <header className="h-12 shrink-0 flex items-center gap-1.5 px-4 bg-surface-dock border-b border-line/10">
@@ -127,7 +149,7 @@ export const GradientExplorerV2App: React.FC = () => {
         <SettingsButton />
       </header>
 
-      <WorkingHero derived={derived} candidate={candidate} source={source} onMixWith={mixWith} />
+      <WorkingHero derived={derived} source={source} onMixWith={mixWith} />
 
       {/* stage */}
       <div className="flex-1 min-h-0 flex flex-col relative">
@@ -170,16 +192,22 @@ export const GradientExplorerV2App: React.FC = () => {
       )}
 
       {variantsOpen && <VariantsMenu derived={derived} onClose={() => setVariantsOpen(false)} />}
+      {contextMenu.visible && (
+        <GlobalContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenu.items}
+          targetHelpIds={contextMenu.targetHelpIds}
+          onClose={closeContextMenu}
+          onOpenHelp={openHelp}
+        />
+      )}
       <SettingsHost />
       <ToastHost />
       <FullscreenGradientOverlay />
     </div>
+    </StoreCallbacksProvider>
   );
 };
-
-/** Render a config to its ramp (for Mix with on a candidate). */
-import { renderStopsToRamp } from '../../palette/core/gmtGradient';
-import type { GradientConfig } from '../../types';
-const deriveRampOf = (c: GradientConfig) => renderStopsToRamp(c.stops, c.blendSpace, c.colorSpace);
 
 export default GradientExplorerV2App;

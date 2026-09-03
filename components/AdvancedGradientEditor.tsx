@@ -88,6 +88,9 @@ interface AdvancedGradientEditorProps {
     chrome?: 'full' | 'strip';
     /** Height of the colour strip in px (default 32, the panel size). The v2 hero uses ~60. */
     stripHeight?: number;
+    /** Host override for the inspector colour picker's fixed Palette row (hex strings). The
+     *  v2 hero feeds its working palette here so there is ONE palette, not two. */
+    pickerPalette?: string[];
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -112,7 +115,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32 }) => {
+const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette }) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -845,11 +848,11 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                     {selectedNodes.length > 0 ? (
                         <>
                              <div className="mb-px mt-2">
-                                <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} />
+                                <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
                              </div>
                              
                              <div className="flex flex-col">
-                                 <Dropdown 
+                                 {chrome === 'full' && (<Dropdown 
                                     label="Interpolation"
                                     value={commonInterpolation}
                                     onChange={(v) => handleMultiPropertyChange('interpolation', v as InterpolationMode)}
@@ -860,7 +863,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                                         { label: 'Smooth', value: 'smooth' }
                                     ]}
                                     className="mb-px"
-                                 />
+                                 />)}
                                  
                                  {chrome === 'full' && selectedNodes.length === 1 && (
                                      <Slider 

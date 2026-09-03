@@ -1,34 +1,32 @@
 /**
- * WorkingHero — the ONE hero of the v2 shell, and it IS the stops editor (owner review
- * 2026-09-03; plans/ge-v2-design.md §5.1 revised, §6b).
+ * WorkingHero — the ONE hero of the v2 shell, and it IS the stops editor (owner reviews
+ * 2026-09-03; plans/ge-v2-design.md §5.1 revised, §6b, §12).
  *
  * Top to bottom inside the block:
- *   1. name · state chip · Follow · Mix with · ★ · Curves ▾ · Adjust ▾
+ *   1. name · state chip · More like this · Mix with · ★ · Curves ▾ · Adjust ▾
  *   2. the PALETTE ROW — draggable sample positions on top of the ramp (PaletteRow)
  *   3. the RAMP = the shared AdvancedGradientEditor in `strip` chrome: draggable stop knots,
- *      add on click, per-stop inspector (colour / interpolation / position / bias) right
- *      under it. The first edit on a live or picked input is the bake (workingStore.beginEdit).
- *   4. the preview row (a Browse candidate) with Use · Mix with · More like this · ★ · ✕
- *   5. the expander: Curves (the channel graph editor over the working base) or Adjust
+ *      add on click, right-click menu, per-stop colour picker under it whose Palette row IS
+ *      the working palette (one palette, not two). The first gesture on a live or picked
+ *      input is the bake (workingStore.beginEdit).
+ *   4. the expander: Curves (the channel graph editor over the working base) or Adjust
  *      (the Modify + Noise dials, standard GMT sliders). Same surface, no drawer.
  *
- * States: hidden (nothing yet) · previewing (the first pick IS the hero) · working ·
- * live from Build/Extract · edited (return to source). Follow: while on and Browse is the
- * source, every candidate flows straight into Working through a plain setState (not
- * undoable, not collected).
+ * There is no previewing state and no preview row any more: a Browse or shelf click IS a
+ * Use (the shell does it), the previous working gradient is one undo step away, and the
+ * first ramp gesture edits. States: hidden (nothing yet) · working · live from Build /
+ * Extract · edited (return to source).
  *
  * Editor wiring: while the input is NOT the stops document, the editor shows the derived
  * config (verbatim for a picked gradient, fitted for a live one) and the bracket hooks fold
  * it into the document on the first gesture; afterwards it edits paletteEditorStore through
- * the (d) seam (editorEditStart / editorEditEnd / editorEdit), exactly as the old Stops
- * sub-mode did. Stop ids are index-derived by the fitter, so the fold hands the editor the
- * same ids it already holds and a drag survives the swap.
+ * the (d) seam (editorEditStart / editorEditEnd / editorEdit). Stop ids are index-derived by
+ * the fitter, so the fold hands the editor the same ids it already holds.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { deselectActiveHero, type HeroSelection } from '../../palette/store/heroSelection';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
@@ -36,28 +34,23 @@ import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } fro
 import { applyEditorChange } from '../../palette/core/editorConfig';
 import { useGeneratorStore, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
-import { GradientStrip } from '../../palette/components/GradientStrip';
-import { renderStopsToRamp } from '../../palette/core/gmtGradient';
-import { swatchesAt } from '../../palette/core/paletteSample';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
-import { showToast } from '../../engine/store/toastStore';
 import { PaletteRow } from './PaletteRow';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
 
-const chip = (on = false, tone: 'live' | 'edited' | 'ghost' | 'star' | 'plain' = 'plain'): string => {
+const hexOf = (c: RGB): string =>
+  '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+
+const chip = (on = false, tone: 'live' | 'edited' | 'star' | 'plain' = 'plain'): string => {
   const base = 'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[12px] whitespace-nowrap border transition-colors';
   if (tone === 'live') return `${base} text-[#86e3a6] border-[#86e3a6]/40`;
   if (tone === 'edited') return `${base} text-[#f3b562] border-[#f3b562]/40 cursor-pointer hover:border-[#f3b562]`;
-  if (tone === 'ghost') return `${base} text-fg-dim border-transparent`;
   if (tone === 'star') return `${base} ${on ? 'text-[#f5c542] border-[#f5c542]' : 'text-fg-muted border-line/20 hover:text-fg hover:border-line/40'}`;
   return `${base} ${on ? 'text-accent-300 border-accent-400 bg-accent-400/10' : 'text-fg-muted border-line/20 hover:text-fg hover:border-line/40'}`;
 };
-const btn = (accent = false): string =>
-  `h-7 px-3 rounded-lg text-[12px] border transition-colors ${
-    accent ? 'bg-accent-400 text-black border-accent-400 font-semibold hover:brightness-110' : 'border-line/20 text-fg hover:border-accent-400 hover:text-accent-300'
-  }`;
+const btn = (): string => 'h-7 px-3 rounded-lg text-[12px] border border-line/20 text-fg hover:border-accent-400 hover:text-accent-300 transition-colors';
 
 /** Measure an element's width (for the palette drag scale and the curve editor). A callback
  *  ref, not an effect: the hero mounts its ramp AFTER the first render (it is hidden until a
@@ -82,96 +75,41 @@ type Expander = 'curves' | 'adjust' | null;
 
 interface Props {
   derived: WorkingDerived;
-  candidate: HeroSelection | null;
   source: SourceId;
   onMixWith: () => void;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMixWith }) => {
-  const follow = useWorkingStore((s) => s.follow);
-  const positions = useWorkingStore((s) => s.positions);
+export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [expander, setExpander] = useState<Expander>(null);
   const [scrubT, setScrubT] = useState<number | null>(null);
   const [rampRef, rampW] = useWidth();
-  const cand = candidate?.payload ?? null;
-  const candKey = candidate?.key ?? null;
-  const previewOnly = derived.empty && !!cand;
 
-  // Follow: the Browse candidate flows straight into Working.
-  useEffect(() => {
-    if (!follow || source !== 'browse' || !cand) return;
-    useWorkingStore.setState({
-      input: { kind: 'gradient', config: JSON.parse(JSON.stringify(cand.config)) as GradientConfig, name: cand.name, source: cand.source ?? 'Browse' },
-      bakedFrom: null,
-      name: null,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [follow, source, candKey]);
-
-  // Display space: a catalog config may carry colorSpace 'linear' (a GMT texture hint), and
-  // rendering with it yields linear-light bytes that read dark on screen. Swatches and
-  // strips are display, so always render sRGB here (the pipeline does the same).
-  const candRamp = useMemo(
-    () => (cand ? renderStopsToRamp(cand.config.stops, cand.config.blendSpace, 'srgb') : null),
-    [cand],
-  );
-  // A click on the swatch that already IS the working gradient would otherwise do nothing
-  // visible; say so.
-  useEffect(() => {
-    if (!cand || previewOnly || follow) return;
-    const inp = useWorkingStore.getState().input;
-    if (inp.kind === 'gradient' && favientSig(inp.config) === favientSig(cand.config)) {
-      showToast(`${cand.name} is already your working gradient`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candKey]);
-  const mainConfig: GradientConfig | null = previewOnly ? cand!.config : derived.config;
-  const mainRamp: RGB[] | null = previewOnly ? candRamp : derived.ramp;
-  const mainName = previewOnly ? cand!.name : derived.name;
-  const palette = useMemo(
-    () => (previewOnly && candRamp ? swatchesAt(candRamp, positions) : derived.palette),
-    [previewOnly, candRamp, positions, derived.palette],
-  );
+  const config = derived.config;
   const favOf = useMemo(() => {
-    if (!mainConfig) return null;
-    const sig = favientSig(mainConfig);
-    return favients.find((f) => favientSig(f.config) === sig) ?? null;
-  }, [favients, mainConfig]);
-
-  if (!mainConfig || !mainRamp) return null;
-
-  const input = derived.input;
-  const showPreviewRow =
-    !!cand &&
-    !previewOnly &&
-    !follow &&
-    source === 'browse' &&
-    !(input.kind === 'gradient' && favientSig(input.config) === favientSig(cand.config));
-
-  const useCandidate = () => {
-    if (!cand) return;
-    useWorkingStore.getState().use(cand.config, cand.name, cand.source ?? 'Browse');
-    deselectActiveHero();
-    showToast(`${cand.name} is now your working gradient`);
-  };
-  const toggleStar = (config: GradientConfig, name: string, src: string) => {
-    const st = useFavientsStore.getState();
+    if (!config) return null;
     const sig = favientSig(config);
-    const existing = st.favients.find((f) => favientSig(f.config) === sig);
-    if (existing) st.remove(existing.id);
-    else st.add(config, name, src);
+    return favients.find((f) => favientSig(f.config) === sig) ?? null;
+  }, [favients, config]);
+  const paletteHex = useMemo(() => derived.palette.map((s) => hexOf(s.color)), [derived.palette]);
+
+  if (!config || !derived.ramp) return null;
+
+  const toggleStar = () => {
+    const st = useFavientsStore.getState();
+    if (favOf) {
+      st.remove(favOf.id);
+      return;
+    }
+    useWorkingStore.getState().collectCurrent();
+    st.add(config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
   };
 
   // ── editor wiring ─────────────────────────────────────────────────────────────
-  // The value the editor shows: the document once editing, else the derived config
-  // (the fold hands the document the same stops). A candidate preview: the first gesture
-  // Uses it, then folds.
-  const editorValue: GradientConfig = derived.edited ? docConfig : mainConfig;
+  const editorValue: GradientConfig = derived.edited ? docConfig : config;
   const ensureEditing = () => {
-    if (previewOnly) useCandidate();
     if (useWorkingStore.getState().input.kind !== 'stops') useWorkingStore.getState().beginEdit();
   };
   const onEditorStart = () => {
@@ -188,9 +126,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMix
     usePaletteEditorStore.getState().setConfig(applyEditorChange(cur, val));
   };
 
-  const stateChip = previewOnly ? (
-    <span className={chip(false, 'ghost')}>previewing · Use to keep</span>
-  ) : derived.live ? (
+  const stateChip = derived.live ? (
     <span className={chip(false, 'live')}>● live from {source === 'build' ? 'Build' : 'Extract'}</span>
   ) : derived.edited ? (
     <button
@@ -209,28 +145,25 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMix
       <div className="flex items-center gap-2.5 mb-2">
         <input
           className="bg-transparent border-0 outline-none text-[16px] font-semibold text-fg min-w-[80px] max-w-[40%]"
-          value={mainName}
-          readOnly={previewOnly}
+          value={derived.name}
           onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
           title="Name"
         />
         {stateChip}
         <span className="flex-1" />
-        <button
-          className={chip(follow)}
-          title="Follow the Browse candidate through Curves and Adjust (browsing under Follow is not undoable)"
-          onClick={() => useWorkingStore.getState().setFollow(!follow)}
-        >
-          ⛓ Follow
-        </button>
+        {source === 'browse' && (
+          <button
+            className={chip()}
+            title="Sort the wall by similarity to this gradient"
+            onClick={() => setSimilarityAnchor({ config, name: derived.name })}
+          >
+            More like this
+          </button>
+        )}
         <button className={chip()} onClick={onMixWith} title="Put this gradient into Build slot A and pick another for B">
           Mix with…
         </button>
-        <button
-          className={chip(!!favOf, 'star')}
-          title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'}
-          onClick={() => toggleStar(mainConfig, mainName, previewOnly ? cand!.source ?? 'Browse' : derived.input.kind)}
-        >
+        <button className={chip(!!favOf, 'star')} title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'} onClick={toggleStar}>
           ★
         </button>
         <span className="w-px h-5 bg-line/20 mx-1" />
@@ -243,7 +176,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMix
       </div>
 
       {/* 2. palette on top */}
-      <PaletteRow palette={palette} scale={Math.max(1, rampW - 16)} readOnly={previewOnly} onScrub={setScrubT} className="h-[34px] mb-1.5" />
+      <PaletteRow palette={derived.palette} scale={Math.max(1, rampW - 16)} onScrub={setScrubT} className="h-[34px] mb-1.5" />
 
       {/* 3. the ramp IS the stops editor */}
       <div ref={rampRef} className="relative">
@@ -255,6 +188,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMix
           onEditStart={onEditorStart}
           onEditEnd={editorEditEnd}
           edit={onEditorEdit}
+          pickerPalette={paletteHex}
         />
         {scrubT != null && (
           <div
@@ -264,59 +198,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onMix
         )}
       </div>
 
-      {/* 4. the candidate preview row */}
-      {showPreviewRow && cand && candRamp && (
-        <div className="mt-2.5 pt-2.5 border-t border-dashed border-line/20 grid grid-cols-[1fr_auto] gap-3.5 items-center">
-          <div>
-            <div className="text-[12px] text-fg-dim mb-1">
-              Previewing <b className="text-fg font-semibold text-[13px]">{cand.name}</b> {cand.source ?? ''}
-            </div>
-            <GradientStrip ramp={candRamp} height={36} className="w-full block opacity-90" />
-          </div>
-          <div className="flex gap-1.5">
-            <button className={btn(true)} onClick={useCandidate}>
-              Use ↑
-            </button>
-            <button className={btn()} onClick={onMixWith} title="Mix the working gradient with this one">
-              Mix with
-            </button>
-            <button
-              className={btn()}
-              title="Sort the wall by similarity to this gradient"
-              onClick={() => setSimilarityAnchor({ config: cand.config, name: cand.name })}
-            >
-              More like this
-            </button>
-            <button className={btn()} onClick={() => toggleStar(cand.config, cand.name, cand.source ?? 'Browse')} title="Save to My Gradients">
-              ★
-            </button>
-            <button className={btn()} onClick={() => deselectActiveHero()} title="Dismiss (Esc)">
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
-      {previewOnly && (
-        <div className="mt-2 flex gap-1.5 justify-end">
-          <button className={btn(true)} onClick={useCandidate}>
-            Use ↑
-          </button>
-          <button
-            className={btn()}
-            title="Sort the wall by similarity to this gradient"
-            onClick={() => cand && setSimilarityAnchor({ config: cand.config, name: cand.name })}
-          >
-            More like this
-          </button>
-          <button className={btn()} onClick={() => deselectActiveHero()} title="Dismiss (Esc)">
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* 5. the expanders */}
-      {expander === 'curves' && !previewOnly && <CurvesExpander derived={derived} width={rampW} />}
-      {expander === 'adjust' && !previewOnly && (
+      {/* 4. the expanders */}
+      {expander === 'curves' && <CurvesExpander derived={derived} width={rampW} />}
+      {expander === 'adjust' && (
         <div className="mt-3 pt-3 border-t border-line/10 grid grid-cols-2 gap-x-7">
           <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" />
           <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Noise" />
