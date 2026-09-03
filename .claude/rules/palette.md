@@ -62,6 +62,13 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
   `engine/`, `engine-gmt/` and shared code freely, but never `app-gmt/`,
   `fluid-toy/` or `gradient-explorer/`. Currently zero violations; it is a cheap
   grep to keep that way.
+- **The gradient wall has ONE model, and three hosts.** `palette/core/pickerModel.ts`
+  (pure: search index, filter windows, group/rows/sort, carve, More like this) plus
+  `palette/components/usePickerModel.ts` (the React/store binding) hold ALL of it.
+  `gradient-explorer/PickerStage.tsx` — mounted by the old shell AND by app-gmt's
+  `PalettePickerOverlay` — and `gradient-explorer/v2/BrowseStage.tsx` are chrome over that
+  hook and nothing else. A host that calls `catalog.filter(...)` itself is a fork; extend
+  the model. Guard: `npx tsx debug/test-palette-pickermodel.mts`.
 - **Host-agnosticism goes through registries, never a branch on the host.**
   `componentRegistry` ids, `store/sendTargetRegistry`, the capability flags in
   `palette/core/favientTargets.ts` (select-mode / browse / studio), and the
@@ -84,7 +91,7 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 
 ```
 npm run smoke:boot           # the registration path, to throw-depth
-npm run test:palette         # 18 chained harnesses over palette/core/** and the Favients store
+npm run test:palette         # 23 chained harnesses over palette/core/** and the Favients store
 npm run test:palette-favients  # favientsStore: the load/import gate, dedupe, __proto__ labels, undo write-through
 npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
@@ -95,8 +102,8 @@ npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts
 both persisters, `favientsStore.seedPresets` and all four feature registrations.
 Falsified 2026-07-29 with a planted throw in `mountFavientsPanel`.
 
-`test:palette` chains 16 harnesses. `check:rule-guards` resolves the union of all
-16 (the direct-file composite case was fixed 2026-07-29 — before that it saw only
+`test:palette` chains 23 harnesses. `check:rule-guards` resolves the union of all
+of them (the direct-file composite case was fixed 2026-07-29 — before that it saw only
 member 1, and older notes claiming a `test:palette` citation "only reaches
 stopfit" are stale). Cite the specific link anyway when you mean one, because it
 tells the reader which harness covers what:
@@ -115,6 +122,7 @@ tells the reader which harness covers what:
 | `core/paletteSample.ts` (v2 palette face, More like this) | `debug/test-palette-sample.mts` |
 | `core/workingPipeline.ts` (v2 Working pipeline) | `debug/test-palette-working.mts` |
 | `store/favientsStore.ts` `collectRecent` (v2 Recent zone) | `debug/test-palette-favients.mts` section [6] |
+| `core/pickerModel.ts` (the wall: search, filter windows, arrange, carve, More like this) | `debug/test-palette-pickermodel.mts` |
 
 The two img2grad harnesses are **not** redundant — the overshoot sweep is the
 only thing that catches the `resample()` overshoot regression, proven by removing

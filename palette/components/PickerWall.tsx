@@ -29,6 +29,7 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../core/presetCatalog';
+import type { PickerRow as PickerGroup } from '../core/pickerModel';
 import { GradientHoverPreview } from './GradientHoverPreview';
 import {
   pointInBox,
@@ -44,19 +45,12 @@ import { SelectionOverlay, type SelectionOverlayState } from './SelectionOverlay
 import { shouldSquare, squareCols } from '../core/wallLayout';
 import { setDragOrigin } from '../store/dragVisual';
 
-export interface PickerGroup {
-  key: string;
-  /** Primary label (e.g. the category) — blank to continue the previous one. */
-  label: string;
-  /** Secondary label (e.g. the facet row bucket). */
-  sublabel?: string;
-  entries: CatalogEntry[];
-  /** Category id — adjacent groups sharing it (and a facet range) may merge into one row. */
-  cat?: string;
-  /** Facet bucket bounds (0..1) for a bucketed sub-row; absent = not row-mergeable. */
-  lo?: number;
-  hi?: number;
-}
+/**
+ * A band of the wall. The shape is defined ONCE, in the pure model that builds them
+ * (`palette/core/pickerModel.ts` → `PickerRow`), and re-exported here under the name every
+ * caller already uses. Type-only, so this adds nothing to the bundle.
+ */
+export type { PickerRow as PickerGroup } from '../core/pickerModel';
 
 /** Spatial-selection tool active on the wall. */
 export type SelectionTool = 'rect' | 'lasso' | 'paint';

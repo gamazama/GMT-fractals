@@ -22,6 +22,7 @@ import React, { useEffect, useMemo } from 'react';
 import { deselectActiveHero, type HeroSelection } from '../../palette/store/heroSelection';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
+import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
 import { samplePalette } from '../../palette/core/paletteSample';
@@ -232,6 +233,14 @@ export const WorkingHero: React.FC<Props> = ({ derived, candidate, source, onEdi
               title="Mix the working gradient with this one"
             >
               Mix with
+            </button>
+            {/* S1: re-sort the Browse wall by ramp distance to this candidate. */}
+            <button
+              className={btn()}
+              onClick={() => setSimilarityAnchor({ config: cand.config, name: cand.name })}
+              title="Re-sort the wall with the gradients closest to this one first"
+            >
+              More like this
             </button>
             <button className={btn()} onClick={() => toggleStar(cand.config, cand.name, cand.source ?? 'Browse')} title="Save to My Gradients">
               ★

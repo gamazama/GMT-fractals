@@ -12,10 +12,11 @@
  *     in Recent) — the hero keeps showing what you just made;
  *   • Browse never touches Working; a wall click is a candidate the hero previews.
  *
- * Phase 1 skeleton: the three stages are the EXISTING PickerStage / GeneratorStage /
- * ImageStage mounted as-is (each still carries its own per-mode hero from the old shell —
- * S1 / S3 strip those), and the bottom row is the existing FavientsPanel body. Variants,
- * Export and Share are placeholders until their pieces land.
+ * Browse is the v2 `BrowseStage` (S1): the wall as a canvas, search + one Filters popover,
+ * no hero of its own. Build and Extract are still the EXISTING GeneratorStage / ImageStage
+ * mounted as-is, each carrying its own per-mode hero from the old shell (S3 strips those).
+ * The bottom row is the existing FavientsPanel body; Export and Share are placeholders
+ * until their pieces land.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -24,7 +25,7 @@ import { ToastHost } from '../../engine/components/ToastHost';
 import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
-import { PickerStage } from '../PickerStage';
+import { BrowseStage } from './BrowseStage';
 import { GeneratorStage } from '../../palette/components/GeneratorStage';
 import { ImageStage } from '../../palette/components/ImageStage';
 import { FavientsPanel } from '../../palette/components/FavientsPanel';
@@ -150,7 +151,7 @@ export const GradientExplorerV2App: React.FC = () => {
           )}
         </div>
         <div className="flex-1 min-h-0 flex flex-col relative">
-          {source === 'browse' && <PickerStage hideFavientsLink />}
+          {source === 'browse' && <BrowseStage />}
           {source === 'build' && <GeneratorStage />}
           {source === 'extract' && <ImageStage />}
         </div>

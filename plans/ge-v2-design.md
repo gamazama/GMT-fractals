@@ -202,7 +202,7 @@ tabs honour safe-area insets (fixes the June follow-up on body-portaled wells).
 - **Phase 1 — foundation (serial, one session, Fable) — BUILT + COMMITTED 2026-09-03 on `ge-v2` (`bd661fd6`), see §11:** Working input slot on the pipeline ·
   Recent auto-collect in favientsStore · variants store · the v2 shell skeleton + entry page built to the mock B skeleton (top bar · hero · drawer · stage · silent row) ·
   frozen interfaces written into this doc. Branch `ge-v2`.
-- **Phase 2 — parallel streams (worktrees, 2–3 at a time; shared 5 h cap; check in ~2 h):**
+- **Phase 2 — the six streams. Owner decision 2026-09-03: run them ONE AT A TIME, in this tree on `ge-v2`, starting with S1; each stream lands uncommitted, the orchestrator runs the gates, the owner reviews visually, then it is committed.** (The original plan below said 2–3 in parallel in worktrees; kept for the record.)
 
 | Stream | Scope | Model |
 |---|---|---|
@@ -263,6 +263,7 @@ Mock A showed the whole pipeline on every screen: seven persistent regions, two 
 
 Regions on screen after the first Use, desktop 1280x800: top bar 48, hero 248 including the preview row (about 170 without it), source row 57, wall 400 (50 %), My Gradients row 47. On the phone the same stack fits in 390x800 with no horizontal overflow and the source tabs move to the bottom.
 - 2026-09-03 — mock A (every surface at once) rejected as complex and squished; mock B (one thing at a time, one hero with a preview state, edit drawer, Filters popover, silent My Gradients row) APPROVED as the layout reference. No right panel in v2.
+- 2026-09-03 — Phase 2 runs one stream at a time (owner), S1 Browse first.
 - 2026-09-03 — Phase 1 foundation built on `ge-v2` (§11): one Working pipeline (ADR-0111), Recent auto-collect, variants that bypass loadPreset (ADR-0112), the v2 shell as `gradient-explorer-next.html`. Guards: `test:palette` (21 links) + `smoke:ge-next`.
 
 ## 11. Frozen interfaces (Phase 1, 2026-09-03) — streams code against THESE
