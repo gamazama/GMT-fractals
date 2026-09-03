@@ -14,6 +14,7 @@ import { splineMode } from './splineMode';
 import { FRACTAL_MODE } from './fractalMode';
 import { LIQUIFY_MODE } from './liquifyMode';
 import { PARALLAX_MODE } from './parallaxMode';
+import { GRADIENT_MAP_MODE } from './gradientMapMode';
 
 for (const mode of BUILTIN_MODES) registerFullscreenMode(mode);
 
@@ -22,3 +23,4 @@ registerFullscreenMode(splineMode);     // glQuad    — gradient flows along an
 registerFullscreenMode(FRACTAL_MODE);   // ownCanvas — live Mandelbrot coloured by the ramp
 registerFullscreenMode(LIQUIFY_MODE);   // ownCanvas — deformable LUT-mesh (MLS + XPBD + Taubin)
 registerFullscreenMode(PARALLAX_MODE);  // ownCanvas — depth-layered gradient point field
+registerFullscreenMode(GRADIENT_MAP_MODE); // cpuRaster — the Extract image recoloured by the ramp

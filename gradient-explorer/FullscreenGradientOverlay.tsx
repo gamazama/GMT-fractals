@@ -14,6 +14,16 @@
  * The chosen mode exports to PNG (the canvas snapshot IS the active mode). It never mutates
  * gradient data — the previewed config is a snapshot handed in via `openFullscreen`.
  *
+ * TWO export paths, both live here (S4 Wallpaper, 2026-09-03):
+ *   • the toolbar's **Export PNG** — the original: a snapshot of the ON-SCREEN canvas at
+ *     window size × DPR. Still the only path that embeds a fractal scene in the PNG, so it
+ *     stays the coordinate carrier for the fluid-toy handoff.
+ *   • the bottom bar's **Export panel** — pick a size (Phone / Square / 1080p / 4K / custom,
+ *     either orientation, optional ×2 supersample on the CPU kinds) and the frame is rendered
+ *     OFFSCREEN at exactly that size: a second `FullscreenCompositor` for cpuField/cpuRaster/
+ *     glQuad, the handle's `renderAt(w, h)` for ownCanvas modes. Capped at 4K, no tiling.
+ *     The visible canvas is never resized by either path.
+ *
  * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen" send-target
  * registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well in the P2-A dock).
  *
@@ -42,12 +52,17 @@ import {
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
 import { useGeneratorDerived } from '../palette/store/generatorStore';
+import { useImageStore } from '../palette/store/imageStore';
+import { showToast } from '../engine/store/toastStore';
 import type { GradientConfig } from '../types';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
 import { GeometryHandleLayer, hasGeometryHandles } from './fullscreen/GeometryHandleLayer';
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRegistry';
 import './fullscreen/modes'; // registers the builtin modes at import time
+import { ExportPanel } from './fullscreen/ExportPanel';
+import { exportFileName, type ExportSizePlan } from './fullscreen/exportSize';
+import { pngSizeOf, renderModeToBlob } from './fullscreen/exportRender';
 import { canvasToPngBlob, downloadBlob, embedScenePng } from '../utils/SceneFormat';
 import { getActiveFractalCoords } from './fullscreen/modes/fractalMode';
 import { buildFluidToyScene, openInFluidToy } from './fractalHandoff';
@@ -114,6 +129,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // Set when an ownCanvas mode fails to mount (e.g. no WebGL2) — shows an error instead of a
   // forever-spinner.
   const [ownError, setOwnError] = useState(false);
+  // True while an at-size export is running (a 4K CPU field is a visible pause) — disables the
+  // panel's button so a second click can't start a parallel render.
+  const [exporting, setExporting] = useState(false);
+  // The Extract image's display thumbnail. The overlay does not draw it — the `gradientMap`
+  // cpuRaster mode reads it from `imageStore` inside its own `raster` — but the overlay is the
+  // only thing that can NOTICE it changed and repaint. Subscribed here so dropping an image
+  // while the split preview is up refreshes the map instead of leaving a stale frame.
+  const imageThumb = useImageStore((s) => s.thumb);
 
   // The active mode + whether it owns its canvas (vs flowing through the compositor). Modes are
   // registered at module import (above), so the registry is populated by first render.
@@ -187,6 +210,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // Reset to null whenever the compositor is (re)created so a fresh surface always paints.
   const lastFieldKeyRef = useRef<string | null>(null);
   const lastFieldRampRef = useRef<unknown>(null);
+  /** The Extract image the last cpuRaster present used — part of the same idempotence key. */
+  const lastImageRef = useRef<unknown>(null);
 
   // Paint a compositor mode (cpuField / cpuRaster / glQuad) through the shared dither tail.
   // `ownCanvas` modes drive their own canvas and are skipped here.
@@ -220,19 +245,25 @@ export const FullscreenGradientOverlay: React.FC = () => {
     if (mode.kind === 'glQuad') {
       comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
       comp.presentMode(mode, ctx);
-    } else if (mode.kind === 'cpuField') {
+    } else {
       // Idempotent: an unrelated re-render (or a no-op upstream emit) with the SAME geom/params/
-      // dither/size/ramp re-runs nothing — the field stays as last rendered. Resize and the
-      // interacting→idle settle change `key`, so they still repaint.
+      // dither/size/ramp/image re-runs nothing — the field stays as last rendered. Resize and the
+      // interacting→idle settle change `key`, so they still repaint. Both CPU kinds are gated
+      // this way: cpuField costs a full error-diffusion pass, cpuRaster (gradientMap) an 8 MPx
+      // resample — neither is something to repeat on an unrelated render.
       const key = `${fs.geom}|${comp.dither ? 1 : 0}|${w}x${h}|${JSON.stringify(fs.geomParams)}`;
-      if (lastFieldKeyRef.current === key && lastFieldRampRef.current === ramp) return;
+      if (
+        lastFieldKeyRef.current === key &&
+        lastFieldRampRef.current === ramp &&
+        lastImageRef.current === imageThumb
+      ) return;
       lastFieldKeyRef.current = key;
       lastFieldRampRef.current = ramp;
-      comp.presentField(mode.field!(ctx), w, h, DEFAULT_BACKGROUND, ramp);
-    } else {
-      comp.presentRaster(mode.raster!(ctx), w, h);
+      lastImageRef.current = imageThumb;
+      if (mode.kind === 'cpuField') comp.presentField(mode.field!(ctx), w, h, DEFAULT_BACKGROUND, ramp);
+      else comp.presentRaster(mode.raster!(ctx), w, h);
     }
-  }, [ramp, lut, fs.geom, fs.geomParams, fs.dither, fs.interacting]);
+  }, [ramp, lut, fs.geom, fs.geomParams, fs.dither, fs.interacting, imageThumb]);
 
   // Repaint on open + whenever the geometry / params / ramp change — COALESCED to one paint
   // per animation frame: a handle drag emits store updates at pointer rate, and each re-created
@@ -339,9 +370,70 @@ export const FullscreenGradientOverlay: React.FC = () => {
     downloadBlob(blob, `${stem}-${fs.split ? 'split' : fs.geom}.png`);
   }, [sourceName, sourceConfig, fs.geom, fs.split, isOwnCanvas, activeMode]);
 
+  /**
+   * Export at a chosen size — the second, deliberate export path (the toolbar's Export PNG
+   * above stays exactly as it was). Nothing here touches the visible canvas:
+   *   • compositor modes render through a throwaway offscreen {@link FullscreenCompositor};
+   *   • ownCanvas modes go through their handle's `renderAt(w, h)`, and a mode that has not
+   *     implemented it yet falls back to the on-screen snapshot with a toast saying so.
+   *
+   * The file is named from the PNG's REAL pixel size, read back off its header — a mode may
+   * legitimately cap itself below the request (the Fractal renderer stops at 1600 px on the
+   * long edge), and a wallpaper named 3840×2160 that is really 1600×900 would be a lie.
+   *
+   * The at-size path deliberately does NOT embed the fractal scene in the PNG. That belongs to
+   * the on-screen Export PNG button, which stays the coordinate-carrier path; duplicating it
+   * here would make every 4K fractal export also a scene file with no way to opt out.
+   */
+  const exportAtSize = useCallback(async (plan: ExportSizePlan) => {
+    const mode = getFullscreenMode(fs.geom);
+    if (!mode || !ramp || !lut) return;
+    setExporting(true);
+    try {
+      let blob: Blob | null = null;
+      if (mode.kind === 'ownCanvas') {
+        const renderAt = ownHandleRef.current?.renderAt;
+        if (!renderAt) {
+          showToast(`${mode.label} exports at screen size — no at-size render yet`, 'warning', 4000);
+          await exportPng();
+          return;
+        }
+        blob = await renderAt(plan.renderWidth, plan.renderHeight);
+      } else {
+        blob = await renderModeToBlob(
+          mode,
+          { ramp, lut, params: buildParams(fs) },
+          plan,
+          fs.dither,
+        );
+      }
+      if (!blob) {
+        showToast('Export failed — the renderer produced no image', 'error', 4000);
+        return;
+      }
+      const real = (await pngSizeOf(blob)) ?? { width: plan.width, height: plan.height };
+      downloadBlob(blob, exportFileName(sourceName, mode.id, real.width, real.height));
+      const short =
+        real.width !== plan.width || real.height !== plan.height
+          ? ` (${mode.label} caps its own render)`
+          : '';
+      showToast(`Exported ${real.width}×${real.height}${short}`, short ? 'warning' : 'success', short ? 4000 : 2600);
+    } catch (e) {
+      console.error('[fullscreen export] at-size export failed:', e);
+      showToast('Export failed', 'error', 4000);
+    } finally {
+      setExporting(false);
+    }
+  }, [fs, ramp, lut, sourceName, exportPng]);
+
   if (!fs.open || !fs.config) return null;
 
   const ActiveControls = activeMode?.Controls;
+  const ActiveStage = activeMode?.Stage;
+  // A compositor mode always renders at any size (a second compositor on an offscreen canvas);
+  // an ownCanvas mode only if it implements the optional `renderAt` face. Read through the ref
+  // during render — `ownReady` re-renders once the mode has mounted, so this settles correctly.
+  const canRenderAtSize = !isOwnCanvas || !!ownHandleRef.current?.renderAt;
   // The bottom-right stage hint — split / per-mode / generic display-only.
   const hint = fs.split
     ? 'Live — follows the gradient you last edited · drag the divider to resize'
@@ -506,6 +598,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
             reads the canvas back, can never contain it). The layer itself decides whether the
             active geometry has handles, fades on idle, and honours the toolbar toggle. */}
         {!isOwnCanvas && <GeometryHandleLayer />}
+        {/* The active mode's own stage layer (empty states / annotation). DOM, above the
+            canvas, so — like the handles — it can never appear in an exported PNG. */}
+        {ActiveStage && <ActiveStage />}
         {isOwnCanvas && ownError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-center px-6">
             <div className="text-[13px] text-fg-secondary">Couldn’t start {activeMode!.label}</div>
@@ -521,6 +616,19 @@ export const FullscreenGradientOverlay: React.FC = () => {
           {hint}
         </div>
       </div>
+
+      {/* Bottom bar — export at a chosen size. Additive: the toolbar's Export PNG above still
+          snapshots the on-screen canvas (and is still the only path that embeds a fractal
+          scene in the file). */}
+      <ExportPanel
+        kind={activeMode?.kind ?? 'cpuField'}
+        modeLabel={activeMode?.label ?? 'This mode'}
+        canRenderAtSize={canRenderAtSize}
+        dither={fs.dither}
+        onDitherChange={setFullscreenDither}
+        onExport={(plan) => { void exportAtSize(plan); }}
+        busy={exporting}
+      />
     </div>,
     document.body,
   );

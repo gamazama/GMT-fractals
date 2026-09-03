@@ -103,6 +103,7 @@
     "test:frag:v": "tsx debug/test-frag-importer.mts --verbose",
     "test:gate": "npm run test:interaction && npm run test:interaction:wiring && npm run test:interaction:coverage && npm run test:modulation-coverage && npm run test:param-mapping && npm run test:modulation-parity",
     "test:gmf": "tsx debug/test-gmf-roundtrip.mts",
+    "test:gx-export": "tsx debug/test-gx-export-size.mts",
     "test:hybrid": "tsx debug/native-config-sweep.mts --mode=hybrid --fresh",
     "test:hybrid-adv": "tsx debug/native-config-sweep.mts --mode=hybrid-adv --fresh",
     "test:interaction": "tsx debug/test-interaction-session.mts",

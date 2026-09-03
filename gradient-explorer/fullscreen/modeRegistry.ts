@@ -4,7 +4,8 @@
  * A "fullscreen mode" is a self-contained way to render the active gradient full-bleed.
  * Shipped today, in selector order (grep `registerFullscreenMode` in `modes/index.ts` —
  * that file is the ground truth, not this list): Linear / Radial / Conic / Arched
- * (cpuField) · Spline (glQuad) · Fractal / Liquify / Parallax (ownCanvas).
+ * (cpuField) · Spline (glQuad) · Fractal / Liquify / Parallax (ownCanvas) ·
+ * Gradient map (cpuRaster).
  * The overlay dispatches PURELY on this registry: it never hard-codes a mode.
  * A new mode is added by calling {@link registerFullscreenMode} from its own module — no
  * edit to the overlay core — so the parallel mode streams don't collide.
@@ -20,7 +21,8 @@
  *        • 'cpuRaster' — a pure `raster(ctx) → RGBA` producer, uploaded and presented
  *          through the shared dither tail. Pre-quantises to 8-bit, so the dither cannot
  *          recover banding — only for modes that genuinely own their pixels (an imported
- *          image). **No mode in the tree uses this today**; prefer 'cpuField'.
+ *          image). ONE mode uses it since 2026-09-03: `gradientMap`, which recolours the
+ *          Extract image through the ramp. For gradient-over-position modes prefer 'cpuField'.
  *        • 'glQuad'    — a fragment `fragBody` defining `vec3 modeColor(vec2 uv)`. The
  *          harness wraps it (standard preamble + `sampleLut` + dither tail), compiles once,
  *          and renders a fullscreen quad. Reads the gradient via `uLut`. Extra uniforms via
@@ -46,7 +48,10 @@
  *   palette/core DIRECTLY, never through a registered mode, so it pins `sampleGeometry`
  *   and only covers today's geometry modes because their `field` is a bare delegation to
  *   it. A mode whose own `field` body pulled in Math.random or a frame counter would pass
- *   that harness untouched. Nothing pins cpuRaster at all — nothing uses it.
+ *   that harness untouched. Nothing pins cpuRaster at all: `gradientMap`'s `raster` is
+ *   deterministic for a given (image, ctx) but reads the image from `palette/store/imageStore`
+ *   rather than from `ctx` — see its own `@assumption`, which is the honest statement of that
+ *   deviation. The seam carries no image channel.
  * @assumption A mode reads gradient data ONLY from `ctx` (never the store directly) so the
  *   same mode renders correctly for the snapshot (fullscreen) AND the live hero (split)
  *   source. Reaching into the store instead still renders in fullscreen, which is why this
@@ -124,6 +129,26 @@ export interface OwnCanvasHandle {
   setDither?: (on: boolean) => void;
   /** Return the canvas to read for PNG export (the mode should render a fresh frame first). */
   exportCanvas?: () => HTMLCanvasElement | null;
+  /**
+   * OPTIONAL "export at size" (ADDITIVE, 2026-09-03 — S4 Wallpaper): render ONE frame at
+   * `w × h` DEVICE pixels and resolve a PNG blob. The overlay's Export panel calls this
+   * instead of snapshotting the on-screen canvas, so a wallpaper is exported at the
+   * requested resolution rather than at whatever the window happens to be.
+   *
+   * The contract, in three parts:
+   *   • Render OFFSCREEN, or into a temporarily resized backing store that is RESTORED (and
+   *     repainted) before resolving. The visible canvas must look unchanged afterwards.
+   *   • Do not disturb mode state the user can see or feel: the Liquify soft body, the
+   *     Fractal's centre/zoom, the Parallax field's positions and energy all stay put. Only
+   *     the projection changes.
+   *   • It MAY produce fewer pixels than asked when the mode's own renderer caps itself (the
+   *     Fractal renderer caps its buffer at 1600 px on the long edge). The caller reads the
+   *     true size back off the PNG header (`readPngSize` in `exportSize.ts`) and names the
+   *     file from THAT, so under-delivering is honest rather than silent.
+   *
+   * A mode that omits this falls back to the on-screen export, and the panel says so.
+   */
+  renderAt?: (w: number, h: number) => Promise<Blob | null>;
   /** Tear down — dispose the renderer, cancel RAF, remove listeners, and remove the canvas. */
   dispose: () => void;
 }
@@ -188,6 +213,17 @@ export interface FullscreenMode {
   // ── controls ──
   /** Self-contained controls panel (optional). */
   Controls?: React.FC;
+  /**
+   * Optional React layer rendered INSIDE the stage, above the canvas and below the hint —
+   * for a mode's own empty state or on-image annotation. Mounted only while the mode is
+   * active, like {@link Controls}. It is DOM, not canvas, so it can never bake into a PNG
+   * export (the same reason the geometry handles live in their own layer).
+   *
+   * Added 2026-09-03 for `gradientMap`, which has nothing to draw until an image is loaded
+   * and needs to say so where the user is looking. Set `pointer-events-none` unless the
+   * layer is genuinely interactive.
+   */
+  Stage?: React.FC;
 }
 
 // ── registry ────────────────────────────────────────────────────────────────────────────

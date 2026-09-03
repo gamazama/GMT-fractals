@@ -27,6 +27,7 @@ import { ScalarInput } from '../../../components/inputs/ScalarInput';
 import { useClipboardCopy } from '../../../hooks/useClipboardCopy';
 import { createLogMapping } from '../../../components/inputs/primitives/FormatUtils';
 import { getFullscreenState } from '../../../palette/store/fullscreenStore';
+import { canvasToPngBlob } from '../../../utils/SceneFormat';
 import {
   getFractalState,
   subscribeFractal,
@@ -68,6 +69,11 @@ const FRACTAL_MAPPINGS: ReadonlyArray<{ value: number; label: string }> = [
 
 /** Per-frame phase advance when auto-cycling (≈ one full cycle / 8s @ 60fps). */
 const PHASE_ANIM_STEP = 1 / 480;
+/** Frames burst into an at-size export before reading it back. Resizing the render buffer
+ *  resets the TSAA accumulator to sample 0, and a single un-accumulated frame is visibly
+ *  aliased on a still; 24 samples is where the edge noise stops being visible at 1:1 while the
+ *  whole export still lands well inside a second. */
+const EXPORT_TSAA_FRAMES = 24;
 // Density is a log control so each drag is a RATIO. Under depth-normalized colour (v2) every
 // mode wants ≈1 so a ~3-decade track (0.1..100) centred on 1 is plenty; the hard bounds stay
 // wide so legacy (v1) power-users can still type the old extreme tilings (e.g. Stripe ~500).
@@ -342,6 +348,31 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
     onContext: (ctx) => { if (ctx.lut.length) renderer?.setColormap(ctx.lut); },
     setDither: (on) => { renderer?.setDither(on); },
     exportCanvas: () => { renderer?.render(); return canvas; },
+    // Export at size: re-project the SAME view onto a `w × h` buffer, burst enough frames to
+    // reconverge TSAA (the resize resets the accumulator to sample 0), read the PNG, then put
+    // the on-screen size back and repaint. `center` / `zoom` / `juliaC` are never touched, so
+    // the view the user is looking at survives verbatim — only the aspect of the frame changes.
+    //
+    // `setRenderSize` takes CSS px and multiplies by the capped DPR, so the request is divided
+    // by that same DPR first — otherwise a 1000×1000 export would come back 2000×2000 on a
+    // retina display.
+    //
+    // The renderer then caps its own buffer at MAX_RENDER_DIM (1600) on the long edge, so a 4K
+    // request comes back as 1600×900 (right aspect, fewer pixels). That is deliberate: three
+    // MRT float targets at 4K would be several hundred MB of GPU memory. The caller reads the
+    // real size off the PNG header and names the file from that, so the shortfall is visible
+    // rather than silent.
+    renderAt: async (w, h) => {
+      const r = renderer;
+      if (!r) return null;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      r.setRenderSize(w / dpr, h / dpr);
+      for (let i = 0; i < EXPORT_TSAA_FRAMES; i++) r.render();
+      const blob = await canvasToPngBlob(canvas);
+      r.setRenderSize(container.clientWidth, container.clientHeight);
+      r.render();
+      return blob;
+    },
     dispose: () => {
       cancelled = true;
       cancelAnimationFrame(startRaf);

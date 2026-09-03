@@ -136,6 +136,15 @@ export interface GeometryParams {
   /** [spline] DEPTH shading −1..1 — perpendicular dimensionality. 0 = flat full-bleed fill;
    *  >0 darkens with distance (vignette); <0 lifts near the path (glow). */
   splineDepth?: number;
+  // ── gradient map mode — recolour the Extract image through the ramp ──
+  // Like the two spline keys above, these live in the bag but OUTSIDE the gate:
+  // `sampleGeometry` never reads them, so the determinism harness's hand-maintained `cases`
+  // list is unaffected. @see gradient-explorer/fullscreen/modes/gradientMapMode.tsx
+  /** [gradientMap] blend 0..1 between the original image (0) and the fully mapped image (1). */
+  mapStrength?: number;
+  /** [gradientMap] flip the luminance lookup (0 = off, 1 = on) — dark pixels take the ramp's
+   *  END colour. Boolean-as-scalar because the params bag is numeric. */
+  mapInvert?: number;
 }
 
 /** Default value for every optional {@link GeometryParams} field. Omitting a field in a
@@ -164,6 +173,9 @@ export const GEOM_DEFAULTS = {
   // Spline path: a gentle diffusion spread, flat depth (full-bleed fill) by default.
   splineSpread: 0.15,
   splineDepth: 0,
+  // Gradient map: fully mapped, not inverted — the duotone look the mode exists for.
+  mapStrength: 1,
+  mapInvert: 0,
 } as const;
 
 /**

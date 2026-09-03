@@ -25,6 +25,7 @@
  */
 
 import React from 'react';
+import { canvasToPngBlob } from '../../../utils/SceneFormat';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
 import { LiquifyMesh, type BrushType } from './liquify/LiquifyMesh';
 import { LiquifyRenderer, screenToMesh, meshToScreen } from './liquify/LiquifyRenderer';
@@ -92,6 +93,8 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   let first = true;
   let unsub: (() => void) | undefined;
   let disposed = false;
+  /** True while `renderAt` holds the canvas at the export size — freezes the RAF loop. */
+  let exporting = false;
 
   // Cursor state for the brush-ring signifier (CSS px within the overlay; null when outside).
   let cursor: { x: number; y: number } | null = null;
@@ -252,6 +255,14 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   // ── RAF loop ──
   const loop = (now: number): void => {
     if (disposed) return;
+    // An at-size export owns the GL canvas for a few frames. Freeze the loop while it runs:
+    // the sim must not advance (the exported frame would then differ from what is on screen,
+    // and the soft body would silently drift as a side effect of pressing Export) and the
+    // draw must not fight the temporarily-resized backing store.
+    if (exporting) {
+      raf = requestAnimationFrame(loop);
+      return;
+    }
     const dt = lastT ? Math.min((now - lastT) / 1000, 1 / 20) : 1 / 60;
     lastT = now;
     const st = getLiquifyState();
@@ -273,6 +284,25 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
     onContext: (ctx) => { if (ctx.lut.length) renderer.setLut(ctx.lut); },
     setDither: (on) => { renderer.dither = on; },
     exportCanvas: () => { renderer.draw(mesh.pos); return glCanvas; },
+    // Export at size: the mesh is resolution-independent (positions are in mesh space, the
+    // vertex shader maps them to the viewport), so a wallpaper is just the SAME `mesh.pos`
+    // drawn into a bigger backing store. The sculpt, the physics state and the handles are
+    // untouched — the RAF freeze above guarantees the sim cannot even tick during the read.
+    renderAt: async (w, h) => {
+      const prevW = glCanvas.width;
+      const prevH = glCanvas.height;
+      exporting = true;
+      try {
+        renderer.setSize(w, h);
+        renderer.draw(mesh.pos);
+        return await canvasToPngBlob(glCanvas);
+      } finally {
+        renderer.setSize(prevW, prevH);
+        renderer.draw(mesh.pos);
+        lastT = 0; // the frozen frames must not land as one giant dt on resume
+        exporting = false;
+      }
+    },
     dispose: () => {
       disposed = true;
       cancelAnimationFrame(raf);

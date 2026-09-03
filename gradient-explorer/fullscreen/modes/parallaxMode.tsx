@@ -23,6 +23,7 @@
  */
 
 import React from 'react';
+import { canvasToPngBlob } from '../../../utils/SceneFormat';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
 import { ParallaxField, MARGIN, type StirInput } from './parallax/ParallaxField';
 import { ParallaxRenderer, WASH_FOR } from './parallax/ParallaxRenderer';
@@ -84,6 +85,8 @@ const mountParallax = (host: OwnCanvasHost): OwnCanvasHandle => {
   let lastT = 0;
   let first = true;
   let disposed = false;
+  /** True while `renderAt` holds the canvas at the export size — freezes the RAF loop. */
+  let exporting = false;
   // Idle power saving: once the field has settled, the cursor is gone and the camera is home,
   // the frame is pixel-identical — skip sim + upload + draw until something wakes us.
   let needsFrame = true;
@@ -181,6 +184,10 @@ const mountParallax = (host: OwnCanvasHost): OwnCanvasHandle => {
   const loop = (now: number): void => {
     if (disposed) return;
     raf = requestAnimationFrame(loop);
+    // An at-size export owns the GL canvas for a moment: freeze the sim + the draw so the
+    // field cannot drift under the frame being read, and so the loop does not repaint at the
+    // on-screen size while the backing store is temporarily huge.
+    if (exporting) return;
     // Floor dt: equal RAF timestamps would make the sim's `input.dx / dt` blow up to Infinity.
     const dt = lastT ? Math.min(Math.max((now - lastT) / 1000, 1e-4), 1 / 30) : 1 / 60;
     lastT = now;
@@ -231,6 +238,37 @@ const mountParallax = (host: OwnCanvasHost): OwnCanvasHandle => {
     onContext: (ctx) => { if (ctx.lut.length) renderer.setLut(ctx.lut); wake(); },
     setDither: (on) => { renderer.dither = on; wake(); },
     exportCanvas: () => { renderer.draw(dyn, cam.x, cam.y); return glCanvas; },
+    // Export at size. The field lives in NORMALISED home coordinates, so re-projecting it onto
+    // a different frame is `writeDynamic(out, cssW, cssH)` into a scratch buffer — the particle
+    // positions, displacements and energies are read, never written.
+    //
+    // Two deliberate choices:
+    //  • The CSS size handed to the renderer keeps the export's ASPECT but the on-screen SCALE
+    //    (`cssW = w / k`), with the whole magnification carried in the dpr argument `k`. The
+    //    sprite radii and `uSizeScale` therefore scale with the image instead of shrinking into
+    //    pinpricks at 4K — the wallpaper looks like the preview, just larger.
+    //  • The camera exports at HOME (0, 0). The peek is a hover state, and by the time the
+    //    Export button is clicked the pointer has left the field anyway; a frozen half-peek
+    //    would bake an off-centre composition into the file.
+    renderAt: async (w, h) => {
+      const prevW = Math.max(1, container.clientWidth);
+      const prevH = Math.max(1, container.clientHeight);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const k = Math.max(1e-3, Math.min(w, h) / Math.max(1, Math.min(prevW, prevH)));
+      exporting = true;
+      try {
+        const scratch = new Float32Array(field.n * 3);
+        renderer.setSize(w / k, h / k, k);
+        field.writeDynamic(scratch, w / k, h / k);
+        renderer.draw(scratch, 0, 0);
+        return await canvasToPngBlob(glCanvas);
+      } finally {
+        renderer.setSize(prevW, prevH, dpr);
+        lastT = 0; // the frozen frames must not land as one giant dt on resume
+        exporting = false;
+        wake();
+      }
+    },
     dispose: () => {
       disposed = true;
       cancelAnimationFrame(raf);
