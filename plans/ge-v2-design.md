@@ -233,6 +233,7 @@ tabs honour safe-area insets (fixes the June follow-up on body-portaled wells).
 - 2026-09-03 — Variants are GLOBAL snapshots; tween between two in OKLab; Animate leaves.
 - 2026-09-03 — Wallpaper caps at 4K, no tiling.
 - 2026-09-03 — build beside the old shell on `ge-v2`; retire at parity.
+- 2026-09-03 (S3 review, 2) — My Gradients is the §4 strip at last: `FavientsPanel layout="strip"` (one row, Recent first, groups as labelled runs, Presets hidden while Recent has anything; drag-reorder / to-group / new-group / trash keep working in the row); "more" pulls up the full panel with `hint` overridden. `PRESETS_GROUP` is exported from favientsStore. The old shell + app-gmt render the default `panel` layout unchanged.
 - 2026-09-03 (S3 review) — the bin follows the work: one Recent entry per working session, updated live. Build → Mix (Sweep gone from v2; A = hero, B = previous bin entry, B armed). Extract → Image. "Mix with…" leaves the hero.
 - 2026-09-03 (late) — the palette and the stops are ONE thing seen twice: a swatch click selects its stop (creates one if none); a swatch drag hands over to the neighbour it pushes past (slots never reorder); Even / Perceptual after a Stops layout go back to six swatches. The editor's inspector lends its left column to the hero (Curves / Adjust + blend / output / menu); the raised bar under the ramp is gone.
 

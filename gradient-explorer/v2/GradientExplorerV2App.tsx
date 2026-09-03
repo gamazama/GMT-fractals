@@ -235,18 +235,20 @@ export const GradientExplorerV2App: React.FC = () => {
         </div>
       </div>
 
-      {/* My Gradients — silent until there is something in it */}
+      {/* My Gradients (§4): ONE strip on the bottom edge — Recent first, then the groups as
+          labelled runs (FavientsPanel layout="strip"); pull up for the full panel (search,
+          list view, rename, import / export). Silent until there is something in it. */}
       {recentCount > 0 && (
-        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 320 : 128 }}>
+        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }}>
           <div className="flex items-center gap-3 px-6 pt-1.5 text-[12px] text-fg-dim">
             <b className="text-fg-muted font-semibold">My Gradients</b>
-            <span>fills itself as you work · drag into a group to organise</span>
-            <button className="ml-auto hover:text-fg" onClick={() => setMineOpen((o) => !o)}>
-              {mineOpen ? '▾ less' : '▴ groups'}
+            {mineOpen && <span>Recent fills itself as you work · drag a gradient into a group to keep it · shared with the GMT studio</span>}
+            <button className="ml-auto hover:text-fg" onClick={() => setMineOpen((o) => !o)} title={mineOpen ? 'Back to the strip' : 'Search, list view, rename, import and export'}>
+              {mineOpen ? '▾ less' : '▴ more'}
             </button>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">
-            <FavientsPanel />
+            {mineOpen ? <FavientsPanel hint={null} /> : <FavientsPanel layout="strip" />}
           </div>
         </footer>
       )}

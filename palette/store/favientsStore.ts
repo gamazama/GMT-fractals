@@ -64,6 +64,9 @@ export const RECENT_GROUP = 'g-recent';
 export const RECENT_LABEL = 'Recent';
 /** How many auto-collected favourites the Recent run keeps. Oldest fall off the tail. */
 export const RECENT_CAP = 60;
+/** The one-time seeded starter group (registerPaletteUI). The v2 strip hides it while
+ *  Recent has anything in it; the full panel always shows it. */
+export const PRESETS_GROUP = 'g-presets';
 
 /** True for the auto-managed Recent group. Undefined / '' is the default group, not Recent. */
 export const isRecentGroup = (id?: string): boolean => id === RECENT_GROUP;
