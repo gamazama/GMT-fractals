@@ -9,17 +9,26 @@
  *
  * The dials live in the Image dock tab (DDFS params); this surface is visuals +
  * direct manipulation. Heavy state (the ImageModel, the trace path) is in imageStore.
+ *
+ * `chrome` (ADDITIVE, 2026-09-03, GE v2 S3): `'full'` (default, every existing host —
+ * the old shell, app-gmt) renders the mode tabs + Replace-image row and the Result hero
+ * exactly as before. `'bare'` — the v2 `ExtractStage` — skips both: v2 has no hero
+ * anywhere but the Working hero above, and supplies its own v2-labeled method chips
+ * (Dominant / Tones / Path) on the shared stage row instead of this component's old-
+ * vocabulary tabs. The cloud + image pane + trace toolbar render in both modes
+ * unchanged — that's the surface `ExtractStage` reuses.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
-import { decodeAndIngest, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
+import { tracePolyline, autoPath, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
 import { clamp01 } from '../../utils/stopOps';
 import { useFlash } from './useFlash';
+import { useImageDrop } from './useImageDrop';
 
 const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'distill', label: 'Distill' },
@@ -83,14 +92,12 @@ const useHiDPICanvas = (ref: React.RefObject<HTMLCanvasElement>, active = true):
   return gen;
 };
 
-export const ImageStage: React.FC = () => {
+export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'full' }) => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
   const loading = useImageStore((s) => s.loading);
   const path = useImageStore((s) => s.path);
-  const setModel = useImageStore((s) => s.setModel);
   const setPath = useImageStore((s) => s.setPath);
-  const setLoading = useImageStore((s) => s.setLoading);
 
   const mode = useImageMode();
   const [, setModeIdx] = useImageParam<number>('mode');
@@ -104,79 +111,13 @@ export const ImageStage: React.FC = () => {
     [derived],
   );
 
-  const [over, setOver] = useState(false);
+  // Bottom-of-canvas message (unchanged spot/behaviour); image loading + the whole-
+  // window drop/paste listeners are useImageDrop (lifted 2026-09-03, GE v2 S3) so the
+  // v2 shell can mount a second instance at its root — see that hook's header.
   const { toast, flash } = useFlash(1400);
-
-  // --- image loading: decode → downsample to ≤160px → ingest (shared with the scene
-  // document round-trip via decodeAndIngest) ---
-  const loadImage = useCallback(
-    (src: string) => {
-      setLoading(true);
-      decodeAndIngest(src)
-        .then(({ model, thumb }) => {
-          setModel(model, thumb);
-          if (mode === 'trace') setPath(autoPath(model));
-        })
-        .catch(() => {
-          setLoading(false);
-          flash('could not load image');
-        });
-    },
-    [mode, setModel, setPath, setLoading, flash],
-  );
-
-  const fileToImg = useCallback(
-    (f: File | null | undefined): boolean => {
-      if (f && f.type.startsWith('image')) {
-        const r = new FileReader();
-        r.onload = () => loadImage(r.result as string);
-        r.readAsDataURL(f);
-        return true;
-      }
-      return false;
-    },
-    [loadImage],
-  );
-
-  // whole-window drop target + paste (active while the Image stage is mounted)
-  useEffect(() => {
-    let dragT: number | undefined;
-    // Coexistence with in-app drags: a gradient-swatch / favient drag carries a custom
-    // MIME and belongs to a send target (DropTargetLayer), not the image-file importer —
-    // it never carries 'Files'. So ImageStage proceeds ONLY for genuine OS file drops;
-    // any drag without a 'Files' type is an internal drag we stand down for (no overlay
-    // flash over it).
-    const isWellDrag = (e: DragEvent): boolean =>
-      !e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files');
-    const onDragOver = (e: DragEvent) => {
-      if (isWellDrag(e)) return;
-      e.preventDefault();
-      setOver(true);
-      window.clearTimeout(dragT);
-      dragT = window.setTimeout(() => setOver(false), 130);
-    };
-    const onDrop = (e: DragEvent) => {
-      if (isWellDrag(e)) return;
-      e.preventDefault();
-      setOver(false);
-      window.clearTimeout(dragT);
-      if (!fileToImg(e.dataTransfer?.files[0])) flash('not an image');
-    };
-    const onPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (items) for (const it of items) if (it.type.startsWith('image')) { fileToImg(it.getAsFile()); return; }
-      flash('no image in clipboard');
-    };
-    window.addEventListener('dragover', onDragOver);
-    window.addEventListener('drop', onDrop);
-    window.addEventListener('paste', onPaste);
-    return () => {
-      window.removeEventListener('dragover', onDragOver);
-      window.removeEventListener('drop', onDrop);
-      window.removeEventListener('paste', onPaste);
-      window.clearTimeout(dragT);
-    };
-  }, [fileToImg, flash]);
+  // In 'bare' chrome the v2 shell mounts the drop hook at its root, so the stage must not
+  // attach a second set of window listeners (one drop would decode twice).
+  const { over, fileToImg } = useImageDrop({ notify: flash, enabled: chrome === 'full' });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -438,12 +379,15 @@ export const ImageStage: React.FC = () => {
       {!model ? (
         <div className="flex-1 flex items-center justify-center p-8">
           {/* Keep the always-visible mobile hero rail from showing a bare band before any
-              image exists — rail-only, so desktop's no-image screen is unchanged. */}
-          <HeroSlot railOnly>
-            <div className="text-[11px] text-fg-dim flex items-center h-full">
-              The image’s gradient appears here once you load one.
-            </div>
-          </HeroSlot>
+              image exists — rail-only, so desktop's no-image screen is unchanged.
+              v2 (`chrome="bare"`) has no hero rail at all — WorkingHero covers it. */}
+          {chrome === 'full' && (
+            <HeroSlot railOnly>
+              <div className="text-[11px] text-fg-dim flex items-center h-full">
+                The image’s gradient appears here once you load one.
+              </div>
+            </HeroSlot>
+          )}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="max-w-md text-center border border-dashed border-line/20 hover:border-accent-500/60 rounded-xl px-10 py-12 transition-colors"
@@ -456,7 +400,10 @@ export const ImageStage: React.FC = () => {
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-4">
-          {/* Mode tabs */}
+          {/* Mode tabs + Result hero — chrome="bare" (v2 ExtractStage) skips both: v2
+              supplies its own v2-labeled method chips and has no hero but WorkingHero. */}
+          {chrome === 'full' && (
+            <>
           <div className="flex items-center gap-2">
             <div className="flex gap-1 rounded-md bg-line/[0.04] p-0.5">
               {MODES.map((m, i) => (
@@ -503,6 +450,8 @@ export const ImageStage: React.FC = () => {
               </div>
             )}
           </HeroSlot>
+            </>
+          )}
 
           {/* Cloud + image pane */}
           <div className="flex gap-4 flex-wrap">

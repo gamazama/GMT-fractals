@@ -78,6 +78,15 @@ interface AutoFeaturePanelProps {
      *  body instead of being filtered out as "not roots". Also lifts
      *  customUI entries whose parentId matches. */
     liftChildrenOf?: string;
+    /** Skip the DDFS `dynamicVisible` gate for this mount only — the param definition
+     *  (shared with every other host) is untouched. Added for the v2 Gradient Explorer
+     *  hero (plans/ge-v2-design.md §5.1/§12): `paletteGenerator`'s Modify/Noise groups
+     *  carry `dynamicVisible: isMixed` (a Generator-era assumption — those dials hid
+     *  whenever the recipe wasn't the two-source mix), but v2's Adjust expander mounts
+     *  them on WORKING, which must stay visible under every Build recipe (and every
+     *  other source). `checkParamActive` (the `condition` gate, just above) is NOT
+     *  affected — only the two `dynamicVisible` checks are. */
+    ignoreDynamicVisible?: boolean;
 }
 
 /**
@@ -162,7 +171,7 @@ const RangePairPad: React.FC<{
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, variant = 'default',
-    forcedState, onChangeOverride, pendingChanges, liftChildrenOf
+    forcedState, onChangeOverride, pendingChanges, liftChildrenOf, ignoreDynamicVisible = false
 }) => {
     const feature = featureRegistry.get(featureId);
     // Use forcedState if provided (for Engine Panel pending changes), otherwise fallback to Store
@@ -578,8 +587,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const config = feature.params[id];
         // EXCLUSION CHECK
         if (!config || config.hidden || excludeParams.includes(id) || rangePartnerKeys.has(id) || !checkParamActive(config.condition, sliceState, globalState, config.parentId)) return null;
-        // Dynamic visibility (DDFS) — checked after condition
-        if (config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
+        // Dynamic visibility (DDFS) — checked after condition. `ignoreDynamicVisible`
+        // skips ONLY this per-mount gate; the param definition is untouched.
+        if (!ignoreDynamicVisible && config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
         if (config.isAdvanced && !advancedMode) return null;
         const control = renderControl(id, config);
         const childIds = Object.keys(feature.params).filter(k => feature.params[k].parentId === id);
@@ -680,7 +690,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const id = roots[i];
             const config = feature.params[id];
             if (config.hidden || excludeParams.includes(id) || !checkParamActive(config.condition, sliceState, globalState)) continue;
-            if (config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
+            if (!ignoreDynamicVisible && config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
             if (config.layout === 'half' && variant !== 'dense') {
                 let nextId = roots[i + 1];
                 let nextConfig = nextId ? feature.params[nextId] : null;

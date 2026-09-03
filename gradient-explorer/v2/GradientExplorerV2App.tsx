@@ -13,8 +13,10 @@
  *   • Browse never touches Working; a wall click is a candidate the hero previews.
  *
  * Browse is the v2 `BrowseStage` (S1): the wall as a canvas, search + one Filters popover,
- * no hero of its own. Build and Extract are still the EXISTING GeneratorStage / ImageStage
- * mounted as-is, each carrying its own per-mode hero from the old shell (S3 strips those).
+ * no hero of its own. Build and Extract are the v2 `BuildStage` / `ExtractStage` (S3): thin
+ * v2 compositions over the SAME GeneratorStage / ImageStage pieces (SourceRow, MixBlend,
+ * ColorBoxControls, the image pane) — see those files' headers — with no per-mode hero, no
+ * curve editor, no Modify/Noise, no export block; Adjust and Shape live on the hero above.
  * The bottom row is the existing FavientsPanel body; Export and Share are placeholders
  * until their pieces land.
  */
@@ -29,8 +31,8 @@ import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
 import { BrowseStage } from './BrowseStage';
-import { GeneratorStage } from '../../palette/components/GeneratorStage';
-import { ImageStage } from '../../palette/components/ImageStage';
+import { BuildStage } from './BuildStage';
+import { ExtractStage } from './ExtractStage';
 import { FavientsPanel } from '../../palette/components/FavientsPanel';
 import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
@@ -38,6 +40,9 @@ import { useActiveHeroSelection, deselectActiveHero } from '../../palette/store/
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
 import { useGeneratorStore } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
+import { renderStopsToRamp } from '../../palette/core/gmtGradient';
+import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
+import { useImageDrop } from '../../palette/components/useImageDrop';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 
@@ -62,6 +67,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const recentCount = useFavientsStore((s) => s.favients.length);
+  const armed = useArmedSlot();
   useGlobalContextMenu();
   const contextMenu = useEngineStore((s) => s.contextMenu);
   const closeContextMenu = useEngineStore((s) => s.closeContextMenu);
@@ -76,9 +82,25 @@ export const GradientExplorerV2App: React.FC = () => {
   // A pick IS a Use (owner, end of 2026-09-03): a wall or shelf click becomes the working
   // gradient at once (one undo step back to the previous one); nothing lands in Recent for
   // a mere pick. The same gradient picked again is a no-op.
+  //
+  // ARMED TARGETS (§3): when a Build slot is armed (Mix with…, or clicking a slot directly
+  // — see BuildStage), the NEXT pick fills that slot instead — checked first, before the
+  // normal "pick IS a Use" handling, so an armed pick never touches Working.
   useEffect(() => {
     if (!candidate) return;
     const p = candidate.payload;
+    const slot = getArmedSlot();
+    if (slot) {
+      const ramp = renderStopsToRamp(p.config.stops, p.config.blendSpace, p.config.colorSpace);
+      useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);
+      armSlot(null);
+      // Working goes live over Build again (it may have been fixed by leaving the Build
+      // tab to browse for this pick) so the hero shows the new blend immediately.
+      useWorkingStore.getState().setInput({ kind: 'build' });
+      deselectActiveHero();
+      setSourceState('build');
+      return;
+    }
     const w = useWorkingStore.getState();
     if (w.input.kind === 'gradient' && favientSig(w.input.config) === favientSig(p.config)) return;
     w.use(p.config, p.name, p.source ?? (candidate.mode === 'favients' ? 'My Gradients' : 'Browse'));
@@ -108,13 +130,22 @@ export const GradientExplorerV2App: React.FC = () => {
       useGeneratorStore.getState().sendRampToSlot('A', d.ramp, workingNameNow());
     }
     switchSource('build');
+    armSlot('B');
     showToast('Slot A is set — pick a gradient for B');
   }, [switchSource]);
 
-  // Esc closes the variants popover.
+  // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
+  // useImageDrop instance mounted once here at the root; ImageStage keeps its own for the
+  // old shell / app-gmt (see palette/components/useImageDrop.ts).
+  useImageDrop({ onLoaded: () => switchSource('extract') });
+
+  // Esc closes the variants popover, or — failing that — clears an armed slot (§3) without
+  // picking anything.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && variantsOpen) setVariantsOpen(false);
+      if (e.key !== 'Escape') return;
+      if (variantsOpen) { setVariantsOpen(false); return; }
+      if (getArmedSlot()) armSlot(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -164,14 +195,17 @@ export const GradientExplorerV2App: React.FC = () => {
               {s.label}
             </button>
           ))}
-          {derived.empty && source === 'browse' && (
+          {armed && source === 'browse' && (
+            <span className="ml-4 text-[12px] text-accent-300">Pick a gradient for slot {armed} · Esc cancels</span>
+          )}
+          {!armed && derived.empty && source === 'browse' && (
             <span className="ml-4 text-[12px] text-fg-dim">Click any gradient below. It previews above; Use it, mix it, or keep looking.</span>
           )}
         </div>
         <div className="flex-1 min-h-0 flex flex-col relative">
           {source === 'browse' && <BrowseStage />}
-          {source === 'build' && <GeneratorStage />}
-          {source === 'extract' && <ImageStage />}
+          {source === 'build' && <BuildStage />}
+          {source === 'extract' && <ExtractStage />}
         </div>
       </div>
 

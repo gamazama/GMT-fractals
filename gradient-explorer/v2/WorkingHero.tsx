@@ -202,8 +202,14 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
       {expander === 'curves' && <CurvesExpander derived={derived} width={rampW} />}
       {expander === 'adjust' && (
         <div className="mt-3 pt-3 border-t border-line/10 grid grid-cols-2 gap-x-7">
-          <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" />
-          <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Noise" />
+          {/* Modify/Noise carry `dynamicVisible: isMixed` (a Generator-era assumption:
+              those dials hid whenever the recipe wasn't the two-source mix). Adjust
+              belongs to WORKING here (§5.1), not to the Build recipe, so it must stay
+              visible under Sweep too — ignoreDynamicVisible skips that gate for this
+              mount only; the shared param definition (also read by GeneratorStage /
+              app-gmt) is untouched. @see plans/ge-v2-design.md §12 item 4 */}
+          <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" ignoreDynamicVisible />
+          <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Noise" ignoreDynamicVisible />
         </div>
       )}
     </section>
