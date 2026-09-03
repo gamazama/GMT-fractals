@@ -1,5 +1,6 @@
 /**
- * ExtractStage — the v2 Extract source (plans/ge-v2-design.md §5.4).
+ * ExtractStage — the v2 IMAGE source (the tab reads "Image" since the owner S3 review
+ * 2026-09-03; the file keeps its name) — plans/ge-v2-design.md §5.4.
  *
  * Reuses `ImageStage` in `chrome="bare"` (see that file's header) for everything it
  * already does well — drop/paste/click to load, the rotatable OKLab colour cloud, the
@@ -18,7 +19,7 @@
  *     returns, and widening that pure boundary wasn't needed for this), click copies
  *     hex — same copy-toast pattern as `PaletteRow.tsx` (clipboard write + a toast).
  *
- * NO hero (the Working hero above shows the result live — "live from Extract", §2), NO
+ * NO hero (the Working hero above shows the result live — "live from Image", §2), NO
  * export block (ImageStage never rendered one itself — the old shell's export block is
  * the `palette-image-extras` customUI entry, mounted only through the Dock tab, which
  * v2 doesn't mount; excluded here too via `whitelistParams`).

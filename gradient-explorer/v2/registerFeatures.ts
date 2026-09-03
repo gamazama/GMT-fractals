@@ -10,7 +10,7 @@
  *     shared favourites store. app-gmt / fluid-toy never call this.
  *   • registerGradientTargets() is NOT called — the dock-shaped "select → reveal → place"
  *     targets read the old shell's dock state. v2 routes gradients through the hero
- *     (Use / Mix with / star) and will register its own target set in Phase 2.
+ *     (Use / Mix / star) and will register its own target set in Phase 2.
  */
 
 import { registerPaletteUI } from '../../palette/registerPaletteUI';
@@ -21,12 +21,12 @@ import { setFavientSelectMode } from '../../palette/core/favientTargets';
 // Stops is folded into the hero in v2 (there is no Stops mode tab anywhere).
 registerPaletteUI({ standaloneStopsMode: false });
 
-// The Working gradient: undo + Save/Load providers, and every "becomes Working" event
-// lands in the Recent zone of My Gradients (never a bare wall click).
+// The Working gradient: undo + Save/Load providers, and ONE Recent entry per working
+// session in My Gradients — opened by the collector, refreshed in place by the updater as
+// the user edits (see workingStore.syncRecent).
 installWorking({
-  collectRecent: (config, name, source) => {
-    useFavientsStore.getState().collectRecent(config, name, source);
-  },
+  collectRecent: (config, name, source) => useFavientsStore.getState().collectRecent(config, name, source),
+  updateRecent: (id, config, name) => useFavientsStore.getState().updateRecent(id, config, name),
 });
 
 // A shelf swatch click SELECTS (the hero previews it) rather than applying somewhere.

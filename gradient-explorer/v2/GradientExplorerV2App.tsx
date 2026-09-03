@@ -38,7 +38,7 @@ import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
-import { useGeneratorStore } from '../../palette/store/generatorStore';
+import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
@@ -49,8 +49,8 @@ import { VariantsMenu } from './VariantsMenu';
 export type SourceId = 'browse' | 'build' | 'extract';
 const SOURCES: { id: SourceId; label: string }[] = [
   { id: 'browse', label: 'Browse' },
-  { id: 'build', label: 'Build' },
-  { id: 'extract', label: 'Extract' },
+  { id: 'build', label: 'Mix' },
+  { id: 'extract', label: 'Image' },
 ];
 
 const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-white/5 transition-colors';
@@ -58,6 +58,32 @@ const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg
 const workingNameNow = (): string => {
   const s = useWorkingStore.getState();
   return s.name ?? autoWorkingName(s.input, s.bakedFrom);
+};
+
+/**
+ * Entering Mix (owner S3 review): A = the hero's gradient, B = the most recent OTHER entry in
+ * My Gradients (falling back to whatever B already holds), B armed so a bin click swaps it.
+ * Always the two-source mixer — Sweep is gone from v2, so a document that still carries
+ * generatorMode 1 or 2 is put back on 0 here.
+ */
+const enterMix = (): void => {
+  const w = useWorkingStore.getState();
+  const g = useGeneratorStore.getState();
+  const gs = readGeneratorSlice();
+  if ((gs.generatorMode ?? 0) !== 0) setGeneratorSlice({ generatorMode: 0 });
+  // A blend at 0 shows A alone, so filling B would change nothing on screen: open at the
+  // midpoint unless the user already set a blend.
+  if (!gs.mixL && !gs.mixC && !gs.mixH) setGeneratorSlice({ mixL: 0.5, mixC: 0.5, mixH: 0.5 });
+  const d = deriveWorkingNow();
+  if (d) {
+    w.syncRecent();
+    g.sendRampToSlot('A', d.ramp, workingNameNow());
+    const aSig = favientSig(d.config);
+    const other = useFavientsStore.getState().favients.find((f) => favientSig(f.config) !== aSig);
+    if (other) g.sendRampToSlot('B', renderStopsToRamp(other.config.stops, other.config.blendSpace, other.config.colorSpace), other.name);
+  }
+  w.setInput({ kind: 'build' });
+  armSlot('B');
 };
 
 export const GradientExplorerV2App: React.FC = () => {
@@ -80,12 +106,13 @@ export const GradientExplorerV2App: React.FC = () => {
   }, []);
 
   // A pick IS a Use (owner, end of 2026-09-03): a wall or shelf click becomes the working
-  // gradient at once (one undo step back to the previous one); nothing lands in Recent for
-  // a mere pick. The same gradient picked again is a no-op.
+  // gradient at once (one undo step back to the previous one) and opens a new Recent
+  // session. The same gradient picked again is a no-op.
   //
-  // ARMED TARGETS (§3): when a Build slot is armed (Mix with…, or clicking a slot directly
-  // — see BuildStage), the NEXT pick fills that slot instead — checked first, before the
-  // normal "pick IS a Use" handling, so an armed pick never touches Working.
+  // ARMED TARGETS (§3): when a Mix slot is armed (entering Mix arms B; clicking a slot arms
+  // it — see BuildStage), the NEXT pick fills that slot instead — checked first, so an
+  // armed pick never touches Working. A My Gradients pick keeps the slot armed (try
+  // several); a Browse pick is one-shot and comes back to Mix.
   useEffect(() => {
     if (!candidate) return;
     const p = candidate.payload;
@@ -93,19 +120,28 @@ export const GradientExplorerV2App: React.FC = () => {
     if (slot) {
       const ramp = renderStopsToRamp(p.config.stops, p.config.blendSpace, p.config.colorSpace);
       useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);
-      armSlot(null);
-      // Working goes live over Build again (it may have been fixed by leaving the Build
-      // tab to browse for this pick) so the hero shows the new blend immediately.
-      useWorkingStore.getState().setInput({ kind: 'build' });
+      if (candidate.mode !== 'favients') armSlot(null);
+      // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to
+      // browse for this pick) so the hero shows the new blend immediately.
+      if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().setInput({ kind: 'build' });
       deselectActiveHero();
       setSourceState('build');
       return;
     }
     const w = useWorkingStore.getState();
     if (w.input.kind === 'gradient' && favientSig(w.input.config) === favientSig(p.config)) return;
-    w.use(p.config, p.name, p.source ?? (candidate.mode === 'favients' ? 'My Gradients' : 'Browse'));
+    const fromRecent = candidate.mode === 'favients';
+    w.use(p.config, p.name, p.source ?? (fromRecent ? 'My Gradients' : 'Browse'), { fromRecent });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidate?.key, candidate?.mode]);
+
+  // My Gradients follows the work (owner S3 review): every change to the derived output or
+  // the name lands in the session's Recent entry, debounced past a drag.
+  useEffect(() => {
+    if (derived.empty) return;
+    const t = window.setTimeout(() => useWorkingStore.getState().syncRecent(), 400);
+    return () => window.clearTimeout(t);
+  }, [derived.config, derived.name, derived.empty]);
 
   const switchSource = useCallback(
     (next: SourceId) => {
@@ -113,26 +149,16 @@ export const GradientExplorerV2App: React.FC = () => {
       const w = useWorkingStore.getState();
       if ((source === 'build' || source === 'extract') && w.input.kind === source) {
         const d = deriveWorkingNow();
-        if (d) w.use(d.config, workingNameNow(), source === 'build' ? 'Build' : 'Extract');
+        if (d) w.use(d.config, workingNameNow(), source === 'build' ? 'Mix' : 'Image');
       }
-      if (next === 'build') w.setInput({ kind: 'build' });
+      if (next === 'build') enterMix();
       else if (next === 'extract') w.setInput({ kind: 'extract' });
+      if (next !== 'build' && next !== 'browse') armSlot(null);
       deselectActiveHero();
       setSourceState(next);
     },
     [source],
   );
-
-  const mixWith = useCallback(() => {
-    const d = deriveWorkingNow();
-    if (d) {
-      useWorkingStore.getState().collectCurrent();
-      useGeneratorStore.getState().sendRampToSlot('A', d.ramp, workingNameNow());
-    }
-    switchSource('build');
-    armSlot('B');
-    showToast('Slot A is set — pick a gradient for B');
-  }, [switchSource]);
 
   // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
   // useImageDrop instance mounted once here at the root; ImageStage keeps its own for the
@@ -155,7 +181,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
   const wallpaper = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
-    useWorkingStore.getState().collectCurrent();
+    useWorkingStore.getState().syncRecent();
     openFullscreen(derived.config, derived.name);
   };
 
@@ -180,7 +206,7 @@ export const GradientExplorerV2App: React.FC = () => {
         <SettingsButton />
       </header>
 
-      <WorkingHero derived={derived} source={source} onMixWith={mixWith} />
+      <WorkingHero derived={derived} source={source} />
 
       {/* stage */}
       <div className="flex-1 min-h-0 flex flex-col relative">
@@ -196,7 +222,7 @@ export const GradientExplorerV2App: React.FC = () => {
             </button>
           ))}
           {armed && source === 'browse' && (
-            <span className="ml-4 text-[12px] text-accent-300">Pick a gradient for slot {armed} · Esc cancels</span>
+            <span className="ml-4 text-[12px] text-accent-300">Pick a gradient for Mix slot {armed} · Esc cancels</span>
           )}
           {!armed && derived.empty && source === 'browse' && (
             <span className="ml-4 text-[12px] text-fg-dim">Click any gradient below. It previews above; Use it, mix it, or keep looking.</span>

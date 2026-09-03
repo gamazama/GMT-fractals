@@ -23,6 +23,8 @@
  *   [6] collectRecent: the auto-collected Recent group — front-of-run dedupe, the
  *       cap, the "already filed by the user" no-op, the restored label, and the
  *       contiguous-run-at-index-0 invariant it shares with `add()`
+ *   [7] updateRecent: the v2 working-session entry refreshed in place — no-op on same
+ *       content, keeps id + place, absorbs a Recent duplicate, refuses a non-Recent id
  *
  * Run: `npm run test:palette-favients` (also a link of `test:palette`)
  *
@@ -249,6 +251,32 @@ console.log('\n[6] collectRecent auto-fills the Recent group');
     const saved = store().favients.find(f => f.id === idU)!;
     check((saved.group ?? DEFAULT_GROUP) === DEFAULT_GROUP, 'add() with lastGroupId === RECENT_GROUP falls back to DEFAULT_GROUP');
     check(store().lastGroupId === DEFAULT_GROUP, 'and the fallback is what gets remembered');
+}
+
+console.log('\n[7] updateRecent refreshes a session entry in place');
+{
+    store().clear();
+    const id = store().collectRecent(cfg('#ff0000', '#0000ff'), 'Session', 'Browse')!;
+    store().collectRecent(cfg('#00ff00'), 'Other');
+    check(store().favients.length === 2 && store().favients[0].name === 'Other', 'precondition: two Recent entries, Other in front');
+    check(store().updateRecent(id, cfg('#ff0000', '#0000ff'), 'Session') === true, 'same content + name → true');
+    const before = JSON.stringify(store().favients);
+    store().updateRecent(id, cfg('#ff0000', '#0000ff'), 'Session');
+    check(JSON.stringify(store().favients) === before, 'and writes nothing');
+    check(store().updateRecent(id, cfg('#ff0000', '#00ff00'), 'Session edited') === true, 'an edit → true');
+    const e = store().favients.find(f => f.id === id)!;
+    check(favientSig(e.config) === favientSig(cfg('#ff0000', '#00ff00')) && e.name === 'Session edited', 'the entry now holds the edited gradient and name');
+    check(store().favients.length === 2 && store().favients[1].id === id, 'it keeps its id and its place in the run');
+    check(favientSig((onDisk().find((f: any) => f.id === id) as any).config) === favientSig(e.config), 'the update is written through to disk');
+    // Converging on another Recent entry's content drops that entry: one-per-gradient.
+    store().updateRecent(id, cfg('#00ff00'), 'Same as Other');
+    check(store().favients.length === 1 && store().favients[0].id === id, 'an update that matches another Recent entry absorbs it');
+    // No longer Recent → false, untouched.
+    store().moveFavient(id, 0, 'g1');
+    const kept = JSON.stringify(store().favients);
+    check(store().updateRecent(id, cfg('#123456'), 'Nope') === false, 'an entry dragged into a user group returns false');
+    check(JSON.stringify(store().favients) === kept, 'and is left byte-identical');
+    check(store().updateRecent('no-such-id', cfg('#123456'), 'Nope') === false, 'an unknown id returns false');
 }
 
 console.log(failures === 0 ? '\nPASS — the Favients shelf gates what it ingests and persists' : `\nFAIL — ${failures} assertion(s) failed`);

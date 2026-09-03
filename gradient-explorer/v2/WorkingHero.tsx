@@ -3,7 +3,8 @@
  * 2026-09-03; plans/ge-v2-design.md §5.1 revised, §6b, §12).
  *
  * Top to bottom inside the block:
- *   1. name · state chip · More like this · Mix with · ★
+ *   1. name · state chip · More like this · ★  (Mix is a source tab, not a button here —
+ *      owner: less UI is more likely to be clicked than advertising in a busy one)
  *   2. the PALETTE ROW — draggable sample positions on top of the ramp (PaletteRow). A click
  *      on a swatch selects its stop in the editor (creating one if there is none), so the
  *      palette and the stops are one thing seen twice — owner review 2026-09-03.
@@ -18,8 +19,8 @@
  *
  * There is no previewing state and no preview row any more: a Browse or shelf click IS a
  * Use (the shell does it), the previous working gradient is one undo step away, and the
- * first ramp gesture edits. States: hidden (nothing yet) · working · live from Build /
- * Extract · edited (return to source).
+ * first ramp gesture edits. States: hidden (nothing yet) · working · live from Mix /
+ * Image · edited (return to source).
  *
  * Editor wiring: while the input is NOT the stops document, the editor shows the derived
  * config (verbatim for a picked gradient, fitted for a live one) and the bracket hooks fold
@@ -32,7 +33,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
-import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
+import { useFavientsStore, favientSig, isRecentGroup } from '../../palette/store/favientsStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../../palette/store/paletteEditorStore';
 import { applyEditorChange } from '../../palette/core/editorConfig';
@@ -80,10 +81,9 @@ type Expander = 'curves' | 'adjust' | null;
 interface Props {
   derived: WorkingDerived;
   source: SourceId;
-  onMixWith: () => void;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
@@ -96,7 +96,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
   const favOf = useMemo(() => {
     if (!config) return null;
     const sig = favientSig(config);
-    return favients.find((f) => favientSig(f.config) === sig) ?? null;
+    // Kept = filed by the user. The Recent session entry always matches (it follows the
+    // work), so it must not light the star.
+    return favients.find((f) => !isRecentGroup(f.group) && favientSig(f.config) === sig) ?? null;
   }, [favients, config]);
   const paletteHex = useMemo(() => derived.palette.map((s) => hexOf(s.color)), [derived.palette]);
 
@@ -108,7 +110,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
       st.remove(favOf.id);
       return;
     }
-    useWorkingStore.getState().collectCurrent();
+    useWorkingStore.getState().syncRecent();
     st.add(config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
   };
 
@@ -132,7 +134,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
   };
 
   const stateChip = derived.live ? (
-    <span className={chip(false, 'live')}>● live from {source === 'build' ? 'Build' : 'Extract'}</span>
+    <span className={chip(false, 'live')}>● live from {source === 'build' ? 'Mix' : 'Image'}</span>
   ) : derived.edited ? (
     <button
       className={chip(false, 'edited')}
@@ -165,9 +167,6 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
             More like this
           </button>
         )}
-        <button className={chip()} onClick={onMixWith} title="Put this gradient into Build slot A and pick another for B">
-          Mix with…
-        </button>
         <button className={chip(!!favOf, 'star')} title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'} onClick={toggleStar}>
           ★
         </button>
@@ -219,8 +218,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
         <div className="mt-3 pt-3 border-t border-line/10 grid grid-cols-2 gap-x-7">
           {/* Modify/Noise carry `dynamicVisible: isMixed` (a Generator-era assumption:
               those dials hid whenever the recipe wasn't the two-source mix). Adjust
-              belongs to WORKING here (§5.1), not to the Build recipe, so it must stay
-              visible under Sweep too — ignoreDynamicVisible skips that gate for this
+              belongs to WORKING here (§5.1), not to the Mix recipe, so it must stay
+              visible whatever the recipe — ignoreDynamicVisible skips that gate for this
               mount only; the shared param definition (also read by GeneratorStage /
               app-gmt) is untouched. @see plans/ge-v2-design.md §12 item 4 */}
           <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" ignoreDynamicVisible />

@@ -18,14 +18,17 @@ import {
   serializeWorkingDocument,
   restoreWorkingDocument,
   setRecentCollector,
+  setRecentUpdater,
   type RecentCollector,
+  type RecentUpdater,
 } from './store/workingStore';
 
-export const installWorking = (opts: { collectRecent?: RecentCollector } = {}): void => {
+export const installWorking = (opts: { collectRecent?: RecentCollector; updateRecent?: RecentUpdater } = {}): void => {
   // Undo: `setInput` / `use` / `beginEdit` / `returnToSource` each bracket one paramEdit;
   // this provider is what the bracket snapshots.
   registerHistoryProvider('working', { capture: captureWorkingHistory, restore: restoreWorkingHistory });
   // Save/Load + variants: the input slot + name + fold memory ride the scene document.
   registerDocumentProvider('working', { serialize: serializeWorkingDocument, restore: restoreWorkingDocument });
   if (opts.collectRecent) setRecentCollector(opts.collectRecent);
+  if (opts.updateRecent) setRecentUpdater(opts.updateRecent);
 };

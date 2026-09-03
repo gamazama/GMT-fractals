@@ -209,6 +209,15 @@ interface FavientsState {
    * that wants the collect on the undo stack brackets it itself.
    */
   collectRecent: (config: GradientConfig, name: string, source?: string) => string | null;
+  /**
+   * Refresh a Recent entry IN PLACE — the v2 working session (owner, 2026-09-03: the bin
+   * "should be updating the gradient whenever the user modifies it"). Returns false when
+   * `id` is no longer a Recent entry (removed, or dragged into a user group — that IS
+   * keeping it, so it is left alone), which tells the caller to start a new one. Same
+   * content and name → true with no write. Any OTHER Recent entry already holding the new
+   * content is dropped, so the run stays one-per-gradient.
+   */
+  updateRecent: (id: string, config: GradientConfig, name: string) => boolean;
   remove: (id: string) => void;
   /** Content-presence query (used by the gradient-file import to skip duplicates). */
   isFav: (config: GradientConfig) => boolean;
@@ -347,6 +356,20 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     // `add()`, and an automatic collect must not steer where a deliberate save goes.
     set({ favients, groupLabels });
     return head.id;
+  },
+
+  updateRecent: (id, config, name) => {
+    const cur = get().favients;
+    const at = cur.findIndex((f) => f.id === id);
+    if (at < 0 || !isRecentGroup(cur[at].group)) return false;
+    const sig = favientSig(config);
+    if (favientSig(cur[at].config) === sig && cur[at].name === name) return true;
+    const favients = cur
+      .filter((f) => f.id === id || !(isRecentGroup(f.group) && favientSig(f.config) === sig))
+      .map((f) => (f.id === id ? { ...f, config, name } : f));
+    saveFavients(favients);
+    set({ favients });
+    return true;
   },
 
   remove: (id) => {

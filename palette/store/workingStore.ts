@@ -21,11 +21,16 @@
  * remembers what was folded so `returnToSource` can undo the fold structurally; Ctrl+Z
  * covers it too (one `paramEdit` bracket per action).
  *
- * Recent auto-collect: the store does NOT import the favourites store. A host registers a
- * `RecentCollector` (see palette/installWorking.ts); `beginEdit` and `collectCurrent` call
- * it. `use` does NOT (since 2026-09-03 a Browse pick IS a Use, and a mere pick must never
- * land in Recent): the shell collects on bake, mix, star, export, share, wallpaper, and on
- * leaving a live source.
+ * Recent = ONE BIN ENTRY PER WORKING SESSION (owner, 2026-09-03 S3 review: the bin "should
+ * be updating the gradient whenever the user modifies it, and know when to create a new
+ * gradient"). The store does NOT import the favourites store; a host registers a
+ * `RecentCollector` + `RecentUpdater` (palette/installWorking.ts). `syncRecent` — called by
+ * the shell, debounced, whenever the derived output or the name changes — refreshes the
+ * session's entry (`sessionId`) in place, or opens one when there is none. A new session
+ * (sessionId → null) starts on `use`, `setInput` and `returnToSource`; `beginEdit` keeps
+ * it (an edit is the same gradient, changed). A session picked up FROM the bin
+ * (`use(..., { fromRecent: true })`) is pinned: its first change opens a new entry rather
+ * than rewriting the one it came from.
  *
  * Undo + Save/Load: `captureWorkingHistory` / `serializeWorkingDocument` (registered by
  * installWorking) snapshot `{ input, name, bakedFrom }`; the palette-row prefs (positions /
@@ -90,13 +95,18 @@ export interface BakedFrom {
   curvesOn: boolean;
 }
 
-export type RecentCollector = (config: GradientConfig, name: string, source: string) => void;
+export type RecentCollector = (config: GradientConfig, name: string, source: string) => string | null;
+export type RecentUpdater = (id: string, config: GradientConfig, name: string) => boolean;
 
 export interface WorkingState {
   input: WorkingInput;
   /** User-typed name; null = derive it from the input. */
   name: string | null;
   bakedFrom: BakedFrom | null;
+  /** The My Gradients (Recent) entry this working session writes to; null = none yet. */
+  sessionId: string | null;
+  /** The session started from a bin pick: its first change opens a NEW entry. */
+  sessionPinned: boolean;
   /** Palette-row prefs (per viewer, not undoable): the swatch positions along the ramp and
    *  the last layout rule applied (UI highlight only — positions are the truth). */
   positions: number[];
@@ -106,16 +116,19 @@ export interface WorkingState {
 
   /** Replace the input. One undo entry. Clears any fold memory. */
   setInput: (input: WorkingInput) => void;
-  /** "Use": a fixed gradient becomes the input (cloned). One undo entry; NOT collected. */
-  use: (config: GradientConfig, name: string, source: string) => void;
+  /** "Use": a fixed gradient becomes the input (cloned). One undo entry; a new session. */
+  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean }) => void;
   setName: (name: string | null) => void;
   /** Fold the live pipeline into editable stops (no-op when already editing an untouched
    *  stops input). Collects the folded gradient into Recent. */
   beginEdit: () => void;
   /** Undo the fold structurally: restore the pre-bake input, dials and curves. */
   returnToSource: () => void;
-  /** Collect the current output into Recent (the shell calls this on leaving Build /
-   *  Extract and on export / share / wallpaper). */
+  /** Write the current output to the session's Recent entry, opening one if needed. The
+   *  shell calls this (debounced) on every derived change; star / export / wallpaper call
+   *  it directly so the bin is current before they read it. */
+  syncRecent: () => void;
+  /** @deprecated alias of syncRecent, kept for the S4 call sites. */
   collectCurrent: () => void;
   /** Re-lay by a rule (Even / Perceptual / Stops); Even / Perceptual after Stops use HAND_COUNT. */
   layoutPalette: (rule: PaletteRule) => void;
@@ -132,16 +145,29 @@ export interface WorkingState {
 
 // --- Recent seam ------------------------------------------------------------------
 let _collect: RecentCollector | null = null;
+let _update: RecentUpdater | null = null;
 export const setRecentCollector = (fn: RecentCollector | null): void => {
   _collect = fn;
 };
-const collect = (config: GradientConfig, name: string, source: string): void => {
+export const setRecentUpdater = (fn: RecentUpdater | null): void => {
+  _update = fn;
+};
+const collect = (config: GradientConfig, name: string, source: string): string | null => {
   try {
-    _collect?.(config, name, source);
+    return _collect?.(config, name, source) ?? null;
   } catch {
-    /* a collector failure must never break an edit */
+    return null; /* a collector failure must never break an edit */
   }
 };
+const update = (id: string, config: GradientConfig, name: string): boolean => {
+  try {
+    return _update?.(id, config, name) ?? false;
+  } catch {
+    return false;
+  }
+};
+/** Structural identity of a config (the store must not import favientSig). */
+const configKey = (c: GradientConfig): string => JSON.stringify([c.stops, c.colorSpace ?? '', c.blendSpace ?? '']);
 
 // --- helpers ----------------------------------------------------------------------
 const cloneConfig = (c: GradientConfig): GradientConfig => JSON.parse(JSON.stringify(c)) as GradientConfig;
@@ -242,13 +268,17 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
   input: { kind: 'empty' },
   name: null,
   bakedFrom: null,
+  sessionId: null,
+  sessionPinned: false,
   ...loadPrefs(),
 
-  setInput: (input) => paramEdit(() => set({ input, bakedFrom: null })),
+  setInput: (input) => paramEdit(() => set({ input, bakedFrom: null, sessionId: null, sessionPinned: false })),
 
-  use: (config, name, source) => {
+  use: (config, name, source, opts) => {
     const c = cloneConfig(config);
-    paramEdit(() => set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null }));
+    paramEdit(() =>
+      set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent }),
+    );
   },
 
   setName: (name) => paramEdit(() => set({ name: name && name.trim() ? name : null })),
@@ -274,7 +304,6 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
       useGeneratorStore.setState({ tracks: null, curvesOn: false });
       set({ input: { kind: 'stops' }, bakedFrom: baked, name });
     });
-    collect(config, name, sourceOf(s.input));
   },
 
   returnToSource: () => {
@@ -284,16 +313,26 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     paramEdit(() => {
       setGeneratorSlice(b.adjust);
       useGeneratorStore.setState({ tracks: b.tracks, curvesOn: b.curvesOn });
-      set({ input: b.input, name: b.name, bakedFrom: null });
+      set({ input: b.input, name: b.name, bakedFrom: null, sessionId: null, sessionPinned: false });
     });
   },
 
-  collectCurrent: () => {
+  syncRecent: () => {
     const s = get();
     const d = deriveWorkingNow();
     if (!d) return;
-    collect(d.config, s.name ?? autoWorkingName(s.input, s.bakedFrom), sourceOf(s.input));
+    const name = s.name ?? autoWorkingName(s.input, s.bakedFrom);
+    let id = s.sessionId;
+    // A session picked up from the bin rewrites nothing: the moment its output differs
+    // from what was picked, it becomes a new entry (the one it came from stays as it was).
+    if (id && s.sessionPinned && s.input.kind === 'gradient' && configKey(d.config) !== configKey(s.input.config)) id = null;
+    if (id && s.sessionPinned && s.input.kind !== 'gradient') id = null;
+    if (id && update(id, d.config, name)) return;
+    const next = collect(d.config, name, sourceOf(s.input));
+    // Transient bookkeeping, outside any undo bracket (the next bracket snapshots it).
+    set({ sessionId: next, sessionPinned: next ? s.sessionPinned && next === s.sessionId : false });
   },
+  collectCurrent: () => get().syncRecent(),
 
   layoutPalette: (rule) => {
     const { ramp, config } = layoutSourceNow();
@@ -334,7 +373,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
 }));
 
 // --- providers (undo + Save/Load) — registered by palette/installWorking.ts ----------
-type WorkingSnapshot = Pick<WorkingState, 'input' | 'name' | 'bakedFrom'>;
+type WorkingSnapshot = Pick<WorkingState, 'input' | 'name' | 'bakedFrom' | 'sessionId' | 'sessionPinned'>;
 
 const coerceInput = (v: unknown): WorkingInput | null => {
   if (!v || typeof v !== 'object') return null;
@@ -389,12 +428,18 @@ export const coerceWorkingSnapshot = (snap: unknown): WorkingSnapshot | null => 
   const o = snap as Record<string, unknown>;
   const input = coerceInput(o.input);
   if (!input) return null;
-  return { input, name: typeof o.name === 'string' ? o.name : null, bakedFrom: coerceBaked(o.bakedFrom) };
+  return {
+    input,
+    name: typeof o.name === 'string' ? o.name : null,
+    bakedFrom: coerceBaked(o.bakedFrom),
+    sessionId: typeof o.sessionId === 'string' ? o.sessionId : null,
+    sessionPinned: o.sessionPinned === true,
+  };
 };
 
 export const captureWorkingHistory = (): JsonValue => {
   const s = useWorkingStore.getState();
-  return JSON.parse(JSON.stringify({ input: s.input, name: s.name, bakedFrom: s.bakedFrom })) as JsonValue;
+  return JSON.parse(JSON.stringify({ input: s.input, name: s.name, bakedFrom: s.bakedFrom, sessionId: s.sessionId, sessionPinned: s.sessionPinned })) as JsonValue;
 };
 export const restoreWorkingHistory = (snap: unknown): void => {
   const v = coerceWorkingSnapshot(snap);
