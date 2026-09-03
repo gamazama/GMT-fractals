@@ -199,7 +199,7 @@ tabs honour safe-area insets (fixes the June follow-up on body-portaled wells).
 
 - **Phase 0 — design lock (this session, Fable):** this doc + `plans/ge-v2-mock.html` (clickable,
   measured at desktop / tablet / phone). Iterate until the layout feels right.
-- **Phase 1 — foundation (serial, one session, Fable) — BUILT 2026-09-03 on `ge-v2`, see §11:** Working input slot on the pipeline ·
+- **Phase 1 — foundation (serial, one session, Fable) — BUILT + COMMITTED 2026-09-03 on `ge-v2` (`bd661fd6`), see §11:** Working input slot on the pipeline ·
   Recent auto-collect in favientsStore · variants store · the v2 shell skeleton + entry page built to the mock B skeleton (top bar · hero · drawer · stage · silent row) ·
   frozen interfaces written into this doc. Branch `ge-v2`.
 - **Phase 2 — parallel streams (worktrees, 2–3 at a time; shared 5 h cap; check in ~2 h):**
