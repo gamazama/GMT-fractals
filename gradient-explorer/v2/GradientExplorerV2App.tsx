@@ -21,7 +21,7 @@
  * until their pieces land.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { useGlobalContextMenu } from '../../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../../components/GlobalContextMenu';
@@ -71,9 +71,8 @@ const enterMix = (): void => {
   const g = useGeneratorStore.getState();
   const gs = readGeneratorSlice();
   if ((gs.generatorMode ?? 0) !== 0) setGeneratorSlice({ generatorMode: 0 });
-  // A blend at 0 shows A alone, so filling B would change nothing on screen: open at the
-  // midpoint unless the user already set a blend.
-  if (!gs.mixL && !gs.mixC && !gs.mixH) setGeneratorSlice({ mixL: 0.5, mixC: 0.5, mixH: 0.5 });
+  // Fully A to start (owner): the crossfade between the A and B bands is the gesture.
+  if (gs.mixL || gs.mixC || gs.mixH) setGeneratorSlice({ mixL: 0, mixC: 0, mixH: 0 });
   const d = deriveWorkingNow();
   if (d) {
     w.syncRecent();
@@ -113,10 +112,13 @@ export const GradientExplorerV2App: React.FC = () => {
   // it — see BuildStage), the NEXT pick fills that slot instead — checked first, so an
   // armed pick never touches Working. A My Gradients pick keeps the slot armed (try
   // several); a Browse pick is one-shot and comes back to Mix.
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
   useEffect(() => {
     if (!candidate) return;
     const p = candidate.payload;
-    const slot = getArmedSlot();
+    // On the Mix tab a pick always lands in a slot — B unless A is armed.
+    const slot = getArmedSlot() ?? (sourceRef.current === 'build' ? 'B' : null);
     if (slot) {
       const ramp = renderStopsToRamp(p.config.stops, p.config.blendSpace, p.config.colorSpace);
       useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);

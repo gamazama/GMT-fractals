@@ -8,7 +8,11 @@
  *   2. the PALETTE ROW — draggable sample positions on top of the ramp (PaletteRow). A click
  *      on a swatch selects its stop in the editor (creating one if there is none), so the
  *      palette and the stops are one thing seen twice — owner review 2026-09-03.
- *   3. the RAMP = the shared AdvancedGradientEditor in `strip` chrome: draggable stop knots,
+ *   3. the RAMP — SPLIT whenever the pipeline is doing something (owner, 2026-09-03: "the
+ *      source and result language as a split hero"): a thin SOURCE band on top
+ *      (SourceBands: the picked gradient / the raw image ramp / the stops before Adjust; in
+ *      Mix it is A · crossfade · B, the two bands being the armable slots) and the RESULT
+ *      band under it, which is the shared AdvancedGradientEditor in `strip` chrome: draggable stop knots,
  *      add on click, right-click menu, per-stop colour picker under it whose Palette row IS
  *      the working palette (one palette, not two). Its inspector's left column carries our
  *      Curves ▾ / Adjust ▾ toggles (`stripAside`) beside the editor's own blend / output /
@@ -41,6 +45,7 @@ import { useGeneratorStore, prospectiveFitChannels, prospectiveFitFrames, readAd
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
 import { PaletteRow } from './PaletteRow';
+import { SourceBands, SOURCE_BAND_H, mixSourceHeight } from './SourceBands';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
@@ -93,6 +98,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
 
   const config = derived.config;
+  // The split: Mix always (its source is two things); otherwise whenever the output is not
+  // the input verbatim (curves on, Adjust off default, an image fit). Bake = passthrough
+  // again = the bands merge.
+  const split = derived.input.kind === 'build' || !derived.passthrough;
+  const sourceH = derived.input.kind === 'build' ? mixSourceHeight() : SOURCE_BAND_H;
+  const resultH = split ? (derived.input.kind === 'build' ? 40 : 42) : 60;
   const favOf = useMemo(() => {
     if (!config) return null;
     const sig = favientSig(config);
@@ -181,12 +192,17 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
         className="h-[34px] mb-1.5"
       />
 
-      {/* 3. the ramp IS the stops editor */}
+      {/* 3. the ramp IS the stops editor — under the source band(s) while the pipeline is live */}
       <div ref={rampRef} className="relative">
+        {split && (
+          <div className="px-2 mb-px" style={{ minHeight: sourceH }}>
+            <SourceBands derived={derived} />
+          </div>
+        )}
         <AdvancedGradientEditor
           ref={editorRef}
           chrome="strip"
-          stripHeight={60}
+          stripHeight={resultH}
           stripAside={
             <div className="flex flex-wrap gap-1.5">
               <button className={chip(expander === 'curves')} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
@@ -206,8 +222,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
         />
         {scrubT != null && (
           <div
-            className="absolute top-0 h-[60px] w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"
-            style={{ left: `calc(8px + ${scrubT} * (100% - 16px))` }}
+            className="absolute w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"
+            style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split ? sourceH + 1 : 0, height: resultH }}
           />
         )}
       </div>

@@ -1,56 +1,52 @@
 /**
- * BuildStage — the v2 MIX source (plans/ge-v2-design.md §5.3; owner S3 review 2026-09-03:
- * "build would be — mix", Sweep scrapped).
+ * BuildStage — the v2 MIX stage (plans/ge-v2-design.md §5.3; owner 2026-09-03).
  *
- * Source A / Source B (`SourceRow`, lifted out of GeneratorStage — see
- * `palette/components/GeneratorSourceRow.tsx`) with the three L/C/h blend sliders
- * (`MixBlend`) between them and Swap. The recipe is always the two-source mixer: the shell
- * writes `generatorMode = 0` on entering Mix, and there is no Sweep (ColorBox) here any
- * more — `ColorBoxControls` stays for the old shell's GeneratorStage.
+ * The recipe itself is drawn in the HERO: the A and B bands (the slots) with the crossfade
+ * between them, over the result (gradient-explorer/v2/SourceBands.tsx). This stage is what
+ * is left: one line — Swap, and "Split by channel", which opens the three per-channel
+ * faders (`MixBlend`, the old Generator's) for A's lightness with B's colour and the like —
+ * and then the Browse wall, so a pick for the armed band is right here. Sweep (ColorBox)
+ * is gone from v2; `ColorBoxControls` stays for the old shell's GeneratorStage.
  *
- * How the slots fill (owner): entering Mix puts the HERO's gradient into A and the most
- * recent OTHER My Gradients entry into B (falling back to whatever B held), and arms B, so
- * a bin click swaps B in; a Browse pick fills B once. Clicking a slot arms it explicitly
- * (`palette/store/armedTarget.ts`) — the same mechanism, no drop layer.
- *
- * NO hero (the Working hero above shows the result live — "live from Mix", §2), NO curve
- * editor (Shape lives on Working), NO Modify/Noise dials (Adjust lives on Working), no
- * Stops sub-mode, no export block, and no `data-gx-target` / `data-gx-step` anchors —
- * those stay in GeneratorStage for the old shell's GradientDropLayer, which the v2 shell
- * doesn't mount (registerFeatures.ts: NO registerGradientTargets).
+ * On this tab a pick always fills a band: B unless A is armed (the shell's pick effect).
  *
  * @see plans/ge-v2-design.md §5.3
  */
 
-import React from 'react';
-import { useGeneratorStore, useGeneratorDerived } from '../../palette/store/generatorStore';
-import { SourceRow } from '../../palette/components/GeneratorSourceRow';
+import React, { useState } from 'react';
+import { useGeneratorStore } from '../../palette/store/generatorStore';
 import { MixBlend } from '../../palette/components/MixBlend';
-import { useArmedSlot, armSlot } from '../../palette/store/armedTarget';
+import { useArmedSlot } from '../../palette/store/armedTarget';
+import { BrowseStage } from './BrowseStage';
 
 export const BuildStage: React.FC = () => {
-  // useGeneratorDerived also computes the curve/ghost/fitted-config scopes BuildStage
-  // doesn't need — reused anyway rather than duplicating the per-slot ramp math
-  // (stripA/stripB) into a second selector; see the file header on lift discipline.
-  const { stripA, stripB } = useGeneratorDerived();
-  const slotA = useGeneratorStore((s) => s.slotA);
-  const slotB = useGeneratorStore((s) => s.slotB);
   const swap = useGeneratorStore((s) => s.swap);
   const resetMix = useGeneratorStore((s) => s.resetMix);
   const armed = useArmedSlot();
+  const [splitOpen, setSplitOpen] = useState(false);
+  const btn = 'h-7 px-3 rounded-lg text-[12px] border border-line/20 text-fg hover:border-accent-400 hover:text-accent-300 transition-colors';
 
   return (
-    <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-3">
-      <div className="flex flex-col gap-2 max-w-2xl">
-        <SourceRow which="A" ramp={stripA} preset={slotA} height={48} onSlotClick={() => armSlot(armed === 'A' ? null : 'A')} armed={armed === 'A'} />
-        <MixBlend onSwap={swap} onReset={resetMix} />
-        <SourceRow which="B" ramp={stripB} preset={slotB} height={48} onSlotClick={() => armSlot(armed === 'B' ? null : 'B')} armed={armed === 'B'} />
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="shrink-0 px-6 pb-2 flex items-center gap-2 flex-wrap">
+        <button className={btn} onClick={swap} title="Swap A and B">
+          ⇅ Swap
+        </button>
+        <button className={`${btn} ${splitOpen ? 'border-accent-400 text-accent-300' : ''}`} onClick={() => setSplitOpen((o) => !o)} title="Blend lightness, chroma and hue separately">
+          Split by channel {splitOpen ? '▴' : '▾'}
+        </button>
+        <span className="text-[12px] text-fg-dim ml-2">
+          {armed === 'A'
+            ? 'Band A takes the next pick — from My Gradients below or the wall. Esc cancels.'
+            : 'Picks fill band B. Click band A above to fill A instead. Drag the line between them to blend.'}
+        </span>
       </div>
-      <div className="text-[12px] text-fg-dim max-w-2xl">
-        {armed
-          ? `Slot ${armed} takes the next pick — click a gradient in My Gradients below, or go to Browse and pick one there. Esc cancels.`
-          : 'Click a slot, then pick a gradient for it from My Gradients or Browse.'}
-      </div>
+      {splitOpen && (
+        <div className="shrink-0 px-6 pb-2">
+          <MixBlend onSwap={swap} onReset={resetMix} height={60} />
+        </div>
+      )}
+      <BrowseStage />
     </div>
   );
 };
