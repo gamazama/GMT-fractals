@@ -55,8 +55,9 @@
  *   focus to another window and watch it recover. A fair test uses the
  *   mic path with a virtual audio device as the control: same analysis,
  *   no screen-share surface. If the control holds 60, the surface is it.
- *   Open the app with `?perf` first (engine-gmt/renderer/perfProbe.ts): it
- *   prints one line per second with the main-thread rAF rate, long tasks,
+ *   Open the app with `?perf` first (engine-gmt/renderer/perfProbe.ts; it
+ *   samples every second and prints every 10 s — `?perf=live` prints every
+ *   second with an overlay, at a frame cost of its own): the main-thread rAF rate, long tasks,
  *   ticks dispatched, frames delivered and hover picks, so the reading says
  *   WHICH half dropped — the main thread (raf 30) or the worker (raf 60,
  *   frames 30) — and whether the pointer was over the canvas at the time.

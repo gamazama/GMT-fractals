@@ -28,6 +28,18 @@
  *
  * Zero cost when the flag is absent: nothing is imported or installed
  * (app-gmt/main.tsx loads this module only on `?perf`).
+ *
+ * @bug PRODUCTION: the probe itself lowered the frame rate on the owner's
+ *   machine (2026-09-02), which taints its own readings. Not measured, but
+ *   the two things it did per second that the app does not are a console
+ *   line (expensive with DevTools open) and a `position: fixed` readout over
+ *   the canvas (a compositor layer that can cost the canvas its direct
+ *   scanout path on Windows). Both are now opt-in: `?perf` collects silently
+ *   into `window.__perfProbe.log` and prints a summary every 10 s;
+ *   `?perf=live` restores the per-second line and the overlay. If `?perf`
+ *   alone still costs frames, the remaining per-frame work is the rAF gap
+ *   sampler and the two wrapped methods, and the profiling session should
+ *   start by measuring with the probe off.
  */
 import { isMouseOverCanvas } from '../../engine/worker/ViewportRefs';
 import { audioAnalysisEngine } from '../../engine/features/audioMod/AudioAnalysisEngine';
@@ -41,7 +53,8 @@ interface ProbeHandle { log: string[]; copy: () => Promise<void> | void; stop: (
  *   real proxy split makes a shared static type more trouble than it is worth
  *   for a diagnostic.
  */
-export function installPerfProbe(proxy: any): ProbeHandle {
+export function installPerfProbe(proxy: any, opts: { live?: boolean } = {}): ProbeHandle {
+    const live = !!opts.live;
     // ── counters reset every second ──
     let ticks = 0;
     let picks = 0, pickDone = 0, pickLatSum = 0;
@@ -77,15 +90,20 @@ export function installPerfProbe(proxy: any): ProbeHandle {
         observer.observe({ type: 'longtask', buffered: false });
     } catch { observer = null; }
 
-    // Corner readout — plain DOM, outside React, so it costs nothing to the app.
-    const el = document.createElement('div');
-    el.setAttribute('data-perf-probe', '');
-    Object.assign(el.style, {
-        position: 'fixed', left: '8px', bottom: '8px', zIndex: '99999', pointerEvents: 'none',
-        font: '11px/1.4 ui-monospace, Consolas, monospace', color: '#e6e8ee',
-        background: 'rgba(11,13,18,0.85)', padding: '4px 8px', borderRadius: '6px', whiteSpace: 'pre',
-    } as Partial<CSSStyleDeclaration>);
-    document.body.appendChild(el);
+    // Corner readout — only in live mode (see the @bug above): a fixed layer
+    // over the canvas is itself a compositor cost.
+    let el: HTMLDivElement | null = null;
+    if (live) {
+        el = document.createElement('div');
+        el.setAttribute('data-perf-probe', '');
+        Object.assign(el.style, {
+            position: 'fixed', left: '8px', bottom: '8px', zIndex: '99999', pointerEvents: 'none',
+            font: '11px/1.4 ui-monospace, Consolas, monospace', color: '#e6e8ee',
+            background: 'rgba(11,13,18,0.85)', padding: '4px 8px', borderRadius: '6px', whiteSpace: 'pre',
+        } as Partial<CSSStyleDeclaration>);
+        document.body.appendChild(el);
+    }
+    let seconds = 0;
 
     let lastFrames = Number(proxy.frameCount ?? 0);
     const log: string[] = [];
@@ -102,10 +120,13 @@ export function installPerfProbe(proxy: any): ProbeHandle {
             `raf=${gaps.length}/s gap p50=${q(0.5).toFixed(1)} p95=${q(0.95).toFixed(1)} max=${(sorted[sorted.length - 1] ?? 0).toFixed(1)}ms ` +
             `long=${longTasks}/s max=${longMax.toFixed(0)}ms ticks=${ticks}/s frames=${frames}/s ` +
             `picks=${picks}/s lat=${pickDone ? (pickLatSum / pickDone).toFixed(1) : '-'}ms`;
-        console.log('[perf] ' + line);
         log.push(`${new Date().toISOString().slice(11, 19)} ${line}`);
         if (log.length > 120) log.shift();
-        el.textContent = line.replace(/ (raf|long|ticks|picks)=/g, '\n$1=');
+        seconds++;
+        // Quiet by default: one console line per 10 s (the last second's
+        // reading); live mode prints every second and updates the overlay.
+        if (live || seconds % 10 === 0) console.log('[perf] ' + line);
+        if (el) el.textContent = line.replace(/ (raf|long|ticks|picks)=/g, '\n$1=');
         gaps.length = 0; ticks = 0; picks = 0; pickDone = 0; pickLatSum = 0; longTasks = 0; longMax = 0;
     }, 1000);
 
@@ -113,7 +134,7 @@ export function installPerfProbe(proxy: any): ProbeHandle {
         clearInterval(timer);
         cancelAnimationFrame(rafId);
         observer?.disconnect();
-        el.remove();
+        el?.remove();
         proxy.sendRenderTick = origTick;
         proxy.pickWorldPosition = origPick;
         delete (window as any).__perfProbe;
@@ -124,6 +145,8 @@ export function installPerfProbe(proxy: any): ProbeHandle {
         stop,
     };
     (window as any).__perfProbe = handle;
-    console.log('[perf] probe armed — one line per second; window.__perfProbe.copy() puts the last 120 s on the clipboard');
+    console.log(live
+        ? '[perf] probe armed (live) — one line per second + overlay; window.__perfProbe.copy() puts the last 120 s on the clipboard'
+        : '[perf] probe armed (quiet) — sampling every second, printing every 10 s; window.__perfProbe.copy() puts the last 120 s on the clipboard; ?perf=live for per-second output');
     return handle;
 }

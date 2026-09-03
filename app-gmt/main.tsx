@@ -702,9 +702,11 @@ if (typeof window !== 'undefined') {
     (window as any).__fractalRegistry = registry;
     // `?perf` — the frame-rate diagnostic (engine-gmt/renderer/perfProbe.ts).
     // Loaded on demand so it costs nothing otherwise.
-    let wantPerf = false;
-    try { wantPerf = new URLSearchParams(window.location.search).has('perf'); } catch { /* no URL */ }
-    if (wantPerf) void import('../engine-gmt/renderer/perfProbe').then((m) => m.installPerfProbe(getProxy()));
+    let perfMode: string | null = null;
+    try { perfMode = new URLSearchParams(window.location.search).get('perf'); } catch { /* no URL */ }
+    // `?perf` = quiet (10 s summaries); `?perf=live` = per-second line + overlay,
+    // which has its own frame cost (see the @bug on the probe).
+    if (perfMode !== null) void import('../engine-gmt/renderer/perfProbe').then((m) => m.installPerfProbe(getProxy(), { live: perfMode === 'live' }));
 }
 
 // Deep-link parse — if the page was opened with `?gallery=<slug>` (typically
