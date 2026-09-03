@@ -3,10 +3,12 @@
  * 2026-09-03; plans/ge-v2-design.md §5.1 revised).
  *
  * Each swatch is a sample POSITION on the ramp (`workingStore.positions`). Dragging a swatch
- * left/right scrubs its position along the ramp, so its colour changes live; it cannot pass
- * its neighbours (order stays stable, no jumping slots). A plain click copies the hex. `+` at
- * the end inserts a swatch at the largest gap; `×` on hover removes one. The layout rules
- * (Even / Perceptual / Stops) are buttons, not modes.
+ * left/right scrubs its position along the ramp, so its colour changes live. Slots never
+ * reorder: when the pointer pushes past a neighbour, the drag HANDS OVER to that neighbour
+ * (the swatch it left stays put just short of it) — owner review 2026-09-03. A plain click
+ * selects the swatch's stop in the editor below (`onSelect`; the host creates one if there is
+ * none). `+` at the end inserts a swatch at the largest gap; `×` on hover removes one. The
+ * layout rules (Even / Perceptual / Stops) are buttons, not modes.
  *
  * `onScrub(t)` lets the host draw a marker on the ramp while a swatch is being dragged.
  * `scale` maps a horizontal pixel delta to a `t` delta: pass the ramp's pixel width so a
@@ -36,12 +38,16 @@ interface Props {
   /** Read-only (a candidate preview): no drag, no add/remove. */
   readOnly?: boolean;
   onScrub?: (t: number | null) => void;
+  /** A click (no drag) on a swatch: select / create its stop. Without it a click copies the hex. */
+  onSelect?: (index: number, t: number) => void;
   className?: string;
 }
 
 const DRAG_THRESHOLD = 3;
+/** Minimum spacing kept between neighbouring swatches (in ramp t). */
+const GAP = 0.002;
 
-export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, onScrub, className = '' }) => {
+export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, onScrub, onSelect, className = '' }) => {
   const rule = useWorkingStore((s) => s.rule);
   const [dragging, setDragging] = useState<number | null>(null);
   const drag = useRef<{ index: number; startX: number; startT: number; moved: boolean } | null>(null);
@@ -68,10 +74,26 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
     d.moved = true;
     const st = useWorkingStore.getState();
     const p = st.positions;
-    // Clamp to the neighbours so a swatch never passes another (order stays stable).
-    const lo = d.index > 0 ? p[d.index - 1] + 0.002 : 0;
-    const hi = d.index < p.length - 1 ? p[d.index + 1] - 0.002 : 1;
-    const t = Math.max(lo, Math.min(hi, d.startT + dx / Math.max(1, scale)));
+    let t = d.startT + dx / Math.max(1, scale);
+    // Handover: pushed past a neighbour, the drag continues on THAT swatch (slots never
+    // reorder). The one the pointer left is parked just short of the neighbour it met.
+    if (d.index < p.length - 1 && t > p[d.index + 1] - GAP) {
+      st.moveSwatch(d.index, p[d.index + 1] - GAP);
+      d.index += 1;
+      d.startT = p[d.index];
+      d.startX = e.clientX;
+      t = d.startT;
+    } else if (d.index > 0 && t < p[d.index - 1] + GAP) {
+      st.moveSwatch(d.index, p[d.index - 1] + GAP);
+      d.index -= 1;
+      d.startT = p[d.index];
+      d.startX = e.clientX;
+      t = d.startT;
+    }
+    const q = useWorkingStore.getState().positions;
+    const lo = d.index > 0 ? q[d.index - 1] + GAP : 0;
+    const hi = d.index < q.length - 1 ? q[d.index + 1] - GAP : 1;
+    t = Math.max(lo, Math.min(hi, t));
     st.moveSwatch(d.index, t);
     setDragging(d.index);
     onScrub?.(t);
@@ -86,7 +108,10 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
     } catch {
       /* already released */
     }
-    if (d && !d.moved && palette[index]) copyHex(hexOf(palette[index].color));
+    if (d && !d.moved && palette[index]) {
+      if (onSelect) onSelect(index, palette[index].t);
+      else copyHex(hexOf(palette[index].color));
+    }
   };
 
   return (
@@ -101,7 +126,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
                 isDrag ? 'outline outline-2 outline-accent-400' : 'hover:outline hover:outline-2 hover:outline-white'
               }`}
               style={{ background: hex, touchAction: 'none' }}
-              title={readOnly ? `${hex} · click to copy` : `${hex} · drag to slide along the ramp · click to copy`}
+              title={readOnly ? `${hex} · click to copy` : onSelect ? `${hex} · drag to slide along the ramp · click to edit its stop` : `${hex} · drag to slide along the ramp · click to copy`}
               onPointerDown={(e) => onPointerDown(e, i)}
               onPointerMove={onPointerMove}
               onPointerUp={(e) => onPointerUp(e, i)}

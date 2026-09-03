@@ -3,12 +3,16 @@
  * 2026-09-03; plans/ge-v2-design.md §5.1 revised, §6b, §12).
  *
  * Top to bottom inside the block:
- *   1. name · state chip · More like this · Mix with · ★ · Curves ▾ · Adjust ▾
- *   2. the PALETTE ROW — draggable sample positions on top of the ramp (PaletteRow)
+ *   1. name · state chip · More like this · Mix with · ★
+ *   2. the PALETTE ROW — draggable sample positions on top of the ramp (PaletteRow). A click
+ *      on a swatch selects its stop in the editor (creating one if there is none), so the
+ *      palette and the stops are one thing seen twice — owner review 2026-09-03.
  *   3. the RAMP = the shared AdvancedGradientEditor in `strip` chrome: draggable stop knots,
  *      add on click, right-click menu, per-stop colour picker under it whose Palette row IS
- *      the working palette (one palette, not two). The first gesture on a live or picked
- *      input is the bake (workingStore.beginEdit).
+ *      the working palette (one palette, not two). Its inspector's left column carries our
+ *      Curves ▾ / Adjust ▾ toggles (`stripAside`) beside the editor's own blend / output /
+ *      menu items — no separate bar. The first gesture on a live or picked input is the bake
+ *      (workingStore.beginEdit).
  *   4. the expander: Curves (the channel graph editor over the working base) or Adjust
  *      (the Modify + Noise dials, standard GMT sliders). Same surface, no drawer.
  *
@@ -25,7 +29,7 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import AdvancedGradientEditor from '../../components/AdvancedGradientEditor';
+import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
@@ -86,6 +90,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
   const [expander, setExpander] = useState<Expander>(null);
   const [scrubT, setScrubT] = useState<number | null>(null);
   const [rampRef, rampW] = useWidth();
+  const editorRef = useRef<AdvancedGradientEditorHandle>(null);
 
   const config = derived.config;
   const favOf = useMemo(() => {
@@ -166,23 +171,33 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, onMixWith }) => 
         <button className={chip(!!favOf, 'star')} title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'} onClick={toggleStar}>
           ★
         </button>
-        <span className="w-px h-5 bg-line/20 mx-1" />
-        <button className={chip(expander === 'curves')} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
-          Curves {expander === 'curves' ? '▴' : '▾'}
-        </button>
-        <button className={chip(expander === 'adjust')} onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))} title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise">
-          Adjust {expander === 'adjust' ? '▴' : '▾'}
-        </button>
       </div>
 
       {/* 2. palette on top */}
-      <PaletteRow palette={derived.palette} scale={Math.max(1, rampW - 16)} onScrub={setScrubT} className="h-[34px] mb-1.5" />
+      <PaletteRow
+        palette={derived.palette}
+        scale={Math.max(1, rampW - 16)}
+        onScrub={setScrubT}
+        onSelect={(_, t) => editorRef.current?.selectAt(t)}
+        className="h-[34px] mb-1.5"
+      />
 
       {/* 3. the ramp IS the stops editor */}
       <div ref={rampRef} className="relative">
         <AdvancedGradientEditor
+          ref={editorRef}
           chrome="strip"
           stripHeight={60}
+          stripAside={
+            <div className="flex flex-wrap gap-1.5">
+              <button className={chip(expander === 'curves')} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
+                Curves {expander === 'curves' ? '▴' : '▾'}
+              </button>
+              <button className={chip(expander === 'adjust')} onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))} title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise">
+                Adjust {expander === 'adjust' ? '▴' : '▾'}
+              </button>
+            </div>
+          }
           value={editorValue}
           onChange={onEditorChange}
           onEditStart={onEditorStart}

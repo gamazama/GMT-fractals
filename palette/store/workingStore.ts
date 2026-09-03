@@ -117,7 +117,7 @@ export interface WorkingState {
   /** Collect the current output into Recent (the shell calls this on leaving Build /
    *  Extract and on export / share / wallpaper). */
   collectCurrent: () => void;
-  /** Re-lay the current number of swatches by a rule (Even / Perceptual / Stops). */
+  /** Re-lay by a rule (Even / Perceptual / Stops); Even / Perceptual after Stops use HAND_COUNT. */
   layoutPalette: (rule: PaletteRule) => void;
   /** Re-lay with N swatches under the last rule. */
   setCount: (n: number) => void;
@@ -206,6 +206,8 @@ export const deriveWorkingNow = (): WorkingDerivedCore | null => {
 const PREFS_KEY = 'gmt.ge.working.prefs';
 const RULES: PaletteRule[] = ['stops', 'even', 'perceptual'];
 const DEFAULT_POSITIONS = [0, 0.2, 0.4, 0.6, 0.8, 1];
+/** The swatch count Even / Perceptual fall back to after a Stops layout. */
+const HAND_COUNT = DEFAULT_POSITIONS.length;
 const validPositions = (v: unknown): number[] | null => {
   if (!Array.isArray(v) || v.length < PALETTE_MIN || v.length > PALETTE_MAX) return null;
   if (!v.every((x) => typeof x === 'number' && Number.isFinite(x))) return null;
@@ -295,7 +297,12 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
 
   layoutPalette: (rule) => {
     const { ramp, config } = layoutSourceNow();
-    set({ rule, positions: layoutPositions(rule, get().positions.length, ramp, config) });
+    const prev = get();
+    // Even / Perceptual coming off Stops go back to a hand-sized palette (owner review
+    // 2026-09-03): a stops layout can carry dozens of knots, and re-spacing that many was
+    // never what the click meant. Even ↔ Perceptual keep whatever count the user built.
+    const n = rule !== 'stops' && prev.rule === 'stops' ? HAND_COUNT : prev.positions.length;
+    set({ rule, positions: layoutPositions(rule, n, ramp, config) });
     savePrefs(get());
   },
   setCount: (n) => {

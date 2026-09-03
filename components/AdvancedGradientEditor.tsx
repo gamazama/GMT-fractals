@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
@@ -82,8 +82,9 @@ interface AdvancedGradientEditorProps {
      *            behind the toggle. Every existing host renders this.
      *   'strip' — NO header row: the strip + knot track are the whole top edge, the inspector
      *            is always available below (it shows when a knot is selected), and the
-     *            blend/output-space indicators + the clipboard menu move onto the inspector's
-     *            first line. The host entrance is not rendered (the v2 hero has its own star).
+     *            blend/output-space indicators + the clipboard menu sit in the inspector's LEFT
+     *            column next to the host's `stripAside`, beside the colour picker. No raised
+     *            backdrop. The host entrance is not rendered (the v2 hero has its own star).
      */
     chrome?: 'full' | 'strip';
     /** Height of the colour strip in px (default 32, the panel size). The v2 hero uses ~60. */
@@ -91,6 +92,18 @@ interface AdvancedGradientEditorProps {
     /** Host override for the inspector colour picker's fixed Palette row (hex strings). The
      *  v2 hero feeds its working palette here so there is ONE palette, not two. */
     pickerPalette?: string[];
+    /** Strip chrome only: host items for the inspector's LEFT column (the v2 hero puts its
+     *  Curves / Adjust toggles here). With a knot selected they stack down the left of the
+     *  colour picker, which is wide enough to lend the space; with nothing selected they lie
+     *  in one line with the blend / output / menu items. */
+    stripAside?: React.ReactNode;
+}
+
+/** Imperative seam for a host that owns a palette face over the strip (the v2 hero). */
+export interface AdvancedGradientEditorHandle {
+    /** Select the knot within `tolerance` of `t`; if there is none, insert one there (the
+     *  ramp's colour at `t`, the segment's interpolation) as ONE bracketed edit and select it. */
+    selectAt: (t: number, tolerance?: number) => void;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -115,7 +128,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette }) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -306,6 +319,27 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             emitChange(knotsRef.current.map(k => selectedIds.has(k.id) ? { ...k, color } : k));
         }
     }, [selectedIds, emitChange]);
+
+    // Host seam (v2 hero): a palette swatch click lands on its stop. The knot nearest `t`
+    // within the tolerance is selected; otherwise one is inserted there the way a track
+    // click inserts (sampled colour, the segment's interpolation) — one bracketed edit.
+    useImperativeHandle(ref, () => ({
+        selectAt: (t: number, tolerance = 0.015) => {
+            const pos = Math.max(0, Math.min(1, t));
+            const cur = knotsRef.current;
+            let best: AdvancedGradientKnot | null = null;
+            for (const k of cur) {
+                const d = Math.abs(k.position - pos);
+                if (d <= tolerance && (!best || d < Math.abs(best.position - pos))) best = k;
+            }
+            if (best) { setSelectedIds(new Set([best.id])); return; }
+            const color = rgbToHex(sampleStops(cur, pos, blendSpace));
+            const prev = [...cur].sort((a, b) => a.position - b.position).filter(k => k.position <= pos).pop();
+            const newKnot: AdvancedGradientKnot = { id: Date.now().toString(), position: pos, color, bias: 0.5, interpolation: prev ? prev.interpolation : 'linear' };
+            editAction(() => emitChange([...cur, newKnot]));
+            setSelectedIds(new Set([newKnot.id]));
+        },
+    }), [blendSpace, editAction, emitChange]);
 
     const handleCopy = useCallback(() => {
         const data = JSON.stringify({
@@ -615,7 +649,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
 
     return (
         <div 
-            className="w-full select-none bg-surface-raised rounded"
+            className={`w-full select-none rounded ${chrome === 'strip' ? '' : 'bg-surface-raised'}`}
             ref={containerRef}
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
@@ -823,10 +857,14 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                 </div>
             </div>
 
-            {isExpanded && (
-                <div className="flex flex-col gradient-interactive-element overflow-hidden">
-                    {chrome === 'strip' && (
-                        <div className="flex items-center gap-3 mt-1.5 px-2 text-[10px] text-fg-dim">
+            {isExpanded && chrome === 'strip' && (
+                <div className={`flex gap-3 mt-1.5 px-2 gradient-interactive-element ${selectedNodes.length > 0 ? 'items-start' : 'items-center'}`}>
+                    {/* Left: the host aside (v2: Curves / Adjust) + blend / output / menu. With a
+                        selection they stack down the left of the picker; without one they lie in
+                        a single line — no bar behind them either way. */}
+                    <div className={`flex gap-1.5 ${selectedNodes.length > 0 ? 'flex-col items-start w-[160px] shrink-0 pt-1' : 'flex-row flex-wrap items-center flex-1'}`}>
+                        {stripAside}
+                        <div className="flex items-center gap-2 text-[10px] text-fg-dim">
                             <span>blend</span>
                             <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleBlendSpace} title="Blend space (RGB → HSV → HSV Far → Oklab)">
                                 {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
@@ -835,24 +873,32 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                             <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleColorSpace} title="Output colour profile">
                                 {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
                             </button>
-                            <span className="flex-1" />
                             <button
                                 className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
                                 onClick={handlePresetsClick}
-                                title="Stops menu — copy, paste, reverse, distribute…"
+                                title="Stops menu — copy, paste, reverse, distribute, interpolation…"
                             >
                                 <MenuIcon />
                             </button>
                         </div>
+                    </div>
+                    {selectedNodes.length > 0 && (
+                        <div className="flex-1 min-w-0">
+                            <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
+                        </div>
                     )}
+                </div>
+            )}
+            {isExpanded && chrome === 'full' && (
+                <div className="flex flex-col gradient-interactive-element overflow-hidden">
                     {selectedNodes.length > 0 ? (
                         <>
                              <div className="mb-px mt-2">
                                 <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
                              </div>
-                             
+
                              <div className="flex flex-col">
-                                 {chrome === 'full' && (<Dropdown 
+                                 <Dropdown
                                     label="Interpolation"
                                     value={commonInterpolation}
                                     onChange={(v) => handleMultiPropertyChange('interpolation', v as InterpolationMode)}
@@ -863,24 +909,24 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
                                         { label: 'Smooth', value: 'smooth' }
                                     ]}
                                     className="mb-px"
-                                 />)}
-                                 
-                                 {chrome === 'full' && selectedNodes.length === 1 && (
-                                     <Slider 
-                                        label="Position" 
-                                        value={selectedNodes[0].position * 100} 
-                                        min={0} max={100} step={0.1} 
+                                 />
+
+                                 {selectedNodes.length === 1 && (
+                                     <Slider
+                                        label="Position"
+                                        value={selectedNodes[0].position * 100}
+                                        min={0} max={100} step={0.1}
                                         onChange={(val) => handleSliderPropertyChange('position', val / 100)}
                                     />
                                  )}
 
-                                 {chrome === 'full' && (<Slider
+                                 <Slider
                                     label="Bias (Midpoint)"
                                     value={commonBias === -1 ? 50 : commonBias * 100}
                                     min={0} max={100} step={1}
                                     onChange={(val) => handleSliderPropertyChange('bias', val / 100)}
                                     overrideInputText={commonBias === -1 ? "Mixed" : undefined}
-                                 />)}
+                                 />
                              </div>
                         </>
                     ) : (
@@ -892,6 +938,7 @@ const AdvancedGradientEditor: React.FC<AdvancedGradientEditorProps> = ({ value, 
             {marqueeRect && createPortal(<div className="fixed border border-info bg-info/20 pointer-events-none" style={{ left: marqueeRect.x, top: marqueeRect.y, width: marqueeRect.w, height: marqueeRect.h, zIndex: z('tooltip') }} />, document.body)}
         </div>
     );
-};
+});
+AdvancedGradientEditor.displayName = 'AdvancedGradientEditor';
 
 export default AdvancedGradientEditor;
