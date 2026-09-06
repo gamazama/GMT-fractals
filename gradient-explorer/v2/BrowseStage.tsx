@@ -6,11 +6,14 @@
  * row labels down the left edge (the wall's own gutter), and a caption that appears only
  * while a carve tool is drawing.
  *
- * Narrowing is ONE control: a search field carrying the live match count, and a Filters
- * button whose badge counts the active narrowers (search excluded — it has its own field).
- * Everything else — themes, the five look ranges, sources, the count with its single
- * clear-all, and the Arrange sentence — lives in the popover under that button. Nothing
- * narrows the wall from anywhere else.
+ * Narrowing (owner, 2026-09-06): the COLOUR PICKER is the main narrower — a hue × lightness
+ * field with a ranged box (`HueLightnessPad`) and the saturation strip under it — then the
+ * search field carrying the live match count, then a Filters button whose badge counts the
+ * active narrowers (search excluded). Filters is NOT a popover (it covered the wall it
+ * narrows, which updates live): it opens three inline rows under the bar — LOOK (simple ↔
+ * complex, single-hue ↔ rainbow) · SOURCES · ARRANGE (group / rows / sort / reverse, the
+ * count, clear-all). Cool ↔ warm is not rendered here (redundant with hue). Nothing narrows
+ * the wall from anywhere else.
  *
  * No hero here. A wall click is a candidate (`setHeroPick`); `WorkingHero` previews it.
  *
@@ -24,18 +27,33 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickerWall } from '../../palette/components/PickerWall';
 import { usePickerModel } from '../../palette/components/usePickerModel';
-import { PickerThemeChips, PickerBundleToggles } from '../../palette/components/PickerControls';
-import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { AnchoredMenu } from '../../components/ui';
+import { PickerBundleToggles } from '../../palette/components/PickerControls';
+import { QualityRangePadConnected } from '../../palette/components/QualityRangePadConnected';
+import { HueLightnessPad, satTrackFor } from '../../palette/components/HueLightnessPad';
+import { QUALITY_AXES } from '../../palette/features/paletteFilters';
+import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
+import { Dropdown } from '../../components/Dropdown';
+import { groupByParam, rowsByParam, sortByParam } from '../../palette/features/paletteFilters';
+
+// Owner, 2026-09-06: hue + dark/light are the 2-D pad on the bar; cool/warm is redundant
+// with hue and is not rendered in v2. What is left for the popover:
+const SAT_AXIS = QUALITY_AXES.find((a) => a.axis === 'qC')!;
+const LOOK_AXES = QUALITY_AXES.filter((a) => a.axis === 'qCov' || a.axis === 'qRb');
+import type { ParamConfig } from '../../engine/FeatureSystem';
+
+/** DDFS enum options → Dropdown options (index-valued, like the panel's own enum rows). */
+const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
+  ((c as { options?: { value: number; label: string }[] }).options ?? []).map((o) => ({ value: o.value, label: o.label }));
+import { Icon } from './ui/Icon';
 
 // No "hand" entry: the rest state (pick on click, right-drag pans) is implicit and never
 // highlighted — a highlighted default read as a stuck mode (owner review 2026-09-03).
 // Clicking the active tool again returns to the rest state.
 const TOOLS = [
-  { id: 'zoom', glyph: '🔍', label: 'Zoom', title: 'Zoom — drag to zoom around the grab point · right-drag pans · Fit resets' },
-  { id: 'rect', glyph: '▭', label: 'Box', title: 'Box select, then keep or cut' },
-  { id: 'lasso', glyph: '◌', label: 'Lasso', title: 'Draw a free shape, then keep or cut' },
-  { id: 'paint', glyph: '✎', label: 'Paint', title: 'Paint over the ones you want — [ ] resize' },
+  { id: 'zoom', glyph: 'zoom' as const, label: 'Zoom', title: 'Zoom — drag to zoom around the grab point · right-drag pans · Fit resets' },
+  { id: 'rect', glyph: 'box' as const, label: 'Box', title: 'Box select, then keep or cut' },
+  { id: 'lasso', glyph: 'lasso' as const, label: 'Lasso', title: 'Draw a free shape, then keep or cut' },
+  { id: 'paint', glyph: 'brush' as const, label: 'Paint', title: 'Paint over the ones you want — [ ] resize' },
 ] as const;
 type ToolId = (typeof TOOLS)[number]['id'];
 
@@ -49,9 +67,9 @@ const pill = 'bg-surface-dock/90 border border-line/20 rounded-lg backdrop-blur-
 
 export const BrowseStage: React.FC = () => {
   const m = usePickerModel();
-  /** Viewport anchor for the popover (the button's bottom-left), or null = closed. */
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [arrangeOpen, setArrangeOpen] = useState(false);
+  /** Owner, 2026-09-06: Filters is not a popover (it covered the wall it narrows) — it is three
+      inline rows under the bar: LOOK · SOURCES · ARRANGE. These are already the rare items. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // The zoom tool is not a selection tool (it never carves), so it lives here; the two are
   // mutually exclusive — picking either clears the other.
   const [zoomTool, setZoomTool] = useState(false);
@@ -69,29 +87,20 @@ export const BrowseStage: React.FC = () => {
     [m],
   );
   const btnRef = useRef<HTMLButtonElement>(null);
-  const closeFilters = useCallback(() => setAnchor(null), []);
+  const toggleFilters = useCallback(() => setFiltersOpen((o) => !o), []);
 
-  const toggleFilters = useCallback(() => {
-    setAnchor((a) => {
-      if (a) return null;
-      const r = btnRef.current?.getBoundingClientRect();
-      return r ? { x: r.left, y: r.bottom + 6 } : { x: 24, y: 96 };
-    });
-  }, []);
-
-  // AnchoredMenu's own Escape goes through the scope-aware shortcut registry, which does
-  // not stop the shell's plain window keydown — so Esc would ALSO dismiss the candidate.
-  // Take Escape here instead, in the capture phase, and stop it from travelling further.
+  // Esc closes the rows (capture phase, so the shell's plain keydown does not also dismiss
+  // the candidate).
   useEffect(() => {
-    if (!anchor) return;
+    if (!filtersOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
-      closeFilters();
+      setFiltersOpen(false);
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
-  }, [anchor, closeFilters]);
+  }, [filtersOpen]);
 
   // PickerThemeChips / PickerBundleToggles are DDFS custom-UI components: they read
   // `sliceState` and call `actions['set' + capitalised featureId]`. Mounting them here
@@ -100,6 +109,15 @@ export const BrowseStage: React.FC = () => {
   // feature's `sources` group cannot express. The two groups that DO render fine as-is
   // (the look ranges, the arrange params) go through AutoFeaturePanel below.
   const actions = useMemo(() => ({ setPaletteFilters: m.setPaletteFilters }), [m.setPaletteFilters]);
+  const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
+  const win = (k: string): [number, number] => {
+    const o = m.sliceState?.[k] as { x?: number; y?: number } | undefined;
+    return [o?.x ?? 0, o?.y ?? 1];
+  };
+  const hueWin = win('qHue');
+  const lightWin = win('qL');
+  // The saturation strip is painted toward the picker window's average colour (owner).
+  const satTrack = useMemo(() => satTrackFor(hueWin, lightWin) ?? undefined, [hueWin[0], hueWin[1], lightWin[0], lightWin[1]]);
 
   const zoomPct = m.zoom.x === m.zoom.y
     ? `${Math.round(m.zoom.x * 100)}%`
@@ -108,8 +126,23 @@ export const BrowseStage: React.FC = () => {
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       {/* ── one narrowing row ─────────────────────────────────────────────── */}
-      <div className="shrink-0 relative px-6 pb-2.5 flex items-center gap-2">
-        <div className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-line/20 bg-surface-dock w-[320px] max-w-full">
+      <div className="shrink-0 relative px-6 pb-2.5 flex items-center gap-3">
+        {/* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
+            bar, never over the wall it narrows. */}
+        <div className="flex flex-col gap-1">
+          <HueLightnessPad
+            hue={hueWin}
+            light={lightWin}
+            onChange={(h, l) => m.setPaletteFilters?.({ qHue: { x: h[0], y: h[1] }, qL: { x: l[0], y: l[1] } })}
+            onDragStart={() => handleInteractionStart('param')}
+            onDragEnd={handleInteractionEnd}
+            width={220}
+            height={56}
+          />
+          {/* the saturation strip, in a picker's own language, under the field */}
+          <QualityRangePadConnected featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...SAT_AXIS} hints="tooltip" keyframes={false} variant="strip" height={12} drawTrack={satTrack} />
+        </div>
+        <div className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-line/20 bg-surface-dock w-[260px] max-w-full">
           <svg className="w-3.5 h-3.5 shrink-0 text-fg-dim" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="7" cy="7" r="4.5" />
             <path d="M11 11l3.6 3.6" strokeLinecap="round" />
@@ -124,7 +157,7 @@ export const BrowseStage: React.FC = () => {
             <button onClick={() => m.setSearch('')} title="Clear search" className="px-1 text-fg-dim hover:text-fg">×</button>
           )}
           {m.loaded && m.count < m.total && (
-            <span className="text-[12px] text-fg-dim tabular-nums whitespace-nowrap">{m.count.toLocaleString()} match</span>
+            <span className="text-[12px] text-fg-muted tabular-nums whitespace-nowrap">{m.count.toLocaleString()} match</span>
           )}
         </div>
 
@@ -133,9 +166,9 @@ export const BrowseStage: React.FC = () => {
           data-gx-filters-trigger=""
           onClick={toggleFilters}
           className={`h-[34px] px-3 rounded-[10px] border text-[13px] flex items-center gap-2 transition-colors ${
-            anchor ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40'
+            filtersOpen ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40'
           }`}
-          title="Themes, look, sources and how the wall is arranged"
+          title="Look, sources and how the wall is arranged"
         >
           Filters
           <span
@@ -154,58 +187,50 @@ export const BrowseStage: React.FC = () => {
             <button onClick={() => m.setAnchor(null)} className="underline shrink-0 hover:text-fg">clear</button>
           </span>
         )}
+      </div>
 
-        {/* ── the Filters popover ─────────────────────────────────────────── */}
-        {/* AnchoredMenu = the sanctioned floating primitive: portaled (so nothing in the
-            shell can trap it), viewport-clamped, capture-phase outside-dismiss. The
-            trigger is outside its ref, hence `ignore`. */}
-        {anchor && (
-          <AnchoredMenu
-            anchor={anchor}
-            onClose={closeFilters}
-            dismissOnEscape={false}
-            ignore="[data-gx-filters-trigger]"
-            className="w-[440px] max-w-[calc(100vw-16px)] max-h-[70vh] overflow-y-auto custom-scroll bg-surface-dock border border-line/20 rounded-xl shadow-2xl"
-          >
-          <div data-gx-selectable="">
-            <PickerThemeChips featureId="paletteFilters" sliceState={m.sliceState} actions={actions} />
-
-            <div className="border-t border-line/10 pt-1.5">
-              <div className="px-2 text-[10px] uppercase tracking-wide text-fg-dim">Look</div>
-              <AutoFeaturePanel featureId="paletteFilters" groupFilter="quality" variant="dense" />
+      {/* ── Filters: three inline rows, never over the wall ────────────────── */}
+      {filtersOpen && (
+        <div className="shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10" data-gx-selectable="">
+          {/* LOOK */}
+          <div className="flex items-center gap-3">
+            <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Look</span>
+            <div className="flex-1 grid grid-cols-2 gap-x-6">
+              {LOOK_AXES.map((ax) => (
+                <QualityRangePadConnected key={ax.axis} featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...ax} hints="tooltip" keyframes={false} />
+              ))}
             </div>
-
-            <div className="border-t border-line/10">
-              <PickerBundleToggles featureId="paletteFilters" sliceState={m.sliceState} actions={actions} />
-            </div>
-
-            {/* count · one clear-all · the Arrange sentence */}
-            <div className="border-t border-line/10 px-2.5 py-2 flex items-center gap-3 text-[12px]">
-              <span className="text-fg-dim tabular-nums">
+          </div>
+          {/* ARRANGE */}
+          <div className="flex items-center gap-3">
+            <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Arrange</span>
+            <div className="flex-1 flex items-center gap-3 flex-wrap">
+              <div className="flex-1 min-w-[160px]"><Dropdown size="md" fullWidth label="Group by" value={Number(m.sliceState?.groupBy ?? 0)} options={enumOptions(groupByParam.config)} onChange={(v) => m.setPaletteFilters?.({ groupBy: v })} /></div>
+              <div className="flex-1 min-w-[160px]"><Dropdown size="md" fullWidth label="Rows by" value={Number(m.sliceState?.rowsBy ?? 0)} options={enumOptions(rowsByParam.config)} onChange={(v) => m.setPaletteFilters?.({ rowsBy: v })} /></div>
+              <div className="flex-1 min-w-[160px]"><Dropdown size="md" fullWidth label="Sort by" value={Number(m.sliceState?.sortBy ?? 0)} options={enumOptions(sortByParam.config)} onChange={(v) => m.setPaletteFilters?.({ sortBy: v })} /></div>
+              <label className="flex items-center gap-2 text-[13px] text-fg-muted select-none">
+                <input type="checkbox" checked={!!m.sliceState?.reverse} onChange={(e) => m.setPaletteFilters?.({ reverse: e.target.checked })} /> Reverse
+              </label>
+              <span className="ml-auto text-[13px] text-fg-muted tabular-nums">
                 {m.loaded ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : 'loading…'}
               </span>
               {(m.narrowers.length > 0 || m.anchor) && (
-                <button onClick={m.clearAll} className="text-accent-300 underline hover:text-fg" title="Clear search, look ranges, themes, sources, the carve and the similarity sort">
+                <button onClick={m.clearAll} className="text-[13px] text-accent-300 underline hover:text-fg" title="Clear search, look ranges, sources, the carve and the similarity sort">
                   clear all
                 </button>
               )}
-              <button
-                onClick={() => setArrangeOpen((o) => !o)}
-                className="ml-auto text-fg-muted hover:text-fg text-right min-w-0 truncate"
-                title="How the wall is grouped, banded and sorted"
-              >
-                {m.arrangeText} {arrangeOpen ? '▴' : '▾'}
-              </button>
             </div>
-            {arrangeOpen && (
-              <div className="border-t border-line/10">
-                <AutoFeaturePanel featureId="paletteFilters" groupFilter="arrange" variant="dense" />
-              </div>
-            )}
           </div>
-          </AnchoredMenu>
-        )}
-      </div>
+          {/* SOURCES */}
+          <div className="flex items-center gap-3">
+            <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Sources</span>
+            <div className="flex-1 min-w-0">
+              <PickerBundleToggles featureId="paletteFilters" sliceState={m.sliceState} actions={actions} layout="row" />
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* ── the wall as a canvas ──────────────────────────────────────────── */}
       {/* data-gx-keepselect: the wall manages its own clicks (swatch → pick, empty →
@@ -269,7 +294,7 @@ export const BrowseStage: React.FC = () => {
                 aria-pressed={on}
                 className={`w-8 h-8 rounded-lg text-[15px] transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
               >
-                {t.glyph}
+                <Icon name={t.glyph} />
               </button>
             );
           })}
@@ -297,7 +322,7 @@ export const BrowseStage: React.FC = () => {
         )}
 
         {/* zoom readout + Fit */}
-        <div className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-dim tabular-nums ${pill}`}>
+        <div className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-muted tabular-nums ${pill}`}>
           <span title="Middle-drag zooms · right-drag pans">{zoomPct}</span>
           <button
             onClick={m.resetZoom}

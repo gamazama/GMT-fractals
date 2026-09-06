@@ -534,7 +534,10 @@ const FavientSwatch: React.FC<{
           ref={ref}
           onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
           style={{ width: cw, height: ch }}
-          className="block shrink-0 rounded-[2px] ring-1 ring-line/10 overflow-hidden cursor-pointer"
+          // V8 gradient-bar spec (plans/ge-v2-unified-shell-plan.md §1), inlined rather
+          // than importing `gradient-explorer/v2/ui/bar.ts` — palette/** must never
+          // import an app (.claude/rules/palette.md).
+          className="block shrink-0 rounded ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg overflow-hidden cursor-pointer"
         />
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -579,8 +582,11 @@ const FavientSwatch: React.FC<{
     >
       <button
         onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
-        className={`block rounded-[2px] origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
-          selected ? 'scale-[1.4] ring-2 ring-accent-400 shadow-[0_0_12px_rgb(var(--accent-glow)/0.45)]' : 'ring-1 ring-line/10 hover:ring-warn/80'
+        // V8 gradient-bar spec, inlined for the same app-boundary reason as above.
+        className={`block rounded origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
+          selected
+            ? 'scale-[1.4] outline outline-2 outline-accent-400 shadow-[0_0_12px_rgb(var(--accent-glow)/0.45)]'
+            : 'ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg'
         }`}
       >
         <canvas ref={ref} style={{ width: cw, height: ch }} className="block" />

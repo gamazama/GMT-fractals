@@ -97,6 +97,9 @@ export default {
           DEFAULT: 'rgb(var(--secondary) / <alpha-value>)',
           strong: 'rgb(var(--secondary-strong) / <alpha-value>)',
         },
+        // v2 shell "armed" meaning colour (gradient-explorer/v2/ui/StateChip.tsx) — see
+        // the --gx-armed definition in index.css for why this isn't `secondary`.
+        'gx-armed': 'rgb(var(--gx-armed) / <alpha-value>)',
       },
     },
   },

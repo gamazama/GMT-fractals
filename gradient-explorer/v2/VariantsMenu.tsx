@@ -19,13 +19,16 @@ import { fitRampToStops } from '../../palette/core/stopFit';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { showToast } from '../../engine/store/toastStore';
+import { Floating } from './ui/Floating';
+import { Act } from './ui/Act';
+import { Icon } from './ui/Icon';
+import { ZoneLabel } from './ui/ZoneLabel';
+import { gradientBarClass } from './ui/bar';
 
 interface Props {
   derived: WorkingDerived;
   onClose: () => void;
 }
-
-const btn = 'h-7 px-3 rounded-lg text-[12px] border border-line/20 text-fg hover:border-accent-400 hover:text-accent-300';
 
 export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
   const variants = useVariantsStore((s) => s.variants);
@@ -76,15 +79,15 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
   };
 
   return (
-    <div className="absolute right-4 top-12 z-30 w-[300px] bg-surface-dock border border-line/20 rounded-xl p-3.5 shadow-2xl" data-gx-selectable>
+    <Floating className="absolute right-4 top-12 z-30 w-[300px] p-3.5" data-gx-selectable>
       <div className="flex items-center mb-2">
-        <span className="text-[11px] uppercase tracking-wider text-fg-dim">Variants</span>
-        <button className="ml-auto text-[12px] text-fg-dim hover:text-fg" onClick={onClose}>
-          ✕
+        <ZoneLabel>Variants</ZoneLabel>
+        <button className="ml-auto text-fg-muted hover:text-fg" onClick={onClose} title="Close (Esc)">
+          <Icon name="close" />
         </button>
       </div>
       <div className="flex flex-col gap-1.5 max-h-[50vh] overflow-y-auto custom-scroll">
-        {variants.length === 0 && <div className="text-[12px] text-fg-dim">No variants yet. Capture the current state to come back to it later.</div>}
+        {variants.length === 0 && <div className="text-[13px] text-fg-muted">No variants yet. Capture the current state to come back to it later.</div>}
         {variants.map((v) => {
           const ramp = rampFromInts(v.ramp);
           const on = v.id === activeId;
@@ -93,19 +96,19 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
             <div
               key={v.id}
               className={`flex items-center gap-2 p-1.5 rounded-lg border cursor-pointer ${
-                on ? 'border-accent-400 bg-accent-400/10' : isSecond ? 'border-[#b78cff] bg-[#b78cff]/10' : 'border-line/10 hover:border-line/30'
+                on ? 'border-accent-400 bg-accent-400/10' : isSecond ? 'border-gx-armed bg-gx-armed/10' : 'border-line/10 hover:border-line/30'
               }`}
               onClick={(e) => pick(v, e)}
               title={on ? 'Active · shift-click another to tween' : 'Click to switch · shift-click to tween with the active one'}
             >
-              <span className={`w-7 text-center font-semibold ${on ? 'text-accent-300' : isSecond ? 'text-[#b78cff]' : 'text-fg-muted'}`}>{v.name.slice(0, 3)}</span>
-              <div className="flex-1 min-w-0">
+              <span className={`w-7 text-center font-semibold ${on ? 'text-accent-300' : isSecond ? 'text-gx-armed' : 'text-fg-muted'}`}>{v.name.slice(0, 3)}</span>
+              <div className={`flex-1 min-w-0 ${gradientBarClass({ size: 'item' })}`}>
                 {ramp ? <GradientStrip ramp={ramp} height={22} className="w-full block" /> : <div className="h-[22px] rounded bg-surface-section" />}
               </div>
               {renaming === v.id ? (
                 <input
                   autoFocus
-                  className="w-16 h-6 bg-surface-section border border-line/20 rounded text-[12px] px-1 text-fg"
+                  className="w-16 h-6 bg-surface-section border border-line/20 rounded text-[13px] px-1 text-fg"
                   defaultValue={v.name}
                   onClick={(e) => e.stopPropagation()}
                   onBlur={(e) => {
@@ -118,19 +121,23 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
                   }}
                 />
               ) : (
+                // No "rename" glyph exists in the v2 Icon set (search/zoom/box/lasso/
+                // brush/undo/redo/chevron/settings/close/plus/swap/star) — kept as text
+                // rather than inventing a glyph outside the mandated set (P6).
                 <button
-                  className="text-[11px] text-fg-dim hover:text-fg px-1"
+                  className="text-[13px] text-fg-muted hover:text-fg px-1"
                   title="Rename"
                   onClick={(e) => {
                     e.stopPropagation();
                     setRenaming(v.id);
                   }}
                 >
-                  ✎
+                  rename
                 </button>
               )}
+              {/* Same gap: no "refresh/update" glyph in the set — kept as text (P6). */}
               <button
-                className="text-[11px] text-fg-dim hover:text-fg px-1"
+                className="text-[13px] text-fg-muted hover:text-fg px-1"
                 title="Update this variant with the current state"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -138,10 +145,10 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
                   showToast(`Variant ${v.name} updated`);
                 }}
               >
-                ⟳
+                update
               </button>
               <button
-                className="text-[11px] text-fg-dim hover:text-[#e5646c] px-1"
+                className="text-fg-muted hover:text-danger px-1"
                 title="Delete"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -149,31 +156,29 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
                   if (second === v.id) setSecond(null);
                 }}
               >
-                ✕
+                <Icon name="close" />
               </button>
             </div>
           );
         })}
       </div>
       <div className="flex items-center gap-2 mt-2.5">
-        <button className={btn} onClick={capture} disabled={derived.empty} title="Snapshot the whole studio as a new variant">
-          + New
-        </button>
-        <span className="text-[11px] text-fg-dim">click = switch · shift-click = tween</span>
+        <Act onClick={capture} disabled={derived.empty} title="Snapshot the whole studio as a new variant">
+          <Icon name="plus" /> New
+        </Act>
+        <span className="text-[13px] text-fg-muted">click = switch · shift-click = tween</span>
       </div>
       {tweenable && (
         <div className="mt-3 pt-3 border-t border-line/10">
-          <div className="flex items-center gap-2 text-[12px] text-fg-muted">
+          <div className="flex items-center gap-2 text-[13px] text-fg-muted">
             <span className="w-7 text-center text-accent-300 font-semibold">{a!.name.slice(0, 3)}</span>
             <input type="range" min={0} max={100} value={Math.round(t * 100)} onChange={(e) => previewTween(Number(e.target.value) / 100)} className="flex-1" />
-            <span className="w-7 text-center text-[#b78cff] font-semibold">{b!.name.slice(0, 3)}</span>
-            <button className={btn} onClick={bakeTween}>
-              Bake
-            </button>
+            <span className="w-7 text-center text-gx-armed font-semibold">{b!.name.slice(0, 3)}</span>
+            <Act onClick={bakeTween}>Bake</Act>
           </div>
-          <div className="text-[11px] text-fg-dim mt-1">Drag to preview the blend in the hero (OKLab). Bake keeps it.</div>
+          <div className="text-[13px] text-fg-muted mt-1">Drag to preview the blend in the hero (OKLab). Bake keeps it.</div>
         </div>
       )}
-    </div>
+    </Floating>
   );
 };

@@ -68,6 +68,15 @@ export interface QualityRangePadProps {
   /** Track height in px (default 22, matching GMT slider tracks). */
   height?: number;
   className?: string;
+  /** 'default' (unchanged) = the GMT slider-chrome header (label + two value
+   *  cells) above the track. 'row' = the V4 "one slider" anatomy (GE v2 unified
+   *  shell, plans/ge-v2-unified-shell-plan.md §4 Phase A): label · track · value
+   *  in one row, no boxed header, radius 4px on the track. Opt-in — every
+   *  existing caller (Fog Range via RangePairPad, the app-gmt Filters popover)
+   *  keeps 'default' unless it explicitly asks for 'row'. */
+  /** 'row' = pole · track · pole · amounts. 'strip' = the bare track (the saturation strip under
+   *  the hue/lightness picker). Both draw the selection the way HueLightnessPad does. */
+  variant?: 'default' | 'row' | 'strip';
 }
 
 const fmt2 = (v: number) => v.toFixed(2);
@@ -117,6 +126,7 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   onDragEnd,
   height = 22,
   className,
+  variant = 'default',
 }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -235,6 +245,83 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
     </div>
   );
 
+  // Track body — distribution background + dim-outside + draggable window.
+  // Shared by both variants; only the radius and surrounding chrome differ.
+  const trackNode = (
+    <div
+      ref={trackRef}
+      className={`relative w-full overflow-hidden cursor-crosshair select-none touch-none ${variant !== 'default' ? 'rounded ring-1 ring-line/20' : ''}`}
+      style={{ height }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+    >
+      {drawTrack ? (
+        <canvas ref={canvasRef} width={TRACK_W} height={TRACK_H} className="absolute inset-0 w-full h-full block" />
+      ) : (
+        <div className="absolute inset-0" style={{ background: trackGradient ?? 'rgba(255,255,255,0.1)' }} />
+      )}
+      {/* dim-outside masks */}
+      <div className={`absolute top-0 bottom-0 left-0 pointer-events-none ${variant === 'default' ? 'bg-black/60' : 'bg-black/45'}`} style={{ width: `${na * 100}%` }} />
+      <div className={`absolute top-0 bottom-0 pointer-events-none ${variant === 'default' ? 'bg-black/60' : 'bg-black/45'}`} style={{ left: `${nb * 100}%`, width: `${(1 - nb) * 100}%` }} />
+      {/* selected window: GMT edge thumbs in the default chrome; the HueLightnessPad box
+          (white hairline + dark halo) in the v2 variants, so every ranged selection reads alike. */}
+      {variant === 'default' ? (
+        <div
+          className="absolute top-0 bottom-0 border-l-2 border-r-2 border-line/80 box-border pointer-events-none"
+          style={{ left: `${na * 100}%`, width: `${(nb - na) * 100}%` }}
+        />
+      ) : (na > 0 || nb < 1) ? (
+        <div
+          className="absolute top-0 bottom-0 border border-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] rounded-[2px] box-border pointer-events-none"
+          style={{ left: `${na * 100}%`, width: `${(nb - na) * 100}%` }}
+        />
+      ) : null}
+    </div>
+  );
+
+  if (variant === 'strip') return <div className={className} title={label ?? (loLabel && hiLabel ? `${loLabel} ↔ ${hiLabel}` : undefined)}>{trackNode}</div>;
+
+  if (variant === 'row') {
+    // V4 "one slider" anatomy: label · track · value, no boxed header, radius 4px
+    // on the track (the sample radius, V2). The gradient/canvas track background
+    // is the only thing this app keeps from the old chrome (per V4).
+    return (
+      // Owner, 2026-09-06: the two poles sit either side of the track, the two
+      // amounts stack as a column on the right on a subtle raised ground that
+      // does not change while a number is being typed (DraggableNumber's edit
+      // input is transparent for that reason).
+      <div className={`flex items-center gap-2 ${className ?? ''}`} title={label}>
+        <span className="min-w-[64px] shrink-0 text-[13px] leading-none text-fg-muted text-left whitespace-nowrap select-none pointer-events-none">{label ?? loLabel}</span>
+        <div className="flex-1 min-w-0">{trackNode}</div>
+        <span className="min-w-[64px] shrink-0 text-[13px] leading-none text-fg-muted whitespace-nowrap select-none pointer-events-none">{label ? '' : hiLabel}</span>
+        <div className="flex flex-col shrink-0 w-[52px] h-[36px] text-[13px] tabular-nums rounded bg-surface-raised border border-line/10 overflow-hidden">
+          <DraggableNumber
+            value={a}
+            onChange={setMin}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            step={step}
+            hardMin={softRange ? undefined : min}
+            hardMax={Math.max(loFloor, b - gapD)}
+            format={format ?? fmt2}
+          />
+          <DraggableNumber
+            value={b}
+            onChange={setMax}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            step={step}
+            hardMin={Math.min(hiCeil, a + gapD)}
+            hardMax={softRange ? undefined : max}
+            format={format ?? fmt2}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`mb-px ${className ?? ''}`}>
       {/* Header — GMT slider chrome: label + two value cells */}
@@ -252,30 +339,7 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
         </div>
       </div>
 
-      {/* Track — distribution background + dim-outside + draggable window */}
-      <div
-        ref={trackRef}
-        className="relative w-full overflow-hidden cursor-crosshair select-none touch-none"
-        style={{ height }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
-        {drawTrack ? (
-          <canvas ref={canvasRef} width={TRACK_W} height={TRACK_H} className="absolute inset-0 w-full h-full block" />
-        ) : (
-          <div className="absolute inset-0" style={{ background: trackGradient ?? 'rgba(255,255,255,0.1)' }} />
-        )}
-        {/* dim-outside masks */}
-        <div className="absolute top-0 bottom-0 left-0 bg-black/60 pointer-events-none" style={{ width: `${na * 100}%` }} />
-        <div className="absolute top-0 bottom-0 bg-black/60 pointer-events-none" style={{ left: `${nb * 100}%`, width: `${(1 - nb) * 100}%` }} />
-        {/* selected window with GMT-style edge thumbs */}
-        <div
-          className="absolute top-0 bottom-0 border-l-2 border-r-2 border-line/80 box-border pointer-events-none"
-          style={{ left: `${na * 100}%`, width: `${(nb - na) * 100}%` }}
-        />
-      </div>
+      {trackNode}
     </div>
   );
 };
@@ -350,6 +414,22 @@ const hsv2 = (hin: number): [number, number, number] => {
 };
 
 /** Single-hue → rainbow ramp (single-hue ↔ rainbow). Vertical axis sweeps hue. */
+/** The colour wheel, left to right — the hue window's track (the Filters "colour picker"). */
+export const drawHueTrack = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+  const img = ctx.createImageData(w, h);
+  for (let x = 0; x < w; x++) {
+    const rc = hsv2((x / (w - 1)) * 360);
+    for (let y = 0; y < h; y++) {
+      const i = (y * w + x) * 4;
+      img.data[i] = rc[0];
+      img.data[i + 1] = rc[1];
+      img.data[i + 2] = rc[2];
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+};
+
 export const drawRainbowTrack = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
   const img = ctx.createImageData(w, h);
   const sol: [number, number, number] = [40, 150, 150];

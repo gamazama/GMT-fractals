@@ -40,6 +40,9 @@ import { autoPath } from '../../palette/core/img2grad';
 import { samplePalette } from '../../palette/core/paletteSample';
 import type { RGB } from '../../palette/core/oklab';
 import { showToast } from '../../engine/store/toastStore';
+import { Act } from './ui/Act';
+import { ZoneLabel } from './ui/ZoneLabel';
+import { gradientBarClass } from './ui/bar';
 
 const METHODS: { id: number; label: string; title: string }[] = [
   { id: 0, label: 'Dominant', title: 'Saliency-weighted dominant colours, ordered into a smooth ramp.' },
@@ -114,12 +117,9 @@ export const ExtractStage: React.FC = () => {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="ml-auto text-[11px] text-fg-muted hover:text-fg-secondary px-2 py-1 rounded-sm bg-line/[0.04]"
-          >
+          <Act className="ml-auto" onClick={() => fileInputRef.current?.click()}>
             Replace image
-          </button>
+          </Act>
         </div>
       )}
 
@@ -132,7 +132,7 @@ export const ExtractStage: React.FC = () => {
             <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} />
             {dominant && (
               <div>
-                <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1.5">Dominant colours · click to copy</div>
+                <ZoneLabel className="block mb-1.5">Dominant colours · click to copy</ZoneLabel>
                 <div className="flex flex-wrap gap-1.5">
                   {dominant.map((sw, i) => {
                     const hex = hexOf(sw.color);
@@ -141,7 +141,7 @@ export const ExtractStage: React.FC = () => {
                         key={i}
                         onClick={() => copyHex(hex)}
                         title={`${hex} · click to copy`}
-                        className="w-7 h-7 rounded-md border border-black/40 hover:outline hover:outline-2 hover:outline-white transition"
+                        className={`w-7 h-7 ${gradientBarClass({ size: 'swatch' })}`}
                         style={{ background: hex }}
                       />
                     );

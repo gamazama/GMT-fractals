@@ -47,6 +47,8 @@ import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 import { ExportMenu } from './ExportMenu';
 import { shareUrlFor, takeShareFromLocation } from './shareUrl';
+import { Icon } from './ui/Icon';
+import { ZoneLabel } from './ui/ZoneLabel';
 
 export type SourceId = 'browse' | 'build' | 'extract';
 const SOURCES: { id: SourceId; label: string }[] = [
@@ -226,8 +228,8 @@ export const GradientExplorerV2App: React.FC = () => {
           <span className="text-[15px] font-semibold text-fg">Gradient Explorer</span>
           <span className="text-[11px] text-fg-dim border border-line/20 rounded px-1">next</span>
         </a>
-        <button className={`${tb} w-8 px-0`} title="Undo (Ctrl+Z)" onClick={undo}>↶</button>
-        <button className={`${tb} w-8 px-0`} title="Redo (Ctrl+Y)" onClick={redo}>↷</button>
+        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={24} /></button>
+        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={24} /></button>
         <button className={`${tb} ${variantsOpen ? 'text-fg bg-line/10' : ''}`} onClick={() => setVariantsOpen((o) => !o)} title="Snapshots of the whole studio — switch, or tween between two">
           Variants
         </button>
@@ -253,10 +255,10 @@ export const GradientExplorerV2App: React.FC = () => {
             </button>
           ))}
           {armed && source === 'browse' && (
-            <span className="ml-4 text-[12px] text-accent-300">Pick a gradient for Mix slot {armed} · Esc cancels</span>
+            <span className="ml-4 text-[13px] text-gx-armed">Pick a gradient for Mix slot {armed} · Esc cancels</span>
           )}
           {!armed && derived.empty && source === 'browse' && (
-            <span className="ml-4 text-[12px] text-fg-dim">Click a gradient to preview it above · click it again to keep and edit it.</span>
+            <span className="ml-4 text-[13px] text-fg-muted">Click a gradient to preview it above · click it again to keep and edit it.</span>
           )}
         </div>
         <div className="flex-1 min-h-0 flex flex-col relative">
@@ -271,11 +273,11 @@ export const GradientExplorerV2App: React.FC = () => {
           list view, rename, import / export). Silent until there is something in it. */}
       {recentCount > 0 && (
         <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }}>
-          <div className="flex items-center gap-3 px-6 pt-1.5 text-[12px] text-fg-dim">
-            <b className="text-fg-muted font-semibold">My Gradients</b>
+          <div className="flex items-center gap-3 px-6 pt-1.5 text-[13px] text-fg-muted">
+            <ZoneLabel>My Gradients</ZoneLabel>
             {mineOpen && <span>Recent fills itself as you work · drag a gradient into a group to keep it · shared with the GMT studio</span>}
-            <button className="ml-auto hover:text-fg" onClick={() => setMineOpen((o) => !o)} title={mineOpen ? 'Back to the strip' : 'Search, list view, rename, import and export'}>
-              {mineOpen ? '▾ less' : '▴ more'}
+            <button className="ml-auto flex items-center gap-1 hover:text-fg" onClick={() => setMineOpen((o) => !o)} title={mineOpen ? 'Back to the strip' : 'Search, list view, rename, import and export'}>
+              {mineOpen ? 'less' : 'more'} <Icon name={mineOpen ? 'chevronDown' : 'chevronUp'} />
             </button>
           </div>
           <div className="flex-1 min-h-0 overflow-hidden">

@@ -182,6 +182,8 @@ export interface FilterWindows {
   qCov?: [number, number];
   qRb?: [number, number];
   qWarm?: [number, number];
+  /** Dominant hue window, 0..1 = 0..360°. Achromatic ramps (no dominant hue) fail an active window. */
+  qHue?: [number, number];
 }
 
 /** True if a gradient's facets fall inside every active (non-[0,1]) filter window. */
@@ -192,6 +194,7 @@ export const passesFilters = (f: Facets, w: FilterWindows): boolean => {
     test(f.chroma, w.qC) &&
     test(f.complexity, w.qCov) &&
     test(f.rainbow, w.qRb) &&
-    test(f.warmth, w.qWarm)
+    test(f.warmth, w.qWarm) &&
+    (!w.qHue || (w.qHue[0] <= 0 && w.qHue[1] >= 1) || (f.chroma > 0 && test(f.raw.meanHue / 360, w.qHue)))
   );
 };

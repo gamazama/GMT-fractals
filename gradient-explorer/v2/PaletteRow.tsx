@@ -21,6 +21,9 @@ import type { PaletteSwatch } from '../../palette/core/paletteSample';
 import { PALETTE_MAX, PALETTE_MIN, type PaletteRule } from '../../palette/core/paletteSample';
 import type { RGB } from '../../palette/core/oklab';
 import { showToast } from '../../engine/store/toastStore';
+import { gradientBarClass } from './ui/bar';
+import { Icon } from './ui/Icon';
+import { Act } from './ui/Act';
 
 const hexOf = (c: RGB): string =>
   '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
@@ -122,9 +125,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
         return (
           <div key={i} className={`relative flex-1 min-w-0 group ${dragging != null && !isDrag ? 'pointer-events-none' : ''}`}>
             <button
-              className={`w-full h-full rounded-md border border-black/40 ${readOnly ? 'cursor-pointer' : 'cursor-ew-resize'} ${
-                isDrag ? 'outline outline-2 outline-accent-400' : 'hover:outline hover:outline-2 hover:outline-white'
-              }`}
+              className={`w-full h-full ${gradientBarClass({ size: 'swatch', selected: isDrag })} ${readOnly ? 'cursor-pointer' : 'cursor-ew-resize'}`}
               style={{ background: hex, touchAction: 'none' }}
               title={readOnly ? `${hex} · click to copy` : onSelect ? `${hex} · drag to slide along the ramp · click to edit its stop` : `${hex} · drag to slide along the ramp · click to copy`}
               onPointerDown={(e) => onPointerDown(e, i)}
@@ -145,7 +146,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             )}
             {!readOnly && palette.length > PALETTE_MIN && (
               <button
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/80 text-white text-[10px] leading-4 text-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 title="Remove this swatch"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -153,7 +154,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
                   useWorkingStore.getState().removeSwatch(i);
                 }}
               >
-                ×
+                <Icon name="close" size={10} />
               </button>
             )}
           </div>
@@ -161,23 +162,23 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
       })}
       {!readOnly && (
         <div className="flex flex-col justify-center gap-1 pl-1">
-          <button
-            className="w-7 h-7 rounded-md border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 text-[14px] leading-none disabled:opacity-30"
+          <Act
+            className="w-[26px] px-0 justify-center"
             title="Add a swatch where the palette is thinnest"
             disabled={palette.length >= PALETTE_MAX}
             onClick={() => useWorkingStore.getState().addSwatch()}
           >
-            +
-          </button>
+            <Icon name="plus" />
+          </Act>
         </div>
       )}
       {!readOnly && (
         <div className="flex flex-col justify-center pl-1">
-          <div className="inline-flex border border-line/20 rounded-md overflow-hidden">
+          <div className="inline-flex border border-line/20 rounded-lg overflow-hidden">
             {RULES.map((r) => (
               <button
                 key={r.id}
-                className={`px-2 h-7 text-[11px] ${rule === r.id ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                className={`px-2 h-7 text-[13px] ${rule === r.id ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg'}`}
                 title={r.title}
                 onClick={() => useWorkingStore.getState().layoutPalette(r.id)}
               >

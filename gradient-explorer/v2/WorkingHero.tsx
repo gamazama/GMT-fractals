@@ -46,21 +46,16 @@ import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor'
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
 import { PaletteRow } from './PaletteRow';
 import { SourceBands, SOURCE_BAND_H, mixSourceHeight } from './SourceBands';
+import { Act } from './ui/Act';
+import { StateChip } from './ui/StateChip';
+import { Icon } from './ui/Icon';
+import { gradientBarClass } from './ui/bar';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
 
 const hexOf = (c: RGB): string =>
   '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
-
-const chip = (on = false, tone: 'live' | 'edited' | 'star' | 'plain' = 'plain'): string => {
-  const base = 'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[12px] whitespace-nowrap border transition-colors';
-  if (tone === 'live') return `${base} text-[#86e3a6] border-[#86e3a6]/40`;
-  if (tone === 'edited') return `${base} text-[#f3b562] border-[#f3b562]/40 cursor-pointer hover:border-[#f3b562]`;
-  if (tone === 'star') return `${base} ${on ? 'text-[#f5c542] border-[#f5c542]' : 'text-fg-muted border-line/20 hover:text-fg hover:border-line/40'}`;
-  return `${base} ${on ? 'text-accent-300 border-accent-400 bg-accent-400/10' : 'text-fg-muted border-line/20 hover:text-fg hover:border-line/40'}`;
-};
-const btn = (): string => 'h-7 px-3 rounded-lg text-[12px] border border-line/20 text-fg hover:border-accent-400 hover:text-accent-300 transition-colors';
 
 /** Measure an element's width (for the palette drag scale and the curve editor). A callback
  *  ref, not an effect: the hero mounts its ramp AFTER the first render (it is hidden until a
@@ -145,24 +140,27 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
   };
 
   const stateChip = derived.live ? (
-    <span className={chip(false, 'live')}>● live from {source === 'build' ? 'Mix' : 'Image'}</span>
+    <StateChip kind="live" variant="inline">live from {source === 'build' ? 'Mix' : 'Image'}</StateChip>
   ) : derived.edited ? (
-    <button
-      className={chip(false, 'edited')}
+    <StateChip
+      kind="edited"
+      variant="inline"
       title={bakedFrom ? 'Undo the bake and go back to the source that produced this gradient' : 'Edited stops'}
       onClick={() => useWorkingStore.getState().returnToSource()}
     >
-      ◆ editing{bakedFrom ? ' · return to source' : ''}
-    </button>
+      editing{bakedFrom ? ' · return to source' : ''}
+    </StateChip>
   ) : (
-    <span className={chip(false, 'live')} title="A preview: click the same gradient again, or edit a stop, to keep it">● preview</span>
+    <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it">preview</StateChip>
   );
 
   return (
     <section className="shrink-0 px-6 pt-3 pb-3 bg-surface-dock border-b border-line/10" data-gx-selectable>
-      <div className="flex items-center gap-2.5 mb-2">
+      {/* Owner, 2026-09-06: the name is a HEADING BAR of the hero — one object with the ramp
+          beneath it — and the state reads inline in that bar, not as a floating pill. */}
+      <div className="flex items-center gap-2.5 h-10 px-3 mb-2 rounded-lg bg-surface-section border border-line/20">
         <input
-          className="bg-transparent border-0 outline-none text-[16px] font-semibold text-fg min-w-[80px] max-w-[40%]"
+          className="bg-transparent border-0 outline-none text-[18px] font-semibold text-fg min-w-[80px] max-w-[40%]"
           value={derived.name}
           onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
           title="Name"
@@ -170,17 +168,13 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
         {stateChip}
         <span className="flex-1" />
         {source === 'browse' && (
-          <button
-            className={chip()}
-            title="Sort the wall by similarity to this gradient"
-            onClick={() => setSimilarityAnchor({ config, name: derived.name })}
-          >
+          <Act title="Sort the wall by similarity to this gradient" onClick={() => setSimilarityAnchor({ config, name: derived.name })}>
             More like this
-          </button>
+          </Act>
         )}
-        <button className={chip(!!favOf, 'star')} title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'} onClick={toggleStar}>
-          ★
-        </button>
+        <Act active={!!favOf} title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'} onClick={toggleStar}>
+          <Icon name="star" className={favOf ? 'text-warn' : ''} />
+        </Act>
       </div>
 
       {/* 2. palette on top */}
@@ -193,7 +187,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
       />
 
       {/* 3. the ramp IS the stops editor — under the source band(s) while the pipeline is live */}
-      <div ref={rampRef} className="relative">
+      <div ref={rampRef} className={`relative ${gradientBarClass({ size: 'ramp' })}`}>
         {split && (
           <div className="px-2 mb-px" style={{ minHeight: sourceH }}>
             <SourceBands derived={derived} />
@@ -205,12 +199,16 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
           stripHeight={resultH}
           stripAside={
             <div className="flex flex-wrap gap-1.5">
-              <button className={chip(expander === 'curves')} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
-                Curves {expander === 'curves' ? '▴' : '▾'}
-              </button>
-              <button className={chip(expander === 'adjust')} onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))} title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise">
-                Adjust {expander === 'adjust' ? '▴' : '▾'}
-              </button>
+              <Act active={expander === 'curves'} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
+                Curves <Icon name={expander === 'curves' ? 'chevronUp' : 'chevronDown'} />
+              </Act>
+              <Act
+                active={expander === 'adjust'}
+                onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))}
+                title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise"
+              >
+                Adjust <Icon name={expander === 'adjust' ? 'chevronUp' : 'chevronDown'} />
+              </Act>
             </div>
           }
           value={editorValue}
@@ -281,22 +279,22 @@ const CurvesExpander: React.FC<{ derived: WorkingDerived; width: number }> = ({ 
   return (
     <div className="mt-3 pt-3 border-t border-line/10">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <button className={btn()} disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit editable curves from the current gradient">
+        <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit editable curves from the current gradient">
           {tracks ? 'Re-fit from source' : 'Fit from source'}
-        </button>
-        <button className={btn()} disabled={!tracks} onClick={() => g.setCurvesOn(!curvesOn)}>
+        </Act>
+        <Act disabled={!tracks} onClick={() => g.setCurvesOn(!curvesOn)}>
           {curvesOn ? 'Curves on' : 'Curves off'}
-        </button>
-        <button className={btn()} disabled={!tracks} onClick={() => g.resetCurves()}>
+        </Act>
+        <Act disabled={!tracks} onClick={() => g.resetCurves()}>
           Reset
-        </button>
-        <label className="flex items-center gap-2 text-[12px] text-fg-muted ml-2">
+        </Act>
+        <label className="flex items-center gap-2 text-[13px] text-fg-muted ml-2">
           Detail <input type="range" min={2} max={10} value={detail} onChange={(e) => g.setDetail(Number(e.target.value))} /> {detail}
         </label>
-        <label className="flex items-center gap-2 text-[12px] text-fg-muted">
+        <label className="flex items-center gap-2 text-[13px] text-fg-muted">
           Smooth <input type="range" min={0} max={10} value={smooth} onChange={(e) => g.setSmooth(Number(e.target.value))} /> {smooth}
         </label>
-        <span className="text-[11px] text-fg-dim ml-auto">Detail and Smooth are the fit recipe; the faint ghost previews a re-fit.</span>
+        <span className="text-[13px] text-fg-muted ml-auto">Detail and Smooth are the fit recipe; the faint ghost previews a re-fit.</span>
       </div>
       {tracks ? (
         <div className="relative" style={{ height: 240 }}>
@@ -312,7 +310,7 @@ const CurvesExpander: React.FC<{ derived: WorkingDerived; width: number }> = ({ 
           />
         </div>
       ) : (
-        <div className="h-[120px] rounded-lg bg-surface-section border border-line/10 flex items-center justify-center text-[12px] text-fg-dim">
+        <div className="h-[120px] rounded-lg bg-surface-section border border-line/10 flex items-center justify-center text-[13px] text-fg-muted">
           Fit from source to make the lightness, chroma and hue curves editable.
         </div>
       )}

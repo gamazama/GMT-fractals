@@ -24,6 +24,7 @@ import { useGeneratorStore, useGeneratorDerived, useGenParam, slotSnapshot, setG
 import { paramEditStart, paramEditEnd } from '../../palette/store/paramUndoBracket';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, DEFAULT_GENERATOR_PARAMS } from '../../palette/core/generatorPipeline';
 import { useArmedSlot, armSlot } from '../../palette/store/armedTarget';
+import { gradientBarClass } from './ui/bar';
 import type { WorkingDerived } from '../../palette/store/workingStore';
 
 /** Band heights (px). Mix borrows a little: A + line + B = 36 over a 40 px result. */
@@ -32,13 +33,13 @@ export const MIX_BAND_H = 14;
 export const MIX_LINE_H = 8;
 export const mixSourceHeight = (): number => MIX_BAND_H * 2 + MIX_LINE_H;
 
-const label = 'absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-white/90 drop-shadow-[0_0_2px_rgba(0,0,0,.9)] pointer-events-none select-none';
+const label = 'absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-white/90 drop-shadow-[0_0_2px_rgba(0,0,0,.9)] pointer-events-none select-none';
 
 const SlotBand: React.FC<{ which: 'A' | 'B'; ramp: import('../../palette/core/oklab').RGB[]; name: string }> = ({ which, ramp, name }) => {
   const armed = useArmedSlot() === which;
   return (
     <button
-      className={`relative w-full block rounded-sm overflow-hidden text-left ${armed ? 'outline outline-2 outline-dashed outline-accent-300' : 'hover:outline hover:outline-1 hover:outline-white/50'}`}
+      className={`relative w-full block overflow-hidden text-left ${gradientBarClass({ size: 'band', armed })}`}
       style={{ height: MIX_BAND_H }}
       title={armed ? `Slot ${which} takes the next pick (Esc cancels)` : `Slot ${which}: ${name} · click, then pick a gradient for it`}
       onClick={() => armSlot(armed ? null : which)}
@@ -97,8 +98,8 @@ const Crossfade: React.FC = () => {
         className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-white shadow ${even ? 'bg-accent-300' : 'bg-transparent'}`}
         style={{ left: `${v * 100}%` }}
       />
-      <span className="absolute -left-0.5 top-1/2 -translate-y-1/2 -translate-x-full pr-1.5 text-[9px] text-fg-dim select-none">A</span>
-      <span className="absolute -right-0.5 top-1/2 -translate-y-1/2 translate-x-full pl-1.5 text-[9px] text-fg-dim select-none">B</span>
+      <span className="absolute -left-0.5 top-1/2 -translate-y-1/2 -translate-x-full pr-1.5 text-[11px] text-fg-dim select-none">A</span>
+      <span className="absolute -right-0.5 top-1/2 -translate-y-1/2 translate-x-full pl-1.5 text-[11px] text-fg-dim select-none">B</span>
     </div>
   );
 };
@@ -138,7 +139,7 @@ export const SourceBands: React.FC<{ derived: WorkingDerived }> = ({ derived }) 
   if (derived.input.kind === 'build') return <MixSources />;
   if (!ramp.length) return null;
   return (
-    <div className="relative rounded-sm overflow-hidden" style={{ height: SOURCE_BAND_H }} title="The source this gradient is made from — the result is below it">
+    <div className={`relative overflow-hidden ${gradientBarClass({ size: 'band' })}`} style={{ height: SOURCE_BAND_H }} title="The source this gradient is made from — the result is below it">
       <GradientStrip ramp={ramp} height={SOURCE_BAND_H} rounded={false} />
       <span className={label}>{sourceLabel(derived)}</span>
     </div>

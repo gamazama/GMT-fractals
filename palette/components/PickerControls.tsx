@@ -33,7 +33,7 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
   return (
     <div className="px-2 py-1.5">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wide text-fg-dim">Themes</span>
+        <span className="text-[11px] uppercase tracking-wide text-fg-muted">Themes</span>
         {active.length > 0 && (
           <button onClick={() => setter?.({ activeThemes: [] })} className="text-[10px] text-accent-400 hover:text-accent-300">
             clear
@@ -47,12 +47,17 @@ export const PickerThemeChips: React.FC<FeatureComponentProps> = ({ featureId, s
             <button
               key={theme}
               onClick={() => toggle(theme)}
-              style={chipStyle(theme)}
-              className={`px-1.5 py-0.5 rounded text-[10px] border whitespace-nowrap transition-all ${
-                on ? 'border-fg ring-1 ring-white' : 'border-black/30 opacity-80 hover:opacity-100'
-              }`}
+              title={`${theme} · ${count}`}
+              className={`inline-flex items-center gap-1 whitespace-nowrap transition-all ${on ? '' : 'opacity-80 hover:opacity-100'}`}
             >
-              {theme} <b className="opacity-70 font-semibold">{count}</b>
+              {/* V3: the hue fill IS the colour; the count sits outside it as a dim figure. */}
+              <span
+                style={chipStyle(theme)}
+                className={`px-1.5 py-0.5 rounded text-[11px] border ${on ? 'border-fg ring-1 ring-fg' : 'border-black/30'}`}
+              >
+                {theme}
+              </span>
+              <span className="text-[11px] text-fg-muted tabular-nums">{count}</span>
             </button>
           );
         })}
@@ -78,7 +83,7 @@ const orderedBundleIds = (counts: Record<string, number>): string[] => {
  * live in lazy groups → the checkbox LOADS/UNLOADS the group (fetch on demand), so a
  * public build needn't ship them at all.
  */
-export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId, sliceState, actions }) => {
+export const PickerBundleToggles: React.FC<FeatureComponentProps & { layout?: 'column' | 'row' }> = ({ featureId, sliceState, actions, layout = 'column' }) => {
   const bundles = usePickerStore((s) => s.bundles);
   const counts = usePickerStore((s) => s.bundleCounts);
   const loadedGroups = usePickerStore((s) => s.loadedGroups);
@@ -96,10 +101,11 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId
   const toggleHide = (id: string) =>
     setter?.({ hiddenBundles: hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id] });
 
+  const row = layout === 'row';
   return (
-    <div className="px-2 py-1.5">
-      <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">Sources</div>
-      <div className="flex flex-col gap-0.5">
+    <div className={row ? 'flex items-center gap-x-5 gap-y-1 flex-wrap' : 'px-2 py-1.5'}>
+      {!row && <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">Sources</div>}
+      <div className={row ? 'contents' : 'flex flex-col gap-0.5'}>
         {ids.map((id) => {
           const info = bundles[id];
           const isCore = groupCore(id);
@@ -112,7 +118,7 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId
             else if (gid) setGroupLoaded(gid, !on);
           };
           return (
-            <label key={id} className="flex items-center gap-2 text-[11px] text-fg-tertiary cursor-pointer">
+            <label key={id} className={`flex items-center gap-2 cursor-pointer ${row ? 'text-[13px] text-fg-muted' : 'text-[11px] text-fg-tertiary'}`}>
               <input type="checkbox" checked={on} disabled={loading} onChange={onToggle} className="accent-accent-500" />
               <span className={`flex-1 truncate ${!isCore && !on ? 'text-fg-dim' : ''}`} title={info?.attribution}>
                 {info?.label ?? id}
@@ -135,9 +141,11 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps> = ({ featureId
           );
         })}
       </div>
-      <div className="mt-1 text-[9px] text-fg-faint leading-tight">
-        <span className="text-warn/70">•</span> licensed source — loaded on demand, omittable from a public build
-      </div>
+      {!row && (
+        <div className="mt-1 text-[9px] text-fg-faint leading-tight">
+          <span className="text-warn/70">•</span> licensed source — loaded on demand, omittable from a public build
+        </div>
+      )}
     </div>
   );
 };

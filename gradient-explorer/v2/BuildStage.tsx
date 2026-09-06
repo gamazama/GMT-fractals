@@ -18,24 +18,25 @@ import { useGeneratorStore } from '../../palette/store/generatorStore';
 import { MixBlend } from '../../palette/components/MixBlend';
 import { useArmedSlot } from '../../palette/store/armedTarget';
 import { BrowseStage } from './BrowseStage';
+import { Act } from './ui/Act';
+import { Icon } from './ui/Icon';
 
 export const BuildStage: React.FC = () => {
   const swap = useGeneratorStore((s) => s.swap);
   const resetMix = useGeneratorStore((s) => s.resetMix);
   const armed = useArmedSlot();
   const [splitOpen, setSplitOpen] = useState(false);
-  const btn = 'h-7 px-3 rounded-lg text-[12px] border border-line/20 text-fg hover:border-accent-400 hover:text-accent-300 transition-colors';
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="shrink-0 px-6 pb-2 flex items-center gap-2 flex-wrap">
-        <button className={btn} onClick={swap} title="Swap A and B">
-          ⇅ Swap
-        </button>
-        <button className={`${btn} ${splitOpen ? 'border-accent-400 text-accent-300' : ''}`} onClick={() => setSplitOpen((o) => !o)} title="Blend lightness, chroma and hue separately">
-          Split by channel {splitOpen ? '▴' : '▾'}
-        </button>
-        <span className="text-[12px] text-fg-dim ml-2">
+        <Act onClick={swap} title="Swap A and B">
+          <Icon name="swap" /> Swap
+        </Act>
+        <Act active={splitOpen} onClick={() => setSplitOpen((o) => !o)} title="Blend lightness, chroma and hue separately">
+          Split by channel <Icon name={splitOpen ? 'chevronUp' : 'chevronDown'} />
+        </Act>
+        <span className="text-[13px] text-fg-muted ml-2">
           {armed === 'A'
             ? 'Band A takes the next pick — from My Gradients below or the wall. Esc cancels.'
             : 'Picks fill band B. Click band A above to fill A instead. Drag the line between them to blend.'}

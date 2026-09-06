@@ -295,6 +295,53 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
 - 2026-09-06 · Phase 0 (this plan): L1–L9, V1–V8, P1–P5 as written. Found during mock C: a tray that
   arms a target must leave the ground visible (folded into L6); the armed pill must not sit where
   a tray can cover it (bottom edge of the ground, folded into L6).
+- 2026-09-06 · Phase A (built, awaiting the owner's walk). Confirmed: V1–V3, V5, V6 compose cleanly
+  as six primitives in `gradient-explorer/v2/ui/` (Act, StateChip, Floating, ZoneLabel, Icon,
+  bar.ts). Found wanting: **V3 needs a fourth, neutral state** — "picked" / "preview" / "snapshot"
+  are states but carry no meaning colour; StateChip gives them a neutral fill (added to V3 in
+  spirit; owner to confirm the wording). **V6's icon list was short by two**: rename and update
+  (VariantsMenu) have no glyph and fell back to words; add `pencil` and `refresh` to the set when
+  Phase D re-hosts Variants. **V8 on a canvas-drawn wall is a draw-call, not a className**:
+  PickerWall tiles are Canvas 2D, so the tile spec (hairline, hover, selected) has to be applied in
+  its draw code — carried to Phase C. Meaning colours: live = the engine's `ok` token, edited =
+  `warn`, armed = a new fixed `--gx-armed` (violet) in `index.css` + Tailwind `gx-armed`; kept (★)
+  reuses `warn` for now — a gold token is a Phase E question.
+- 2026-09-06 · Phase A, owner iteration 1. **V3 amended:** a state reads INLINE (coloured dot +
+  coloured text) inside the hero's heading bar, which is the name's home; the filled pill is kept
+  only for a state that floats over the ground (the armed pill), because a pill with no bar to
+  belong to "doesn't seem visually related to anything" (owner). `StateChip` has `variant`
+  'fill' | 'inline'. **L2 sharpened:** the hero's name row is a HEADING BAR — one object with the
+  ramp beneath it. **Filters:** the theme chips are gone from v2; the first LOOK row is a hue
+  window on a colour-wheel track (the "colour picker": `qHue` on `paletteFilters`, a sixth
+  `FilterWindows` entry tested against `raw.meanHue`, achromatic ramps fail an active window);
+  each look row reads pole · track · pole with the two amounts stacked on a subtle raised box
+  that does not change while typing; the arrange controls are a "more ›" button opening three
+  13 px dropdowns (`GenericDropdown` gained an additive `size: 'md'`); Group by defaults to None.
+  Undo / redo icons are 24 px.
+- 2026-09-06 · Phase A, owner iteration 2. **L1/L6 extended to narrowing:** a narrower must not
+  cover the wall it narrows, because the wall updates live — so the main narrower sits ON the bar
+  above the wall, and the popover keeps only what is used rarely. **The main picking mode is the
+  colour picker, not search** (few people know a gradient's name): `HueLightnessPad`
+  (`palette/components/`) is a 2-D OKLab field, hue × lightness, with a RANGED box (draw, move,
+  resize an edge, a plain click clears, or on a clear pad drops a 15 %-wide full-height hue band — a click used to leave an unusable zero-size box) writing the same `qHue` / `qL` windows. Cool/warm is
+  redundant with hue and is not rendered in v2 (`POPOVER_AXES` in BrowseStage: muted/vivid,
+  simple/complex, single-hue/rainbow remain). Softology and cpt-city load at boot in the v2
+  shell (`registerFeatures.ts`); app-gmt keeps them on demand. `GenericDropdown` inherits the
+  page font and, at `size: 'md'`, drops the medium weight so it matches the rest of the popover.
+- 2026-09-06 · Phase A, owner iteration 3. **Filters is not a popover at all** on the wide screen:
+  three inline rows under the bar (LOOK · SOURCES · ARRANGE), no "more" sub-section — these are
+  already the rare items. The saturation strip (muted ↔ vivid) sits UNDER the hue/lightness
+  picker as a picker's own language (`QualityRangePad` `variant: 'strip'`, 12 px). **V8 extended
+  to ranged selections:** every v2 range window is drawn the picker's way (white hairline + dark
+  halo, dim outside), so a selection on a slider and a selection on the pad read as one thing;
+  the engine's default chrome keeps its edge thumbs. `PickerBundleToggles` gained `layout: 'row'`.
+  The saturation strip is painted from grey toward the picker window's AVERAGE colour (mean
+  hue at mean lightness, `satTrackFor` in HueLightnessPad.tsx); with no window it falls back
+  to the generic chroma track, since a full wheel averages to grey.
+- 2026-09-06 · Phase A, owner iteration 4 (last): rows ordered LOOK · ARRANGE · SOURCES; the
+  look sliders' pole labels left-align with the dropdowns beneath them and every row runs to the
+  same right edge, so the three rows read as one block. **Phase A accepted by the owner and
+  committed.**
 
 ## 9. Definition of done, per phase
 
@@ -314,3 +361,43 @@ phase now carries**. Items move out of this list only when a later phase's entry
   (S3 note, still open); the three teaching texts, Recent expiry by age, the hero height on short
   windows, the long B-band name (carried from design §13). Next: Phase A carries the diamonds and
   the contrast pass.
+- 2026-09-06 · Phase A. **In scope, left undone:** PickerWall tile hover / selected / hairline per
+  V8 (canvas draw code, not a className — deliberately not touched; Phase C owns the ground).
+  FavientsPanel's two 🗑 trash-zone glyphs and VariantsMenu's rename/update glyphs (no matching
+  icon; words for now). The toast host (`engine/components/ToastHost`) is not a `Floating` surface.
+  BrowseStage still inlines the Act / Floating classes instead of importing the primitives (they
+  were built concurrently) — a five-line swap for Phase C. The Filters look-range row anatomy is
+  keyed off `keyframes={false}` rather than its own prop because `paletteFilters.ts` was out of
+  scope; app-gmt's overlay keeps the old boxed look. **Noticed outside scope:** the hero ramp's V8
+  hairline reads heavier than mock C's (check on the walk); `PickerControls.tsx` bundle-toggle rows
+  still use fg-dim; undo / redo icons in the top bar render small and faint at 16 px on the 48 px
+  bar; the row-label column on the wall is still at x≈6, not inside the 24 px gutter (V7, Phase C);
+  the Image tab still empties the hero (L8, Phase B). **Phase B now carries:** L8, the use cluster,
+  the image slot, Back to GMT with `?g=`, and the `pencil` / `refresh` icons if it touches
+  VariantsMenu before D.
+- 2026-09-06 · Phase A, after iteration 1. **Still missing:** the hue window ignores achromatic
+  ramps by dropping them (a grey ramp never matches a hue window — acceptable, but a "greys"
+  chip may be wanted); the theme vocabulary (kaleidoscope, meadow…) is no longer reachable in v2
+  except through search; the heading bar's right-hand actions (More like this · ★) are still
+  `Act` buttons inside the bar — Phase B decides whether they move to the use cluster; the
+  Filters hue track is HSV-painted, not OKLab, so the strip is brighter in the yellows than the
+  wall's meanHue statistic is.
+- 2026-09-06 · Phase A, after iteration 2. **Still missing:** the pad has no readout (the hue /
+  lightness numbers live nowhere now that the two rows left the popover — decide whether a small
+  readout under the pad is wanted); the pad's box has no keyboard nudge; the pad is 220×56 and
+  the wall's row labels still bucket by lightness while the pad's y axis is the same quantity —
+  a duplicated cue, which Phase C's ground work should resolve (rows by none by default, or the
+  pad's window drawn as a band on the wall); the "N match" count moved into the search pill and
+  only shows while narrowed; search is now the SECOND control on the bar, which is the intent;
+  loading the licensed packs at boot costs ~8,000 extra entries (11,131 total) before the first
+  paint — measure on the phone in Phase F; the theme vocabulary is reachable only via search.
+- 2026-09-06 · Phase A, after iteration 3. **Still missing:** the three Filters rows are
+  desktop-only in shape (three dropdowns + toggles in one row wrap badly under ~900 px — Phase F
+  decides the phone form); the saturation strip has no readout and no pole labels (tooltip
+  only); the ARRANGE row's Reverse is a bare checkbox, not the engine toggle; the LOOK rows keep
+  their amounts column while the pad and strip have none — one readout policy is still to be
+  chosen; `arrangeText` (the sentence) is no longer shown anywhere.
+- 2026-09-06 · Phase A closed. Everything above in the Phase A entries still stands as the
+  carry-over list; Phase B starts with L8 (the hero never unmounts), the use cluster, the image
+  slot and Back to GMT, and picks up the `pencil` / `refresh` icons and the BrowseStage
+  primitive swap (Act / Floating) if it touches those files.

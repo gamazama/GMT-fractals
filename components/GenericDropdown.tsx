@@ -21,6 +21,8 @@ export interface GenericDropdownProps<T> {
     onChange: (value: T) => void;
     fullWidth?: boolean;
     className?: string;
+    /** 'md' = 32 px tall, 13 px text (the v2 shell's control size). Default = the engine's compact 26 px. */
+    size?: 'sm' | 'md';
     selectClassName?: string;
     labelSuffix?: React.ReactNode;
     /** Optional help-id for help system integration */
@@ -41,6 +43,7 @@ export function GenericDropdown<T extends string | number>({
     onChange,
     fullWidth,
     className = '',
+    size = 'sm',
     selectClassName = '',
     labelSuffix,
     onContextMenu,
@@ -56,13 +59,13 @@ export function GenericDropdown<T extends string | number>({
 
     return (
         <div
-            className={`flex items-stretch bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] overflow-hidden border-b border-line/5 ${fullWidth ? 'w-full' : ''} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
+            className={`flex items-stretch bg-line/[0.12] ${size === 'md' ? 'rounded-lg h-8 border border-line/20' : 'rounded-t-sm h-9 md:h-[26px]'} overflow-hidden border-b border-line/5 ${fullWidth ? 'w-full' : ''} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
             data-help-id={rest['data-help-id']}
             onContextMenu={onContextMenu}
         >
             {label && (
                 <div className="flex-1 flex items-center gap-2 px-2 min-w-0">
-                    <label className="text-[10px] font-medium tracking-tight select-none truncate pointer-events-none text-fg-muted">
+                    <label className={`${size === 'md' ? 'text-[13px] font-normal' : 'text-[10px] font-medium'} tracking-tight select-none truncate pointer-events-none text-fg-muted`}>
                         {label}{labelSuffix}
                     </label>
                 </div>
@@ -75,7 +78,7 @@ export function GenericDropdown<T extends string | number>({
                     onChange={handleChange}
                     disabled={disabled}
                     {...selectHandlers}
-                    className={`w-full h-full bg-transparent text-[10px] font-medium text-fg-secondary px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
+                    className={`w-full h-full bg-transparent [font-family:inherit] ${size === 'md' ? 'text-[13px] font-normal text-fg' : 'text-[10px] font-medium text-fg-secondary'} px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
                 >
                     {options.map((opt) => (
                         <option key={String(opt.value)} value={String(opt.value)} disabled={opt.disabled} className="bg-surface text-fg-tertiary">

@@ -17,6 +17,7 @@ import { defineEnumParam } from '../../engine/defineEnumParam';
 
 /** Catalog quality axes — param key, lo/hi labels, track painter id, hint. Order = display order. */
 export const QUALITY_AXES = [
+  { axis: 'qHue', loLabel: 'hue', hiLabel: '', track: 'hue', hint: 'Dominant hue — a window on the colour wheel. Full width = any hue.' },
   { axis: 'qL', loLabel: 'dark', hiLabel: 'light', track: 'lightness', hint: 'Overall lightness — keep dark moody ramps or bright airy ones.' },
   { axis: 'qC', loLabel: 'muted', hiLabel: 'vivid', track: 'chroma', hint: 'Colourfulness — greyish/muted through to vivid saturated.' },
   { axis: 'qCov', loLabel: 'simple', hiLabel: 'complex', track: 'complexity', hint: 'Complexity — smooth simple ramps through to busy multi-stop gradients.' },
@@ -29,7 +30,7 @@ export const QUALITY_AXES = [
 //   • Rows by  — a facet bucketed into sub-rows WITHIN each group.
 //   • Sort within — orders the columns within each row.
 export const groupByParam = defineEnumParam(['none', 'theme', 'bundle'] as const, 'Group by', {
-  defaultIndex: 1, // Category
+  defaultIndex: 0, // None (owner, 2026-09-06: the wall opens ungrouped)
   optionLabels: { none: 'None', theme: 'Category', bundle: 'Source' },
   optionHints: {
     none: 'No category grouping.',

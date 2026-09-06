@@ -13,6 +13,7 @@
  *     (Use / Mix / star) and will register its own target set in Phase 2.
  */
 
+import { usePickerStore } from '../../palette/store/pickerStore';
 import { registerPaletteUI } from '../../palette/registerPaletteUI';
 import { installWorking } from '../../palette/installWorking';
 import { useFavientsStore } from '../../palette/store/favientsStore';
@@ -31,3 +32,8 @@ installWorking({
 
 // A shelf swatch click SELECTS (the hero previews it) rather than applying somewhere.
 setFavientSelectMode(true);
+
+// Owner, 2026-09-06: the licensed packs (Softology, cpt-city) are on by default in the
+// Explorer — fetched at boot alongside the core groups. app-gmt keeps them off until toggled.
+usePickerStore.getState().setGroupLoaded('softology', true);
+usePickerStore.getState().setGroupLoaded('cptcity', true);

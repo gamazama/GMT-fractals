@@ -13,6 +13,10 @@ import { EXPORT_FORMATS, grdStopCount, type ExportFormatDef } from '../../palett
 import { downloadBlob } from '../../utils/SceneFormat';
 import { showToast } from '../../engine/store/toastStore';
 import type { RGB } from '../../palette/core/oklab';
+import { Floating } from './ui/Floating';
+import { Act } from './ui/Act';
+import { Icon } from './ui/Icon';
+import { ZoneLabel } from './ui/ZoneLabel';
 
 const GROUPS: { title: string; keys: string[] }[] = [
   { title: 'For the web', keys: ['css', 'svg', 'hex', 'json', 'js'] },
@@ -23,7 +27,6 @@ const GROUPS: { title: string; keys: string[] }[] = [
 
 const slug = (name: string): string => name.trim().replace(/[^\w-]+/g, '_').slice(0, 48) || 'gradient';
 
-const rowBtn = 'h-6 px-2 rounded text-[11px] border border-line/20 text-fg-muted hover:text-fg hover:border-line/40';
 
 export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => void }> = ({ ramp, name, onClose }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -85,24 +88,24 @@ export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => vo
 
   const row = (f: ExportFormatDef) => (
     <div key={f.key} className="flex items-center gap-2 py-0.5">
-      <span className="flex-1 text-[12px] text-fg">{f.label}</span>
+      <span className="flex-1 text-[13px] text-fg">{f.label}</span>
       {!f.binary && (
-        <button className={rowBtn} onClick={() => copy(f)} title="Copy to the clipboard">
+        <Act onClick={() => copy(f)} title="Copy to the clipboard">
           Copy
-        </button>
+        </Act>
       )}
-      <button className={rowBtn} onClick={() => download(f)} title={`Download .${f.ext}`}>
+      <Act onClick={() => download(f)} title={`Download .${f.ext}`}>
         Download
-      </button>
+      </Act>
     </div>
   );
 
   return (
-    <div ref={ref} className="absolute right-4 top-12 z-40 w-[360px] max-h-[70vh] overflow-y-auto rounded-xl border border-line/20 bg-surface-dock shadow-2xl p-4 flex flex-col gap-3" data-gx-export>
+    <Floating ref={ref} className="absolute right-4 top-12 z-40 w-[360px] max-h-[70vh] overflow-y-auto p-4 flex flex-col gap-3" data-gx-export>
       <div className="flex items-center">
         <b className="text-[13px] text-fg">Export “{name}”</b>
-        <button className="ml-auto text-fg-dim hover:text-fg text-[12px]" onClick={onClose} title="Close (Esc)">
-          ✕
+        <button className="ml-auto text-fg-muted hover:text-fg" onClick={onClose} title="Close (Esc)">
+          <Icon name="close" />
         </button>
       </div>
       {GROUPS.map((g) => {
@@ -110,28 +113,26 @@ export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => vo
         if (!fs.length) return null;
         return (
           <div key={g.title}>
-            <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">{g.title}</div>
+            <ZoneLabel className="block mb-1">{g.title}</ZoneLabel>
             {fs.map(row)}
           </div>
         );
       })}
       {rest.length > 0 && (
         <div>
-          <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">More</div>
+          <ZoneLabel className="block mb-1">More</ZoneLabel>
           {rest.map(row)}
         </div>
       )}
       <div>
-        <div className="text-[10px] uppercase tracking-wide text-fg-dim mb-1">As an image</div>
+        <ZoneLabel className="block mb-1">As an image</ZoneLabel>
         <div className="flex items-center gap-2 py-0.5">
-          <span className="flex-1 text-[12px] text-fg">PNG strip (1024 × 64)</span>
-          <button className={rowBtn} onClick={png}>
-            Download
-          </button>
+          <span className="flex-1 text-[13px] text-fg">PNG strip (1024 × 64)</span>
+          <Act onClick={png}>Download</Act>
         </div>
-        <div className="text-[11px] text-fg-dim mt-1">For a full-size image use Wallpaper.</div>
+        <div className="text-[13px] text-fg-muted mt-1">For a full-size image use Wallpaper.</div>
       </div>
-    </div>
+    </Floating>
   );
 };
 

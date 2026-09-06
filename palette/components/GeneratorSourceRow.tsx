@@ -35,6 +35,17 @@ import { favientSig } from '../store/favientsStore';
 import { setDragOrigin } from '../store/dragVisual';
 import { setHeroPick, setHeroDrag, useHeroPick, useActiveHeroMode, useHeroOptionsOpen } from '../store/heroSelection';
 
+// V8 gradient-bar spec (plans/ge-v2-unified-shell-plan.md §1), inlined rather than
+// imported from `gradient-explorer/v2/ui/bar.ts`: `palette/**` must never import an app
+// (.claude/rules/palette.md "the boundary that IS real"), and `gradient-explorer/` is an
+// app. Keep in sync with that file by hand until the spec moves to a shared, app-free home.
+const barClass = (armed: boolean, selected: boolean): string => {
+  const base = 'rounded ring-1 ring-line/20 transition-[outline-color]';
+  if (armed) return `${base} outline outline-2 outline-dashed outline-gx-armed`;
+  if (selected) return `${base} outline outline-2 outline-accent-400`;
+  return `${base} hover:outline hover:outline-2 hover:outline-fg`;
+};
+
 export const SourceRow: React.FC<{
   which: 'A' | 'B';
   ramp: { r: number; g: number; b: number }[];
@@ -100,11 +111,7 @@ export const SourceRow: React.FC<{
               ? `Picking for slot ${which} — pick a gradient on Browse, or Esc to cancel`
               : `Source ${which} — click to select, drag onto a target, or drop a gradient here to load it`
           }
-          className={`relative block flex-1 min-w-0 rounded-sm transition cursor-grab active:cursor-grabbing ${
-            armed
-              ? 'ring-0 border-2 border-dashed border-accent-400'
-              : `ring-1 ${selected ? 'ring-2 ring-accent-400' : 'ring-line/10 hover:ring-accent-500/40'}`
-          }`}
+          className={`relative block flex-1 min-w-0 transition cursor-grab active:cursor-grabbing ${barClass(!!armed, selected)}`}
         >
           <GradientStrip ramp={ramp} height={height} />
           {armed && (

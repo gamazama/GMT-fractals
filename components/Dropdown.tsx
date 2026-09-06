@@ -23,7 +23,7 @@ interface DropdownProps<T> {
     labelSuffix?: React.ReactNode;
 }
 
-export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '', labelSuffix }: DropdownProps<T>) {
+export function Dropdown<T extends string | number>({ label, value, options, onChange, helpId, fullWidth, className = '', selectClassName = '', labelSuffix, size }: DropdownProps<T> & { size?: 'sm' | 'md' }) {
     const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
     const handleContextMenu = useHelpContextMenu();
     // Pause rendering while the native select is open; resume on selection.
@@ -45,6 +45,7 @@ export function Dropdown<T extends string | number>({ label, value, options, onC
             fullWidth={fullWidth}
             className={className}
             selectClassName={selectClassName}
+            size={size}
             labelSuffix={labelSuffix}
             data-help-id={helpId}
             onContextMenu={handleContextMenu}

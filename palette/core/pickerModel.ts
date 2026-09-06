@@ -102,13 +102,13 @@ export const EMPTY_CRITERIA: FilterCriteria = {
   query: '',
 };
 
-/** The five quality windows as `passesFilters` wants them, from a `{x,y}`-shaped slice. */
+/** The six quality windows as `passesFilters` wants them, from a `{x,y}`-shaped slice. */
 export const windowsFromSlice = (pf: Record<string, unknown> | undefined): FilterWindows => {
   const win = (v: unknown): [number, number] => {
     const o = v as { x?: number; y?: number } | undefined;
     return [o?.x ?? 0, o?.y ?? 1];
   };
-  return { qL: win(pf?.qL), qC: win(pf?.qC), qCov: win(pf?.qCov), qRb: win(pf?.qRb), qWarm: win(pf?.qWarm) };
+  return { qL: win(pf?.qL), qC: win(pf?.qC), qCov: win(pf?.qCov), qRb: win(pf?.qRb), qWarm: win(pf?.qWarm), qHue: win(pf?.qHue) };
 };
 
 /** A window narrows only when it is not the full [0,1] range. */
@@ -116,7 +116,7 @@ export const isWindowActive = (w: [number, number] | undefined): boolean => !!w 
 
 /** How many of the five quality axes are narrowed right now. */
 export const activeWindowCount = (w: FilterWindows): number =>
-  [w.qL, w.qC, w.qCov, w.qRb, w.qWarm].filter(isWindowActive).length;
+  [w.qL, w.qC, w.qCov, w.qRb, w.qWarm, w.qHue].filter(isWindowActive).length;
 
 export const filterCatalog = (
   catalog: CatalogEntry[],
