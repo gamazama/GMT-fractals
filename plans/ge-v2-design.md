@@ -339,3 +339,5 @@ Built and committed on `ge-v2` so far: Phase 1 · S1 Browse · S2 hero · S3 Mix
 
 Small open calls carried over from §10: the three teaching texts; Recent expiry by age; the hero height on short windows with the inspector and an expander open; the long B-band name when a bin entry came from an earlier mix.
 
+
+> **Update 2026-09-06 (unified shell; §6b source tabs superseded, decision otherwise unchanged):** after the owner's walk (§13 item 0) the relationship-map pass produced `plans/ge-v2-mock-c.html` (one ground · one hero · one shelf; no source tabs; Mix and Extract as trays under the ramp; Variants as Snapshots on the shelf; outputs on the hero) and `plans/ge-v2-unified-shell-plan.md` (the layout + visual-language principles, phases A–G, rollout, models and sessions). That plan is now the order of work in place of §13 items 3–6; §11 interfaces and §2–§4 stand.
