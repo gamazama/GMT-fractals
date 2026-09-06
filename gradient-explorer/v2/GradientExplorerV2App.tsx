@@ -17,7 +17,7 @@
  * v2 compositions over the SAME GeneratorStage / ImageStage pieces (SourceRow, MixBlend,
  * ColorBoxControls, the image pane) — see those files' headers — with no per-mode hero, no
  * curve editor, no Modify/Noise, no export block; Adjust and Shape live on the hero above.
- * The bottom row is the existing FavientsPanel body; Export and Share are placeholders
+ * The bottom row is the FavientsPanel strip (§4); Export is ExportMenu, Share is shareUrl (hooked up 2026-09-06)
  * until their pieces land.
  */
 
@@ -45,6 +45,8 @@ import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTa
 import { useImageDrop } from '../../palette/components/useImageDrop';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
+import { ExportMenu } from './ExportMenu';
+import { shareUrlFor, takeShareFromLocation } from './shareUrl';
 
 export type SourceId = 'browse' | 'build' | 'extract';
 const SOURCES: { id: SourceId; label: string }[] = [
@@ -53,7 +55,7 @@ const SOURCES: { id: SourceId; label: string }[] = [
   { id: 'extract', label: 'Image' },
 ];
 
-const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-white/5 transition-colors';
+const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors';
 
 const workingNameNow = (): string => {
   const s = useWorkingStore.getState();
@@ -89,6 +91,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const [source, setSourceState] = useState<SourceId>('browse');
   const [mineOpen, setMineOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const pickSerial = usePickSerial();
@@ -189,6 +192,24 @@ export const GradientExplorerV2App: React.FC = () => {
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
+  // A share link opens straight into Working (once, on boot; the param is stripped).
+  useEffect(() => {
+    const shared = takeShareFromLocation();
+    if (shared) useWorkingStore.getState().use(shared.config, shared.name, 'Shared link');
+  }, []);
+  const share = () => {
+    if (!derived.config) return showToast('Pick or build a gradient first');
+    useWorkingStore.getState().syncRecent();
+    const url = shareUrlFor(derived.config, derived.name);
+    navigator.clipboard?.writeText(url).then(
+      () => showToast('Link copied — it opens this gradient'),
+      () => window.prompt('Copy this link', url),
+    );
+  };
+  const exportOpenToggle = () => {
+    if (!derived.config) return showToast('Pick or build a gradient first');
+    setExportOpen((o) => !o);
+  };
   const wallpaper = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
     useWorkingStore.getState().syncRecent();
@@ -197,7 +218,7 @@ export const GradientExplorerV2App: React.FC = () => {
 
   return (
     <StoreCallbacksProvider value={storeCallbacks}>
-    <div className="fixed inset-0 bg-black text-fg select-none flex flex-col overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
+    <div className="fixed inset-0 bg-surface text-fg select-none flex flex-col overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
       {/* top bar */}
       <header className="h-12 shrink-0 flex items-center gap-1.5 px-4 bg-surface-dock border-b border-line/10">
         <a href="app-gmt.html" className="flex items-center gap-2 mr-auto no-underline" title="GMT">
@@ -207,11 +228,11 @@ export const GradientExplorerV2App: React.FC = () => {
         </a>
         <button className={`${tb} w-8 px-0`} title="Undo (Ctrl+Z)" onClick={undo}>↶</button>
         <button className={`${tb} w-8 px-0`} title="Redo (Ctrl+Y)" onClick={redo}>↷</button>
-        <button className={`${tb} ${variantsOpen ? 'text-fg bg-white/5' : ''}`} onClick={() => setVariantsOpen((o) => !o)} title="Snapshots of the whole studio — switch, or tween between two">
+        <button className={`${tb} ${variantsOpen ? 'text-fg bg-line/10' : ''}`} onClick={() => setVariantsOpen((o) => !o)} title="Snapshots of the whole studio — switch, or tween between two">
           Variants
         </button>
-        <button className={tb} onClick={() => showToast('Share lands in Phase 2')}>Share</button>
-        <button className={tb} onClick={() => showToast('The Export dialog lands in Phase 2')}>Export</button>
+        <button className={tb} onClick={share} title="Copy a link that opens this gradient">Share</button>
+        <button className={`${tb} ${exportOpen ? 'text-fg bg-line/10' : ''}`} onClick={exportOpenToggle} title="Copy or download this gradient in a file format">Export</button>
         <button className={`${tb} text-fg border border-line/20`} onClick={wallpaper}>Wallpaper</button>
         <SettingsButton />
       </header>
@@ -224,7 +245,7 @@ export const GradientExplorerV2App: React.FC = () => {
           {SOURCES.map((s) => (
             <button
               key={s.id}
-              className={`px-4 py-2 rounded-[10px] text-[15px] transition-colors ${source === s.id ? 'text-fg bg-white/[0.07]' : 'text-fg-muted hover:text-fg'}`}
+              className={`px-4 py-2 rounded-[10px] text-[15px] transition-colors ${source === s.id ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg'}`}
               onClick={() => switchSource(s.id)}
               data-gx-mode-tab={s.id}
             >
@@ -264,6 +285,7 @@ export const GradientExplorerV2App: React.FC = () => {
       )}
 
       {variantsOpen && <VariantsMenu derived={derived} onClose={() => setVariantsOpen(false)} />}
+      {exportOpen && derived.ramp && <ExportMenu ramp={derived.ramp} name={derived.name} onClose={() => setExportOpen(false)} />}
       {contextMenu.visible && (
         <GlobalContextMenu
           x={contextMenu.x}

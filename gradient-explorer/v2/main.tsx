@@ -22,6 +22,8 @@ import { registerUI } from '../../engine/features/ui';
 import { installShortcuts } from '../../engine/plugins/Shortcuts';
 import { installUndo } from '../../engine/plugins/Undo';
 import { registerCoreSettings } from '../../store/coreSettings';
+import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeStore';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 
@@ -31,6 +33,18 @@ installShortcuts();
 // the shell renders its own undo control against the store.
 installUndo({ hideTopBarButtons: true });
 registerCoreSettings();
+
+// Light grey by default (owner, 2026-09-06), the switch kept: Settings ▸ Colour still offers
+// every preset + the axes. The theme axes are SHARED across the GMT apps (gmt.brightness …,
+// engine/store/colorSchemeStore.ts), so this seeds the light-grey preset ONCE per browser
+// on the first v2 boot and never again — a user who switches back keeps their choice, and
+// app-gmt sees the same theme either way, as it always has.
+const THEME_SEED_KEY = 'gmt.ge.themeSeeded';
+if (!safeLocalGet(THEME_SEED_KEY)) {
+  const lightGrey = THEME_PRESETS.find((p) => p.id === 'light-grey');
+  if (lightGrey) useColorScheme.getState().applyPreset(lightGrey);
+  safeLocalSet(THEME_SEED_KEY, '1');
+}
 
 // Browse filter prefs (shared `gmt.paletteFilters`) — restored + watched exactly as the
 // old shell's mountFavientsPanel did, minus the dock-panel state it also managed.

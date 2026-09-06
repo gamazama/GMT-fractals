@@ -140,7 +140,7 @@ export const BrowseStage: React.FC = () => {
           Filters
           <span
             className={`min-w-[18px] h-[18px] px-1 rounded-full text-[11px] leading-[18px] text-center tabular-nums ${
-              m.filterCount ? 'bg-accent-400 text-black font-semibold' : 'bg-white/10 text-fg-dim'
+              m.filterCount ? 'bg-accent-400 text-surface font-semibold' : 'bg-line/10 text-fg-dim'
             }`}
           >
             {m.filterCount}
