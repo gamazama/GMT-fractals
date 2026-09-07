@@ -406,6 +406,11 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   (a steep run is no longer chained into step stops — real palettes' worst error 0.105 → 0.068).
   trays-spec §13; stopfit [6] guards it.
 
+- 2026-09-07 · stepped palettes get step knots: the fitter seeds one STEP stop per flat run
+  (exact-equality plateaus; banded-ramp mode for small-edged bands, an edge gate for smooth
+  ramps' quantisation runs). Surveyed on the real bundles: banded cpt-city palettes with step
+  stops 57 → 105 of 120. trays-spec §13a; stopfit [7] guards it.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

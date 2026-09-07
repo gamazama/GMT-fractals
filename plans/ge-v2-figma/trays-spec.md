@@ -236,3 +236,29 @@ headless probes that loaded 11,131 gradients against the dev server during this 
 - Known limit: two jumps ONE texel apart (a one-texel band) fit at ΔE 0.059 — the second jump
   is not isolated. Rare outside synthetic tests. Guard: `test:palette` stopfit [6] (falsified by
   forcing bias off: two assertions red).
+
+### 13a. Stepped palettes actually produce step knots (owner, 2026-09-07 — built)
+
+The owner: "many stepped gradients in the library and none create stepped knots." Surveyed the
+real catalog bundles (core + softology + cpt-city, 11,131 entries): cpt-city alone has 2,006
+banded palettes (≥150 flat texels), and the jump-based corner detector gave step stops to 57 of
+120 sampled — most bands differ by a tiny ΔE (median edge 0.021), so no "corner" was ever seen.
+A banded palette is defined by its FLAT RUNS, not its jumps:
+- **One STEP stop per plateau.** A run of ≥4 EXACTLY identical texels seeds a step stop holding
+  the band, the next stop half a texel past its end. Exact equality, not a small ΔE: a smooth
+  8-bit ramp's one-level differences (~0.002–0.004) made a band's start creep one texel per
+  re-fit until equality was required.
+- **Banded ramp vs quantisation run.** If most of the ramp (≥60 % of texels) is inside flat
+  runs, every run is a band however small the edges (the seam's 64-band test has 0.008 edges).
+  Otherwise a run counts only when one of its ends is a real edge (ΔE ≥ 0.01) — a smooth dark
+  ramp's identical-texel runs stay linear (a "bluescale" that briefly got 87 stops, 11 of
+  them steps, is back to 5).
+After: step stops in 105/120 sampled banded cpt-city palettes (was 57), 25/27 softology, 39/120
+core (core's "banded" set is mostly smooth uigradients with quantisation runs — correct to leave
+linear). Non-banded palettes unchanged (10.4 / 11.6 avg stops). Every fit ≤ 2 ms. Guard:
+stopfit [7] (16 bands with 0.013 edges → 16 step stops rendering exactly; a smooth ramp gets
+none; falsified with seedPlateaus off).
+- **Re-fits are no-ops.** The input's own stops go in first; the plateau and corner detectors
+  may add a stop only where the ramp is STILL over tolerance with those seeds in place. Without
+  that gate a re-fit found new "bands" in the slow regions of its own rendering and grew four
+  stops per bake (`smoke:ge-tray` [5] caught it).

@@ -14,6 +14,14 @@
  *      greatest ΔE between GMT's *rendered* gradient and the target, until under
  *      tolerance. Strictly better than Douglas-Peucker, which measures linear-RGB
  *      error blind to OKLCh interpolation.
+ *   0. PLATEAUS ARE STEPS (2026-09-07, owner: "there are many stepped gradients in the
+ *      library and none of them create stepped knots"). A banded palette is defined by its
+ *      FLAT RUNS, not by the size of its jumps — most bands in real palettes differ by a
+ *      tiny ΔE (cpt-city's banded palettes: median edge 0.021), so a jump-based corner
+ *      detector never sees them (57 of 120 got any step; the rest got linear stops or
+ *      none). Every run of ≥ 3 identical texels now seeds one STEP stop holding the band,
+ *      with the next stop half a texel past the band's end. Exact by construction, and one
+ *      stop per band instead of a fitted curve through them.
  *   3. BIAS AND SMOOTH BEFORE A NEW STOP (2026-09-07, owner: "make use of stepped and
  *      bias interpolation"). Before spending a stop on the worst segment, the refine
  *      tries the segment's BIAS (a coarse-then-fine grid) and its interpolation
@@ -35,8 +43,20 @@ export interface StopFitOptions {
   maxStops?: number;
   /** Seed stops at detected hard transitions (bands). */
   seedCorners?: boolean;
+  /** Seed one STEP stop per flat run (idea 0). Default on. */
+  seedPlateaus?: boolean;
+  /** A run this many IDENTICAL texels long counts as a band … */
+  plateauMin?: number;
+  /** … provided at least one of its ends is a real edge: adjacent ΔE this large. A smooth
+   *  8-bit ramp is full of identical-texel runs (one level of sRGB is ΔE ≈ 0.003 in the
+   *  darks) — those are quantisation, not bands, and must stay linear (measured 2026-09-07:
+   *  without this gate a smooth "bluescale" got 87 stops, 11 of them steps). */
+  bandEdgeDE?: number;
   /** Adjacent-sample ΔE above which a position counts as a hard transition. */
   cornerDE?: number;
+  /** How much a jump must stand out from its neighbours' ΔE to be an EDGE (a step) rather
+   *  than a steep run. See detectCorners. */
+  edgeRatio?: number;
   /** Stops to seed BEFORE the refine loop — the position AND interpolation of the stops the
    *  input already had. Without them every re-fit of a re-quantised ramp finds its "worst
    *  error" a texel further along and the interior stops WALK on each bake (measured
@@ -59,10 +79,14 @@ const DEFAULTS: Required<StopFitOptions> = {
   seedStops: [],
   fitBias: false,
   seedCorners: true,
+  seedPlateaus: true,
+  plateauMin: 4,
+  bandEdgeDE: 0.01,
   // Only TRUE posterization edges become 'step'. Set high so gradual (but
   // colourful) rainbow transitions stay smooth — marking those as step creates
   // a hard edge that the refine loop then has to undo with extra stops.
   cornerDE: 0.09,
+  edgeRatio: 2.5,
 };
 
 /**
@@ -79,7 +103,7 @@ const DEFAULTS: Required<StopFitOptions> = {
  * ΔE 0.13 left on texels 88–89 of a bias-0.82 segment). Those texels are seeded as plain
  * stops instead, and the refine's bias / smooth trials take it from there.
  */
-const detectCorners = (ramp: RGB[], cornerDE: number): { seeds: number[]; stepLeft: Set<number> } => {
+const detectCorners = (ramp: RGB[], cornerDE: number, edgeRatio: number): { seeds: number[]; stepLeft: Set<number> } => {
   const d = new Array<number>(256).fill(0);
   for (let i = 1; i < 256; i++) d[i] = oklabDistance(ramp[i - 1], ramp[i]);
   const set = new Set<number>();
@@ -87,7 +111,7 @@ const detectCorners = (ramp: RGB[], cornerDE: number): { seeds: number[]; stepLe
   for (let i = 1; i < 256; i++) {
     if (d[i] <= cornerDE) continue;
     const neighbours = Math.max(i > 1 ? d[i - 1] : 0, i < 255 ? d[i + 1] : 0);
-    const isolated = d[i] > 2.5 * neighbours;
+    const isolated = d[i] > edgeRatio * neighbours;
     if (isolated) {
       if (i - 1 > 0) {
         set.add(i - 1);
@@ -100,6 +124,24 @@ const detectCorners = (ramp: RGB[], cornerDE: number): { seeds: number[]; stepLe
     }
   }
   return { seeds: [...set].sort((a, b) => a - b), stepLeft };
+};
+
+/** Flat runs: [start, end] texel ranges of EXACTLY identical colour. Exact, not "within a
+ *  small ΔE": a held band renders to identical texels, while a smooth ramp's one-level
+ *  quantisation differences are ~0.002–0.004 — treating those as flat made a band's start
+ *  creep one texel per re-fit (measured 2026-09-07: 127.5 → 126.5 → 125.5). */
+const detectPlateaus = (ramp: RGB[], minRun: number): { start: number; end: number }[] => {
+  const runs: { start: number; end: number }[] = [];
+  let start = 0;
+  const same = (a: RGB, b: RGB) => Math.round(a.r) === Math.round(b.r) && Math.round(a.g) === Math.round(b.g) && Math.round(a.b) === Math.round(b.b);
+  for (let i = 1; i <= 256; i++) {
+    const flat = i < 256 && same(ramp[i - 1], ramp[i]);
+    if (!flat) {
+      if (i - start >= minRun) runs.push({ start, end: i - 1 });
+      start = i;
+    }
+  }
+  return runs;
 };
 
 const mkStop = (
@@ -143,10 +185,66 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   const used = new Set<number>([0, 255]);
   const stops: GradientStop[] = [mkStop(0, ramp, nextId++), mkStop(255, ramp, nextId++)];
 
+  // The stops the input already had go in FIRST, at their exact positions (a half-texel
+  // edge stop must not be rounded back onto the texel, or the edge walks). Everything the
+  // detectors add below has to pass `stillWrong`: with these seeds in place, is the ramp
+  // still over tolerance there? On a first fit (no seeds) that is true everywhere; on a
+  // re-fit of an unchanged gradient it is true nowhere, so nothing is added and a bake is
+  // a no-op — without the gate a re-fit found new "bands" in the slow regions of its own
+  // rendering (identical runs beside a real edge) and grew four stops per bake.
+  for (const sd of o.seedStops) {
+    if (stops.length >= o.maxStops) break;
+    const idx = Math.max(0, Math.min(255, Math.round(sd.position * 255)));
+    if (used.has(idx)) continue;
+    used.add(idx);
+    stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position)), sd.bias ?? 0.5));
+  }
+  const seededErr = o.seedStops.length ? renderStopsToRamp([...stops].sort((a, b) => a.position - b.position), 'oklab', 'srgb').map((c, i) => oklabDistance(c, ramp[i])) : null;
+  const stillWrong = (from: number, to: number): boolean => {
+    if (!seededErr) return true;
+    for (let i = Math.max(0, from); i <= Math.min(255, to); i++) if (seededErr[i] > o.targetDE) return true;
+    return false;
+  };
+
+  // 0) Plateaus → one STEP stop per band (idea 0). The step holds the band's colour until
+  //    the next stop; that next stop sits half a texel past the band's end (the renderer's
+  //    inclusive step boundary — see edgeRightPosition) and starts whatever follows: the
+  //    next band (then it is that band's step stop) or a ramp (then it is linear).
+  if (o.seedPlateaus) {
+    const edge = (a: number, b: number) => (a < 0 || b > 255 ? 1 : oklabDistance(ramp[a], ramp[b]));
+    const all = detectPlateaus(ramp, o.plateauMin);
+    // A BANDED ramp (most texels inside flat runs) is bands wherever it is flat, however
+    // small the edges between them (the seam's 64-band test has edges of 0.008; adjacent
+    // library bands are often that close). A SMOOTH ramp's occasional identical-texel runs
+    // are quantisation, and only count as a band when one end is a real edge.
+    const flatTexels = all.reduce((n, r) => n + (r.end - r.start + 1), 0);
+    const bandedRamp = flatTexels >= 0.6 * 256;
+    const runs = bandedRamp ? all : all.filter((r) => Math.max(edge(r.start - 1, r.start), edge(r.end, r.end + 1)) >= o.bandEdgeDE);
+    const bandStart = new Set(runs.map((r) => r.start));
+    for (const r of runs) {
+      if (stops.length >= o.maxStops) break;
+      if (!stillWrong(r.start, r.end + 1)) continue;
+      // the band's own stop: on texel 0 at position 0; otherwise half a texel before it
+      if (!used.has(r.start)) {
+        used.add(r.start);
+        stops.push(r.start === 0 ? { ...stops.shift()!, interpolation: 'step' } : mkStop(r.start, ramp, nextId++, 'step', edgeRightPosition(r.start)));
+      } else if (r.start === 0) {
+        stops[0] = { ...stops[0], interpolation: 'step' };
+      }
+      // what follows the band (unless the next band's own stop covers it)
+      const next = r.end + 1;
+      if (next <= 255 && !bandStart.has(next) && !used.has(next) && stops.length < o.maxStops) {
+        used.add(next);
+        stops.push(mkStop(next, ramp, nextId++, 'linear', next === 255 ? 1 : edgeRightPosition(next)));
+      }
+    }
+    stops.sort((a, b) => a.position - b.position);
+  }
+
   // 1) Corner pre-seed — concentrate stops at hard band edges up front, marking
   //    the left side of each jump as a STEP edge for crisp bands.
   if (o.seedCorners) {
-    const { seeds, stepLeft } = detectCorners(ramp, o.cornerDE);
+    const { seeds, stepLeft } = detectCorners(ramp, o.cornerDE, o.edgeRatio);
     // If the corners alone exceed the budget, subsample them EVENLY across positions
     // rather than letting the earliest ones fill maxStops — otherwise a region dense
     // with edges (heavy posterize / noise) starves every later position of a stop and
@@ -158,6 +256,7 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
         : seeds;
     for (const idx of chosen) {
       if (used.has(idx) || stops.length >= o.maxStops) continue;
+      if (!stillWrong(idx - 1, idx + 1)) continue;
       used.add(idx);
       const left = stepLeft.has(idx);
       // the right side of a jump (its left neighbour is a step edge) sits half a texel early
@@ -166,17 +265,6 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     }
     stops.sort((a, b) => a.position - b.position);
   }
-
-  // 1b) Seed the stops the input already had (see `seedStops`) — at their EXACT positions
-  //     (a half-texel edge stop must not be rounded back onto the texel, or the edge walks).
-  for (const sd of o.seedStops) {
-    if (stops.length >= o.maxStops) break;
-    const idx = Math.max(0, Math.min(255, Math.round(sd.position * 255)));
-    if (used.has(idx)) continue;
-    used.add(idx);
-    stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position)), sd.bias ?? 0.5));
-  }
-  if (o.seedStops.length) stops.sort((a, b) => a.position - b.position);
 
   // 2) Refine: the worst SEGMENT first gets its bias / smooth tried (idea 3); a new stop
   //    only when that is not enough. One full render per iteration; the trials sample the

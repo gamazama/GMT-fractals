@@ -16,7 +16,7 @@ import type { GradientStop, GradientConfig } from '../types';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { renderStopsToBuffer } from '../palette/core/gmtGradient';
 import { fitRampToStops, measureFit, rgbToOklab } from '../palette/core/stopFit';
-import type { RGB } from '../palette/core/oklab';
+import { oklabDistance, type RGB } from '../palette/core/oklab';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -228,6 +228,34 @@ if (files.length === 0) {
   for (const c of biased) fitRampToStops(c.ramp, { targetDE: 0.012, maxStops: 48 });
   const ms = (performance.now() - t0) / biased.length;
   ok(ms < 12, `a fit stays fast (${ms.toFixed(1)} ms avg over ${biased.length}; it runs on every slider move)`);
+}
+
+// 7) A BANDED PALETTE GETS ONE STEP STOP PER BAND (2026-09-07, owner: "many stepped
+//    gradients in the library and none create stepped knots"). Bands are flat runs, not big
+//    jumps: a 16-band ramp whose neighbouring bands differ by only ~0.015 ΔE (typical of the
+//    library — cpt-city's banded palettes have a median edge of 0.021) must still come out
+//    as 16 step stops that render it EXACTLY, and a smooth ramp must get no step at all.
+//    Falsified with `seedPlateaus: false`: the first assertion goes red (the jump-based
+//    corner detector sees nothing at 0.015).
+{
+  console.log('\n[7] a banded palette is step stops');
+  const { renderStopsToRamp } = await import('../palette/core/gmtGradient');
+  const bands = 16;
+  // 16 bands stepping through a narrow hue range: neighbours differ by a small ΔE
+  const band = (k: number): RGB => ({ r: 40 + k * 6, g: 90 + k * 4, b: 200 - k * 3 });
+  const ramp: RGB[] = Array.from({ length: 256 }, (_, i) => band(Math.floor((i / 256) * bands)));
+  let edge = 1;
+  for (let k = 1; k < bands; k++) edge = Math.min(edge, oklabDistance(band(k - 1), band(k)));
+  const f = fitRampToStops(ramp, { targetDE: 0.02, maxStops: 128 });
+  const steps = f.stops.filter((s) => s.interpolation === 'step').length;
+  ok(steps >= bands, `${bands} bands (smallest edge ΔE ${edge.toFixed(3)}) → ${steps} step stops`);
+  ok(measureFit(f, ramp).maxDE < 0.001, `…rendering the bands exactly (max ΔE ${measureFit(f, ramp).maxDE.toFixed(4)})`);
+  const smooth = renderStopsToRamp([
+    { id: 'a', position: 0, color: '#101830', bias: 0.5, interpolation: 'linear' },
+    { id: 'b', position: 1, color: '#E0D0A0', bias: 0.5, interpolation: 'linear' },
+  ], 'oklab', 'srgb').map((c) => ({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) }));
+  const fs = fitRampToStops(smooth, { targetDE: 0.02, maxStops: 128 });
+  ok(!fs.stops.some((s) => s.interpolation === 'step'), `a smooth ramp with quantisation runs gets no step (${fs.stops.length} stops)`);
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
