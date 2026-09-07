@@ -40,6 +40,7 @@ import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
 import Slider from '../../components/Slider';
+import { InputSkinProvider } from '../../components/inputs';
 import { MixBandB } from './SourceBands';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
 import type { WorkingDerived } from '../../palette/store/workingStore';
@@ -82,10 +83,14 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
     style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }}
   >
-    {face === 'mix' && <MixFace />}
-    {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} />}
-    {face === 'curves' && <CurvesFace derived={derived} width={width} />}
-    {face === 'adjust' && <AdjustFace />}
+    {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
+        wiring; the studio keeps the default */}
+    <InputSkinProvider skin="soft">
+      {face === 'mix' && <MixFace />}
+      {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} />}
+      {face === 'curves' && <CurvesFace derived={derived} width={width} />}
+      {face === 'adjust' && <AdjustFace />}
+    </InputSkinProvider>
     {/* the inspector host lives whatever the face — the editor portals into it */}
     <div ref={inspectorHostRef} hidden={face !== 'inspector'} className="px-4 py-3" />
   </div>

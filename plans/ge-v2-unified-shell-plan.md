@@ -255,7 +255,9 @@ order of work from here, each folded into the phase that owns the surface.
   the editor's strip chrome, hover-gated): the hero's bias
   handles (the mid-segment knots) show only while the pointer is over the ramp; at rest the
   ramp carries its stops alone ("the less on screen, the better").
-- **C.8 · A slider skin for the shell** (owner, same message): the shared slider component
+- **C.8 · A slider skin for the shell** (DONE 2026-09-07 evening — `InputSkinProvider skin="soft"`
+  in components/inputs/skin.tsx, read by ScalarInput's full variant; the Tray provides it, so
+  every face's slider wears it and app-gmt keeps the default): the shared slider component
   gets a second skin matching v2's visual language (the rounded, quiet controls of the tray)
   — the Mix sliders and Adjust bins wear it; app-gmt keeps the default. Genericize, don't fork:
   a skin prop on the master component (grep `Slider` under `components/`), never a parallel.
