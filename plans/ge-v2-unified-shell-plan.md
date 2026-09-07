@@ -435,3 +435,12 @@ phase now carries**. Items move out of this list only when a later phase's entry
   inspector) as ONE floating surface hanging from the card, one open at a time, designed first
   as a frame in the GE v2 Hero Figma file and walked before code; Curves as a split-hero mode
   (design §13 item 4) lands inside it; L9's deletion; the Act / Floating swap in BrowseStage.
+- 2026-09-07 · Phase B, after the walk. **Closed:** the wall's tiles and the shelf's items carry
+  the large rounding — `PickerWall` gained an additive `tileRadius` (BrowseStage passes 8; the
+  paint pass clips each tile, capped at a THIRD of the short side so an 18 px tile is a rounded
+  bar, not a pill — 8 px uncapped read as pills), the enlarged pick and the hover preview follow
+  it, `FavientSwatch` takes `strip` for 10 px corners; GMT main's overlay and panel are at 0 / 4 as
+  before. **Decided (owner):** Back to GMT is a PLAIN link — the working gradient is already in
+  GMT's My Gradients through the shared Recent group, so the `?g=` hand-back and app-gmt's boot
+  reader are removed; `shareUrl.ts` keeps the Share link only, `test:gx-share` [4] now round-trips
+  that. Plan §3's "Back to GMT carries the working stops" line is superseded by this entry.

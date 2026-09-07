@@ -5,14 +5,14 @@
  *   [2] the default-valued fields are elided from the wire (short links) yet restored
  *   [3] garbage decodes to null: not base64, not JSON, wrong version, a bad stop row, a
  *       config the shared gate rejects
- *   [4] the GMT-bound "Back to GMT" URL (`gmtUrlFor`) points at app-gmt.html and round-trips
- *       through the SAME decoder app-gmt boots with (`takeShareFromLocation`), which also
- *       strips the param so a refresh does not re-apply the gradient
+ *   [4] the Share URL (`shareUrlFor`) opens the explorer page and round-trips through
+ *       `takeShareFromLocation`, which also strips the param so a refresh does not re-apply
+ *       the gradient. (Until 2026-09-07 this tested the "Back to GMT" hand-back URL; the owner dropped it — GMT's My Gradients already has the gradient.)
  *
  * Node only, no browser. `npm run test:gx-share`.
  */
 
-import { encodeShare, decodeShare, gmtUrlFor, takeShareFromLocation, SHARE_PARAM } from '../gradient-explorer/v2/shareUrl';
+import { encodeShare, decodeShare, shareUrlFor, takeShareFromLocation, SHARE_PARAM } from '../gradient-explorer/v2/shareUrl';
 import type { GradientConfig } from '../types';
 
 let failures = 0;
@@ -73,9 +73,9 @@ console.log('\n[3] garbage');
   check(decodeShare(Buffer.from(JSON.stringify({ v: 1, s: [] })).toString('base64url')) === null, 'garbage decodes to null');
 }
 
-console.log('\n[4] the GMT-bound URL');
+console.log('\n[4] the Share URL round-trips');
 {
-  // `gmtUrlFor` / `takeShareFromLocation` read `window.location` at CALL time, so a
+  // `shareUrlFor` / `takeShareFromLocation` read `window.location` at CALL time, so a
   // minimal stub is enough to exercise them on node (the module itself imports clean).
   const cfg: GradientConfig = {
     stops: [
@@ -90,21 +90,21 @@ console.log('\n[4] the GMT-bound URL');
     location: { href: 'http://localhost:3400/gradient-explorer-next.html?zoom=2' },
     history: { replaceState: (_a: unknown, _b: unknown, url: string) => { replaced = url; } },
   };
-  const url = gmtUrlFor(cfg, 'Dusk over water');
-  check(url.includes('/app-gmt.html?'), `the link goes to app-gmt.html (${url.slice(0, 46)})`);
+  const url = shareUrlFor(cfg, 'Dusk over water');
+  check(url.includes('/gradient-explorer-next.html?'), `the link opens the explorer (${url.slice(0, 60)})`);
   const code = new URL(url).searchParams.get(SHARE_PARAM) ?? '';
   check(code.length > 0 && /^[A-Za-z0-9_-]+$/.test(code), 'it carries a base64url ?g= code');
 
-  // Arrival: app-gmt boots by calling exactly this.
+  // Arrival: the explorer boots by calling exactly this.
   (globalThis as any).window.location.href = url;
   const arrived = takeShareFromLocation();
-  check(!!arrived, 'app-gmt decodes it with the same module');
+  check(!!arrived, 'it decodes with the same module');
   if (arrived) {
-    check(arrived.name === 'Dusk over water', 'the name round-trips to GMT');
+    check(arrived.name === 'Dusk over water', 'the name round-trips');
     check(arrived.config.stops.length === 3, 'three stops arrive');
     check(
       arrived.config.stops[1].color.toUpperCase() === '#ABCDEF' && arrived.config.stops[1].interpolation === 'smooth',
-      'colour + interpolation survive the hand-back',
+      'colour + interpolation survive the link',
     );
     check(
       (arrived.config.stops[0].bias ?? 0.5) === 0.5 && (arrived.config.stops[0].interpolation ?? 'linear') === 'linear',

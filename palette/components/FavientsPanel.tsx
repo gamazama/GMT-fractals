@@ -444,7 +444,11 @@ const FavientSwatch: React.FC<{
   selected?: boolean;
   /** Host flips click apply→select + enables the enlarge/selectable treatment. */
   selectMode?: boolean;
-}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode }) => {
+  /** The v2 strip: 10 px corners (V8 as amended 2026-09-07 — large rounding on every
+   *  gradient bar). The panel layouts keep their 4 px. */
+  strip?: boolean;
+}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode, strip = false }) => {
+  const radius = strip ? 'rounded-[10px]' : 'rounded';
   const ref = useRef<HTMLCanvasElement>(null);
   const [editing, setEditing] = useState(false);
   const list = view === 'list';
@@ -537,7 +541,7 @@ const FavientSwatch: React.FC<{
           // V8 gradient-bar spec (plans/ge-v2-unified-shell-plan.md §1), inlined rather
           // than importing `gradient-explorer/v2/ui/bar.ts` — palette/** must never
           // import an app (.claude/rules/palette.md).
-          className="block shrink-0 rounded ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg overflow-hidden cursor-pointer"
+          className={`block shrink-0 ${radius} ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg overflow-hidden cursor-pointer`}
         />
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -583,7 +587,7 @@ const FavientSwatch: React.FC<{
       <button
         onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
         // V8 gradient-bar spec, inlined for the same app-boundary reason as above.
-        className={`block rounded origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
+        className={`block ${radius} origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
           selected
             ? 'scale-[1.4] outline outline-2 outline-accent-400 shadow-[0_0_12px_rgb(var(--accent-glow)/0.45)]'
             : 'ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg'
@@ -988,7 +992,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
                   {block.favs.map((f, i) => (
                     <React.Fragment key={f.id}>
                       {phIndex === i && <Placeholder w={swatchW} h={swatchH} />}
-                      <FavientSwatch fav={f} {...swatchProps} groupLabel={groupLabel} selected={selectMode && favActive && favPick?.key === f.id} />
+                      <FavientSwatch fav={f} strip={strip} {...swatchProps} groupLabel={groupLabel} selected={selectMode && favActive && favPick?.key === f.id} />
                     </React.Fragment>
                   ))}
                   {phIndex === block.favs.length && <Placeholder w={swatchW} h={swatchH} />}
@@ -1220,6 +1224,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
                       <React.Fragment key={f.id}>
                         {phIndex === i && <Placeholder w={swatchW} h={swatchH} list={viewMode === 'list'} />}
                         <FavientSwatch
+                          strip={strip}
                           fav={f}
                           {...swatchProps}
                           groupLabel={groupLabel}

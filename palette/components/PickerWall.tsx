@@ -110,6 +110,12 @@ export interface PickerWallProps {
    *  Nothing else changes — picks still need a click without movement, and middle/right
    *  keep their meanings. Default false (every existing host). */
   zoomTool?: boolean;
+  /** Corner radius (CSS px) drawn on every tile, the enlarged pick and the hover preview
+   *  (additive, 2026-09-07, Gradient Explorer v2: "gradients and swatches always carry
+   *  large rounding" — plans/ge-v2-unified-shell-plan.md §8, V8 as amended). A per-tile
+   *  clip in the paint pass, which runs per chunk on layout, never per frame. Default 0 =
+   *  the square tiles every existing host draws. */
+  tileRadius?: number;
   /** Carve committed: the INSIDE id-set + whether to isolate (keep inside) or cut (drop inside). */
   onSelectionCommit?: (insideIds: string[], op: 'isolate' | 'cut') => void;
   /** User cancelled (right-click / Esc-equivalent) — the host should deselect the tool. */
@@ -197,7 +203,8 @@ const SwatchCanvas: React.FC<{
   /** A selection tool is active → drop the swatch's hand cursor so the wall's tool cursor
    *  (set on the scroll container, an inherited CSS property) shows over the swatches too. */
   toolActive?: boolean;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister, toolActive }) => {
+  tileRadius?: number;
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister, toolActive, tileRadius = 0 }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -236,10 +243,21 @@ const SwatchCanvas: React.FC<{
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
     ctx.imageSmoothingEnabled = false;
+    // tileRadius > 0: clip each tile to a rounded rect (the V8 large-rounding rule). The
+    // radius is capped at a THIRD of the tile's short side so a thin tile stays a rounded
+    // bar, not a pill (measured 2026-09-07: 8 px on an 18 px tile read as pills).
+    const r = Math.min(tileRadius, swatchW / 3, swatchH / 3);
     for (let k = 0; k < entries.length; k++) {
       const col = Math.floor(k / nrows);
       const row = k % nrows;
+      if (r > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(col * cellW, row * cellH, swatchW, swatchH, r);
+        ctx.clip();
+      }
       ctx.drawImage(sprite, 0, entries[k].row, 256, 1, col * cellW, row * cellH, swatchW, swatchH);
+      if (r > 0) ctx.restore();
     }
     // The selected swatch ENLARGES IN PLACE: redrawn last (on top of its neighbours),
     // oversized + centred on its cell, with a drop-shadow lift + a thin cyan ring. Clamped
@@ -255,20 +273,35 @@ const SwatchCanvas: React.FC<{
       const cy = row * cellH + swatchH / 2;
       const ex = Math.max(0, Math.min(cx - ew / 2, cssW - ew));
       const ey = Math.max(0, Math.min(cy - eh / 2, cssH - eh));
+      const er = Math.min(tileRadius * 1.8, ew / 3, eh / 3);
       ctx.save();
       ctx.imageSmoothingEnabled = true; // smooth the showcased swatch (neighbours stay crisp)
       ctx.shadowColor = 'rgba(0,0,0,0.55)';
       ctx.shadowBlur = 8;
       ctx.shadowOffsetY = 2;
+      if (er > 0) {
+        // The shadow is cast by the clipped shape: paint it with a filled path first (a
+        // clip alone would clip the shadow away), then draw the sprite inside the clip.
+        ctx.beginPath();
+        ctx.roundRect(ex, ey, ew, eh, er);
+        ctx.fillStyle = '#000';
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+        ctx.clip();
+      }
       ctx.drawImage(sprite, 0, entries[selIdx].row, 256, 1, ex, ey, ew, eh);
       ctx.restore();
       // Dark keyline (reads on light ramps) under a thin cyan selection ring.
-      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(ex + 0.5, ey + 0.5, ew - 1, eh - 1);
-      ctx.strokeStyle = '#22d3ee';
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(ex + 1.25, ey + 1.25, ew - 2.5, eh - 2.5);
+      const ring = (inset: number, style: string, width: number) => {
+        ctx.strokeStyle = style;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        if (er > 0) ctx.roundRect(ex + inset, ey + inset, ew - inset * 2, eh - inset * 2, Math.max(0, er - inset));
+        else ctx.rect(ex + inset, ey + inset, ew - inset * 2, eh - inset * 2);
+        ctx.stroke();
+      };
+      ring(0.5, 'rgba(0,0,0,0.65)', 1);
+      ring(1.25, '#22d3ee', 1.5);
     }
   }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId]);
 
@@ -374,7 +407,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart, onRegister, toolActive }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -388,6 +421,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
   toolActive?: boolean;
+  tileRadius?: number;
 }) {
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
@@ -435,6 +469,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             gap={gap}
             selectedId={selectedId}
             toolActive={toolActive}
+            tileRadius={tileRadius}
             onHover={onHover}
             onPick={onPick}
             onEntryDragStart={onEntryDragStart}
@@ -466,6 +501,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   resetZoomSignal,
   selectionTool = null,
   zoomTool = false,
+  tileRadius = 0,
   onSelectionCommit,
   onSelectionCancel,
   onDeselect,
@@ -1032,6 +1068,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               gap={gap}
               selectedId={selectedId}
               toolActive={!!selectionTool}
+              tileRadius={tileRadius}
               onHover={handleHover}
               onPick={handlePick}
               onEntryDragStart={selectionTool ? undefined : onEntryDragStart}
@@ -1052,6 +1089,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
                     ctx.imageSmoothingEnabled = false;
                     ctx.drawImage(sprite, 0, hover.entry.row, 256, 1, 0, 0, w, h);
                   },
+                  radius: tileRadius > 0 ? Math.min(tileRadius * 1.8, hover.eh / 3) : undefined,
                   name: hover.entry.name,
                   sub: f
                     ? `· ${hover.entry.theme ?? '—'} · ${hover.entry.bundle ?? '—'} · L ${f.lightness.toFixed(2)} · vivid ${f.chroma.toFixed(2)} · ${Math.round(f.raw.hueSpreadDeg)}°`

@@ -29,6 +29,8 @@ export interface GradientHover {
   /** Paint the zoomed gradient into the preview canvas (in CSS-pixel coords). */
   paint: (ctx: CanvasRenderingContext2D, w: number, h: number) => void;
   name: string;
+  /** Corner radius of the zoomed preview (CSS px). Default: the 2 px every host had. */
+  radius?: number;
   /** Optional trailing details (facets line, source label…). */
   sub?: React.ReactNode;
 }
@@ -89,7 +91,7 @@ export const GradientHoverPreview: React.FC<{ hover: GradientHover | null }> = (
       <canvas
         ref={ref}
         className="fixed pointer-events-none border border-fg rounded-[2px]"
-        style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, zIndex: z('tooltip'), boxShadow: '0 0 28px rgba(0,0,0,0.92)' }}
+        style={{ left: hover.ex, top: hover.ey, width: hover.ew, height: hover.eh, zIndex: z('tooltip'), boxShadow: '0 0 28px rgba(0,0,0,0.92)', borderRadius: hover.radius }}
       />
       <div
         ref={tipRef}

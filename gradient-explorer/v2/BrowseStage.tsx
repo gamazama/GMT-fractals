@@ -260,6 +260,7 @@ export const BrowseStage: React.FC = () => {
             onZoomChange={m.onZoomChange}
             resetZoomSignal={m.resetZoomSignal}
             zoomTool={zoomTool && !m.tool}
+            tileRadius={8}
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}

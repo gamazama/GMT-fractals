@@ -250,3 +250,10 @@ grid cell), so the state reads right after it instead of floating 200 px out.
   Nothing shows until there is a recent. `exportActions.ts` owns the doing (`runExport`) and
   the recents (localStorage `gx.v2.recentExports`); the full window calls the same function,
   so the two surfaces share one behaviour. The flyout is `fixed` because the card clips.
+
+### 7g. Rounding beyond the hero (2026-09-07)
+
+Wall tiles: `tileRadius={8}` on the v2 wall, clipped per tile in the paint pass and capped at a
+third of the short side (an 18 px tile gets 6; 8 read as pills). Shelf items: 10 px in the strip.
+GMT main's wall and panel are untouched. Back to GMT is a plain link now (the gradient is already
+in GMT's My Gradients).

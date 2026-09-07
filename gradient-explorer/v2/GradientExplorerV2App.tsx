@@ -49,7 +49,7 @@ import { useImageDrop } from '../../palette/components/useImageDrop';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 import { ExportMenu } from './ExportMenu';
-import { shareUrlFor, takeShareFromLocation, gmtUrlFor, cameFromGmt } from './shareUrl';
+import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
 import { ZoneLabel } from './ui/ZoneLabel';
 
@@ -260,15 +260,11 @@ export const GradientExplorerV2App: React.FC = () => {
         <button className={`${tb} ${variantsOpen ? 'text-fg bg-line/10' : ''}`} onClick={() => setVariantsOpen((o) => !o)} title="Snapshots of the whole studio — switch, or tween between two">
           Variants
         </button>
-        {/* Back to GMT carries the gradient: the SAME `?g=` code Share writes, read by
-            app-gmt at boot (grep takeShareFromLocation in app-gmt/main.tsx). Only shown
-            when this page was opened from the studio. */}
+        {/* Back to GMT is a plain link (owner, 2026-09-07): the working gradient is already
+            in GMT's My Gradients panel through the shared `gmt.favients` Recent group, so
+            the link carries nothing. Only shown when this page was opened from the studio. */}
         {cameFromGmt && (
-          <a
-            className={`${tb} flex items-center no-underline`}
-            href={derived.config ? gmtUrlFor(derived.config, derived.name) : 'app-gmt.html'}
-            title="Back to the GMT studio, taking this gradient with you"
-          >
+          <a className={`${tb} flex items-center no-underline`} href="app-gmt.html" title="Back to the GMT studio">
             Back to GMT
           </a>
         )}
