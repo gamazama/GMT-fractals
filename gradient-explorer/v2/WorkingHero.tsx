@@ -429,6 +429,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                     chrome="strip"
                     stripHeight={resultH}
                     stripCorners={split ? 'bottom' : 'all'}
+                    previewConfig={derived.edited && !derived.passthrough && config ? config : undefined}
                     onStripClick={gesture ? onBake : undefined}
                     stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
                     stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}

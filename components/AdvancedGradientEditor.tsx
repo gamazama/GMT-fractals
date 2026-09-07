@@ -113,6 +113,11 @@ interface AdvancedGradientEditorProps {
     /** Strip chrome only: which corners of the bar are rounded. 'bottom' when the host stacks
      *  a source half on top of the strip (the v2 hero's split ramp) so the two read as one bar. */
     stripCorners?: 'all' | 'bottom';
+    /** 'strip' chrome: paint THIS gradient on the bar instead of the edited stops — the v2
+     *  hero passes the pipeline's RESULT while Adjust / curves are live over an edited
+     *  document (measured 2026-09-07: after a Curves bake the bar showed the stops document,
+     *  so Adjust moved the palette swatches and not the ramp). The knots stay the document's. */
+    previewConfig?: GradientConfig;
     /** 'strip' chrome: a single click on the bar (not on a bias handle) — the v2 hero's
      *  BAKE gesture while a face is open (C.9). Absent = the bar takes no single click. */
     onStripClick?: () => void;
@@ -154,7 +159,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', onStripClick, stripTitle, stripHint }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', onStripClick, stripTitle, stripHint, previewConfig }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -280,7 +285,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // concern — the strip shows the sRGB authoring colours (as the old CSS string
     // did), so it stays a faithful colour preview. Memoised so unrelated re-renders
     // (selection / marquee / expand) don't re-sample 256 texels.
-    const previewRamp = useMemo(() => renderStopsToRamp(knots, blendSpace), [knots, blendSpace]);
+    const previewStops = previewConfig?.stops ?? knots;
+    const previewBlend = previewConfig?.blendSpace ?? blendSpace;
+    const previewRamp = useMemo(() => renderStopsToRamp(previewStops, previewBlend), [previewStops, previewBlend]);
     // Strip chrome (the v2 hero, ~1100 px wide): the preview samples the STOPS once per
     // display pixel instead of stretching the 256-texel ramp — a bilinear scale-up softened
     // every step edge into a little gradient, and nearest would band the smooth ones
@@ -289,13 +296,13 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const previewWide = useMemo(() => {
         if (chrome !== 'strip') return null;
         const out = new Uint8ClampedArray(STRIP_PREVIEW_W * 4);
-        const sorted = [...knots].sort((a, b) => a.position - b.position);
+        const sorted = [...previewStops].sort((a, b) => a.position - b.position);
         for (let x = 0; x < STRIP_PREVIEW_W; x++) {
-            const c = sampleStops(sorted, x / (STRIP_PREVIEW_W - 1), blendSpace, 'srgb');
+            const c = sampleStops(sorted, x / (STRIP_PREVIEW_W - 1), previewBlend, 'srgb');
             out[x * 4] = c.r; out[x * 4 + 1] = c.g; out[x * 4 + 2] = c.b; out[x * 4 + 3] = 255;
         }
         return out;
-    }, [knots, blendSpace, chrome]);
+    }, [previewStops, previewBlend, chrome]);
 
     useEffect(() => {
         const cv = previewCanvasRef.current;
