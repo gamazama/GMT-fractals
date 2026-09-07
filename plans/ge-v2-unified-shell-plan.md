@@ -226,11 +226,13 @@ order of work from here, each folded into the phase that owns the surface.
   split — clicking the BOTTOM half (the result) bakes it; clicking the TOP half (the source)
   keeps the source instead — cancel. Either way the face's transformations reset and the
   face closes. Instant tooltips on hover ("Keep this result" / "Keep the source instead").
-- **C.10 · The wall's header** (owner, same evening): the main gradient wider and centre
+- **C.10 · The wall's header** (DONE 2026-09-07 evening — a 1fr·auto·1fr grid, the pad 360 px
+  centred, the right column = similarity chip · clear all · Filters · Search): the main gradient wider and centre
   aligned; search on the right with Filters to its left; with Filters closed, "Clear all" sits
   right-aligned on the Filters row.
-- **C.11 · Zoom tool status** (owner): while the zoom tool is active, the status chip in the
-  bottom-right corner also carries sliders for the wall's padding.
+- **C.11 · Zoom tool status** (DONE 2026-09-07 evening — a soft-skin Padding slider in the
+  zoom readout, `data-gx-zoom-padding`): while the zoom tool is active, the status chip in the
+  bottom-right corner also carries the wall's padding.
 - **C.12 · A smoothing brush for Curves** (owner, 2026-09-07 evening): a brush over the
   channel graph that acts as a LOCALISED bake + smooth + simplify — the fit recipe we already
   have (`smoothChannel`, `dpIndices`, `fitChannelsToTracks`) applied to the samples under

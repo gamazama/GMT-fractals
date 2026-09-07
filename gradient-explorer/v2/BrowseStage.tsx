@@ -27,6 +27,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickerWall } from '../../palette/components/PickerWall';
 import { usePickerModel } from '../../palette/components/usePickerModel';
+import Slider from '../../components/Slider';
+import { InputSkinProvider } from '../../components/inputs';
 import { PickerBundleToggles } from '../../palette/components/PickerControls';
 import { QualityRangePadConnected } from '../../palette/components/QualityRangePadConnected';
 import { HueLightnessPad, satTrackFor } from '../../palette/components/HueLightnessPad';
@@ -129,23 +131,57 @@ export const BrowseStage: React.FC = () => {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      {/* ── one narrowing row ─────────────────────────────────────────────── */}
-      <div className="shrink-0 relative px-6 pb-2.5 flex items-center gap-3">
+      {/* ── one narrowing row (C.10, owner 2026-09-07 evening): the main gradient — the hue ×
+          lightness pad — WIDER and CENTRED; Search at the right with Filters to its left;
+          with Filters closed, "clear all" sits right-aligned on this same row. ── */}
+      <div className="shrink-0 relative px-6 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div />
         {/* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
             bar, never over the wall it narrows. */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 justify-self-center">
           <HueLightnessPad
             hue={hueWin}
             light={lightWin}
             onChange={(h, l) => m.setPaletteFilters?.({ qHue: { x: h[0], y: h[1] }, qL: { x: l[0], y: l[1] } })}
             onDragStart={() => handleInteractionStart('param')}
             onDragEnd={handleInteractionEnd}
-            width={220}
+            width={360}
             height={56}
           />
           {/* the saturation strip, in a picker's own language, under the field */}
           <QualityRangePadConnected featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...SAT_AXIS} hints="tooltip" keyframes={false} variant="strip" height={12} drawTrack={satTrack} />
         </div>
+        <div className="flex items-center justify-end gap-3 min-w-0">
+        {/* More like this — the wall is one band ordered by ramp distance to this gradient. */}
+        {m.anchor && (
+          <span className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-accent-400/40 bg-accent-400/10 text-[12px] text-accent-300 min-w-0">
+            <span className="truncate">sorted by similarity to <b className="font-semibold">{m.anchor.name}</b></span>
+            <button onClick={() => m.setAnchor(null)} className="underline shrink-0 hover:text-fg">clear</button>
+          </span>
+        )}
+        {!filtersOpen && (m.narrowers.length > 0 || m.anchor) && (
+          <button onClick={m.clearAll} className="text-[13px] text-accent-300 underline hover:text-fg whitespace-nowrap" title="Clear search, look ranges, sources, the carve and the similarity sort">
+            clear all
+          </button>
+        )}
+        <button
+          ref={btnRef}
+          data-gx-filters-trigger=""
+          onClick={toggleFilters}
+          className={`h-[34px] px-3 rounded-[10px] border text-[13px] flex items-center gap-2 transition-colors ${
+            filtersOpen ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40'
+          }`}
+          title="Look, sources and how the wall is arranged"
+        >
+          Filters
+          <span
+            className={`min-w-[18px] h-[18px] px-1 rounded-full text-[11px] leading-[18px] text-center tabular-nums ${
+              m.filterCount ? 'bg-accent-400 text-surface font-semibold' : 'bg-line/10 text-fg-dim'
+            }`}
+          >
+            {m.filterCount}
+          </span>
+        </button>
         <div className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-line/20 bg-surface-dock w-[260px] max-w-full">
           <svg className="w-3.5 h-3.5 shrink-0 text-fg-dim" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="7" cy="7" r="4.5" />
@@ -165,32 +201,7 @@ export const BrowseStage: React.FC = () => {
           )}
         </div>
 
-        <button
-          ref={btnRef}
-          data-gx-filters-trigger=""
-          onClick={toggleFilters}
-          className={`h-[34px] px-3 rounded-[10px] border text-[13px] flex items-center gap-2 transition-colors ${
-            filtersOpen ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40'
-          }`}
-          title="Look, sources and how the wall is arranged"
-        >
-          Filters
-          <span
-            className={`min-w-[18px] h-[18px] px-1 rounded-full text-[11px] leading-[18px] text-center tabular-nums ${
-              m.filterCount ? 'bg-accent-400 text-surface font-semibold' : 'bg-line/10 text-fg-dim'
-            }`}
-          >
-            {m.filterCount}
-          </span>
-        </button>
-
-        {/* More like this — the wall is one band ordered by ramp distance to this gradient. */}
-        {m.anchor && (
-          <span className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-accent-400/40 bg-accent-400/10 text-[12px] text-accent-300 min-w-0">
-            <span className="truncate">sorted by similarity to <b className="font-semibold">{m.anchor.name}</b></span>
-            <button onClick={() => m.setAnchor(null)} className="underline shrink-0 hover:text-fg">clear</button>
-          </span>
-        )}
+        </div>
       </div>
 
       {/* ── Filters: three inline rows, never over the wall ────────────────── */}
@@ -328,6 +339,15 @@ export const BrowseStage: React.FC = () => {
 
         {/* zoom readout + Fit */}
         <Floating className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-muted tabular-nums ${floatOver}`}>
+          {/* C.11 (owner): with the zoom tool active, the wall's Padding is here too — the
+              gap between swatches is what you tune while zoomed in on them */}
+          {zoomTool && !m.tool && (
+            <InputSkinProvider skin="soft">
+              <div className="w-[150px] mr-1" data-gx-zoom-padding>
+                <Slider label="Padding" value={Number(m.sliceState?.paddingSize ?? 1)} min={0} max={40} step={1} onChange={(v) => m.setPaletteFilters?.({ paddingSize: v })} defaultValue={1} />
+              </div>
+            </InputSkinProvider>
+          )}
           <span title="Middle-drag zooms · right-drag pans">{zoomPct}</span>
           <button
             onClick={m.resetZoom}
