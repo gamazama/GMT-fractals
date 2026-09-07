@@ -28,6 +28,7 @@ import {
   PRESETS_GROUP,
   type Favient,
 } from '../store/favientsStore';
+import { buildBlocks } from './favientBlocks';
 import {
   subscribeFavientHost,
   getFavientBrowseAction,
@@ -678,21 +679,6 @@ const StudioIcon: React.FC = () => (
   </svg>
 );
 
-interface Block {
-  group: string;
-  start: number;
-  favs: Favient[];
-}
-const buildBlocks = (favients: Favient[]): Block[] => {
-  const blocks: Block[] = [];
-  favients.forEach((f, i) => {
-    const g = f.group ?? DEFAULT_GROUP;
-    const last = blocks[blocks.length - 1];
-    if (last && last.group === g) last.favs.push(f);
-    else blocks.push({ group: g, start: i, favs: [f] });
-  });
-  return blocks;
-};
 
 type DropTarget = { kind: 'group'; group: string; index: number } | { kind: 'newgroup' } | { kind: 'trash' } | null;
 
@@ -968,8 +954,9 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
               const groupLabel = groupLabels[block.group] ?? '';
               return (
                 <div
-                  key={block.group}
+                  key={block.key}
                   className="flex items-center gap-1 shrink-0"
+                  data-gx-shelf-block={block.label ?? block.group}
                   onDragOver={(e) => {
                     if (!dndOk(e)) return;
                     e.preventDefault();
@@ -986,7 +973,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
                 >
                   {block.group !== DEFAULT_GROUP && (
                     <span className="text-[10px] uppercase tracking-wide text-fg-tertiary mr-1.5 whitespace-nowrap select-none">
-                      {isRecentGroup(block.group) ? RECENT_LABEL : groupLabel || 'Group'}
+                      {block.label ?? (isRecentGroup(block.group) ? RECENT_LABEL : groupLabel || 'Group')}
                     </span>
                   )}
                   {block.favs.map((f, i) => (
@@ -1194,10 +1181,10 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
               const phIndex = dropTarget?.kind === 'group' && dropTarget.group === block.group ? dropTarget.index : -1;
               const groupLabel = groupLabels[block.group] ?? '';
               return (
-                <div key={block.group}>
+                <div key={block.key}>
                   {block.group !== DEFAULT_GROUP && (
                     <GroupDivider
-                      label={isRecentGroup(block.group) ? RECENT_LABEL : groupLabel}
+                      label={block.label ?? (isRecentGroup(block.group) ? RECENT_LABEL : groupLabel)}
                       onRename={(v) => renameGroup(block.group, v)}
                       autoFocus={focusGroup === block.group}
                       fixed={isRecentGroup(block.group)}

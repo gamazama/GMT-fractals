@@ -259,10 +259,20 @@ order of work from here, each folded into the phase that owns the surface.
   gets a second skin matching v2's visual language (the rounded, quiet controls of the tray)
   — the Mix sliders and Adjust bins wear it; app-gmt keeps the default. Genericize, don't fork:
   a skin prop on the master component (grep `Slider` under `components/`), never a parallel.
-- **D.1 · My Gradients as DATED bins** (folds into Phase D): entries file into a bin per day by
-  default; the session keeps refreshing the SAME entry until the gradient is favourited or a
-  new one is selected (today's Recent-session rule, kept) — then the next work opens a new
-  entry in the day's bin. Starred / named groups sit beside the days.
+- **C.13 · The tray tabs as one segmented control** (owner, 2026-09-07 evening): Mix · Image ·
+  Curves · Adjust in the same style as Even / Perceptual / Stops, and the open one drawn as a
+  TAB — joined to its face below (the face's top edge meets the tab, no gap).
+- **C.14 · Title and state spacing** (DONE 2026-09-07 evening): the state chip sits a touch
+  further from the name (8 px).
+- **C.15 · The strip's blend · output · menu cluster** (owner, same message): right-align it
+  on the tab row, and revisit what those options are, which matter here and which go
+  ("the less on screen").
+- **D.1 · My Gradients as DATED bins** (DONE 2026-09-07 evening — `buildBlocks` in
+  palette/components/favientBlocks.ts splits Recent's run per local day, labelled Today /
+  Yesterday / the date; `test:palette-favients` guards it, falsified): entries file into a bin
+  per day by default; the session keeps refreshing the SAME entry until the gradient is
+  favourited or a new one is selected (the Recent-session rule, kept) — a re-pick refreshes
+  `createdAt`, so it moves into today's bin. Starred / named groups sit beside the days.
 
 ### Phase D — the shelf as the only memory
 **Goal:** L4; Variants become Snapshots.

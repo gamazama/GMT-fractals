@@ -354,7 +354,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 title="Name"
               />
             </span>
-            {stateChip}
+            {stateChip && <span className="ml-2 inline-flex">{stateChip}</span>}
             <span className="flex-1" />
             {source === 'browse' && !emptySource && (
               <Act className="mr-1" title="Sort the wall by similarity to this gradient" onClick={() => setSimilarityAnchor({ config: shown.config, name: derived.name })}>

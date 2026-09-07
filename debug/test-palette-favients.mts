@@ -61,6 +61,7 @@ const shim = {
 
 const { useFavientsStore, favientSig, readCollectionFavients, captureFavientsHistory, restoreFavientsHistory, DEFAULT_GROUP, RECENT_GROUP, RECENT_LABEL, RECENT_CAP } =
     await import('../palette/store/favientsStore');
+const { buildBlocks } = await import('../palette/components/favientBlocks');
 type GradientConfig = import('../types').GradientConfig;
 
 let failures = 0;
@@ -196,6 +197,21 @@ console.log('\n[6] collectRecent auto-fills the Recent group');
     const idA3 = store().collectRecent(cfg('#ff0000', '#0000ff'), 'Working gradient, fresh', 'Image', { fresh: true });
     check(idA3 !== idA && store().favients.length === 3, 'a fresh collect of a known signature opens a NEW Recent entry');
     check(store().favients[0].id === idA3 && store().favients[0].group === RECENT_GROUP, 'the fresh entry lands at the front of Recent');
+    // D.1 — Recent files into DATED bins: the shelf splits its run at every change of local
+    // day, Today / Yesterday / the date. Falsified by keying blocks on the group alone in
+    // buildBlocks: "two days → two Recent blocks" goes red.
+    {
+      const now = Date.now();
+      const recent = store().favients.filter((f) => f.group === RECENT_GROUP);
+      check(recent.length >= 3, `three Recent entries to bin (${recent.length})`);
+      const aged = recent.map((f, i) => ({ ...f, createdAt: now - (i === 2 ? 86400000 : 0) }));
+      const blocks = buildBlocks(aged, now);
+      check(blocks.length === 2, `two days → two Recent blocks (got ${blocks.length})`);
+      check(blocks[0]?.label === 'Today' && blocks[0].favs.length === 2, `the first bin is Today with 2 (${blocks[0]?.label}, ${blocks[0]?.favs.length})`);
+      check(blocks[1]?.label === 'Yesterday' && blocks[1].favs.length === 1, `the second bin is Yesterday with 1 (${blocks[1]?.label})`);
+      const old = buildBlocks(recent.map((f) => ({ ...f, createdAt: now - 40 * 86400000 })), now);
+      check(old.length === 1 && /\d/.test(old[0].label ?? ''), `an older day reads as a date (${old[0]?.label})`);
+    }
 
     // lastGroupId is the landing group for the user's next deliberate save — a collect
     // must not steer it. Park it on a named group via the drag path, then collect.
