@@ -16,9 +16,10 @@
  *     sliders, plain horizontal, always shown, with a LINK switch (off) that moves all three
  *     together, and Swap. Band A is the hero ramp's top half. Leaving Mix bakes the result
  *     (the shell's `use`) and the sources are gone.
- *   • Image — `ExtractStage` as it was on the Image tab (method chips, dials, the image pane
- *     with the Path handles, the colour cloud), in a fixed-height box. The only face that
- *     grows to a pane.
+ *   • Image (C.6, 2026-09-07) — ONE picture: the preview is the working surface with the
+ *     Path tools and Replace image on it, the colour cloud a square beside it, the method
+ *     chips + dials under it (`ExtractStage` over `ImageStage chrome="face"`). Full width —
+ *     the one face that grows to a pane.
  *   • Curves — the channel graph over the working base (moved here from the hero's expander).
  *   • Adjust — three containers (owner, 2026-09-07): Hue rotate · Chroma · Contrast |
  *     Phase · Repeats · Posterize | Noise: Strength · Noise: Frequency · Targets. Standard GMT
@@ -62,8 +63,9 @@ interface Props {
   width: number;
   /** Callback ref for the inspector's portal host — stable across faces. */
   inspectorHostRef: (el: HTMLDivElement | null) => void;
-  /** Left edge in the hero band's coordinates: the PANEL's left (owner, 2026-09-07: the tray
-   *  is inline with the hero's gradient panel, not under the image column). */
+  /** Left edge in the hero band's coordinates: the PANEL's left past its corner radius
+   *  (owner, 2026-09-07: inline with the gradient panel, not under the image column). The
+   *  Image face ignores it and spans the full width — the one face that grows to a pane. */
   left: number;
 }
 
@@ -73,14 +75,10 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
     className="absolute right-6 z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
-    style={{ top: 'calc(100% - 11px)', left }}
+    style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 24 : left }}
   >
     {face === 'mix' && <MixFace />}
-    {face === 'image' && (
-      <div className="h-[380px] flex flex-col">
-        <ExtractStage />
-      </div>
-    )}
+    {face === 'image' && <ExtractStage />}
     {face === 'curves' && <CurvesFace derived={derived} width={width} />}
     {face === 'adjust' && <AdjustFace />}
     {/* the inspector host lives whatever the face — the editor portals into it */}

@@ -10,7 +10,9 @@
  * The dials live in the Image dock tab (DDFS params); this surface is visuals +
  * direct manipulation. Heavy state (the ImageModel, the trace path) is in imageStore.
  *
- * `chrome` (ADDITIVE, 2026-09-03, GE v2 S3): `'full'` (default, every existing host —
+ * `chrome` (ADDITIVE, 2026-09-03, GE v2 S3; `'face'` added 2026-09-07 for the v2 tray's Image
+ * face — the preview as the working surface with the tools on it, the cloud a square beside
+ * it, no captions / source pane / hero; grep IMAGE_FACE_H): `'full'` (default, every existing host —
  * the old shell, app-gmt) renders the mode tabs + Replace-image row and the Result hero
  * exactly as before. `'bare'` — the v2 `ExtractStage` — skips both: v2 has no hero
  * anywhere but the Working hero above, and supplies its own v2-labeled method chips
@@ -37,12 +39,12 @@ const MODES: { id: Img2GradMode; label: string }[] = [
 ];
 
 // --- 3D cloud projection (verbatim from the standalone proj()) ---
-const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number, pitch: number): [number, number, number] => {
+const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number, pitch: number, zoom = 0.62): [number, number, number] => {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
   const X = a, Y = L - 0.5, Z = b;
   const x1 = X * cy - Z * sy, z1 = X * sy + Z * cy;
   const y1 = Y * cp - z1 * sp, z2 = Y * sp + z1 * cp;
-  const sc = Math.min(W, H) * 0.62;
+  const sc = Math.min(W, H) * zoom;
   return [W / 2 + x1 * sc, H / 2 - y1 * sc * 1.05, z2];
 };
 
@@ -92,7 +94,10 @@ const useHiDPICanvas = (ref: React.RefObject<HTMLCanvasElement>, active = true):
   return gen;
 };
 
-export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'full' }) => {
+/** The face's fixed preview height (px) — the v2 tray's Image face (`chrome="face"`). */
+export const IMAGE_FACE_H = 240;
+
+export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ chrome = 'full' }) => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
   const loading = useImageStore((s) => s.loading);
@@ -135,10 +140,16 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'f
     // backing-px per CSS-px, so dot/line sizes stay visually constant across DPR
     const dpr = W / Math.max(1, cv.getBoundingClientRect().width);
     x.clearRect(0, 0, W, H);
-    x.fillStyle = '#08080c';
-    x.fillRect(0, 0, W, H);
+    // 'face' chrome (the v2 tray): the canvas sits on the panel's ground (its CSS
+    // background) and the cloud is projected larger — on a 640×340 canvas at 0.62 it read
+    // small and zoomed out (owner, 2026-09-07).
+    const zoom = chrome === 'face' ? 1.0 : 0.62;
+    if (chrome !== 'face') {
+      x.fillStyle = '#08080c';
+      x.fillRect(0, 0, W, H);
+    }
     const pts = model.cloud
-      .map((p) => { const pr = proj(p.L, p.a, p.b, W, H, yaw, pitch); return { sx: pr[0], sy: pr[1], z: pr[2], p }; })
+      .map((p) => { const pr = proj(p.L, p.a, p.b, W, H, yaw, pitch, zoom); return { sx: pr[0], sy: pr[1], z: pr[2], p }; })
       .sort((u, v) => u.z - v.z);
     const zmn = pts.length ? pts[0].z : 0;
     const zr = (pts.length ? pts[pts.length - 1].z - zmn : 1) || 1;
@@ -157,20 +168,20 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'f
       x.lineWidth = 4 * dpr;
       x.lineCap = 'round';
       for (let i = 1; i < 256; i++) {
-        const a = proj(ribbon[i - 1].L, ribbon[i - 1].a, ribbon[i - 1].b, W, H, yaw, pitch);
-        const b = proj(ribbon[i].L, ribbon[i].a, ribbon[i].b, W, H, yaw, pitch);
+        const a = proj(ribbon[i - 1].L, ribbon[i - 1].a, ribbon[i - 1].b, W, H, yaw, pitch, zoom);
+        const b = proj(ribbon[i].L, ribbon[i].a, ribbon[i].b, W, H, yaw, pitch, zoom);
         x.strokeStyle = `rgb(${Math.round(ramp[i].r)},${Math.round(ramp[i].g)},${Math.round(ramp[i].b)})`;
         x.beginPath();
         x.moveTo(a[0], a[1]);
         x.lineTo(b[0], b[1]);
         x.stroke();
       }
-      const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch);
-      const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch);
+      const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch, zoom);
+      const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch, zoom);
       x.fillStyle = '#fff';
       [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3 * dpr, 0, 7); x.fill(); });
     }
-  }, [model, derived]);
+  }, [model, derived, chrome]);
 
   useEffect(() => { drawCloud(); }, [drawCloud, cloudGen]);
 
@@ -218,8 +229,10 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'f
     const x = cv.getContext('2d');
     if (!x) return;
     x.clearRect(0, 0, cv.width, cv.height);
-    x.fillStyle = '#08080c';
-    x.fillRect(0, 0, cv.width, cv.height);
+    if (chrome !== 'face') {
+      x.fillStyle = '#08080c';
+      x.fillRect(0, 0, cv.width, cv.height);
+    }
     if (!thumb || !model) return;
     const R = paneRect();
     // backing-px per CSS-px, so the overlay strokes/handles keep a constant visual
@@ -246,7 +259,7 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'f
         x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke();
       });
     }
-  }, [thumb, model, mode, path, catmull, paneRect]);
+  }, [thumb, model, mode, path, catmull, paneRect, chrome]);
   useEffect(() => { drawPane(); }, [drawPane, paneGen]);
 
   // Live refs so the pointer listeners can stay attached for the whole drag. If the
@@ -367,6 +380,86 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' }> = ({ chrome = 'f
 
   // Send-to-Generator is now the Generator · A / Generator · B bins in the dock
   // (select the result or drag it onto a bin) — no hardcoded buttons here.
+
+  // 'face' chrome — the v2 tray's Image face (plans/ge-v2-unified-shell-plan.md §4 C.6, owner
+  // 2026-09-07: "one picture, not three"). The PREVIEW is the working surface: wide, full
+  // aspect, letter-boxed to IMAGE_FACE_H, the Path handles and the Draw / Auto / Straight
+  // tools ON it; the colour cloud is a square beside it on the panel's ground; Replace image
+  // is a small button on the preview, shown when the draw tool is not active. No captions,
+  // no source pane, no hero, no dominant swatches (the hero palette is that row). The host
+  // (ExtractStage) puts the method chips and dials under this.
+  if (chrome === 'face') {
+    const tool = 'inline-flex items-center h-[26px] px-3 rounded-lg text-[13px] border transition-colors';
+    const toolIdle = `${tool} bg-surface-section/90 border-line/20 text-fg-muted hover:text-fg hover:border-line/40`;
+    const toolOn = `${tool} bg-surface-section border-line/40 text-accent-300`;
+    return (
+      <div className="flex gap-4 items-stretch" style={{ height: IMAGE_FACE_H }}>
+        {!model ? (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 rounded-[10px] border border-dashed border-line/40 text-[13px] text-fg-muted hover:border-accent-400 hover:text-accent-300 flex items-center justify-center"
+          >
+            {loading ? 'reading image…' : 'Drop, paste, or click to choose an image'}
+          </button>
+        ) : (
+          <>
+            <div className="relative flex-1 min-w-0 rounded-[10px] overflow-hidden bg-surface-viewport">
+              <canvas
+                ref={paneRef}
+                width={640}
+                height={340}
+                className={`w-full h-full block touch-none ${mode === 'trace' ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`}
+              />
+              {/* the tools live ON the picture */}
+              <div className="absolute top-2 right-2 flex gap-1.5">
+                {mode === 'trace' && (
+                  <>
+                    <button type="button" className={drawing ? toolOn : toolIdle} onClick={() => setDrawing((d) => !d)} title="Draw the path across the image">
+                      {drawing ? 'Drawing…' : 'Draw'}
+                    </button>
+                    <button type="button" className={toolIdle} onClick={() => model && (setDrawing(false), setPath(autoPath(model)))} title="Place the path automatically">
+                      Auto
+                    </button>
+                    <button
+                      type="button"
+                      className={`${toolIdle} disabled:opacity-40`}
+                      disabled={!path.points}
+                      onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
+                      title="Reset to a straight line between the endpoints"
+                    >
+                      Straight
+                    </button>
+                  </>
+                )}
+                {!(mode === 'trace' && drawing) && (
+                  <button type="button" className={toolIdle} onClick={() => fileInputRef.current?.click()} title="Choose another image (or drop one anywhere)">
+                    Replace image
+                  </button>
+                )}
+              </div>
+            </div>
+            <canvas
+              ref={cloudRef}
+              width={340}
+              height={340}
+              className="block shrink-0 rounded-[10px] bg-surface-viewport cursor-grab touch-none"
+              style={{ width: IMAGE_FACE_H, height: IMAGE_FACE_H }}
+              title="Colour cloud (OKLab) — drag to rotate · the line is your gradient"
+            />
+          </>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { if (e.target.files?.[0] && !fileToImg(e.target.files[0])) flash('not an image'); e.target.value = ''; }}
+        />
+        {toast && <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-surface/80 text-fg-secondary text-xs px-3 py-1.5 rounded-full border border-line/10 shadow-xl z-40">{toast}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surface-dock relative overflow-hidden">

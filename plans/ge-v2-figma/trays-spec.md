@@ -275,3 +275,16 @@ none; falsified with seedPlateaus off).
   than 256 rows by linear interpolation (`debug/bake-palette-catalog.mts`, grep `rows.length ===
   256`), so discrete palettes arrive as smooth ramps and the fitter is right to fit them
   smooth. Fixing that is a re-bake with a per-source "discrete" flag — a separate job.
+
+## 14. The Image face is one picture (C.6, owner's walk 2026-09-07 — built)
+
+`ImageStage` gained `chrome="face"`: the PREVIEW is the working surface — wide, full aspect,
+letter-boxed to 240 px, the Path handles drawn on it and the Draw / Auto / Straight tools plus
+Replace image as small buttons in its top-right corner (Replace hides while the draw tool is
+active); the colour cloud is a 240 px square beside it on the panel's ground (no black fill),
+projected at 1.0× instead of 0.62×. No captions, no source pane, no hero, no Dominant swatch
+row (the hero palette is that, live). `ExtractStage` puts the method chips and the method's
+dials (two columns, tooltips, no diamonds) under the picture. This face alone spans the tray's
+full width from the gutter; the other faces stay inline with the panel. The hero's slot keeps
+its thumbnail as the "from an image" mark and the way in. Measured: tray 24 → 1256, preview
+942 × 240, cloud 240 × 240, slot 199 square.

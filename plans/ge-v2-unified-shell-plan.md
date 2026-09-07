@@ -213,7 +213,8 @@ order of work from here, each folded into the phase that owns the surface.
   Curves — `fitChannelsToTracks` + `ChannelGraphEditor` (grep for both). Shares Phase E's
   session if it touches the editor primitives.
 - **C.5 · Mix UI** — the owner is still thinking; not blocking. Parked until there is a design.
-- **C.6 · The Image face is one picture** (owner's walk, 2026-09-07). Today it is the old Image
+- **C.6 · The Image face is one picture** (owner's walk, 2026-09-07; BUILT the same day —
+  trays-spec §14). Today it is the old Image
   tab's body in a box: a source pane, a big preview and the hero's slot — three views of one
   image, Replace image far from it, the colour cloud small on a black 640×340 canvas, and a
   Dominant swatch row the hero palette has superseded. The redesign: the tray's PREVIEW is the

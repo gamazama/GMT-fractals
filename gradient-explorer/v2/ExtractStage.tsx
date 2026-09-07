@@ -2,7 +2,8 @@
  * ExtractStage — the v2 IMAGE source (the tab reads "Image" since the owner S3 review
  * 2026-09-03; the file keeps its name) — plans/ge-v2-design.md §5.4.
  *
- * Reuses `ImageStage` in `chrome="bare"` (see that file's header) for everything it
+ * Reuses `ImageStage` in `chrome="face"` (2026-09-07, C.6 — the preview as the working
+ * surface, the tools on it, the cloud beside it; before that `"bare"`) for everything it
  * already does well — drop/paste/click to load, the rotatable OKLab colour cloud, the
  * image pane with the Path (Trace) handles and its Draw/Auto/Straight toolbar, the
  * decode/ingest path — and supplies v2-only chrome around it:
@@ -13,11 +14,7 @@
  *   • the active method's dials, `AutoFeaturePanel featureId="paletteImage"` — the
  *     June `dynamicVisible` per-mode gating (isDistill / isTone / mode===2 / notTrace)
  *     is untouched and keeps working, since only the chip labels are new;
- *   • the Dominant result's individual colours as a swatch row (evenly sampled off the
- *     produced ramp at the `colours` dial's count — the discrete cluster centres
- *     `img2grad/distill.ts` computes are resampled into the 256-ramp before `extract()`
- *     returns, and widening that pure boundary wasn't needed for this), click copies
- *     hex — same copy-toast pattern as `PaletteRow.tsx` (clipboard write + a toast).
+ *   • (the Dominant swatch row is gone, 2026-09-07 — the hero's palette row is that, live.)
  *
  * NO hero (the Working hero above shows the result live — "live from Image", §2), NO
  * export block (ImageStage never rendered one itself — the old shell's export block is
@@ -31,18 +28,11 @@
  * @see plans/ge-v2-design.md §5.4
  */
 
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback } from 'react';
 import { ImageStage } from '../../palette/components/ImageStage';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { useImageStore, useImageDerived, useImageMode, useImageParam, useImageSlice } from '../../palette/store/imageStore';
-import { useImageDrop } from '../../palette/components/useImageDrop';
+import { useImageStore, useImageParam } from '../../palette/store/imageStore';
 import { autoPath } from '../../palette/core/img2grad';
-import { samplePalette } from '../../palette/core/paletteSample';
-import type { RGB } from '../../palette/core/oklab';
-import { showToast } from '../../engine/store/toastStore';
-import { Act } from './ui/Act';
-import { ZoneLabel } from './ui/ZoneLabel';
-import { gradientBarClass } from './ui/bar';
 
 const METHODS: { id: number; label: string; title: string }[] = [
   { id: 0, label: 'Dominant', title: 'Saliency-weighted dominant colours, ordered into a smooth ramp.' },
@@ -56,21 +46,10 @@ const METHODS: { id: number; label: string; title: string }[] = [
 // customUI when whitelisting params) — see the file header.
 const DIAL_PARAMS = ['colours', 'saliency', 'tonalDetail', 'chromaBoost', 'bandWidth', 'smoothing', 'catmullRom', 'goldenHour', 'spacing', 'reverse'];
 
-const hexOf = (c: RGB): string =>
-  '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
-
 export const ExtractStage: React.FC = () => {
   const model = useImageStore((s) => s.model);
   const setPath = useImageStore((s) => s.setPath);
-  const mode = useImageMode();
   const [modeIdx, setModeIdx] = useImageParam<number>('mode');
-  const slice = useImageSlice();
-  const derived = useImageDerived();
-  // A second useImageDrop instance: the root-mounted one (GradientExplorerV2App) keeps
-  // the window listeners live everywhere; this one wires a local "Replace image"
-  // trigger the same way ImageStage's own (hidden in chrome="bare") one does.
-  const { fileToImg } = useImageDrop();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mirrors ImageStage's own (hidden) switchMode: entering Path auto-positions the
   // handles from the image, same as the old shell's mode tabs. `drawing` (the freehand-
@@ -84,25 +63,14 @@ export const ExtractStage: React.FC = () => {
     [setModeIdx, model, setPath],
   );
 
-  const dominant = useMemo(
-    () => (mode === 'distill' && derived ? samplePalette(derived.ramp, 'even', slice.colours) : null),
-    [mode, derived, slice.colours],
-  );
-
-  const copyHex = (hex: string) => {
-    try {
-      void navigator.clipboard?.writeText(hex);
-    } catch {
-      /* the toast still shows the value */
-    }
-    showToast(`copied ${hex}`);
-  };
-
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex flex-col gap-3 px-4 py-3">
+      {/* the picture — the working surface, the cloud beside it (ImageStage 'face' chrome) */}
+      <ImageStage chrome="face" />
+      {/* under the picture: the method, and the method's dials */}
       {model && (
-        <div className="shrink-0 flex items-center gap-2 px-6 pt-1 pb-2.5">
-          <div className="flex gap-1 rounded-[10px] border border-line/20 p-0.5">
+        <div className="flex items-start gap-6">
+          <div className="flex gap-1 rounded-[10px] border border-line/20 p-0.5 shrink-0">
             {METHODS.map((m) => (
               <button
                 key={m.id}
@@ -117,52 +85,11 @@ export const ExtractStage: React.FC = () => {
               </button>
             ))}
           </div>
-          <Act className="ml-auto" onClick={() => fileInputRef.current?.click()}>
-            Replace image
-          </Act>
+          <div className="flex-1 min-w-0">
+            <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} hints="tooltip" keyframes={false} className="grid grid-cols-2 gap-x-6" />
+          </div>
         </div>
       )}
-
-      <div className="flex-1 min-h-0 flex">
-        <div className="flex-1 min-h-0 min-w-0">
-          <ImageStage chrome="bare" />
-        </div>
-        {model && (
-          <div className="w-[280px] shrink-0 overflow-y-auto border-l border-line/10 px-4 py-3 flex flex-col gap-3">
-            <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} />
-            {dominant && (
-              <div>
-                <ZoneLabel className="block mb-1.5">Dominant colours · click to copy</ZoneLabel>
-                <div className="flex flex-wrap gap-1.5">
-                  {dominant.map((sw, i) => {
-                    const hex = hexOf(sw.color);
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => copyHex(hex)}
-                        title={`${hex} · click to copy`}
-                        className={`w-7 h-7 ${gradientBarClass({ size: 'swatch' })}`}
-                        style={{ background: hex }}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          fileToImg(e.target.files?.[0]);
-          e.target.value = '';
-        }}
-      />
     </div>
   );
 };
