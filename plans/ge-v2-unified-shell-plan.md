@@ -280,7 +280,8 @@ order of work from here, each folded into the phase that owns the surface.
 - **C.14 · Title and state spacing** (DONE 2026-09-07 evening): the state chip sits a touch
   further from the name (8 px).
 - **C.15 · The strip's blend · output · menu cluster** (right-aligned 2026-09-07 evening; the
-  REVISIT is open — owner to decide): blend = the interpolation space (RGB · HSV · HSV Far ·
+  owner agreed output → Export, DONE the same evening: an Output profile row in the Export
+  window, the strip keeps blend + menu; the menu's fate still open): blend = the interpolation space (RGB · HSV · HSV Far ·
   Oklab) — it changes the ramp, keep; output = the export colour profile (sRGB · Linear ·
   ACES) — an export concern, candidate for the Export window; the menu = copy / paste /
   reverse / distribute / interpolation — the stop inspector's context menu already has most
@@ -331,12 +332,18 @@ read first, P1).
 phone.
 **Files:** v2/* (CSS + a `useIsPhone` seam), gradient-explorer-next.html viewport meta.
 
-### Wallpaper (fullscreen) ideas — owner, 2026-09-07 evening; not scheduled
-"A whole other world inside the app." W.1 the Wallpaper icon carries a silvery gradient
-background. W.2 Conic: a twist amount and a bias control. W.3 Radial: a sine strength /
-frequency around the circle. W.4 Gradient map: besides simple lightness, map individual RGB
-and HCL channels to the gradient. All of W.2–W.4 as on-screen controls that read without
-text, like the fullscreen controls already there.
+### Phase W — Wallpaper (scheduled 2026-09-07 evening, owner: "I don't want them lost")
+**Goal:** the fullscreen is "a whole other world inside the app"; its controls read without
+text, like the on-screen controls already there. Order of work, after Phase C's follow-ups and
+before Phase D unless the owner reorders:
+- **W.1 · The Wallpaper icon** carries a silvery gradient background (the hero's use cluster).
+- **W.2 · Conic:** a twist amount and a bias control.
+- **W.3 · Radial:** a sine strength / frequency around the circle.
+- **W.4 · Gradient map:** besides simple lightness, map individual RGB and HCL channels to
+  the gradient.
+**Gates:** the fullscreen smoke (grep `smoke:fullscreen` in package.json; add one if none) +
+an owner walk in the wallpaper. **Files:** palette/store/fullscreenStore.ts and the fullscreen
+mode renderers (grep `ownCanvas`), gradient-explorer/v2/WorkingHero.tsx (the icon).
 
 ### Phase G — parity, polish, swap
 - Parity checklist vs the old shell (`gradient-explorer.html`), item by item from

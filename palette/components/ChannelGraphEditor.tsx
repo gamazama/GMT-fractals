@@ -57,6 +57,13 @@ export type ChannelKey = 'L' | 'C' | 'h';
 export type ChannelTracks = Record<ChannelKey, Track>;
 
 // Colours match GraphRenderer.TRACK_COLORS by index (L cyan, C purple, h green).
+/** Each channel's RELEVANT range for the normalized plot (hue is per turn, see trackRanges). */
+const CHANNEL_RANGE: Record<ChannelKey, { min: number; max: number }> = {
+  L: { min: 0, max: 1 },
+  C: { min: 0, max: 0.4 },
+  h: { min: 0, max: 360 },
+};
+
 const CHANNELS: ChannelInfo[] = [
   { key: 'L', label: 'Lightness', color: '#22d3ee' },
   { key: 'C', label: 'Chroma', color: '#a855f7' },
@@ -232,8 +239,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     return { panX, panY: viewY.pan, scaleX: frameWidth, scaleY: viewY.scale, width: canvasWidth, height: canvasHeight };
   }, [scrollLeft, frameWidth, viewY, canvasWidth, canvasHeight]);
 
-  // Per-channel value range (min/max of keyframes), padded — same shape as GraphEditor's
-  // trackRanges. Normalized rendering maps each to [0,1]. The GHOST extent is folded in so
+  // Per-channel value range — same shape as GraphEditor's trackRanges. NORMALIZED (the
+  // default) maps each channel's RELEVANT range to [0,1]: L 0..1, C 0..0.4 (sRGB's reach),
+  // h one turn (grown to whole turns when the unwrapped hue runs past it) — not the data's
+  // own min..max, which made a nearly flat channel fill the plot and read as a wild swing
+  // (owner, 2026-09-07 evening: "lightness, chroma and hue have different relevant ranges —
+  // this is what needs to be normalized to 0–1, not their current range"). Un-normalized:
+  // the data's min/max as before (the shared-axis view). The GHOST extent is folded in so
   // the result ghost (which can swing outside the keyframe band under the Modify chain, or
   // be the only data when there are no keyframes yet) always stays in view AND shares the
   // editable curve's scale — they overlay where equal and diverge to show what Modify did.
@@ -257,6 +269,18 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       if (!isFinite(min) || !isFinite(max)) {
         min = 0;
         max = 1;
+      }
+      if (normalized) {
+        // the channel's relevant range, grown only where the data runs past it
+        const rel = CHANNEL_RANGE[tid as ChannelKey];
+        if (tid === 'h') {
+          const lo = Math.floor(Math.min(min, 0) / 360) * 360;
+          const hi = Math.ceil(Math.max(max, 360) / 360) * 360;
+          min = lo; max = hi;
+        } else {
+          min = Math.min(rel.min, min);
+          max = Math.max(rel.max, max);
+        }
       } else if (max - min < 0.00001) {
         min -= 0.5;
         max += 0.5;
@@ -264,7 +288,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       ranges[tid] = { min, max, span: max - min };
     });
     return ranges;
-  }, [tracks, trackIds, ghost, showGhost]);
+  }, [tracks, trackIds, ghost, showGhost, normalized]);
 
   const getLocalY = useCallback(
     (val: number, tid: string) => {
@@ -518,6 +542,11 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         const tr = tracksRef.current[tid as ChannelKey];
         if (tr) onTracksChange({ ...tracksRef.current, [tid]: { ...tr, keyframes: keys } });
       }),
+    // the brush's live preview: a plain write (the pointer-down bracket spans the gesture)
+    preview: (tid, keys) => {
+      const tr = tracksRef.current[tid as ChannelKey];
+      if (tr) onTracksChange({ ...tracksRef.current, [tid]: { ...tr, keyframes: keys } });
+    },
   });
 
   const handleContextMenu = (e: React.MouseEvent) => {

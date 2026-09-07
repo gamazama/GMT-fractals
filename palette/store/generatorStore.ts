@@ -241,7 +241,10 @@ export const fitChannelsToTracks = (base: Channels, detail: number, smooth: numb
   const h = unwrapHue(base.h);
   // A banded source keeps its bands (C.4): its runs become Step keys, and Smooth is not
   // applied (it would blur the very edges the holds reproduce). Smooth ramps: as before.
-  const runs = flatRuns([base.L, base.C, h]);
+  // Detail decides how SMALL a band still counts as one (10 → every 2-texel run; 2 → only
+  // runs of 10+), so the ghost answers the dial on a banded source too (owner, 2026-09-07
+  // evening: the ghost "needs to update when the slider moves").
+  const runs = flatRuns([base.L, base.C, h], Math.round(2 + (10 - detail)));
   const sm = runs.length ? 0 : smooth;
   return {
     L: rampToSteppedTrack(smoothChannel(base.L, sm), runs, 'L', 'Lightness', { eps: 0.01 * k }),

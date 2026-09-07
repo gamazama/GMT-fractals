@@ -938,10 +938,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleBlendSpace} title="Blend space (RGB → HSV → HSV Far → Oklab)">
                             {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
                         </button>
-                        <span>output</span>
-                        <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleColorSpace} title="Output colour profile">
-                            {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
-                        </button>
+                        {/* the output profile is an EXPORT concern in v2 — it lives in the
+                            Export window when the host hosts the inspector (C.15, owner) */}
+                        {!inspectorHost && (
+                            <>
+                                <span>output</span>
+                                <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleColorSpace} title="Output colour profile">
+                                    {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
+                                </button>
+                            </>
+                        )}
                         <button
                             className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
                             onClick={handlePresetsClick}

@@ -59,11 +59,17 @@ interface PencilOpts {
    *  also reaches, and the elastic smooth's strength per stroke (strokes accumulate).
    *  Defaults 6 / 0.25. */
   brush?: { radius?: number; strength?: number };
+  /** The brush's LIVE preview while the pointer moves (owner: "live update while brushing"):
+   *  the host writes these keys straight to its state, no undo bracket of its own — the
+   *  pointer-down bracket already spans the gesture; `commit` lands the final keys. Each
+   *  preview is computed from the keys as they were at pen-down, so one stroke's softening
+   *  does not compound with itself as the pointer wanders. */
+  preview?: (trackId: string, keys: Keyframe[]) => void;
 }
 
 export const usePencilTool = ({
   interactionRef, overlayRef, view, maxFrame,
-  frameToCanvasPixel, canvasPixelToFrame, getTarget, getKeys, commit, brush,
+  frameToCanvasPixel, canvasPixelToFrame, getTarget, getKeys, commit, brush, preview,
 }: PencilOpts) => {
   const brushOpts = { radius: brush?.radius ?? 6, strength: brush?.strength ?? 0.25 };
   const [pencilMode, setPencilMode] = useState(false);
@@ -74,6 +80,10 @@ export const usePencilTool = ({
     points: { frame: number; py: number }[];
     /** a smoothing-brush stroke: the span matters, the pen's height does not */
     brush?: boolean;
+    /** the track as it was at pen-down (the brush works from this, never from its own preview) */
+    origin?: Keyframe[];
+    /** the last previewed span, so an unchanged span does not recompute */
+    lastSpan?: string;
   } | null>(null);
 
   const draw = useCallback(() => {
@@ -108,13 +118,31 @@ export const usePencilTool = ({
     ctx.globalAlpha = 1;
   }, [overlayRef, frameToCanvasPixel, maxFrame, brushOpts.radius]);
 
+  const brushSpan = useCallback((st: NonNullable<typeof strokeRef.current>) => {
+    const fs = st.points.map((p) => p.frame);
+    return { lo: Math.max(0, Math.min(...fs) - brushOpts.radius), hi: Math.min(maxFrame, Math.max(...fs) + brushOpts.radius) };
+  }, [maxFrame, brushOpts.radius]);
+  const brushKeys = useCallback((st: NonNullable<typeof strokeRef.current>, keys: Keyframe[]) => {
+    const { lo, hi } = brushSpan(st);
+    return smoothSpan(keys, lo, hi, st.target.eps, brushOpts.strength, `${st.target.trackId}-brush-${Math.round(lo)}-${Math.round(hi)}-${Date.now().toString(36)}`, (ks, f) => evaluateTrackValue(ks, f, false, false));
+  }, [brushSpan, brushOpts.strength]);
+
   const onMove = useCallback((e: MouseEvent) => {
     const st = strokeRef.current;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!st || !rect) return;
     st.points.push({ frame: canvasPixelToFrame(e.clientX - rect.left), py: e.clientY - rect.top });
     draw();
-  }, [interactionRef, canvasPixelToFrame, draw]);
+    if (st.brush && preview && st.origin) {
+      const { lo, hi } = brushSpan(st);
+      const key = `${Math.round(lo)}-${Math.round(hi)}`;
+      if (key !== st.lastSpan) {
+        st.lastSpan = key;
+        const out = brushKeys(st, st.origin);
+        if (out) preview(st.target.trackId, out);
+      }
+    }
+  }, [interactionRef, canvasPixelToFrame, draw, preview, brushSpan, brushKeys]);
 
   const onUp = useCallback(() => {
     const st = strokeRef.current;
@@ -127,12 +155,9 @@ export const usePencilTool = ({
 
     if (st.brush) {
       // The smoothing brush: bake + smooth + simplify the ACTIVE track over the stroke's
-      // span (± radius), keys outside untouched (utils/CurveFitting smoothSpan).
-      const fs = st.points.map((p) => p.frame);
-      const lo = Math.max(0, Math.min(...fs) - brushOpts.radius);
-      const hi = Math.min(maxFrame, Math.max(...fs) + brushOpts.radius);
-      const keys = getKeys(st.target.trackId);
-      const out = smoothSpan(keys, lo, hi, st.target.eps, brushOpts.strength, `${st.target.trackId}-brush-${Math.round(lo)}-${Math.round(hi)}-${Date.now().toString(36)}`, (ks, f) => evaluateTrackValue(ks, f, false, false));
+      // span (± radius), keys outside untouched (utils/CurveFitting smoothSpan) — from the
+      // keys as they were at pen-down (the previews along the way were the same maths).
+      const out = brushKeys(st, st.origin ?? getKeys(st.target.trackId));
       if (out) commit(st.target.trackId, out);
       return;
     }
@@ -176,7 +201,7 @@ export const usePencilTool = ({
     while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
     const seam = new Set([firstSpan - 1, firstSpan, lastSpan, lastSpan + 1]);
     commit(st.target.trackId, reTangentBezier(merged, (_k, i) => seam.has(i)));
-  }, [overlayRef, maxFrame, getKeys, commit, onMove]);
+  }, [overlayRef, maxFrame, getKeys, commit, onMove, brushKeys]);
 
   const beginBrush = useCallback((e: React.MouseEvent) => {
     const rect = interactionRef.current?.getBoundingClientRect();
@@ -187,10 +212,11 @@ export const usePencilTool = ({
       frozenView: view,
       points: [{ frame: canvasPixelToFrame(e.clientX - rect.left), py: e.clientY - rect.top }],
       brush: true,
+      origin: getKeys(target.trackId),
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [interactionRef, getTarget, view, canvasPixelToFrame, onMove, onUp]);
+  }, [interactionRef, getTarget, getKeys, view, canvasPixelToFrame, onMove, onUp]);
 
   const beginPencil = useCallback((e: React.MouseEvent) => {
     const rect = interactionRef.current?.getBoundingClientRect();

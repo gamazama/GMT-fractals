@@ -335,6 +335,15 @@ export const GradientExplorerV2App: React.FC = () => {
             <ExportMenu
               ramp={derived.ramp}
               name={derived.name}
+              colorSpace={derived.config?.colorSpace}
+              onColorSpace={(id) => {
+                // the profile is part of the stops document: editing it bakes first (as a
+                // stop edit would), then the document takes the profile
+                const w = useWorkingStore.getState();
+                if (w.input.kind !== 'stops') w.beginEdit();
+                const cur = usePaletteEditorStore.getState().config;
+                usePaletteEditorStore.getState().setConfig({ ...cur, colorSpace: id });
+              }}
               onClose={() => setExportOpen(false)}
               positionClass="absolute right-2.5 top-[56px] z-40"
             />

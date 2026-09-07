@@ -31,11 +31,29 @@ const GROUPS: { title: string; keys: string[] }[] = [
 /** `positionClass` is where the popover hangs (Phase B: it re-anchors to the Export
  *  button in the hero's use cluster instead of the retired top-bar one). Everything else
  *  about the menu is unchanged. */
-export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => void; positionClass?: string }> = ({
+/** The output colour profiles, in the order the strip used to cycle them. */
+const PROFILES: { id: 'srgb' | 'linear' | 'aces_inverse'; label: string; title: string }[] = [
+  { id: 'srgb', label: 'sRGB', title: 'Standard display colours' },
+  { id: 'linear', label: 'Linear', title: 'Linear light — for render engines and compositing' },
+  { id: 'aces_inverse', label: 'ACES', title: 'ACES inverse — for an ACES-managed pipeline' },
+];
+
+export const ExportMenu: React.FC<{
+  ramp: RGB[];
+  name: string;
+  onClose: () => void;
+  positionClass?: string;
+  /** The gradient's output colour profile and its setter (C.15: an export concern, so it
+   *  lives here rather than on the strip). */
+  colorSpace?: 'srgb' | 'linear' | 'aces_inverse';
+  onColorSpace?: (id: 'srgb' | 'linear' | 'aces_inverse') => void;
+}> = ({
   ramp,
   name,
   onClose,
   positionClass = 'absolute right-4 top-12 z-40',
+  colorSpace,
+  onColorSpace,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -94,6 +112,24 @@ export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => vo
         <div>
           <ZoneLabel className="block mb-1">More</ZoneLabel>
           {rest.map(row)}
+        </div>
+      )}
+      {colorSpace && onColorSpace && (
+        <div>
+          <ZoneLabel className="block mb-1">Output profile</ZoneLabel>
+          <div className="inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
+            {PROFILES.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`px-2.5 h-7 text-[13px] ${colorSpace === p.id ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                title={p.title}
+                onClick={() => onColorSpace(p.id)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div>
