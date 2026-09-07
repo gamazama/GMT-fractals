@@ -106,6 +106,9 @@ interface AdvancedGradientEditorProps {
     inspectorHost?: HTMLElement | null;
     /** Fires with the number of selected knots whenever it changes (strip chrome hosts). */
     onSelectionChange?: (count: number) => void;
+    /** Strip chrome only: which corners of the bar are rounded. 'bottom' when the host stacks
+     *  a source half on top of the strip (the v2 hero's split ramp) so the two read as one bar. */
+    stripCorners?: 'all' | 'bottom';
 }
 
 /** Imperative seam for a host that owns a palette face over the strip (the v2 hero). */
@@ -139,7 +142,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all' }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -743,7 +746,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 strip itself has no border there — the v2 hero draws it borderless. 'full'
                 chrome (GMT main) is unchanged. */}
             <div
-                className={`relative px-2 ${chrome === 'strip' ? 'rounded-[10px] overflow-hidden' : ''}`}
+                className={`relative px-2 ${chrome === 'strip' ? `${stripCorners === 'bottom' ? 'rounded-b-[10px]' : 'rounded-[10px]'} overflow-hidden` : ''}`}
                 style={chrome === 'strip' ? {
                     backgroundImage: `linear-gradient(to right, rgb(${previewRamp[0].r} ${previewRamp[0].g} ${previewRamp[0].b}) 50%, rgb(${previewRamp[255].r} ${previewRamp[255].g} ${previewRamp[255].b}) 50%)`,
                     backgroundSize: `100% ${stripHeight}px`,

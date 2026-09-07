@@ -182,3 +182,15 @@ falsified three ways). Multi-select colour editing already applied to every sele
   the three as one, and Swap. The crossfade line, "Split by channel" and the sentence are gone.
 - **Leaving Mix bakes**: closing the face or opening another commits the result (`use`); the
   two sources are not kept. Unchanged behaviour, now the only path.
+
+## 11. After the Mix walk (owner, 2026-09-07)
+
+- **No quiet hero.** The source half does not hide when the pointer is over the wall; the L9
+  fold, its timers and the `quiet` prop are deleted.
+- **The source half is a bar like the result:** its 8 px gutters carry its end colours and its
+  top corners are rounded; the result half rounds only its bottom. One bar, two halves.
+- **Bug: stops walked on every Mix bake.** Each bake re-fitted the result ramp from nothing; a
+  re-quantised ramp moves the fitter's "worst error" a texel, so interior stops drifted (16.9 →
+  18.8 → 19.2 → 19.6 %). Fixed by seeding the fit with the stop positions both gradients already
+  have (`seedPositions`, carried as `seeds` on the Mix input: yours at enterMix, the other's on
+  the pick). Three bakes now reproduce the stops exactly. Guard: `test:palette` (stopfit).

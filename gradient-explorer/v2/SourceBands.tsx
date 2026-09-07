@@ -25,6 +25,21 @@ import { useGeneratorStore, useGeneratorDerived, slotSnapshot } from '../../pale
 import { buildGradientRamp, DEFAULT_SLOT_MODS, DEFAULT_GENERATOR_PARAMS } from '../../palette/core/generatorPipeline';
 import { useArmedSlot, armSlot } from '../../palette/store/armedTarget';
 import { gradientBarClass } from './ui/bar';
+import type { RGB } from '../../palette/core/oklab';
+
+/** The strip chrome's bar language for the SOURCE half: 8 px gutters painted with the ramp's
+ *  two end colours (the knots' room, so the gradient reads edge to edge) and rounded top
+ *  corners — the result half under it rounds the bottom, so the two read as one bar. */
+const SourceBar: React.FC<{ ramp: RGB[]; children: React.ReactNode }> = ({ ramp, children }) => {
+  const first = ramp[0];
+  const last = ramp[ramp.length - 1];
+  const bg = first && last ? `linear-gradient(to right, rgb(${first.r} ${first.g} ${first.b}) 50%, rgb(${last.r} ${last.g} ${last.b}) 50%)` : undefined;
+  return (
+    <div className="rounded-t-[10px] overflow-hidden px-2" style={{ backgroundImage: bg }}>
+      {children}
+    </div>
+  );
+};
 import type { WorkingDerived } from '../../palette/store/workingStore';
 
 /** Band heights (px). Mix splits the 60 px ramp in two: 30 source (band A) over 30 result. */
@@ -67,7 +82,11 @@ export const MixBandB: React.FC<{ height?: number }> = ({ height = 36 }) => {
 const MixSources: React.FC = () => {
   const { stripA } = useGeneratorDerived();
   const slotA = useGeneratorStore((s) => s.slotA);
-  return <SlotBand which="A" ramp={stripA} name={slotSnapshot(slotA).name} height={MIX_SOURCE_H} clean />;
+  return (
+    <SourceBar ramp={stripA}>
+      <SlotBand which="A" ramp={stripA} name={slotSnapshot(slotA).name} height={MIX_SOURCE_H} clean />
+    </SourceBar>
+  );
 };
 
 const sourceLabel = (d: WorkingDerived): string => {
@@ -92,10 +111,12 @@ export const SourceBands: React.FC<{ derived: WorkingDerived }> = ({ derived }) 
   if (derived.input.kind === 'build') return <MixSources />;
   if (!ramp.length) return null;
   return (
-    <div className={`relative overflow-hidden ${gradientBarClass({ size: 'band' })}`} style={{ height: SOURCE_BAND_H }} title="The source this gradient is made from — the result is below it">
-      <GradientStrip ramp={ramp} height={SOURCE_BAND_H} rounded={false} />
-      <span className={label}>{sourceLabel(derived)}</span>
-    </div>
+    <SourceBar ramp={ramp}>
+      <div className="relative overflow-hidden" style={{ height: SOURCE_BAND_H }} title="The source this gradient is made from — the result is below it">
+        <GradientStrip ramp={ramp} height={SOURCE_BAND_H} rounded={false} />
+        <span className={label}>{sourceLabel(derived)}</span>
+      </div>
+    </SourceBar>
   );
 };
 

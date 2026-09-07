@@ -42,8 +42,10 @@ principles; **language principles (V)** from the visual-language audit of the li
 - **L8 · The hero never unmounts once it exists.** An empty source is an empty source band, not an
   empty hero. The previous working gradient is one undo away; Recent catches what was moved on from.
 - **L9 · The screen grows with the user.** First load: the wall, search, Filters, one pill. The hero
-  appears on the first pick; the shelf when Recent has one item. While the pointer lives in the
-  wall the hero quiets to the ramp and a row of small use buttons.
+  appears on the first pick; the shelf when Recent has one item. ~~While the pointer lives in the
+  wall the hero quiets to the ramp and a row of small use buttons.~~ **Quiet removed 2026-09-07
+  (owner): the hero is the same whatever the pointer does — the trays overlay the wall (L6), so
+  the hero never needed to give height back.**
 
 ### Visual language
 
@@ -383,6 +385,15 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   bar + three plain L / C / h sliders + Link (off) + Swap; leaving Mix bakes. `smoke:ge-tray`
   [4] was found clicking the hero instead of the wall (pre-hero coordinates) and now asserts the
   pick landed. trays-spec §10.
+
+- 2026-09-07 · Phase C, owner's second Mix pass (built): **L9's quiet hero deleted** (no source
+  hiding when the pointer is over the wall; the fold, its timers and the `quiet` prop are gone);
+  the source half of the split ramp carries the strip's bar language (end-colour gutters, rounded
+  top; the result half rounds only its bottom — `stripCorners` on the editor); and a real bug:
+  every Mix bake re-fitted the ramp from scratch and the interior stops WALKED (measured 16.9 →
+  18.8 → 19.2 → 19.6 % over three bakes) — the fit now seeds the positions the two gradients
+  already have (`seedPositions` in stopFit, carried on the `build` input as `seeds`), and three
+  bakes reproduce the stops exactly. trays-spec §11.
 
 ## 9. Definition of done, per phase
 

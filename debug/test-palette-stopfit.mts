@@ -145,5 +145,38 @@ if (files.length === 0) {
   if (smoothCounts.length) console.log(`  smooth palettes (${smoothCounts.length}): avg ${avg(smoothCounts).toFixed(1)} stops to converge`);
 }
 
+// 5) SEEDED RE-FIT IS STABLE (2026-09-07, the v2 Mix bake). Re-fitting a fitted gradient's
+//    own rendered ramp with its stop positions as `seedPositions` must reproduce those
+//    positions EXACTLY, bake after bake — without seeds the interior stops walk (measured
+//    16.9 → 18.8 → 19.2 → 19.6 % over three bakes in the app). Falsified by removing the
+//    seed loop in fitRampToStops: the assertions below go red.
+{
+  console.log('\n[5] seeded re-fit is stable');
+  const { renderStopsToRamp } = await import('../palette/core/gmtGradient');
+  let cfg: GradientConfig = {
+    stops: [
+      { id: 'a', position: 0, color: '#1020A0', bias: 0.5, interpolation: 'linear' },
+      { id: 'b', position: 0.17, color: '#F0C030', bias: 0.5, interpolation: 'linear' },
+      { id: 'c', position: 0.5, color: '#20A040', bias: 0.5, interpolation: 'linear' },
+      { id: 'd', position: 0.83, color: '#4030D0', bias: 0.5, interpolation: 'linear' },
+      { id: 'e', position: 1, color: '#A01050', bias: 0.5, interpolation: 'linear' },
+    ],
+    blendSpace: 'oklab',
+    colorSpace: 'srgb',
+  };
+  const pos = (c: GradientConfig) => c.stops.map((st) => Math.round(st.position * 255)).join(',');
+  const first = fitRampToStops(renderStopsToRamp(cfg.stops, 'oklab', 'srgb'), { targetDE: 0.008, maxStops: 48, seedPositions: cfg.stops.map((st) => st.position) });
+  ok(cfg.stops.every((st) => first.stops.some((f) => Math.round(f.position * 255) === Math.round(st.position * 255))), `seeded fit keeps every input position (${pos(first)})`);
+  cfg = first;
+  const p0 = pos(cfg);
+  for (let k = 0; k < 3; k++) {
+    // quantise to 8-bit like the app's slot registration does, then re-fit with seeds
+    const ramp = renderStopsToRamp(cfg.stops, 'oklab', 'srgb').map((c) => ({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) }));
+    cfg = fitRampToStops(ramp, { targetDE: 0.008, maxStops: 48, seedPositions: cfg.stops.map((st) => st.position) });
+  }
+  ok(cfg.stops.length === first.stops.length, `three seeded re-fits keep the stop count (${first.stops.length} → ${cfg.stops.length})`);
+  ok(pos(cfg) === p0, `three seeded re-fits reproduce the positions exactly (${p0} → ${pos(cfg)})`);
+}
+
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

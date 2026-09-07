@@ -48,7 +48,9 @@ import type { RGB } from './oklab';
 
 export type WorkingInput =
   | { kind: 'empty' }
-  | { kind: 'build' }
+  /** `seeds`: the stop positions of the gradients being mixed (additive, 2026-09-07) — the
+   *  fit keeps them so a bake does not walk the stops; absent = the plain fit. */
+  | { kind: 'build'; seeds?: number[] }
   | { kind: 'extract' }
   | { kind: 'gradient'; config: GradientConfig; name: string; source: string }
   | { kind: 'stops' };
@@ -108,6 +110,7 @@ export const runWorkingPipeline = (
   noiseSeed: number,
   detail: number,
   verbatim: GradientConfig | null,
+  seedPositions: number[] = [],
 ): WorkingDerivedCore => {
   const passthrough = !!verbatim && !curves && isIdentityAdjust(params);
   const built = buildGradientRamp(
@@ -128,5 +131,5 @@ export const runWorkingPipeline = (
       passthrough: true,
     };
   }
-  return { base, ramp: built.ramp, final: built.final, config: fitRampToStops(built.ramp, stopBudget(detail)), passthrough: false };
+  return { base, ramp: built.ramp, final: built.final, config: fitRampToStops(built.ramp, { ...stopBudget(detail), seedPositions }), passthrough: false };
 };

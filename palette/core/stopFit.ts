@@ -29,11 +29,19 @@ export interface StopFitOptions {
   seedCorners?: boolean;
   /** Adjacent-sample ΔE above which a position counts as a hard transition. */
   cornerDE?: number;
+  /** Positions (0..1) to seed stops at BEFORE the refine loop — the stops the input already
+   *  had. Without them every re-fit of a re-quantised ramp finds its "worst error" a texel
+   *  further along and the interior stops WALK on each bake (measured 2026-09-07 in the v2
+   *  Mix: 16.9 → 18.8 → 19.2 → 19.6 % over three bakes). With them a re-fit of an
+   *  unchanged gradient reproduces its stops exactly. Over budget, the seeds win over the
+   *  refine, never over the corners. */
+  seedPositions?: number[];
 }
 
 const DEFAULTS: Required<StopFitOptions> = {
   targetDE: 0.02,
   maxStops: 32,
+  seedPositions: [],
   seedCorners: true,
   // Only TRUE posterization edges become 'step'. Set high so gradual (but
   // colourful) rainbow transitions stay smooth — marking those as step creates
@@ -108,6 +116,16 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     }
     stops.sort((a, b) => a.position - b.position);
   }
+
+  // 1b) Seed the positions the input already had (see `seedPositions`).
+  for (const p of o.seedPositions) {
+    if (stops.length >= o.maxStops) break;
+    const idx = Math.max(0, Math.min(255, Math.round(p * 255)));
+    if (used.has(idx)) continue;
+    used.add(idx);
+    stops.push(mkStop(idx, ramp, nextId++));
+  }
+  if (o.seedPositions.length) stops.sort((a, b) => a.position - b.position);
 
   // 2) Refine to worst rendered error.
   let guard = 0;

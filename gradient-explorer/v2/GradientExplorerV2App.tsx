@@ -57,9 +57,6 @@ export type SourceId = 'browse' | 'build' | 'extract';
  *  the `extract` input, every other face (or none) is Browse. There are no source tabs. */
 const sourceOf = (face: TrayFace): SourceId => (face === 'mix' ? 'build' : face === 'image' ? 'extract' : 'browse');
 
-/** L9: how long the pointer must live in the wall before the hero quiets. */
-const QUIET_MS = 600;
-
 const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors';
 
 const workingNameNow = (): string => {
@@ -88,8 +85,18 @@ const enterMix = (): void => {
     const other = useFavientsStore.getState().favients.find((f) => favientSig(f.config) !== aSig);
     if (other) g.sendRampToSlot('B', renderStopsToRamp(other.config.stops, other.config.blendSpace, other.config.colorSpace), other.name);
   }
-  w.setInput({ kind: 'build' });
+  // The stops your gradient already has seed every bake's fit, so mixing and baking
+  // again does not walk them (grep seedPositions in palette/core/stopFit.ts).
+  w.setInput({ kind: 'build', seeds: d ? d.config.stops.map((s) => s.position) : [] });
   armSlot('B');
+};
+
+/** Add the other gradient's stop positions to the Mix input's seeds (a pick filled a bar). */
+const addMixSeeds = (positions: number[]): void => {
+  const w = useWorkingStore.getState();
+  const cur = w.input.kind === 'build' ? w.input.seeds ?? [] : [];
+  const merged = Array.from(new Set([...cur, ...positions].map((p) => Math.round(p * 255)))).sort((a, b) => a - b).map((i) => i / 255);
+  useWorkingStore.setState({ input: { kind: 'build', seeds: merged } });
 };
 
 export const GradientExplorerV2App: React.FC = () => {
@@ -98,7 +105,6 @@ export const GradientExplorerV2App: React.FC = () => {
   const [mineOpen, setMineOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
-  const [quiet, setQuiet] = useState(false);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const pickSerial = usePickSerial();
@@ -139,6 +145,7 @@ export const GradientExplorerV2App: React.FC = () => {
       // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to
       // browse for this pick) so the hero shows the new blend immediately.
       if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().setInput({ kind: 'build' });
+      addMixSeeds(p.config.stops.map((s) => s.position));
       deselectActiveHero();
       setTray('mix');
       return;
@@ -205,25 +212,6 @@ export const GradientExplorerV2App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [variantsOpen, openTray]);
 
-  // L9 — the quiet hero. While the pointer lives in the WALL, the hero folds its source
-  // band away (WorkingHero animates the fold); any pointer over the hero (or the shelf)
-  // brings it back. 600 ms, down from 900 (owner, 2026-09-07: the late snap was jarring). Two timers and one boolean — no store state, nothing persisted, and the hero
-  // itself never unmounts (L8).
-  const quietTimer = useRef<number | null>(null);
-  const enterWall = useCallback(() => {
-    if (quietTimer.current) window.clearTimeout(quietTimer.current);
-    quietTimer.current = window.setTimeout(() => setQuiet(true), QUIET_MS);
-  }, []);
-  const leaveWall = useCallback(() => {
-    if (quietTimer.current) window.clearTimeout(quietTimer.current);
-    quietTimer.current = null;
-  }, []);
-  const wakeHero = useCallback(() => {
-    leaveWall();
-    setQuiet(false);
-  }, [leaveWall]);
-  useEffect(() => () => { if (quietTimer.current) window.clearTimeout(quietTimer.current); }, []);
-
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
   // A share link opens straight into Working (once, on boot; the param is stripped).
@@ -277,11 +265,10 @@ export const GradientExplorerV2App: React.FC = () => {
         <SettingsButton />
       </header>
 
-      <div className="shrink-0" onMouseEnter={wakeHero}>
+      <div className="shrink-0">
       <WorkingHero
         derived={derived}
         source={source}
-        quiet={quiet}
         tray={tray}
         onTray={openTray}
         onShare={share}
@@ -301,8 +288,8 @@ export const GradientExplorerV2App: React.FC = () => {
       />
       </div>
 
-      {/* stage — the ground. The pointer living here is what quiets the hero (L9). */}
-      <div className="flex-1 min-h-0 flex flex-col relative" onMouseEnter={enterWall} onMouseLeave={leaveWall}>
+      {/* stage — the ground */}
+      <div className="flex-1 min-h-0 flex flex-col relative">
         {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it. One line
             above it only when it has something to say. */}
         {(armed || derived.empty) && (
@@ -323,7 +310,7 @@ export const GradientExplorerV2App: React.FC = () => {
           labelled runs (FavientsPanel layout="strip"); pull up for the full panel (search,
           list view, rename, import / export). Silent until there is something in it. */}
       {recentCount > 0 && (
-        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }} onMouseEnter={wakeHero}>
+        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }}>
           <div className="flex items-center gap-3 px-6 pt-1.5 text-[13px] text-fg-muted">
             <ZoneLabel>My Gradients</ZoneLabel>
             {mineOpen && <span>Recent fills itself as you work · drag a gradient into a group to keep it · shared with the GMT studio</span>}

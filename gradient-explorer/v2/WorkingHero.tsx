@@ -29,11 +29,8 @@
  *     editable, since there is no live document behind it — with an empty source band
  *     saying what is missing. The previous working gradient is one undo away through
  *     workingStore, unchanged. Guarded by `npm run smoke:ge-hero`.
- *   • **L9 — the quiet hero.** `quiet` (the shell's pointer-in-the-wall timer) folds the
- *     source band away — and nothing else. The palette, the ramp at full height, the
- *     Curves / Adjust aside and the slot all stay (owner, 2026-09-07: the palette vanishing
- *     and the hard snap were both jarring). The fold is a 200 ms `Collapse`, so quiet is a
- *     settle, not a jump. A prop, not store state; nothing unmounts.
+ *   • **L9's quiet hero is GONE** (owner, 2026-09-07: no source hiding when the pointer is
+ *     over the wall). The hero is the same whatever the pointer does.
  *
  * Top to bottom inside the WORK column:
  *   1. name · state chip · More like this · ★  (Mix is a source tab, not a button here —
@@ -115,9 +112,6 @@ const useWidth = (): [(el: HTMLDivElement | null) => void, number] => {
 interface Props {
   derived: WorkingDerived;
   source: SourceId;
-  /** L9: the pointer has lived in the wall for a while — collapse to the ramp and a row
-   *  of small use buttons. A pure class/height switch; no store state. */
-  quiet?: boolean;
   /** Which tray face is open (Phase C) — the shell owns it, since Mix / Image are sources. */
   tray: TrayFace;
   /** Open a face (the same face again closes it); `null` closes. */
@@ -130,7 +124,7 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, tray, onTray, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
@@ -247,7 +241,6 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
     <section
       className="relative shrink-0 p-2.5 bg-surface-raised border-b border-line/10"
       data-gx-hero
-      data-gx-quiet={quiet ? '' : undefined}
       data-gx-selectable
     >
       {/* the CARD — radius 20 (same as the panel, owner 2026-09-07), one object, inset 10 px in the band, and the PANEL flush with the card's top / right / bottom (owner,
@@ -302,7 +295,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
 
           <div className="px-4 pt-4 pb-2 flex flex-col">
             {/* the palette on top of the ramp — hidden only while the source is empty (there
-                is nothing live to sample from); it STAYS through quiet (owner, 2026-09-07) */}
+                is nothing live to sample from) */}
             {!emptySource && (
               <PaletteRow
                 palette={derived.palette}
@@ -321,32 +314,32 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
             <div ref={rampRef} className="relative rounded-[10px]">
               {emptySource ? (
                 <>
-                  <Collapse open={!quiet}>
-                    <div className="px-2 mb-px">
-                      <div
-                        className="flex items-center px-2 rounded border border-dashed border-line/40 text-[11px] text-fg-muted"
-                        style={{ height: SOURCE_BAND_H }}
-                        title="This source has nothing in it yet — the ramp below is the gradient you were last working on"
-                      >
-                        {emptyText}
-                      </div>
+                  <div className="px-2 mb-px">
+                    <div
+                      className="flex items-center px-2 rounded border border-dashed border-line/40 text-[11px] text-fg-muted"
+                      style={{ height: SOURCE_BAND_H }}
+                      title="This source has nothing in it yet — the ramp below is the gradient you were last working on"
+                    >
+                      {emptyText}
                     </div>
-                  </Collapse>
+                  </div>
                   <GradientStrip ramp={shown.ramp} height={42} className="w-full block" />
                 </>
               ) : (
                 <>
+                  {/* the SOURCE half: the same bar language as the result under it — the 8 px
+                      gutters painted with its end colours and the top corners rounded, so the two
+                      halves read as one bar (owner, 2026-09-07) */}
                   {split && (
-                    <Collapse open={!quiet}>
-                      <div className={mix ? 'px-2' : 'px-2 mb-px'} style={{ minHeight: sourceH }}>
-                        <SourceBands derived={derived} />
-                      </div>
-                    </Collapse>
+                    <div className={mix ? '' : 'mb-px'} style={{ minHeight: sourceH }}>
+                      <SourceBands derived={derived} />
+                    </div>
                   )}
                   <AdvancedGradientEditor
                     ref={editorRef}
                     chrome="strip"
                     stripHeight={resultH}
+                    stripCorners={split ? 'bottom' : 'all'}
                     stripAside={
                       /* the TRAY'S TAB ROW (Phase C): the four named faces; the open one is
                          accent ("this one", V3) and clicks closed */
@@ -377,7 +370,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
                   {scrubT != null && (
                     <div
                       className="absolute w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"
-                      style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split && !quiet ? sourceH + (mix ? 0 : 1) : 0, height: resultH }}
+                      style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split ? sourceH + (mix ? 0 : 1) : 0, height: resultH }}
                     />
                   )}
                 </>
@@ -446,12 +439,4 @@ const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; n
     </div>
   );
 };
-
-/** A grid-rows fold (auto-height content can't transition `height`); the child stays mounted. */
-const Collapse: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => (
-  <div className="grid transition-[grid-template-rows] duration-200 ease-out" style={{ gridTemplateRows: open ? '1fr' : '0fr' }} aria-hidden={!open}>
-    <div className="min-h-0 overflow-hidden">{children}</div>
-  </div>
-);
-
 

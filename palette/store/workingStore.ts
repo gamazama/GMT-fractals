@@ -225,7 +225,7 @@ export const deriveWorkingNow = (): WorkingDerivedCore | null => {
   const { base, verbatim } = resolveBaseNow(input);
   if (!base) return null;
   const g = useGeneratorStore.getState();
-  return runWorkingPipeline(base, readAdjustParamsNow(), readSampledCurvesNow(), g.noiseSeed, g.detail, verbatim);
+  return runWorkingPipeline(base, readAdjustParamsNow(), readSampledCurvesNow(), g.noiseSeed, g.detail, verbatim, input.kind === 'build' ? input.seeds : undefined);
 };
 
 // --- prefs ------------------------------------------------------------------------
@@ -498,8 +498,8 @@ export const useWorkingDerived = (): WorkingDerived => {
   }, [input, buildBase, extracted, stopsConfig]);
 
   const core = useMemo(
-    () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim) : null),
-    [resolved, params, curves, noiseSeed, detail],
+    () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim, input.kind === 'build' ? input.seeds : undefined) : null),
+    [resolved, params, curves, noiseSeed, detail, input],
   );
   const palette = useMemo(() => (core ? swatchesAt(core.ramp, positions) : []), [core, positions]);
   const name = useMemo(
