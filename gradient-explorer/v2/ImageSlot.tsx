@@ -12,7 +12,8 @@
  *   • filled — the ingested image's thumbnail (`imageStore.thumb`, an HTMLCanvasElement
  *     the img2grad ingest sets alongside the model; drawn as a data URL so it survives
  *     React's re-renders without re-parenting a live canvas node). The slot GROWS to the
- *     largest square the card's height allows (`h-full aspect-square`) — the card's grid
+ *     largest square the card's height allows minus 16 px above and below (owner,
+ *     2026-09-07: the full-height preview was very big) — the card's grid
  *     column is `auto`, so the gradient panel gives way.
  *   • active — the Image source is the working input: a 2 px accent outline (V3, accent
  *     means "this one"). Phase C turns the click into a tray toggle instead of a tab.

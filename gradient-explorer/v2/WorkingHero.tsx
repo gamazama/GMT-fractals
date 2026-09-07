@@ -274,7 +274,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       <div className="grid gap-4 pl-[13px] rounded-[20px] bg-surface-section border border-line/20 overflow-hidden" style={{ gridTemplateColumns: 'auto minmax(0,1fr)' }}>
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
-        <div className="flex flex-col justify-center py-1">
+        <div className="flex flex-col justify-center py-4">
           <ImageSlot active={source === 'extract'} onClick={() => onTray('image')} />
         </div>
 
