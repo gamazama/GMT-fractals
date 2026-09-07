@@ -213,6 +213,19 @@ order of work from here, each folded into the phase that owns the surface.
   Curves — `fitChannelsToTracks` + `ChannelGraphEditor` (grep for both). Shares Phase E's
   session if it touches the editor primitives.
 - **C.5 · Mix UI** — the owner is still thinking; not blocking. Parked until there is a design.
+- **C.6 · The Image face is one picture** (owner's walk, 2026-09-07). Today it is the old Image
+  tab's body in a box: a source pane, a big preview and the hero's slot — three views of one
+  image, Replace image far from it, the colour cloud small on a black 640×340 canvas, and a
+  Dominant swatch row the hero palette has superseded. The redesign: the tray's PREVIEW is the
+  working surface — wide, full aspect, letter-boxed to a fixed height; the Path handles and the
+  Draw / Auto / Straight tools sit on it (a re-host of the image pane, same behaviour); the
+  source pane goes. This face alone takes the tray's FULL width (the plan's "grows to a pane").
+  Under the image: the method chips (Dominant · Tones · Path) with the active method's dials in
+  one row; the Dominant swatch row goes. The colour cloud is the only other thing: a square
+  beside the image on the panel's ground, zoomed to fill (a change to the cloud canvas, not a
+  style). Replace image = a small icon button on the preview, shown when the draw tool is not
+  active (drop-anywhere still works). The hero's slot keeps its thumbnail: it says "from an
+  image" and opens the face; it is no longer somewhere to look. Design it as a frame first.
 - **D.1 · My Gradients as DATED bins** (folds into Phase D): entries file into a bin per day by
   default; the session keeps refreshing the SAME entry until the gradient is favourited or a
   new one is selected (today's Recent-session rule, kept) — then the next work opens a new
