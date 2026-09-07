@@ -541,3 +541,10 @@ phase now carries**. Items move out of this list only when a later phase's entry
   (Path handles now live inside the tray's Image face — check on the walk). **Noticed:**
   `ExtractStage`'s method chips are a hand-rolled segmented control, not `Act`s; the Mix face's
   sentence is the only teaching text left under the card. **Phase D now carries:** the shelf.
+- 2026-09-07 · Phase C follow-ups, end of day (C.1, C.2, C.6 done; the fitter rebuilt). **In scope,
+  left undone:** C.3 (bake/cancel for Curves/Adjust + the chip cancelling a live face), C.4
+  (Curves fit-on-entry, step segments), C.5 (Mix UI, parked). **Noticed:** the cloud's zoom is
+  fixed — scale to its extent if a monochrome image reads small; `ExtractStage`'s dial column
+  is a fixed 560 px; the Image face never opens without an image now, so L8's empty-source band
+  is only reachable by a drop that fails to decode (keep the code, it is the L8 guarantee).
+  **Phase D now carries:** D.1 dated bins on top of its own list.
