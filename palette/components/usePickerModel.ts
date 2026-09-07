@@ -222,7 +222,11 @@ export const usePickerModel = (): PickerModel => {
   // every re-filter. 16 samples per entry pulled straight out of the packed ramp buffer.
   const distance = useMemo(() => {
     if (!anchor || !catalog.length) return null;
-    const ramp = renderStopsToRamp(anchor.config.stops, anchor.config.blendSpace, anchor.config.colorSpace);
+    // DISPLAY colours, whatever the document's output profile: the catalog's texels are sRGB
+    // thumbnails, and "similar" is what the eye sees. Measured 2026-09-07: a document on the
+    // Linear profile rendered a near-black anchor, so "More like this" returned the darkest
+    // gradients in the library.
+    const ramp = renderStopsToRamp(anchor.config.stops, anchor.config.blendSpace, 'srgb');
     return similarityIndex(catalog, ramp);
   }, [anchor, catalog]);
 

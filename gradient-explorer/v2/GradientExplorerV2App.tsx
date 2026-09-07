@@ -41,6 +41,9 @@ import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
 import { usePaletteEditorStore } from '../../palette/store/paletteEditorStore';
+import { similarityProbe, describeRamp } from '../../palette/core/paletteSample';
+import { sampleRampBuffer } from '../../palette/core/pickerModel';
+import { usePickerStore } from '../../palette/store/pickerStore';
 import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot } from '../../palette/store/generatorStore';
@@ -268,6 +271,15 @@ export const GradientExplorerV2App: React.FC = () => {
   // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
   useEffect(() => {
     (window as unknown as { __gxWorking?: () => unknown }).__gxWorking = () => ({ config: deriveWorkingNow()?.config ?? usePaletteEditorStore.getState().config, input: useWorkingStore.getState().input });
+    (window as unknown as { __gxSim?: unknown }).__gxSim = {
+      probe: similarityProbe,
+      describe: describeRamp,
+      sample: sampleRampBuffer,
+      catalog: () => usePickerStore.getState().catalog,
+      ramp: () => deriveWorkingNow()?.ramp ?? null,
+      render: renderStopsToRamp,
+      config: () => deriveWorkingNow()?.config ?? null,
+    };
   }, []);
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
