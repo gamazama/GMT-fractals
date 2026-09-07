@@ -40,6 +40,7 @@ import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
+import { usePaletteEditorStore } from '../../palette/store/paletteEditorStore';
 import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot } from '../../palette/store/generatorStore';
@@ -258,6 +259,11 @@ export const GradientExplorerV2App: React.FC = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [variantsOpen, openTray]);
+
+  // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
+  useEffect(() => {
+    (window as unknown as { __gxWorking?: () => unknown }).__gxWorking = () => ({ config: deriveWorkingNow()?.config ?? usePaletteEditorStore.getState().config, input: useWorkingStore.getState().input });
+  }, []);
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();

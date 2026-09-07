@@ -258,5 +258,34 @@ if (files.length === 0) {
   ok(!fs.stops.some((s) => s.interpolation === 'step'), `a smooth ramp with quantisation runs gets no step (${fs.stops.length} stops)`);
 }
 
+// [8] step seeds on INTEGER texels re-fit without growing. Library palettes carry step stops
+// at exact texels (235 / 240 / 250 here, from "snowstorm"); GMT paints a step from the texel
+// AFTER it, so the seed's colour must be sampled there. Falsified by sampling the seed at its
+// own texel (drop `colourIdx` in stopFit.ts): the re-fit adds two stops half a texel late.
+{
+  console.log('\n[8] integer-texel step seeds re-fit stable');
+  const { renderStopsToRamp } = await import('../palette/core/gmtGradient');
+  const cfg: GradientConfig = {
+    stops: [
+      { id: 'a', position: 0, color: '#2E3440', interpolation: 'linear' },
+      { id: 'b', position: 200 / 255, color: '#E5E9F0', interpolation: 'linear' },
+      { id: 'c', position: 235 / 255, color: '#EBEEF4', interpolation: 'step' },
+      { id: 'd', position: 240 / 255, color: '#ECEFF4', interpolation: 'step' },
+      { id: 'e', position: 250 / 255, color: '#D8DEE9', interpolation: 'step' },
+      { id: 'f', position: 1, color: '#D9DFE9', interpolation: 'linear' },
+    ],
+    colorSpace: 'srgb', blendSpace: 'oklab',
+  } as GradientConfig;
+  const seedsOf = (c: GradientConfig) => c.stops.map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias }));
+  const ramp = renderStopsToRamp(cfg.stops, 'oklab', 'srgb');
+  const fit = fitRampToStops(ramp, { targetDE: 0.012, maxStops: 128, seedStops: seedsOf(cfg), fitBias: true });
+  const before = cfg.stops.map((s) => s.position.toFixed(5)).join(' ');
+  const after = fit.stops.map((s) => s.position.toFixed(5)).join(' ');
+  ok(after === before, `the seeded re-fit keeps exactly the source's stops (${cfg.stops.length} → ${fit.stops.length})`);
+  const back = renderStopsToRamp(fit.stops, 'oklab', 'srgb');
+  const worst = Math.max(...ramp.map((c, i) => oklabDistance(c, back[i])));
+  ok(worst < 0.012, `and renders the bands back within tolerance (worst ΔE ${worst.toFixed(4)})`);
+}
+
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

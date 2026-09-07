@@ -126,7 +126,7 @@ const MixFace: React.FC = () => {
       {/* the three channel blends, A (0) → B (1); Link moves them as one */}
       <div className="w-[320px] shrink-0 flex flex-col gap-0.5">
         {MIX_CHANNELS.map((c) => (
-          <Slider key={c.param} label={c.label} value={values[c.param]} min={0} max={1} step={0.01} onChange={(v) => change(c.param, v)} onDragStart={genEditStart} onDragEnd={genEditEnd} />
+          <Slider key={c.param} dense label={c.label} value={values[c.param]} min={0} max={1} step={0.01} defaultValue={0} onChange={(v) => change(c.param, v)} onDragStart={genEditStart} onDragEnd={genEditEnd} />
         ))}
         <div className="flex items-center gap-1.5 pt-1">
           <Act active={linked} className={linked ? 'text-accent-300' : ''} onClick={() => setLinked((l) => !l)} title="Move the three sliders together">
@@ -220,12 +220,8 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
         <Act disabled={!tracks} onClick={() => g.resetCurves()}>
           Reset
         </Act>
-        <label className="flex items-center gap-2 text-[13px] text-fg-muted ml-2">
-          Detail <input type="range" min={2} max={10} value={detail} onChange={(e) => g.setDetail(Number(e.target.value))} /> {detail}
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-fg-muted">
-          Smooth <input type="range" min={0} max={10} value={smooth} onChange={(e) => g.setSmooth(Number(e.target.value))} /> {smooth}
-        </label>
+        <div className="w-[170px] ml-2"><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} /></div>
+        <div className="w-[170px]"><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} /></div>
       </div>
       {tracks ? (
         <div className="relative rounded-[10px] overflow-hidden" style={{ height: 240 }}>

@@ -1,5 +1,6 @@
 
-import { Keyframe } from '../types';
+import type { Keyframe, AnimationSequence } from '../types';
+import { calculateConstrainedSmoothing } from './ConstrainedSmoothing';
 import { nanoid } from 'nanoid';
 import { AnimationMath } from '../engine/math/AnimationMath';
 
@@ -62,51 +63,59 @@ export const reTangentBezier = (
  *  fit (startFrame 0) and the Pencil's drawn span (startFrame = stroke start). */
 /**
  * The SMOOTHING BRUSH (Gradient Explorer v2, Phase C.12 — owner: "a localised bake + smooth +
- * simplify of the functions we already have"): over the frames [lo, hi] only, the track is
- * BAKED (sampled per frame from its current keys), SMOOTHED (a box window, two passes ≈ a
- * gaussian) and SIMPLIFIED (Douglas-Peucker at `eps`) into fresh Bezier keys; every key
- * outside the span is kept, and the seam keys are re-tangented so the join is clean (the
- * same heal the pencil does). The span's edge samples are the track's own values, so the
- * curve is continuous at both ends. Returns the merged key list, or null when the span is
- * too short to touch.
+ * simplify of the functions we already have"; second cut, same evening: "soften
+ * incrementally … local keyframe baking before applying our elastic smooth"). Over the frames
+ * [lo, hi] only:
+ *   1. BAKE — the track is sampled from its current keys into dense keys, one every `stride`
+ *      frames (so a hold, a spline and a hand-drawn stroke all become the same clay);
+ *   2. SMOOTH — the elastic smooth the graph tools use (calculateConstrainedSmoothing: an
+ *      implicit heat equation anchored to the unbrushed keys either side) at `strength` —
+ *      one stroke softens a little, the next softens further, since each stroke works from
+ *      the track as it now is;
+ *   3. SIMPLIFY — Douglas-Peucker at a TIGHT tolerance (eps / 3) into Bezier keys with
+ *      auto-tangents, so the result stays as round as the smooth made it.
+ * Every key outside the span is kept; the seam keys are re-tangented (the pencil's heal).
+ * Returns the merged key list, or null when the span is too short to touch.
  */
 export const smoothSpan = (
     keys: Keyframe[],
     lo: number,
     hi: number,
     eps: number,
-    window: number,
+    strength: number,
     idPrefix: string,
     sample: (keys: Keyframe[], frame: number) => number,
+    stride = 2,
 ): Keyframe[] | null => {
     lo = Math.round(lo); hi = Math.round(hi);
-    if (hi - lo < 2) return null;
-    let vals: number[] = [];
-    for (let f = lo; f <= hi; f++) vals.push(sample(keys, f));
-    const w = Math.max(1, Math.floor(window)) | 1; // odd
-    const h = w >> 1;
-    const pass = (v: number[]): number[] => v.map((_, i) => {
-        let s = 0, c = 0;
-        for (let k = -h; k <= h; k++) {
-            const j = i + k;
-            if (j < 0 || j >= v.length) continue;
-            s += v[j]; c++;
-        }
-        return s / c;
-    });
-    if (h > 0) vals = pass(pass(vals));
-    // pin the ends to the track so the join is exact
-    vals[0] = sample(keys, lo);
-    vals[vals.length - 1] = sample(keys, hi);
-    const spanKeys = fitSamplesToKeys(vals, lo, eps, idPrefix);
+    if (hi - lo < 2 * stride) return null;
+    // 1. bake the span
+    const baked: Keyframe[] = [];
+    for (let f = lo; f <= hi; f += stride) baked.push({ id: `${idPrefix}-b${f}`, frame: f, value: sample(keys, f), interpolation: 'Linear' });
+    if (baked[baked.length - 1].frame !== hi) baked.push({ id: `${idPrefix}-b${hi}`, frame: hi, value: sample(keys, hi), interpolation: 'Linear' });
     const kept = keys.filter((k) => k.frame < lo || k.frame > hi);
+    const dense = [...kept, ...baked].sort((a, b) => a.frame - b.frame);
+    // 2. the elastic smooth over the baked keys, anchored to the kept ones
+    const tid = 't';
+    const updates = calculateConstrainedSmoothing(
+        [tid],
+        { tracks: { [tid]: { id: tid, type: 'float', label: '', keyframes: dense } } } as unknown as AnimationSequence,
+        baked.map((k) => `${tid}::${k.id}`),
+        strength,
+    );
+    const patched = new Map(updates.map((u) => [u.keyId, u.patch.value]));
+    const smoothed = baked.map((k) => ({ ...k, value: patched.get(k.id) ?? k.value }));
+    // 3. simplify the span, tightly, into round keys
+    const vals = smoothed.map((k) => k.value);
+    const idx = dpIndices(vals, eps / 3);
+    const spanKeys: Keyframe[] = idx.map((i, n) => ({ id: `${idPrefix}-${n}`, frame: smoothed[i].frame, value: smoothed[i].value, interpolation: 'Bezier' as const }));
     const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
     if (merged.length < 2) return null;
     const firstSpan = merged.findIndex((k) => k.frame >= lo);
     let lastSpan = firstSpan;
     while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
-    const seam = new Set([firstSpan - 1, firstSpan, lastSpan, lastSpan + 1]);
-    return reTangentBezier(merged, (_k, i) => seam.has(i));
+    // the span's keys get auto-tangents, and so do the two kept keys flanking it
+    return reTangentBezier(merged, (_k, i) => i >= firstSpan - 1 && i <= lastSpan + 1);
 };
 
 export const fitSamplesToKeys = (

@@ -134,19 +134,25 @@ if (files.length === 0) {
 // they were. Falsified by returning `keys` unchanged from smoothSpan: the first check goes
 // red; by dropping the `kept` filter: the second.
 {
-  const jag = Array.from({ length: 256 }, (_, i) => 0.5 + 0.25 * Math.sin(i / 12) + (i % 2 ? 0.08 : -0.08));
+  const jag = Array.from({ length: 256 }, (_, i) => 0.5 + 0.25 * Math.sin(i / 12) + 0.08 * Math.sin(i * 1.05));
   const track = rampToTrack(jag, 'L', 'Lightness', { eps: 0.001, interpolation: 'Linear' });
   const sample = (ks: Parameters<typeof evaluateTrackValue>[0], f: number) => evaluateTrackValue(ks, f, false, false);
   const before = Array.from({ length: 256 }, (_, f) => sample(track.keyframes, f));
-  const out = smoothSpan(track.keyframes, 96, 160, 0.004, 9, 'L-brush', sample);
+  const out = smoothSpan(track.keyframes, 96, 160, 0.004, 0.25, 'L-brush', sample);
   ok(!!out, 'the brush returns a merged key list');
   const after = Array.from({ length: 256 }, (_, f) => sample(out!, f));
   const rough = (v: number[], a: number, b: number) => { let s = 0; for (let i = a + 1; i < b; i++) s += Math.abs(v[i - 1] - 2 * v[i] + v[i + 1]); return s / (b - a); };
   const rb = rough(before, 100, 156), ra = rough(after, 100, 156);
-  ok(ra < rb * 0.35, `the brushed span is smoother (roughness ${rb.toFixed(4)} → ${ra.toFixed(4)})`);
+  ok(ra < rb * 0.7, `the brushed span is smoother (roughness ${rb.toFixed(4)} → ${ra.toFixed(4)})`);
   const outside = Math.max(...before.map((v, f) => (f < 90 || f > 166 ? Math.abs(v - after[f]) : 0)));
   ok(outside < 1e-9, `outside the span nothing moved (worst ${outside.toExponential(2)})`);
-  console.log(`  brush: ${track.keyframes.length} keys → ${out!.length}; roughness in span ${rb.toFixed(4)} → ${ra.toFixed(4)}`);
+  // incremental: a second stroke over the same span softens FURTHER (owner: "soften
+  // incrementally") — the brush works from the track as it now is, never from the original
+  const out2 = smoothSpan(out!, 96, 160, 0.004, 0.25, 'L-brush2', sample);
+  const after2 = Array.from({ length: 256 }, (_, f) => sample(out2!, f));
+  const ra2 = rough(after2, 100, 156);
+  ok(ra2 < ra * 0.85, `a second stroke softens further (${ra.toFixed(5)} → ${ra2.toFixed(5)})`);
+  console.log(`  brush: ${track.keyframes.length} keys → ${out!.length} → ${out2!.length}; roughness in span ${rb.toFixed(4)} → ${ra.toFixed(4)} → ${ra2.toFixed(4)}`);
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

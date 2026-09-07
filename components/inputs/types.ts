@@ -90,6 +90,9 @@ export interface ScalarInputProps extends DraggableNumberProps {
     
     /** Visual variant */
     variant?: 'full' | 'compact' | 'minimal';
+    /** 'soft' skin only: label · bar · value on ONE 26 px row (the study's option C) — for
+     *  full-width rows; the default soft look stacks the bar under the label line. */
+    dense?: boolean;
     /** Additional CSS class */
     className?: string;
     

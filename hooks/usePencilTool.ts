@@ -56,15 +56,16 @@ interface PencilOpts {
   getKeys: (trackId: string) => Keyframe[];
   commit: (trackId: string, newKeys: Keyframe[]) => void;
   /** The SMOOTHING BRUSH (beginBrush): frames either side of the stroke's span that the brush
-   *  also reaches, and the smoothing window in frames. Defaults 6 / 9. */
-  brush?: { radius?: number; window?: number };
+   *  also reaches, and the elastic smooth's strength per stroke (strokes accumulate).
+   *  Defaults 6 / 0.25. */
+  brush?: { radius?: number; strength?: number };
 }
 
 export const usePencilTool = ({
   interactionRef, overlayRef, view, maxFrame,
   frameToCanvasPixel, canvasPixelToFrame, getTarget, getKeys, commit, brush,
 }: PencilOpts) => {
-  const brushOpts = { radius: brush?.radius ?? 6, window: brush?.window ?? 9 };
+  const brushOpts = { radius: brush?.radius ?? 6, strength: brush?.strength ?? 0.25 };
   const [pencilMode, setPencilMode] = useState(false);
   const [brushMode, setBrushMode] = useState(false);
   const strokeRef = useRef<{
@@ -131,7 +132,7 @@ export const usePencilTool = ({
       const lo = Math.max(0, Math.min(...fs) - brushOpts.radius);
       const hi = Math.min(maxFrame, Math.max(...fs) + brushOpts.radius);
       const keys = getKeys(st.target.trackId);
-      const out = smoothSpan(keys, lo, hi, st.target.eps, brushOpts.window, `${st.target.trackId}-brush-${Math.round(lo)}-${Math.round(hi)}`, (ks, f) => evaluateTrackValue(ks, f, false, false));
+      const out = smoothSpan(keys, lo, hi, st.target.eps, brushOpts.strength, `${st.target.trackId}-brush-${Math.round(lo)}-${Math.round(hi)}-${Date.now().toString(36)}`, (ks, f) => evaluateTrackValue(ks, f, false, false));
       if (out) commit(st.target.trackId, out);
       return;
     }

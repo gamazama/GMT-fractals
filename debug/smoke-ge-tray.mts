@@ -135,7 +135,10 @@ async function main() {
   if (!s.bandA) fail('[4] the hero ramp has no source half (Mix = your gradient over the result)');
   if (!s.bandB) fail('[4] the Mix face has no bar for the gradient you mix with');
   const otherBefore = s.otherTitle;
-  await page.mouse.click(wallBox.x + 24 + 44 * 5, wallBox.y + 14);
+  // the tray overlays the wall's first rows: pick a tile CLEAR of it (measured, not assumed —
+  // the Mix face's height moves with its design)
+  const trayBottom = await page.evaluate(() => document.querySelector('[data-gx-tray-root]')!.getBoundingClientRect().bottom);
+  await page.mouse.click(wallBox.x + 24 + 44 * 5, Math.max(wallBox.y + 14, trayBottom + 18));
   await page.waitForTimeout(400);
   s = await state(page);
   if (s.face !== 'mix') fail(`[4] a wall pick closed the Mix face (${s.face})`);
@@ -154,11 +157,18 @@ async function main() {
   const phase = await page.evaluate(() => (window as any).__store.getState().paletteGenerator.phase);
   if (phase !== 0) fail(`[5] leaving Mix baked the result but left Adjust set (phase ${phase}) — it would apply again next pass`);
   const knotsA = await page.evaluate(() => Array.from(document.querySelector('[title="Double-click to select all"]')!.nextElementSibling!.children).map((k) => (k as HTMLElement).style.left).join(' '));
+  // the baked gradient, for reproducing a drift offline (debug/scratch/mix-drift.json)
+  const bakedJson = await page.evaluate(() => JSON.stringify({ name: (document.querySelector('[data-gx-hero] input') as HTMLInputElement).value, working: (window as any).__store ? null : null, ...((window as any).__gxWorking?.() ?? {}) }));
   await page.click('[data-gx-tray-tab="mix"]');
   await page.waitForTimeout(400);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   const knotsB = await page.evaluate(() => Array.from(document.querySelector('[title="Double-click to select all"]')!.nextElementSibling!.children).map((k) => (k as HTMLElement).style.left).join(' '));
+  if (knotsA !== knotsB) {
+    const fs = await import('fs');
+    fs.mkdirSync('debug/scratch', { recursive: true });
+    fs.writeFileSync('debug/scratch/mix-drift.json', bakedJson);
+  }
   if (knotsA !== knotsB) fail(`[5] a second Mix on/off moved the stops:
     ${knotsA}
     ${knotsB}`);

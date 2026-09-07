@@ -235,8 +235,11 @@ order of work from here, each folded into the phase that owns the surface.
   bottom-right corner also carries the wall's padding.
 - **C.12 · A smoothing brush for Curves** (DONE 2026-09-07 evening — `smoothSpan` in
   utils/CurveFitting.ts, a brush stroke in the shared usePencilTool, a tool button in the
-  channel editor; the channelcurve harness guards it, falsified twice. Brush reach ±6 frames,
-  window 9): a brush over the
+  channel editor; the channelcurve harness guards it, falsified twice. Second cut, owner:
+  "soften incrementally … local keyframe baking before applying our elastic smooth" — the
+  span is BAKED to a key every 2 frames, run through calculateConstrainedSmoothing (the
+  graph tools' elastic smooth, strength 0.25 per stroke, so strokes accumulate) and DP-fitted
+  at eps/3 into Bezier keys; the harness checks a second stroke softens further): a brush over the
   channel graph that acts as a LOCALISED bake + smooth + simplify — the fit recipe we already
   have (`smoothChannel`, `dpIndices`, `fitChannelsToTracks`) applied to the samples under
   the brush only, re-keyed there, the rest of the track untouched. Sits with the editor's
@@ -262,7 +265,11 @@ order of work from here, each folded into the phase that owns the surface.
   ramp carries its stops alone ("the less on screen, the better").
 - **C.8 · A slider skin for the shell** (DONE 2026-09-07 evening — `InputSkinProvider skin="soft"`
   in components/inputs/skin.tsx, read by ScalarInput's full variant; the Tray provides it, so
-  every face's slider wears it and app-gmt keeps the default): the shared slider component
+  every face's slider wears it and app-gmt keeps the default. Second cut the same evening, the
+  owner's pick from the Opus study `plans/ge-v2-figma/slider-skin.md`: option B, THUMBLESS —
+  the fill's edge is the value with a 2 px accent cap — and option C as `dense`, one 26 px row
+  for full-width rows (Mix's channels, Curves' Detail / Smooth). The value stays a
+  DraggableNumber: click to type, wherever a user expects a text entry): the shared slider component
   gets a second skin matching v2's visual language (the rounded, quiet controls of the tray)
   — the Mix sliders and Adjust bins wear it; app-gmt keeps the default. Genericize, don't fork:
   a skin prop on the master component (grep `Slider` under `components/`), never a parallel.

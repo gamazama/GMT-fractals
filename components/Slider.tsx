@@ -95,6 +95,8 @@ interface BaseSliderProps {
     dataHelpId?: string;
     disabled?: boolean;
     className?: string;
+    /** soft skin: one-line row (see components/inputs/skin.tsx). */
+    dense?: boolean;
 }
 
 /**
@@ -123,11 +125,13 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
     onDragStart,
     onDragEnd,
     disabled = false,
-    className = ''
+    className = '',
+    dense,
 }) => {
     // Pass unmapped min/max - ScalarInput handles the mapping internally.
     return (
         <ScalarInput
+            dense={dense}
             label={label}
             value={value}
             onChange={onChange}
@@ -290,6 +294,7 @@ const Slider: React.FC<SliderProps> = ({
             onContextMenu={handleContextMenu}
             dataHelpId={helpIdAttr}
             className={props.className}
+            dense={props.dense}
             defaultValue={defaultValue}
             onReset={() => {
                 handleInteractionStart('param');

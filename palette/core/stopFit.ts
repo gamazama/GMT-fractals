@@ -197,7 +197,14 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     const idx = Math.max(0, Math.min(255, Math.round(sd.position * 255)));
     if (used.has(idx)) continue;
     used.add(idx);
-    stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position)), sd.bias ?? 0.5));
+    // A STEP seed paints the texels strictly AFTER its position (GMT holds a step through its
+    // right boundary inclusive), so its colour is the first of those — for a seed on an
+    // integer texel that is the NEXT texel, not its own. Measured 2026-09-07 ("snowstorm",
+    // steps at 235 / 240 / 250 exactly): sampled at its own texel the seed carried the
+    // previous band's colour, the band rendered wrong, and the plateau pass added a second
+    // stop half a texel later on every re-fit (46 → 48 stops on the first Mix toggle).
+    const colourIdx = (sd.interpolation ?? 'linear') === 'step' ? Math.min(255, Math.floor(sd.position * 255 + 1e-6) + 1) : idx;
+    stops.push(mkStop(colourIdx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position)), sd.bias ?? 0.5));
   }
   let currentErr: number[] | null = null;
   const rescore = () => {

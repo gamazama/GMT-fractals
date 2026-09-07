@@ -45,6 +45,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     trackPosition = 'below',
     trackHeight = 20,
     variant = 'full',
+    dense = false,
     className = '',
 
     trackBackground,
@@ -236,83 +237,114 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     const headerHeight = "h-9 md:h-[26px]";
 
     if (soft) {
-        // The v2 skin: one quiet line (label · value), a 10 px rounded bar under it.
-        const softTrackH = 10;
-        return (
+        // The v2 skin (plans/ge-v2-figma/slider-skin.md, option B, owner's pick 2026-09-07):
+        // THUMBLESS — the fill's leading edge IS the value, with a 2 px accent cap so it never
+        // vanishes at 0 % or 100 %; a 10 px bar in the same radius family as the ramp; the
+        // default value a 1 px tick over the fill (its hit area resets); one quiet line of
+        // label · value, the value a DraggableNumber (click to TYPE — a text entry stays
+        // wherever a user expects one). `dense` (option C): label · bar · value on one 26 px row.
+        // The cap is an ::after on the fill, so the drag's single width write moves it.
+        const atDefault = defaultValue !== undefined && Math.abs(value - defaultValue) < 1e-9;
+        const capCls = trackBackground
+            ? 'after:bg-fg after:shadow-[0_0_0_1px_rgba(0,0,0,.4)]'
+            : disabled ? 'after:hidden' : isActive ? 'after:bg-accent-300' : atDefault ? 'after:bg-accent-400/60' : 'after:bg-accent-300';
+        const fillCls = trackBackground ? 'bg-transparent' : disabled ? 'bg-fg-muted/15' : isActive ? 'bg-accent-400/65' : atDefault ? 'bg-accent-400/30' : 'bg-accent-400/50';
+        const number = (
+            <DraggableNumber
+                value={value}
+                onChange={onChange}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                step={step}
+                hardMin={hardMin}
+                hardMax={hardMax}
+                mapping={mapping}
+                format={overrideText ? () => overrideText : format}
+                mapTextInput={mapTextInput}
+                defaultValue={defaultValue}
+                disabled={disabled}
+                highlight={isActive}
+                onImmediateChange={handleImmediateChange}
+            />
+        );
+        const bar = showTrack && hasBounds && (
             <div
-                className={`py-1 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
-                data-help-id={dataHelpId}
-                data-input-skin="soft"
-                onContextMenu={onContextMenu}
+                ref={trackContainerRef}
+                className={`relative flex items-center touch-none ${dense ? 'flex-1 min-w-[64px]' : ''} ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
+                style={{ touchAction: 'none', height: 16 }}
+                onPointerDown={track.onPointerDown}
+                onPointerMove={track.onPointerMove}
+                onPointerUp={track.onPointerUp}
+                onPointerCancel={track.onPointerUp}
+                onLostPointerCapture={track.onPointerUp}
             >
-                {label && (
-                    <div className="flex items-center h-6 gap-2 min-w-0">
-                        {headerRight}
-                        <label className={`text-[12px] select-none flex items-center gap-2 truncate pointer-events-none ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
-                            {label}
-                            {labelSuffix}
-                            {liveValue !== undefined && !disabled && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
-                            )}
-                        </label>
-                        <div className="ml-auto min-w-[56px] text-right text-[12px] tabular-nums group/num-area touch-none">
-                            <DraggableNumber
-                                value={value}
-                                onChange={onChange}
-                                onDragStart={onDragStart}
-                                onDragEnd={onDragEnd}
-                                step={step}
-                                hardMin={hardMin}
-                                hardMax={hardMax}
-                                mapping={mapping}
-                                format={overrideText ? () => overrideText : format}
-                                mapTextInput={mapTextInput}
-                                defaultValue={defaultValue}
-                                disabled={disabled}
-                                highlight={isActive}
-                                onImmediateChange={handleImmediateChange}
-                            />
-                        </div>
-                    </div>
-                )}
-                {showTrack && hasBounds && (
+                <div className={`absolute left-0 right-0 rounded-[10px] overflow-hidden bg-line/[0.12] group-hover/soft:bg-line/20 ${isActive ? 'ring-1 ring-accent-400/30' : ''}`} style={{ top: 3, height: 10 }}>
+                    {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
                     <div
-                        ref={trackContainerRef}
-                        className={`relative flex items-center touch-none py-1 ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
-                        style={{ touchAction: 'none', height: softTrackH + 8 }}
-                        onPointerDown={track.onPointerDown}
-                        onPointerMove={track.onPointerMove}
-                        onPointerUp={track.onPointerUp}
-                        onPointerCancel={track.onPointerUp}
-                        onLostPointerCapture={track.onPointerUp}
-                    >
-                        <div className="absolute left-0 right-0 rounded-full overflow-hidden bg-line/15" style={{ top: 4, height: softTrackH }}>
-                            {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
-                            <div
-                                ref={fullTrackFillRef}
-                                className={`absolute top-0 bottom-0 left-0 rounded-full ${trackBackground ? 'bg-transparent' : disabled ? 'bg-fg-muted/20' : 'bg-accent-400/60'}`}
-                                style={{ width: `${valuePct}%` }}
-                            />
-                            {showLiveIndicator && liveValue !== undefined && !disabled && (
-                                <div className="absolute top-0 bottom-0 w-1 bg-secondary transition-all duration-75 ease-out" style={{ left: `calc(${livePct}% - 2px)` }} />
-                            )}
-                            {defaultPct !== null && (
-                                <div className="absolute top-0 bottom-0 w-px bg-fg/40 pointer-events-none" style={{ left: `${defaultPct}%` }} />
-                            )}
-                        </div>
-                        {/* the round thumb, over the bar's edge */}
-                        <div
-                            data-role="thumb"
-                            className={`absolute w-3.5 h-3.5 rounded-full pointer-events-none z-10 shadow-[0_0_0_1px_rgba(0,0,0,.35)] ${disabled ? 'bg-fg-dim' : 'bg-fg'}`}
-                            style={{ left: `calc(${valuePct}% - 7px)`, top: 2 }}
-                        />
+                        ref={fullTrackFillRef}
+                        className={`absolute top-0 bottom-0 left-0 rounded-[10px] ${fillCls} after:content-[''] after:absolute after:right-0 after:inset-y-0 after:w-[2px] group-hover/soft:after:w-[3px] ${capCls}`}
+                        style={{ width: `${valuePct}%` }}
+                    />
+                    {showLiveIndicator && liveValue !== undefined && !disabled && (
+                        <div className="absolute top-0 bottom-0 w-[3px] rounded-full bg-secondary transition-all duration-75 ease-out z-10" style={{ left: `calc(${livePct}% - 1.5px)` }} />
+                    )}
+                    {defaultPct !== null && (
+                        <div className="absolute top-0 bottom-0 w-px bg-fg/30 pointer-events-none z-10" style={{ left: `${defaultPct}%` }} />
+                    )}
+                </div>
+                {defaultPct !== null && !disabled && (
+                    <button
+                        type="button"
+                        className="absolute top-0 bottom-0 w-[10px] -ml-[5px] z-20 cursor-pointer"
+                        style={{ left: `${defaultPct}%` }}
+                        title={`Reset to ${defaultValue}`}
+                        aria-label="Reset to default"
+                        tabIndex={-1}
+                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleReset(); }}
+                    />
+                )}
+            </div>
+        );
+        const labelEl = label && (
+            <label className={`text-[13px] select-none flex items-center gap-2 truncate pointer-events-none ${dense ? 'shrink-0 max-w-[45%]' : ''} ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
+                {label}
+                {labelSuffix}
+                {liveValue !== undefined && !disabled && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
+                )}
+            </label>
+        );
+        const valueEl = (
+            <div className={`text-right text-[13px] tabular-nums group/num-area touch-none ${dense ? 'w-[52px] shrink-0' : 'ml-auto min-w-[56px]'} ${isActive ? 'text-fg font-medium' : ''}`}>
+                {number}
+            </div>
+        );
+        if (dense) {
+            return (
+                <div className={`group/soft h-[26px] flex items-center gap-2.5 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                    {/* the keyframe diamond's home in this skin (headerRight) */}
+                    {labelEl}
+                    {bar}
+                    {valueEl}
+                    {headerRight}
+                </div>
+            );
+        }
+        return (
+            <div className={`group/soft py-[3px] ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                {label && (
+                    <div className="flex items-center h-5 gap-2 min-w-0">
+                        {headerRight}
+                        {labelEl}
+                        {valueEl}
                     </div>
                 )}
+                {bar}
             </div>
         );
     }
 
-    
     return (
         <div 
             className={`mt-px ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}
