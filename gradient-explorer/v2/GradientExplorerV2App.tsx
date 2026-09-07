@@ -89,7 +89,7 @@ const enterMix = (): void => {
   }
   // The stops your gradient already has seed every bake's fit, so mixing and baking
   // again does not walk them (grep seedPositions in palette/core/stopFit.ts).
-  w.setInput({ kind: 'build', seeds: d ? d.config.stops.map((s) => ({ position: s.position, interpolation: s.interpolation })) : [] });
+  w.setInput({ kind: 'build', seeds: d ? d.config.stops.map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias })) : [] });
   armSlot('B');
 };
 
@@ -98,10 +98,10 @@ const addMixSeeds = (stops: GradientConfig['stops']): void => {
   const w = useWorkingStore.getState();
   const cur: SeedStop[] = w.input.kind === 'build' ? w.input.seeds ?? [] : [];
   const byTexel = new Map<number, SeedStop>();
-  for (const s of [...cur, ...stops.map((s) => ({ position: s.position, interpolation: s.interpolation }))]) {
+  for (const s of [...cur, ...stops.map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias }))]) {
     const i = Math.round(s.position * 255);
     // a step edge wins over a linear seed on the same texel
-    if (!byTexel.has(i) || s.interpolation === 'step') byTexel.set(i, { position: i / 255, interpolation: s.interpolation });
+    if (!byTexel.has(i) || s.interpolation === 'step') byTexel.set(i, { position: i / 255, interpolation: s.interpolation, bias: s.bias });
   }
   useWorkingStore.setState({ input: { kind: 'build', seeds: Array.from(byTexel.values()).sort((a, b) => a.position - b.position) } });
 };

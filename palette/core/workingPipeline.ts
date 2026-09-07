@@ -46,7 +46,7 @@ import { fitRampToStops } from './stopFit';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { RGB } from './oklab';
 
-export type SeedStop = { position: number; interpolation?: GradientStop['interpolation'] };
+export type SeedStop = { position: number; interpolation?: GradientStop['interpolation']; bias?: number };
 
 export type WorkingInput =
   | { kind: 'empty' }
@@ -133,5 +133,5 @@ export const runWorkingPipeline = (
       passthrough: true,
     };
   }
-  return { base, ramp: built.ramp, final: built.final, config: fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops }), passthrough: false };
+  return { base, ramp: built.ramp, final: built.final, config: fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops, fitBias: true }), passthrough: false };
 };

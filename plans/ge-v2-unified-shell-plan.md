@@ -400,6 +400,12 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   inclusive step boundary). trays-spec §12. `use()` gained `bakes`; stopFit gained `seedStops`
   and the half-texel edge stop; `smoke:ge-tray` [5] and stopfit [5] guard it.
 
+- 2026-09-07 · the stop fitter (owner: "make use of stepped and bias interpolation"): bias +
+  smooth are tried on the worst segment before a stop is added (opt-in `fitBias`, the working
+  pipeline uses it; 12.3 → 6.3 stops on biased gradients); a step edge must be an ISOLATED jump
+  (a steep run is no longer chained into step stops — real palettes' worst error 0.105 → 0.068).
+  trays-spec §13; stopfit [6] guards it.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

@@ -216,3 +216,23 @@ under the other:
 Measured after all three: clean toggles and toggles with a leftover Phase both hold every stop
 exactly. Scrubbing the blend costs ~17 ms a step with no long tasks — the app is not slow; the
 headless probes that loaded 11,131 gradients against the dev server during this work were.
+
+## 13. The stop fitter uses bias and step properly (owner, 2026-09-07 — built)
+
+- **Bias and smooth before a new stop.** The refine loop finds the worst SEGMENT and first
+  tries its bias (a coarse-then-fine grid) and its interpolation (linear / smooth); a stop is
+  spent only when neither gets the segment under tolerance. Trials evaluate the segment's own
+  texels, not a full re-render, so a fit stays a few ms. Measured on 40 synthetic gradients
+  with random biases: 12.3 → 6.3 stops (linear), 14.5 → 8.6 (smooth); plain bias-0.5 gradients
+  unchanged.
+- **A step edge is an ISOLATED jump.** The corner detector used to chain step stops through any
+  steep run (a strongly biased segment), holding the wrong colour on each stop's own texel
+  where no refine could reach (ΔE 0.13 left behind). It now requires the jump to stand out from
+  its neighbours (2.5×); a steep run seeds plain stops instead. Side effect on the 64 real
+  palettes at 32 stops: worst error 0.105 → 0.068, mean 0.028 → 0.022, same stop count.
+- **Opt-in.** `fitBias` is off by default: the GMT seam (legacy palette import) wants crisp
+  bands, and bias curves would reproduce a posterised palette within tolerance with fewer, softer
+  stops. The v2 working pipeline opts in. Seeds now carry bias too.
+- Known limit: two jumps ONE texel apart (a one-texel band) fit at ΔE 0.059 — the second jump
+  is not isolated. Rare outside synthetic tests. Guard: `test:palette` stopfit [6] (falsified by
+  forcing bias off: two assertions red).

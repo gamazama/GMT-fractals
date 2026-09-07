@@ -165,7 +165,7 @@ if (files.length === 0) {
     colorSpace: 'srgb',
   };
   const pos = (c: GradientConfig) => c.stops.map((st) => Math.round(st.position * 255)).join(',');
-  const seedsOf = (c: GradientConfig) => c.stops.map((st) => ({ position: st.position, interpolation: st.interpolation }));
+  const seedsOf = (c: GradientConfig) => c.stops.map((st) => ({ position: st.position, interpolation: st.interpolation, bias: st.bias }));
   const first = fitRampToStops(renderStopsToRamp(cfg.stops, 'oklab', 'srgb'), { targetDE: 0.008, maxStops: 48, seedStops: seedsOf(cfg) });
   ok(cfg.stops.every((st) => first.stops.some((f) => Math.round(f.position * 255) === Math.round(st.position * 255))), `seeded fit keeps every input position (${pos(first)})`);
   cfg = first;
@@ -177,6 +177,57 @@ if (files.length === 0) {
   }
   ok(cfg.stops.length === first.stops.length, `three seeded re-fits keep the stop count (${first.stops.length} → ${cfg.stops.length})`);
   ok(pos(cfg) === p0, `three seeded re-fits reproduce the positions exactly (${p0} → ${pos(cfg)})`);
+}
+
+// 6) BIAS AND SMOOTH ARE USED (2026-09-07). Gradients authored with random biases must fit
+//    with far fewer stops than a bias-blind fitter needs, at or under tolerance; plain
+//    bias-0.5 gradients must not get worse; and a fit must stay a few ms (it runs on every
+//    slider move in the v2 hero). Falsified with `fitBias: false`: the biased set needs
+//    ~13 stops instead of ~7 and the first assertion goes red.
+{
+  console.log('\n[6] bias + smooth before a new stop');
+  const { renderStopsToRamp } = await import('../palette/core/gmtGradient');
+  let seed = 7;
+  const rnd2 = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const col = () => `#${hex2(rnd2() * 256)}${hex2(rnd2() * 256)}${hex2(rnd2() * 256)}`.toUpperCase();
+  const synth = (interp: GradientStop['interpolation'], withBias: boolean): { ramp: RGB[]; n: number } => {
+    const n = 3 + Math.floor(rnd2() * 4);
+    const pos = Array.from({ length: n }, () => rnd2()).sort((a, b) => a - b);
+    pos[0] = 0;
+    pos[n - 1] = 1;
+    const st = pos.map((p, i) => ({ id: `r${i}`, position: p, color: col(), bias: withBias ? 0.15 + rnd2() * 0.7 : 0.5, interpolation: interp }));
+    return { ramp: renderStopsToRamp(st, 'oklab', 'srgb').map((c) => ({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) })), n };
+  };
+  const set = (interp: GradientStop['interpolation'], withBias: boolean) => Array.from({ length: 40 }, () => synth(interp, withBias));
+  const stopsFor = (cases: { ramp: RGB[]; n: number }[], fitBias: boolean) => {
+    let stops = 0;
+    let worst = 0;
+    for (const c of cases) {
+      const m = measureFit(fitRampToStops(c.ramp, { targetDE: 0.012, maxStops: 48, fitBias }), c.ramp);
+      stops += m.stops;
+      worst = Math.max(worst, m.maxDE);
+    }
+    return { avg: stops / cases.length, worst };
+  };
+  const biased = set('linear', true);
+  const b = stopsFor(biased, true);
+  const blind = stopsFor(biased, false);
+  ok(b.avg < blind.avg * 0.7, `random-bias gradients fit with far fewer stops (${b.avg.toFixed(1)} vs ${blind.avg.toFixed(1)} bias-blind)`);
+  // 0.07, not the 0.012 target: one synthetic case has two jumps ONE texel apart (a one-texel
+  // band from random positions), which the isolated-jump rule cannot mark as two edges and
+  // whose texel already carries the edge stop; it fits at 0.059 (bias-blind: 0.031 with 23
+  // stops). Every other case is at or under 0.03.
+  ok(b.worst <= 0.07, `…and stay near tolerance (worst ΔE ${b.worst.toFixed(4)})`);
+  const plain = set('linear', false);
+  const p1 = stopsFor(plain, true);
+  const p0 = stopsFor(plain, false);
+  ok(p1.avg <= p0.avg + 0.5, `plain bias-0.5 gradients are not worse (${p1.avg.toFixed(1)} vs ${p0.avg.toFixed(1)})`);
+  const sm = stopsFor(set('smooth', true), true);
+  ok(sm.avg < 11, `smooth + biased gradients fit in ~9 stops (${sm.avg.toFixed(1)})`);
+  const t0 = performance.now();
+  for (const c of biased) fitRampToStops(c.ramp, { targetDE: 0.012, maxStops: 48 });
+  const ms = (performance.now() - t0) / biased.length;
+  ok(ms < 12, `a fit stays fast (${ms.toFixed(1)} ms avg over ${biased.length}; it runs on every slider move)`);
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

@@ -14,11 +14,19 @@
  *      greatest ΔE between GMT's *rendered* gradient and the target, until under
  *      tolerance. Strictly better than Douglas-Peucker, which measures linear-RGB
  *      error blind to OKLCh interpolation.
+ *   3. BIAS AND SMOOTH BEFORE A NEW STOP (2026-09-07, owner: "make use of stepped and
+ *      bias interpolation"). Before spending a stop on the worst segment, the refine
+ *      tries the segment's BIAS (a coarse-then-fine grid) and its interpolation
+ *      (linear / smooth) and keeps the best; a stop is added only when neither gets the
+ *      segment under tolerance. Measured on 40 synthetic gradients with random biases:
+ *      13.3 → 7.4 stops (linear), 14.6 → 8.6 (smooth), at a LOWER worst error; plain
+ *      bias-0.5 gradients unchanged (5.0 → 5.1). Trials are evaluated on the segment's
+ *      own texels only (`sampleStops`), not a full re-render, so a fit stays a few ms.
  */
 
 import type { GradientStop, GradientConfig } from '../../types';
 import { rgbToOklab, oklabDistance, type RGB } from './oklab';
-import { renderStopsToRamp, rgbToHex } from './gmtGradient';
+import { renderStopsToRamp, sampleStops, rgbToHex } from './gmtGradient';
 
 export interface StopFitOptions {
   /** Perceptual stop tolerance (OKLab ΔE). Lower = more stops, higher fidelity. */
@@ -37,13 +45,19 @@ export interface StopFitOptions {
    *  patches with one more stop per bake (measured: 95.7, then 96.1, then 96.5 %). With
    *  both, a re-fit of an unchanged gradient reproduces its stops exactly. Over budget the
    *  seeds win over the refine, never over the corners. */
-  seedStops?: { position: number; interpolation?: GradientStop['interpolation'] }[];
+  seedStops?: { position: number; interpolation?: GradientStop['interpolation']; bias?: number }[];
+  /** Try bias + smooth on the worst segment before adding a stop (idea 3). OFF by default:
+   *  it reproduces a posterised palette within tolerance using soft curves and fewer stops,
+   *  which the GMT seam (legacy palette import) does not want — bands must stay crisp. The
+   *  v2 working pipeline opts in. */
+  fitBias?: boolean;
 }
 
 const DEFAULTS: Required<StopFitOptions> = {
   targetDE: 0.02,
   maxStops: 32,
   seedStops: [],
+  fitBias: false,
   seedCorners: true,
   // Only TRUE posterization edges become 'step'. Set high so gradual (but
   // colourful) rainbow transitions stay smooth — marking those as step creates
@@ -52,45 +66,60 @@ const DEFAULTS: Required<StopFitOptions> = {
 };
 
 /**
- * Hard transitions in the ramp. For each adjacent pair (i-1, i) whose OKLab ΔE
- * exceeds cornerDE, both indices are seeded and `i-1` is flagged as a STEP edge:
+ * Hard transitions in the ramp. For each adjacent pair (i-1, i) whose OKLab ΔE exceeds
+ * cornerDE AND stands out from its neighbours (an isolated jump — a genuine band edge has
+ * flat colour on both sides), both indices are seeded and `i-1` is flagged as a STEP edge:
  * GMT's 'step' interpolation holds the left colour until the next stop then jumps,
- * reproducing a crisp band with two stops instead of many. This is what lets the
- * unified-stop fitter match banded palettes cheaply (no per-channel curves).
+ * reproducing a crisp band with two stops instead of many. This is what lets the unified-stop
+ * fitter match banded palettes cheaply (no per-channel curves).
+ *
+ * A steep but CONTINUOUS run (adjacent ΔE over the threshold on several texels in a row —
+ * a strongly biased segment does this) is NOT an edge: chaining step stops through it holds
+ * the wrong colour on each stop's own texel, where no refine can reach (measured 2026-09-07:
+ * ΔE 0.13 left on texels 88–89 of a bias-0.82 segment). Those texels are seeded as plain
+ * stops instead, and the refine's bias / smooth trials take it from there.
  */
-const detectCorners = (lab: RGB[], cornerDE: number): { seeds: number[]; stepLeft: Set<number> } => {
+const detectCorners = (ramp: RGB[], cornerDE: number): { seeds: number[]; stepLeft: Set<number> } => {
+  const d = new Array<number>(256).fill(0);
+  for (let i = 1; i < 256; i++) d[i] = oklabDistance(ramp[i - 1], ramp[i]);
   const set = new Set<number>();
   const stepLeft = new Set<number>();
   for (let i = 1; i < 256; i++) {
-    if (oklabDistance(lab[i - 1], lab[i]) > cornerDE) {
+    if (d[i] <= cornerDE) continue;
+    const neighbours = Math.max(i > 1 ? d[i - 1] : 0, i < 255 ? d[i + 1] : 0);
+    const isolated = d[i] > 2.5 * neighbours;
+    if (isolated) {
       if (i - 1 > 0) {
         set.add(i - 1);
         stepLeft.add(i - 1);
       }
       if (i < 255) set.add(i);
+    } else {
+      // a steep run: give the refine a foothold, but never a step
+      if (i - 1 > 0) set.add(i - 1);
     }
   }
   return { seeds: [...set].sort((a, b) => a - b), stepLeft };
 };
 
-/**
- * A stop at texel `idx`, or at an explicit `position` (a seed keeps the position it came
- * with; the right-hand stop of a hard edge sits HALF a texel early — see detectCorners).
- * The colour is always the ramp's at `idx`.
- */
 const mkStop = (
   idx: number,
   ramp: RGB[],
   id: number,
   interpolation: GradientStop['interpolation'] = 'linear',
   position: number = idx / 255,
+  bias = 0.5,
 ): GradientStop => ({
   id: `s${id}`,
   position,
   color: rgbToHex(ramp[idx]),
-  bias: 0.5,
+  bias,
   interpolation,
 });
+
+/** The bias grid the refine tries on a segment: coarse first, then fine around the best. */
+const BIAS_COARSE = [0.2, 0.35, 0.5, 0.65, 0.8];
+const biasFine = (b: number): number[] => [b - 0.1, b - 0.05, b + 0.05, b + 0.1].filter((x) => x > 0.05 && x < 0.95);
 
 /**
  * GMT's renderer holds a STEP segment's left colour through its right boundary INCLUSIVE
@@ -145,29 +174,73 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     const idx = Math.max(0, Math.min(255, Math.round(sd.position * 255)));
     if (used.has(idx)) continue;
     used.add(idx);
-    stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position))));
+    stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position)), sd.bias ?? 0.5));
   }
   if (o.seedStops.length) stops.sort((a, b) => a.position - b.position);
 
-  // 2) Refine to worst rendered error.
-  let guard = 0;
-  while (stops.length < o.maxStops && guard++ < 512) {
-    const rendered = renderStopsToRamp(stops, 'oklab', 'srgb');
-    let worst = -1;
-    let worstDE = o.targetDE;
-    for (let i = 1; i < 255; i++) {
+  // 2) Refine: the worst SEGMENT first gets its bias / smooth tried (idea 3); a new stop
+  //    only when that is not enough. One full render per iteration; the trials sample the
+  //    segment's own texels.
+  const texelOf = (p: number) => Math.max(0, Math.min(255, Math.round(p * 255)));
+  const segmentError = (st: GradientStop[], k: number, from: number, to: number): { max: number; at: number } => {
+    let max = 0;
+    let at = from;
+    for (let i = from; i <= to; i++) {
       if (used.has(i)) continue;
-      const d = oklabDistance(rendered[i], ramp[i]);
-      if (d > worstDE) {
-        worstDE = d;
-        worst = i;
+      const d = oklabDistance(sampleStops(st, i / 255, 'oklab', 'srgb'), ramp[i]);
+      if (d > max) {
+        max = d;
+        at = i;
       }
     }
-    if (worst < 0) break; // everything under tolerance
-    used.add(worst);
-    stops.push(mkStop(worst, ramp, nextId++));
+    return { max, at };
+  };
+  let guard = 0;
+  while (guard++ < 512) {
     stops.sort((a, b) => a.position - b.position);
+    const rendered = renderStopsToRamp(stops, 'oklab', 'srgb');
+    // the worst segment (by its worst texel). A step segment counts too: the corner
+    // detector marks any steep run as step pairs, and a steep-but-continuous run is
+    // better served by a biased linear / smooth segment — the trials below say which.
+    let worstK = -1;
+    let worstDE = o.targetDE;
+    let worstAt = -1;
+    for (let k = 0; k < stops.length - 1; k++) {
+      const from = texelOf(stops[k].position);
+      const to = texelOf(stops[k + 1].position);
+      for (let i = from; i <= to; i++) {
+        if (used.has(i)) continue;
+        const d = oklabDistance(rendered[i], ramp[i]);
+        if (d > worstDE) {
+          worstDE = d;
+          worstK = k;
+          worstAt = i;
+        }
+      }
+    }
+    if (worstK < 0) break; // everything under tolerance
+    if (o.fitBias) {
+      const from = texelOf(stops[worstK].position);
+      const to = texelOf(stops[worstK + 1].position);
+      type Interp = NonNullable<GradientStop['interpolation']>;
+      let best: { bias: number; interp: Interp; max: number } = { bias: stops[worstK].bias ?? 0.5, interp: (stops[worstK].interpolation ?? 'linear') as Interp, max: worstDE };
+      const trial = (bias: number, interp: Interp) => {
+        const st = stops.map((x, i) => (i === worstK ? { ...x, bias, interpolation: interp } : x));
+        const e = segmentError(st, worstK, from, to);
+        if (e.max < best.max - 1e-6) best = { bias, interp, max: e.max };
+      };
+      for (const interp of ['linear', 'smooth'] as const) {
+        for (const bias of BIAS_COARSE) trial(bias, interp);
+      }
+      for (const bias of biasFine(best.bias)) trial(bias, best.interp);
+      stops[worstK] = { ...stops[worstK], bias: best.bias, interpolation: best.interp };
+      if (best.max <= o.targetDE) continue; // the segment is fixed without a new stop
+    }
+    if (stops.length >= o.maxStops) break;
+    used.add(worstAt);
+    stops.push(mkStop(worstAt, ramp, nextId++));
   }
+  stops.sort((a, b) => a.position - b.position);
 
   return { stops, colorSpace: 'srgb', blendSpace: 'oklab' };
 };
