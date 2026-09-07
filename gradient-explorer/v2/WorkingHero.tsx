@@ -87,6 +87,9 @@ import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
 
+/** The gradient panel's corner radius (px) — `rounded-[20px]` on the panel below. */
+const PANEL_RADIUS = 20;
+
 const hexOf = (c: RGB): string =>
   '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 
@@ -130,8 +133,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [rampRef, rampW] = useWidth();
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
-  // The tray's left edge = the panel's left edge in the band's coordinates. Measured, not
-  // computed: the slot column is 45 px empty and a card-tall square once an image is in.
+  // The tray's left edge = the panel's left edge PLUS the panel's corner radius (owner,
+  // 2026-09-07: "include the corner radius too"), i.e. where the panel's flat bottom edge
+  // begins. Measured, not computed: the slot column is 45 px empty and a card-tall square
+  // once an image is in.
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelLeft, setPanelLeft] = useState(85);
   useEffect(() => {
@@ -140,7 +145,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     const band = el.closest('[data-gx-hero]') as HTMLElement | null;
     const update = () => {
       if (!band) return;
-      setPanelLeft(Math.round(el.getBoundingClientRect().left - band.getBoundingClientRect().left));
+      setPanelLeft(Math.round(el.getBoundingClientRect().left - band.getBoundingClientRect().left) + PANEL_RADIUS);
     };
     update();
     const ro = new ResizeObserver(update);

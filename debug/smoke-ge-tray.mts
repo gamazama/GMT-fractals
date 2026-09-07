@@ -103,7 +103,7 @@ async function main() {
   if (s.face !== 'adjust') fail(`[2] Adjust did not open the Adjust face (${s.face})`);
   if (s.trays !== 1) fail(`[2] ${s.trays} tray elements — there is ONE tray`);
   if (s.trayTop == null || s.cardBottom == null || Math.abs(s.trayTop - s.cardBottom) > 2) fail(`[2] the tray does not hang from the card (tray ${s.trayTop}, card ${s.cardBottom})`);
-  if (s.trayLeft !== s.panelLeft) fail(`[2] the tray is not inline with the panel (tray x=${s.trayLeft}, panel x=${s.panelLeft}) — it must not sit under the image column`);
+  if (s.trayLeft !== s.panelLeft! + 20) fail(`[2] the tray is not inline with the panel's flat bottom edge (tray x=${s.trayLeft}, panel x=${s.panelLeft} + 20 radius)`);
   if (s.wallY !== wallY0) fail(`[2] the wall moved when the tray opened (${wallY0} → ${s.wallY}) — the tray must overlay, not push (L6)`);
   console.log('✓ [2] Adjust opens the tray under the card, over the wall');
 
