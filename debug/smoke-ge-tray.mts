@@ -69,6 +69,7 @@ const state = (page: Page) =>
       trayTop: tr?.y ?? null,
       trayLeft: tr && hr ? tr.x - hr.x : null,
       panelLeft: hero && hr ? (hero.querySelector('[data-gx-hero] > div > div:nth-child(2)') as HTMLElement).getBoundingClientRect().x - hr.x : null,
+      tabsLeft: hero && hr ? (hero.querySelector('[data-gx-tray-tabs]') as HTMLElement | null)?.getBoundingClientRect().x ?? NaN : null,
       cardBottom: cr?.bottom ?? null,
       wallY: wall?.getBoundingClientRect().y ?? null,
       armedHint: /Pick a gradient to (mix with|replace)/.test(document.body.innerText),
@@ -108,10 +109,11 @@ async function main() {
   await page.click('[data-gx-tray-tab="adjust"]');
   await page.waitForTimeout(300);
   s = await state(page);
+  const hr0 = await page.evaluate(() => document.querySelector('[data-gx-hero]')!.getBoundingClientRect().x);
   if (s.face !== 'adjust') fail(`[2] Adjust did not open the Adjust face (${s.face})`);
   if (s.trays !== 1) fail(`[2] ${s.trays} tray elements — there is ONE tray`);
   if (s.trayTop == null || s.cardBottom == null || Math.abs(s.trayTop - s.cardBottom) > 2) fail(`[2] the tray does not hang from the card (tray ${s.trayTop}, card ${s.cardBottom})`);
-  if (s.trayLeft !== s.panelLeft! + 20) fail(`[2] the tray is not inline with the panel's flat bottom edge (tray x=${s.trayLeft}, panel x=${s.panelLeft} + 20 radius)`);
+  if (s.tabsLeft == null || Math.round(s.tabsLeft - hr0) !== s.trayLeft) fail(`[2] the tray's left edge is not the tab row's (tray x=${s.trayLeft}, tabs x=${s.tabsLeft != null ? Math.round(s.tabsLeft - hr0) : s.tabsLeft})`);
   if (s.wallY !== wallY0) fail(`[2] the wall moved when the tray opened (${wallY0} → ${s.wallY}) — the tray must overlay, not push (L6)`);
   console.log('✓ [2] Adjust opens the tray under the card, over the wall');
 

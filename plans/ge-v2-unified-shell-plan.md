@@ -316,6 +316,13 @@ read first, P1).
 phone.
 **Files:** v2/* (CSS + a `useIsPhone` seam), gradient-explorer-next.html viewport meta.
 
+### Wallpaper (fullscreen) ideas — owner, 2026-09-07 evening; not scheduled
+"A whole other world inside the app." W.1 the Wallpaper icon carries a silvery gradient
+background. W.2 Conic: a twist amount and a bias control. W.3 Radial: a sine strength /
+frequency around the circle. W.4 Gradient map: besides simple lightness, map individual RGB
+and HCL channels to the gradient. All of W.2–W.4 as on-screen controls that read without
+text, like the fullscreen controls already there.
+
 ### Phase G — parity, polish, swap
 - Parity checklist vs the old shell (`gradient-explorer.html`), item by item from
   `plans/ge-v2-functionality.md`; `/polish` on the v2 shell; label sweep across the three hosts

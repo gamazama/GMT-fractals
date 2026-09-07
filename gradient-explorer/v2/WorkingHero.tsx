@@ -159,7 +159,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     const band = el.closest('[data-gx-hero]') as HTMLElement | null;
     const update = () => {
       if (!band) return;
-      setPanelLeft(Math.round(el.getBoundingClientRect().left - band.getBoundingClientRect().left) + PANEL_RADIUS);
+      // The tray's left edge is the TAB ROW's left edge (owner, 2026-09-07 evening: "aligned
+      // to the tabs"); before the tabs exist (empty source) the panel's flat edge stands in.
+      const tabs = band.querySelector('[data-gx-tray-tabs]') as HTMLElement | null;
+      const edge = tabs ? tabs.getBoundingClientRect().left : el.getBoundingClientRect().left + PANEL_RADIUS;
+      setPanelLeft(Math.round(edge - band.getBoundingClientRect().left));
       setPanelH(Math.round(el.getBoundingClientRect().height));
     };
     update();
@@ -433,16 +437,24 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                          segmented control in the Even / Perceptual / Stops style; the open face's
                          segment is a TAB — it takes the tray's colour and a tongue runs from its
                          bottom to the tray's (borderless) top edge, 8 px below, so the two read as
-                         one piece. No chevrons: the tab says it is open. Click again closes. */
-                      <div className="inline-flex rounded-lg border border-line/20" data-gx-tray-tabs>
+                         one piece. The corners under the open tab are HARD — the segment's bottom
+                         corners and, when it is an end segment, the pill's own outer bottom corner
+                         (owner: "the button's corners need hardening when it's under a tab"). No
+                         chevrons: the tab says it is open. Click again closes. */
+                      <div
+                        className={`inline-flex rounded-t-lg border border-line/20 ${tray === TRAY_TABS[0].face ? '' : 'rounded-bl-lg'} ${tray === TRAY_TABS[TRAY_TABS.length - 1].face ? '' : 'rounded-br-lg'}`}
+                        data-gx-tray-tabs
+                      >
                         {TRAY_TABS.map((t, i) => {
                           const on = tray === t.face;
-                          const ends = `${i === 0 ? 'rounded-l-[7px]' : ''} ${i === TRAY_TABS.length - 1 ? 'rounded-r-[7px]' : ''}`;
+                          const first = i === 0;
+                          const last = i === TRAY_TABS.length - 1;
+                          const ends = `${first ? 'rounded-tl-[7px]' : ''} ${first && !on ? 'rounded-bl-[7px]' : ''} ${last ? 'rounded-tr-[7px]' : ''} ${last && !on ? 'rounded-br-[7px]' : ''}`;
                           return (
                             <button
                               key={t.face}
                               type="button"
-                              className={`relative px-2.5 h-7 text-[13px] ${ends} ${on ? 'bg-surface-section text-accent-300 rounded-b-none' : 'text-fg-muted hover:text-fg'}`}
+                              className={`relative px-2.5 h-7 text-[13px] ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
                               onClick={() => onTray(t.face)}
                               title={t.title}
                               data-gx-tray-tab={t.face}
