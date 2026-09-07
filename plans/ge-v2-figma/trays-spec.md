@@ -194,3 +194,25 @@ falsified three ways). Multi-select colour editing already applied to every sele
   18.8 → 19.2 → 19.6 %). Fixed by seeding the fit with the stop positions both gradients already
   have (`seedPositions`, carried as `seeds` on the Mix input: yours at enterMix, the other's on
   the pick). Three bakes now reproduce the stops exactly. Guard: `test:palette` (stopfit).
+
+## 12. The stops-walk bug, the whole of it (2026-09-07)
+
+The owner's "a new set of shifted stops every time I click Mix" had THREE causes, found one
+under the other:
+1. **Adjust applied twice.** Leaving Mix baked the result (Adjust and curves folded in) but left
+   the dials set, so they applied again on the next pass — a leftover Phase of 0.02 moved every
+   stop 2 % per toggle. `use(…, { bakes: true })` now resets Adjust + curves like the click-to-edit
+   bake does. Guarded by `smoke:ge-tray` [5] (falsified: red without `bakes`).
+2. **The fit re-found its stops.** Each bake re-fitted the ramp from nothing; a re-quantised ramp
+   moves the fitter's worst-error texel and interior stops walked ~0.4 % per bake. The fit now
+   seeds the stops both gradients already have (`seedStops`, position + interpolation).
+3. **A step edge walked one texel per render.** GMT's renderer holds a step segment's left colour
+   through its right boundary INCLUSIVE, so a right-hand stop placed exactly on texel `i` paints
+   `i` with the left colour and the jump lands on `i + 1`; the next fit moved the edge again.
+   The fitter now places the right-hand stop of a hard edge half a texel early and keeps seeded
+   positions exact. Side effect: the fitter's worst-case edge error at 32 stops fell from 0.153
+   to 0.105. Guarded by `test:palette` stopfit [5] (a step stop in the fixture; three seeded
+   re-fits must reproduce every position).
+Measured after all three: clean toggles and toggles with a leftover Phase both hold every stop
+exactly. Scrubbing the blend costs ~17 ms a step with no long tasks — the app is not slow; the
+headless probes that loaded 11,131 gradients against the dev server during this work were.

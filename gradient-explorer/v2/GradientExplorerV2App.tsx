@@ -40,6 +40,8 @@ import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
+import type { SeedStop } from '../../palette/core/workingPipeline';
+import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
@@ -87,16 +89,21 @@ const enterMix = (): void => {
   }
   // The stops your gradient already has seed every bake's fit, so mixing and baking
   // again does not walk them (grep seedPositions in palette/core/stopFit.ts).
-  w.setInput({ kind: 'build', seeds: d ? d.config.stops.map((s) => s.position) : [] });
+  w.setInput({ kind: 'build', seeds: d ? d.config.stops.map((s) => ({ position: s.position, interpolation: s.interpolation })) : [] });
   armSlot('B');
 };
 
-/** Add the other gradient's stop positions to the Mix input's seeds (a pick filled a bar). */
-const addMixSeeds = (positions: number[]): void => {
+/** Add the other gradient's stops to the Mix input's seeds (a pick filled a bar). */
+const addMixSeeds = (stops: GradientConfig['stops']): void => {
   const w = useWorkingStore.getState();
-  const cur = w.input.kind === 'build' ? w.input.seeds ?? [] : [];
-  const merged = Array.from(new Set([...cur, ...positions].map((p) => Math.round(p * 255)))).sort((a, b) => a - b).map((i) => i / 255);
-  useWorkingStore.setState({ input: { kind: 'build', seeds: merged } });
+  const cur: SeedStop[] = w.input.kind === 'build' ? w.input.seeds ?? [] : [];
+  const byTexel = new Map<number, SeedStop>();
+  for (const s of [...cur, ...stops.map((s) => ({ position: s.position, interpolation: s.interpolation }))]) {
+    const i = Math.round(s.position * 255);
+    // a step edge wins over a linear seed on the same texel
+    if (!byTexel.has(i) || s.interpolation === 'step') byTexel.set(i, { position: i / 255, interpolation: s.interpolation });
+  }
+  useWorkingStore.setState({ input: { kind: 'build', seeds: Array.from(byTexel.values()).sort((a, b) => a.position - b.position) } });
 };
 
 export const GradientExplorerV2App: React.FC = () => {
@@ -145,7 +152,7 @@ export const GradientExplorerV2App: React.FC = () => {
       // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to
       // browse for this pick) so the hero shows the new blend immediately.
       if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().setInput({ kind: 'build' });
-      addMixSeeds(p.config.stops.map((s) => s.position));
+      addMixSeeds(p.config.stops);
       deselectActiveHero();
       setTray('mix');
       return;
@@ -190,7 +197,8 @@ export const GradientExplorerV2App: React.FC = () => {
         const gs = readGeneratorSlice();
         const untouched = from === 'build' && !gs.mixL && !gs.mixC && !gs.mixH;
         const name = untouched ? slotSnapshot(useGeneratorStore.getState().slotA).name : workingNameNow();
-        if (d) w.use(d.config, name, from === 'build' ? 'Mix' : 'Image');
+        // `bakes`: the result carries Adjust + curves, so they reset with it (see `use`).
+        if (d) w.use(d.config, name, from === 'build' ? 'Mix' : 'Image', { bakes: true });
       }
       if (to === 'build') enterMix();
       else if (to === 'extract') w.setInput({ kind: 'extract' });

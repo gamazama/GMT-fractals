@@ -12,7 +12,9 @@
  *       2026-09-07, no A / B language); a second wall click fills that bar and the Mix
  *       face stays open
  *   [5] Esc — the tray closes, the slot disarms, the hero is still there and the wall still
- *       has not moved
+ *       has not moved; the bake RESET the leftover Adjust value set before [4] (it would
+ *       apply again on every pass otherwise), and a second Mix on / off leaves every stop
+ *       exactly where it was (the seeded fit + the half-texel step edge)
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
  *       the colour picker in it; Esc closes it
  *
@@ -24,7 +26,10 @@
  * band's padding); dropping `armSlot('B')` from enterMix → [4] red ("did not arm band B");
  * dropping the hero's clearSelection effect → [6] red ("the stop stayed selected") — the
  * first cut of [6] only checked that the face closed and stayed GREEN on that break, which is
- * why [6] also asserts the picker is gone. Wants `npm run dev` on port 3400.
+ * why [6] also asserts the picker is gone. Dropping `{ bakes: true }` from the shell's
+ * leave-Mix `use` → [5] red (first on "the wall moved (383 → 384)": the un-reset Adjust
+ * re-opens the 1 px labelled source band and the hero grows, before the phase check itself
+ * fires). Wants `npm run dev` on port 3400.
  *
  * Run: `npm run smoke:ge-tray`.
  */
@@ -106,6 +111,10 @@ async function main() {
   if (s.face !== 'curves' || s.trays !== 1) fail(`[3] Curves did not replace the face (${s.face}, ${s.trays} trays)`);
   console.log('✓ [3] Curves replaces Adjust — still one tray');
 
+  // A leftover Adjust value (as a user who once dragged Phase would have): the bake on
+  // leaving Mix must fold it in ONCE and reset it, or it applies again on every pass and
+  // the stops walk (measured 2026-09-07: 2 % further right per toggle).
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.02 }));
   await page.click('[data-gx-tray-tab="mix"]');
   await page.waitForTimeout(400);
   s = await state(page);
@@ -130,7 +139,18 @@ async function main() {
   if (s.armedHint) fail('[5] Escape closed Mix but left the pick armed');
   if (!s.hero) fail('[5] the hero unmounted');
   if (s.wallY !== wallY0) fail(`[5] the wall moved (${wallY0} → ${s.wallY})`);
-  console.log('✓ [5] Escape closes the tray and disarms; the wall never moved');
+  const phase = await page.evaluate(() => (window as any).__store.getState().paletteGenerator.phase);
+  if (phase !== 0) fail(`[5] leaving Mix baked the result but left Adjust set (phase ${phase}) — it would apply again next pass`);
+  const knotsA = await page.evaluate(() => Array.from(document.querySelector('[title="Double-click to select all"]')!.nextElementSibling!.children).map((k) => (k as HTMLElement).style.left).join(' '));
+  await page.click('[data-gx-tray-tab="mix"]');
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const knotsB = await page.evaluate(() => Array.from(document.querySelector('[title="Double-click to select all"]')!.nextElementSibling!.children).map((k) => (k as HTMLElement).style.left).join(' '));
+  if (knotsA !== knotsB) fail(`[5] a second Mix on/off moved the stops:
+    ${knotsA}
+    ${knotsB}`);
+  console.log('✓ [5] Escape closes the tray, disarms, resets Adjust; the wall never moved; a second toggle leaves the stops exactly');
 
   const swatch = page.locator('[data-gx-hero] [class*="cursor-ew-resize"]').first();
   await swatch.click();

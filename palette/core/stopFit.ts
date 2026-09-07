@@ -29,19 +29,21 @@ export interface StopFitOptions {
   seedCorners?: boolean;
   /** Adjacent-sample ΔE above which a position counts as a hard transition. */
   cornerDE?: number;
-  /** Positions (0..1) to seed stops at BEFORE the refine loop — the stops the input already
-   *  had. Without them every re-fit of a re-quantised ramp finds its "worst error" a texel
-   *  further along and the interior stops WALK on each bake (measured 2026-09-07 in the v2
-   *  Mix: 16.9 → 18.8 → 19.2 → 19.6 % over three bakes). With them a re-fit of an
-   *  unchanged gradient reproduces its stops exactly. Over budget, the seeds win over the
-   *  refine, never over the corners. */
-  seedPositions?: number[];
+  /** Stops to seed BEFORE the refine loop — the position AND interpolation of the stops the
+   *  input already had. Without them every re-fit of a re-quantised ramp finds its "worst
+   *  error" a texel further along and the interior stops WALK on each bake (measured
+   *  2026-09-07 in the v2 Mix: 16.9 → 18.8 → 19.2 → 19.6 % over three bakes). Position alone
+   *  is not enough: a seed at a STEP edge re-fitted as linear leaves an error the refine
+   *  patches with one more stop per bake (measured: 95.7, then 96.1, then 96.5 %). With
+   *  both, a re-fit of an unchanged gradient reproduces its stops exactly. Over budget the
+   *  seeds win over the refine, never over the corners. */
+  seedStops?: { position: number; interpolation?: GradientStop['interpolation'] }[];
 }
 
 const DEFAULTS: Required<StopFitOptions> = {
   targetDE: 0.02,
   maxStops: 32,
-  seedPositions: [],
+  seedStops: [],
   seedCorners: true,
   // Only TRUE posterization edges become 'step'. Set high so gradual (but
   // colourful) rainbow transitions stay smooth — marking those as step creates
@@ -71,18 +73,34 @@ const detectCorners = (lab: RGB[], cornerDE: number): { seeds: number[]; stepLef
   return { seeds: [...set].sort((a, b) => a - b), stepLeft };
 };
 
+/**
+ * A stop at texel `idx`, or at an explicit `position` (a seed keeps the position it came
+ * with; the right-hand stop of a hard edge sits HALF a texel early — see detectCorners).
+ * The colour is always the ramp's at `idx`.
+ */
 const mkStop = (
   idx: number,
   ramp: RGB[],
   id: number,
   interpolation: GradientStop['interpolation'] = 'linear',
+  position: number = idx / 255,
 ): GradientStop => ({
   id: `s${id}`,
-  position: idx / 255,
+  position,
   color: rgbToHex(ramp[idx]),
   bias: 0.5,
   interpolation,
 });
+
+/**
+ * GMT's renderer holds a STEP segment's left colour through its right boundary INCLUSIVE
+ * (`pos <= s2.position` in sampleSorted), so a right-hand stop placed exactly on texel `i`
+ * paints texel `i` with the LEFT colour and the jump lands on `i + 1`. Re-fit that, and
+ * the edge walks one texel right per bake (measured 2026-09-07: 212 → 213 → 214). The
+ * right-hand stop of a hard edge therefore sits half a texel early, so texel `i` is past
+ * it and takes the right colour: the edge stays where the ramp has it.
+ */
+const edgeRightPosition = (i: number): number => (i - 0.5) / 255;
 
 /**
  * Fit a 256-step ramp to GMT stops. `ramp` is 256 sRGB colours (0-255).
@@ -112,20 +130,24 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     for (const idx of chosen) {
       if (used.has(idx) || stops.length >= o.maxStops) continue;
       used.add(idx);
-      stops.push(mkStop(idx, ramp, nextId++, stepLeft.has(idx) ? 'step' : 'linear'));
+      const left = stepLeft.has(idx);
+      // the right side of a jump (its left neighbour is a step edge) sits half a texel early
+      const rightOfEdge = !left && stepLeft.has(idx - 1);
+      stops.push(mkStop(idx, ramp, nextId++, left ? 'step' : 'linear', rightOfEdge ? edgeRightPosition(idx) : idx / 255));
     }
     stops.sort((a, b) => a.position - b.position);
   }
 
-  // 1b) Seed the positions the input already had (see `seedPositions`).
-  for (const p of o.seedPositions) {
+  // 1b) Seed the stops the input already had (see `seedStops`) — at their EXACT positions
+  //     (a half-texel edge stop must not be rounded back onto the texel, or the edge walks).
+  for (const sd of o.seedStops) {
     if (stops.length >= o.maxStops) break;
-    const idx = Math.max(0, Math.min(255, Math.round(p * 255)));
+    const idx = Math.max(0, Math.min(255, Math.round(sd.position * 255)));
     if (used.has(idx)) continue;
     used.add(idx);
-    stops.push(mkStop(idx, ramp, nextId++));
+    stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position))));
   }
-  if (o.seedPositions.length) stops.sort((a, b) => a.position - b.position);
+  if (o.seedStops.length) stops.sort((a, b) => a.position - b.position);
 
   // 2) Refine to worst rendered error.
   let guard = 0;

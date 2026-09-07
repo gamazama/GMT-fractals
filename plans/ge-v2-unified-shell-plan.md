@@ -395,6 +395,11 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   already have (`seedPositions` in stopFit, carried on the `build` input as `seeds`), and three
   bakes reproduce the stops exactly. trays-spec §11.
 
+- 2026-09-07 · Phase C, the stops-walk bug closed for real (three causes: Adjust applied twice
+  on a bake, the fit re-finding its stops, and a step edge walking one texel per render on GMT's
+  inclusive step boundary). trays-spec §12. `use()` gained `bakes`; stopFit gained `seedStops`
+  and the half-texel edge stop; `smoke:ge-tray` [5] and stopfit [5] guard it.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

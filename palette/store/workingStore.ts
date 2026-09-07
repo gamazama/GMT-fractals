@@ -117,7 +117,11 @@ export interface WorkingState {
   /** Replace the input. One undo entry. Clears any fold memory. */
   setInput: (input: WorkingInput) => void;
   /** "Use": a fixed gradient becomes the input (cloned). One undo entry; a new session. */
-  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean }) => void;
+  /** `bakes`: the config already CARRIES the current Adjust dials and curves (a live Mix /
+   *  Image committed on leaving it) — reset them, as beginEdit does, or they apply AGAIN on
+   *  the next pass. Measured 2026-09-07: a leftover Phase of 0.02 shifted every stop 2 %
+   *  further right on each Mix toggle. */
+  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean; bakes?: boolean }) => void;
   setName: (name: string | null) => void;
   /** Fold the live pipeline into editable stops (no-op when already editing an untouched
    *  stops input). Collects the folded gradient into Recent. */
@@ -276,9 +280,13 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
 
   use: (config, name, source, opts) => {
     const c = cloneConfig(config);
-    paramEdit(() =>
-      set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent }),
-    );
+    paramEdit(() => {
+      set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent });
+      if (opts?.bakes) {
+        setGeneratorSlice({ ...MAIN_DEFAULTS });
+        useGeneratorStore.setState({ tracks: null, curvesOn: false });
+      }
+    });
   },
 
   setName: (name) => paramEdit(() => set({ name: name && name.trim() ? name : null })),
