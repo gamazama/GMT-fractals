@@ -292,16 +292,22 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                         <div className="absolute top-0 bottom-0 w-px bg-fg/30 pointer-events-none z-10" style={{ left: `${defaultPct}%` }} />
                     )}
                 </div>
+                {/* The default tick's hit area RESETS on a click but never swallows the
+                    pointer-down: with no thumb, the fill's edge at a default value sits exactly
+                    on this tick, and a drag that starts there must still be a drag (measured
+                    2026-09-07: Hue rotate at 0 could not be grabbed — "click a few times
+                    before it moves"). The track's own pointer-down runs first (bubbling), so
+                    a plain click lands on the tick's position and the reset then makes it
+                    exact; a drag just drags. */}
                 {defaultPct !== null && !disabled && (
                     <button
                         type="button"
-                        className="absolute top-0 bottom-0 w-[10px] -ml-[5px] z-20 cursor-pointer"
+                        className="absolute top-0 bottom-0 w-[10px] -ml-[5px] z-20 cursor-ew-resize"
                         style={{ left: `${defaultPct}%` }}
                         title={`Reset to ${defaultValue}`}
                         aria-label="Reset to default"
                         tabIndex={-1}
-                        onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleReset(); }}
+                        onClick={(e) => { e.preventDefault(); if (!track.dragged()) handleReset(); }}
                     />
                 )}
             </div>

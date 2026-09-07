@@ -51,7 +51,7 @@ export function usePrecisionTrackDrag(opts: PrecisionTrackDragOptions) {
     const { min, max, step = 0.01, mapping, hardMin, hardMax, disabled, onChange, onDragStart, onDragEnd, onImmediate } = opts;
     const hasBounds = min !== undefined && max !== undefined && min !== max;
 
-    const drag = React.useRef({ active: false, startX: 0, startValue: 0, lastShift: false, lastAlt: false });
+    const drag = React.useRef({ active: false, startX: 0, startValue: 0, lastShift: false, lastAlt: false, moved: false });
 
     const quantize = React.useCallback((v: number) => (step ? Math.round(v / step) * step : v), [step]);
     const clampHard = React.useCallback((v: number) => {
@@ -79,7 +79,7 @@ export function usePrecisionTrackDrag(opts: PrecisionTrackDragOptions) {
         onChange(v);
         onImmediate?.(v);
 
-        drag.current = { active: true, startX: e.clientX, startValue: clickedDisplay, lastShift: e.shiftKey, lastAlt: e.altKey };
+        drag.current = { active: true, startX: e.clientX, startValue: clickedDisplay, lastShift: e.shiftKey, lastAlt: e.altKey, moved: false };
     }, [disabled, hasBounds, min, max, mapping, quantize, clampHard, onChange, onDragStart, onImmediate]);
 
     const onPointerMove = React.useCallback((e: React.PointerEvent<HTMLElement>) => {
@@ -100,6 +100,7 @@ export function usePrecisionTrackDrag(opts: PrecisionTrackDragOptions) {
             d.lastAlt = e.altKey;
         }
 
+        if (Math.abs(e.clientX - d.startX) > 3) d.moved = true;
         const sens = base * precisionMultiplier(e);
         let nextDisplay = quantize(d.startValue + (e.clientX - d.startX) * sens);
         nextDisplay = Math.max(dMin, Math.min(dMax, nextDisplay));
@@ -117,5 +118,9 @@ export function usePrecisionTrackDrag(opts: PrecisionTrackDragOptions) {
         onDragEnd?.();
     }, [onDragEnd]);
 
-    return { onPointerDown, onPointerMove, onPointerUp, hasBounds };
+    /** Did the last gesture MOVE (more than a click's worth)? A reset tick that sits on the
+     *  track reads this on click so a drag that started on it stays a drag. */
+    const dragged = React.useCallback(() => drag.current.moved, []);
+
+    return { onPointerDown, onPointerMove, onPointerUp, hasBounds, dragged };
 }
