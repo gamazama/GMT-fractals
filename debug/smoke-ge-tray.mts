@@ -16,6 +16,10 @@
  *       has not moved; the bake RESET the leftover Adjust value set before [4] (it would
  *       apply again on every pass otherwise), and a second Mix on / off leaves every stop
  *       exactly where it was (the seeded fit + the half-texel step edge)
+ *   [7] C.3 — closing Adjust with a dial turned BAKES it (dial reset, chip "editing · return
+ *       to source"); the chip click cancels the bake (the dial is live again)
+ *   [8] C.3 — the "live from Mix · cancel" chip closes Mix without baking; the gradient from
+ *       before Mix is back
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
  *       the colour picker in it; Esc closes it
  *
@@ -23,6 +27,8 @@
  * same day: [4]'s second click used the wall's PRE-hero box and hit the hero's ramp — it armed
  * the top half and never picked; the step now re-measures the wall and asserts the other bar
  * took the pick, which the old click fails): making `Tray` `relative` instead of
+ * C.3 (same day): dropping the leave-face `beginEdit` in openTray → [7] red ("closing Adjust
+ * did not bake"); making `cancelLive` return early → [8] red ("the chip did not cancel").
  * `absolute` → [2] red ("not in the 24 px gutter (x=34)" — the relative box picks up the
  * band's padding); dropping `armSlot('B')` from enterMix → [4] red ("did not arm band B");
  * dropping the hero's clearSelection effect → [6] red ("the stop stayed selected") — the
@@ -168,6 +174,54 @@ async function main() {
   // portalled into the hidden host and the next swatch click finds a stale inspector.
   if (s.picker) fail('[6] Escape closed the inspector face but the stop stayed selected (the picker is still in the host)');
   console.log('✓ [6] a stop selection opens the inspector face; Escape closes it and clears the selection');
+
+  // C.3 — bake and cancel are ONE mechanism for every face. [7] Adjust: a dial turned, the
+  // face closed → the dial is BAKED into the stops (reset to default, the chip reads
+  // "editing · return to source"); the chip click CANCELS the bake (the dial comes back live).
+  // Falsified by dropping the leave-face `beginEdit` in openTray: "closing Adjust did not
+  // bake" goes red.
+  const chip = () => page.evaluate(() => {
+    const el = document.querySelector('[data-gx-hero] [data-gx-state]') as HTMLElement | null;
+    return { state: el?.dataset.gxState ?? null, text: el?.innerText.replace(/\s+/g, ' ').trim() ?? '' };
+  });
+  const phaseNow = () => page.evaluate(() => (window as any).__store.getState().paletteGenerator.phase as number);
+  await page.click('[data-gx-tray-tab="adjust"]');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.05 }));
+  await page.waitForTimeout(300);
+  await page.click('[data-gx-tray-tab="adjust"]');
+  await page.waitForTimeout(400);
+  s = await state(page);
+  let c = await chip();
+  if (s.face) fail(`[7] the Adjust tab did not close the face (${s.face})`);
+  if (c.state !== 'edited' || !/return to source/.test(c.text)) fail(`[7] closing Adjust did not bake (chip: ${c.state} "${c.text}")`);
+  if ((await phaseNow()) !== 0) fail('[7] the bake left the Phase dial set — it would apply again');
+  await page.click('[data-gx-hero] [data-gx-state="edited"]');
+  await page.waitForTimeout(400);
+  c = await chip();
+  if (c.state !== 'preview') fail(`[7] return to source did not undo the bake (chip: ${c.state})`);
+  if (Math.abs((await phaseNow()) - 0.05) > 1e-9) fail('[7] return to source did not bring the dial back');
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0 }));
+  console.log('✓ [7] closing Adjust bakes the dial into the stops; the chip cancels the bake');
+
+  // [8] Mix: the live chip reads "live from Mix · cancel"; clicking it closes the face WITHOUT
+  // baking — the gradient from before Mix is back as a preview. Falsified by making
+  // cancelLive a no-op: "the chip did not cancel" goes red.
+  const nameBefore = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
+  await page.click('[data-gx-tray-tab="mix"]');
+  await page.waitForTimeout(400);
+  c = await chip();
+  if (c.state !== 'live' || !/cancel/.test(c.text)) fail(`[8] the live chip does not offer cancel (chip: ${c.state} "${c.text}")`);
+  await page.click('[data-gx-hero] [data-gx-state="live"]');
+  await page.waitForTimeout(400);
+  s = await state(page);
+  c = await chip();
+  if (s.face) fail(`[8] the chip did not close the Mix face (${s.face})`);
+  if (s.armedHint) fail('[8] cancelling Mix left the pick armed');
+  if (c.state !== 'preview') fail(`[8] the chip did not cancel — the hero is not back on the gradient from before (chip: ${c.state})`);
+  const nameAfter = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
+  if (nameAfter !== nameBefore) fail(`[8] cancel came back with a different gradient ("${nameBefore}" → "${nameAfter}")`);
+  console.log('✓ [8] the live chip cancels Mix: face closed, nothing baked, the gradient from before is back');
 
   await browser.close();
   if (errors.length) {

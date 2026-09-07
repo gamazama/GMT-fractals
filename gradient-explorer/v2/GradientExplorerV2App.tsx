@@ -90,7 +90,7 @@ const enterMix = (): void => {
   }
   // The stops your gradient already has seed every bake's fit, so mixing and baking
   // again does not walk them (grep seedPositions in palette/core/stopFit.ts).
-  w.setInput({ kind: 'build', seeds: d ? d.config.stops.map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias })) : [] });
+  w.goLive({ kind: 'build', seeds: d ? d.config.stops.map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias })) : [] });
   armSlot('B');
 };
 
@@ -152,7 +152,7 @@ export const GradientExplorerV2App: React.FC = () => {
       if (candidate.mode !== 'favients') armSlot(null);
       // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to
       // browse for this pick) so the hero shows the new blend immediately.
-      if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().setInput({ kind: 'build' });
+      if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().goLive({ kind: 'build' });
       addMixSeeds(p.config.stops);
       deselectActiveHero();
       setTray('mix');
@@ -191,8 +191,17 @@ export const GradientExplorerV2App: React.FC = () => {
     const face: TrayFace = cur === next ? null : next;
     const from = sourceOf(cur);
     const to = sourceOf(face);
+    const w = useWorkingStore.getState();
+    // ONE rule for every face (C.3, owner: "the default will be to bake after switching from
+    // any mode"): leaving Curves or Adjust with something applied folds it into the stops
+    // (beginEdit — the chip then offers "return to source" as the cancel). Untouched dials
+    // fold nothing. First, so a face left for Mix hands Mix the baked gradient, not live
+    // curves that would apply again over the blend.
+    if ((cur === 'curves' || cur === 'adjust') && face !== cur) {
+      const d = deriveWorkingNow();
+      if (d && !d.passthrough && w.input.kind !== 'build' && w.input.kind !== 'extract') w.beginEdit();
+    }
     if (from !== to) {
-      const w = useWorkingStore.getState();
       if ((from === 'build' || from === 'extract') && w.input.kind === from) {
         const d = deriveWorkingNow();
         // An UNTOUCHED mix (all three blends still at 0) is your gradient unchanged: it keeps
@@ -205,11 +214,20 @@ export const GradientExplorerV2App: React.FC = () => {
         if (d) w.use(d.config, name, from === 'build' ? 'Mix' : 'Image', { bakes: true });
       }
       if (to === 'build') enterMix();
-      else if (to === 'extract') w.setInput({ kind: 'extract' });
+      else if (to === 'extract') w.goLive({ kind: 'extract' });
       if (to !== 'build') armSlot(null);
       deselectActiveHero();
     }
     setTray(face);
+  }, []);
+
+  // Cancel a live face (the state chip, C.3): what was working before Mix / Image comes
+  // back and the face closes WITHOUT baking (so not openTray, which would commit it).
+  const cancelLive = useCallback(() => {
+    useWorkingStore.getState().cancelLive();
+    armSlot(null);
+    deselectActiveHero();
+    setTray(null);
   }, []);
 
   // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
@@ -298,6 +316,7 @@ export const GradientExplorerV2App: React.FC = () => {
         source={source}
         tray={tray}
         onTray={(face) => (face === 'image' ? requestImageOrOpen() : openTray(face))}
+        onCancelLive={cancelLive}
         onShare={share}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}

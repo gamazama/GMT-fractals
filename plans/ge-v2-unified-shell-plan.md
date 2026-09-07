@@ -198,10 +198,15 @@ order of work from here, each folded into the phase that owns the surface.
   and the slot open the file dialog and the source switches only when one arrives; cancel =
   nothing changes. `smoke:ge-hero` [3] guards it (the old "empty Image source" band is now
   reachable only by a drop that fails to decode).
-- **C.3 · Bake and cancel, one rule for every face.** A face (Mix · Image · Curves · Adjust) is a
-  LIVE edit shown as the split ramp; leaving it BAKES by default (owner) — today true for Mix
-  and Image (`use(…, { bakes: true })`), still to do for Curves and Adjust, which persist as live
-  dials after the tray closes. Bake = the stops are the result and the dials reset; CANCEL =
+- **C.3 · Bake and cancel, one rule for every face** (DONE 2026-09-07 evening): leaving Curves
+  or Adjust with something applied folds it into the stops (`beginEdit`, before any source
+  switch, so Mix is handed the baked gradient); Mix and Image bake as before. The chip is the
+  cancel for both: "editing · return to source" undoes a bake, "live from Mix · cancel" leaves
+  a live face without baking (`liveFrom` / `goLive` / `cancelLive` in workingStore).
+  `smoke:ge-tray` [7] and [8] guard it, both falsified. The original note: a face (Mix · Image
+  · Curves · Adjust) is a LIVE edit shown as the split ramp; leaving it BAKES by default (owner)
+  — was true for Mix and Image (`use(…, { bakes: true })`), Curves and Adjust persisted as
+  live dials after the tray closed. Bake = the stops are the result and the dials reset; CANCEL =
   return to the source, which the state chip already offers for an edited bake ("editing ·
   return to source") and must also offer for a live face (the chip reads "live from Mix";
   clicking it cancels). No separate Bake button in a face — the header is the place. Owner:
@@ -227,6 +232,13 @@ order of work from here, each folded into the phase that owns the surface.
   style). Replace image = a small icon button on the preview, shown when the draw tool is not
   active (drop-anywhere still works). The hero's slot keeps its thumbnail: it says "from an
   image" and opens the face; it is no longer somewhere to look. Design it as a frame first.
+- **C.7 · Bias handles only over the gradient** (owner, 2026-09-07 evening): the hero's bias
+  handles (the mid-segment knots) show only while the pointer is over the ramp; at rest the
+  ramp carries its stops alone ("the less on screen, the better").
+- **C.8 · A slider skin for the shell** (owner, same message): the shared slider component
+  gets a second skin matching v2's visual language (the rounded, quiet controls of the tray)
+  — the Mix sliders and Adjust bins wear it; app-gmt keeps the default. Genericize, don't fork:
+  a skin prop on the master component (grep `Slider` under `components/`), never a parallel.
 - **D.1 · My Gradients as DATED bins** (folds into Phase D): entries file into a bin per day by
   default; the session keeps refreshing the SAME entry until the gradient is favourited or a
   new one is selected (today's Recent-session rule, kept) — then the next work opens a new

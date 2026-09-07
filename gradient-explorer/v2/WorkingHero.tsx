@@ -119,6 +119,8 @@ interface Props {
   tray: TrayFace;
   /** Open a face (the same face again closes it); `null` closes. */
   onTray: (face: TrayFace) => void;
+  /** The state chip on a live face: cancel it — back to what was working before (C.3). */
+  onCancelLive: () => void;
   onShare: () => void;
   onExport: () => void;
   onWallpaper: () => void;
@@ -127,8 +129,9 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelLive, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
+  const liveFrom = useWorkingStore((s) => s.liveFrom);
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [rampRef, rampW] = useWidth();
@@ -263,19 +266,32 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   };
   // The state reads inline in the heading bar (V3 as amended by Phase A iteration 1); an
   // empty source has no state of its own — the source band says what is missing instead.
+  // Bake and cancel are ONE mechanism, and the chip is it (C.3): a live face bakes when it
+  // closes; clicking the chip cancels it instead — back to what was working before. An
+  // edited bake's chip returns to its source the same way.
+  const liveName = source === 'build' ? 'Mix' : 'Image';
   const stateChip = emptySource ? null : derived.live ? (
-    <StateChip kind="live" variant="inline">live from {source === 'build' ? 'Mix' : 'Image'}</StateChip>
+    <StateChip
+      kind="live"
+      variant="inline"
+      title={liveFrom ? `Cancel ${liveName}: go back to the gradient you had before it (closing the face keeps the result)` : undefined}
+      onClick={liveFrom ? onCancelLive : undefined}
+      data-gx-state="live"
+    >
+      live from {liveName}{liveFrom ? ' · cancel' : ''}
+    </StateChip>
   ) : derived.edited ? (
     <StateChip
       kind="edited"
       variant="inline"
       title={bakedFrom ? 'Undo the bake and go back to the source that produced this gradient' : 'Edited stops'}
-      onClick={() => useWorkingStore.getState().returnToSource()}
+      onClick={bakedFrom ? () => useWorkingStore.getState().returnToSource() : undefined}
+      data-gx-state="edited"
     >
       editing{bakedFrom ? ' · return to source' : ''}
     </StateChip>
   ) : (
-    <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it">preview</StateChip>
+    <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it" data-gx-state="preview">preview</StateChip>
   );
 
   // What the EMPTY source band says (L8): the source is selected but has nothing in it.

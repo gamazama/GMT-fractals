@@ -65,7 +65,7 @@ const DOT: Record<ChipKind, string> = {
   armed: 'bg-gx-armed',
 };
 
-export const StateChip: React.FC<Props> = ({ kind, children, title, className = '', onClick, variant = 'fill' }) => {
+export const StateChip: React.FC<Props> = ({ kind, children, title, className = '', onClick, variant = 'fill', ...rest }) => {
   const inline = variant === 'inline';
   const cls = [
     inline
@@ -77,14 +77,14 @@ export const StateChip: React.FC<Props> = ({ kind, children, title, className = 
   ].join(' ');
   if (onClick) {
     return (
-      <button type="button" title={title} className={cls} onClick={onClick}>
+      <button type="button" title={title} className={cls} onClick={onClick} {...rest}>
         {inline && <span className={`w-2 h-2 rounded-full ${DOT[kind]}`} />}
         {children}
       </button>
     );
   }
   return (
-    <span title={title} className={cls}>
+    <span title={title} className={cls} {...rest}>
       {inline && <span className={`w-2 h-2 rounded-full ${DOT[kind]}`} />}
       {children}
     </span>

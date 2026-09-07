@@ -17,7 +17,9 @@
  * Bake (`beginEdit`): the first stop edit on a live/gradient input FOLDS the current output
  * into stops — output ramp → `fitRampToStops` (verbatim when the pipeline is the identity)
  * → paletteEditorStore — then resets Adjust to defaults and turns the curves off, so the
- * pipeline stays live over the new `stops` input without double-applying. `bakedFrom`
+ * pipeline stays live over the new `stops` input without double-applying. A live source
+ * (build / extract) enters via `goLive`, which remembers the input it replaced in `liveFrom`
+ * so `cancelLive` can put it back (the v2 state chip; Phase C.3). `bakedFrom`
  * remembers what was folded so `returnToSource` can undo the fold structurally; Ctrl+Z
  * covers it too (one `paramEdit` bracket per action).
  *
@@ -103,6 +105,10 @@ export interface WorkingState {
   /** User-typed name; null = derive it from the input. */
   name: string | null;
   bakedFrom: BakedFrom | null;
+  /** What was working BEFORE a live source (Mix / Image) took over, so the live face can be
+   *  CANCELLED — the state chip ("live from Mix") is the cancel (Phase C.3, owner: "the hero
+   *  needs a bake/cancel mechanism"). Cleared by the bake (`use`) and by cancelLive. */
+  liveFrom: BakedFrom | null;
   /** The My Gradients (Recent) entry this working session writes to; null = none yet. */
   sessionId: string | null;
   /** The session started from a bin pick: its first change opens a NEW entry. */
@@ -128,6 +134,12 @@ export interface WorkingState {
   beginEdit: () => void;
   /** Undo the fold structurally: restore the pre-bake input, dials and curves. */
   returnToSource: () => void;
+  /** Put a live source (build / extract) in, remembering what it replaced (`liveFrom`) so
+   *  cancelLive can put it back. Already live → just the input (a re-entry keeps the
+   *  original memory). */
+  goLive: (input: WorkingInput) => void;
+  /** Cancel the live face: the input, name, Adjust dials and curves from before it. */
+  cancelLive: () => void;
   /** Write the current output to the session's Recent entry, opening one if needed. The
    *  shell calls this (debounced) on every derived change; star / export / wallpaper call
    *  it directly so the bin is current before they read it. */
@@ -272,6 +284,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
   input: { kind: 'empty' },
   name: null,
   bakedFrom: null,
+  liveFrom: null,
   sessionId: null,
   sessionPinned: false,
   ...loadPrefs(),
@@ -281,7 +294,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
   use: (config, name, source, opts) => {
     const c = cloneConfig(config);
     paramEdit(() => {
-      set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent });
+      set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, liveFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent });
       if (opts?.bakes) {
         setGeneratorSlice({ ...MAIN_DEFAULTS });
         useGeneratorStore.setState({ tracks: null, curvesOn: false });
@@ -310,7 +323,28 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
       usePaletteEditorStore.getState().setConfig(config);
       setGeneratorSlice({ ...MAIN_DEFAULTS });
       useGeneratorStore.setState({ tracks: null, curvesOn: false });
-      set({ input: { kind: 'stops' }, bakedFrom: baked, name });
+      set({ input: { kind: 'stops' }, bakedFrom: baked, liveFrom: null, name });
+    });
+  },
+
+  goLive: (input) => {
+    const s = get();
+    const live = s.input.kind === 'build' || s.input.kind === 'extract';
+    const gen = useGeneratorStore.getState();
+    const liveFrom: BakedFrom | null = live
+      ? s.liveFrom
+      : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn };
+    paramEdit(() => set({ input, bakedFrom: null, liveFrom, sessionId: null, sessionPinned: false }));
+  },
+
+  cancelLive: () => {
+    const s = get();
+    const b = s.liveFrom;
+    if (!b || !(s.input.kind === 'build' || s.input.kind === 'extract')) return;
+    paramEdit(() => {
+      setGeneratorSlice(b.adjust);
+      useGeneratorStore.setState({ tracks: b.tracks, curvesOn: b.curvesOn });
+      set({ input: b.input, name: b.name, bakedFrom: null, liveFrom: null, sessionId: null, sessionPinned: false });
     });
   },
 
@@ -384,7 +418,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
 }));
 
 // --- providers (undo + Save/Load) — registered by palette/installWorking.ts ----------
-type WorkingSnapshot = Pick<WorkingState, 'input' | 'name' | 'bakedFrom' | 'sessionId' | 'sessionPinned'>;
+type WorkingSnapshot = Pick<WorkingState, 'input' | 'name' | 'bakedFrom' | 'liveFrom' | 'sessionId' | 'sessionPinned'>;
 
 const coerceInput = (v: unknown): WorkingInput | null => {
   if (!v || typeof v !== 'object') return null;
@@ -443,6 +477,7 @@ export const coerceWorkingSnapshot = (snap: unknown): WorkingSnapshot | null => 
     input,
     name: typeof o.name === 'string' ? o.name : null,
     bakedFrom: coerceBaked(o.bakedFrom),
+    liveFrom: coerceBaked(o.liveFrom),
     sessionId: typeof o.sessionId === 'string' ? o.sessionId : null,
     sessionPinned: o.sessionPinned === true,
   };
@@ -450,7 +485,7 @@ export const coerceWorkingSnapshot = (snap: unknown): WorkingSnapshot | null => 
 
 export const captureWorkingHistory = (): JsonValue => {
   const s = useWorkingStore.getState();
-  return JSON.parse(JSON.stringify({ input: s.input, name: s.name, bakedFrom: s.bakedFrom, sessionId: s.sessionId, sessionPinned: s.sessionPinned })) as JsonValue;
+  return JSON.parse(JSON.stringify({ input: s.input, name: s.name, bakedFrom: s.bakedFrom, liveFrom: s.liveFrom, sessionId: s.sessionId, sessionPinned: s.sessionPinned })) as JsonValue;
 };
 export const restoreWorkingHistory = (snap: unknown): void => {
   const v = coerceWorkingSnapshot(snap);
