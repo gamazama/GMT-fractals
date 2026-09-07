@@ -200,6 +200,8 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
   }, [base, curvesOn, tracks, detail, smooth, noiseSeed, derived.final]);
   const ghostPoints = useMemo(() => (base ? prospectiveFitFrames(base, detail, smooth) : null), [base, detail, smooth]);
   const g = useGeneratorStore.getState();
+  // Detail / Smooth being dragged: the ghost layer shows itself (C.16)
+  const [fitting, setFitting] = useState(false);
   // Fit on entry (C.4, owner: "curved mode should start fitting when we enter that mode"):
   // the face opens with the curves already editable. Leaving the face bakes (C.3) and
   // resets the tracks, so the next entry fits the baked gradient afresh.
@@ -220,8 +222,9 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
         <Act disabled={!tracks} onClick={() => g.resetCurves()}>
           Reset
         </Act>
-        <div className="w-[170px] ml-2"><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} /></div>
-        <div className="w-[170px]"><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} /></div>
+        {/* the fit recipe; while either is being dragged the editor shows its ghost (C.16) */}
+        <div className="w-[170px] ml-2"><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+        <div className="w-[170px]"><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
       </div>
       {tracks ? (
         <div className="relative rounded-[10px] overflow-hidden" style={{ height: 240 }}>
@@ -233,6 +236,8 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
             previewRamp={derived.ramp ?? undefined}
             ghost={ghost}
             ghostPoints={ghostPoints}
+            ghostDefault={false}
+            ghostActive={fitting}
             interactive
           />
         </div>

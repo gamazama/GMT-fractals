@@ -285,6 +285,9 @@ order of work from here, each folded into the phase that owns the surface.
   ACES) — an export concern, candidate for the Export window; the menu = copy / paste /
   reverse / distribute / interpolation — the stop inspector's context menu already has most
   of it, candidate to go.
+- **C.16 · The fit ghost is a layer** (DONE 2026-09-07 evening — `ghostDefault` / `ghostActive`
+  on ChannelGraphEditor; the ghost canvas was already pointer-events-none): off at rest, shown
+  while Detail or Smooth is being dragged, the eye forces it on.
 - **D.1 · My Gradients as DATED bins** (DONE 2026-09-07 evening — `buildBlocks` in
   palette/components/favientBlocks.ts splits Recent's run per local day, labelled Today /
   Yesterday / the date; `test:palette-favients` guards it, falsified): entries file into a bin

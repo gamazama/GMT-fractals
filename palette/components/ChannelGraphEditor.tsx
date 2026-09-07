@@ -138,6 +138,14 @@ interface ChannelGraphEditorProps {
    * the ghost sample index). (generatorStore.prospectiveFitFrames.)
    */
   ghostPoints?: Record<ChannelKey, number[]> | null;
+  /** The ghost's resting visibility (the eye toggles it). Default true (the studio); the v2
+   *  Curves face passes false — there the ghost is a layer that shows itself only while the
+   *  fit recipe is being adjusted (`ghostActive`), unless the user turns the eye on (owner,
+   *  2026-09-07 evening: "visible only during adjusting curve input settings, unless user
+   *  specified"). */
+  ghostDefault?: boolean;
+  /** The host is adjusting Detail / Smooth right now: the ghost shows whatever the eye says. */
+  ghostActive?: boolean;
   /**
    * When false the editor is a read-only SCOPE: no keyframe edits, the editing tools are
    * hidden, but the axes + ghost still render. Used before any curves are fit so the
@@ -154,6 +162,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   previewRamp,
   ghost,
   ghostPoints,
+  ghostDefault = true,
+  ghostActive = false,
   interactive = true,
 }) => {
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -175,7 +185,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   const [visible, setVisible] = useState<Record<string, boolean>>({ L: true, C: true, h: true });
   // Source-ghost visibility — a transient local UI flag (like `normalized` / `visible`),
   // NOT a DDFS param. Default on so the prospective fit is visible the moment curves exist.
-  const [ghostVisible, setGhostVisible] = useState(true);
+  const [ghostVisible, setGhostVisible] = useState(ghostDefault);
+  const showGhost = ghostVisible || ghostActive;
   // Soft selection (proportional editing) — local state mirroring the animation
   // store's softSelection fields.
   const [softEnabled, setSoftEnabled] = useState(false);
@@ -238,7 +249,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         if (k.value < min) min = k.value;
         if (k.value > max) max = k.value;
       });
-      const g = ghostVisible ? ghost?.[tid as ChannelKey] : undefined;
+      const g = showGhost ? ghost?.[tid as ChannelKey] : undefined;
       if (g) for (let i = 0; i < g.length; i++) {
         if (g[i] < min) min = g[i];
         if (g[i] > max) max = g[i];
@@ -253,7 +264,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       ranges[tid] = { min, max, span: max - min };
     });
     return ranges;
-  }, [tracks, trackIds, ghost, ghostVisible]);
+  }, [tracks, trackIds, ghost, showGhost]);
 
   const getLocalY = useCallback(
     (val: number, tid: string) => {
@@ -618,7 +629,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, cv.width, cv.height);
-    if (!ghostVisible || !ghost) return;
+    if (!showGhost || !ghost) return;
     const N = 256;
     for (const ch of CHANNELS) {
       if (visible[ch.key] === false) continue;
@@ -669,7 +680,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       }
     }
     ctx.globalAlpha = 1;
-  }, [ghost, ghostPoints, ghostVisible, visible, v2p, frameToCanvasPixel, activeChannel, canvasWidth, canvasHeight]);
+  }, [ghost, ghostPoints, showGhost, visible, v2p, frameToCanvasPixel, activeChannel, canvasWidth, canvasHeight]);
 
   const highlightedTracks = useMemo(() => new Set([activeChannel]), [activeChannel]);
 
