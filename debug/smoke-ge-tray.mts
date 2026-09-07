@@ -20,6 +20,8 @@
  *       to source"); the chip click cancels the bake (the dial is live again)
  *   [8] C.3 — the "live from Mix · cancel" chip closes Mix without baking; the gradient from
  *       before Mix is back
+ *   [9] C.9 — a click on the split ramp's RESULT half bakes the face
+ *   [10] C.9 — a click on the SOURCE half cancels it
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
  *       the colour picker in it; Esc closes it
  *
@@ -222,6 +224,46 @@ async function main() {
   const nameAfter = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
   if (nameAfter !== nameBefore) fail(`[8] cancel came back with a different gradient ("${nameBefore}" → "${nameAfter}")`);
   console.log('✓ [8] the live chip cancels Mix: face closed, nothing baked, the gradient from before is back');
+
+  // C.9 — the split ramp's halves ARE the bake / cancel controls. [9] Adjust with a dial
+  // turned: a click on the RESULT half bakes (chip "editing · return to source", dial reset).
+  // [10] Mix: a click on the SOURCE half cancels (face closed, chip "preview", same name).
+  // Falsified by dropping `onStripClick` from the hero's editor → [9] red; by dropping
+  // `onKeepSource` from SourceBands → [10] red.
+  await page.click('[data-gx-tray-tab="adjust"]');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.05 }));
+  await page.waitForTimeout(300);
+  s = await state(page);
+  const halves = await page.evaluate(() => ({
+    src: !!document.querySelector('[data-gx-hero] [data-gx-source-half="cancel"]'),
+    res: !!document.querySelector('[data-gx-hero] [data-gx-result-half="bake"]'),
+  }));
+  if (!halves.src || !halves.res) fail(`[9] the split ramp does not offer both halves as controls (source ${halves.src}, result ${halves.res})`);
+  await page.click('[data-gx-hero] [data-gx-result-half="bake"]', { position: { x: 200, y: 10 } });
+  await page.waitForTimeout(400);
+  s = await state(page);
+  c = await chip();
+  if (s.face) fail(`[9] the result-half click did not close the face (${s.face})`);
+  if (c.state !== 'edited') fail(`[9] the result-half click did not bake (chip: ${c.state} "${c.text}")`);
+  if ((await phaseNow()) !== 0) fail('[9] the bake left the dial set');
+  await page.click('[data-gx-hero] [data-gx-state="edited"]');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0 }));
+  console.log('✓ [9] a click on the result half bakes the face');
+
+  await page.click('[data-gx-tray-tab="mix"]');
+  await page.waitForTimeout(400);
+  await page.click('[data-gx-hero] [data-gx-source-half="cancel"]', { position: { x: 200, y: 10 } });
+  await page.waitForTimeout(400);
+  s = await state(page);
+  c = await chip();
+  if (s.face) fail(`[10] the source-half click did not close Mix (${s.face})`);
+  if (s.armedHint) fail('[10] the source-half click left the pick armed');
+  if (c.state !== 'preview') fail(`[10] the source-half click did not cancel (chip: ${c.state})`);
+  const nameAfter2 = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
+  if (nameAfter2 !== nameBefore) fail(`[10] cancel came back with a different gradient ("${nameBefore}" → "${nameAfter2}")`);
+  console.log('✓ [10] a click on the source half cancels the face');
 
   await browser.close();
   if (errors.length) {

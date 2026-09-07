@@ -52,7 +52,7 @@ const label = 'absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibol
 
 /** One Mix slot as a bar: click arms it (the next pick fills it), armed = dashed violet.
  *  `clean` = the hero's band A: no hairline, square corners (it is the ramp's top half). */
-const SlotBand: React.FC<{ which: 'A' | 'B'; ramp: import('../../palette/core/oklab').RGB[]; name: string; height: number; clean?: boolean }> = ({ which, ramp, name, height, clean = false }) => {
+const SlotBand: React.FC<{ which: 'A' | 'B'; ramp: import('../../palette/core/oklab').RGB[]; name: string; height: number; clean?: boolean; onClick?: () => void; title?: string }> = ({ which, ramp, name, height, clean = false, onClick, title }) => {
   const armed = useArmedSlot() === which;
   const cls = clean
     ? `relative w-full block overflow-hidden text-left ${armed ? 'outline outline-2 outline-dashed outline-gx-armed -outline-offset-2' : ''}`
@@ -62,8 +62,8 @@ const SlotBand: React.FC<{ which: 'A' | 'B'; ramp: import('../../palette/core/ok
       className={cls}
       style={{ height }}
       data-gx-mix-band={which === 'A' ? 'this' : 'other'}
-      title={armed ? 'Takes the next pick — from the wall or My Gradients (Esc cancels)' : which === 'A' ? `${name} · click, then pick a gradient to replace it` : `Mixing with ${name} · click, then pick another`}
-      onClick={() => armSlot(armed ? null : which)}
+      title={title ?? (armed ? 'Takes the next pick — from the wall or My Gradients (Esc cancels)' : which === 'A' ? `${name} · click, then pick a gradient to replace it` : `Mixing with ${name} · click, then pick another`)}
+      onClick={onClick ?? (() => armSlot(armed ? null : which))}
     >
       <GradientStrip ramp={ramp} height={height} rounded={false} />
     </button>
@@ -79,12 +79,24 @@ export const MixBandB: React.FC<{ height?: number }> = ({ height = 36 }) => {
   return <SlotBand which="B" ramp={stripB} name={slotSnapshot(slotB).name} height={height} />;
 };
 
-const MixSources: React.FC = () => {
+/** The hero's top half in Mix: YOUR gradient. With the bake gesture (C.9) its click keeps
+ *  it — cancels the mix — rather than arming it for a replacement pick (that gesture went
+ *  with C.9; replace = cancel, then pick). */
+const MixSources: React.FC<{ onKeepSource?: () => void }> = ({ onKeepSource }) => {
   const { stripA } = useGeneratorDerived();
   const slotA = useGeneratorStore((s) => s.slotA);
+  const name = slotSnapshot(slotA).name;
   return (
     <SourceBar ramp={stripA}>
-      <SlotBand which="A" ramp={stripA} name={slotSnapshot(slotA).name} height={MIX_SOURCE_H} clean />
+      <SlotBand
+        which="A"
+        ramp={stripA}
+        name={name}
+        height={MIX_SOURCE_H}
+        clean
+        onClick={onKeepSource}
+        title={onKeepSource ? `${name} — keep it as it is: cancel the mix (the face closes)` : undefined}
+      />
     </SourceBar>
   );
 };
@@ -102,20 +114,26 @@ const sourceLabel = (d: WorkingDerived): string => {
   }
 };
 
-export const SourceBands: React.FC<{ derived: WorkingDerived }> = ({ derived }) => {
+export const SourceBands: React.FC<{ derived: WorkingDerived; onKeepSource?: () => void }> = ({ derived, onKeepSource }) => {
   const base = derived.base;
   const ramp = useMemo(
     () => (base ? buildGradientRamp(base, base, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, DEFAULT_GENERATOR_PARAMS, null, 1).ramp : []),
     [base],
   );
-  if (derived.input.kind === 'build') return <MixSources />;
+  if (derived.input.kind === 'build') return <MixSources onKeepSource={onKeepSource} />;
   if (!ramp.length) return null;
+  const Tag = onKeepSource ? 'button' : 'div';
   return (
     <SourceBar ramp={ramp}>
-      <div className="relative overflow-hidden" style={{ height: SOURCE_BAND_H }} title="The source this gradient is made from — the result is below it">
+      <Tag
+        className="relative overflow-hidden w-full block text-left"
+        style={{ height: SOURCE_BAND_H }}
+        title={onKeepSource ? 'The source — click to keep it as it is: what the face did is dropped (the face closes)' : 'The source this gradient is made from — the result is below it'}
+        onClick={onKeepSource}
+      >
         <GradientStrip ramp={ramp} height={SOURCE_BAND_H} rounded={false} />
         <span className={label}>{sourceLabel(derived)}</span>
-      </div>
+      </Tag>
     </SourceBar>
   );
 };

@@ -119,8 +119,12 @@ interface Props {
   tray: TrayFace;
   /** Open a face (the same face again closes it); `null` closes. */
   onTray: (face: TrayFace) => void;
-  /** The state chip on a live face: cancel it — back to what was working before (C.3). */
-  onCancelLive: () => void;
+  /** Cancel the open face — back to what was there before it (C.3 / C.9: the state chip on
+   *  a live face, and a click on the ramp's SOURCE half while a face is open). */
+  onCancelFace: () => void;
+  /** Bake the open face's result (C.9: a click on the ramp's RESULT half) — the face closes
+   *  and its transformations reset; the stops are the result. */
+  onBake: () => void;
   onShare: () => void;
   onExport: () => void;
   onWallpaper: () => void;
@@ -129,7 +133,7 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelLive, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
   const favients = useFavientsStore((s) => s.favients);
@@ -202,6 +206,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // the input verbatim (curves on, Adjust off default, an image fit). Bake = passthrough
   // again = the bands merge.
   const split = derived.input.kind === 'build' || !derived.passthrough;
+  // THE BAKE GESTURE (C.9, owner 2026-09-07 evening): while a face is open and the ramp is
+  // split, the two halves are the controls — the top (source) half click keeps the source
+  // (cancel), the bottom (result) half click bakes the result. The face closes either way
+  // and its transformations reset. Instant hints on hover (HalfHint), no delay.
+  const gesture = split && !!tray && tray !== 'inspector';
   // Is the loaded image still WHAT YOU SEE? Live from Image, yes; baked from Image and
   // untouched (leaving the face bakes; that alone must not shrink the picture — owner,
   // 2026-09-07: "only after an adjustment, to avoid jarring"), yes; a new pick, a stop
@@ -275,7 +284,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       kind="live"
       variant="inline"
       title={liveFrom ? `Cancel ${liveName}: go back to the gradient you had before it (closing the face keeps the result)` : undefined}
-      onClick={liveFrom ? onCancelLive : undefined}
+      onClick={liveFrom ? onCancelFace : undefined}
       data-gx-state="live"
     >
       live from {liveName}{liveFrom ? ' · cancel' : ''}
@@ -406,8 +415,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       gutters painted with its end colours and the top corners rounded, so the two
                       halves read as one bar (owner, 2026-09-07) */}
                   {split && (
-                    <div className={mix ? '' : 'mb-px'} style={{ minHeight: sourceH }}>
-                      <SourceBands derived={derived} />
+                    <div className={`relative group/src ${mix ? '' : 'mb-px'}`} style={{ minHeight: sourceH }} data-gx-source-half={gesture ? 'cancel' : undefined}>
+                      <SourceBands derived={derived} onKeepSource={gesture ? onCancelFace : undefined} />
+                      {gesture && <HalfHint className="group-hover/src:opacity-100">Keep the source · cancel</HalfHint>}
                     </div>
                   )}
                   <AdvancedGradientEditor
@@ -415,6 +425,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                     chrome="strip"
                     stripHeight={resultH}
                     stripCorners={split ? 'bottom' : 'all'}
+                    onStripClick={gesture ? onBake : undefined}
+                    stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
+                    stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}
                     stripAside={
                       /* the TRAY'S TAB ROW (Phase C): the four named faces; the open one is
                          accent ("this one", V3) and clicks closed */
@@ -461,6 +474,16 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     </section>
   );
 };
+
+/** The instant hover hint on a ramp half (C.9) — a small pill at the half's right edge,
+ *  shown by the parent's group-hover class, never in the way of the pointer. */
+const HalfHint: React.FC<{ className?: string; children: React.ReactNode }> = ({ className = '', children }) => (
+  <span
+    className={`absolute right-3 top-1/2 -translate-y-1/2 px-2 h-5 inline-flex items-center rounded-full bg-black/70 text-white text-[11px] whitespace-nowrap pointer-events-none opacity-0 transition-none z-20 ${className}`}
+  >
+    {children}
+  </span>
+);
 
 /**
  * The Export icon. A click opens the full window (`ExportMenu`, all formats). HOVER shows

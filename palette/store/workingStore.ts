@@ -140,6 +140,10 @@ export interface WorkingState {
   goLive: (input: WorkingInput) => void;
   /** Cancel the live face: the input, name, Adjust dials and curves from before it. */
   cancelLive: () => void;
+  /** Cancel WHATEVER face is open (the hero's source-half click, C.9): a live source goes
+   *  back to what it replaced (cancelLive); Curves / Adjust over a fixed input just reset
+   *  their dials and curves, so the ramp is the source again. */
+  cancelFace: () => void;
   /** Write the current output to the session's Recent entry, opening one if needed. The
    *  shell calls this (debounced) on every derived change; star / export / wallpaper call
    *  it directly so the bin is current before they read it. */
@@ -335,6 +339,15 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
       ? s.liveFrom
       : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn };
     paramEdit(() => set({ input, bakedFrom: null, liveFrom, sessionId: null, sessionPinned: false }));
+  },
+
+  cancelFace: () => {
+    const s = get();
+    if (s.input.kind === 'build' || s.input.kind === 'extract') { get().cancelLive(); return; }
+    paramEdit(() => {
+      setGeneratorSlice({ ...MAIN_DEFAULTS });
+      useGeneratorStore.setState({ tracks: null, curvesOn: false });
+    });
   },
 
   cancelLive: () => {

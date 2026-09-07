@@ -219,8 +219,10 @@ order of work from here, each folded into the phase that owns the surface.
   `test:palette` channelcurve guards it (falsified twice). Library caveat: the bundle's own
   "Steps" palettes are smooth (the re-bake defect, §10), so the face only shows holds for a
   gradient that is banded on screen.
-- **C.9 · The bake gesture on the split ramp** (owner, 2026-09-07 evening; supersedes the chip
-  as the primary control, the chip stays as the readout): with a face open the hero ramp is
+- **C.9 · The bake gesture on the split ramp** (DONE 2026-09-07 evening; `smoke:ge-tray` [9]
+  and [10], both falsified. The Mix top half no longer arms a replacement pick — replace =
+  cancel, then pick. Owner's spec, superseding the chip as the primary control, the chip
+  stays as the readout): with a face open the hero ramp is
   split — clicking the BOTTOM half (the result) bakes it; clicking the TOP half (the source)
   keeps the source instead — cancel. Either way the face's transformations reset and the
   face closes. Instant tooltips on hover ("Keep this result" / "Keep the source instead").
@@ -229,6 +231,11 @@ order of work from here, each folded into the phase that owns the surface.
   right-aligned on the Filters row.
 - **C.11 · Zoom tool status** (owner): while the zoom tool is active, the status chip in the
   bottom-right corner also carries sliders for the wall's padding.
+- **C.12 · A smoothing brush for Curves** (owner, 2026-09-07 evening): a brush over the
+  channel graph that acts as a LOCALISED bake + smooth + simplify — the fit recipe we already
+  have (`smoothChannel`, `dpIndices`, `fitChannelsToTracks`) applied to the samples under
+  the brush only, re-keyed there, the rest of the track untouched. Sits with the editor's
+  Pencil tool (grep `pencilMode` in ChannelGraphEditor).
 - **C.5 · Mix UI** — the owner is still thinking; not blocking. Parked until there is a design.
 - **C.6 · The Image face is one picture** (owner's walk, 2026-09-07; BUILT the same day —
   trays-spec §14). Today it is the old Image
@@ -244,7 +251,8 @@ order of work from here, each folded into the phase that owns the surface.
   style). Replace image = a small icon button on the preview, shown when the draw tool is not
   active (drop-anywhere still works). The hero's slot keeps its thumbnail: it says "from an
   image" and opens the face; it is no longer somewhere to look. Design it as a frame first.
-- **C.7 · Bias handles only over the gradient** (owner, 2026-09-07 evening): the hero's bias
+- **C.7 · Bias handles only over the gradient** (DONE 2026-09-07 evening — `showBias` in
+  the editor's strip chrome, hover-gated): the hero's bias
   handles (the mid-segment knots) show only while the pointer is over the ramp; at rest the
   ramp carries its stops alone ("the less on screen, the better").
 - **C.8 · A slider skin for the shell** (owner, same message): the shared slider component

@@ -112,6 +112,14 @@ interface AdvancedGradientEditorProps {
     /** Strip chrome only: which corners of the bar are rounded. 'bottom' when the host stacks
      *  a source half on top of the strip (the v2 hero's split ramp) so the two read as one bar. */
     stripCorners?: 'all' | 'bottom';
+    /** 'strip' chrome: a single click on the bar (not on a bias handle) — the v2 hero's
+     *  BAKE gesture while a face is open (C.9). Absent = the bar takes no single click. */
+    onStripClick?: () => void;
+    /** 'strip' chrome: the bar's tooltip while onStripClick is set. */
+    stripTitle?: string;
+    /** 'strip' chrome: an element rendered inside the bar (the hero's instant hover hint);
+     *  the bar carries the `group/strip` class for it. */
+    stripHint?: React.ReactNode;
 }
 
 /** Imperative seam for a host that owns a palette face over the strip (the v2 hero). */
@@ -145,7 +153,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all' }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', onStripClick, stripTitle, stripHint }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -233,6 +241,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // Strip chrome has no toggle: the inspector is always reachable.
     const isExpanded = chrome === 'strip' ? true : isExpandedState;
     const [isBiasHandlesVisible, setIsBiasHandlesVisible] = useState(true);
+    // 'strip' chrome: the bias handles show only while the pointer is over the bar (C.7,
+    // owner 2026-09-07: "hero bias handles to only be visible when over the gradient").
+    const [stripHover, setStripHover] = useState(false);
+    const showBias = isBiasHandlesVisible && (chrome !== 'strip' || stripHover);
     
     const dragPayloadRef = useRef<DragPayload | null>(null);
     const [isDragRemoving, setIsDragRemoving] = useState(false);
@@ -779,11 +791,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 onContextMenu={openTrackContextMenu}
             >
                 <div
-                    className={`w-full relative mb-0 cursor-pointer overflow-hidden ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
+                    className={`w-full relative mb-0 cursor-pointer overflow-hidden group/strip ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
                     style={{ height: stripHeight }}
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
-                    title="Double-click to select all"
+                    onClick={onStripClick ? (e) => { if (!(e.target as HTMLElement).closest('.bias-handle')) onStripClick(); } : undefined}
+                    onMouseEnter={chrome === 'strip' ? () => setStripHover(true) : undefined}
+                    onMouseLeave={chrome === 'strip' ? () => setStripHover(false) : undefined}
+                    title={onStripClick ? stripTitle : 'Double-click to select all'}
+                    data-gx-result-half={onStripClick ? 'bake' : undefined}
                 >
+                     {stripHint}
                      {/* Exact 256-ramp preview (engine sampler) — pointer-events-none so
                          the strip's double-click + bias handles still receive events. */}
                      <canvas
@@ -792,7 +809,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         height={1}
                         className="absolute inset-0 w-full h-full pointer-events-none"
                      />
-                     {isBiasHandlesVisible && [...knots].sort((a, b) => a.position - b.position).map((k, i, arr) => {
+                     {showBias && [...knots].sort((a, b) => a.position - b.position).map((k, i, arr) => {
                         if (i >= arr.length - 1 || arr[i+1].position - k.position < 0.02 || k.interpolation === 'step') return null;
                         
                         const visualPos = k.position + (arr[i+1].position - k.position) * k.bias;

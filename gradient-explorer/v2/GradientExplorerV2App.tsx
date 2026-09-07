@@ -221,14 +221,16 @@ export const GradientExplorerV2App: React.FC = () => {
     setTray(face);
   }, []);
 
-  // Cancel a live face (the state chip, C.3): what was working before Mix / Image comes
-  // back and the face closes WITHOUT baking (so not openTray, which would commit it).
-  const cancelLive = useCallback(() => {
-    useWorkingStore.getState().cancelLive();
+  // Cancel the open face (C.3 / C.9 — the state chip, or a click on the ramp's SOURCE
+  // half): what was there before the face comes back and the face closes WITHOUT baking
+  // (so not openTray, which would commit it). Bake = openTray(null): leaving commits.
+  const cancelFace = useCallback(() => {
+    useWorkingStore.getState().cancelFace();
     armSlot(null);
     deselectActiveHero();
     setTray(null);
   }, []);
+  const bakeFace = useCallback(() => openTray(null), [openTray]);
 
   // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
   // useImageDrop instance mounted once here at the root; ImageStage keeps its own for the
@@ -316,7 +318,8 @@ export const GradientExplorerV2App: React.FC = () => {
         source={source}
         tray={tray}
         onTray={(face) => (face === 'image' ? requestImageOrOpen() : openTray(face))}
-        onCancelLive={cancelLive}
+        onCancelFace={cancelFace}
+        onBake={bakeFace}
         onShare={share}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}
