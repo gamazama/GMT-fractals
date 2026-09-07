@@ -121,6 +121,10 @@ export interface AdvancedGradientEditorHandle {
     selectAt: (t: number, tolerance?: number) => void;
     /** Deselect every knot (the host's Esc order closes the inspector face this way). */
     clearSelection: () => void;
+    /** Give the knot within `tolerance` of `t` the colour `hex` — or insert one there with it —
+     *  as ONE bracketed edit, WITHOUT changing the selection (the v2 Image face: a click on a
+     *  colour cluster in the cloud; a selection would open the inspector and take the cloud away). */
+    pickColourAt: (t: number, hex: string, tolerance?: number) => void;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -378,6 +382,23 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             setSelectedIds(new Set([newKnot.id]));
         },
         clearSelection: () => setSelectedIds(new Set()),
+        pickColourAt: (t: number, hex: string, tolerance = 0.03) => {
+            const pos = Math.max(0, Math.min(1, t));
+            const cur = knotsRef.current;
+            let best: AdvancedGradientKnot | null = null;
+            for (const k of cur) {
+                const d = Math.abs(k.position - pos);
+                if (d <= tolerance && (!best || d < Math.abs(best.position - pos))) best = k;
+            }
+            if (best) {
+                const id = best.id;
+                editAction(() => emitChange(cur.map(k => k.id === id ? { ...k, color: hex } : k)));
+                return;
+            }
+            const prev = [...cur].sort((a, b) => a.position - b.position).filter(k => k.position <= pos).pop();
+            const newKnot: AdvancedGradientKnot = { id: Date.now().toString(), position: pos, color: hex, bias: 0.5, interpolation: prev ? prev.interpolation : 'linear' };
+            editAction(() => emitChange([...cur, newKnot]));
+        },
     }), [blendSpace, editAction, emitChange]);
 
     const handleCopy = useCallback(() => {

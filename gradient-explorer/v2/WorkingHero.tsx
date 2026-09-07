@@ -83,7 +83,7 @@ import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
 import { runExport, useRecentExports, exportActionLabel } from './exportActions';
-import type { RGB } from '../../palette/core/oklab';
+import { oklabDistance, oklabToRgbSafe, type RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
 
@@ -300,7 +300,24 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
         <div className="flex flex-col justify-center py-4">
-          <ImageSlot active={source === 'extract'} dim={!imageIsTheGradient} bigH={panelH - 32} onClick={() => onTray('image')} cloudHost={imageCloudEl} toolsHost={imageToolsEl} handles={tray === 'image'} />
+          <ImageSlot
+            active={source === 'extract'}
+            dim={!imageIsTheGradient && tray !== 'image'}
+            bigH={panelH - 32}
+            onClick={() => onTray('image')}
+            cloudHost={imageCloudEl}
+            toolsHost={imageToolsEl}
+            handles={tray === 'image'}
+            onPickColour={(hex, lab) => {
+              // a cluster in the cloud → a stop of that colour where the colour lies along
+              // the ramp (nearest texel in OKLab); the first edit bakes, as any ramp gesture does
+              const rgb = oklabToRgbSafe(lab);
+              let best = 0;
+              let bestD = Infinity;
+              shown.ramp.forEach((c, i) => { const d = oklabDistance(c, rgb); if (d < bestD) { bestD = d; best = i; } });
+              editorRef.current?.pickColourAt(best / 255, hex);
+            }}
+          />
         </div>
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}

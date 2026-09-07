@@ -23,7 +23,10 @@
 
 import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
+import { useImageStore, useImageDerived, useImageMode, useImageParam, useImageSlice } from '../store/imageStore';
+import { distill } from '../core/img2grad/distill';
+import { oklabToRgbSafe, type Lab } from '../core/oklab';
+import { rgbToHex } from '../core/gmtGradient';
 import { tracePolyline, autoPath, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
@@ -121,9 +124,12 @@ export interface ImageStageFaceProps {
   /** 'face' only: the Path handles are drawn and draggable (the Image face is open). Off, the
    *  picture is just the picture. */
   handles?: boolean;
+  /** 'face' only: a click on a colour cluster in the cloud (Dominant) hands its colour over —
+   *  the v2 hero puts a stop of that colour where it lies along the ramp. */
+  onPickColour?: (hex: string, lab: Lab) => void;
 }
 
-export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageStageFaceProps> = ({ chrome = 'full', cloudHost = null, toolsHost = null, handles = true }) => {
+export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageStageFaceProps> = ({ chrome = 'full', cloudHost = null, toolsHost = null, handles = true, onPickColour }) => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
   const loading = useImageStore((s) => s.loading);
@@ -134,7 +140,22 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
   const [, setModeIdx] = useImageParam<number>('mode');
   const [catmull] = useImageParam<boolean>('catmullRom');
   const [drawing, setDrawing] = useState(false);
+  // ── face chrome: the cloud ↔ picture link (owner, 2026-09-07) ──
+  // Hover a cloud point → the picture shows where that colour lives (everything else dims);
+  // hover the picture → the cloud rings that pixel's colour. Refs, not state: hover moves
+  // every frame and both canvases redraw from them via rAF.
+  const hoverRef = useRef<{ lab: Lab; from: 'cloud' | 'pane' } | null>(null);
+  const maskRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
+  const clusterHitsRef = useRef<{ x: number; y: number; r: number; lab: Lab; hex: string }[]>([]);
+  const slice = useImageSlice();
   const derived = useImageDerived();
+  // Dominant's clusters, for the cloud's pickable blobs (the bins carry the weights the last
+  // extract applied, so this follows the dials). Empty outside Dominant / face chrome.
+  const clusters = useMemo(() => {
+    if (chrome !== 'face' || !model || mode !== 'distill') return [] as { L: number; a: number; b: number; mass: number }[];
+    try { return distill(model.bins, { colours: slice.colours }); } catch { return []; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chrome, model, mode, slice.colours, derived]);
   // Image extraction is ramp-only; fit to GMT stops once so it can be favourited as a
   // GradientConfig (the shelf's interchange representation).
   const favConfig = useMemo(
@@ -203,6 +224,52 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
       x.fill();
     }
     x.globalAlpha = 1;
+    if (chrome === 'face') {
+      // AXES: the lightness axis (a = b = 0, dark to light) and a chroma ring at mid-lightness,
+      // so the rotation has a frame (owner, 2026-09-07)
+      const P = (L: number, a: number, b: number) => proj(L, a, b, W, H, yaw, pitch, zoom);
+      x.strokeStyle = 'rgba(255,255,255,0.35)';
+      x.lineWidth = 1 * dpr;
+      const d0 = P(0, 0, 0), d1 = P(1, 0, 0);
+      x.beginPath(); x.moveTo(d0[0], d0[1]); x.lineTo(d1[0], d1[1]); x.stroke();
+      x.beginPath();
+      for (let i = 0; i <= 48; i++) { const t = (i / 48) * Math.PI * 2; const q = P(0.5, 0.25 * Math.cos(t), 0.25 * Math.sin(t)); i ? x.lineTo(q[0], q[1]) : x.moveTo(q[0], q[1]); }
+      x.stroke();
+      x.fillStyle = 'rgba(255,255,255,0.6)';
+      x.font = `${10 * dpr}px ui-sans-serif, system-ui, sans-serif`;
+      x.textAlign = 'center';
+      x.fillText('light', d1[0], d1[1] - 6 * dpr);
+      x.fillText('dark', d0[0], d0[1] + 12 * dpr);
+      // HOVER from the picture: ring the pixel's colour, brighten the points near it
+      const hv = hoverRef.current;
+      if (hv) {
+        const q = P(hv.lab.L, hv.lab.a, hv.lab.b);
+        for (const c of model.cloud) {
+          const d = Math.hypot(c.L - hv.lab.L, c.a - hv.lab.a, c.b - hv.lab.b);
+          if (d < 0.06) { x.globalAlpha = 1; x.fillStyle = `rgb(${c.r},${c.g},${c.bl})`; const pr = P(c.L, c.a, c.b); x.beginPath(); x.arc(pr[0], pr[1], 4 * dpr, 0, 7); x.fill(); }
+        }
+        x.globalAlpha = 1;
+        x.strokeStyle = 'rgba(255,255,255,0.95)';
+        x.lineWidth = 2 * dpr;
+        x.beginPath(); x.arc(q[0], q[1], 7 * dpr, 0, 7); x.stroke();
+      }
+      // CLUSTERS (Dominant): blobs sized by mass, pickable
+      const hits: typeof clusterHitsRef.current = [];
+      const maxMass = clusters.reduce((m, c) => Math.max(m, c.mass), 0) || 1;
+      for (const c of clusters) {
+        const q = P(c.L, c.a, c.b);
+        const r = (4 + 9 * Math.sqrt(c.mass / maxMass)) * dpr;
+        const rgb = oklabToRgbSafe({ L: c.L, a: c.a, b: c.b });
+        x.fillStyle = `rgb(${Math.round(rgb.r)},${Math.round(rgb.g)},${Math.round(rgb.b)})`;
+        x.strokeStyle = 'rgba(255,255,255,0.9)';
+        x.lineWidth = 1.5 * dpr;
+        x.beginPath(); x.arc(q[0], q[1], r, 0, 7); x.fill(); x.stroke();
+        hits.push({ x: q[0] / dpr, y: q[1] / dpr, r: r / dpr + 3, lab: { L: c.L, a: c.a, b: c.b }, hex: rgbToHex(rgb) });
+      }
+      clusterHitsRef.current = hits;
+      // a test hook: the blobs' CSS-px centres (smoke scripts click them)
+      cv.dataset.gxClusters = JSON.stringify(hits.map((h) => [Math.round(h.x), Math.round(h.y)]));
+    }
     const ribbon = derived?.ribbon, ramp = derived?.ramp;
     if (ribbon && ramp && chrome === 'face') {
       // the gradient's path as a THIN BRIGHT line over a dark halo (owner, 2026-09-07: "so
@@ -245,7 +312,7 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
       x.fillStyle = '#fff';
       [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3 * dpr, 0, 7); x.fill(); });
     }
-  }, [model, derived, chrome]);
+  }, [model, derived, chrome, clusters]);
 
   useEffect(() => { drawCloud(); }, [drawCloud, cloudGen]);
 
@@ -255,15 +322,50 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
     if (!cv) return;
     let dr = false, lx = 0, ly = 0, raf = 0;
     const schedule = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; drawCloud(); }); };
-    const down = (e: PointerEvent) => { dr = true; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(e.pointerId); cv.classList.add('cursor-grabbing'); };
+    let moved = 0;
+    const paneRedraw = () => { if (chrome === 'face') requestAnimationFrame(() => drawPaneRef.current?.()); };
+    const local = (e: PointerEvent): [number, number] => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    const down = (e: PointerEvent) => { dr = true; moved = 0; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(e.pointerId); cv.classList.add('cursor-grabbing'); };
     const move = (e: PointerEvent) => {
-      if (!dr) return;
+      if (!dr) {
+        // face chrome: hover a cloud point → the picture shows where that colour is
+        if (chrome === 'face' && model) {
+          const [mx, my] = local(e);
+          const dpr = cv.width / Math.max(1, cv.getBoundingClientRect().width);
+          let best: { d: number; lab: Lab } | null = null;
+          for (const c of model.cloud) {
+            const q = proj(c.L, c.a, c.b, cv.width, cv.height, yawRef.current, pitchRef.current, 1.0);
+            const d = Math.hypot(q[0] / dpr - mx, q[1] / dpr - my);
+            if (d < 10 && (!best || d < best.d)) best = { d, lab: { L: c.L, a: c.a, b: c.b } };
+          }
+          const next = best ? { lab: best.lab, from: 'cloud' as const } : null;
+          const was = hoverRef.current;
+          if (!!next !== !!was || (next && was && (next.lab.L !== was.lab.L || next.lab.a !== was.lab.a || next.lab.b !== was.lab.b))) {
+            hoverRef.current = next;
+            schedule();
+            paneRedraw();
+          }
+        }
+        return;
+      }
+      moved += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly);
       yawRef.current += (e.clientX - lx) * 0.01;
       pitchRef.current = Math.max(-1.4, Math.min(1.4, pitchRef.current + (e.clientY - ly) * 0.01));
       lx = e.clientX; ly = e.clientY;
       schedule();
     };
-    const up = () => { dr = false; cv.classList.remove('cursor-grabbing'); };
+    const up = (e: PointerEvent) => {
+      const wasDrag = dr && moved > 3;
+      dr = false; cv.classList.remove('cursor-grabbing');
+      // a CLICK (no drag) on a cluster blob picks its colour
+      if (!wasDrag && chrome === 'face' && onPickColour) {
+        const [mx, my] = local(e);
+        const hit = clusterHitsRef.current.find((h) => Math.hypot(h.x - mx, h.y - my) <= h.r);
+        if (hit) onPickColour(hit.hex, hit.lab);
+      }
+    };
+    const leave = () => { if (hoverRef.current?.from === 'cloud') { hoverRef.current = null; schedule(); paneRedraw(); } };
+    cv.addEventListener('pointerleave', leave);
     cv.addEventListener('pointerdown', down);
     cv.addEventListener('pointermove', move);
     cv.addEventListener('pointerup', up);
@@ -273,9 +375,10 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
       cv.removeEventListener('pointermove', move);
       cv.removeEventListener('pointerup', up);
       cv.removeEventListener('pointercancel', up);
+      cv.removeEventListener('pointerleave', leave);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [drawCloud]);
+  }, [drawCloud, cloudHost, chrome, model, onPickColour]);
 
   // --- image pane (source / trace path) ---
   const paneRef = useRef<HTMLCanvasElement>(null);
@@ -287,6 +390,7 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
     if (w / h > ar) w = h * ar; else h = w / ar;
     return { ox: (cv.width - w) / 2, oy: (cv.height - h) / 2, w, h };
   }, [model]);
+  const drawPaneRef = useRef<(() => void) | null>(null);
   const drawPane = useCallback(() => {
     const cv = paneRef.current;
     if (!cv) return;
@@ -305,6 +409,26 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
     x.imageSmoothingEnabled = true;
     x.imageSmoothingQuality = 'high';
     x.drawImage(thumb, R.ox, R.oy, R.w, R.h);
+    // face chrome, hovering a cloud point: dim everything but the pixels of that colour
+    const hv = hoverRef.current;
+    if (chrome === 'face' && hv && hv.from === 'cloud') {
+      const key = `${hv.lab.L.toFixed(3)},${hv.lab.a.toFixed(3)},${hv.lab.b.toFixed(3)}`;
+      if (!maskRef.current || maskRef.current.key !== key) {
+        const mc = document.createElement('canvas');
+        mc.width = model.w; mc.height = model.h;
+        const mx = mc.getContext('2d')!;
+        const img = mx.createImageData(model.w, model.h);
+        const lab = model.lab;
+        for (let i = 0, n = model.w * model.h; i < n; i++) {
+          const d = Math.hypot(lab[i * 3] - hv.lab.L, lab[i * 3 + 1] - hv.lab.a, lab[i * 3 + 2] - hv.lab.b);
+          img.data[i * 4 + 3] = d < 0.06 ? 0 : 170;
+        }
+        mx.putImageData(img, 0, 0);
+        maskRef.current = { key, canvas: mc };
+      }
+      x.imageSmoothingEnabled = true;
+      x.drawImage(maskRef.current.canvas, R.ox, R.oy, R.w, R.h);
+    }
     if (mode === 'trace' && (chrome !== 'face' || handles)) {
       // Dense curve in image px (same geometry the sampler walks) → pane coords.
       const poly = tracePolyline(path, model.w, model.h, catmull);
@@ -324,7 +448,32 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
       });
     }
   }, [thumb, model, mode, path, catmull, paneRect, chrome, handles]);
+  drawPaneRef.current = drawPane;
   useEffect(() => { drawPane(); }, [drawPane, paneGen]);
+
+  // face chrome: hover the PICTURE → the cloud rings that pixel's colour
+  useEffect(() => {
+    const cv = paneRef.current;
+    if (chrome !== 'face' || !cv || !model) return;
+    let raf = 0;
+    const redraw = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; drawCloud(); }); };
+    const move = (e: PointerEvent) => {
+      if (e.buttons) return; // a drag on the handles is not a hover
+      const r = cv.getBoundingClientRect();
+      const R = paneRect();
+      const sx = cv.width / Math.max(1, r.width), sy = cv.height / Math.max(1, r.height);
+      const px = Math.floor(((e.clientX - r.left) * sx - R.ox) / R.w * model.w);
+      const py = Math.floor(((e.clientY - r.top) * sy - R.oy) / R.h * model.h);
+      if (px < 0 || py < 0 || px >= model.w || py >= model.h) { if (hoverRef.current?.from === 'pane') { hoverRef.current = null; redraw(); } return; }
+      const i = (py * model.w + px) * 3;
+      hoverRef.current = { lab: { L: model.lab[i], a: model.lab[i + 1], b: model.lab[i + 2] }, from: 'pane' };
+      redraw();
+    };
+    const leave = () => { if (hoverRef.current?.from === 'pane') { hoverRef.current = null; redraw(); } };
+    cv.addEventListener('pointermove', move);
+    cv.addEventListener('pointerleave', leave);
+    return () => { cv.removeEventListener('pointermove', move); cv.removeEventListener('pointerleave', leave); if (raf) cancelAnimationFrame(raf); };
+  }, [chrome, model, paneRect, drawCloud]);
 
   // Live refs so the pointer listeners can stay attached for the whole drag. If the
   // effect depended on `path`, the first `setPath` would tear down + re-attach the
