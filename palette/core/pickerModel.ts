@@ -53,6 +53,10 @@ export interface PickerRow {
   /** Secondary label (e.g. the facet row bucket). */
   sublabel?: string;
   entries: CatalogEntry[];
+  /** The wall fills a band COLUMN-major (a sort runs down each column); a RANKED band —
+   *  "More like this" — reads ROW-major, nearest first left to right, top to bottom
+   *  (owner, 2026-09-07 evening: "only the first column shows similar gradients"). */
+  rowMajor?: boolean;
   /** Category id — adjacent rows sharing it (and a facet range) may merge into one row. */
   cat?: string;
   /** Facet bucket bounds (0..1) for a bucketed sub-row; absent = not row-mergeable. */
@@ -317,7 +321,7 @@ export const rankBySimilarity = (list: CatalogEntry[], distance: Map<string, num
 
 /** The wall in similarity mode: ONE ungrouped band, nearest first. */
 export const similarityRows = (list: CatalogEntry[], distance: Map<string, number>): PickerRow[] => [
-  { key: 'similar', label: '', entries: rankBySimilarity(list, distance) },
+  { key: 'similar', label: '', entries: rankBySimilarity(list, distance), rowMajor: true },
 ];
 
 // --- carve -----------------------------------------------------------------------

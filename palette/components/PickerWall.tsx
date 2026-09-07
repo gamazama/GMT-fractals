@@ -2,7 +2,9 @@
  * PickerWall — the gradient wall, matching the palette-lab prototype's layout:
  *   • one SECTION per group (category/source/none); the group label runs down the
  *     LEFT in a fixed column, then that group's swatch canvas(es).
- *   • within a group the sorted list fills COLUMN-MAJOR (k → col=⌊k/nrows⌋, row=k%nrows).
+ *   • within a group the sorted list fills COLUMN-MAJOR (k → col=⌊k/nrows⌋, row=k%nrows);
+ *     a RANKED group (`PickerRow.rowMajor`, "More like this") fills ROW-major instead, so
+ *     nearest-first reads left to right, top to bottom (grep cellOf / indexAt).
  *   • a group is split into CHUNKED canvases each capped at MAX_CANVAS_CSS_H so no
  *     single canvas exceeds the browser's max dimension (a huge ungrouped group in a
  *     narrow dock would otherwise be tens of thousands of px tall and hang the tab).
@@ -151,7 +153,14 @@ interface ChunkDesc {
   cellH: number;
   swatchW: number;
   swatchH: number;
+  rowMajor: boolean;
 }
+
+/** k → (col, row) and back, for either fill order. */
+const cellOf = (k: number, cols: number, nrows: number, rowMajor: boolean) =>
+  rowMajor ? { col: k % cols, row: Math.floor(k / cols) } : { col: Math.floor(k / nrows), row: k % nrows };
+const indexAt = (col: number, row: number, cols: number, nrows: number, rowMajor: boolean) =>
+  rowMajor ? row * cols + col : col * nrows + row;
 
 /**
  * Merge adjacent bucketed sub-rows within the SAME category while their combined swatch
@@ -204,7 +213,8 @@ const SwatchCanvas: React.FC<{
    *  (set on the scroll container, an inherited CSS property) shows over the swatches too. */
   toolActive?: boolean;
   tileRadius?: number;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister, toolActive, tileRadius = 0 }) => {
+  rowMajor?: boolean;
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -248,8 +258,7 @@ const SwatchCanvas: React.FC<{
     // bar, not a pill (measured 2026-09-07: 8 px on an 18 px tile read as pills).
     const r = Math.min(tileRadius, swatchW / 3, swatchH / 3);
     for (let k = 0; k < entries.length; k++) {
-      const col = Math.floor(k / nrows);
-      const row = k % nrows;
+      const { col, row } = cellOf(k, cols, nrows, rowMajor);
       if (r > 0) {
         ctx.save();
         ctx.beginPath();
@@ -265,8 +274,7 @@ const SwatchCanvas: React.FC<{
     // rest→enlarge selection treatment — the hero shows the same pick at full size.
     const selIdx = selectedId ? entries.findIndex((e) => e.id === selectedId) : -1;
     if (selIdx >= 0) {
-      const col = Math.floor(selIdx / nrows);
-      const row = selIdx % nrows;
+      const { col, row } = cellOf(selIdx, cols, nrows, rowMajor);
       const ew = Math.max(Math.round(swatchW * 1.8), 40);
       const eh = Math.max(Math.round(swatchH * 1.8), 24);
       const cx = col * cellW + swatchW / 2;
@@ -303,7 +311,7 @@ const SwatchCanvas: React.FC<{
       ring(0.5, 'rgba(0,0,0,0.65)', 1);
       ring(1.25, '#22d3ee', 1.5);
     }
-  }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId]);
+  }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId, rowMajor]);
 
   // Register this chunk for selection hit-testing while it's mounted; deregister on unmount
   // / when it scrolls away. The registry therefore only ever holds on-screen chunks → the
@@ -312,9 +320,9 @@ const SwatchCanvas: React.FC<{
     if (!visible) return;
     const el = canvasRef.current;
     if (!el) return;
-    onRegister(chunkKey, { el, entries, cols, nrows, cellW, cellH, swatchW, swatchH });
+    onRegister(chunkKey, { el, entries, cols, nrows, cellW, cellH, swatchW, swatchH, rowMajor });
     return () => onRegister(chunkKey, null);
-  }, [visible, chunkKey, entries, cols, nrows, cellW, cellH, swatchW, swatchH, onRegister]);
+  }, [visible, chunkKey, entries, cols, nrows, cellW, cellH, swatchW, swatchH, onRegister, rowMajor]);
 
   // Use getBoundingClientRect + clientX/Y (NOT offsetX/Y): under a CSS-transformed
   // ancestor (floating DraggableWindow uses translate), offsetX/Y is reported against
@@ -325,8 +333,8 @@ const SwatchCanvas: React.FC<{
     const rect = cv.getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / cellW);
     const row = Math.floor((e.clientY - rect.top) / cellH);
-    if (col < 0 || row < 0 || row >= nrows) return null;
-    const k = col * nrows + row;
+    if (col < 0 || row < 0 || row >= nrows || col >= cols) return null;
+    const k = indexAt(col, row, cols, nrows, rowMajor);
     if (k < 0 || k >= entries.length) return null;
     return { entry: entries[k], col, row };
   };
@@ -470,6 +478,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             selectedId={selectedId}
             toolActive={toolActive}
             tileRadius={tileRadius}
+            rowMajor={!!group.rowMajor}
             onHover={onHover}
             onPick={onPick}
             onEntryDragStart={onEntryDragStart}
@@ -661,8 +670,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const baseX = r.left - host.left;
       const baseY = r.top - host.top;
       for (let k = 0; k < d.entries.length; k++) {
-        const col = Math.floor(k / d.nrows);
-        const row = k % d.nrows;
+        const { col, row } = cellOf(k, d.cols, d.nrows, d.rowMajor);
         out.push({ id: d.entries[k].id, cx: baseX + col * d.cellW + d.swatchW / 2, cy: baseY + row * d.cellH + d.swatchH / 2 });
       }
     }
@@ -679,8 +687,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) continue;
       const col = Math.floor((cx - r.left) / d.cellW);
       const row = Math.floor((cy - r.top) / d.cellH);
-      if (col < 0 || row < 0 || row >= d.nrows) continue;
-      const k = col * d.nrows + row;
+      if (col < 0 || row < 0 || row >= d.nrows || col >= d.cols) continue;
+      const k = indexAt(col, row, d.cols, d.nrows, d.rowMajor);
       if (k < 0 || k >= d.entries.length) continue;
       return { id: d.entries[k].id, box: { x: r.left - host.left + col * d.cellW, y: r.top - host.top + row * d.cellH, w: d.swatchW, h: d.swatchH } };
     }
@@ -705,7 +713,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const rowMax = Math.min(d.nrows - 1, Math.floor((ly + r) / d.cellH));
       for (let col = colMin; col <= colMax; col++) {
         for (let row = rowMin; row <= rowMax; row++) {
-          const k = col * d.nrows + row;
+          const k = indexAt(col, row, d.cols, d.nrows, d.rowMajor);
           if (k < 0 || k >= d.entries.length) continue;
           const ccx = col * d.cellW + d.swatchW / 2;
           const ccy = row * d.cellH + d.swatchH / 2;
