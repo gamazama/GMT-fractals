@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
+import type { ContextMenuItem } from '../types/help';
 import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
@@ -444,7 +445,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // (subscribed for late registration); the dropdown shows the same "Send to Favients"
     // the context menu does. Built at call time so `checked`/disabled stay fresh.
     const favientsBridge = useSyncExternalStore(subscribeGradientFavientsBridge, getGradientFavientsBridge);
-    const buildMenuItems = useCallback(() => buildGradientMenu({
+    // In the v2 hero (the inspector is hosted) the menu keeps only its ACTIONS and VIEW
+    // sections (owner, 2026-09-07 evening): favients, clipboard, interpolation, blend and
+    // output all have homes elsewhere there (the shelf, the inspector, the strip, Export).
+    const onlySections = (items: ContextMenuItem[]): ContextMenuItem[] => {
+        if (!inspectorHost) return items;
+        const keep = new Set(['Actions', 'View']);
+        let on = false;
+        return items.filter((it) => {
+            if (it.isHeader) { on = keep.has(it.label ?? ''); return on; }
+            return on;
+        });
+    };
+    const buildMenuItems = useCallback(() => onlySections(buildGradientMenu({
         knots,
         config: currentConfig,
         selectedIds,
@@ -457,7 +470,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         setBiasHandlesVisible: setIsBiasHandlesVisible,
         copy: handleCopy,
         paste: handlePaste,
-    }), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge]);
+    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const payload = dragPayloadRef.current;
@@ -951,7 +964,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         <button
                             className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
                             onClick={handlePresetsClick}
-                            title="Stops menu — copy, paste, reverse, distribute, interpolation…"
+                            title={inspectorHost ? 'Stops menu — invert, double, distribute, delete · bias handles, reset' : 'Stops menu — copy, paste, reverse, distribute, interpolation…'}
                         >
                             <MenuIcon />
                         </button>

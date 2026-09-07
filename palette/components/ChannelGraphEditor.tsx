@@ -38,7 +38,7 @@ import {
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../../data/constants';
 import { calculateViewBounds } from '../../utils/keyframeViewBounds';
 import { calculateTangentModeUpdates, calculateGlobalInterpolationUpdates } from '../../utils/timelineUtils';
-import { FitIcon, FitSelectionIcon, NormIcon, WaveIcon, BakeIcon, MagicIcon, EyeIcon, PencilIcon, BrushIcon } from '../../components/Icons';
+import { FitIcon, FitSelectionIcon, NormIcon, WaveIcon, BakeIcon, MagicIcon, PencilIcon, BrushIcon } from '../../components/Icons';
 import type { Track, Keyframe, AnimationSequence, SoftSelectionType } from '../../types';
 import type { RGB } from '../core/oklab';
 import type { Channels } from '../core/generatorPipeline';
@@ -57,11 +57,15 @@ export type ChannelKey = 'L' | 'C' | 'h';
 export type ChannelTracks = Record<ChannelKey, Track>;
 
 // Colours match GraphRenderer.TRACK_COLORS by index (L cyan, C purple, h green).
-/** Each channel's RELEVANT range for the normalized plot (hue is per turn, see trackRanges). */
+/** Each channel's RELEVANT range for the normalized plot. Hue is in RADIANS here (the
+ *  pipeline's `h` is atan2 output, unwrapped by unwrapHue in ±π steps): one turn = 2π, and
+ *  trackRanges grows it to whole turns when the unwrapped hue runs past one. Chroma's 0.4:
+ *  OKLCH chroma of the sRGB gamut peaks near 0.32 (pure blue and green); 0.4 is that with
+ *  headroom, the same ceiling the Adjust dials use. */
 const CHANNEL_RANGE: Record<ChannelKey, { min: number; max: number }> = {
   L: { min: 0, max: 1 },
   C: { min: 0, max: 0.4 },
-  h: { min: 0, max: 360 },
+  h: { min: 0, max: Math.PI * 2 },
 };
 
 const CHANNELS: ChannelInfo[] = [
@@ -153,6 +157,10 @@ interface ChannelGraphEditorProps {
   ghostDefault?: boolean;
   /** The host is adjusting Detail / Smooth right now: the ghost shows whatever the eye says. */
   ghostActive?: boolean;
+  /** Show the Normalize (0–1) toggle. The v2 Curves face passes false: there the plot is
+   *  ALWAYS on the channels' relevant ranges (L 0–1 = C 0–0.4 = one hue turn; owner,
+   *  2026-09-07 evening) — the un-normalized view was where Fit all / Fit selection broke. */
+  normalizeToggle?: boolean;
   /**
    * When false the editor is a read-only SCOPE: no keyframe edits, the editing tools are
    * hidden, but the axes + ghost still render. Used before any curves are fit so the
@@ -171,6 +179,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   ghostPoints,
   ghostDefault = true,
   ghostActive = false,
+  normalizeToggle = true,
   interactive = true,
 }) => {
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -274,8 +283,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         // the channel's relevant range, grown only where the data runs past it
         const rel = CHANNEL_RANGE[tid as ChannelKey];
         if (tid === 'h') {
-          const lo = Math.floor(Math.min(min, 0) / 360) * 360;
-          const hi = Math.ceil(Math.max(max, 360) / 360) * 360;
+          const turn = Math.PI * 2;
+          const lo = Math.floor(Math.min(min, 0) / turn) * turn;
+          const hi = Math.ceil(Math.max(max, turn) / turn - 1e-9) * turn;
           min = lo; max = hi;
         } else {
           min = Math.min(rel.min, min);
@@ -751,6 +761,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
           const tr = tracks[k];
           if (tr) setSelectedKeyframeIds(tr.keyframes.map((kf) => `${k}::${kf.id}`));
         }}
+        layers={ghost ? [{ key: 'ghost', label: 'Fit ghost', color: '#9ca3af', dashed: true, visible: showGhost, onToggle: () => setGhostVisible((g) => !g) }] : []}
         onSelectAll={() => {
           const all: string[] = [];
           displayTrackIds.forEach((t) => tracks[t as ChannelKey]?.keyframes.forEach((kf) => all.push(`${t}::${kf.id}`)));
@@ -772,7 +783,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
           >
             <ToolButton onClick={fitAll} icon={<FitIcon />} tooltip="Fit all" />
             {interactive && <ToolButton onClick={fitSelection} icon={<FitSelectionIcon />} tooltip="Fit selection" />}
-            <ToolButton onClick={toggleNormalize} active={normalized} icon={<NormIcon active={normalized} />} tooltip="Normalize (0–1)" />
+            {normalizeToggle && <ToolButton onClick={toggleNormalize} active={normalized} icon={<NormIcon active={normalized} />} tooltip="Normalize (0–1)" />}
             {interactive && (
               <ToolButton
                 onClick={() => { setPencilMode((p) => !p); setBrushMode(false); }}
@@ -793,12 +804,6 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
             {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
             {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left)" />}
-            <ToolButton
-              onClick={() => setGhostVisible((g) => !g)}
-              active={ghostVisible}
-              icon={<EyeIcon active={ghostVisible} />}
-              tooltip="Result ghost — faint dashed = the gradient's actual channels + the dots a re-fit would place (detail/smooth)"
-            />
           </div>
           <GraphCanvas
             width={canvasWidth}

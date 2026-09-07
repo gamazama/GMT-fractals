@@ -238,6 +238,7 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
             ghostPoints={ghostPoints}
             ghostDefault={false}
             ghostActive={fitting}
+            normalizeToggle={false}
             interactive
           />
         </div>

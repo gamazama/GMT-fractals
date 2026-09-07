@@ -281,7 +281,8 @@ order of work from here, each folded into the phase that owns the surface.
   further from the name (8 px).
 - **C.15 · The strip's blend · output · menu cluster** (right-aligned 2026-09-07 evening; the
   owner agreed output → Export, DONE the same evening: an Output profile row in the Export
-  window, the strip keeps blend + menu; the menu's fate still open): blend = the interpolation space (RGB · HSV · HSV Far ·
+  window, the strip keeps blend + the menu trimmed to its Actions and View sections — owner,
+  same evening): blend = the interpolation space (RGB · HSV · HSV Far ·
   Oklab) — it changes the ramp, keep; output = the export colour profile (sRGB · Linear ·
   ACES) — an export concern, candidate for the Export window; the menu = copy / paste /
   reverse / distribute / interpolation — the stop inspector's context menu already has most
