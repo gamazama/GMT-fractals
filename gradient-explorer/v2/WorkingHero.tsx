@@ -137,10 +137,14 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // 2026-09-07: "include the corner radius too"), i.e. where the panel's flat bottom edge
   // begins. Measured, not computed: the slot column is 45 px empty and a card-tall square
   // once an image is in.
-  const panelRef = useRef<HTMLDivElement>(null);
+  // A CALLBACK ref, not an effect: the hero renders nothing until the first pick, so an
+  // effect with an empty dep list would run before the panel exists and never again (it
+  // did — the 85 px default was right only by coincidence).
   const [panelLeft, setPanelLeft] = useState(85);
-  useEffect(() => {
-    const el = panelRef.current;
+  const panelRo = useRef<ResizeObserver | null>(null);
+  const panelRef = useCallback((el: HTMLDivElement | null) => {
+    panelRo.current?.disconnect();
+    panelRo.current = null;
     if (!el) return;
     const band = el.closest('[data-gx-hero]') as HTMLElement | null;
     const update = () => {
@@ -148,10 +152,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       setPanelLeft(Math.round(el.getBoundingClientRect().left - band.getBoundingClientRect().left) + PANEL_RADIUS);
     };
     update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    if (band) ro.observe(band);
-    return () => ro.disconnect();
+    panelRo.current = new ResizeObserver(update);
+    panelRo.current.observe(el);
+    if (band) panelRo.current.observe(band);
   }, []);
   // The tray's inspector face is a portal host the editor renders its stop inspector into;
   // a stop selection opens that face, clearing it closes it, and the shell's Esc order closes
