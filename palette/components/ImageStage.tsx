@@ -21,6 +21,7 @@
  * unchanged — that's the surface `ExtractStage` reuses.
  */
 
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
 import { tracePolyline, autoPath, type Img2GradMode } from '../core/img2grad';
@@ -94,10 +95,17 @@ const useHiDPICanvas = (ref: React.RefObject<HTMLCanvasElement>, active = true):
   return gen;
 };
 
-/** The face's fixed preview height (px) — the v2 tray's Image face (`chrome="face"`). */
-export const IMAGE_FACE_H = 240;
+export interface ImageStageFaceProps {
+  /** 'face' only: where the colour cloud renders (the tray's Image face) — null = not shown. */
+  cloudHost?: HTMLElement | null;
+  /** 'face' only: where the Draw / Auto / Straight tools render (beside the method chips). */
+  toolsHost?: HTMLElement | null;
+  /** 'face' only: the Path handles are drawn and draggable (the Image face is open). Off, the
+   *  picture is just the picture. */
+  handles?: boolean;
+}
 
-export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ chrome = 'full' }) => {
+export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageStageFaceProps> = ({ chrome = 'full', cloudHost = null, toolsHost = null, handles = true }) => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
   const loading = useImageStore((s) => s.loading);
@@ -128,7 +136,9 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ ch
 
   // --- cloud ---
   const cloudRef = useRef<HTMLCanvasElement>(null);
-  const cloudGen = useHiDPICanvas(cloudRef, !!model);
+  // the face's cloud canvas mounts only once its host exists (the tray face opens later
+  // than the picture) — `active` re-runs the fit when it does
+  const cloudGen = useHiDPICanvas(cloudRef, !!model && (chrome !== 'face' || !!cloudHost));
   const yawRef = useRef(-0.6);
   const pitchRef = useRef(0.5);
   const drawCloud = useCallback(() => {
@@ -241,7 +251,7 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ ch
     x.imageSmoothingEnabled = true;
     x.imageSmoothingQuality = 'high';
     x.drawImage(thumb, R.ox, R.oy, R.w, R.h);
-    if (mode === 'trace') {
+    if (mode === 'trace' && (chrome !== 'face' || handles)) {
       // Dense curve in image px (same geometry the sampler walks) → pane coords.
       const poly = tracePolyline(path, model.w, model.h, catmull);
       const toPane = (p: Pt): [number, number] => [R.ox + (p.x / (model.w - 1)) * R.w, R.oy + (p.y / (model.h - 1)) * R.h];
@@ -259,7 +269,7 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ ch
         x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke();
       });
     }
-  }, [thumb, model, mode, path, catmull, paneRect, chrome]);
+  }, [thumb, model, mode, path, catmull, paneRect, chrome, handles]);
   useEffect(() => { drawPane(); }, [drawPane, paneGen]);
 
   // Live refs so the pointer listeners can stay attached for the whole drag. If the
@@ -272,6 +282,8 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ ch
   pathRef.current = path;
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
+  const handlesRef = useRef(handles);
+  handlesRef.current = chrome !== 'face' || handles;
   // Freehand recording buffer (non-null while a draw stroke is in progress).
   const recordRef = useRef<Pt[] | null>(null);
 
@@ -294,7 +306,7 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ ch
     });
 
     const down = (e: PointerEvent) => {
-      if (modeRef.current !== 'trace') return;
+      if (modeRef.current !== 'trace' || !handlesRef.current) return;
       const [mx, my] = loc(e), R = paneRect();
       // Draw mode: begin a fresh freehand stroke.
       if (drawingRef.current) {
@@ -381,73 +393,57 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' }> = ({ ch
   // Send-to-Generator is now the Generator · A / Generator · B bins in the dock
   // (select the result or drag it onto a bin) — no hardcoded buttons here.
 
-  // 'face' chrome — the v2 tray's Image face (plans/ge-v2-unified-shell-plan.md §4 C.6, owner
-  // 2026-09-07: "one picture, not three"). The PREVIEW is the working surface: wide, full
-  // aspect, letter-boxed to IMAGE_FACE_H, the Path handles and the Draw / Auto / Straight
-  // tools ON it; the colour cloud is a square beside it on the panel's ground; Replace image
-  // is a small button on the preview, shown when the draw tool is not active. No captions,
-  // no source pane, no hero, no dominant swatches (the hero palette is that row). The host
-  // (ExtractStage) puts the method chips and dials under this.
+  // 'face' chrome — the v2 hero (plans/ge-v2-unified-shell-plan.md §4 C.6, owner 2026-09-07,
+  // second take: "the hero's own image slot IS the picture"). Rendered INSIDE the hero's slot:
+  // the pane fills the host, the Path handles draw on it while `handles` (the Image face is
+  // open), Replace image is a small button on the picture. The Draw / Auto / Straight tools
+  // and the colour cloud PORTAL into the tray's Image face (`toolsHost` / `cloudHost`) — one
+  // component, two homes, the same state. No captions, no source pane, no hero.
   if (chrome === 'face') {
     const tool = 'inline-flex items-center h-[26px] px-3 rounded-lg text-[13px] border transition-colors';
-    const toolIdle = `${tool} bg-surface-section/90 border-line/20 text-fg-muted hover:text-fg hover:border-line/40`;
+    const toolIdle = `${tool} bg-surface-section border-line/20 text-fg-muted hover:text-fg hover:border-line/40`;
     const toolOn = `${tool} bg-surface-section border-line/40 text-accent-300`;
     return (
-      <div className="flex gap-4 items-stretch" style={{ height: IMAGE_FACE_H }}>
-        {!model ? (
+      <div className="relative w-full h-full">
+        <canvas
+          ref={paneRef}
+          width={640}
+          height={340}
+          className={`w-full h-full block touch-none ${mode === 'trace' && handles ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`}
+        />
+        {handles && !(mode === 'trace' && drawing) && (
           <button
             type="button"
+            className={`${toolIdle} absolute bottom-2 right-2 h-[24px] px-2 text-[12px] bg-surface-section/90`}
             onClick={() => fileInputRef.current?.click()}
-            className="flex-1 rounded-[10px] border border-dashed border-line/40 text-[13px] text-fg-muted hover:border-accent-400 hover:text-accent-300 flex items-center justify-center"
+            title="Choose another image (or drop one anywhere)"
           >
-            {loading ? 'reading image…' : 'Drop, paste, or click to choose an image'}
+            Replace
           </button>
-        ) : (
-          <>
-            <div className="relative flex-1 min-w-0 rounded-[10px] overflow-hidden bg-surface-viewport">
-              <canvas
-                ref={paneRef}
-                width={640}
-                height={340}
-                className={`w-full h-full block touch-none ${mode === 'trace' ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`}
-              />
-              {/* the tools live ON the picture */}
-              <div className="absolute top-2 right-2 flex gap-1.5">
-                {mode === 'trace' && (
-                  <>
-                    <button type="button" className={drawing ? toolOn : toolIdle} onClick={() => setDrawing((d) => !d)} title="Draw the path across the image">
-                      {drawing ? 'Drawing…' : 'Draw'}
-                    </button>
-                    <button type="button" className={toolIdle} onClick={() => model && (setDrawing(false), setPath(autoPath(model)))} title="Place the path automatically">
-                      Auto
-                    </button>
-                    <button
-                      type="button"
-                      className={`${toolIdle} disabled:opacity-40`}
-                      disabled={!path.points}
-                      onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
-                      title="Reset to a straight line between the endpoints"
-                    >
-                      Straight
-                    </button>
-                  </>
-                )}
-                {!(mode === 'trace' && drawing) && (
-                  <button type="button" className={toolIdle} onClick={() => fileInputRef.current?.click()} title="Choose another image (or drop one anywhere)">
-                    Replace image
-                  </button>
-                )}
-              </div>
-            </div>
-            <canvas
-              ref={cloudRef}
-              width={340}
-              height={340}
-              className="block shrink-0 rounded-[10px] bg-surface-viewport cursor-grab touch-none"
-              style={{ width: IMAGE_FACE_H, height: IMAGE_FACE_H }}
-              title="Colour cloud (OKLab) — drag to rotate · the line is your gradient"
-            />
-          </>
+        )}
+        {toolsHost && mode === 'trace' && createPortal(
+          <div className="flex items-center gap-1.5">
+            <button type="button" className={drawing ? toolOn : toolIdle} onClick={() => setDrawing((d) => !d)} title="Draw the path across the image">
+              {drawing ? 'Drawing…' : 'Draw'}
+            </button>
+            <button type="button" className={toolIdle} onClick={() => model && (setDrawing(false), setPath(autoPath(model)))} title="Place the path automatically">
+              Auto
+            </button>
+            <button
+              type="button"
+              className={`${toolIdle} disabled:opacity-40`}
+              disabled={!path.points}
+              onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
+              title="Reset to a straight line between the endpoints"
+            >
+              Straight
+            </button>
+          </div>,
+          toolsHost,
+        )}
+        {cloudHost && createPortal(
+          <canvas ref={cloudRef} width={340} height={340} className="w-full h-full block cursor-grab touch-none" title="Colour cloud (OKLab) — drag to rotate · the line is your gradient" />,
+          cloudHost,
         )}
         <input
           ref={fileInputRef}

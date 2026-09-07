@@ -288,3 +288,15 @@ dials (two columns, tooltips, no diamonds) under the picture. This face alone sp
 full width from the gutter; the other faces stay inline with the panel. The hero's slot keeps
 its thumbnail as the "from an image" mark and the way in. Measured: tray 24 → 1256, preview
 942 × 240, cloud 240 × 240, slot 199 square.
+
+### 14a. Second take, from the owner's sketch (same day)
+
+The tray preview was still one picture too many. Now the hero's SLOT is the picture: the image at
+its own aspect (as tall as the card allows, at most 520 px wide), hosting `ImageStage
+chrome="face"` — the Path handles draw on it while the Image face is open, Replace is a small
+button on it. Its Draw / Auto / Straight tools and the colour cloud PORTAL into the tray's Image
+face (`toolsHost` / `cloudHost`): one component, two homes, one state. The tray runs from the
+card's left edge (x = 10) and holds only the method (the same segmented control as Even ·
+Perceptual · Stops, owner), the Path tools beside it, the method's dials, and the cloud square on
+the right. With the face closed the picture is just the picture (no handles; a click opens the
+face). Measured: slot 518 × 197 for a 2560 × 570 image, tray 245 tall, cloud 220 square.

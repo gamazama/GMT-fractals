@@ -160,6 +160,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // a stop selection opens that face, clearing it closes it, and the shell's Esc order closes
   // it by clearing the selection (the effect below).
   const [inspectorEl, setInspectorEl] = useState<HTMLDivElement | null>(null);
+  // The Image face's hosts: the picture lives in the slot; its tools and colour cloud
+  // portal into the tray (C.6, second take).
+  const [imageCloudEl, setImageCloudEl] = useState<HTMLDivElement | null>(null);
+  const [imageToolsEl, setImageToolsEl] = useState<HTMLDivElement | null>(null);
   const trayRef = useRef<TrayFace>(tray);
   trayRef.current = tray;
   const selectionCount = useRef(0);
@@ -275,7 +279,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
         <div className="flex flex-col justify-center py-4">
-          <ImageSlot active={source === 'extract'} onClick={() => onTray('image')} />
+          <ImageSlot active={source === 'extract'} onClick={() => onTray('image')} cloudHost={imageCloudEl} toolsHost={imageToolsEl} handles={tray === 'image'} />
         </div>
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}
@@ -407,7 +411,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         </div>
       </div>
       {/* the TRAY (Phase C): one surface under the card, one face at a time */}
-      <Tray face={tray} derived={derived} width={rampW} inspectorHostRef={setInspectorEl} left={panelLeft} />
+      <Tray face={tray} derived={derived} width={rampW} inspectorHostRef={setInspectorEl} imageCloudRef={setImageCloudEl} imageToolsRef={setImageToolsEl} left={panelLeft} />
       {exportMenu}
     </section>
   );
