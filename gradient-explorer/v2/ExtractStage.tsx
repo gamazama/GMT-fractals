@@ -84,7 +84,8 @@ export const ExtractStage: React.FC<{ cloudHostRef: (el: HTMLDivElement | null) 
           {/* the Path tools portal in here (Draw · Auto · Straight) when Path is the method */}
           <div ref={toolsHostRef} className="flex items-center" />
         </div>
-        <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} hints="tooltip" keyframes={false} className="grid grid-cols-2 gap-x-6" />
+        {/* one column (owner, 2026-09-07: compact — the tray's height is this column and the cloud) */}
+        <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} hints="tooltip" keyframes={false} className="max-w-[560px]" />
       </div>
       {/* right: the colour cloud (portalled in by the picture) */}
       <div ref={cloudHostRef} className="w-[220px] h-[220px] shrink-0 rounded-[10px] bg-surface-viewport overflow-hidden" />

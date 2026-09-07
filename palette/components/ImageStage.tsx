@@ -204,7 +204,31 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
     }
     x.globalAlpha = 1;
     const ribbon = derived?.ribbon, ramp = derived?.ramp;
-    if (ribbon && ramp) {
+    if (ribbon && ramp && chrome === 'face') {
+      // the gradient's path as a THIN BRIGHT line over a dark halo (owner, 2026-09-07: "so
+      // it's visible") — the coloured ribbon vanished into the cloud it was drawn from
+      const pathOf = () => {
+        x.beginPath();
+        for (let i = 0; i < 256; i++) {
+          const q = proj(ribbon[i].L, ribbon[i].a, ribbon[i].b, W, H, yaw, pitch, zoom);
+          i ? x.lineTo(q[0], q[1]) : x.moveTo(q[0], q[1]);
+        }
+      };
+      x.lineCap = 'round';
+      x.lineJoin = 'round';
+      x.strokeStyle = 'rgba(0,0,0,0.6)';
+      x.lineWidth = 3 * dpr;
+      pathOf();
+      x.stroke();
+      x.strokeStyle = 'rgba(255,255,255,0.95)';
+      x.lineWidth = 1.25 * dpr;
+      pathOf();
+      x.stroke();
+      const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch, zoom);
+      const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch, zoom);
+      x.fillStyle = '#fff';
+      [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3 * dpr, 0, 7); x.fill(); });
+    } else if (ribbon && ramp) {
       x.lineWidth = 4 * dpr;
       x.lineCap = 'round';
       for (let i = 1; i < 256; i++) {
