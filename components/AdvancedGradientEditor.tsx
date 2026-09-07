@@ -720,9 +720,22 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 />
             )}
 
-            <div className="relative px-2" onContextMenu={openTrackContextMenu}>
+            {/* The 8 px gutters either side of the strip exist so an end knot has somewhere
+                to sit. In 'strip' chrome they are painted with the ramp's two end colours so
+                the gradient does not look as if it stops short (owner, 2026-09-07); the
+                strip itself has no border there — the v2 hero draws it borderless. 'full'
+                chrome (GMT main) is unchanged. */}
+            <div
+                className={`relative px-2 ${chrome === 'strip' ? 'rounded-[10px] overflow-hidden' : ''}`}
+                style={chrome === 'strip' ? {
+                    backgroundImage: `linear-gradient(to right, rgb(${previewRamp[0].r} ${previewRamp[0].g} ${previewRamp[0].b}) 50%, rgb(${previewRamp[255].r} ${previewRamp[255].g} ${previewRamp[255].b}) 50%)`,
+                    backgroundSize: `100% ${stripHeight}px`,
+                    backgroundRepeat: 'no-repeat',
+                } : undefined}
+                onContextMenu={openTrackContextMenu}
+            >
                 <div
-                    className="w-full rounded-t border border-line/20 relative mb-0 cursor-pointer overflow-hidden"
+                    className={`w-full relative mb-0 cursor-pointer overflow-hidden ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
                     style={{ height: stripHeight }}
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
                     title="Double-click to select all"
@@ -757,7 +770,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
                 <div 
                     ref={knotTrackRef} 
-                    className="h-6 w-full bg-line/5 border-x border-b border-line/10 relative rounded-b cursor-crosshair"
+                    className={`h-6 w-full bg-line/5 relative cursor-crosshair ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
                     onMouseDown={handleTrackMouseDown} 
                     title="Click & drag to add/move knot"
                 >

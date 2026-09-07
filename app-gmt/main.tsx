@@ -115,6 +115,11 @@ import { registerGmtTopbar } from '../engine-gmt/topbar';
 import { useEngineStore, getShaderConfigFromState, setFormulaPresetResolver, setCompileEstimator } from '../store/engineStore';
 import { estimateCompileTime } from '../engine-gmt/features/engine/profiles';
 import { parseShareString } from '../utils/Sharing';
+// The Gradient Explorer's `?g=` code — the ONE codec, shared with its Share link
+// (gradient-explorer/v2/shareUrl.ts, guarded by `npm run test:gx-share`). "Back to GMT"
+// on the Explorer's hero builds it; this is the arrival side.
+import { takeShareFromLocation } from '../gradient-explorer/v2/shareUrl';
+import { applyGradientConfig } from '../palette/core/gradientSeam';
 import { setFormulaParamResolver } from '../components/ParameterSelector';
 import { LoadSceneFilterMenuItem } from '../components/LoadFilterPanel';
 
@@ -753,6 +758,21 @@ void resolveBootPreset().then((bootPreset) => {
     } else {
         console.warn('[app-gmt] No boot preset available — worker may boot un-hydrated');
     }
+    // A gradient handed back from the Gradient Explorer ("Back to GMT"): `?g=<code>`,
+    // decoded by the same module that encodes it, applied ONCE to coloring layer 1 through
+    // the shared gradient seam (elided defaults and all — the codec restores them). Runs
+    // AFTER the boot preset so it wins over the preset's own gradient, and BEFORE the React
+    // mount so the worker's first BOOT config already carries it. takeShareFromLocation
+    // strips the param, so a refresh does not re-apply it.
+    try {
+        const handedBack = takeShareFromLocation();
+        if (handedBack && !applyGradientConfig(handedBack.config, 1)) {
+            console.warn('[app-gmt] ?g= gradient could not be applied — no coloring feature');
+        }
+    } catch (err) {
+        console.warn('[app-gmt] ?g= gradient handoff failed', err);
+    }
+
     ReactDOM.createRoot(rootElement).render(
         <AppErrorBoundary initialError={bootError}>
             <React.StrictMode>

@@ -45,6 +45,7 @@ import type { ParamConfig } from '../../engine/FeatureSystem';
 const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
   ((c as { options?: { value: number; label: string }[] }).options ?? []).map((o) => ({ value: o.value, label: o.label }));
 import { Icon } from './ui/Icon';
+import { Floating } from './ui/Floating';
 
 // No "hand" entry: the rest state (pick on click, right-drag pans) is implicit and never
 // highlighted — a highlighted default read as a stuck mode (owner review 2026-09-03).
@@ -63,7 +64,10 @@ const GROUND: React.CSSProperties = {
   backgroundSize: '16px 16px',
 };
 
-const pill = 'bg-surface-dock/90 border border-line/20 rounded-lg backdrop-blur-sm';
+// V1: everything that floats over the wall is a `Floating` surface — the Phase A
+// carry-over (these were inlined class strings, built concurrently with the primitive).
+// `backdrop-blur-sm` stays: the wall scrolls under them.
+const floatOver = 'backdrop-blur-sm';
 
 export const BrowseStage: React.FC = () => {
   const m = usePickerModel();
@@ -282,7 +286,7 @@ export const BrowseStage: React.FC = () => {
         )}
 
         {/* floating tool palette */}
-        <div ref={m.toolbarRef} className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${pill}`}>
+        <Floating ref={m.toolbarRef} className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${floatOver}`}>
           {TOOLS.map((t) => {
             const on = activeTool === t.id;
             return (
@@ -298,17 +302,17 @@ export const BrowseStage: React.FC = () => {
               </button>
             );
           })}
-        </div>
+        </Floating>
 
         {/* one-line caption while the zoom tool is active */}
         {zoomTool && !m.tool && (
-          <div className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${pill}`}>
+          <Floating className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${floatOver}`}>
             drag to zoom · right-drag pans · Fit resets · click the tool again to stop
-          </div>
+          </Floating>
         )}
         {/* one-line caption, only while a carve tool is active */}
         {m.tool && (
-          <div className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${pill}`}>
+          <Floating className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${floatOver}`}>
             draw around the ones you like, then keep or cut
             {m.keptIds && (
               <>
@@ -318,11 +322,11 @@ export const BrowseStage: React.FC = () => {
                 </button>
               </>
             )}
-          </div>
+          </Floating>
         )}
 
         {/* zoom readout + Fit */}
-        <div className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-muted tabular-nums ${pill}`}>
+        <Floating className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-muted tabular-nums ${floatOver}`}>
           <span title="Middle-drag zooms · right-drag pans">{zoomPct}</span>
           <button
             onClick={m.resetZoom}
@@ -332,7 +336,7 @@ export const BrowseStage: React.FC = () => {
           >
             Fit
           </button>
-        </div>
+        </Floating>
       </div>
     </div>
   );

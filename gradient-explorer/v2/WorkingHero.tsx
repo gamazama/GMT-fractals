@@ -2,7 +2,40 @@
  * WorkingHero — the ONE hero of the v2 shell, and it IS the stops editor (owner reviews
  * 2026-09-03; plans/ge-v2-design.md §5.1 revised, §6b, §12).
  *
- * Top to bottom inside the block:
+ * Phase B (2026-09-06, plans/ge-v2-unified-shell-plan.md §4) made it the three-column band
+ * of mock C. The owner's Figma pass (2026-09-07, "Hero v3 (agreed)" in the GE v2 Hero file;
+ * plans/ge-v2-figma/hero-spec.md §7a) reshaped it into a CARD:
+ *
+ *   • the band (`surface-raised`) holds one card, radius 32, 10 px inset; the 24 px gutter
+ *     (V7) is kept INSIDE it (10 + 1 + 13). Two columns, not three:
+ *   • SOURCE — the `ImageSlot` (L3: the image is reached into, never switched to). Slim
+ *     while empty, a card-tall square once an image is loaded. Phase C turns its click
+ *     from a tab switch into a tray.
+ *   • the PANEL — radius 20 on the wall's own ground (`surface-viewport`): a header strip
+ *     (name · state · More like this · the four USE icons), the palette, the ramp, the
+ *     expanders. The USE column and both zone labels are gone — the card's shape does the
+ *     grouping (owner: the less text on screen, the better). Keep · Share · Export ·
+ *     Wallpaper are icon `Act`s at the header's right edge (L2); the shell still owns
+ *     what they DO (P3).
+ *
+ * Surfaces map the Figma ladder (band > card > panel, three clear steps) onto the tokens
+ * the running scheme already generates: raised > section > viewport. The Figma hexes are
+ * lighter than the app's — see hero-spec.md §7b.
+ *
+ * Two behaviours the band carries:
+ *
+ *   • **L8 — the hero never unmounts once it exists.** An empty source (the Image tab with
+ *     no image, a Mix with nothing in it) keeps the LAST gradient on the ramp — shown, not
+ *     editable, since there is no live document behind it — with an empty source band
+ *     saying what is missing. The previous working gradient is one undo away through
+ *     workingStore, unchanged. Guarded by `npm run smoke:ge-hero`.
+ *   • **L9 — the quiet hero.** `quiet` (the shell's pointer-in-the-wall timer) folds the
+ *     source band away — and nothing else. The palette, the ramp at full height, the
+ *     Curves / Adjust aside and the slot all stay (owner, 2026-09-07: the palette vanishing
+ *     and the hard snap were both jarring). The fold is a 200 ms `Collapse`, so quiet is a
+ *     settle, not a jump. A prop, not store state; nothing unmounts.
+ *
+ * Top to bottom inside the WORK column:
  *   1. name · state chip · More like this · ★  (Mix is a source tab, not a button here —
  *      owner: less UI is more likely to be clicked than advertising in a busy one)
  *   2. the PALETTE ROW — draggable sample positions on top of the ramp (PaletteRow). A click
@@ -44,12 +77,15 @@ import { applyEditorChange } from '../../palette/core/editorConfig';
 import { useGeneratorStore, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
+import { GradientStrip } from '../../palette/components/GradientStrip';
 import { PaletteRow } from './PaletteRow';
+import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, mixSourceHeight } from './SourceBands';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
-import { gradientBarClass } from './ui/bar';
+import { Floating } from './ui/Floating';
+import { runExport, useRecentExports, exportActionLabel } from './exportActions';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
@@ -81,9 +117,20 @@ type Expander = 'curves' | 'adjust' | null;
 interface Props {
   derived: WorkingDerived;
   source: SourceId;
+  /** L9: the pointer has lived in the wall for a while — collapse to the ramp and a row
+   *  of small use buttons. A pure class/height switch; no store state. */
+  quiet?: boolean;
+  /** Click on the image slot — the shell switches the source (Phase C: opens the tray). */
+  onImageSource: () => void;
+  onShare: () => void;
+  onExport: () => void;
+  onWallpaper: () => void;
+  exportOpen: boolean;
+  /** Export's popover, anchored inside the use cluster. */
+  exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, onImageSource, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
@@ -91,6 +138,16 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
   const [scrubT, setScrubT] = useState<number | null>(null);
   const [rampRef, rampW] = useWidth();
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
+
+  // L8 — the hero never unmounts once it exists. An empty source (the Image tab with no
+  // image, a Mix with nothing in it) used to return null and take the whole hero with it.
+  // Instead the LAST gradient the pipeline produced stays on the ramp (it is also one undo
+  // away in workingStore) and the source half says what is missing. Refs, not state: this
+  // is a memory of the render, and re-rendering because of it would be a loop.
+  const lastGood = useRef<{ config: GradientConfig; ramp: RGB[] } | null>(null);
+  if (derived.config && derived.ramp) lastGood.current = { config: derived.config, ramp: derived.ramp };
+  const emptySource = !derived.config || !derived.ramp;
+  const shown = emptySource ? lastGood.current : { config: derived.config!, ramp: derived.ramp! };
 
   const config = derived.config;
   // The split: Mix always (its source is two things); otherwise whenever the output is not
@@ -100,15 +157,17 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
   const sourceH = derived.input.kind === 'build' ? mixSourceHeight() : SOURCE_BAND_H;
   const resultH = split ? (derived.input.kind === 'build' ? 40 : 42) : 60;
   const favOf = useMemo(() => {
-    if (!config) return null;
-    const sig = favientSig(config);
+    const c = derived.config ?? lastGood.current?.config;
+    if (!c) return null;
+    const sig = favientSig(c);
     // Kept = filed by the user. The Recent session entry always matches (it follows the
     // work), so it must not light the star.
     return favients.find((f) => !isRecentGroup(f.group) && favientSig(f.config) === sig) ?? null;
-  }, [favients, config]);
+  }, [favients, config, derived.config]);
   const paletteHex = useMemo(() => derived.palette.map((s) => hexOf(s.color)), [derived.palette]);
 
-  if (!config || !derived.ramp) return null;
+  // L9 — before the first pick there is no hero at all; that state is unchanged.
+  if (!shown) return null;
 
   const toggleStar = () => {
     const st = useFavientsStore.getState();
@@ -117,11 +176,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
       return;
     }
     useWorkingStore.getState().syncRecent();
-    st.add(config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
+    st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
   };
 
   // ── editor wiring ─────────────────────────────────────────────────────────────
-  const editorValue: GradientConfig = derived.edited ? docConfig : config;
+  // Only reached with a live source (an empty one shows a plain strip, not the editor).
+  const editorValue: GradientConfig = derived.edited ? docConfig : (config ?? shown.config);
   const ensureEditing = () => {
     if (useWorkingStore.getState().input.kind !== 'stops') useWorkingStore.getState().beginEdit();
   };
@@ -138,8 +198,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
     const cur = usePaletteEditorStore.getState().config;
     usePaletteEditorStore.getState().setConfig(applyEditorChange(cur, val));
   };
-
-  const stateChip = derived.live ? (
+  // The state reads inline in the heading bar (V3 as amended by Phase A iteration 1); an
+  // empty source has no state of its own — the source band says what is missing instead.
+  const stateChip = emptySource ? null : derived.live ? (
     <StateChip kind="live" variant="inline">live from {source === 'build' ? 'Mix' : 'Image'}</StateChip>
   ) : derived.edited ? (
     <StateChip
@@ -154,95 +215,232 @@ export const WorkingHero: React.FC<Props> = ({ derived, source }) => {
     <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it">preview</StateChip>
   );
 
+  // What the EMPTY source band says (L8): the source is selected but has nothing in it.
+  const emptyText =
+    derived.input.kind === 'extract'
+      ? 'image · drop one on the slot'
+      : derived.input.kind === 'build'
+        ? 'Mix · pick B from the wall or the shelf'
+        : 'no source · pick a gradient below';
+
   return (
-    <section className="shrink-0 px-6 pt-3 pb-3 bg-surface-dock border-b border-line/10" data-gx-selectable>
-      {/* Owner, 2026-09-06: the name is a HEADING BAR of the hero — one object with the ramp
-          beneath it — and the state reads inline in that bar, not as a floating pill. */}
-      <div className="flex items-center gap-2.5 h-10 px-3 mb-2 rounded-lg bg-surface-section border border-line/20">
-        <input
-          className="bg-transparent border-0 outline-none text-[18px] font-semibold text-fg min-w-[80px] max-w-[40%]"
-          value={derived.name}
-          onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
-          title="Name"
-        />
-        {stateChip}
-        <span className="flex-1" />
-        {source === 'browse' && (
-          <Act title="Sort the wall by similarity to this gradient" onClick={() => setSimilarityAnchor({ config, name: derived.name })}>
-            More like this
-          </Act>
-        )}
-        <Act active={!!favOf} title={favOf ? 'Saved in My Gradients — click to remove' : 'Save to My Gradients'} onClick={toggleStar}>
-          <Icon name="star" className={favOf ? 'text-warn' : ''} />
-        </Act>
-      </div>
+    <section
+      className="relative shrink-0 p-2.5 bg-surface-raised border-b border-line/10"
+      data-gx-hero
+      data-gx-quiet={quiet ? '' : undefined}
+      data-gx-selectable
+    >
+      {/* the CARD — radius 20 (same as the panel, owner 2026-09-07), one object, inset 10 px in the band, and the PANEL flush with the card's top / right / bottom (owner,
+          2026-09-07); the 24 px gutter is 10 (band) + 1 (card border) + 13 */}
+      <div className="grid gap-4 pl-[13px] rounded-[20px] bg-surface-section border border-line/20 overflow-hidden" style={{ gridTemplateColumns: 'auto minmax(0,1fr)' }}>
+        {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
+            once an image is in. It never moves and never unmounts. */}
+        <div className="flex flex-col justify-center py-1">
+          <ImageSlot active={source === 'extract'} onClick={onImageSource} />
+        </div>
 
-      {/* 2. palette on top */}
-      <PaletteRow
-        palette={derived.palette}
-        scale={Math.max(1, rampW - 16)}
-        onScrub={setScrubT}
-        onSelect={(_, t) => editorRef.current?.selectAt(t)}
-        className="h-[34px] mb-1.5"
-      />
-
-      {/* 3. the ramp IS the stops editor — under the source band(s) while the pipeline is live */}
-      <div ref={rampRef} className={`relative ${gradientBarClass({ size: 'ramp' })}`}>
-        {split && (
-          <div className="px-2 mb-px" style={{ minHeight: sourceH }}>
-            <SourceBands derived={derived} />
-          </div>
-        )}
-        <AdvancedGradientEditor
-          ref={editorRef}
-          chrome="strip"
-          stripHeight={resultH}
-          stripAside={
-            <div className="flex flex-wrap gap-1.5">
-              <Act active={expander === 'curves'} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
-                Curves <Icon name={expander === 'curves' ? 'chevronUp' : 'chevronDown'} />
+        {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}
+        <div className="min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden">
+          {/* Owner, 2026-09-06 / 07: the name is the HEADER of the panel — one object with
+              the ramp beneath it — the state reads inline, and the outputs (Keep · Share ·
+              Export · Wallpaper) sit at its right edge as icons (L2), no use column. */}
+          <div className="flex items-center gap-1.5 h-[42px] px-4 bg-surface-raised">
+            {/* the name HUGS its text (a mirror span sizes the grid cell; the input fills it)
+                instead of clipping at a fixed width — owner, 2026-09-07 */}
+            <span className="inline-grid min-w-[40px] max-w-[60%] text-[18px] font-semibold">
+              <span className="invisible col-start-1 row-start-1 whitespace-pre pr-0.5" aria-hidden>{derived.name || ' '}</span>
+              <input
+                size={1}
+                className="col-start-1 row-start-1 w-full min-w-0 bg-transparent border-0 outline-none text-fg"
+                value={derived.name}
+                onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
+                title="Name"
+              />
+            </span>
+            {stateChip}
+            <span className="flex-1" />
+            {source === 'browse' && !emptySource && (
+              <Act className="mr-1" title="Sort the wall by similarity to this gradient" onClick={() => setSimilarityAnchor({ config: shown.config, name: derived.name })}>
+                More like this
               </Act>
-              <Act
-                active={expander === 'adjust'}
-                onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))}
-                title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise"
-              >
-                Adjust <Icon name={expander === 'adjust' ? 'chevronUp' : 'chevronDown'} />
+            )}
+            {/* USE — the shell still owns what these DO (P3). Export's full window hangs
+                off the BAND (below), outside the card's clip; its icon carries the flyout. */}
+            <div className="flex items-center gap-1.5">
+              <Act icon active={!!favOf} className={favOf ? 'text-warn' : ''} onClick={toggleStar} title={favOf ? 'Saved in My Gradients — click to remove' : 'Keep — save to My Gradients'}>
+                <Icon name="heart" size={15} />
+              </Act>
+              <Act icon onClick={onShare} title="Share — copy a link that opens this gradient">
+                <Icon name="share" size={15} />
+              </Act>
+              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} />
+              <Act icon onClick={onWallpaper} title="Wallpaper — fill the screen with it">
+                <Icon name="fullscreen" size={15} />
               </Act>
             </div>
-          }
-          value={editorValue}
-          onChange={onEditorChange}
-          onEditStart={onEditorStart}
-          onEditEnd={editorEditEnd}
-          edit={onEditorEdit}
-          pickerPalette={paletteHex}
-        />
-        {scrubT != null && (
-          <div
-            className="absolute w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"
-            style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split ? sourceH + 1 : 0, height: resultH }}
-          />
-        )}
-      </div>
+          </div>
 
-      {/* 4. the expanders */}
-      {expander === 'curves' && <CurvesExpander derived={derived} width={rampW} />}
-      {expander === 'adjust' && (
-        <div className="mt-3 pt-3 border-t border-line/10 grid grid-cols-2 gap-x-7">
-          {/* Modify/Noise carry `dynamicVisible: isMixed` (a Generator-era assumption:
-              those dials hid whenever the recipe wasn't the two-source mix). Adjust
-              belongs to WORKING here (§5.1), not to the Mix recipe, so it must stay
-              visible whatever the recipe — ignoreDynamicVisible skips that gate for this
-              mount only; the shared param definition (also read by GeneratorStage /
-              app-gmt) is untouched. @see plans/ge-v2-design.md §12 item 4 */}
-          <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" ignoreDynamicVisible />
-          <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Noise" ignoreDynamicVisible />
+          <div className="px-4 pt-4 pb-2 flex flex-col">
+            {/* the palette on top of the ramp — hidden only while the source is empty (there
+                is nothing live to sample from); it STAYS through quiet (owner, 2026-09-07) */}
+            {!emptySource && (
+              <PaletteRow
+                palette={derived.palette}
+                scale={Math.max(1, rampW - 16)}
+                onScrub={setScrubT}
+                onSelect={(_, t) => editorRef.current?.selectAt(t)}
+                className="h-9 mb-3"
+              />
+            )}
+
+            {/* the ramp IS the stops editor — under the source band(s) while the pipeline is
+                live. With an EMPTY source it is the last gradient, shown but not editable:
+                there is no live document behind it until a source is back (L8). No hairline
+                and no hover outline here (owner, 2026-09-07: the border was unnecessary) —
+                the editor's strip chrome paints its own rounded, edge-filled bar. */}
+            <div ref={rampRef} className="relative rounded-[10px]">
+              {emptySource ? (
+                <>
+                  <Collapse open={!quiet}>
+                    <div className="px-2 mb-px">
+                      <div
+                        className="flex items-center px-2 rounded border border-dashed border-line/40 text-[11px] text-fg-muted"
+                        style={{ height: SOURCE_BAND_H }}
+                        title="This source has nothing in it yet — the ramp below is the gradient you were last working on"
+                      >
+                        {emptyText}
+                      </div>
+                    </div>
+                  </Collapse>
+                  <GradientStrip ramp={shown.ramp} height={42} className="w-full block" />
+                </>
+              ) : (
+                <>
+                  {split && (
+                    <Collapse open={!quiet}>
+                      <div className="px-2 mb-px" style={{ minHeight: sourceH }}>
+                        <SourceBands derived={derived} />
+                      </div>
+                    </Collapse>
+                  )}
+                  <AdvancedGradientEditor
+                    ref={editorRef}
+                    chrome="strip"
+                    stripHeight={resultH}
+                    stripAside={
+                      (
+                        <div className="flex flex-wrap gap-1.5">
+                          <Act active={expander === 'curves'} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
+                            Curves <Icon name={expander === 'curves' ? 'chevronUp' : 'chevronDown'} />
+                          </Act>
+                          <Act
+                            active={expander === 'adjust'}
+                            onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))}
+                            title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise"
+                          >
+                            Adjust <Icon name={expander === 'adjust' ? 'chevronUp' : 'chevronDown'} />
+                          </Act>
+                        </div>
+                      )
+                    }
+                    value={editorValue}
+                    onChange={onEditorChange}
+                    onEditStart={onEditorStart}
+                    onEditEnd={editorEditEnd}
+                    edit={onEditorEdit}
+                    pickerPalette={paletteHex}
+                  />
+                  {scrubT != null && (
+                    <div
+                      className="absolute w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"
+                      style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split && !quiet ? sourceH + 1 : 0, height: resultH }}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* the expanders (Phase C moves them into the tray accordion) */}
+            {!quiet && expander === 'curves' && <CurvesExpander derived={derived} width={rampW} />}
+            {!quiet && expander === 'adjust' && (
+              <div className="mt-3 pt-3 border-t border-line/10 grid grid-cols-2 gap-x-7">
+                {/* Modify/Noise carry `dynamicVisible: isMixed` (a Generator-era assumption:
+                    those dials hid whenever the recipe wasn't the two-source mix). Adjust
+                    belongs to WORKING here (§5.1), not to the Mix recipe, so it must stay
+                    visible whatever the recipe — ignoreDynamicVisible skips that gate for this
+                    mount only; the shared param definition (also read by GeneratorStage /
+                    app-gmt) is untouched. @see plans/ge-v2-design.md §12 item 4 */}
+                <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" ignoreDynamicVisible />
+                <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Noise" ignoreDynamicVisible />
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
+      {exportMenu}
     </section>
   );
 };
+
+/**
+ * The Export icon. A click opens the full window (`ExportMenu`, all formats). HOVER shows
+ * the last three exports as one-click rows (owner, 2026-09-07: "a small on-hover dropdown
+ * with their most recent export types"); nothing shows until there is a recent. The
+ * flyout is `fixed`, measured off the button, because everything inside the card is
+ * clipped by it.
+ */
+const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string }> = ({ open, onOpen, ramp, name }) => {
+  const recents = useRecentExports();
+  const [hover, setHover] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const btn = useRef<HTMLDivElement>(null);
+  const leaveTimer = useRef<number | null>(null);
+  const enter = () => {
+    if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+    const r = btn.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    setHover(true);
+  };
+  const leave = () => {
+    if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
+    leaveTimer.current = window.setTimeout(() => setHover(false), 150);
+  };
+  const show = hover && !open && recents.length > 0 && pos;
+  return (
+    <div ref={btn} className="flex" onPointerEnter={enter} onPointerLeave={leave}>
+      <Act icon active={open} onClick={onOpen} title="Export — copy or download this gradient in a file format">
+        <Icon name="download" size={15} />
+      </Act>
+      {show && (
+        <Floating className="fixed z-40 p-1 flex flex-col min-w-[180px]" style={{ top: pos.top, right: pos.right }} data-gx-export-recent>
+          {recents.map((a) => (
+            <button
+              key={exportActionLabel(a)}
+              type="button"
+              className="text-left text-[13px] text-fg px-2 py-1 rounded-lg hover:bg-line/10 whitespace-nowrap"
+              onClick={() => {
+                runExport(a, ramp, name);
+                setHover(false);
+              }}
+            >
+              {exportActionLabel(a)}
+            </button>
+          ))}
+          <button type="button" className="text-left text-[13px] text-fg-muted hover:text-fg px-2 py-1 rounded-lg hover:bg-line/10" onClick={onOpen}>
+            All formats…
+          </button>
+        </Floating>
+      )}
+    </div>
+  );
+};
+
+/** A grid-rows fold (auto-height content can't transition `height`); the child stays mounted. */
+const Collapse: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open, children }) => (
+  <div className="grid transition-[grid-template-rows] duration-200 ease-out" style={{ gridTemplateRows: open ? '1fr' : '0fr' }} aria-hidden={!open}>
+    <div className="min-h-0 overflow-hidden">{children}</div>
+  </div>
+);
 
 /**
  * Curves over the WORKING base: the same channel graph editor the Generator uses, fed the

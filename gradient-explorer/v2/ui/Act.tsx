@@ -17,9 +17,11 @@ interface Props {
   active?: boolean;
   disabled?: boolean;
   className?: string;
+  /** An icon-only action: a 26 px square, no side padding (the hero's USE buttons). */
+  icon?: boolean;
 }
 
-export const Act: React.FC<Props> = ({ children, onClick, title, active = false, disabled = false, className = '' }) => (
+export const Act: React.FC<Props> = ({ children, onClick, title, active = false, disabled = false, className = '', icon = false }) => (
   <button
     type="button"
     onClick={onClick}
@@ -27,7 +29,8 @@ export const Act: React.FC<Props> = ({ children, onClick, title, active = false,
     disabled={disabled}
     aria-pressed={active || undefined}
     className={[
-      'inline-flex items-center gap-1 h-[26px] px-3 rounded-lg text-[13px] whitespace-nowrap',
+      'inline-flex items-center gap-1 h-[26px] rounded-lg text-[13px] whitespace-nowrap',
+      icon ? 'w-[26px] justify-center px-0' : 'px-3',
       'border transition-colors disabled:opacity-40 disabled:cursor-default',
       active
         ? 'bg-surface-section border-line/40 text-fg'

@@ -1,8 +1,11 @@
 /**
  * GradientExplorerV2App — the streamlined shell (plans/ge-v2-design.md §6b, mock B).
  *
- * Top to bottom: a six-item top bar · the Working hero (hidden until the first pick; it IS
- * the stops editor, with the palette row on top and Curves / Adjust expanders inside it) ·
+ * Top to bottom: the top bar — which is for the APP, not the gradient (L2), so since Phase B
+ * it is brand · undo · redo · Variants (until Phase D) · Back to GMT · settings, and ★ Keep /
+ * Share / Export / Wallpaper live in the hero's use cluster · the Working hero (absent until
+ * the first pick, and never unmounted after it — L8; it IS the stops editor, with the palette
+ * row on top and Curves / Adjust expanders inside it) ·
  * the stage with three source tabs · the silent My Gradients row (hidden until Recent has
  * something). No Dock, no side panel, no drawer, no timeline, no scene name.
  *
@@ -46,7 +49,7 @@ import { useImageDrop } from '../../palette/components/useImageDrop';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 import { ExportMenu } from './ExportMenu';
-import { shareUrlFor, takeShareFromLocation } from './shareUrl';
+import { shareUrlFor, takeShareFromLocation, gmtUrlFor, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
 import { ZoneLabel } from './ui/ZoneLabel';
 
@@ -56,6 +59,9 @@ const SOURCES: { id: SourceId; label: string }[] = [
   { id: 'build', label: 'Mix' },
   { id: 'extract', label: 'Image' },
 ];
+
+/** L9: how long the pointer must live in the wall before the hero quiets. */
+const QUIET_MS = 600;
 
 const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors';
 
@@ -94,6 +100,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const [mineOpen, setMineOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [quiet, setQuiet] = useState(false);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const pickSerial = usePickSerial();
@@ -192,6 +199,25 @@ export const GradientExplorerV2App: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [variantsOpen]);
 
+  // L9 — the quiet hero. While the pointer lives in the WALL, the hero folds its source
+  // band away (WorkingHero animates the fold); any pointer over the hero (or the shelf)
+  // brings it back. 600 ms, down from 900 (owner, 2026-09-07: the late snap was jarring). Two timers and one boolean — no store state, nothing persisted, and the hero
+  // itself never unmounts (L8).
+  const quietTimer = useRef<number | null>(null);
+  const enterWall = useCallback(() => {
+    if (quietTimer.current) window.clearTimeout(quietTimer.current);
+    quietTimer.current = window.setTimeout(() => setQuiet(true), QUIET_MS);
+  }, []);
+  const leaveWall = useCallback(() => {
+    if (quietTimer.current) window.clearTimeout(quietTimer.current);
+    quietTimer.current = null;
+  }, []);
+  const wakeHero = useCallback(() => {
+    leaveWall();
+    setQuiet(false);
+  }, [leaveWall]);
+  useEffect(() => () => { if (quietTimer.current) window.clearTimeout(quietTimer.current); }, []);
+
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
   // A share link opens straight into Working (once, on boot; the param is stripped).
@@ -230,19 +256,50 @@ export const GradientExplorerV2App: React.FC = () => {
         </a>
         <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={24} /></button>
         <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={24} /></button>
+        {/* Variants stays on the bar until Phase D moves it to the shelf as Snapshots (L4). */}
         <button className={`${tb} ${variantsOpen ? 'text-fg bg-line/10' : ''}`} onClick={() => setVariantsOpen((o) => !o)} title="Snapshots of the whole studio — switch, or tween between two">
           Variants
         </button>
-        <button className={tb} onClick={share} title="Copy a link that opens this gradient">Share</button>
-        <button className={`${tb} ${exportOpen ? 'text-fg bg-line/10' : ''}`} onClick={exportOpenToggle} title="Copy or download this gradient in a file format">Export</button>
-        <button className={`${tb} text-fg border border-line/20`} onClick={wallpaper}>Wallpaper</button>
+        {/* Back to GMT carries the gradient: the SAME `?g=` code Share writes, read by
+            app-gmt at boot (grep takeShareFromLocation in app-gmt/main.tsx). Only shown
+            when this page was opened from the studio. */}
+        {cameFromGmt && (
+          <a
+            className={`${tb} flex items-center no-underline`}
+            href={derived.config ? gmtUrlFor(derived.config, derived.name) : 'app-gmt.html'}
+            title="Back to the GMT studio, taking this gradient with you"
+          >
+            Back to GMT
+          </a>
+        )}
         <SettingsButton />
       </header>
 
-      <WorkingHero derived={derived} source={source} />
+      <div className="shrink-0" onMouseEnter={wakeHero}>
+      <WorkingHero
+        derived={derived}
+        source={source}
+        quiet={quiet}
+        onImageSource={() => switchSource('extract')}
+        onShare={share}
+        onExport={exportOpenToggle}
+        onWallpaper={wallpaper}
+        exportOpen={exportOpen}
+        exportMenu={
+          exportOpen && derived.ramp ? (
+            <ExportMenu
+              ramp={derived.ramp}
+              name={derived.name}
+              onClose={() => setExportOpen(false)}
+              positionClass="absolute right-2.5 top-[56px] z-40"
+            />
+          ) : null
+        }
+      />
+      </div>
 
-      {/* stage */}
-      <div className="flex-1 min-h-0 flex flex-col relative">
+      {/* stage — the ground. The pointer living here is what quiets the hero (L9). */}
+      <div className="flex-1 min-h-0 flex flex-col relative" onMouseEnter={enterWall} onMouseLeave={leaveWall}>
         <div className="shrink-0 flex items-center gap-2 px-6 py-2.5">
           {SOURCES.map((s) => (
             <button
@@ -272,7 +329,7 @@ export const GradientExplorerV2App: React.FC = () => {
           labelled runs (FavientsPanel layout="strip"); pull up for the full panel (search,
           list view, rename, import / export). Silent until there is something in it. */}
       {recentCount > 0 && (
-        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }}>
+        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }} onMouseEnter={wakeHero}>
           <div className="flex items-center gap-3 px-6 pt-1.5 text-[13px] text-fg-muted">
             <ZoneLabel>My Gradients</ZoneLabel>
             {mineOpen && <span>Recent fills itself as you work · drag a gradient into a group to keep it · shared with the GMT studio</span>}
@@ -287,7 +344,6 @@ export const GradientExplorerV2App: React.FC = () => {
       )}
 
       {variantsOpen && <VariantsMenu derived={derived} onClose={() => setVariantsOpen(false)} />}
-      {exportOpen && derived.ramp && <ExportMenu ramp={derived.ramp} name={derived.name} onClose={() => setExportOpen(false)} />}
       {contextMenu.visible && (
         <GlobalContextMenu
           x={contextMenu.x}

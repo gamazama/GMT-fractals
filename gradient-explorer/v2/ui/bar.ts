@@ -9,8 +9,13 @@
  * `kept` (the star overlay) is deliberately NOT drawn here — V8 says "kept = a star in
  * the corner", which is a positioned `<Icon name="star">` the caller renders, not a class.
  *
- * `size` only changes which callers use this (documented for grep, not for CSS): the
- * radius/ring/outline spec is identical at every size, so nothing here branches on it.
+ * **Radius (owner, 2026-09-07, amending V8's "radius 4"): gradients and swatches always
+ * carry LARGE rounding — it is what separates them from each other.** 10 px for every
+ * size that has the height for it (swatch, ramp, tile, item, slot); the thin source
+ * bands (14–18 px tall, SourceBands) take 6 px so they stay bars and not pills. This is
+ * the only thing `size` branches on; ring/outline are identical everywhere. The wall's
+ * tiles are canvas-drawn (PickerWall) and the shelf's items are FavientsPanel's own — both
+ * outside this helper; see plans/ge-v2-figma/hero-spec.md §7c.
  */
 
 export type GradientBarSize = 'tile' | 'item' | 'swatch' | 'slot' | 'band' | 'ramp';
@@ -30,7 +35,8 @@ export interface GradientBarOpts {
  */
 export const gradientBarClass = (opts: GradientBarOpts = {}): string => {
   const { selected = false, armed = false } = opts;
-  const base = 'rounded ring-1 ring-line/20 transition-[outline-color]';
+  const radius = opts.size === 'band' ? 'rounded-md' : 'rounded-[10px]';
+  const base = `${radius} ring-1 ring-line/20 transition-[outline-color]`;
   if (armed) return `${base} outline outline-2 outline-dashed outline-gx-armed`;
   if (selected) return `${base} outline outline-2 outline-accent-400`;
   return `${base} hover:outline hover:outline-2 hover:outline-fg`;

@@ -343,6 +343,27 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   same right edge, so the three rows read as one block. **Phase A accepted by the owner and
   committed.**
 
+- 2026-09-07 · Phase B (hero band; built in the Phase B session, then redesigned in Figma with the
+  owner the same day — `plans/ge-v2-figma/hero-spec.md` §7–7f is the record; the file is "GE v2
+  Hero", frame `Hero v3 (agreed)`). **Confirmed:** L2 (sharper: the hero is a CARD, its outputs
+  are four icons at the header's right edge, no use column), L5, L7, L8 (`smoke:ge-hero`), V3
+  inline states, V7 (the 24 px gutter survived being moved inside the card). **Amended, owner's
+  call:** **V1** — the hero is not a band on `surface-dock`; it is a card (`surface-section`,
+  radius 20) on a band (`surface-raised`) holding a panel (`surface-viewport`, radius 20) with a
+  `surface-raised` header — ground · band · card · floating is the ladder now. **V2** — samples
+  are 10 px, not 4; pressables stay 8; containers (card, panel) are 20; pill = state still holds.
+  **V5** — the hero carries no zone labels; "the less text on screen, the better" (owner) is the
+  stronger form and zone labels now belong to the shelf and Filters only. **V6** — the hero uses
+  FILLED Material glyphs (heart · share · download · photo · fullscreen) the owner picked; two
+  sets is not an end state — decision: adopt Material across v2, Phase G sweeps. **V8** — radius
+  10 on every bar; the ramp has NO hairline and no hover outline, and its 8 px knot gutters are
+  painted with the two end colours (strip chrome only; GMT main's `full` chrome untouched); small
+  bars keep the hairline. **L9** — quiet no longer hides the palette or shrinks the ramp; it only
+  folds the source band (200 ms) after 600 ms; decision: delete it in Phase C unless the short
+  window still bites. **New:** the stop inspector (colour picker) is a TRAY like Mix / Extract /
+  Curves / Adjust — one thing open under the card at a time, floating from its bottom edge, never
+  pushing the shelf (folds into L6; Phase C hosts it, Phase E restyles its insides).
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on
@@ -401,3 +422,16 @@ phase now carries**. Items move out of this list only when a later phase's entry
   carry-over list; Phase B starts with L8 (the hero never unmounts), the use cluster, the image
   slot and Back to GMT, and picks up the `pencil` / `refresh` icons and the BrowseStage
   primitive swap (Act / Floating) if it touches those files.
+- 2026-09-07 · Phase B closed. **In scope, left undone:** Back to GMT carrying `?g=` (the Phase B
+  brief's fourth item) was not walked today — check `app-gmt/main.tsx` reads it before calling it
+  done. The empty-source band and the quiet fold have not been designed for the card (they render,
+  nobody has looked). **Noticed outside scope:** the wall's canvas tiles and the shelf's items are
+  still on the 4 px spec (V8 as amended wants 10) — PickerWall draw code and FavientsPanel
+  (shared with GMT main; needs a v2-scoped prop); the `kept` heart uses `warn`, the gold token is
+  still owed; the Figma tokens `surface/base` = #f5 and `surface/raised` = #e9 are lighter than
+  any surface the runtime scheme generates — if that look is wanted it is a `SURFACE_NORMAL` pole
+  change in `colorSchemeStore`, not a hero change; keyframe diamonds on tray sliders (carried
+  since §11). **Phase C now carries:** the trays (Mix · Extract · Curves · Adjust · the stop
+  inspector) as ONE floating surface hanging from the card, one open at a time, designed first
+  as a frame in the GE v2 Hero Figma file and walked before code; Curves as a split-hero mode
+  (design §13 item 4) lands inside it; L9's deletion; the Act / Floating swap in BrowseStage.

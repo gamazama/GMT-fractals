@@ -108,3 +108,33 @@ export const takeShareFromLocation = (): { config: GradientConfig; name: string 
   }
   return decodeShare(code);
 };
+
+/**
+ * The GMT-bound link: `app-gmt.html?g=<the same code>` (plan §3 "Back to GMT carries the
+ * working stops"). Same encoder as `shareUrlFor` — one codec, two destinations — so a
+ * gradient that survives a share link survives the hand-back too. `app-gmt/main.tsx`
+ * reads it at boot with `takeShareFromLocation` and applies it to the coloring layer.
+ */
+export const gmtUrlFor = (config: GradientConfig, name: string): string => {
+  const u = new URL('app-gmt.html', window.location.href);
+  u.searchParams.set(SHARE_PARAM, encodeShare(config, name));
+  return u.toString();
+};
+
+/**
+ * True when this page was opened FROM the GMT studio — `?from=gmt` (what
+ * `openGradientExplorer` appends) or a same-origin referrer ending in `app-gmt.html`.
+ * Read once at module load: the referrer survives a history rewrite, `?from` does not.
+ */
+export const cameFromGmt = ((): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    if (new URL(window.location.href).searchParams.get('from') === 'gmt') return true;
+    const r = document.referrer;
+    if (!r) return false;
+    const ru = new URL(r);
+    return ru.origin === window.location.origin && ru.pathname.endsWith('app-gmt.html');
+  } catch {
+    return false;
+  }
+})();

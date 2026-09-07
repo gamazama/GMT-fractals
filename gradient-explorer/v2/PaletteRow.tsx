@@ -163,7 +163,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
       {!readOnly && (
         <div className="flex flex-col justify-center gap-1 pl-1">
           <Act
-            className="w-[26px] px-0 justify-center"
+            icon
             title="Add a swatch where the palette is thinnest"
             disabled={palette.length >= PALETTE_MAX}
             onClick={() => useWorkingStore.getState().addSwatch()}

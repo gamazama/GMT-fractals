@@ -121,23 +121,22 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
                   }}
                 />
               ) : (
-                // No "rename" glyph exists in the v2 Icon set (search/zoom/box/lasso/
-                // brush/undo/redo/chevron/settings/close/plus/swap/star) — kept as text
-                // rather than inventing a glyph outside the mandated set (P6).
+                // V6: `pencil` and `refresh` joined the Icon set in Phase B (the two
+                // glyphs the Phase A §8 entry found the set short by), so these two
+                // actions are icons, not words.
                 <button
-                  className="text-[13px] text-fg-muted hover:text-fg px-1"
+                  className="text-fg-muted hover:text-fg px-1"
                   title="Rename"
                   onClick={(e) => {
                     e.stopPropagation();
                     setRenaming(v.id);
                   }}
                 >
-                  rename
+                  <Icon name="pencil" />
                 </button>
               )}
-              {/* Same gap: no "refresh/update" glyph in the set — kept as text (P6). */}
               <button
-                className="text-[13px] text-fg-muted hover:text-fg px-1"
+                className="text-fg-muted hover:text-fg px-1"
                 title="Update this variant with the current state"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -145,7 +144,7 @@ export const VariantsMenu: React.FC<Props> = ({ derived, onClose }) => {
                   showToast(`Variant ${v.name} updated`);
                 }}
               >
-                update
+                <Icon name="refresh" />
               </button>
               <button
                 className="text-fg-muted hover:text-danger px-1"

@@ -6,12 +6,15 @@
  * Favients collection export use), plus a PNG strip. Each row: Copy (text formats) and
  * Download. Formats are grouped by what they are for, in plain words. The dialog the
  * S5 stream plans (.ase, Tailwind, design tokens) grows from this list, not beside it.
+ *
+ * The doing lives in `exportActions.ts` (`runExport`), shared with the hero's hover flyout
+ * of recent exports; this file is only the full window. It hangs off the hero BAND, not
+ * the card — the card clips its children (2026-09-07).
  */
 
 import React, { useEffect, useRef } from 'react';
-import { EXPORT_FORMATS, grdStopCount, type ExportFormatDef } from '../../palette/core/exportFormats';
-import { downloadBlob } from '../../utils/SceneFormat';
-import { showToast } from '../../engine/store/toastStore';
+import { EXPORT_FORMATS, type ExportFormatDef } from '../../palette/core/exportFormats';
+import { runExport } from './exportActions';
 import type { RGB } from '../../palette/core/oklab';
 import { Floating } from './ui/Floating';
 import { Act } from './ui/Act';
@@ -25,10 +28,15 @@ const GROUPS: { title: string; keys: string[] }[] = [
   { title: 'For code + data', keys: ['csv', 'py'] },
 ];
 
-const slug = (name: string): string => name.trim().replace(/[^\w-]+/g, '_').slice(0, 48) || 'gradient';
-
-
-export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => void }> = ({ ramp, name, onClose }) => {
+/** `positionClass` is where the popover hangs (Phase B: it re-anchors to the Export
+ *  button in the hero's use cluster instead of the retired top-bar one). Everything else
+ *  about the menu is unchanged. */
+export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => void; positionClass?: string }> = ({
+  ramp,
+  name,
+  onClose,
+  positionClass = 'absolute right-4 top-12 z-40',
+}) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -43,45 +51,9 @@ export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => vo
     };
   }, [onClose]);
 
-  const copy = (f: ExportFormatDef) => {
-    const out = f.build(ramp);
-    navigator.clipboard?.writeText(out as string).then(
-      () => showToast(`Copied ${f.label}`),
-      () => showToast('Copy failed'),
-    );
-  };
-  const download = (f: ExportFormatDef) => {
-    const out = f.build(ramp);
-    const blob = f.binary ? new Blob([out as unknown as BlobPart], { type: 'application/octet-stream' }) : new Blob([out as string], { type: 'text/plain' });
-    downloadBlob(blob, `${slug(name)}.${f.ext}`);
-    showToast(f.key === 'grd' ? `Downloaded .grd (${grdStopCount(ramp)} stops)` : `Downloaded .${f.ext}`);
-  };
-  const png = () => {
-    const o = document.createElement('canvas');
-    o.width = 1024;
-    o.height = 64;
-    const x = o.getContext('2d');
-    const r = document.createElement('canvas');
-    r.width = 256;
-    r.height = 1;
-    const rc = r.getContext('2d');
-    if (!x || !rc) return;
-    const img = rc.createImageData(256, 1);
-    for (let i = 0; i < 256; i++) {
-      img.data[i * 4] = Math.round(ramp[i].r);
-      img.data[i * 4 + 1] = Math.round(ramp[i].g);
-      img.data[i * 4 + 2] = Math.round(ramp[i].b);
-      img.data[i * 4 + 3] = 255;
-    }
-    rc.putImageData(img, 0, 0);
-    x.imageSmoothingEnabled = true;
-    x.drawImage(r, 0, 0, 256, 1, 0, 0, o.width, o.height);
-    o.toBlob((bl) => {
-      if (!bl) return;
-      downloadBlob(bl, `${slug(name)}.png`);
-      showToast('Downloaded .png strip');
-    });
-  };
+  const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key }, ramp, name);
+  const download = (f: ExportFormatDef) => runExport({ kind: 'download', key: f.key }, ramp, name);
+  const png = () => runExport({ kind: 'png' }, ramp, name);
 
   const known = new Set(GROUPS.flatMap((g) => g.keys));
   const rest = EXPORT_FORMATS.filter((f) => !known.has(f.key));
@@ -101,7 +73,7 @@ export const ExportMenu: React.FC<{ ramp: RGB[]; name: string; onClose: () => vo
   );
 
   return (
-    <Floating ref={ref} className="absolute right-4 top-12 z-40 w-[360px] max-h-[70vh] overflow-y-auto p-4 flex flex-col gap-3" data-gx-export>
+    <Floating ref={ref} className={`${positionClass} w-[360px] max-h-[70vh] overflow-y-auto p-4 flex flex-col gap-3`} data-gx-export>
       <div className="flex items-center">
         <b className="text-[13px] text-fg">Export “{name}”</b>
         <button className="ml-auto text-fg-muted hover:text-fg" onClick={onClose} title="Close (Esc)">
