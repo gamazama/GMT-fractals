@@ -493,6 +493,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       selectedKeyframeIds,
       v2p,
       canvasPixelToFrame,
+      // the elastic Smooth bakes the selection (+ one key either side) to a key per frame
+      // first (owner, 2026-09-07 evening)
+      smoothBakes: true,
     },
     dataSource,
   );
@@ -803,7 +806,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             )}
             {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
             {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
-            {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left)" />}
+            {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left) — bakes the selected keys and their neighbours first" tag="smooth" />}
           </div>
           <GraphCanvas
             width={canvasWidth}

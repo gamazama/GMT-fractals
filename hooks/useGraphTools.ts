@@ -13,6 +13,11 @@ interface GraphToolsProps {
     selectedKeyframeIds: string[];
     v2p: (val: number, tid: string) => number;
     canvasPixelToFrame: (px: number) => number;
+    /** The elastic Smooth tool BAKES first (the palette's Curves; owner, 2026-09-07 evening:
+     *  "the points always need to be baked … select the next adjacent keys and bake them"):
+     *  on pointer-down the selection (or every key) grows by one key either side, that span
+     *  is resampled to a key per frame, and the smoothing then works on those dense keys. */
+    smoothBakes?: boolean;
 }
 
 export const useGraphTools = (
@@ -22,7 +27,8 @@ export const useGraphTools = (
         selectedTrackIds,
         selectedKeyframeIds,
         v2p,
-        canvasPixelToFrame
+        canvasPixelToFrame,
+        smoothBakes = false,
     }: GraphToolsProps,
     // Store-agnostic data source — the timeline passes the store source, the
     // palette its local impl. Always supplied by callers.
@@ -45,6 +51,9 @@ export const useGraphTools = (
     const toolStartRef = useRef({ x: 0, y: 0 });
     const originalSequenceRef = useRef<AnimationSequence | null>(null);
     const simplifyTargetsRef = useRef<string[]>([]);
+    /** smoothBakes: the baked keys the current Smooth gesture works on (the selection state
+     *  is stale within the gesture, so the ids live here). */
+    const smoothKeysRef = useRef<string[] | null>(null);
 
     // --- HELPERS ---
     const getTargetTracks = useCallback(() => {
@@ -183,6 +192,42 @@ export const useGraphTools = (
         const targets = getTargetTracks();
         if (targets.length === 0) return;
         beginDragTool(e, handleSmoothMove, handleSmoothUp);
+        if (smoothBakes && originalSequenceRef.current) {
+            // grow the selection by one key either side, bake that span to a key per
+            // frame, and smooth THOSE — from a snapshot that already holds the baked keys
+            const snap = originalSequenceRef.current;
+            const sel = new Set(getTargetKeys());
+            const updates: { trackId: string; newKeys: Keyframe[] }[] = [];
+            const bakedIds: string[] = [];
+            targets.forEach((tid) => {
+                const track = snap.tracks[tid];
+                if (!track) return;
+                const sorted = [...track.keyframes].sort((a, b) => a.frame - b.frame);
+                const idx = sorted.map((k, i) => (sel.has(`${tid}::${k.id}`) ? i : -1)).filter((i) => i >= 0);
+                if (idx.length === 0) return;
+                const first = Math.max(0, idx[0] - 1);
+                const last = Math.min(sorted.length - 1, idx[idx.length - 1] + 1);
+                const start = Math.ceil(sorted[first].frame);
+                const end = Math.floor(sorted[last].frame);
+                if (end - start < 2) return;
+                const rot = isRotationTrack(tid);
+                const baked: Keyframe[] = [];
+                for (let f = start; f <= end; f++) {
+                    baked.push({ id: `${tid}-sb-${f}-${Date.now().toString(36)}`, frame: f, value: evaluateTrackValue(sorted, f, rot), interpolation: 'Linear' });
+                }
+                const pre = sorted.filter((k) => k.frame < start - 0.0001);
+                const post = sorted.filter((k) => k.frame > end + 0.0001);
+                const newKeys = [...pre, ...baked, ...post];
+                track.keyframes = newKeys;
+                updates.push({ trackId: tid, newKeys });
+                baked.forEach((k) => bakedIds.push(`${tid}::${k.id}`));
+            });
+            if (updates.length > 0) {
+                ds.replaceKeyframes?.(updates);
+                ds.selectKeyframes(bakedIds, false);
+                smoothKeysRef.current = bakedIds;
+            }
+        }
         setSmoothingRadius(0.1);
         setIsSmoothing(true);
     };
@@ -196,14 +241,14 @@ export const useGraphTools = (
             // Apply logic
             if (!originalSequenceRef.current) return;
             const targets = getTargetTracks();
-            const keysToSmooth = getTargetKeys();
+            const keysToSmooth = smoothKeysRef.current ?? getTargetKeys();
 
             let updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[] = [];
             if (r > 0) {
                 updates = calculateConstrainedSmoothing(targets, originalSequenceRef.current, keysToSmooth, r);
             } else {
                 updates = calculateSmoothingUpdates(
-                    targets, sequence, keysToSmooth, r, originalSequenceRef.current, bounceTension, bounceFriction
+                    targets, smoothKeysRef.current ? originalSequenceRef.current : sequence, keysToSmooth, r, originalSequenceRef.current, bounceTension, bounceFriction
                 );
             }
             if (updates.length > 0) ds.updateKeyframes(updates);
@@ -214,6 +259,7 @@ export const useGraphTools = (
         setIsSmoothing(false);
         setSmoothingRadius(0);
         originalSequenceRef.current = null;
+        smoothKeysRef.current = null;
         ds.scrub?.end();
         window.removeEventListener('pointermove', handleSmoothMove);
         window.removeEventListener('pointerup', handleSmoothUp);
