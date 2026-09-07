@@ -429,21 +429,30 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                     stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
                     stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}
                     stripAside={
-                      /* the TRAY'S TAB ROW (Phase C): the four named faces; the open one is
-                         accent ("this one", V3) and clicks closed */
-                      <div className="flex flex-wrap gap-1.5">
-                        {TRAY_TABS.map((t) => (
-                          <Act
-                            key={t.face}
-                            active={tray === t.face}
-                            className={tray === t.face ? 'text-accent-300' : ''}
-                            onClick={() => onTray(t.face)}
-                            title={t.title}
-                            data-gx-tray-tab={t.face}
-                          >
-                            {t.label} <Icon name={tray === t.face ? 'chevronUp' : 'chevronDown'} />
-                          </Act>
-                        ))}
+                      /* the TRAY'S TAB ROW (Phase C, restyled C.13 — owner 2026-09-07 evening): ONE
+                         segmented control in the Even / Perceptual / Stops style; the open face's
+                         segment is a TAB — it takes the tray's colour and a tongue runs from its
+                         bottom to the tray's (borderless) top edge, 8 px below, so the two read as
+                         one piece. No chevrons: the tab says it is open. Click again closes. */
+                      <div className="inline-flex rounded-lg border border-line/20" data-gx-tray-tabs>
+                        {TRAY_TABS.map((t, i) => {
+                          const on = tray === t.face;
+                          const ends = `${i === 0 ? 'rounded-l-[7px]' : ''} ${i === TRAY_TABS.length - 1 ? 'rounded-r-[7px]' : ''}`;
+                          return (
+                            <button
+                              key={t.face}
+                              type="button"
+                              className={`relative px-2.5 h-7 text-[13px] ${ends} ${on ? 'bg-surface-section text-accent-300 rounded-b-none' : 'text-fg-muted hover:text-fg'}`}
+                              onClick={() => onTray(t.face)}
+                              title={t.title}
+                              data-gx-tray-tab={t.face}
+                              data-gx-tab-open={on ? '' : undefined}
+                            >
+                              {t.label}
+                              {on && <span aria-hidden className="absolute -left-px -right-px top-full h-[9px] bg-surface-section border-x border-line/20" data-gx-tab-tongue />}
+                            </button>
+                          );
+                        })}
                       </div>
                     }
                     inspectorHost={inspectorEl}

@@ -259,14 +259,18 @@ order of work from here, each folded into the phase that owns the surface.
   gets a second skin matching v2's visual language (the rounded, quiet controls of the tray)
   — the Mix sliders and Adjust bins wear it; app-gmt keeps the default. Genericize, don't fork:
   a skin prop on the master component (grep `Slider` under `components/`), never a parallel.
-- **C.13 · The tray tabs as one segmented control** (owner, 2026-09-07 evening): Mix · Image ·
+- **C.13 · The tray tabs as one segmented control** (DONE 2026-09-07 evening — a 9 px tongue
+  in the tray's colour from the open segment to the tray's borderless top; no chevrons): Mix · Image ·
   Curves · Adjust in the same style as Even / Perceptual / Stops, and the open one drawn as a
   TAB — joined to its face below (the face's top edge meets the tab, no gap).
 - **C.14 · Title and state spacing** (DONE 2026-09-07 evening): the state chip sits a touch
   further from the name (8 px).
-- **C.15 · The strip's blend · output · menu cluster** (owner, same message): right-align it
-  on the tab row, and revisit what those options are, which matter here and which go
-  ("the less on screen").
+- **C.15 · The strip's blend · output · menu cluster** (right-aligned 2026-09-07 evening; the
+  REVISIT is open — owner to decide): blend = the interpolation space (RGB · HSV · HSV Far ·
+  Oklab) — it changes the ramp, keep; output = the export colour profile (sRGB · Linear ·
+  ACES) — an export concern, candidate for the Export window; the menu = copy / paste /
+  reverse / distribute / interpolation — the stop inspector's context menu already has most
+  of it, candidate to go.
 - **D.1 · My Gradients as DATED bins** (DONE 2026-09-07 evening — `buildBlocks` in
   palette/components/favientBlocks.ts splits Recent's run per local day, labelled Today /
   Yesterday / the date; `test:palette-favients` guards it, falsified): entries file into a bin

@@ -1004,7 +1004,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         <>
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5 px-2 gradient-interactive-element">
                                 {stripAside}
-                                {meta}
+                                {/* blend · output · menu sit at the row's right (owner, C.15) */}
+                                <div className="ml-auto flex items-center">{meta}</div>
                             </div>
                             {selectedNodes.length > 0 && createPortal(
                                 <div className="flex items-stretch gap-3 gradient-interactive-element">
