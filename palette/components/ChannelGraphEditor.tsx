@@ -38,7 +38,7 @@ import {
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../../data/constants';
 import { calculateViewBounds } from '../../utils/keyframeViewBounds';
 import { calculateTangentModeUpdates, calculateGlobalInterpolationUpdates } from '../../utils/timelineUtils';
-import { FitIcon, FitSelectionIcon, NormIcon, WaveIcon, BakeIcon, MagicIcon, EyeIcon, PencilIcon } from '../../components/Icons';
+import { FitIcon, FitSelectionIcon, NormIcon, WaveIcon, BakeIcon, MagicIcon, EyeIcon, PencilIcon, BrushIcon } from '../../components/Icons';
 import type { Track, Keyframe, AnimationSequence, SoftSelectionType } from '../../types';
 import type { RGB } from '../core/oklab';
 import type { Channels } from '../core/generatorPipeline';
@@ -100,11 +100,14 @@ const ToolButton: React.FC<{
   icon: React.ReactNode;
   tooltip: string;
   active?: boolean;
-}> = ({ onClick, onPointerDown, icon, tooltip, active }) => (
+  /** rendered as data-gx-tool, for the smokes */
+  tag?: string;
+}> = ({ onClick, onPointerDown, icon, tooltip, active, tag }) => (
   <button
     onClick={onClick}
     onPointerDown={onPointerDown}
     title={tooltip}
+    data-gx-tool={tag}
     className={`group/btn relative w-6 h-6 flex items-center justify-center rounded border transition-all ${
       active ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' : 'bg-surface/80 text-fg-muted border-line/10 hover:text-fg'
     }`}
@@ -471,7 +474,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   );
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!interactive || pencilMode) return;
+    if (!interactive || pencilMode || brushMode) return;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!rect) return;
     addKeyAtMouse(e.clientX - rect.left, e.clientY - rect.top);
@@ -482,7 +485,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // The stroke maps into the channel's range (basis frozen at pen-down) and is fit to
   // clean keyframes ONLY across the drawn span on release (one undo entry). Bias + move
   // are now handles in the selection box (GraphSelectionBBox), shared with the timeline.
-  const { pencilMode, setPencilMode, beginPencil } = usePencilTool({
+  const { pencilMode, setPencilMode, beginPencil, brushMode, setBrushMode, beginBrush } = usePencilTool({
     interactionRef,
     overlayRef: pencilRef,
     view,
@@ -529,6 +532,12 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
 
   const handleMouseDownWrapped = (e: React.MouseEvent) => {
     if (!interactive) return; // read-only scope: no drag / pan / add
+    // Smoothing brush (C.12): a left-drag over a stretch smooths the active channel there.
+    if (brushMode && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      beginBrush(e);
+      return;
+    }
     // Pencil mode: a left-drag sketches the active channel (no modifiers).
     if (pencilMode && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
@@ -711,7 +720,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <div ref={interactionRef} className="relative" style={{ width: canvasWidth, height: canvasHeight, cursor: pencilMode ? PENCIL_CURSOR : undefined }}>
+        <div ref={interactionRef} className="relative" style={{ width: canvasWidth, height: canvasHeight, cursor: pencilMode || brushMode ? PENCIL_CURSOR : undefined }}>
           {/* Graph tools: fit all, fit selection, normalize, pencil, simplify, bake,
               smooth, ghost. In read-only scope mode only the view tools (fit-all,
               normalize) + the ghost toggle are shown — the editing tools need editable
@@ -726,10 +735,19 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             <ToolButton onClick={toggleNormalize} active={normalized} icon={<NormIcon active={normalized} />} tooltip="Normalize (0–1)" />
             {interactive && (
               <ToolButton
-                onClick={() => setPencilMode((p) => !p)}
+                onClick={() => { setPencilMode((p) => !p); setBrushMode(false); }}
                 active={pencilMode}
                 icon={<PencilIcon active={pencilMode} />}
                 tooltip="Pencil — draw the active channel's curve (click-drag across the plot)"
+              />
+            )}
+            {interactive && (
+              <ToolButton
+                onClick={() => { setBrushMode((b) => !b); setPencilMode(false); }}
+                active={brushMode}
+                icon={<BrushIcon active={brushMode} />}
+                tooltip="Smoothing brush — drag over a stretch to bake, smooth and simplify the active channel there"
+                tag="smooth-brush"
               />
             )}
             {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
@@ -762,7 +780,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             onMouseDown={handleMouseDownWrapped}
             onContextMenu={handleContextMenu}
             onDoubleClick={handleDoubleClick}
-            cursor={pencilMode ? PENCIL_CURSOR : undefined}
+            cursor={pencilMode || brushMode ? PENCIL_CURSOR : undefined}
           />
           {/* Source ghost — overlays the graph, faint + pointer-events-none (see effect). */}
           <canvas

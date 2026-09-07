@@ -233,7 +233,10 @@ order of work from here, each folded into the phase that owns the surface.
 - **C.11 · Zoom tool status** (DONE 2026-09-07 evening — a soft-skin Padding slider in the
   zoom readout, `data-gx-zoom-padding`): while the zoom tool is active, the status chip in the
   bottom-right corner also carries the wall's padding.
-- **C.12 · A smoothing brush for Curves** (owner, 2026-09-07 evening): a brush over the
+- **C.12 · A smoothing brush for Curves** (DONE 2026-09-07 evening — `smoothSpan` in
+  utils/CurveFitting.ts, a brush stroke in the shared usePencilTool, a tool button in the
+  channel editor; the channelcurve harness guards it, falsified twice. Brush reach ±6 frames,
+  window 9): a brush over the
   channel graph that acts as a LOCALISED bake + smooth + simplify — the fit recipe we already
   have (`smoothChannel`, `dpIndices`, `fitChannelsToTracks`) applied to the samples under
   the brush only, re-keyed there, the rest of the track untouched. Sits with the editor's

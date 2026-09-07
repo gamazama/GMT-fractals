@@ -60,6 +60,55 @@ export const reTangentBezier = (
  *  keys: Douglas-Peucker placement (eps in value units) then Catmull-Rom tangents.
  *  `samples[i]` is the value at frame `startFrame + i`. Used for both the full-channel
  *  fit (startFrame 0) and the Pencil's drawn span (startFrame = stroke start). */
+/**
+ * The SMOOTHING BRUSH (Gradient Explorer v2, Phase C.12 — owner: "a localised bake + smooth +
+ * simplify of the functions we already have"): over the frames [lo, hi] only, the track is
+ * BAKED (sampled per frame from its current keys), SMOOTHED (a box window, two passes ≈ a
+ * gaussian) and SIMPLIFIED (Douglas-Peucker at `eps`) into fresh Bezier keys; every key
+ * outside the span is kept, and the seam keys are re-tangented so the join is clean (the
+ * same heal the pencil does). The span's edge samples are the track's own values, so the
+ * curve is continuous at both ends. Returns the merged key list, or null when the span is
+ * too short to touch.
+ */
+export const smoothSpan = (
+    keys: Keyframe[],
+    lo: number,
+    hi: number,
+    eps: number,
+    window: number,
+    idPrefix: string,
+    sample: (keys: Keyframe[], frame: number) => number,
+): Keyframe[] | null => {
+    lo = Math.round(lo); hi = Math.round(hi);
+    if (hi - lo < 2) return null;
+    let vals: number[] = [];
+    for (let f = lo; f <= hi; f++) vals.push(sample(keys, f));
+    const w = Math.max(1, Math.floor(window)) | 1; // odd
+    const h = w >> 1;
+    const pass = (v: number[]): number[] => v.map((_, i) => {
+        let s = 0, c = 0;
+        for (let k = -h; k <= h; k++) {
+            const j = i + k;
+            if (j < 0 || j >= v.length) continue;
+            s += v[j]; c++;
+        }
+        return s / c;
+    });
+    if (h > 0) vals = pass(pass(vals));
+    // pin the ends to the track so the join is exact
+    vals[0] = sample(keys, lo);
+    vals[vals.length - 1] = sample(keys, hi);
+    const spanKeys = fitSamplesToKeys(vals, lo, eps, idPrefix);
+    const kept = keys.filter((k) => k.frame < lo || k.frame > hi);
+    const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
+    if (merged.length < 2) return null;
+    const firstSpan = merged.findIndex((k) => k.frame >= lo);
+    let lastSpan = firstSpan;
+    while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
+    const seam = new Set([firstSpan - 1, firstSpan, lastSpan, lastSpan + 1]);
+    return reTangentBezier(merged, (_k, i) => seam.has(i));
+};
+
 export const fitSamplesToKeys = (
     samples: number[],
     startFrame: number,

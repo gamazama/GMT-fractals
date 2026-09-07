@@ -11,6 +11,8 @@
 import fs from 'fs';
 import path from 'path';
 import { rampToTrack, trackToRamp, flatRuns, rampToSteppedTrack } from '../palette/core/channelCurve';
+import { smoothSpan } from '../utils/CurveFitting';
+import { evaluateTrackValue } from '../utils/timelineUtils';
 import { rgbToOklab, type RGB } from '../palette/core/oklab';
 
 let failures = 0;
@@ -125,6 +127,26 @@ if (files.length === 0) {
   ok(worstBand < 1e-9, `the bands hold exactly (worst ${worstBand.toExponential(2)})`);
   ok(worstSlope < 0.03, `the slope between them is fitted (worst ${worstSlope.toFixed(4)})`);
   console.log(`  stepped: 4 bands → ${track.keyframes.length} keys (${steps.length} Step); mixed → ${mt.keyframes.length} keys, slope err ${worstSlope.toFixed(4)}`);
+}
+
+// The smoothing brush (C.12): a jagged channel brushed over frames 96..160 gets smoother
+// THERE (its second differences shrink) while the samples outside the span stay exactly as
+// they were. Falsified by returning `keys` unchanged from smoothSpan: the first check goes
+// red; by dropping the `kept` filter: the second.
+{
+  const jag = Array.from({ length: 256 }, (_, i) => 0.5 + 0.25 * Math.sin(i / 12) + (i % 2 ? 0.08 : -0.08));
+  const track = rampToTrack(jag, 'L', 'Lightness', { eps: 0.001, interpolation: 'Linear' });
+  const sample = (ks: Parameters<typeof evaluateTrackValue>[0], f: number) => evaluateTrackValue(ks, f, false, false);
+  const before = Array.from({ length: 256 }, (_, f) => sample(track.keyframes, f));
+  const out = smoothSpan(track.keyframes, 96, 160, 0.004, 9, 'L-brush', sample);
+  ok(!!out, 'the brush returns a merged key list');
+  const after = Array.from({ length: 256 }, (_, f) => sample(out!, f));
+  const rough = (v: number[], a: number, b: number) => { let s = 0; for (let i = a + 1; i < b; i++) s += Math.abs(v[i - 1] - 2 * v[i] + v[i + 1]); return s / (b - a); };
+  const rb = rough(before, 100, 156), ra = rough(after, 100, 156);
+  ok(ra < rb * 0.35, `the brushed span is smoother (roughness ${rb.toFixed(4)} → ${ra.toFixed(4)})`);
+  const outside = Math.max(...before.map((v, f) => (f < 90 || f > 166 ? Math.abs(v - after[f]) : 0)));
+  ok(outside < 1e-9, `outside the span nothing moved (worst ${outside.toExponential(2)})`);
+  console.log(`  brush: ${track.keyframes.length} keys → ${out!.length}; roughness in span ${rb.toFixed(4)} → ${ra.toFixed(4)}`);
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
