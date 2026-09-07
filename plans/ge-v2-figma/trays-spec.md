@@ -131,3 +131,15 @@ Large rounding on every gradient bar (10) · radius 8 on pressables · 20 on con
 text on screen the better (no zone labels; captions only where they change what you do) · accent
 only for "this one" · the standard GMT slider everywhere (V4) · one icon set (filled Material,
 adopted in Phase G) · 24 px gutter · 4 px grid.
+
+---
+
+## 7. Where to draw it (2026-09-07, after Figma's connector limit)
+
+The Figma connector's Starter-plan call limit ended the Figma loop. The tray is drawn on a
+Claude Design canvas instead — **https://claude.ai/code/artifact/02580b66-3f8e-4dbe-ba11-b64e53141384**
+("GE v2 Tray"): the shell with the tray open on Adjust, one artboard per remaining face (Mix ·
+Curves · Stop inspector · Image), and the five "before" plates beside them. Edit in place and
+Save; I read the saved version back and port it. Sources: `plans/ge-v2-canvas/` (`gen.py` builds
+the artboards from the hero's real tokens and measurements; `_shared.css` is the token sheet).
+The seeded page itself (`ge-v2-tray.html`, ~2 MB) is not committed — regenerate with the helper.

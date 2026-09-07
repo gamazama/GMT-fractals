@@ -1,0 +1,64 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 800,
+      "title": "Shell \u2014 tray open on Adjust"
+    },
+    {
+      "file": "TrayMix.dc.html",
+      "x": 0,
+      "y": 940,
+      "w": 1232,
+      "h": 120,
+      "title": "Face \u2014 Mix (a strip)"
+    },
+    {
+      "file": "TrayCurves.dc.html",
+      "x": 0,
+      "y": 1200,
+      "w": 1232,
+      "h": 360,
+      "title": "Face \u2014 Curves"
+    },
+    {
+      "file": "TrayInspector.dc.html",
+      "x": 0,
+      "y": 1700,
+      "w": 1232,
+      "h": 240,
+      "title": "Face \u2014 Stop inspector"
+    },
+    {
+      "file": "TrayImage.dc.html",
+      "x": 0,
+      "y": 2080,
+      "w": 1232,
+      "h": 320,
+      "title": "Face \u2014 Image"
+    },
+    {
+      "file": "Before.dc.html",
+      "x": 1440,
+      "y": 0,
+      "w": 1240,
+      "h": 2815,
+      "title": "Before \u2014 the five states today"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "rule",
+      "x": 1440,
+      "y": -200,
+      "w": 420,
+      "text": "ONE thing open under the card at a time. The tray hangs from the card's bottom edge, floats over the wall, never pushes the shelf. Esc closes. The ramp's Curves / Adjust row becomes the tray's tab row and gains Mix and Image; the stop inspector opens on a stop click and has no tab. Brief: plans/ge-v2-figma/trays-spec.md"
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
