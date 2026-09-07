@@ -189,6 +189,35 @@ inside the tray). Owner walk on a short window (≤ 720 px tall) — L6 is the t
 **Files:** v2/BrowseStage.tsx, v2/GradientExplorerV2App.tsx, v2/WorkingHero.tsx (tray host), new
 v2/Trays.tsx (or one file per tray), v2/ExtractStage.tsx, v2/SourceBands.tsx.
 
+### Phase C follow-ups (owner's walk, 2026-09-07) — folded in before Phase D
+The tray works; the walk produced these. Two are done in the same session, the rest are the
+order of work from here, each folded into the phase that owns the surface.
+- **C.1 · Tray inline with the panel** (DONE 2026-09-07): its left edge follows the gradient
+  panel's, never the image column. `smoke:ge-tray` [2] measures it.
+- **C.2 · Image asks for an image first** (DONE 2026-09-07): with nothing loaded, the Image tab
+  and the slot open the file dialog and the source switches only when one arrives; cancel =
+  nothing changes. `smoke:ge-hero` [3] guards it (the old "empty Image source" band is now
+  reachable only by a drop that fails to decode).
+- **C.3 · Bake and cancel, one rule for every face.** A face (Mix · Image · Curves · Adjust) is a
+  LIVE edit shown as the split ramp; leaving it BAKES by default (owner) — today true for Mix
+  and Image (`use(…, { bakes: true })`), still to do for Curves and Adjust, which persist as live
+  dials after the tray closes. Bake = the stops are the result and the dials reset; CANCEL =
+  return to the source, which the state chip already offers for an edited bake ("editing ·
+  return to source") and must also offer for a live face (the chip reads "live from Mix";
+  clicking it cancels). No separate Bake button in a face — the header is the place. Owner:
+  "either mix needs a bake button or the hero needs a bake/cancel mechanism that works with
+  the half split render" — the second, so it is one mechanism for all four.
+- **C.4 · Curves fits on entry and understands steps.** Opening the Curves face runs Fit from
+  source at once (no empty "Fit from source to make the curves editable" box); the channel
+  tracks need STEP segments (a hold, not a spline) so a banded source keeps its bands through
+  Curves — `fitChannelsToTracks` + `ChannelGraphEditor` (grep for both). Shares Phase E's
+  session if it touches the editor primitives.
+- **C.5 · Mix UI** — the owner is still thinking; not blocking. Parked until there is a design.
+- **D.1 · My Gradients as DATED bins** (folds into Phase D): entries file into a bin per day by
+  default; the session keeps refreshing the SAME entry until the gradient is favourited or a
+  new one is selected (today's Recent-session rule, kept) — then the next work opens a new
+  entry in the day's bin. Starred / named groups sit beside the days.
+
 ### Phase D — the shelf as the only memory
 **Goal:** L4; Variants become Snapshots.
 - Footer: zones RECENT · STARRED · named groups · SNAPSHOTS with `ZoneLabel`s; `+ Snapshot` and

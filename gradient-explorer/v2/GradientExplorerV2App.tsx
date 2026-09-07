@@ -47,6 +47,7 @@ import { useFavientsStore, favientSig } from '../../palette/store/favientsStore'
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
 import { useImageDrop } from '../../palette/components/useImageDrop';
+import { useImageStore } from '../../palette/store/imageStore';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 import { ExportMenu } from './ExportMenu';
@@ -211,7 +212,16 @@ export const GradientExplorerV2App: React.FC = () => {
   // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
   // useImageDrop instance mounted once here at the root; ImageStage keeps its own for the
   // old shell / app-gmt (see palette/components/useImageDrop.ts).
-  useImageDrop({ onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); } });
+  // Image asks for an image before it takes over (owner, 2026-09-07): with no image loaded,
+  // the Image tab (and the slot) open the file dialog; the source switches only when one
+  // arrives (`onLoaded`) — cancel the dialog and nothing changes. Drop / paste anywhere
+  // still routes here.
+  const { fileToImg } = useImageDrop({ onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); } });
+  const imageFileRef = useRef<HTMLInputElement>(null);
+  const requestImageOrOpen = useCallback(() => {
+    if (trayRef.current === 'image' || useImageStore.getState().model) openTray('image');
+    else imageFileRef.current?.click();
+  }, [openTray]);
 
   // Esc order (Phase C, L6): popover → the open tray face (the inspector closes by clearing
   // the stop selection, which the hero does when the face leaves) → an armed slot.
@@ -284,7 +294,7 @@ export const GradientExplorerV2App: React.FC = () => {
         derived={derived}
         source={source}
         tray={tray}
-        onTray={openTray}
+        onTray={(face) => (face === 'image' ? requestImageOrOpen() : openTray(face))}
         onShare={share}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}
@@ -349,6 +359,16 @@ export const GradientExplorerV2App: React.FC = () => {
           onOpenHelp={openHelp}
         />
       )}
+      <input
+        ref={imageFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          fileToImg(e.target.files?.[0]);
+          e.target.value = '';
+        }}
+      />
       <SettingsHost />
       <ToastHost />
       <FullscreenGradientOverlay />

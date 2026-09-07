@@ -4,8 +4,9 @@
  * floating over the wall, Esc closes.
  *
  *   [1] pick a tile — the hero exists, no tray is open, the wall sits at y0
- *   [2] Adjust — the tray opens on the Adjust face, hangs from the card's bottom edge inside
- *       the 24 px gutter, and the WALL DOES NOT MOVE (L6: the tray overlays, never pushes)
+ *   [2] Adjust — the tray opens on the Adjust face, hangs from the card's bottom edge INLINE
+ *       WITH THE PANEL (owner, 2026-09-07: not under the image column), and the WALL DOES NOT
+ *       MOVE (L6: the tray overlays, never pushes)
  *   [3] Curves — the face switches; still one tray element
  *   [4] Mix — the face is Mix, the next pick is ARMED (the armed hint shows), your gradient
  *       is the ramp's top half and the gradient you mix with is a bar in the tray (owner,
@@ -59,6 +60,7 @@ const state = (page: Page) =>
       trays: document.querySelectorAll('[data-gx-tray-root]').length,
       trayTop: tr?.y ?? null,
       trayLeft: tr && hr ? tr.x - hr.x : null,
+      panelLeft: hero && hr ? (hero.querySelector('[data-gx-hero] > div > div:nth-child(2)') as HTMLElement).getBoundingClientRect().x - hr.x : null,
       cardBottom: cr?.bottom ?? null,
       wallY: wall?.getBoundingClientRect().y ?? null,
       armedHint: /Pick a gradient to (mix with|replace)/.test(document.body.innerText),
@@ -101,7 +103,7 @@ async function main() {
   if (s.face !== 'adjust') fail(`[2] Adjust did not open the Adjust face (${s.face})`);
   if (s.trays !== 1) fail(`[2] ${s.trays} tray elements — there is ONE tray`);
   if (s.trayTop == null || s.cardBottom == null || Math.abs(s.trayTop - s.cardBottom) > 2) fail(`[2] the tray does not hang from the card (tray ${s.trayTop}, card ${s.cardBottom})`);
-  if (s.trayLeft !== 24) fail(`[2] the tray is not in the 24 px gutter (x=${s.trayLeft})`);
+  if (s.trayLeft !== s.panelLeft) fail(`[2] the tray is not inline with the panel (tray x=${s.trayLeft}, panel x=${s.panelLeft}) — it must not sit under the image column`);
   if (s.wallY !== wallY0) fail(`[2] the wall moved when the tray opened (${wallY0} → ${s.wallY}) — the tray must overlay, not push (L6)`);
   console.log('✓ [2] Adjust opens the tray under the card, over the wall');
 

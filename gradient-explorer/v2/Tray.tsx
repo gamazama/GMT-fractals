@@ -3,7 +3,8 @@
  * the design record is plans/ge-v2-figma/trays-spec.md and the "GE v2 Tray" canvas).
  *
  * Mix · Image · Curves · Adjust · the stop inspector are five FACES of one thing: it hangs
- * from the card's bottom edge inside the 24 px gutter, floats OVER the wall (the wall and
+ * from the card's bottom edge, inline with the gradient PANEL (its left edge follows the
+ * panel's, so it never sits under the image column), floats OVER the wall (the wall and
  * the shelf never move — L6), one face open at a time, Esc closes it. The tab row that
  * opens the four named faces is the ramp's control row in `WorkingHero` (the editor's
  * `stripAside`); the inspector has no tab — selecting a stop opens it and clearing the
@@ -61,15 +62,18 @@ interface Props {
   width: number;
   /** Callback ref for the inspector's portal host — stable across faces. */
   inspectorHostRef: (el: HTMLDivElement | null) => void;
+  /** Left edge in the hero band's coordinates: the PANEL's left (owner, 2026-09-07: the tray
+   *  is inline with the hero's gradient panel, not under the image column). */
+  left: number;
 }
 
-export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef }) => (
+export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, left }) => (
   <div
     hidden={face === null}
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
-    className="absolute left-6 right-6 z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
-    style={{ top: 'calc(100% - 11px)' }}
+    className="absolute right-6 z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
+    style={{ top: 'calc(100% - 11px)', left }}
   >
     {face === 'mix' && <MixFace />}
     {face === 'image' && (

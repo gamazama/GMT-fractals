@@ -130,6 +130,24 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [rampRef, rampW] = useWidth();
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
+  // The tray's left edge = the panel's left edge in the band's coordinates. Measured, not
+  // computed: the slot column is 45 px empty and a card-tall square once an image is in.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelLeft, setPanelLeft] = useState(85);
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const band = el.closest('[data-gx-hero]') as HTMLElement | null;
+    const update = () => {
+      if (!band) return;
+      setPanelLeft(Math.round(el.getBoundingClientRect().left - band.getBoundingClientRect().left));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (band) ro.observe(band);
+    return () => ro.disconnect();
+  }, []);
   // The tray's inspector face is a portal host the editor renders its stop inspector into;
   // a stop selection opens that face, clearing it closes it, and the shell's Esc order closes
   // it by clearing the selection (the effect below).
@@ -253,7 +271,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         </div>
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}
-        <div className="min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden">
+        <div ref={panelRef} className="min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden">
           {/* Owner, 2026-09-06 / 07: the name is the HEADER of the panel — one object with
               the ramp beneath it — the state reads inline, and the outputs (Keep · Share ·
               Export · Wallpaper) sit at its right edge as icons (L2), no use column. */}
@@ -381,7 +399,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         </div>
       </div>
       {/* the TRAY (Phase C): one surface under the card, one face at a time */}
-      <Tray face={tray} derived={derived} width={rampW} inspectorHostRef={setInspectorEl} />
+      <Tray face={tray} derived={derived} width={rampW} inspectorHostRef={setInspectorEl} left={panelLeft} />
       {exportMenu}
     </section>
   );
