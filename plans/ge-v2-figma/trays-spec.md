@@ -262,3 +262,16 @@ none; falsified with seedPlateaus off).
   may add a stop only where the ramp is STILL over tolerance with those seeds in place. Without
   that gate a re-fit found new "bands" in the slow regions of its own rendering and grew four
   stops per bake (`smoke:ge-tray` [5] caught it).
+- **One knot per band.** After the plateau pass the fit is re-scored, so the corner detector
+  no longer adds its own step stop on a band's last texel (a redundant knot per band).
+- **Hard edges stay hard on screen.** The hero's strip is 256 texels stretched to ~1,100 px; the
+  browser's bilinear scale-up softened every step into a little gradient. In strip chrome the
+  editor now samples the STOPS once per display pixel (1,536 wide) — exact for steps and for
+  smooth runs, no banding. `GradientStrip` (the source half, the shelf) has only a ramp: it goes
+  nearest + `image-rendering: pixelated` when the ramp is banded (the fitter's 60 % rule) and
+  stays bilinear otherwise — pixelated everywhere would band the smooth ones (owner).
+- **Some "Steps" palettes are baked smooth in the library.** `PairedColor12Steps` (pypalettes)
+  is 255 texel changes out of 256 in `core.bin.gz`: the bake resamples any source with fewer
+  than 256 rows by linear interpolation (`debug/bake-palette-catalog.mts`, grep `rows.length ===
+  256`), so discrete palettes arrive as smooth ramps and the fitter is right to fit them
+  smooth. Fixing that is a re-bake with a per-source "discrete" flag — a separate job.

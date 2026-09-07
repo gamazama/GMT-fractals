@@ -199,10 +199,14 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     used.add(idx);
     stops.push(mkStop(idx, ramp, nextId++, sd.interpolation ?? 'linear', Math.max(0, Math.min(1, sd.position)), sd.bias ?? 0.5));
   }
-  const seededErr = o.seedStops.length ? renderStopsToRamp([...stops].sort((a, b) => a.position - b.position), 'oklab', 'srgb').map((c, i) => oklabDistance(c, ramp[i])) : null;
+  let currentErr: number[] | null = null;
+  const rescore = () => {
+    currentErr = renderStopsToRamp([...stops].sort((a, b) => a.position - b.position), 'oklab', 'srgb').map((c, i) => oklabDistance(c, ramp[i]));
+  };
+  if (o.seedStops.length) rescore();
   const stillWrong = (from: number, to: number): boolean => {
-    if (!seededErr) return true;
-    for (let i = Math.max(0, from); i <= Math.min(255, to); i++) if (seededErr[i] > o.targetDE) return true;
+    if (!currentErr) return true;
+    for (let i = Math.max(0, from); i <= Math.min(255, to); i++) if (currentErr[i] > o.targetDE) return true;
     return false;
   };
 
@@ -239,6 +243,10 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
       }
     }
     stops.sort((a, b) => a.position - b.position);
+    // With the bands in, re-score: the corner pass below must not add its own stop on the
+    // last texel of a band whose edge the band's step already renders exactly (that was a
+    // redundant knot per band — owner, 2026-09-07: "they only need 1 knot to change colour").
+    if (runs.length) rescore();
   }
 
   // 1) Corner pre-seed — concentrate stops at hard band edges up front, marking

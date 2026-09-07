@@ -3,6 +3,9 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExtern
 import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
+
+/** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
+const STRIP_PREVIEW_W = 1536;
 import { stopOps } from '../utils/stopOps';
 import Slider from './Slider';
 import { z } from './ui';
@@ -265,12 +268,33 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // did), so it stays a faithful colour preview. Memoised so unrelated re-renders
     // (selection / marquee / expand) don't re-sample 256 texels.
     const previewRamp = useMemo(() => renderStopsToRamp(knots, blendSpace), [knots, blendSpace]);
+    // Strip chrome (the v2 hero, ~1100 px wide): the preview samples the STOPS once per
+    // display pixel instead of stretching the 256-texel ramp — a bilinear scale-up softened
+    // every step edge into a little gradient, and nearest would band the smooth ones
+    // (owner, 2026-09-07: pixelated only where it is stepped). Full chrome (GMT main) keeps
+    // the 256-texel canvas.
+    const previewWide = useMemo(() => {
+        if (chrome !== 'strip') return null;
+        const out = new Uint8ClampedArray(STRIP_PREVIEW_W * 4);
+        const sorted = [...knots].sort((a, b) => a.position - b.position);
+        for (let x = 0; x < STRIP_PREVIEW_W; x++) {
+            const c = sampleStops(sorted, x / (STRIP_PREVIEW_W - 1), blendSpace, 'srgb');
+            out[x * 4] = c.r; out[x * 4 + 1] = c.g; out[x * 4 + 2] = c.b; out[x * 4 + 3] = 255;
+        }
+        return out;
+    }, [knots, blendSpace, chrome]);
 
     useEffect(() => {
         const cv = previewCanvasRef.current;
         if (!cv) return;
         const ctx = cv.getContext('2d');
         if (!ctx) return;
+        if (previewWide) {
+            const img = ctx.createImageData(STRIP_PREVIEW_W, 1);
+            img.data.set(previewWide);
+            ctx.putImageData(img, 0, 0);
+            return;
+        }
         const img = ctx.createImageData(256, 1);
         for (let i = 0; i < 256; i++) {
             img.data[i * 4] = previewRamp[i].r;
@@ -281,7 +305,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         // 256×1 backing store stretched by CSS to the strip's full width/height —
         // the browser's display scaling smooths it into a continuous gradient.
         ctx.putImageData(img, 0, 0);
-    }, [previewRamp]);
+    }, [previewRamp, previewWide]);
 
     // --- OUTPUT LOGIC ---
     // Always emits the Object format if we detect we are in "Advanced Mode" (internal check), 
@@ -764,7 +788,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                          the strip's double-click + bias handles still receive events. */}
                      <canvas
                         ref={previewCanvasRef}
-                        width={256}
+                        width={chrome === 'strip' ? STRIP_PREVIEW_W : 256}
                         height={1}
                         className="absolute inset-0 w-full h-full pointer-events-none"
                      />
