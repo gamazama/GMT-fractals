@@ -200,7 +200,12 @@ export const GradientExplorerV2App: React.FC = () => {
     // curves that would apply again over the blend.
     if ((cur === 'curves' || cur === 'adjust') && face !== cur) {
       const d = deriveWorkingNow();
-      if (d && !d.passthrough && w.input.kind !== 'build' && w.input.kind !== 'extract') w.beginEdit();
+      const gen = useGeneratorStore.getState();
+      if (cur === 'curves' && gen.tracks && !gen.tracksEdited) {
+        // an UNTOUCHED fit (Curves opened, looked at, closed) is the source restated: no
+        // bake — the fit just goes, and the gradient stays what it was
+        useGeneratorStore.setState({ tracks: null, curvesOn: false });
+      } else if (d && !d.passthrough && w.input.kind !== 'build' && w.input.kind !== 'extract') w.beginEdit();
     }
     if (from !== to) {
       if ((from === 'build' || from === 'extract') && w.input.kind === from) {

@@ -121,7 +121,13 @@ async function main() {
   await page.waitForTimeout(300);
   s = await state(page);
   if (s.face !== 'curves' || s.trays !== 1) fail(`[3] Curves did not replace the face (${s.face}, ${s.trays} trays)`);
-  console.log('✓ [3] Curves replaces Adjust — still one tray');
+  // an untouched fit must not bake on leaving: peek into Curves, close, the chip is still
+  // "preview" (falsified by dropping the `!gen.tracksEdited` branch in openTray: red)
+  await page.click('[data-gx-tray-tab="curves"]');
+  await page.waitForTimeout(400);
+  const peek = await page.evaluate(() => (document.querySelector('[data-gx-hero] [data-gx-state]') as HTMLElement | null)?.dataset.gxState);
+  if (peek !== 'preview') fail(`[3] peeking into Curves and closing baked the gradient (chip: ${peek})`);
+  console.log('✓ [3] Curves replaces Adjust — still one tray; an untouched fit does not bake');
 
   // A leftover Adjust value (as a user who once dragged Phase would have): the bake on
   // leaving Mix must fold it in ONCE and reset it, or it applies again on every pass and

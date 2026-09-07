@@ -135,6 +135,10 @@ interface GeneratorState {
   slotB: number;
   tracks: ChannelTracks | null;
   curvesOn: boolean;
+  /** The tracks have been EDITED since they were fitted (a drag, the pencil, the brush, a
+   *  key added). An untouched fit is the source restated, so leaving the Curves face with
+   *  it must not bake — it just clears (v2, C.4 follow-up 2026-09-07 evening). */
+  tracksEdited: boolean;
   detail: number;
   smooth: number;
   noiseSeed: number;
@@ -300,6 +304,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   slotB: 5, // Inferno
   tracks: null,
   curvesOn: false,
+  tracksEdited: false,
   detail: 8,
   smooth: 5,
   noiseSeed: 1,
@@ -313,7 +318,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
     genEdit(() => set(which === 'A' ? { slotA: idx } : { slotB: idx }));
     return idx;
   },
-  setTracks: (tracks) => set({ tracks }),
+  setTracks: (tracks) => set({ tracks, tracksEdited: true }),
   setCurvesOn: (on) => genEdit(() => set((s) => ({ curvesOn: on && !!s.tracks }))),
   setDetail: (v) => set({ detail: v }),
   setSmooth: (v) => set({ smooth: v }),
@@ -333,8 +338,8 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       // gradient instead of the A/B mix (hue unwrapping happens inside fitChannelsToTracks).
       set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth), curvesOn: true });
     }),
-  fitFromChannels: (base) => genEdit(() => set({ tracks: fitChannelsToTracks(base, get().detail, get().smooth), curvesOn: true })),
-  resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
+  fitFromChannels: (base) => genEdit(() => set({ tracks: fitChannelsToTracks(base, get().detail, get().smooth), curvesOn: true, tracksEdited: false })),
+  resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false, tracksEdited: false })),
   // Reset the Mix blend (mixL/mixC/mixH are DDFS params on the slice) to defaults —
   // 0/0/0 = all source A. Mirrors resetCurves: one genEdit() bracket = one undo entry.
   resetMix: () => genEdit(() => setSlice({ mixL: 0, mixC: 0, mixH: 0 })),
