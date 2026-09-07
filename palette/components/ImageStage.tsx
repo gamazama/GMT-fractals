@@ -30,6 +30,7 @@ import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
 import { clamp01 } from '../../utils/stopOps';
+import { rgbToOklab } from '../core/oklab';
 import { useFlash } from './useFlash';
 import { useImageDrop } from './useImageDrop';
 
@@ -38,6 +39,23 @@ const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'tone', label: 'Tone' },
   { id: 'trace', label: 'Trace' },
 ];
+
+/** The sRGB gamut, sampled 9 × 9 × 9, in OKLab — drawn faintly under the image's cloud in
+ *  'face' chrome so you can see where the picture's colours sit in what is possible (owner,
+ *  2026-09-07: "show a low opacity of the unused gamut"). Computed once. */
+type GamutPoint = { L: number; a: number; b: number; r: number; g: number; bl: number };
+let _gamut: GamutPoint[] | null = null;
+const gamutPoints = (): GamutPoint[] => {
+  if (_gamut) return _gamut;
+  const out: GamutPoint[] = [];
+  for (let ri = 0; ri < 9; ri++) for (let gi = 0; gi < 9; gi++) for (let bi = 0; bi < 9; bi++) {
+    const r = Math.round((ri / 8) * 255), g = Math.round((gi / 8) * 255), bl = Math.round((bi / 8) * 255);
+    const o = rgbToOklab({ r, g, b: bl });
+    out.push({ L: o.L, a: o.a, b: o.b, r, g, bl });
+  }
+  _gamut = out;
+  return out;
+};
 
 // --- 3D cloud projection (verbatim from the standalone proj()) ---
 const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number, pitch: number, zoom = 0.62): [number, number, number] => {
@@ -157,6 +175,18 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
     if (chrome !== 'face') {
       x.fillStyle = '#08080c';
       x.fillRect(0, 0, W, H);
+    }
+    if (chrome === 'face') {
+      // the unused gamut, faint, under everything
+      x.globalAlpha = 0.12;
+      for (const q of gamutPoints()) {
+        const pr = proj(q.L, q.a, q.b, W, H, yaw, pitch, zoom);
+        x.fillStyle = `rgb(${q.r},${q.g},${q.bl})`;
+        x.beginPath();
+        x.arc(pr[0], pr[1], 1.6 * dpr, 0, 7);
+        x.fill();
+      }
+      x.globalAlpha = 1;
     }
     const pts = model.cloud
       .map((p) => { const pr = proj(p.L, p.a, p.b, W, H, yaw, pitch, zoom); return { sx: pr[0], sy: pr[1], z: pr[2], p }; })

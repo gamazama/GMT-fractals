@@ -294,7 +294,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     >
       {/* the CARD — radius 20 (same as the panel, owner 2026-09-07), one object, inset 10 px in the band, and the PANEL flush with the card's top / right / bottom (owner,
           2026-09-07); the 24 px gutter is 10 (band) + 1 (card border) + 13 */}
-      <div className="grid gap-4 pl-[13px] rounded-[20px] bg-surface-section border border-line/20 overflow-hidden" style={{ gridTemplateColumns: 'auto minmax(0,1fr)' }}>
+      {/* a LEFT-ALIGNED tray (Image) grows out of the card's left edge: no bottom-left corner
+          then (owner, 2026-09-07) */}
+      <div className={`grid gap-4 pl-[13px] rounded-[20px] bg-surface-section border border-line/20 overflow-hidden ${tray === 'image' ? 'rounded-bl-none' : ''}`} style={{ gridTemplateColumns: 'auto minmax(0,1fr)' }}>
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
         <div className="flex flex-col justify-center py-4">

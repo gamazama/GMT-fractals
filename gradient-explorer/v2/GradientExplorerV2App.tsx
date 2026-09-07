@@ -167,6 +167,9 @@ export const GradientExplorerV2App: React.FC = () => {
     if (w.input.kind === 'stops' && w.bakedFrom?.input.kind === 'gradient' && favientSig(w.bakedFrom.input.config) === sig) return;
     const fromRecent = candidate.mode === 'favients';
     w.use(p.config, p.name, p.source ?? (fromRecent ? 'My Gradients' : 'Browse'), { fromRecent });
+    // A pick while the Image face is open replaces the image as the source: the face closes
+    // (owner, 2026-09-07). `use` already replaced the input, so no bake, just the tray.
+    if (trayRef.current === 'image') setTray(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [candidate?.key, candidate?.mode, pickSerial]);
 
