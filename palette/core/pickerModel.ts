@@ -35,7 +35,7 @@
 
 import type { CatalogEntry } from './presetCatalog';
 import { passesFilters, type FilterWindows } from './facets';
-import { rampDistance } from './paletteSample';
+import { similarityProbe, SIM_SAMPLES } from './paletteSample';
 import type { RGB } from './oklab';
 
 // --- row shape -------------------------------------------------------------------
@@ -295,16 +295,19 @@ export const sampleRampBuffer = (buf: Uint8Array, samples = 16, stride = 4): RGB
 };
 
 /**
- * OKLab ΔE from every catalog entry to one anchor ramp, keyed by entry id. O(n · samples)
- * — compute ONCE per (catalog, anchor) and reuse it while the user keeps filtering.
+ * Similarity of every catalog entry to one anchor ramp, keyed by entry id (paletteSample's
+ * probe: shape with warp tolerance, against the reverse too; colour content by rank;
+ * bandedness). O(n · samples · band) — compute ONCE per (catalog, anchor) and reuse it
+ * while the user keeps filtering.
  */
 export const similarityIndex = (
   catalog: CatalogEntry[],
   anchorRamp: RGB[],
-  samples = 16,
+  samples = SIM_SAMPLES,
 ): Map<string, number> => {
   const m = new Map<string, number>();
-  for (const e of catalog) m.set(e.id, rampDistance(sampleRampBuffer(e.ramp, samples), anchorRamp, samples));
+  const probe = similarityProbe(anchorRamp, samples);
+  for (const e of catalog) m.set(e.id, probe.distance(sampleRampBuffer(e.ramp, samples)));
   return m;
 };
 

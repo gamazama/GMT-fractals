@@ -123,6 +123,86 @@ export const rampDistance = (a: RGB[], b: RGB[], samples = 16): number => {
   return d;
 };
 
+// ── "More like this" — similarity that agrees with the eye ─────────────────────────────
+// `rampDistance` above is pointwise: a reversed twin, a copy shifted by a few texels, or the
+// same colours in another order all read as FAR (owner, 2026-09-07 evening: "actually show
+// you gradients that are similar to yours"). The probe below scores three things and
+// sums them, every term in mean-ΔE units so they weigh alike:
+//   • SHAPE — the colour sequence, with tolerance for a shift or stretch: dynamic time
+//     warping over `SIM_SAMPLES` OKLab samples within a ±`SIM_WARP` band, taken against the
+//     ramp AND its reverse (a reversed gradient is the same gradient, the other way);
+//   • PALETTE — what colours are in it regardless of order: the samples of each ramp
+//     sorted by lightness, matched rank for rank;
+//   • STRUCTURE — how banded it is: the share of adjacent samples that are (near) identical,
+//     so a stepped gradient sits with stepped ones, smooth with smooth.
+// Weights: shape 0.5, palette 0.4, structure 0.1 (a full bands-vs-smooth mismatch costs
+// about as much as a 0.1 ΔE shift everywhere). Build ONE probe per anchor; score 11k
+// entries against it in a few ms (32 samples, a 7-wide DTW band).
+
+export const SIM_SAMPLES = 32;
+const SIM_WARP = 3;
+const SIM_FLAT_DE = 0.012;
+
+type Lab = { L: number; a: number; b: number };
+interface RampDescriptor {
+  seq: Lab[];
+  byL: Lab[];
+  banded: number;
+}
+
+const labs = (ramp: RGB[], k: number): Lab[] => {
+  const out: Lab[] = new Array(k);
+  for (let s = 0; s < k; s++) out[s] = rgbToOklab(ramp[Math.round((s / (k - 1)) * (ramp.length - 1))]);
+  return out;
+};
+const dE = (p: Lab, q: Lab) => Math.hypot(p.L - q.L, p.a - q.a, p.b - q.b);
+
+export const describeRamp = (ramp: RGB[], samples = SIM_SAMPLES): RampDescriptor => {
+  const seq = ramp.length >= samples || ramp.length < 2 ? labs(ramp, samples) : labs(ramp, samples);
+  let flat = 0;
+  for (let i = 1; i < seq.length; i++) if (dE(seq[i - 1], seq[i]) < SIM_FLAT_DE) flat++;
+  return { seq, byL: [...seq].sort((p, q) => p.L - q.L), banded: flat / (seq.length - 1) };
+};
+
+/** Banded DTW between two equal-length sequences, normalised per sample. */
+const dtw = (a: Lab[], b: Lab[], band: number): number => {
+  const n = a.length;
+  const INF = Number.POSITIVE_INFINITY;
+  let prev = new Float64Array(n).fill(INF);
+  let cur = new Float64Array(n).fill(INF);
+  for (let i = 0; i < n; i++) {
+    cur.fill(INF);
+    const lo = Math.max(0, i - band), hi = Math.min(n - 1, i + band);
+    for (let j = lo; j <= hi; j++) {
+      const c = dE(a[i], b[j]);
+      const best = i === 0 && j === 0 ? 0 : Math.min(i > 0 ? prev[j] : INF, j > 0 ? cur[j - 1] : INF, i > 0 && j > 0 ? prev[j - 1] : INF);
+      cur[j] = c + best;
+    }
+    const t = prev; prev = cur; cur = t;
+  }
+  return prev[n - 1] / n;
+};
+
+/** The anchor's side of the comparison, built once. */
+export interface SimilarityProbe {
+  distance: (ramp: RGB[]) => number;
+}
+export const similarityProbe = (anchor: RGB[], samples = SIM_SAMPLES): SimilarityProbe => {
+  const A = describeRamp(anchor, samples);
+  const Arev = [...A.seq].reverse();
+  return {
+    distance: (ramp) => {
+      const B = describeRamp(ramp, samples);
+      const shape = Math.min(dtw(A.seq, B.seq, SIM_WARP), dtw(Arev, B.seq, SIM_WARP));
+      let pal = 0;
+      for (let i = 0; i < samples; i++) pal += dE(A.byL[i], B.byL[i]);
+      pal /= samples;
+      const structure = Math.abs(A.banded - B.banded);
+      return 0.5 * shape + 0.4 * pal + 0.1 * structure;
+    },
+  };
+};
+
 // ── Positions as STATE (owner review 2026-09-03) ───────────────────────────────────────
 // The v2 hero keeps the palette as an array of sample positions the user can drag along
 // the ramp; the rules above are LAYOUTS that produce such an array, not modes. A swatch is

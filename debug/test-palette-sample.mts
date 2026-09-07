@@ -17,6 +17,7 @@ import {
   samplePerceptual,
   sampleAtStops,
   rampDistance,
+  similarityProbe,
   clampCount,
   layoutPositions,
   swatchesAt,
@@ -109,6 +110,24 @@ console.log('[5] rampDistance');
   ok(d > 0, 'reverse → positive');
   ok(Math.abs(rampDistance(rev, coded) - d) < 1e-12, 'symmetric');
   ok(rampDistance(coded, front) > 0 && rampDistance(coded, front) < d, 'a near ramp is closer than a far one');
+  // [5b] the "More like this" probe (owner, 2026-09-07 evening): a reversed twin and a
+  // shifted copy are NEAR, the same colours in another order are nearer than a stranger,
+  // and a banded twin of a smooth ramp costs a little. Falsified by scoring the shape term
+  // against the anchor only (drop the `Arev` dtw): "reversed twin is near" goes red.
+  const probe = similarityProbe(coded);
+  const self = probe.distance(coded);
+  const reversed = probe.distance(rev);
+  const shifted = probe.distance(coded.map((_, i) => coded[Math.min(coded.length - 1, i + 12)]));
+  const stranger = probe.distance(coded.map((c) => ({ r: 255 - c.r, g: c.g, b: 255 - c.b })));
+  const scrambled = probe.distance([...coded].sort((a, b) => (a.r * 7 + a.g * 3 + a.b) % 17 - (b.r * 7 + b.g * 3 + b.b) % 17));
+  ok(self === 0, `identity → 0 (${self})`);
+  ok(reversed < stranger * 0.35, `a reversed twin is near (${reversed.toFixed(4)} vs a stranger ${stranger.toFixed(4)})`);
+  ok(shifted < stranger * 0.35, `a shifted copy is near (${shifted.toFixed(4)})`);
+  ok(scrambled < stranger, `the same colours in another order beat a stranger (${scrambled.toFixed(4)} < ${stranger.toFixed(4)})`);
+  const banded = coded.map((_, i) => coded[Math.floor(i / 32) * 32]);
+  const bandedD = probe.distance(banded);
+  ok(bandedD > 0 && bandedD < stranger * 0.5, `a banded twin costs a little, not a lot (${bandedD.toFixed(4)})`);
+  console.log(`    reversed ${reversed.toFixed(4)} · shifted ${shifted.toFixed(4)} · scrambled ${scrambled.toFixed(4)} · banded ${bandedD.toFixed(4)} · stranger ${stranger.toFixed(4)}`);
   ok(rampDistance(coded, []) === Infinity, 'empty → Infinity');
   ok(Number.isFinite(rampDistance(coded, coded.slice(0, 64))), 'unequal lengths compare by t');
 }
