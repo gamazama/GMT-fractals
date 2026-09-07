@@ -190,6 +190,12 @@ console.log('\n[6] collectRecent auto-fills the Recent group');
     const idA2 = store().collectRecent(cfg('#ff0000', '#0000ff'), 'Working gradient again');
     check(store().favients.length === 2, 're-collecting the same gradient does not duplicate it');
     check(idA2 === idA && store().favients[0].id === idA, 're-collecting moves the existing entry to the front and keeps its id');
+    // `fresh` (entering a source again — the Image, a Mix — is new work, owner 2026-09-07):
+    // a NEW entry even though the signature is already in Recent. Falsified by dropping the
+    // `opts?.fresh ? -1 :` branch in collectRecent: the first check below goes red.
+    const idA3 = store().collectRecent(cfg('#ff0000', '#0000ff'), 'Working gradient, fresh', 'Image', { fresh: true });
+    check(idA3 !== idA && store().favients.length === 3, 'a fresh collect of a known signature opens a NEW Recent entry');
+    check(store().favients[0].id === idA3 && store().favients[0].group === RECENT_GROUP, 'the fresh entry lands at the front of Recent');
 
     // lastGroupId is the landing group for the user's next deliberate save — a collect
     // must not steer it. Park it on a named group via the drag path, then collect.

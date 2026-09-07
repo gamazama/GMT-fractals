@@ -300,3 +300,16 @@ card's left edge (x = 10) and holds only the method (the same segmented control 
 Perceptual · Stops, owner), the Path tools beside it, the method's dials, and the cloud square on
 the right. With the face closed the picture is just the picture (no handles; a click opens the
 face). Measured: slot 518 × 197 for a 2560 × 570 image, tray 245 tall, cloud 220 square.
+
+### 14b. Leaving the image (owner, 2026-09-07)
+
+The picture keeps its full size until the image is no longer WHAT YOU SEE — and that moment is an
+actual change, never the face closing (leaving Image bakes the result unchanged, so the picture
+stays big). A new pick, a stop edit, or a dial in another face greys it (grayscale, 55 %
+opacity) and shrinks it to an 84 px thumbnail at its own aspect, animated over 300 ms
+(`ImageSlot dim`, decided by `imageIsTheGradient` in WorkingHero: live from Image, or baked from
+Image and untouched). Clicking the thumbnail makes the image the source again — and opens a NEW
+bin entry: entering a source with no session is `fresh` for the Recent collector, which otherwise
+promotes an entry with the same signature (`test:palette` favients [6], falsified). The picture's
+size comes from the PANEL's height, never its own column (measuring the column fed back and
+crept: 302, 327 …).

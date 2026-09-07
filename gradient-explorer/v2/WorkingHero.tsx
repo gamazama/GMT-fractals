@@ -141,6 +141,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // effect with an empty dep list would run before the panel exists and never again (it
   // did — the 85 px default was right only by coincidence).
   const [panelLeft, setPanelLeft] = useState(85);
+  // …and the panel's HEIGHT is the card's: the picture in the slot is sized from it (the slot
+  // must never size the card — measuring the slot's own column fed back and crept: 302, 327…).
+  const [panelH, setPanelH] = useState(200);
   const panelRo = useRef<ResizeObserver | null>(null);
   const panelRef = useCallback((el: HTMLDivElement | null) => {
     panelRo.current?.disconnect();
@@ -150,6 +153,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     const update = () => {
       if (!band) return;
       setPanelLeft(Math.round(el.getBoundingClientRect().left - band.getBoundingClientRect().left) + PANEL_RADIUS);
+      setPanelH(Math.round(el.getBoundingClientRect().height));
     };
     update();
     panelRo.current = new ResizeObserver(update);
@@ -195,6 +199,21 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // the input verbatim (curves on, Adjust off default, an image fit). Bake = passthrough
   // again = the bands merge.
   const split = derived.input.kind === 'build' || !derived.passthrough;
+  // Is the loaded image still WHAT YOU SEE? Live from Image, yes; baked from Image and
+  // untouched (leaving the face bakes; that alone must not shrink the picture — owner,
+  // 2026-09-07: "only after an adjustment, to avoid jarring"), yes; a new pick, a stop
+  // edit, a dial in another face — no: the picture greys and shrinks (ImageSlot `dim`).
+  const imageIsTheGradient = useMemo((): boolean => {
+    const input = derived.input;
+    if (input.kind === 'extract') return true;
+    if (input.kind === 'gradient') return input.source === 'Image' && derived.passthrough;
+    if (input.kind === 'stops' && bakedFrom?.input.kind === 'gradient' && bakedFrom.input.source === 'Image') {
+      const a = bakedFrom.input.config.stops;
+      const b = docConfig.stops;
+      return derived.passthrough && a.length === b.length && a.every((s, i) => s.position === b[i].position && s.color === b[i].color && (s.bias ?? 0.5) === (b[i].bias ?? 0.5) && (s.interpolation ?? 'linear') === (b[i].interpolation ?? 'linear'));
+    }
+    return false;
+  }, [derived.input, derived.passthrough, bakedFrom, docConfig]);
   // Mix: the ramp splits CLEANLY in two — band A over the result, 30 + 30, no divider
   // (owner, 2026-09-07); the other split states keep the thin labelled source band.
   const mix = derived.input.kind === 'build';
@@ -279,7 +298,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
         <div className="flex flex-col justify-center py-4">
-          <ImageSlot active={source === 'extract'} onClick={() => onTray('image')} cloudHost={imageCloudEl} toolsHost={imageToolsEl} handles={tray === 'image'} />
+          <ImageSlot active={source === 'extract'} dim={!imageIsTheGradient} bigH={panelH - 32} onClick={() => onTray('image')} cloudHost={imageCloudEl} toolsHost={imageToolsEl} handles={tray === 'image'} />
         </div>
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}

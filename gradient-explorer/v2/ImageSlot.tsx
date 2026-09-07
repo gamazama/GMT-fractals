@@ -15,6 +15,10 @@
  *     that draws the Path handles while the Image face is open (`handles`) and carries the
  *     Replace button; its tools and colour cloud portal into the tray's Image face
  *     (`toolsHost` / `cloudHost`). The card's grid column is `auto`, so the panel gives way.
+ *   • dim — the image is loaded but no longer what you see (a new pick, a stop edit, a dial
+ *     in another face — NOT merely leaving the face, which bakes it unchanged): the picture
+ *     greys and shrinks to an 84 px thumbnail, animated over 300 ms; clicking it makes the
+ *     image the source again (owner, 2026-09-07).
  *   • active — the Image source is the working input: a 2 px accent outline (V3, accent
  *     means "this one"). Phase C turns the click into a tray toggle instead of a tab.
  *
@@ -30,13 +34,22 @@ import { Icon } from './ui/Icon';
 interface Props extends ImageStageFaceProps {
   /** The Image source is the working input. */
   active: boolean;
+  /** The image is loaded but no longer what you see (another gradient, an edit): the picture
+   *  greys and shrinks to a thumbnail — animated, and only on that change (owner). */
+  dim?: boolean;
+  /** The full picture's height (px): the panel's height minus the column's padding. The
+   *  slot never sizes the card; the panel does. */
+  bigH: number;
   onClick: () => void;
 }
 
-/** The widest the loaded picture may go (px) — a panorama must not eat the panel. */
+/** The widest the full picture may go (px) — a panorama must not eat the panel. */
 const MAX_W = 520;
+/** The dimmed thumbnail: as tall as the empty slot, at the image's aspect, capped. */
+const SMALL_H = 84;
+const SMALL_MAX_W = 150;
 
-export const ImageSlot: React.FC<Props> = ({ active, onClick, cloudHost, toolsHost, handles = false }) => {
+export const ImageSlot: React.FC<Props> = ({ active, dim = false, bigH, onClick, cloudHost, toolsHost, handles = false }) => {
   const model = useImageStore((s) => s.model);
   const ring = active ? 'outline outline-2 outline-accent-400 outline-offset-2' : '';
 
@@ -53,14 +66,25 @@ export const ImageSlot: React.FC<Props> = ({ active, onClick, cloudHost, toolsHo
     );
   }
 
-  // The picture at its own aspect, as tall as the card allows, hosting the image pane. With
-  // the face closed a transparent button over it opens the face (the pane is not
-  // interactive then); with it open the pane takes the pointer for the Path handles.
+  const ar = model.w / Math.max(1, model.h);
+  const h = dim ? SMALL_H : bigH;
+  const w = dim ? Math.min(SMALL_MAX_W, Math.round(SMALL_H * ar)) : Math.min(MAX_W, Math.round(bigH * ar));
+
+  // The picture at its own aspect, hosting the image pane. With the face closed a
+  // transparent button over it opens the face (the pane is not interactive then); with it
+  // open the pane takes the pointer for the Path handles.
   return (
     <div
-      className={`relative h-full rounded-lg overflow-hidden border border-line/20 bg-surface-viewport ${ring}`}
-      style={{ aspectRatio: `${model.w} / ${model.h}`, maxWidth: MAX_W }}
-      title={handles ? undefined : 'The image this gradient comes from — click for the Image face'}
+      className={`relative rounded-lg overflow-hidden border border-line/20 bg-surface-viewport ${ring}`}
+      style={{
+        width: w,
+        height: h,
+        filter: dim ? 'grayscale(1)' : 'none',
+        opacity: dim ? 0.55 : 1,
+        transition: 'width 300ms ease, height 300ms ease, filter 300ms ease, opacity 300ms ease',
+      }}
+      title={handles ? undefined : dim ? 'The image this gradient came from — click to work from it again' : 'The image this gradient comes from — click for the Image face'}
+      data-gx-image-slot={dim ? 'dim' : 'live'}
     >
       <ImageStage chrome="face" cloudHost={cloudHost} toolsHost={toolsHost} handles={handles} />
       {!handles && <button type="button" className="absolute inset-0" onClick={onClick} aria-label="Open the Image face" />}

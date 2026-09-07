@@ -95,7 +95,7 @@ export interface BakedFrom {
   curvesOn: boolean;
 }
 
-export type RecentCollector = (config: GradientConfig, name: string, source: string) => string | null;
+export type RecentCollector = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean }) => string | null;
 export type RecentUpdater = (id: string, config: GradientConfig, name: string) => boolean;
 
 export interface WorkingState {
@@ -156,9 +156,9 @@ export const setRecentCollector = (fn: RecentCollector | null): void => {
 export const setRecentUpdater = (fn: RecentUpdater | null): void => {
   _update = fn;
 };
-const collect = (config: GradientConfig, name: string, source: string): string | null => {
+const collect = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean }): string | null => {
   try {
-    return _collect?.(config, name, source) ?? null;
+    return _collect?.(config, name, source, opts) ?? null;
   } catch {
     return null; /* a collector failure must never break an edit */
   }
@@ -336,7 +336,10 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     if (id && s.sessionPinned && s.input.kind === 'gradient' && configKey(d.config) !== configKey(s.input.config)) id = null;
     if (id && s.sessionPinned && s.input.kind !== 'gradient') id = null;
     if (id && update(id, d.config, name)) return;
-    const next = collect(d.config, name, sourceOf(s.input));
+    // A session just opened on a live SOURCE (Image again, a Mix) is new work: a fresh
+    // entry, even when its first output matches one already in the bin (owner, 2026-09-07).
+    const fresh = !s.sessionId && (s.input.kind === 'extract' || s.input.kind === 'build');
+    const next = collect(d.config, name, sourceOf(s.input), { fresh });
     // Transient bookkeeping, outside any undo bracket (the next bracket snapshots it).
     set({ sessionId: next, sessionPinned: next ? s.sessionPinned && next === s.sessionId : false });
   },

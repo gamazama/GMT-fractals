@@ -211,7 +211,11 @@ interface FavientsState {
    * front of the run instead of duplicating it. Undo is NOT bracketed here; a caller
    * that wants the collect on the undo stack brackets it itself.
    */
-  collectRecent: (config: GradientConfig, name: string, source?: string) => string | null;
+  /** `fresh`: open a NEW Recent entry even if one with this signature exists (entering a
+   *  source — the Image again, a Mix — is a new piece of work; owner, 2026-09-07: "bringing
+   *  the image back as the source should also create a new item in the bin"). Without it the
+   *  matching entry is promoted to the head, which is right for a re-pick. */
+  collectRecent: (config: GradientConfig, name: string, source?: string, opts?: { fresh?: boolean }) => string | null;
   /**
    * Refresh a Recent entry IN PLACE — the v2 working session (owner, 2026-09-03: the bin
    * "should be updating the gradient whenever the user modifies it"). Returns false when
@@ -326,7 +330,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
    *     ("the Recent run is one contiguous block at index 0")
    *   Falsified 2026-09-03 by emitting `[...rest, ...run]` instead of `[...run, ...rest]`.
    */
-  collectRecent: (config, name, source) => {
+  collectRecent: (config, name, source, opts) => {
     const sig = favientSig(config);
     const cur = get().favients;
 
@@ -340,7 +344,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const recent = cur.filter((f) => isRecentGroup(f.group));
     const rest = cur.filter((f) => !isRecentGroup(f.group));
 
-    const at = recent.findIndex((f) => favientSig(f.config) === sig);
+    const at = opts?.fresh ? -1 : recent.findIndex((f) => favientSig(f.config) === sig);
     const head: Favient =
       at >= 0
         ? { ...recent[at], createdAt: Date.now() }

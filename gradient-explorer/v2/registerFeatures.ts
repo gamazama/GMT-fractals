@@ -26,7 +26,7 @@ registerPaletteUI({ standaloneStopsMode: false });
 // session in My Gradients — opened by the collector, refreshed in place by the updater as
 // the user edits (see workingStore.syncRecent).
 installWorking({
-  collectRecent: (config, name, source) => useFavientsStore.getState().collectRecent(config, name, source),
+  collectRecent: (config, name, source, opts) => useFavientsStore.getState().collectRecent(config, name, source, opts),
   updateRecent: (id, config, name) => useFavientsStore.getState().updateRecent(id, config, name),
 });
 
