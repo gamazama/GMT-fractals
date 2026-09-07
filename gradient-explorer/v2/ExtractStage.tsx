@@ -65,7 +65,7 @@ export const ExtractStage: React.FC<{ cloudHostRef: (el: HTMLDivElement | null) 
   return (
     <div className="flex items-stretch gap-4 px-4 py-3">
       {/* left, under the picture: the method, its tools, its dials */}
-      <div className="flex-1 min-w-0 flex flex-col gap-3">
+      <div className="w-[560px] shrink-0 flex flex-col gap-3">
         <div className="flex items-center gap-4 flex-wrap">
           {/* the same segmented control as the palette's Even · Perceptual · Stops (owner) */}
           <div className="inline-flex border border-line/20 rounded-lg overflow-hidden shrink-0">
@@ -85,10 +85,11 @@ export const ExtractStage: React.FC<{ cloudHostRef: (el: HTMLDivElement | null) 
           <div ref={toolsHostRef} className="flex items-center" />
         </div>
         {/* one column (owner, 2026-09-07: compact — the tray's height is this column and the cloud) */}
-        <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} hints="tooltip" keyframes={false} className="max-w-[560px]" />
+        <AutoFeaturePanel featureId="paletteImage" whitelistParams={DIAL_PARAMS} hints="tooltip" keyframes={false} />
       </div>
-      {/* right: the colour cloud (portalled in by the picture) */}
-      <div ref={cloudHostRef} className="w-[220px] h-[220px] shrink-0 rounded-[10px] bg-surface-viewport overflow-hidden" />
+      {/* beside the dials: the colour cloud (portalled in by the picture) — the tray is as
+          wide as the dials and this, no further (owner, 2026-09-07) */}
+      <div ref={cloudHostRef} className="w-[280px] self-stretch min-h-[220px] shrink-0 rounded-[10px] bg-surface-viewport overflow-hidden" />
     </div>
   );
 };

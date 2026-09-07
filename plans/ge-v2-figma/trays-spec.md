@@ -319,13 +319,12 @@ crept: 302, 327 …).
 - **Cloud ↔ picture.** Hover a cloud point and the picture dims everything but the pixels of
   that colour (a per-pixel OKLab mask at the model's resolution, cached per hover); hover the
   picture and the cloud rings that pixel's colour and brightens the points near it.
-- **Clusters are pickable.** In Dominant the clusters are blobs sized by mass; a click on one
-  puts its colour on the stop nearest to where that colour lies along the ramp (or inserts
-  one), as one edit, WITHOUT selecting it — a selection would open the inspector face and take
-  the cloud away. The first such click bakes, as any ramp gesture does; while the Image face
-  stays open the picture stays full size, and dims only once the face closes.
+- ~~Clusters are pickable.~~ Built, then REMOVED the same day (owner: "remove the clusters, the
+  hover links and axes are rad"). One thing survived it: while the Image face is open the
+  picture stays full size and dims only once the face closes.
 - **Axes.** The lightness axis (dark → light) and a chroma ring at mid-lightness, faint, so the
   rotation has a frame; the gradient's path is the thin bright line; the sRGB gamut sits
   underneath at 12 %.
-- Test hook: the cloud canvas carries `data-gx-clusters` (the blobs' centres) so a script can
-  click them.
+- The cloud sits inline beside the one dial column and the tray hugs that content (x = 10 →
+  ~900 at 1280 wide); the chroma plane is drawn 2× wider than lightness (`abScale`) so the
+  cloud reads as a cloud, not a stalk.

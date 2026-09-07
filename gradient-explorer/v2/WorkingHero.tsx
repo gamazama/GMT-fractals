@@ -83,7 +83,7 @@ import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
 import { runExport, useRecentExports, exportActionLabel } from './exportActions';
-import { oklabDistance, oklabToRgbSafe, type RGB } from '../../palette/core/oklab';
+import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
 
@@ -308,15 +308,6 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             cloudHost={imageCloudEl}
             toolsHost={imageToolsEl}
             handles={tray === 'image'}
-            onPickColour={(hex, lab) => {
-              // a cluster in the cloud → a stop of that colour where the colour lies along
-              // the ramp (nearest texel in OKLab); the first edit bakes, as any ramp gesture does
-              const rgb = oklabToRgbSafe(lab);
-              let best = 0;
-              let bestD = Infinity;
-              shown.ramp.forEach((c, i) => { const d = oklabDistance(c, rgb); if (d < bestD) { bestD = d; best = i; } });
-              editorRef.current?.pickColourAt(best / 255, hex);
-            }}
           />
         </div>
 

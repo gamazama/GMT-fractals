@@ -79,8 +79,8 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     hidden={face === null}
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
-    className="absolute right-6 z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
-    style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 10 : left }}
+    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
+    style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }}
   >
     {face === 'mix' && <MixFace />}
     {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} />}

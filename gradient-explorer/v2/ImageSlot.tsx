@@ -49,7 +49,7 @@ const MAX_W = 520;
 const SMALL_H = 84;
 const SMALL_MAX_W = 150;
 
-export const ImageSlot: React.FC<Props> = ({ active, dim = false, bigH, onClick, cloudHost, toolsHost, handles = false, onPickColour }) => {
+export const ImageSlot: React.FC<Props> = ({ active, dim = false, bigH, onClick, cloudHost, toolsHost, handles = false }) => {
   const model = useImageStore((s) => s.model);
   const ring = active ? 'outline outline-2 outline-accent-400 outline-offset-2' : '';
 
@@ -86,7 +86,7 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, bigH, onClick,
       title={handles ? undefined : dim ? 'The image this gradient came from — click to work from it again' : 'The image this gradient comes from — click for the Image face'}
       data-gx-image-slot={dim ? 'dim' : 'live'}
     >
-      <ImageStage chrome="face" cloudHost={cloudHost} toolsHost={toolsHost} handles={handles} onPickColour={onPickColour} />
+      <ImageStage chrome="face" cloudHost={cloudHost} toolsHost={toolsHost} handles={handles} />
       {!handles && <button type="button" className="absolute inset-0" onClick={onClick} aria-label="Open the Image face" />}
     </div>
   );
