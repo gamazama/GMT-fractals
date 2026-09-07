@@ -79,7 +79,7 @@ import { applyEditorChange } from '../../palette/core/editorConfig';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
-import { SourceBands, SOURCE_BAND_H, mixSourceHeight } from './SourceBands';
+import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
 import { Tray, TRAY_TABS, type TrayFace } from './Tray';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
@@ -171,8 +171,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
   // the input verbatim (curves on, Adjust off default, an image fit). Bake = passthrough
   // again = the bands merge.
   const split = derived.input.kind === 'build' || !derived.passthrough;
-  const sourceH = derived.input.kind === 'build' ? mixSourceHeight() : SOURCE_BAND_H;
-  const resultH = split ? (derived.input.kind === 'build' ? 40 : 42) : 60;
+  // Mix: the ramp splits CLEANLY in two — band A over the result, 30 + 30, no divider
+  // (owner, 2026-09-07); the other split states keep the thin labelled source band.
+  const mix = derived.input.kind === 'build';
+  const sourceH = mix ? mixSourceHeight() : SOURCE_BAND_H;
+  const resultH = split ? (mix ? MIX_RESULT_H : 42) : 60;
   const favOf = useMemo(() => {
     const c = derived.config ?? lastGood.current?.config;
     if (!c) return null;
@@ -335,7 +338,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
                 <>
                   {split && (
                     <Collapse open={!quiet}>
-                      <div className="px-2 mb-px" style={{ minHeight: sourceH }}>
+                      <div className={mix ? 'px-2' : 'px-2 mb-px'} style={{ minHeight: sourceH }}>
                         <SourceBands derived={derived} />
                       </div>
                     </Collapse>
@@ -374,7 +377,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, t
                   {scrubT != null && (
                     <div
                       className="absolute w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"
-                      style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split && !quiet ? sourceH + 1 : 0, height: resultH }}
+                      style={{ left: `calc(8px + ${scrubT} * (100% - 16px))`, top: split && !quiet ? sourceH + (mix ? 0 : 1) : 0, height: resultH }}
                     />
                   )}
                 </>

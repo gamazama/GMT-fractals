@@ -377,6 +377,13 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   trays-spec §5 item 4, undecided); L9 quiet is still in (deletion deferred until the short
   window walk); the picker's insides are Phase E.
 
+- 2026-09-07 · Phase C, owner's Mix pass (built): no A / B language — your gradient and the
+  one you mix with; the hero ramp splits cleanly 30 / 30 with no divider or label (L5 kept, the
+  labelled band is now only for Image / Curves / Adjust); the Mix face is the other gradient's
+  bar + three plain L / C / h sliders + Link (off) + Swap; leaving Mix bakes. `smoke:ge-tray`
+  [4] was found clicking the hero instead of the wall (pre-hero coordinates) and now asserts the
+  pick landed. trays-spec §10.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

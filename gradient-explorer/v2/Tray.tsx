@@ -10,9 +10,11 @@
  * selection closes it.
  *
  * What each face holds (the content inventory, trays-spec §4):
- *   • Mix — Swap · Split by channel (the three per-channel faders) · one sentence. The recipe
- *     itself (A · crossfade · B) is the hero's source bands. The wall underneath IS the
- *     picker for band B (opening Mix arms B — the shell does that, see `openTray`).
+ *   • Mix (owner, 2026-09-07) — band B as a bar (the wall / shelf pick fills it; opening Mix
+ *     arms it — the shell does that, see `openTray`) beside a column of the three L / C / h
+ *     sliders, plain horizontal, always shown, with a LINK switch (off) that moves all three
+ *     together, and Swap. Band A is the hero ramp's top half. Leaving Mix bakes the result
+ *     (the shell's `use`) and the sources are gone.
  *   • Image — `ExtractStage` as it was on the Image tab (method chips, dials, the image pane
  *     with the Path handles, the colour cloud), in a fixed-height box. The only face that
  *     grows to a pane.
@@ -32,10 +34,10 @@
 
 import React, { useMemo, useState } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { useGeneratorStore, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
-import { useArmedSlot } from '../../palette/store/armedTarget';
+import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
-import { MixBlend } from '../../palette/components/MixBlend';
+import Slider from '../../components/Slider';
+import { MixBandB } from './SourceBands';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
 import type { WorkingDerived } from '../../palette/store/workingStore';
 import { ExtractStage } from './ExtractStage';
@@ -46,7 +48,7 @@ export type TrayFace = 'mix' | 'image' | 'curves' | 'adjust' | 'inspector' | nul
 
 /** The four faces with a tab, in tab order. */
 export const TRAY_TABS: { face: Exclude<TrayFace, null | 'inspector'>; label: string; title: string }[] = [
-  { face: 'mix', label: 'Mix', title: 'Blend this gradient with another — the wall picks band B' },
+  { face: 'mix', label: 'Mix', title: 'Blend this gradient with another — pick the other one from the wall or My Gradients' },
   { face: 'image', label: 'Image', title: 'Extract a gradient from an image' },
   { face: 'curves', label: 'Curves', title: 'Shape the lightness, chroma and hue curves' },
   { face: 'adjust', label: 'Adjust', title: 'Hue, chroma, contrast, posterize, repeats, phase, noise' },
@@ -82,27 +84,47 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef }
   </div>
 );
 
+const MIX_CHANNELS: { param: 'mixL' | 'mixC' | 'mixH'; label: string }[] = [
+  { param: 'mixL', label: 'Lightness' },
+  { param: 'mixC', label: 'Chroma' },
+  { param: 'mixH', label: 'Hue' },
+];
+
 const MixFace: React.FC = () => {
   const swap = useGeneratorStore((s) => s.swap);
-  const resetMix = useGeneratorStore((s) => s.resetMix);
-  const armed = useArmedSlot();
-  const [splitOpen, setSplitOpen] = useState(false);
+  const [mixL, setL] = useGenParam<number>('mixL');
+  const [mixC, setC] = useGenParam<number>('mixC');
+  const [mixH, setH] = useGenParam<number>('mixH');
+  const [linked, setLinked] = useState(false);
+  const values = { mixL: mixL ?? 0, mixC: mixC ?? 0, mixH: mixH ?? 0 };
+  const setters = { mixL: setL, mixC: setC, mixH: setH };
+  const change = (param: 'mixL' | 'mixC' | 'mixH', v: number) => {
+    if (linked) {
+      setL(v);
+      setC(v);
+      setH(v);
+    } else setters[param](v);
+  };
   return (
-    <div className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex items-center gap-2 flex-wrap">
-        <Act onClick={swap} title="Swap A and B">
-          <Icon name="swap" /> Swap
-        </Act>
-        <Act active={splitOpen} onClick={() => setSplitOpen((o) => !o)} title="Blend lightness, chroma and hue separately">
-          Split by channel <Icon name={splitOpen ? 'chevronUp' : 'chevronDown'} />
-        </Act>
-        <span className="text-[13px] text-fg-muted ml-2">
-          {armed === 'A'
-            ? 'Band A takes the next pick — from My Gradients below or the wall. Esc cancels.'
-            : 'Picks fill band B. Click band A above to fill A instead. Drag the line between them to blend.'}
-        </span>
+    <div className="flex items-stretch gap-4 px-4 py-3">
+      {/* the gradient you're mixing with — the bar the next pick fills */}
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <MixBandB height={36} />
       </div>
-      {splitOpen && <MixBlend onSwap={swap} onReset={resetMix} height={60} />}
+      {/* the three channel blends, A (0) → B (1); Link moves them as one */}
+      <div className="w-[320px] shrink-0 flex flex-col gap-0.5">
+        {MIX_CHANNELS.map((c) => (
+          <Slider key={c.param} label={c.label} value={values[c.param]} min={0} max={1} step={0.01} onChange={(v) => change(c.param, v)} onDragStart={genEditStart} onDragEnd={genEditEnd} />
+        ))}
+        <div className="flex items-center gap-1.5 pt-1">
+          <Act active={linked} className={linked ? 'text-accent-300' : ''} onClick={() => setLinked((l) => !l)} title="Move the three sliders together">
+            Link
+          </Act>
+          <Act onClick={swap} title="Swap the two gradients">
+            <Icon name="swap" /> Swap
+          </Act>
+        </div>
+      </div>
     </div>
   );
 };

@@ -169,3 +169,16 @@ inspector face. Adjust = three bins via `whitelistParams` + `labelOverrides`, to
 diamonds. Esc order: popover → tray → armed slot. Guard: `npm run smoke:ge-tray` (six steps,
 falsified three ways). Multi-select colour editing already applied to every selected stop
 (`handleColorChange`); position stays single-stop, bias and interpolation apply to all — as asked.
+
+## 10. Mix, redesigned (owner, 2026-09-07 — built the same day)
+
+- **No A / B language.** There is your gradient and the gradient you're mixing with.
+- **The hero ramp splits cleanly in two**, same total height: the top half is your gradient
+  (the source), the bottom half the result. No divider, no label. Clicking the top half arms it
+  so the next pick replaces your gradient (dashed outline while armed).
+- **The Mix face** = a bar for the gradient you're mixing with (the wall or My Gradients pick
+  fills it; opening Mix arms it) beside a column of three plain horizontal sliders — Lightness ·
+  Chroma · Hue, 0 = yours, 1 = the other — always shown, plus a **Link** switch (off) that moves
+  the three as one, and Swap. The crossfade line, "Split by channel" and the sentence are gone.
+- **Leaving Mix bakes**: closing the face or opening another commits the result (`use`); the
+  two sources are not kept. Unchanged behaviour, now the only path.

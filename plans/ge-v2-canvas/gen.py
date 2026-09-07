@@ -96,9 +96,14 @@ FACE_ADJUST = tabrow('Adjust') + f'''
 </div>'''
 
 FACE_MIX = tabrow('Mix') + f'''
-<div class="face" style="flex-direction: row; align-items: center; gap: 8px; padding-top: 4px">
-  {act('Swap', '', 'swap')}{act('Split by channel', '', after='chevronDown')}
-  <span style="color: #4B5563; margin-left: 8px">Picks fill band B. Click band A above to fill A instead. Drag the line between them to blend.</span>
+<div class="face" style="flex-direction: row; gap: 16px; align-items: stretch; padding-top: 4px">
+  <div style="flex: 1; display: flex; flex-direction: column; justify-content: center">
+    <div class="bar" style="height: 36px; background: linear-gradient(to right, #0B3D91, #2E8BC0, #BFE3F2); outline: 2px dashed #A78BFA; outline-offset: -2px" title="the gradient you're mixing with — the next pick fills it"></div>
+  </div>
+  <div style="width: 320px; display: flex; flex-direction: column; gap: 10px">
+    {slider('Lightness', '0.00', 0)}{slider('Chroma', '0.00', 0)}{slider('Hue', '0.00', 0)}
+    <div style="display: flex; gap: 6px">{act('Link')}{act('Swap', '', 'swap')}</div>
+  </div>
 </div>'''
 
 FACE_CURVES = tabrow('Curves') + f'''
@@ -196,7 +201,7 @@ def standalone_tray(face, h):
 
 boards = {
     'Main': (doc(shell(FACE_ADJUST), 'Tray — Adjust open', 1280, 800), 1280, 800),
-    'TrayMix': (doc(standalone_tray(FACE_MIX, 120), 'Mix face', 1232, 120), 1232, 120),
+    'TrayMix': (doc(standalone_tray(FACE_MIX, 200), 'Mix face', 1232, 200), 1232, 200),
     'TrayCurves': (doc(standalone_tray(FACE_CURVES, 360), 'Curves face', 1232, 360), 1232, 360),
     'TrayInspector': (doc(standalone_tray(FACE_INSPECTOR, 240), 'Stop inspector face', 1232, 240), 1232, 240),
     'TrayImage': (doc(standalone_tray(FACE_IMAGE, 320), 'Image face', 1232, 320), 1232, 320),
@@ -210,7 +215,7 @@ for name, (html, w, h) in boards.items():
 canvas = {
     'artboards': [
         {'file': 'Main.dc.html', 'x': 0, 'y': 0, 'w': 1280, 'h': 800, 'title': 'Shell — tray open on Adjust'},
-        {'file': 'TrayMix.dc.html', 'x': 0, 'y': 940, 'w': 1232, 'h': 120, 'title': 'Face — Mix (a strip)'},
+        {'file': 'TrayMix.dc.html', 'x': 0, 'y': 940, 'w': 1232, 'h': 200, 'title': 'Face — Mix'},
         {'file': 'TrayCurves.dc.html', 'x': 0, 'y': 1200, 'w': 1232, 'h': 360, 'title': 'Face — Curves'},
         {'file': 'TrayInspector.dc.html', 'x': 0, 'y': 1700, 'w': 1232, 'h': 240, 'title': 'Face — Stop inspector'},
         {'file': 'TrayImage.dc.html', 'x': 0, 'y': 2080, 'w': 1232, 'h': 320, 'title': 'Face — Image'},

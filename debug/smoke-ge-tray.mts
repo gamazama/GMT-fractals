@@ -7,15 +7,19 @@
  *   [2] Adjust — the tray opens on the Adjust face, hangs from the card's bottom edge inside
  *       the 24 px gutter, and the WALL DOES NOT MOVE (L6: the tray overlays, never pushes)
  *   [3] Curves — the face switches; still one tray element
- *   [4] Mix — the face is Mix, band B is ARMED (the armed hint shows), the source bands
- *       appear over the ramp (the hero is the blend); a second wall click fills B and the
- *       Mix face stays open
+ *   [4] Mix — the face is Mix, the next pick is ARMED (the armed hint shows), your gradient
+ *       is the ramp's top half and the gradient you mix with is a bar in the tray (owner,
+ *       2026-09-07, no A / B language); a second wall click fills that bar and the Mix
+ *       face stays open
  *   [5] Esc — the tray closes, the slot disarms, the hero is still there and the wall still
  *       has not moved
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
  *       the colour picker in it; Esc closes it
  *
- * Falsified 2026-09-07 three ways, each reverted: making `Tray` `relative` instead of
+ * Falsified 2026-09-07 three ways, each reverted (and once more after the Mix redesign the
+ * same day: [4]'s second click used the wall's PRE-hero box and hit the hero's ramp — it armed
+ * the top half and never picked; the step now re-measures the wall and asserts the other bar
+ * took the pick, which the old click fails): making `Tray` `relative` instead of
  * `absolute` → [2] red ("not in the 24 px gutter (x=34)" — the relative box picks up the
  * band's padding); dropping `armSlot('B')` from enterMix → [4] red ("did not arm band B");
  * dropping the hero's clearSelection effect → [6] red ("the stop stayed selected") — the
@@ -52,8 +56,11 @@ const state = (page: Page) =>
       trayLeft: tr && hr ? tr.x - hr.x : null,
       cardBottom: cr?.bottom ?? null,
       wallY: wall?.getBoundingClientRect().y ?? null,
-      armedHint: /Pick a gradient for Mix band/.test(document.body.innerText),
-      bands: hero?.querySelectorAll('[title^="Slot "]').length ?? 0,
+      armedHint: /Pick a gradient to (mix with|replace)/.test(document.body.innerText),
+      bandA: !!hero?.querySelector('[data-gx-mix-band="this"]'),
+      bandB: !!tray?.querySelector('[data-gx-mix-band="other"]'),
+      thisTitle: hero?.querySelector('[data-gx-mix-band="this"]')?.getAttribute('title') ?? '',
+      otherTitle: tray?.querySelector('[data-gx-mix-band="other"]')?.getAttribute('title') ?? '',
       picker: !!tray?.querySelector('input, canvas'),
       text: tray?.innerText.replace(/\s+/g, ' ').slice(0, 120) ?? '',
     };
@@ -75,6 +82,9 @@ async function main() {
   await page.mouse.click(box.x + 24, box.y + 14);
   await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[1] no hero after a wall click'));
   await page.mouse.move(640, 60);
+  // The hero pushed the wall down: re-measure it, or every later "wall click" lands on the
+  // hero's ramp instead (that is how the first cut of [4] armed the top half by accident).
+  const wallBox = (await wall.boundingBox())!;
   let s = await state(page);
   if (s.face) fail(`[1] a tray is open before anyone asked (${s.face})`);
   const wallY0 = s.wallY;
@@ -100,19 +110,24 @@ async function main() {
   await page.waitForTimeout(400);
   s = await state(page);
   if (s.face !== 'mix') fail(`[4] Mix did not open (${s.face})`);
-  if (!s.armedHint) fail('[4] opening Mix did not arm band B (no armed hint)');
-  if (s.bands < 2) fail(`[4] the hero shows ${s.bands} source bands — Mix is A · B over the ramp`);
-  await page.mouse.click(box.x + 24 + 44 * 3, box.y + 14);
+  if (!s.armedHint) fail('[4] opening Mix did not arm the next pick (no armed hint)');
+  if (!s.bandA) fail('[4] the hero ramp has no source half (Mix = your gradient over the result)');
+  if (!s.bandB) fail('[4] the Mix face has no bar for the gradient you mix with');
+  const otherBefore = s.otherTitle;
+  await page.mouse.click(wallBox.x + 24 + 44 * 5, wallBox.y + 14);
   await page.waitForTimeout(400);
   s = await state(page);
-  if (s.face !== 'mix') fail(`[4] a wall pick for band B closed the Mix face (${s.face})`);
-  console.log('✓ [4] Mix arms B, the hero is the blend, a wall pick fills B and Mix stays open');
+  if (s.face !== 'mix') fail(`[4] a wall pick closed the Mix face (${s.face})`);
+  if (s.armedHint) fail('[4] the wall pick did not fill the other bar — it is still armed');
+  if (s.otherTitle === otherBefore || !/^Mixing with/.test(s.otherTitle)) fail(`[4] the other bar did not take the pick (${s.otherTitle})`);
+  if (/Takes the next pick/.test(s.thisTitle)) fail('[4] the pick armed YOUR gradient instead of filling the other bar');
+  console.log('✓ [4] Mix arms the next pick, the hero is the blend, a wall pick fills the other bar and Mix stays open');
 
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   s = await state(page);
   if (s.face) fail(`[5] Escape did not close the tray (${s.face})`);
-  if (s.armedHint) fail('[5] Escape closed Mix but left band B armed');
+  if (s.armedHint) fail('[5] Escape closed Mix but left the pick armed');
   if (!s.hero) fail('[5] the hero unmounted');
   if (s.wallY !== wallY0) fail(`[5] the wall moved (${wallY0} → ${s.wallY})`);
   console.log('✓ [5] Escape closes the tray and disarms; the wall never moved');

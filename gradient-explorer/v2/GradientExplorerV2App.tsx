@@ -308,7 +308,7 @@ export const GradientExplorerV2App: React.FC = () => {
         {(armed || derived.empty) && (
           <div className="shrink-0 flex items-center gap-2 px-6 pt-2.5 text-[13px]">
             {armed ? (
-              <span className="text-gx-armed">Pick a gradient for Mix band {armed} · Esc cancels</span>
+              <span className="text-gx-armed">{armed === 'B' ? 'Pick a gradient to mix with · Esc cancels' : 'Pick a gradient to replace this one · Esc cancels'}</span>
             ) : (
               <span className="text-fg-muted">Click a gradient to preview it above · click it again to keep and edit it.</span>
             )}
