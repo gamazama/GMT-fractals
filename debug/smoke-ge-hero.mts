@@ -73,7 +73,7 @@ async function main() {
   console.log(`✓ [2] the hero appeared on the first pick (ramp ${s.gradientPixels}px of canvas)`);
 
   // [3] the Image source with nothing in it — L8
-  await page.click('[data-gx-mode-tab="extract"]');
+  await page.click('[data-gx-tray-tab="image"]');
   await page.waitForTimeout(700);
   s = await heroState(page);
   if (!s.present) fail('[3] the hero unmounted on an empty Image source (L8)');

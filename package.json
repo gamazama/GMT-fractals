@@ -41,6 +41,7 @@
     "smoke:boot": "tsx debug/smoke-boot.mts",
     "smoke:ge-next": "cross-env ENGINE_URL=http://localhost:3400/gradient-explorer-next.html tsx debug/smoke-boot.mts",
     "smoke:ge-hero": "tsx debug/smoke-ge-hero.mts",
+    "smoke:ge-tray": "tsx debug/smoke-ge-tray.mts",
     "smoke:camera": "tsx debug/smoke-camera.mts",
     "smoke:canvas-menu": "tsx debug/smoke-canvas-menu.mts",
     "smoke:canvas-pan-zoom": "tsx debug/smoke-canvas-pan-zoom.mts",

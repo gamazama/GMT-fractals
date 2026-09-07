@@ -58,12 +58,12 @@ async function main() {
   await page.keyboard.press('Escape');
 
   // Mix
-  await page.click('[data-gx-mode-tab="build"]');
+  await page.click('[data-gx-tray-tab="mix"]');
   await page.mouse.move(640, 60);
   await shot(page, 'ref-tray-mix');
 
   // Image, empty
-  await page.click('[data-gx-mode-tab="extract"]');
+  await page.click('[data-gx-tray-tab="image"]');
   await page.mouse.move(640, 60);
   await shot(page, 'ref-tray-image');
 

@@ -85,15 +85,14 @@ def shell(tray_html, tray_top=233 + 48, extra=''):
 </div>'''
 
 # ── faces ─────────────────────────────────────────────────────────────────────
+def group(inner, flex='1'):
+    return f'<div style="flex: {flex}; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #B6B6B6">{inner}</div>'
+
 FACE_ADJUST = tabrow('Adjust') + f'''
-<div class="face" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 28px">
-  {slider('Hue rotate', '0', 0.5)}{slider('Amount', '0', 0)}
-  {slider('Chroma ×', '1.00', 0.4)}{slider('Frequency', '32', 0.25)}
-  {slider('Contrast', '1.00', 0.35)}
-  <div style="display: flex; align-items: center; gap: 6px"><span class="zone" style="margin-right: 4px">Targets</span>{act('lightness', 'on accent')}{act('chroma')}{act('hue')}</div>
-  {slider('Posterize bands', '0', 0)}<div></div>
-  {slider('Repeats', '1', 0)}<div></div>
-  {slider('Phase', '0.00', 0)}<div></div>
+<div class="face" style="flex-direction: row; gap: 12px; align-items: stretch">
+  {group(slider('Hue rotate', '0', 0.5) + slider('Chroma ×', '1.00', 0.4) + slider('Contrast', '1.00', 0.35), '1.1')}
+  {group(slider('Phase', '0.00', 0) + slider('Repeats', '1', 0) + slider('Posterize bands', '0', 0), '1')}
+  {group(slider('Noise: Strength', '0', 0) + slider('Noise: Frequency', '32', 0.25) + '<div style="display: flex; align-items: center; gap: 6px"><span class="zone" style="margin-right: 4px">Targets</span>' + act('lightness', 'on accent') + act('chroma') + act('hue') + '</div>', '1')}
 </div>'''
 
 FACE_MIX = tabrow('Mix') + f'''
@@ -125,19 +124,31 @@ def chan(label, value, frac, grad):
             f'<div style="flex: 1; height: 10px; border-radius: 5px; background: {grad}; position: relative"><div style="position: absolute; top: -3px; left: calc({frac:.0%} - 2px); width: 4px; height: 16px; background: #FFFFFF; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.45)"></div></div>'
             f'<span class="mono" style="width: 36px; text-align: right; color: #111111">{value}</span></div>')
 
+def divider(collapsed=False, title=''):
+    chev = 'M10 4l-4 4 4 4' if not collapsed else 'M6 4l4 4-4 4'
+    return (f'<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 16px; align-self: stretch" title="{title}">'
+            f'<div style="flex: 1; width: 1px; background: rgba(17,24,39,0.2)"></div>'
+            f'<div style="width: 16px; height: 16px; border-radius: 8px; background: #C5C5C5; border: 1px solid rgba(17,24,39,0.2); display: flex; align-items: center; justify-content: center; color: #4B5563">'
+            f'<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{chev}"></path></svg></div>'
+            f'<div style="flex: 1; width: 1px; background: rgba(17,24,39,0.2)"></div></div>')
+
 FACE_INSPECTOR = f'''
-<div class="tabrow"><span class="zone">stop 4 of 8 · t = 0.43</span><div class="meta"><span>interpolation</span><b>Smooth</b></div></div>
-<div class="face" style="display: grid; grid-template-columns: 300px minmax(0, 1fr) 380px; gap: 16px; padding-top: 4px">
-  <div style="display: flex; flex-direction: column; gap: 8px">
+<div class="tabrow"><span class="zone">stop 4 of 8 · t = 0.43</span></div>
+<div class="face" style="flex-direction: row; gap: 12px; padding-top: 4px; align-items: stretch">
+  <div style="width: 260px; display: flex; flex-direction: column; gap: 8px">
     <div style="display: flex; align-items: center; gap: 8px"><div class="bar" style="width: 26px; height: 26px; background: #C8624F"></div><div class="mono" style="flex: 1; height: 26px; border-radius: 8px; border: 1px solid rgba(17,24,39,0.2); display: flex; align-items: center; padding: 0 10px">#C8624F</div>{act('Copy')}</div>
     <div style="height: 150px; border-radius: 10px; background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, #E8541A)"></div>
   </div>
-  <div style="display: flex; flex-direction: column; gap: 8px; justify-content: center">
+  {divider(False, 'collapse the colour field')}
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; justify-content: center">
     {chan('R', '200', 0.78, 'linear-gradient(to right, #00624F, #FF624F)')}{chan('G', '98', 0.38, 'linear-gradient(to right, #C8004F, #C8FF4F)')}{chan('B', '79', 0.31, 'linear-gradient(to right, #C86200, #C862FF)')}
-    <div style="height: 4px"></div>
+    <div style="height: 2px"></div>
     {chan('H', '9', 0.03, 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)')}{chan('S', '61', 0.61, 'linear-gradient(to right, #C8C8C8, #C8402A)')}{chan('B', '78', 0.78, 'linear-gradient(to right, #000, #FF7D65)')}
   </div>
-  <div style="display: flex; flex-direction: column; gap: 8px; justify-content: center">
+  {divider(True, 'position · bias · interpolation — collapsed')}
+  <div style="width: 22px; display: flex; align-items: center; justify-content: center"><span class="zone" style="writing-mode: vertical-rl; transform: rotate(180deg)">position · bias · interpolation</span></div>
+  {divider(False, 'collapse the palette column')}
+  <div style="width: 300px; display: flex; flex-direction: column; gap: 8px; justify-content: center">
     <div style="display: flex; align-items: center; gap: 8px"><span class="zone" style="width: 56px">Palette</span><div style="flex: 1; display: flex; gap: 4px">{''.join(f'<div class="bar" style="flex: 1; height: 22px; background: {c}"></div>' for c in SW)}</div></div>
     <div style="display: flex; align-items: center; gap: 8px"><span class="zone" style="width: 56px">Recent</span><div style="flex: 1; display: flex; gap: 4px">{''.join(f'<div class="bar" style="flex: 1; height: 22px; background: {c}"></div>' for c in ['#0E7A90', '#F2C078', '#2B1B3D', '#9B3F5C'])}<div style="flex: 2"></div></div></div>
     <div style="color: #4B5563; font-size: 11px">Harmony rows (Analog · Mono · Comp · Split) — Phase E decides whether they stay.</div>

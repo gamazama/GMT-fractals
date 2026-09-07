@@ -34,8 +34,7 @@ import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
 import { BrowseStage } from './BrowseStage';
-import { BuildStage } from './BuildStage';
-import { ExtractStage } from './ExtractStage';
+import type { TrayFace } from './Tray';
 import { FavientsPanel } from '../../palette/components/FavientsPanel';
 import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
@@ -54,11 +53,9 @@ import { Icon } from './ui/Icon';
 import { ZoneLabel } from './ui/ZoneLabel';
 
 export type SourceId = 'browse' | 'build' | 'extract';
-const SOURCES: { id: SourceId; label: string }[] = [
-  { id: 'browse', label: 'Browse' },
-  { id: 'build', label: 'Mix' },
-  { id: 'extract', label: 'Image' },
-];
+/** Phase C: the source follows the TRAY — the Mix face is the `build` input, the Image face
+ *  the `extract` input, every other face (or none) is Browse. There are no source tabs. */
+const sourceOf = (face: TrayFace): SourceId => (face === 'mix' ? 'build' : face === 'image' ? 'extract' : 'browse');
 
 /** L9: how long the pointer must live in the wall before the hero quiets. */
 const QUIET_MS = 600;
@@ -96,7 +93,8 @@ const enterMix = (): void => {
 };
 
 export const GradientExplorerV2App: React.FC = () => {
-  const [source, setSourceState] = useState<SourceId>('browse');
+  const [tray, setTray] = useState<TrayFace>(null);
+  const source = sourceOf(tray);
   const [mineOpen, setMineOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -127,13 +125,13 @@ export const GradientExplorerV2App: React.FC = () => {
   // it — see BuildStage), the NEXT pick fills that slot instead — checked first, so an
   // armed pick never touches Working. A My Gradients pick keeps the slot armed (try
   // several); a Browse pick is one-shot and comes back to Mix.
-  const sourceRef = useRef(source);
-  sourceRef.current = source;
+  const trayRef = useRef<TrayFace>(tray);
+  trayRef.current = tray;
   useEffect(() => {
     if (!candidate) return;
     const p = candidate.payload;
     // On the Mix tab a pick always lands in a slot — B unless A is armed.
-    const slot = getArmedSlot() ?? (sourceRef.current === 'build' ? 'B' : null);
+    const slot = getArmedSlot() ?? (trayRef.current === 'mix' ? 'B' : null);
     if (slot) {
       const ramp = renderStopsToRamp(p.config.stops, p.config.blendSpace, p.config.colorSpace);
       useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);
@@ -142,7 +140,7 @@ export const GradientExplorerV2App: React.FC = () => {
       // browse for this pick) so the hero shows the new blend immediately.
       if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().setInput({ kind: 'build' });
       deselectActiveHero();
-      setSourceState('build');
+      setTray('mix');
       return;
     }
     const w = useWorkingStore.getState();
@@ -165,39 +163,47 @@ export const GradientExplorerV2App: React.FC = () => {
     return () => window.clearTimeout(t);
   }, [derived.config, derived.name, derived.empty]);
 
-  const switchSource = useCallback(
-    (next: SourceId) => {
-      if (next === source) return;
+  // Open a tray face (the same face again closes it). Mix and Image are SOURCES, so
+  // crossing between them and Browse does what the source tabs did (Phase B): leaving a
+  // live Mix / Image commits it with `use`; entering Mix runs enterMix (arms B); entering
+  // Image puts the extract input live. Leaving Mix disarms — the wall is B's picker only
+  // while the Mix face is open.
+  const openTray = useCallback((next: TrayFace) => {
+    const cur = trayRef.current;
+    const face: TrayFace = cur === next ? null : next;
+    const from = sourceOf(cur);
+    const to = sourceOf(face);
+    if (from !== to) {
       const w = useWorkingStore.getState();
-      if ((source === 'build' || source === 'extract') && w.input.kind === source) {
+      if ((from === 'build' || from === 'extract') && w.input.kind === from) {
         const d = deriveWorkingNow();
-        if (d) w.use(d.config, workingNameNow(), source === 'build' ? 'Mix' : 'Image');
+        if (d) w.use(d.config, workingNameNow(), from === 'build' ? 'Mix' : 'Image');
       }
-      if (next === 'build') enterMix();
-      else if (next === 'extract') w.setInput({ kind: 'extract' });
-      if (next !== 'build' && next !== 'browse') armSlot(null);
+      if (to === 'build') enterMix();
+      else if (to === 'extract') w.setInput({ kind: 'extract' });
+      if (to !== 'build') armSlot(null);
       deselectActiveHero();
-      setSourceState(next);
-    },
-    [source],
-  );
+    }
+    setTray(face);
+  }, []);
 
   // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
   // useImageDrop instance mounted once here at the root; ImageStage keeps its own for the
   // old shell / app-gmt (see palette/components/useImageDrop.ts).
-  useImageDrop({ onLoaded: () => switchSource('extract') });
+  useImageDrop({ onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); } });
 
-  // Esc closes the variants popover, or — failing that — clears an armed slot (§3) without
-  // picking anything.
+  // Esc order (Phase C, L6): popover → the open tray face (the inspector closes by clearing
+  // the stop selection, which the hero does when the face leaves) → an armed slot.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (variantsOpen) { setVariantsOpen(false); return; }
+      if (trayRef.current) { openTray(null); return; }
       if (getArmedSlot()) armSlot(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [variantsOpen]);
+  }, [variantsOpen, openTray]);
 
   // L9 — the quiet hero. While the pointer lives in the WALL, the hero folds its source
   // band away (WorkingHero animates the fold); any pointer over the hero (or the shelf)
@@ -276,7 +282,8 @@ export const GradientExplorerV2App: React.FC = () => {
         derived={derived}
         source={source}
         quiet={quiet}
-        onImageSource={() => switchSource('extract')}
+        tray={tray}
+        onTray={openTray}
         onShare={share}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}
@@ -296,28 +303,19 @@ export const GradientExplorerV2App: React.FC = () => {
 
       {/* stage — the ground. The pointer living here is what quiets the hero (L9). */}
       <div className="flex-1 min-h-0 flex flex-col relative" onMouseEnter={enterWall} onMouseLeave={leaveWall}>
-        <div className="shrink-0 flex items-center gap-2 px-6 py-2.5">
-          {SOURCES.map((s) => (
-            <button
-              key={s.id}
-              className={`px-4 py-2 rounded-[10px] text-[15px] transition-colors ${source === s.id ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg'}`}
-              onClick={() => switchSource(s.id)}
-              data-gx-mode-tab={s.id}
-            >
-              {s.label}
-            </button>
-          ))}
-          {armed && source === 'browse' && (
-            <span className="ml-4 text-[13px] text-gx-armed">Pick a gradient for Mix slot {armed} · Esc cancels</span>
-          )}
-          {!armed && derived.empty && source === 'browse' && (
-            <span className="ml-4 text-[13px] text-fg-muted">Click a gradient to preview it above · click it again to keep and edit it.</span>
-          )}
-        </div>
+        {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it. One line
+            above it only when it has something to say. */}
+        {(armed || derived.empty) && (
+          <div className="shrink-0 flex items-center gap-2 px-6 pt-2.5 text-[13px]">
+            {armed ? (
+              <span className="text-gx-armed">Pick a gradient for Mix band {armed} · Esc cancels</span>
+            ) : (
+              <span className="text-fg-muted">Click a gradient to preview it above · click it again to keep and edit it.</span>
+            )}
+          </div>
+        )}
         <div className="flex-1 min-h-0 flex flex-col relative">
-          {source === 'browse' && <BrowseStage />}
-          {source === 'build' && <BuildStage />}
-          {source === 'extract' && <ExtractStage />}
+          <BrowseStage />
         </div>
       </div>
 

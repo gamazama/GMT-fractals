@@ -10,7 +10,7 @@
 
 import React from 'react';
 
-interface Props {
+interface Props extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'title' | 'className' | 'disabled' | 'children'> {
   children: React.ReactNode;
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   title?: string;
@@ -21,8 +21,9 @@ interface Props {
   icon?: boolean;
 }
 
-export const Act: React.FC<Props> = ({ children, onClick, title, active = false, disabled = false, className = '', icon = false }) => (
+export const Act: React.FC<Props> = ({ children, onClick, title, active = false, disabled = false, className = '', icon = false, ...rest }) => (
   <button
+    {...rest}
     type="button"
     onClick={onClick}
     title={title}

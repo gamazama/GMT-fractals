@@ -364,6 +364,19 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   Curves / Adjust — one thing open under the card at a time, floating from its bottom edge, never
   pushing the shelf (folds into L6; Phase C hosts it, Phase E restyles its insides).
 
+- 2026-09-07 · Phase C (the trays), built the same day from the "GE v2 Tray" canvas
+  (plans/ge-v2-figma/trays-spec.md §8–9). **Confirmed:** L3 (the wall is always the ground;
+  Mix and Image are reached into through the tray, the source tabs are gone), L6 (one tray,
+  floating, the wall never moves — `smoke:ge-tray` [2] and [5] measure it), the Esc order.
+  **Amended:** the stop inspector is the tray's fifth face (folded into L6 as decided on
+  Phase B's close); the tab row is the ramp's control row, not a row of the tray's own
+  (trays-spec §5 item 1, decided by the build: the tabs must be visible when no tray is open);
+  Adjust is three containers (owner). **Not done here, carried:** the Curves face still uses
+  the engine's bare range inputs for Detail / Smooth (V4 wants the standard slider); the
+  Image face is a fixed 380 px box with ExtractStage as it was (its max height / scroll is
+  trays-spec §5 item 4, undecided); L9 quiet is still in (deletion deferred until the short
+  window walk); the picker's insides are Phase E.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on
@@ -444,3 +457,10 @@ phase now carries**. Items move out of this list only when a later phase's entry
   GMT's My Gradients through the shared Recent group, so the `?g=` hand-back and app-gmt's boot
   reader are removed; `shareUrl.ts` keeps the Share link only, `test:gx-share` [4] now round-trips
   that. Plan §3's "Back to GMT carries the working stops" line is superseded by this entry.
+- 2026-09-07 · Phase C built (awaiting the owner's walk). **In scope, left undone:** the ground
+  furniture (search + Filters + tools as Floating elements over the wall, the armed pill at the
+  ground's bottom edge, the 72 px row-label column) — BrowseStage is untouched; the tray
+  accordion's Extract "grows to a pane" rule is a fixed box; `smoke:gx-handles` not re-run
+  (Path handles now live inside the tray's Image face — check on the walk). **Noticed:**
+  `ExtractStage`'s method chips are a hand-rolled segmented control, not `Act`s; the Mix face's
+  sentence is the only teaching text left under the card. **Phase D now carries:** the shelf.

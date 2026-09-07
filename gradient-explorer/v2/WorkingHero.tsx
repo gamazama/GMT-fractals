@@ -51,8 +51,11 @@
  *      Curves ▾ / Adjust ▾ toggles (`stripAside`) beside the editor's own blend / output /
  *      menu items — no separate bar. The first gesture on a live or picked input is the bake
  *      (workingStore.beginEdit).
- *   4. the expander: Curves (the channel graph editor over the working base) or Adjust
- *      (the Modify + Noise dials, standard GMT sliders). Same surface, no drawer.
+ *   4. the TRAY (Phase C, 2026-09-07 — `Tray.tsx`): one surface hanging from the card's
+ *      bottom edge over the wall, one face at a time — Mix · Image · Curves · Adjust from
+ *      the tab row in the ramp's control row, the stop inspector from a stop selection.
+ *      The shell owns which face is open (`tray` / `onTray`), since Mix and Image are
+ *      sources; the hero only hosts it. Nothing here pushes the wall any more.
  *
  * There is no previewing state and no preview row any more: a Browse or shelf click IS a
  * Use (the shell does it), the previous working gradient is one undo step away, and the
@@ -66,21 +69,18 @@
  * the fitter, so the fold hands the editor the same ids it already holds.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
-import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { useFavientsStore, favientSig, isRecentGroup } from '../../palette/store/favientsStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../../palette/store/paletteEditorStore';
 import { applyEditorChange } from '../../palette/core/editorConfig';
-import { useGeneratorStore, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
-import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
-import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels } from '../../palette/core/generatorPipeline';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, mixSourceHeight } from './SourceBands';
+import { Tray, TRAY_TABS, type TrayFace } from './Tray';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
@@ -112,16 +112,16 @@ const useWidth = (): [(el: HTMLDivElement | null) => void, number] => {
   return [ref, w];
 };
 
-type Expander = 'curves' | 'adjust' | null;
-
 interface Props {
   derived: WorkingDerived;
   source: SourceId;
   /** L9: the pointer has lived in the wall for a while — collapse to the ramp and a row
    *  of small use buttons. A pure class/height switch; no store state. */
   quiet?: boolean;
-  /** Click on the image slot — the shell switches the source (Phase C: opens the tray). */
-  onImageSource: () => void;
+  /** Which tray face is open (Phase C) — the shell owns it, since Mix / Image are sources. */
+  tray: TrayFace;
+  /** Open a face (the same face again closes it); `null` closes. */
+  onTray: (face: TrayFace) => void;
   onShare: () => void;
   onExport: () => void;
   onWallpaper: () => void;
@@ -130,14 +130,31 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, onImageSource, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, tray, onTray, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
-  const [expander, setExpander] = useState<Expander>(null);
-  const [scrubT, setScrubT] = useState<number | null>(null);
   const [rampRef, rampW] = useWidth();
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
+  // The tray's inspector face is a portal host the editor renders its stop inspector into;
+  // a stop selection opens that face, clearing it closes it, and the shell's Esc order closes
+  // it by clearing the selection (the effect below).
+  const [inspectorEl, setInspectorEl] = useState<HTMLDivElement | null>(null);
+  const trayRef = useRef<TrayFace>(tray);
+  trayRef.current = tray;
+  const selectionCount = useRef(0);
+  const onSelectionChange = useCallback(
+    (n: number) => {
+      selectionCount.current = n;
+      if (n > 0 && trayRef.current !== 'inspector') onTray('inspector');
+      else if (n === 0 && trayRef.current === 'inspector') onTray(null);
+    },
+    [onTray],
+  );
+  useEffect(() => {
+    if (tray !== 'inspector' && selectionCount.current > 0) editorRef.current?.clearSelection();
+  }, [tray]);
+  const [scrubT, setScrubT] = useState<number | null>(null);
 
   // L8 — the hero never unmounts once it exists. An empty source (the Image tab with no
   // image, a Mix with nothing in it) used to return null and take the whole hero with it.
@@ -236,7 +253,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, o
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
         <div className="flex flex-col justify-center py-1">
-          <ImageSlot active={source === 'extract'} onClick={onImageSource} />
+          <ImageSlot active={source === 'extract'} onClick={() => onTray('image')} />
         </div>
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}
@@ -328,21 +345,25 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, o
                     chrome="strip"
                     stripHeight={resultH}
                     stripAside={
-                      (
-                        <div className="flex flex-wrap gap-1.5">
-                          <Act active={expander === 'curves'} onClick={() => setExpander((e) => (e === 'curves' ? null : 'curves'))} title="Shape the lightness, chroma and hue curves">
-                            Curves <Icon name={expander === 'curves' ? 'chevronUp' : 'chevronDown'} />
-                          </Act>
+                      /* the TRAY'S TAB ROW (Phase C): the four named faces; the open one is
+                         accent ("this one", V3) and clicks closed */
+                      <div className="flex flex-wrap gap-1.5">
+                        {TRAY_TABS.map((t) => (
                           <Act
-                            active={expander === 'adjust'}
-                            onClick={() => setExpander((e) => (e === 'adjust' ? null : 'adjust'))}
-                            title="Hue, chroma, contrast, posterize, repeats, phase, mirror, reverse, noise"
+                            key={t.face}
+                            active={tray === t.face}
+                            className={tray === t.face ? 'text-accent-300' : ''}
+                            onClick={() => onTray(t.face)}
+                            title={t.title}
+                            data-gx-tray-tab={t.face}
                           >
-                            Adjust <Icon name={expander === 'adjust' ? 'chevronUp' : 'chevronDown'} />
+                            {t.label} <Icon name={tray === t.face ? 'chevronUp' : 'chevronDown'} />
                           </Act>
-                        </div>
-                      )
+                        ))}
+                      </div>
                     }
+                    inspectorHost={inspectorEl}
+                    onSelectionChange={onSelectionChange}
                     value={editorValue}
                     onChange={onEditorChange}
                     onEditStart={onEditorStart}
@@ -360,23 +381,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, quiet = false, o
               )}
             </div>
 
-            {/* the expanders (Phase C moves them into the tray accordion) */}
-            {!quiet && expander === 'curves' && <CurvesExpander derived={derived} width={rampW} />}
-            {!quiet && expander === 'adjust' && (
-              <div className="mt-3 pt-3 border-t border-line/10 grid grid-cols-2 gap-x-7">
-                {/* Modify/Noise carry `dynamicVisible: isMixed` (a Generator-era assumption:
-                    those dials hid whenever the recipe wasn't the two-source mix). Adjust
-                    belongs to WORKING here (§5.1), not to the Mix recipe, so it must stay
-                    visible whatever the recipe — ignoreDynamicVisible skips that gate for this
-                    mount only; the shared param definition (also read by GeneratorStage /
-                    app-gmt) is untouched. @see plans/ge-v2-design.md §12 item 4 */}
-                <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Modify" ignoreDynamicVisible />
-                <AutoFeaturePanel featureId="paletteGenerator" groupFilter="Noise" ignoreDynamicVisible />
-              </div>
-            )}
           </div>
         </div>
       </div>
+      {/* the TRAY (Phase C): one surface under the card, one face at a time */}
+      <Tray face={tray} derived={derived} width={rampW} inspectorHostRef={setInspectorEl} />
       {exportMenu}
     </section>
   );
@@ -442,76 +451,4 @@ const Collapse: React.FC<{ open: boolean; children: React.ReactNode }> = ({ open
   </div>
 );
 
-/**
- * Curves over the WORKING base: the same channel graph editor the Generator uses, fed the
- * working pipeline's base. The prospective-fit ghost + ghost points use the Generator's
- * recipe, computed here because the base is no longer the A×B mix.
- */
-const CurvesExpander: React.FC<{ derived: WorkingDerived; width: number }> = ({ derived, width }) => {
-  const tracks = useGeneratorStore((s) => s.tracks);
-  const curvesOn = useGeneratorStore((s) => s.curvesOn);
-  const detail = useGeneratorStore((s) => s.detail);
-  const smooth = useGeneratorStore((s) => s.smooth);
-  const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
-  const base = derived.base;
 
-  const ghost = useMemo((): Channels | null => {
-    if (!base) return null;
-    if (curvesOn && tracks) {
-      const f = buildGradientRamp(
-        base,
-        base,
-        DEFAULT_SLOT_MODS,
-        DEFAULT_SLOT_MODS,
-        { ...readAdjustParamsNow(), mixL: 0, mixC: 0, mixH: 0 },
-        prospectiveFitChannels(base, detail, smooth),
-        noiseSeed,
-      ).final;
-      return { L: f.L, C: f.C, h: unwrapHue(f.h) };
-    }
-    return derived.final ? { L: derived.final.L, C: derived.final.C, h: unwrapHue(derived.final.h) } : null;
-  }, [base, curvesOn, tracks, detail, smooth, noiseSeed, derived.final]);
-  const ghostPoints = useMemo(() => (base ? prospectiveFitFrames(base, detail, smooth) : null), [base, detail, smooth]);
-  const g = useGeneratorStore.getState();
-
-  return (
-    <div className="mt-3 pt-3 border-t border-line/10">
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
-        <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit editable curves from the current gradient">
-          {tracks ? 'Re-fit from source' : 'Fit from source'}
-        </Act>
-        <Act disabled={!tracks} onClick={() => g.setCurvesOn(!curvesOn)}>
-          {curvesOn ? 'Curves on' : 'Curves off'}
-        </Act>
-        <Act disabled={!tracks} onClick={() => g.resetCurves()}>
-          Reset
-        </Act>
-        <label className="flex items-center gap-2 text-[13px] text-fg-muted ml-2">
-          Detail <input type="range" min={2} max={10} value={detail} onChange={(e) => g.setDetail(Number(e.target.value))} /> {detail}
-        </label>
-        <label className="flex items-center gap-2 text-[13px] text-fg-muted">
-          Smooth <input type="range" min={0} max={10} value={smooth} onChange={(e) => g.setSmooth(Number(e.target.value))} /> {smooth}
-        </label>
-        <span className="text-[13px] text-fg-muted ml-auto">Detail and Smooth are the fit recipe; the faint ghost previews a re-fit.</span>
-      </div>
-      {tracks ? (
-        <div className="relative" style={{ height: 240 }}>
-          <ChannelGraphEditor
-            tracks={tracks}
-            onTracksChange={g.setTracks}
-            width={width}
-            height={240}
-            previewRamp={derived.ramp ?? undefined}
-            ghost={ghost}
-            ghostPoints={ghostPoints}
-            interactive
-          />
-        </div>
-      ) : (
-        <div className="h-[120px] rounded-lg bg-surface-section border border-line/10 flex items-center justify-center text-[13px] text-fg-muted">
-          Fit from source to make the lightness, chroma and hue curves editable.
-        </div>
-      )}
-    </div>
-  );
-};

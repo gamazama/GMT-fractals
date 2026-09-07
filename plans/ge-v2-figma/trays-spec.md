@@ -143,3 +143,29 @@ Curves · Stop inspector · Image), and the five "before" plates beside them. Ed
 Save; I read the saved version back and port it. Sources: `plans/ge-v2-canvas/` (`gen.py` builds
 the artboards from the hero's real tokens and measurements; `_shared.css` is the token sheet).
 The seeded page itself (`ge-v2-tray.html`, ~2 MB) is not committed — regenerate with the helper.
+
+## 8. Owner's first pass on the canvas (2026-09-07)
+
+Talked through rather than drawn. Header: good.
+- **Adjust = three containers:** Hue rotate · Chroma · Contrast · Posterize | Phase · Repeats |
+  Noise: Strength · Noise: Frequency · Targets. ("Amount" reads as Strength.) Posterize moved to the middle bin on the second look.
+- **Mix strip, Curves:** fine for now, still to be reviewed.
+- **Stop inspector:** the R G B / H S B sliders were too narrow — the channel column gets the
+  width. Every column has a VERTICAL DIVIDER that collapses it. A further column, hidden by
+  default, holds the full sliders for position and bias plus interpolation. **Multi-select edits
+  R G B / H S B across all selected stops while each keeps its own position, bias and
+  interpolation** — a behaviour for Phase E's build, recorded here.
+
+## 9. Built (2026-09-07)
+
+`gradient-explorer/v2/Tray.tsx` (the surface + the five faces) · `WorkingHero.tsx` hosts it and
+carries the tab row in the ramp's control row (Mix · Image · Curves · Adjust, the open one in
+accent) · `GradientExplorerV2App.tsx` owns which face is open — the source FOLLOWS the tray
+(Mix = the `build` input, Image = `extract`, else Browse), the three source tabs and
+`BuildStage.tsx` are gone, the wall is always the ground · `AdvancedGradientEditor` (strip chrome
+only) portals its stop inspector into the tray's host and adds the collapsible position · bias ·
+interpolation column; `clearSelection` on its handle; `onSelectionChange` opens / closes the
+inspector face. Adjust = three bins via `whitelistParams` + `labelOverrides`, tooltips, no
+diamonds. Esc order: popover → tray → armed slot. Guard: `npm run smoke:ge-tray` (six steps,
+falsified three ways). Multi-select colour editing already applied to every selected stop
+(`handleColorChange`); position stays single-stop, bias and interpolation apply to all — as asked.

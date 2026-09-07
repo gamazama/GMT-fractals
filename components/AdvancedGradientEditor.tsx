@@ -97,6 +97,15 @@ interface AdvancedGradientEditorProps {
      *  colour picker, which is wide enough to lend the space; with nothing selected they lie
      *  in one line with the blend / output / menu items. */
     stripAside?: React.ReactNode;
+    /** Strip chrome only (additive, 2026-09-07, GE v2 Phase C — plans/ge-v2-figma/trays-spec.md):
+     *  an element to PORTAL the stop inspector into. The v2 hero hangs a tray under its card
+     *  and the inspector is one of the tray's faces, so with a host given the inspector (the
+     *  colour picker + the stop column) renders THERE instead of under the strip, and the strip
+     *  row keeps only `stripAside` + blend / output / menu. `onSelectionChange` tells the host
+     *  when to show that face. Every other host is unchanged (no host → today's layout). */
+    inspectorHost?: HTMLElement | null;
+    /** Fires with the number of selected knots whenever it changes (strip chrome hosts). */
+    onSelectionChange?: (count: number) => void;
 }
 
 /** Imperative seam for a host that owns a palette face over the strip (the v2 hero). */
@@ -104,6 +113,8 @@ export interface AdvancedGradientEditorHandle {
     /** Select the knot within `tolerance` of `t`; if there is none, insert one there (the
      *  ramp's colour at `t`, the segment's interpolation) as ONE bracketed edit and select it. */
     selectAt: (t: number, tolerance?: number) => void;
+    /** Deselect every knot (the host's Esc order closes the inspector face this way). */
+    clearSelection: () => void;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -128,7 +139,7 @@ const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean })
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -339,6 +350,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             editAction(() => emitChange([...cur, newKnot]));
             setSelectedIds(new Set([newKnot.id]));
         },
+        clearSelection: () => setSelectedIds(new Set()),
     }), [blendSpace, editAction, emitChange]);
 
     const handleCopy = useCallback(() => {
@@ -593,6 +605,11 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     }, [selectedIds, knots]);
 
     const selectedNodes = useMemo(() => knots.filter(k => selectedIds.has(k.id)), [knots, selectedIds]);
+    const selectionCount = selectedIds.size;
+    useEffect(() => { onSelectionChange?.(selectionCount); }, [selectionCount, onSelectionChange]);
+    // The stop column (position · bias · interpolation) beside the picker in the portalled
+    // inspector — collapsed until asked for (owner, 2026-09-07: "another hidden column").
+    const [stopColumnOpen, setStopColumnOpen] = useState(false);
     
     const commonInterpolation = useMemo(() => {
         if (selectedNodes.length === 0) return 'linear';
@@ -870,38 +887,110 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 </div>
             </div>
 
-            {isExpanded && chrome === 'strip' && (
-                <div className={`flex gap-3 mt-1.5 px-2 gradient-interactive-element ${selectedNodes.length > 0 ? 'items-start' : 'items-center'}`}>
-                    {/* Left: the host aside (v2: Curves / Adjust) + blend / output / menu. With a
-                        selection they stack down the left of the picker; without one they lie in
-                        a single line — no bar behind them either way. */}
-                    <div className={`flex gap-1.5 ${selectedNodes.length > 0 ? 'flex-col items-start w-[160px] shrink-0 pt-1' : 'flex-row flex-wrap items-center flex-1'}`}>
-                        {stripAside}
-                        <div className="flex items-center gap-2 text-[10px] text-fg-dim">
-                            <span>blend</span>
-                            <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleBlendSpace} title="Blend space (RGB → HSV → HSV Far → Oklab)">
-                                {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
-                            </button>
-                            <span>output</span>
-                            <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleColorSpace} title="Output colour profile">
-                                {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
-                            </button>
-                            <button
-                                className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
-                                onClick={handlePresetsClick}
-                                title="Stops menu — copy, paste, reverse, distribute, interpolation…"
-                            >
-                                <MenuIcon />
-                            </button>
-                        </div>
+            {isExpanded && chrome === 'strip' && (() => {
+                const meta = (
+                    <div className="flex items-center gap-2 text-[10px] text-fg-dim">
+                        <span>blend</span>
+                        <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleBlendSpace} title="Blend space (RGB → HSV → HSV Far → Oklab)">
+                            {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
+                        </button>
+                        <span>output</span>
+                        <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleColorSpace} title="Output colour profile">
+                            {colorSpace === 'srgb' ? 'sRGB' : colorSpace === 'linear' ? 'Linear' : 'ACES'}
+                        </button>
+                        <button
+                            className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
+                            onClick={handlePresetsClick}
+                            title="Stops menu — copy, paste, reverse, distribute, interpolation…"
+                        >
+                            <MenuIcon />
+                        </button>
                     </div>
-                    {selectedNodes.length > 0 && (
-                        <div className="flex-1 min-w-0">
-                            <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
+                );
+                const stopColumn = selectedNodes.length > 0 && (
+                    <div className="flex items-stretch gap-2 self-stretch">
+                        {/* the divider that collapses the stop column */}
+                        <button
+                            type="button"
+                            className="flex flex-col items-center gap-1.5 w-4 shrink-0 text-fg-muted hover:text-fg"
+                            onClick={() => setStopColumnOpen((o) => !o)}
+                            title={stopColumnOpen ? 'Hide position, bias and interpolation' : 'Show position, bias and interpolation'}
+                        >
+                            <span className="flex-1 w-px bg-line/20" />
+                            <span className="w-4 h-4 rounded-full border border-line/20 bg-surface-section flex items-center justify-center">
+                                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d={stopColumnOpen ? 'M10 4l-4 4 4 4' : 'M6 4l4 4-4 4'} /></svg>
+                            </span>
+                            <span className="flex-1 w-px bg-line/20" />
+                        </button>
+                        {stopColumnOpen ? (
+                            <div className="w-[220px] shrink-0 flex flex-col gap-1">
+                                <Dropdown
+                                    label="Interpolation"
+                                    value={commonInterpolation}
+                                    onChange={(v) => handleMultiPropertyChange('interpolation', v as InterpolationMode)}
+                                    options={[
+                                        ...(commonInterpolation === 'mixed' ? [{ label: 'Mixed', value: 'mixed' }] : []),
+                                        { label: 'Linear', value: 'linear' },
+                                        { label: 'Step', value: 'step' },
+                                        { label: 'Smooth', value: 'smooth' }
+                                    ]}
+                                />
+                                {selectedNodes.length === 1 && (
+                                    <Slider label="Position" value={selectedNodes[0].position * 100} min={0} max={100} step={0.1} onChange={(val) => handleSliderPropertyChange('position', val / 100)} />
+                                )}
+                                <Slider
+                                    label="Bias (Midpoint)"
+                                    value={commonBias === -1 ? 50 : commonBias * 100}
+                                    min={0} max={100} step={1}
+                                    onChange={(val) => handleSliderPropertyChange('bias', val / 100)}
+                                    overrideInputText={commonBias === -1 ? 'Mixed' : undefined}
+                                />
+                            </div>
+                        ) : (
+                            <div className="w-[18px] shrink-0 flex items-center justify-center">
+                                <span className="text-[11px] uppercase tracking-wide text-fg-muted" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>position · bias · interpolation</span>
+                            </div>
+                        )}
+                    </div>
+                );
+                if (inspectorHost) {
+                    // v2 tray: the strip row keeps the host aside + meta in one line; the
+                    // inspector (picker + stop column) is portalled into the tray face.
+                    return (
+                        <>
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 px-2 gradient-interactive-element">
+                                {stripAside}
+                                {meta}
+                            </div>
+                            {selectedNodes.length > 0 && createPortal(
+                                <div className="flex items-stretch gap-3 gradient-interactive-element">
+                                    <div className="flex-1 min-w-0">
+                                        <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
+                                    </div>
+                                    {stopColumn}
+                                </div>,
+                                inspectorHost,
+                            )}
+                        </>
+                    );
+                }
+                return (
+                    <div className={`flex gap-3 mt-1.5 px-2 gradient-interactive-element ${selectedNodes.length > 0 ? 'items-start' : 'items-center'}`}>
+                        {/* Left: the host aside (v2: Curves / Adjust) + blend / output / menu. With a
+                            selection they stack down the left of the picker; without one they lie in
+                            a single line — no bar behind them either way. */}
+                        <div className={`flex gap-1.5 ${selectedNodes.length > 0 ? 'flex-col items-start w-[160px] shrink-0 pt-1' : 'flex-row flex-wrap items-center flex-1'}`}>
+                            {stripAside}
+                            {meta}
                         </div>
-                    )}
-                </div>
-            )}
+                        {selectedNodes.length > 0 && (
+                            <div className="flex-1 min-w-0">
+                                <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
             {isExpanded && chrome === 'full' && (
                 <div className="flex flex-col gradient-interactive-element overflow-hidden">
                     {selectedNodes.length > 0 ? (
