@@ -36,7 +36,7 @@ import {
 import { EASING_NAMES, type EasingName } from '../core/easings';
 import { fitColorBoxToRamp } from '../core/colorBoxFit';
 import { showToast } from '../../engine/store/toastStore';
-import { rampToBezierTrack, trackToRamp } from '../core/channelCurve';
+import { rampToBezierTrack, rampToSteppedTrack, flatRuns, trackToRamp } from '../core/channelCurve';
 import { buildPresetCatalog, registerCustomRamp, registerCustomChannels } from '../core/presetCatalog';
 import { bufferToRamp } from '../core/stopFit';
 import { GENERATOR_PARAM_DEFAULTS } from '../features/paletteGenerator';
@@ -238,10 +238,15 @@ export const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
  */
 export const fitChannelsToTracks = (base: Channels, detail: number, smooth: number): ChannelTracks => {
   const k = (11 - detail) / 3;
+  const h = unwrapHue(base.h);
+  // A banded source keeps its bands (C.4): its runs become Step keys, and Smooth is not
+  // applied (it would blur the very edges the holds reproduce). Smooth ramps: as before.
+  const runs = flatRuns([base.L, base.C, h]);
+  const sm = runs.length ? 0 : smooth;
   return {
-    L: rampToBezierTrack(smoothChannel(base.L, smooth), 'L', 'Lightness', { eps: 0.01 * k }),
-    C: rampToBezierTrack(smoothChannel(base.C, smooth), 'C', 'Chroma', { eps: 0.01 * k }),
-    h: rampToBezierTrack(smoothChannel(unwrapHue(base.h), smooth), 'h', 'Hue', { eps: 0.06 * k }),
+    L: rampToSteppedTrack(smoothChannel(base.L, sm), runs, 'L', 'Lightness', { eps: 0.01 * k }),
+    C: rampToSteppedTrack(smoothChannel(base.C, sm), runs, 'C', 'Chroma', { eps: 0.01 * k }),
+    h: rampToSteppedTrack(smoothChannel(h, sm), runs, 'h', 'Hue', { eps: 0.06 * k }),
   };
 };
 

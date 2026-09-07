@@ -212,11 +212,23 @@ order of work from here, each folded into the phase that owns the surface.
   clicking it cancels). No separate Bake button in a face — the header is the place. Owner:
   "either mix needs a bake button or the hero needs a bake/cancel mechanism that works with
   the half split render" — the second, so it is one mechanism for all four.
-- **C.4 · Curves fits on entry and understands steps.** Opening the Curves face runs Fit from
-  source at once (no empty "Fit from source to make the curves editable" box); the channel
-  tracks need STEP segments (a hold, not a spline) so a banded source keeps its bands through
-  Curves — `fitChannelsToTracks` + `ChannelGraphEditor` (grep for both). Shares Phase E's
-  session if it touches the editor primitives.
+- **C.4 · Curves fits on entry and understands steps** (DONE 2026-09-07 evening): the face
+  fits on mount (a bake on leaving resets the tracks, so the next entry fits the baked
+  gradient); `flatRuns` + `rampToSteppedTrack` (channelCurve.ts) give a banded source one
+  Step key per band and Linear keys over the slopes between, Smooth off for banded sources.
+  `test:palette` channelcurve guards it (falsified twice). Library caveat: the bundle's own
+  "Steps" palettes are smooth (the re-bake defect, §10), so the face only shows holds for a
+  gradient that is banded on screen.
+- **C.9 · The bake gesture on the split ramp** (owner, 2026-09-07 evening; supersedes the chip
+  as the primary control, the chip stays as the readout): with a face open the hero ramp is
+  split — clicking the BOTTOM half (the result) bakes it; clicking the TOP half (the source)
+  keeps the source instead — cancel. Either way the face's transformations reset and the
+  face closes. Instant tooltips on hover ("Keep this result" / "Keep the source instead").
+- **C.10 · The wall's header** (owner, same evening): the main gradient wider and centre
+  aligned; search on the right with Filters to its left; with Filters closed, "Clear all" sits
+  right-aligned on the Filters row.
+- **C.11 · Zoom tool status** (owner): while the zoom tool is active, the status chip in the
+  bottom-right corner also carries sliders for the wall's padding.
 - **C.5 · Mix UI** — the owner is still thinking; not blocking. Parked until there is a design.
 - **C.6 · The Image face is one picture** (owner's walk, 2026-09-07; BUILT the same day —
   trays-spec §14). Today it is the old Image

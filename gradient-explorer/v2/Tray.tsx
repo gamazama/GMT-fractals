@@ -35,7 +35,7 @@
  * `use`) — Phase B's tab semantics, re-hosted (P3).
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
@@ -195,12 +195,19 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
   }, [base, curvesOn, tracks, detail, smooth, noiseSeed, derived.final]);
   const ghostPoints = useMemo(() => (base ? prospectiveFitFrames(base, detail, smooth) : null), [base, detail, smooth]);
   const g = useGeneratorStore.getState();
+  // Fit on entry (C.4, owner: "curved mode should start fitting when we enter that mode"):
+  // the face opens with the curves already editable. Leaving the face bakes (C.3) and
+  // resets the tracks, so the next entry fits the baked gradient afresh.
+  useEffect(() => {
+    if (!tracks && base) g.fitFromChannels(base);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="flex flex-col gap-3 px-4 py-3">
       <div className="flex items-center gap-2 flex-wrap">
-        <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit editable curves from the current gradient">
-          {tracks ? 'Re-fit from source' : 'Fit from source'}
+        <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit the curves from the source again (Detail and Smooth are the recipe; the faint ghost previews it)">
+          Re-fit
         </Act>
         <Act disabled={!tracks} onClick={() => g.setCurvesOn(!curvesOn)}>
           {curvesOn ? 'Curves on' : 'Curves off'}
@@ -214,7 +221,6 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
         <label className="flex items-center gap-2 text-[13px] text-fg-muted">
           Smooth <input type="range" min={0} max={10} value={smooth} onChange={(e) => g.setSmooth(Number(e.target.value))} /> {smooth}
         </label>
-        <span className="text-[13px] text-fg-muted ml-auto">Detail and Smooth are the fit recipe; the faint ghost previews a re-fit.</span>
       </div>
       {tracks ? (
         <div className="relative rounded-[10px] overflow-hidden" style={{ height: 240 }}>
@@ -231,7 +237,7 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
         </div>
       ) : (
         <div className="h-[120px] rounded-[10px] bg-surface-viewport flex items-center justify-center text-[13px] text-fg-muted">
-          Fit from source to make the lightness, chroma and hue curves editable.
+          Nothing to fit yet — pick a gradient.
         </div>
       )}
     </div>
