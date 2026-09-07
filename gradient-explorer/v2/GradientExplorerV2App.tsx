@@ -40,7 +40,7 @@ import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
 import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
-import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice } from '../../palette/store/generatorStore';
+import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
@@ -184,7 +184,13 @@ export const GradientExplorerV2App: React.FC = () => {
       const w = useWorkingStore.getState();
       if ((from === 'build' || from === 'extract') && w.input.kind === from) {
         const d = deriveWorkingNow();
-        if (d) w.use(d.config, workingNameNow(), from === 'build' ? 'Mix' : 'Image');
+        // An UNTOUCHED mix (all three blends still at 0) is your gradient unchanged: it keeps
+        // its own name. Otherwise the result is "yours × the other" — measured 2026-09-07:
+        // without this, toggling Mix on and off grew the name by "× Greyscale" every time.
+        const gs = readGeneratorSlice();
+        const untouched = from === 'build' && !gs.mixL && !gs.mixC && !gs.mixH;
+        const name = untouched ? slotSnapshot(useGeneratorStore.getState().slotA).name : workingNameNow();
+        if (d) w.use(d.config, name, from === 'build' ? 'Mix' : 'Image');
       }
       if (to === 'build') enterMix();
       else if (to === 'extract') w.setInput({ kind: 'extract' });
