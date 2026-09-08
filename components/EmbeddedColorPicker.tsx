@@ -978,7 +978,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
                 onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             {/* RGB and HSV are two ways of saying the same colour, so they read as two groups */}
-            <div className={soft ? 'h-px bg-line/15 my-1' : 'h-px bg-line/5 my-0.5'} />
+            <div className={soft ? 'h-px bg-line/15' : 'h-px bg-line/5 my-0.5'} />
             <GradientSlider label="H" value={Math.round(hsb.h)} min={0} max={360} step={1} defaultValue={0} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
                 onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="S" value={Math.round(hsb.s)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
@@ -1224,7 +1224,15 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                         {on('spectrum') && <div className="flex flex-col gap-2 shrink-0">{fieldBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
                         {on('harmony') && harmonyBlock}
-                        {on('channels') && <div className="flex flex-col gap-2 flex-1 min-w-[190px]">{channelsBlock}</div>}
+                        {/* The channels stand exactly as tall as the spectrum / wheel beside them:
+                            the column takes the surface height and SPREADS its rows into it, so
+                            the two blocks line up by construction rather than by a tuned gap
+                            (owner, 2026-09-08). */}
+                        {on('channels') && (
+                            <div className="flex flex-col justify-between flex-1 min-w-[190px]" style={{ height: SURFACE_PX }}>
+                                {channelsBlock}
+                            </div>
+                        )}
                         {on('kelvin') && kelvinBlock}
 
                     </div>
