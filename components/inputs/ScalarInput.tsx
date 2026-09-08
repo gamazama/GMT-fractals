@@ -249,6 +249,15 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             ? 'after:bg-fg after:shadow-[0_0_0_1px_rgba(0,0,0,.4)]'
             : disabled ? 'after:hidden' : isActive ? 'after:bg-accent-300' : atDefault ? 'after:bg-accent-400/60' : 'after:bg-accent-300';
         const fillCls = trackBackground ? 'bg-transparent' : disabled ? 'bg-fg-muted/15' : isActive ? 'bg-accent-400/65' : atDefault ? 'bg-accent-400/30' : 'bg-accent-400/50';
+        // How many decimals the number shows follows the STEP: a slider that moves in whole
+        // numbers has no business printing 25.94594595, which is what the default 8-place
+        // format did with a value that came out of a colour conversion (owner, 2026-09-08).
+        const dp = (() => {
+            const t = String(step ?? 1);
+            const i = t.indexOf('.');
+            return i < 0 ? 0 : Math.min(3, t.length - i - 1);
+        })();
+        const softFormat = format ?? ((v: number) => v.toFixed(dp));
         const number = (
             <DraggableNumber
                 value={value}
@@ -259,7 +268,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 hardMin={hardMin}
                 hardMax={hardMax}
                 mapping={mapping}
-                format={overrideText ? () => overrideText : format}
+                format={overrideText ? () => overrideText : softFormat}
                 mapTextInput={mapTextInput}
                 defaultValue={defaultValue}
                 disabled={disabled}
@@ -271,14 +280,14 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             <div
                 ref={trackContainerRef}
                 className={`relative flex items-center touch-none ${dense ? 'flex-1 min-w-[64px]' : ''} ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
-                style={{ touchAction: 'none', height: 16 }}
+                style={{ touchAction: 'none', height: 14 }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
                 onPointerUp={track.onPointerUp}
                 onPointerCancel={track.onPointerUp}
                 onLostPointerCapture={track.onPointerUp}
             >
-                <div className={`absolute left-0 right-0 rounded-[10px] overflow-hidden bg-line/[0.12] group-hover/soft:bg-line/20 ${isActive ? 'ring-1 ring-accent-400/30' : ''}`} style={{ top: 3, height: 10 }}>
+                <div className={`absolute left-0 right-0 rounded-[10px] overflow-hidden bg-line/[0.12] group-hover/soft:bg-line/20 ${isActive ? 'ring-1 ring-accent-400/30' : ''}`} style={{ top: 2, height: 10 }}>
                     {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
                     <div
                         ref={fullTrackFillRef}
@@ -328,7 +337,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
         );
         if (dense) {
             return (
-                <div className={`group/soft h-[26px] flex items-center gap-2.5 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                <div className={`group/soft h-[22px] flex items-center gap-2.5 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
                     {/* the keyframe diamond's home in this skin (headerRight) */}
                     {labelEl}
                     {bar}
@@ -338,7 +347,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             );
         }
         return (
-            <div className={`group/soft py-[3px] ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+            <div className={`group/soft py-px ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
                 {label && (
                     <div className="flex items-center h-5 gap-2 min-w-0">
                         {headerRight}
