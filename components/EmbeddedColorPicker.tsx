@@ -134,8 +134,15 @@ const hsbToHex = ({ h, s, v }: HSB): string => rgbToHex(hsbToRgb(h, s, v));
 // gradient and swatch (10 px bars), one quiet 12 px line of text instead of 9 px uppercase
 // bold, no box of its own (the tray is the surface), and mono type on the hex alone.
 
-/** A gradient/swatch bar's radius in the soft dialect (the owner's rule, hero-spec §7). */
-const SOFT_BAR = 'rounded-[10px]';
+// Radii here are deliberately MODEST. The shell's large rounding is the GRADIENT language —
+// the hero ramp, the palette bars, the wall's tiles — and a picker is made of controls, not
+// gradients (owner, 2026-09-08: "the round edges are supposed to be for gradients"). So
+// nothing here becomes a pill: a track or a pad takes 6 px, a solid colour chip 4 px, and a
+// pressable keeps the shell's 8 px.
+/** Pads, strips and slider tracks. */
+const CTRL_R = 'rounded-md';
+/** Solid colour chips (harmony / recent / palette). */
+const CHIP_R = 'rounded';
 
 // ── selection MODES (soft dialect) ─────────────────────────────────────────────────────
 // The reference chooser's real cleverness is not any one control but that you CHOOSE which
@@ -194,7 +201,7 @@ const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: strin
                         key={`${c}-${i}`}
                         onClick={() => onPick(c)}
                         className={soft
-                            ? `h-5 flex-1 min-w-0 ${SOFT_BAR} border transition-transform hover:scale-105 hover:z-10 ${
+                            ? `h-5 flex-1 min-w-0 ${CHIP_R} border transition-transform hover:scale-105 hover:z-10 ${
                                 current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/20'
                             }`
                             : `h-4 flex-1 min-w-0 rounded-[2px] border transition-transform hover:scale-110 hover:z-10 ${
@@ -237,7 +244,7 @@ const GradientSlider: React.FC<{
                 ? 'w-3 shrink-0 text-[12px] text-fg-muted text-center select-none'
                 : 'w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none'}>{label}</div>
             <div
-                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-[10px] ${SOFT_BAR}` : 'h-3.5 rounded-sm'}`}
+                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-[10px] ${CTRL_R}` : 'h-3.5 rounded-sm'}`}
                 style={{ background: trackBg }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
@@ -286,7 +293,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
 }) => {
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
-    // The host's input skin decides the dialect (see SOFT_BAR above).
+    // The host's input skin decides the dialect (see CTRL_R / CHIP_R above).
     const soft = useInputSkin() === 'soft';
     // ── the colour wheel (soft dialect) ────────────────────────────────────────────────
     // The wheel replaces the saturation/value field AND the four static harmony rows: one
@@ -736,7 +743,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     ref={fieldRef}
                     width={208}
                     height={120}
-                    className={`w-full h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? SOFT_BAR : "rounded"}`}
+                    className={`w-full h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
                     onPointerDown={beginField}
                     onPointerMove={moveField}
                     onPointerUp={endField}
@@ -753,7 +760,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     ref={hueRef}
                     width={16}
                     height={120}
-                    className={`w-4 h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? SOFT_BAR : "rounded"}`}
+                    className={`w-4 h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
                     onPointerDown={beginHue}
                     onPointerMove={moveHue}
                     onPointerUp={endHue}
@@ -779,7 +786,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 ref={hlPadRef}
                 width={208}
                 height={120}
-                className={`w-full h-9 cursor-crosshair touch-none ${soft ? SOFT_BAR : "rounded"}`}
+                className={`w-full h-9 cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
                 onPointerDown={beginHLPad}
                 onPointerMove={moveHLPad}
                 onPointerUp={endHLPad}

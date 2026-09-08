@@ -56,6 +56,13 @@ principles; **language principles (V)** from the visual-language audit of the li
 - **V2 · Radius encodes role.** 4 px = a sample (swatch, tile, slider track). 8 px = something you
   press (button, segmented control, input). 12 px = something that floats. Pill = a state, never
   an action.
+  **As amended 2026-09-07/08 (the owner, twice, and this is the settled form): LARGE rounding —
+  10 px on a bar, 20 px on a box — belongs to GRADIENTS and to CONTAINERS. Nothing else.** The one
+  exception is a gradient's own PALETTE SWATCHES, which are round "because of [their] relation to
+  gradients". A control is not a gradient even when it paints one: the colour picker's channel
+  bars, pads, strips and colour chips take control radii (6 px on a track or pad, 4 px on a chip,
+  8 px on a pressable) and none of them may become a pill. Measured against the first cut of the
+  Phase E picker, which wore the gradient language throughout and read wrong for it.
 - **V3 · Accent means "this one".** Selected tab or segment, selected swatch outline, slider fill,
   focus. Nothing else is accent. Meaning colours are three and each is a *filled* chip with white
   text: live = green, edited = amber, armed = violet. The thing the chip refers to carries the

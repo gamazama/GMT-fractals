@@ -36,7 +36,7 @@ interface Props {
     activeIndex: number;
     /** Disc diameter in px. */
     size?: number;
-    /** Rounded corners on the value strip — the shell's large-rounding rule. */
+    /** Modest rounding on the value strip (a control radius, not the gradient one). */
     soft?: boolean;
     onActivate: (index: number) => void;
     /** The active handle was dragged to this hue / saturation. */
@@ -223,7 +223,8 @@ export const ColorWheel: React.FC<Props> = ({
         return `linear-gradient(to bottom, rgb(${top.r},${top.g},${top.b}), #000)`;
     }, [active?.h, active?.s]);
 
-    const radius = soft ? 'rounded-[10px]' : 'rounded';
+    // a control, not a gradient bar: 6 px, never a pill (owner, 2026-09-08)
+    const radius = soft ? 'rounded-md' : 'rounded';
 
     return (
         <div className="flex gap-1.5 items-start">
