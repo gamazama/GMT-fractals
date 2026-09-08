@@ -27,8 +27,38 @@ cluster right-aligned; C.16 the fit ghost as an auto-shown layer; D.1 dated bins
 took the previous band's colour, so every first Mix toggle on such a gradient grew two stops
 (`test:palette` stopfit [8]). smoke:ge-tray is now ten steps, each falsified. Recorded, not built:
 the owner's Wallpaper ideas (plan, W.1–W.4) and C.15's revisit of blend / output / menu.
-**Next:** C.5 when the Mix design exists; Phase D (the shelf) when the owner is ready for it —
-they said not yet.
+**Late evening, same session.** The owner walked the new surfaces and four real defects came out
+of it, each fixed with a falsified guard. (1) The soft slider's default TICK swallowed a
+pointer-down: thumbless, the fill's edge at a default value sits exactly on the tick, so Hue
+rotate at 0 could not be grabbed — and after a bake every Adjust dial is at its default, which
+read as "Adjust does nothing". The tick now passes the drag through and resets only on a click
+that did not move (`usePrecisionTrackDrag.dragged`). (2) The hero BAR and the palette row were
+fed from different places — the bar is the stops editor (the document) and the row is the
+pipeline's output. Fine while those agree; once leaving Curves bakes into a stops document,
+Adjust moved the swatches and not the ramp. One rule now: the bar always paints the output
+(`AdvancedGradientEditor previewConfig`), the knots stay the document's. (3) The elastic Smooth
+tool bakes before it smooths — the selection grows by one key either side and that span becomes
+a key per frame (`useGraphTools smoothBakes`); the brush was already right and is untouched.
+(4) "More like this" was ranking against the anchor rendered through the document's OUTPUT
+profile: on Linear that is a near-black ramp, so the wall came back with the library's darkest
+gradients on some anchors and looked correct on others. The anchor now renders sRGB, named as
+`similarityAnchorRamp` in core with an @invariant and a falsified unit guard.
+**"More like this" itself was rebuilt** (owner: "actually show you gradients that are similar"):
+`similarityProbe` in paletteSample scores shape by banded DTW over 32 OKLab samples against the
+anchor AND its reverse (a reversed twin scores 0, a shifted copy a tenth of a stranger), colour
+content by lightness-rank matching, and bandedness as a small term — weights 0.5 / 0.4 / 0.1, one
+probe per anchor, 11k entries in ms. The wall also filled a ranked band COLUMN-major, so
+nearest-first ran down the first column only; `PickerRow.rowMajor` switches the fill and
+PickerWall routes draw / hit-test / selection through one `cellOf` / `indexAt` pair.
+Also: Curves is normalised by each channel's RELEVANT range (L 0–1, C 0–0.4 = sRGB's 0.32 peak
+with headroom, hue one TURN in radians — it was flat because 360 squashed a 2π turn), the
+normalize toggle is gone from v2 (that view was where Fit all / Fit selection broke), the fit
+ghost is a non-selectable sidebar LAYER rather than a toolbar icon, and the strip's stops menu
+keeps only its Actions and View sections with the output profile moved into the Export window.
+**Next:** C.5 when the Mix design exists; Phase W (wallpaper, W.1–W.4) is scheduled and
+unblocked; Phase D (the shelf) when the owner is ready — they said not yet. **Idea parked:**
+arranging the whole wall by similarity (a descriptor per gradient → UMAP → snapped to the grid)
+as a third Arrange option beside Group by / Rows by.
 
 **📋 2026-09-07 — Gradient Explorer v2: Phase B (the hero) built, redesigned in Figma with the owner, COMMITTED on `ge-v2`:**
 

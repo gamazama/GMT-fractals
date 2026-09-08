@@ -37,11 +37,13 @@ import {
   FACET_OF,
   ROW_BUCKETS,
   EMPTY_CRITERIA,
+  similarityAnchorRamp,
   type FilterCriteria,
   type ArrangeAxes,
 } from '../palette/core/pickerModel';
 import { bufferToRamp } from '../palette/core/stopFit';
 import { rampDistance } from '../palette/core/paletteSample';
+import type { GradientConfig } from '../types';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import type { Facets } from '../palette/core/facets';
 
@@ -359,6 +361,25 @@ console.log('[8] badge, narrowers, sentence');
     'sentence: rows-by is omitted when off; reverse is spelled out',
   );
   ok(arrangeSentence({ groupAxis: 'none', rowsAxis: 'none', sortAxis: 'hue', reverse: false }).startsWith('ungrouped'), 'sentence: no grouping reads "ungrouped"');
+}
+
+{
+  // "More like this" ranks against DISPLAY colours: the anchor's output profile (an export
+  // concern — sRGB / Linear / ACES) must not move the wall at all. Falsified by rendering
+  // the anchor with `config.colorSpace` instead of 'srgb' in similarityAnchorRamp: the two
+  // rankings diverge and the first check goes red.
+  const stops = [
+    { id: 'a', position: 0, color: '#B2A599', interpolation: 'linear' as const },
+    { id: 'b', position: 0.5, color: '#24404A', interpolation: 'linear' as const },
+    { id: 'c', position: 1, color: '#083344', interpolation: 'linear' as const },
+  ];
+  const srgbRamp = similarityAnchorRamp({ stops, blendSpace: 'oklab', colorSpace: 'srgb' } as GradientConfig);
+  const linearRamp = similarityAnchorRamp({ stops, blendSpace: 'oklab', colorSpace: 'linear' } as GradientConfig);
+  const acesRamp = similarityAnchorRamp({ stops, blendSpace: 'oklab', colorSpace: 'aces_inverse' } as GradientConfig);
+  ok(rampDistance(srgbRamp, linearRamp, 32) === 0 && rampDistance(srgbRamp, acesRamp, 32) === 0,
+    'the output profile does not move the ranking (sRGB · Linear · ACES render one anchor ramp)');
+  ok(srgbRamp.some((c) => c.r > 40 || c.g > 40 || c.b > 40),
+    'the anchor keeps its display colours (a Linear render would be near-black)');
 }
 
 console.log(failures === 0 ? '\nOK — pickerModel' : `\n${failures} FAILURE(S)`);

@@ -36,7 +36,9 @@
 import type { CatalogEntry } from './presetCatalog';
 import { passesFilters, type FilterWindows } from './facets';
 import { similarityProbe, SIM_SAMPLES } from './paletteSample';
+import { renderStopsToRamp } from './gmtGradient';
 import type { RGB } from './oklab';
+import type { GradientConfig } from '../../types';
 
 // --- row shape -------------------------------------------------------------------
 
@@ -297,6 +299,18 @@ export const sampleRampBuffer = (buf: Uint8Array, samples = 16, stride = 4): RGB
   }
   return out;
 };
+
+/**
+ * The ramp "More like this" compares AGAINST, from the anchor's own config: always rendered
+ * in sRGB, whatever output profile the document carries. The catalog's texels are sRGB
+ * thumbnails and "similar" is what the eye sees — measured 2026-09-07: a document on the
+ * Linear profile rendered a near-black anchor, so the wall came back with the library's
+ * darkest gradients while the metric itself ranked correctly.
+ * @invariant the output profile never changes the ranking — proven by: npx tsx
+ *   debug/test-palette-pickermodel.mts ("the output profile does not move the ranking")
+ */
+export const similarityAnchorRamp = (config: GradientConfig): RGB[] =>
+  renderStopsToRamp(config.stops, config.blendSpace, 'srgb');
 
 /**
  * Similarity of every catalog entry to one anchor ramp, keyed by entry id (paletteSample's

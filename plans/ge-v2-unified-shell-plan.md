@@ -626,3 +626,14 @@ phase now carries**. Items move out of this list only when a later phase's entry
   is a fixed 560 px; the Image face never opens without an image now, so L8's empty-source band
   is only reachable by a drop that fails to decode (keep the code, it is the L8 guarantee).
   **Phase D now carries:** D.1 dated bins on top of its own list.
+- 2026-09-07 · late evening, the owner's walk of the new surfaces. **Fixed with guards:** the soft
+  slider's default tick swallowing a drag; the hero bar showing the document while the palette
+  showed the output (one rule now — the bar is the output); the elastic Smooth tool not baking
+  first; "More like this" ranking against the anchor's output profile. **Rebuilt:** the
+  similarity metric itself (`similarityProbe`) and the ranked band's fill order (`rowMajor`).
+  **In scope, left undone:** C.5 (Mix UI, parked on the owner's design). **Noticed, not built:**
+  arranging the WHOLE wall by similarity (descriptors → UMAP → snapped to the grid) as a third
+  Arrange option — the pieces exist, it is a half-day spike; the similarity weights (0.5 shape /
+  0.4 palette / 0.1 structure) are three constants at the top of the probe if a walk wants them
+  tuned; `rampDistance` is now a texel-identity check only, not a ranking metric.
+  **Phase W is unblocked** and is the next buildable block if the owner wants one.

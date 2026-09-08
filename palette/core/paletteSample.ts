@@ -107,8 +107,13 @@ export const samplePalette = (
 };
 
 /**
- * Similarity of two ramps: the sum of OKLab ΔE at `samples` evenly spaced texels.
- * 0 for identical ramps; symmetric. Ramps of unequal length are compared by t.
+ * POINTWISE distance between two ramps: the sum of OKLab ΔE at `samples` evenly spaced
+ * texels. 0 for identical ramps; symmetric; unequal lengths compared by t.
+ *
+ * Not the "More like this" metric — `similarityProbe` below is, since this one calls a
+ * reversed or shifted twin a stranger. What this is still good for is TEXEL IDENTITY: two
+ * ramps that should be byte-for-byte the same score exactly 0 (the picker harness checks
+ * `sampleRampBuffer` that way).
  */
 export const rampDistance = (a: RGB[], b: RGB[], samples = 16): number => {
   if (!a.length || !b.length) return Infinity;
