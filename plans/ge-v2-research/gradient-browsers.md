@@ -1,29 +1,23 @@
 # How other people build a wall of 11,000 things — research for GE v2 Phase D
 
 Written 2026-09-08, for the owner's open question at the head of
-`plans/ge-v2-unified-shell-plan.md` §4 Phase D: *"still not happy with the browser canvas"*,
-and *"should the shelf and the browser be one surface?"*
-
-Read-only research. No code was changed. Sources are linked inline; where a site refused a
-server-side fetch the claim is marked **(second-hand)**.
-
----
+`plans/ge-v2-unified-shell-plan.md` §4 Phase D: *"still not happy with the browser canvas"* and
+*"should the shelf and the browser be one surface?"* Read-only research; no code changed. Sources
+linked inline; where a site refused a server-side fetch the claim is marked **(second-hand)**.
 
 ## 1. What we have, honestly
 
-The wall is a canvas of **11,131 gradients** (`plans/ge-v2-unified-shell-plan.md` §10, Phase A
-iteration 2) blitted from one shared 256×11131 sprite, drawn by `palette/components/PickerWall.tsx`
-into chunked, IntersectionObserver-virtualised canvases capped at 2200 CSS px each. It opens
-**Group by: None · Rows by: Lightness (10 buckets) · Sort within: Hue**, each band filled
-**column-major**, tiles 32×18 px with a 1 px gap and an 8 px corner. The header
-(`gradient-explorer/v2/BrowseStage.tsx`) is a 1fr·auto·1fr grid: a 360×56 hue×lightness pad centred,
-a saturation strip under it, and search · Filters · clear-all right-aligned; Filters opens three
-inline rows (LOOK · ARRANGE · SOURCES). Four floating tools sit top-right (zoom, box, lasso, paint),
-a zoom readout with Fit bottom-right, and "More like this" re-ranks the whole wall into one
-row-major band against an anchor. Below it, the shelf is a **separate 88 px footer** — `FavientsPanel
-layout="strip"`, 56×30 items, dated bins (Today / Yesterday / date) plus Starred and named groups —
-which pulls up to 340 px for the full panel, and which **does not exist at all until Recent has one
-item**.
+The wall is a canvas of **11,131 gradients** (§10, Phase A iteration 2) blitted from one shared
+256×11131 sprite by `palette/components/PickerWall.tsx` into chunked,
+IntersectionObserver-virtualised canvases capped at 2200 CSS px each. It opens **Group by: None ·
+Rows by: Lightness (10 buckets) · Sort within: Hue**, each band filled **column-major**, tiles 32×18
+with a 1 px gap and an 8 px corner. The header (`gradient-explorer/v2/BrowseStage.tsx`) is a
+1fr·auto·1fr grid: a 360×56 hue×lightness pad centred, a saturation strip beneath, search · Filters ·
+clear-all right-aligned; Filters opens three inline rows (LOOK · ARRANGE · SOURCES). Four floating
+tools top-right, a zoom readout with Fit bottom-right, and "More like this" re-ranks the wall into
+one row-major band against an anchor. Below it the shelf is a **separate 88 px footer** —
+`FavientsPanel layout="strip"`, 56×30 items, dated bins plus Starred and named groups — pulling up to
+340 px for the full panel, and **absent entirely until Recent has one item**.
 
 **My guess at what "not happy with the browser canvas" is pointing at.** Not density and not
 performance — those are fine. Three things, in order of likelihood:
@@ -111,47 +105,47 @@ solutions to the same problem:
 ### 2c. Facets, search, and not reaching zero
 
 - Hearst's recommendations for hierarchical faceted search
-  ([SIGIR'06 PDF](http://flamenco.berkeley.edu/papers/faceted-workshop06.pdf); the Flamenco study,
+  ([SIGIR'06](http://flamenco.berkeley.edu/papers/faceted-workshop06.pdf); the Flamenco study,
   [CHI'03](https://bailando.berkeley.edu/papers/flamenco-chi03.pdf), found 90% of participants
-  preferred faceted metadata over standard search on 35,000 fine-arts images): flexible navigation,
-  **seamless integration with keyword search**, fluid alternation between refining and expanding,
-  **avoidance of empty result sets**, a constant feeling of control. Facets along the top suit image
-  collections ([A List Apart](https://alistapart.com/article/design-patterns-faceted-navigation/)).
-  **We do this well already** — pad + Filters + live count is a good faceted header, and our empty
-  states offer the escape. The gap: facet state is *invisible when Filters is closed* (a count badge
+  preferred faceted metadata to standard search on 35,000 fine-arts images): flexible navigation,
+  **seamless integration with keyword search**, fluid refine/expand, **avoidance of empty result
+  sets**, constant feeling of control; facets along the top suit image collections
+  ([A List Apart](https://alistapart.com/article/design-patterns-faceted-navigation/)). **We do this
+  well already**; the gap is that facet state is *invisible when Filters is closed* (a count badge
   only).
 - **[Substance 3D Painter](https://helpx.adobe.com/substance-3d-painter/interface/assets/navigation.html)**
   hides non-applicable folders by default (structural avoidance of empty sets) and ships
   **[saved searches](https://helpx.adobe.com/substance-3d-painter/interface/assets/saved-searches.html)**
-  — a facet state turned into a named, re-openable view. **Transfers directly**: our carve + filter
-  state is exactly a saved search, and today it evaporates.
+  — a facet state as a named, re-openable view. Our carve + filter state is exactly that, and today
+  it evaporates.
 - **[UE5 Collections](https://dev.epicgames.com/documentation/en-us/unreal-engine/filters-and-collections-in-unreal-engine)**
   hold *references*, not assets: one canonical order for storage, unlimited overlapping sets for use.
-  **Transfers**: our named groups should be reference sets over the catalogue *and* over My
-  Gradients, not a separate container.
+  Our named groups should be reference sets over the catalogue *and* over My Gradients.
 - **Curation on top of the archive** is everywhere: cpt-city's hand-made "selection" over its author
   tree **(recollection — host down; ~7,140 gradients per
   [CRAN cptcity](https://cran.r-project.org/package=cptcity))**, [Quixel](https://quixel.com/en-US)'s
-  Collections, [Adobe Color Trends](https://color.adobe.com/trends/Ui/ux) bucketed **by industry**,
-  Apple Photos' Days view. **We have nothing curated** — 11,131 open as an undifferentiated dump, and
-  the theme vocabulary (rainbow, fire, ocean, kaleidoscope, meadow) is reachable only through Filters
-  or search (§10, Phase A iteration 1). A wasted asset.
+  Collections, [Adobe Color Trends](https://color.adobe.com/trends/Ui/ux) bucketed **by industry**.
+  **We have nothing curated** — 11,131 open as an undifferentiated dump, and the theme vocabulary
+  (rainbow, fire, ocean, kaleidoscope, meadow) is reachable only through Filters or search (§10,
+  Phase A iteration 1). A wasted asset.
 - **[Are.na](https://help.are.na/docs/getting-started/blocks)** offers two orderings on Explore:
   chronological or **random** — the honest answer to "too many, no criteria yet". Cheap; transfers.
+  Its only verb is **Connect** (put this in a channel of mine): collecting and organising are one
+  gesture, but with no facets retrieval depends entirely on your own structure.
 
 ### 2d. Zoom as navigation
 
 - **Apple Photos** is the mainstream survivor of semantic zoom: Years / Months / Days / All Photos are
-  not the same grid at different sizes — the upper levels are an **editorially reduced set**, with
-  near-duplicates, screenshots and receipts suppressed
+  not one grid at four sizes — the upper levels are an **editorially reduced set**, near-duplicates
+  and screenshots suppressed
   ([Apple](https://support.apple.com/en-us/guide/photos/pht56eafa987/6.0/mac/11.0)).
 - Cockburn, Karlson & Bederson
   ([ACM CSUR 41(1), 2009](https://faculty.cc.gatech.edu/~stasko/7450/Papers/cockburn-surveys08.pdf))
-  separate **overview+detail**, **zooming** (temporally separated — you lose context in the
-  transition), **focus+context**, and **cue-based** (highlight/suppress in place). Our zoom tool is
-  pure zooming: it costs context and gives nothing semantic back. The **cue-based** family — Furnas'
-  `DOI(x) = importance(x) − distance(x, focus)` ([CHI'86](https://dl.acm.org/doi/10.1145/22627.22342))
-  — is what "More like this" already is, and the better lever for us.
+  separate **overview+detail**, **zooming** (you lose context in the transition), **focus+context**,
+  and **cue-based** (highlight/suppress in place). Our zoom tool is pure zooming: it costs context and
+  returns nothing semantic. The **cue-based** family — Furnas' `DOI(x) = importance − distance(x,
+  focus)` ([CHI'86](https://dl.acm.org/doi/10.1145/22627.22342)) — is what "More like this" already
+  is, and the better lever.
 - **The dedup point is worth stealing.** 11,131 where several hundred are near-identical *is* noise,
   and no arrangement fixes it. We have `similarityProbe`; the same metric can fold near-duplicates
   into one tile that expands on zoom. This is **not** the cancelled idea — the owner cancelled
@@ -202,97 +196,84 @@ solutions to the same problem:
 *The owner said the canvas is wrong. Nothing below fixes that if the arrangement stays unreadable.*
 
 ```
-┌ [Recent ▸ 6 of yours]  ← optional 1-row pinned band, top of the wall
-├ DARK · single-hue → rainbow ────────────────────────── sticky band label
+├ DARK · single-hue → rainbow ──────────────────── sticky band label
 │ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
-│ ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
-├ MID ────────────────────────────────────────────────
-   ...                            [◧ size ▭▭▭●▭▭ ]  ← replaces Padding
-   "10 lightness bands, hue across ·  1,240 of 11,131"  ← the sentence, always on
+├ MID ───────────────────────────────────────────
+   ...                        [◧ size ▭▭▭●▭▭ ]   ← replaces Padding
+   "10 lightness bands, hue across · 1,240 of 11,131"  ← the sentence, always on
 ```
 
-Five changes, all inside `BrowseStage` + `PickerWall`:
-(a) **sticky band labels** — the gutter label pins to the top of the scroll box while its band is on
-screen (`position: sticky` on the label column, or a floating label driven by the chunk
-IntersectionObserver we already run); (b) **bring back `arrangeText`** as one quiet line beside the
-count — the wall must be describable in a sentence (Phase A iteration 3 noted it went missing);
-(c) **flip the default fill to row-major**, or say "down each column" in that sentence — the
-"More like this" fix (C.9 era) proved column-major reads wrong; (d) **swap the Padding slider for a
-tile-size slider** (`swatchSize` already exists in `paletteFilters`, it is simply not exposed) and
-show it always, not only under the zoom tool; (e) **arrow-key navigation + Home/End** on the wall —
-today the only key handler in `PickerWall` is `[`/`]`.
-**Cost:** low, ~1 day. All additive; `usePickerModel` untouched. **Breaks:** sticky labels need the
-label column to become a sibling of the canvas stack rather than a flex child of each `GroupRow`, a
-real but contained change to `GroupRow`. app-gmt's overlay mounts the same wall — gate (d) behind a
-prop like `tileRadius` was.
+Five changes, all inside `BrowseStage` + `PickerWall`: (a) **sticky band labels** — the gutter label
+pins to the top of the scroll box while its band is on screen (`position: sticky`, or a floating
+label driven by the chunk IntersectionObserver we already run); (b) **bring back `arrangeText`** as
+one quiet line beside the count — the wall must be describable in a sentence; (c) **flip the default
+fill to row-major**, or say "down each column" in that sentence — the "More like this" fix proved
+column-major reads wrong; (d) **swap the Padding slider for a tile-size slider** (`swatchSize`
+already exists in `paletteFilters`, simply unexposed), always visible, not only under the zoom tool;
+(e) **arrow keys + Home/End** on the wall.
+**Cost:** low, ~1 day; `usePickerModel` untouched. **Breaks:** sticky labels need the label column to
+become a sibling of the canvas stack rather than a flex child of each `GroupRow` — contained, but
+real. app-gmt's overlay mounts the same wall, so gate (d) behind a prop as `tileRadius` was.
 
 ### P2 — **The fractal thumbnail** (the highest-leverage single change on this page)
 Every strong library previews the preset *doing its job*. A 32×18 colour strip does not tell you what
-that gradient does to a Mandelbulb. Render one small fractal orbit-trap image per catalogue entry —
-offline, baked into the bundle as a second sprite sheet, so nothing renders at browse time — and let
-the wall toggle **strip ⇄ render** (one button by the size slider), or show the render only on hover
-and on the enlarged pick. This is ColorBrewer's map, Lospec's example artwork, and Google Fonts'
-preview string, in our vocabulary.
-**Cost:** medium-high. A baking script (we already have the headless formula→PNG loop —
-`project_opus_render_look_loop`), ~11k × (say) 48×32 RGB ≈ 17 MB raw, well under that as WebP; a
-second sprite in `usePickerModel`; a `previewMode` on `PickerWall`. **Breaks:** bundle size and the
-boot path (the catalogue already costs ~8,000 extra entries before first paint, §10). Mitigate by
-loading the render sheet lazily, after the strip wall is up. **Do not** live-preview on the user's
-fractal — that is the Lightroom performance trap.
+a gradient does to a Mandelbulb. Bake one small orbit-trap render per catalogue entry **offline**,
+ship it as a second sprite sheet, and let the wall toggle **strip ⇄ render** (a button by the size
+slider) — or show the render only on hover and on the enlarged pick. ColorBrewer's map, Lospec's
+example artwork and Google Fonts' preview string, in our vocabulary.
+**Cost:** medium-high — a baking script (we have the headless formula→PNG loop), ~11k × 48×32 as
+WebP, a second sprite in `usePickerModel`, a `previewMode` on `PickerWall`. **Breaks:** bundle size
+and the boot path (the catalogue already costs ~8,000 extra entries before first paint, §10) —
+mitigate by loading the render sheet lazily, after the strip wall is up. **Do not** live-preview on
+the user's fractal: that is the Lightroom performance trap.
 
 ### P3 — **Unify: My Gradients becomes a pinned zone of the wall** (the owner's hypothesis)
 ```
-┌ header: [hue×lightness pad]           [MINE ●] [Filters 2] [Search…]
-├─────────────────────────────────────────────────────────────────────
-│ MY GRADIENTS · today          ▓▓▓▓▓ ▓▓▓▓▓ ▓▓▓▓▓         ← pinned band,
-│ MY GRADIENTS · starred        ▓▓▓▓▓ ▓▓▓▓▓                 never scrolls away
-├─────────────────────────────────────────────────────────────────────
-│ DARK   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
-│ MID    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                ← the catalogue
+┌ header: [hue×lightness pad]        [MINE ●] [Filters 2] [Search…]
+│ MY GRADIENTS · today     ▓▓▓▓▓ ▓▓▓▓▓ ▓▓▓▓▓   ← pinned bands,
+│ MY GRADIENTS · starred   ▓▓▓▓▓ ▓▓▓▓▓            never scroll away
+├──────────────────────────────────────────────
+│ DARK   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     ← the catalogue
 ```
-Mine becomes `PickerRow`s at the head of `m.rows` — so search, the hue pad, Filters, zoom, carve and
-"More like this" all apply to your own gradients for free, and L7 stops being a convention and starts
-being structural. The footer goes; `mineOpen`'s 340 px full panel becomes a dialog reached from a
-"manage" affordance (import/export/rename still need `FavientsPanel`).
+Mine becomes `PickerRow`s at the head of `m.rows` — so search, the pad, Filters, zoom, carve and
+"More like this" all apply to your own gradients for free, and L7 stops being a convention and
+becomes structural. The footer goes; `mineOpen`'s 340 px panel becomes a dialog behind a "manage"
+affordance (import/export/rename still need `FavientsPanel`).
 **Concretely:** a favient → `CatalogEntry` adapter (`renderStopsToRamp` + `computeFacets(ramp)`, both
-already exist), rows reserved at the **head** of the sprite so a save repaints 256×N of an
-over-allocated canvas instead of rebuilding all 11 MB; a `pinned` flag on `PickerRow` so `PickerWall`
-renders those bands in a non-scrolling header stack; and a **MINE** toggle in the header that is
-loud when on (rule 3 above).
-**Cost:** high, 2–3 days. **What it breaks / risks:** (i) the **write target** problem — with one
-list, "what does ★ mean here, and what does drag-to-a-group mean" needs an answer (VS Code #68527 is
-the warning); (ii) **your things must never be outranked** by the catalogue (rule 2) — hence *pinned*,
-not "first band, then scrolls away"; (iii) the **Apple Photos revert** is the direct
-counter-evidence: dissolving a place into a canvas cost addressability, and Apple undid it in iOS 26.
-The pinned-band form is specifically designed to keep the place while gaining the powers. (iv) The
-strip's 56×30 items become wall tiles at the wall's size — the shelf loses its own scale, which the
-owner may or may not want.
+already exist); rows reserved at the **head** of an over-allocated sprite so a save repaints a small
+`putImageData` instead of rebuilding all ~11 MB; a `pinned` flag on `PickerRow` so `PickerWall`
+renders those bands in a non-scrolling header stack; a **MINE** toggle in the header, loud when on.
+**Cost:** high, 2–3 days. **Risks:** (i) the **write-target** problem — in one list, what ★ and
+drag-to-a-group mean needs an answer (VS Code #68527 is the warning); (ii) your things must never be
+outranked by the catalogue (rule 2) — hence *pinned*, not "first band, then scrolls away"; (iii) the
+**Apple Photos revert** is the direct counter-evidence, and the pinned-band form exists precisely to
+keep the place while gaining the powers; (iv) the shelf's 56×30 items become wall tiles at the wall's
+size, so it loses its own scale.
 
 ### P4 — **Keep them separate; make the shelf a real zone with the wall's powers**
-The conservative version of P3, and the one I would ship if P3 feels like a rewrite. The footer stays
-where it is (a place, addressable, at a known edge — rule 1), but gains: the header's **search filters
-the shelf too** when the shelf has focus, or a small search of its own; a **★-only / all** toggle;
-**"more like this" from a shelf item ranks the catalogue** (the anchor already accepts any gradient —
-`similarityAnchorRamp` takes a `GradientConfig`, so this is nearly free); and the wall **marks tiles
-you already have** with the ★ glyph (rule 5 — Steam's most-requested missing feature). Also fix the
-two smaller wrongs: the shelf should occupy its space even when empty (an outline saying what lands
-here), because appearing-from-nowhere furniture is worse than an empty shelf, and its dated bins want
-the same `ZoneLabel` treatment the wall's bands get.
+The conservative version of P3, and what I would ship if P3 feels like a rewrite. The footer stays
+where it is — a place, addressable, at a known edge (rule 1) — but gains: **search reaches it** (its
+own small field, or the header's when the shelf has focus); a **★-only / all** toggle; **"more like
+this" from a shelf item ranks the catalogue** (`similarityAnchorRamp` already takes a
+`GradientConfig`, so this is nearly free); and the wall **marks tiles you already starred** (rule 5 —
+Steam's most-requested missing feature). Plus two small wrongs: the shelf should hold its space when
+empty (an outline saying what lands here — furniture that appears from nowhere is worse than an empty
+shelf), and its dated bins want the same `ZoneLabel` treatment the wall's bands get.
 **Cost:** low-medium, ~1 day. **Breaks:** nothing structural. `FavientsPanel` is shared with GMT main
-— every addition must be a prop, per the C.8/`tileRadius` precedent.
+— every addition must be a prop, per the C.8 / `tileRadius` precedent.
 
 ### P5 — **A curated front door + saved views**
-Two things every large library has and we do not. (a) **The wall does not open on 11,131.** It opens
-on a curated shortlist — the theme vocabulary we already have (rainbow, fire, ocean, kaleidoscope,
-meadow) as a row of chips under the pad, each a band of ~40 hand-or-metric-picked exemplars, with
-"show all 11,131" one click away. This is cpt-city's *selection*, Quixel's *Collections*, Adobe's
-*Trends by industry*. It also rescues the theme vocabulary, which §10 records as currently reachable
-only through search. (b) **Saved views** — a filter+carve state you can name and reopen, which is
-Substance's saved searches and which also gives Shneiderman's missing *history* and *extract* tasks a
-home. Bonus: **Random** as an arrange option (Are.na), the honest answer to "too many, no criteria".
-**Cost:** (a) low if the exemplar picking is metric-based, medium if hand-curated (an editorial job,
-not a coding one). (b) medium — needs a new persisted store. **Breaks:** nothing; both are additive.
-Risk: a curated front door hides the tail, the documented cost of every popularity-sorted library.
+Two things every large library has and we do not. (a) **The wall does not open on 11,131** — it opens
+on a curated shortlist: the theme vocabulary we already have (rainbow, fire, ocean, kaleidoscope,
+meadow) as chips under the pad, each a band of ~40 metric- or hand-picked exemplars, "show all
+11,131" one click away. This is cpt-city's *selection*, Quixel's *Collections*, Adobe's *Trends by
+industry*, and it rescues the theme vocabulary that §10 records as reachable only through search.
+(b) **Saved views** — a named, reopenable filter+carve state (Substance's saved searches), which also
+gives Shneiderman's missing *history* and *extract* tasks a home. Bonus: **Random** as an arrange
+option (Are.na).
+**Cost:** (a) low if metric-picked, medium if hand-curated (an editorial job, not a coding one);
+(b) medium, needs a persisted store. **Breaks:** nothing, both additive. Risk: a curated front door
+hides the tail — the documented cost of every popularity-sorted library.
 
 ---
 
@@ -300,23 +281,20 @@ Risk: a curated front door hides the tail, the documented cost of every populari
 
 **P1, entirely, plus the free half of P4.** In order:
 
-1. **Sticky band labels** and **the arrange sentence back on screen**, always visible next to the
-   count. Two hours. This is the largest legibility win per line changed, and it directly answers "no
-   sense of place" and "the arrangement is not legible".
-2. **Expose `swatchSize` as a tile-size slider** in the wall's bottom-right chrome (moving the
-   Padding slider behind it or out), always available rather than only under the zoom tool. Every
-   professional browser has this knob and ours is hidden. One hour.
-3. **Arrow keys + Home/End** on the wall, and the selected tile scrolling itself into view. One hour.
-4. **Mark catalogue tiles you have already starred** with the same ★ glyph the shelf uses, and
-   **allow a shelf item to become the "More like this" anchor**. Two hours, mostly wiring — and it is
-   the cheapest possible demonstration of what unification would feel like, which is exactly the
-   evidence the owner needs before committing to P3.
+1. **Sticky band labels** + **the arrange sentence back on screen** beside the count. Two hours; the
+   largest legibility win per line changed, and it answers points 1 and 2 of §1 directly.
+2. **Expose `swatchSize` as a tile-size slider** in the wall's bottom-right chrome (Padding moves
+   behind it or out), always available. One hour. Every professional browser has this knob.
+3. **Arrow keys + Home/End**, with the selected tile scrolling itself into view. One hour.
+4. **Mark catalogue tiles you have already starred**, and **let a shelf item be the "More like this"
+   anchor**. Two hours of wiring — and the cheapest possible demonstration of what unification would
+   feel like, which is exactly the evidence needed before committing to P3.
 
-Then walk it. If, after those four, the wall still feels wrong, the problem is the **tile** and not
-the layout — and the answer is P2, the fractal thumbnail, which is a bake job rather than a shell
-job. I would not start P3 until P1 has been walked: P3 is a 2–3 day structural change premised on the
-wall being good enough to host the shelf, and today it is not.
+Then walk it. If the wall still feels wrong after those four, the problem is the **tile**, not the
+layout, and the answer is P2 — a bake job, not a shell job. I would not start P3 until P1 has been
+walked: it is a 2–3 day structural change premised on the wall being good enough to host the shelf,
+and today it is not.
 
-**What I would not do:** re-propose a similarity-embedded 2-D wall (cancelled by the owner,
-2026-09-07), or a single canvas that dissolves My Gradients into a scrolling zone with no fixed
-address — that is precisely the design Apple and Google both shipped in 2024 and Apple reverted.
+**What I would not do:** re-propose a similarity-embedded 2-D wall (cancelled 2026-09-07), or a
+single canvas that dissolves My Gradients into a scrolling zone with no fixed address — precisely the
+design Apple and Google both shipped in 2024 and Apple reverted.

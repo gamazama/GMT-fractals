@@ -239,7 +239,10 @@ const GradientSlider: React.FC<{
     const pct = ((value - min) / (max - min)) * 100;
     const soft = useInputSkin() === 'soft';
     return (
-        <div className={`flex items-center ${soft ? 'gap-2 h-6' : 'gap-1.5'}`}>
+        // one rhythm for the whole picker: a 20 px row on an 8 px gap, the same pitch the
+        // swatch rows keep, so the sliders do not read as more widely spaced than everything
+        // around them (owner, 2026-09-08)
+        <div className={`flex items-center ${soft ? 'gap-2 h-5' : 'gap-1.5'}`}>
             <div className={soft
                 ? 'w-3 shrink-0 text-[12px] text-fg-muted text-center select-none'
                 : 'w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none'}>{label}</div>
@@ -855,7 +858,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
                 onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <div className="h-px bg-line/5 my-0.5" />
+            {!soft && <div className="h-px bg-line/5 my-0.5" />}
             <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
                 onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
@@ -1022,12 +1025,12 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // the chosen controls, in a fixed reading order; the hex line carries the
                 // toolbar so turning one on or off is one click from the colour itself
                 <>
-                    <div className="flex items-center gap-1.5">{hexRow}{modeBar}</div>
+                    <div className="flex items-center gap-2">{hexRow}{modeBar}</div>
                     <div className="flex flex-wrap gap-4 items-start">
-                        {on('field') && <div className="flex flex-col gap-1.5 shrink-0 w-[180px]">{fieldBlock}</div>}
+                        {on('field') && <div className="flex flex-col gap-2 shrink-0 w-[180px]">{fieldBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 w-[230px] shrink-0">{harmonyBlock}</div>}
-                        {on('channels') && <div className="flex flex-col gap-1.5 flex-1 min-w-[190px]">{channelsBlock}</div>}
+                        {on('channels') && <div className="flex flex-col gap-2 flex-1 min-w-[190px]">{channelsBlock}</div>}
                         {on('kelvin') && kelvinBlock}
                         {on('swatches') && (
                             <div className="flex flex-col gap-2 flex-1 min-w-[190px]">
