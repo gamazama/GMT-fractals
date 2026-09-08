@@ -8,6 +8,42 @@
 import React from 'react';
 import { ChevronDown } from './Icons';
 
+/**
+ * Shrink the selected option's type until it fits the box, rather than clipping it. A
+ * dropdown in a narrow column ("Split complementary" in a 110 px well) is unreadable
+ * truncated and perfectly fine a point or two smaller (owner, 2026-09-08). Measures the
+ * REAL rendered text, so it holds for any label in any font.
+ */
+const useFitText = (text: string, base: number, min = 9) => {
+    const ref = React.useRef<HTMLSelectElement>(null);
+    const [size, setSize] = React.useState(base);
+    React.useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) return;
+        const fit = () => {
+            // the element's OWN padding, not a guessed gutter: the chevron sits in a 24 px
+            // right pad and a magic number under-reserved it, so text still clipped by a hair
+            const cs = getComputedStyle(el);
+            const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+            if (room <= 0) return;
+            const probe = document.createElement('span');
+            probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:-9999px';
+            probe.style.font = cs.font;
+            probe.style.fontSize = `${base}px`;
+            probe.textContent = text;
+            document.body.appendChild(probe);
+            const w = probe.getBoundingClientRect().width;
+            probe.remove();
+            setSize(w <= room ? base : Math.max(min, Math.floor(base * (room / w))));
+        };
+        fit();
+        const ro = new ResizeObserver(fit);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [text, base, min]);
+    return { ref, size };
+};
+
 export interface GenericDropdownOption<T> {
     label: string;
     value: T;
@@ -51,6 +87,9 @@ export function GenericDropdown<T extends string | number>({
     selectHandlers,
     ...rest
 }: GenericDropdownProps<T>) {
+    const selectedLabel = options.find((o) => String(o.value) === String(value))?.label ?? '';
+    const { ref: selectRef, size: fitSize } = useFitText(selectedLabel, size === 'md' ? 13 : 10);
+
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;
         const isNumber = typeof options[0]?.value === 'number';
@@ -74,11 +113,13 @@ export function GenericDropdown<T extends string | number>({
                 className={`${label ? 'w-1/2' : 'w-full'} relative border-l border-line/10 bg-line/[0.02] border-t border-t-white/5`}
             >
                 <select
+                    ref={selectRef}
                     value={value}
                     onChange={handleChange}
                     disabled={disabled}
                     {...selectHandlers}
-                    className={`w-full h-full bg-transparent [font-family:inherit] ${size === 'md' ? 'text-[13px] font-normal text-fg' : 'text-[10px] font-medium text-fg-secondary'} px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
+                    style={{ fontSize: fitSize }}
+                    className={`w-full h-full bg-transparent [font-family:inherit] ${size === 'md' ? 'font-normal text-fg' : 'font-medium text-fg-secondary'} px-2 pr-6 outline-none cursor-pointer appearance-none text-center ${selectClassName}`}
                 >
                     {options.map((opt) => (
                         <option key={String(opt.value)} value={String(opt.value)} disabled={opt.disabled} className="bg-surface text-fg-tertiary">

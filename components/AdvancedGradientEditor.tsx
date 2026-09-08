@@ -399,16 +399,17 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             const d = Math.abs(k.position - pos);
             if (d <= tolerance && (!best || d < Math.abs(best.position - pos))) best = k;
         }
+        // The SELECTION is not the drop's business: you are colouring a knot, not choosing one,
+        // and stealing it swaps the inspector out from under the colour you just dragged
+        // (owner, 2026-09-08).
         if (best) {
             const target = best;
             editAction(() => emitChange(cur.map((k) => (k.id === target.id ? { ...k, color: hex } : k))));
-            setSelectedIds(new Set([target.id]));
             return;
         }
         const prev = [...cur].sort((a, b) => a.position - b.position).filter((k) => k.position <= pos).pop();
         const added: AdvancedGradientKnot = { id: `${Date.now()}_drop`, position: pos, color: hex, bias: 0.5, interpolation: prev ? prev.interpolation : 'linear' };
         editAction(() => emitChange([...cur, added]));
-        setSelectedIds(new Set([added.id]));
     }, [editAction, emitChange]);
 
     useImperativeHandle(ref, () => ({
@@ -1049,6 +1050,36 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         </button>
                     </div>
                 );
+                // The knot's fields on their own, for the v2 picker's 'stop' mode. Same
+                // controls as the studio's side column below, without its collapsing divider.
+                const stopFields = selectedNodes.length > 0 && (
+                    <div className="flex flex-col gap-1">
+                        <Dropdown
+                            size="md"
+                            fullWidth
+                            label="Interpolation"
+                            value={commonInterpolation}
+                            onChange={(v) => handleMultiPropertyChange('interpolation', v as InterpolationMode)}
+                            options={[
+                                ...(commonInterpolation === 'mixed' ? [{ label: 'Mixed', value: 'mixed' }] : []),
+                                { label: 'Linear', value: 'linear' },
+                                { label: 'Step', value: 'step' },
+                                { label: 'Smooth', value: 'smooth' },
+                            ]}
+                        />
+                        {selectedNodes.length === 1 && (
+                            <Slider dense label="Position" value={selectedNodes[0].position * 100} min={0} max={100} step={0.1} onChange={(val) => handleSliderPropertyChange('position', val / 100)} />
+                        )}
+                        <Slider
+                            dense
+                            label="Bias"
+                            value={commonBias === -1 ? 50 : commonBias * 100}
+                            min={0} max={100} step={1}
+                            onChange={(val) => handleSliderPropertyChange('bias', val / 100)}
+                            overrideInputText={commonBias === -1 ? 'Mixed' : undefined}
+                        />
+                    </div>
+                );
                 const stopColumn = selectedNodes.length > 0 && (
                     <div className="flex items-stretch gap-2 self-stretch">
                         {/* the divider that collapses the stop column */}
@@ -1106,11 +1137,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                 <div className="ml-auto flex items-center">{meta}</div>
                             </div>
                             {selectedNodes.length > 0 && createPortal(
-                                <div className="flex items-stretch gap-3 gradient-interactive-element">
-                                    <div className="flex-1 min-w-0">
-                                        <EmbeddedColorPicker color={commonColor} onColorChange={handleColorChange} palette={pickerPalette} />
-                                    </div>
-                                    {stopColumn}
+                                <div className="gradient-interactive-element">
+                                    {/* The knot's own controls are a picker MODE here, not a column
+                                        of their own: the owner asked for them on the left, on a
+                                        switch like everything else (2026-09-08). */}
+                                    <EmbeddedColorPicker
+                                        color={commonColor}
+                                        onColorChange={handleColorChange}
+                                        palette={pickerPalette}
+                                        stopBlock={stopFields}
+                                    />
                                 </div>,
                                 inspectorHost,
                             )}

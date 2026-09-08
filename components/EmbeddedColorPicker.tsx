@@ -12,6 +12,7 @@ import {
     wrapHue,
     harmonyHandles,
     HARMONY_COUNT,
+    HARMONY_ANGLE,
     kelvinToHex,
     applyTint,
     type ColorHarmony,
@@ -29,6 +30,7 @@ import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisio
 import { ChevronDown } from './Icons';
 import { useInputSkin } from './inputs/skin';
 import { setColorDrag } from './gradient/colorDrag';
+import Slider from './Slider';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rich colour picker (W10): 2D saturation×brightness field + hue strip, RGB+HSB
@@ -68,6 +70,10 @@ interface EmbeddedColorPickerProps {
     onAlphaChange?: (alpha: number) => void;
     /** Optional host override for the fixed Palette row. Defaults to PALETTE_DEFAULT. */
     palette?: string[];
+    /** The controls for the KNOT being edited (position, bias, interpolation), supplied by the
+     *  host. Rendered as the 'stop' mode, first in the row — the owner asked for it on the left
+     *  and on a switch, in place of the old collapsing side column. */
+    stopBlock?: React.ReactNode;
 }
 
 // --- shared, capped, persisted recents (MRU) ---
@@ -153,11 +159,11 @@ const SURFACE_PX = 150;
 // combination is remembered for next time (owner, 2026-09-08 — "the default is the regular
 // square picker … its cleverness is its configurability"). So the field is on by default and
 // the wheel is one option among several, not a replacement for anything.
-export type PickerMode = 'spectrum' | 'wheel' | 'harmony' | 'channels' | 'kelvin' | 'swatches';
+export type PickerMode = 'stop' | 'spectrum' | 'wheel' | 'harmony' | 'channels' | 'kelvin' | 'swatches';
 /** Spectrum and Wheel are two views of the same job, so they TOGGLE rather than stack. */
 const SURFACES: PickerMode[] = ['spectrum', 'wheel'];
 const MODES_KEY = 'gmt.colorpicker.modes';
-const MODE_DEFAULT: PickerMode[] = ['spectrum', 'channels', 'swatches'];
+const MODE_DEFAULT: PickerMode[] = ['stop', 'spectrum', 'channels', 'swatches'];
 /** Stored sets from the first cut named this mode 'field'. */
 const migrateModes = (v: string[]): PickerMode[] => {
     const named = v.map((m) => (m === 'field' ? 'spectrum' : m)) as PickerMode[];
@@ -176,6 +182,8 @@ const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
     switch (mode) {
         case 'spectrum':
             return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 10.5 13.5 4" opacity=".5" /></svg>;
+        case 'stop':
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><path d="M2.5 11.5h11" /><path d="M8 11.5V6" /><path d="M5.4 6h5.2l-2.6-3.4z" fill="currentColor" /></svg>;
         case 'harmony':
             return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" opacity=".45" /><circle cx="8" cy="2.5" r="1.6" /><circle cx="12.8" cy="10.8" r="1.6" /><circle cx="3.2" cy="10.8" r="1.6" /></svg>;
         case 'wheel':
@@ -191,6 +199,7 @@ const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
 };
 
 const MODE_TITLE: Record<PickerMode, string> = {
+    stop: 'Stop — this knot\u2019s position, bias and interpolation',
     spectrum: 'Spectrum — saturation and brightness for one hue',
     wheel: 'Wheel — hue and saturation on a disc',
     harmony: 'Harmony — related colours, and this gradient\u2019s own',
@@ -328,6 +337,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     alpha,
     onAlphaChange,
     palette = PALETTE_DEFAULT,
+    stopBlock,
 }) => {
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
@@ -347,11 +357,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         } catch { return MODE_DEFAULT; }
     });
     const on = useCallback((m: PickerMode) => modes.includes(m), [modes]);
-    const toggleMode = useCallback((m: PickerMode) => {
+    const toggleMode = useCallback((m: PickerMode, keepOthers = false) => {
         setModes((prev) => {
-            // never leave the chooser with nothing to choose WITH: the last mode stays on
-            // a surface REPLACES the other surface; anything else is an independent switch
-            const off = prev.filter((x) => x !== m && !(SURFACES.includes(m) && SURFACES.includes(x)));
+            // a surface REPLACES the other surface, unless shift says keep both
+            const off = prev.filter((x) => x !== m && !(!keepOthers && SURFACES.includes(m) && SURFACES.includes(x)));
             const next = prev.includes(m) ? (prev.length > 1 ? off : prev) : [...off, m];
             safeLocalSet(MODES_KEY, JSON.stringify(next));
             return next;
@@ -362,6 +371,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const [tint, setTint] = useState(0);
     const [harmony, setHarmony] = useState<ColorHarmony>('analogous');
     const [harmonyCount, setHarmonyCount] = useState(5);
+    /** The angle a harmony spreads by, where it has one (see HARMONY_ANGLE). */
+    const [harmonyAngle, setHarmonyAngle] = useState(30);
     // The handles are STATE, not a derivation. Deriving them from the live colour meant that
     // merely ACTIVATING another handle re-derived the whole set around it, so a click walked
     // every other colour (owner, 2026-09-08: "it must not recalculate all the colors to the
@@ -730,16 +741,16 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         const base: HsvHandle = { h: hsb.h, s: hsb.s / 100, v: hsb.v };
         if (skipHandleSync.current) { skipHandleSync.current = false; return; }
         setHandles((prev) => {
-            if (!prev.length) return harmonyHandles(base, harmony, harmonyCount);
+            if (!prev.length) return harmonyHandles(base, harmony, harmonyCount, harmonyAngle);
             const cur = prev[Math.min(activeHandle, prev.length - 1)];
             const same = cur && Math.abs(cur.h - base.h) < 1e-6 && Math.abs(cur.s - base.s) < 1e-6 && Math.abs(cur.v - base.v) < 1e-6;
-            if (same && prev.length === (harmony === 'free' ? prev.length : harmonyHandles(base, harmony, harmonyCount).length)) return prev;
+            if (same && prev.length === (harmony === 'free' ? prev.length : harmonyHandles(base, harmony, harmonyCount, harmonyAngle).length)) return prev;
             if (harmony === 'free') return prev.map((f, i) => (i === activeHandle ? base : f));
-            return harmonyHandles(base, harmony, harmonyCount);
+            return harmonyHandles(base, harmony, harmonyCount, harmonyAngle);
         });
         if (harmony !== 'free') setActiveHandle(0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [hsb.h, hsb.s, hsb.v, harmony, harmonyCount]);
+    }, [hsb.h, hsb.s, hsb.v, harmony, harmonyCount, harmonyAngle]);
 
     const wheelHandles = handles.length ? handles : [{ h: hsb.h, s: hsb.s / 100, v: hsb.v }];
     const wheelActive = Math.min(activeHandle, wheelHandles.length - 1);
@@ -779,6 +790,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     }, [harmony, wheelHandles, wheelActive, setFromHex]);
 
     const countRange = HARMONY_COUNT[harmony];
+    const angleRange = HARMONY_ANGLE[harmony];
 
     const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
@@ -830,8 +842,11 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     onPointerCancel={endField}
                     onLostPointerCapture={endField}
                 />
+                {/* A NEUTRAL marker. `mix-blend-difference` inverts whatever is under it, so on a
+                    warm field it turned cyan and on a cool one it turned red — it read as a
+                    coloured thing rather than a pointer (owner, 2026-09-08). */}
                 <div
-                    className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
+                    className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-white/85 shadow-[0_0_0_1px_rgba(0,0,0,.55)] pointer-events-none"
                     style={{ left: `${hsb.s}%`, top: `${100 - hsb.v}%` }}
                 />
             </div>
@@ -875,7 +890,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 onLostPointerCapture={endHLPad}
             />
             <div
-                className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
+                className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-white/85 shadow-[0_0_0_1px_rgba(0,0,0,.55)] pointer-events-none"
                 style={{ left: `${(hsb.h / 360) * 100}%`, top: `${(1 - padLightness) * 100}%` }}
             />
         </div>
@@ -954,24 +969,40 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
 
     // The mode toolbar — which controls are on. Sits at the end of the always-visible
     // swatch/hex line, so the line reads: what the colour IS, then what you may pick it with.
+    // Spectrum and Wheel are ONE joined control — the shell's segmented-button language, the
+    // same shape as Even / Perceptual / Stops — because they are two answers to one question.
+    // Shift-click adds rather than replaces, for the rare "show me both"; either can still be
+    // turned off entirely (owner, 2026-09-08). The independent switches sit beside it and wear
+    // the same thin-bordered look when they are on.
+    const modeButton = (m: PickerMode, joined?: 'l' | 'r') => (
+        <button
+            key={m}
+            type="button"
+            onClick={(e) => toggleMode(m, e.shiftKey)}
+            title={`${MODE_TITLE[m]}${SURFACES.includes(m) ? ' \u00b7 shift-click to keep both' : ''}`}
+            aria-pressed={on(m)}
+            data-gx-picker-mode={m}
+            data-on={on(m) ? '' : undefined}
+            className={`h-7 grid place-items-center transition-colors ${
+                joined ? 'px-2.5' : 'w-7 rounded-lg border'
+            } ${joined === 'l' ? 'rounded-l-lg' : ''} ${joined === 'r' ? 'rounded-r-lg' : ''} ${
+                on(m)
+                    ? 'bg-accent-400/15 text-accent-300 border-accent-400/40'
+                    : `text-fg-dim hover:text-fg hover:bg-line/10 ${joined ? '' : 'border-transparent'}`
+            }`}
+        >
+            <ModeGlyph mode={m} />
+        </button>
+    );
     const modeBar = (
-        <div className="flex items-center gap-0.5 shrink-0" data-gx-picker-modes>
-            {(['spectrum', 'wheel', 'harmony', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => (
-                <button
-                    key={m}
-                    type="button"
-                    onClick={() => toggleMode(m)}
-                    title={MODE_TITLE[m]}
-                    aria-pressed={on(m)}
-                    data-gx-picker-mode={m}
-                    data-on={on(m) ? '' : undefined}
-                    className={`w-7 h-7 grid place-items-center rounded-lg transition-colors ${
-                        on(m) ? 'bg-accent-400/15 text-accent-300' : 'text-fg-dim hover:text-fg hover:bg-line/10'
-                    }`}
-                >
-                    <ModeGlyph mode={m} />
-                </button>
-            ))}
+        <div className="flex items-center gap-1.5 shrink-0" data-gx-picker-modes>
+            <div className="inline-flex rounded-lg border border-line/20 overflow-hidden" data-gx-picker-surfaces>
+                {modeButton('spectrum', 'l')}
+                {modeButton('wheel', 'r')}
+            </div>
+            <div className="flex items-center gap-0.5">
+                {(['stop', 'harmony', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => modeButton(m))}
+            </div>
         </div>
     );
 
@@ -1031,13 +1062,17 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     );
 
     // The wheel, its handle palette, and the harmony chooser (soft dialect only).
+    // With Harmony switched off the wheel is just a colour wheel: one handle, the colour you
+    // are editing. The set is still there underneath — turning Harmony back on shows it again
+    // unchanged (owner, 2026-09-08).
+    const shownHandles = on('harmony') ? wheelHandles : [wheelHandles[wheelActive] ?? wheelHandles[0]];
     const wheelBlock = (
         <ColorWheel
-            handles={wheelHandles}
-            activeIndex={wheelActive}
+            handles={shownHandles}
+            activeIndex={on('harmony') ? wheelActive : 0}
             size={150}
             soft
-            onActivate={wheelActivate}
+            onActivate={(i) => wheelActivate(on('harmony') ? i : wheelActive)}
             onMove={wheelMove}
             onValue={wheelValue}
             onDragStart={handleSliderStart}
@@ -1060,8 +1095,6 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                             { label: 'Monochromatic', value: 'mono' },
                             { label: 'Complementary', value: 'complementary' },
                             { label: 'Analogous', value: 'analogous' },
-                            { label: 'Split complementary', value: 'split' },
-                            { label: 'Tetrad', value: 'tetrad' },
                             { label: 'Equiangular', value: 'equiangular' },
                         ]}
                         onChange={(v) => {
@@ -1070,6 +1103,12 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                             // that it is the user's own set: re-seeding on every entry threw away
                             // hand-placed handles as soon as you looked at another harmony and
                             // came back (measured 2026-09-08 — four handles became five).
+                            const range = HARMONY_ANGLE[mode];
+                            if (range) setHarmonyAngle(range[2]);
+                            // a count carried over from another rule can sit outside this
+                            // one's range (5 handles under Complementary, which tops out at 4)
+                            const cr = HARMONY_COUNT[mode];
+                            if (cr) setHarmonyCount((n) => Math.max(cr[0], Math.min(cr[1], n)));
                             setHarmony(mode);
                         }}
                     />
@@ -1094,6 +1133,18 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     </div>
                 )}
             </div>
+            {angleRange && (
+                <Slider
+                    dense
+                    label={harmony === 'analogous' ? 'Step' : 'Spread'}
+                    value={harmonyAngle}
+                    min={angleRange[0]}
+                    max={angleRange[1]}
+                    step={1}
+                    defaultValue={angleRange[2]}
+                    onChange={(v) => setHarmonyAngle(Math.round(v))}
+                />
+            )}
             <SwatchRow
                 label={harmony === 'free' ? 'Handles' : 'Harmony'}
                 colors={wheelHandles.map((h) => hsbToHex({ h: h.h, s: h.s * 100, v: h.v }))}
@@ -1138,6 +1189,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 <>
                     <div className="flex items-center gap-2">{hexRow}{modeBar}{on('swatches') && recentStrip}</div>
                     <div className="flex flex-wrap gap-4 items-start">
+                        {on('stop') && stopBlock && <div className="flex flex-col gap-2 w-[210px] shrink-0">{stopBlock}</div>}
                         {on('spectrum') && <div className="flex flex-col gap-2 shrink-0">{fieldBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
                         {on('harmony') && harmonyBlock}

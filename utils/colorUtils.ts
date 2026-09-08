@@ -577,7 +577,7 @@ export const complementary = (base: string): string[] => [base.toUpperCase(), ro
  *   tetrad       two analogous pairs, complementary to each other
  *   equiangular  n spread evenly round the wheel
  */
-export type ColorHarmony = 'free' | 'mono' | 'complementary' | 'analogous' | 'split' | 'tetrad' | 'equiangular';
+export type ColorHarmony = 'free' | 'mono' | 'complementary' | 'analogous' | 'equiangular';
 
 export interface HsvHandle { h: number; s: number; v: number }
 
@@ -585,11 +585,25 @@ export interface HsvHandle { h: number; s: number; v: number }
 export const HARMONY_COUNT: Record<ColorHarmony, [number, number] | null> = {
   free: null,
   mono: [2, 8],
-  complementary: null,
+  complementary: [2, 4],
   analogous: [2, 8],
-  split: null,
-  tetrad: null,
   equiangular: [3, 8],
+};
+
+/**
+ * The ANGLE dial, where a harmony has one, as [min, max, default] in degrees. Split
+ * complementary and tetrad were separate modes until the owner noticed (2026-09-08) that they
+ * are one family: a complementary pair whose ends SPLIT by an amount. So Complementary now
+ * takes both a count and an angle — 2 is the classic pair, 3 splits the far end (the old split
+ * complementary at 30°), 4 splits both ends (the old tetrad at 60°) — and Analogous uses the
+ * same dial for its step, which used to be frozen at 30°.
+ */
+export const HARMONY_ANGLE: Record<ColorHarmony, [number, number, number] | null> = {
+  free: null,
+  mono: null,
+  complementary: [0, 90, 30],
+  analogous: [5, 60, 30],
+  equiangular: null,
 };
 
 /** The handles a harmony puts on the wheel for `base`. `s` is 0..1, `v` 0..100. */
@@ -601,8 +615,13 @@ export const harmonyHandles = (base: HsvHandle, mode: ColorHarmony, count = 5, s
       const n = Math.max(2, count);
       return Array.from({ length: n }, (_, i) => (i === 0 ? at(base.h) : at(base.h, (i / (n - 1)) * 0.9 + 0.08)));
     }
-    case 'complementary':
-      return [at(base.h), at(base.h + 180)];
+    case 'complementary': {
+      // one family: a complementary pair, its ends split by `stepDeg`
+      const n = Math.max(2, Math.min(4, count));
+      if (n === 2) return [at(base.h), at(base.h + 180)];
+      if (n === 3) return [at(base.h), at(base.h + 180 - stepDeg), at(base.h + 180 + stepDeg)];
+      return [at(base.h), at(base.h + stepDeg), at(base.h + 180), at(base.h + 180 + stepDeg)];
+    }
     case 'analogous': {
       const n = Math.max(2, count);
       const half = (n - 1) / 2;
@@ -610,10 +629,6 @@ export const harmonyHandles = (base: HsvHandle, mode: ColorHarmony, count = 5, s
       const rest = Array.from({ length: n }, (_, i) => (i - half) * stepDeg).filter((d) => Math.abs(d) > 1e-9);
       return [at(base.h), ...rest.map((d) => at(base.h + d))];
     }
-    case 'split':
-      return [at(base.h), at(base.h + 150), at(base.h + 210)];
-    case 'tetrad':
-      return [at(base.h), at(base.h + 60), at(base.h + 180), at(base.h + 240)];
     case 'equiangular': {
       const n = Math.max(3, count);
       return Array.from({ length: n }, (_, i) => at(base.h + (i * 360) / n));

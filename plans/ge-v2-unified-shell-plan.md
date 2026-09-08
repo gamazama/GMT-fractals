@@ -349,6 +349,22 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **The owner's third walk of the picker (2026-09-08).** Spectrum and Wheel became ONE joined
+  segmented control in the shell's button language (shift-click keeps both; either can still be
+  off), and the independent switches beside it wear the same thin border when on. The knot's own
+  fields — interpolation, position, bias — left their collapsing side column and became the
+  'stop' MODE on the LEFT, with the interpolation chooser now the same dropdown as Harmony's.
+  That dropdown SHRINKS its type to fit rather than clipping ("Complementary" lands at 11 px in
+  a 113 px well), measuring the element's own padding rather than a guessed gutter. The
+  spectrum's marker went neutral: `mix-blend-difference` inverts whatever is under it, so it
+  turned cyan on a warm field and red on a cool one and read as a coloured thing rather than a
+  pointer. A dropped colour no longer steals the SELECTION — you are colouring a knot, not
+  choosing one. **Complementary, split complementary and tetrad folded into one rule** at the
+  owner's suggestion: a complementary pair whose ends split by an angle, so the count says how
+  many (2 the classic pair, 3 the old split at 30°, 4 the old tetrad at 60°) and the new
+  Spread dial says how far; Analogous uses the same dial for its step, which used to be frozen.
+  With Harmony switched off the wheel shows the one handle you are editing, the set kept
+  underneath for when it comes back.
 - **Dragging a COLOUR onto the gradient (2026-09-08).** Any chip in the picker — Recent,
   Harmony, this gradient's own row — can be dragged onto the ramp: over a knot it recolours
   that knot, over bare track it inserts one there. The affordance is the point, so while a
