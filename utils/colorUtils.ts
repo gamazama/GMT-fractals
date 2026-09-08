@@ -483,6 +483,24 @@ export const kelvinToHex = (kelvin: number): string => {
 /**
  * Preset color temperatures for UI convenience
  */
+/**
+ * TINT: the second axis of a light's colour, green to magenta, which a temperature alone
+ * cannot express — the same pairing a camera's white balance uses (Kelvin plus tint). `t`
+ * runs -100 (green) to +100 (magenta). Done as a trade between the green channel and the
+ * red/blue pair, which is what that axis physically is; it stays in gamut by clamping.
+ */
+export const applyTint = (hex: string, t: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb || !t) return hex.toUpperCase();
+  const k = Math.max(-100, Math.min(100, t)) / 100;
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return rgbToHex({
+    r: clamp(rgb.r * (1 + k * 0.18)),
+    g: clamp(rgb.g * (1 - k * 0.18)),
+    b: clamp(rgb.b * (1 + k * 0.18)),
+  });
+};
+
 export const COLOR_TEMPERATURE_PRESETS = [
   { label: 'Candle', value: 1900 },
   { label: 'Tungsten', value: 2700 },

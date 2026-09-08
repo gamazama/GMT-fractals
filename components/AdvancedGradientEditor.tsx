@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExtern
 import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import type { ContextMenuItem } from '../types/help';
+import { isColorDrag, readColorDrag } from './gradient/colorDrag';
 import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
@@ -135,6 +136,9 @@ export interface AdvancedGradientEditorHandle {
     selectAt: (t: number, tolerance?: number) => void;
     /** Deselect every knot (the host's Esc order closes the inspector face this way). */
     clearSelection: () => void;
+    /** A colour was DROPPED at `t`: recolour the knot within `tolerance`, or insert one there.
+     *  One bracketed edit either way; the touched knot ends up selected. */
+    dropColourAt: (t: number, hex: string, tolerance?: number) => void;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -264,6 +268,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
     const containerRef = useRef<HTMLDivElement>(null);
     const knotTrackRef = useRef<HTMLDivElement>(null);
+    /** Where a colour being dragged would land (0..1), or null when none is in flight. The
+     *  ramp shows every knot dashed while this is set — see components/gradient/colorDrag.ts. */
+    const [colourDropAt, setColourDropAt] = useState<number | null>(null);
     const previewCanvasRef = useRef<HTMLCanvasElement>(null);
 
     // Host-injected header entrance (app-gmt / explorer mount the Favients shelf
@@ -381,6 +388,29 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // Host seam (v2 hero): a palette swatch click lands on its stop. The knot nearest `t`
     // within the tolerance is selected; otherwise one is inserted there the way a track
     // click inserts (sampled colour, the segment's interpolation) — one bracketed edit.
+    /** A colour landed at `t`: recolour the knot within `tolerance`, else insert one there.
+     *  Shared by the imperative handle (the hero's palette row drops through it) and by the
+     *  knot track's own onDrop. */
+    const dropColourAt = useCallback((t: number, hex: string, tolerance = 0.02) => {
+        const pos = Math.max(0, Math.min(1, t));
+        const cur = knotsRef.current;
+        let best: AdvancedGradientKnot | null = null;
+        for (const k of cur) {
+            const d = Math.abs(k.position - pos);
+            if (d <= tolerance && (!best || d < Math.abs(best.position - pos))) best = k;
+        }
+        if (best) {
+            const target = best;
+            editAction(() => emitChange(cur.map((k) => (k.id === target.id ? { ...k, color: hex } : k))));
+            setSelectedIds(new Set([target.id]));
+            return;
+        }
+        const prev = [...cur].sort((a, b) => a.position - b.position).filter((k) => k.position <= pos).pop();
+        const added: AdvancedGradientKnot = { id: `${Date.now()}_drop`, position: pos, color: hex, bias: 0.5, interpolation: prev ? prev.interpolation : 'linear' };
+        editAction(() => emitChange([...cur, added]));
+        setSelectedIds(new Set([added.id]));
+    }, [editAction, emitChange]);
+
     useImperativeHandle(ref, () => ({
         selectAt: (t: number, tolerance = 0.015) => {
             const pos = Math.max(0, Math.min(1, t));
@@ -398,7 +428,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             setSelectedIds(new Set([newKnot.id]));
         },
         clearSelection: () => setSelectedIds(new Set()),
-    }), [blendSpace, editAction, emitChange]);
+        dropColourAt,
+    }), [blendSpace, editAction, emitChange, dropColourAt]);
 
     const handleCopy = useCallback(() => {
         const data = JSON.stringify({
@@ -854,7 +885,37 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     className={`h-6 w-full bg-line/5 relative cursor-crosshair ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
                     onMouseDown={handleTrackMouseDown} 
                     title="Click & drag to add/move knot"
+                    onDragOver={(e) => {
+                        if (!isColorDrag(e.dataTransfer)) return;
+                        // preventDefault is what makes this a legal drop target at all
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'copy';
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setColourDropAt(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
+                    }}
+                    onDragLeave={(e) => {
+                        // ignore the leaves fired as the pointer crosses child knots
+                        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                        setColourDropAt(null);
+                    }}
+                    onDrop={(e) => {
+                        const hex = readColorDrag(e.dataTransfer);
+                        setColourDropAt(null);
+                        if (!hex) return;
+                        e.preventDefault();
+                        const r = e.currentTarget.getBoundingClientRect();
+                        dropColourAt(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), hex);
+                    }}
+                    data-gx-colour-drop={colourDropAt !== null ? '' : undefined}
                 >
+                    {/* Where a NEW knot would go, when the colour is not over an existing one. */}
+                    {colourDropAt !== null && !knots.some((k) => Math.abs(k.position - colourDropAt) <= 0.02) && (
+                        <div
+                            className="absolute top-0 bottom-0 w-0 border-l-2 border-dashed border-accent-300 z-30 pointer-events-none"
+                            style={{ left: `${colourDropAt * 100}%` }}
+                            data-gx-colour-drop-new
+                        />
+                    )}
                     {knots.map(knot => (
                         <div 
                             key={knot.id} 
@@ -893,6 +954,17 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             }}
                         >
                             <KnotIcon color={knot.color} isSelected={selectedIds.has(knot.id)} />
+                            {/* "this one will take it" — a dashed ring on every knot while a
+                                colour is in flight, brighter on the one under the pointer */}
+                            {colourDropAt !== null && (
+                                <span
+                                    aria-hidden
+                                    className={`absolute -inset-x-1 -top-1 bottom-0 rounded border-2 border-dashed pointer-events-none ${
+                                        Math.abs(knot.position - colourDropAt) <= 0.02 ? 'border-accent-300' : 'border-accent-300/40'
+                                    }`}
+                                    data-gx-colour-drop-knot
+                                />
+                            )}
                         </div>
                     ))}
 

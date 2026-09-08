@@ -391,6 +391,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 scale={Math.max(1, rampW - 16)}
                 onScrub={setScrubT}
                 onSelect={(_, t) => editorRef.current?.selectAt(t)}
+                // a colour dragged from the picker onto a palette swatch lands on the ramp at
+                // that swatch's position (the editor recolours the nearest knot, or inserts one)
+                onDropColour={(t, hex) => { ensureEditing(); editorRef.current?.dropColourAt(t, hex); }}
                 className="h-9 mb-3"
               />
             )}

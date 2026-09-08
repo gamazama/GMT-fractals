@@ -349,6 +349,22 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **Dragging a COLOUR onto the gradient (2026-09-08).** Any chip in the picker — Recent,
+  Harmony, this gradient's own row — can be dragged onto the ramp: over a knot it recolours
+  that knot, over bare track it inserts one there. The affordance is the point, so while a
+  colour is in flight EVERY knot draws a dashed ring and an insertion mark shows where a new
+  one would go; the hero's palette swatches are drop targets too, landing the colour at that
+  swatch's position through the editor's `dropColourAt`. `components/gradient/colorDrag.ts`
+  owns the payload and carries its own MIME type on purpose: the shelf already drags whole
+  GRADIENTS, and during `dragover` a browser exposes the drag's TYPES but not its values, so
+  the type is the only discriminator a drop target has. Guarded twice, both falsified:
+  `test:palette` colordrag (a favient drag is not a colour drag) and `smoke:ge-tray` [12] (the
+  knots light up and the colour lands).
+- **Recent colours and Kelvin, same day.** Recent moved out of the flowing blocks onto the top
+  line after the mode switches, as SQUARE chips — a colour you used is a thing in itself, not
+  a band of a gradient (owner). Kelvin lost its presets and gained a **tint**, the green-to-
+  magenta axis a temperature cannot express on its own (`applyTint` in colorUtils, the pairing
+  a camera's white balance uses).
 - **The owner's second walk of the picker (2026-09-08).** Spectrum and Wheel are two views of
   one job, so they TOGGLE in a single slot rather than stacking, both at 150 px, and a stored
   set holding both is sanitised on load. Harmony is its own switch now, independent of the

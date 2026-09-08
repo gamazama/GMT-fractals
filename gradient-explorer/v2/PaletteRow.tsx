@@ -24,6 +24,7 @@ import { showToast } from '../../engine/store/toastStore';
 import { gradientBarClass } from './ui/bar';
 import { Icon } from './ui/Icon';
 import { Act } from './ui/Act';
+import { isColorDrag, readColorDrag } from '../../components/gradient/colorDrag';
 
 const hexOf = (c: RGB): string =>
   '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
@@ -35,6 +36,9 @@ const RULES: { id: PaletteRule; label: string; title: string }[] = [
 ];
 
 interface Props {
+  /** A colour was dropped on the swatch at ramp position `t` (components/gradient/colorDrag).
+   *  The hero routes this to the editor, which recolours the nearest knot or inserts one. */
+  onDropColour?: (t: number, hex: string) => void;
   palette: PaletteSwatch[];
   /** Pixel width of the ramp the positions map onto (for drag speed). */
   scale: number;
@@ -50,7 +54,9 @@ const DRAG_THRESHOLD = 3;
 /** Minimum spacing kept between neighbouring swatches (in ramp t). */
 const GAP = 0.002;
 
-export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, onScrub, onSelect, className = '' }) => {
+export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, onScrub, onSelect, onDropColour, className = '' }) => {
+  /** Which swatch a dragged colour is over (index), or null. */
+  const [dropOver, setDropOver] = useState<number | null>(null);
   const rule = useWorkingStore((s) => s.rule);
   const [dragging, setDragging] = useState<number | null>(null);
   const drag = useRef<{ index: number; startX: number; startT: number; moved: boolean } | null>(null);
@@ -123,7 +129,32 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
         const hex = hexOf(sw.color);
         const isDrag = dragging === i;
         return (
-          <div key={i} className={`relative flex-1 min-w-0 group ${dragging != null && !isDrag ? 'pointer-events-none' : ''}`}>
+          <div
+            key={i}
+            className={`relative flex-1 min-w-0 group ${dragging != null && !isDrag ? 'pointer-events-none' : ''}`}
+            onDragOver={(e) => {
+              if (!onDropColour || !isColorDrag(e.dataTransfer)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+              setDropOver(i);
+            }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropOver(null); }}
+            onDrop={(e) => {
+              const hex = readColorDrag(e.dataTransfer);
+              setDropOver(null);
+              if (!hex || !onDropColour) return;
+              e.preventDefault();
+              onDropColour(sw.t, hex);
+            }}
+            data-gx-palette-drop={dropOver === i ? '' : undefined}
+          >
+            {/* a colour is in flight: every swatch says it will take it */}
+            {onDropColour && dropOver !== null && (
+              <span
+                aria-hidden
+                className={`absolute inset-0 rounded-[10px] border-2 border-dashed pointer-events-none z-10 ${dropOver === i ? 'border-accent-300' : 'border-accent-300/40'}`}
+              />
+            )}
             <button
               className={`w-full h-full ${gradientBarClass({ size: 'swatch', selected: isDrag })} ${readOnly ? 'cursor-pointer' : 'cursor-ew-resize'}`}
               style={{ background: hex, touchAction: 'none' }}

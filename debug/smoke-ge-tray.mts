@@ -22,6 +22,7 @@
  *       before Mix is back
  *   [9] C.9 — a click on the split ramp's RESULT half bakes the face
  *   [10] C.9 — a click on the SOURCE half cancels it
+ *   [12] a colour dragged out of the picker lights every knot dashed and lands on the ramp
  *   [11] a picker MODE toggled off and on again comes back PAINTED (a remounted canvas has a
  *       blank backing store; the draw effect must key on the remount, not on the colour)
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
@@ -203,33 +204,6 @@ async function main() {
   if (s.picker) fail('[6] Escape closed the inspector face but the stop stayed selected (the picker is still in the host)');
   console.log('✓ [6] a stop selection opens the inspector face in the v2 dialect; Escape closes it and clears the selection');
 
-  // [11] A picker MODE toggled off and on again comes back PAINTED. A canvas that remounts
-  // gets a blank backing store, and a draw effect keyed on colour alone will not repaint it
-  // (the colour did not change) — so Spectrum came back empty until the next colour edit
-  // (owner, 2026-09-08). Falsified by keying the field's draw effect on `[hsb.h]` alone
-  // instead of `[hsb.h, canvasGen]`: "came back blank" goes red.
-  await page.click('[data-gx-hero] [class*="cursor-ew-resize"]');
-  await page.waitForTimeout(500);
-  const painted = () => page.evaluate(() => {
-    const c = document.querySelector('[data-gx-picker-skin] canvas') as HTMLCanvasElement | null;
-    if (!c) return -1;
-    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
-    return n;
-  });
-  const before = await painted();
-  if (before <= 0) fail(`[11] the picker's first canvas is not painted at all (${before})`);
-  await page.click('[data-gx-picker-mode="spectrum"]');
-  await page.waitForTimeout(300);
-  await page.click('[data-gx-picker-mode="spectrum"]');
-  await page.waitForTimeout(500);
-  const after = await painted();
-  if (after !== before) fail(`[11] Spectrum came back blank after a toggle (painted ${before} → ${after})`);
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(300);
-  console.log('✓ [11] a picker mode toggled off and on comes back painted');
-
   // C.3 — bake and cancel are ONE mechanism for every face. [7] Adjust: a dial turned, the
   // face closed → the dial is BAKED into the stops (reset to default, the chip reads
   // "editing · return to source"); the chip click CANCELS the bake (the dial comes back live).
@@ -317,6 +291,99 @@ async function main() {
   const nameAfter2 = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
   if (nameAfter2 !== nameBefore) fail(`[10] cancel came back with a different gradient ("${nameBefore}" → "${nameAfter2}")`);
   console.log('✓ [10] a click on the source half cancels the face');
+
+  // [11] A picker MODE toggled off and on again comes back PAINTED. A canvas that remounts
+  // gets a blank backing store, and a draw effect keyed on colour alone will not repaint it
+  // (the colour did not change) — so Spectrum came back empty until the next colour edit
+  // (owner, 2026-09-08). Falsified by keying the field's draw effect on `[hsb.h]` alone
+  // instead of `[hsb.h, canvasGen]`: "came back blank" goes red.
+  await page.click('[data-gx-hero] [class*="cursor-ew-resize"]');
+  await page.waitForTimeout(500);
+  const painted = () => page.evaluate(() => {
+    const c = document.querySelector('[data-gx-picker-skin] canvas') as HTMLCanvasElement | null;
+    if (!c) return -1;
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  const before = await painted();
+  if (before <= 0) fail(`[11] the picker's first canvas is not painted at all (${before})`);
+  await page.click('[data-gx-picker-mode="spectrum"]');
+  await page.waitForTimeout(300);
+  await page.click('[data-gx-picker-mode="spectrum"]');
+  await page.waitForTimeout(500);
+  const after = await painted();
+  if (after !== before) fail(`[11] Spectrum came back blank after a toggle (painted ${before} → ${after})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  console.log('✓ [11] a picker mode toggled off and on comes back painted');
+
+  // [12] A colour dragged out of the picker lands on the ramp: while it is in flight EVERY
+  // knot draws a dashed ring (the affordance is the point — the ramp says "these will take
+  // it"), a drop over bare track inserts a knot, and a drop on a knot recolours it. Falsified
+  // by dropping the `onDragOver` handler on the knot track: "no knot lit up" goes red.
+  await page.click('[data-gx-hero] [class*="cursor-ew-resize"]');
+  await page.waitForTimeout(500);
+  // Harmony carries THIS gradient's own colours, which always exist — a fresh profile has no
+  // Recent colours yet, so the default modes leave nothing to drag.
+  const harmonyOn = await page.evaluate(() => !!document.querySelector('[data-gx-picker-mode="harmony"][data-on]'));
+  if (!harmonyOn) await page.click('[data-gx-picker-mode="harmony"]');
+  await page.waitForTimeout(400);
+  // The dragover and the read must not share a tick: React batches the state that draws the
+  // dashed rings, so a same-tick query sees the DOM as it was.
+  const started = await page.evaluate(() => {
+    const root = document.querySelector('[data-gx-picker-skin]');
+    const track = document.querySelector('[data-gx-hero] [title="Click & drag to add/move knot"]') as HTMLElement | null;
+    if (!root || !track) return { err: 'no picker or no knot track' };
+    const chips = Array.from(root.querySelectorAll('button[title^="#"]')) as HTMLElement[];
+    if (!chips.length) return { err: 'the picker has no colour chips to drag' };
+    const dt = new DataTransfer();
+    chips[chips.length - 1].dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+    const r = track.getBoundingClientRect();
+    // a gap no knot is near, so this is the INSERT path
+    const pos = Array.from(track.querySelectorAll('[class*="cursor-grab"]')).map((d) => parseFloat((d as HTMLElement).style.left) / 100);
+    let t = 0.5;
+    for (let c = 0.06; c < 0.94; c += 0.01) if (pos.every((q) => Math.abs(q - c) > 0.08)) { t = c; break; }
+    const w = window as unknown as { __drag?: unknown };
+    w.__drag = { dt, track, x: r.left + r.width * t, y: r.top + r.height / 2 };
+    (w as unknown as { __dragDiag: unknown }).__dragDiag = { pos, t };
+    track.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer: dt, clientX: r.left + r.width * t, clientY: r.top + r.height / 2 }));
+    return { hex: dt.getData('application/x-gmt-color'), before: track.querySelectorAll('[class*="cursor-grab"]').length };
+  });
+  if ('err' in started && started.err) fail(`[12] ${started.err}`);
+  if (!/^#[0-9A-F]{6}$/.test(started.hex ?? '')) fail(`[12] the chip did not start a colour drag (${started.hex})`);
+  await page.waitForTimeout(400);
+  const shown = await page.evaluate(() => ({
+    lit: document.querySelectorAll('[data-gx-colour-drop-knot]').length,
+    mark: !!document.querySelector('[data-gx-colour-drop-new]'),
+  }));
+  if (!shown.lit) fail('[12] no knot lit up while a colour was over the ramp');
+  // A dense gradient may have no gap at all, in which case the drop RECOLOURS rather than
+  // inserts: the mark only claims to appear when the colour is not over a knot.
+  const overKnot = await page.evaluate(() => {
+    const d = (window as unknown as { __dragDiag: { pos: number[]; t: number } }).__dragDiag;
+    return d.pos.some((p) => Math.abs(p - d.t) <= 0.02);
+  });
+  if (!overKnot && !shown.mark) fail('[12] no insertion mark where the colour would land, and no knot is near it');
+  await page.evaluate(() => {
+    const d = (window as unknown as { __drag: { dt: DataTransfer; track: HTMLElement; x: number; y: number } }).__drag;
+    d.track.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer: d.dt, clientX: d.x, clientY: d.y }));
+  });
+  await page.waitForTimeout(500);
+  const landed = await page.evaluate((hex: string) => {
+    const track = document.querySelector('[data-gx-hero] [title="Click & drag to add/move knot"]')!;
+    return {
+      count: track.querySelectorAll('[class*="cursor-grab"]').length,
+      carries: Array.from(track.querySelectorAll('svg path')).some((n) => (n.getAttribute('fill') ?? '').toUpperCase() === hex),
+    };
+  }, started.hex ?? '');
+  // the colour LANDED: either a new knot appeared, or an existing one took the colour
+  if (!landed.carries) fail(`[12] the dropped colour ${started.hex} is on no knot`);
+  if (!overKnot && landed.count !== (started.before ?? 0) + 1) fail(`[12] the drop over bare track did not add a knot (${started.before} → ${landed.count})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  console.log('✓ [12] a colour dragged from the picker lights the knots and lands on the ramp');
 
   await browser.close();
   if (errors.length) {

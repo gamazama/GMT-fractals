@@ -13,7 +13,7 @@ import {
     harmonyHandles,
     HARMONY_COUNT,
     kelvinToHex,
-    COLOR_TEMPERATURE_PRESETS,
+    applyTint,
     type ColorHarmony,
     type HsvHandle,
 } from '../utils/colorUtils';
@@ -28,6 +28,7 @@ import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
 import { ChevronDown } from './Icons';
 import { useInputSkin } from './inputs/skin';
+import { setColorDrag } from './gradient/colorDrag';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rich colour picker (W10): 2D saturation×brightness field + hue strip, RGB+HSB
@@ -194,8 +195,8 @@ const MODE_TITLE: Record<PickerMode, string> = {
     wheel: 'Wheel — hue and saturation on a disc',
     harmony: 'Harmony — related colours, and this gradient\u2019s own',
     channels: 'Channels — RGB and HSB sliders',
-    kelvin: 'Kelvin — colour temperature',
-    swatches: 'Swatches — recent and the working palette',
+    kelvin: 'Kelvin — colour temperature, and its green-to-magenta tint',
+    swatches: 'Recent colours — the ones you have used',
 };
 
 // A small clickable swatch strip used by harmony / recents / palette rows.
@@ -228,6 +229,10 @@ const SwatchRow: React.FC<{
                     <button
                         key={`${c}-${i}`}
                         onClick={() => (onPickIndex ? onPickIndex(i) : onPick(c))}
+                        // drag a colour onto the ramp: over a knot it recolours it, over bare
+                        // track it inserts one (components/gradient/colorDrag.ts)
+                        draggable
+                        onDragStart={(e) => setColorDrag(e.dataTransfer, c)}
                         className={soft
                             ? `h-5 flex-1 min-w-0 ${CHIP_R} border transition-transform hover:scale-105 hover:z-10 ${
                                 current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/20'
@@ -353,6 +358,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         });
     }, []);
     const [kelvin, setKelvin] = useState(6500);
+    /** Green (−) to magenta (+): the axis a temperature cannot say on its own. */
+    const [tint, setTint] = useState(0);
     const [harmony, setHarmony] = useState<ColorHarmony>('analogous');
     const [harmonyCount, setHarmonyCount] = useState(5);
     // The handles are STATE, not a derivation. Deriving them from the live colour meant that
@@ -968,6 +975,32 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         </div>
     );
 
+    // Recent colours have their own space on the top line, after the mode switches, as SQUARE
+    // chips — a colour you used is a thing in itself, not a band of a gradient (owner,
+    // 2026-09-08). Draggable onto the ramp like every other chip here.
+    const recentStrip = (
+        <div className="flex items-center gap-1 shrink min-w-0 overflow-hidden" data-gx-recent-strip>
+            {recents.length === 0 ? (
+                <span className="text-[12px] text-fg-faint whitespace-nowrap">no recent colours</span>
+            ) : (
+                recents.map((c, i) => (
+                    <button
+                        key={`${c}-${i}`}
+                        type="button"
+                        onClick={() => setFromHex(c)}
+                        draggable
+                        onDragStart={(e) => setColorDrag(e.dataTransfer, c)}
+                        title={c}
+                        className={`w-5 h-5 shrink-0 ${CHIP_R} border transition-transform hover:scale-105 ${
+                            c.toUpperCase() === hex.toUpperCase() ? 'border-fg' : 'border-line/20'
+                        }`}
+                        style={{ backgroundColor: c }}
+                    />
+                ))
+            )}
+        </div>
+    );
+
     // Kelvin — a light's temperature rather than a screen colour. One-way by nature (a
     // rendered colour has no single temperature), so the slider proposes and the colour takes.
     const kelvinBlock = (
@@ -979,23 +1012,21 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 max={15000}
                 step={50}
                 trackBg={`linear-gradient(to right, ${[1000, 2500, 4000, 5500, 7000, 9000, 12000, 15000].map(kelvinToHex).join(', ')})`}
-                onChange={(k) => { setKelvin(k); emit(safeHsb(kelvinToHex(k))); }}
+                onChange={(k) => { setKelvin(k); emit(safeHsb(applyTint(kelvinToHex(k), tint))); }}
                 onStart={handleSliderStart}
                 onEnd={handleSliderEnd}
             />
-            <div className="flex flex-wrap gap-1">
-                {COLOR_TEMPERATURE_PRESETS.map((t) => (
-                    <button
-                        key={t.value}
-                        type="button"
-                        className="px-2 h-6 rounded-lg border border-line/20 text-[11px] text-fg-muted hover:text-fg"
-                        title={`${t.value} K`}
-                        onClick={() => { setKelvin(t.value); setFromHex(kelvinToHex(t.value)); }}
-                    >
-                        {t.label}
-                    </button>
-                ))}
-            </div>
+            <GradientSlider
+                label="T"
+                value={tint}
+                min={-100}
+                max={100}
+                step={1}
+                trackBg={`linear-gradient(to right, ${applyTint(kelvinToHex(kelvin), -100)}, ${kelvinToHex(kelvin)}, ${applyTint(kelvinToHex(kelvin), 100)})`}
+                onChange={(t) => { setTint(t); emit(safeHsb(applyTint(kelvinToHex(kelvin), t))); }}
+                onStart={handleSliderStart}
+                onEnd={handleSliderEnd}
+            />
         </div>
     );
 
@@ -1105,18 +1136,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // the chosen controls, in a fixed reading order; the hex line carries the
                 // toolbar so turning one on or off is one click from the colour itself
                 <>
-                    <div className="flex items-center gap-2">{hexRow}{modeBar}</div>
+                    <div className="flex items-center gap-2">{hexRow}{modeBar}{on('swatches') && recentStrip}</div>
                     <div className="flex flex-wrap gap-4 items-start">
                         {on('spectrum') && <div className="flex flex-col gap-2 shrink-0">{fieldBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
                         {on('harmony') && harmonyBlock}
                         {on('channels') && <div className="flex flex-col gap-2 flex-1 min-w-[190px]">{channelsBlock}</div>}
                         {on('kelvin') && kelvinBlock}
-                        {on('swatches') && (
-                            <div className="flex flex-col gap-2 flex-1 min-w-[190px]">
-                                <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
-                            </div>
-                        )}
+
                     </div>
                 </>
             ) : layout === 'cols' ? (
