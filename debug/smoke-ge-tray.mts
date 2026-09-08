@@ -22,6 +22,8 @@
  *       before Mix is back
  *   [9] C.9 — a click on the split ramp's RESULT half bakes the face
  *   [10] C.9 — a click on the SOURCE half cancels it
+ *   [11] a picker MODE toggled off and on again comes back PAINTED (a remounted canvas has a
+ *       blank backing store; the draw effect must key on the remount, not on the colour)
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
  *       the colour picker in it; Esc closes it
  *
@@ -200,6 +202,33 @@ async function main() {
   // portalled into the hidden host and the next swatch click finds a stale inspector.
   if (s.picker) fail('[6] Escape closed the inspector face but the stop stayed selected (the picker is still in the host)');
   console.log('✓ [6] a stop selection opens the inspector face in the v2 dialect; Escape closes it and clears the selection');
+
+  // [11] A picker MODE toggled off and on again comes back PAINTED. A canvas that remounts
+  // gets a blank backing store, and a draw effect keyed on colour alone will not repaint it
+  // (the colour did not change) — so Spectrum came back empty until the next colour edit
+  // (owner, 2026-09-08). Falsified by keying the field's draw effect on `[hsb.h]` alone
+  // instead of `[hsb.h, canvasGen]`: "came back blank" goes red.
+  await page.click('[data-gx-hero] [class*="cursor-ew-resize"]');
+  await page.waitForTimeout(500);
+  const painted = () => page.evaluate(() => {
+    const c = document.querySelector('[data-gx-picker-skin] canvas') as HTMLCanvasElement | null;
+    if (!c) return -1;
+    const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++;
+    return n;
+  });
+  const before = await painted();
+  if (before <= 0) fail(`[11] the picker's first canvas is not painted at all (${before})`);
+  await page.click('[data-gx-picker-mode="spectrum"]');
+  await page.waitForTimeout(300);
+  await page.click('[data-gx-picker-mode="spectrum"]');
+  await page.waitForTimeout(500);
+  const after = await painted();
+  if (after !== before) fail(`[11] Spectrum came back blank after a toggle (painted ${before} → ${after})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  console.log('✓ [11] a picker mode toggled off and on comes back painted');
 
   // C.3 — bake and cancel are ONE mechanism for every face. [7] Adjust: a dial turned, the
   // face closed → the dial is BAKED into the stops (reset to default, the chip reads

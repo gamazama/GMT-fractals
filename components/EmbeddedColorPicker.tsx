@@ -150,14 +150,16 @@ const CHIP_R = 'rounded';
 // combination is remembered for next time (owner, 2026-09-08 — "the default is the regular
 // square picker … its cleverness is its configurability"). So the field is on by default and
 // the wheel is one option among several, not a replacement for anything.
-export type PickerMode = 'field' | 'wheel' | 'channels' | 'kelvin' | 'swatches';
+export type PickerMode = 'spectrum' | 'wheel' | 'channels' | 'kelvin' | 'swatches';
 const MODES_KEY = 'gmt.colorpicker.modes';
-const MODE_DEFAULT: PickerMode[] = ['field', 'channels', 'swatches'];
+const MODE_DEFAULT: PickerMode[] = ['spectrum', 'channels', 'swatches'];
+/** Stored sets from the first cut named this mode 'field'. */
+const migrateModes = (v: string[]): PickerMode[] => v.map((m) => (m === 'field' ? 'spectrum' : m)) as PickerMode[];
 
 const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
     const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
     switch (mode) {
-        case 'field':
+        case 'spectrum':
             return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 10.5 13.5 4" opacity=".5" /></svg>;
         case 'wheel':
             return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="10.4" cy="5.6" r="1.4" /></svg>;
@@ -172,7 +174,7 @@ const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
 };
 
 const MODE_TITLE: Record<PickerMode, string> = {
-    field: 'Field — saturation and brightness for one hue',
+    spectrum: 'Spectrum — saturation and brightness for one hue',
     wheel: 'Wheel — hue and saturation, with harmony handles',
     channels: 'Channels — RGB and HSB sliders',
     kelvin: 'Kelvin — colour temperature',
@@ -310,7 +312,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         if (!raw) return MODE_DEFAULT;
         try {
             const v = JSON.parse(raw);
-            return Array.isArray(v) && v.length ? (v as PickerMode[]) : MODE_DEFAULT;
+            return Array.isArray(v) && v.length ? migrateModes(v) : MODE_DEFAULT;
         } catch { return MODE_DEFAULT; }
     });
     const on = useCallback((m: PickerMode) => modes.includes(m), [modes]);
@@ -337,9 +339,21 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
 
     const lastOutputHex = useRef(color.toUpperCase());
     const rootRef = useRef<HTMLDivElement>(null);
-    const fieldRef = useRef<HTMLCanvasElement>(null);
-    const hueRef = useRef<HTMLCanvasElement>(null);
-    const hlPadRef = useRef<HTMLCanvasElement>(null);
+    const fieldRef = useRef<HTMLCanvasElement | null>(null);
+    const hueRef = useRef<HTMLCanvasElement | null>(null);
+    const hlPadRef = useRef<HTMLCanvasElement | null>(null);
+    // A canvas that REMOUNTS comes back with a blank backing store, and a draw effect keyed
+    // on colour alone will not repaint it: the colour did not change. That used to be true
+    // only when the layout branch changed, so the effects listed `layout, minified` — then
+    // the mode toggles arrived and turning Spectrum off and on again left an empty pad until
+    // the next colour edit (owner, 2026-09-08). These callback refs bump a generation on
+    // every mount instead, so ANY future branch that remounts a canvas repaints it for free.
+    // Stable identities (deps []), or React would detach on every render and loop.
+    const [canvasGen, setCanvasGen] = useState(0);
+    const bumpCanvas = useCallback(() => setCanvasGen((g) => g + 1), []);
+    const setFieldCanvas = useCallback((el: HTMLCanvasElement | null) => { fieldRef.current = el; if (el) bumpCanvas(); }, [bumpCanvas]);
+    const setHueCanvas = useCallback((el: HTMLCanvasElement | null) => { hueRef.current = el; if (el) bumpCanvas(); }, [bumpCanvas]);
+    const setHlPadCanvas = useCallback((el: HTMLCanvasElement | null) => { hlPadRef.current = el; if (el) bumpCanvas(); }, [bumpCanvas]);
 
     // Container-responsive layout (NOT viewport — the picker is mounted both in a
     // ~260px dock and, since the Stops mode, on a very wide centre stage). Measure
@@ -487,10 +501,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         ctx.fillStyle = val;
         ctx.fillRect(0, 0, w, h);
         // `layout`/`minified` are deps: switching layout (stack→cols once measured) or
-        // expanding out of the minified pad renders a different branch, which REMOUNTS
-        // this canvas to a fresh blank backing store — repaint it (the effect runs
-        // post-commit, so the ref is the new canvas).
-    }, [hsb.h, layout, minified]);
+        // `canvasGen` is the remount signal (see setFieldCanvas): whenever this canvas is
+        // replaced — a layout branch, a mode toggle — the effect re-runs and repaints it.
+    }, [hsb.h, canvasGen]);
 
     // --- vertical hue strip ---
     useEffect(() => {
@@ -505,7 +518,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         ctx.fillRect(0, 0, w, h);
         // `layout`/`minified` deps so the strip repaints after a remount (see the field
         // effect above) — the gradient itself is static.
-    }, [layout, minified]);
+    }, [canvasGen]);
 
     // --- mini Hue×Lightness pad (minified view) ---
     // The classic HSL "spectrum": X = hue, Y = lightness — WHITE on top → full-saturation
@@ -704,6 +717,17 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         setFromHex(hsbToHex({ h, s: s * 100, v: hsb.v }));
     }, [harmony, freeHandles, wheelHandles, hsb.v, setFromHex]);
 
+    /** Free mode: drop the active handle (never the last one). */
+    const wheelRemove = useCallback(() => {
+        if (harmony !== 'free' || wheelHandles.length < 2) return;
+        const rest = wheelHandles.filter((_, i) => i !== wheelActive).map((x) => ({ ...x }));
+        const nextActive = Math.min(wheelActive, rest.length - 1);
+        setFreeHandles(rest);
+        setFreeActive(nextActive);
+        const t = rest[nextActive];
+        if (t) setFromHex(hsbToHex({ h: t.h, s: t.s * 100, v: t.v }));
+    }, [harmony, wheelHandles, wheelActive, setFromHex]);
+
     const countRange = HARMONY_COUNT[harmony];
 
     const doCopy = () => { void clip.copy(hex); };
@@ -745,7 +769,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         <div className="flex gap-1.5">
             <div className="relative flex-1">
                 <canvas
-                    ref={fieldRef}
+                    ref={setFieldCanvas}
                     width={208}
                     height={120}
                     className={`w-full h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
@@ -762,7 +786,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             </div>
             <div className="relative w-4 shrink-0">
                 <canvas
-                    ref={hueRef}
+                    ref={setHueCanvas}
                     width={16}
                     height={120}
                     className={`w-4 h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
@@ -788,7 +812,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const hlPad = (
         <div className="relative">
             <canvas
-                ref={hlPadRef}
+                ref={setHlPadCanvas}
                 width={208}
                 height={120}
                 className={`w-full h-9 cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
@@ -879,7 +903,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // swatch/hex line, so the line reads: what the colour IS, then what you may pick it with.
     const modeBar = (
         <div className="flex items-center gap-0.5 shrink-0" data-gx-picker-modes>
-            {(['field', 'wheel', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => (
+            {(['spectrum', 'wheel', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => (
                 <button
                     key={m}
                     type="button"
@@ -942,6 +966,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             onDragStart={handleSliderStart}
             onDragEnd={handleSliderEnd}
             onAdd={harmony === 'free' ? wheelAdd : undefined}
+            onRemove={harmony === 'free' && wheelHandles.length > 1 ? wheelRemove : undefined}
         />
     );
     const harmonyBlock = (
@@ -964,8 +989,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                         ]}
                         onChange={(v) => {
                             const mode = v as ColorHarmony;
-                            // stepping into Free keeps whatever is on the wheel right now
-                            if (mode === 'free') { setFreeHandles(wheelHandles.map((x) => ({ ...x }))); setFreeActive(0); }
+                            // Free starts from whatever is on the wheel the FIRST time, and after
+                            // that it is the user's own set: re-seeding on every entry threw away
+                            // hand-placed handles as soon as you looked at another harmony and
+                            // came back (measured 2026-09-08 — four handles became five).
+                            if (mode === 'free') {
+                                setFreeHandles((prev) => (prev.length ? prev : wheelHandles.map((x) => ({ ...x }))));
+                                setFreeActive((i) => Math.min(i, Math.max(0, wheelHandles.length - 1)));
+                            }
                             setHarmony(mode);
                         }}
                     />
@@ -1029,7 +1060,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 <>
                     <div className="flex items-center gap-2">{hexRow}{modeBar}</div>
                     <div className="flex flex-wrap gap-4 items-start">
-                        {on('field') && <div className="flex flex-col gap-2 shrink-0 w-[180px]">{fieldBlock}</div>}
+                        {on('spectrum') && <div className="flex flex-col gap-2 shrink-0 w-[180px]">{fieldBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 w-[230px] shrink-0">{harmonyBlock}</div>}
                         {on('channels') && <div className="flex flex-col gap-2 flex-1 min-w-[190px]">{channelsBlock}</div>}

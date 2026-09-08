@@ -13,6 +13,7 @@
  *   • drag anywhere in the disc          — move the active handle to that hue / saturation
  *   • click a handle                     — make it the active colour
  *   • Ctrl/Cmd + click                   — add a handle there (host decides if it may)
+ *   • Delete / Backspace                  — drop the active handle (host decides if it may)
  *   • Escape mid-drag                    — cancel back to where the drag started
  *   • the strip on the right             — the active colour's value
  *
@@ -46,6 +47,8 @@ interface Props {
     onDragEnd: () => void;
     /** Ctrl/Cmd + click on empty wheel. Omit to forbid adding. */
     onAdd?: (h: number, s: number) => void;
+    /** Delete / Backspace on the focused wheel. Omit to forbid removing. */
+    onRemove?: () => void;
 }
 
 const TAU = Math.PI * 2;
@@ -68,6 +71,7 @@ export const ColorWheel: React.FC<Props> = ({
     onDragStart,
     onDragEnd,
     onAdd,
+    onRemove,
 }) => {
     const discRef = useRef<HTMLCanvasElement>(null);
     const active = handles[activeIndex] ?? handles[0];
@@ -141,7 +145,10 @@ export const ColorWheel: React.FC<Props> = ({
 
     const onPointerDown = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
+        // preventDefault stops the browser focusing the box on its own, which would leave the
+        // arrow keys and Delete dead after a click (measured 2026-09-08) — so take focus here.
         e.preventDefault();
+        boxRef.current?.focus();
         const [h, s] = at(e);
         if ((e.ctrlKey || e.metaKey) && onAdd) {
             onAdd(h, s);
@@ -191,6 +198,12 @@ export const ColorWheel: React.FC<Props> = ({
     // reference spec's 1 % / 10 % / edge, mapped onto a wheel).
     const onKeyDown = (e: React.KeyboardEvent) => {
         if (!active) return;
+        if ((e.key === 'Delete' || e.key === 'Backspace') && onRemove) {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove();
+            return;
+        }
         const fine = e.shiftKey ? 10 : 1;
         let h = active.h;
         let s = active.s;

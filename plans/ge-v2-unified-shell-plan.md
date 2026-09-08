@@ -349,6 +349,18 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **Bug sweep of the picker (2026-09-08, the owner asked for one).** Three real defects, each
+  fixed and two of them guarded. (1) A picker canvas that REMOUNTS comes back with a blank
+  backing store, and a draw effect keyed on colour alone will not repaint it — Spectrum toggled
+  off and on stayed empty until the next colour edit. The canvases now report their own mount
+  through a callback ref that bumps `canvasGen`, which the draw effects key on, so any future
+  branch that remounts one repaints it for free; `smoke:ge-tray` [11] guards it, falsified.
+  (2) Leaving Free mode and coming back re-seeded the handles from the current harmony, throwing
+  away hand-placed ones — Free now seeds only when it has none. (3) `preventDefault` on the
+  wheel's pointer-down stopped the box taking focus, so the arrow keys and Delete were dead
+  after a click; it focuses explicitly now, and Delete removes the active handle in Free (the
+  reference spec's Del / Backspace, and a handle you can add should be one you can remove).
+  The mode is called **Spectrum**, as the spec calls it, with stored sets migrated from 'field'.
 - **The COLOUR WHEEL (second pass, 2026-09-08) — now one MODE among those, off by default.** The owner supplied Cinema 4D's Color Chooser
   spec as "what a robust and comfortable colour picker looks like". The move taken from it: a
   wheel carrying draggable HANDLES, which answers the open question about the four harmony rows
