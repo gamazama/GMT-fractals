@@ -20,7 +20,8 @@ import type { GradientConfig, GradientStop, ColorSpaceMode, BlendColorSpace, Jso
 import { stopOps } from '../../utils/stopOps';
 
 const COLOR_SPACES: ColorSpaceMode[] = ['srgb', 'linear', 'aces_inverse'];
-const BLEND_SPACES: BlendColorSpace[] = ['rgb', 'hsv', 'hsv-far', 'oklab'];
+/** 'hsv-far' is retired from every chooser (owner, 2026-09-08); the renderer still knows it. */
+const BLEND_SPACES: BlendColorSpace[] = ['rgb', 'hsv', 'oklab'];
 
 /** The Stops mode's starting gradient — a vivid 3-stop ramp so the mode looks
  *  alive on first open (and what "Reset to default" restores). */

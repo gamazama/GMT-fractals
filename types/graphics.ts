@@ -18,6 +18,9 @@ export interface GradientStop {
 export type ColorSpaceMode = 'srgb' | 'linear' | 'aces_inverse';
 
 /** How colors blend between gradient stops */
+/** `hsv-far` (hue the long way round) is RETIRED: no chooser offers it any more, but the
+ *  type and the renderer keep it so gradients already saved in it still render (owner,
+ *  2026-09-08). Do not add it back to a picker. */
 export type BlendColorSpace = 'rgb' | 'hsv' | 'hsv-far' | 'oklab';
 
 // The new Rich Object container

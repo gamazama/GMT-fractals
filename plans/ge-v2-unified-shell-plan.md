@@ -349,6 +349,11 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **`hsv-far` retired (owner, 2026-09-08).** Blending hue the LONG way round is gone from every
+  chooser: the strip's cycle, the stops menu, the palette dock's dropdown and the editor-config
+  cycle. The TYPE and the renderer keep it on purpose — gradients already saved in it must still
+  render, and the two blend readouts still name it so such a document reads honestly. Do not put
+  it back in a picker.
 - **A channel slider means something different with SEVERAL knots selected (2026-09-08).** It
   used to paint every selected knot the picker's whole colour, so nudging red flattened the
   selection to one colour. Now: setting a colour outright — the hex, the spectrum, the wheel, a

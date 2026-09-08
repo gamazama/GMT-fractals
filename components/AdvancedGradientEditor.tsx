@@ -396,7 +396,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     };
 
     const cycleBlendSpace = () => {
-        const order: BlendColorSpace[] = ['rgb', 'hsv', 'hsv-far', 'oklab'];
+        // 'hsv-far' is retired (owner, 2026-09-08) — the cycle skips it; a gradient already
+        // saved in it still renders and simply moves on at the next click.
+        const order: BlendColorSpace[] = ['rgb', 'hsv', 'oklab'];
         const next = order[(order.indexOf(blendSpace) + 1) % order.length];
         editAction(() => emitChange(knots, undefined, next));
     };

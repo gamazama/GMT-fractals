@@ -124,8 +124,7 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
 
     { label: 'Blend Mode', action: () => {}, isHeader: true },
     { label: 'RGB (Standard)', checked: blendSpace === 'rgb', action: wrap(() => emit(knots, undefined, 'rgb')) },
-    { label: 'HSV (Short Path)', checked: blendSpace === 'hsv', action: wrap(() => emit(knots, undefined, 'hsv')) },
-    { label: 'HSV (Long Path)', checked: blendSpace === 'hsv-far', action: wrap(() => emit(knots, undefined, 'hsv-far')) },
+    { label: 'HSV', checked: blendSpace === 'hsv', action: wrap(() => emit(knots, undefined, 'hsv')) },
     { label: 'Oklab (Perceptual)', checked: blendSpace === 'oklab', action: wrap(() => emit(knots, undefined, 'oklab')) },
 
     { label: 'Output Mode', action: () => {}, isHeader: true },
