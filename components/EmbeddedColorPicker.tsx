@@ -70,6 +70,16 @@ interface EmbeddedColorPickerProps {
     onAlphaChange?: (alpha: number) => void;
     /** Optional host override for the fixed Palette row. Defaults to PALETTE_DEFAULT. */
     palette?: string[];
+    /**
+     * A host editing MORE THAN ONE thing at once (the gradient editor with several knots
+     * selected) passes this. Then a CHANNEL slider stops meaning "make everything this colour"
+     * and starts meaning "move this channel by this much on each of them", which is what a
+     * multi-selection is for: drop everyone's red a little, lift everyone's value, without
+     * flattening the differences that made you select them (owner, 2026-09-08).
+     * Setting a colour outright — the hex, the spectrum, the wheel, a swatch — still applies
+     * to all of them, because that is unambiguous.
+     */
+    onChannelAdjust?: (channel: 'r' | 'g' | 'b' | 'h' | 's' | 'v', delta: number) => void;
     /** The controls for the KNOT being edited (position, bias, interpolation), supplied by the
      *  host. Rendered as the 'stop' mode, first in the row — the owner asked for it on the left
      *  and on a switch, in place of the old collapsing side column. */
@@ -364,6 +374,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     onAlphaChange,
     palette = PALETTE_DEFAULT,
     stopBlock,
+    onChannelAdjust,
 }) => {
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
@@ -818,6 +829,17 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const countRange = HARMONY_COUNT[harmony];
     const angleRange = HARMONY_ANGLE[harmony];
 
+    /** One channel moved. With a multi-selection host the move is a DELTA it applies to each
+     *  of its own things; otherwise it is just this colour's edit. */
+    const channelEdit = useCallback((ch: 'r' | 'g' | 'b' | 'h' | 's' | 'v', next: number, current: number, own: () => void) => {
+        if (onChannelAdjust) {
+            const delta = next - current;
+            if (delta) onChannelAdjust(ch, delta);
+            return;
+        }
+        own();
+    }, [onChannelAdjust]);
+
     const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
         const ED = getEyeDropper();
@@ -972,24 +994,24 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const channelsBlock = (
         <>
             <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
-                onChange={(r) => rgbEdit({ r })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+                onChange={(r) => channelEdit('r', r, rgb.r, () => rgbEdit({ r }))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
-                onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+                onChange={(g) => channelEdit('g', g, rgb.g, () => rgbEdit({ g }))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
-                onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+                onChange={(b) => channelEdit('b', b, rgb.b, () => rgbEdit({ b }))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             {/* RGB and HSV are two ways of saying the same colour, so they read as two groups */}
             <div className={soft ? 'h-px bg-line/15' : 'h-px bg-line/5 my-0.5'} />
             <GradientSlider label="H" value={Math.round(hsb.h)} min={0} max={360} step={1} defaultValue={0} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
-                onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+                onChange={(h) => channelEdit('h', h, hsb.h, () => emit(clampHsb(h, hsb.s, hsb.v)))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="S" value={Math.round(hsb.s)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
-                onChange={(s) => emit(clampHsb(hsb.h, s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+                onChange={(s) => channelEdit('s', s, hsb.s, () => emit(clampHsb(hsb.h, s, hsb.v)))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             {/* The H/S/V numbers are ROUNDED for display: they come from a conversion, so the
                 raw values carry a colour's worth of decimals (25.94594595) that no one wants to
                 read. The drag still steps by 1 and the stored colour keeps its precision. */}
             {/* V, not B: the trio is HSV — hue, saturation, VALUE (owner, 2026-09-08). The
                 store calls the same number `v` already; only the label was wrong. */}
             <GradientSlider label="V" value={Math.round(hsb.v)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
-                onChange={(v) => emit(clampHsb(hsb.h, hsb.s, v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+                onChange={(v) => channelEdit('v', v, hsb.v, () => emit(clampHsb(hsb.h, hsb.s, v)))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             {alphaEnabled && (
                 <GradientSlider label="A" value={a} min={0} max={100} step={1}
                     trackBg={`linear-gradient(to right, rgba(${rgb.r},${rgb.g},${rgb.b},0), rgb(${rgb.r},${rgb.g},${rgb.b}))`}

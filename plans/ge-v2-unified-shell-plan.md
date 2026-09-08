@@ -349,6 +349,16 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **A channel slider means something different with SEVERAL knots selected (2026-09-08).** It
+  used to paint every selected knot the picker's whole colour, so nudging red flattened the
+  selection to one colour. Now: setting a colour outright — the hex, the spectrum, the wheel, a
+  swatch — still paints them all the same (that is unambiguous), but moving a CHANNEL moves
+  that channel by the same DELTA on each of them and leaves the rest of each colour alone. Drop
+  everyone's red, lift everyone's value, and the differences that made you select them survive.
+  `nudgeChannel` in colorUtils is the maths (RGB clamps per colour so one hitting the wall does
+  not drag the others; hue wraps, being an angle); the picker sends a delta through
+  `onChannelAdjust` only when the host says it is editing more than one thing. Guarded in
+  `test:palette` colordrag [4], falsified by rebuilding each colour from the shared value.
 - **One cursor scheme (owner's walk, 2026-09-08).** A cursor is a promise about the next
   click, so each shape now means exactly one thing across the hero and the editor, written at
   the top of AdvancedGradientEditor: **crosshair** place or draw on the track (add a knot, drag

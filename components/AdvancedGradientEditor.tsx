@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import type { ContextMenuItem } from '../types/help';
 import { isColorDrag, readColorDrag } from './gradient/colorDrag';
-import { rgbToHex, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
+import { rgbToHex, nudgeChannel, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
 const STRIP_PREVIEW_W = 1536;
@@ -406,6 +406,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             emitChange(knotsRef.current.map(k => selectedIds.has(k.id) ? { ...k, color } : k));
         }
     }, [selectedIds, emitChange]);
+
+    /**
+     * A channel nudged while SEVERAL knots are selected: move that channel by `delta` on each
+     * of them and leave the rest of each colour alone. Setting a colour outright still paints
+     * them all the same; this is the other half of that pair (owner, 2026-09-08: "adjust just
+     * that channel while keeping each individual knot's other settings").
+     * Clamped per knot, so one knot hitting the end does not drag the others with it.
+     */
+    const adjustChannel = useCallback((channel: 'r' | 'g' | 'b' | 'h' | 's' | 'v', delta: number) => {
+        const ids = selectedIds;
+        if (ids.size === 0) return;
+        emitChange(knotsRef.current.map((k) => (ids.has(k.id) ? { ...k, color: nudgeChannel(k.color, channel, delta) } : k)));
+    }, [emitChange, selectedIds]);
 
     // Host seam (v2 hero): a palette swatch click lands on its stop. The knot nearest `t`
     // within the tolerance is selected; otherwise one is inserted there the way a track
@@ -1210,6 +1223,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                         onColorChange={handleColorChange}
                                         palette={pickerPalette}
                                         stopBlock={stopFields}
+                                        onChannelAdjust={selectedNodes.length > 1 ? adjustChannel : undefined}
                                     />
                                 </div>,
                                 inspectorHost,

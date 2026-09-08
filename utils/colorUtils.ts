@@ -501,6 +501,27 @@ export const applyTint = (hex: string, t: number): string => {
   });
 };
 
+/**
+ * Move ONE channel of a colour and leave the rest of it alone. This is what a channel slider
+ * means when several things are selected at once: everyone's red drops by the same amount,
+ * nobody's green or blue moves, and the differences that made you select them survive (owner,
+ * 2026-09-08). RGB clamps at the ends, per colour, so one hitting the wall does not drag the
+ * others; hue wraps, since it is an angle.
+ */
+export const nudgeChannel = (hex: string, channel: 'r' | 'g' | 'b' | 'h' | 's' | 'v', delta: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb || !delta) return hex.toUpperCase();
+  const clamp = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+  if (channel === 'r' || channel === 'g' || channel === 'b') {
+    return rgbToHex({ ...rgb, [channel]: Math.round(clamp(rgb[channel] + delta, 255)) });
+  }
+  const hsv = rgbToHsv(rgb);
+  const next = channel === 'h'
+    ? { ...hsv, h: wrapHue(hsv.h + delta) }
+    : { ...hsv, [channel]: clamp(hsv[channel] + delta, 100) };
+  return rgbToHex(hsvToRgb(next.h, next.s, next.v));
+};
+
 export const COLOR_TEMPERATURE_PRESETS = [
   { label: 'Candle', value: 1900 },
   { label: 'Tungsten', value: 2700 },
