@@ -163,6 +163,7 @@ export type PickerMode = 'stop' | 'spectrum' | 'wheel' | 'harmony' | 'channels' 
 /** Spectrum and Wheel are two views of the same job, so they TOGGLE rather than stack. */
 const SURFACES: PickerMode[] = ['spectrum', 'wheel'];
 const MODES_KEY = 'gmt.colorpicker.modes';
+/** The owner's own working set, taken from their session (2026-09-08). */
 const MODE_DEFAULT: PickerMode[] = ['stop', 'spectrum', 'channels', 'swatches'];
 /** Stored sets from the first cut named this mode 'field'. */
 const migrateModes = (v: string[]): PickerMode[] => {
@@ -203,7 +204,7 @@ const MODE_TITLE: Record<PickerMode, string> = {
     spectrum: 'Spectrum — saturation and brightness for one hue',
     wheel: 'Wheel — hue and saturation on a disc',
     harmony: 'Harmony — related colours, and this gradient\u2019s own',
-    channels: 'Channels — RGB and HSB sliders',
+    channels: 'Channels — RGB and HSV sliders',
     kelvin: 'Kelvin — colour temperature, and its green-to-magenta tint',
     swatches: 'Recent colours — the ones you have used',
 };
@@ -260,11 +261,15 @@ const SwatchRow: React.FC<{
 };
 
 /**
- * Bespoke value slider with a custom gradient track. Uses the SHARED
- * usePrecisionTrackDrag (the exact GMT slider interaction — click-to-position,
- * delta-drag, Shift ×10 coarse / Alt ×0.1 fine), so it feels identical to every
- * other GMT slider, but paints the channel/hue gradient as its track with a
- * GMT-style thumb on top (which ScalarInput can't do).
+ * The studio's compact channel slider: a custom gradient track with a bar thumb, drawn small
+ * enough for a 26 px dock row. Uses the SHARED usePrecisionTrackDrag so the feel matches.
+ *
+ * @deprecated for the v2 dialect. `ScalarInput` can paint a gradient track now
+ * (`trackBackground`), so the soft skin uses the REAL `Slider` instead — which brings
+ * right-click reset, the default-value tick, the live indicator, help ids and a typed value
+ * that this one never had (owner, 2026-09-08: "this component is missing a lot of
+ * functionality that the real slider component has"). Kept for `full` chrome, whose rows are
+ * half the height a full Slider needs.
  */
 const GradientSlider: React.FC<{
     label: string;
@@ -276,10 +281,31 @@ const GradientSlider: React.FC<{
     onStart: () => void;
     onEnd: () => void;
     trackBg: string;
-}> = ({ label, value, min, max, step, onChange, onStart, onEnd, trackBg }) => {
+    /** Where the value's tick sits, and what a right-click resets to (soft dialect). */
+    defaultValue?: number;
+}> = ({ label, value, min, max, step, onChange, onStart, onEnd, trackBg, defaultValue }) => {
     const track = usePrecisionTrackDrag({ min, max, step, onChange, onDragStart: onStart, onDragEnd: onEnd });
     const pct = ((value - min) / (max - min)) * 100;
     const soft = useInputSkin() === 'soft';
+    // The v2 dialect uses the app's OWN slider, so the picker's channels behave like every
+    // other slider in the shell (and match their thickness).
+    if (soft) {
+        return (
+            <Slider
+                dense
+                label={label}
+                value={value}
+                min={min}
+                max={max}
+                step={step}
+                defaultValue={defaultValue}
+                trackBackground={trackBg}
+                onChange={onChange}
+                onDragStart={onStart}
+                onDragEnd={onEnd}
+            />
+        );
+    }
     return (
         // One rhythm for the whole picker: a 20 px BAND on an 8 px gap. Matching the pitch was
         // not enough — a 10 px track inside a 20 px row left 18 px of nothing between bars
@@ -945,19 +971,24 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // Group 2 — channels: the RGB + HSB (+ alpha) gradient sliders.
     const channelsBlock = (
         <>
-            <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
+            <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
                 onChange={(r) => rgbEdit({ r })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
+            <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
                 onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
+            <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
                 onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            {/* RGB and HSB are two ways of saying the same colour, so they read as two groups */}
+            {/* RGB and HSV are two ways of saying the same colour, so they read as two groups */}
             <div className={soft ? 'h-px bg-line/15 my-1' : 'h-px bg-line/5 my-0.5'} />
-            <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
+            <GradientSlider label="H" value={Math.round(hsb.h)} min={0} max={360} step={1} defaultValue={0} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
                 onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
+            <GradientSlider label="S" value={Math.round(hsb.s)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
                 onChange={(s) => emit(clampHsb(hsb.h, s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="B" value={hsb.v} min={0} max={100} step={1} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
+            {/* The H/S/V numbers are ROUNDED for display: they come from a conversion, so the
+                raw values carry a colour's worth of decimals (25.94594595) that no one wants to
+                read. The drag still steps by 1 and the stored colour keeps its precision. */}
+            {/* V, not B: the trio is HSV — hue, saturation, VALUE (owner, 2026-09-08). The
+                store calls the same number `v` already; only the label was wrong. */}
+            <GradientSlider label="V" value={Math.round(hsb.v)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
                 onChange={(v) => emit(clampHsb(hsb.h, hsb.s, v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             {alphaEnabled && (
                 <GradientSlider label="A" value={a} min={0} max={100} step={1}

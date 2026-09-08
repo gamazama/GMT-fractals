@@ -97,6 +97,11 @@ interface BaseSliderProps {
     className?: string;
     /** soft skin: one-line row (see components/inputs/skin.tsx). */
     dense?: boolean;
+    /** Paint the track with a gradient instead of the accent fill — for a slider whose RANGE
+     *  is the meaning (a colour channel, a hue sweep). ScalarInput already draws it and drops
+     *  the fill; this just carries it through, so a colour picker can use the real slider
+     *  rather than a hand-rolled one (owner, 2026-09-08). */
+    trackBackground?: string;
 }
 
 /**
@@ -127,11 +132,13 @@ export const BaseSlider: React.FC<BaseSliderProps> = ({
     disabled = false,
     className = '',
     dense,
+    trackBackground,
 }) => {
     // Pass unmapped min/max - ScalarInput handles the mapping internally.
     return (
         <ScalarInput
             dense={dense}
+            trackBackground={trackBackground}
             label={label}
             value={value}
             onChange={onChange}
@@ -295,6 +302,7 @@ const Slider: React.FC<SliderProps> = ({
             dataHelpId={helpIdAttr}
             className={props.className}
             dense={props.dense}
+            trackBackground={props.trackBackground}
             defaultValue={defaultValue}
             onReset={() => {
                 handleInteractionStart('param');

@@ -349,6 +349,17 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **The picker's channels ARE the app's slider (2026-09-08).** The bespoke `GradientSlider`
+  was missing most of what the real one does — right-click reset, the default tick, the live
+  indicator, help ids, a properly typed value (owner: "this component is missing a lot of
+  functionality that the real slider component has"). `ScalarInput` could already paint a
+  gradient track; `Slider` simply never forwarded it, so it does now (`trackBackground`), and
+  the soft dialect renders the real `Slider` for every channel. That also puts the bars back to
+  the component's own 10 px. `GradientSlider` stays for `full` chrome, whose rows are half the
+  height a full Slider needs, and is marked deprecated for v2. The trio is **HSV**, not HSB —
+  the store always called it `v`, only the label was wrong — and the H/S/V readouts are rounded
+  for display, since they come from a conversion and carry a colour's worth of decimals.
+  The DEFAULT mode set is now the owner's own working one: stop · spectrum · channels · recent.
 - **The owner's third walk of the picker (2026-09-08).** Spectrum and Wheel became ONE joined
   segmented control in the shell's button language (shift-click keeps both; either can still be
   off), and the independent switches beside it wear the same thin border when on. The knot's own
