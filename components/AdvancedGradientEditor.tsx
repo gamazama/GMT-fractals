@@ -129,6 +129,23 @@ interface AdvancedGradientEditorProps {
     stripHint?: React.ReactNode;
 }
 
+/**
+ * CURSORS, one scheme across the whole editor (owner's walk, 2026-09-08). A cursor is a
+ * promise about the next click, so each shape means exactly one thing here:
+ *
+ *   crosshair    place or draw ON the track  — add a knot, drag a marquee
+ *   grab/grabbing  pick a knot up and move it
+ *   move         move a whole selection
+ *   ew-resize    change a value along the axis — scale a selection, a bias handle, a slider,
+ *                a palette swatch sliding along the ramp
+ *   pointer      a click that DOES something — bake, cancel, a chip, a button
+ *   no-drop      let go here and the knot is dropped from the gradient
+ *   default      nothing happens here
+ *
+ * The rule that keeps it honest: a surface only wears `pointer` while it actually has a
+ * click to give. The bar used to wear it always, including when a click did nothing.
+ */
+
 /** Imperative seam for a host that owns a palette face over the strip (the v2 hero). */
 export interface AdvancedGradientEditorHandle {
     /** Select the knot within `tolerance` of `t`; if there is none, insert one there (the
@@ -545,7 +562,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             if (isDragRemovingRef.current !== isPullingAway) {
                 isDragRemovingRef.current = isPullingAway;
                 setIsDragRemoving(isPullingAway);
-                document.body.style.cursor = isPullingAway ? 'no-drop' : 'ew-resize';
+                // match what the element under the pointer already promised: a knot is
+                // GRABBED, a selection is MOVED. It used to say ew-resize for both, which
+                // contradicted the knot's own grab cursor (owner's cursor walk, 2026-09-08).
+                document.body.style.cursor = isPullingAway ? 'no-drop' : type === 'knot' ? 'grabbing' : 'move';
             }
 
             // Engine stop-op: move selected stops by the pointer delta (shift-snaps).
@@ -886,7 +906,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 onContextMenu={openTrackContextMenu}
             >
                 <div
-                    className={`w-full relative mb-0 cursor-pointer overflow-hidden group/strip ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
+                    className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick || chrome !== 'strip' ? 'cursor-pointer' : 'cursor-default'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
                     style={{ height: stripHeight }}
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
                     onClick={onStripClick ? (e) => { if (!(e.target as HTMLElement).closest('.bias-handle')) onStripClick(); } : undefined}

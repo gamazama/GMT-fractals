@@ -349,6 +349,18 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **One cursor scheme (owner's walk, 2026-09-08).** A cursor is a promise about the next
+  click, so each shape now means exactly one thing across the hero and the editor, written at
+  the top of AdvancedGradientEditor: **crosshair** place or draw on the track (add a knot, drag
+  a marquee) · **grab / grabbing** pick a knot up · **move** move a whole selection ·
+  **ew-resize** change a value along the axis (scale a selection, a bias handle, a slider, a
+  palette swatch sliding the ramp) · **pointer** a click that DOES something (bake, cancel, a
+  chip, a button) · **no-drop** let go and the knot leaves · **default** nothing happens here.
+  Two things were lying: the ramp wore `pointer` at all times, including when a click did
+  nothing (it now wears it only while `onStripClick` is live — verified `default` at rest,
+  `pointer` on both halves once a face splits the bar), and a knot DRAG overrode the body
+  cursor to `ew-resize`, contradicting the knot's own grab. Measured in the browser, state by
+  state, including the preview chip correctly having no pointer since it has no action.
 - **The knot says what it does (2026-09-08).** A knot whose segment HOLDS is drawn as a
   flat-topped square; one that travels keeps the pointed house. A stepped gradient is now
   readable straight off the track. Right-clicking a knot opens its own menu with INTERPOLATION

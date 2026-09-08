@@ -423,7 +423,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       gutters painted with its end colours and the top corners rounded, so the two
                       halves read as one bar (owner, 2026-09-07) */}
                   {split && (
-                    <div className={`relative group/src ${mix ? '' : 'mb-px'}`} style={{ minHeight: sourceH }} data-gx-source-half={gesture ? 'cancel' : undefined}>
+                    <div className={`relative group/src ${gesture ? 'cursor-pointer' : ''} ${mix ? '' : 'mb-px'}`} style={{ minHeight: sourceH }} data-gx-source-half={gesture ? 'cancel' : undefined}>
                       <SourceBands derived={derived} onKeepSource={gesture ? onCancelFace : undefined} />
                       {gesture && <HalfHint className="group-hover/src:opacity-100">Keep the source · cancel</HalfHint>}
                     </div>
