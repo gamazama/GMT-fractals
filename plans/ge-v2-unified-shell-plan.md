@@ -954,3 +954,23 @@ phase now carries**. Items move out of this list only when a later phase's entry
   (L9) — `smoke:ge-tray` had to re-measure the wall before its second wall click for
   exactly that reason. Gates green: `smoke:ge-ground` (eight steps), `smoke:ge-tray`,
   `smoke:ge-hero`, `test:palette`, knip.
+- 2026-09-08 · Phase D, the owner's third pass (built): **the pad follows the Arrange
+  state.** Of the Arrange axes, hue · lightness · vividness are colour coordinates, so the
+  pad's Y is the ROWS axis and its X the SORT axis whenever those are colour axes, and the
+  strip beside it is the third (`palette/core/padAxes.ts`, the table pinned by
+  `test-palette-groundsets` [7]); the field is painted for any pair (`HueLightnessPad` takes
+  `axes` + the third coordinate's value from the strip's window centre) and the strip is
+  painted toward the pad window's average colour for whichever axis it carries
+  (`stripTrackFor`). Rows by complexity / rainbow / warmth / none fall back to the default
+  hue × lightness pad. **The scrollbar beside the pad is always there** (owner: "rather
+  than no lens, default to the standard display"): the lens range when the bands are on the
+  pad's Y, else the plain scroll position — a scrollbar, which is always true; the lens on
+  the field is withheld only when it would lie. `smoke:ge-ground` [9] guards the switch both
+  ways. **Noticed:** warmth is a hue projection (the Filters comment already says so) and
+  could map onto the hue axis reversed if a walk wants it; `QualityRangePad.tsx` still
+  mentions the pad by its old name in a comment.
+  **Then (same pass):** the scrollbar's track dims to 50 % opacity outside the REACHABLE part
+  of the axis — the bands that exist — so it also says where the wall can take you (owner:
+  "it's so beautiful"). **Session closed here (owner); Phase D awaits nothing but use.** Next
+  buildable: Phase W (wallpaper) or Phase F (phone); C.5 Mix UI parked; the §8 L10 wording;
+  Phase G decides the variants modules and ADR-0112.

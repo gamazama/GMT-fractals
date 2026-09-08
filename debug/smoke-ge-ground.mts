@@ -17,7 +17,12 @@
  *   [7] reload — the ground comes back on that group (the set id persists)
  *   [8] the pad is the wall's map (D.2): on All the scrollbar beside the pad carries a thumb
  *       for the lightness on screen, and scrolling the wall moves it
- *   (Steps [9]–[10], the Snapshots set, were removed with the feature on 2026-09-08.)
+ *   [9] the pad follows the Arrange state: Rows by = Vividness puts chroma on the pad's Y
+ *       and lightness on the strip, with the lens still there; Rows by = Complexity falls
+ *       back to the default pad and the chroma strip, the lens withheld but the scrollbar
+ *       still there as a plain scroll position (owner: "rather than no lens, default to
+ *       the standard display")
+ *   (The old [9]–[10], the Snapshots set, were removed with the feature on 2026-09-08.)
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
  * [3] "the title does not say Today"; `tileSizeFor` returning the base for every count reds
@@ -57,6 +62,9 @@ const state = (page: Page) =>
       filters: !!document.querySelector('[data-gx-filters-trigger]'),
       keep: (document.querySelector('[data-gx-keep-these]') as HTMLElement | null)?.innerText ?? null,
       markerTop: (document.querySelector('[data-gx-pad-marker]') as HTMLElement | null)?.getBoundingClientRect().top ?? null,
+      padAxes: (document.querySelector('[data-gx-pad-axes]') as HTMLElement | null)?.dataset.gxPadAxes ?? null,
+      lens: !!document.querySelector('[data-gx-pad-lens]'),
+      stripAxis: (document.querySelector('[data-gx-pad-strip]') as HTMLElement | null)?.dataset.gxPadStrip ?? null,
       tools: wall?.querySelectorAll('button[aria-label]').length ?? 0,
       canvases: canvases.length,
       canvasLeft: c0 && wr ? Math.round(c0.x - wr.x) : null,
@@ -200,6 +208,25 @@ async function main() {
   s = await state(page);
   if (s.markerTop == null || Math.abs(s.markerTop - markerBefore!) < 2) fail(`[8] the marker did not move with the wall (${markerBefore} → ${s.markerTop})`);
   console.log(`✓ [8] the pad marks where the wall is (top ${Math.round(markerBefore!)} → ${Math.round(s.markerTop)})`);
+
+  // [9] the pad follows the Arrange state
+  const setRows = (i: number) => page.evaluate((n) => (window as any).__store.getState().setPaletteFilters({ rowsBy: n }), i);
+  await setRows(2); // vividness
+  await page.waitForTimeout(600);
+  s = await state(page);
+  if (s.padAxes !== 'hue×chroma') fail(`[9] rows by vividness did not put chroma on the pad's Y (${s.padAxes})`);
+  if (s.stripAxis !== 'lightness') fail(`[9] the strip is not lightness (${s.stripAxis})`);
+  if (!s.lens || s.markerTop == null) fail('[9] the lens / scrollbar is gone although the rows are on the pad');
+  await setRows(3); // complexity
+  await page.waitForTimeout(600);
+  s = await state(page);
+  if (s.padAxes !== 'hue×lightness') fail(`[9] rows by complexity did not fall back to the default pad (${s.padAxes})`);
+  if (s.lens) fail('[9] a lens is shown although the bands are not on any pad axis');
+  if (s.markerTop == null) fail('[9] the scrollbar is gone — it should fall back to the plain scroll position');
+  if (s.stripAxis !== 'chroma') fail(`[9] the strip is not chroma again (${s.stripAxis})`);
+  await setRows(1); // back to lightness
+  await page.waitForTimeout(300);
+  console.log('✓ [9] the pad follows the Arrange state: vividness on Y with the lightness strip; complexity falls back with no lens');
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
   await browser.close();

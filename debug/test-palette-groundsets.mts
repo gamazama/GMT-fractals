@@ -16,6 +16,9 @@
  *   [6] insertMany (the store): files in one write at the START of an existing group's
  *       run, at the tail for a new group with a unique label, skips content already in
  *       that group, and returns the ids filed
+ *   [7] padAxesFor (`palette/core/padAxes.ts`): the pad's axes follow the Arrange state —
+ *       rows on Y and sort on X when they are colour axes, the strip is the third; a
+ *       non-colour rows axis falls back to hue × lightness with no lens
  *
  * FALSIFIED 2026-09-08 (each reverted): dropping the `bins` push in `listGroundSets` reds
  * [1] "Today is second"; `favientsToEntries` numbering rows from 1 reds [3] "rows are
@@ -41,6 +44,7 @@ const { listGroundSets, membersOf, favientsToEntries, tileSizeFor, parseSetId, b
   await import('../palette/core/groundSets');
 const { useFavientsStore, RECENT_GROUP, DEFAULT_GROUP, PRESETS_GROUP, newGroupId } = await import('../palette/store/favientsStore');
 const { dayKey } = await import('../palette/components/favientBlocks');
+const { padAxesFor } = await import('../palette/core/padAxes');
 type Favient = import('../palette/store/favientsStore').Favient;
 type GradientConfig = import('../types').GradientConfig;
 
@@ -159,6 +163,28 @@ console.log('[6] insertMany');
   ok(fresh.length === 1 && st().favients[st().favients.length - 1].group === g, 'a new group lands at the tail');
   ok(st().groupLabels[g] === 'One 2', `a new group's label is made unique — got "${st().groupLabels[g]}"`);
   ok(st().lastGroupId === g, 'the new group is the last-used group');
+}
+
+console.log('[7] padAxesFor');
+{
+  const d = padAxesFor('lightness', 'hue');
+  ok(d.x === 'hue' && d.y === 'lightness' && d.strip === 'chroma' && d.rowsOnY, 'the default: hue × lightness, chroma strip, lens on');
+  const v = padAxesFor('vividness', 'hue');
+  ok(v.x === 'hue' && v.y === 'chroma' && v.strip === 'lightness' && v.rowsOnY, 'rows by vividness: hue × chroma, lightness strip');
+  const lc = padAxesFor('lightness', 'vividness');
+  ok(lc.x === 'chroma' && lc.y === 'lightness' && lc.strip === 'hue', 'sort by vividness: chroma × lightness, hue strip');
+  const hl = padAxesFor('hue', 'lightness');
+  ok(hl.x === 'lightness' && hl.y === 'hue' && hl.strip === 'chroma', 'rows by hue: lightness × hue');
+  const hh = padAxesFor('hue', 'hue');
+  ok(hh.x === 'lightness' && hh.y === 'hue', 'rows and sort both hue: X falls to lightness');
+  const ll = padAxesFor('lightness', 'lightness');
+  ok(ll.x === 'hue' && ll.y === 'lightness', 'rows and sort both lightness: X falls to hue');
+  const cx = padAxesFor('complexity', 'hue');
+  ok(cx.x === 'hue' && cx.y === 'lightness' && cx.strip === 'chroma' && !cx.rowsOnY, 'rows by complexity: the default pad, no lens');
+  const nn = padAxesFor('none', 'name');
+  ok(nn.x === 'hue' && nn.y === 'lightness' && !nn.rowsOnY, 'no rows, sort by name: the default pad, no lens');
+  const nh = padAxesFor('none', 'vividness');
+  ok(nh.x === 'chroma' && nh.y === 'lightness' && nh.strip === 'hue' && !nh.rowsOnY, 'no rows, sort by vividness: chroma × lightness, no lens');
 }
 
 console.log(failures === 0 ? '\nPASS test-palette-groundsets' : `\nFAIL test-palette-groundsets (${failures})`);

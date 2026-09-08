@@ -21,13 +21,21 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { oklabToRgbSafe } from '../core/oklab';
 
 export type Range01 = [number, number];
+import { DEFAULT_PAD_AXES, type ColourAxis, type PadAxes } from '../core/padAxes';
 
 interface Props {
-  /** Hue window, 0..1 of the wheel. */
-  hue: Range01;
-  /** Lightness window, 0 = dark, 1 = light. */
-  light: Range01;
-  onChange: (hue: Range01, light: Range01) => void;
+  /** The X window (0..1 along the pad's X axis — hue by default). */
+  x: Range01;
+  /** The Y window (0..1 along the pad's Y axis — lightness by default; 1 is the top). */
+  y: Range01;
+  onChange: (x: Range01, y: Range01) => void;
+  /** Which colour coordinates the pad's axes are, and which is on the strip beside it
+   *  (GE v2, owner 2026-09-08: the pad follows the wall's Arrange state — see
+   *  `palette/core/padAxes.ts`). The default is hue × lightness. */
+  axes?: PadAxes;
+  /** The third coordinate's value (0..1) the field is painted at — the centre of the
+   *  strip's window. 0.5 on the default axes is the chroma the pad always used. */
+  fixed?: number;
   onDragStart?: () => void;
   onDragEnd?: () => void;
   width?: number;
@@ -51,15 +59,30 @@ const L_HI = 0.95;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const isFull = (r: Range01) => r[0] <= 0 && r[1] >= 1;
+/** The chroma a normalised 0..1 chroma value paints at (0.5 → the 0.11 the pad always used). */
+const C_MAX = CHROMA * 2;
+const COLOUR_AXES: readonly ColourAxis[] = ['hue', 'lightness', 'chroma'];
 
-/** Paint the field once: OKLab, gamut-safe, hue left→right, light top→bottom. */
-const paintField = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+/** Normalised (0..1 per axis) → OKLab. Lightness spans L_LO..L_HI, chroma 0..C_MAX. */
+const labOf = (v: Record<ColourAxis, number>) => {
+  const L = L_LO + clamp01(v.lightness) * (L_HI - L_LO);
+  const C = clamp01(v.chroma) * C_MAX;
+  const hRad = v.hue * Math.PI * 2;
+  return { L, a: C * Math.cos(hRad), b: C * Math.sin(hRad) };
+};
+
+/** Paint the field once: OKLab, gamut-safe, the X axis left→right, the Y axis with 1 at
+ *  the top, the third coordinate fixed. */
+const paintField = (ctx: CanvasRenderingContext2D, w: number, h: number, axes: PadAxes, fixed: number) => {
   const img = ctx.createImageData(w, h);
+  const third = COLOUR_AXES.find((a) => a !== axes.x && a !== axes.y)!;
+  const v: Record<ColourAxis, number> = { hue: 0, lightness: 0, chroma: 0 };
+  v[third] = fixed;
   for (let y = 0; y < h; y++) {
-    const L = L_HI - (y / (h - 1)) * (L_HI - L_LO);
+    v[axes.y] = 1 - y / (h - 1);
     for (let x = 0; x < w; x++) {
-      const hRad = (x / (w - 1)) * Math.PI * 2;
-      const rgb = oklabToRgbSafe({ L, a: CHROMA * Math.cos(hRad), b: CHROMA * Math.sin(hRad) });
+      v[axes.x] = x / (w - 1);
+      const rgb = oklabToRgbSafe(labOf(v));
       const i = (y * w + x) * 4;
       img.data[i] = rgb.r;
       img.data[i + 1] = rgb.g;
@@ -77,8 +100,10 @@ type Drag =
 
 export const HueLightnessPad: React.FC<Props> = ({
   marker = null,
-  hue,
-  light,
+  x: hue,
+  y: light,
+  axes = DEFAULT_PAD_AXES,
+  fixed = 0.5,
   onChange,
   onDragStart,
   onDragEnd,
@@ -100,8 +125,8 @@ export const HueLightnessPad: React.FC<Props> = ({
     const cv = canvasRef.current;
     const ctx = cv?.getContext('2d');
     if (!cv || !ctx) return;
-    paintField(ctx, cv.width, cv.height);
-  }, []);
+    paintField(ctx, cv.width, cv.height, axes, fixed);
+  }, [axes.x, axes.y, fixed]);
 
   // The window in pad pixels. y is DOWN, light is UP: top = light[1], bottom = light[0].
   const box = useMemo(() => {
@@ -204,7 +229,8 @@ export const HueLightnessPad: React.FC<Props> = ({
       ref={hostRef}
       className={`relative select-none touch-none rounded overflow-hidden ring-1 ring-line/20 ${hover} ${className}`}
       style={{ width, height }}
-      title={title ?? 'Drag a box to keep only these hues and lightnesses · drag inside to move it · drag an edge to resize · click: a hue band, or clear'}
+      title={title ?? 'Drag a box to keep only this part of the wall · drag inside to move it · drag an edge to resize · click: a band, or clear'}
+      data-gx-pad-axes={`${axes.x}×${axes.y}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -228,13 +254,14 @@ export const HueLightnessPad: React.FC<Props> = ({
       {marker && (() => {
         // The wall's viewport as a lens: y is down, light is up (as the window above). It
         // indicates only — every gesture on the field stays the window's.
-        const my0 = (1 - Math.max(marker[0], marker[1])) * height;
-        const my1 = (1 - Math.min(marker[0], marker[1])) * height;
+        // rounded the same way as the scrollbar's thumb beside the pad, so the two line up
+        const my0 = Math.round((1 - Math.max(marker[0], marker[1])) * height);
+        const my1 = Math.round((1 - Math.min(marker[0], marker[1])) * height);
         return (
           <div
             data-gx-pad-lens=""
             className="absolute left-0 right-0 pointer-events-none bg-white/[.14] border-y border-white/60"
-            style={{ top: Math.round(my0), height: Math.max(2, Math.round(my1 - my0)) }}
+            style={{ top: my0, height: Math.max(3, my1 - my0) }}
           />
         );
       })()}
@@ -243,20 +270,29 @@ export const HueLightnessPad: React.FC<Props> = ({
 };
 
 /**
- * Paint a saturation strip toward the AVERAGE colour of a hue × lightness window (owner,
- * 2026-09-06): grey at the left, the window's mean hue at its mean lightness at full chroma
- * on the right. Returns null while the hue window is clear (a full wheel averages to grey, so
- * the caller falls back to its generic chroma track).
+ * Paint the strip beside the pad for its third coordinate, toward the AVERAGE colour of the
+ * pad's window (owner, 2026-09-06 for the chroma strip: grey at the left, the window's mean
+ * hue at its mean lightness at full chroma on the right). The strip axis runs 0..1 across;
+ * the pad's two axes sit at their windows' centres. Returns null when the strip is chroma or
+ * lightness and the hue window is clear (a full wheel averages to grey, so the caller falls
+ * back to its generic track); a hue strip is always paintable.
  */
-export const satTrackFor = (hue: Range01, light: Range01): ((ctx: CanvasRenderingContext2D, w: number, h: number) => void) | null => {
-  if (isFull(hue)) return null;
-  const hRad = ((hue[0] + hue[1]) / 2) * Math.PI * 2;
-  const L = L_LO + ((light[0] + light[1]) / 2) * (L_HI - L_LO);
+export const stripTrackFor = (axes: PadAxes, xWin: Range01, yWin: Range01): ((ctx: CanvasRenderingContext2D, w: number, h: number) => void) | null => {
+  const hueWin = axes.x === 'hue' ? xWin : axes.y === 'hue' ? yWin : null;
+  if (axes.strip !== 'hue' && hueWin && isFull(hueWin)) return null;
+  const centre = (r: Range01) => (r[0] + r[1]) / 2;
+  const v: Record<ColourAxis, number> = { hue: 0.5, lightness: 0.5, chroma: 0.5 };
+  v[axes.x] = centre(xWin);
+  v[axes.y] = centre(yWin);
   return (ctx, w, h) => {
     const img = ctx.createImageData(w, h);
     for (let x = 0; x < w; x++) {
-      const C = (x / (w - 1)) * 0.3;
-      const rgb = oklabToRgbSafe({ L, a: C * Math.cos(hRad), b: C * Math.sin(hRad) });
+      const t = x / (w - 1);
+      const vv = { ...v, [axes.strip]: t } as Record<ColourAxis, number>;
+      // the chroma strip reaches further than the field (0.3) so its right end reads vivid
+      const lab = labOf(vv);
+      if (axes.strip === 'chroma') { const hRad = vv.hue * Math.PI * 2; lab.a = t * 0.3 * Math.cos(hRad); lab.b = t * 0.3 * Math.sin(hRad); }
+      const rgb = oklabToRgbSafe(lab);
       for (let y = 0; y < h; y++) {
         const i = (y * w + x) * 4;
         img.data[i] = rgb.r; img.data[i + 1] = rgb.g; img.data[i + 2] = rgb.b; img.data[i + 3] = 255;
@@ -265,5 +301,9 @@ export const satTrackFor = (hue: Range01, light: Range01): ((ctx: CanvasRenderin
     ctx.putImageData(img, 0, 0);
   };
 };
+
+/** The default pad's chroma strip (kept for callers that predate `stripTrackFor`). */
+export const satTrackFor = (hue: Range01, light: Range01): ((ctx: CanvasRenderingContext2D, w: number, h: number) => void) | null =>
+  stripTrackFor(DEFAULT_PAD_AXES, hue, light);
 
 export default HueLightnessPad;

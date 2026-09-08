@@ -100,6 +100,13 @@ export interface WallBand {
   visible: boolean;
 }
 
+/** The scroll box as `onViewport` reports it: where it is and how tall the whole wall is. */
+export interface WallView {
+  scrollTop: number;
+  height: number;
+  scrollHeight: number;
+}
+
 export interface PickerWallProps {
   groups: PickerGroup[];
   /** Shared 256×N sprite — row N is catalog entry `row`. */
@@ -114,10 +121,11 @@ export interface PickerWallProps {
    *  and its own key) with whether it intersects the viewport — reported on scroll, on
    *  resize and when the rows change (GE v2's pad-as-map draws the wall's viewport on the
    *  hue × lightness pad from this, and scrolls to a band by its key). rAF-throttled. */
-  onViewport?: (bands: WallBand[], viewportHeight: number) => void;
+  onViewport?: (bands: WallBand[], view: WallView) => void;
   /** Scroll so a band's top — or a point `frac` (0..1) of the way down it — sits at the top
-   *  of the viewport; bump `seq` to fire again for the same target. */
-  scrollToGroup?: { key: string; frac?: number; seq: number } | null;
+   *  of the viewport; with no `key`, `frac` is of the whole scroll height (a plain
+   *  scrollbar seek). Bump `seq` to fire again for the same target. */
+  scrollToGroup?: { key?: string; frac?: number; seq: number } | null;
   /** Begin an HTML5 drag for the swatch under the pointer (e.g. drag into Favients). */
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   selectedId?: string;
@@ -1112,7 +1120,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
           visible: br.bottom > r.top && br.top < r.bottom,
         });
       });
-      cb(bands, r.height);
+      cb(bands, { scrollTop: el.scrollTop, height: r.height, scrollHeight: el.scrollHeight });
     };
     const schedule = () => { if (!raf) raf = requestAnimationFrame(report); };
     el.addEventListener('scroll', schedule, { passive: true });
@@ -1125,6 +1133,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     if (!scrollToGroup) return;
     const el = scrollRef.current;
     if (!el) return;
+    if (scrollToGroup.key == null) {
+      // a plain scrollbar seek: the fraction is of the whole wall
+      el.scrollTop = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, (scrollToGroup.frac ?? 0) * el.scrollHeight));
+      return;
+    }
     const band = el.querySelector<HTMLElement>(`[data-wall-group="${CSS.escape(scrollToGroup.key)}"]`);
     if (!band) return;
     const br = band.getBoundingClientRect();
