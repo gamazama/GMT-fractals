@@ -152,10 +152,15 @@ const BiasIcon = () => (
     </svg>
 );
 
-const KnotIcon = ({ color, isSelected }: { color: string, isSelected: boolean }) => (
+/**
+ * The knot's SHAPE says what its segment does (owner, 2026-09-08): a pointed house for a
+ * segment that travels (linear, smooth), a flat-topped SQUARE for one that holds (step).
+ * A stepped gradient is then readable straight off the track.
+ */
+const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelected: boolean, interpolation?: InterpolationMode }) => (
     <svg width="14" height="18" viewBox="0 0 14 18" className="drop-shadow-md pointer-events-none">
         <path 
-            d="M 7 0 L 14 7 L 14 17 L 0 17 L 0 7 Z" 
+            d={interpolation === 'step' ? "M 0 1 L 14 1 L 14 17 L 0 17 Z" : "M 7 0 L 14 7 L 14 17 L 0 17 L 0 7 Z"}
             fill={color} 
             stroke={isSelected ? "white" : "#555"} 
             strokeWidth={isSelected ? "2" : "1"} 
@@ -739,6 +744,44 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         openContextMenu(e.clientX, e.clientY, buildMenuItems(), [helpId || 'ui.gradient_editor']);
     };
 
+    /** Right-click ON a knot: its own menu. The v2 hero trims the strip's menu to Actions and
+     *  View, but a knot's INTERPOLATION belongs on the knot itself — it is the one property
+     *  you reach for while looking at it (owner, 2026-09-08). Built from the same shared list,
+     *  so the wording and the checkmarks cannot drift from the inspector's. */
+    const openKnotContextMenu = (e: React.MouseEvent, knotId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // a right-click on an unselected knot selects it first, so the menu acts on what you clicked
+        if (!selectedIds.has(knotId)) setSelectedIds(new Set([knotId]));
+        const full = buildGradientMenu({
+            knots,
+            config: currentConfig,
+            selectedIds: selectedIds.has(knotId) ? selectedIds : new Set([knotId]),
+            blendSpace,
+            colorSpace,
+            isBiasHandlesVisible,
+            emit: emitChange,
+            editAction,
+            setSelectedIds,
+            setBiasHandlesVisible: setIsBiasHandlesVisible,
+            copy: handleCopy,
+            paste: handlePaste,
+        });
+        // the Interpolation section, then whatever the host's own trim leaves
+        const interp: ContextMenuItem[] = [];
+        let inSection = false;
+        for (const it of full) {
+            if (it.isHeader) {
+                inSection = /^Interpolation/.test(it.label ?? '');
+                if (inSection) interp.push(it);
+                continue;
+            }
+            if (inSection) interp.push(it);
+        }
+        const rest = onlySections(full).filter((it) => !interp.includes(it));
+        openContextMenu(e.clientX, e.clientY, [...interp, ...rest], [helpId || 'ui.gradient_editor']);
+    };
+
     const handlePresetsClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
@@ -922,6 +965,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             key={knot.id} 
                             className={`gradient-interactive-element absolute top-0 w-4 h-5 -ml-2 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center group transition-opacity duration-200 ${isDragRemoving && selectedIds.has(knot.id) ? 'opacity-30' : 'opacity-100'}`} 
                             style={{ left: `${knot.position * 100}%` }} 
+                            onContextMenu={(e) => openKnotContextMenu(e, knot.id)}
                             onMouseDown={(e) => {
                                 e.stopPropagation();
                                 const isRightClick = e.button === 2;
@@ -954,7 +998,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                 }
                             }}
                         >
-                            <KnotIcon color={knot.color} isSelected={selectedIds.has(knot.id)} />
+                            <KnotIcon color={knot.color} isSelected={selectedIds.has(knot.id)} interpolation={knot.interpolation} />
                             {/* "this one will take it" — a dashed ring on every knot while a
                                 colour is in flight, brighter on the one under the pointer */}
                             {colourDropAt !== null && (

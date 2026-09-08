@@ -349,6 +349,13 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **The knot says what it does (2026-09-08).** A knot whose segment HOLDS is drawn as a
+  flat-topped square; one that travels keeps the pointed house. A stepped gradient is now
+  readable straight off the track. Right-clicking a knot opens its own menu with INTERPOLATION
+  at the top (the one property you reach for while looking at a knot), then whatever the host's
+  trim leaves — built from the same shared `buildGradientMenu`, so its wording and checkmarks
+  cannot drift from the inspector's. A right-click on an unselected knot selects it first, so
+  the menu acts on what you clicked.
 - **Small ones, same evening.** A colour can be dropped on the palette row's **+**: it makes
   the new swatch and lands there on the ramp (`addSwatch` now returns the position it chose, so
   the caller can act on that spot). The soft slider's number sits in a slightly darker WELL, so
