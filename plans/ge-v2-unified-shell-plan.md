@@ -354,11 +354,17 @@ the fallback.
   rounded square (spectrum), a circle (wheel), the knot's own silhouette (stop), four
   overlapping circles (harmony), sliders (channels), a thermometer (kelvin) and loose chips
   (swatches), which is exactly the set the toolbar needed. `components/gradient/pickerIcons.tsx`
-  transcribes each path VERBATIM and frames it with its own `viewBox="<x> 146 8 8"` rather than
-  re-origining the coordinates by hand, which is how a curve quietly loses a pixel; the only
-  changes are `currentColor` in place of the authored ink, so they follow the theme and the
-  accent, and dropping a clip-path the viewBox already performs. Stroke weights are kept as
-  drawn. The unicode stand-ins on Copy and the eyedropper are gone.
+  carries them. **Transcribing them verbatim was wrong** and the owner caught it: framing each
+  glyph at its exact bounding box CLIPS the stroke against the frame (a stroke straddles its
+  path) and leaves no breathing room in the button, so they came out oversized and cut. They
+  are now redrawn to the same designs on a 16-unit grid with the ink filling 2.1–13.9 — about
+  three quarters of the box, the balance between clipped and lost. The harmony glyph is eased
+  too: four heavily overlapping circles are lovely at 44 px and a flower at 14, so the overlap
+  is reduced until the four discs survive at icon size, which is the whole point of the glyph.
+  The eyedropper is the exception, kept verbatim: it is filled rather than stroked, so nothing
+  clips, and it reads correctly as drawn. `currentColor` throughout so a glyph follows the
+  theme and turns accent when its mode is on; the file carries the house rules for the next
+  one. The unicode stand-ins on Copy and the eyedropper are gone.
 - **`hsv-far` retired (owner, 2026-09-08).** Blending hue the LONG way round is gone from every
   chooser: the strip's cycle, the stops menu, the palette dock's dropdown and the editor-config
   cycle. The TYPE and the renderer keep it on purpose — gradients already saved in it must still
