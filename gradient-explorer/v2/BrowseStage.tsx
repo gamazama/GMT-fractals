@@ -17,6 +17,15 @@
  *
  * No hero here. A wall click is a candidate (`setHeroPick`); `WorkingHero` previews it.
  *
+ * ONE GROUND, MANY SETS (Phase D, 2026-09-08): the wall shows whichever set the rail has lit
+ * (`useGroundSetId` → `useGroundSource`). On the catalogue (All) everything above applies.
+ * On a user set — a dated bin of Recent, Kept, a named group — the pad and Filters are
+ * gone (they are the catalogue's lens), the header names the set, search still narrows,
+ * "More like this" still ranks, the carve tools are gone (their ids are catalogue ids), the
+ * gutter is 0 (no bands to label) and the tiles are as large as the count allows. "Keep
+ * these N" on a narrowed All files the narrowed wall as a new group and puts it on the
+ * ground — a saved search that is also a place.
+ *
  * All of the behaviour is `usePickerModel` — the same hook the old `PickerStage` and
  * app-gmt's palette overlay run. This file is layout, wording and chrome. If you need the
  * wall to filter/sort/carve differently, change `palette/core/pickerModel.ts`, not this.
@@ -48,6 +57,16 @@ const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
   ((c as { options?: { value: number; label: string }[] }).options ?? []).map((o) => ({ value: o.value, label: o.label }));
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
+import { Act } from './ui/Act';
+import { useGroundSetId, setGroundSetId } from '../../palette/store/groundSet';
+import { useGroundSets, useGroundSource } from './useGroundSource';
+import { groupSetId } from '../../palette/core/groundSets';
+import { newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
+import { entryToGradientConfig } from '../../palette/core/gradientSeam';
+import { paramEdit } from '../../palette/store/paramUndoBracket';
+
+/** "Keep these N" is offered up to this many — past it the narrowing is not a selection yet. */
+const KEEP_MAX = 400;
 
 // No "hand" entry: the rest state (pick on click, right-drag pans) is implicit and never
 // highlighted — a highlighted default read as a stuck mode (owner review 2026-09-03).
@@ -72,7 +91,34 @@ const GROUND: React.CSSProperties = {
 const floatOver = 'backdrop-blur-sm';
 
 export const BrowseStage: React.FC = () => {
-  const m = usePickerModel();
+  const setId = useGroundSetId();
+  const sets = useGroundSets();
+  const source = useGroundSource(setId, sets);
+  const m = usePickerModel({ source });
+  const setDesc = sets.find((s) => s.id === m.setId) ?? null;
+  // A set has no carve tools: drop an active one when the ground switches to a set.
+  useEffect(() => {
+    if (m.isSet && m.tool) m.setTool(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m.isSet]);
+  // Keep these N: the narrowed wall becomes a named group and the ground shows it.
+  const keepThese = useCallback(() => {
+    const entries = m.rows.flatMap((r) => r.entries);
+    if (!entries.length || entries.length > KEEP_MAX) return;
+    const q = m.search.trim();
+    const label = q ? q.charAt(0).toUpperCase() + q.slice(1) : 'Selection';
+    const g = newGroupId();
+    paramEdit(() => {
+      // the theme rides along as provenance, so the panel's search still finds a
+      // gradient that matched by theme rather than by name
+      useFavientsStore.getState().insertMany(entries.map((e) => ({ config: entryToGradientConfig(e), name: e.name, source: e.theme ? `Browse · ${e.theme}` : 'Browse' })), g, label);
+    });
+    // The narrowing has become a place: the search that made it is done (measured: a
+    // catalogue match by THEME is not a match by name once it is a favourite, so the new
+    // group opened as "9 of 143" with the query still live).
+    m.setSearch('');
+    setGroundSetId(groupSetId(g));
+  }, [m.rows, m.search, m.setSearch]);
   /** Owner, 2026-09-06: Filters is not a popover (it covered the wall it narrows) — it is three
       inline rows under the bar: LOOK · SOURCES · ARRANGE. These are already the rare items. */
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -134,10 +180,34 @@ export const BrowseStage: React.FC = () => {
       {/* ── one narrowing row (C.10, owner 2026-09-07 evening): the main gradient — the hue ×
           lightness pad — WIDER and CENTRED; Search at the right with Filters to its left;
           with Filters closed, "clear all" sits right-aligned on this same row. ── */}
-      <div className="shrink-0 relative px-6 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-        <div />
-        {/* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
-            bar, never over the wall it narrows. */}
+      <div className="shrink-0 relative px-6 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3" data-gx-ground-set={m.setId}>
+        {/* left: the wall in a sentence (the research: a wall you cannot describe reads as
+            noise) — on All the count and the arrangement; on a set, nothing (its name is
+            in the centre where the pad was). */}
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-[12px] text-fg-dim tabular-nums truncate min-w-0" data-gx-arrange-text="">
+            {!m.isSet && m.loaded && (
+              <>{m.count < m.total ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : m.total.toLocaleString()} · {m.anchor ? 'nearest first' : m.arrangeText}</>
+            )}
+          </span>
+          {/* Keep these N — the sentence says what narrowed the wall; this keeps it as a
+              group in My Gradients and shows it (Phase D) */}
+          {!m.isSet && m.loaded && m.count > 0 && m.count < m.total && m.count <= KEEP_MAX && (
+            <Act onClick={keepThese} title="File these as a new group in My Gradients and show it" data-gx-keep-these="" className="shrink-0">
+              <Icon name="plus" /> Keep these {m.count.toLocaleString()}
+            </Act>
+          )}
+        </div>
+        {m.isSet ? (
+          /* a set on the ground: its name where the pad was — the pad and Filters are the
+             catalogue's lens (their windows, themes and carve ids mean nothing here) */
+          <div className="flex items-baseline gap-2 justify-self-center h-[56px]" data-gx-set-title="">
+            <span className="text-[15px] text-fg">{setDesc?.label ?? m.setId}</span>
+            <span className="text-[13px] text-fg-muted tabular-nums">{m.count < m.total ? `${m.count} of ${m.total}` : m.total}</span>
+          </div>
+        ) : (
+        /* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
+            bar, never over the wall it narrows. */
         <div className="flex flex-col gap-1 justify-self-center">
           <HueLightnessPad
             hue={hueWin}
@@ -151,6 +221,7 @@ export const BrowseStage: React.FC = () => {
           {/* the saturation strip, in a picker's own language, under the field */}
           <QualityRangePadConnected featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...SAT_AXIS} hints="tooltip" keyframes={false} variant="strip" height={12} drawTrack={satTrack} />
         </div>
+        )}
         <div className="flex items-center justify-end gap-3 min-w-0">
         {/* More like this — the wall is one band ordered by ramp distance to this gradient. */}
         {m.anchor && (
@@ -164,6 +235,7 @@ export const BrowseStage: React.FC = () => {
             clear all
           </button>
         )}
+        {!m.isSet && (
         <button
           ref={btnRef}
           data-gx-filters-trigger=""
@@ -182,6 +254,7 @@ export const BrowseStage: React.FC = () => {
             {m.filterCount}
           </span>
         </button>
+        )}
         <div className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-line/20 bg-surface-dock w-[260px] max-w-full">
           <svg className="w-3.5 h-3.5 shrink-0 text-fg-dim" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="7" cy="7" r="4.5" />
@@ -190,7 +263,7 @@ export const BrowseStage: React.FC = () => {
           <input
             value={m.search}
             onChange={(e) => m.setSearch(e.target.value)}
-            placeholder={m.loaded ? `Search ${m.total.toLocaleString()} gradients` : 'Loading gradients…'}
+            placeholder={m.isSet ? `Search ${setDesc?.label ?? 'this set'}` : m.loaded ? `Search ${m.total.toLocaleString()} gradients` : 'Loading gradients…'}
             className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-fg placeholder-fg-faint"
           />
           {m.search && (
@@ -205,7 +278,7 @@ export const BrowseStage: React.FC = () => {
       </div>
 
       {/* ── Filters: three inline rows, never over the wall ────────────────── */}
-      {filtersOpen && (
+      {filtersOpen && !m.isSet && (
         <div className="shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10" data-gx-selectable="">
           {/* LOOK */}
           <div className="flex items-center gap-3">
@@ -271,7 +344,10 @@ export const BrowseStage: React.FC = () => {
             onZoomChange={m.onZoomChange}
             resetZoomSignal={m.resetZoomSignal}
             zoomTool={zoomTool && !m.tool}
-            tileRadius={8}
+            /* V2 as amended: 10 px on a bar, 20 on a box — a tile that has grown toward a
+               box takes more rounding (the wall caps it at a third of the short side) */
+            tileRadius={Math.round(Math.min(20, 8 + Math.max(0, m.tile.h - 18) / 9))}
+            gutter={m.isSet ? 0 : undefined}
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}
@@ -279,8 +355,10 @@ export const BrowseStage: React.FC = () => {
             inHand={m.gradientInHand}
           />
         ) : (
-          <div className="h-full flex items-center justify-center text-[13px] text-fg-muted px-8 text-center">
-            {m.search.trim() ? (
+          <div className="h-full flex items-center justify-center text-[13px] text-fg-muted px-8 text-center" data-gx-ground-empty="">
+            {m.isSet && !m.search.trim() ? (
+              <span>Nothing here yet — pick gradients from All and they land in Today; drop one on a chip below to file it.</span>
+            ) : m.search.trim() ? (
               <span>
                 Nothing matches “{m.search.trim()}”{m.keptIds ? ' in what you kept' : ''} —{' '}
                 <button onClick={() => m.setSearch('')} className="text-accent-300 underline">clear the search</button>.
@@ -299,7 +377,7 @@ export const BrowseStage: React.FC = () => {
 
         {/* floating tool palette */}
         <Floating ref={m.toolbarRef} className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${floatOver}`}>
-          {TOOLS.map((t) => {
+          {TOOLS.filter((t) => !m.isSet || t.id === 'zoom').map((t) => {
             const on = activeTool === t.id;
             return (
               <button

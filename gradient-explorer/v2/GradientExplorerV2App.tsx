@@ -6,8 +6,12 @@
  * Share / Export / Wallpaper live in the hero's use cluster · the Working hero (absent until
  * the first pick, and never unmounted after it — L8; it IS the stops editor, with the palette
  * row on top and Curves / Adjust expanders inside it) ·
- * the stage with three source tabs · the silent My Gradients row (hidden until Recent has
- * something). No Dock, no side panel, no drawer, no timeline, no scene name.
+ * the stage — the GROUND, which shows ONE SET of gradients at a time (Phase D, 2026-09-08:
+ * the catalogue, a dated bin of Recent, Kept, a named group) · the SET RAIL on the bottom
+ * edge naming the sets (`SetRail`; silent until there is a second set), with the full
+ * My Gradients panel behind its pull-up. No Dock, no side panel, no drawer, no timeline,
+ * no scene name, and no shelf strip any more — the gradients you keep are drawn on the
+ * ground, by the wall, as large as their count allows.
  *
  * Source switching is where the pipeline rules live (§2):
  *   • entering Build / Extract sets the working INPUT to that live source;
@@ -20,8 +24,7 @@
  * v2 compositions over the SAME GeneratorStage / ImageStage pieces (SourceRow, MixBlend,
  * ColorBoxControls, the image pane) — see those files' headers — with no per-mode hero, no
  * curve editor, no Modify/Noise, no export block; Adjust and Shape live on the hero above.
- * The bottom row is the FavientsPanel strip (§4); Export is ExportMenu, Share is shareUrl (hooked up 2026-09-06)
- * until their pieces land.
+ * Export is ExportMenu, Share is shareUrl (hooked up 2026-09-06).
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -53,9 +56,11 @@ import { useImageStore } from '../../palette/store/imageStore';
 import { WorkingHero } from './WorkingHero';
 import { VariantsMenu } from './VariantsMenu';
 import { ExportMenu } from './ExportMenu';
+import { SetRail } from './SetRail';
+import { useGroundSets } from './useGroundSource';
+import { useGroundSetId, setGroundSetId } from '../../palette/store/groundSet';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
-import { ZoneLabel } from './ui/ZoneLabel';
 
 export type SourceId = 'browse' | 'build' | 'extract';
 /** Phase C: the source follows the TRAY — the Mix face is the `build` input, the Image face
@@ -118,7 +123,8 @@ export const GradientExplorerV2App: React.FC = () => {
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const pickSerial = usePickSerial();
-  const recentCount = useFavientsStore((s) => s.favients.length);
+  const sets = useGroundSets();
+  const groundSetId = useGroundSetId();
   const armed = useArmedSlot();
   useGlobalContextMenu();
   const contextMenu = useEngineStore((s) => s.contextMenu);
@@ -376,21 +382,18 @@ export const GradientExplorerV2App: React.FC = () => {
         </div>
       </div>
 
-      {/* My Gradients (§4): ONE strip on the bottom edge — Recent first, then the groups as
-          labelled runs (FavientsPanel layout="strip"); pull up for the full panel (search,
-          list view, rename, import / export). Silent until there is something in it. */}
-      {recentCount > 0 && (
-        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 88 }}>
-          <div className="flex items-center gap-3 px-6 pt-1.5 text-[13px] text-fg-muted">
-            <ZoneLabel>My Gradients</ZoneLabel>
-            {mineOpen && <span>Recent fills itself as you work · drag a gradient into a group to keep it · shared with the GMT studio</span>}
-            <button className="ml-auto flex items-center gap-1 hover:text-fg" onClick={() => setMineOpen((o) => !o)} title={mineOpen ? 'Back to the strip' : 'Search, list view, rename, import and export'}>
-              {mineOpen ? 'less' : 'more'} <Icon name={mineOpen ? 'chevronDown' : 'chevronUp'} />
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 overflow-hidden">
-            {mineOpen ? <FavientsPanel hint={null} /> : <FavientsPanel layout="strip" />}
-          </div>
+      {/* The SET RAIL (Phase D): the bottom edge names the sets — All · Today · Yesterday ·
+          the date · Kept · named groups — and the lit one is on the ground. Silent until
+          there is a second set (L9: the screen grows with the user). The chevron pulls up
+          the full My Gradients panel (search, list view, rename, import / export). */}
+      {sets.length > 1 && (
+        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 40 }} data-gx-footer="">
+          <SetRail sets={sets} activeId={groundSetId} onSelect={setGroundSetId} open={mineOpen} onToggleOpen={() => setMineOpen((o) => !o)} />
+          {mineOpen && (
+            <div className="flex-1 min-h-0 overflow-hidden border-t border-line/10">
+              <FavientsPanel hint={null} />
+            </div>
+          )}
         </footer>
       )}
 

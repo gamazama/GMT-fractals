@@ -184,6 +184,9 @@ export const sortValue = (axis: string, e: CatalogEntry): number | string => {
     case 'warmth': return e.facets.warmth;
     case 'hue': return e.facets.raw.meanHue;
     case 'name': return e.name.toLowerCase();
+    // A set's OWN order (GE v2 Phase D): a user set's entries are numbered in shelf order,
+    // so sorting by row keeps the order the user made. On the catalogue it is load order.
+    case 'order': return e.row;
     default: return 0;
   }
 };

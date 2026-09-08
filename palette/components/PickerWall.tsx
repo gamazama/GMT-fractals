@@ -128,6 +128,10 @@ export interface PickerWallProps {
   /** A gradient is in hand following the cursor (click-through pick, not a drag) — suppress
    *  the wall's own hover-zoom preview so it doesn't fight the floating avatar. */
   inHand?: boolean;
+  /** Override the row-label gutter width (px). Default: 132 px, shrinking toward 0 on a
+   *  narrow wall. A host showing an unlabelled set (GE v2's user sets) passes 0 so the
+   *  tiles start at the wall's own left edge instead of behind an empty column. */
+  gutter?: number;
 }
 
 const LABEL_W = 132;
@@ -515,6 +519,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onSelectionCancel,
   onDeselect,
   inHand = false,
+  gutter,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -543,7 +548,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // The left label gutter is the lowest-priority column: full width on a roomy wall,
   // shrinking linearly to 0 as the wall narrows (≥700 → full, ≤380 → gone), so the
   // swatches keep their size on narrow screens instead of the gutter stealing space.
-  const labelW = Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
+  const labelW = gutter != null ? Math.max(0, gutter) : Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
   // cols is derived from the BASE swatch width (NOT the zoom), so horizontal zoom never
   // reflows the grid — it only widens the swatches + the content, which then scrolls.
   const cols = Math.max(1, Math.floor((width - labelW - gap) / (swatchW + gap)));

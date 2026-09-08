@@ -312,6 +312,37 @@ shape, so it comes first: what is wrong with the wall as it stands, and does My 
 ZONE of the wall (its filters, zoom, carve and similarity applying to your own gradients too)
 instead of a separate strip. The list below is the separate-shelf design as it stood; keep it as
 the fallback.
+**DECIDED 2026-09-08 (owner: "build it to your recommendation") — ONE GROUND, MANY SETS.** The
+research (`plans/ge-v2-research/gradient-browsers.md`) diagnosed the wall; the owner's scenario
+diagnosed the shell: the quest is a FUNNEL (11,131 → filtered → a curated few → the ones picked
+today → the one being worked on, plus one to mix) and the ground never changed shape with it,
+while the shelf showed the picks as a second, smaller kind of tile. So: **the ground shows one
+SET at a time; the bottom edge names the sets; tile size follows the count.** Sets are the
+catalogue (with its narrowers), Recent's dated bins (Today · Yesterday · the date), Kept (the
+default group), every named group, and Snapshots. Every set is drawn by the same `PickerWall`
+fed a different list — so search, "More like this", zoom, drag and ★ work on your own gradients
+for free (L7 becomes structural); Mine stays a PLACE because the chips never move (the Photos
+revert); the lit chip says which set a ★ or a drop acts on (no write-target ambiguity); the
+shelf strip goes, and the full My Gradients panel survives as the manage surface behind the
+rail's pull-up. The research's P1 legibility items land on the All set (the arrange sentence,
+tile size by count instead of a slider, the pad as the wall's map); P2 (fractal thumbnails) is
+NOT taken — GE v2 is for colour enthusiasts generally, and the strip IS the honest preview;
+P3's pinned-zone form is superseded by this. Held: a curated front door (changes L9's
+first-load contract), folding near-duplicate tiles.
+**Order:** D.0 the set ground (`palette/core/groundSets.ts` pure: set list, favient→entry
+adapter with its own 256-wide sprite rows, `tileSizeFor`; `palette/store/groundSet.ts` the
+persisted set id; `usePickerModel({ source })` — additive, app-gmt's overlay calls it bare and
+is untouched; `PickerWall` gains only a `gutter` override) · D.1 the rail
+(`gradient-explorer/v2/SetRail.tsx`: chips in a fixed order, counts, lit = accent, rename by
+double-click, drop a gradient on a chip to file it, drop on the tail for a new group; "Keep
+these N" on a narrowed All saves the carve as a group — Substance's saved search, UE's
+collection) · D.2 the All set's legibility (sentence beside the count, pad-as-map) · D.3
+Snapshots as a set (click restores, two selected → tween in the header, `VariantsMenu`
+retired; L4 as written). Gates: `test:palette` gains `test-palette-groundsets`; a new
+`smoke:ge-ground` walks pick → Today chip → the set alone on the ground → back to All.
+**Known loss to weigh on the walk:** the picks are no longer visible while the wall is up —
+the hero shows the current one and the chip shows the count. If that is not enough, the chips
+grow a small stacked preview; the model holds either way.
 **Goal:** L4; Variants become Snapshots.
 - Footer: zones RECENT · STARRED · named groups · SNAPSHOTS with `ZoneLabel`s; `+ Snapshot` and
   `groups ▴` at the tail; the full panel (`FavientsPanel`) unchanged beneath.

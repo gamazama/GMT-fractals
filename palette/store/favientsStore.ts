@@ -235,6 +235,15 @@ interface FavientsState {
   moveFavient: (id: string, toIndex: number, group: string) => void;
   /** Insert a NEW favourite (from an external drag) at flat index `toIndex` in `group`. */
   insertFavient: (config: GradientConfig, name: string, source: string | undefined, toIndex: number, group: string) => string;
+  /**
+   * File MANY gradients into a group in one write (GE v2 Phase D: "Keep these N" saves a
+   * narrowed wall as a group). They join the START of the group's run in the given order,
+   * or the tail of the shelf when the group is new; `label` names a new group (made unique
+   * against the others, as `renameGroup` does) and is ignored for one that already has
+   * one. Content already in that group is skipped. Returns the ids filed. Undo is NOT
+   * bracketed here — the caller wraps it, as every panel gesture does.
+   */
+  insertMany: (items: { config: GradientConfig; name: string; source?: string }[], group: string, label?: string) => string[];
   /** Rename a group's divider label. */
   renameGroup: (groupId: string, label: string) => void;
   /** One-time seed of starter favourites into a named group (e.g. the built-in
@@ -420,6 +429,31 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     saveLastGroup(group);
     set({ favients: arr, lastGroupId: group });
     return fav.id;
+  },
+
+  insertMany: (items, group, label) => {
+    const arr = [...get().favients];
+    const have = new Set(arr.filter((f) => (f.group ?? DEFAULT_GROUP) === group).map((f) => favientSig(f.config)));
+    const now = Date.now();
+    const fresh: Favient[] = [];
+    for (const it of items) {
+      const sig = favientSig(it.config);
+      if (have.has(sig)) continue;
+      have.add(sig);
+      fresh.push({ id: newId(), name: it.name, source: it.source, config: it.config, createdAt: now, group });
+    }
+    if (!fresh.length) return [];
+    const at = arr.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);
+    arr.splice(at < 0 ? arr.length : at, 0, ...fresh);
+    let groupLabels = get().groupLabels;
+    if (label && group !== DEFAULT_GROUP && !groupLabels[group]) {
+      groupLabels = { ...groupLabels, [group]: uniqueGroupLabel(label, group, groupLabels) };
+      saveGroupLabels(groupLabels);
+    }
+    saveFavients(arr);
+    saveLastGroup(group);
+    set({ favients: arr, groupLabels, lastGroupId: group });
+    return fresh.map((f) => f.id);
   },
 
   renameGroup: (groupId, label) => {
