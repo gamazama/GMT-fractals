@@ -813,3 +813,9 @@ phase now carries**. Items move out of this list only when a later phase's entry
   **CANCELLED by the owner (2026-09-08):** arranging the whole wall by similarity (descriptors,
   UMAP, snapped to the grid) as a third Arrange option — do not re-propose it.
   **Phase W is unblocked** and is the next buildable block if the owner wants one.
+- 2026-09-08 · **The eyedropper stays native.** An in-app dropper (`components/gradient/useEyedropper.tsx`
+  — its own loupe, sampling canvases through `getImageData`) had appeared in the working tree
+  alongside the icon work; the owner: *"the eyedropper, scrap the custom and make it the native
+  dropper as before."* Reverted — the button is back on the browser's `EyeDropper` API
+  (`getEyeDropper` / `doEyedrop` in `EmbeddedColorPicker.tsx`), keeping the owner's own
+  `EyedropperGlyph`. Chrome's red-grid magnifier is accepted; do not re-roll a custom one.
