@@ -143,6 +143,8 @@ const hsbToHex = ({ h, s, v }: HSB): string => rgbToHex(hsbToRgb(h, s, v));
 const CTRL_R = 'rounded-md';
 /** Solid colour chips (harmony / recent / palette). */
 const CHIP_R = 'rounded';
+/** Spectrum and Wheel are the same size: they occupy one slot and toggle (owner). */
+const SURFACE_PX = 150;
 
 // ── selection MODES (soft dialect) ─────────────────────────────────────────────────────
 // The reference chooser's real cleverness is not any one control but that you CHOOSE which
@@ -150,17 +152,31 @@ const CHIP_R = 'rounded';
 // combination is remembered for next time (owner, 2026-09-08 — "the default is the regular
 // square picker … its cleverness is its configurability"). So the field is on by default and
 // the wheel is one option among several, not a replacement for anything.
-export type PickerMode = 'spectrum' | 'wheel' | 'channels' | 'kelvin' | 'swatches';
+export type PickerMode = 'spectrum' | 'wheel' | 'harmony' | 'channels' | 'kelvin' | 'swatches';
+/** Spectrum and Wheel are two views of the same job, so they TOGGLE rather than stack. */
+const SURFACES: PickerMode[] = ['spectrum', 'wheel'];
 const MODES_KEY = 'gmt.colorpicker.modes';
 const MODE_DEFAULT: PickerMode[] = ['spectrum', 'channels', 'swatches'];
 /** Stored sets from the first cut named this mode 'field'. */
-const migrateModes = (v: string[]): PickerMode[] => v.map((m) => (m === 'field' ? 'spectrum' : m)) as PickerMode[];
+const migrateModes = (v: string[]): PickerMode[] => {
+    const named = v.map((m) => (m === 'field' ? 'spectrum' : m)) as PickerMode[];
+    // A stored set from before Spectrum and Wheel became one slot can hold both: keep the first.
+    let surfaceSeen = false;
+    return named.filter((m) => {
+        if (!SURFACES.includes(m)) return true;
+        if (surfaceSeen) return false;
+        surfaceSeen = true;
+        return true;
+    });
+};
 
 const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
     const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
     switch (mode) {
         case 'spectrum':
             return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 10.5 13.5 4" opacity=".5" /></svg>;
+        case 'harmony':
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" opacity=".45" /><circle cx="8" cy="2.5" r="1.6" /><circle cx="12.8" cy="10.8" r="1.6" /><circle cx="3.2" cy="10.8" r="1.6" /></svg>;
         case 'wheel':
             return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="10.4" cy="5.6" r="1.4" /></svg>;
         case 'channels':
@@ -175,17 +191,27 @@ const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
 
 const MODE_TITLE: Record<PickerMode, string> = {
     spectrum: 'Spectrum — saturation and brightness for one hue',
-    wheel: 'Wheel — hue and saturation, with harmony handles',
+    wheel: 'Wheel — hue and saturation on a disc',
+    harmony: 'Harmony — related colours, and this gradient\u2019s own',
     channels: 'Channels — RGB and HSB sliders',
     kelvin: 'Kelvin — colour temperature',
     swatches: 'Swatches — recent and the working palette',
 };
 
 // A small clickable swatch strip used by harmony / recents / palette rows.
-const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: string) => void; current?: string }> = ({
+const SwatchRow: React.FC<{
+    label: string;
+    colors: string[];
+    onPick: (hex: string) => void;
+    /** Takes precedence over `onPick`: the row's colours ARE a set with identity (the wheel's
+     *  handles), so picking one selects that member rather than re-deriving from its colour. */
+    onPickIndex?: (index: number) => void;
+    current?: string;
+}> = ({
     label,
     colors,
     onPick,
+    onPickIndex,
     current,
 }) => {
     const soft = useInputSkin() === 'soft';
@@ -201,7 +227,7 @@ const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: strin
                 colors.map((c, i) => (
                     <button
                         key={`${c}-${i}`}
-                        onClick={() => onPick(c)}
+                        onClick={() => (onPickIndex ? onPickIndex(i) : onPick(c))}
                         className={soft
                             ? `h-5 flex-1 min-w-0 ${CHIP_R} border transition-transform hover:scale-105 hover:z-10 ${
                                 current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/20'
@@ -246,12 +272,12 @@ const GradientSlider: React.FC<{
         // against 8 px between the swatch chips, and that is what read as loose (measured with
         // the owner, 2026-09-08). The band itself fills the row, so every coloured element in
         // the picker is 20 px with 8 px of air.
-        <div className={`flex items-center ${soft ? 'gap-2 h-5' : 'gap-1.5'}`}>
+        <div className={`flex items-center ${soft ? 'gap-2 h-4' : 'gap-1.5'}`}>
             <div className={soft
                 ? 'w-3 shrink-0 text-[12px] text-fg-muted text-center select-none'
                 : 'w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none'}>{label}</div>
             <div
-                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-5 ${CTRL_R}` : 'h-3.5 rounded-sm'}`}
+                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-4 ${CTRL_R}` : 'h-3.5 rounded-sm'}`}
                 style={{ background: trackBg }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
@@ -319,7 +345,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const toggleMode = useCallback((m: PickerMode) => {
         setModes((prev) => {
             // never leave the chooser with nothing to choose WITH: the last mode stays on
-            const next = prev.includes(m) ? (prev.length > 1 ? prev.filter((x) => x !== m) : prev) : [...prev, m];
+            // a surface REPLACES the other surface; anything else is an independent switch
+            const off = prev.filter((x) => x !== m && !(SURFACES.includes(m) && SURFACES.includes(x)));
+            const next = prev.includes(m) ? (prev.length > 1 ? off : prev) : [...off, m];
             safeLocalSet(MODES_KEY, JSON.stringify(next));
             return next;
         });
@@ -327,9 +355,15 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const [kelvin, setKelvin] = useState(6500);
     const [harmony, setHarmony] = useState<ColorHarmony>('analogous');
     const [harmonyCount, setHarmonyCount] = useState(5);
-    // 'free': the handles are the user's own, so they are STORED (every other mode derives).
-    const [freeHandles, setFreeHandles] = useState<HsvHandle[]>([]);
-    const [freeActive, setFreeActive] = useState(0);
+    // The handles are STATE, not a derivation. Deriving them from the live colour meant that
+    // merely ACTIVATING another handle re-derived the whole set around it, so a click walked
+    // every other colour (owner, 2026-09-08: "it must not recalculate all the colors to the
+    // new point"). Now: changing the rule, the count, or the active handle's own colour
+    // recomputes the followers; selecting a different handle only changes which one is live.
+    const [handles, setHandles] = useState<HsvHandle[]>([]);
+    const [activeHandle, setActiveHandle] = useState(0);
+    /** Set when a colour change came from ACTIVATING a handle — that must not recompute. */
+    const skipHandleSync = useRef(false);
     const [hexDraft, setHexDraft] = useState(color.toUpperCase());
     const clip = useClipboardCopy(1000);
     const copied = clip.state === 'copied';
@@ -682,48 +716,57 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
     const endHLPad = endDrag(hlPadDrag);
 
-    // The handles the wheel shows. Free mode keeps the user's; every other mode derives
-    // them from the current colour, so editing anywhere (RGB sliders, hex, eyedropper)
-    // moves the whole harmony with it and there is no state to fall out of sync.
-    const wheelHandles = useMemo<HsvHandle[]>(() => {
+    // Keep the set in step with the colour: the ACTIVE handle is always the live colour, and
+    // its followers are recomputed whenever that colour moves under the rule. Editing anywhere
+    // (a channel slider, the hex, the eyedropper) therefore moves the harmony with it.
+    useEffect(() => {
         const base: HsvHandle = { h: hsb.h, s: hsb.s / 100, v: hsb.v };
-        if (harmony !== 'free') return harmonyHandles(base, harmony, harmonyCount);
-        if (freeHandles.length === 0) return [base];
-        return freeHandles.map((f, i) => (i === freeActive ? base : f));
-    }, [hsb, harmony, harmonyCount, freeHandles, freeActive]);
-    const wheelActive = harmony === 'free' ? Math.min(freeActive, Math.max(0, wheelHandles.length - 1)) : 0;
+        if (skipHandleSync.current) { skipHandleSync.current = false; return; }
+        setHandles((prev) => {
+            if (!prev.length) return harmonyHandles(base, harmony, harmonyCount);
+            const cur = prev[Math.min(activeHandle, prev.length - 1)];
+            const same = cur && Math.abs(cur.h - base.h) < 1e-6 && Math.abs(cur.s - base.s) < 1e-6 && Math.abs(cur.v - base.v) < 1e-6;
+            if (same && prev.length === (harmony === 'free' ? prev.length : harmonyHandles(base, harmony, harmonyCount).length)) return prev;
+            if (harmony === 'free') return prev.map((f, i) => (i === activeHandle ? base : f));
+            return harmonyHandles(base, harmony, harmonyCount);
+        });
+        if (harmony !== 'free') setActiveHandle(0);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hsb.h, hsb.s, hsb.v, harmony, harmonyCount]);
+
+    const wheelHandles = handles.length ? handles : [{ h: hsb.h, s: hsb.s / 100, v: hsb.v }];
+    const wheelActive = Math.min(activeHandle, wheelHandles.length - 1);
 
     // through `emit`, like every other control here: it also carries the hex draft and the
     // echo guard, which a hand-rolled setHsb would silently drop
     const wheelMove = useCallback((h: number, s: number) => emit(clampHsb(h, s * 100, hsb.v)), [emit, hsb.v]);
     const wheelValue = useCallback((v: number) => emit(clampHsb(hsb.h, hsb.s, v)), [emit, hsb.h, hsb.s]);
-    /** Clicking a handle makes IT the colour — the harmony then re-derives around it. */
+    /** Selecting a handle makes it the live colour and moves NOTHING else. */
     const wheelActivate = useCallback((i: number) => {
         const t = wheelHandles[i];
         if (!t) return;
-        if (harmony === 'free') {
-            setFreeHandles((prev) => (prev.length ? prev : wheelHandles.map((x) => ({ ...x }))));
-            setFreeActive(i);
-        }
+        skipHandleSync.current = true;
+        setActiveHandle(i);
         setFromHex(hsbToHex({ h: t.h, s: t.s * 100, v: t.v }));
-    }, [wheelHandles, harmony, setFromHex]);
+    }, [wheelHandles, setFromHex]);
     /** Ctrl/Cmd + click adds a handle — free mode only (a harmony's set is its rule). */
     const wheelAdd = useCallback((h: number, s: number) => {
         if (harmony !== 'free') return;
-        const seeded = freeHandles.length ? freeHandles : wheelHandles.map((x) => ({ ...x }));
-        const next = [...seeded, { h, s, v: hsb.v }];
-        setFreeHandles(next);
-        setFreeActive(next.length - 1);
+        const next = [...wheelHandles.map((x) => ({ ...x })), { h, s, v: hsb.v }];
+        skipHandleSync.current = true;
+        setHandles(next);
+        setActiveHandle(next.length - 1);
         setFromHex(hsbToHex({ h, s: s * 100, v: hsb.v }));
-    }, [harmony, freeHandles, wheelHandles, hsb.v, setFromHex]);
+    }, [harmony, wheelHandles, hsb.v, setFromHex]);
 
     /** Free mode: drop the active handle (never the last one). */
     const wheelRemove = useCallback(() => {
         if (harmony !== 'free' || wheelHandles.length < 2) return;
         const rest = wheelHandles.filter((_, i) => i !== wheelActive).map((x) => ({ ...x }));
         const nextActive = Math.min(wheelActive, rest.length - 1);
-        setFreeHandles(rest);
-        setFreeActive(nextActive);
+        skipHandleSync.current = true;
+        setHandles(rest);
+        setActiveHandle(nextActive);
         const t = rest[nextActive];
         if (t) setFromHex(hsbToHex({ h: t.h, s: t.s * 100, v: t.v }));
     }, [harmony, wheelHandles, wheelActive, setFromHex]);
@@ -766,13 +809,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // "SL pad + H strip"). Shown when expanded / in the wide layouts.
     const fieldBlock = (
         // Field + hue strip (shrinks on narrow/mobile; Shift/Alt = coarse/fine)
-        <div className="flex gap-1.5">
+        <div className={`flex ${soft ? 'gap-2' : 'gap-1.5'}`} style={soft ? { width: SURFACE_PX + 8 + 16 } : undefined}>
             <div className="relative flex-1">
                 <canvas
                     ref={setFieldCanvas}
                     width={208}
                     height={120}
-                    className={`w-full h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
+                    className={`w-full cursor-crosshair touch-none ${soft ? `h-[${SURFACE_PX}px] ${CTRL_R}` : 'h-[76px] md:h-[86px] rounded'}`}
+                    style={soft ? { height: SURFACE_PX } : undefined}
                     onPointerDown={beginField}
                     onPointerMove={moveField}
                     onPointerUp={endField}
@@ -789,7 +833,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     ref={setHueCanvas}
                     width={16}
                     height={120}
-                    className={`w-4 h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
+                    className={`w-4 cursor-crosshair touch-none ${soft ? CTRL_R : 'h-[76px] md:h-[86px] rounded'}`}
+                    style={soft ? { height: SURFACE_PX } : undefined}
                     onPointerDown={beginHue}
                     onPointerMove={moveHue}
                     onPointerUp={endHue}
@@ -884,7 +929,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
                 onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            {!soft && <div className="h-px bg-line/5 my-0.5" />}
+            {/* RGB and HSB are two ways of saying the same colour, so they read as two groups */}
+            <div className={soft ? 'h-px bg-line/15 my-1' : 'h-px bg-line/5 my-0.5'} />
             <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
                 onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
@@ -903,7 +949,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // swatch/hex line, so the line reads: what the colour IS, then what you may pick it with.
     const modeBar = (
         <div className="flex items-center gap-0.5 shrink-0" data-gx-picker-modes>
-            {(['spectrum', 'wheel', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => (
+            {(['spectrum', 'wheel', 'harmony', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => (
                 <button
                     key={m}
                     type="button"
@@ -970,7 +1016,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         />
     );
     const harmonyBlock = (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 w-[230px] shrink-0">
             <div className="flex flex-col gap-2">
                 <div className="min-w-0">
                     <Dropdown
@@ -993,10 +1039,6 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                             // that it is the user's own set: re-seeding on every entry threw away
                             // hand-placed handles as soon as you looked at another harmony and
                             // came back (measured 2026-09-08 — four handles became five).
-                            if (mode === 'free') {
-                                setFreeHandles((prev) => (prev.length ? prev : wheelHandles.map((x) => ({ ...x }))));
-                                setFreeActive((i) => Math.min(i, Math.max(0, wheelHandles.length - 1)));
-                            }
                             setHarmony(mode);
                         }}
                     />
@@ -1024,9 +1066,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             <SwatchRow
                 label={harmony === 'free' ? 'Handles' : 'Harmony'}
                 colors={wheelHandles.map((h) => hsbToHex({ h: h.h, s: h.s * 100, v: h.v }))}
+                // by INDEX: picking a handle here selects it, it does not re-derive the set
+                onPickIndex={wheelActivate}
                 onPick={(c) => setFromHex(c)}
                 current={hex}
             />
+            {/* the colours of the gradient being edited — its palette row, brought here so the
+                harmony and the thing it has to live with are side by side (owner) */}
+            <SwatchRow label="Gradient" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
         </div>
     );
 
@@ -1060,15 +1107,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 <>
                     <div className="flex items-center gap-2">{hexRow}{modeBar}</div>
                     <div className="flex flex-wrap gap-4 items-start">
-                        {on('spectrum') && <div className="flex flex-col gap-2 shrink-0 w-[180px]">{fieldBlock}</div>}
+                        {on('spectrum') && <div className="flex flex-col gap-2 shrink-0">{fieldBlock}</div>}
                         {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
-                        {on('wheel') && <div className="flex flex-col gap-2 w-[230px] shrink-0">{harmonyBlock}</div>}
+                        {on('harmony') && harmonyBlock}
                         {on('channels') && <div className="flex flex-col gap-2 flex-1 min-w-[190px]">{channelsBlock}</div>}
                         {on('kelvin') && kelvinBlock}
                         {on('swatches') && (
                             <div className="flex flex-col gap-2 flex-1 min-w-[190px]">
                                 <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
-                                <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
                             </div>
                         )}
                     </div>

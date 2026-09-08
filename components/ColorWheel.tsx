@@ -257,6 +257,27 @@ export const ColorWheel: React.FC<Props> = ({
                 title="Drag to pick hue and saturation; click a handle to make it the colour"
             >
                 <canvas ref={discRef} className="w-full h-full rounded-full block" style={{ width: size, height: size }} />
+                {/* A dashed spoke from the centre to each handle: it says the handle's angle is
+                    its HUE and its distance is its saturation, and it keeps a set of handles
+                    readable as one arrangement rather than loose dots (owner, 2026-09-08). */}
+                <svg className="absolute inset-0 pointer-events-none" width={size} height={size} aria-hidden>
+                    {handles.map((h, i) => {
+                        const [x, y] = handleXY(h, size);
+                        return (
+                            <line
+                                key={i}
+                                x1={size / 2}
+                                y1={size / 2}
+                                x2={x}
+                                y2={y}
+                                stroke="currentColor"
+                                className={i === activeIndex ? 'text-fg/70' : 'text-fg/35'}
+                                strokeWidth={i === activeIndex ? 1.25 : 1}
+                                strokeDasharray="3 3"
+                            />
+                        );
+                    })}
+                </svg>
                 {handles.map((h, i) => {
                     const [x, y] = handleXY(h, size);
                     const on = i === activeIndex;

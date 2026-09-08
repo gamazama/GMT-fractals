@@ -349,6 +349,18 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **The owner's second walk of the picker (2026-09-08).** Spectrum and Wheel are two views of
+  one job, so they TOGGLE in a single slot rather than stacking, both at 150 px, and a stored
+  set holding both is sanitised on load. Harmony is its own switch now, independent of the
+  wheel, and it carries this gradient's own colours — the row previously labelled "Palette",
+  which is the working gradient's palette and is now called **Gradient**. The wheel draws a
+  dashed spoke from the centre to each handle, so a set reads as one arrangement rather than
+  loose dots. **The handles became STATE rather than a derivation**: deriving them from the
+  live colour meant merely SELECTING another handle re-derived the set around it, walking every
+  other colour — now the rule, the count, or the active handle's own colour recompute the
+  followers, and selecting only changes which handle is live (`onPickIndex` on the swatch row
+  carries that through to the Harmony chips). Channel bars went 20 → 16 px to sit with the
+  16 px vertical strips, and RGB and HSB are separated by a hairline again.
 - **Bug sweep of the picker (2026-09-08, the owner asked for one).** Three real defects, each
   fixed and two of them guarded. (1) A picker canvas that REMOUNTS comes back with a blank
   backing store, and a draw effect keyed on colour alone will not repaint it — Spectrum toggled
