@@ -239,15 +239,17 @@ const GradientSlider: React.FC<{
     const pct = ((value - min) / (max - min)) * 100;
     const soft = useInputSkin() === 'soft';
     return (
-        // one rhythm for the whole picker: a 20 px row on an 8 px gap, the same pitch the
-        // swatch rows keep, so the sliders do not read as more widely spaced than everything
-        // around them (owner, 2026-09-08)
+        // One rhythm for the whole picker: a 20 px BAND on an 8 px gap. Matching the pitch was
+        // not enough — a 10 px track inside a 20 px row left 18 px of nothing between bars
+        // against 8 px between the swatch chips, and that is what read as loose (measured with
+        // the owner, 2026-09-08). The band itself fills the row, so every coloured element in
+        // the picker is 20 px with 8 px of air.
         <div className={`flex items-center ${soft ? 'gap-2 h-5' : 'gap-1.5'}`}>
             <div className={soft
                 ? 'w-3 shrink-0 text-[12px] text-fg-muted text-center select-none'
                 : 'w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none'}>{label}</div>
             <div
-                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-[10px] ${CTRL_R}` : 'h-3.5 rounded-sm'}`}
+                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-5 ${CTRL_R}` : 'h-3.5 rounded-sm'}`}
                 style={{ background: trackBg }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
