@@ -102,6 +102,11 @@ async function main() {
   await page.mouse.click(box.x + 24, box.y + 14);
   await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[1] no hero after a wall click'));
   await page.mouse.move(640, 60);
+  // The first pick also lands in Recent (~400 ms later), and with it the SET RAIL appears at
+  // the top of the ground (Phase D, 2026-09-08) and the wall drops 40 px — so wait for that
+  // before measuring, or [4]'s wall click lands on the rail and [5]'s "the wall never
+  // moved" reads the rail's arrival as the tray pushing the wall.
+  await page.waitForTimeout(900);
   // The hero pushed the wall down: re-measure it, or every later "wall click" lands on the
   // hero's ramp instead (that is how the first cut of [4] armed the top half by accident).
   const wallBox = (await wall.boundingBox())!;
@@ -148,7 +153,14 @@ async function main() {
   // the tray overlays the wall's first rows: pick a tile CLEAR of it (measured, not assumed —
   // the Mix face's height moves with its design)
   const trayBottom = await page.evaluate(() => document.querySelector('[data-gx-tray-root]')!.getBoundingClientRect().bottom);
-  await page.mouse.click(wallBox.x + 24 + 44 * 5, Math.max(wallBox.y + 14, trayBottom + 18));
+  // Re-measure NOW: opening Mix adds the armed hint line above the ground, which pushes the
+  // wall down (and since Phase D the set rail and the taller header sit above it too), so a
+  // point computed from [1]'s box lands in the wall's header rather than on a tile. Take the
+  // first canvas that is clear of the tray.
+  const cvs = page.locator('[data-gx-keepselect] canvas');
+  let target = (await cvs.first().boundingBox())!;
+  if (target.y + 10 < trayBottom + 8) target = (await cvs.nth(1).boundingBox())!;
+  await page.mouse.click(target.x + 24 + 44 * 5, Math.max(target.y + 10, trayBottom + 18));
   await page.waitForTimeout(400);
   s = await state(page);
   if (s.face !== 'mix') fail(`[4] a wall pick closed the Mix face (${s.face})`);

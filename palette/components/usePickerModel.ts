@@ -99,11 +99,6 @@ export interface GroundSource {
   entries: CatalogEntry[];
   /** What each tile stands for. */
   itemOf: (entry: CatalogEntry) => GroundItem;
-  /** Take over the click (Snapshots restore rather than pick). Default: a shelf-style pick. */
-  onPick?: (entry: CatalogEntry, e?: React.MouseEvent) => void;
-  /** Which tile wears the selected enlarge when the pick is not the shelf's (Snapshots:
-   *  the active one). Default: the shelf pick's key. */
-  selectedId?: string | null;
 }
 
 /** The set's arrangement: one band, the set's own order, read left to right. */
@@ -339,11 +334,10 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
 
   // Pick → SELECT it (drives the host's hero preview + the bin dock). The standalone studio
   // has no fractal to colour, so there is no apply-to-coloring side effect here.
-  const onPick = useCallback((e: CatalogEntry, ev?: React.MouseEvent) => {
+  const onPick = useCallback((e: CatalogEntry) => {
     if (source) {
       // A set tile is a shelf item: the same pick the strip made (mode `favients`, the
       // favourite's id as the key), so the shell's rules apply unchanged.
-      if (source.onPick) return source.onPick(e, ev);
       const it = source.itemOf(e);
       setHeroPick({ mode: 'favients', key: e.id, payload: { config: it.config, name: it.name, source: it.source, favId: it.favId } });
       return;
@@ -370,7 +364,6 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
   // The tile grows as the set shrinks; the wall's own setting is the floor.
   const baseTile: TileSize = { w: Math.round(pf?.swatchSize?.x ?? 32), h: Math.round(pf?.swatchSize?.y ?? 18) };
   const tile = tileSizeFor(count, baseTile);
-  const sliceGap = Math.max(0, Math.round(pf?.paddingSize ?? 0));
 
   return {
     setId: source?.id ?? ALL_SET_ID,
@@ -395,7 +388,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
     anchor,
     setAnchor: setSimilarityAnchor,
     selected,
-    selectedId: source?.selectedId != null ? source.selectedId : pickerActive ? selected?.id : undefined,
+    selectedId: pickerActive ? selected?.id : undefined,
     gradientInHand,
     onPick,
     onEntryDragStart,
@@ -412,8 +405,8 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
     zoomed: zoom.x !== 1 || zoom.y !== 1,
     swatchW: tile.w,
     swatchH: tile.h,
-    // Large tiles want air between them; the slice's Padding is the floor.
-    gap: tile.w > 48 ? Math.max(sliceGap, 6) : sliceGap,
+    // The wall scales the gap with the tile it draws (zoomed or grown); Padding is the floor.
+    gap: Math.max(0, Math.round(pf?.paddingSize ?? 0)),
     sliceState: pf,
     setPaletteFilters,
   };

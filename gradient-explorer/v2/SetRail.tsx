@@ -3,8 +3,10 @@
  * plans/ge-v2-unified-shell-plan.md §4 Phase D, the DECIDED block).
  *
  * One row of chips in a FIXED order — All · Today · Yesterday · the date · Kept · every
- * named group · Snapshots — so a set is a place you return to by position (the research's
- * rule 1; the Photos revert). The lit chip is the set on the ground (V3: accent means "this
+ * named group — so a set is a place you return to by position (the research's rule 1; the
+ * Photos revert). It stands at the TOP of the ground, above the wall's own header (the
+ * owner's walk, 2026-09-08: "that makes more sense hierarchically" — which set, then how it
+ * is narrowed, then the tiles). The lit chip is the set on the ground (V3: accent means "this
  * one") and the number beside each label is its count. It replaces the shelf's strip of
  * small bars: the gradients themselves are drawn on the ground, by the wall, at a size
  * that follows the count.
@@ -16,8 +18,8 @@
  *   • drop a gradient on Kept or a named group — file it there (a favourite MOVES, a wall
  *     tile becomes a new favourite); drop it on the empty tail — a new group. Recent's bins
  *     take no drops (Recent is auto-managed), nor does All.
- *   • the chevron at the right end pulls up the full My Gradients panel (search, list
- *     view, import / export) — the manage surface, unchanged.
+ *   • the chevron at the right end opens the full My Gradients panel (search, list view,
+ *     import / export) under the rail — the manage surface, unchanged.
  *
  * Store writes go through `paramEdit`, so a drop or a rename is one undo step, exactly as
  * the panel's gestures are.
@@ -35,13 +37,9 @@ interface Props {
   sets: GroundSetDesc[];
   activeId: string;
   onSelect: (id: string) => void;
-  /** The manage pull-up (the full My Gradients panel). */
+  /** The manage panel (the full My Gradients panel) under the rail. */
   open: boolean;
   onToggleOpen: () => void;
-  /** "+ Snapshot": capture the whole studio (Phase D.3; the Snapshots chip appears with
-   *  the first one). Disabled while there is nothing to capture. */
-  onSnapshot?: () => void;
-  snapshotDisabled?: boolean;
 }
 
 const groupOf = (f: Favient): string => f.group ?? DEFAULT_GROUP;
@@ -63,7 +61,7 @@ const fileInto = (group: string, p: FavientDragPayload): void => {
 
 const NEW_GROUP_LABEL = 'Group';
 
-export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onToggleOpen, onSnapshot, snapshotDisabled = false }) => {
+export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onToggleOpen }) => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const { openContextMenu } = useStoreCallbacks();
   const [over, setOver] = useState<string | null>(null);
@@ -134,7 +132,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onTog
             data-gx-set-kind={s.kind}
             data-gx-set-count={s.count}
             aria-pressed={lit}
-            title={s.kind === 'catalog' ? 'The whole library' : s.kind === 'bin' ? 'What you picked that day' : s.kind === 'group' ? (renamable ? 'Double-click to rename · drop a gradient here to file it' : 'What you kept · drop a gradient here to file it') : 'Snapshots of the whole studio'}
+            title={s.kind === 'catalog' ? 'The whole library' : s.kind === 'bin' ? 'What you picked that day' : renamable ? 'Double-click to rename · drop a gradient here to file it' : 'What you kept · drop a gradient here to file it'}
             onClick={() => { if (!isRenaming) onSelect(s.id); }}
             onDoubleClick={renamable ? () => setRenaming({ group: s.group!, value: s.label }) : undefined}
             onContextMenu={menuFor(s)}
@@ -180,26 +178,14 @@ export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onTog
         onDrop={dropOn(null)}
         title="Drop a gradient here to start a new group"
       />
-      {onSnapshot && (
-        <button
-          type="button"
-          data-gx-snapshot-new=""
-          className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-lg text-[13px] border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 disabled:opacity-40 disabled:cursor-default"
-          onClick={onSnapshot}
-          disabled={snapshotDisabled}
-          title="Snapshot the whole studio — every snapshot is a tile on the Snapshots set; click one to come back to it, shift-click a second to tween"
-        >
-          <Icon name="plus" /> Snapshot
-        </button>
-      )}
       <button
         type="button"
         className="flex items-center gap-1 h-[26px] px-2 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10"
         onClick={onToggleOpen}
         aria-expanded={open}
-        title={open ? 'Back to the wall' : 'My Gradients — search, list view, rename, import and export'}
+        title={open ? 'Close My Gradients' : 'My Gradients — search, list view, rename, import and export'}
       >
-        {open ? 'less' : 'more'} <Icon name={open ? 'chevronDown' : 'chevronUp'} />
+        {open ? 'less' : 'more'} <Icon name={open ? 'chevronUp' : 'chevronDown'} />
       </button>
     </div>
   );

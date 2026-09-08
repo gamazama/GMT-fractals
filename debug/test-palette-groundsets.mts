@@ -3,10 +3,10 @@
  * `palette/core/groundSets.ts`). Plain node, no browser, sub-second.
  *
  *   [1] the rail's order: All first, Recent's bins newest first (Today · Yesterday · a
- *       date), Kept, named groups in shelf order, Snapshots last; a group split into two
- *       runs is ONE chip with the summed count; Presets hides once Recent has anything
+ *       date), Kept, named groups in shelf order; a group split into two runs is ONE chip
+ *       with the summed count; Presets hides once Recent has anything
  *   [2] membersOf resolves a bin to that day's Recent entries and a group to its run(s), in
- *       shelf order; All and Snapshots resolve to nothing
+ *       shelf order; All resolves to nothing
  *   [3] favientsToEntries numbers rows 0..n-1 in input order, ids are the favourites' ids,
  *       ramps are 256 RGBA texels rendered in sRGB, and a rename does not re-render (the
  *       body cache hits by id + content)
@@ -37,7 +37,7 @@ const shim = {
 (globalThis as any).window = { localStorage: shim, addEventListener: () => {} };
 (globalThis as any).localStorage = shim;
 
-const { listGroundSets, membersOf, favientsToEntries, tileSizeFor, parseSetId, binSetId, groupSetId, ALL_SET_ID, SNAPSHOTS_SET_ID, KEPT_LABEL } =
+const { listGroundSets, membersOf, favientsToEntries, tileSizeFor, parseSetId, binSetId, groupSetId, ALL_SET_ID, KEPT_LABEL } =
   await import('../palette/core/groundSets');
 const { useFavientsStore, RECENT_GROUP, DEFAULT_GROUP, PRESETS_GROUP, newGroupId } = await import('../palette/store/favientsStore');
 const { dayKey } = await import('../palette/components/favientBlocks');
@@ -83,7 +83,7 @@ const labels = { [RECENT_GROUP]: 'Recent', 'g-ocean': 'Ocean', [PRESETS_GROUP]: 
 
 console.log('[1] the rail order');
 {
-  const sets = listGroundSets({ favients: shelf, groupLabels: labels, catalogTotal: 11131, snapshotCount: 3, now });
+  const sets = listGroundSets({ favients: shelf, groupLabels: labels, catalogTotal: 11131, now });
   ok(sets[0].id === ALL_SET_ID && sets[0].count === 11131, 'All is first with the catalogue count');
   ok(sets[1].kind === 'bin' && sets[1].label === 'Today' && sets[1].count === 2, 'Today is second, count 2');
   ok(sets[2].label === 'Yesterday' && sets[2].count === 1, 'Yesterday third');
@@ -91,11 +91,10 @@ console.log('[1] the rail order');
   ok(sets[4].kind === 'group' && sets[4].label === KEPT_LABEL && sets[4].count === 2, 'Kept follows the bins, split run summed to 2');
   ok(sets[5].label === 'Ocean' && sets[5].count === 2 && sets[5].id === groupSetId('g-ocean'), 'Ocean next, in shelf order');
   ok(!sets.some((s) => s.group === PRESETS_GROUP), 'Presets hides while Recent has anything');
-  ok(sets[sets.length - 1].id === SNAPSHOTS_SET_ID && sets[sets.length - 1].count === 3, 'Snapshots last');
-  const noRecent = listGroundSets({ favients: shelf.filter((f) => f.group !== RECENT_GROUP), groupLabels: labels, catalogTotal: 1, snapshotCount: 0, now });
+  ok(sets[sets.length - 1].label === 'Ocean', 'the last chip is the last named group');
+  const noRecent = listGroundSets({ favients: shelf.filter((f) => f.group !== RECENT_GROUP), groupLabels: labels, catalogTotal: 1, now });
   ok(noRecent.some((s) => s.group === PRESETS_GROUP), 'Presets shows when Recent is empty');
-  ok(!noRecent.some((s) => s.id === SNAPSHOTS_SET_ID), 'no Snapshots chip without snapshots');
-  ok(listGroundSets({ favients: [], groupLabels: {}, catalogTotal: 5, snapshotCount: 0 }).length === 1, 'an empty shelf is All alone');
+  ok(listGroundSets({ favients: [], groupLabels: {}, catalogTotal: 5 }).length === 1, 'an empty shelf is All alone');
 }
 
 console.log('[2] membersOf');
@@ -105,7 +104,7 @@ console.log('[2] membersOf');
   ok(membersOf(binSetId(dayKey(now - DAY)), shelf).map((f) => f.name).join() === 'y1', 'Yesterday = y1');
   ok(membersOf(groupSetId(DEFAULT_GROUP), shelf).map((f) => f.name).join() === 'k1,k2', 'Kept = both runs of the default group');
   ok(membersOf(groupSetId('g-ocean'), shelf).length === 2, 'Ocean = 2');
-  ok(membersOf(ALL_SET_ID, shelf).length === 0 && membersOf(SNAPSHOTS_SET_ID, shelf).length === 0, 'All / Snapshots resolve to nothing');
+  ok(membersOf(ALL_SET_ID, shelf).length === 0, 'All resolves to nothing');
 }
 
 console.log('[3] favientsToEntries');
@@ -138,7 +137,6 @@ console.log('[5] parseSetId');
 {
   ok(parseSetId(binSetId('2026-09-08')).kind === 'bin' && parseSetId(binSetId('2026-09-08')).key === '2026-09-08', 'bin round-trips');
   ok(parseSetId(groupSetId('')).kind === 'group' && parseSetId(groupSetId('')).key === '', 'the default group round-trips');
-  ok(parseSetId(SNAPSHOTS_SET_ID).kind === 'snapshots', 'snapshots');
   ok(parseSetId('nonsense').kind === 'catalog' && parseSetId('').kind === 'catalog', 'garbage reads as the catalogue');
 }
 

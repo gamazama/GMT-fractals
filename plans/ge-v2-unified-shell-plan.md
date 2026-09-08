@@ -772,6 +772,15 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   walk should judge:** the count-driven tile steps on All (44 px under 1,500, 64 under 400,
   80 under 160, …) re-layout the wall at those thresholds while the pad is dragged —
   legibility bought with motion; if it reads as jitter, keep the steps for user sets only.
+- 2026-09-08 · Phase D, the owner's second walk. **L4 amended:** "One memory" holds Recent,
+  Kept and the named groups — Snapshots are removed (tray states are baked after every
+  action; the gradient is already in Recent and Kept), so "Variants are Snapshots on the
+  shelf" no longer applies. **The rail is the top of the ground, not its bottom edge**
+  (hierarchy: which set · how it is narrowed · the tiles); L10 as proposed above should
+  read "the ground is HEADED by the populations' names" if adopted. **V8 confirmed and
+  applied to the wall:** selected = a 2 px accent stroke in place, no showcased copy.
+  **V7/V8 extended in fact:** the gap between tiles scales with the tile as drawn (zoom or
+  count), Padding being the floor.
 
 ## 9. Definition of done, per phase
 
@@ -922,3 +931,26 @@ phase now carries**. Items move out of this list only when a later phase's entry
   Kept with a tween between any two tiles · retire from v2) is the owner's and is not yet
   taken — nothing changed in code. L10 (§8) still awaits the owner's yes or no; it was
   explained on the walk.
+- 2026-09-08 · Phase D, the owner's second walk (built the same evening). **Snapshots are
+  GONE** — owner: "there's no need to save tray states, they're baked after every action; I
+  think we can remove snapshots". The set, the rail's "+ Snapshot", the tween and the
+  snapshot menu are removed; `groundSets` has three kinds again. **L4 amended:** "One
+  memory" holds Recent, Kept and the named groups; Variants/Snapshots are no longer a zone
+  of it — the design doc's §5.6 and the Phase D fallback's Snapshots line are superseded by
+  this entry. `palette/store/variantsStore.ts`, `palette/core/variantsCore.ts` and
+  `palette/core/rampTween.ts` now have no consumer but their two harnesses; kept for the
+  moment (a tween between any two tiles may want `rampTween` back) — Phase G decides whether
+  to delete them and mark ADR-0112 superseded. **The selected tile is a STROKE, not a
+  popup** (V8 as written: a 2 px accent outline, drawn inside the tile's edge so it never
+  overlaps a neighbour, with a dark hairline inside it; the 1.8× showcased copy with its
+  shadow is gone — every host of `PickerWall` inherits this, app-gmt's overlay included).
+  **The gap grows with the tile as drawn** — zoomed in, or grown because the set is small:
+  `PickerWall` scales it (`gapAt`: the host's Padding is the floor; 32 px keeps 2, 96 px
+  gets 7, 192 px gets 14), so the model's own 6 px rule went. **The rail moved to the TOP
+  of the ground**, above the wall's header ("that makes more sense hierarchically": which
+  set, then how it is narrowed, then the tiles); the manage panel opens UNDER the rail as a
+  Floating over the wall (L6), Esc closes it first; the footer is gone. Consequence to
+  know: the wall now drops 40 px the moment the first pick lands, when the rail appears
+  (L9) — `smoke:ge-tray` had to re-measure the wall before its second wall click for
+  exactly that reason. Gates green: `smoke:ge-ground` (eight steps), `smoke:ge-tray`,
+  `smoke:ge-hero`, `test:palette`, knip.

@@ -2,26 +2,30 @@
  * groundSets — the pure half of "one ground, many sets" (GE v2 Phase D, 2026-09-08;
  * plans/ge-v2-unified-shell-plan.md §4 Phase D, the DECIDED block).
  *
- * The v2 shell's ground shows ONE set of gradients at a time and the bottom rail names the
+ * The v2 shell's ground shows ONE set of gradients at a time and the rail above it names the
  * sets. This module answers three questions without React, the DOM or a store:
  *
  *   1. `listGroundSets` — which sets exist, in the rail's FIXED order: All (the catalogue),
  *      Recent's dated bins newest first (Today · Yesterday · the date), Kept (the shelf's
- *      default group), every named group in shelf order, Snapshots last. The order never
- *      changes with use, so a set is a PLACE (the research's rule 1: "Mine is a place").
+ *      default group), every named group in shelf order. The order never changes with use,
+ *      so a set is a PLACE (the research's rule 1: "Mine is a place").
  *   2. `membersOf` — which favourites a set id resolves to, in shelf order.
- *   3. `favientsToEntries` / `rampToEntry` — a favourite (or a snapshot's ramp) as the
- *      `CatalogEntry` the wall draws. The wall blits every tile from ONE sprite by
- *      `entry.row`, so a set's entries are renumbered 0..n-1 for a sprite of their own
- *      (`usePickerModel` builds it from `entries[i].ramp`). Display ramps are rendered in
- *      sRGB, as `FavientSwatch` does — the stored colorSpace is a bake-for-shader concern.
+ *   3. `favientsToEntries` — a favourite as the `CatalogEntry` the wall draws. The wall blits
+ *      every tile from ONE sprite by `entry.row`, so a set's entries are renumbered 0..n-1
+ *      for a sprite of their own (`usePickerModel` builds it from `entries[i].ramp`).
+ *      Display ramps are rendered in sRGB, as `FavientSwatch` does — the stored colorSpace
+ *      is a bake-for-shader concern.
  *
  * Plus `tileSizeFor`: the tile grows as the set shrinks, so five gradients are five large
  * bars and eleven thousand are the dense wall. Steps, not a curve, so the wall does not
- * re-layout on every pad drag.
+ * re-layout on every pad drag (the owner walked the steps on 2026-09-08 and kept them).
+ *
+ * Snapshots were a fourth kind of set for one afternoon and are gone (owner, 2026-09-08:
+ * "there's no need to save tray states, they're baked after every action" — the gradient
+ * itself is already in Recent and Kept).
  *
  * Set ids are strings so they persist: `all` · `bin:<YYYY-MM-DD>` · `group:<groupId>`
- * (`group:` with an empty id is the default group) · `snapshots`.
+ * (`group:` with an empty id is the default group).
  *
  * @invariant `favientsToEntries` numbers rows 0..n-1 in input order and every entry's id is
  *   its favourite's id — proven by: `npx tsx debug/test-palette-groundsets.mts`
@@ -43,13 +47,12 @@ import { buildBlocks, dayKey } from '../components/favientBlocks';
 // --- ids ---------------------------------------------------------------------------
 
 export const ALL_SET_ID = 'all';
-export const SNAPSHOTS_SET_ID = 'snapshots';
 /** The shelf's default (un-divided) group, as a chip. */
 export const KEPT_LABEL = 'Kept';
 export const binSetId = (day: string): string => `bin:${day}`;
 export const groupSetId = (group: string): string => `group:${group}`;
 
-export type GroundSetKind = 'catalog' | 'bin' | 'group' | 'snapshots';
+export type GroundSetKind = 'catalog' | 'bin' | 'group';
 
 export interface GroundSetDesc {
   id: string;
@@ -64,7 +67,6 @@ export interface GroundSetDesc {
 
 /** Parse a set id back into its kind and key. Unknown shapes read as All. */
 export const parseSetId = (id: string): { kind: GroundSetKind; key: string } => {
-  if (id === SNAPSHOTS_SET_ID) return { kind: 'snapshots', key: '' };
   if (id.startsWith('bin:')) return { kind: 'bin', key: id.slice(4) };
   if (id.startsWith('group:')) return { kind: 'group', key: id.slice(6) };
   return { kind: 'catalog', key: '' };
@@ -77,7 +79,6 @@ export interface ListGroundSetsInput {
   groupLabels: Record<string, string>;
   /** Entries in the loaded catalogue (the All chip's count). */
   catalogTotal: number;
-  snapshotCount: number;
   now?: number;
 }
 
@@ -87,7 +88,7 @@ export interface ListGroundSetsInput {
  * chip with the summed count. The seeded Presets group hides once Recent has anything —
  * the strip's rule, kept: it is a starter, not a place the user made.
  */
-export const listGroundSets = ({ favients, groupLabels, catalogTotal, snapshotCount, now = Date.now() }: ListGroundSetsInput): GroundSetDesc[] => {
+export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date.now() }: ListGroundSetsInput): GroundSetDesc[] => {
   const out: GroundSetDesc[] = [{ id: ALL_SET_ID, kind: 'catalog', label: 'All', count: catalogTotal }];
   const bins: GroundSetDesc[] = [];
   const groups = new Map<string, GroundSetDesc>();
@@ -109,11 +110,10 @@ export const listGroundSets = ({ favients, groupLabels, catalogTotal, snapshotCo
     if (g.group === PRESETS_GROUP && hasRecent) continue;
     out.push(g);
   }
-  if (snapshotCount > 0) out.push({ id: SNAPSHOTS_SET_ID, kind: 'snapshots', label: 'Snapshots', count: snapshotCount });
   return out;
 };
 
-/** The favourites a bin or group set holds, in shelf order. Empty for All / Snapshots. */
+/** The favourites a bin or group set holds, in shelf order. Empty for All. */
 export const membersOf = (setId: string, favients: Favient[]): Favient[] => {
   const { kind, key } = parseSetId(setId);
   if (kind === 'bin') return favients.filter((f) => isRecentGroup(f.group) && dayKey(f.createdAt) === key);
@@ -156,15 +156,6 @@ const bodyFor = (f: Favient): EntryBody => {
 /** The wall entries for a set of favourites: `row` = index, id = the favourite's id. */
 export const favientsToEntries = (favs: Favient[]): CatalogEntry[] =>
   favs.map((f, i) => ({ ...bodyFor(f), name: f.name, row: i }));
-
-/** One wall entry from a display ramp (a snapshot's). `row` is the caller's index. */
-export const rampToEntry = (id: string, name: string, ramp: RGB[], row: number): CatalogEntry => ({
-  id,
-  name,
-  facets: computeFacets(ramp),
-  ramp: packRamp(ramp),
-  row,
-});
 
 // --- tile size by count --------------------------------------------------------------
 

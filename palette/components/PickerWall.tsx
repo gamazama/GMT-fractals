@@ -185,6 +185,18 @@ interface ChunkDesc {
   rowMajor: boolean;
 }
 
+/** The scheme's accent, for canvas strokes (the DOM gets it as a class). Read once per
+ *  paint from the root's CSS variables; the cyan the wall always used is the fallback. */
+const accentColour = (): string => {
+  if (typeof document === 'undefined') return '#22d3ee';
+  const cs = getComputedStyle(document.documentElement);
+  // The scheme writes channels (`--accent-400: 34 211 238`, see tailwind.config.js), which
+  // a canvas needs wrapped; a full colour string passes through.
+  const c = cs.getPropertyValue('--accent-400').trim();
+  if (/^\d+\s+\d+\s+\d+$/.test(c)) return `rgb(${c})`;
+  return c || '#22d3ee';
+};
+
 /** k → (col, row) and back, for either fill order. */
 const cellOf = (k: number, cols: number, nrows: number, rowMajor: boolean) =>
   rowMajor ? { col: k % cols, row: Math.floor(k / cols) } : { col: Math.floor(k / nrows), row: k % nrows };
@@ -302,44 +314,26 @@ const SwatchCanvas: React.FC<{
     // oversized + centred on its cell, with a drop-shadow lift + a thin cyan ring. Clamped
     // to the canvas so a cell at a chunk edge isn't clipped. This is the wall's
     // rest→enlarge selection treatment — the hero shows the same pick at full size.
+    // The selected tile wears a STROKE in place (V8: selected = a 2 px accent outline; the
+    // owner, 2026-09-08: "it can just have a stroke instead of the popup" — the 1.8×
+    // showcased copy with a shadow is gone; the hero shows the pick at full size). Drawn
+    // inside the tile's edge so it never overlaps a neighbour at the small sizes; a dark
+    // hairline just inside it keeps it legible on a ramp near the accent's own hue.
     const selIdx = selectedId ? entries.findIndex((e) => e.id === selectedId) : -1;
     if (selIdx >= 0) {
       const { col, row } = cellOf(selIdx, cols, nrows, rowMajor);
-      const ew = Math.max(Math.round(swatchW * 1.8), 40);
-      const eh = Math.max(Math.round(swatchH * 1.8), 24);
-      const cx = col * cellW + swatchW / 2;
-      const cy = row * cellH + swatchH / 2;
-      const ex = Math.max(0, Math.min(cx - ew / 2, cssW - ew));
-      const ey = Math.max(0, Math.min(cy - eh / 2, cssH - eh));
-      const er = Math.min(tileRadius * 1.8, ew / 3, eh / 3);
-      ctx.save();
-      ctx.imageSmoothingEnabled = true; // smooth the showcased swatch (neighbours stay crisp)
-      ctx.shadowColor = 'rgba(0,0,0,0.55)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetY = 2;
-      if (er > 0) {
-        // The shadow is cast by the clipped shape: paint it with a filled path first (a
-        // clip alone would clip the shadow away), then draw the sprite inside the clip.
-        ctx.beginPath();
-        ctx.roundRect(ex, ey, ew, eh, er);
-        ctx.fillStyle = '#000';
-        ctx.fill();
-        ctx.shadowColor = 'transparent';
-        ctx.clip();
-      }
-      ctx.drawImage(sprite, 0, entries[selIdx].row, 256, 1, ex, ey, ew, eh);
-      ctx.restore();
-      // Dark keyline (reads on light ramps) under a thin cyan selection ring.
+      const x = col * cellW, y = row * cellH;
+      const r = Math.min(tileRadius, swatchW / 3, swatchH / 3);
       const ring = (inset: number, style: string, width: number) => {
         ctx.strokeStyle = style;
         ctx.lineWidth = width;
         ctx.beginPath();
-        if (er > 0) ctx.roundRect(ex + inset, ey + inset, ew - inset * 2, eh - inset * 2, Math.max(0, er - inset));
-        else ctx.rect(ex + inset, ey + inset, ew - inset * 2, eh - inset * 2);
+        if (r > 0) ctx.roundRect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2, Math.max(0, r - inset));
+        else ctx.rect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2);
         ctx.stroke();
       };
-      ring(0.5, 'rgba(0,0,0,0.65)', 1);
-      ring(1.25, '#22d3ee', 1.5);
+      ring(1, accentColour(), 2);
+      ring(2.5, 'rgba(0,0,0,0.45)', 1);
     }
   }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId, rowMajor]);
 
@@ -590,7 +584,13 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   const labelW = gutter != null ? Math.max(0, gutter) : Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
   // cols is derived from the BASE swatch width (NOT the zoom), so horizontal zoom never
   // reflows the grid — it only widens the swatches + the content, which then scrolls.
-  const cols = Math.max(1, Math.floor((width - labelW - gap) / (swatchW + gap)));
+  // The gap between tiles grows with the tile as DRAWN — zoomed in, or grown because the
+  // set is small (owner, 2026-09-08: "when the wall is zoomed in, or with fewer tiles,
+  // there should be more padding between gradients"). The host's `gap` (Padding) is the
+  // floor; a 32 px tile keeps 2 px, a 96 px tile gets 7, a 192 px tile 14.
+  const gapAt = (w: number) => Math.max(gap, Math.round(w / 14));
+  const baseGap = gapAt(swatchW);
+  const cols = Math.max(1, Math.floor((width - labelW - baseGap) / (swatchW + baseGap)));
   // Effective (zoomed) swatch render size + the resulting content width.
   const ewW = Math.max(1, Math.round(swatchW * zoom.x));
   const ewH = Math.max(1, Math.round(swatchH * zoom.y));
@@ -599,10 +599,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // It's a single count for the wall — many small blocks each a couple of rows still tile
   // uniformly (and a content-heavy wall is a no-op: it stays full width).
   const totalEntries = groups.reduce((s, g) => s + g.entries.length, 0);
-  const effCols = shouldSquare(totalEntries, cols, ewW + gap, ewH + gap)
-    ? squareCols(totalEntries, ewW + gap, ewH + gap, cols)
+  const effGap = gapAt(ewW);
+  const effCols = shouldSquare(totalEntries, cols, ewW + effGap, ewH + effGap)
+    ? squareCols(totalEntries, ewW + effGap, ewH + effGap, cols)
     : cols;
-  const contentWidth = labelW + effCols * (ewW + gap);
+  const contentWidth = labelW + effCols * (ewW + effGap);
   // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders the
   // wall, and this walks every group).
   const rows = useMemo(() => mergeRows(groups, effCols), [groups, effCols]);
@@ -919,8 +920,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // instead lets that rounding accumulate into visible drift over many rows.
     const ewWStart = Math.max(1, Math.round(swatchW * c.czx));
     const ewHStart = Math.max(1, Math.round(swatchH * c.czy));
-    const contentX = labelW + (c.ax - labelW) * ((ewW + gap) / (ewWStart + gap));
-    const contentY = c.headerAbove + c.swatchAbove * ((ewH + gap) / (ewHStart + gap));
+    const gapStart = gapAt(ewWStart);
+    const contentX = labelW + (c.ax - labelW) * ((ewW + effGap) / (ewWStart + gapStart));
+    const contentY = c.headerAbove + c.swatchAbove * ((ewH + effGap) / (ewHStart + gapStart));
     el.scrollLeft = Math.max(0, Math.min(contentX - c.relX, contentWidth - el.clientWidth));
     el.scrollTop = Math.max(0, Math.min(contentY - c.relY, el.scrollHeight - el.clientHeight));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1165,7 +1167,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               labelW={labelW}
               swatchW={ewW}
               swatchH={ewH}
-              gap={gap}
+              gap={effGap}
               selectedId={selectedId}
               toolActive={!!selectionTool}
               tileRadius={tileRadius}

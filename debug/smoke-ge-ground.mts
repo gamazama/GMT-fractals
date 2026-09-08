@@ -15,20 +15,14 @@
  *   [6] search narrows All; "Keep these N" files the narrowed wall as a group and puts it
  *       on the ground: a lit group chip with that count, the title carrying the label
  *   [7] reload — the ground comes back on that group (the set id persists)
- *   [8] the pad is the wall's map (D.2): on All the pad carries a marker for the bands on
- *       screen, and scrolling the wall moves it
- *   [9] Snapshots (D.3): "+ Snapshot" on the rail twice, with a different working gradient
- *       between — the Snapshots chip says 2; on the Snapshots set there are two tiles and
- *       clicking the first restores the first snapshot's working gradient
- *  [10] shift-click the second — the tween appears in the header; Bake changes the working
- *       gradient and the tween closes
+ *   [8] the pad is the wall's map (D.2): on All the scrollbar beside the pad carries a thumb
+ *       for the lightness on screen, and scrolling the wall moves it
+ *   (Steps [9]–[10], the Snapshots set, were removed with the feature on 2026-09-08.)
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
  * [3] "the title does not say Today"; `tileSizeFor` returning the base for every count reds
  * [3] "the tiles did not grow"; dropping `setGroundSetId(groupSetId(g))` from `keepThese`
- * reds [6] "the ground did not switch to the new group"; `onSnapshotPick` not calling
- * `restore` reds [9] "did not restore"; `bakeTween` without the `use` reds [10] "Bake did
- * not change the working gradient".
+ * reds [6] "the ground did not switch to the new group".
  *
  * Run: `npm run smoke:ge-ground` (needs `npm run dev` on :3400, or ENGINE_URL).
  */
@@ -63,8 +57,6 @@ const state = (page: Page) =>
       filters: !!document.querySelector('[data-gx-filters-trigger]'),
       keep: (document.querySelector('[data-gx-keep-these]') as HTMLElement | null)?.innerText ?? null,
       markerTop: (document.querySelector('[data-gx-pad-marker]') as HTMLElement | null)?.getBoundingClientRect().top ?? null,
-      tween: !!document.querySelector('[data-gx-tween]'),
-      snapName: (document.querySelector('[data-gx-snapshot-name]') as HTMLInputElement | null)?.value ?? null,
       tools: wall?.querySelectorAll('button[aria-label]').length ?? 0,
       canvases: canvases.length,
       canvasLeft: c0 && wr ? Math.round(c0.x - wr.x) : null,
@@ -208,61 +200,6 @@ async function main() {
   s = await state(page);
   if (s.markerTop == null || Math.abs(s.markerTop - markerBefore!) < 2) fail(`[8] the marker did not move with the wall (${markerBefore} → ${s.markerTop})`);
   console.log(`✓ [8] the pad marks where the wall is (top ${Math.round(markerBefore!)} → ${Math.round(s.markerTop)})`);
-
-  // [9] Snapshots: back on the Fire group, pick, snapshot, pick another, snapshot
-  await page.click(`[data-gx-set="${groundBefore}"]`);
-  await page.waitForTimeout(500);
-  s = await state(page);
-  const cellW = (s.canvasW ?? 800) / Math.max(1, Math.round((s.canvasW ?? 800) / 86));
-  const groupTile = async (i: number) => {
-    const box = (await page.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
-    await page.mouse.click(box.x + cellW * (i + 0.5), box.y + 22);
-    await page.mouse.move(640, 40);
-    await page.waitForTimeout(900);
-  };
-  await groupTile(0);
-  const snap1 = await working(page);
-  await page.click('[data-gx-snapshot-new]');
-  await page.waitForTimeout(400);
-  await groupTile(2);
-  const snap2 = await working(page);
-  if (snap2 === snap1) fail('[9] the second pick did not change the working gradient');
-  await page.click('[data-gx-snapshot-new]');
-  await page.waitForTimeout(400);
-  s = await state(page);
-  const snapsChip = s.chips.find((c) => c.kind === 'snapshots');
-  if (!snapsChip || snapsChip.count !== 2) fail(`[9] Snapshots · 2 expected, got ${JSON.stringify(s.chips)}`);
-  await page.click('[data-gx-set="snapshots"]');
-  await page.waitForTimeout(500);
-  s = await state(page);
-  if (s.ground !== 'snapshots' || s.canvases !== 1) fail(`[9] the Snapshots set is not on the ground (${s.ground}, ${s.canvases} canvases)`);
-  const snapBox = (await page.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
-  const half = (s.canvasW ?? 300) / 2;
-  await page.mouse.click(snapBox.x + half * 0.5, snapBox.y + (s.canvasH ?? 80) / 2);
-  await page.mouse.move(640, 40);
-  await page.waitForTimeout(900);
-  const restored = await working(page);
-  if (restored !== snap1) fail(`[9] clicking the first snapshot did not restore its working gradient\n  want ${snap1}\n  got  ${restored}`);
-  s = await state(page);
-  if (!s.snapName) fail('[9] the active snapshot has no name field in the header');
-  console.log(`✓ [9] two snapshots; the first restores (active "${s.snapName}")`);
-
-  // [10] shift-click the second → the tween; Bake
-  // page.mouse.click has no modifiers option — hold Shift on the keyboard around it
-  await page.keyboard.down('Shift');
-  await page.mouse.click(snapBox.x + half * 1.5, snapBox.y + (s.canvasH ?? 80) / 2);
-  await page.keyboard.up('Shift');
-  await page.waitForTimeout(400);
-  s = await state(page);
-  if (!s.tween) fail('[10] shift-click did not open the tween');
-  await page.click('[data-gx-tween-bake]');
-  await page.mouse.move(640, 40);
-  await page.waitForTimeout(900);
-  const baked = await working(page);
-  if (baked === restored) fail('[10] Bake did not change the working gradient');
-  s = await state(page);
-  if (s.tween) fail('[10] the tween is still open after Bake');
-  console.log('✓ [10] the tween baked into Working and closed');
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
   await browser.close();

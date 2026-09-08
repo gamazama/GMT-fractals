@@ -8,11 +8,12 @@
  * the first pick, and never unmounted after it — L8; it IS the stops editor, with the palette
  * row on top and Curves / Adjust expanders inside it) ·
  * the stage — the GROUND, which shows ONE SET of gradients at a time (Phase D, 2026-09-08:
- * the catalogue, a dated bin of Recent, Kept, a named group) · the SET RAIL on the bottom
- * edge naming the sets (`SetRail`; silent until there is a second set), with the full
- * My Gradients panel behind its pull-up. No Dock, no side panel, no drawer, no timeline,
- * no scene name, and no shelf strip any more — the gradients you keep are drawn on the
- * ground, by the wall, as large as their count allows.
+ * the catalogue, a dated bin of Recent, Kept, a named group), headed by the SET RAIL naming
+ * the sets (`SetRail`, at the TOP of the ground above the wall's own header — owner: "that
+ * makes more sense hierarchically"; silent until there is a second set), with the full
+ * My Gradients panel floating under the rail when opened. No Dock, no side panel, no
+ * drawer, no timeline, no scene name, no footer, and no shelf strip any more — the
+ * gradients you keep are drawn on the ground, by the wall, as large as their count allows.
  *
  * Source switching is where the pipeline rules live (§2):
  *   • entering Build / Extract sets the working INPUT to that live source;
@@ -55,7 +56,7 @@ import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTa
 import { useImageDrop } from '../../palette/components/useImageDrop';
 import { useImageStore } from '../../palette/store/imageStore';
 import { WorkingHero } from './WorkingHero';
-import { useVariantsStore } from '../../palette/store/variantsStore';
+import { Floating } from './ui/Floating';
 import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
 import { useGroundSets } from './useGroundSource';
@@ -264,12 +265,13 @@ export const GradientExplorerV2App: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      if (mineOpen) { setMineOpen(false); return; }
       if (trayRef.current) { openTray(null); return; }
       if (getArmedSlot()) armSlot(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openTray]);
+  }, [mineOpen, openTray]);
 
   // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
   useEffect(() => {
@@ -300,12 +302,6 @@ export const GradientExplorerV2App: React.FC = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
     useWorkingStore.getState().syncRecent();
     openFullscreen(derived.config, derived.name);
-  };
-  // Snapshot the whole studio (Phase D.3, L4): the Snapshots set appears with the first one.
-  const snapshot = () => {
-    if (derived.empty) return;
-    const v = useVariantsStore.getState().capture(undefined, derived.ramp ?? undefined);
-    showToast(`Snapshot ${v.name} — on the Snapshots set below`);
   };
 
   return (
@@ -367,6 +363,20 @@ export const GradientExplorerV2App: React.FC = () => {
 
       {/* stage — the ground */}
       <div className="flex-1 min-h-0 flex flex-col relative">
+        {/* The SET RAIL (Phase D): the top of the ground names the sets — All · Today ·
+            Yesterday · the date · Kept · named groups — and the lit one is on the ground; the
+            wall's own header (how the set is narrowed) sits under it. Silent until there is
+            a second set (L9: the screen grows with the user). The chevron opens the full My
+            Gradients panel (search, list view, rename, import / export) under the rail,
+            floating over the wall (L6: nothing pushes the ground). */}
+        {sets.length > 1 && (
+          <SetRail sets={sets} activeId={groundSetId} onSelect={setGroundSetId} open={mineOpen} onToggleOpen={() => setMineOpen((o) => !o)} />
+        )}
+        {mineOpen && sets.length > 1 && (
+          <Floating className="absolute left-6 right-6 top-10 z-30 h-[340px] overflow-hidden flex flex-col" data-gx-mine-panel="">
+            <FavientsPanel hint={null} />
+          </Floating>
+        )}
         {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it. One line
             above it only when it has something to say. */}
         {(armed || derived.empty) && (
@@ -383,20 +393,6 @@ export const GradientExplorerV2App: React.FC = () => {
         </div>
       </div>
 
-      {/* The SET RAIL (Phase D): the bottom edge names the sets — All · Today · Yesterday ·
-          the date · Kept · named groups — and the lit one is on the ground. Silent until
-          there is a second set (L9: the screen grows with the user). The chevron pulls up
-          the full My Gradients panel (search, list view, rename, import / export). */}
-      {sets.length > 1 && (
-        <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 40 }} data-gx-footer="">
-          <SetRail sets={sets} activeId={groundSetId} onSelect={setGroundSetId} open={mineOpen} onToggleOpen={() => setMineOpen((o) => !o)} onSnapshot={snapshot} snapshotDisabled={derived.empty} />
-          {mineOpen && (
-            <div className="flex-1 min-h-0 overflow-hidden border-t border-line/10">
-              <FavientsPanel hint={null} />
-            </div>
-          )}
-        </footer>
-      )}
 
       {contextMenu.visible && (
         <GlobalContextMenu
