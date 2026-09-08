@@ -349,6 +349,12 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **Small ones, same evening.** A colour can be dropped on the palette row's **+**: it makes
+  the new swatch and lands there on the ramp (`addSwatch` now returns the position it chose, so
+  the caller can act on that spot). The soft slider's number sits in a slightly darker WELL, so
+  it reads as a field you can drag and type into without needing a border or a label. Decimals
+  follow the slider's `step` (1 → none, 0.1 → one), which is why the channels had been printing
+  a conversion's eight places; and the rows hug the bar — dense 26 → 22 px.
 - **The picker's channels ARE the app's slider (2026-09-08).** The bespoke `GradientSlider`
   was missing most of what the real one does — right-click reset, the default tick, the live
   indicator, help ids, a properly typed value (owner: "this component is missing a lot of

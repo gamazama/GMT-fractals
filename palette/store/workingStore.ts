@@ -155,7 +155,10 @@ export interface WorkingState {
   /** Re-lay with N swatches under the last rule. */
   setCount: (n: number) => void;
   /** "+": one more swatch at the midpoint of the largest gap. */
-  addSwatch: () => void;
+  /** Adds a swatch at the largest gap. Returns its position, so a caller that dropped
+   *  something onto the "+" can put it there too (the colour drop, 2026-09-08); null when
+   *  the palette is already full. */
+  addSwatch: () => number | null;
   /** "×" on a swatch. Keeps at least PALETTE_MIN. */
   removeSwatch: (index: number) => void;
   /** Drag: move one swatch to `t`; returns its index after re-sorting. */
@@ -408,9 +411,14 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     savePrefs(get());
   },
   addSwatch: () => {
-    if (get().positions.length >= PALETTE_MAX) return;
-    set({ positions: insertAtLargestGap(get().positions) });
+    const before = get().positions;
+    if (before.length >= PALETTE_MAX) return null;
+    const next = insertAtLargestGap(before);
+    set({ positions: next });
     savePrefs(get());
+    // the one that was not there before
+    const seen = new Set(before);
+    return next.find((t) => !seen.has(t)) ?? null;
   },
   removeSwatch: (index) => {
     const p = get().positions;

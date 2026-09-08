@@ -198,6 +198,25 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             title="Add a swatch where the palette is thinnest"
             disabled={palette.length >= PALETTE_MAX}
             onClick={() => useWorkingStore.getState().addSwatch()}
+            // A colour dropped on "+" makes the new swatch AND lands there on the ramp
+            // (owner, 2026-09-08).
+            onDragOver={(e) => {
+              if (!onDropColour || !isColorDrag(e.dataTransfer)) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+              setDropOver(-1);
+            }}
+            onDragLeave={() => setDropOver(null)}
+            onDrop={(e) => {
+              const hex = readColorDrag(e.dataTransfer);
+              setDropOver(null);
+              if (!hex || !onDropColour) return;
+              e.preventDefault();
+              const t = useWorkingStore.getState().addSwatch();
+              if (t != null) onDropColour(t, hex);
+            }}
+            data-gx-palette-add-drop={dropOver === -1 ? '' : undefined}
+            className={dropOver === -1 ? 'ring-2 ring-dashed ring-accent-300' : undefined}
           >
             <Icon name="plus" />
           </Act>

@@ -330,8 +330,15 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 )}
             </label>
         );
+        // The number is a FIELD you can drag and type into, so it gets a zone of its own: a
+        // slightly darker well, which says "this is editable" without a border or a label
+        // (owner, 2026-09-08).
         const valueEl = (
-            <div className={`text-right text-[13px] tabular-nums group/num-area touch-none ${dense ? 'w-[52px] shrink-0' : 'ml-auto min-w-[56px]'} ${isActive ? 'text-fg font-medium' : ''}`}>
+            <div
+                className={`text-right text-[13px] tabular-nums group/num-area touch-none rounded px-1.5 transition-colors ${
+                    dense ? 'w-[56px] shrink-0' : 'ml-auto min-w-[60px]'
+                } ${disabled ? 'bg-line/[0.06]' : isActive ? 'bg-line/[0.16] text-fg font-medium' : 'bg-line/[0.10] hover:bg-line/[0.16]'}`}
+            >
                 {number}
             </div>
         );
