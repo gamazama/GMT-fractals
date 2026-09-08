@@ -332,7 +332,17 @@ the fallback.
   surface. The skin travels through the React tree, NOT the DOM — the inspector is a portal, so the
   provider sits on the editor. `smoke:ge-tray` [6] asserts the dialect (`data-gx-picker-skin`),
   falsified by flipping the provider to `default`.
-- **The COLOUR WHEEL (second pass, 2026-09-08).** The owner supplied Cinema 4D's Color Chooser
+- **SELECTION MODES (third pass, 2026-09-08 — the owner's correction).** The reference spec's
+  real move is not any one control: it is that you CHOOSE which controls are on, several at
+  once, from a toolbar under the swatch, and the combination is remembered (owner: "the colour
+  wheel is not even enabled by default, the default is the regular square picker — part of its
+  cleverness is its configurability"). So the picker now carries `PickerMode` toggles — field
+  · wheel · channels · kelvin · swatches — as glyph buttons at the end of the always-visible
+  swatch/hex line, persisted under `gmt.colorpicker.modes`, defaulting to field + channels +
+  swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
+  new and one-way by nature (a rendered colour has no single temperature): the slider and the
+  eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **The COLOUR WHEEL (second pass, 2026-09-08) — now one MODE among those, off by default.** The owner supplied Cinema 4D's Color Chooser
   spec as "what a robust and comfortable colour picker looks like". The move taken from it: a
   wheel carrying draggable HANDLES, which answers the open question about the four harmony rows
   by replacing them — and it replaces the saturation/value field too, so the face has ONE 2D

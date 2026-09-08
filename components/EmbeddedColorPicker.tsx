@@ -12,6 +12,8 @@ import {
     wrapHue,
     harmonyHandles,
     HARMONY_COUNT,
+    kelvinToHex,
+    COLOR_TEMPERATURE_PRESETS,
     type ColorHarmony,
     type HsvHandle,
 } from '../utils/colorUtils';
@@ -135,6 +137,41 @@ const hsbToHex = ({ h, s, v }: HSB): string => rgbToHex(hsbToRgb(h, s, v));
 /** A gradient/swatch bar's radius in the soft dialect (the owner's rule, hero-spec §7). */
 const SOFT_BAR = 'rounded-[10px]';
 
+// ── selection MODES (soft dialect) ─────────────────────────────────────────────────────
+// The reference chooser's real cleverness is not any one control but that you CHOOSE which
+// controls are on: a toolbar of toggles under the swatch, several at once, and the
+// combination is remembered for next time (owner, 2026-09-08 — "the default is the regular
+// square picker … its cleverness is its configurability"). So the field is on by default and
+// the wheel is one option among several, not a replacement for anything.
+export type PickerMode = 'field' | 'wheel' | 'channels' | 'kelvin' | 'swatches';
+const MODES_KEY = 'gmt.colorpicker.modes';
+const MODE_DEFAULT: PickerMode[] = ['field', 'channels', 'swatches'];
+
+const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
+    const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+    switch (mode) {
+        case 'field':
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 10.5 13.5 4" opacity=".5" /></svg>;
+        case 'wheel':
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="10.4" cy="5.6" r="1.4" /></svg>;
+        case 'channels':
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" /></svg>;
+        case 'kelvin':
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><path d="M6.5 9.2V3.6a1.5 1.5 0 0 1 3 0v5.6a3 3 0 1 1-3 0z" /></svg>;
+        case 'swatches':
+        default:
+            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="5" height="5" rx="1.5" /><rect x="8.5" y="2.5" width="5" height="5" rx="1.5" /><rect x="2.5" y="8.5" width="5" height="5" rx="1.5" /><rect x="8.5" y="8.5" width="5" height="5" rx="1.5" /></svg>;
+    }
+};
+
+const MODE_TITLE: Record<PickerMode, string> = {
+    field: 'Field — saturation and brightness for one hue',
+    wheel: 'Wheel — hue and saturation, with harmony handles',
+    channels: 'Channels — RGB and HSB sliders',
+    kelvin: 'Kelvin — colour temperature',
+    swatches: 'Swatches — recent and the working palette',
+};
+
 // A small clickable swatch strip used by harmony / recents / palette rows.
 const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: string) => void; current?: string }> = ({
     label,
@@ -256,6 +293,24 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // 2D control does hue + saturation with value on the strip beside it, and its extra
     // HANDLES are the harmony, live and draggable, rather than a printed list. Index 0 is
     // always the colour being edited (utils/colorUtils harmonyHandles).
+    const [modes, setModes] = useState<PickerMode[]>(() => {
+        const raw = safeLocalGet(MODES_KEY);
+        if (!raw) return MODE_DEFAULT;
+        try {
+            const v = JSON.parse(raw);
+            return Array.isArray(v) && v.length ? (v as PickerMode[]) : MODE_DEFAULT;
+        } catch { return MODE_DEFAULT; }
+    });
+    const on = useCallback((m: PickerMode) => modes.includes(m), [modes]);
+    const toggleMode = useCallback((m: PickerMode) => {
+        setModes((prev) => {
+            // never leave the chooser with nothing to choose WITH: the last mode stays on
+            const next = prev.includes(m) ? (prev.length > 1 ? prev.filter((x) => x !== m) : prev) : [...prev, m];
+            safeLocalSet(MODES_KEY, JSON.stringify(next));
+            return next;
+        });
+    }, []);
+    const [kelvin, setKelvin] = useState(6500);
     const [harmony, setHarmony] = useState<ColorHarmony>('analogous');
     const [harmonyCount, setHarmonyCount] = useState(5);
     // 'free': the handles are the user's own, so they are STORED (every other mode derives).
@@ -346,6 +401,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     useEffect(() => () => { if (paramTxOpenRef.current) endColorTx(); }, [endColorTx]);
 
     const hex = useMemo(() => hsbToHex(hsb), [hsb]);
+    /** The live HSB, readable from callbacks that must not re-create on every colour change. */
+    const hsbRef = useRef(hsb);
+    hsbRef.current = hsb;
     const rgb = useMemo(() => hsbToRgb(hsb.h, hsb.s, hsb.v), [hsb]);
 
     // Emit without committing to recents (called continuously during a drag).
@@ -382,8 +440,21 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         emit(next);
     }, [rgb, hsb.h, hsb.s, emit]);
 
-    const handleSliderStart = useCallback(() => { beginColorTx(); colorSession.onPointerDown(); }, [colorSession, beginColorTx]);
-    const handleSliderEnd = useCallback(() => { colorSession.onPointerUp(); endColorTx(); pushRecent(lastOutputHex.current); }, [colorSession, endColorTx]);
+    // The colour a gesture STARTED from. While one is in flight the swatch splits and shows
+    // it beside the live colour, so you can see what you are changing away from (the owner's
+    // reference spec: "This color swatch is split when the color handle or slider is moved").
+    const [gestureFrom, setGestureFrom] = useState<string | null>(null);
+    const handleSliderStart = useCallback(() => {
+        setGestureFrom(hsbToHex(hsbRef.current));
+        beginColorTx();
+        colorSession.onPointerDown();
+    }, [colorSession, beginColorTx]);
+    const handleSliderEnd = useCallback(() => {
+        setGestureFrom(null);
+        colorSession.onPointerUp();
+        endColorTx();
+        pushRecent(lastOutputHex.current);
+    }, [colorSession, endColorTx]);
 
     // --- 2D field (saturation × brightness for the current hue) ---
     useEffect(() => {
@@ -737,7 +808,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     </span>
                 </button>
             )}
-            <div className={`shrink-0 border ${soft ? 'w-7 h-7 rounded-lg border-line/20' : 'w-6 h-6 rounded border-line/10'}`} style={{ backgroundColor: hex }} />
+            <div
+                className={`shrink-0 border overflow-hidden ${soft ? 'w-7 h-7 rounded-lg border-line/20' : 'w-6 h-6 rounded border-line/10'}`}
+                style={gestureFrom
+                    // mid-gesture: the new colour on the left, the one you started from on the right
+                    ? { backgroundImage: `linear-gradient(to right, ${hex} 50%, ${gestureFrom} 50%)` }
+                    : { backgroundColor: hex }}
+                title={gestureFrom ? `${hex} \u2190 ${gestureFrom} (Esc to keep the original)` : hex}
+            />
             <input
                 value={hexDraft}
                 onChange={(e) => setHexDraft(e.target.value)}
@@ -785,6 +863,60 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         </>
     );
 
+    // The mode toolbar — which controls are on. Sits at the end of the always-visible
+    // swatch/hex line, so the line reads: what the colour IS, then what you may pick it with.
+    const modeBar = (
+        <div className="flex items-center gap-0.5 shrink-0" data-gx-picker-modes>
+            {(['field', 'wheel', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => (
+                <button
+                    key={m}
+                    type="button"
+                    onClick={() => toggleMode(m)}
+                    title={MODE_TITLE[m]}
+                    aria-pressed={on(m)}
+                    data-gx-picker-mode={m}
+                    data-on={on(m) ? '' : undefined}
+                    className={`w-7 h-7 grid place-items-center rounded-lg transition-colors ${
+                        on(m) ? 'bg-accent-400/15 text-accent-300' : 'text-fg-dim hover:text-fg hover:bg-line/10'
+                    }`}
+                >
+                    <ModeGlyph mode={m} />
+                </button>
+            ))}
+        </div>
+    );
+
+    // Kelvin — a light's temperature rather than a screen colour. One-way by nature (a
+    // rendered colour has no single temperature), so the slider proposes and the colour takes.
+    const kelvinBlock = (
+        <div className="flex flex-col gap-2 w-[190px]">
+            <GradientSlider
+                label="K"
+                value={kelvin}
+                min={1000}
+                max={15000}
+                step={50}
+                trackBg={`linear-gradient(to right, ${[1000, 2500, 4000, 5500, 7000, 9000, 12000, 15000].map(kelvinToHex).join(', ')})`}
+                onChange={(k) => { setKelvin(k); emit(safeHsb(kelvinToHex(k))); }}
+                onStart={handleSliderStart}
+                onEnd={handleSliderEnd}
+            />
+            <div className="flex flex-wrap gap-1">
+                {COLOR_TEMPERATURE_PRESETS.map((t) => (
+                    <button
+                        key={t.value}
+                        type="button"
+                        className="px-2 h-6 rounded-lg border border-line/20 text-[11px] text-fg-muted hover:text-fg"
+                        title={`${t.value} K`}
+                        onClick={() => { setKelvin(t.value); setFromHex(kelvinToHex(t.value)); }}
+                    >
+                        {t.label}
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+
     // The wheel, its handle palette, and the harmony chooser (soft dialect only).
     const wheelBlock = (
         <ColorWheel
@@ -802,8 +934,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     );
     const harmonyBlock = (
         <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0">
+            <div className="flex flex-col gap-2">
+                <div className="min-w-0">
                     <Dropdown
                         size="md"
                         fullWidth
@@ -827,7 +959,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     />
                 </div>
                 {countRange && (
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 justify-end">
                         <button
                             type="button"
                             className="w-6 h-6 rounded-lg border border-line/20 text-fg-muted hover:text-fg disabled:opacity-40"
@@ -852,8 +984,6 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 onPick={(c) => setFromHex(c)}
                 current={hex}
             />
-            <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
-            <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
         </div>
     );
 
@@ -881,7 +1011,26 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             data-gx-picker-skin={soft ? 'soft' : 'default'}
             onContextMenu={handleContainerContextMenu}
         >
-            {layout === 'cols' ? (
+            {soft && !minified ? (
+                // the chosen controls, in a fixed reading order; the hex line carries the
+                // toolbar so turning one on or off is one click from the colour itself
+                <>
+                    <div className="flex items-center gap-1.5">{hexRow}{modeBar}</div>
+                    <div className="flex flex-wrap gap-4 items-start">
+                        {on('field') && <div className="flex flex-col gap-1.5 shrink-0 w-[180px]">{fieldBlock}</div>}
+                        {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
+                        {on('wheel') && <div className="flex flex-col gap-2 w-[230px] shrink-0">{harmonyBlock}</div>}
+                        {on('channels') && <div className="flex flex-col gap-1.5 flex-1 min-w-[190px]">{channelsBlock}</div>}
+                        {on('kelvin') && kelvinBlock}
+                        {on('swatches') && (
+                            <div className="flex flex-col gap-2 flex-1 min-w-[190px]">
+                                <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
+                                <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
+                            </div>
+                        )}
+                    </div>
+                </>
+            ) : layout === 'cols' ? (
                 // Widest — pads | channels | swatches, three columns side by side.
                 <div className={`flex items-start ${soft ? 'gap-4' : 'gap-3'}`}>
                     <div className={`min-w-0 flex flex-col ${soft ? 'gap-2 shrink-0' : 'flex-1 gap-1.5'}`}>{hexRow}{soft ? wheelBlock : fieldBlock}</div>

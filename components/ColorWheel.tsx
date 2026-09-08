@@ -186,6 +186,28 @@ export const ColorWheel: React.FC<Props> = ({
         return () => window.removeEventListener('keydown', onKey, true);
     }, [activeIndex, onMove, onDragEnd]);
 
+    // Arrow keys nudge the active handle once it has focus: hue on the horizontal, saturation
+    // on the vertical, Shift for a coarse step, Alt to jump to the rim or the centre (the
+    // reference spec's 1 % / 10 % / edge, mapped onto a wheel).
+    const onKeyDown = (e: React.KeyboardEvent) => {
+        if (!active) return;
+        const fine = e.shiftKey ? 10 : 1;
+        let h = active.h;
+        let s = active.s;
+        switch (e.key) {
+            case 'ArrowLeft': h -= fine; break;
+            case 'ArrowRight': h += fine; break;
+            case 'ArrowUp': s = e.altKey ? 1 : s + fine / 100; break;
+            case 'ArrowDown': s = e.altKey ? 0 : s - fine / 100; break;
+            default: return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        onDragStart();
+        onMove(((h % 360) + 360) % 360, Math.max(0, Math.min(1, s)));
+        onDragEnd();
+    };
+
     // --- the value strip ------------------------------------------------------------
     const stripRef = useRef<HTMLDivElement>(null);
     const stripDrag = useRef(false);
@@ -207,8 +229,12 @@ export const ColorWheel: React.FC<Props> = ({
         <div className="flex gap-1.5 items-start">
             <div
                 ref={boxRef}
-                className="relative shrink-0 cursor-crosshair touch-none select-none"
+                tabIndex={0}
+                role="application"
+                aria-label="Colour wheel"
+                className="relative shrink-0 cursor-crosshair touch-none select-none outline-none focus-visible:ring-2 focus-visible:ring-accent-400/60 rounded-full"
                 style={{ width: size, height: size }}
+                onKeyDown={onKeyDown}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={endDrag}
