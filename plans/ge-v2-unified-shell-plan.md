@@ -343,6 +343,26 @@ retired; L4 as written). Gates: `test:palette` gains `test-palette-groundsets`; 
 **Known loss to weigh on the walk:** the picks are no longer visible while the wall is up —
 the hero shows the current one and the chip shows the count. If that is not enough, the chips
 grow a small stacked preview; the model holds either way.
+**BUILT 2026-09-08 (D.0–D.3, commits dc74070f + b7ef9dd9; awaiting the owner's walk).**
+D.0 the set ground: `palette/core/groundSets.ts` (the rail order, favourite → wall entry
+with its own sprite rows, `tileSizeFor`), `palette/store/groundSet.ts` (the set id,
+persisted), `usePickerModel({ source })`, `PickerWall.gutter`. D.1 the rail
+(`gradient-explorer/v2/SetRail.tsx`): chips in a fixed order — click · double-click renames
+a group · right-click Rename / Manage… · drop a gradient to file it · drop on the tail for a
+new group; "Keep these N" in the wall's left cell files a narrowed All as a group and puts
+it on the ground; the arrange sentence is back beside the count; the shelf strip is gone and
+the full panel is the rail's pull-up. D.2 the pad as the wall's map: the wall reports its
+bands as drawn and the pad draws the on-screen lightness range as a thumb at its left edge
+plus two hairlines; the thumb scrolls the wall while the wall is ungrouped. D.3 Snapshots:
+"+ Snapshot" on the rail, the set of tiles, click restores, shift-click a second tweens in
+the header (Bake keeps it), right-click Update · Duplicate · Remove, the active one's name
+editable in the header; `VariantsMenu.tsx` deleted. Gates: `test:palette` (+
+`test-palette-groundsets`, six blocks) · `smoke:ge-ground` (ten steps) · `smoke:ge-tray` ·
+`smoke:ge-hero` · knip — all green; every new claim falsified (the guards' headers say how).
+**Not built:** arrow keys on the wall; a tile-size slider (superseded by size-by-count; the
+wall's Padding stays under the zoom tool); an armed mark on the tween's second snapshot (the
+header names it); a "source" on a snapshot (the §11f gap stands). The owner's walk decides
+the peek question above.
 **Goal:** L4; Variants become Snapshots.
 - Footer: zones RECENT · STARRED · named groups · SNAPSHOTS with `ZoneLabel`s; `+ Snapshot` and
   `groups ▴` at the tail; the full panel (`FavientsPanel`) unchanged beneath.
@@ -381,7 +401,7 @@ grow a small stacked preview; the model holds either way.
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
 - **The picker wears the owner's own icons (2026-09-08).** They arrived as one sheet
-  (`H:\GMTssets\GXN\someIcons.svg`): nine 8-unit glyphs in a row — copy, eyedropper, a
+  (`H:\GMT\assets\GXN\someIcons.svg`): nine 8-unit glyphs in a row — copy, eyedropper, a
   rounded square (spectrum), a circle (wheel), the knot's own silhouette (stop), four
   overlapping circles (harmony), sliders (channels), a thermometer (kelvin) and loose chips
   (swatches), which is exactly the set the toolbar needed. `components/gradient/pickerIcons.tsx`
@@ -738,6 +758,20 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   (exact-equality plateaus; banded-ramp mode for small-edged bands, an edge gate for smooth
   ramps' quantisation runs). Surveyed on the real bundles: banded cpt-city palettes with step
   stops 57 → 105 of 120. trays-spec §13a; stopfit [7] guards it.
+- 2026-09-08 · Phase D (built, awaiting the owner's walk). **L1 amended in fact, not yet in
+  words: the shelf is no longer the edge — the RAIL is**, and it names SETS rather than
+  holding gradients; the ground is whichever set is lit. Proposed as **L10 · One ground,
+  many sets: the ground shows one population at a time; the edge names the populations, in
+  a fixed order; tile size follows the count.** Owner to decide. **L4 honoured as written**
+  (Snapshots on the rail, Variants off the bar). **L7 became structural**: a set tile IS a
+  shelf pick (the same store mode), so search, More like this, zoom, drag and ★ reach your
+  own gradients through the same code rather than by convention. **L9 kept**: the rail
+  appears with the second set, not before. **V3**: the lit chip is the accent; nothing else
+  on the rail is. **V2 as amended**: a tile that has grown toward a box takes more rounding
+  (8 → up to 20 px, capped by the wall at a third of the short side). **A candidate the
+  walk should judge:** the count-driven tile steps on All (44 px under 1,500, 64 under 400,
+  80 under 160, …) re-layout the wall at those thresholds while the pad is dragged —
+  legibility bought with motion; if it reads as jitter, keep the steps for user sets only.
 
 ## 9. Definition of done, per phase
 
@@ -850,3 +884,23 @@ phase now carries**. Items move out of this list only when a later phase's entry
   dropper as before."* Reverted — the button is back on the browser's `EyeDropper` API
   (`getEyeDropper` / `doEyedrop` in `EmbeddedColorPicker.tsx`), keeping the owner's own
   `EyedropperGlyph`. Chrome's red-grid magnifier is accepted; do not re-roll a custom one.
+- 2026-09-08 · Phase D built (D.0–D.3, awaiting the owner's walk). **In scope, left
+  undone:** arrow keys + Home/End on the wall (the research's P1e); the pad's seek is off
+  while grouped by category (every lightness exists once per category — ambiguous); the
+  tween's second snapshot has no mark on the canvas (the header names it); a group cannot be
+  deleted from the rail (remove its gradients in the pull-up); `FavientsPanel
+  layout="strip"` is now unused by v2 (kept — app-gmt does not use it either; delete, or
+  keep for a peek variant, after the walk). **Noticed:** the tile-size steps re-layout All
+  at 1,500 / 400 / 160 while the pad is dragged (see §8); on a fresh origin the catalogue
+  is 3,076 until the licensed packs load, so a first-run rail is All · Presets 24; the
+  Phase E block above carried a bell byte in a Windows path (a heredoc's `\a`), repaired
+  today — write patch scripts with the Write tool; another session's dev server on :3400 was
+  serving a stale `BrowseStage` all afternoon (its watcher had lost the file) — the smokes
+  ran on a second server (`.claude/launch.json` `gmt-dev-3401`, local, gitignored): restart
+  `npm run dev` before the walk. **The owner's walk now carries:** the peek question (are
+  the picks wanted on the edge while foraging, or is Today · N enough); the tile steps on
+  All; the marker's thumb (left edge, 7 px) against a translucent band; whether "Keep these
+  N" belongs beside the sentence or on the rail; the empty-set line's wording. **Phase F
+  carries:** the rail on a phone (a chip row suits it better than the strip did; the tail
+  drop needs a "+ group" affordance on touch; the pad's thumb is 7 px, too thin for a
+  finger).
