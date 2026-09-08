@@ -88,11 +88,32 @@ const toolCursor = (tool: SelectionTool | null | undefined): string | undefined 
         ? 'none'
         : undefined;
 
+/** One band as the wall draws it — see `onViewport`. */
+export interface WallBand {
+  key: string;
+  /** The facet bucket bounds (0..1) when the rows are bucketed; absent otherwise. */
+  lo?: number;
+  hi?: number;
+  visible: boolean;
+}
+
 export interface PickerWallProps {
   groups: PickerGroup[];
   /** Shared 256×N sprite — row N is catalog entry `row`. */
   sprite: HTMLCanvasElement | null;
-  onPick: (entry: CatalogEntry) => void;
+  /** A swatch click. The event rides along so a host can read modifiers (GE v2's
+   *  Snapshots: shift-click arms a tween). */
+  onPick: (entry: CatalogEntry, e?: React.MouseEvent) => void;
+  /** A right-click on a swatch (the host opens its menu). Absent = the wall only swallows
+   *  the native menu, as before. */
+  onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
+  /** Every band AS DRAWN (after `mergeRows`, so a merged band carries the unioned range
+   *  and its own key) with whether it intersects the viewport — reported on scroll, on
+   *  resize and when the rows change (GE v2's pad-as-map draws the wall's viewport on the
+   *  hue × lightness pad from this, and scrolls to a band by its key). rAF-throttled. */
+  onViewport?: (bands: WallBand[]) => void;
+  /** Scroll a band to the top of the viewport; bump `seq` to fire again for the same key. */
+  scrollToGroup?: { key: string; seq: number } | null;
   /** Begin an HTML5 drag for the swatch under the pointer (e.g. drag into Favients). */
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   selectedId?: string;
@@ -210,7 +231,8 @@ const SwatchCanvas: React.FC<{
   selectedId?: string;
   chunkKey: string;
   onHover: (h: Hover | null) => void;
-  onPick: (e: CatalogEntry) => void;
+  onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
+  onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
   /** A selection tool is active → drop the swatch's hand cursor so the wall's tool cursor
@@ -218,7 +240,7 @@ const SwatchCanvas: React.FC<{
   toolActive?: boolean;
   tileRadius?: number;
   rowMajor?: boolean;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false }) => {
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -408,8 +430,16 @@ const SwatchCanvas: React.FC<{
               // the hover preview (same source as the drag) and clear the hover.
               setHoverOrigin(h.col, h.row);
               onHover(null);
-              onPick(h.entry);
+              onPick(h.entry, e);
             }
+          }}
+          onContextMenu={(e) => {
+            if (!onEntryContextMenu) return;
+            const h = hit(e);
+            if (!h) return;
+            e.preventDefault();
+            e.stopPropagation();
+            onEntryContextMenu(h.entry, e);
           }}
         />
       )}
@@ -419,7 +449,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryDragStart, onRegister, toolActive, tileRadius }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -429,7 +459,8 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   gap: number;
   selectedId?: string;
   onHover: (h: Hover | null) => void;
-  onPick: (e: CatalogEntry) => void;
+  onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
+  onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
   toolActive?: boolean;
@@ -451,7 +482,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           {group.label}
         </div>
       )}
-      <div className="flex items-stretch">
+      <div className="flex items-stretch" data-wall-group={group.key} data-wall-lo={group.lo} data-wall-hi={group.hi}>
         {/* Single centered line: "0.8–0.9 (23)" (range + count) — one line so it fits the
             swatch-row height (no leftover vertical gap). This gutter is
             the lowest-priority column: on a narrow wall `labelW` shrinks toward 0 so the
@@ -485,6 +516,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             rowMajor={!!group.rowMajor}
             onHover={onHover}
             onPick={onPick}
+            onEntryContextMenu={onEntryContextMenu}
             onEntryDragStart={onEntryDragStart}
             onRegister={onRegister}
           />
@@ -504,6 +536,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   groups,
   sprite,
   onPick,
+  onEntryContextMenu,
+  onViewport,
+  scrollToGroup,
   onEntryDragStart,
   selectedId,
   swatchW = 32,
@@ -1040,9 +1075,54 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // under the avatar (the guard above only blocks NEW hovers).
   useEffect(() => { if (inHand) setHover(null); }, [inHand]);
   // Picks are suppressed while a tool is active (left-click is the carve keep-click).
-  const handlePick = useCallback((entry: CatalogEntry) => {
-    if (!selToolRef.current) onPick(entry);
+  const handlePick = useCallback((entry: CatalogEntry, e?: React.MouseEvent) => {
+    if (!selToolRef.current) onPick(entry, e);
   }, [onPick]);
+
+  // Which bands are on screen (GE v2's pad-as-map): measured against the scroll box on
+  // scroll, and again whenever the rows or the tile size change, rAF-throttled.
+  const onViewportRef = useRef(onViewport);
+  onViewportRef.current = onViewport;
+  const hasViewport = !!onViewport;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !hasViewport) return;
+    let raf = 0;
+    const report = () => {
+      raf = 0;
+      const cb = onViewportRef.current;
+      if (!cb) return;
+      const r = el.getBoundingClientRect();
+      const bands: WallBand[] = [];
+      el.querySelectorAll<HTMLElement>('[data-wall-group]').forEach((b) => {
+        const br = b.getBoundingClientRect();
+        const lo = b.dataset.wallLo, hi = b.dataset.wallHi;
+        bands.push({
+          key: b.dataset.wallGroup!,
+          lo: lo != null ? Number(lo) : undefined,
+          hi: hi != null ? Number(hi) : undefined,
+          visible: br.bottom > r.top && br.top < r.bottom,
+        });
+      });
+      cb(bands);
+    };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(report); };
+    el.addEventListener('scroll', schedule, { passive: true });
+    schedule();
+    return () => { el.removeEventListener('scroll', schedule); if (raf) cancelAnimationFrame(raf); };
+  }, [hasViewport, rows, width, ewH, sprite]);
+
+  // Scroll a band to the top (the pad's thumb dragged / clicked).
+  useEffect(() => {
+    if (!scrollToGroup) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const band = el.querySelector<HTMLElement>(`[data-wall-group="${CSS.escape(scrollToGroup.key)}"]`);
+    if (!band) return;
+    const top = band.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    el.scrollTop = Math.max(0, top - 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToGroup?.seq]);
 
   if (!sprite || width === 0) return <div ref={scrollRef} className="absolute inset-0" />;
 
@@ -1084,6 +1164,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               tileRadius={tileRadius}
               onHover={handleHover}
               onPick={handlePick}
+              onEntryContextMenu={selectionTool ? undefined : onEntryContextMenu}
               onEntryDragStart={selectionTool ? undefined : onEntryDragStart}
               onRegister={registerChunk}
             />

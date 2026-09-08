@@ -38,6 +38,10 @@ interface Props {
   /** The manage pull-up (the full My Gradients panel). */
   open: boolean;
   onToggleOpen: () => void;
+  /** "+ Snapshot": capture the whole studio (Phase D.3; the Snapshots chip appears with
+   *  the first one). Disabled while there is nothing to capture. */
+  onSnapshot?: () => void;
+  snapshotDisabled?: boolean;
 }
 
 const groupOf = (f: Favient): string => f.group ?? DEFAULT_GROUP;
@@ -59,7 +63,7 @@ const fileInto = (group: string, p: FavientDragPayload): void => {
 
 const NEW_GROUP_LABEL = 'Group';
 
-export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onToggleOpen }) => {
+export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onToggleOpen, onSnapshot, snapshotDisabled = false }) => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const { openContextMenu } = useStoreCallbacks();
   const [over, setOver] = useState<string | null>(null);
@@ -176,6 +180,18 @@ export const SetRail: React.FC<Props> = ({ sets, activeId, onSelect, open, onTog
         onDrop={dropOn(null)}
         title="Drop a gradient here to start a new group"
       />
+      {onSnapshot && (
+        <button
+          type="button"
+          data-gx-snapshot-new=""
+          className="inline-flex items-center gap-1 h-[26px] px-2.5 rounded-lg text-[13px] border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 disabled:opacity-40 disabled:cursor-default"
+          onClick={onSnapshot}
+          disabled={snapshotDisabled}
+          title="Snapshot the whole studio — every snapshot is a tile on the Snapshots set; click one to come back to it, shift-click a second to tween"
+        >
+          <Icon name="plus" /> Snapshot
+        </button>
+      )}
       <button
         type="button"
         className="flex items-center gap-1 h-[26px] px-2 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10"

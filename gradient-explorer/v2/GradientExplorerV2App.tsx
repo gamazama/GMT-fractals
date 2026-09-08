@@ -2,7 +2,8 @@
  * GradientExplorerV2App — the streamlined shell (plans/ge-v2-design.md §6b, mock B).
  *
  * Top to bottom: the top bar — which is for the APP, not the gradient (L2), so since Phase B
- * it is brand · undo · redo · Variants (until Phase D) · Back to GMT · settings, and ★ Keep /
+ * it is brand · undo · redo · Back to GMT · settings (Variants left it in Phase D: snapshots
+ * are a SET on the ground, captured from the rail), and ★ Keep /
  * Share / Export / Wallpaper live in the hero's use cluster · the Working hero (absent until
  * the first pick, and never unmounted after it — L8; it IS the stops editor, with the palette
  * row on top and Curves / Adjust expanders inside it) ·
@@ -54,7 +55,7 @@ import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTa
 import { useImageDrop } from '../../palette/components/useImageDrop';
 import { useImageStore } from '../../palette/store/imageStore';
 import { WorkingHero } from './WorkingHero';
-import { VariantsMenu } from './VariantsMenu';
+import { useVariantsStore } from '../../palette/store/variantsStore';
 import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
 import { useGroundSets } from './useGroundSource';
@@ -118,7 +119,6 @@ export const GradientExplorerV2App: React.FC = () => {
   const [tray, setTray] = useState<TrayFace>(null);
   const source = sourceOf(tray);
   const [mineOpen, setMineOpen] = useState(false);
-  const [variantsOpen, setVariantsOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
@@ -264,13 +264,12 @@ export const GradientExplorerV2App: React.FC = () => {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (variantsOpen) { setVariantsOpen(false); return; }
       if (trayRef.current) { openTray(null); return; }
       if (getArmedSlot()) armSlot(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [variantsOpen, openTray]);
+  }, [openTray]);
 
   // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
   useEffect(() => {
@@ -302,6 +301,12 @@ export const GradientExplorerV2App: React.FC = () => {
     useWorkingStore.getState().syncRecent();
     openFullscreen(derived.config, derived.name);
   };
+  // Snapshot the whole studio (Phase D.3, L4): the Snapshots set appears with the first one.
+  const snapshot = () => {
+    if (derived.empty) return;
+    const v = useVariantsStore.getState().capture(undefined, derived.ramp ?? undefined);
+    showToast(`Snapshot ${v.name} — on the Snapshots set below`);
+  };
 
   return (
     <StoreCallbacksProvider value={storeCallbacks}>
@@ -315,10 +320,6 @@ export const GradientExplorerV2App: React.FC = () => {
         </a>
         <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={24} /></button>
         <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={24} /></button>
-        {/* Variants stays on the bar until Phase D moves it to the shelf as Snapshots (L4). */}
-        <button className={`${tb} ${variantsOpen ? 'text-fg bg-line/10' : ''}`} onClick={() => setVariantsOpen((o) => !o)} title="Snapshots of the whole studio — switch, or tween between two">
-          Variants
-        </button>
         {/* Back to GMT is a plain link (owner, 2026-09-07): the working gradient is already
             in GMT's My Gradients panel through the shared `gmt.favients` Recent group, so
             the link carries nothing. Only shown when this page was opened from the studio. */}
@@ -388,7 +389,7 @@ export const GradientExplorerV2App: React.FC = () => {
           the full My Gradients panel (search, list view, rename, import / export). */}
       {sets.length > 1 && (
         <footer className="shrink-0 bg-surface-dock border-t border-line/10 flex flex-col" style={{ height: mineOpen ? 340 : 40 }} data-gx-footer="">
-          <SetRail sets={sets} activeId={groundSetId} onSelect={setGroundSetId} open={mineOpen} onToggleOpen={() => setMineOpen((o) => !o)} />
+          <SetRail sets={sets} activeId={groundSetId} onSelect={setGroundSetId} open={mineOpen} onToggleOpen={() => setMineOpen((o) => !o)} onSnapshot={snapshot} snapshotDisabled={derived.empty} />
           {mineOpen && (
             <div className="flex-1 min-h-0 overflow-hidden border-t border-line/10">
               <FavientsPanel hint={null} />
@@ -397,7 +398,6 @@ export const GradientExplorerV2App: React.FC = () => {
         </footer>
       )}
 
-      {variantsOpen && <VariantsMenu derived={derived} onClose={() => setVariantsOpen(false)} />}
       {contextMenu.visible && (
         <GlobalContextMenu
           x={contextMenu.x}

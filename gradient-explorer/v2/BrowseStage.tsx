@@ -26,6 +26,19 @@
  * these N" on a narrowed All files the narrowed wall as a new group and puts it on the
  * ground — a saved search that is also a place.
  *
+ * THE PAD IS THE WALL'S MAP (D.2): the wall reports which bands are on screen
+ * (`onViewport`) and, while the rows are bucketed by lightness, the pad draws that range
+ * as its marker — overview + detail with no new furniture. Dragging the marker's thumb
+ * scrolls the wall (`scrollToGroup`), only while the wall is ungrouped (grouped by
+ * category every lightness exists once per category, so "jump to 0.7" is ambiguous).
+ *
+ * SNAPSHOTS (D.3, L4): the Snapshots set is every studio snapshot as a tile. A click
+ * restores it (one undo step, ADR-0112); shift-click a second arms a TWEEN — a slider in
+ * the header previews `tweenRamp(A, B, t)` in the hero through a plain setState (not
+ * undoable, like Follow) and Bake commits it via `use`. Right-click a tile for Update ·
+ * Duplicate · Remove; the active snapshot's name is editable in the header. The top-bar
+ * Variants popover this replaces is gone.
+ *
  * All of the behaviour is `usePickerModel` — the same hook the old `PickerStage` and
  * app-gmt's palette overlay run. This file is layout, wording and chrome. If you need the
  * wall to filter/sort/carve differently, change `palette/core/pickerModel.ts`, not this.
@@ -34,7 +47,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PickerWall } from '../../palette/components/PickerWall';
+import { PickerWall, type WallBand } from '../../palette/components/PickerWall';
 import { usePickerModel } from '../../palette/components/usePickerModel';
 import Slider from '../../components/Slider';
 import { InputSkinProvider } from '../../components/inputs';
@@ -64,6 +77,14 @@ import { groupSetId } from '../../palette/core/groundSets';
 import { newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
 import { entryToGradientConfig } from '../../palette/core/gradientSeam';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
+import { useVariantsStore } from '../../palette/store/variantsStore';
+import { rampFromInts } from '../../palette/core/variantsCore';
+import { tweenRamp } from '../../palette/core/rampTween';
+import { fitRampToStops } from '../../palette/core/stopFit';
+import { useWorkingStore, deriveWorkingNow } from '../../palette/store/workingStore';
+import { showToast } from '../../engine/store/toastStore';
+import { SNAPSHOT_FIT } from './useGroundSource';
+import type { CatalogEntry } from '../../palette/core/presetCatalog';
 
 /** "Keep these N" is offered up to this many — past it the narrowing is not a selection yet. */
 const KEEP_MAX = 400;
@@ -93,9 +114,65 @@ const floatOver = 'backdrop-blur-sm';
 export const BrowseStage: React.FC = () => {
   const setId = useGroundSetId();
   const sets = useGroundSets();
-  const source = useGroundSource(setId, sets);
+  // Snapshots (D.3): a click restores; shift-click, with one active, arms a tween.
+  const activeSnapshot = useVariantsStore((s) => s.activeId);
+  const variants = useVariantsStore((s) => s.variants);
+  const [second, setSecond] = useState<string | null>(null);
+  const [t, setT] = useState(0.5);
+  const onSnapshotPick = useCallback((id: string, e?: React.MouseEvent) => {
+    const st = useVariantsStore.getState();
+    if (e?.shiftKey && st.activeId && id !== st.activeId) {
+      setSecond((s) => (s === id ? null : id));
+      return;
+    }
+    setSecond(null);
+    st.restore(id);
+    showToast(`Snapshot ${st.variants.find((v) => v.id === id)?.name ?? ''}`);
+  }, []);
+  const source = useGroundSource(setId, sets, { onSnapshotPick, snapshotSelectedId: activeSnapshot });
   const m = usePickerModel({ source });
   const setDesc = sets.find((s) => s.id === m.setId) ?? null;
+  const onSnapshots = setDesc?.kind === 'snapshots';
+  useEffect(() => { if (!onSnapshots) setSecond(null); }, [onSnapshots]);
+  const snapA = variants.find((v) => v.id === activeSnapshot) ?? null;
+  const snapB = variants.find((v) => v.id === second) ?? null;
+  const tweenable = onSnapshots && !!(snapA && snapB && snapA.ramp && snapB.ramp);
+  const tweenConfig = (value: number) => fitRampToStops(tweenRamp(rampFromInts(snapA!.ramp)!, rampFromInts(snapB!.ramp)!, value), SNAPSHOT_FIT);
+  const previewTween = (value: number) => {
+    setT(value);
+    if (!tweenable) return;
+    useWorkingStore.setState({
+      input: { kind: 'gradient', config: tweenConfig(value), name: `${snapA!.name} ↔ ${snapB!.name}`, source: 'Snapshots' },
+      bakedFrom: null,
+      name: null,
+    });
+  };
+  const bakeTween = () => {
+    if (!tweenable) return;
+    useWorkingStore.getState().use(tweenConfig(t), `${snapA!.name} ↔ ${snapB!.name} · ${Math.round(t * 100)}%`, 'Snapshots');
+    setSecond(null);
+    showToast('Tween baked into Working');
+  };
+
+  // The pad as the wall's map (D.2): which bands are on screen → a lightness range.
+  // The wall reports its bands AS DRAWN (merged small buckets carry the unioned range and
+  // their own key), so the marker and the seek work on that, not on the model's rows.
+  const [wallBands, setWallBands] = useState<WallBand[]>([]);
+  const [scrollTo, setScrollTo] = useState<{ key: string; seq: number } | null>(null);
+  const bandsByLight = !m.isSet && !m.anchor && m.axes.rowsAxis === 'lightness';
+  const marker = useMemo<[number, number] | null>(() => {
+    if (!bandsByLight) return null;
+    let lo = 1, hi = 0;
+    for (const b of wallBands) if (b.visible && b.lo != null && b.hi != null) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
+    return hi > lo ? [lo, hi] : null;
+  }, [bandsByLight, wallBands]);
+  const canSeek = bandsByLight && m.axes.groupAxis === 'none';
+  const seekBand = useCallback((L: number) => {
+    const bands = wallBands.filter((b) => b.lo != null && b.hi != null);
+    if (!bands.length) return;
+    const band = bands.find((b) => L >= b.lo! && L < b.hi!) ?? bands.reduce((best, b) => (Math.abs((b.lo! + b.hi!) / 2 - L) < Math.abs((best.lo! + best.hi!) / 2 - L) ? b : best));
+    setScrollTo((s) => ({ key: band.key, seq: (s?.seq ?? 0) + 1 }));
+  }, [wallBands]);
   // A set has no carve tools: drop an active one when the ground switches to a set.
   useEffect(() => {
     if (m.isSet && m.tool) m.setTool(null);
@@ -161,7 +238,28 @@ export const BrowseStage: React.FC = () => {
   // feature's `sources` group cannot express. The two groups that DO render fine as-is
   // (the look ranges, the arrange params) go through AutoFeaturePanel below.
   const actions = useMemo(() => ({ setPaletteFilters: m.setPaletteFilters }), [m.setPaletteFilters]);
-  const { handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
+  const { handleInteractionStart, handleInteractionEnd, openContextMenu } = useStoreCallbacks();
+  // A tile's right-click menu: on Snapshots the snapshot's verbs; on a bin or a group,
+  // removing the favourite (one undo step). None on the catalogue.
+  const onTileMenu = useMemo(() => {
+    if (!source) return undefined;
+    if (onSnapshots) {
+      return (entry: CatalogEntry, e: React.MouseEvent) => {
+        const st = useVariantsStore.getState();
+        openContextMenu(e.clientX, e.clientY, [
+          { label: 'Restore', action: () => onSnapshotPick(entry.id) },
+          { label: 'Update with the current state', action: () => { st.update(entry.id, deriveWorkingNow()?.ramp ?? undefined); showToast(`Snapshot ${entry.name} updated`); } },
+          { label: 'Duplicate', action: () => { st.duplicate(entry.id); } },
+          { label: 'Remove', danger: true, action: () => { st.remove(entry.id); setSecond((s) => (s === entry.id ? null : s)); } },
+        ]);
+      };
+    }
+    return (entry: CatalogEntry, e: React.MouseEvent) => {
+      openContextMenu(e.clientX, e.clientY, [
+        { label: 'Remove from My Gradients', danger: true, action: () => paramEdit(() => useFavientsStore.getState().remove(entry.id)) },
+      ]);
+    };
+  }, [source, onSnapshots, openContextMenu, onSnapshotPick]);
   const win = (k: string): [number, number] => {
     const o = m.sliceState?.[k] as { x?: number; y?: number } | undefined;
     return [o?.x ?? 0, o?.y ?? 1];
@@ -201,9 +299,39 @@ export const BrowseStage: React.FC = () => {
         {m.isSet ? (
           /* a set on the ground: its name where the pad was — the pad and Filters are the
              catalogue's lens (their windows, themes and carve ids mean nothing here) */
-          <div className="flex items-baseline gap-2 justify-self-center h-[56px]" data-gx-set-title="">
-            <span className="text-[15px] text-fg">{setDesc?.label ?? m.setId}</span>
-            <span className="text-[13px] text-fg-muted tabular-nums">{m.count < m.total ? `${m.count} of ${m.total}` : m.total}</span>
+          <div className="flex items-center gap-3 justify-self-center h-[56px]">
+            <div className="flex items-baseline gap-2" data-gx-set-title="">
+              <span className="text-[15px] text-fg">{setDesc?.label ?? m.setId}</span>
+              <span className="text-[13px] text-fg-muted tabular-nums">{m.count < m.total ? `${m.count} of ${m.total}` : m.total}</span>
+            </div>
+            {/* Snapshots: the tween between the active one and a shift-clicked second, or
+                the active one's name (editable) with the gesture hint */}
+            {tweenable ? (
+              <div className="flex items-center gap-2" data-gx-tween="">
+                <span className="text-[13px] text-accent-300 font-semibold">{snapA!.name}</span>
+                <InputSkinProvider skin="soft">
+                  <div className="w-[160px]">
+                    <Slider label="" value={Math.round(t * 100)} min={0} max={100} step={1} onChange={(v) => previewTween(v / 100)} defaultValue={50} />
+                  </div>
+                </InputSkinProvider>
+                <span className="text-[13px] text-gx-armed font-semibold">{snapB!.name}</span>
+                <Act onClick={bakeTween} title="Keep this blend as the working gradient" data-gx-tween-bake="">Bake</Act>
+                <button className="text-fg-muted hover:text-fg" onClick={() => setSecond(null)} title="Cancel the tween"><Icon name="close" /></button>
+              </div>
+            ) : onSnapshots && snapA ? (
+              <div className="flex items-center gap-2">
+                <input
+                  key={snapA.id}
+                  defaultValue={snapA.name}
+                  data-gx-snapshot-name=""
+                  className="h-[26px] w-[120px] px-2 rounded-lg bg-surface-section border border-line/20 text-[13px] text-fg outline-none focus:border-line/40"
+                  title="The active snapshot — rename it here"
+                  onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== snapA.name) useVariantsStore.getState().rename(snapA.id, v); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); e.stopPropagation(); }}
+                />
+                <span className="text-[12px] text-fg-dim">click restores · shift-click a second to tween · right-click for more</span>
+              </div>
+            ) : null}
           </div>
         ) : (
         /* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
@@ -217,6 +345,8 @@ export const BrowseStage: React.FC = () => {
             onDragEnd={handleInteractionEnd}
             width={360}
             height={56}
+            marker={marker}
+            onMarkerSeek={canSeek ? seekBand : undefined}
           />
           {/* the saturation strip, in a picker's own language, under the field */}
           <QualityRangePadConnected featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...SAT_AXIS} hints="tooltip" keyframes={false} variant="strip" height={12} drawTrack={satTrack} />
@@ -348,6 +478,9 @@ export const BrowseStage: React.FC = () => {
                box takes more rounding (the wall caps it at a third of the short side) */
             tileRadius={Math.round(Math.min(20, 8 + Math.max(0, m.tile.h - 18) / 9))}
             gutter={m.isSet ? 0 : undefined}
+            onViewport={bandsByLight ? setWallBands : undefined}
+            scrollToGroup={scrollTo}
+            onEntryContextMenu={onTileMenu}
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}

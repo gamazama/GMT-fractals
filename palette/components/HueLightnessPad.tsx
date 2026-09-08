@@ -34,6 +34,12 @@ interface Props {
   height?: number;
   className?: string;
   title?: string;
+  /** The wall's VIEWPORT on the map (GE v2 Phase D, the pad as the wall's map): the
+   *  lightness range of the bands on screen, 0 = dark, 1 = light. Drawn as two hairlines
+   *  across the field and a thumb at the left edge. Null = nothing drawn. */
+  marker?: [number, number] | null;
+  /** The thumb was pressed or dragged: scroll the wall to this lightness. */
+  onMarkerSeek?: (light: number) => void;
 }
 
 const PAINT_W = 180;
@@ -71,6 +77,8 @@ type Drag =
   | { kind: 'edge'; edge: 'l' | 'r' | 't' | 'b' };
 
 export const HueLightnessPad: React.FC<Props> = ({
+  marker = null,
+  onMarkerSeek,
   hue,
   light,
   onChange,
@@ -219,6 +227,32 @@ export const HueLightnessPad: React.FC<Props> = ({
           />
         </>
       )}
+      {marker && (() => {
+        // The wall's viewport: y is down, light is up (as the window above).
+        const my0 = (1 - Math.max(marker[0], marker[1])) * height;
+        const my1 = (1 - Math.min(marker[0], marker[1])) * height;
+        const seek = (e: React.PointerEvent) => onMarkerSeek?.(clamp01(1 - toLocal(e).y / height));
+        return (
+          <>
+            <div className="absolute left-0 right-0 pointer-events-none border-t border-white/80 shadow-[0_1px_0_rgba(0,0,0,.55)]" style={{ top: Math.round(my0) }} />
+            <div className="absolute left-0 right-0 pointer-events-none border-t border-white/80 shadow-[0_1px_0_rgba(0,0,0,.55)]" style={{ top: Math.round(my1) - 1 }} />
+            <div
+              data-gx-pad-marker=""
+              className="absolute left-0 w-[7px] bg-white/85 shadow-[0_0_0_1px_rgba(0,0,0,.6)] rounded-r-[2px] cursor-ns-resize"
+              style={{ top: Math.round(my0), height: Math.max(3, Math.round(my1 - my0)) }}
+              title="Where the wall is — drag to scroll it"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                seek(e);
+              }}
+              onPointerMove={(e) => { if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) seek(e); }}
+              onPointerUp={(e) => (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)}
+              onDoubleClick={(e) => e.stopPropagation()}
+            />
+          </>
+        );
+      })()}
     </div>
   );
 };

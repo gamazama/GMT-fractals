@@ -100,7 +100,10 @@ export interface GroundSource {
   /** What each tile stands for. */
   itemOf: (entry: CatalogEntry) => GroundItem;
   /** Take over the click (Snapshots restore rather than pick). Default: a shelf-style pick. */
-  onPick?: (entry: CatalogEntry) => void;
+  onPick?: (entry: CatalogEntry, e?: React.MouseEvent) => void;
+  /** Which tile wears the selected enlarge when the pick is not the shelf's (Snapshots:
+   *  the active one). Default: the shelf pick's key. */
+  selectedId?: string | null;
 }
 
 /** The set's arrangement: one band, the set's own order, read left to right. */
@@ -158,7 +161,7 @@ export interface PickerModel {
   selectedId: string | undefined;
   /** A gradient is in hand following the cursor — suppress the wall's hover zoom. */
   gradientInHand: boolean;
-  onPick: (e: CatalogEntry) => void;
+  onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
   onEntryDragStart: (e: CatalogEntry, dt: DataTransfer) => void;
   onDeselect: () => void;
 
@@ -336,11 +339,11 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
 
   // Pick → SELECT it (drives the host's hero preview + the bin dock). The standalone studio
   // has no fractal to colour, so there is no apply-to-coloring side effect here.
-  const onPick = useCallback((e: CatalogEntry) => {
+  const onPick = useCallback((e: CatalogEntry, ev?: React.MouseEvent) => {
     if (source) {
       // A set tile is a shelf item: the same pick the strip made (mode `favients`, the
       // favourite's id as the key), so the shell's rules apply unchanged.
-      if (source.onPick) return source.onPick(e);
+      if (source.onPick) return source.onPick(e, ev);
       const it = source.itemOf(e);
       setHeroPick({ mode: 'favients', key: e.id, payload: { config: it.config, name: it.name, source: it.source, favId: it.favId } });
       return;
@@ -392,7 +395,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
     anchor,
     setAnchor: setSimilarityAnchor,
     selected,
-    selectedId: pickerActive ? selected?.id : undefined,
+    selectedId: source?.selectedId != null ? source.selectedId : pickerActive ? selected?.id : undefined,
     gradientInHand,
     onPick,
     onEntryDragStart,
