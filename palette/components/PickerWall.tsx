@@ -94,6 +94,9 @@ export interface WallBand {
   /** The facet bucket bounds (0..1) when the rows are bucketed; absent otherwise. */
   lo?: number;
   hi?: number;
+  /** The band's edges in px from the top of the scroll box (negative = scrolled past). */
+  top: number;
+  bottom: number;
   visible: boolean;
 }
 
@@ -111,9 +114,10 @@ export interface PickerWallProps {
    *  and its own key) with whether it intersects the viewport — reported on scroll, on
    *  resize and when the rows change (GE v2's pad-as-map draws the wall's viewport on the
    *  hue × lightness pad from this, and scrolls to a band by its key). rAF-throttled. */
-  onViewport?: (bands: WallBand[]) => void;
-  /** Scroll a band to the top of the viewport; bump `seq` to fire again for the same key. */
-  scrollToGroup?: { key: string; seq: number } | null;
+  onViewport?: (bands: WallBand[], viewportHeight: number) => void;
+  /** Scroll so a band's top — or a point `frac` (0..1) of the way down it — sits at the top
+   *  of the viewport; bump `seq` to fire again for the same target. */
+  scrollToGroup?: { key: string; frac?: number; seq: number } | null;
   /** Begin an HTML5 drag for the swatch under the pointer (e.g. drag into Favients). */
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
   selectedId?: string;
@@ -1101,10 +1105,12 @@ export const PickerWall: React.FC<PickerWallProps> = ({
           key: b.dataset.wallGroup!,
           lo: lo != null ? Number(lo) : undefined,
           hi: hi != null ? Number(hi) : undefined,
+          top: br.top - r.top,
+          bottom: br.bottom - r.top,
           visible: br.bottom > r.top && br.top < r.bottom,
         });
       });
-      cb(bands);
+      cb(bands, r.height);
     };
     const schedule = () => { if (!raf) raf = requestAnimationFrame(report); };
     el.addEventListener('scroll', schedule, { passive: true });
@@ -1119,7 +1125,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     if (!el) return;
     const band = el.querySelector<HTMLElement>(`[data-wall-group="${CSS.escape(scrollToGroup.key)}"]`);
     if (!band) return;
-    const top = band.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+    const br = band.getBoundingClientRect();
+    const top = br.top - el.getBoundingClientRect().top + el.scrollTop + (scrollToGroup.frac ?? 0) * br.height;
     el.scrollTop = Math.max(0, top - 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollToGroup?.seq]);

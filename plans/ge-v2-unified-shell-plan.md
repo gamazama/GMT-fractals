@@ -904,3 +904,21 @@ phase now carries**. Items move out of this list only when a later phase's entry
   carries:** the rail on a phone (a chip row suits it better than the strip did; the tail
   drop needs a "+ group" affordance on touch; the pad's thumb is 7 px, too thin for a
   finger).
+- 2026-09-08 · Phase D, the owner's first walk. **Decided:** the peek question is CLOSED —
+  "I like it like this": Today · N on the rail is enough while foraging, no stacked preview
+  on the chips. The count-driven tile steps on All are ACCEPTED ("the tile re-layout
+  works"). **Changed on the walk:** the wall's viewport indicator — a thumb inside the pad
+  with hairlines "wasn't conveying the right language or reading smoothly as the visible
+  area" — is now a LENS on the pad (a light translucent band, hairline edges, indicating
+  only) plus a slim SCROLLBAR standing beside the pad (`gradient-explorer/v2/ui/MapScrollbar.tsx`)
+  whose thumb is the same range and whose drag scrolls the wall; the range is computed
+  continuously (a band half scrolled past contributes half its lightness), so both move with
+  every pixel of scroll instead of band by band; 12 px of air above the pad (it sat against
+  the hero). **Open, the owner's concept question:** "+ Snapshot" — what it is, whether the
+  word is right, and how it differs from a kept gradient. It is the whole studio state (the
+  working gradient plus the trays' live settings — Adjust dials, Curves, the Mix sources, the
+  image — and the Filters slice), restored as one undo step, tweenable between two; a kept
+  gradient is the gradient alone. Answered in the session; the decision (rename · fold into
+  Kept with a tween between any two tiles · retire from v2) is the owner's and is not yet
+  taken — nothing changed in code. L10 (§8) still awaits the owner's yes or no; it was
+  explained on the walk.

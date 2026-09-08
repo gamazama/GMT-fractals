@@ -27,9 +27,13 @@
  * ground — a saved search that is also a place.
  *
  * THE PAD IS THE WALL'S MAP (D.2): the wall reports which bands are on screen
- * (`onViewport`) and, while the rows are bucketed by lightness, the pad draws that range
- * as its marker — overview + detail with no new furniture. Dragging the marker's thumb
- * scrolls the wall (`scrollToGroup`), only while the wall is ungrouped (grouped by
+ * (`onViewport`, each band's edges in px) and, while the rows are bucketed by lightness,
+ * the range on screen is computed CONTINUOUSLY (a band half scrolled past contributes half
+ * its lightness range), so the pad's lens and the scrollbar beside it move with every
+ * pixel of scroll rather than band by band (the owner's walk: the first, band-stepped cut
+ * did not "read smoothly as the visible area"). The lens on the pad only indicates; the
+ * `MapScrollbar` beside the pad is the control, and its drag scrolls the wall
+ * (`scrollToGroup` with a fraction into the band) while the wall is ungrouped (grouped by
  * category every lightness exists once per category, so "jump to 0.7" is ambiguous).
  *
  * SNAPSHOTS (D.3, L4): the Snapshots set is every studio snapshot as a tile. A click
@@ -54,6 +58,7 @@ import { InputSkinProvider } from '../../components/inputs';
 import { PickerBundleToggles } from '../../palette/components/PickerControls';
 import { QualityRangePadConnected } from '../../palette/components/QualityRangePadConnected';
 import { HueLightnessPad, satTrackFor } from '../../palette/components/HueLightnessPad';
+import { MapScrollbar } from './ui/MapScrollbar';
 import { QUALITY_AXES } from '../../palette/features/paletteFilters';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { Dropdown } from '../../components/Dropdown';
@@ -157,22 +162,35 @@ export const BrowseStage: React.FC = () => {
   // The pad as the wall's map (D.2): which bands are on screen → a lightness range.
   // The wall reports its bands AS DRAWN (merged small buckets carry the unioned range and
   // their own key), so the marker and the seek work on that, not on the model's rows.
-  const [wallBands, setWallBands] = useState<WallBand[]>([]);
-  const [scrollTo, setScrollTo] = useState<{ key: string; seq: number } | null>(null);
+  const [wallView, setWallView] = useState<{ bands: WallBand[]; h: number }>({ bands: [], h: 0 });
+  const [scrollTo, setScrollTo] = useState<{ key: string; frac?: number; seq: number } | null>(null);
   const bandsByLight = !m.isSet && !m.anchor && m.axes.rowsAxis === 'lightness';
+  // The lightness range on screen, continuous: within a band (light at its top, dark at its
+  // bottom) the visible slice maps linearly onto the band's bucket.
   const marker = useMemo<[number, number] | null>(() => {
-    if (!bandsByLight) return null;
+    if (!bandsByLight || !wallView.h) return null;
     let lo = 1, hi = 0;
-    for (const b of wallBands) if (b.visible && b.lo != null && b.hi != null) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
+    for (const b of wallView.bands) {
+      if (b.lo == null || b.hi == null) continue;
+      const h = b.bottom - b.top;
+      if (h <= 0) continue;
+      const vt = Math.max(b.top, 0), vb = Math.min(b.bottom, wallView.h);
+      if (vb <= vt) continue;
+      const fTop = (vt - b.top) / h, fBot = (vb - b.top) / h;
+      lo = Math.min(lo, b.hi - fBot * (b.hi - b.lo));
+      hi = Math.max(hi, b.hi - fTop * (b.hi - b.lo));
+    }
     return hi > lo ? [lo, hi] : null;
-  }, [bandsByLight, wallBands]);
+  }, [bandsByLight, wallView]);
   const canSeek = bandsByLight && m.axes.groupAxis === 'none';
+  // Put lightness L at the top of the viewport: the band holding it, and how far down it.
   const seekBand = useCallback((L: number) => {
-    const bands = wallBands.filter((b) => b.lo != null && b.hi != null);
+    const bands = wallView.bands.filter((b) => b.lo != null && b.hi != null);
     if (!bands.length) return;
-    const band = bands.find((b) => L >= b.lo! && L < b.hi!) ?? bands.reduce((best, b) => (Math.abs((b.lo! + b.hi!) / 2 - L) < Math.abs((best.lo! + best.hi!) / 2 - L) ? b : best));
-    setScrollTo((s) => ({ key: band.key, seq: (s?.seq ?? 0) + 1 }));
-  }, [wallBands]);
+    const band = bands.find((b) => L >= b.lo! && L <= b.hi!) ?? bands.reduce((best, b) => (Math.abs((b.lo! + b.hi!) / 2 - L) < Math.abs((best.lo! + best.hi!) / 2 - L) ? b : best));
+    const frac = Math.min(1, Math.max(0, (band.hi! - L) / Math.max(1e-6, band.hi! - band.lo!)));
+    setScrollTo((s) => ({ key: band.key, frac, seq: (s?.seq ?? 0) + 1 }));
+  }, [wallView.bands]);
   // A set has no carve tools: drop an active one when the ground switches to a set.
   useEffect(() => {
     if (m.isSet && m.tool) m.setTool(null);
@@ -278,7 +296,7 @@ export const BrowseStage: React.FC = () => {
       {/* ── one narrowing row (C.10, owner 2026-09-07 evening): the main gradient — the hue ×
           lightness pad — WIDER and CENTRED; Search at the right with Filters to its left;
           with Filters closed, "clear all" sits right-aligned on this same row. ── */}
-      <div className="shrink-0 relative px-6 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3" data-gx-ground-set={m.setId}>
+      <div className="shrink-0 relative px-6 pt-3 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3" data-gx-ground-set={m.setId}>
         {/* left: the wall in a sentence (the research: a wall you cannot describe reads as
             noise) — on All the count and the arrangement; on a set, nothing (its name is
             in the centre where the pad was). */}
@@ -337,6 +355,9 @@ export const BrowseStage: React.FC = () => {
         /* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
             bar, never over the wall it narrows. */
         <div className="flex flex-col gap-1 justify-self-center">
+          {/* the pad, with the wall's scrollbar standing beside it: the lens on the pad and
+              the thumb on the bar are the same range — where the wall is */}
+          <div className="flex items-stretch gap-1.5">
           <HueLightnessPad
             hue={hueWin}
             light={lightWin}
@@ -346,8 +367,9 @@ export const BrowseStage: React.FC = () => {
             width={360}
             height={56}
             marker={marker}
-            onMarkerSeek={canSeek ? seekBand : undefined}
           />
+          <MapScrollbar range={marker} height={56} onSeek={canSeek ? seekBand : undefined} />
+          </div>
           {/* the saturation strip, in a picker's own language, under the field */}
           <QualityRangePadConnected featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...SAT_AXIS} hints="tooltip" keyframes={false} variant="strip" height={12} drawTrack={satTrack} />
         </div>
@@ -478,7 +500,7 @@ export const BrowseStage: React.FC = () => {
                box takes more rounding (the wall caps it at a third of the short side) */
             tileRadius={Math.round(Math.min(20, 8 + Math.max(0, m.tile.h - 18) / 9))}
             gutter={m.isSet ? 0 : undefined}
-            onViewport={bandsByLight ? setWallBands : undefined}
+            onViewport={bandsByLight ? (bands, h) => setWallView({ bands, h }) : undefined}
             scrollToGroup={scrollTo}
             onEntryContextMenu={onTileMenu}
             selectionTool={m.tool}
