@@ -332,9 +332,27 @@ the fallback.
   surface. The skin travels through the React tree, NOT the DOM — the inspector is a portal, so the
   provider sits on the editor. `smoke:ge-tray` [6] asserts the dialect (`data-gx-picker-skin`),
   falsified by flipping the provider to `default`.
-- **Left for the owner's walk:** whether the four harmony rows (Analog / Mono / Comp / Split) stay
-  in the hero at all — §12 item 2 leaned to hiding them, and they are now a third of the face's
-  width. Recent and Palette earn their place; the harmonies are the question.
+- **The COLOUR WHEEL (second pass, 2026-09-08).** The owner supplied Cinema 4D's Color Chooser
+  spec as "what a robust and comfortable colour picker looks like". The move taken from it: a
+  wheel carrying draggable HANDLES, which answers the open question about the four harmony rows
+  by replacing them — and it replaces the saturation/value field too, so the face has ONE 2D
+  control instead of two plus a printed list. `components/ColorWheel.tsx` is a pure, store-free
+  primitive (hue = angle, saturation = radius, value on the strip beside it; drag the disc, click
+  a handle to make it the colour, Ctrl/Cmd + click adds one in Free, Escape mid-drag cancels back
+  to where the gesture started). `utils/colorUtils.ts` gains `harmonyHandles` + `HARMONY_COUNT`:
+  free · monochromatic · complementary · analogous · split · tetrad · equiangular, with a count
+  where the rule takes one. Index 0 is always the colour being edited, so every other mode DERIVES
+  from the live colour and cannot fall out of sync; only Free stores handles. Under the wheel:
+  the handle palette, then Recent and Palette.
+- **Not taken from the spec (candidates, cheapest first):** the split old/new swatch while
+  dragging; arrow-key nudge on the wheel (1 % / 10 % / jump-to-edge); right-click the colour box
+  for copy / paste / swap; Kelvin temperature (`kelvinToRgb` already exists in colorUtils);
+  colour-from-picture handles (our Image face already does the picking); saved swatch GROUPS with
+  drag between them, sort-by-hue and remove-duplicates — that one wants Phase D's shelf question
+  settled first, since it is the same "where does my saved stuff live" problem.
+- **Worth its own thought:** the wheel's handles are a palette of harmonious colours sitting one
+  gesture away from a gradient that wants stops. "Send these handles to the ramp as stops" would
+  make the picker a gradient-authoring tool rather than a colour-authoring one.
 - Decide (owner) whether the harmony rows stay in strip chrome at all; §12 item 2 leaned to hiding
   them.
 **Gates:** + `smoke:interact`, `smoke:undo` (the editor's undo bracket), owner walk in BOTH the v2

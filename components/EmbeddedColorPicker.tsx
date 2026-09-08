@@ -10,7 +10,13 @@ import {
     complementary,
     splitComplementary,
     wrapHue,
+    harmonyHandles,
+    HARMONY_COUNT,
+    type ColorHarmony,
+    type HsvHandle,
 } from '../utils/colorUtils';
+import { ColorWheel } from './ColorWheel';
+import { Dropdown } from './Dropdown';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionDrag } from '../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
@@ -245,6 +251,16 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const [recents, setRecents] = useState<string[]>(recentsCache);
     // The host's input skin decides the dialect (see SOFT_BAR above).
     const soft = useInputSkin() === 'soft';
+    // ── the colour wheel (soft dialect) ────────────────────────────────────────────────
+    // The wheel replaces the saturation/value field AND the four static harmony rows: one
+    // 2D control does hue + saturation with value on the strip beside it, and its extra
+    // HANDLES are the harmony, live and draggable, rather than a printed list. Index 0 is
+    // always the colour being edited (utils/colorUtils harmonyHandles).
+    const [harmony, setHarmony] = useState<ColorHarmony>('analogous');
+    const [harmonyCount, setHarmonyCount] = useState(5);
+    // 'free': the handles are the user's own, so they are STORED (every other mode derives).
+    const [freeHandles, setFreeHandles] = useState<HsvHandle[]>([]);
+    const [freeActive, setFreeActive] = useState(0);
     const [hexDraft, setHexDraft] = useState(color.toUpperCase());
     const clip = useClipboardCopy(1000);
     const copied = clip.state === 'copied';
@@ -570,6 +586,43 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
     const endHLPad = endDrag(hlPadDrag);
 
+    // The handles the wheel shows. Free mode keeps the user's; every other mode derives
+    // them from the current colour, so editing anywhere (RGB sliders, hex, eyedropper)
+    // moves the whole harmony with it and there is no state to fall out of sync.
+    const wheelHandles = useMemo<HsvHandle[]>(() => {
+        const base: HsvHandle = { h: hsb.h, s: hsb.s / 100, v: hsb.v };
+        if (harmony !== 'free') return harmonyHandles(base, harmony, harmonyCount);
+        if (freeHandles.length === 0) return [base];
+        return freeHandles.map((f, i) => (i === freeActive ? base : f));
+    }, [hsb, harmony, harmonyCount, freeHandles, freeActive]);
+    const wheelActive = harmony === 'free' ? Math.min(freeActive, Math.max(0, wheelHandles.length - 1)) : 0;
+
+    // through `emit`, like every other control here: it also carries the hex draft and the
+    // echo guard, which a hand-rolled setHsb would silently drop
+    const wheelMove = useCallback((h: number, s: number) => emit(clampHsb(h, s * 100, hsb.v)), [emit, hsb.v]);
+    const wheelValue = useCallback((v: number) => emit(clampHsb(hsb.h, hsb.s, v)), [emit, hsb.h, hsb.s]);
+    /** Clicking a handle makes IT the colour — the harmony then re-derives around it. */
+    const wheelActivate = useCallback((i: number) => {
+        const t = wheelHandles[i];
+        if (!t) return;
+        if (harmony === 'free') {
+            setFreeHandles((prev) => (prev.length ? prev : wheelHandles.map((x) => ({ ...x }))));
+            setFreeActive(i);
+        }
+        setFromHex(hsbToHex({ h: t.h, s: t.s * 100, v: t.v }));
+    }, [wheelHandles, harmony, setFromHex]);
+    /** Ctrl/Cmd + click adds a handle — free mode only (a harmony's set is its rule). */
+    const wheelAdd = useCallback((h: number, s: number) => {
+        if (harmony !== 'free') return;
+        const seeded = freeHandles.length ? freeHandles : wheelHandles.map((x) => ({ ...x }));
+        const next = [...seeded, { h, s, v: hsb.v }];
+        setFreeHandles(next);
+        setFreeActive(next.length - 1);
+        setFromHex(hsbToHex({ h, s: s * 100, v: hsb.v }));
+    }, [harmony, freeHandles, wheelHandles, hsb.v, setFromHex]);
+
+    const countRange = HARMONY_COUNT[harmony];
+
     const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
         const ED = getEyeDropper();
@@ -732,6 +785,78 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         </>
     );
 
+    // The wheel, its handle palette, and the harmony chooser (soft dialect only).
+    const wheelBlock = (
+        <ColorWheel
+            handles={wheelHandles}
+            activeIndex={wheelActive}
+            size={150}
+            soft
+            onActivate={wheelActivate}
+            onMove={wheelMove}
+            onValue={wheelValue}
+            onDragStart={handleSliderStart}
+            onDragEnd={handleSliderEnd}
+            onAdd={harmony === 'free' ? wheelAdd : undefined}
+        />
+    );
+    const harmonyBlock = (
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                    <Dropdown
+                        size="md"
+                        fullWidth
+                        label="Harmony"
+                        value={harmony}
+                        options={[
+                            { label: 'Free', value: 'free' },
+                            { label: 'Monochromatic', value: 'mono' },
+                            { label: 'Complementary', value: 'complementary' },
+                            { label: 'Analogous', value: 'analogous' },
+                            { label: 'Split complementary', value: 'split' },
+                            { label: 'Tetrad', value: 'tetrad' },
+                            { label: 'Equiangular', value: 'equiangular' },
+                        ]}
+                        onChange={(v) => {
+                            const mode = v as ColorHarmony;
+                            // stepping into Free keeps whatever is on the wheel right now
+                            if (mode === 'free') { setFreeHandles(wheelHandles.map((x) => ({ ...x }))); setFreeActive(0); }
+                            setHarmony(mode);
+                        }}
+                    />
+                </div>
+                {countRange && (
+                    <div className="flex items-center gap-1 shrink-0">
+                        <button
+                            type="button"
+                            className="w-6 h-6 rounded-lg border border-line/20 text-fg-muted hover:text-fg disabled:opacity-40"
+                            disabled={harmonyCount <= countRange[0]}
+                            onClick={() => setHarmonyCount((n) => Math.max(countRange[0], n - 1))}
+                            title="One fewer colour"
+                        >&minus;</button>
+                        <span className="w-3 text-center text-[12px] tabular-nums text-fg-muted select-none">{harmonyCount}</span>
+                        <button
+                            type="button"
+                            className="w-6 h-6 rounded-lg border border-line/20 text-fg-muted hover:text-fg disabled:opacity-40"
+                            disabled={harmonyCount >= countRange[1]}
+                            onClick={() => setHarmonyCount((n) => Math.min(countRange[1], n + 1))}
+                            title="One more colour"
+                        >+</button>
+                    </div>
+                )}
+            </div>
+            <SwatchRow
+                label={harmony === 'free' ? 'Handles' : 'Harmony'}
+                colors={wheelHandles.map((h) => hsbToHex({ h: h.h, s: h.s * 100, v: h.v }))}
+                onPick={(c) => setFromHex(c)}
+                current={hex}
+            />
+            <SwatchRow label="Recent" colors={recents} onPick={(c) => setFromHex(c)} current={hex} />
+            <SwatchRow label="Palette" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
+        </div>
+    );
+
     // Group 3 — swatches: harmony rows + recents + palette.
     const swatchesBlock = (
         <>
@@ -758,18 +883,18 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         >
             {layout === 'cols' ? (
                 // Widest — pads | channels | swatches, three columns side by side.
-                <div className="flex gap-3 items-start">
-                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">{hexRow}{fieldBlock}</div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
+                <div className={`flex items-start ${soft ? 'gap-4' : 'gap-3'}`}>
+                    <div className={`min-w-0 flex flex-col ${soft ? 'gap-2 shrink-0' : 'flex-1 gap-1.5'}`}>{hexRow}{soft ? wheelBlock : fieldBlock}</div>
+                    <div className={`flex-1 min-w-0 flex flex-col ${soft ? 'gap-1.5' : 'gap-1'}`}>{channelsBlock}</div>
+                    <div className={`flex-1 min-w-0 flex flex-col ${soft ? 'gap-2' : 'gap-1'}`}>{soft ? harmonyBlock : swatchesBlock}</div>
                 </div>
             ) : layout === 'rows' ? (
                 // Medium — pads on top, channels | swatches side by side below.
                 <>
-                    <div className="flex flex-col gap-1.5">{hexRow}{fieldBlock}</div>
-                    <div className="flex gap-3 items-start pt-0.5 border-t border-line/5">
+                    <div className="flex flex-col gap-1.5">{hexRow}{soft ? wheelBlock : fieldBlock}</div>
+                    <div className={`flex items-start pt-0.5 ${soft ? 'gap-4' : 'gap-3 border-t border-line/5'}`}>
                         <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
-                        <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">{soft ? harmonyBlock : swatchesBlock}</div>
                     </div>
                 </>
             ) : minified ? (

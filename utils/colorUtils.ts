@@ -544,6 +544,68 @@ export const monochromatic = (base: string, n = 5): string[] => {
 /** `[base, opposite]` — hue + 180°. */
 export const complementary = (base: string): string[] => [base.toUpperCase(), rotateHue(base, 180)];
 
+/**
+ * The colour HARMONIES a wheel can hold, as HSV handles rather than hex strings, so a wheel
+ * can place them (hue = angle, saturation = radius) and a drag can re-derive them from a new
+ * base. The set follows the studio convention the owner referenced (Cinema 4D's Color
+ * Chooser): index 0 is always the BASE, i.e. the colour being edited.
+ *
+ *   free         the handles are wherever the user put them (the host stores them)
+ *   mono         one hue, spread along the radius — saturation is what differs, so the
+ *                handles do not stack on one point of the disc
+ *   complementary  two, opposite
+ *   analogous    n around the base at `stepDeg` (15° or 30°, the classic pair)
+ *   split        base + the two neighbours of its complement
+ *   tetrad       two analogous pairs, complementary to each other
+ *   equiangular  n spread evenly round the wheel
+ */
+export type ColorHarmony = 'free' | 'mono' | 'complementary' | 'analogous' | 'split' | 'tetrad' | 'equiangular';
+
+export interface HsvHandle { h: number; s: number; v: number }
+
+/** Does this harmony take a handle COUNT, and within what range? */
+export const HARMONY_COUNT: Record<ColorHarmony, [number, number] | null> = {
+  free: null,
+  mono: [2, 8],
+  complementary: null,
+  analogous: [2, 8],
+  split: null,
+  tetrad: null,
+  equiangular: [3, 8],
+};
+
+/** The handles a harmony puts on the wheel for `base`. `s` is 0..1, `v` 0..100. */
+export const harmonyHandles = (base: HsvHandle, mode: ColorHarmony, count = 5, stepDeg = 30): HsvHandle[] => {
+  const at = (h: number, s = base.s, v = base.v): HsvHandle => ({ h: wrapHue(h), s: Math.max(0, Math.min(1, s)), v });
+  switch (mode) {
+    case 'mono': {
+      // along the radius: the base keeps its own saturation, the rest fan out from it
+      const n = Math.max(2, count);
+      return Array.from({ length: n }, (_, i) => (i === 0 ? at(base.h) : at(base.h, (i / (n - 1)) * 0.9 + 0.08)));
+    }
+    case 'complementary':
+      return [at(base.h), at(base.h + 180)];
+    case 'analogous': {
+      const n = Math.max(2, count);
+      const half = (n - 1) / 2;
+      // the base first, then its neighbours outward, so index 0 stays the edited colour
+      const rest = Array.from({ length: n }, (_, i) => (i - half) * stepDeg).filter((d) => Math.abs(d) > 1e-9);
+      return [at(base.h), ...rest.map((d) => at(base.h + d))];
+    }
+    case 'split':
+      return [at(base.h), at(base.h + 150), at(base.h + 210)];
+    case 'tetrad':
+      return [at(base.h), at(base.h + 60), at(base.h + 180), at(base.h + 240)];
+    case 'equiangular': {
+      const n = Math.max(3, count);
+      return Array.from({ length: n }, (_, i) => at(base.h + (i * 360) / n));
+    }
+    case 'free':
+    default:
+      return [at(base.h)];
+  }
+};
+
 /** `[base, base+150°, base+210°]` — the two neighbours of the complement. */
 export const splitComplementary = (base: string): string[] => [
   base.toUpperCase(),
