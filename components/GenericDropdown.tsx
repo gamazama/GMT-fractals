@@ -98,7 +98,15 @@ export function GenericDropdown<T extends string | number>({
 
     return (
         <div
-            className={`flex items-stretch bg-line/[0.12] ${size === 'md' ? 'rounded-lg h-8 border border-line/20' : 'rounded-t-sm h-9 md:h-[26px]'} overflow-hidden border-b border-line/5 ${fullWidth ? 'w-full' : ''} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
+            // 'md' is the v2 shell's control: the SAME 30 px box as a segmented button
+            // (h-7 plus its border) and, like that button, transparent behind its label — only
+            // the value half is filled, the way a slider's value sits in its own well (owner,
+            // 2026-09-08). 'sm' is the studio's filled row, untouched.
+            className={`flex items-stretch ${
+                size === 'md'
+                    ? 'rounded-lg h-[30px] border border-line/20'
+                    : 'bg-line/[0.12] rounded-t-sm h-9 md:h-[26px] border-b border-line/5'
+            } overflow-hidden ${fullWidth ? 'w-full' : ''} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`}
             data-help-id={rest['data-help-id']}
             onContextMenu={onContextMenu}
         >
@@ -110,7 +118,9 @@ export function GenericDropdown<T extends string | number>({
                 </div>
             )}
             <div
-                className={`${label ? 'w-1/2' : 'w-full'} relative border-l border-line/10 bg-line/[0.02] border-t border-t-white/5`}
+                className={`${label ? 'w-1/2' : 'w-full'} relative ${
+                    size === 'md' ? 'border-l border-line/20 bg-line/[0.10]' : 'border-l border-line/10 bg-line/[0.02] border-t border-t-white/5'
+                }`}
             >
                 <select
                     ref={selectRef}
