@@ -298,6 +298,13 @@ order of work from here, each folded into the phase that owns the surface.
   `createdAt`, so it moves into today's bin. Starred / named groups sit beside the days.
 
 ### Phase D — the shelf as the only memory
+**OPEN QUESTION, owner 2026-09-08 (settle this BEFORE building the shelf):** the owner is "still
+not happy with the browser canvas" and wants to consider **unifying the shelf and the browser** —
+one surface of gradients rather than a wall above and a shelf below. That decides the phase's whole
+shape, so it comes first: what is wrong with the wall as it stands, and does My Gradients become a
+ZONE of the wall (its filters, zoom, carve and similarity applying to your own gradients too)
+instead of a separate strip. The list below is the separate-shelf design as it stood; keep it as
+the fallback.
 **Goal:** L4; Variants become Snapshots.
 - Footer: zones RECENT · STARRED · named groups · SNAPSHOTS with `ZoneLabel`s; `+ Snapshot` and
   `groups ▴` at the tail; the full panel (`FavientsPanel`) unchanged beneath.
@@ -313,10 +320,21 @@ order of work from here, each folded into the phase that owns the surface.
 
 ### Phase E — the picker dialect (shared with app-gmt)
 **Goal:** the last foreign vocabulary: the stop inspector's colour picker.
-- `AdvancedGradientEditor` strip chrome + `EmbeddedColorPicker`: radii (V2), the channel bars as the
-  standard slider or a clearly-a-sample 4 px track (V4/V8), harmony rows and the working palette row
-  styled as V8 bars, mono only for hex (V5). Additive props or a `chrome`-scoped stylesheet so
-  app-gmt's `full` chrome is untouched.
+- **DONE 2026-09-08 (first pass).** The picker reads the INPUT SKIN context
+  (`components/inputs/skin.tsx`) rather than taking new props, so one provider around the editor in
+  `WorkingHero` puts the whole stop inspector into the v2 dialect and app-gmt's `full` chrome is
+  untouched by construction. What changed under `soft`: every channel bar is a 10 px rounded pill
+  painting its own gradient with a hairline marker (the track carries the meaning, so unlike the
+  thumbless v2 slider it keeps a mark); the harmony / recent / palette swatches are 10 px bars;
+  the 9 px uppercase bold labels become one quiet 12 px line; the value fields lose their boxes but
+  stay text entries (the owner's rule); the hex keeps mono type and nothing else does (V5); the
+  pads take the large radius; and the picker drops its own bordered box, since the tray is the
+  surface. The skin travels through the React tree, NOT the DOM — the inspector is a portal, so the
+  provider sits on the editor. `smoke:ge-tray` [6] asserts the dialect (`data-gx-picker-skin`),
+  falsified by flipping the provider to `default`.
+- **Left for the owner's walk:** whether the four harmony rows (Analog / Mono / Comp / Split) stay
+  in the hero at all — §12 item 2 leaned to hiding them, and they are now a third of the face's
+  width. Recent and Palette earn their place; the harmonies are the question.
 - Decide (owner) whether the harmony rows stay in strip chrome at all; §12 item 2 leaned to hiding
   them.
 **Gates:** + `smoke:interact`, `smoke:undo` (the editor's undo bracket), owner walk in BOTH the v2
@@ -631,9 +649,9 @@ phase now carries**. Items move out of this list only when a later phase's entry
   showed the output (one rule now — the bar is the output); the elastic Smooth tool not baking
   first; "More like this" ranking against the anchor's output profile. **Rebuilt:** the
   similarity metric itself (`similarityProbe`) and the ranked band's fill order (`rowMajor`).
-  **In scope, left undone:** C.5 (Mix UI, parked on the owner's design). **Noticed, not built:**
-  arranging the WHOLE wall by similarity (descriptors → UMAP → snapped to the grid) as a third
-  Arrange option — the pieces exist, it is a half-day spike; the similarity weights (0.5 shape /
-  0.4 palette / 0.1 structure) are three constants at the top of the probe if a walk wants them
-  tuned; `rampDistance` is now a texel-identity check only, not a ranking metric.
+  **In scope, left undone:** C.5 (Mix UI, parked on the owner's design).   **Noticed:** the similarity weights
+  (0.5 shape / 0.4 palette / 0.1 structure) are three constants at the top of the probe if a walk
+  wants them tuned; `rampDistance` is now a texel-identity check only, not a ranking metric.
+  **CANCELLED by the owner (2026-09-08):** arranging the whole wall by similarity (descriptors,
+  UMAP, snapped to the grid) as a third Arrange option — do not re-propose it.
   **Phase W is unblocked** and is the next buildable block if the owner wants one.

@@ -81,6 +81,7 @@ import { Tray, TRAY_TABS, type TrayFace } from './Tray';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
+import { InputSkinProvider } from '../../components/inputs';
 import { Floating } from './ui/Floating';
 import { runExport, useRecentExports, exportActionLabel } from './exportActions';
 import type { RGB } from '../../palette/core/oklab';
@@ -424,59 +425,63 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       {gesture && <HalfHint className="group-hover/src:opacity-100">Keep the source · cancel</HalfHint>}
                     </div>
                   )}
-                  <AdvancedGradientEditor
-                    ref={editorRef}
-                    chrome="strip"
-                    stripHeight={resultH}
-                    stripCorners={split ? 'bottom' : 'all'}
-                    previewConfig={derived.edited && !derived.passthrough && config ? config : undefined}
-                    onStripClick={gesture ? onBake : undefined}
-                    stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
-                    stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}
-                    stripAside={
-                      /* the TRAY'S TAB ROW (Phase C, restyled C.13 — owner 2026-09-07 evening): ONE
-                         segmented control in the Even / Perceptual / Stops style; the open face's
-                         segment is a TAB — it takes the tray's colour and a tongue runs from its
-                         bottom to the tray's (borderless) top edge, 8 px below, so the two read as
-                         one piece. The corners under the open tab are HARD — the segment's bottom
-                         corners and, when it is an end segment, the pill's own outer bottom corner
-                         (owner: "the button's corners need hardening when it's under a tab"). No
-                         chevrons: the tab says it is open. Click again closes. */
-                      <div
-                        className={`inline-flex rounded-t-lg border border-line/20 ${tray === TRAY_TABS[0].face ? '' : 'rounded-bl-lg'} ${tray === TRAY_TABS[TRAY_TABS.length - 1].face ? '' : 'rounded-br-lg'}`}
-                        data-gx-tray-tabs
-                      >
-                        {TRAY_TABS.map((t, i) => {
-                          const on = tray === t.face;
-                          const first = i === 0;
-                          const last = i === TRAY_TABS.length - 1;
-                          const ends = `${first ? 'rounded-tl-[7px]' : ''} ${first && !on ? 'rounded-bl-[7px]' : ''} ${last ? 'rounded-tr-[7px]' : ''} ${last && !on ? 'rounded-br-[7px]' : ''}`;
-                          return (
-                            <button
-                              key={t.face}
-                              type="button"
-                              className={`relative px-2.5 h-7 text-[13px] ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
-                              onClick={() => onTray(t.face)}
-                              title={t.title}
-                              data-gx-tray-tab={t.face}
-                              data-gx-tab-open={on ? '' : undefined}
-                            >
-                              {t.label}
-                              {on && <span aria-hidden className="absolute -left-px -right-px top-full h-[9px] bg-surface-section border-x border-line/20" data-gx-tab-tongue />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    }
-                    inspectorHost={inspectorEl}
-                    onSelectionChange={onSelectionChange}
-                    value={editorValue}
-                    onChange={onEditorChange}
-                    onEditStart={onEditorStart}
-                    onEditEnd={editorEditEnd}
-                    edit={onEditorEdit}
-                    pickerPalette={paletteHex}
-                  />
+                  {/* the editor and everything it portals (the stop inspector's colour picker) speak
+                      the v2 dialect — context follows the React tree, not the DOM (Phase E) */}
+                  <InputSkinProvider skin="soft">
+                    <AdvancedGradientEditor
+                      ref={editorRef}
+                      chrome="strip"
+                      stripHeight={resultH}
+                      stripCorners={split ? 'bottom' : 'all'}
+                      previewConfig={derived.edited && !derived.passthrough && config ? config : undefined}
+                      onStripClick={gesture ? onBake : undefined}
+                      stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
+                      stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}
+                      stripAside={
+                        /* the TRAY'S TAB ROW (Phase C, restyled C.13 — owner 2026-09-07 evening): ONE
+                           segmented control in the Even / Perceptual / Stops style; the open face's
+                           segment is a TAB — it takes the tray's colour and a tongue runs from its
+                           bottom to the tray's (borderless) top edge, 8 px below, so the two read as
+                           one piece. The corners under the open tab are HARD — the segment's bottom
+                           corners and, when it is an end segment, the pill's own outer bottom corner
+                           (owner: "the button's corners need hardening when it's under a tab"). No
+                           chevrons: the tab says it is open. Click again closes. */
+                        <div
+                          className={`inline-flex rounded-t-lg border border-line/20 ${tray === TRAY_TABS[0].face ? '' : 'rounded-bl-lg'} ${tray === TRAY_TABS[TRAY_TABS.length - 1].face ? '' : 'rounded-br-lg'}`}
+                          data-gx-tray-tabs
+                        >
+                          {TRAY_TABS.map((t, i) => {
+                            const on = tray === t.face;
+                            const first = i === 0;
+                            const last = i === TRAY_TABS.length - 1;
+                            const ends = `${first ? 'rounded-tl-[7px]' : ''} ${first && !on ? 'rounded-bl-[7px]' : ''} ${last ? 'rounded-tr-[7px]' : ''} ${last && !on ? 'rounded-br-[7px]' : ''}`;
+                            return (
+                              <button
+                                key={t.face}
+                                type="button"
+                                className={`relative px-2.5 h-7 text-[13px] ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                                onClick={() => onTray(t.face)}
+                                title={t.title}
+                                data-gx-tray-tab={t.face}
+                                data-gx-tab-open={on ? '' : undefined}
+                              >
+                                {t.label}
+                                {on && <span aria-hidden className="absolute -left-px -right-px top-full h-[9px] bg-surface-section border-x border-line/20" data-gx-tab-tongue />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      }
+                      inspectorHost={inspectorEl}
+                      onSelectionChange={onSelectionChange}
+                      value={editorValue}
+                      onChange={onEditorChange}
+                      onEditStart={onEditorStart}
+                      onEditEnd={editorEditEnd}
+                      edit={onEditorEdit}
+                      pickerPalette={paletteHex}
+                    />
+                  </InputSkinProvider>
                   {scrubT != null && (
                     <div
                       className="absolute w-[2px] bg-white shadow-[0_0_0_1px_rgba(0,0,0,.6)] pointer-events-none"

@@ -78,6 +78,7 @@ const state = (page: Page) =>
       thisTitle: hero?.querySelector('[data-gx-mix-band="this"]')?.getAttribute('title') ?? '',
       otherTitle: tray?.querySelector('[data-gx-mix-band="other"]')?.getAttribute('title') ?? '',
       picker: !!tray?.querySelector('input, canvas'),
+      pickerSkin: (tray?.querySelector('[data-gx-picker-skin]') as HTMLElement | null)?.dataset.gxPickerSkin ?? null,
       text: tray?.innerText.replace(/\s+/g, ' ').slice(0, 120) ?? '',
     };
   });
@@ -186,6 +187,11 @@ async function main() {
   s = await state(page);
   if (s.face !== 'inspector') fail(`[6] a swatch click did not open the inspector face (${s.face})`);
   if (!s.picker) fail('[6] the inspector face has no colour picker in it');
+  // Phase E: the picker speaks the v2 dialect. Its skin comes from a CONTEXT and it renders
+  // through a portal, so the provider has to sit on the editor in the React tree, not on the
+  // tray's host div — falsified by removing the InputSkinProvider around the editor in
+  // WorkingHero: this goes red with "default".
+  if (s.pickerSkin !== 'soft') fail(`[6] the stop inspector's picker is not in the v2 dialect (skin: ${s.pickerSkin})`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   s = await state(page);
@@ -193,7 +199,7 @@ async function main() {
   // The face closing is not enough: the SELECTION must be gone too, or the picker stays
   // portalled into the hidden host and the next swatch click finds a stale inspector.
   if (s.picker) fail('[6] Escape closed the inspector face but the stop stayed selected (the picker is still in the host)');
-  console.log('✓ [6] a stop selection opens the inspector face; Escape closes it and clears the selection');
+  console.log('✓ [6] a stop selection opens the inspector face in the v2 dialect; Escape closes it and clears the selection');
 
   // C.3 — bake and cancel are ONE mechanism for every face. [7] Adjust: a dial turned, the
   // face closed → the dial is BAKED into the stops (reset to default, the chip reads

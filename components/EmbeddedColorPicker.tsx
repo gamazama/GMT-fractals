@@ -19,6 +19,7 @@ import { useClipboardCopy } from '../hooks/useClipboardCopy';
 import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
 import { ChevronDown } from './Icons';
+import { useInputSkin } from './inputs/skin';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rich colour picker (W10): 2D saturation×brightness field + hue strip, RGB+HSB
@@ -118,26 +119,44 @@ const clampHsb = (h: number, s: number, v: number): HSB => ({
 });
 const hsbToHex = ({ h, s, v }: HSB): string => rgbToHex(hsbToRgb(h, s, v));
 
+// ── the v2 dialect (Phase E) ───────────────────────────────────────────────────────────
+// The picker is shared with app-gmt, so its LOOK follows the input skin the host provides
+// (components/inputs/skin.tsx — the same context the sliders read): 'default' is the studio's
+// picker, unchanged; 'soft' is Gradient Explorer v2's language — large rounding on every
+// gradient and swatch (10 px bars), one quiet 12 px line of text instead of 9 px uppercase
+// bold, no box of its own (the tray is the surface), and mono type on the hex alone.
+
+/** A gradient/swatch bar's radius in the soft dialect (the owner's rule, hero-spec §7). */
+const SOFT_BAR = 'rounded-[10px]';
+
 // A small clickable swatch strip used by harmony / recents / palette rows.
 const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: string) => void; current?: string }> = ({
     label,
     colors,
     onPick,
     current,
-}) => (
-    <div className="flex items-center gap-1.5">
-        <div className="w-[52px] shrink-0 text-[9px] uppercase tracking-wide text-fg-dim font-bold">{label}</div>
-        <div className="flex-1 flex gap-[2px] overflow-hidden">
+}) => {
+    const soft = useInputSkin() === 'soft';
+    return (
+    <div className={`flex items-center ${soft ? 'gap-2' : 'gap-1.5'}`}>
+        <div className={soft
+            ? 'w-[52px] shrink-0 text-[12px] text-fg-muted select-none'
+            : 'w-[52px] shrink-0 text-[9px] uppercase tracking-wide text-fg-dim font-bold'}>{label}</div>
+        <div className={`flex-1 flex overflow-hidden ${soft ? 'gap-1' : 'gap-[2px]'}`}>
             {colors.length === 0 ? (
-                <div className="text-[9px] text-fg-faint italic py-[3px]">—</div>
+                <div className={soft ? 'text-[12px] text-fg-faint py-[3px]' : 'text-[9px] text-fg-faint italic py-[3px]'}>—</div>
             ) : (
                 colors.map((c, i) => (
                     <button
                         key={`${c}-${i}`}
                         onClick={() => onPick(c)}
-                        className={`h-4 flex-1 min-w-0 rounded-[2px] border transition-transform hover:scale-110 hover:z-10 ${
-                            current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/10'
-                        }`}
+                        className={soft
+                            ? `h-5 flex-1 min-w-0 ${SOFT_BAR} border transition-transform hover:scale-105 hover:z-10 ${
+                                current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/20'
+                            }`
+                            : `h-4 flex-1 min-w-0 rounded-[2px] border transition-transform hover:scale-110 hover:z-10 ${
+                                current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/10'
+                            }`}
                         style={{ backgroundColor: c }}
                         title={c}
                     />
@@ -145,7 +164,8 @@ const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: strin
             )}
         </div>
     </div>
-);
+    );
+};
 
 /**
  * Bespoke value slider with a custom gradient track. Uses the SHARED
@@ -167,11 +187,14 @@ const GradientSlider: React.FC<{
 }> = ({ label, value, min, max, step, onChange, onStart, onEnd, trackBg }) => {
     const track = usePrecisionTrackDrag({ min, max, step, onChange, onDragStart: onStart, onDragEnd: onEnd });
     const pct = ((value - min) / (max - min)) * 100;
+    const soft = useInputSkin() === 'soft';
     return (
-        <div className="flex items-center gap-1.5">
-            <div className="w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none">{label}</div>
+        <div className={`flex items-center ${soft ? 'gap-2 h-6' : 'gap-1.5'}`}>
+            <div className={soft
+                ? 'w-3 shrink-0 text-[12px] text-fg-muted text-center select-none'
+                : 'w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none'}>{label}</div>
             <div
-                className="relative flex-1 h-3.5 rounded-sm cursor-ew-resize touch-none overflow-hidden"
+                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-[10px] ${SOFT_BAR}` : 'h-3.5 rounded-sm'}`}
                 style={{ background: trackBg }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
@@ -179,9 +202,12 @@ const GradientSlider: React.FC<{
                 onPointerCancel={track.onPointerUp}
                 onLostPointerCapture={track.onPointerUp}
             >
-                {/* GMT-style thumb: a vertical bar spanning the track, dark-outlined for legibility on any gradient. */}
+                {/* The marker. The TRACK carries the meaning here, so unlike the thumbless v2
+                    slider the value needs a mark: a hairline that survives any hue under it. */}
                 <div
-                    className="absolute top-0 bottom-0 w-3.5 -ml-[7px] z-10 border-x-2 border-line/80 bg-line/10 shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none"
+                    className={soft
+                        ? 'absolute top-0 bottom-0 w-[2px] -ml-px z-10 bg-fg rounded-full shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none'
+                        : 'absolute top-0 bottom-0 w-3.5 -ml-[7px] z-10 border-x-2 border-line/80 bg-line/10 shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none'}
                     style={{ left: `${pct}%` }}
                 />
             </div>
@@ -196,7 +222,13 @@ const GradientSlider: React.FC<{
                 // Native number spinners are browser chrome — they squish this 36px field
                 // and ignore the colour scheme. Hide them (the track drag already steps the
                 // value, with Shift ×10 / Alt ×0.1) and use a themed focus border instead.
-                className="w-9 shrink-0 bg-surface-sunken border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] text-right tabular-nums outline-none focus:border-accent-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                // A text entry stays wherever a user expects one (owner): in the soft dialect
+                // it is a bare number that takes focus, not a boxed field.
+                className={`shrink-0 text-right tabular-nums outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 ${
+                    soft
+                        ? 'w-9 bg-transparent text-[12px] text-fg-muted focus:text-fg'
+                        : 'w-9 bg-surface-sunken border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] focus:border-accent-500/50'
+                }`}
             />
         </div>
     );
@@ -211,6 +243,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
 }) => {
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
+    // The host's input skin decides the dialect (see SOFT_BAR above).
+    const soft = useInputSkin() === 'soft';
     const [hexDraft, setHexDraft] = useState(color.toUpperCase());
     const clip = useClipboardCopy(1000);
     const copied = clip.state === 'copied';
@@ -578,7 +612,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     ref={fieldRef}
                     width={208}
                     height={120}
-                    className="w-full h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
+                    className={`w-full h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? SOFT_BAR : "rounded"}`}
                     onPointerDown={beginField}
                     onPointerMove={moveField}
                     onPointerUp={endField}
@@ -595,7 +629,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     ref={hueRef}
                     width={16}
                     height={120}
-                    className="w-4 h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
+                    className={`w-4 h-[76px] md:h-[86px] cursor-crosshair touch-none ${soft ? SOFT_BAR : "rounded"}`}
                     onPointerDown={beginHue}
                     onPointerMove={moveHue}
                     onPointerUp={endHue}
@@ -621,7 +655,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 ref={hlPadRef}
                 width={208}
                 height={120}
-                className="w-full h-9 rounded cursor-crosshair touch-none"
+                className={`w-full h-9 cursor-crosshair touch-none ${soft ? SOFT_BAR : "rounded"}`}
                 onPointerDown={beginHLPad}
                 onPointerMove={moveHLPad}
                 onPointerUp={endHLPad}
@@ -650,19 +684,24 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     </span>
                 </button>
             )}
-            <div className="w-6 h-6 shrink-0 rounded border border-line/10" style={{ backgroundColor: hex }} />
+            <div className={`shrink-0 border ${soft ? 'w-7 h-7 rounded-lg border-line/20' : 'w-6 h-6 rounded border-line/10'}`} style={{ backgroundColor: hex }} />
             <input
                 value={hexDraft}
                 onChange={(e) => setHexDraft(e.target.value)}
                 onBlur={(e) => setFromHex(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                className="flex-1 min-w-0 bg-surface-sunken border border-line/10 rounded text-[11px] font-mono text-fg-secondary px-1.5 py-1 uppercase"
+                // mono type on the hex ALONE (V5): it is a code, the rest of the picker is not
+                className={`flex-1 min-w-0 font-mono uppercase outline-none ${
+                    soft
+                        ? 'h-7 bg-surface-viewport border border-line/20 rounded-lg text-[12px] text-fg px-2'
+                        : 'bg-surface-sunken border border-line/10 rounded text-[11px] text-fg-secondary px-1.5 py-1'
+                }`}
                 spellCheck={false}
             />
-            <button onClick={doCopy} title="Copy hex" className="w-6 h-6 shrink-0 grid place-items-center rounded border border-line/10 hover:bg-line/10 text-fg-tertiary text-[10px]">
+            <button onClick={doCopy} title="Copy hex" className={`shrink-0 grid place-items-center border hover:bg-line/10 text-fg-tertiary ${soft ? 'w-7 h-7 rounded-lg border-line/20 text-[12px]' : 'w-6 h-6 rounded border-line/10 text-[10px]'}`}>
                 {copied ? '✓' : '⧉'}
             </button>
-            <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`w-6 h-6 shrink-0 grid place-items-center rounded border hover:bg-line/10 text-[11px] ${eyedropError ? 'border-amber-500/60 text-amber-400' : 'border-line/10 text-fg-tertiary'}`}>
+            <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`shrink-0 grid place-items-center border hover:bg-line/10 ${soft ? 'w-7 h-7 rounded-lg text-[12px]' : 'w-6 h-6 rounded text-[11px]'} ${eyedropError ? 'border-amber-500/60 text-amber-400' : soft ? 'border-line/20 text-fg-tertiary' : 'border-line/10 text-fg-tertiary'}`}>
                 ⦿
             </button>
         </div>
@@ -709,8 +748,12 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     return (
         <div
             ref={rootRef}
-            className="flex flex-col gap-1.5 w-full bg-surface-section border border-line/10 rounded p-2 gradient-interactive-element"
+            // soft: no box of its own — the tray IS the surface (no panel inside a panel)
+            className={`flex flex-col w-full gradient-interactive-element ${
+                soft ? 'gap-2' : 'gap-1.5 bg-surface-section border border-line/10 rounded p-2'
+            }`}
             data-help-id="ui.colorpicker"
+            data-gx-picker-skin={soft ? 'soft' : 'default'}
             onContextMenu={handleContainerContextMenu}
         >
             {layout === 'cols' ? (
