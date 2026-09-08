@@ -30,6 +30,7 @@ import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisio
 import { ChevronDown } from './Icons';
 import { useInputSkin } from './inputs/skin';
 import { setColorDrag } from './gradient/colorDrag';
+import { CopyGlyph, EyedropperGlyph, SpectrumGlyph, WheelGlyph, StopGlyph, HarmonyGlyph, ChannelsGlyph, KelvinGlyph, SwatchesGlyph } from './gradient/pickerIcons';
 import Slider from './Slider';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -188,25 +189,19 @@ const migrateModes = (v: string[]): PickerMode[] => {
     });
 };
 
+const MODE_GLYPH: Record<PickerMode, React.FC<{ size?: number }>> = {
+    stop: StopGlyph,
+    spectrum: SpectrumGlyph,
+    wheel: WheelGlyph,
+    harmony: HarmonyGlyph,
+    channels: ChannelsGlyph,
+    kelvin: KelvinGlyph,
+    swatches: SwatchesGlyph,
+};
+
 const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
-    const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
-    switch (mode) {
-        case 'spectrum':
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="11" height="11" rx="2.5" /><path d="M2.5 10.5 13.5 4" opacity=".5" /></svg>;
-        case 'stop':
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><path d="M2.5 11.5h11" /><path d="M8 11.5V6" /><path d="M5.4 6h5.2l-2.6-3.4z" fill="currentColor" /></svg>;
-        case 'harmony':
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" opacity=".45" /><circle cx="8" cy="2.5" r="1.6" /><circle cx="12.8" cy="10.8" r="1.6" /><circle cx="3.2" cy="10.8" r="1.6" /></svg>;
-        case 'wheel':
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><circle cx="8" cy="8" r="5.5" /><circle cx="10.4" cy="5.6" r="1.4" /></svg>;
-        case 'channels':
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" /></svg>;
-        case 'kelvin':
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><path d="M6.5 9.2V3.6a1.5 1.5 0 0 1 3 0v5.6a3 3 0 1 1-3 0z" /></svg>;
-        case 'swatches':
-        default:
-            return <svg viewBox="0 0 16 16" width="14" height="14" {...p}><rect x="2.5" y="2.5" width="5" height="5" rx="1.5" /><rect x="8.5" y="2.5" width="5" height="5" rx="1.5" /><rect x="2.5" y="8.5" width="5" height="5" rx="1.5" /><rect x="8.5" y="8.5" width="5" height="5" rx="1.5" /></svg>;
-    }
+    const G = MODE_GLYPH[mode];
+    return <G size={14} />;
 };
 
 const MODE_TITLE: Record<PickerMode, string> = {
@@ -981,10 +976,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 spellCheck={false}
             />
             <button onClick={doCopy} title="Copy hex" className={`shrink-0 grid place-items-center border hover:bg-line/10 text-fg-tertiary ${soft ? 'w-7 h-7 rounded-lg border-line/20 text-[12px]' : 'w-6 h-6 rounded border-line/10 text-[10px]'}`}>
-                {copied ? '✓' : '⧉'}
+                {copied ? '✓' : <CopyGlyph size={14} />}
             </button>
             <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`shrink-0 grid place-items-center border hover:bg-line/10 ${soft ? 'w-7 h-7 rounded-lg text-[12px]' : 'w-6 h-6 rounded text-[11px]'} ${eyedropError ? 'border-amber-500/60 text-amber-400' : soft ? 'border-line/20 text-fg-tertiary' : 'border-line/10 text-fg-tertiary'}`}>
-                ⦿
+                <EyedropperGlyph size={14} />
             </button>
         </div>
     );

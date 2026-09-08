@@ -349,6 +349,16 @@ the fallback.
   swatches (the square picker, as it was). The last mode on cannot be switched off. Kelvin is
   new and one-way by nature (a rendered colour has no single temperature): the slider and the
   eight presets propose, the colour takes. `data-gx-picker-mode` marks each toggle.
+- **The picker wears the owner's own icons (2026-09-08).** They arrived as one sheet
+  (`H:\GMTssets\GXN\someIcons.svg`): nine 8-unit glyphs in a row — copy, eyedropper, a
+  rounded square (spectrum), a circle (wheel), the knot's own silhouette (stop), four
+  overlapping circles (harmony), sliders (channels), a thermometer (kelvin) and loose chips
+  (swatches), which is exactly the set the toolbar needed. `components/gradient/pickerIcons.tsx`
+  transcribes each path VERBATIM and frames it with its own `viewBox="<x> 146 8 8"` rather than
+  re-origining the coordinates by hand, which is how a curve quietly loses a pixel; the only
+  changes are `currentColor` in place of the authored ink, so they follow the theme and the
+  accent, and dropping a clip-path the viewBox already performs. Stroke weights are kept as
+  drawn. The unicode stand-ins on Copy and the eyedropper are gone.
 - **`hsv-far` retired (owner, 2026-09-08).** Blending hue the LONG way round is gone from every
   chooser: the strip's cycle, the stops menu, the palette dock's dropdown and the editor-config
   cycle. The TYPE and the renderer keep it on purpose — gradients already saved in it must still
