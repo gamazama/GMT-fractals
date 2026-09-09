@@ -61,18 +61,17 @@ export const useGroundSource = (setIds: readonly string[], sets: GroundSetDesc[]
         const f = byId.get(e.id)!;
         return { config: f.config, name: f.name, source: f.source, favId: f.id };
       },
-      // With more than one set lit, the wall draws a labelled band each, in rail order, so
-      // the ground stays two PLACES rather than becoming one undivided run — and each band
-      // is a drop target, which is how a gradient moves between them (owner, 2026-09-09).
-      // The band key is the SET id, so the drop knows where it landed.
-      bands:
-        live.length > 1
-          ? live.map((id) => ({
-              key: id,
-              label: sets.find((s) => s.id === id)?.label ?? id,
-              ids: new Set(membersOf(id, favients).map((f) => f.id)),
-            }))
-          : undefined,
+      // One band per lit set, keyed by SET ID — which is what lets a drop on the wall know
+      // where it landed, and so is supplied even for a single set (a drop then REORDERS
+      // within it: the shelf panel's own gesture, which the ground never had). The LABEL
+      // is only drawn when there is more than one: with two sets the ground has to stay
+      // two PLACES rather than one undivided run (owner, 2026-09-09), and with one the
+      // header would just repeat the title above it.
+      bands: live.map((id) => ({
+        key: id,
+        label: live.length > 1 ? (sets.find((s) => s.id === id)?.label ?? id) : '',
+        ids: new Set(membersOf(id, favients).map((f) => f.id)),
+      })),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live.join('\u0000'), favients, sets]);

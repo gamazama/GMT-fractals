@@ -143,11 +143,38 @@ export interface PickerWallProps {
    * the only way to re-file was to drag onto a chip on the rail). Without the pair of
    * callbacks the wall takes no drops, exactly as before, so app-gmt and the old stage are
    * untouched.
+   *
+   * `beforeId` is the entry the drop lands IN FRONT OF, or null for the end of the band —
+   * an ID, not a position, so a wall narrowed by search still says exactly which gradient
+   * it means. That is what makes the drop a REORDER and not just a re-file: the shelf
+   * panel has always placed to an exact index (grep `insertIndexFromPointer`) and the
+   * ground could only ever append.
    */
-  onBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => void;
+  onBandDrop?: (bandKey: string, dataTransfer: DataTransfer, beforeId: string | null) => void;
   /** Whether THIS band would take THIS drag (the host decides: an auto-managed bin does
    *  not, and neither does the band the gradient is already in). */
   canBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => boolean;
+  /**
+   * Make the wall keyboard-reachable (the migration audit's M14). ADDITIVE: without it the
+   * wall has no tab stop and no key handling, exactly as before, so app-gmt and the old
+   * stage opt in separately. With it: Tab focuses the wall, the arrows move a cursor ring
+   * that is deliberately NOT the pick (a white hairline against the pick's accent ring),
+   * Home / End jump to the ends, Enter or Space picks what the cursor is on, and Delete
+   * asks the host to remove it. The wall was pointer-only until 2026-09-09.
+   */
+  keyboard?: boolean;
+  /** Delete pressed on the focused tile. Absent = Delete does nothing. */
+  onEntryDelete?: (entry: CatalogEntry) => void;
+  /** Multi-selected tiles, drawn ringed + washed. Must be reference-stable. */
+  selectedIds?: ReadonlySet<string>;
+  /**
+   * SELECT MODE: a carve commits the moment the drag ends, and there is no keep-click and
+   * no dim. The catalogue's carve asks a second question after the marquee ("isolate or
+   * cut?"), which is what the `chosen` phase and its scrim exist for; a selection has no
+   * such question, so it must not inherit that second click — it would read as destroying
+   * what you just chose.
+   */
+  selectMode?: boolean;
   selectedId?: string;
   swatchW?: number;
   swatchH?: number;
@@ -172,7 +199,7 @@ export interface PickerWallProps {
    *  the square tiles every existing host draws. */
   tileRadius?: number;
   /** Carve committed: the INSIDE id-set + whether to isolate (keep inside) or cut (drop inside). */
-  onSelectionCommit?: (insideIds: string[], op: 'isolate' | 'cut') => void;
+  onSelectionCommit?: (insideIds: string[], op: 'isolate' | 'cut' | 'select') => void;
   /** User cancelled (right-click / Esc-equivalent) — the host should deselect the tool. */
   onSelectionCancel?: () => void;
   /** A click on the wall that did NOT land on a swatch (an "empty-wall click") — the host
@@ -273,6 +300,10 @@ const SwatchCanvas: React.FC<{
   swatchH: number;
   gap: number;
   selectedId?: string;
+  /** The keyboard's cursor — drawn as a lighter ring than the pick's. */
+  focusedId?: string;
+  /** Multi-selected tiles (the carve, on a set). Reference-stable — see `wallSelection`. */
+  selectedIds?: ReadonlySet<string>;
   chunkKey: string;
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
@@ -284,7 +315,13 @@ const SwatchCanvas: React.FC<{
   toolActive?: boolean;
   tileRadius?: number;
   rowMajor?: boolean;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, chunkKey, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false }) => {
+  /** This chunk's first index within its BAND (chunks are slices of one band's entries). */
+  startIndex?: number;
+  /** Report where a dragged gradient would be inserted, as a band-relative index. */
+  onInsertAt?: (index: number) => void;
+  /** Draw the insertion caret before this band-relative index (null = none). */
+  caret?: number | null;
+}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, chunkKey, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false, startIndex = 0, onInsertAt, caret = null }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
@@ -363,7 +400,49 @@ const SwatchCanvas: React.FC<{
       ring(1, accentColour(), 2);
       ring(2.5, 'rgba(0,0,0,0.45)', 1);
     }
-  }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId, rowMajor]);
+    // The MULTI-SELECTION: every chosen tile wears the same ring, drawn before the pick's
+    // and the cursor's so those stay on top when they coincide. Tinted differently from the
+    // pick (accent-300 against the pick's accent-400 + its dark hairline) because they mean
+    // different things: one is what the hero shows, these are what the next action acts on.
+    if (selectedIds && selectedIds.size) {
+      const rr = Math.min(tileRadius, swatchW / 3, swatchH / 3);
+      ctx.strokeStyle = accentColour();
+      ctx.lineWidth = 2;
+      for (let k = 0; k < entries.length; k++) {
+        if (!selectedIds.has(entries[k].id)) continue;
+        const { col, row } = cellOf(k, cols, nrows, rowMajor);
+        const x = col * cellW, y = row * cellH;
+        ctx.beginPath();
+        if (rr > 0) ctx.roundRect(x + 1, y + 1, swatchW - 2, swatchH - 2, Math.max(0, rr - 1));
+        else ctx.rect(x + 1, y + 1, swatchW - 2, swatchH - 2);
+        ctx.stroke();
+        // a translucent wash so a selected tile reads as chosen at a glance, not just edged
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = accentColour();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    // The KEYBOARD cursor, when it is somewhere other than the pick: a thinner ring in the
+    // foreground colour, so "where the keys are" and "what is picked" never look the same.
+    const focIdx = focusedId && focusedId !== selectedId ? entries.findIndex((e) => e.id === focusedId) : -1;
+    if (focIdx >= 0) {
+      const { col, row } = cellOf(focIdx, cols, nrows, rowMajor);
+      const x = col * cellW, y = row * cellH;
+      const rr = Math.min(tileRadius, swatchW / 3, swatchH / 3);
+      const ring2 = (inset: number, style: string, width: number) => {
+        ctx.strokeStyle = style;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        if (rr > 0) ctx.roundRect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2, Math.max(0, rr - inset));
+        else ctx.rect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2);
+        ctx.stroke();
+      };
+      ring2(1, 'rgba(0,0,0,0.5)', 2.5);
+      ring2(1, '#fff', 1.5);
+    }
+  }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId, focusedId, selectedIds, rowMajor, tileRadius]);
 
   // Register this chunk for selection hit-testing while it's mounted; deregister on unmount
   // / when it scrolls away. The registry therefore only ever holds on-screen chunks → the
@@ -391,6 +470,41 @@ const SwatchCanvas: React.FC<{
     return { entry: entries[k], col, row };
   };
 
+  /**
+   * Where a dragged gradient would land, in READING order — the same question the shelf
+   * panel's `insertIndexFromPointer` answers over its DOM slots, asked of a canvas. The
+   * left half of a tile means "before it", the right half "after it"; past the last tile
+   * in a row means after that row's last. Returned band-relative (`startIndex + k`), so a
+   * band split across several chunk canvases still yields one continuous index.
+   *
+   * Row-major only. Column-major is the catalogue's fill, and the catalogue has no order
+   * of yours to rearrange — the caller does not offer reordering there.
+   */
+  const insertIndexAt = (clientX: number, clientY: number): number => {
+    const cv = canvasRef.current;
+    if (!cv) return startIndex;
+    const rect = cv.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const row = Math.max(0, Math.min(nrows - 1, Math.floor(y / cellH)));
+    const rawCol = x / cellW;
+    const col = Math.max(0, Math.min(cols, Math.round(rawCol)));
+    const k = Math.max(0, Math.min(entries.length, row * cols + col));
+    return startIndex + k;
+  };
+
+  /** The caret's px position inside this chunk, or null when it belongs to another one. */
+  const caretBox = (): { left: number; top: number } | null => {
+    if (caret == null || !rowMajor) return null;
+    const k = caret - startIndex;
+    if (k < 0 || k > entries.length) return null;
+    // Past the last tile: park it just after it rather than at the start of a phantom row.
+    const at = Math.min(k, entries.length);
+    const row = Math.min(nrows - 1, Math.floor(at / cols));
+    const col = at - row * cols;
+    return { left: col * cellW - gap / 2, top: row * cellH };
+  };
+
   // The swatch's HOVER-preview rect (3×w·2×h, the enlarged zoom the user is looking at) — the
   // morph source for the drag/click avatar. Shared by onDragStart + onClick.
   const setHoverOrigin = (col: number, row: number): void => {
@@ -406,14 +520,34 @@ const SwatchCanvas: React.FC<{
     });
   };
 
+  const cb = caretBox();
   return (
-    <div ref={wrapRef} style={{ width: cssW, height: cssH }}>
+    <div
+      ref={wrapRef}
+      className="relative"
+      data-wall-chunk={chunkKey}
+      data-wall-chunk-start={startIndex}
+      data-wall-chunk-cols={cols}
+      data-wall-chunk-cellw={cellW}
+      data-wall-chunk-cellh={cellH}
+      data-wall-chunk-rowmajor={rowMajor ? '1' : ''}
+      style={{ width: cssW, height: cssH }}
+    >
+      {cb && (
+        <div
+          aria-hidden
+          data-wall-caret=""
+          className="absolute z-10 pointer-events-none rounded-full bg-accent-300"
+          style={{ left: cb.left, top: cb.top, width: 2, height: swatchH }}
+        />
+      )}
       {visible && (
         <canvas
           ref={canvasRef}
           style={{ width: cssW, height: cssH }}
           className={`block ${toolActive ? '' : 'cursor-pointer'}`}
           draggable={!!onEntryDragStart}
+          onDragOver={onInsertAt ? (e) => onInsertAt(insertIndexAt(e.clientX, e.clientY)) : undefined}
           onDragStart={(e) => {
             const h = hit(e);
             if (!h || !onEntryDragStart) {
@@ -475,7 +609,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -484,19 +618,23 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   swatchH: number;
   gap: number;
   selectedId?: string;
+  focusedId?: string;
+  selectedIds?: ReadonlySet<string>;
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
   onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
-  onBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => void;
+  onBandDrop?: (bandKey: string, dataTransfer: DataTransfer, beforeId: string | null) => void;
   canBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => boolean;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
   toolActive?: boolean;
   tileRadius?: number;
 }) {
   // Lit while a droppable gradient is over this band. Local state, so a drag over one band
-  // does not re-render the others.
+  // does not re-render the others. `caret` is where in the band the drop would land — the
+  // chunk canvases report it on dragover and one of them draws the bar.
   const [over, setOver] = React.useState(false);
+  const [caret, setCaret] = React.useState<number | null>(null);
   const takes = (dt: DataTransfer): boolean => !!onBandDrop && (canBandDrop?.(group.key, dt) ?? true);
   const dropProps = onBandDrop
     ? {
@@ -511,13 +649,18 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           // otherwise flicker the highlight off and on.
           if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
           setOver(false);
+          setCaret(null);
         },
         onDrop: (e: React.DragEvent) => {
           if (!takes(e.dataTransfer)) return;
           e.preventDefault();
           e.stopPropagation();
           setOver(false);
-          onBandDrop(group.key, e.dataTransfer);
+          // The caret's index names the entry it sits in front of; past the last one it is
+          // null, meaning the end of the band.
+          const beforeId = caret == null ? null : group.entries[caret]?.id ?? null;
+          setCaret(null);
+          onBandDrop(group.key, e.dataTransfer, beforeId);
         },
       }
     : {};
@@ -530,6 +673,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   return (
     <div
       className={`relative ${over ? 'outline outline-2 outline-dashed outline-gx-armed rounded-md' : ''}`}
+      onDragEnd={() => setCaret(null)}
       data-wall-band={group.key}
       {...dropProps}
     >
@@ -564,12 +708,17 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             key={ci}
             chunkKey={`${group.key}#${ci}`}
             entries={chunk}
+            startIndex={ci * chunkLen}
+            onInsertAt={onBandDrop ? setCaret : undefined}
+            caret={over ? caret : null}
             sprite={sprite}
             cols={cols}
             swatchW={swatchW}
             swatchH={swatchH}
             gap={gap}
             selectedId={selectedId}
+            focusedId={focusedId}
+            selectedIds={selectedIds}
             toolActive={toolActive}
             tileRadius={tileRadius}
             rowMajor={!!group.rowMajor}
@@ -601,6 +750,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onEntryDragStart,
   onBandDrop,
   canBandDrop,
+  keyboard,
+  onEntryDelete,
+  selectedIds,
+  selectMode,
   selectedId,
   swatchW = 32,
   swatchH = 18,
@@ -727,7 +880,20 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     paintPending: false,
     shape: null as SelShape | null,
     insideIds: new Set<string>(),
+    /** Select mode: shift/ctrl held at press — this marquee UNIONS with what is chosen. */
+    additive: false,
+    /** This gesture began on the BACKGROUND with no tool — a plain rubber band. */
+    bgMarquee: false,
   });
+
+  /**
+   * Which shape this gesture is drawing. A carve TOOL says so explicitly; otherwise, in
+   * select mode, a drag that began on the background is a plain rubber band (owner,
+   * 2026-09-09: "multi select should not be using the cropping tool, it should just be
+   * when dragging from the background"). Choosing several is the ordinary thing to want on
+   * your own shelf — it should not cost a mode.
+   */
+  const effTool = (): SelectionTool | null => selectionTool ?? (sel.current.bgMarquee ? 'rect' : null);
 
   const toLocal = (cx: number, cy: number): Pt => {
     const r = scrollRef.current!.getBoundingClientRect();
@@ -858,6 +1024,20 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     const s = sel.current;
     s.shape = shape;
     s.insideIds = presetInside ?? swatchesInShape(shape, collectCenters());
+    // SELECT MODE ends here: the marquee IS the answer, so commit and drop the shape. The
+    // catalogue's `chosen` phase — the scrim plus a second keep-click to say isolate or cut
+    // — asks a question a selection does not have. Dropping the shape also sidesteps the
+    // scrim's one real defect: it is viewport-pinned, so a scroll leaves it lying about
+    // which tiles it covers (nothing clears it on scroll).
+    if (selectMode) {
+      const ids = [...s.insideIds];
+      const additive = s.additive;
+      clearSelectionState();
+      // Shift or Ctrl held when the drag began UNIONS with what is already chosen — the way
+      // to select past the fold, since a marquee can only ever reach mounted tiles.
+      if (ids.length) onSelectionCommit?.(ids, additive ? 'select' : 'isolate');
+      return;
+    }
     s.phase = 'chosen';
     setSelOverlay({ shape, phase: 'chosen', dimInside: !isPointInside(s.lastX, s.lastY) });
   };
@@ -877,16 +1057,17 @@ export const PickerWall: React.FC<PickerWallProps> = ({
 
   const onSelMove = (e: React.PointerEvent) => {
     const s = sel.current;
+    const tool = effTool();
     e.preventDefault();
     if (Math.hypot(e.clientX - s.downX, e.clientY - s.downY) > MOVE_THRESH) s.moved = true;
-    if (selectionTool === 'rect') {
+    if (tool === 'rect') {
       if (s.moved) {
         s.phase = 'drawing';
         const a = toLocal(s.downX, s.downY);
         const b = toLocal(e.clientX, e.clientY);
         overlayDrawing({ kind: 'rect', box: rectFromDrag(a.x, a.y, b.x, b.y) });
       }
-    } else if (selectionTool === 'lasso') {
+    } else if (tool === 'lasso') {
       if (s.moved) {
         s.phase = 'drawing';
         if (!s.pts.length) s.pts.push(toLocal(s.downX, s.downY));
@@ -895,7 +1076,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         if (Math.hypot(lp.x - last.x, lp.y - last.y) >= LASSO_MIN_DIST) s.pts.push(lp);
         overlayDrawing({ kind: 'lasso', pts: [...s.pts] });
       }
-    } else if (selectionTool === 'paint') {
+    } else if (tool === 'paint') {
       if (s.moved) {
         // A deferred no-modifier press that turned into a drag starts a FRESH stroke
         // (replacing any prior chosen set), matching how rect/lasso redraw replaces.
@@ -911,28 +1092,36 @@ export const PickerWall: React.FC<PickerWallProps> = ({
 
   const onSelUp = (e: React.PointerEvent) => {
     const s = sel.current;
+    const tool = effTool();
     s.active = false;
     scrollRef.current?.releasePointerCapture?.(e.pointerId);
     s.lastX = e.clientX;
     s.lastY = e.clientY;
     if (s.moved) {
       // Finished drawing a fresh region.
-      if (selectionTool === 'rect') {
+      if (tool === 'rect') {
         const a = toLocal(s.downX, s.downY);
         const b = toLocal(e.clientX, e.clientY);
         finalizeChosen({ kind: 'rect', box: rectFromDrag(a.x, a.y, b.x, b.y) });
-      } else if (selectionTool === 'lasso') {
+      } else if (tool === 'lasso') {
         if (s.pts.length >= 3) finalizeChosen({ kind: 'lasso', pts: [...s.pts] });
         else clearSelectionState();
-      } else if (selectionTool === 'paint') {
+      } else if (tool === 'paint') {
         if (s.paint.size) finalizeChosen({ kind: 'paint', rects: [...s.paint.values()] }, new Set(s.paint.keys()));
         else clearSelectionState();
       }
+      s.bgMarquee = false;
+    } else if (s.bgMarquee) {
+      // A background CLICK (no drag) in select mode means "nothing" — the way clicking the
+      // desktop clears a file selection.
+      s.bgMarquee = false;
+      clearSelectionState();
+      if (selectedIds?.size) onSelectionCommit?.([], 'isolate');
     } else if (s.phase === 'chosen' && s.shape) {
       // A click (no drag) while a region is chosen = the keep-click. For deferred paint
       // taps this is exactly the keep-click case (paintPending, no move). isolate/cut by side.
       keepClickCommit(e.clientX, e.clientY);
-    } else if (selectionTool === 'paint') {
+    } else if (tool === 'paint') {
       if (s.phase === 'drawing') {
         // A modifier tap (Shift/Ctrl) edited the set without moving — keep what's there.
         if (s.paint.size) finalizeChosen({ kind: 'paint', rects: [...s.paint.values()] }, new Set(s.paint.keys()));
@@ -992,16 +1181,31 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   }, [ewW, ewH]);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    // In SELECT MODE a left-drag from the BACKGROUND is a rubber band — no tool, the way
+    // choosing several of anything works everywhere else (owner, 2026-09-09). A press ON a
+    // tile is left alone: that is a pick, or the start of a drag.
+    const bgPress =
+      selectMode && !selectionTool && !zoomTool && e.button === 0 && !entryHitAtPoint(e.clientX, e.clientY);
+    if (bgPress) sel.current.bgMarquee = true;
     // Selection (left button) takes over while a tool is active.
-    if (selectionTool && e.button === 0) {
+    if ((selectionTool || bgPress) && e.button === 0) {
       const el = scrollRef.current;
       if (!el) return;
+      // … EXCEPT on a tile that is already selected, in select mode: pressing one of your
+      // chosen tiles means "pick this batch up", so stand aside and let the browser start
+      // an HTML5 drag. Capturing the pointer here (or preventDefault) would kill it before
+      // dragstart, which is why the tool used to make the wall undraggable outright.
+      if (selectMode && selectedIds?.size) {
+        const h = entryHitAtPoint(e.clientX, e.clientY);
+        if (h && selectedIds.has(h.id)) return;
+      }
       e.preventDefault();
       setHover(null);
       el.setPointerCapture(e.pointerId);
       const s = sel.current;
       s.active = true;
       s.moved = false;
+      s.additive = e.shiftKey || e.ctrlKey || e.metaKey;
       s.downX = e.clientX; s.downY = e.clientY;
       s.lastX = e.clientX; s.lastY = e.clientY;
       if (selectionTool === 'lasso') s.pts = [];
@@ -1210,6 +1414,113 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollToGroup?.seq]);
 
+  // ---- the keyboard cursor (M14) ---------------------------------------------------
+  // A ring that moves with the arrows and is NOT the pick, so arrowing across the wall
+  // costs nothing: Enter is what commits. Reading order comes from `rows`, which is what
+  // the wall actually draws, so the cursor never lands on a tile that is not there.
+  const flatIds = useMemo(() => rows.flatMap((r) => r.entries.map((e) => e.id)), [rows]);
+  const [focusedId, setFocusedId] = useState<string | undefined>(undefined);
+  const entryById = useCallback(
+    (id: string): CatalogEntry | undefined => {
+      for (const r of rows) {
+        const e = r.entries.find((x) => x.id === id);
+        if (e) return e;
+      }
+      return undefined;
+    },
+    [rows],
+  );
+  // A cursor whose tile has gone (a filter narrowed the wall, the set changed) goes with it.
+  useEffect(() => {
+    if (focusedId && !flatIds.includes(focusedId)) setFocusedId(undefined);
+  }, [flatIds, focusedId]);
+
+  /**
+   * Bring the focused tile into view. The chunk canvases are VIRTUALIZED — one that has
+   * scrolled away is unmounted — but their wrapper divs stay in the DOM to hold the scroll
+   * space open, and they carry the geometry as data attributes. So the cursor can be moved
+   * onto a tile that is not currently drawn and still scroll to exactly the right place.
+   */
+  const revealIndex = useCallback((flatIndex: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Which band, and how far into it.
+    let seen = 0;
+    let band: (typeof rows)[number] | null = null;
+    let within = 0;
+    for (const r of rows) {
+      if (flatIndex < seen + r.entries.length) { band = r; within = flatIndex - seen; break; }
+      seen += r.entries.length;
+    }
+    if (!band) return;
+    const wraps = el.querySelectorAll<HTMLElement>(`[data-wall-chunk^="${CSS.escape(band.key)}#"]`);
+    for (const w of wraps) {
+      const start = Number(w.dataset.wallChunkStart ?? 0);
+      const cols = Number(w.dataset.wallChunkCols ?? 1);
+      const cellH = Number(w.dataset.wallChunkCellh ?? 1);
+      const count = Math.round(w.offsetHeight / Math.max(1, cellH)) * cols;
+      if (within < start || within >= start + count) continue;
+      const k = within - start;
+      const row = w.dataset.wallChunkRowmajor ? Math.floor(k / cols) : k % Math.max(1, Math.round(w.offsetHeight / Math.max(1, cellH)));
+      const top = w.offsetTop + row * cellH;
+      if (top < el.scrollTop) el.scrollTop = Math.max(0, top - cellH);
+      else if (top + cellH > el.scrollTop + el.clientHeight) el.scrollTop = top + cellH - el.clientHeight + cellH;
+      return;
+    }
+  }, [rows]);
+
+  const moveFocus = useCallback(
+    (delta: number, absolute?: 'first' | 'last') => {
+      if (!flatIds.length) return;
+      const cur = focusedId ? flatIds.indexOf(focusedId) : -1;
+      const next =
+        absolute === 'first' ? 0
+        : absolute === 'last' ? flatIds.length - 1
+        : cur < 0 ? (delta > 0 ? 0 : flatIds.length - 1)
+        : Math.max(0, Math.min(flatIds.length - 1, cur + delta));
+      setFocusedId(flatIds[next]);
+      revealIndex(next);
+    },
+    [flatIds, focusedId, revealIndex],
+  );
+
+  const onWallKeyDown = (e: React.KeyboardEvent) => {
+    if (!keyboard) return;
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    switch (e.key) {
+      case 'ArrowRight': e.preventDefault(); moveFocus(1); break;
+      case 'ArrowLeft': e.preventDefault(); moveFocus(-1); break;
+      case 'ArrowDown': e.preventDefault(); moveFocus(effCols); break;
+      case 'ArrowUp': e.preventDefault(); moveFocus(-effCols); break;
+      case 'Home': e.preventDefault(); moveFocus(0, 'first'); break;
+      case 'End': e.preventDefault(); moveFocus(0, 'last'); break;
+      case 'Enter':
+      case ' ': {
+        if (!focusedId) return;
+        const en = entryById(focusedId);
+        if (!en) return;
+        e.preventDefault();
+        onPick(en);
+        break;
+      }
+      case 'Delete':
+      case 'Backspace': {
+        if (!focusedId || !onEntryDelete) return;
+        const en = entryById(focusedId);
+        if (!en) return;
+        e.preventDefault();
+        // Step the cursor on BEFORE the tile goes, so the keyboard keeps its place.
+        const i = flatIds.indexOf(focusedId);
+        setFocusedId(flatIds[i + 1] ?? flatIds[i - 1]);
+        onEntryDelete(en);
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
   if (!sprite || width === 0) return <div ref={scrollRef} className="absolute inset-0" />;
 
   const f = hover?.entry.facets;
@@ -1218,7 +1529,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     <div className="absolute inset-0">
       <div
         ref={scrollRef}
-        className="absolute inset-0 overflow-auto custom-scroll"
+        className="absolute inset-0 overflow-auto custom-scroll outline-none focus-visible:ring-1 focus-visible:ring-accent-400/60"
+        {...(keyboard ? { tabIndex: 0, role: 'grid', 'aria-label': 'Gradients' } : {})}
+        onKeyDown={keyboard ? onWallKeyDown : undefined}
         style={{ cursor: toolCursor(selectionTool) }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -1234,7 +1547,11 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         // the cursor is precise and Esc is the explicit deselect there).
         onClick={() => { if (!selectionTool && !coarsePointer.current) onDeselect?.(); }}
       >
-        <div ref={contentRef} style={{ width: contentWidth, transformOrigin: '0 0' }}>
+        {/* `pb` keeps the last row clear of the floating readouts along the bottom edge;
+            the LEFT margin is the `gutter` (0 on the catalogue, where the row labels use
+            it; 24 on a set, where there are no labels but the tiles still want the shell's
+            margin — owner, 2026-09-09). */}
+        <div ref={contentRef} className="pb-14" style={{ width: contentWidth, transformOrigin: '0 0' }}>
           {rows.map((g) => (
             <GroupRow
               key={g.key}
@@ -1246,13 +1563,17 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               swatchH={ewH}
               gap={effGap}
               selectedId={selectedId}
+              focusedId={focusedId}
+              selectedIds={selectedIds}
               toolActive={!!selectionTool}
               tileRadius={tileRadius}
               onHover={handleHover}
               onPick={handlePick}
               onEntryContextMenu={selectionTool ? undefined : onEntryContextMenu}
-              onEntryDragStart={selectionTool ? undefined : onEntryDragStart}
-              onBandDrop={selectionTool ? undefined : onBandDrop}
+              // A tool normally makes the tiles undraggable (a press is a marquee). In
+              // select mode a chosen tile stays draggable — that is how a batch moves.
+              onEntryDragStart={selectionTool && !(selectMode && selectedIds?.size) ? undefined : onEntryDragStart}
+              onBandDrop={selectionTool && !selectMode ? undefined : onBandDrop}
               canBandDrop={canBandDrop}
               onRegister={registerChunk}
             />

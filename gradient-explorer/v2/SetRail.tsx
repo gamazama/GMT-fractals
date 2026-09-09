@@ -33,6 +33,10 @@
  *   • drop a gradient on Kept or a named group — file it there (a favourite MOVES, a wall
  *     tile becomes a new favourite); drop it on the empty tail — a new group. Recent's bins
  *     take no drops (Recent is auto-managed), nor does All.
+ *   • a TRASH appears at the right end while an existing favourite is in flight — drop it
+ *     there to remove it (one undo step). The shelf panel has always had one; the ground
+ *     had removal only through a tile's right-click menu. It shows only for a favourite:
+ *     a catalogue tile is not yours to throw away, so there is nothing to offer.
  *   • the + at the end of the chips — a new, EMPTY group, named on the spot. A group used
  *     to exist only once something was dropped into it; an empty one is a chip now
  *     (`listGroundSets`), so "make a place, then fill it" is a thing you can do.
@@ -56,6 +60,7 @@ import { groupSetId, type GroundSetDesc } from '../../palette/core/groundSets';
 import type { ContextMenuItem } from '../../types/help';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { showToast } from '../../engine/store/toastStore';
+import { useNativeDragging, useDragPayload } from '../../palette/store/dragVisual';
 import { Icon } from './ui/Icon';
 
 interface Props {
@@ -80,7 +85,12 @@ const NEW_GROUP_LABEL = 'Group';
 export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, open, onToggleOpen, onExportSet, onImportInto }) => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const removeGroup = useFavientsStore((s) => s.removeGroup);
+  const removeFavient = useFavientsStore((s) => s.remove);
   const { openContextMenu } = useStoreCallbacks();
+  // The trash is only offered for a drag that carries a favId — an existing favourite.
+  const dragging = useNativeDragging();
+  const inFlight = useDragPayload();
+  const trashable = dragging && !!inFlight?.favId;
   const [over, setOver] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ group: string; value: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -226,6 +236,34 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
           </button>
         );
       })}
+      {/* the TRASH — only while a favourite is in flight, in the place the eye is already
+          on (the rail is where the drag is going anyway) */}
+      {trashable && (
+        <div
+          data-gx-trash=""
+          onDragOver={(e) => {
+            if (!Array.from(e.dataTransfer.types).includes(FAVIENT_DND_MIME)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (over !== 'trash') setOver('trash');
+          }}
+          onDragLeave={() => { if (over === 'trash') setOver(null); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setOver(null);
+            const p = readFavientDrag(e.dataTransfer);
+            if (!p?.favId) return; // only an existing favourite can be thrown away
+            paramEdit(() => removeFavient(p.favId!));
+            showToast(`Removed “${p.name}” — undo with Ctrl+Z`);
+          }}
+          title="Drop here to remove it from My Gradients"
+          className={`inline-flex items-center gap-1 h-[26px] px-2.5 rounded-lg border text-[13px] transition-colors ${
+            over === 'trash' ? 'border-danger text-danger bg-danger/10' : 'border-line/25 text-fg-muted'
+          }`}
+        >
+          <Icon name="trash" /> Remove
+        </div>
+      )}
       {/* a new, EMPTY group — the same thing the tail's drop makes, without needing a
           gradient in hand first */}
       {sets.length > 0 && (

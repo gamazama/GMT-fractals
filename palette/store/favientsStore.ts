@@ -244,6 +244,15 @@ interface FavientsState {
    * bracketed here — the caller wraps it, as every panel gesture does.
    */
   insertMany: (items: { config: GradientConfig; name: string; source?: string }[], group: string, label?: string) => string[];
+  /**
+   * Replace the whole shelf array in ONE write, and set the landing group. The batched
+   * primitive behind a multi-item move (`fileFavientsAt`): moving six favourites through
+   * six `moveFavient` calls is six localStorage writes and six store notifications, and
+   * each one resolves its index against the array the last one just changed. The caller is
+   * responsible for the array being well-formed — it is expected to be a permutation of
+   * the current one, with groups reassigned.
+   */
+  replaceAll: (favients: Favient[], lastGroupId?: string) => void;
   /** Rename a group's divider label. */
   renameGroup: (groupId: string, label: string) => void;
   /**
@@ -462,6 +471,12 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     saveLastGroup(group);
     set({ favients: arr, groupLabels, lastGroupId: group });
     return fresh.map((f) => f.id);
+  },
+
+  replaceAll: (favients, lastGroupId) => {
+    saveFavients(favients);
+    if (lastGroupId !== undefined) saveLastGroup(lastGroupId);
+    set(lastGroupId !== undefined ? { favients, lastGroupId } : { favients });
   },
 
   renameGroup: (groupId, label) => {

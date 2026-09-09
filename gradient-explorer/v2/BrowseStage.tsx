@@ -87,13 +87,14 @@ import { Act } from './ui/Act';
 import { useGroundSetIds, setGroundSetId } from '../../palette/store/groundSet';
 import { showToast } from '../../engine/store/toastStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
-import { fileFavientInto } from '../../palette/store/favientFiling';
+import { fileFavientAt, fileFavientsAt } from '../../palette/store/favientFiling';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../../palette/core/favientDnd';
 import { parseSetId } from '../../palette/core/groundSets';
 import type { ContextMenuItem } from '../../types/help';
 import { useGroundSets, useGroundSource } from './useGroundSource';
 import { groupSetId } from '../../palette/core/groundSets';
 import { newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
+import { clearWallSelection } from '../../palette/store/wallSelection';
 import { entryToGradientConfig } from '../../palette/core/gradientSeam';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
 import type { CatalogEntry } from '../../palette/core/presetCatalog';
@@ -106,9 +107,9 @@ const KEEP_MAX = 400;
 // Clicking the active tool again returns to the rest state.
 const TOOLS = [
   { id: 'zoom', glyph: 'zoom' as const, label: 'Zoom', title: 'Zoom — drag to zoom around the grab point · right-drag pans · Fit resets' },
-  { id: 'rect', glyph: 'box' as const, label: 'Box', title: 'Box select, then keep or cut' },
-  { id: 'lasso', glyph: 'lasso' as const, label: 'Lasso', title: 'Draw a free shape, then keep or cut' },
-  { id: 'paint', glyph: 'brush' as const, label: 'Paint', title: 'Paint over the ones you want — [ ] resize' },
+  { id: 'rect', glyph: 'box' as const, label: 'Box', title: 'Box select — on the catalogue, keep or cut; on your own set, choose several · shift-drag adds' },
+  { id: 'lasso', glyph: 'lasso' as const, label: 'Lasso', title: 'Draw a free shape — on the catalogue, keep or cut; on your own set, choose several · shift-drag adds' },
+  { id: 'paint', glyph: 'brush' as const, label: 'Paint', title: 'Paint over the ones you want — [ ] resize · shift-drag adds' },
 ] as const;
 type ToolId = (typeof TOOLS)[number]['id'];
 
@@ -198,9 +199,11 @@ export const BrowseStage: React.FC = () => {
     const t = span[1] - span[0] > 1e-6 ? (L - span[0]) / (span[1] - span[0]) : L;
     setScrollTo((s) => ({ frac: Math.min(1, Math.max(0, 1 - t)), seq: (s?.seq ?? 0) + 1 }));
   }, [span]);
-  // A set has no carve tools: drop an active one when the ground switches to a set.
+  // Crossing between the catalogue and a set changes what a carve MEANS — narrowing there,
+  // choosing here — so an active tool is dropped on the way rather than carried across with
+  // a new meaning. (Until 2026-09-09 a set had no carve tools at all; the tools now stay.)
   useEffect(() => {
-    if (m.isSet && m.tool) m.setTool(null);
+    if (m.tool) m.setTool(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m.isSet]);
   // Keep these N: the narrowed wall becomes a named group and the ground shows it.
@@ -281,6 +284,13 @@ export const BrowseStage: React.FC = () => {
         },
       ];
       if (source && fav) {
+        // Rename, on the ground. A wall tile shows no name — the shelf panel's LIST view is
+        // where names live and where renaming has always happened — so this opens a small
+        // input over the tile rather than sending you to the panel to find it.
+        items.push({
+          label: 'Rename',
+          action: () => setRenaming({ id: fav.id, name: fav.name, x: e.clientX, y: e.clientY }),
+        });
         items.push({
           label: 'Remove from My Gradients',
           danger: true,
@@ -296,27 +306,87 @@ export const BrowseStage: React.FC = () => {
     },
     [source, openContextMenu],
   );
-  // A gradient dropped ON a band files it into that set (owner, 2026-09-09: "I can't drag
-  // gradients from one to the other"). The band key IS the set id, so a drop knows exactly
-  // where it landed — the same filing rule the rail's chips use, from the same module, so
-  // the two drop targets cannot drift apart.
+  // A gradient dropped ON a band files it into that set, at the position the caret shows
+  // (owner, 2026-09-09: "I can't drag gradients from one to the other"). The band key IS
+  // the set id, so a drop knows exactly where it landed — and it files through the same
+  // rule the rail's chips use, from the same module, so the two cannot drift apart.
   //
-  // A dated bin refuses: Recent is auto-managed and a gradient filed there would fall off
-  // its own cap. Only offered while several sets share the ground; with one set there is
-  // nowhere else on the wall to move a gradient TO.
-  const multi = setIds.length > 1;
+  // Offered on a GROUP band whether one set is lit or several: with two it moves a gradient
+  // between them, with one it reorders within it — the shelf panel's own gesture, which
+  // the ground never had. A dated bin refuses either way: Recent is auto-managed and
+  // ordered by when you picked things, so a gradient placed there would fall off its cap.
+  // Renaming a tile in place (the context menu's Rename). Anchored at the pointer, because
+  // the tile itself is a region of a canvas and has no element to attach to.
+  const [renaming, setRenaming] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
+  const commitRename = useCallback((v: string) => {
+    setRenaming((cur) => {
+      if (cur && v.trim() && v !== cur.name) paramEdit(() => useFavientsStore.getState().rename(cur.id, v.trim()));
+      return null;
+    });
+  }, []);
+
   const canBandDrop = useCallback(
     (bandKey: string, dt: DataTransfer) =>
-      multi && parseSetId(bandKey).kind === 'group' && Array.from(dt.types).includes(FAVIENT_DND_MIME),
-    [multi],
+      parseSetId(bandKey).kind === 'group' && Array.from(dt.types).includes(FAVIENT_DND_MIME),
+    [],
   );
-  const onBandDrop = useCallback((bandKey: string, dt: DataTransfer) => {
+  const onBandDrop = useCallback((bandKey: string, dt: DataTransfer, beforeId: string | null) => {
     const { kind, key } = parseSetId(bandKey);
     if (kind !== 'group') return;
     const p = readFavientDrag(dt);
     if (!p) return;
-    paramEdit(() => fileFavientInto(key, p));
+    // With a place: the drop is a REORDER as well as a re-file, which is what the shelf
+    // panel could always do and the ground could not. A multi-drag carries every id, and
+    // lands as ONE run in ONE undo step.
+    paramEdit(() => {
+      if (p.favIds && p.favIds.length > 1) fileFavientsAt(key, p.favIds, beforeId);
+      else fileFavientAt(key, p, beforeId);
+    });
+    clearWallSelection();
   }, []);
+
+  /** Move everything selected into a group the user picks from the shelf's own groups. */
+  const moveSelectionTo = useCallback(() => {
+    const ids = [...m.selectedIds];
+    if (!ids.length) return;
+    const st = useFavientsStore.getState();
+    const groups = sets.filter((x) => x.kind === 'group');
+    const items: ContextMenuItem[] = groups.map((g) => ({
+      label: g.label,
+      action: () => {
+        paramEdit(() => fileFavientsAt(g.group!, ids, null));
+        m.clearSelection();
+        showToast(`Moved ${ids.length} to “${g.label}”`);
+      },
+    }));
+    items.push({
+      label: 'New group…',
+      action: () => {
+        const gid = newGroupId();
+        paramEdit(() => {
+          st.renameGroup(gid, 'Group');
+          fileFavientsAt(gid, ids, null);
+        });
+        m.clearSelection();
+        setGroundSetId(groupSetId(gid));
+        showToast(`Moved ${ids.length} into a new group`);
+      },
+    });
+    // Anchored at the bar itself — the menu belongs to the button that opened it.
+    const el = document.querySelector('[data-gx-selection-bar]')?.getBoundingClientRect();
+    openContextMenu(el ? el.left + 60 : 200, el ? el.top : 200, items);
+  }, [m.selectedIds, m.clearSelection, sets, openContextMenu]);
+
+  const removeSelection = useCallback(() => {
+    const ids = [...m.selectedIds];
+    if (!ids.length) return;
+    paramEdit(() => {
+      const st = useFavientsStore.getState();
+      st.replaceAll(st.favients.filter((f) => !ids.includes(f.id)));
+    });
+    m.clearSelection();
+    showToast(`Removed ${ids.length} — undo with Ctrl+Z`);
+  }, [m.selectedIds, m.clearSelection]);
 
   const stripDef = QUALITY_AXES.find((a) => a.axis === WINDOW_KEY[pad.strip])!;
   // The strip is painted toward the pad window's average colour (owner).
@@ -520,12 +590,28 @@ export const BrowseStage: React.FC = () => {
             /* V2 as amended: 10 px on a bar, 20 on a box — a tile that has grown toward a
                box takes more rounding (the wall caps it at a third of the short side) */
             tileRadius={Math.round(Math.min(20, 8 + Math.max(0, m.tile.h - 18) / 9))}
-            gutter={m.isSet ? 0 : undefined}
+            // A set has no row-label gutter to draw, but it still wants the shell's 24 px
+            // margin: at 0 the user's own gradients ran flush into the window edge, out of
+            // line with the rail chips and the header above them (owner, 2026-09-09: "the
+            // user areas are very tight against the edge of the screen"). Below 28 px the
+            // gutter draws nothing and is pure margin — which is exactly what is wanted.
+            gutter={m.isSet ? 24 : undefined}
             onViewport={onAll ? (bands, view) => setWallView({ bands, view }) : undefined}
             scrollToGroup={scrollTo}
             onEntryContextMenu={onTileMenu}
-            onBandDrop={multi ? onBandDrop : undefined}
+            onBandDrop={onBandDrop}
             canBandDrop={canBandDrop}
+            keyboard
+            selectedIds={m.selectedIds}
+            selectMode={m.isSet}
+            onEntryDelete={
+              source
+                ? (entry) => {
+                    paramEdit(() => useFavientsStore.getState().remove(entry.id));
+                    showToast(`Removed “${entry.name}” — undo with Ctrl+Z`);
+                  }
+                : undefined
+            }
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}
@@ -578,7 +664,9 @@ export const BrowseStage: React.FC = () => {
             drag to zoom · right-drag pans · Fit resets · click the tool again to stop
           </Floating>
         )}
-        {/* one-line caption, only while a carve tool is active */}
+        {/* one-line caption, only while a carve tool is active. What the carve MEANS differs
+            by ground: on the catalogue it narrows (keep or cut), on your own set it chooses
+            (2026-09-09) — so the sentence differs too. */}
         {m.tool && (
           <Floating className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${floatOver}`}>
             draw around the ones you like, then keep or cut
@@ -590,6 +678,26 @@ export const BrowseStage: React.FC = () => {
                 </button>
               </>
             )}
+          </Floating>
+        )}
+        {/* WHAT YOU CHOSE, and what can be done with it. Shown whenever a selection exists,
+            tool or no tool — it outlives the gesture that made it (owner's parity list:
+            "select these six and move them to that group"). Dragging any one of them
+            carries the batch; these are the same actions without a drag. */}
+        {m.selectedIds.size > 0 && (
+          <Floating
+            className={`absolute bottom-3 left-4 flex items-center gap-2 px-3 py-1.5 text-[13px] ${floatOver}`}
+            data-gx-selection-bar=""
+          >
+            <span className="text-fg">
+              {m.selectedIds.size} selected
+            </span>
+            <span className="text-fg-dim">· drag them onto a set, or</span>
+            <Act onClick={() => moveSelectionTo()} title="Move them into another group">Move to…</Act>
+            <Act onClick={removeSelection} title="Remove them from My Gradients">Remove</Act>
+            <button onClick={m.clearSelection} className="text-fg-muted hover:text-fg" title="Clear the selection (Esc)">
+              <Icon name="close" />
+            </button>
           </Floating>
         )}
 
@@ -615,6 +723,29 @@ export const BrowseStage: React.FC = () => {
           </button>
         </Floating>
       </div>
+
+      {/* Rename in place. Fixed to the pointer, because a tile is a region of a canvas and
+          has no element of its own to hang off. Enter commits, Esc and blur cancel. */}
+      {renaming && (
+        <Floating
+          className="fixed z-50 p-1.5"
+          style={{ left: Math.min(renaming.x, window.innerWidth - 240), top: Math.min(renaming.y, window.innerHeight - 60) }}
+          data-gx-tile-rename=""
+        >
+          <input
+            autoFocus
+            defaultValue={renaming.name}
+            aria-label="Rename gradient"
+            className="w-[200px] bg-transparent outline-none text-[13px] text-fg border-b border-line/30 px-1 py-0.5"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commitRename(e.currentTarget.value); }
+              else if (e.key === 'Escape') { e.preventDefault(); setRenaming(null); }
+              e.stopPropagation();
+            }}
+            onBlur={(e) => commitRename(e.currentTarget.value)}
+          />
+        </Floating>
+      )}
     </div>
   );
 };

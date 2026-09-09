@@ -12,10 +12,29 @@ export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
  *  Readable during `dragover` (where getData is blocked), so a swatch can show the
  *  reorder indicator for internal drags but not external ones (picker → add). */
 export const FAVIENT_INTERNAL_MIME = 'application/x-gmt-favient-internal';
+/**
+ * Marker MIME for a MULTI drag — several favourites in flight at once. Its VALUE is the
+ * count. Present in `dataTransfer.types` during `dragover`, where `getData` is blocked, so
+ * a target can say "3 gradients" in its hover affordance before the drop.
+ */
+export const FAVIENT_MULTI_MIME = 'application/x-gmt-favient-multi';
 
 export interface FavientDragPayload {
   config: GradientConfig;
   name: string;
+  /**
+   * A MULTI drag: every favourite in flight, this one FIRST, as shelf ids (2026-09-09).
+   * Ids rather than whole configs because on a set every dragged tile is already a
+   * favourite, and fifty inlined stop lists is a large string to hang off a DataTransfer.
+   *
+   * ADDITIVE by design: the top-level `config`/`name`/`favId` still describe gradient one,
+   * so every existing drop target — the shelf panel, the send-target routing layer, the
+   * hero — keeps filing exactly one and none of them has to learn about this. A target
+   * that wants the batch reads `favIds` and iterates. Do NOT make the payload itself an
+   * array: `readFavientDrag`'s validator would reject it and all four consumers would
+   * break at once.
+   */
+  favIds?: string[];
   /** Provenance, carried so a drop-to-favourite keeps the gradient's origin label. */
   source?: string;
   /** Set when the drag originates from an existing Favients swatch — enables
@@ -44,7 +63,8 @@ export const setFavientDrag = (dt: DataTransfer, payload: FavientDragPayload): v
   dt.effectAllowed = 'copyMove';
   // Tell the avatar what is in flight: a DataTransfer's DATA cannot be read during dragover,
   // only its types, so the thing being dragged has to be stashed at dragstart.
-  setDragPayload({ config: payload.config, name: payload.name });
+  if (payload.favIds && payload.favIds.length > 1) dt.setData(FAVIENT_MULTI_MIME, String(payload.favIds.length));
+  setDragPayload({ config: payload.config, name: payload.name, favId: payload.favId, count: payload.favIds?.length });
 };
 
 // A 1×1 transparent GIF, created EAGERLY at module load (DOM-guarded so pure-core tests don't

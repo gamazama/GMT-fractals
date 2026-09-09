@@ -1084,6 +1084,49 @@ are where to START reading, not necessarily where the change lands.
 > machinery already computes an id-set — turning that into "move these to a group" is the
 > cheapest batch-organise there is), and M14's arrow-key navigation.
 
+> **Status 2026-09-09 (session 3, second pass): the ground becomes an ORGANISER.** The five
+> gaps the re-audit named, all of them things the old My Gradients panel could do and the
+> wall could not. Guard: `npm run test:palette-shelf`, now nine sections, falsified fifteen
+> ways in total.
+>
+> | # | What shipped | Where |
+> |---|---|---|
+> | 1 | **Drag to REORDER inside a band, to an exact position**, with a live insertion caret — the panel's `insertIndexFromPointer` gesture, asked of a canvas. The anchor travels as an ID (`beforeId`), not an index, so a wall narrowed by search still means the gradient you can see; the panel disables reordering while filtered for exactly the reason this avoids. Offered with one set lit (reorder) or several (move between). | `PickerWall.tsx` (`insertIndexAt`, `caretBox`), `favientFiling.ts` (`fileFavientAt`) |
+> | 2 | **Multi-select, and act on it.** A left-drag from the BACKGROUND is a rubber band — no tool, no mode (owner: "it should just be when dragging from the background"; the first cut put it behind the Box tool and that was wrong). Shift or Ctrl at press unions, so a selection can grow past the fold — a marquee can only ever reach mounted tiles. Dragging any selected tile carries the batch; the bar offers Move to… (any group, or a new one) and Remove. Esc or a background click clears. | `wallSelection.ts` (new), `usePickerModel.ts`, `PickerWall.tsx`, `BrowseStage.tsx`, `favientFiling.ts` (`fileFavientsAt`), `favientsStore.ts` (`replaceAll`) |
+> | 3 | **Rename from a wall tile** — a small input over the tile. The panel's LIST view is where names have always lived; this stops the ground sending you there to find one. | `BrowseStage.tsx` |
+> | 4 | **A trash on the ground** — it appears in the rail while an existing favourite is in flight, and only then: a catalogue tile is not yours to throw away. Needed a real `trash` icon, which closes the §10 Phase-A note about the panel's two 🗑 glyphs having no icon to use. | `SetRail.tsx`, `ui/Icon.tsx`, `dragVisual.ts` |
+> | 5 | **Keyboard navigation** (M14) — Tab focuses the wall, arrows move a cursor ring that is deliberately NOT the pick, Home/End jump, Enter picks, Delete removes. Additive prop, so app-gmt opts in separately. Scroll-into-view works even onto a tile whose canvas is unmounted, because the virtualized chunks keep their wrapper and now carry their geometry as data attributes. | `PickerWall.tsx` |
+>
+> Plus, from the owner's walk: **the wall had no left margin on a set** ("the user areas are
+> very tight against the edge") — the gutter was set to 0 because a set draws no row labels,
+> so the tiles ran into the window edge, out of line with the rail chips and the header. It
+> is 24 px now, the shell's own gutter, using the mechanism that was already there.
+>
+> **Three things worth carrying forward.**
+>
+> 1. **The multi-drag payload is ADDITIVE, and that is the whole design.** `favIds` rides
+>    alongside the existing single-gradient fields, which still describe gradient one. Every
+>    drop target that knows nothing about batches — the shelf panel, the send-target routing
+>    layer, the hero — files exactly one, which is the old behaviour rather than a break.
+>    Making the payload itself an array would have failed `readFavientDrag`'s validator and
+>    broken all four consumers at once. Ids, not configs: on a set every dragged tile is
+>    already a favourite, and fifty inlined stop lists is a large string on a DataTransfer.
+> 2. **A batch move is ONE splice, not a loop.** `fileFavientAt` resolves its anchor against
+>    the array it just mutated, so calling it six times interleaves or reverses them and
+>    writes localStorage six times. `fileFavientsAt` computes the index once and hands the
+>    whole run to a new `replaceAll`. The harness's "B stays ONE contiguous run" assertion
+>    is what catches the loop version, and it went red on exactly that mutation.
+> 3. **The selection's Set must be reference-stable.** The wall's tile paint is a per-swatch
+>    `drawImage` loop with the Set in its dependency array and `React.memo` on every band, so
+>    a fresh Set per render repaints every mounted chunk. `wallSelection` publishes a new
+>    frozen Set only on a real change, and the harness pins it — a no-op write that publishes
+>    is a performance bug that looks like nothing at all.
+>
+> **Still open:** item 5 of §8b (one unified export — a design job, with the set leg built).
+> From the re-audit and not built: the panel's own list view has no equivalent on the ground
+> (deliberate — the wall draws bars, and the panel is where names live); the wall's
+> `keptIds` carve remains catalogue-only; and app-gmt has not opted into `keyboard`.
+
 1. **A dropped swatch should land anywhere on the gradient, not only on the bottom bar.**
    Colour drag-and-drop works today only over the ramp strip. The payload and its MIME type are
    `components/gradient/colorDrag.ts`; the editor's drop handling and `dropColourAt` are in

@@ -28,6 +28,7 @@ export type IconName =
   | 'swap'
   | 'pencil'
   | 'refresh'
+  | 'trash'
   | 'star'
   | 'heart'
   | 'share'
@@ -81,6 +82,10 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.React
   swap: <path d="M3 5.5h8M9 3l2 2.5-2 2.5M13 10.5H5M7 8l-2 2.5 2 2.5" />,
   pencil: <path d="M2.5 13.5l.7-2.8 7-7 2.1 2.1-7 7-2.8.7zM9.8 3.4l2.1 2.1" />,
   refresh: <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.5 2.2v3.2h-3.2" />,
+  // The trash zone that appears while a favourite is in flight. Drawn, not 🗑 — no
+  // emoji glyphs in this shell (V-rules), and the shelf panel's two trash zones were
+  // waiting on exactly this icon (plan §10, Phase A).
+  trash: <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2a1 1 0 0 0 1 .8h3.8a1 1 0 0 0 1-.8l.6-8.2M6.8 7v4M9.2 7v4" />,
 };
 
 const STAR_PATH = 'M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4L2.2 6.5l4-.6z';

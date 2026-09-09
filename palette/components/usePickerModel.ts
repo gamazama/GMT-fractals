@@ -44,6 +44,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { usePickerStore } from '../store/pickerStore';
 import { usePickerSearch, setPickerSearch } from '../store/pickerSearch';
 import { useSimilarityAnchor, setSimilarityAnchor, type SimilarityAnchor } from '../store/pickerSimilarity';
+import { useWallSelection, setWallSelection, clearWallSelection, getWallSelection } from '../store/wallSelection';
 import { entryToGradientConfig } from '../core/gradientSeam';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GROUP_BY, ROWS_BY, SORT_BY } from '../features/paletteFilters';
@@ -100,11 +101,15 @@ export interface GroundSource {
   /** What each tile stands for. */
   itemOf: (entry: CatalogEntry) => GroundItem;
   /**
-   * When SEVERAL sets share the ground (2026-09-09), which set each entry came from — one
-   * labelled band per set, in rail order. The wall already draws a full-width header for a
-   * band that has a `label` (grep `data-wall-header` in PickerWall), so this is what makes
-   * two sets read as two places rather than one undivided run. Omitted, or of length 1,
-   * and the ground arranges as it always did: one band, the set's own order.
+   * Which set each entry came from — one band per lit set, in rail order, KEYED BY SET ID
+   * so a drop on the wall knows where it landed. The wall draws a full-width header for a
+   * band that has a `label` (grep `data-wall-header` in PickerWall), which is what makes
+   * two sets read as two places rather than one undivided run; a single set passes an
+   * empty label and looks exactly as it always did. Omitted entirely and the ground
+   * arranges as it always did: one band, the set's own order, no drop target.
+   *
+   * Similarity outranks the division: sorting by "more like this" asks one question ACROSS
+   * the sets, so it keeps its single band.
    */
   bands?: { key: string; label: string; ids: ReadonlySet<string> }[];
 }
@@ -171,7 +176,11 @@ export interface PickerModel {
   // --- carve tool ---
   tool: SelectionTool | null;
   setTool: React.Dispatch<React.SetStateAction<SelectionTool | null>>;
-  onSelectionCommit: (insideIds: string[], op: 'isolate' | 'cut') => void;
+  onSelectionCommit: (insideIds: string[], op: 'isolate' | 'cut' | 'select') => void;
+  /** The tiles a carve selected — set-ground only; empty on the catalogue. */
+  selectedIds: ReadonlySet<string>;
+  /** Drop the selection. */
+  clearSelection: () => void;
   /** Attach to the element wrapping the wall — a pointerdown inside it keeps the tool. */
   wallHostRef: React.RefObject<HTMLDivElement>;
   /** Attach to the tool palette — same. */
@@ -208,6 +217,13 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
   useEffect(() => { load(); }, [load]);
   // The list the wall shows: the catalogue, or the set's own entries.
   const base = source ? source.entries : catalog;
+  const selectedIds = useWallSelection();
+  // A selection belongs to the ground it was made on: changing set, or leaving for the
+  // catalogue, drops it rather than leaving ids highlighted that are no longer drawn.
+  const groundKey = source?.id ?? ALL_SET_ID;
+  useEffect(() => {
+    clearWallSelection();
+  }, [groundKey]);
   const heroMode = source ? 'favients' : 'picker';
 
   // The wall's OWN pick lives in the per-surface heroSelection store (not local state) so
@@ -303,7 +319,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
     // Sorting by similarity is a re-rank of the whole ground and outranks the division —
     // it is asking one question ACROSS the sets, so it keeps its single band.
     const bands = source?.bands;
-    if (bands && bands.length > 1 && !distance) {
+    if (bands && bands.length && !distance) {
       const seen = new Set<string>();
       result = bands
         .map((b) => ({
@@ -328,8 +344,16 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
 
   // --- carve commit / clear ---------------------------------------------------------
   const onSelectionCommit = useCallback(
-    (insideIds: string[], op: 'isolate' | 'cut') => {
-      if (source) return; // the carve is catalogue ids; a set has no carve tools
+    (insideIds: string[], op: 'isolate' | 'cut' | 'select') => {
+      // ON A SET the same gesture means SELECTION, not narrowing (2026-09-09). A set is
+      // small and already yours: narrowing it answers nothing, whereas "these six" is the
+      // one thing neither the wall nor the shelf panel could ever express. On the
+      // CATALOGUE it stays the carve, byte for byte.
+      if (source) {
+        setWallSelection(insideIds, op === 'cut' ? 'subtract' : op === 'select' ? 'add' : 'replace');
+        return;
+      }
+      if (op === 'select') return; // a set-only op; the catalogue never asks for it
       setPaletteFilters?.({ keptIds: carveIds(idsRef.current, insideIds, op) });
     },
     [setPaletteFilters, source],
@@ -377,8 +401,16 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
   // Drag a swatch out of the wall to drop it into the Favients shelf.
   const onEntryDragStart = useCallback((e: CatalogEntry, dt: DataTransfer) => {
     const it = source ? source.itemOf(e) : null;
+    // Dragging a tile that is part of a SELECTION carries the whole selection, this one
+    // first. Every other field still describes gradient one, so a target that knows
+    // nothing about batches files exactly that one — the old behaviour, not a break.
+    const sel = getWallSelection();
+    const favIds =
+      it?.favId && sel.size > 1 && sel.has(e.id)
+        ? [it.favId, ...idsRef.current.filter((id) => id !== e.id && sel.has(id))]
+        : undefined;
     const payload = it
-      ? { config: it.config, name: it.name, source: it.source, favId: it.favId }
+      ? { config: it.config, name: it.name, source: it.source, favId: it.favId, favIds }
       : { config: entryToGradientConfig(e), name: e.name, source: 'Picker' };
     setFavientDrag(dt, payload);
     beginCustomAvatarDrag(dt); // register the drag + suppress the native image (avatar stands in)
@@ -392,6 +424,8 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
   const tile = tileSizeFor(count, baseTile);
 
   return {
+    selectedIds,
+    clearSelection: clearWallSelection,
     setId: source?.id ?? ALL_SET_ID,
     isSet: !!source,
     tile,

@@ -22,6 +22,9 @@
  *       and removes, ctrl-click's setGroundSetId replaces, and a pre-2026-09-09 bare id in
  *       localStorage reads back as a one-element selection
  *   [7] setV2FavientsPanelKey keeps v2's grid/list preference out of app-gmt's blob
+ *   [9] fileFavientsAt — a BATCH lands as one contiguous run, in the order given, at the
+ *       place asked for, in one store write; and wallSelection's snapshot is
+ *       reference-stable (the wall's paint effect has it in a dependency array)
  *   [8] fileFavientInto — the ONE rule behind every drop target (a rail chip, a band on
  *       the wall): a favourite MOVES rather than copying, a gradient that matches by
  *       CONTENT moves too, a drop onto its own group does nothing, and an unnamed payload
@@ -49,6 +52,16 @@
  *   • `fileFavientInto` dropping its CONTENT match → 3 red ("the same gradient with NO
  *     favId still moves, not copies"); filing `p.name` raw instead of falling back to
  *     `configToName` → 1 red ("an unnamed payload is still named (got \"\")").
+ *
+ * Four more on 2026-09-09 for [9], same method:
+ *   • `fileFavientsAt` reversing the batch → 1 red ("got b1,a3,a1,b2").
+ *   • it splicing the batch at index 0 instead of at the anchor → 3 red, including
+ *     "B stays ONE contiguous run (got BB.BB.)" — the run check earns its place here.
+ *   • it ignoring `beforeId` and always appending → 1 red ("got b1,b2,a1,a3").
+ *   • `wallSelection` dropping its no-op guard → 1 red ("writing the SAME ids does not
+ *     publish a new reference"). That guard is not tidiness: the wall's per-swatch paint
+ *     effect has the Set in its dependency array, so a fresh reference repaints every
+ *     mounted chunk.
  */
 
 // ── localStorage shim, BEFORE any store loads ─────────────────────────────
@@ -261,6 +274,60 @@ console.log('[6] the ground selection');
   mem.set('gmt.ge.groundSet', 'group:legacy');
   const gs2 = await import(`../palette/store/groundSet?legacy=${Date.now()}`);
   ok(gs2.getGroundSetIds().join() === 'group:legacy', 'a pre-2026-09-09 bare id reads back as a one-set selection');
+}
+
+console.log('[9] fileFavientsAt + wallSelection: a batch, and a stable snapshot');
+{
+  reset();
+  const st = () => useFavientsStore.getState();
+  const { fileFavientsAt } = await import('../palette/store/favientFiling');
+  const a = newGroupId();
+  const b = newGroupId();
+  // three in A, two in B, one in Kept — enough that a bad splice interleaves visibly
+  importGradientsInto([{ name: 'a1.map', text: MAP }, { name: 'a2.css', text: CSS }, { name: 'a3.gpl', text: GPL }], a);
+  importGradientsInto([{ name: 'b1.map', text: MAP.replace('255 255 255', '9 9 9') }, { name: 'b2.map', text: MAP.replace('0 255 0', '9 200 9') }], b);
+  importGradientsInto([{ name: 'k1.map', text: MAP.replace('255 0 0', '3 3 3') }], DEFAULT_GROUP);
+  const inA = st().favients.filter((f) => f.group === a).map((f) => f.id);
+  ok(inA.length === 3, `precondition: three in A (got ${inA.length})`);
+
+  // move A's first and third into B, in that order, in front of B's second
+  const bMembers = st().favients.filter((f) => f.group === b);
+  fileFavientsAt(b, [inA[0], inA[2]], bMembers[1].id);
+  const names = (g: string) => st().favients.filter((f) => (f.group ?? DEFAULT_GROUP) === g).map((f) => f.name);
+  ok(st().favients.length === 6, 'a batch move deletes nothing');
+  ok(names(a).length === 1, `the ones moved left A (got ${names(a).join()})`);
+  ok(names(b).length === 4, `and joined B (got ${names(b).join()})`);
+  ok(names(b).join() === 'b1,a1,a3,b2', `the batch lands IN ORDER, at the place asked for (got ${names(b).join()})`);
+  const groupsInOrder = st().favients.map((f) => f.group ?? DEFAULT_GROUP);
+  const bRun = groupsInOrder.map((g) => g === b);
+  ok(bRun.slice(bRun.indexOf(true), bRun.lastIndexOf(true) + 1).every(Boolean), `B stays ONE contiguous run (got ${groupsInOrder.map((g) => (g === b ? 'B' : '.')).join('')})`);
+
+  // null anchor = the end of the group
+  fileFavientsAt(b, [st().favients.find((f) => f.name === 'k1')!.id], null);
+  ok(names(b)[names(b).length - 1] === 'k1', `a null anchor appends (got ${names(b).join()})`);
+  fileFavientsAt(b, ['no-such-id'], null);
+  ok(st().favients.length === 6, 'an unknown id is skipped, not inserted');
+
+  const sel = await import(`../palette/store/wallSelection?fresh=${Date.now()}`);
+  ok(sel.getWallSelection().size === 0, 'the selection starts empty');
+  const empty1 = sel.getWallSelection();
+  ok(sel.getWallSelection() === empty1, 'selection: the snapshot is reference-stable between reads');
+  sel.setWallSelection(['x', 'y']);
+  const s1 = sel.getWallSelection();
+  ok(s1.size === 2 && s1.has('x'), 'a selection can be set');
+  ok(sel.getWallSelection() === s1, 'selection: still reference-stable after a write');
+  sel.setWallSelection(['x', 'y']);
+  ok(sel.getWallSelection() === s1, 'selection: writing the SAME ids does not publish a new reference');
+  sel.setWallSelection(['z'], 'add');
+  ok(sel.getWallSelection() !== s1 && sel.getWallSelection().size === 3, 'selection: a real change publishes a new reference');
+  sel.setWallSelection(['x'], 'subtract');
+  ok(sel.getWallSelection().size === 2 && !sel.getWallSelection().has('x'), 'subtract removes');
+  sel.toggleWallSelected('y');
+  ok(!sel.getWallSelection().has('y'), 'toggle removes one that is in');
+  sel.toggleWallSelected('y');
+  ok(sel.getWallSelection().has('y'), 'and adds one that is out');
+  sel.clearWallSelection();
+  ok(sel.getWallSelection().size === 0, 'clear empties it');
 }
 
 console.log('[8] fileFavientInto: one rule for every drop target');

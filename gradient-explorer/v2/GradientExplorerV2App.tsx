@@ -54,6 +54,7 @@ import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot 
 import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store/favientsStore';
 import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary, isGradientFileName } from '../../palette/core/importGradientFiles';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
+import { getWallSelection, clearWallSelection } from '../../palette/store/wallSelection';
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
 import { useImageDrop } from '../../palette/components/useImageDrop';
@@ -315,12 +316,16 @@ export const GradientExplorerV2App: React.FC = () => {
     else imageFileRef.current?.click();
   }, [openTray]);
 
-  // Esc order (Phase C, L6): popover → the open tray face (the inspector closes by clearing
-  // the stop selection, which the hero does when the face leaves) → an armed slot.
+  // Esc order (Phase C, L6): popover → a wall selection → the open tray face (the inspector
+  // closes by clearing the stop selection, which the hero does when the face leaves) → an
+  // armed slot.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (mineOpen) { setMineOpen(false); return; }
+      // A wall selection is the nearest thing to a popover: it is a held state you can be
+      // stuck in, and it must let go before Esc starts closing faces.
+      if (getWallSelection().size) { clearWallSelection(); return; }
       if (trayRef.current) { openTray(null); return; }
       if (getArmedSlot()) armSlot(null);
     };

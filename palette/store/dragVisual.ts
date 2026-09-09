@@ -37,18 +37,27 @@ export const getDragOrigin = (): DragRect | null => origin;
 // nothing did — so every gradient drag in that shell was invisible while in flight, which
 // reads as "dragging does not work" (owner, testing the live shell).
 
-let dragPayload: { config: unknown; name?: string } | null = null;
+export interface DragPayloadPeek {
+  config: unknown;
+  name?: string;
+  /** Set only when an EXISTING favourite is in flight — what makes it removable. */
+  favId?: string;
+  /** How many gradients are in flight (a multi-drag); absent or 1 for the usual case. */
+  count?: number;
+}
+
+let dragPayload: DragPayloadPeek | null = null;
 
 /** What is in flight (call from `setFavientDrag`). null to clear. */
-export const setDragPayload = (p: { config: unknown; name?: string } | null): void => {
+export const setDragPayload = (p: DragPayloadPeek | null): void => {
   dragPayload = p;
   listeners.forEach((l) => l());
 };
 
-export const getDragPayload = (): { config: unknown; name?: string } | null => dragPayload;
+export const getDragPayload = (): DragPayloadPeek | null => dragPayload;
 
 /** Subscribe to what is being dragged (null between drags). */
-export const useDragPayload = (): { config: unknown; name?: string } | null =>
+export const useDragPayload = (): DragPayloadPeek | null =>
   useSyncExternalStore(subscribe, () => dragPayload, () => dragPayload);
 
 // --- Landing — the reverse of the take-off morph: when a gradient is APPLIED to a target,
