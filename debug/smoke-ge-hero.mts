@@ -13,10 +13,22 @@
  *       opens, the source does NOT switch, the hero and its ramp are untouched (L8's
  *       empty-source band is now reachable only by a drop that fails to decode)
  *   [4] Escape — the hero is still there
+ *   [5] the EXPORT window's two subjects (§8b item 5, 2026-09-09): Ramp + Swatches,
+ *       opening on Ramp, and Swatches narrowing the offer to the formats that have a
+ *       swatch form — the format list is the registry seen through `formatsFor`, so a
+ *       subject control that only painted itself would leave the offer unchanged
  *
  * Falsified 2026-09-06 by re-introducing the old hide (`if (!shown) return null` →
  * `if (emptySource) return null`): step [3] goes red with "the hero unmounted on an empty
  * Image source (L8)". Wants `npm run dev` on port 3400, like every other browser smoke.
+ *
+ * Step [5] falsified 2026-09-09 two ways, each reverted: pinning `formatsFor('ramp')` in
+ * ExportMenu whatever the subject is (red with "the Swatches subject offers the same
+ * formats as Ramp (20 vs 20) — the subject is decorative"), and dropping the subject from
+ * the image row's wording (red with "should be the swatch sheet (png-strip)"). The first
+ * cut of [5] keyed the format list off each Download button's TITLE and reported a false
+ * red: .css is the extension of two formats now (the linear-gradient and the variable set),
+ * so it read cssvars as css. It keys off the registry key instead.
  *
  * Run: `npm run smoke:ge-hero`.
  */
@@ -97,13 +109,64 @@ async function main() {
   if (!s.present) fail('[4] Escape unmounted the hero');
   console.log('✓ [4] Escape leaves the hero standing');
 
+  // [5] THE EXPORT WINDOW'S TWO SUBJECTS (§8b item 5). The window is one surface over the
+  // ramp and the palette; the format list is not a filter written here but the registry
+  // seen through `formatsFor`, so the assertion is that switching the subject actually
+  // CHANGES the offer — a subject control that only painted itself would look identical.
+  // Falsified by passing 'ramp' to `formatsFor` in ExportMenu whatever the subject is:
+  // red with "the Swatches subject offers the same formats as Ramp".
+  await page.click('[title^="Export"]');
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[5] the Export window did not open'));
+  const readWindow = () =>
+    page.evaluate(() => {
+      const w = document.querySelector('[data-gx-export]') as HTMLElement | null;
+      if (!w) return null;
+      const seg = w.querySelector('[data-gx-export-subject]');
+      return {
+        subjects: Array.from(seg?.querySelectorAll('[data-gx-subject]') ?? []).map((b) => (b as HTMLElement).dataset.gxSubject ?? ''),
+        on: (seg?.querySelector('[data-gx-subject][data-on]') as HTMLElement | null)?.dataset.gxSubject ?? null,
+        // one row per offered format, keyed by the REGISTRY key rather than by the
+        // download title: two formats can share an extension (.css is both the
+        // linear-gradient and the variable set), and a title test cannot tell them apart.
+        formats: Array.from(w.querySelectorAll('[data-gx-format]')).map((e) => (e as HTMLElement).dataset.gxFormat ?? ''),
+        image: w.innerText.includes('Swatch sheet') ? 'swatch-sheet' : w.innerText.includes('PNG strip') ? 'png-strip' : 'other',
+      };
+    });
+  const ramp = await readWindow();
+  if (!ramp) fail('[5] the Export window vanished');
+  if (ramp!.subjects.join(',') !== 'ramp,swatches') fail(`[5] the subject control is not Ramp + Swatches (${ramp!.subjects.join(',')})`);
+  if (ramp!.on !== 'ramp') fail(`[5] the window should open on the Ramp subject (${ramp!.on})`);
+  if (!ramp!.formats.length) fail('[5] the Ramp subject offered no formats at all');
+  if (ramp!.image !== 'png-strip') fail(`[5] the Ramp subject's image row should be the PNG strip (${ramp!.image})`);
+
+  await page.click('[data-gx-subject="swatches"]');
+  await page.waitForTimeout(250);
+  const sw = await readWindow();
+  if (sw!.on !== 'swatches') fail('[5] the Swatches segment did not take');
+  if (!sw!.formats.length) fail('[5] the Swatches subject offered no formats at all');
+  if (sw!.formats.length >= ramp!.formats.length)
+    fail(`[5] the Swatches subject offers the same formats as Ramp (${sw!.formats.length} vs ${ramp!.formats.length}) — the subject is decorative`);
+  // The ramp-only formats must be GONE, not merely fewer: a CSS linear-gradient of seven
+  // colours is not a palette, and .ase must be there, because it is the reason a designer
+  // opens this at all.
+  const rampOnly = ['css', 'svg', 'ggr', 'cpt', 'map', 'ugr', 'grd', 'ai', 'idml'].filter((k) => sw!.formats.includes(k));
+  if (rampOnly.length) fail(`[5] ramp-only formats are still offered under Swatches: ${rampOnly.join(', ')}`);
+  for (const k of ['ase', 'gpl', 'hex', 'tw', 'tokens', 'cssvars'])
+    if (!sw!.formats.includes(k)) fail(`[5] ${k} is missing from the Swatches subject`);
+  if (!ramp!.formats.includes('css') || !ramp!.formats.includes('ggr')) fail('[5] the Ramp subject lost a ramp format');
+  if (sw!.image !== 'swatch-sheet') fail(`[5] the Swatches subject's image row should be the swatch sheet (${sw!.image})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  if (await page.$('[data-gx-export]')) fail('[5] Escape did not close the Export window');
+  console.log('✓ [5] one export window, two subjects: Swatches narrows the offer and changes the image row');
+
   await browser.close();
   if (errors.length) {
     errors.forEach((e) => console.log(e));
     console.log('\nFAIL — page errors');
     process.exit(1);
   }
-  console.log('\nPASS — the hero never unmounts (L8)');
+  console.log('\nPASS — the hero never unmounts (L8); one export window, two subjects');
 }
 
 main().catch((e) => {

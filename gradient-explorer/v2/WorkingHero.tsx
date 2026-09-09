@@ -279,6 +279,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     return favients.find((f) => !isRecentGroup(f.group) && favientSig(f.config) === sig) ?? null;
   }, [favients, config, derived.config]);
   const paletteHex = useMemo(() => derived.palette.map((s) => hexOf(s.color)), [derived.palette]);
+  /** The swatch row as colours — what an export's SWATCHES subject takes (§8b item 5). */
+  const paletteRgb = useMemo(() => derived.palette.map((s) => s.color), [derived.palette]);
 
   // L9 — before the first pick there is no hero at all; that state is unchanged.
   if (!shown) return null;
@@ -434,7 +436,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               <Act icon onClick={onShare} title="Share — copy a link that opens this gradient">
                 <Icon name="share" size={15} />
               </Act>
-              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} />
+              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} palette={paletteRgb} />
               {/* Wallpaper is the door OUT of the shell — "a whole other world inside the
                   app" (Phase W) — so alone among the use icons it carries a surface of its
                   own: a brushed sheen, quiet enough to sit in the header row and bright
@@ -674,7 +676,7 @@ const HalfHint: React.FC<{ className?: string; children: React.ReactNode }> = ({
  * flyout is `fixed`, measured off the button, because everything inside the card is
  * clipped by it.
  */
-const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string }> = ({ open, onOpen, ramp, name }) => {
+const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string; palette: RGB[] }> = ({ open, onOpen, ramp, name, palette }) => {
   const recents = useRecentExports();
   const [hover, setHover] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -704,7 +706,7 @@ const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; n
               type="button"
               className="text-left text-[13px] text-fg px-2 py-1 rounded-lg hover:bg-line/10 whitespace-nowrap"
               onClick={() => {
-                runExport(a, ramp, name);
+                runExport(a, ramp, name, palette);
                 setHover(false);
               }}
             >

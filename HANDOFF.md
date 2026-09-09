@@ -18,6 +18,42 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-09 (session 4) — §8b item 5: ONE export window, two axes.** The last open
+item in the live-testing queue. Every export in the app is now a cell in a 2×2: *what* is
+taken — the RAMP (the continuous gradient) or the SWATCHES (the palette composed on the hero)
+— crossed with *how many* — this one, or a whole set. That covers the three nouns the item
+names (a gradient, a palette, a set) and hands back the fourth, a set's palettes, for free.
+
+**What unlocked it:** the suite had ONE subject shape, a 256-step ramp, and every format was
+written against it — which is why a GIMP *palette* export emitted 256 entries and Paint.NET 96.
+The palette face already existed on the hero and is exactly what those formats want, so "a
+palette" was never a third noun needing a third window.
+
+- **`ExportFormatDef` gained `swatches?`** beside `build`, and `formatsFor(subject)` is the one
+  place the offer is decided — a format appears under Swatches iff it has that builder. The
+  registry's shape is the filter; there is no second list in the window to drift from it.
+- **`build` stayed required and unchanged.** The old shell's Extras panels (still what GMT
+  reaches) call it unconditionally, and `test:palette-importformats` re-parses .gpl / .map /
+  .ggr / .cpt / .json from their 256-entry ramp form. A "replace the builder per subject"
+  design would have broken both.
+- **Four swatch-native formats**, which also closes Phase G's S5 line: **.ase** (Adobe Swatch
+  Exchange), **Tailwind**, **design tokens (W3C DTCG)** and **CSS variables**. `.ase` is the
+  only swatches format that BUNDLES a set into one file, because grouping is part of that
+  format. `.ase` also now carries the lossy notice `.ai` does — it reduces at the same 40-stop
+  budget and was warning-free.
+- **The set grew the same two faces**, plus a swatch sheet (the palette as labelled hex chips).
+  OD2 answered: the contact sheet stays, as the RAMP subject's image row.
+- **Two layout defects found by measuring:** `Floating` is a flex column that scrolls, and
+  `flex-shrink: 1` squashed its children once the content passed `max-h` (the subject segments
+  came out **2 px tall**); and `max-h-[70vh]` was a ceiling on the wrong number — the set
+  window ran **66 px past the bottom edge** with no way to reach its last rows. Both fixed.
+
+Guards: `npm run test:palette-exportsubjects` (seven sections, falsified seven ways; its heart
+is an .ase READER independent of the writer, which catches both classic block-layout bugs) and
+`smoke:ge-hero` step [5], falsified two ways. Full write-up: the status block under item 5 in
+[`plans/ge-v2-unified-shell-plan.md`](./plans/ge-v2-unified-shell-plan.md) §8b, plus a §10 entry.
+**What is left of the GE v2 plan: Phase F (phone) and Phase G (parity + the entry-point swap).**
+
 **📋 2026-09-09 (session 4) — §8b item 9: a click on the wall deselects a knot.** From the
 owner's testing: "deselecting a knot should be easier — ie when clicking on the wall". Escape was
 the ONLY way out. The stops editor's own click-away needs container area outside the knot track,

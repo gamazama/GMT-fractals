@@ -977,7 +977,7 @@ are where to START reading, not necessarily where the change lands.
 > | 2 | Minimap: lens spans the SELECTED region with the band's edges extended right to the bar; edges at 50 %; the band is now the SCROLL POSITION mapped into the reachable span, not a lightness range; field + strip chroma raised to sRGB's 0.32; empty-state text moved onto the map. | `npm run test:palette-lensband` |
 > | 3 | First-run brightness dialogue, live-previewing behind a transparent backdrop. Also fixes the silent seed OVERRIDING an app-gmt user's brightness on first v2 boot. | `npm run test:ge-first-run` |
 > | 4 | — not started (the migration audit's subject) | |
-> | 5 | — not started (design job first) | |
+> | 5 | Shipped in session 4 (2026-09-09) — see the block under item 5 below | `npm run test:palette-exportsubjects`, `smoke:ge-hero` [5] |
 > | 6 | `.gx-metal`: the Wallpaper sheen mixed from the scheme's ink + ground, so it inverts to a gunmetal on a light interface. Glyph measured 77 on dark, 236 on light. | — |
 > | 7 | The out-of-bounds veil is a wash of ink, not `rgba(0,0,0,0.6)`. Fixed for every graph editor in the suite, not just Curves. | `npm run test:theme-scrim` |
 > | 8 | The source image shows faithfully and large while the eyedropper is open — it samples what is painted. Transition skipped so a fast click cannot sample a half-grey pixel. | `npm run test:eyedropper` |
@@ -1003,7 +1003,8 @@ are where to START reading, not necessarily where the change lands.
 >    on purpose is a guess about a guard.
 >
 > **Still open in this queue:** items 4 and 5, which are the migration audit's subject and
-> want reading rather than re-deriving. Item 8's visual half wants the owner's walk with an
+> want reading rather than re-deriving. (Both are closed as of session 4, 2026-09-09; this
+> paragraph is left as written, per the append-only habit.) Item 8's visual half wants the owner's walk with an
 > image loaded — a native EyeDropper needs a user gesture and cannot be driven headlessly.
 
 > **Status 2026-09-09 (session 3): item 4 — the "more" panel's features belong in the wall.**
@@ -1454,6 +1455,7 @@ are where to START reading, not necessarily where the change lands.
 >    is a performance bug that looks like nothing at all.
 >
 > **Still open:** item 5 of §8b (one unified export — a design job, with the set leg built).
+> **Closed in session 4, 2026-09-09** — see the status block under item 5.
 > From the re-audit and not built: the panel's own list view has no equivalent on the ground
 > (deliberate — the wall draws bars, and the panel is where names live); the wall's
 > `keptIds` carve remains catalogue-only; and app-gmt has not opted into `keyboard`.
@@ -1492,6 +1494,81 @@ are where to START reading, not necessarily where the change lands.
    surface. The audit's OD2 (does the contact sheet stay) and its "whole-set export" item are
    part of this, and `membersOf` in `palette/core/groundSets.ts` is the one-line substitution
    that makes a set exportable.
+
+   > **Shipped 2026-09-09 (session 4). ONE WINDOW, TWO AXES.** The design job resolved into
+   > this: every export in the app is a cell in a 2×2. *What* is taken — the **RAMP** (the
+   > continuous gradient) or the **SWATCHES** (the palette composed on the hero) — crossed
+   > with *how many* — this one, or a whole set. That covers the three nouns this item names
+   > and hands back the fourth, a set's palettes, for free.
+   >
+   > **The observation that unlocked it.** The suite had ONE subject shape — a 256-step ramp —
+   > and every format was written against it. Which is why a GIMP *palette* export emitted 256
+   > entries and Paint.NET 96: formats that are really about a set of colours were being handed
+   > a continuous gradient and left to invent their own sampling. The palette face already
+   > existed on the hero (`PaletteRow`, `workingStore.positions`) and is exactly the input
+   > those formats want. So "a palette" was never a third noun needing a third window — it is
+   > the second face of the noun already there.
+   >
+   > | What shipped | Where |
+   > |---|---|
+   > | **The subject axis.** `ExportFormatDef` gained `swatches?: (colors, stem)` beside `build`, and `formatsFor(subject)` is the one place the offer is decided: a format appears under Swatches iff it carries that builder. **The registry's shape IS the filter** — there is no second list in the window to fall out of step with it. | `exportFormats.ts` |
+   > | **`build` stayed required, and stayed exactly what it was.** The old shell's Extras panels (`GeneratorExtrasPanel`, `ImageExtrasPanel` — still what GMT reaches) iterate the registry and call `.build` unconditionally, and `test:palette-importformats` re-parses .gpl / .map / .ggr / .cpt / .json from their 256-entry ramp form. Both would have broken under a "replace the builder per subject" design. `build` gained an optional `stem` so a Tailwind file downloaded as `ember.js` says `ember`, not `gradient`. | `exportFormats.ts` |
+   > | **Four swatch-native formats**, closing Phase G's S5 line: **`.ase`** (Adobe Swatch Exchange — the interchange every Adobe app reads, and the reason a designer opens this window at all), **Tailwind**, **design tokens (W3C DTCG)** and **CSS variables**. Each has both faces: the swatches form is the honest one, the ramp form samples it. At exactly eleven colours the three scale formats emit the idiomatic 50…950 keys; at any other count, 1…N. | `exportFormats.ts` |
+   > | **`.ase` is the only swatches format that BUNDLES** (`collectionSwatches`), because grouping is part of that format — a set of twenty palettes stays one file with twenty named folders in Illustrator's panel. Everything else zips, and the button says which. | `exportFormats.ts`, `favientsExport.ts` |
+   > | **The set grew the same two faces**: `setSwatches` / `buildSwatchZip` / `buildSwatchCollectionFile`, plus `buildSwatchSheet` — the palette as labelled hex chips, one row per gradient, which is the artefact people paste into a brief. It takes `NamedSwatches[]`, so one gradient and a whole set are the same drawing rather than two functions that will drift. | `favientsExport.ts` |
+   > | **OD2 answered: the contact sheet stays**, as the RAMP subject's image row. The swatch sheet is the SWATCHES subject's, not a replacement. | `ExportMenu.tsx` |
+   > | **`.ase` now carries the lossy notice** `.ai` does. It reduces at the same 40-stop budget (`ASE_MAX` is defined as `AI_MAX` for exactly this reason) and was warning-free, which is the one thing that notice exists to prevent. | `favientsExport.ts` |
+   >
+   > **The one real asymmetry, stated so nobody re-derives it.** WHERE THE COUNT COMES FROM.
+   > For the working gradient the swatch row IS the control and it lives on the hero (L2), so
+   > the window exports it exactly as laid out and offers no count of its own — it says so in
+   > a caption and points back at the hero. A set has no composed row (it is other people's
+   > gradients), so it gets one stepper and the rule places them. Everything else about the
+   > two "how many" cases was already the same and stayed that way.
+   >
+   > **Two layout defects found by measuring rather than by looking.**
+   >
+   > 1. **The window was squashing its own children.** `Floating` is a flex COLUMN that
+   >    scrolls, and the default `flex-shrink: 1` means that once the content passes `max-h`
+   >    every child is compressed instead of the box scrolling. Measured: the new subject
+   >    segments came out **2 px tall** — their two borders — with the 28 px buttons clipped by
+   >    their own `overflow-hidden` and the group headers below painting over where they
+   >    should have been. `[&>*]:shrink-0`. It was latent before this change; taller content
+   >    is what made it show.
+   > 2. **`max-h-[70vh]` was a ceiling on the wrong number.** Both call sites position the
+   >    window absolutely inside a container the page has already pushed down. Measured with
+   >    the set window at y=345 in a 930 px viewport: 70vh ran it **66 px past the bottom
+   >    edge**, with no way to reach the last rows. The ceiling is measured from the window's
+   >    own top now.
+   >
+   > **Guards.** `npm run test:palette-exportsubjects` (`debug/test-palette-exportsubjects.mts`,
+   > a link of `test:palette`) — seven sections, falsified seven ways. Its heart is an **.ase
+   > READER written against the published block layout and independent of the writer**: it
+   > walks by the declared lengths, so a name length that omits its null terminator (how
+   > nearly every hand-rolled .ase writer gets it wrong) or a block length that counts its own
+   > header desynchronises it and the round trip fails. Both were tried and both went red.
+   > Plus `smoke:ge-hero` step [5] for the window itself, falsified two ways.
+   >
+   > **Two things worth carrying forward.**
+   >
+   > 1. **A refusal has to be a returned null, and a throw is a different failure.** [7]'s
+   >    first cut asserted only "not null". Under the mutation it was written for, the
+   >    fallback died indexing a three-colour "ramp" at 255, so the run exploded with a stack
+   >    trace at whatever line came next instead of naming the defect. A harness that reports
+   >    the right break in the wrong words is one rewrite away from being read as a flake.
+   > 2. **A test keyed on a user-facing string breaks when the strings collide.** [5]'s first
+   >    cut read the offered formats off each Download button's TITLE and reported a FALSE
+   >    red: `.css` is now the extension of two formats (the linear-gradient and the variable
+   >    set), so it read `cssvars` as `css`. It keys off the registry key via `data-gx-format`
+   >    instead. The collision itself is fine — the files differ by name (`-swatches`).
+   >
+   > **Left undone, deliberately:** §5.8's "default is remembered" (neither the format nor the
+   > subject persists across opens — the recents flyout is the existing answer to repetition,
+   > and it now remembers the subject too); a set × swatches export applies `even` placement
+   > rather than offering the hero's three rules; and `.ugr`'s silent reduction keeps its
+   > standing `@assumption` in `collectionQualityWarnings` — its 64-stop budget still needs a
+   > per-format threshold threaded through before it can warn honestly.
+
 
 6. **The Wallpaper icon's silver must follow the theme.** Mine, from W.1: the sheen and its
    pinned-dark glyph are hard-coded hexes in `gradient-explorer/v2/WorkingHero.tsx` (grep
@@ -1791,3 +1868,27 @@ phase now carries**. Items move out of this list only when a later phase's entry
   like a product regression — the spline smoke spent two runs "failing" on a picture that was
   simply the untouched default curve. Both smokes now name the hazard in the failure text.
   Restart the dev server after editing either.
+- 2026-09-09 · session 4 (§8b item 9, then item 5). **In scope, left undone:** §5.8's "default
+  is remembered" — neither the export format nor the subject persists across opens; the recents
+  flyout is the standing answer to repetition and it now remembers the subject, so this may be
+  the whole answer, but nobody has decided. A set × swatches export always uses `even`
+  placement — the hero's three rules (Even / Perceptual / Stops) are not offered for a set, and
+  Perceptual would arguably be the better default for a palette taken from a gradient nobody
+  laid out. `.ugr` still reduces silently: its `@assumption` in `collectionQualityWarnings`
+  stands, and it now sits beside three formats that DO warn, which makes the gap more visible
+  rather than less. The swatch sheet's palette layout is one row per gradient with no wrapping,
+  so a set of sixty at seven swatches is a very tall PNG — fine for the working gradient, worth
+  looking at for a big set. **Noticed outside scope:** the editor's prop-sync effect (grep
+  `justEmittedRef` in `AdvancedGradientEditor.tsx`) never clears `selectedIds` when the incoming
+  stops are a DIFFERENT gradient, and `selectionCount` is the raw set size while `selectedNodes`
+  is filtered against the live knots — so a wholesale swap with a stop selected leaves the
+  inspector face open over an empty inspector. Item 9's ground click-away can no longer reach
+  it; a swap driven from inside the hero still could, and nobody has found that path. The old
+  shell's Extras panels tell you a binary format is binary by quoting `grdStopCount` whatever
+  the format is — harmless, wrong for `.idml` before this session and now wrong for `.ase` too.
+  Two formats share the `.css` extension now (the linear-gradient and the variable set); the
+  downloads differ by name (`-swatches`) but the extension no longer identifies the format, and
+  anything keying off it will be wrong — a test already was. **What the next session carries:**
+  Phase F (phone) and Phase G (parity + the entry-point swap) are what is left of the plan.
+  Phase F should measure the boot cost of the two licensed packs on a real phone (~8,000 extra
+  entries, 11,131 total, carried since Phase A iteration 2) before anything else.

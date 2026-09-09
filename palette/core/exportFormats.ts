@@ -21,17 +21,44 @@ import { buildIdmlSwatchLibrary } from './indesignIdml';
 export interface ExportFormatDef {
   key: string;
   label: string;
+  /** What to call this format under the SWATCHES subject, when the ramp wording is wrong
+   *  for it ("Hex list (256)" is a ramp fact). Falls back to `label`. */
+  swatchLabel?: string;
   ext: string;
   /** Binary formats return a Uint8Array (download only — Copy is disabled). */
   binary?: boolean;
-  build: (ramp: RGB[]) => string | Uint8Array;
+  /** The RAMP subject: the continuous 256-step gradient. `stem` is the gradient's name,
+   *  for formats that name what they write; older builders ignore it. */
+  build: (ramp: RGB[], stem?: string) => string | Uint8Array;
   /**
    * Collection formats can bundle MANY named gradients into ONE file (e.g. an
    * Illustrator swatch library). When present, the Favients export emits a single
    * combined file instead of a per-gradient .zip.
    */
   collection?: (items: { name: string; ramp: RGB[] }[]) => string | Uint8Array;
+  /**
+   * The SWATCHES subject: build this format from a LIST OF COLOURS — the palette the
+   * user composed on the hero — rather than from the 256-step ramp. Absent means the
+   * format is about a continuous gradient and does not appear under that subject; the
+   * registry's shape is the filter, so there is no second list to keep in step.
+   * `stem` is the gradient's name, for formats that name their entries.
+   */
+  swatches?: (colors: RGB[], stem: string) => string | Uint8Array;
+  /**
+   * Many named colour LISTS in one file (the swatches counterpart of `collection`).
+   * Only .ase implements it — grouping is part of that format, so a whole set stays
+   * one file with a named folder per gradient. Everything else zips.
+   */
+  collectionSwatches?: (items: { name: string; colors: RGB[] }[]) => string | Uint8Array;
 }
+
+/** Which face of a gradient an export is taken from (§8b item 5, 2026-09-09). */
+export type ExportSubject = 'ramp' | 'swatches';
+
+/** The formats that can serve `subject`. Under 'swatches' this is the registry filtered
+ *  to entries carrying a `swatches` builder — the single place that decision is made. */
+export const formatsFor = (subject: ExportSubject): ExportFormatDef[] =>
+  subject === 'ramp' ? EXPORT_FORMATS : EXPORT_FORMATS.filter((f) => !!f.swatches);
 
 const ri = (c: RGB): [number, number, number] => [Math.round(c.r), Math.round(c.g), Math.round(c.b)];
 const hx2 = (c: [number, number, number]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -370,6 +397,188 @@ const buildUgr = (items: { name: string; ramp: RGB[] }[]): string => {
   return blocks.join('\n\n') + '\n';
 };
 
+// ---- the SWATCHES subject: a list of colours, not a ramp ----
+//
+// A gradient has two faces, and until 2026-09-09 the export suite only knew one of them.
+// Every builder above takes the 256-step RAMP. But the hero also carries a PALETTE — the
+// handful of swatches the user actually placed along that ramp (`palette/core/
+// paletteSample.ts`, `workingStore.positions`) — and for a whole family of formats THAT is
+// the natural input: a GIMP palette wants your seven colours, not 256 samples of them; so
+// does a Tailwind scale, a design-token file, an .ase library.
+//
+// So a format may declare a second builder, `swatches`. It is not a replacement: `build`
+// keeps its exact meaning and its round-trip guard (`test:palette-importformats` re-parses
+// .gpl and friends from their 256-entry ramp form). A format with no `swatches` builder
+// simply does not appear under the Swatches subject — the registry's shape IS the filter,
+// so there is no second list to keep in step.
+//
+// @invariant every EXPORT_FORMATS entry still has a `build`, so the old shell's Extras
+//   panels (palette/components/GeneratorExtrasPanel.tsx + ImageExtrasPanel.tsx, which
+//   iterate the registry and call `.build` unconditionally) cannot meet a format they
+//   choke on — proven by: `npx tsx debug/test-palette-exportsubjects.mts`
+//   ("[1] every registry format still builds from a 256-step ramp").
+
+/** A Tailwind-shaped scale's step count, and its step names. */
+/** The .ase stop budget — the same 40 the .grd / .ai reductions use, so an .ase and an .ai
+ *  of the same gradient agree on which colours matter. */
+const ASE_MAX = AI_MAX;
+
+const SCALE_STEPS = 11;
+const SCALE_KEYS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+
+/** Sample a colour list down to `n` evenly spaced entries (a ramp's swatch form). */
+const rampToSwatches = (r: RGB[], n: number): RGB[] =>
+  Array.from({ length: n }, (_, k) => r[Math.round((k / (n - 1)) * (r.length - 1))]);
+
+/** A CSS/JS-safe identifier stem from a gradient name. */
+const identOf = (name: string): string =>
+  (name || 'gradient').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'gradient';
+
+/** Step names for a colour list: a Tailwind-style 50…950 scale at exactly SCALE_STEPS,
+ *  plain 1-based indices otherwise. Keeps the eleven-colour case idiomatic without
+ *  pretending an arbitrary count is a scale. */
+const stepNames = (n: number): string[] =>
+  n === SCALE_STEPS ? SCALE_KEYS.map(String) : Array.from({ length: n }, (_, i) => String(i + 1));
+
+// ---- Adobe Swatch Exchange (.ase) ----
+//
+// The interchange every Adobe app and most third-party colour tools read. Binary,
+// big-endian:
+//
+//   "ASEF" | u16 major=1 | u16 minor=0 | u32 blockCount
+//   block: u16 type | u32 length (bytes AFTER this field) | payload
+//     type 0x0001 = colour entry, 0xC001 = group start, 0xC002 = group end
+//     colour entry payload: u16 nameLen (UTF-16 units INCLUDING the null terminator)
+//                           | name as UTF-16BE + U+0000 | 4 ASCII colour-model bytes
+//                           | model floats (RGB = 3 × f32, 0..1) | u16 colour type
+//     group start payload:  the same name fields, nothing else
+//     group end payload:    empty (length 0)
+//
+// The declared name length counts UTF-16 CODE UNITS — not bytes and not code points — so a
+// name carrying an emoji contributes 2. Iterating with `charCodeAt` is deliberate for that
+// reason; `Array.from` would undercount a surrogate pair and shift every following block.
+
+const aseNameUnits = (s: string): number[] => {
+  const out: number[] = [];
+  for (let i = 0; i < s.length; i++) out.push(s.charCodeAt(i));
+  out.push(0); // the terminating null is part of the declared length
+  return out;
+};
+
+interface AseBlock {
+  type: number;
+  name?: string;
+  color?: RGB;
+}
+
+const buildAseBlocks = (blocks: AseBlock[]): Uint8Array => {
+  const bodies = blocks.map((b) => {
+    if (b.type === 0xc002) return new Uint8Array(0);
+    const units = aseNameUnits(b.name ?? '');
+    const extra = b.color ? 4 + 12 + 2 : 0;
+    const buf = new DataView(new ArrayBuffer(2 + units.length * 2 + extra));
+    let p = 0;
+    buf.setUint16(p, units.length, false);
+    p += 2;
+    for (const u of units) {
+      buf.setUint16(p, u, false);
+      p += 2;
+    }
+    if (b.color) {
+      for (const ch of 'RGB ') {
+        buf.setUint8(p, ch.charCodeAt(0));
+        p += 1;
+      }
+      const ch01 = (v: number) => Math.min(1, Math.max(0, Math.round(v) / 255));
+      buf.setFloat32(p, ch01(b.color.r), false);
+      p += 4;
+      buf.setFloat32(p, ch01(b.color.g), false);
+      p += 4;
+      buf.setFloat32(p, ch01(b.color.b), false);
+      p += 4;
+      buf.setUint16(p, 2, false); // 2 = normal (not global, not spot)
+    }
+    return new Uint8Array(buf.buffer);
+  });
+  const total = 12 + bodies.reduce((a, b) => a + 6 + b.length, 0);
+  const out = new Uint8Array(total);
+  const dv = new DataView(out.buffer);
+  let p = 0;
+  for (const ch of 'ASEF') {
+    dv.setUint8(p, ch.charCodeAt(0));
+    p += 1;
+  }
+  dv.setUint16(p, 1, false);
+  p += 2;
+  dv.setUint16(p, 0, false);
+  p += 2;
+  dv.setUint32(p, blocks.length, false);
+  p += 4;
+  blocks.forEach((b, i) => {
+    dv.setUint16(p, b.type, false);
+    p += 2;
+    dv.setUint32(p, bodies[i].length, false);
+    p += 4;
+    out.set(bodies[i], p);
+    p += bodies[i].length;
+  });
+  return out;
+};
+
+/** One flat .ase of `colors`, each named "<stem> <step>". */
+export const buildAse = (colors: RGB[], stem = 'gradient'): Uint8Array =>
+  buildAseBlocks(colors.map((c, i) => ({ type: 0x0001, name: `${stem} ${stepNames(colors.length)[i]}`, color: c })));
+
+/** One .ase holding a GROUP per named colour list — what a whole set exports to. This is
+ *  why .ase is the only swatches format that bundles rather than zipping: grouping is IN
+ *  the format, so twenty palettes stay twenty named folders in Illustrator's panel. */
+export const buildAseGroups = (items: { name: string; colors: RGB[] }[]): Uint8Array => {
+  const seen = new Map<string, number>();
+  const blocks: AseBlock[] = [];
+  for (const it of items) {
+    const base = it.name || 'gradient';
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    const label = n ? `${base} ${n + 1}` : base;
+    const names = stepNames(it.colors.length);
+    blocks.push({ type: 0xc001, name: label });
+    it.colors.forEach((c, i) => blocks.push({ type: 0x0001, name: `${label} ${names[i]}`, color: c }));
+    blocks.push({ type: 0xc002 });
+  }
+  return buildAseBlocks(blocks);
+};
+
+// ---- text formats over a colour list ----
+
+const hexList = (colors: RGB[]): string[] => colors.map((c) => hx2(ri(c)));
+
+/** Tailwind: a `theme.extend.colors` fragment. Eleven colours become a real 50…950 scale. */
+const buildTailwind = (colors: RGB[], stem = 'gradient'): string =>
+  '// tailwind.config.js — theme.extend.colors\n' +
+  `${JSON.stringify(identOf(stem))}: {\n` +
+  stepNames(colors.length)
+    .map((n, i) => `  ${JSON.stringify(n)}: ${JSON.stringify(hexList(colors)[i])},`)
+    .join('\n') +
+  '\n},\n';
+
+/** W3C design tokens (the DTCG draft shape: `$value` + `$type`). */
+const buildTokens = (colors: RGB[], stem = 'gradient'): string => {
+  const names = stepNames(colors.length);
+  const hx = hexList(colors);
+  const body: Record<string, { $value: string; $type: string }> = {};
+  names.forEach((n, i) => {
+    body[n] = { $value: hx[i], $type: 'color' };
+  });
+  return JSON.stringify({ [identOf(stem)]: body }, null, 2);
+};
+
+/** CSS custom properties on `:root`. */
+const buildCssVars = (colors: RGB[], stem = 'gradient'): string => {
+  const id = identOf(stem);
+  const hx = hexList(colors);
+  return ':root {\n' + stepNames(colors.length).map((n, i) => `  --${id}-${n}: ${hx[i]};`).join('\n') + '\n}\n';
+};
+
 // ---- the suite ----
 
 export const EXPORT_FORMATS: ExportFormatDef[] = [
@@ -379,7 +588,14 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     ext: 'map',
     build: (r) => seq((i) => ri(r[i]).map((v) => String(v).padStart(3, ' ')).join(' ')).join('\n'),
   },
-  { key: 'hex', label: 'Hex list (256)', ext: 'txt', build: (r) => seq((i) => hx2(ri(r[i]))).join('\n') },
+  {
+    key: 'hex',
+    label: 'Hex list (256)',
+    swatchLabel: 'Hex list',
+    ext: 'txt',
+    build: (r) => seq((i) => hx2(ri(r[i]))).join('\n'),
+    swatches: (c) => hexList(c).join('\n'),
+  },
   {
     key: 'css',
     label: 'CSS linear-gradient',
@@ -398,15 +614,47 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
       reduceStopIndices(r, SVG_MAX).map((i) => '<stop offset="' + ((i / 255) * 100).toFixed(1) + '%" stop-color="' + hx2(ri(r[i])) + '"/>').join('') +
       '</linearGradient></defs><rect width="256" height="32" fill="url(#g)"/></svg>',
   },
-  { key: 'json', label: 'JSON', ext: 'json', build: (r) => JSON.stringify({ name: 'gradient', colors: seq((i) => hx2(ri(r[i]))) }) },
-  { key: 'js', label: 'JS array (rgb)', ext: 'js', build: (r) => 'const gradient = ' + JSON.stringify(seq((i) => ri(r[i]))) + ';' },
-  { key: 'py', label: 'Python list', ext: 'py', build: (r) => 'gradient = [' + seq((i) => '(' + ri(r[i]).join(', ') + ')').join(', ') + ']' },
-  { key: 'csv', label: 'CSV', ext: 'csv', build: (r) => 'r,g,b\n' + seq((i) => ri(r[i]).join(',')).join('\n') },
+  {
+    key: 'json',
+    label: 'JSON',
+    ext: 'json',
+    build: (r, stem) => JSON.stringify({ name: stem || 'gradient', colors: seq((i) => hx2(ri(r[i]))) }),
+    swatches: (c, stem) => JSON.stringify({ name: stem || 'gradient', colors: hexList(c) }, null, 2),
+  },
+  {
+    key: 'js',
+    label: 'JS array (rgb)',
+    swatchLabel: 'JS array (hex)',
+    ext: 'js',
+    build: (r) => 'const gradient = ' + JSON.stringify(seq((i) => ri(r[i]))) + ';',
+    swatches: (c) => 'const palette = ' + JSON.stringify(hexList(c)) + ';',
+  },
+  {
+    key: 'py',
+    label: 'Python list',
+    ext: 'py',
+    build: (r) => 'gradient = [' + seq((i) => '(' + ri(r[i]).join(', ') + ')').join(', ') + ']',
+    swatches: (c) => 'palette = [' + hexList(c).map((h) => JSON.stringify(h)).join(', ') + ']',
+  },
+  {
+    key: 'csv',
+    label: 'CSV',
+    ext: 'csv',
+    build: (r) => 'r,g,b\n' + seq((i) => ri(r[i]).join(',')).join('\n'),
+    swatches: (c) => 'name,hex,r,g,b\n' + c.map((x, i) => [stepNames(c.length)[i], hx2(ri(x)), ...ri(x)].join(',')).join('\n'),
+  },
   {
     key: 'gpl',
     label: 'GIMP palette .gpl',
     ext: 'gpl',
     build: (r) => 'GIMP Palette\nName: gradient\nColumns: 16\n#\n' + seq((i) => ri(r[i]).map((v) => String(v).padStart(3, ' ')).join(' ') + '\tc' + i).join('\n'),
+    swatches: (c, stem) =>
+      'GIMP Palette\nName: ' +
+      (stem || 'gradient') +
+      '\nColumns: ' +
+      Math.min(16, c.length) +
+      '\n#\n' +
+      c.map((x, i) => ri(x).map((v) => String(v).padStart(3, ' ')).join(' ') + '\t' + stepNames(c.length)[i]).join('\n'),
   },
   {
     key: 'ggr',
@@ -439,6 +687,8 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     build: (r) =>
       '; paint.net Palette File\n' +
       Array.from({ length: 96 }, (_, k) => 'FF' + ri(r[Math.round((k / 95) * 255)]).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
+    swatches: (c) =>
+      '; paint.net Palette File\n' + c.map((x) => 'FF' + ri(x).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
   },
   { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r) => buildGRD(r) },
   {
@@ -462,6 +712,46 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     ext: 'ugr',
     build: (r) => buildUgr([{ name: 'gradient', ramp: r }]),
     collection: (items) => buildUgr(items),
+  },
+  // ---- swatch-native formats (S5 / §8b item 5, 2026-09-09) ----
+  //
+  // These four are ABOUT a list of colours, so their swatches builder is the honest one and
+  // their ramp builder is a sampling of it: .ase takes the ramp's key stops (the same RDP
+  // reduction .grd and .ai use, so an .ase of a gradient and an .ai of it agree on which
+  // colours matter), while the three scale formats take SCALE_STEPS even steps — eleven,
+  // because that is the shape Tailwind, token files and CSS variable sets are written in,
+  // and at exactly eleven `stepNames` gives the idiomatic 50…950 keys.
+  {
+    key: 'ase',
+    label: 'Adobe swatches .ase',
+    ext: 'ase',
+    binary: true,
+    build: (r, stem) => buildAse(reduceStopIndices(r, ASE_MAX).map((i) => r[i]), stem || 'gradient'),
+    swatches: (c, stem) => buildAse(c, stem || 'gradient'),
+    collection: (items) =>
+      buildAseGroups(items.map((it) => ({ name: it.name, colors: reduceStopIndices(it.ramp, ASE_MAX).map((i) => it.ramp[i]) }))),
+    collectionSwatches: (items) => buildAseGroups(items),
+  },
+  {
+    key: 'tw',
+    label: 'Tailwind colors',
+    ext: 'js',
+    build: (r, stem) => buildTailwind(rampToSwatches(r, SCALE_STEPS), stem || 'gradient'),
+    swatches: (c, stem) => buildTailwind(c, stem || 'gradient'),
+  },
+  {
+    key: 'tokens',
+    label: 'Design tokens (W3C)',
+    ext: 'json',
+    build: (r, stem) => buildTokens(rampToSwatches(r, SCALE_STEPS), stem || 'gradient'),
+    swatches: (c, stem) => buildTokens(c, stem || 'gradient'),
+  },
+  {
+    key: 'cssvars',
+    label: 'CSS variables',
+    ext: 'css',
+    build: (r, stem) => buildCssVars(rampToSwatches(r, SCALE_STEPS), stem || 'gradient'),
+    swatches: (c, stem) => buildCssVars(c, stem || 'gradient'),
   },
 ];
 

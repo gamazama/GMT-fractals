@@ -401,6 +401,7 @@ export const GradientExplorerV2App: React.FC = () => {
             <ExportMenu
               ramp={derived.ramp}
               name={derived.name}
+              palette={derived.palette.map((s) => s.color)}
               colorSpace={derived.config?.colorSpace}
               onColorSpace={(id) => {
                 // the profile is part of the stops document: editing it bakes first (as a

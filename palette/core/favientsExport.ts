@@ -13,6 +13,7 @@ import { zipSync, strToU8 } from 'fflate';
 import type { Favient } from '../store/favientsStore';
 import { renderStopsToRamp } from './gmtGradient';
 import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA } from './exportFormats';
+import { layoutPositions, swatchesAt, clampCount, type PaletteRule } from './paletteSample';
 import { canvasToPngBlob } from '../../utils/SceneFormat';
 import type { RGB } from './oklab';
 
@@ -57,8 +58,9 @@ export const buildCollectionFile = (
  * Quality warnings for a collection export: favourites that lose visible detail
  * under the format's stop limit. Empty for lossless / non-collection formats.
  *
- * Covers `.ai` and `.idml` only — both reduce at `AI_STOP_LIMIT`, so one `aiLossyGradients`
- * measurement is valid for both. `.ugr` is the THIRD collection format (added later) and is
+ * Covers `.ai`, `.idml` and `.ase` — all three reduce at the SAME budget (`ASE_MAX` is
+ * defined as `AI_MAX` for exactly this reason), so one `aiLossyGradients` measurement is
+ * valid for all of them. `.ugr` is the fourth collection format (added later) and is
  * also lossy — `exportFormats.ts` reduces it at `UGR_MAX_STOPS` (64) through the same
  * `reduceStopIndices` — but it returns no warnings here, because `aiLossyGradients` measures
  * error at the 40-stop budget and would over-report at 64. Warning on `.ugr` needs a
@@ -71,8 +73,114 @@ export const collectionQualityWarnings = (
   fmtKey: string,
   threshold = AI_LOSSY_DELTA,
 ): { name: string; delta: number }[] => {
-  if (fmtKey !== 'ai' && fmtKey !== 'idml') return []; // both reduce to the stop budget
+  if (fmtKey !== 'ai' && fmtKey !== 'idml' && fmtKey !== 'ase') return []; // all three reduce to the same stop budget
   return aiLossyGradients(favients.map((f) => ({ name: f.name, ramp: rampOf(f) })), threshold);
+};
+
+// ---- the SWATCHES subject over a whole set (§8b item 5, 2026-09-09) ----
+//
+// The set has the same two faces the working gradient does. Its RAMP face is everything
+// above; its SWATCHES face is each member's palette, sampled by the same rule the hero
+// uses. There is no composed swatch row for someone else's gradient — the row is a thing
+// you make on the hero — so the caller says how many, and the rule does the placing. That
+// is the whole difference between the two subjects at this level.
+
+/** One member's palette: `n` swatches placed by `rule` (the hero's rules, applied to a
+ *  gradient nobody has laid out by hand). */
+export const paletteOf = (f: Favient, n: number, rule: PaletteRule = 'even'): RGB[] => {
+  const ramp = rampOf(f);
+  return swatchesAt(ramp, layoutPositions(rule, clampCount(n), ramp, f.config)).map((s) => s.color);
+};
+
+export interface NamedSwatches {
+  name: string;
+  colors: RGB[];
+}
+
+/** Every member's palette, named — the input both swatch exporters take. */
+export const setSwatches = (favients: Favient[], n: number, rule: PaletteRule = 'even'): NamedSwatches[] =>
+  favients.map((f) => ({ name: f.name, colors: paletteOf(f, n, rule) }));
+
+/**
+ * A .zip of every member's palette in `fmtKey`'s swatches form. Mirrors
+ * `buildCollectionZip`, and returns null when the format has no swatches builder rather
+ * than silently falling back to a ramp export in a file the user asked for colours from.
+ */
+export const buildSwatchZip = (items: NamedSwatches[], fmtKey: string): Uint8Array | null => {
+  const fmt = getExportFormat(fmtKey);
+  if (!fmt?.swatches) return null;
+  const files: Record<string, Uint8Array> = {};
+  items.forEach((it, i) => {
+    const out = fmt.swatches!(it.colors, it.name);
+    files[`${String(i + 1).padStart(3, '0')}_${sanitize(it.name)}.${fmt.ext}`] = typeof out === 'string' ? strToU8(out) : out;
+  });
+  return zipSync(files, { level: 6 });
+};
+
+/**
+ * One combined file for a format that groups swatch lists natively (.ase only, today).
+ * Null for everything else — the caller zips instead.
+ */
+export const buildSwatchCollectionFile = (items: NamedSwatches[], fmtKey: string): { data: string | Uint8Array; ext: string } | null => {
+  const fmt = getExportFormat(fmtKey);
+  if (!fmt?.collectionSwatches) return null;
+  return { data: fmt.collectionSwatches(items), ext: fmt.ext };
+};
+
+/**
+ * The swatch sheet: the palette as labelled chips, one row per gradient. The image
+ * counterpart of the swatches subject, the way the contact sheet is the ramp subject's —
+ * a designer's screenshot of "these are the colours", hex included, which is the artefact
+ * people actually paste into a brief.
+ *
+ * Takes `NamedSwatches[]`, so ONE entry is the working gradient's palette and many is a
+ * set: the two cases are the same drawing, not two functions that will drift.
+ */
+export const buildSwatchSheet = async (items: NamedSwatches[], title = 'Palette'): Promise<Blob | null> => {
+  if (typeof document === 'undefined' || !items.length) return null;
+
+  const widest = Math.max(...items.map((i) => i.colors.length));
+  const CHIP = 76, CHIPH = 62, LBL = 16, GAP = 8;
+  const PAD = 16, HEAD = 34, ROWLBL = 18, ROWGAP = 14;
+  const W = PAD * 2 + widest * CHIP + (widest - 1) * GAP;
+  const rowH = ROWLBL + CHIPH + LBL;
+  const H = PAD * 2 + HEAD + items.length * rowH + (items.length - 1) * ROWGAP;
+  const dpr = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1)));
+
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  const ctx = cv.getContext('2d');
+  if (!ctx) return null;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.fillStyle = '#0a0a0b';
+  ctx.fillRect(0, 0, W, H);
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#e5e5e5';
+  ctx.font = '600 16px ui-sans-serif, system-ui, sans-serif';
+  const total = items.reduce((a, b) => a + b.colors.length, 0);
+  ctx.fillText(`${title} — ${total} colour${total === 1 ? '' : 's'}`, PAD, PAD);
+
+  items.forEach((it, r) => {
+    const y = PAD + HEAD + r * (rowH + ROWGAP);
+    ctx.fillStyle = '#9ca3af';
+    ctx.font = '500 11px ui-sans-serif, system-ui, sans-serif';
+    ctx.fillText(it.name.length > 60 ? `${it.name.slice(0, 59)}…` : it.name, PAD, y);
+    it.colors.forEach((c, k) => {
+      const x = PAD + k * (CHIP + GAP);
+      const hex = '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+      ctx.fillStyle = hex;
+      ctx.fillRect(x, y + ROWLBL, CHIP, CHIPH);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.strokeRect(x + 0.5, y + ROWLBL + 0.5, CHIP - 1, CHIPH - 1);
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '500 11px ui-monospace, SFMono-Regular, monospace';
+      ctx.fillText(hex.toUpperCase(), x, y + ROWLBL + CHIPH + 3);
+    });
+  });
+
+  return canvasToPngBlob(cv);
 };
 
 /** A reusable 256×1 scratch canvas + buffer for painting ramps — one allocation

@@ -27,7 +27,12 @@ In this order — each is the entry point to a layer:
 - `palette/core/rampGeometry.ts` — `sampleGeometry` is a pure function of
   `(geom, params, w, h)` with no module state and no cache. The Gradient
   Explorer depends on a byte-identical double render, so keep it that way.
-- `palette/core/exportFormats.ts` — the format registry and the stop budgets.
+- `palette/core/exportFormats.ts` — the format registry and the stop budgets. Read
+  the SWATCHES SUBJECT block in it before adding a format: an entry's `build` takes the
+  256-step ramp and its optional `swatches` takes a colour list, and whether a format
+  appears under the export window's Swatches subject is decided by whether it has the
+  second one (grep `formatsFor`). `build` is required on every entry — the old shell's
+  Extras panels call it unconditionally.
 - `palette/core/img2grad/index.ts` — the `extract()` pipeline.
 - `palette/core/oklab.ts` — **read its `@assumption` first.** It is a hand copy
   of engine colour code with a drift pin that does not actually pin anything.
@@ -95,7 +100,7 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 
 ```
 npm run smoke:boot           # the registration path, to throw-depth
-npm run test:palette         # 25 chained harnesses over palette/core/** and the Favients store
+npm run test:palette         # 28 chained harnesses over palette/core/** and the Favients store
 npm run test:palette-favients  # favientsStore: the load/import gate, dedupe, __proto__ labels, undo write-through
 npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
@@ -106,7 +111,7 @@ npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts
 both persisters, `favientsStore.seedPresets` and all four feature registrations.
 Falsified 2026-07-29 with a planted throw in `mountFavientsPanel`.
 
-`test:palette` chains 25 harnesses. `check:rule-guards` resolves the union of all
+`test:palette` chains 28 harnesses. `check:rule-guards` resolves the union of all
 of them (the direct-file composite case was fixed 2026-07-29 — before that it saw only
 member 1, and older notes claiming a `test:palette` citation "only reaches
 stopfit" are stale). Cite the specific link anyway when you mean one, because it
@@ -129,6 +134,7 @@ tells the reader which harness covers what:
 | `core/pickerModel.ts` (the wall: search, filter windows, arrange, carve, More like this) | `debug/test-palette-pickermodel.mts` |
 | `core/globalSet.ts` + `store/globalSetStore.ts` (the GX global shared set), `core/importGradientFiles.ts`, `store/favientFiling.ts` (incl. `fileFavientAt` / `fileFavientsAt`), `store/wallSelection.ts`, `store/groundSet.ts`, `store/favientsStore.ts` `removeGroup` + `replaceAll`, `core/groundSets.ts` `membersOfMany` + the empty-group chip (the shelf's MANAGE surface, 2026-09-09 — §8b item 4) | `debug/test-palette-shelf-manage.mts` (`npm run test:palette-shelf`; falsified fifteen ways, three of them assertions that passed under mutation first and were rewritten — see its header) |
 | `core/groundSets.ts` (GE v2 Phase D, 2026-09-08 — the rail's set order, favourite → wall entry, tile size by count), `core/padAxes.ts` (which colour axes the pad shows for an Arrange state) and `store/favientsStore.ts` `insertMany` | `debug/test-palette-groundsets.mts` (falsified four ways the day it was written — see its header) |
+| `core/exportFormats.ts` (the registry, the two subjects, the .ase / Tailwind / design-token / CSS-variable writers) and `core/favientsExport.ts` swatch builders (GE v2 §8b item 5, 2026-09-09) | `debug/test-palette-exportsubjects.mts` (`npm run test:palette-exportsubjects`; falsified six ways, and its §[7] was rewritten after the first cut reported a break as a stack trace instead of naming it — see its header) |
 
 The two img2grad harnesses are **not** redundant — the overshoot sweep is the
 only thing that catches the `resample()` overshoot regression, proven by removing
