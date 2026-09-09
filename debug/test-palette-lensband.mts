@@ -14,6 +14,7 @@
  *   [3] a band never leaves the track, however far the range reaches past 0..1
  *   [4] a vanishingly thin range still draws MIN_BAND tall, and still inside the track
  *   [5] the two consumers agree: same range + same height ⇒ same pixels
+ *   [6] ...and are handed the same range to begin with, read from the wall's SCROLL
  *
  * [3] is the one that was broken. [5] reads the two source files rather than the runtime —
  * a unit test cannot see a React style prop, but it CAN see whether either file went back
@@ -28,6 +29,14 @@
  * the comparison and passed under every mutation. Falsifying it is what exposed that; it now
  * asserts pixels.
  *   [5] re-inlining the arithmetic in MapScrollbar  ✗ "MapScrollbar uses the shared lensBand"
+ *   [6] `marker={marker}` → `marker={lens}`        ✗ "the pad is given `marker`, not `lens`"
+ *   [6] restoring the band-derived lens            ✗ "the band is read from scroll position"
+ *
+ * [6] is a source-text check, which is weak, but it pins what geometry cannot see. The
+ * pad and the bar drew the same shape from DIFFERENT values, so the lens vanished
+ * wherever they disagreed. And the value itself used to be derived from which lightness
+ * BANDS were on screen, which froze outright under grouping — measured at top 6 px
+ * through a 5,819 px scroll — and was coarse without it. It is the scroll position now.
  *
  * Run: `npx tsx debug/test-palette-lensband.mts`
  */
@@ -90,7 +99,10 @@ console.log('[6] the pad and the scrollbar are fed the same range, from a readab
   ok(/marker=\{marker\}/.test(stage), 'the pad is given `marker`, not `lens`');
   ok(/range=\{marker\}/.test(stage), 'the scrollbar is given `marker`');
   ok(!/marker=\{lens\}/.test(stage), 'the pad is not given the bare `lens` again');
-  ok(/groupAxis === 'none'/.test(stage), 'the lens is gated on the wall being ungrouped');
+  // The band is read from the SCROLL, not from the bands' lightness (owner, 2026-09-09):
+  // band-derived positions froze under grouping and were coarse without it.
+  ok(/scrollTop \+ height\) \/ scrollHeight/.test(stage), 'the band is read from scroll position');
+  ok(!/b\.hi - fBot \*/.test(stage), 'the band is not derived from the visible bands again');
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

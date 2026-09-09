@@ -135,91 +135,54 @@ export const BrowseStage: React.FC = () => {
   const [wallView, setWallView] = useState<{ bands: WallBand[]; view: WallView }>({ bands: [], view: { scrollTop: 0, height: 0, scrollHeight: 0 } });
   const [scrollTo, setScrollTo] = useState<{ key?: string; frac?: number; seq: number } | null>(null);
   const onAll = !m.isSet && !m.anchor;
-  // The bands are on the pad's Y: the LENS shows the axis range on screen, continuous —
-  // within a band (its high value at the top) the visible slice maps linearly onto the
-  // band's bucket.
-  // The lens can only say "this much of the AXIS is on screen" while the wall's Y really is
-  // that axis, run once, top to bottom. GROUPING breaks that: grouped by category the wall
-  // is category A's full lightness sweep, then category B's, then C's — 125 bands whose
-  // lightness restarts high-to-low inside each one. The union of the visible bands' ranges
-  // is then roughly the same at every scroll position, so the lens pinned to the top of the
-  // pad and only its HEIGHT twitched: "the visible/scrollable area is not relating at all to
-  // the scroll on the page" (owner, 2026-09-09). `canSeek` below already excluded grouping
-  // for the same reason — the mapping is not invertible — but the drawing did not.
-  // Two different questions, and collapsing them cost the scrollbar its third reading
-  // (owner, 2026-09-09: "we've lost the unusual property of this scrollbar — where the
-  // scrollbar shows both the selected area and the visible area and the total area").
+  // WHERE THE WALL IS — one value, drawn by both the pad's lens and the scrollbar's thumb,
+  // and read purely from the SCROLL POSITION (owner, 2026-09-09: "i think we should just map
+  // it by scroll position and not by lightness").
   //
-  //  • rowsOnAxis — is the pad's Y the axis the wall's bands carry at all? That is what
-  //    makes their lo/hi readable, so it is what REACH (the selected area: which part of
-  //    the axis the wall actually holds) depends on. Grouping does not affect it.
-  //  • bandsByLight — ...and can a POSITION on that axis be read off the scroll? Only when
-  //    the wall is ungrouped: grouped, the axis restarts inside every group, so the union
-  //    of the visible bands stops moving. This is what the LENS depends on.
+  // It used to be derived from which lightness BANDS were on screen, which is a truer
+  // statement when it works and unreliable when it does not. Grouped by category the wall is
+  // category A's whole lightness sweep, then B's, then C's, so the axis restarts inside
+  // every group and the union of the visible bands barely moves — the band sat still through
+  // a 5,819 px scroll. Ungrouped it mostly worked, but "the minimap regions are still
+  // slightly missing", because a band's own extent is coarser than the pixels on screen.
+  // Scroll position has neither problem: it is always defined, always moves, and is what a
+  // scrollbar has always meant.
+  //
+  // The three readings the scrollbar carries at once stay consistent under this because they
+  // are measured on one span:
+  //   • TOTAL    — the whole track, the pad's axis end to end;
+  //   • SELECTED — `reach`, the part of that axis the wall actually holds (dimmed outside);
+  //   • VISIBLE  — the scroll fraction mapped INTO `reach`.
+  // Mapping into the reachable span rather than the whole axis is what keeps the visible
+  // band from walking outside the selection at the end of a scroll.
   const rowsOnAxis = onAll && pad.rowsOnY;
-  const bandsByLight = rowsOnAxis && m.axes.groupAxis === 'none';
-  const lens = useMemo<[number, number] | null>(() => {
-    if (!bandsByLight || !wallView.view.height) return null;
-    const H = wallView.view.height;
-    let lo = 1, hi = 0;
-    for (const b of wallView.bands) {
-      if (b.lo == null || b.hi == null) continue;
-      const h = b.bottom - b.top;
-      if (h <= 0) continue;
-      const vt = Math.max(b.top, 0), vb = Math.min(b.bottom, H);
-      if (vb <= vt) continue;
-      const fTop = (vt - b.top) / h, fBot = (vb - b.top) / h;
-      lo = Math.min(lo, b.hi - fBot * (b.hi - b.lo));
-      hi = Math.max(hi, b.hi - fTop * (b.hi - b.lo));
-    }
-    return hi > lo ? [lo, hi] : null;
-  }, [bandsByLight, wallView]);
-  // Where the wall is — and BOTH the pad's lens and the scrollbar's thumb draw this one
-  // value (owner, 2026-09-08: "rather than no lens, default to the standard display"). The
-  // lens range when the wall's Y really is the pad's axis, else the plain scroll position,
-  // which is always true of a scrollbar. The pad used to draw `lens` and the bar `marker`,
-  // so wherever the two differed the pad simply showed nothing while the bar showed a
-  // thumb — the "missing quite often" of §8b item 2.
-  const marker = useMemo<[number, number] | null>(() => {
-    if (lens) return lens;
-    const { scrollTop, height, scrollHeight } = wallView.view;
-    if (!onAll || !height || scrollHeight <= height + 1) return null;
-    // Mapped into the SELECTED window, not across the pad's whole axis. The wall holds only
-    // what the window kept, so scrolling it top to bottom sweeps that window and nothing
-    // else; spread over the full axis the band walked below the selection box at the bottom
-    // of the wall — "the minimap showed us scrolling PAST the selected area" (owner,
-    // 2026-09-09), which claims you are looking at lightnesses the wall is not showing. With
-    // no window this is the identity, so an unfiltered pad is unchanged.
-    const lo = Math.min(yWin[0], yWin[1]);
-    const span = Math.abs(yWin[1] - yWin[0]);
-    const into = (v: number) => lo + v * span;
-    return [into(1 - Math.min(1, (scrollTop + height) / scrollHeight)), into(1 - scrollTop / scrollHeight)];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lens, onAll, wallView.view, yWin[0], yWin[1]]);
   // The part of the pad's Y axis the wall can reach — the bands that exist. Outside it the
   // scrollbar's track dims (owner: "the section that is not reachable at 50% the opacity").
+  // Grouping does not affect this: it changes the ORDER the bands appear in, not which ones.
   const reach = useMemo<[number, number] | null>(() => {
     if (!rowsOnAxis) return null;
     let lo = 1, hi = 0;
     for (const b of wallView.bands) if (b.lo != null && b.hi != null) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
     return hi > lo ? [lo, hi] : null;
   }, [rowsOnAxis, wallView.bands]);
-  // (with grouping now folded into `bandsByLight`, seeking is possible in both remaining
-  // cases: a lightness-banded wall seeks to a band, a plain one to a fraction.)
+  /** The span the scroll is laid out over: what the wall holds, else the selected window. */
+  const span = useMemo<[number, number]>(() => {
+    const r = reach ?? yWin;
+    return [Math.min(r[0], r[1]), Math.max(r[0], r[1])];
+  }, [reach, yWin[0], yWin[1]]);
+  const marker = useMemo<[number, number] | null>(() => {
+    const { scrollTop, height, scrollHeight } = wallView.view;
+    if (!onAll || !height || scrollHeight <= height + 1) return null;
+    const into = (v: number) => span[0] + v * (span[1] - span[0]);
+    return [into(1 - Math.min(1, (scrollTop + height) / scrollHeight)), into(1 - scrollTop / scrollHeight)];
+  }, [onAll, wallView.view, span]);
   const canSeek = onAll;
-  // Put value L at the top of the viewport: the band holding it and how far down it, or —
-  // with no bands on the pad — the plain fraction of the wall.
+  /** Put `L` (a value on the pad's axis) at the top of the viewport — the inverse of the
+   *  mapping above, so dragging the thumb lands the band exactly where it is dropped. */
   const seekBand = useCallback((L: number) => {
-    if (!bandsByLight) {
-      setScrollTo((s) => ({ frac: 1 - L, seq: (s?.seq ?? 0) + 1 }));
-      return;
-    }
-    const bands = wallView.bands.filter((b) => b.lo != null && b.hi != null);
-    if (!bands.length) return;
-    const band = bands.find((b) => L >= b.lo! && L <= b.hi!) ?? bands.reduce((best, b) => (Math.abs((b.lo! + b.hi!) / 2 - L) < Math.abs((best.lo! + best.hi!) / 2 - L) ? b : best));
-    const frac = Math.min(1, Math.max(0, (band.hi! - L) / Math.max(1e-6, band.hi! - band.lo!)));
-    setScrollTo((s) => ({ key: band.key, frac, seq: (s?.seq ?? 0) + 1 }));
-  }, [bandsByLight, wallView.bands]);
+    const t = span[1] - span[0] > 1e-6 ? (L - span[0]) / (span[1] - span[0]) : L;
+    setScrollTo((s) => ({ frac: Math.min(1, Math.max(0, 1 - t)), seq: (s?.seq ?? 0) + 1 }));
+  }, [span]);
   // A set has no carve tools: drop an active one when the ground switches to a set.
   useEffect(() => {
     if (m.isSet && m.tool) m.setTool(null);
