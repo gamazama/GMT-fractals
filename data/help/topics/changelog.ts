@@ -55,7 +55,7 @@ The rest of the codebase audit landing as real fixes — including one that chan
 - **A saved camera renamed to nothing cancels** instead of storing a blank name.
 - **Less of the audio path competes with the renderer for the graphics card.** The interface was repainting sixty times a second with audio running; it is twenty now, and the spectrum display no longer draws on the GPU at all. This is an improvement, not a cure — audio still costs frame rate, and the rest needs proper profiling.
 
-**New: Gradient Explorer v2, in preview** at \`gradient-explorer-next.html\`. A ground-up rebuild — one gradient seen as both palette and stop editor, a browsable wall with "More like this" ranked by how the colours actually look, working faces to Mix · pull from an Image · reshape with Curves · Adjust, a new colour wheel with harmony handles, and a Wallpaper mode whose live frames now render on the graphics card (about 130ms down to under 2ms at 1440p). It is **not linked to GMT yet** and the old Gradient Explorer is untouched.
+**New: Gradient Explorer v2, in preview** — [app.gmt-fractals.com/gradient-explorer-next.html](https://app.gmt-fractals.com/gradient-explorer-next.html). A ground-up rebuild — one gradient seen as both palette and stop editor, a browsable wall with "More like this" ranked by how the colours actually look, working faces to Mix · pull from an Image · reshape with Curves · Adjust, a new colour wheel with harmony handles, and a Wallpaper mode whose live frames now render on the graphics card (about 130ms down to under 2ms at 1440p). It is **not linked to GMT yet** and the old Gradient Explorer is untouched.
 
 ---
 
