@@ -37,6 +37,28 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
+## 0.9.8.3 — Repairs, and a new Gradient Explorer
+> September 9, 2026
+
+The rest of the codebase audit landing as real fixes — including one that changes how some saved scenes look — plus a rebuilt Gradient Explorer, online as a preview.
+
+**If you use the Modular node graph, read this one.** Five nodes — Scale, Twist, Bend, Smooth Union and Mix — each read one of their own settings twice, which shifted the values of every node placed after them. A Scale in front of a Mandelbulb made the bulb read a power of 0.1 instead of 8, and dragging Power moved the phase instead. Now fixed, which means **saved Modular scenes using those five nodes will render differently**: they read the values their sliders show.
+
+- **Auto Compile is gone from the node graph.** It threw an error when clicked and nothing behind it was ever implemented. COMPILE now lights up only when the graph would actually build a different shader — and deleting a connection or swapping which shape feeds a boolean finally counts as a change.
+- **The Formula Workshop imports the formulas it could not read.** For two of the shipped library formulas, Preview and Import did nothing at all — no import, no error. They work now, and you can name the import first.
+- **21 shipped formulas are no longer hidden** behind "show broken" on an April snapshot that said they render under neither pipeline. All 21 load today; they are greyed rather than hidden.
+- **A crash while drawing the interface shows a page with the error and a Reload button**, instead of a white screen.
+- **A shader that fails to compile says so** — a red notice with the actual error, instead of an empty image and no explanation.
+- **An export frame that stalls now fails and reports** rather than waiting forever. It gives up only on no progress, so a slow 4K path-traced frame is never cut short.
+- **Audio modulation no longer drops a whole ring of onsets** at one exact timing coincidence.
+- **One broken overlay can no longer freeze the whole renderer** — the rest of the frame carries on and the failure is named.
+- **A saved camera renamed to nothing cancels** instead of storing a blank name.
+- **Less of the audio path competes with the renderer for the graphics card.** The interface was repainting sixty times a second with audio running; it is twenty now, and the spectrum display no longer draws on the GPU at all. This is an improvement, not a cure — audio still costs frame rate, and the rest needs proper profiling.
+
+**New: Gradient Explorer v2, in preview** at \`gradient-explorer-next.html\`. A ground-up rebuild — one gradient seen as both palette and stop editor, a browsable wall with "More like this" ranked by how the colours actually look, working faces to Mix · pull from an Image · reshape with Curves · Adjust, a new colour wheel with harmony handles, and a Wallpaper mode whose live frames now render on the graphics card (about 130ms down to under 2ms at 1440p). It is **not linked to GMT yet** and the old Gradient Explorer is untouched.
+
+---
+
 ## 0.9.8.2 — Repairs
 > September 1, 2026
 
