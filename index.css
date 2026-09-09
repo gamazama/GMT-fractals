@@ -94,9 +94,10 @@
    THEMEABLE GLOBAL PLAIN CSS
 
    html background, color-scheme, and scrollbars — driven by the variables
-   above so they follow the scheme. Lives here (not per-app HTML heads or the
-   runtime-injected componentClasses.ts) so every app gets it from the single
-   index.css import, including mesh-export which never calls registerUI().
+   above so they follow the scheme. Lives here (not in per-app HTML heads) so every
+   app gets it from the single index.css import, including mesh-export which never
+   calls registerUI(). The runtime-injected alternative this replaced,
+   engine/styles/componentClasses.ts, no longer exists — deleted in 40c041bc.
    `:root` selectors are used for html-level rules so they win over the
    hardcoded `html { … }` rules still present in each app's boot <style>.
    ───────────────────────────────────────────────────────────────────────── */
@@ -148,9 +149,13 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
    block in engine/styles/componentClasses.ts — but ONLY the Tailwind Play CDN's
    runtime JIT compiled those @apply blocks. With the CDN removed they must be
    compiled at build time, so they live here (the build-time Tailwind entry,
-   imported by every app). They now `@apply` the semantic color tokens (so they
-   follow the active scheme); engine/styles/componentClasses.ts remains the
-   owner of intent — keep the two in sync. */
+   imported by every app). They now `@apply` the semantic color tokens, so they
+   follow the active scheme.
+
+   Corrected 2026-09-09: this block used to end "engine/styles/componentClasses.ts
+   remains the owner of intent — keep the two in sync". That file was deleted by the
+   orphan sweep in 40c041bc (the same commit that removed the CDN), so there is nothing
+   to sync with and no second owner. THIS BLOCK is the single source of truth. */
 @layer components {
   .t-label { @apply text-[10px] font-bold text-fg-dim; }
   .t-label-sm { @apply text-[9px] font-bold text-fg-dim; }
@@ -171,6 +176,46 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
   .t-btn-default { @apply bg-gradient-to-b from-surface-raised to-transparent border-line/10 text-fg-muted hover:text-fg hover:bg-line/5 hover:border-line/20; }
   .t-select { @apply w-full bg-surface-section border border-line/10 text-[10px] font-medium text-fg-tertiary rounded px-2 py-1 outline-none focus:border-accent-500/50 appearance-none hover:border-line/20 transition-colors cursor-pointer; }
   .t-select option { @apply bg-surface text-fg-tertiary; }
+
+  /* A brushed metal that takes the scheme rather than fixing two literals.
+     Wallpaper is the door OUT of the GE v2 shell — "a whole other world inside the app"
+     (Phase W) — so alone among the hero's use icons it carries a surface of its own. W.1
+     hard-coded that sheen as six greys with a pinned-dark glyph, deliberately outside the
+     theme so it read as a door; on a light interface that reasoning fails and the icon
+     becomes a bright smudge on a bright bar (GE v2 §8b item 6).
+
+     So the sheen is mixed from the scheme's own INK and GROUND instead. The percentages
+     are the original silver's luminances re-expressed as "how far from the ground toward
+     the ink" — on a dark scheme they reproduce that silver almost exactly; on a light one
+     the same ladder inverts into a gunmetal, still the brightest-contrast thing in the
+     row.
+
+     The glyph takes the GROUND, so it stays legible against the metal in both directions
+     without a second rule — but it is published as a VARIABLE rather than set here,
+     because a component class cannot win a `color` fight with a Tailwind utility: layered
+     `@layer components` always loses to `@layer utilities`, whatever the specificity, and
+     the button already carries one (it rendered as `--fg-muted` until this was split out).
+     The consumer spends them as `!text-[color:var(--metal-glyph)]
+     hover:!text-[color:var(--metal-glyph-hover)]`. Both oddities in that string are load-
+     bearing, and each one failed silently on the way here — the glyph just stayed
+     `--fg-muted` and the metal looked merely wrong rather than broken:
+       • the `color:` hint, because `text-[var(--x)]` is ambiguous between a colour and a
+         font-size, so Tailwind emits NOTHING for it;
+       • the `!`, because both this and the button's own `text-fg-muted` are utilities of
+         equal specificity, so SOURCE ORDER decides — and Tailwind sorts the arbitrary one
+         first, i.e. it loses. (The `text-[#2b2f34]` this replaced won that race only by
+         where a hex literal happened to sort.) */
+  .gx-metal {
+    --metal-glyph: color-mix(in srgb, rgb(var(--surface-raised)) 92%, rgb(var(--fg)));
+    --metal-glyph-hover: rgb(var(--surface-raised));
+    background-image: linear-gradient(135deg,
+      color-mix(in srgb, rgb(var(--fg)) 98%, rgb(var(--surface-raised))) 0%,
+      color-mix(in srgb, rgb(var(--fg)) 87%, rgb(var(--surface-raised))) 26%,
+      color-mix(in srgb, rgb(var(--fg)) 68%, rgb(var(--surface-raised))) 48%,
+      color-mix(in srgb, rgb(var(--fg)) 95%, rgb(var(--surface-raised))) 62%,
+      color-mix(in srgb, rgb(var(--fg)) 77%, rgb(var(--surface-raised))) 82%,
+      color-mix(in srgb, rgb(var(--fg)) 60%, rgb(var(--surface-raised))) 100%);
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────

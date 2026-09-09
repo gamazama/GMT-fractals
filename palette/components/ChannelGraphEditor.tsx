@@ -34,6 +34,7 @@ import {
   valueToPixel,
   pixelToFrame,
   pixelToValue,
+  THEME,
 } from '../../utils/GraphUtils';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../../data/constants';
 import { calculateViewBounds } from '../../utils/keyframeViewBounds';
@@ -705,7 +706,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         const vals = ghost[ch.key];
         if (!frames || !vals || vals.length === 0) continue;
         const active = ch.key === activeChannel;
-        ctx.fillStyle = '#0a0a0a';
+        // hollow dots: filled with the canvas GROUND, not a literal near-black — on a
+        // light interface the ground is near-white and a black fill read as solid dots.
+        ctx.fillStyle = THEME.backgroundColor;
         ctx.strokeStyle = ch.color;
         ctx.lineWidth = active ? 1.5 : 1;
         ctx.globalAlpha = active ? 0.7 : 0.4;

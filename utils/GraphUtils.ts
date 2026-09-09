@@ -23,6 +23,25 @@ export const THEME = {
     get handleLineColor() { return getThemeColor('--secondary-strong'); },
     get curveColor() { return getThemeColor('--accent-400'); },
     get backgroundColor() { return getThemeColor('--surface-viewport'); },
+    /** The wash over the region PAST the duration limit — everything right of the last
+     *  frame — and the diagonal hatch on top of it.
+     *
+     *  A wash of INK at low alpha, deliberately. The literal `rgba(0,0,0,0.6)` these
+     *  replaced was a black smear once the viewport went light (GE v2 §8b item 7), but no
+     *  fixed colour can work either: `--surface-viewport` sweeps 5 → 224 with brightness
+     *  (0 → 255 under high contrast), so any constant lands ON the viewport somewhere and
+     *  the region stops reading. `--fg` inverts with the regime already, so a wash of it
+     *  pushes AWAY from the surface at every brightness — lighter on a dark interface,
+     *  darker on a light one. Low alpha because it must recede, not smear.
+     *
+     *  @invariant the veil stays visible against the viewport under every preset, high
+     *    contrast included — proven by: npx tsx debug/test-theme-scrim.mts ("veil reads")
+     */
+    get limitVeilColor() { return getThemeColor('--fg', 0.10); },
+    /** The diagonal hatch drawn on top of {@link limitVeilColor}. Cached into a
+     *  CanvasPattern by the renderer, which must therefore drop that cache on theme
+     *  change — see `_limitPattern` in GraphRenderer.ts. */
+    get limitHatchColor() { return getThemeColor('--fg', 0.16); },
 };
 
 // Transform Data (Frame, Value) -> Screen (X, Y)

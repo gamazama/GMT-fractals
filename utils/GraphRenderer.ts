@@ -63,6 +63,9 @@ const _softMaskCache = new SoftSelectionMaskCache();
 onThemeChange(() => {
     _polylineCache.clear();
     _softMaskCache.clear();
+    // The hatch bakes THEME.limitHatchColor into a CanvasPattern, so it is scheme-bound
+    // too and must be rebuilt rather than reused (GE v2 §8b item 7).
+    _limitPattern = null;
 });
 
 let _limitPattern: CanvasPattern | null = null;
@@ -76,7 +79,7 @@ const getLimitPattern = (ctx: CanvasRenderingContext2D) => {
     pCanvas.height = size;
     const pCtx = pCanvas.getContext('2d');
     if (pCtx) {
-        pCtx.strokeStyle = "rgba(0,0,0,0.3)";
+        pCtx.strokeStyle = THEME.limitHatchColor;
         pCtx.lineWidth = 10;
         pCtx.lineCap = 'butt';
         
@@ -386,7 +389,7 @@ export const drawGraph = (props: GraphRenderProps) => {
 
     const limitX = frameToCanvasPixel(durationFrames);
     if (limitX < width) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillStyle = THEME.limitVeilColor;
         ctx.fillRect(limitX, 0, width - limitX, height);
         
         const pattern = getLimitPattern(ctx);
