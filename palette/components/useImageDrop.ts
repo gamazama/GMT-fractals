@@ -20,6 +20,13 @@
  * `onLoaded` fires after a successful decode + ingest — the v2 shell uses it to switch
  * the active source tab to Extract.
  *
+ * `onOtherFiles` is the seam for a host that also accepts NON-image files on the same
+ * drop (§8b item 4, 2026-09-09: GE v2 takes a dropped `.map` / `.ggr` / collection
+ * `.json` as a gradient import). It is offered every dropped file the importer did not
+ * take and returns whether it handled them — only if nobody did does the drop report
+ * "not an image". One window listener, not two racing ones. `ImageStage` passes none, so
+ * its behaviour is unchanged.
+ *
  * @see plans/ge-v2-design.md §5.4
  */
 
@@ -36,6 +43,9 @@ export interface UseImageDropOptions {
   onLoaded?: () => void;
   /** Message sink — defaults to the global toast. */
   notify?: (message: string) => void;
+  /** Dropped files that were not an image. Return true if you consumed them (suppresses
+   *  the "not an image" message). */
+  onOtherFiles?: (files: FileList) => boolean;
 }
 
 export interface UseImageDropResult {
@@ -46,7 +56,7 @@ export interface UseImageDropResult {
 }
 
 export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult => {
-  const { onLoaded, notify = (m: string) => showToast(m), enabled = true } = opts;
+  const { onLoaded, notify = (m: string) => showToast(m), enabled = true, onOtherFiles } = opts;
   const setModel = useImageStore((s) => s.setModel);
   const setPath = useImageStore((s) => s.setPath);
   const setLoading = useImageStore((s) => s.setLoading);
@@ -100,7 +110,10 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
       e.preventDefault();
       setOver(false);
       window.clearTimeout(dragT);
-      if (!fileToImg(e.dataTransfer?.files[0])) notify('not an image');
+      const files = e.dataTransfer?.files;
+      if (fileToImg(files?.[0])) return;
+      if (files?.length && onOtherFiles?.(files)) return;
+      notify('not an image');
     };
     const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -116,7 +129,7 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
       window.removeEventListener('paste', onPaste);
       window.clearTimeout(dragT);
     };
-  }, [fileToImg, notify, enabled]);
+  }, [fileToImg, notify, enabled, onOtherFiles]);
 
   return { over, fileToImg };
 };

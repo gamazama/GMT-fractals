@@ -99,6 +99,14 @@ export interface GroundSource {
   entries: CatalogEntry[];
   /** What each tile stands for. */
   itemOf: (entry: CatalogEntry) => GroundItem;
+  /**
+   * When SEVERAL sets share the ground (2026-09-09), which set each entry came from — one
+   * labelled band per set, in rail order. The wall already draws a full-width header for a
+   * band that has a `label` (grep `data-wall-header` in PickerWall), so this is what makes
+   * two sets read as two places rather than one undivided run. Omitted, or of length 1,
+   * and the ground arranges as it always did: one band, the set's own order.
+   */
+  bands?: { key: string; label: string; ids: ReadonlySet<string> }[];
 }
 
 /** The set's arrangement: one band, the set's own order, read left to right. */
@@ -287,9 +295,26 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
   }, [anchor, base]);
 
   const key = JSON.stringify([criteria, axes]);
+  const bandKey = source?.bands?.map((b) => `${b.key}:${b.ids.size}`).join('|') ?? '';
   const { rows, count, ids } = useMemo(() => {
     const list = filterCatalog(base, criteria, searchIndex);
     let result = distance ? similarityRows(list, distance) : arrangeRows(list, axes, bundleLabel);
+    // SEVERAL sets on one ground: a band each, labelled, in the order the rail names them.
+    // Sorting by similarity is a re-rank of the whole ground and outranks the division —
+    // it is asking one question ACROSS the sets, so it keeps its single band.
+    const bands = source?.bands;
+    if (bands && bands.length > 1 && !distance) {
+      const seen = new Set<string>();
+      result = bands
+        .map((b) => ({
+          key: b.key,
+          label: `${b.label}`,
+          // A favourite that belongs to two lit sets is drawn under the FIRST that claims
+          // it, so the union stays a partition and no tile appears twice.
+          entries: list.filter((e) => b.ids.has(e.id) && !seen.has(e.id) && (seen.add(e.id), true)),
+        }))
+        .filter((r) => r.entries.length > 0);
+    }
     // A set reads left to right, top to bottom, like the shelf it came from (the wall's
     // default fill is column-major, which suits a sorted continuum, not an ordered list).
     if (source) result = result.map((r) => ({ ...r, rowMajor: true }));
@@ -297,7 +322,8 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
     // come from the ROWS, not the pre-arrange list.
     return { rows: result, count: list.length, ids: result.flatMap((g) => g.entries.map((e) => e.id)) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, searchIndex, bundleLabel, distance, key, !!source]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, searchIndex, bundleLabel, distance, key, !!source, bandKey]);
   idsRef.current = ids;
 
   // --- carve commit / clear ---------------------------------------------------------

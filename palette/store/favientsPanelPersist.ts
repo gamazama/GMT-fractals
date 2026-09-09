@@ -215,6 +215,21 @@ export const watchFavientsPanel = (opts?: FavientsPersistOptions): void => {
   });
 };
 
+/**
+ * Claim the per-host key WITHOUT mounting a panel window. GE v2 renders `FavientsPanel`
+ * inside its own `Floating` and never calls `restoreFavientsPanel`/`watchFavientsPanel`,
+ * so `activeStorageKey` stayed at the module default — app-gmt's key — and toggling
+ * grid/list in v2's pull-up silently changed app-gmt's shelf layout, and the reverse
+ * (the 2026-09-08 migration audit §3.8b). One call at v2 boot closes that leak.
+ *
+ * Idempotent, and safe to call before the panel mounts; a host that DOES mount a window
+ * still overwrites this from `restoreFavientsPanel`, which is the correct precedence —
+ * the window writer and the viewMode must not disagree about the key.
+ */
+export const setV2FavientsPanelKey = (key: string): void => {
+  activeStorageKey = key;
+};
+
 /** Read the persisted shelf layout for the active host (default 'grid'). */
 export const getFavientsViewMode = (): FavientsViewMode =>
   lsGetJson<Stored | null>(activeStorageKey, null)?.viewMode === 'list' ? 'list' : 'grid';

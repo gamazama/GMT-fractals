@@ -10,11 +10,23 @@
  * The doing lives in `exportActions.ts` (`runExport`), shared with the hero's hover flyout
  * of recent exports; this file is only the full window. It hangs off the hero BAND, not
  * the card — the card clips its children (2026-09-07).
+ *
+ * TWO SUBJECTS, one window (§8b item 4, 2026-09-09). With `set` passed it exports that
+ * SET of gradients instead of the working one — the same registry, the same grouping,
+ * reached by right-clicking a chip on the set rail. What changes per subject is small and
+ * named inline: a set has no Copy (no single text form), gets a .zip where a gradient gets
+ * one file, carries the `.ai`/`.idml` lossy notice the collection path always had, and
+ * offers the contact sheet in place of the PNG strip. The output profile belongs to the
+ * working document, so it is a gradient-only row. This is deliberately ONE component
+ * rather than a second export window — the plan's §8b item 5 (one unified export over a
+ * gradient, a palette and a set) grows from here.
  */
 
 import React, { useEffect, useRef } from 'react';
 import { EXPORT_FORMATS, type ExportFormatDef } from '../../palette/core/exportFormats';
-import { runExport } from './exportActions';
+import { runExport, runSetExport, runSetContactSheet, setLossyCount } from './exportActions';
+import { AI_STOP_LIMIT } from '../../palette/core/exportFormats';
+import type { Favient } from '../../palette/store/favientsStore';
 import type { RGB } from '../../palette/core/oklab';
 import { Floating } from './ui/Floating';
 import { Act } from './ui/Act';
@@ -47,6 +59,9 @@ export const ExportMenu: React.FC<{
    *  lives here rather than on the strip). */
   colorSpace?: 'srgb' | 'linear' | 'aces_inverse';
   onColorSpace?: (id: 'srgb' | 'linear' | 'aces_inverse') => void;
+  /** Export a SET instead of the working gradient (the set rail's chip menu). `ramp` and
+   *  `name` are then unused for the output; `name` still titles the window. */
+  set?: Favient[];
 }> = ({
   ramp,
   name,
@@ -54,6 +69,7 @@ export const ExportMenu: React.FC<{
   positionClass = 'absolute right-4 top-12 z-40',
   colorSpace,
   onColorSpace,
+  set,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -69,31 +85,52 @@ export const ExportMenu: React.FC<{
     };
   }, [onClose]);
 
+  const isSet = !!set;
   const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key }, ramp, name);
-  const download = (f: ExportFormatDef) => runExport({ kind: 'download', key: f.key }, ramp, name);
-  const png = () => runExport({ kind: 'png' }, ramp, name);
+  const download = (f: ExportFormatDef) =>
+    set ? runSetExport(f.key, set, name) : runExport({ kind: 'download', key: f.key }, ramp, name);
+  const png = () => (set ? void runSetContactSheet(set, name) : runExport({ kind: 'png' }, ramp, name));
 
   const known = new Set(GROUPS.flatMap((g) => g.keys));
   const rest = EXPORT_FORMATS.filter((f) => !known.has(f.key));
 
-  const row = (f: ExportFormatDef) => (
-    <div key={f.key} className="flex items-center gap-2 py-0.5">
-      <span className="flex-1 text-[13px] text-fg">{f.label}</span>
-      {!f.binary && (
-        <Act onClick={() => copy(f)} title="Copy to the clipboard">
-          Copy
-        </Act>
-      )}
-      <Act onClick={() => download(f)} title={`Download .${f.ext}`}>
-        Download
-      </Act>
-    </div>
-  );
+  const row = (f: ExportFormatDef) => {
+    // A set in a collection format (.ai/.idml/.ugr) is ONE file; in any other format it is
+    // one file per gradient inside a .zip. Say which on the button, so the download is not
+    // a surprise.
+    const bundles = isSet && !!f.collection;
+    const lossy = isSet && bundles ? setLossyCount(set!, f.key) : 0;
+    return (
+      <div key={f.key} className="py-0.5">
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-[13px] text-fg">{f.label}</span>
+          {!isSet && !f.binary && (
+            <Act onClick={() => copy(f)} title="Copy to the clipboard">
+              Copy
+            </Act>
+          )}
+          <Act
+            onClick={() => download(f)}
+            title={isSet ? (bundles ? `All ${set!.length} in one .${f.ext}` : `${set!.length} files in a .zip`) : `Download .${f.ext}`}
+          >
+            {isSet && !bundles ? '.zip' : 'Download'}
+          </Act>
+        </div>
+        {lossy > 0 && (
+          <div className="text-[11px] leading-snug text-fg-muted pr-1">
+            {lossy} of {set!.length} use more than {AI_STOP_LIMIT} colour stops, so they export simplified. Most apps cap stops similarly.
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <Floating ref={ref} className={`${positionClass} w-[360px] max-h-[70vh] overflow-y-auto p-4 flex flex-col gap-3`} data-gx-export>
       <div className="flex items-center">
-        <b className="text-[13px] text-fg">Export “{name}”</b>
+        <b className="text-[13px] text-fg">
+          Export “{name}”{isSet && <span className="font-normal text-fg-muted"> · {set!.length} gradient{set!.length === 1 ? '' : 's'}</span>}
+        </b>
         <button className="ml-auto text-fg-muted hover:text-fg" onClick={onClose} title="Close (Esc)">
           <Icon name="close" />
         </button>
@@ -114,7 +151,7 @@ export const ExportMenu: React.FC<{
           {rest.map(row)}
         </div>
       )}
-      {colorSpace && onColorSpace && (
+      {!isSet && colorSpace && onColorSpace && (
         <div>
           <ZoneLabel className="block mb-1">Output profile</ZoneLabel>
           <div className="inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
@@ -135,10 +172,12 @@ export const ExportMenu: React.FC<{
       <div>
         <ZoneLabel className="block mb-1">As an image</ZoneLabel>
         <div className="flex items-center gap-2 py-0.5">
-          <span className="flex-1 text-[13px] text-fg">PNG strip (1024 × 64)</span>
+          <span className="flex-1 text-[13px] text-fg">{isSet ? 'Contact sheet' : 'PNG strip (1024 × 64)'}</span>
           <Act onClick={png}>Download</Act>
         </div>
-        <div className="text-[13px] text-fg-muted mt-1">For a full-size image use Wallpaper.</div>
+        <div className="text-[13px] text-fg-muted mt-1">
+          {isSet ? 'A grid of the whole set, names included.' : 'For a full-size image use Wallpaper.'}
+        </div>
       </div>
     </Floating>
   );

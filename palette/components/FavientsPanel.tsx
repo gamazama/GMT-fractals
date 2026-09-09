@@ -39,6 +39,7 @@ import { getSendTargets, subscribeSendTargets, type SendTarget } from '../../sto
 import { setFavientDrag, beginCustomAvatarDrag, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
 import { setDragOrigin, markPickLanded } from '../store/dragVisual';
+import { setSimilarityAnchor } from '../store/pickerSimilarity';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { configToName } from '../core/facetName';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
@@ -51,8 +52,7 @@ import { useDragEndSafetyNet } from '../../hooks/useDragEndSafetyNet';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFormats';
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
-import { parseGradientText, IMPORT_EXTENSIONS } from '../core/importFormats';
-import { fitRampToStops } from '../core/stopFit';
+import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary } from '../core/importGradientFiles';
 import {
   getFavientsViewMode,
   setFavientsViewMode,
@@ -91,22 +91,6 @@ const KebabIcon = () => (
 const menuItemCls =
   'w-full flex items-center justify-between gap-2 px-2 py-1.5 text-left rounded text-xs text-fg-tertiary hover:text-fg hover:bg-line/10 transition-colors';
 
-/** `accept` attribute for the gradient-file import picker (the text formats we parse). */
-const GRADIENT_FILE_ACCEPT = IMPORT_EXTENSIONS.map((e) => '.' + e).join(',');
-
-const extOf = (name: string): string => {
-  const dot = name.lastIndexOf('.');
-  return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
-};
-
-/** Filename without directory or extension — the favourite's display name. */
-const gradientName = (name: string): string => {
-  const cut = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  const file = cut >= 0 ? name.slice(cut + 1) : name;
-  const dot = file.lastIndexOf('.');
-  return (dot > 0 ? file.slice(0, dot) : file).trim() || 'imported';
-};
-
 /**
  * The name a dragged-in gradient gets when added. A payload with no explicit name
  * auto-derives a perceptual label (e.g. "Warm Vivid Rainbow") via the shared
@@ -134,8 +118,6 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
   const favients = useFavientsStore((s) => s.favients);
   const exportCollection = useFavientsStore((s) => s.exportCollection);
   const importCollection = useFavientsStore((s) => s.importCollection);
-  const add = useFavientsStore((s) => s.add);
-  const isFav = useFavientsStore((s) => s.isFav);
   const clear = useFavientsStore((s) => s.clear);
 
   const [open, setOpen] = useState(false);
@@ -207,49 +189,20 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
   };
 
   // Import one or more GRADIENT files (.map/.gpl/.ggr/.cpt/.css/.json — distinct from a
-  // Favients *collection*). The File read lives here; parsing is the pure core. Each
-  // gradient is fitted to stops and added to the shelf (content-deduped via isFav).
+  // Favients *collection*). The whole path — read, parse, name, fit, add — is the shared
+  // `importGradientFiles`, which GE v2's rail menu and root drop call too. Naming no
+  // destination, this menu keeps the shelf's last-used group and whole-collection dedupe
+  // (see that module's header).
   const onGradientFiles = async (files: FileList) => {
     // Read every file FIRST (async), so the undo bracket below stays fully
     // SYNCHRONOUS. Holding a param transaction open across awaits risks another
     // gesture's beginParamTransaction clobbering the engine's single
     // interactionSnapshot mid-import — which would drop the import's undo entry.
-    const reads = await Promise.all(
-      Array.from(files).map(async (f) => {
-        try {
-          return { name: f.name, text: await f.text() };
-        } catch {
-          return null; // read failure on this file — never aborts the rest
-        }
-      }),
-    );
-    let imported = 0;
-    let skipped = 0;
+    const reads = await readGradientFiles(files);
+    let outcome = { imported: 0, skipped: 0 };
     // Bracket the whole batch as ONE undo entry (empty diff → no entry if nothing added).
-    favEdit(() => {
-      for (const r of reads) {
-        if (!r) {
-          skipped++;
-          continue;
-        }
-        try {
-          const res = parseGradientText(r.text, extOf(r.name));
-          // parseGradientText guarantees a 256-length ramp, so fitRampToStops won't throw.
-          const config = res && fitRampToStops(res.ramp, { targetDE: 0.02, maxStops: 32 });
-          if (config && !isFav(config)) {
-            add(config, gradientName(r.name), `Import · .${res!.format}`);
-            imported++;
-          } else skipped++; // unreadable, or a duplicate of an existing favourite
-        } catch {
-          skipped++; // parse failure on this file
-        }
-      }
-    });
-    onFlash(
-      imported
-        ? `Imported ${imported} gradient${imported > 1 ? 's' : ''}${skipped ? ` · ${skipped} skipped` : ''}`
-        : 'No gradient could be read from that file',
-    );
+    favEdit(() => { outcome = importGradientsInto(reads); });
+    onFlash(importSummary(outcome));
     close();
   };
 
@@ -445,14 +398,30 @@ const FavientSwatch: React.FC<{
   selected?: boolean;
   /** Host flips click apply→select + enables the enlarge/selectable treatment. */
   selectMode?: boolean;
+  /** Right-click this favourite (Remove · Rename · More like this). */
+  onMenu?: (fav: Favient, e: React.MouseEvent) => void;
+  /** Delete / Backspace on the focused favourite. */
+  onRemove?: (fav: Favient) => void;
+  /** Open this row's rename input (the menu's Rename; the grid's switches to list view
+   *  first). Latched by an effect rather than by initial state, so it also fires when the
+   *  row is ALREADY mounted — which is the ordinary case in list view. */
+  autoRename?: boolean;
+  /** Fired once the rename editor has been opened, so the host can drop the request. */
+  onRenameOpened?: () => void;
   /** The v2 strip: 10 px corners (V8 as amended 2026-09-07 — large rounding on every
    *  gradient bar). The panel layouts keep their 4 px. */
   strip?: boolean;
-}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode, strip = false }) => {
+}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode, strip = false, onMenu, onRemove, autoRename, onRenameOpened }) => {
   const radius = strip ? 'rounded-[10px]' : 'rounded';
   const ref = useRef<HTMLCanvasElement>(null);
-  const [editing, setEditing] = useState(false);
   const list = view === 'list';
+  const [editing, setEditing] = useState(false);
+  useEffect(() => {
+    if (!autoRename || !list) return;
+    setEditing(true);
+    onRenameOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRename, list]);
   // Canvas footprint: the compact grid swatch, or a short fixed strip in list rows.
   const cw = list ? LIST_STRIP_W : swatchW;
   const ch = list ? Math.max(14, swatchH) : swatchH;
@@ -496,6 +465,27 @@ const FavientSwatch: React.FC<{
     });
   };
 
+  // Removal used to be drag-to-trash ONLY — no ✕, no menu, no Delete key — and nothing in
+  // this panel was reachable from the keyboard at all (the 2026-09-08 migration audit's
+  // M3 / A30 / A31). Both gestures land on the swatch's OUTER element so they work the
+  // same in grid and list; in grid the focus lives on the inner button and the key event
+  // bubbles up to here, in list it is the canvas that takes the tab stop.
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (editing) return;
+    // never while typing in the rename input
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      e.stopPropagation();
+      onRemove?.(fav);
+    }
+  };
+  const menuProps = {
+    onKeyDown,
+    ...(onMenu ? { onContextMenu: (e: React.MouseEvent) => onMenu(fav, e) } : {}),
+  };
+
   // The row stays `draggable` even while a filter disables reordering, so a drag
   // ATTEMPT is detectable (dragstart fires) — we cancel it and surface the cue,
   // rather than persistently nagging. Editing suppresses drag so the input works.
@@ -531,13 +521,20 @@ const FavientSwatch: React.FC<{
         data-slot
         {...(selectMode ? { 'data-gx-selectable': '' } : {})}
         {...dragProps}
-        className={`group flex items-center gap-2 px-1 py-1 rounded transition ${selected ? 'bg-accent-500/10 ring-1 ring-accent-400/40' : 'hover:bg-line/[0.06]'} ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+        {...menuProps}
+        className={`group flex items-center gap-2 px-1 py-1 rounded transition focus-within:ring-1 focus-within:ring-accent-400/60 ${selected ? 'bg-accent-500/10 ring-1 ring-accent-400/40' : 'hover:bg-line/[0.06]'} ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
       >
         {/* Strip selects/applies; name double-click renames (separate targets so renaming
             doesn't fire it). */}
         <canvas
           ref={ref}
+          tabIndex={0}
+          role="button"
+          aria-label={fav.name}
           onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(fav); }
+          }}
           style={{ width: cw, height: ch }}
           // V8 gradient-bar spec (plans/ge-v2-unified-shell-plan.md §1), inlined rather
           // than importing `gradient-explorer/v2/ui/bar.ts` — palette/** must never
@@ -584,6 +581,7 @@ const FavientSwatch: React.FC<{
       {...(selectMode ? { 'data-gx-selectable': '' } : {})}
       className={`group relative shrink-0 ${selected ? 'z-10' : ''}`}
       {...dragProps}
+      {...menuProps}
     >
       <button
         onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
@@ -912,6 +910,35 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
     });
   };
 
+  // Per-item removal, rename and "more like this" — the three things a favourite could not
+  // be told to do from itself (the 2026-09-08 migration audit's M3 + M12; A30/A31 recorded
+  // that removal was drag-to-trash only and nothing here answered the keyboard). One undo
+  // entry each, like every other gesture in this panel.
+  //
+  // Rename lives in the LIST row's own input, which the grid has no room for, so the grid's
+  // menu switches the view and asks that row to open its editor as it mounts — rather than
+  // growing a second rename affordance the two views would then have to keep in step.
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const removeFav = (fav: Favient) => {
+    favEdit(() => remove(fav.id));
+    flash(`Removed “${fav.name}” — undo with Ctrl+Z`);
+  };
+  const onSwatchMenu = (fav: Favient, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    useEngineStore.getState().openContextMenu(e.clientX, e.clientY, [
+      {
+        label: 'Rename',
+        action: () => {
+          if (viewMode !== 'list') toggleViewMode();
+          setRenameId(fav.id);
+        },
+      },
+      { label: 'More like this', action: () => setSimilarityAnchor({ config: fav.config, name: fav.name }) },
+      { label: 'Remove from My Gradients', danger: true, action: () => removeFav(fav) },
+    ]);
+  };
+
   const swatchProps = {
     onActivate: selectMode ? onSelect : onApply,
     onHover: setHover,
@@ -923,6 +950,8 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
     onRename: rename,
     onDragBlocked: () => flash('Clear the filter to reorder'),
     selectMode,
+    onMenu: onSwatchMenu,
+    onRemove: removeFav,
   };
 
   if (strip) {
@@ -1166,8 +1195,8 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
           <div className="flex-1 flex items-center justify-center text-center px-4">
             <div className="text-[11px] text-fg-dim leading-relaxed">
               <FavientsIcon className="text-2xl mb-2 opacity-60 block mx-auto" />
-              Drag a gradient here from the Picker, Generator, Image, or Stops to save it.
-              <div className="mt-1 text-fg-faint">Click a swatch to {selectMode ? 'select' : 'apply'} · drag to reorder · drag onto a target.</div>
+              Drag a gradient here to save it, or import one from a file.
+              <div className="mt-1 text-fg-faint">Click a swatch to {selectMode ? 'select' : 'apply'} · drag to reorder · right-click for rename and remove.</div>
               <div className="mt-1.5 text-fg-faint">Saved gradients are shared with the main GMT studio.</div>
             </div>
           </div>
@@ -1215,6 +1244,8 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
                           fav={f}
                           {...swatchProps}
                           groupLabel={groupLabel}
+                          autoRename={renameId === f.id}
+                          onRenameOpened={() => setRenameId(null)}
                           selected={selectMode && favActive && favPick?.key === f.id}
                         />
                       </React.Fragment>

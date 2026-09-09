@@ -246,6 +246,14 @@ interface FavientsState {
   insertMany: (items: { config: GradientConfig; name: string; source?: string }[], group: string, label?: string) => string[];
   /** Rename a group's divider label. */
   renameGroup: (groupId: string, label: string) => void;
+  /**
+   * Remove a named group. Its favourites are NOT deleted — they move to the default
+   * group (Kept), joining the head of its run, and the label goes. Deleting a container
+   * must not silently delete what is in it: removing a gradient is its own gesture
+   * (`remove`), and the rail's menu says how many will be re-homed before you agree.
+   * No-op on the default group, on Recent and on an unknown id. Returns how many moved.
+   */
+  removeGroup: (groupId: string) => number;
   /** One-time seed of starter favourites into a named group (e.g. the built-in
    *  presets). No-op after the first ever call (flagged in localStorage), so the
    *  user's edits/deletions are never overwritten. */
@@ -461,6 +469,32 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const groupLabels = { ...get().groupLabels, [groupId]: uniqueGroupLabel(label, groupId, get().groupLabels) };
     saveGroupLabels(groupLabels);
     set({ groupLabels });
+  },
+
+  removeGroup: (groupId) => {
+    if (groupId === DEFAULT_GROUP || isRecentGroup(groupId)) return 0;
+    const cur = get().favients;
+    const members = cur.filter((f) => (f.group ?? DEFAULT_GROUP) === groupId);
+    const labels = get().groupLabels;
+    if (!members.length && !(groupId in labels)) return 0;
+    // Rebuild rather than mutate in place: the survivors keep their order, and the
+    // re-homed members are spliced into the Kept run as ONE block so `buildBlocks`
+    // (which opens a block on every group change) still reads Kept as one divider.
+    const rest = cur.filter((f) => (f.group ?? DEFAULT_GROUP) !== groupId);
+    const rehomed = members.map((f) => ({ ...f, group: DEFAULT_GROUP }));
+    const firstKept = rest.findIndex((f) => (f.group ?? DEFAULT_GROUP) === DEFAULT_GROUP);
+    const at = firstKept >= 0 ? firstKept : recentRunEnd(rest);
+    const favients = [...rest.slice(0, at), ...rehomed, ...rest.slice(at)];
+    const groupLabels = { ...labels };
+    delete groupLabels[groupId];
+    saveFavients(favients);
+    saveGroupLabels(groupLabels);
+    // lastGroupId must not point at a group that no longer exists, or the next `add`
+    // would resurrect it as an orphan.
+    const lastGroupId = get().lastGroupId === groupId ? DEFAULT_GROUP : get().lastGroupId;
+    if (lastGroupId !== get().lastGroupId) saveLastGroup(lastGroupId);
+    set({ favients, groupLabels, lastGroupId });
+    return rehomed.length;
   },
 
   seedPresets: (entries, group, label) => {

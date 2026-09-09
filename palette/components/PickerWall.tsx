@@ -88,6 +88,14 @@ const toolCursor = (tool: SelectionTool | null | undefined): string | undefined 
         ? 'none'
         : undefined;
 
+/**
+ * At or above this tile WIDTH (px) the hover-enlarge preview is not drawn: the tile is
+ * already legible, and the popover would only cover its neighbours. 96 sits between
+ * `tileSizeFor`'s 80-wide step (a set of up to 160, still small enough to want the zoom)
+ * and its 112-wide step (up to 60 — large bars that do not).
+ */
+const HOVER_PREVIEW_MAX_W = 96;
+
 /** One band as the wall draws it — see `onViewport`. */
 export interface WallBand {
   key: string;
@@ -128,6 +136,18 @@ export interface PickerWallProps {
   scrollToGroup?: { key?: string; frac?: number; seq: number } | null;
   /** Begin an HTML5 drag for the swatch under the pointer (e.g. drag into Favients). */
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
+  /**
+   * A gradient dropped ON a band — the host files it into whatever that band stands for
+   * (GE v2, 2026-09-09: with several sets on the ground, dragging a tile from one band to
+   * another MOVES it between groups; before this the wall had no drop target at all and
+   * the only way to re-file was to drag onto a chip on the rail). Without the pair of
+   * callbacks the wall takes no drops, exactly as before, so app-gmt and the old stage are
+   * untouched.
+   */
+  onBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => void;
+  /** Whether THIS band would take THIS drag (the host decides: an auto-managed bin does
+   *  not, and neither does the band the gradient is already in). */
+  canBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => boolean;
   selectedId?: string;
   swatchW?: number;
   swatchH?: number;
@@ -455,7 +475,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -468,10 +488,39 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
   onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
   onEntryDragStart?: (entry: CatalogEntry, dataTransfer: DataTransfer) => void;
+  onBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => void;
+  canBandDrop?: (bandKey: string, dataTransfer: DataTransfer) => boolean;
   onRegister: (key: string, desc: ChunkDesc | null) => void;
   toolActive?: boolean;
   tileRadius?: number;
 }) {
+  // Lit while a droppable gradient is over this band. Local state, so a drag over one band
+  // does not re-render the others.
+  const [over, setOver] = React.useState(false);
+  const takes = (dt: DataTransfer): boolean => !!onBandDrop && (canBandDrop?.(group.key, dt) ?? true);
+  const dropProps = onBandDrop
+    ? {
+        onDragOver: (e: React.DragEvent) => {
+          if (!takes(e.dataTransfer)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          if (!over) setOver(true);
+        },
+        onDragLeave: (e: React.DragEvent) => {
+          // Only when the pointer leaves the band itself — crossing a child would
+          // otherwise flicker the highlight off and on.
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setOver(false);
+        },
+        onDrop: (e: React.DragEvent) => {
+          if (!takes(e.dataTransfer)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          setOver(false);
+          onBandDrop(group.key, e.dataTransfer);
+        },
+      }
+    : {};
   const cellH = swatchH + gap;
   const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
   const chunkLen = Math.max(1, cols * maxRows);
@@ -479,7 +528,11 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   for (let i = 0; i < group.entries.length; i += chunkLen) chunks.push(group.entries.slice(i, i + chunkLen));
 
   return (
-    <>
+    <div
+      className={`relative ${over ? 'outline outline-2 outline-dashed outline-gx-armed rounded-md' : ''}`}
+      data-wall-band={group.key}
+      {...dropProps}
+    >
       {/* Category label as a full-width header band (when present) — keeping it OUT of
           the per-bucket left gutter so a sparse bucket's gutter is a single short line
           that fits inside the swatch-row height (no leftover vertical gap). */}
@@ -529,7 +582,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           ))}
         </div>
       </div>
-    </>
+    </div>
   );
 });
 
@@ -546,6 +599,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onViewport,
   scrollToGroup,
   onEntryDragStart,
+  onBandDrop,
+  canBandDrop,
   selectedId,
   swatchW = 32,
   swatchH = 18,
@@ -1082,9 +1137,18 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // the zoom preview, is the relevant feedback then), OR while a gradient is in hand (the
   // floating click-through avatar already follows the cursor). Stable identity so memoised
   // GroupRows don't re-render on every hover.
+  // The hover-enlarge preview exists so a SMALL tile can be seen. Once the tile is already
+  // big — which it is whenever the ground holds a set rather than the catalogue, because
+  // `tileSizeFor` grows the tile as the set shrinks — a 3× popover under the cursor shows
+  // nothing new and covers the neighbours you were reaching for, including the band you were
+  // about to drag onto (owner, 2026-09-09: "we don't need the huge mouseover previews when
+  // the chips are so large"). So it is a function of the tile, not a setting: at or above
+  // this width the tile IS the preview.
+  const previewSuppressed = swatchW >= HOVER_PREVIEW_MAX_W;
   const handleHover = useCallback((h: Hover | null) => {
+    if (previewSuppressed) return;
     if (!dragging.current && !selToolRef.current && !inHandRef.current && !coarsePointer.current) setHover(h);
-  }, []);
+  }, [previewSuppressed]);
   // Drop any showing preview the instant a gradient goes in hand, so it doesn't linger
   // under the avatar (the guard above only blocks NEW hovers).
   useEffect(() => { if (inHand) setHover(null); }, [inHand]);
@@ -1188,6 +1252,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               onPick={handlePick}
               onEntryContextMenu={selectionTool ? undefined : onEntryContextMenu}
               onEntryDragStart={selectionTool ? undefined : onEntryDragStart}
+              onBandDrop={selectionTool ? undefined : onBandDrop}
+              canBandDrop={canBandDrop}
               onRegister={registerChunk}
             />
           ))}

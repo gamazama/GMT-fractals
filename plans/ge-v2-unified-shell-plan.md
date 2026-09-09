@@ -1006,6 +1006,84 @@ are where to START reading, not necessarily where the change lands.
 > want reading rather than re-deriving. Item 8's visual half wants the owner's walk with an
 > image loaded — a native EyeDropper needs a user gesture and cannot be driven headlessly.
 
+> **Status 2026-09-09 (session 3): item 4 — the "more" panel's features belong in the wall.**
+> The audit's M1-M4, M7 and M12 shipped, plus what the OWNER asked for on top of them once
+> he had it in his hands, plus a defect that made the whole thing look broken. Guard:
+> `npm run test:palette-shelf` (`debug/test-palette-shelf-manage.mts`, eight sections,
+> falsified eleven ways — three of its assertions passed under mutation on the first attempt
+> and were rewritten; the header names each).
+>
+> | What shipped | Where |
+> |---|---|
+> | **M2 Import a gradient file** — one shared path (`palette/core/importGradientFiles.ts`) that the panel's kebab, the rail's "Import into this set…" and a file dropped ANYWHERE on the shell all call. The drop shares the image importer's single window listener through a new `onOtherFiles` seam rather than racing a second one. | `importGradientFiles.ts`, `useImageDrop.ts`, `SetRail.tsx`, `GradientExplorerV2App.tsx` |
+> | **M1 Export a SET** — the same `ExportMenu`, pointed at a set: a collection format bundles it, anything else is a .zip, the `.ai`/`.idml` lossy notice comes with it, and the contact sheet (OD2) takes the PNG strip's place. Deliberately ONE component, so §8b item 5's unified export grows from here. | `ExportMenu.tsx`, `exportActions.ts` |
+> | **M7 Delete a group** — `removeGroup` re-homes its gradients to Kept as one run and says how many before you agree. Deleting a container must not delete what is in it. | `favientsStore.ts`, `SetRail.tsx` |
+> | **M3 Per-item remove, rename and a keyboard path** in the panel — right-click a swatch (Rename · More like this · Remove), Delete on the focused one, a focus ring, and a tab stop on the list row. Grid-view rename works by switching to list and latching that row's editor, rather than growing a second rename affordance. | `FavientsPanel.tsx` |
+> | **M4 The hero is a drag source** — its header is the handle (the ramp cannot be: it is the stops editor, and a drag there moves a knot). | `WorkingHero.tsx` |
+> | **M12 More like this** on every wall tile, and a toast with an undo hint on tile-remove. | `BrowseStage.tsx` |
+> | Audit §3.8a — **the clear-collection lockout**. The rail ROW is now always mounted (its chips still wait for a second set, L9), so the chevron — the only menu route to Import and Load & merge — cannot be cleared away. A dropped file is the other way back in. | `GradientExplorerV2App.tsx` |
+> | Audit §3.8b — **the cross-host view-mode leak**. v2 claims its own panel key at boot. | `favientsPanelPersist.ts`, `main.tsx` |
+>
+> **What the owner added while testing, which is most of the value.**
+>
+> 1. **Sets are MULTI-SELECT** ("users should be able to select multiple user Groups at a
+>    time — I suggest using the same ui but toggleable"). The chips toggle; the ground is
+>    the UNION. Two rules keep it from being a mode, both in `palette/store/groundSet.ts`:
+>    All is exclusive, and the selection is never empty. Ctrl/⌘-click is the inverse — only
+>    this set — because with pure toggling, getting back to one of five would be four
+>    clicks. The stored value is now a JSON array; a pre-2026-09-09 bare id still reads.
+> 2. **A group can be CREATED empty** — the `+` at the end of the chips. It needed
+>    `listGroundSets` to show a labelled group with no members, which also stops an emptied
+>    group vanishing under the user.
+> 3. **The ground is DIVIDED** ("when I select today + kept, there's no division between
+>    them"). `GroundSource` gained `bands`, so the wall draws one labelled band per set. No
+>    change in `PickerWall` was needed for the labels — it has always drawn a header for a
+>    band that has one; a set simply never had one, because `SET_AXES` produces a single
+>    band with an empty label.
+> 4. **A tile can be dragged from one band to another** ("and I can't drag gradients from
+>    one to the other"). The wall had NO drop target at all — it was a viewer with a
+>    drag-out. Each band is now one, keyed by set id, filing through the same
+>    `fileFavientInto` the rail's chips use.
+> 5. **No hover-enlarge on large tiles** ("we don't need the huge mouseover previews when
+>    the chips are so large"). It is a function of the tile width, not a setting: the
+>    preview exists so a SMALL tile can be seen, and on a set the tile is already big — the
+>    popover only covered the band you were reaching for.
+> 6. **The drag avatar is back, simpler** ("it can be much simpler now"). New
+>    `palette/components/GradientDragAvatar.tsx`: a 120×24 ramp at the cursor, no morph, no
+>    spring, no landing — not a fork of the old shell's 442-line `GradientDropLayer`, the
+>    part v2 needs. It reads a new drag-payload slot rather than the hero SELECTION, so a
+>    drag never doubles as a pick.
+>
+> **Three things worth carrying forward.**
+>
+> 1. **THE BUG THAT MADE ALL OF IT LOOK BROKEN, and it was already shipped.**
+>    `setFavientDrag` set `effectAllowed = 'copy'`; `SetRail`'s chip drop set
+>    `dropEffect = 'move'`. A dropEffect the effectAllowed does not permit is reset to
+>    'none' by the browser and **`drop` never fires** — silently, no error, no cursor
+>    change. So dragging a wall tile onto a rail chip has never worked in v2, and the new
+>    band drop inherited it. `effectAllowed` is now `'copyMove'`. Two things hid it: the
+>    2026-09-08 audit traced the drag through the code and concluded it worked (the CODE is
+>    right; the browser refuses it), and a synthetic-`DragEvent` harness never applies the
+>    compatibility rule at all. **A synthetic drag proves the handlers; it cannot prove the
+>    drop.** The owner found it in minutes with a mouse.
+> 2. **A re-audit from a different question found what the first audit could not.** The
+>    2026-09-08 audit asked "does v2 have this?" and counted the panel — which v2 mounts —
+>    as the answer. Asked instead as "can you do this ON THE GROUND?", A13 (drag to reorder)
+>    and A16 (trash) are panel-only, A14 is partial, and A9/A10's "genuine, improved" hid
+>    exactly the missing division the owner hit within minutes. The classification was not
+>    careless; the question was too weak. Both audits are on file.
+> 3. **A literal NUL byte got into `useGroundSource.ts`** from a join key written through a
+>    shell heredoc, which turned one source file binary to grep. `check:text-bytes` caught
+>    it in about a second. Run it after any scripted edit.
+>
+> **Still open in this queue:** item 5 (one unified export — a design job, and the set leg
+> of it now exists to build on). From the re-audit, still true and not built: drag to
+> REORDER within a band to an exact position (the panel's `insertIndexFromPointer` +
+> placeholder has no ground equivalent — the biggest remaining gap), rename a gradient from
+> a wall tile, a trash target on the ground, multi-select of TILES on the wall (the carve
+> machinery already computes an id-set — turning that into "move these to a group" is the
+> cheapest batch-organise there is), and M14's arrow-key navigation.
+
 1. **A dropped swatch should land anywhere on the gradient, not only on the bottom bar.**
    Colour drag-and-drop works today only over the ramp strip. The payload and its MIME type are
    `components/gradient/colorDrag.ts`; the editor's drop handling and `dropColourAt` are in

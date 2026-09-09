@@ -9,7 +9,9 @@
  *      Recent's dated bins newest first (Today · Yesterday · the date), Kept (the shelf's
  *      default group), every named group in shelf order. The order never changes with use,
  *      so a set is a PLACE (the research's rule 1: "Mine is a place").
- *   2. `membersOf` — which favourites a set id resolves to, in shelf order.
+ *   2. `membersOf` — which favourites a set id resolves to, in shelf order, and
+ *      `membersOfMany` — the UNION of several, deduped, still in shelf order (2026-09-09:
+ *      the rail's chips are multi-select, so the ground can be two groups at once).
  *   3. `favientsToEntries` — a favourite as the `CatalogEntry` the wall draws. The wall blits
  *      every tile from ONE sprite by `entry.row`, so a set's entries are renumbered 0..n-1
  *      for a sprite of their own (`usePickerModel` builds it from `entries[i].ramp`).
@@ -87,6 +89,12 @@ export interface ListGroundSetsInput {
  * promotes to the head of the run); a named group whose favourites sit in two runs is ONE
  * chip with the summed count. The seeded Presets group hides once Recent has anything —
  * the strip's rule, kept: it is a starter, not a place the user made.
+ *
+ * A group that has a LABEL but no favourites is a chip too (2026-09-09), at the end and
+ * with a count of 0. Blocks are built from the favourites, so an empty group was invisible
+ * — which made "new group" impossible to express as anything but a drop, and made an
+ * emptied group vanish under the user rather than stay somewhere to refill. Recent and the
+ * default group are never in `groupLabels`, so neither can arrive this way.
  */
 export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date.now() }: ListGroundSetsInput): GroundSetDesc[] => {
   const out: GroundSetDesc[] = [{ id: ALL_SET_ID, kind: 'catalog', label: 'All', count: catalogTotal }];
@@ -110,7 +118,26 @@ export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date
     if (g.group === PRESETS_GROUP && hasRecent) continue;
     out.push(g);
   }
+  for (const [id, label] of Object.entries(groupLabels)) {
+    if (groups.has(id) || id === DEFAULT_GROUP || isRecentGroup(id)) continue;
+    if (id === PRESETS_GROUP && hasRecent) continue;
+    out.push({ id: groupSetId(id), kind: 'group', label, count: 0, group: id });
+  }
   return out;
+};
+
+/**
+ * The union of several sets, deduped by favourite id, in shelf order — what the ground
+ * shows when more than one chip is lit. `All` among them means the catalogue, which is not
+ * a favourites set, so the caller handles that case before asking (it returns []).
+ */
+export const membersOfMany = (setIds: readonly string[], favients: Favient[]): Favient[] => {
+  if (setIds.length === 1) return membersOf(setIds[0], favients);
+  const want = new Set<string>();
+  for (const id of setIds) for (const f of membersOf(id, favients)) want.add(f.id);
+  // Walk the shelf, not the ids: order is the shelf's, and a favourite in two sets
+  // (a Recent bin AND a group it was filed into) appears once.
+  return favients.filter((f) => want.has(f.id));
 };
 
 /** The favourites a bin or group set holds, in shelf order. Empty for All. */

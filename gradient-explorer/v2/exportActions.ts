@@ -10,6 +10,16 @@
  *
  * Recents persist in localStorage (`gx.v2.recentExports`); an unknown format key (a
  * renamed registry entry) is dropped on load, never shown.
+ *
+ * `runSetExport` is the same registry pointed at a SET of gradients rather than one
+ * (§8b item 4, the 2026-09-08 migration audit's M1): a collection format bundles the set
+ * into one file, everything else becomes a .zip of one file per gradient, and the contact
+ * sheet is a PNG grid of the whole set. The building is
+ * `palette/core/favientsExport.ts`, unchanged — what moved is WHAT it is pointed at.
+ * Before this it existed only inside the My Gradients kebab and always meant the whole
+ * collection; the set is the noun Phase D created. A set export is NOT noted as a recent:
+ * the hero's flyout offers one-click repeats of the WORKING gradient, and a set is a
+ * different subject.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -17,6 +27,8 @@ import { getExportFormat, grdStopCount, type ExportFormatDef } from '../../palet
 import { downloadBlob } from '../../utils/SceneFormat';
 import { showToast } from '../../engine/store/toastStore';
 import type { RGB } from '../../palette/core/oklab';
+import { buildCollectionFile, buildCollectionZip, buildContactSheet, collectionQualityWarnings } from '../../palette/core/favientsExport';
+import type { Favient } from '../../palette/store/favientsStore';
 
 export type ExportAction = { kind: 'copy' | 'download'; key: string } | { kind: 'png' };
 
@@ -113,6 +125,51 @@ const downloadPng = (ramp: RGB[], name: string) => {
     showToast('Downloaded .png strip');
   });
 };
+
+/**
+ * Export a whole SET. `key` is a registry format: a collection format (.ai/.idml/.ugr)
+ * bundles every gradient into one file, anything else becomes a .zip of one file per
+ * gradient. No copy variant — a set has no single text form to put on the clipboard.
+ */
+export const runSetExport = (key: string, favients: Favient[], setName: string): void => {
+  if (!favients.length) {
+    showToast('That set is empty');
+    return;
+  }
+  const stem = slugName(setName);
+  const file = buildCollectionFile(favients, key);
+  if (file) {
+    const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
+    downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `${stem}.${file.ext}`);
+    showToast(`Exported ${favients.length} → .${file.ext}`);
+    return;
+  }
+  const bytes = buildCollectionZip(favients, key);
+  downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${stem}.zip`);
+  showToast(`Exported ${favients.length} as .zip`);
+};
+
+/** The contact sheet (OD2): a PNG grid of the set, names included. */
+export const runSetContactSheet = async (favients: Favient[], setName: string): Promise<void> => {
+  if (!favients.length) {
+    showToast('That set is empty');
+    return;
+  }
+  const blob = await buildContactSheet(favients, setName);
+  if (!blob) {
+    showToast('Could not draw the contact sheet');
+    return;
+  }
+  downloadBlob(blob, `${slugName(setName)}-contact-sheet.png`);
+  showToast('Contact sheet saved (PNG)');
+};
+
+/**
+ * How many of a set lose visible detail in `key`, or 0. `.ai`/`.idml` only — see
+ * `collectionQualityWarnings`, whose `.ugr` exemption is an `@assumption` there.
+ */
+export const setLossyCount = (favients: Favient[], key: string): number =>
+  collectionQualityWarnings(favients, key).length;
 
 /** Perform an export of the working ramp and remember it as a recent. */
 export const runExport = (a: ExportAction, ramp: RGB[], name: string): void => {

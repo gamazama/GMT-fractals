@@ -69,6 +69,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
+import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
+import { setDragOrigin } from '../../palette/store/dragVisual';
 import { useFavientsStore, favientSig, isRecentGroup } from '../../palette/store/favientsStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../../palette/store/paletteEditorStore';
@@ -370,7 +372,27 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
           {/* Owner, 2026-09-06 / 07: the name is the HEADER of the panel — one object with
               the ramp beneath it — the state reads inline, and the outputs (Keep · Share ·
               Export · Wallpaper) sit at its right edge as icons (L2), no use column. */}
-          <div className="flex items-center gap-1.5 h-[42px] px-4 bg-surface-raised">
+          {/* The header is also the hero's DRAG HANDLE (§8b item 4 / the migration audit's
+              M4): drag it onto a chip on the set rail to file the working gradient there.
+              Every other gradient bar in the shell is draggable and L7 says the gesture is
+              the same on every bar — before this the only way to file what you were working
+              on was ★ (which puts it in Kept) and then dragging the tile. The RAMP cannot
+              be the handle here: it is the stops editor, and a drag on it moves a knot.
+              A drag begun inside the name input is left alone so selecting its text still
+              works, and an empty source has nothing to hand over. */}
+          <div
+            className="flex items-center gap-1.5 h-[42px] px-4 bg-surface-raised"
+            draggable={!emptySource}
+            title={emptySource ? undefined : 'Drag onto a set below to file this gradient'}
+            onDragStart={(e) => {
+              if (emptySource || !shown) return;
+              if ((e.target as HTMLElement | null)?.closest('input')) return;
+              const payload = { config: shown.config, name: derived.name };
+              setFavientDrag(e.dataTransfer, payload);
+              beginCustomAvatarDrag(e.dataTransfer); // register the drag + suppress the native image
+              setDragOrigin(e.currentTarget.getBoundingClientRect()); // the avatar morphs out of the header
+            }}
+          >
             {/* the name HUGS its text (a mirror span sizes the grid cell; the input fills it)
                 instead of clipping at a fixed width — owner, 2026-09-07 */}
             <span className="inline-grid min-w-[40px] max-w-[60%] text-[18px] font-semibold">

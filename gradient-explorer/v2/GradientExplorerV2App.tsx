@@ -10,7 +10,8 @@
  * the stage — the GROUND, which shows ONE SET of gradients at a time (Phase D, 2026-09-08:
  * the catalogue, a dated bin of Recent, Kept, a named group), headed by the SET RAIL naming
  * the sets (`SetRail`, at the TOP of the ground above the wall's own header — owner: "that
- * makes more sense hierarchically"; silent until there is a second set), with the full
+ * makes more sense hierarchically"; its CHIPS are silent until there is a second set, the
+ * row itself is always there for the chevron), with the full
  * My Gradients panel floating under the rail when opened. No Dock, no side panel, no
  * drawer, no timeline, no scene name, no footer, and no shelf strip any more — the
  * gradients you keep are drawn on the ground, by the wall, as large as their count allows.
@@ -50,17 +51,22 @@ import { usePickerStore } from '../../palette/store/pickerStore';
 import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot } from '../../palette/store/generatorStore';
-import { useFavientsStore, favientSig } from '../../palette/store/favientsStore';
+import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store/favientsStore';
+import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary, isGradientFileName } from '../../palette/core/importGradientFiles';
+import { paramEdit } from '../../palette/store/paramUndoBracket';
 import { renderStopsToRamp } from '../../palette/core/gmtGradient';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
 import { useImageDrop } from '../../palette/components/useImageDrop';
 import { useImageStore } from '../../palette/store/imageStore';
+import { GradientDragAvatar } from '../../palette/components/GradientDragAvatar';
 import { WorkingHero } from './WorkingHero';
 import { Floating } from './ui/Floating';
 import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
 import { useGroundSets } from './useGroundSource';
-import { useGroundSetId, setGroundSetId } from '../../palette/store/groundSet';
+import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetId } from '../../palette/store/groundSet';
+import { membersOf, parseSetId, type GroundSetDesc } from '../../palette/core/groundSets';
+import { setV2FavientsPanelKey } from '../../palette/store/favientsPanelPersist';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
 
@@ -121,11 +127,19 @@ export const GradientExplorerV2App: React.FC = () => {
   const source = sourceOf(tray);
   const [mineOpen, setMineOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  /** The set whose Export window is open (the rail's chip menu), or null. */
+  const [exportSet, setExportSet] = useState<GroundSetDesc | null>(null);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const pickSerial = usePickSerial();
   const sets = useGroundSets();
-  const groundSetId = useGroundSetId();
+  const favients = useFavientsStore((s) => s.favients);
+  // L9, the screen grows with the user: the CHIPS appear only once there is a second set.
+  // The rail ROW is always mounted, because its chevron is the door to My Gradients —
+  // which now holds Import as well as export, and gating that door on the chips is what
+  // made a cleared shelf unrecoverable (the migration audit §3.8a).
+  const railSets = sets.length > 1 ? sets : [];
+  const groundSetIds = useGroundSetIds();
   const armed = useArmedSlot();
   useGlobalContextMenu();
   const contextMenu = useEngineStore((s) => s.contextMenu);
@@ -253,8 +267,49 @@ export const GradientExplorerV2App: React.FC = () => {
   // the Image tab (and the slot) open the file dialog; the source switches only when one
   // arrives (`onLoaded`) — cancel the dialog and nothing changes. Drop / paste anywhere
   // still routes here.
-  const { fileToImg } = useImageDrop({ onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); } });
+  //
+  // A gradient FILE dropped anywhere lands on the shelf (§8b item 4, M2). It shares the
+  // image drop's single window listener through `onOtherFiles` rather than racing a second
+  // one. A `.json` is ambiguous — it is both a gradient format and the Favients collection
+  // format — so `importGradientsInto` tries it as a gradient and a file that is really a
+  // collection simply reports nothing readable; Load & merge in the panel's kebab is the
+  // collection path and stays where it is.
+  //
+  // This is also what un-corners a CLEARED shelf. The rail (and with it the manage panel,
+  // Import and Load & merge) used to be gated on `sets.length > 1`, so "Clear collection"
+  // — reached from inside that very panel — could make every way back in unreachable
+  // (the migration audit §3.8a). Two things fix it: a drop always works, and the rail's
+  // chevron is no longer gated on the chips (see the stage below).
+  const importInto = useCallback((files: FileList | File[], group?: string) => {
+    void (async () => {
+      // Read FIRST (async), then write inside ONE synchronous paramEdit — holding a param
+      // transaction open across an await risks another gesture clobbering the snapshot.
+      const reads = await readGradientFiles(files);
+      let outcome = { imported: 0, skipped: 0 };
+      paramEdit(() => { outcome = importGradientsInto(reads, group); });
+      showToast(importSummary(outcome));
+    })();
+  }, []);
+  const { fileToImg } = useImageDrop({
+    onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); },
+    onOtherFiles: useCallback((files: FileList) => {
+      const gradients = Array.from(files).filter((f) => isGradientFileName(f.name));
+      if (!gradients.length) return false;
+      // Into the set you are looking at, when that set is a group you own; a dated bin and
+      // the catalogue are not yours to file into, so those fall back to Kept.
+      const { kind, key } = parseSetId(getGroundSetId());
+      importInto(gradients, kind === 'group' ? key : DEFAULT_GROUP);
+      return true;
+    }, [importInto]),
+  });
   const imageFileRef = useRef<HTMLInputElement>(null);
+  // The rail's "Import into this set…" — the group is held for the picker's onChange.
+  const gradientFileRef = useRef<HTMLInputElement>(null);
+  const importGroupRef = useRef<string>(DEFAULT_GROUP);
+  const askImportInto = useCallback((group: string) => {
+    importGroupRef.current = group;
+    gradientFileRef.current?.click();
+  }, []);
   const requestImageOrOpen = useCallback(() => {
     if (trayRef.current === 'image' || useImageStore.getState().model) openTray('image');
     else imageFileRef.current?.click();
@@ -369,13 +424,32 @@ export const GradientExplorerV2App: React.FC = () => {
             a second set (L9: the screen grows with the user). The chevron opens the full My
             Gradients panel (search, list view, rename, import / export) under the rail,
             floating over the wall (L6: nothing pushes the ground). */}
-        {sets.length > 1 && (
-          <SetRail sets={sets} activeId={groundSetId} onSelect={setGroundSetId} open={mineOpen} onToggleOpen={() => setMineOpen((o) => !o)} />
-        )}
-        {mineOpen && sets.length > 1 && (
+        <SetRail
+          sets={railSets}
+          activeIds={groundSetIds}
+          onSelect={setGroundSetId}
+          onToggle={toggleGroundSetId}
+          open={mineOpen}
+          onToggleOpen={() => setMineOpen((o) => !o)}
+          onExportSet={setExportSet}
+          onImportInto={askImportInto}
+        />
+        {mineOpen && (
           <Floating className="absolute left-6 right-6 top-10 z-30 h-[340px] overflow-hidden flex flex-col" data-gx-mine-panel="">
             <FavientsPanel hint={null} />
           </Floating>
+        )}
+        {/* The set's own Export window — the same `ExportMenu`, pointed at a set instead of
+            the working gradient (§8b item 4 / the audit's M1). Hosted here, like the hero's,
+            so the rail stays a control. */}
+        {exportSet && (
+          <ExportMenu
+            ramp={[]}
+            name={exportSet.label}
+            set={membersOf(exportSet.id, favients)}
+            onClose={() => setExportSet(null)}
+            positionClass="absolute left-6 top-10 z-40"
+          />
         )}
         {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it. One line
             above it only when it has something to say.
@@ -415,6 +489,23 @@ export const GradientExplorerV2App: React.FC = () => {
           e.target.value = '';
         }}
       />
+      <input
+        ref={gradientFileRef}
+        type="file"
+        accept={GRADIENT_FILE_ACCEPT}
+        multiple
+        aria-label="Import gradient files"
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files?.length) importInto(e.target.files, importGroupRef.current);
+          e.target.value = '';
+        }}
+      />
+      {/* The cursor-following ramp while a gradient is in flight. Mounted here because
+          `beginCustomAvatarDrag` suppresses the browser's own drag image for every gradient
+          drag in the suite — without an avatar a v2 drag was invisible (owner, 2026-09-09:
+          it augments the drags where you expect it, above all hero → shelf). */}
+      <GradientDragAvatar />
       <SettingsHost />
       <ToastHost />
       <FullscreenGradientOverlay />

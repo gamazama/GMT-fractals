@@ -5,7 +5,8 @@
  * persist), like pickerSearch: set on dragstart, read by the avatar on mount, cleared on
  * drag-end.
  *
- * @see gradient-explorer/GradientDropLayer.tsx (the avatar that consumes this)
+ * @see gradient-explorer/GradientDropLayer.tsx (the old shell's avatar + reveal machinery)
+ * @see palette/components/GradientDragAvatar.tsx (the small standalone avatar GE v2 mounts)
  */
 
 import { useSyncExternalStore } from 'react';
@@ -25,6 +26,30 @@ export const setDragOrigin = (rect: DragRect | null): void => {
 };
 
 export const getDragOrigin = (): DragRect | null => origin;
+
+// --- WHAT is being dragged. Set by `setFavientDrag`, the one call every gradient drag in the
+// suite makes, so an avatar can paint the ramp without asking the DataTransfer (whose DATA is
+// unreadable during dragover — only its types are exposed while a drag is in flight) and
+// without piggy-backing on the hero SELECTION, which would turn a drag into a pick.
+//
+// Added 2026-09-09, because GE v2 mounts no `GradientDropLayer`: `beginCustomAvatarDrag`
+// suppresses the native drag image on the promise that an avatar replaces it, and in v2
+// nothing did — so every gradient drag in that shell was invisible while in flight, which
+// reads as "dragging does not work" (owner, testing the live shell).
+
+let dragPayload: { config: unknown; name?: string } | null = null;
+
+/** What is in flight (call from `setFavientDrag`). null to clear. */
+export const setDragPayload = (p: { config: unknown; name?: string } | null): void => {
+  dragPayload = p;
+  listeners.forEach((l) => l());
+};
+
+export const getDragPayload = (): { config: unknown; name?: string } | null => dragPayload;
+
+/** Subscribe to what is being dragged (null between drags). */
+export const useDragPayload = (): { config: unknown; name?: string } | null =>
+  useSyncExternalStore(subscribe, () => dragPayload, () => dragPayload);
 
 // --- Landing — the reverse of the take-off morph: when a gradient is APPLIED to a target,
 // a fading copy flies from where it was (the avatar / cursor) INTO the destination rect.
@@ -171,6 +196,7 @@ const clearNativeDrag = (): void => {
   }
   if (nativeDrag) {
     nativeDrag = false;
+    dragPayload = null; // nothing is in flight any more — the avatar goes with it
     listeners.forEach((l) => l());
   }
 };

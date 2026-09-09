@@ -18,7 +18,8 @@
  * No hero here. A wall click is a candidate (`setHeroPick`); `WorkingHero` previews it.
  *
  * ONE GROUND, MANY SETS (Phase D, 2026-09-08): the wall shows whichever set the rail has lit
- * (`useGroundSetId` → `useGroundSource`). On the catalogue (All) everything above applies.
+ * (`useGroundSetIds` → `useGroundSource`; several lit chips union into one ground). On the
+ * catalogue (All) everything above applies.
  * On a user set — a dated bin of Recent, Kept, a named group — the pad and Filters are
  * gone (they are the catalogue's lens), the header names the set, search still narrows,
  * "More like this" still ranks, the carve tools are gone (their ids are catalogue ids), the
@@ -36,7 +37,14 @@
  * (`scrollToGroup` with a fraction into the band) while the wall is ungrouped (grouped by
  * category every lightness exists once per category, so "jump to 0.7" is ambiguous).
  *
- * A tile's right-click on a bin or a group offers Remove from My Gradients (one undo step).
+ * A tile's right-click offers More like this (every tile) and, on a bin or a group where
+ * the tile is a favourite, Remove from My Gradients (one undo step).
+ *
+ * SEVERAL SETS AT ONCE (2026-09-09): the rail's chips toggle, so the ground can hold two
+ * groups. Then the wall draws a labelled BAND per set (`useGroundSource` supplies them)
+ * and each band is a drop target — drag a tile from one band onto another and the
+ * favourite MOVES, exactly as dragging it onto that set's chip does. That is the one
+ * organising gesture the old My Gradients panel had that the ground did not.
  * Snapshots were a set here for one afternoon (D.3) and are gone with the top-bar Variants
  * popover (owner, 2026-09-08: tray states are baked after every action; the gradient is
  * already in Recent and Kept).
@@ -76,7 +84,13 @@ const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
 import { Act } from './ui/Act';
-import { useGroundSetId, setGroundSetId } from '../../palette/store/groundSet';
+import { useGroundSetIds, setGroundSetId } from '../../palette/store/groundSet';
+import { showToast } from '../../engine/store/toastStore';
+import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
+import { fileFavientInto } from '../../palette/store/favientFiling';
+import { FAVIENT_DND_MIME, readFavientDrag } from '../../palette/core/favientDnd';
+import { parseSetId } from '../../palette/core/groundSets';
+import type { ContextMenuItem } from '../../types/help';
 import { useGroundSets, useGroundSource } from './useGroundSource';
 import { groupSetId } from '../../palette/core/groundSets';
 import { newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
@@ -110,11 +124,13 @@ const GROUND: React.CSSProperties = {
 const floatOver = 'backdrop-blur-sm';
 
 export const BrowseStage: React.FC = () => {
-  const setId = useGroundSetId();
+  const setIds = useGroundSetIds();
   const sets = useGroundSets();
-  const source = useGroundSource(setId, sets);
+  const source = useGroundSource(setIds, sets);
   const m = usePickerModel({ source });
-  const setDesc = sets.find((s) => s.id === m.setId) ?? null;
+  // The ground can be several sets at once, so the title is their labels joined — the
+  // model's `setId` is the joined selection and is not a label.
+  const setTitle = sets.filter((s) => setIds.includes(s.id)).map((s) => s.label).join(' + ') || m.setId;
   // The pad follows the Arrange state (owner, 2026-09-08): rows on its Y, sort on its X when
   // they are colour axes, the third on the strip — so the pad is the wall's map for any
   // arrangement it can paint (`palette/core/padAxes.ts`; the harness pins the table).
@@ -248,16 +264,60 @@ export const BrowseStage: React.FC = () => {
   // (the look ranges, the arrange params) go through AutoFeaturePanel below.
   const actions = useMemo(() => ({ setPaletteFilters: m.setPaletteFilters }), [m.setPaletteFilters]);
   const { handleInteractionStart, handleInteractionEnd, openContextMenu } = useStoreCallbacks();
-  // A tile's right-click menu on a bin or a group: removing the favourite (one undo step).
-  // None on the catalogue.
-  const onTileMenu = useMemo(() => {
-    if (!source) return undefined;
-    return (entry: CatalogEntry, e: React.MouseEvent) => {
-      openContextMenu(e.clientX, e.clientY, [
-        { label: 'Remove from My Gradients', danger: true, action: () => paramEdit(() => useFavientsStore.getState().remove(entry.id)) },
-      ]);
-    };
-  }, [source, openContextMenu]);
+  // A tile's right-click menu. "More like this" is on EVERY tile including the catalogue's
+  // (the migration audit's M12: ranking the wall by one of your own gradients is the most
+  // useful thing a kept tile can do, and it was reachable only from the hero); Remove is
+  // on a bin or a group, where the tile IS a favourite. A favourite's own stored config is
+  // the anchor when we have it — `entryToGradientConfig` is the catalogue's route and
+  // forces colorSpace 'linear', which is right for the fractal and wrong as a round-trip
+  // of what the user saved.
+  const onTileMenu = useMemo(
+    () => (entry: CatalogEntry, e: React.MouseEvent) => {
+      const fav = source ? useFavientsStore.getState().favients.find((f) => f.id === entry.id) : undefined;
+      const items: ContextMenuItem[] = [
+        {
+          label: 'More like this',
+          action: () => setSimilarityAnchor({ config: fav?.config ?? entryToGradientConfig(entry), name: entry.name }),
+        },
+      ];
+      if (source && fav) {
+        items.push({
+          label: 'Remove from My Gradients',
+          danger: true,
+          action: () => {
+            paramEdit(() => useFavientsStore.getState().remove(entry.id));
+            // The tile just vanishes off the wall, so say what happened and that it is
+            // reversible — the panel's own remove has always said so.
+            showToast(`Removed “${entry.name}” — undo with Ctrl+Z`);
+          },
+        });
+      }
+      openContextMenu(e.clientX, e.clientY, items);
+    },
+    [source, openContextMenu],
+  );
+  // A gradient dropped ON a band files it into that set (owner, 2026-09-09: "I can't drag
+  // gradients from one to the other"). The band key IS the set id, so a drop knows exactly
+  // where it landed — the same filing rule the rail's chips use, from the same module, so
+  // the two drop targets cannot drift apart.
+  //
+  // A dated bin refuses: Recent is auto-managed and a gradient filed there would fall off
+  // its own cap. Only offered while several sets share the ground; with one set there is
+  // nowhere else on the wall to move a gradient TO.
+  const multi = setIds.length > 1;
+  const canBandDrop = useCallback(
+    (bandKey: string, dt: DataTransfer) =>
+      multi && parseSetId(bandKey).kind === 'group' && Array.from(dt.types).includes(FAVIENT_DND_MIME),
+    [multi],
+  );
+  const onBandDrop = useCallback((bandKey: string, dt: DataTransfer) => {
+    const { kind, key } = parseSetId(bandKey);
+    if (kind !== 'group') return;
+    const p = readFavientDrag(dt);
+    if (!p) return;
+    paramEdit(() => fileFavientInto(key, p));
+  }, []);
+
   const stripDef = QUALITY_AXES.find((a) => a.axis === WINDOW_KEY[pad.strip])!;
   // The strip is painted toward the pad window's average colour (owner).
   const stripTrack = useMemo(() => stripTrackFor(pad, xWin, yWin) ?? undefined, [pad, xWin[0], xWin[1], yWin[0], yWin[1]]);
@@ -293,7 +353,7 @@ export const BrowseStage: React.FC = () => {
           /* a set on the ground: its name where the pad was — the pad and Filters are the
              catalogue's lens (their windows, themes and carve ids mean nothing here) */
           <div className="flex items-baseline gap-2 justify-self-center h-[56px] items-center" data-gx-set-title="">
-            <span className="text-[15px] text-fg">{setDesc?.label ?? m.setId}</span>
+            <span className="text-[15px] text-fg">{setTitle}</span>
             <span className="text-[13px] text-fg-muted tabular-nums">{m.count < m.total ? `${m.count} of ${m.total}` : m.total}</span>
           </div>
         ) : (
@@ -376,7 +436,7 @@ export const BrowseStage: React.FC = () => {
           <input
             value={m.search}
             onChange={(e) => m.setSearch(e.target.value)}
-            placeholder={m.isSet ? `Search ${setDesc?.label ?? 'this set'}` : m.loaded ? `Search ${m.total.toLocaleString()} gradients` : 'Loading gradients…'}
+            placeholder={m.isSet ? `Search ${setTitle || 'this set'}` : m.loaded ? `Search ${m.total.toLocaleString()} gradients` : 'Loading gradients…'}
             className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-fg placeholder-fg-faint"
           />
           {m.search && (
@@ -464,6 +524,8 @@ export const BrowseStage: React.FC = () => {
             onViewport={onAll ? (bands, view) => setWallView({ bands, view }) : undefined}
             scrollToGroup={scrollTo}
             onEntryContextMenu={onTileMenu}
+            onBandDrop={multi ? onBandDrop : undefined}
+            canBandDrop={canBandDrop}
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}

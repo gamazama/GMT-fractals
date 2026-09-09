@@ -5,7 +5,7 @@
  */
 
 import type { GradientConfig } from '../../types';
-import { beginNativeDrag } from '../store/dragVisual';
+import { beginNativeDrag, setDragPayload } from '../store/dragVisual';
 
 export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
 /** Marker MIME present ONLY on drags that started from an existing Favients swatch.
@@ -33,7 +33,18 @@ export const setFavientDrag = (dt: DataTransfer, payload: FavientDragPayload): v
     /* some browsers restrict custom MIME on certain elements */
   }
   dt.setData('text/plain', payload.name);
-  dt.effectAllowed = 'copy';
+  // 'copyMove', not 'copy'. A drop target whose `dropEffect` is not permitted by
+  // `effectAllowed` is REFUSED by the browser before `drop` fires — silently, with no
+  // error and no cursor change. Filing a gradient into a group genuinely IS a move (the
+  // favourite leaves the group it was in), so `SetRail`'s chips and the wall's bands both
+  // set `dropEffect = 'move'`; against 'copy' alone that made every one of those drops a
+  // no-op. Found 2026-09-09 by the owner, testing: "no visual shows any tile moving
+  // between groups". Every other target in the suite says 'copy', which 'copyMove' still
+  // allows, so widening it here fixes the move targets without touching them.
+  dt.effectAllowed = 'copyMove';
+  // Tell the avatar what is in flight: a DataTransfer's DATA cannot be read during dragover,
+  // only its types, so the thing being dragged has to be stashed at dragstart.
+  setDragPayload({ config: payload.config, name: payload.name });
 };
 
 // A 1×1 transparent GIF, created EAGERLY at module load (DOM-guarded so pure-core tests don't
