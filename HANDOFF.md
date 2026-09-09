@@ -18,6 +18,19 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-09 (session 4) — §8b item 9: a click on the wall deselects a knot.** From the
+owner's testing: "deselecting a knot should be easier — ie when clicking on the wall". Escape was
+the ONLY way out. The stops editor's own click-away needs container area outside the knot track,
+and the hero mounts it with `chrome='strip'`, where the track IS the container — so there was no
+click-away, and a click on the ramp inserts a knot instead. Fix: an `onPointerDownCapture` on the
+ground's stage div in `gradient-explorer/v2/GradientExplorerV2App.tsx` closes the inspector face,
+and the hero's existing `tray !== 'inspector'` effect clears the selection — the same route
+Escape takes. Capture phase, because the wall stops propagation. Covers the wall, the set rail and
+the shelf panel; the top bar deliberately does not, so Undo / Redo does not drop your place.
+Guard: `npm run smoke:ge-tray` step [13], falsified by removing the handler. Written up as
+§8b item 9 in [`plans/ge-v2-unified-shell-plan.md`](./plans/ge-v2-unified-shell-plan.md), with a
+noticed-not-fixed note on the editor's stale `selectedIds` after a wholesale gradient swap.
+
 **📋 2026-09-09 (session 3) — SESSION CLOSED. §8b item 4 shipped, and the "more" panel is retired.** **Pushed and live** — 11 commits, `62edc6a4..5bba8501`, plus 4 on the backend repo
 (`cfc7bc9..83b250d`, which also carried `share-scene` and `ragrat-scores`, deployed long ago
 but never pushed). The **GX GLOBAL** shared set is deployed and taking anonymous

@@ -27,6 +27,8 @@
  *       blank backing store; the draw effect must key on the remount, not on the colour)
  *   [6] a palette swatch click selects its stop — the tray opens on the INSPECTOR face with
  *       the colour picker in it; Esc closes it
+ *   [13] and a click on the WALL closes it too, clearing the stop with it — Esc used to be
+ *       the only way out (owner, 2026-09-09)
  *
  * Falsified 2026-09-07 three ways, each reverted (and once more after the Mix redesign the
  * same day: [4]'s second click used the wall's PRE-hero box and hit the hero's ramp — it armed
@@ -398,6 +400,41 @@ async function main() {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   console.log('✓ [12] a colour dragged from the picker lights the knots and lands on the ramp');
+
+  // [13] CLICK AWAY DESELECTS (owner, 2026-09-09: "deselecting a knot should be easier — ie
+  // when clicking on the wall"). Escape was the ONLY way out: the editor's own click-away
+  // lives on its container OUTSIDE the knot track, and the hero's `chrome='strip'` editor has
+  // no such area — a click on the ramp INSERTS a knot instead. A pointerdown on the ground
+  // now closes the face, and the hero's clearSelection effect drops the stop with it.
+  // Falsified by removing the ground div's `onPointerDownCapture` in GradientExplorerV2App:
+  // red on "the wall click did not close the inspector (inspector)".
+  await page.click('[data-gx-hero] [class*="cursor-ew-resize"]');
+  await page.waitForTimeout(400);
+  s = await state(page);
+  if (s.face !== 'inspector') fail(`[13] setup: a swatch click did not open the inspector (${s.face})`);
+  if (!s.picker) fail('[13] setup: the inspector face has no picker in it');
+  // The tray floats OVER the wall (L6), so an aim taken from the wall's box alone can land on
+  // the inspector and prove nothing. Walk up from the wall's bottom edge to the first point
+  // that hit-tests to the wall itself.
+  const aim = await page.evaluate(() => {
+    const wallEl = document.querySelector('[data-gx-keepselect]')!;
+    const r = wallEl.getBoundingClientRect();
+    const x = r.x + r.width * 0.5;
+    for (let y = Math.min(r.bottom, window.innerHeight) - 8; y > r.y + 4; y -= 8) {
+      const el = document.elementFromPoint(x, y);
+      if (el && !el.closest('[data-gx-hero]') && wallEl.contains(el)) return { x, y };
+    }
+    return null;
+  });
+  if (!aim) fail('[13] no point on the wall is clear of the tray — the aim would land on the inspector');
+  await page.mouse.click(aim!.x, aim!.y);
+  await page.waitForTimeout(400);
+  s = await state(page);
+  if (s.face) fail(`[13] the wall click did not close the inspector (${s.face})`);
+  // The face closing is not enough (the trap [6] fell into): the SELECTION must be gone too,
+  // or the picker stays portalled into the hidden host and the stop is still selected.
+  if (s.picker) fail('[13] the wall click closed the face but the stop stayed selected (the picker is still in the host)');
+  console.log('✓ [13] a click on the wall closes the inspector and clears the stop selection');
 
   await browser.close();
   if (errors.length) {

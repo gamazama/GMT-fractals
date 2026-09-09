@@ -1513,6 +1513,31 @@ are where to START reading, not necessarily where the change lands.
    presentation depends on what you are DOING, not only on whether the gradient still derives
    from it.
 
+9. **Deselecting a knot should be easier — a click on the wall should do it.** Owner, while
+   testing on 2026-09-09. Escape was the only way out of a stop selection: the stops editor's
+   own click-away lives on the area of its container OUTSIDE the knot track
+   (`AdvancedGradientEditor.tsx`, grep the container's `onMouseDown`), and the hero mounts it
+   with `chrome='strip'` — the track IS the container, so that area is a few pixels of nothing,
+   and a click on the ramp runs `handleTrackMouseDown`, which INSERTS a knot.
+
+   > **Shipped 2026-09-09 (session 4).** The GROUND is the click-away target: a
+   > `onPointerDownCapture` on the stage div in `GradientExplorerV2App` closes the inspector
+   > face when one is open, and the hero's `tray !== 'inspector'` effect turns that into
+   > `clearSelection()` — the same route Escape takes, so there is one way out, not two.
+   > CAPTURE, because the wall's own pointer handlers stop propagation. It covers the wall,
+   > the set rail and the shelf panel (all inside the stage); the top bar is deliberately NOT
+   > a target, so Undo / Redo while inspecting a stop does not also drop your place.
+   > Guard: `npm run smoke:ge-tray` step [13], falsified by removing the handler
+   > ("the wall click did not close the inspector (inspector)").
+   >
+   > **Noticed, not fixed:** the editor's prop-sync effect (grep `justEmittedRef`) does not
+   > clear `selectedIds` when the incoming stops are a DIFFERENT gradient, and
+   > `selectionCount` is the raw `selectedIds.size` while `selectedNodes` is filtered against
+   > the live knots — so a wholesale gradient swap while a stop is selected leaves the face
+   > open over an empty inspector. The wall and shelf paths can no longer reach it (the
+   > pointerdown clears first); a swap driven from inside the hero still could. Unverified as
+   > a reachable user path, which is why it is a note and not a `@bug`.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

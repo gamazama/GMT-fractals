@@ -419,7 +419,21 @@ export const GradientExplorerV2App: React.FC = () => {
       </div>
 
       {/* stage — the ground */}
-      <div className="flex-1 min-h-0 flex flex-col relative">
+      {/* CLICK AWAY DESELECTS (owner, 2026-09-09: "deselecting a knot should be easier — ie
+          when clicking on the wall"). The stops editor's own click-away lives on the area of
+          its container OUTSIDE the knot track, and in the hero the editor is `chrome='strip'`
+          — the track IS the container, so that area is a few pixels of nothing and a click on
+          the ramp INSERTS a knot rather than dropping the selection. Esc was the only way out.
+          The ground is the click-away target instead: a pointerdown anywhere on it (wall, set
+          rail, shelf panel) closes the inspector face, and the hero's `tray !== 'inspector'`
+          effect turns that into `clearSelection()` — the same route Esc takes.
+          CAPTURE, so it lands before the wall's own pointer handlers stop propagation.
+          The top bar is deliberately NOT a click-away target: Undo / Redo while inspecting a
+          stop must not also drop your place in the gradient. */}
+      <div
+        className="flex-1 min-h-0 flex flex-col relative"
+        onPointerDownCapture={() => { if (trayRef.current === 'inspector') openTray(null); }}
+      >
         {/* The SET RAIL (Phase D): the top of the ground names the sets — All · Today ·
             Yesterday · the date · Kept · named groups — and the lit one is on the ground; the
             wall's own header (how the set is narrowed) sits under it. Silent until there is
