@@ -1226,6 +1226,69 @@ are where to START reading, not necessarily where the change lands.
 > Also folded in: `favientDropName` in `favientFiling.ts` is now the single naming rule for
 > every drop (the panel's private `addName` went with the extraction), so a gradient filed
 > by a rail chip, a wall band or the panel reads identically.
+
+> **Status 2026-09-09 (session 3, addendum): the hero's ramp is a drag-out zone.** Owner:
+> "dragging from the main hero — if drawing a selection a bit past the knot area, we should
+> start dragging the gradient, taking care that the selection is still available for part of
+> the way in case they want to turn back."
+>
+> A ZONE rule, decided at press time, not a mid-gesture hand-off — and the owner chose it
+> knowing the difference. **HTML5 cannot hand a running gesture over to a native drag:**
+> `dragstart` only fires from a press on a `draggable` element, so once the knot marquee is
+> under way on mouse events there is no way to convert it. A true "drag 40 px past the knots
+> and the gradient lifts" would need a second, pointer-driven drop path with its own
+> hit-testing and target highlighting, in parallel with the HTML5 one every rail chip, band
+> and trash already speaks. Two mechanisms to keep in step, for one gesture.
+>
+> So: `AdvancedGradientEditor` gains `marqueeReach` (px past the knot track's box, default
+> `Infinity` — every other host marquees anywhere in the editor exactly as before). Inside
+> the reach a press starts the selection marquee and `startDrag` preventDefaults it, which
+> suppresses the ancestor's native drag. Outside it the editor does not take the press AT
+> ALL — no consume, no preventDefault — so the hero's ramp wrapper, now `draggable`, starts
+> a drag of the whole gradient.
+>
+> **The margin IS the "part of the way back":** a press that misses the knots by a little
+> still selects, and a marquee under way can be dragged toward them. 20 px on the hero,
+> which leaves the top ~40 px of the 60 px ramp as the drag-out zone.
+>
+> Measured in the app at three heights over the track: inside it → consumed (knots), 10 px
+> above → consumed (marquee), 45 px above → NOT consumed, and a `dragstart` from there
+> carries `application/x-gmt-favient` with the avatar showing and the hero unchanged.
+
+> **Amended, same day: the zone rule was wrong and was replaced.** Shipping it and watching
+> it used took about a minute to falsify — "the gradient drag is swallowing drags that
+> should be selecting knots". Deciding at PRESS time cannot work, because where you press to
+> start a knot marquee is exactly where you press to pick the gradient up: the empty ramp
+> above the knots. No margin makes those two different gestures.
+>
+> **So it is decided by TRAVEL, the long way.** `AdvancedGradientEditor` gains
+> `marqueeEscape` (px past the knot track, default `Infinity` — every other host is
+> untouched) and `onMarqueeEscape`. A marquee that crosses it SUSPENDS — stops drawing,
+> stops selecting — and tells the host; come back inside and it resumes. Nothing commits
+> until mouseup, and a mouseup while escaped commits nothing, so the whole gesture is
+> reversible in both directions. 44 px on the hero.
+>
+> **The gradient drag it hands to is `palette/core/pointerGradientDrag.ts`, and it is NOT a
+> second drop path.** It builds a real `DataTransfer`, fills it with `setFavientDrag` exactly
+> as a native drag would, and then DISPATCHES the ordinary `dragenter` / `dragover` /
+> `dragleave` / `drop` / `dragend` at whatever is under the pointer. Every existing target
+> answers with the handlers it already has — the rail's chips, tail and trash, the wall's
+> bands, `GroundList`'s rows — and acceptance follows the spec, a target claiming the drop by
+> preventing the dragover's default. One drop implementation, reached a second way. The
+> avatar comes free: it reads the same payload slot and tracks the same `dragover` events.
+>
+> **And a stale-closure bug worth remembering.** The avatar came up holding the PREVIOUS
+> gradient. `handleMouseMove` in the editor is a `useCallback` memoised on `[emitChange]` and
+> lives as a window listener for the whole gesture, so the host callback it closed over was
+> several renders old — and that callback closes over `shown.config`. Read through a ref and
+> it is current. Any prop a long-lived listener calls has this shape; the file's existing
+> `knotsRef` / `dragPayloadRef` are the same defence.
+>
+> Measured in the app: press above the knots → marquee; travel 150 px down → marquee gone,
+> avatar up carrying the CURRENT gradient (sampled: 42,5,147 → 162,31,152 → 236,116,85 →
+> 249,228,0, which is Plasma, which is what the hero showed); come back → marquee returns;
+> release on Kept → Presets 26→25, Kept 9→10, so it MOVED; release over the top bar → 0
+> drops, shelf unchanged; exactly 1 drop per drag.
 >
 > **Three things worth carrying forward.**
 >

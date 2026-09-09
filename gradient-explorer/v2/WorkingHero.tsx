@@ -70,6 +70,19 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
+import { startPointerGradientDrag, cancelPointerGradientDrag } from '../../palette/core/pointerGradientDrag';
+
+/**
+ * How far a knot marquee may travel past the knot track before it becomes a drag of the
+ * WHOLE gradient. 44 px — a comfortable overshoot in any direction, so a marquee drawn
+ * around the end knots does not trip it, and turning back before you leave puts you right
+ * back in the selection (owner, 2026-09-09: "a bit past the knot area … taking care that
+ * the selection is still available for part of the way in case they want to turn back").
+ *
+ * Deciding by TRAVEL rather than by where the press landed is the whole point: the first
+ * attempt used a press-time zone and swallowed drags that were reaching for knots.
+ */
+const MARQUEE_ESCAPE = 44;
 import { setDragOrigin } from '../../palette/store/dragVisual';
 import { useFavientsStore, favientSig, isRecentGroup } from '../../palette/store/favientsStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
@@ -559,6 +572,20 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                     <AdvancedGradientEditor
                       ref={editorRef}
                       chrome="strip"
+                      // A marquee that wanders off the knots becomes a drag of the whole
+                      // gradient, and comes back if you do. `pointerGradientDrag` dispatches
+                      // the ordinary drag events, so the rail's chips, the wall's bands and
+                      // the trash answer it with the handlers they already have.
+                      marqueeEscape={MARQUEE_ESCAPE}
+                      onMarqueeEscape={(escaped, ev) => {
+                        if (!escaped) { cancelPointerGradientDrag(); return; }
+                        if (emptySource || !shown) return;
+                        startPointerGradientDrag(
+                          { config: shown.config, name: derived.name },
+                          { x: ev.clientX, y: ev.clientY },
+                          rampElRef.current?.getBoundingClientRect(),
+                        );
+                      }}
                       stripHeight={resultH}
                       stripCorners={split ? 'bottom' : 'all'}
                       previewConfig={derived.edited && !derived.passthrough && config ? config : undefined}

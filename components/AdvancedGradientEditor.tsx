@@ -127,6 +127,18 @@ interface AdvancedGradientEditorProps {
     /** 'strip' chrome: an element rendered inside the bar (the hero's instant hover hint);
      *  the bar carries the `group/strip` class for it. */
     stripHint?: React.ReactNode;
+    /**
+     * How far a SELECTION MARQUEE may travel past the knot track before the host takes the
+     * gesture over (px, every side). Beyond it the marquee suspends — it stops drawing and
+     * stops selecting — and `onMarqueeEscape(true)` fires; come back inside and it resumes
+     * with `onMarqueeEscape(false)`. That is what lets GE v2's hero turn a marquee that has
+     * wandered off the ramp into a drag of the whole gradient, and turn it back again.
+     *
+     * Default `Infinity`: no escape, the marquee behaves exactly as it always has.
+     */
+    marqueeEscape?: number;
+    /** Fired when a marquee crosses `marqueeEscape` in either direction, with the pointer. */
+    onMarqueeEscape?: (escaped: boolean, e: MouseEvent) => void;
 }
 
 /**
@@ -185,7 +197,7 @@ const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelec
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', onStripClick, stripTitle, stripHint, previewConfig }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -560,7 +572,18 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         const deltaXRatio = deltaX / trackRect.width;
 
         if (type === 'marquee') {
-            setMarqueeRect({ 
+            // Has it wandered off the knots? Crossing `marqueeEscape` SUSPENDS the marquee
+            // — it stops drawing and stops selecting — and tells the host, which may take
+            // the gesture over (GE v2's hero turns it into a drag of the whole gradient).
+            // Coming back inside resumes it, so the escape is reversible the whole way:
+            // nothing is committed until mouseup, and mouseup while escaped commits
+            // nothing at all.
+            const escaped = beyondMarqueeEscape(e.clientX, e.clientY);
+            if (escaped !== marqueeEscapedRef.current) {
+                marqueeEscapedRef.current = escaped;
+                onMarqueeEscapeRef.current?.(escaped, e);
+            }
+            setMarqueeRect(escaped ? null : {
                 x: Math.min(startX, e.clientX), 
                 y: Math.min(startY, e.clientY), 
                 w: Math.abs(e.clientX - startX), 
@@ -606,7 +629,11 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         const payload = dragPayloadRef.current;
         if (!payload) return;
 
-        if (payload.type === 'marquee' && knotTrackRef.current) {
+        if (payload.type === 'marquee' && marqueeEscapedRef.current) {
+            // It left, and whoever took it over owns the release. Select nothing.
+            marqueeEscapedRef.current = false;
+            setMarqueeRect(null);
+        } else if (payload.type === 'marquee' && knotTrackRef.current) {
             const r = knotTrackRef.current.getBoundingClientRect();
             const x1 = Math.min(payload.startX, e.clientX), x2 = Math.max(payload.startX, e.clientX);
             const y1 = Math.min(payload.startY, e.clientY), y2 = Math.max(payload.startY, e.clientY);
@@ -648,6 +675,31 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         // captured-stale knotSession.end() is correct. Listing it would churn this
         // callback's identity every render (the original omitted it for the same reason).
     }, [emitChange, handleMouseMove, editEnd]);
+
+    /**
+     * Has a marquee wandered far enough from the knots that it is no longer about them?
+     * The knot track's box grown by `marqueeEscape` on every side — inside is still a
+     * selection, outside the host may take the gesture over. `Infinity` disables it.
+     */
+    const beyondMarqueeEscape = (x: number, y: number): boolean => {
+        const reach = marqueeEscapeRef.current;
+        if (!Number.isFinite(reach)) return false;
+        const r = knotTrackRef.current?.getBoundingClientRect();
+        if (!r) return false;
+        return x < r.left - reach || x > r.right + reach || y < r.top - reach || y > r.bottom + reach;
+    };
+    /** True while the current marquee is suspended because it escaped. */
+    const marqueeEscapedRef = useRef(false);
+    // `handleMouseMove` is a `useCallback` memoised on `[emitChange]` and is registered as a
+    // window listener for the life of a gesture, so anything it closes over can be several
+    // renders old. The host's escape callback closes over the CURRENT gradient — read it
+    // through a ref, or a drag that escapes hands over the gradient that was showing when
+    // the callback was last rebuilt (measured 2026-09-09: "the drag avatar is holding a
+    // stale gradient"). Same for the threshold.
+    const onMarqueeEscapeRef = useRef(onMarqueeEscape);
+    onMarqueeEscapeRef.current = onMarqueeEscape;
+    const marqueeEscapeRef = useRef(marqueeEscape);
+    marqueeEscapeRef.current = marqueeEscape;
 
     const startDrag = (type: DragPayload['type'], ids: string[], e: React.MouseEvent, overrideKnots?: AdvancedGradientKnot[], skipSnapshot?: boolean) => {
         e.preventDefault(); e.stopPropagation();
@@ -842,12 +894,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             onMouseDown={(e) => {
                 if (e.button !== 0) return; 
                 if (!(e.target as HTMLElement).closest('.gradient-interactive-element')) {
-                    if (!e.shiftKey && !e.ctrlKey && !knotTrackRef.current?.contains(e.target as Node)) {
-                         setSelectedIds(new Set<string>());
-                    }
-                    if (!knotTrackRef.current?.contains(e.target as Node)) {
-                        startDrag('marquee', [] as string[], e);
-                    }
+                    if (knotTrackRef.current?.contains(e.target as Node)) return; // the track's own handlers
+                    if (!e.shiftKey && !e.ctrlKey) setSelectedIds(new Set<string>());
+                    marqueeEscapedRef.current = false;
+                    startDrag('marquee', [] as string[], e);
                 }
             }}
         >
