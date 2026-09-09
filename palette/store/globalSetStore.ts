@@ -47,6 +47,18 @@ export const loadGlobalSetOnce = (): void => {
   );
 };
 
+/**
+ * Re-fetch after contributing one, so the chip's count and the wall show it at once
+ * without a reload. Quiet on failure: the set on screen simply stays as it was, which is
+ * still true — the gradient did land, the view is just a moment behind.
+ */
+export const refreshGlobalSet = (): void => {
+  void loadGlobalSet().then(
+    (entries) => { if (entries.length) slot.set({ entries, status: 'ready' }); },
+    () => { /* keep what is on screen */ },
+  );
+};
+
 export const getGlobalSet = (): GlobalSetState => get();
 
 export const useGlobalSet = (): GlobalSetState => useSyncExternalStore(slot.subscribe, get, get);

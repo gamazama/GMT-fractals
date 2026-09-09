@@ -1352,6 +1352,69 @@ are where to START reading, not necessarily where the change lands.
 > Edge Functions' CORS allowlist has the same `dev.` hole as the palette CDN's, and
 > `0001_security_baseline.sql` warns its policies were reconstructed from the live catalog
 > and should be diffed before trusting.
+
+> **Status 2026-09-09 (session 3, addendum 3): GX global goes OPEN — anonymous writes, no
+> sign-in.** Owner: "read only doesn't work for this goal… we will need this to be totally
+> open with no sign in for it to succeed… no names, no duplicates… otherwise best by the
+> regular filters hue, lightness."
+>
+> Backend in the sibling repo (`workspace-gmt/backend`, commit `87c1a72`):
+> `supabase/migrations/0005_gx_gradients.sql` and `supabase/functions/gx-gradients/`.
+> **Written, not deployed** — it needs `GXGLOBAL_IP_SALT` set, `--no-verify-jwt`, and 0005
+> applied first; all three are in the function's README.
+>
+> **The shape, and why.** ONE anonymous endpoint serving both halves, the `ragrat-scores`
+> pattern. Reads come through the function rather than a select policy, and that is the
+> load-bearing decision: this bundle has no supabase-js and no auth, and the feature depends
+> on keeping it that way — a select policy would put an anon-key PostgREST client in a page
+> that has never had one. `engine-gmt/feedback` already POSTs anonymously from this same
+> bundle with a bare `fetch`, which is the proof the shape works here. So the table keeps
+> `ragrat_scores`' posture: RLS on, ZERO policies, service role the only door, and nothing
+> granted to `anon` — including the `revoke` that `0003` and `0004` both omitted.
+>
+> **What stands in for a login.** No names: a row is stops and two colour spaces, so a
+> gradient cannot say anything and there is nothing to moderate — the one problem this
+> codebase has no answer for on an anonymous path. No duplicates, enforced by
+> `unique (sig)` with the signature computed SERVER-side from a canonicalised copy (stops
+> sorted, hex expanded and upper-cased, positions rounded), because a client-side dedupe
+> check may be loose and a uniqueness constraint may not. Two different caps: per-IP per hour
+> (6 — far below ragrat's 30 and share-scene's 40, because this set is permanent, global and
+> small) and a cap on the SET itself, which a per-IP limit does not bound at all. And real
+> schema validation rather than `share-scene`'s marker sniff, which exists only because GMF
+> is a large opaque blob.
+>
+> **Two things the audit of the existing code changed in the design.**
+>
+> 1. **`share-scene`'s anonymous dedupe has a latent bug and it must not be copied.** It is a
+>    read-then-insert with no unique index behind the anon rows, and its own migration
+>    concedes "a rare concurrent-identical race just makes a harmless duplicate row". Harmless
+>    there. Here every row is anonymous and no-duplicates is the requirement — and a second
+>    identical row would make that gradient's `.maybeSingle()` dedupe query error **forever
+>    after**, 500ing every future submission of it. So: a real unique index, and the `23505`
+>    branch answers "already in the set" rather than failing.
+> 2. **The set cap has no precedent in this schema** — the gallery's caps are per-user slots
+>    — so it gets both a function check and a trigger. The ceiling is not arbitrary: the
+>    client renders every ramp and computes every facet on the main thread when the set is
+>    selected, and `groundSets`' body cache clears wholesale past 4,000.
+>
+> **Ordering: dedupe BEFORE the rate limit.** A repeat submission is answered, not charged.
+>
+> **The gesture is a drop on the chip** — the same one that files a gradient into a group of
+> your own, because it means the same thing, except this shelf is everyone's. It asks first
+> (public, no un-sending) and is deliberately NOT undoable: nothing local changed, so there
+> is nothing for Ctrl+Z to put back, and your own copy stays where it was.
+>
+> **The client falls back three deep**: the endpoint, then the CDN copy, then the file
+> shipped in `public/palette/`. Measured with the endpoint absent: one warning, chip still
+> shows 20. That last copy is not decoration — `cdn.gmt-fractals.com` sends no CORS headers
+> to `dev.gmt-fractals.com` or `localhost:3499`, and the Edge Function's allowlist is a
+> config line that can be forgotten on a deploy.
+>
+> **Still open, and the owner's to decide:** `dev.gmt-fractals.com` is on this function's own
+> allowlist but not on `_shared/cors.ts`' or the palette CDN's; whether "no duplicates" should
+> also fold mirrored or near-identical gradients (today it is exact-after-canonicalisation);
+> and `0001_security_baseline.sql` warns its GRANT lines were reconstructed from the live
+> catalog and should be diffed before anything is pushed.
 >
 > **Three things worth carrying forward.**
 >

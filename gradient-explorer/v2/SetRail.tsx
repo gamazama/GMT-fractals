@@ -33,6 +33,10 @@
  *   • drop a gradient on Kept or a named group — file it there (a favourite MOVES, a wall
  *     tile becomes a new favourite); drop it on the empty tail — a new group. Recent's bins
  *     take no drops (Recent is auto-managed), nor does All.
+ *   • drop a gradient on GX GLOBAL — contribute it to the set everyone sees. The same
+ *     gesture because it means the same thing, except that this shelf is everyone's; it
+ *     asks first, because the set is public and there is no un-sending. No sign-in, no
+ *     name, and the server refuses a duplicate.
  *   • a TRASH appears at the right end while an existing favourite is in flight — drop it
  *     there to remove it (one undo step). The shelf panel has always had one; the ground
  *     had removal only through a tile's right-click menu. It shows only for a favourite:
@@ -58,7 +62,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_GROUP, newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
 import { fileFavientInto } from '../../palette/store/favientFiling';
-import { FAVIENT_DND_MIME, readFavientDrag } from '../../palette/core/favientDnd';
+import { submitToGlobalSet, GlobalSetError } from '../../palette/core/globalSet';
+import { refreshGlobalSet } from '../../palette/store/globalSetStore';
+import { FAVIENT_DND_MIME, readFavientDrag, type FavientDragPayload } from '../../palette/core/favientDnd';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
 import { groupSetId, type GroundSetDesc } from '../../palette/core/groundSets';
 import type { ContextMenuItem } from '../../types/help';
@@ -109,7 +115,30 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
   }, [renaming, renameGroup]);
 
   const canTake = (s: GroundSetDesc | null, dt: DataTransfer): boolean =>
-    (s === null || (s.kind === 'group' && s.group !== undefined)) && Array.from(dt.types).includes(FAVIENT_DND_MIME);
+    (s === null || (s.kind === 'group' && s.group !== undefined) || s.kind === 'global') &&
+    Array.from(dt.types).includes(FAVIENT_DND_MIME);
+
+  /**
+   * Contribute a gradient to the SHARED set. The same gesture as filing one into a group
+   * of your own — drag it onto the chip — because it means the same thing, except that
+   * this shelf is everyone's. It asks first: the set is public and there is no un-sending.
+   *
+   * Not undoable, and deliberately not wrapped in `paramEdit`: nothing local changed, so
+   * there is nothing for Ctrl+Z to put back. Your own copy stays exactly where it was.
+   */
+  const contribute = (p: FavientDragPayload): void => {
+    const msg = 'Add this gradient to GX global?' + String.fromCharCode(10, 10) +
+      'Everyone using the app will see it, and it cannot be taken back. Your own copy stays where it is.';
+    if (!window.confirm(msg)) return;
+    showToast('Adding it to GX global…');
+    void submitToGlobalSet(p.config).then(
+      (r) => {
+        showToast(r.added ? 'Added to GX global — thank you' : 'That one is already in GX global');
+        if (r.added) refreshGlobalSet();
+      },
+      (err) => showToast(err instanceof GlobalSetError ? err.message : 'Could not add it to GX global'),
+    );
+  };
 
   const dropOn = (s: GroundSetDesc | null) => (e: React.DragEvent) => {
     if (!canTake(s, e.dataTransfer)) return;
@@ -117,6 +146,10 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     setOver(null);
     const p = readFavientDrag(e.dataTransfer);
     if (!p) return;
+    if (s?.kind === 'global') {
+      contribute(p);
+      return;
+    }
     paramEdit(() => {
       if (s) {
         fileFavientInto(s.group!, p);
@@ -192,7 +225,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
               s.kind === 'catalog'
                 ? 'The whole library'
                 : s.kind === 'global'
-                  ? 'Shared with everyone using the app · drag one out to keep your own copy'
+                  ? 'Shared with everyone using the app · drag one out to keep your own copy, or drop one here to add it'
                 : s.kind === 'bin'
                   ? 'What you picked that day'
                   : renamable
