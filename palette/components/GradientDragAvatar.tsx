@@ -100,6 +100,13 @@ export const GradientDragAvatar: React.FC = () => {
       }}
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
+      {/* A multi-drag must not look like a single one — the same class of bug as having no
+          avatar at all: the gesture is doing more than it appears to. */}
+      {(payload?.count ?? 1) > 1 && (
+        <span className="absolute right-1 top-1/2 -translate-y-1/2 px-1.5 h-[15px] rounded-full bg-surface-dock/90 border border-line/30 text-[10px] leading-[13px] text-fg tabular-nums">
+          {payload!.count}
+        </span>
+      )}
     </div>,
     document.body,
   );

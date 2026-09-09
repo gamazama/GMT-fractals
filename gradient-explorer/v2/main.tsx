@@ -25,7 +25,6 @@ import { registerCoreSettings } from '../../store/coreSettings';
 import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeStore';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
-import { setV2FavientsPanelKey } from '../../palette/store/favientsPanelPersist';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
 import { decideFirstRun } from './firstRunDecision';
@@ -73,11 +72,6 @@ const askBrightness = decideFirstRunBrightness();
 restorePaletteFilters();
 watchPaletteFilters();
 
-// v2 renders the My Gradients panel inside its own Floating and mounts no panel WINDOW,
-// so it never called restoreFavientsPanel — which left the shelf's grid/list preference
-// writing into app-gmt's blob and back (the 2026-09-08 migration audit §3.8b). Claim a key
-// of our own; nothing else about the panel's window machinery is wanted here.
-setV2FavientsPanelKey('gmt.ge.v2.favients.panel');
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');

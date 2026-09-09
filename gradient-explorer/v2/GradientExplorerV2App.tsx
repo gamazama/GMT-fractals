@@ -11,8 +11,9 @@
  * the catalogue, a dated bin of Recent, Kept, a named group), headed by the SET RAIL naming
  * the sets (`SetRail`, at the TOP of the ground above the wall's own header — owner: "that
  * makes more sense hierarchically"; its CHIPS are silent until there is a second set, the
- * row itself is always there for the chevron), with the full
- * My Gradients panel floating under the rail when opened. No Dock, no side panel, no
+ * row itself is always there for the collection menu — the last remnant of the old "more"
+ * pull-up, retired 2026-09-09 once the ground could group, search, rename, reorder and
+ * throw away by itself). No Dock, no side panel, no
  * drawer, no timeline, no scene name, no footer, and no shelf strip any more — the
  * gradients you keep are drawn on the ground, by the wall, as large as their count allows.
  *
@@ -41,7 +42,6 @@ import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
 import { BrowseStage } from './BrowseStage';
 import type { TrayFace } from './Tray';
-import { FavientsPanel } from '../../palette/components/FavientsPanel';
 import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
@@ -61,13 +61,11 @@ import { useImageDrop } from '../../palette/components/useImageDrop';
 import { useImageStore } from '../../palette/store/imageStore';
 import { GradientDragAvatar } from '../../palette/components/GradientDragAvatar';
 import { WorkingHero } from './WorkingHero';
-import { Floating } from './ui/Floating';
 import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
 import { useGroundSets } from './useGroundSource';
 import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetId } from '../../palette/store/groundSet';
 import { membersOf, parseSetId, type GroundSetDesc } from '../../palette/core/groundSets';
-import { setV2FavientsPanelKey } from '../../palette/store/favientsPanelPersist';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
 
@@ -126,7 +124,6 @@ const addMixSeeds = (stops: GradientConfig['stops']): void => {
 export const GradientExplorerV2App: React.FC = () => {
   const [tray, setTray] = useState<TrayFace>(null);
   const source = sourceOf(tray);
-  const [mineOpen, setMineOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   /** The set whose Export window is open (the rail's chip menu), or null. */
   const [exportSet, setExportSet] = useState<GroundSetDesc | null>(null);
@@ -316,13 +313,11 @@ export const GradientExplorerV2App: React.FC = () => {
     else imageFileRef.current?.click();
   }, [openTray]);
 
-  // Esc order (Phase C, L6): popover → a wall selection → the open tray face (the inspector
-  // closes by clearing the stop selection, which the hero does when the face leaves) → an
-  // armed slot.
+  // Esc order (Phase C, L6): a wall selection → the open tray face (the inspector closes by
+  // clearing the stop selection, which the hero does when the face leaves) → an armed slot.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (mineOpen) { setMineOpen(false); return; }
       // A wall selection is the nearest thing to a popover: it is a held state you can be
       // stuck in, and it must let go before Esc starts closing faces.
       if (getWallSelection().size) { clearWallSelection(); return; }
@@ -331,7 +326,7 @@ export const GradientExplorerV2App: React.FC = () => {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mineOpen, openTray]);
+  }, [openTray]);
 
   // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
   useEffect(() => {
@@ -434,16 +429,9 @@ export const GradientExplorerV2App: React.FC = () => {
           activeIds={groundSetIds}
           onSelect={setGroundSetId}
           onToggle={toggleGroundSetId}
-          open={mineOpen}
-          onToggleOpen={() => setMineOpen((o) => !o)}
           onExportSet={setExportSet}
           onImportInto={askImportInto}
         />
-        {mineOpen && (
-          <Floating className="absolute left-6 right-6 top-10 z-30 h-[340px] overflow-hidden flex flex-col" data-gx-mine-panel="">
-            <FavientsPanel hint={null} pickOnDrag={false} />
-          </Floating>
-        )}
         {/* The set's own Export window — the same `ExportMenu`, pointed at a set instead of
             the working gradient (§8b item 4 / the audit's M1). Hosted here, like the hero's,
             so the rail stays a control. */}

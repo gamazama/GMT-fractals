@@ -38,6 +38,14 @@ import type { FavientDragPayload } from '../core/favientDnd';
 
 const groupOf = (f: Favient): string => f.group ?? DEFAULT_GROUP;
 
+/**
+ * The name a dropped gradient gets. A payload with no explicit name auto-derives a
+ * perceptual label ("Warm Vivid Rainbow") rather than filing blank — the same fallback
+ * every other add-path uses (grep `configToName`), so a gradient named by a drop on the
+ * rail, on a wall band, or in the shelf panel reads identically.
+ */
+export const favientDropName = (p: FavientDragPayload): string => p.name?.trim() || configToName(p.config);
+
 /** File a dragged gradient into `group`: a favourite moves, anything else is inserted. */
 export const fileFavientInto = (group: string, p: FavientDragPayload): void => {
   const st = useFavientsStore.getState();
@@ -58,9 +66,7 @@ export const fileFavientInto = (group: string, p: FavientDragPayload): void => {
     return;
   }
   const at = st.favients.findIndex((f) => groupOf(f) === group);
-  // A payload with no name gets the same perceptual label the panel's drop gives it
-  // ("Warm Vivid Rainbow"), rather than filing blank.
-  st.insertFavient(p.config, p.name?.trim() || configToName(p.config), p.source, at < 0 ? st.favients.length : at, group);
+  st.insertFavient(p.config, favientDropName(p), p.source, at < 0 ? st.favients.length : at, group);
 };
 
 /**
@@ -115,5 +121,5 @@ export const fileFavientAt = (group: string, p: FavientDragPayload, beforeId: st
         : rest.length;
   const index = at < 0 ? (members.length ? members[members.length - 1].i + 1 : rest.length) : at;
   if (existing) st.moveFavient(existing.id, index, group);
-  else st.insertFavient(p.config, p.name?.trim() || configToName(p.config), p.source, index, group);
+  else st.insertFavient(p.config, favientDropName(p), p.source, index, group);
 };

@@ -18,6 +18,25 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-09 (session 3) — SESSION CLOSED. §8b item 4 shipped, and the "more" panel is retired.** Seven commits on `main`, **unpushed** (`main` auto-deploys, so pushing is the owner's call). Full write-up: four `Status 2026-09-09 (session 3…)` blocks in [`plans/ge-v2-unified-shell-plan.md`](./plans/ge-v2-unified-shell-plan.md) §8b.
+
+**What shipped.** The audit's M1-M4, M7, M12 and its two defects (§3.8a lockout, §3.8b leak), then the five parity gaps a re-audit found, then what the owner asked for while testing:
+
+- sets are **multi-select** (chips toggle, ground is the union; All exclusive, never empty); a group can be **created empty** (`+` on the rail); the ground is **divided** into a labelled band per set; a tile **drags between bands and reorders inside one**, with an insertion caret; **multi-select by rubber band from the background**, with Move to… / Remove / Delete; **rename** from a wall tile and in list view; a **trash** on the rail while a favourite is in flight; **keyboard** nav on the wall; and a **list view** for the ground (`GroundList.tsx`).
+- The **"more" pull-up is gone.** Only its collection kebab survives, lifted out as `palette/components/FavientsCollectionMenu.tsx` and hung on the set rail. v2 mounts no `FavientsPanel`; app-gmt / fluid-toy / the old shell are untouched.
+
+**Three bugs found by testing that reading had missed, all worth knowing:**
+
+1. **`effectAllowed: 'copy'` vs `dropEffect: 'move'`** — the browser silently refuses a drop whose dropEffect the effectAllowed does not permit, and never fires `drop`. So dragging a wall tile onto a rail chip had **never worked** in v2. Now `'copyMove'`. The 2026-09-08 audit traced this path and called it working (the code is right; the browser refuses it), and a synthetic-`DragEvent` harness cannot catch it — a hand-built `DataTransfer` never applies the compatibility rule. **A synthetic drag proves the handlers, not the drop.**
+2. **`pickOnDrag`** — `onEntryDragStart` ended with `setHeroDrag()` ("drag mirrors click"), and in v2 a pick IS a Use, so dragging a gradient to re-file it replaced the one you were working on. Now opt-out, default true so every older host keeps its behaviour. Two commits were spent hardening the marquee first; a ten-line probe over four real drags settled it in one reading. **Find out WHICH X before hardening the thing you last touched.**
+3. **Presets vanished on the first pick** — a rule inherited from the deleted shelf strip ("Presets hides once Recent has anything"), which on the rail meant 25 gradients unreachable. Reversed; the harness assertion was inverted with a note.
+
+**Guard:** `npm run test:palette-shelf` (`debug/test-palette-shelf-manage.mts`) — 8 sections over the import path, the filing rules, `removeGroup`, `membersOfMany`, the ground selection and `wallSelection`. Falsified fifteen ways; **three assertions passed under mutation on the first attempt and were rewritten**, and the header says which and why each was vacuous. Also in the `test:palette` chain.
+
+**Unguarded, and known to be:** everything in `palette/components/**` — the wall's caret, marquee, rings and keyboard, and all of `GroundList` — has no automated coverage (`test:palette` reaches `palette/core/**` only; the palette rule states this and it was measured). All of it was walked in the running app; a regression there will not go red.
+
+**Still open:** §8b item 5 (one unified export — a design job, with the set leg built); app-gmt has not opted into the wall's `keyboard` prop; the old shell's landing/cancel morphs are still unmounted in v2 (`GradientLandingLayer`, ~143 lines, cheapest polish left); `FavientsPanel layout="strip"` is still dead with zero callers (S13, ~115 lines); and **the §3.8b cross-host view-mode leak would return the moment anything re-mounts `FavientsPanel` in v2** — its fix was removed with the panel rather than left as a vestigial export.
+
 **📋 2026-09-09 (session 2) — SESSION CLOSED. Six of the eight live-testing items shipped; NEXT SESSION STARTS ON THE "MORE" PANEL:**
 
 **START HERE: plan §8b items 4 and 5, and read `plans/ge-v2-old-shell-migration-audit.md`

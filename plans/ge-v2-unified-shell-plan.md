@@ -1188,6 +1188,44 @@ are where to START reading, not necessarily where the change lands.
 > written for and stopped making sense on this one.** Presets-hides was a strip rule; the
 > Delete key was written for a keyboard cursor before there was a selection to act on; the
 > coarse background test was written for a bug that was somewhere else entirely.
+
+> **Status 2026-09-09 (session 3, closed): the "more" panel is retired.** Owner: "we can
+> retire almost the whole 'more section' except for its dropdown menu."
+>
+> `FavientsSystemMenu` was lifted out of `FavientsPanel` unchanged, as
+> `palette/components/FavientsCollectionMenu.tsx`, and now hangs off the right end of the
+> set rail. v2 mounts no `FavientsPanel` at all. The panel keeps mounting the same component
+> in its own toolbar for app-gmt, fluid-toy and the old shell — one component, two hosts,
+> not a fork.
+>
+> **Why the menu is the only survivor.** It is the one surface that acts on the WHOLE SHELF
+> rather than on a set or a gradient — import a file, save / merge / replace / clear the
+> collection, export it, the contact sheet. Everything else the panel did now lives where
+> the gradients are: grouping and dividers on the rail and in the wall's bands, search in
+> the wall header, list view and rename in `GroundList`, drag-to-reorder on the bands,
+> trash on the rail, per-item remove in the tile menu and on the Delete key. OD1 asked
+> whether to trim the panel or keep it whole; the answer turned out to be neither — build
+> its jobs into the ground, then there is nothing left to trim.
+>
+> **What went WITH it, deliberately.** `setV2FavientsPanelKey` and its harness section
+> guarded a cross-host grid/list leak (the audit's §3.8b) that existed only because v2
+> mounted the panel. With the panel gone the fix guards nothing, so it was removed rather
+> than left as a vestigial export with a test behind it. **The leak is real and would return
+> the moment anything re-mounts `FavientsPanel` in v2: it never calls `restoreFavientsPanel`,
+> so `activeStorageKey` stays at app-gmt's key and the two hosts' shelf layouts write over
+> each other.** Recorded here so it is not re-discovered from scratch.
+>
+> Two more removed for the same reason: `FAVIENT_MULTI_MIME` was written on every multi-drag
+> and read by nobody, and `DragPayloadPeek.count` was set and never shown. The MIME is gone
+> (three lines to re-add when a drop target actually needs to say "3 gradients" during
+> `dragover`, where `getData` is blocked); `count` earned its place instead — the avatar
+> carries a badge and the trash reads "Remove 3", so a six-gradient drag no longer looks
+> exactly like a one-gradient drag. That was the same class of bug as having no avatar at
+> all: the gesture doing more than it appears to.
+>
+> Also folded in: `favientDropName` in `favientFiling.ts` is now the single naming rule for
+> every drop (the panel's private `addName` went with the extraction), so a gradient filed
+> by a rail chip, a wall band or the panel reads identically.
 >
 > **Three things worth carrying forward.**
 >

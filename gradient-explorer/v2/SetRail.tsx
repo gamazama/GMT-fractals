@@ -40,12 +40,16 @@
  *   • the + at the end of the chips — a new, EMPTY group, named on the spot. A group used
  *     to exist only once something was dropped into it; an empty one is a chip now
  *     (`listGroundSets`), so "make a place, then fill it" is a thing you can do.
- *   • the chevron at the right end opens the full My Gradients panel (search, list view,
- *     import / export) under the rail — the manage surface, unchanged. It is the ONE part
- *     of this row that is always there: `sets` arrives empty until there is a second set
- *     (L9, the shell's call), and the chevron still shows, because that panel holds the
- *     only menu route to Import and Load & merge and a cleared shelf must not be able to
- *     lock itself out of them (the 2026-09-08 migration audit §3.8a).
+ *   • the kebab at the right end is the COLLECTION menu — import a gradient file, save /
+ *     merge / replace / clear the whole collection, export it, the contact sheet. It is
+ *     all that remains of the old "more" pull-up (owner, 2026-09-09: "we can retire almost
+ *     the whole 'more section' except for its dropdown menu"), because everything else
+ *     that panel did — grouping, dividers, search, list view, rename, trash, drag to
+ *     reorder — is now on the ground itself. It is the ONE part of this row that is always
+ *     there: `sets` arrives empty until there is a second set (L9, the shell's call), and
+ *     the kebab still shows, because it holds the only menu route to Import and Load &
+ *     merge and a cleared shelf must not be able to lock itself out of them (the
+ *     2026-09-08 migration audit §3.8a).
  *
  * Store writes go through `paramEdit`, so a drop or a rename is one undo step, exactly as
  * the panel's gestures are.
@@ -61,6 +65,7 @@ import type { ContextMenuItem } from '../../types/help';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { showToast } from '../../engine/store/toastStore';
 import { useNativeDragging, useDragPayload } from '../../palette/store/dragVisual';
+import { FavientsCollectionMenu } from '../../palette/components/FavientsCollectionMenu';
 import { Icon } from './ui/Icon';
 
 interface Props {
@@ -71,9 +76,6 @@ interface Props {
   onSelect: (id: string) => void;
   /** Add / remove this set from the ground. */
   onToggle: (id: string) => void;
-  /** The manage panel (the full My Gradients panel) under the rail. */
-  open: boolean;
-  onToggleOpen: () => void;
   /** Open the export window over this set (the app hosts it, as it does the hero's). */
   onExportSet: (set: GroundSetDesc) => void;
   /** Ask for gradient files to import into this group. */
@@ -82,7 +84,7 @@ interface Props {
 
 const NEW_GROUP_LABEL = 'Group';
 
-export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, open, onToggleOpen, onExportSet, onImportInto }) => {
+export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, onExportSet, onImportInto }) => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const removeGroup = useFavientsStore((s) => s.removeGroup);
   const removeFavient = useFavientsStore((s) => s.remove);
@@ -167,7 +169,6 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     if (s.kind === 'group') items.push({ label: 'Import into this set…', action: () => onImportInto(s.group!) });
     items.push({ label: 'Export this set…', disabled: s.count === 0, action: () => onExportSet(s) });
     if (named) items.push({ label: 'Delete group', danger: true, action: () => deleteGroup(s) });
-    items.push({ label: open ? 'Close My Gradients' : 'Manage…', action: onToggleOpen });
     openContextMenu(e.clientX, e.clientY, items);
   };
 
@@ -253,15 +254,22 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
             setOver(null);
             const p = readFavientDrag(e.dataTransfer);
             if (!p?.favId) return; // only an existing favourite can be thrown away
-            paramEdit(() => removeFavient(p.favId!));
-            showToast(`Removed “${p.name}” — undo with Ctrl+Z`);
+            // A multi-drag throws away everything it carries, in one undo step.
+            const ids = p.favIds?.length ? p.favIds : [p.favId];
+            const set = new Set(ids);
+            paramEdit(() => {
+              const st = useFavientsStore.getState();
+              if (ids.length === 1) removeFavient(ids[0]);
+              else st.replaceAll(st.favients.filter((f) => !set.has(f.id)));
+            });
+            showToast(ids.length === 1 ? `Removed “${p.name}” — undo with Ctrl+Z` : `Removed ${ids.length} — undo with Ctrl+Z`);
           }}
           title="Drop here to remove it from My Gradients"
           className={`inline-flex items-center gap-1 h-[26px] px-2.5 rounded-lg border text-[13px] transition-colors ${
             over === 'trash' ? 'border-danger text-danger bg-danger/10' : 'border-line/25 text-fg-muted'
           }`}
         >
-          <Icon name="trash" /> Remove
+          <Icon name="trash" /> {(inFlight?.count ?? 1) > 1 ? `Remove ${inFlight!.count}` : 'Remove'}
         </div>
       )}
       {/* a new, EMPTY group — the same thing the tail's drop makes, without needing a
@@ -286,15 +294,8 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
         onDrop={dropOn(null)}
         title="Drop a gradient here to start a new group"
       />
-      <button
-        type="button"
-        className="flex items-center gap-1 h-[26px] px-2 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10"
-        onClick={onToggleOpen}
-        aria-expanded={open}
-        title={open ? 'Close My Gradients' : 'My Gradients — search, list view, rename, import and export'}
-      >
-        {open ? 'less' : 'more'} <Icon name={open ? 'chevronUp' : 'chevronDown'} />
-      </button>
+      {/* the collection menu — the whole of what "more" is now */}
+      <FavientsCollectionMenu onFlash={showToast} />
     </div>
   );
 };

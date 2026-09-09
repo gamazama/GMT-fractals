@@ -12,12 +12,6 @@ export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
  *  Readable during `dragover` (where getData is blocked), so a swatch can show the
  *  reorder indicator for internal drags but not external ones (picker → add). */
 export const FAVIENT_INTERNAL_MIME = 'application/x-gmt-favient-internal';
-/**
- * Marker MIME for a MULTI drag — several favourites in flight at once. Its VALUE is the
- * count. Present in `dataTransfer.types` during `dragover`, where `getData` is blocked, so
- * a target can say "3 gradients" in its hover affordance before the drop.
- */
-export const FAVIENT_MULTI_MIME = 'application/x-gmt-favient-multi';
 
 export interface FavientDragPayload {
   config: GradientConfig;
@@ -63,7 +57,6 @@ export const setFavientDrag = (dt: DataTransfer, payload: FavientDragPayload): v
   dt.effectAllowed = 'copyMove';
   // Tell the avatar what is in flight: a DataTransfer's DATA cannot be read during dragover,
   // only its types, so the thing being dragged has to be stashed at dragstart.
-  if (payload.favIds && payload.favIds.length > 1) dt.setData(FAVIENT_MULTI_MIME, String(payload.favIds.length));
   setDragPayload({ config: payload.config, name: payload.name, favId: payload.favId, count: payload.favIds?.length });
 };
 

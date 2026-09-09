@@ -21,8 +21,7 @@
  *   [6] the ground SELECTION: All is exclusive, the selection is never empty, toggle adds
  *       and removes, ctrl-click's setGroundSetId replaces, and a pre-2026-09-09 bare id in
  *       localStorage reads back as a one-element selection
- *   [7] setV2FavientsPanelKey keeps v2's grid/list preference out of app-gmt's blob
- *   [9] fileFavientsAt — a BATCH lands as one contiguous run, in the order given, at the
+ *   [7] fileFavientsAt — a BATCH lands as one contiguous run, in the order given, at the
  *       place asked for, in one store write; and wallSelection's snapshot is
  *       reference-stable (the wall's paint effect has it in a dependency array)
  *   [8] fileFavientInto — the ONE rule behind every drop target (a rail chip, a band on
@@ -30,7 +29,13 @@
  *       CONTENT moves too, a drop onto its own group does nothing, and an unnamed payload
  *       is named the way every other add-path names it
  *
- * FALSIFIED 2026-09-09 — nine breaks, one per section, each reverted, each exit 1. Three
+ * A section pinning `setV2FavientsPanelKey` is gone. It, which guarded a cross-host leak
+ * that only existed while GE v2 mounted `FavientsPanel`. v2 retired that panel on
+ * 2026-09-09 (the collection kebab is all that survives), so the fix, its call and this
+ * section went with it rather than sitting here as a guard for a surface that is gone. The
+ * leak itself is real and recorded in the plan, should the panel ever come back.
+ *
+ * FALSIFIED 2026-09-09 — breaks reverted one at a time, each exit 1. Three
  * assertions PASSED under mutation on the first attempt and were rewritten; they are noted
  * because the weakness, not the fix, is the lesson.
  *
@@ -48,12 +53,11 @@
  *     shelf → 1 red. Also vacuous at first, because the test named the sets in shelf order;
  *     it now names them in the reverse.
  *   • `normalise` returning an empty selection → 3 red; dropping All's exclusivity → 1 red.
- *   • `setV2FavientsPanelKey` ignoring its argument → 2 red ("app-gmt's blob is untouched").
  *   • `fileFavientInto` dropping its CONTENT match → 3 red ("the same gradient with NO
  *     favId still moves, not copies"); filing `p.name` raw instead of falling back to
  *     `configToName` → 1 red ("an unnamed payload is still named (got \"\")").
  *
- * Four more on 2026-09-09 for [9], same method:
+ * Four more on 2026-09-09 for [7], same method:
  *   • `fileFavientsAt` reversing the batch → 1 red ("got b1,a3,a1,b2").
  *   • it splicing the batch at index 0 instead of at the anchor → 3 red, including
  *     "B stays ONE contiguous run (got BB.BB.)" — the run check earns its place here.
@@ -276,7 +280,7 @@ console.log('[6] the ground selection');
   ok(gs2.getGroundSetIds().join() === 'group:legacy', 'a pre-2026-09-09 bare id reads back as a one-set selection');
 }
 
-console.log('[9] fileFavientsAt + wallSelection: a batch, and a stable snapshot');
+console.log('[7] fileFavientsAt + wallSelection: a batch, and a stable snapshot');
 {
   reset();
   const st = () => useFavientsStore.getState();
@@ -361,17 +365,6 @@ console.log('[8] fileFavientInto: one rule for every drop target');
   ok(st().favients.length === 2, 'a gradient that is not on the shelf is inserted');
   const added = st().favients.find((f) => f.id !== fav.id)!;
   ok(!!added && added.name.trim().length > 0, `an unnamed payload is still named (got "${added?.name}")`);
-}
-
-console.log('[7] v2 does not write into app-gmt\u2019s panel blob');
-{
-  mem.clear();
-  const persist = await import(`../palette/store/favientsPanelPersist?fresh=${Date.now()}`);
-  persist.setV2FavientsPanelKey('gmt.ge.v2.favients.panel');
-  persist.setFavientsViewMode('list');
-  ok(persist.getFavientsViewMode() === 'list', 'the view mode round-trips under the v2 key');
-  ok(!!mem.get('gmt.ge.v2.favients.panel'), 'it is written under the v2 key');
-  ok(!mem.get('gmt.favients.panel'), 'app-gmt\u2019s blob is untouched');
 }
 
 console.log(failures === 0 ? '\nPASS test-palette-shelf-manage' : `\nFAIL test-palette-shelf-manage (${failures})`);
