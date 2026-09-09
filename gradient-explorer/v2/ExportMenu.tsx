@@ -136,6 +136,18 @@ const EXT_COL = 'w-10 shrink-0 text-[11px] text-fg-dim truncate';
  *  left, the extension column included, shifts with it. */
 const COPY_SLOT = 'w-7 h-7 shrink-0';
 
+/** THE NOTE STRIP (owner, 2026-09-10). Every open category ends in a reserved line of this
+ *  height, empty until a row that has something to say is hovered — so the note appears in
+ *  space that was already there and NOTHING moves: not the rows above it, not the categories
+ *  below it, and not the window. The old notice lived inside the row and pushed everything
+ *  under it down the moment it rendered. */
+const NOTE_STRIP = 'h-4 px-1 text-[11px] leading-4 text-fg-muted truncate';
+
+/** What a lossy bundle costs, in as few words as it takes (owner, 2026-09-10 — the line
+ *  used to read "2 of 12 use more than 40 colour stops, so they export simplified. Most apps
+ *  cap stops similarly"). The count is what you need; the lecture is not. */
+const lossyNote = (n: number): string => `${n} gradient${n === 1 ? '' : 's'} reduced to ${AI_STOP_LIMIT} colour stops`;
+
 /** The label with its extension REMOVED, because the column carries it now: the registry
  *  writes "Adobe swatches .ase" and "Fractint .map" for hosts that show a bare list (the old
  *  shell's Extras `<select>`, where "Fractint" alone would be worse), so this is a display
@@ -246,6 +258,9 @@ export const ExportMenu: React.FC<{
     return (last && groupOf(last.key)) || GROUPS[0].title;
   });
   const toggle = (title: string) => setOpen((o) => (o === title ? null : title));
+  /** What the open category's note strip is showing, or null. One at a time, because one
+   *  category is open at a time and one row is hovered at a time. */
+  const [notice, setNotice] = useState<string | null>(null);
 
   const swatches = subject === 'swatches';
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
@@ -277,6 +292,9 @@ export const ExportMenu: React.FC<{
   // shut. Measured 2026-09-09 — and neither smoke caught it, because the section they close
   // first happens to be the one this would re-open.
   useEffect(() => {
+    setNotice(null);
+  }, [open, subject]);
+  useEffect(() => {
     if (open === null || open === PROFILE_SECTION) return;
     if (!sections.some((x) => x.title === open)) setOpen(sections[0]?.title ?? null);
   }, [sections, open]);
@@ -289,7 +307,13 @@ export const ExportMenu: React.FC<{
     const bundles = isSet && !!(swatches ? f.collectionSwatches : f.collection);
     const lossy = isSet && bundles ? setLossyCount(set!, f.key, subject) : 0;
     return (
-      <div key={f.key} data-gx-format={f.key}>
+      <div
+        key={f.key}
+        data-gx-format={f.key}
+        data-gx-lossy={lossy > 0 ? lossy : undefined}
+        onPointerEnter={() => setNotice(lossy > 0 ? lossyNote(lossy) : null)}
+        onPointerLeave={() => setNotice(null)}
+      >
         <div className="flex items-center gap-1">
           {/* THE ROW IS THE DOWNLOAD. It carries the glyph and the extension it will write, so
               the action is stated rather than hidden behind a whole-row click nobody expects
@@ -336,11 +360,6 @@ export const ExportMenu: React.FC<{
             <span className={COPY_SLOT} />
           )}
         </div>
-        {lossy > 0 && (
-          <div className="text-[11px] leading-snug text-fg-muted px-1 pb-1">
-            {lossy} of {set!.length} use more than {AI_STOP_LIMIT} colour stops, so they export simplified. Most apps cap stops similarly.
-          </div>
-        )}
       </div>
     );
   };
@@ -448,7 +467,14 @@ export const ExportMenu: React.FC<{
       {sections.map((sec) => (
         <div key={sec.title}>
           <SectionHead title={sec.title} note={String(sec.formats.length)} open={open === sec.title} onClick={() => toggle(sec.title)} />
-          {open === sec.title && <div className="pt-1 px-1">{sec.formats.map(row)}</div>}
+          {open === sec.title && (
+            <div className="pt-1 px-1">
+              {sec.formats.map(row)}
+              <div className={NOTE_STRIP} data-gx-note>
+                {notice}
+              </div>
+            </div>
+          )}
         </div>
       ))}
 

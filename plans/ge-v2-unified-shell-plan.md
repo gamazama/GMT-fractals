@@ -1617,6 +1617,17 @@ are where to START reading, not necessarily where the change lands.
    >    subject empties the open section also fired on `open === null`, so clicking the open
    >    header shut it and the effect immediately re-opened the first one. Both smokes missed
    >    it because the section they close first is the one it re-opened.
+   > **Then, 2026-09-10: the lossy notice.** "2 of 12 use more than 40 color stops.........
+   > -> 2 gradients reduced to 40 colour stops (only), and only appears on hover. extra space
+   > in each category so it opens neatly without shifting the others." All three, and they are
+   > one thought: the line was a paragraph that rendered inside the row and shoved everything
+   > under it down the moment it existed. Now `lossyNote` says the count and stops
+   > ("1 gradient reduced to 40 colour stops"), it shows only while the row is hovered, and
+   > every open category ends in a RESERVED line (`NOTE_STRIP`) for it to appear in. That last
+   > part is what makes the first two safe: the strip is a fixed height that cannot wrap and
+   > clips what does not fit, so whatever lands in it, the rows above and the categories below
+   > cannot move. Verified by measuring both, not by looking.
+   >
    > 2. **`labelWithoutExt` matched nothing.** It was `new RegExp(...)` built from a TEMPLATE
    >    LITERAL, and the escape for whitespace collapses in the template before the RegExp
    >    ever sees it — so the pattern was `s*.aseb` and every design-app row kept saying its

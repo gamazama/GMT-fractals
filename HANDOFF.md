@@ -39,6 +39,12 @@ the profile and image blocks, about twenty-seven rows, nothing recommended.
   neighbours' (measured: x=1236 vs 1268). The column carries the extension and
   `labelWithoutExt` takes it back out of the label; the registry's labels are untouched,
   because the old shell's Extras `<select>` shows a bare list.
+- **The lossy notice, 2026-09-10.** It was a paragraph rendered inside the row ("2 of 12 use
+  more than 40 colour stops, so they export simplified. Most apps cap stops similarly"), and
+  it shoved everything under it down the moment it existed. Now it says the count and stops
+  ("1 gradient reduced to 40 colour stops"), shows only while the row is hovered, and every
+  open category ends in a RESERVED line for it. The strip is a fixed height that cannot wrap
+  and clips what does not fit, so whatever lands in it, nothing moves — measured, both ways.
 - **Two silent defects fell out of measuring that column, and no smoke had caught either.**
   A section could never be CLOSED (the re-home effect fired on a deliberate close and
   re-opened the first section; both smokes missed it because the section they close first is

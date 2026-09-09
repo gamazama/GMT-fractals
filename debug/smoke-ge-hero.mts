@@ -17,6 +17,12 @@
  *       opening on Ramp, and Swatches narrowing the offer to the formats that have a
  *       swatch form — the format list is the registry seen through `formatsFor`, so a
  *       subject control that only painted itself would leave the offer unchanged
+ *       · each open category ends in a RESERVED note strip: one fixed line that cannot wrap
+ *       and clips what does not fit, so the hover note it carries can never shift the rows
+ *       above it or the categories below
+ *   [7] and the note itself: a set holding a 60-stop gradient bundles into .ai and .ase
+ *       lossily, says "1 gradient reduced to 40 colour stops" in that strip ON HOVER, and
+ *       neither the window nor the rows below it move when it does
  *
  * Falsified 2026-09-06 by re-introducing the old hide (`if (!shown) return null` →
  * `if (emptySource) return null`): step [3] goes red with "the hero unmounted on an empty
@@ -139,6 +145,12 @@ async function main() {
         // THE EXTENSION COLUMN's left edge on every row of the window that has one — format
         // rows, Again rows, the image row. A column is a column only if they agree.
         extXs: Array.from(w.querySelectorAll('.w-10.shrink-0')).map((e) => Math.round(e.getBoundingClientRect().x)),
+        // The open category's reserved NOTE STRIP: how many there are, how tall, whether
+        // text could ever make it grow, and what it says at rest.
+        notes: Array.from(w.querySelectorAll('[data-gx-note]')).map((e) => {
+          const cs = getComputedStyle(e as HTMLElement);
+          return { h: cs.height, nowrap: cs.whiteSpace === 'nowrap', clipped: cs.overflow === 'hidden', text: (e as HTMLElement).innerText.trim() };
+        }),
         again: Array.from(w.querySelectorAll('[data-gx-export-again] button')).map((b) => (b as HTMLElement).innerText.trim()),
         image: w.innerText.includes('Swatch sheet') ? 'swatch-sheet' : w.innerText.includes('PNG strip') ? 'png-strip' : 'other',
       };
@@ -196,6 +208,17 @@ async function main() {
         return m && m.length > 1 && m[m.length - 1] === m[m.length - 2];
       });
       if (twice.length) fail(`[5] the extension is written twice on: ${twice.join(' / ')}`);
+      // THE NOTE STRIP (owner, 2026-09-10: "extra space in each category so it opens neatly
+      // without shifting the others"). One reserved line at the bottom of the open category,
+      // empty until a row with something to say is hovered. The proof that a note can never
+      // move anything is STRUCTURAL and does not need a lossy set to demonstrate: the strip
+      // is a FIXED height that cannot wrap and clips what does not fit, so whatever lands in
+      // it, the rows above and the categories below stay exactly where they are.
+      if (st!.notes.length !== 1) fail(`[5] "${title}" has ${st!.notes.length} note strips, expected exactly one`);
+      const note = st!.notes[0];
+      if (note.h !== '16px') fail(`[5] the note strip in "${title}" is ${note.h}, not a reserved line`);
+      if (!note.nowrap || !note.clipped) fail(`[5] the note strip can GROW (nowrap ${note.nowrap}, clipped ${note.clipped}) — a long note would shift the categories below it`);
+      if (note.text) fail(`[5] the note strip is not empty at rest: "${note.text}"`);
       const xs = Array.from(new Set(st!.extXs));
       if (xs.length > 1) fail(`[5] the extension column starts at ${xs.sort((a, b) => a - b).join(' and ')} in "${title}" — it is not a column`);
       all.push(...st!.visible);
@@ -281,13 +304,84 @@ async function main() {
     fail(`[6] with Again showing, the extension column starts at ${againXs.sort((a, b) => a - b).join(' and ')} — the row kinds do not line up`);
   console.log('✓ [6] Again lists the last exports, opens the section holding one, and lines up with it');
 
+  // [7] THE NOTE ITSELF (owner, 2026-09-10). A bundling format flattens each gradient to
+  // AI_STOP_LIMIT stops, and the ones that lose visible detail say so — on HOVER, in the
+  // category's reserved strip, in as few words as it takes. [5] proves the strip cannot
+  // move anything whatever it holds; this proves the words that land in it, and it is the
+  // only place anything exercises the notice at all, because it needs a set holding a
+  // gradient that actually exceeds the budget. Sixty alternating black/white stops does.
+  // Falsified by restoring the old wording, and by dropping `.ase` from
+  // `collectionQualityWarnings` (then nothing reports and the strip stays empty).
+  await page.evaluate(() => {
+    const stops = Array.from({ length: 60 }, (_, i) => ({
+      id: `s${i}`,
+      position: i / 59,
+      color: i % 2 ? '#ffffff' : '#000000',
+      interpolation: 'linear',
+    }));
+    localStorage.setItem(
+      'gmt.favients',
+      JSON.stringify([
+        { id: 'spiky', name: 'Spiky', createdAt: Date.now(), group: 'noted', config: { stops, blendSpace: 'rgb', colorSpace: 'srgb' } },
+      ]),
+    );
+    localStorage.setItem('gmt.favients.groups', JSON.stringify({ noted: 'Noted' }));
+    localStorage.setItem('gmt.ge.groundSet', JSON.stringify(['group:noted']));
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1800);
+  const ground = await page.$('[data-gx-export-ground]');
+  if (!ground) fail('[7] the rail has no ground-export icon');
+  if (await ground!.isDisabled()) fail('[7] the ground-export icon is disabled with a set of one on the ground');
+  await ground!.click();
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[7] the ground Export window did not open'));
+  // A header TOGGLES, and the seeded .grd recent means this window may already have opened
+  // on "For design apps" — clicking it then would CLOSE it. (It did, and the failure read
+  // as "no notice at all", which is the same trap [5]'s collect() had to learn.)
+  const openNow2 = await page.evaluate(
+    () => (document.querySelector('[data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null,
+  );
+  if (openNow2 !== 'For design apps') {
+    await page.click('[data-gx-section="For design apps"]');
+    await page.waitForTimeout(250);
+  }
+  const lossyKeys = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[data-gx-lossy]')).map((e) => (e as HTMLElement).dataset.gxFormat ?? ''),
+  );
+  if (!lossyKeys.includes('ai')) fail(`[7] a 60-stop gradient bundles into .ai with no notice at all (noted: ${lossyKeys.join(', ') || 'none'})`);
+  if (!lossyKeys.includes('ase')) fail('[7] .ase reduces at the same budget as .ai and must report too');
+  // A REAL hover, not a synthetic `pointerenter`: React derives onPointerEnter from the
+  // delegated pointerover/pointerout pair at the root, so an enter event dispatched straight
+  // at the element never reaches the handler. The first cut did that and read an empty strip.
+  const measure = () =>
+    page.evaluate(() => {
+      const w = document.querySelector('[data-gx-export]') as HTMLElement;
+      return {
+        text: (w.querySelector('[data-gx-note]') as HTMLElement).innerText.trim(),
+        win: Math.round(w.getBoundingClientRect().height),
+        rowY: Math.round((w.querySelector('[data-gx-format="gpl"]') as HTMLElement).getBoundingClientRect().y),
+      };
+    });
+  const noteBefore = await measure();
+  await page.hover('[data-gx-format="ai"]');
+  await page.waitForTimeout(250);
+  const noteAfter = await measure();
+  const shown = { before: noteBefore, after: noteAfter };
+  if (shown.before.text) fail(`[7] the strip was already saying something before the hover: "${shown.before.text}"`);
+  if (shown.after.text !== '1 gradient reduced to 40 colour stops')
+    fail(`[7] the note reads "${shown.after.text}" — expected "1 gradient reduced to 40 colour stops"`);
+  // The whole point of reserving the line: showing it moves NOTHING.
+  if (shown.after.win !== shown.before.win) fail(`[7] the window resized on hover (${shown.before.win} → ${shown.after.win})`);
+  if (shown.after.rowY !== shown.before.rowY) fail(`[7] the rows below moved on hover (${shown.before.rowY} → ${shown.after.rowY})`);
+  console.log('✓ [7] a lossy bundle says so on hover, in the reserved line, and nothing moves');
+
   await browser.close();
   if (errors.length) {
     errors.forEach((e) => console.log(e));
     console.log('\nFAIL — page errors');
     process.exit(1);
   }
-  console.log('\nPASS — the hero never unmounts (L8); one export window, two subjects');
+  console.log('\nPASS — the hero never unmounts (L8); one export window, two subjects, one reserved note line');
 }
 
 main().catch((e) => {
