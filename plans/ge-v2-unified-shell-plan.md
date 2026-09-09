@@ -1577,7 +1577,7 @@ are where to START reading, not necessarily where the change lands.
    > and measurable: the Ramp subject showed twenty formats across four always-open sections
    > plus the profile block and the image block — about twenty-seven rows, nothing
    > recommended, no way to skip what you will never use. A format CATALOGUE presented as a
-   > menu of actions. Two changes, neither of which removes a format:
+   > menu of actions. Three changes, none of which removes a format:
    >
    > - **AGAIN** — the last few exports at the top, one click each. The app had recorded them
    >   since Phase B (`exportActions.ts`, on the Export icon's hover flyout); they were simply
@@ -1588,6 +1588,16 @@ are where to START reading, not necessarily where the change lands.
    >   already carry it. Twenty visible rows become two to eight. The output profile is a
    >   section like the others with its value on the header; the image row stays open,
    >   because it is one row and it is what most people came for.
+   >
+   > - **One action per row.** The row IS the download — it carries the extension it will
+   >   write and the download glyph — and Copy is a small icon beside it, only for the formats
+   >   that have a text form. The glyph is the colour picker's `CopyGlyph`, not a new one
+   >   (owner: "we have a copy icon in the main color picker that you can use"), so the set
+   >   does not grow a near-duplicate of a drawing that already exists. The extension shows
+   >   only where the LABEL does not already carry it — "Adobe swatches .ase" followed by
+   >   ".ase" is the window saying the same thing twice, and half the design-app rows read
+   >   that way. The Again rows and the image row take the same anatomy, so there is one row
+   >   shape in the window rather than three.
    >
    > **The owner then asked for "a lighter strip behind the category names"** — a resting
    > tint (`BAND` in `ExportMenu.tsx`) one step up from the floating surface, on every
@@ -1966,13 +1976,12 @@ phase now carries**. Items move out of this list only when a later phase's entry
   Phase F should measure the boot cost of the two licensed packs on a real phone (~8,000 extra
   entries, 11,131 total, carried since Phase A iteration 2) before anything else.
 - 2026-09-09 · session 4, second pass (the export window's presentation + the rail's icon).
-  **In scope, left undone:** the format ROWS still carry two labelled buttons (Copy · Download);
-  the third change proposed with the accordion — the row IS the download, Copy a small icon —
-  was not built, because the accordion took the visible count from twenty rows to two-to-eight
-  and the button weight stopped being the problem. It is still available and would want a
-  `copy` glyph, which the icon set does not have. The accordion remembers which SECTION was
-  open only within one opening; §5.8's "default is remembered" still is not done for the
-  format itself. **Noticed outside scope, and this is the one to read:** `smoke:ge-ground` [3]
+  **In scope, left undone:** the accordion remembers which SECTION was open only within one
+  opening; §5.8's "default is remembered" still is not done for the format itself. The row's
+  Copy gives no per-row confirmation — it toasts, where the colour picker's own copy button
+  flips to a tick for a second; matching that wants the promise back out of
+  `exportActions.copyFormat`, which is a change to a shared function for a small gain.
+  **Noticed outside scope, and this is the one to read:** `smoke:ge-ground` [3]
   was ALREADY RED on a clean tree before this session touched anything, with two independent
   stale expectations and the first masking the second. The tools half is fixed here (it counted
   `button[aria-label]`, and session 3 put the list-view toggle in the same corner); the canvas

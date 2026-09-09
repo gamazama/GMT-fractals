@@ -30,6 +30,11 @@ the profile and image blocks, about twenty-seven rows, nothing recommended.
   output profile is a section like the others; the image row stays open. Then, per the owner,
   **a lighter strip behind every category name** (`BAND` in `ExportMenu.tsx`) — Again and As an
   image wear it too, or they read as a different kind of thing.
+- **One action per row.** The row IS the download (it carries the extension and the glyph);
+  Copy is a small icon beside it, only where there is a text form, drawn with the colour
+  picker's own `CopyGlyph` rather than a new one (owner: "we have a copy icon in the main
+  color picker that you can use"). The extension shows only where the label does not already
+  carry it. Again and the image row take the same anatomy — one row shape, not three.
 - **The rail has the hero's download icon**, at the right end beside the collection kebab. It
   exports THE GROUND (the union of the lit chips), not one set — the rail is multi-select, so
   one button at its end cannot mean "this set". `All` is the catalogue, so the icon disables

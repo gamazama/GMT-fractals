@@ -27,8 +27,8 @@
  * export overwhelming with the long list of options"). Measured before the change: the Ramp
  * subject showed twenty formats across four always-open sections, plus the profile block and
  * the image block — about twenty-seven rows, nothing recommended, and no way to skip the
- * formats you will never use. It is a format CATALOGUE presented as a menu of actions. Two
- * things fix that and neither removes a format:
+ * formats you will never use. It is a format CATALOGUE presented as a menu of actions. Three
+ * things fix that and none of them removes a format:
  *
  *   1. AGAIN — the last few exports, at the top, one click each. The app already recorded
  *      them (`exportActions.ts`, shown on the Export icon's hover flyout); they were simply
@@ -37,9 +37,17 @@
  *      closed by default, one open at a time, and the one that opens is the one holding your
  *      last export. Twenty visible rows become two to eight.
  *
+ *   3. ONE ACTION PER ROW. The row IS the download — it carries the extension it will write
+ *      and the download glyph, so nothing is hidden behind a whole-row click nobody expects
+ *      — and Copy is a small icon beside it, only for the formats that have a text form.
+ *      The glyph is the colour picker's `CopyGlyph` rather than a new one (owner,
+ *      2026-09-09: "we have a copy icon in the main color picker that you can use"), so the
+ *      set does not grow a near-duplicate of a drawing that already exists.
+ *
  * The output profile is a section like the others with its value on the header — a setting
  * almost nobody touches, previously sitting between the formats and the image row at full
- * weight. The image row stays open: it is one row and it is what most people came for.
+ * weight. The image row stays open: it is one row and it is what most people came for, and
+ * it takes the same shape as a format row so there is one row anatomy in the window.
  *
  * The doing lives in `exportActions.ts` (`runExport`, `runSetExport`, `runSetImage`),
  * shared with the hero's hover flyout of recent exports, so the two surfaces cannot drift.
@@ -55,9 +63,13 @@ import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/palette
 import type { Favient } from '../../palette/store/favientsStore';
 import type { RGB } from '../../palette/core/oklab';
 import { Floating } from './ui/Floating';
-import { Act } from './ui/Act';
 import { Icon } from './ui/Icon';
 import { ZoneLabel } from './ui/ZoneLabel';
+// The copy glyph is the colour picker's, not a second drawing of the same idea (owner,
+// 2026-09-09: "we have a copy icon in the main color picker that you can use"). It is a
+// 16-unit stroke glyph in `currentColor` like the rest of the v2 set, so it sits inside
+// V6 without the icon set growing a near-duplicate of a drawing that already exists.
+import { CopyGlyph } from '../../components/gradient/pickerIcons';
 
 const GROUPS: { title: string; keys: string[] }[] = [
   { title: 'For the web', keys: ['css', 'cssvars', 'svg', 'tw', 'tokens', 'hex', 'json', 'js'] },
@@ -235,16 +247,15 @@ export const ExportMenu: React.FC<{
     const bundles = isSet && !!(swatches ? f.collectionSwatches : f.collection);
     const lossy = isSet && bundles ? setLossyCount(set!, f.key, subject) : 0;
     return (
-      <div key={f.key} className="py-0.5" data-gx-format={f.key}>
-        <div className="flex items-center gap-2">
-          <span className="flex-1 text-[13px] text-fg">{(swatches && f.swatchLabel) || f.label}</span>
-          {!isSet && !f.binary && (
-            <Act onClick={() => copy(f)} title="Copy to the clipboard">
-              Copy
-            </Act>
-          )}
-          <Act
+      <div key={f.key} data-gx-format={f.key}>
+        <div className="flex items-center gap-1">
+          {/* THE ROW IS THE DOWNLOAD. It carries the glyph and the extension it will write, so
+              the action is stated rather than hidden behind a whole-row click nobody expects
+              — and one action per row is what let the two labelled buttons go. */}
+          <button
+            type="button"
             onClick={() => download(f)}
+            data-gx-download={f.key}
             title={
               isSet
                 ? bundles
@@ -252,12 +263,41 @@ export const ExportMenu: React.FC<{
                   : `${set!.length} files in a .zip`
                 : `Download .${f.ext}${swatches ? ` — ${n} swatches` : ''}`
             }
+            className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
           >
-            {isSet && !bundles ? '.zip' : 'Download'}
-          </Act>
+            <span className="flex-1 min-w-0 truncate text-[13px] text-fg">{(swatches && f.swatchLabel) || f.label}</span>
+            {/* The extension, but only when the LABEL does not already carry it — "Adobe
+                swatches .ase" followed by ".ase" is the window telling you the same thing
+                twice, and half the design-app rows read that way. For a set the suffix is
+                new information either way (one file, or a .zip of many). */}
+            {(() => {
+              if (isSet) return <span className="text-[11px] text-fg-dim">{bundles ? `.${f.ext}` : '.zip'}</span>;
+              const label = ((swatches && f.swatchLabel) || f.label).toLowerCase();
+              return label.includes(`.${f.ext.toLowerCase()}`) ? null : (
+                <span className="text-[11px] text-fg-dim">.{f.ext}</span>
+              );
+            })()}
+            <span className="text-fg-dim group-hover:text-fg">
+              <Icon name="download" size={14} />
+            </span>
+          </button>
+          {/* Copy only where there IS a text form: never a binary format, never a set (which
+              has no single thing to put on the clipboard). */}
+          {!isSet && !f.binary && (
+            <button
+              type="button"
+              onClick={() => copy(f)}
+              data-gx-copy={f.key}
+              title={`Copy ${(swatches && f.swatchLabel) || f.label} to the clipboard`}
+              aria-label={`Copy ${(swatches && f.swatchLabel) || f.label}`}
+              className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
+            >
+              <CopyGlyph size={14} />
+            </button>
+          )}
         </div>
         {lossy > 0 && (
-          <div className="text-[11px] leading-snug text-fg-muted pr-1">
+          <div className="text-[11px] leading-snug text-fg-muted px-1 pb-1">
             {lossy} of {set!.length} use more than {AI_STOP_LIMIT} colour stops, so they export simplified. Most apps cap stops similarly.
           </div>
         )}
@@ -348,9 +388,12 @@ export const ExportMenu: React.FC<{
               key={exportActionLabel(a)}
               type="button"
               onClick={() => runExport(a, ramp, name, palette)}
-              className="w-full flex items-center h-7 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors"
+              className="w-full flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
             >
               <span className="flex-1 min-w-0 truncate">{exportActionLabel(a)}</span>
+              <span className="text-fg-dim group-hover:text-fg">
+                {a.kind === 'copy' ? <CopyGlyph size={14} /> : <Icon name="download" size={14} />}
+              </span>
             </button>
           ))}
           </div>
@@ -389,12 +432,21 @@ export const ExportMenu: React.FC<{
           <ZoneLabel className="flex-1">As an image</ZoneLabel>
         </div>
         <div className="pt-1 px-1">
-          <div className="flex items-center gap-2 py-0.5" data-gx-image>
-            <span className="flex-1 text-[13px] text-fg">
+          <button
+            type="button"
+            onClick={image}
+            data-gx-image
+            title="Download a PNG"
+            className="w-full flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
+          >
+            <span className="flex-1 min-w-0 truncate text-[13px] text-fg">
               {swatches ? 'Swatch sheet' : isSet ? 'Contact sheet' : 'PNG strip (1024 × 64)'}
             </span>
-            <Act onClick={image}>Download</Act>
-          </div>
+            <span className="text-[11px] text-fg-dim">.png</span>
+            <span className="text-fg-dim group-hover:text-fg">
+              <Icon name="download" size={14} />
+            </span>
+          </button>
           <div className="text-[13px] text-fg-muted mt-1">
           {swatches
             ? isSet

@@ -133,6 +133,8 @@ async function main() {
         // title: two formats can share an extension (.css is both the linear-gradient and
         // the variable set), and a title test cannot tell them apart.
         visible: Array.from(w.querySelectorAll('[data-gx-format]')).map((e) => (e as HTMLElement).dataset.gxFormat ?? ''),
+        downloads: Array.from(w.querySelectorAll('[data-gx-download]')).map((e) => (e as HTMLElement).dataset.gxDownload ?? ''),
+        copies: Array.from(w.querySelectorAll('[data-gx-copy]')).map((e) => (e as HTMLElement).dataset.gxCopy ?? ''),
         again: Array.from(w.querySelectorAll('[data-gx-export-again] button')).map((b) => (b as HTMLElement).innerText.trim()),
         image: w.innerText.includes('Swatch sheet') ? 'swatch-sheet' : w.innerText.includes('PNG strip') ? 'png-strip' : 'other',
       };
@@ -160,6 +162,17 @@ async function main() {
         const home = seen.get(k);
         if (home && home !== title) fail(`[5] "${k}" is on screen under both "${home}" and "${title}" — every section is rendering at once`);
         seen.set(k, title);
+      }
+      // ROW ANATOMY (2026-09-09): the row IS the download, and Copy is offered only where
+      // there is a text form. A binary format with a Copy button would put "[object
+      // Uint8Array]" on the clipboard, which is the failure this shape has to rule out.
+      const noDownload = st!.visible.filter((k) => !st!.downloads.includes(k));
+      if (noDownload.length) fail(`[5] no download control on ${noDownload.join(', ')}`);
+      for (const k of ['grd', 'ase', 'idml']) {
+        if (st!.visible.includes(k) && st!.copies.includes(k)) fail(`[5] ${k} is binary and must not offer Copy`);
+      }
+      for (const k of ['gpl', 'css', 'hex']) {
+        if (st!.visible.includes(k) && !st!.copies.includes(k)) fail(`[5] ${k} has a text form and lost its Copy`);
       }
       all.push(...st!.visible);
     }
