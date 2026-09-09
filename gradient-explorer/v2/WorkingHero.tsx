@@ -75,6 +75,7 @@ import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } fro
 import { applyEditorChange } from '../../palette/core/editorConfig';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { isColorDrag, readColorDrag, colorInFlight } from '../../components/gradient/colorDrag';
+import { useEyedropperActive } from '../../components/gradient/eyedropperActive';
 import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
@@ -156,6 +157,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   }, []);
   /** Where a colour in flight would land: px across the gradient body, and t on the ramp. */
   const [dropGhost, setDropGhost] = useState<{ x: number; t: number } | null>(null);
+  /** A screen pick is in progress — the source image must show faithfully (§8b item 8). */
+  const eyedropping = useEyedropperActive();
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
   // The tray's left edge = the panel's left edge PLUS the panel's corner radius (owner,
   // 2026-09-07: "include the corner radius too"), i.e. where the panel's flat bottom edge
@@ -348,7 +351,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         <div className="flex flex-col justify-center py-4">
           <ImageSlot
             active={source === 'extract'}
-            dim={!imageIsTheGradient && tray !== 'image'}
+            // ...but never while the eyedropper is open: you are then picking OUT of the
+            // picture, and a greyed 84 px thumbnail is what would be sampled — a colour the
+            // photo does not contain (§8b item 8). What you are DOING decides how the image
+            // is presented, not only whether the gradient still derives from it.
+            dim={!imageIsTheGradient && tray !== 'image' && !eyedropping}
+            instant={eyedropping}
             bigH={panelH - 32}
             onClick={() => onTray('image')}
             cloudHost={imageCloudEl}

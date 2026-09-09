@@ -37,6 +37,10 @@ interface Props extends ImageStageFaceProps {
   /** The image is loaded but no longer what you see (another gradient, an edit): the picture
    *  greys and shrinks to a thumbnail — animated, and only on that change (owner). */
   dim?: boolean;
+  /** Skip the 300 ms grow/ungrey. Set while the eyedropper is open: it samples what is
+   *  PAINTED, so a picture still animating out of its dimmed state hands back a colour part
+   *  way between grey and the photo (§8b item 8). */
+  instant?: boolean;
   /** The full picture's height (px): the panel's height minus the column's padding. The
    *  slot never sizes the card; the panel does. */
   bigH: number;
@@ -49,7 +53,7 @@ const MAX_W = 520;
 const SMALL_H = 84;
 const SMALL_MAX_W = 150;
 
-export const ImageSlot: React.FC<Props> = ({ active, dim = false, bigH, onClick, cloudHost, toolsHost, handles = false }) => {
+export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = false, bigH, onClick, cloudHost, toolsHost, handles = false }) => {
   const model = useImageStore((s) => s.model);
   const ring = active ? 'outline outline-2 outline-accent-400 outline-offset-2' : '';
 
@@ -81,7 +85,7 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, bigH, onClick,
         height: h,
         filter: dim ? 'grayscale(1)' : 'none',
         opacity: dim ? 0.55 : 1,
-        transition: 'width 300ms ease, height 300ms ease, filter 300ms ease, opacity 300ms ease',
+        transition: instant ? 'none' : 'width 300ms ease, height 300ms ease, filter 300ms ease, opacity 300ms ease',
       }}
       title={handles ? undefined : dim ? 'The image this gradient came from — click to work from it again' : 'The image this gradient comes from — click for the Image face'}
       data-gx-image-slot={dim ? 'dim' : 'live'}

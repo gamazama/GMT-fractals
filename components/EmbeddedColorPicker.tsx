@@ -30,6 +30,7 @@ import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisio
 import { ChevronDown } from './Icons';
 import { useInputSkin } from './inputs/skin';
 import { setColorDrag, endColorDrag } from './gradient/colorDrag';
+import { setEyedropperActive } from './gradient/eyedropperActive';
 import { CopyGlyph, EyedropperGlyph, SpectrumGlyph, WheelGlyph, StopGlyph, HarmonyGlyph, ChannelsGlyph, KelvinGlyph, SwatchesGlyph } from './gradient/pickerIcons';
 import Slider from './Slider';
 
@@ -840,11 +841,19 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const doEyedrop = async () => {
         const ED = getEyeDropper();
         if (!ED) { setEyedropError(true); setTimeout(() => setEyedropError(false), 2000); return; }
+        // Announce the pick BEFORE opening, and give the interface two frames to repaint.
+        // EyeDropper samples what is painted, so a surface that presents an image faithfully
+        // only while you are picking (GE v2's hero — see components/gradient/eyedropperActive.ts)
+        // has to have finished doing so before the first sample can be taken.
+        setEyedropperActive(true);
+        await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
         try {
             const res = await new ED().open();
             setFromHex(res.sRGBHex);
         } catch {
-            /* user cancelled — no-op */
+            /* user cancelled - no-op */
+        } finally {
+            setEyedropperActive(false);
         }
     };
 
