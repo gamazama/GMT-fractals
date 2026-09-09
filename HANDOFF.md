@@ -4,6 +4,20 @@
 **Origin:** Forked from gmt-0.8.5 (was `h:/GMT/gmt-0.8.5/`); the engine extraction happened in the since-retired `dev/` tree.
 **Status:** ✅ **GMT fully ported to the engine (2026-04-26).** All three apps boot. `app-gmt.html` is functionally equivalent to gmt-0.8.5: full worker renderer, path tracing, Orbit/Fly navigation, all 26 DDFS features, 42 formulas, all 10 manifest-driven panels, light gizmos, drawing tools, webcam overlay, state debugger, Formula Workshop, GMT loading screen, Share Link, save/load (PNG + GMF + JSON), Camera Manager, formula gallery. `npx tsc --noEmit` → 0 errors. **Mobile mode shipped 2026-05-01.** **True Area Lights shipped 2026-05-03.** **PT reflection quality (env MIS + IS + Sobol) shipped 2026-05-05** — see entry below.
 
+**📋 2026-09-09 — 0.9.8.3 SHIPPED: the Gradient Explorer v2 is online, and main's 36 went with it:**
+
+`main` had been **36 commits ahead of the deployed tree since 2026-09-01** — the whole audit-backlog session was written but never pushed. `ge-v2` was fully pushed to its own branch but had never been merged. One release closed both: **131 commits, merged `690a3145`, pushed, live.**
+
+- **The v2 shell ships as a SECOND entry point**, `gradient-explorer-next.html` — already a `vite.config.ts` input, so going online was a merge, not a build change. The old shell is untouched at its usual address. **Phase G (parity + the swap that retires the old shell) is deliberately NOT done**: the owner wants it usable on its own before it is linked to GMT. Phase F (phone) likewise open.
+- **Verified live, not just built:** `app.gmt-fractals.com/gradient-explorer-next.html` serves `<title>GMT Gradient Explorer (next)</title>` (a nonsense URL serves the SPA fallback, so title is the real tell), 5 canvases render, **all four licensed-pack CDN requests return 200** (softology + cptcity, 11,131 gradients), **zero console errors**. Deploy landed ~2.5 min after push.
+- **Release docs:** [`docs/releases/0.9.8.3.md`](./docs/releases/0.9.8.3.md), an in-app What's New entry (a real `[text](url)` link — the HelpBrowser parser renders anchors), and a `2026-09-09` section in [`docs/CHANGELOG_DEV.md`](./docs/CHANGELOG_DEV.md). Version 0.9.8.2 → **0.9.8.3**, which also arms the What's New dot.
+- **The notes lead with the Modular slot fix** because it changes saved work: scenes containing Scale / Twist / Bend / Smooth Union / Mix now read the values their sliders show. Owner accepted before the push.
+- **The audio item is worded as an improvement, not a cure.** 0.9.8.2 already over-claimed on this once ("the Audio panel no longer halves your frame rate"); the owner's own testing after the 2026-09-02 mitigations says audio still drops the GPU. Wording matched to that.
+
+**⚠ CDN CORS: `dev.gmt-fractals.com` is NOT on the palette allowlist.** Measured against `cdn.gmt-fractals.com/palette/`: `app.gmt-fractals.com` ✓, `gmt-fractals.com` ✓, `localhost:3400` ✓ (which is why `smoke:ge-next` is green), **`dev.gmt-fractals.com` returns no `Access-Control-Allow-Origin`**, and neither does `localhost:3499` — the port `runWithServer` picks, which is why a smoke run through that wrapper shows four CORS errors that mean nothing. v2 loads both licensed packs **eagerly at boot** (owner, 2026-09-06) where app-gmt keeps them off until toggled, and there is no local fallback (`public/palette/` ships `core.*` only; the licensed pair is gitignored). So **a /dev preview walk would come up missing 11,131 gradients**. One line of R2 CORS policy, not a code change — worth doing before the plan's §5 step 6, which calls for the final owner walk on /dev.
+
+**Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
+
 **📋 2026-09-08 (last) — only SPLINE ignored the hero, and why (`ge-v2`, uncommitted):**
 
 The owner: "when I edit the knots on a gradient, it is not updating the wallpaper's split view until I fullscreen it", then the decisive narrowing — "it seems only spline mode is affected, like it's receiving data differently". It was, and the line said so:
