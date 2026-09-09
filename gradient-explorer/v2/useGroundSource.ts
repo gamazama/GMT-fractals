@@ -25,7 +25,7 @@ import { useEffect, useMemo } from 'react';
 import { useFavientsStore } from '../../palette/store/favientsStore';
 import { usePickerStore } from '../../palette/store/pickerStore';
 import { setGroundSetIds } from '../../palette/store/groundSet';
-import { ALL_SET_ID, favientsToEntries, listGroundSets, membersOf, membersOfMany, type GroundSetDesc } from '../../palette/core/groundSets';
+import { ALL_SET_ID, GLOBAL_SET_ID, favientsToEntries, listGroundSets, membersOf, membersOfMany, type GroundSetDesc } from '../../palette/core/groundSets';
 import { useGlobalSet } from '../../palette/store/globalSetStore';
 import type { GroundSource } from '../../palette/components/usePickerModel';
 
@@ -79,6 +79,11 @@ export const useGroundSource = (setIds: readonly string[], sets: GroundSetDesc[]
       // is only drawn when there is more than one: with two sets the ground has to stay
       // two PLACES rather than one undivided run (owner, 2026-09-09), and with one the
       // header would just repeat the title above it.
+      // Arranged by COLOUR when the shared set is the only thing on the ground: it has no
+      // order of anyone's to hold (owner, 2026-09-09 — no curators, no names, so the
+      // regular hue / lightness filters are the way through it). Mixed with a set of your
+      // own, your order wins, because that one IS an order.
+      arrangeable: live.length === 1 && live[0] === GLOBAL_SET_ID,
       bands: live.map((id) => ({
         key: id,
         label: live.length > 1 ? (sets.find((s) => s.id === id)?.label ?? id) : '',

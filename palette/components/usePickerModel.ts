@@ -112,6 +112,15 @@ export interface GroundSource {
    * the sets, so it keeps its single band.
    */
   bands?: { key: string; label: string; ids: ReadonlySet<string> }[];
+  /**
+   * Arrange this set the way the CATALOGUE is arranged — the hue × lightness pad, the
+   * look windows, group / rows / sort — instead of holding the shelf's own order.
+   *
+   * A set normally IS an order: you put those gradients in that sequence. The GX global set
+   * is the exception (owner, 2026-09-09): nobody owns it, so there is no sequence to
+   * preserve, and with no names to search by the only sensible way through it is by colour.
+   */
+  arrangeable?: boolean;
 }
 
 /** The set's arrangement: one band, the set's own order, read left to right. */
@@ -123,6 +132,9 @@ export interface PickerModel {
   setId: string;
   /** True when a user set is on the ground (no DDFS narrowers, no carve tools). */
   isSet: boolean;
+  /** True when this ground is arranged by colour rather than by a held order — the
+   *  catalogue always, and the GX global set, which has no order of anyone's. */
+  arrangeable: boolean;
   /** The tile the wall is drawing at (grows as the set shrinks — `tileSizeFor`). */
   tile: TileSize;
 
@@ -255,6 +267,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
   // Spatial-selection carve: the active wall tool + the surviving id-set (transient).
   const [tool, setTool] = useState<SelectionTool | null>(null);
   // The carve is catalogue ids; on a set it does not apply (and the tools are hidden).
+  // The carve narrows the CATALOGUE by its ids; no set has one, arrangeable or not.
   const keptIds: string[] | null = source ? null : pf?.keptIds ?? null;
   // Live mirror of the currently-displayed ids, so a "cut" carve can drop the selected
   // ones from the WHOLE displayed wall (not just the on-screen swatches the wall sees).
@@ -287,7 +300,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
 
   // On a set only search narrows — the quality windows, themes, sources and the carve are
   // the catalogue's lens (a favourite has no theme or bundle, and carve ids are catalogue ids).
-  const criteria: FilterCriteria = source
+  const criteria: FilterCriteria = source && !source.arrangeable
     ? { ...EMPTY_CRITERIA, windows: windowsFromSlice(undefined), query: search }
     : {
         windows: windowsFromSlice(pf),
@@ -296,7 +309,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
         keptIds,
         query: search,
       };
-  const axes: ArrangeAxes = source
+  const axes: ArrangeAxes = source && !source.arrangeable
     ? SET_AXES
     : {
         groupAxis: GROUP_BY[pf?.groupBy ?? 0] ?? 'none',
@@ -437,6 +450,8 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
   return {
     selectedIds,
     clearSelection: clearWallSelection,
+    /** This ground takes the catalogue's arranging (the pad, the look windows). */
+    arrangeable: !source || !!source.arrangeable,
     setId: source?.id ?? ALL_SET_ID,
     isSet: !!source,
     tile,

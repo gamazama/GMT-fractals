@@ -485,7 +485,7 @@ export const BrowseStage: React.FC = () => {
             </Act>
           )}
         </div>
-        {m.isSet ? (
+        {m.isSet && !m.arrangeable ? (
           /* a set on the ground: its name where the pad was — the pad and Filters are the
              catalogue's lens (their windows, themes and carve ids mean nothing here) */
           <div className="flex items-baseline gap-2 justify-self-center h-[56px] items-center" data-gx-set-title="">
@@ -551,7 +551,7 @@ export const BrowseStage: React.FC = () => {
             clear all
           </button>
         )}
-        {!m.isSet && (
+        {m.arrangeable && (
         <button
           ref={btnRef}
           data-gx-filters-trigger=""
