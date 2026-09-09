@@ -58,6 +58,7 @@ import { QualityRangePadConnected } from '../../palette/components/QualityRangeP
 import { HueLightnessPad, stripTrackFor } from '../../palette/components/HueLightnessPad';
 import { padAxesFor, WINDOW_KEY } from '../../palette/core/padAxes';
 import { MapScrollbar } from './ui/MapScrollbar';
+import { useWorkingDerived } from '../../palette/store/workingStore';
 import { QUALITY_AXES } from '../../palette/features/paletteFilters';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { Dropdown } from '../../components/Dropdown';
@@ -117,6 +118,8 @@ export const BrowseStage: React.FC = () => {
   // they are colour axes, the third on the strip — so the pad is the wall's map for any
   // arrangement it can paint (`palette/core/padAxes.ts`; the harness pins the table).
   const pad = useMemo(() => padAxesFor(m.axes.rowsAxis, m.axes.sortAxis), [m.axes.rowsAxis, m.axes.sortAxis]);
+  // Nothing picked yet — the hero is absent (L8) and the bar says what to do (see below).
+  const nothingPicked = useWorkingDerived().empty;
 
   // The pad as the wall's map (D.2): which bands are on screen → a lightness range.
   // The wall reports its bands AS DRAWN (merged small buckets carry the unioned range and
@@ -300,6 +303,16 @@ export const BrowseStage: React.FC = () => {
         /* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
             bar, never over the wall it narrows. */
         <div className="flex flex-col gap-1 justify-self-center">
+          {/* Nothing picked yet: say so HERE, over the map, rather than in the corner below.
+              This replaces the line that used to sit above the wall in GradientExplorerV2App
+              ("Click a gradient to preview it above …") — which pointed at a hero that does
+              not exist until the first pick (owner, 2026-09-09: "this can replace the 'click
+              a gradient to preview it..' which is wrong anyway"). */}
+          {nothingPicked && (
+            <div className="text-[12px] text-fg-muted text-center leading-none" data-gx-map-hint="">
+              Click a gradient to start · click it again to keep and edit it
+            </div>
+          )}
           {/* the pad, with the wall's scrollbar standing beside it: the lens on the pad and
               the thumb on the bar are the same range — where the wall is */}
           <div className="flex items-stretch gap-1.5">

@@ -110,6 +110,7 @@
     "test:gate": "npm run test:interaction && npm run test:interaction:wiring && npm run test:interaction:coverage && npm run test:modulation-coverage && npm run test:param-mapping && npm run test:modulation-parity",
     "test:gmf": "tsx debug/test-gmf-roundtrip.mts",
     "test:ge-first-run": "tsx debug/test-ge-first-run.mts",
+    "test:palette-lensband": "tsx debug/test-palette-lensband.mts",
     "test:gx-export": "tsx debug/test-gx-export-size.mts",
     "test:theme-scrim": "tsx debug/test-theme-scrim.mts",
     "test:gx-share": "tsx debug/test-gx-share.mts",

@@ -378,14 +378,15 @@ export const GradientExplorerV2App: React.FC = () => {
           </Floating>
         )}
         {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it. One line
-            above it only when it has something to say. */}
-        {(armed || derived.empty) && (
+            above it only when it has something to say.
+            The nothing-picked line used to live here too, reading "Click a gradient to
+            preview it above · click it again to keep and edit it". It is gone: the hero it
+            pointed AT does not exist until the first pick (L8), so it named a place that
+            was not there, in the corner furthest from where the eye is. BrowseStage now
+            says it over the map instead (owner, 2026-09-09). */}
+        {armed && (
           <div className="shrink-0 flex items-center gap-2 px-6 pt-2.5 text-[13px]">
-            {armed ? (
-              <span className="text-gx-armed">{armed === 'B' ? 'Pick a gradient to mix with · Esc cancels' : 'Pick a gradient to replace this one · Esc cancels'}</span>
-            ) : (
-              <span className="text-fg-muted">Click a gradient to preview it above · click it again to keep and edit it.</span>
-            )}
+            <span className="text-gx-armed">{armed === 'B' ? 'Pick a gradient to mix with · Esc cancels' : 'Pick a gradient to replace this one · Esc cancels'}</span>
           </div>
         )}
         <div className="flex-1 min-h-0 flex flex-col relative">

@@ -22,6 +22,7 @@ import { oklabToRgbSafe } from '../core/oklab';
 
 export type Range01 = [number, number];
 import { DEFAULT_PAD_AXES, type ColourAxis, type PadAxes } from '../core/padAxes';
+import { lensBand } from '../core/lensBand';
 
 interface Props {
   /** The X window (0..1 along the pad's X axis — hue by default). */
@@ -53,14 +54,26 @@ const PAINT_W = 180;
 const PAINT_H = 48;
 const EDGE = 6; // px — grab zone for resizing an edge
 const CLICK_BAND = 0.15; // a click on a clear pad = this much of the wheel, full height
-const CHROMA = 0.11;
 const L_LO = 0.18;
 const L_HI = 0.95;
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const isFull = (r: Range01) => r[0] <= 0 && r[1] >= 1;
-/** The chroma a normalised 0..1 chroma value paints at (0.5 → the 0.11 the pad always used). */
-const C_MAX = CHROMA * 2;
+/**
+ * The chroma a normalised 0..1 chroma value paints at.
+ *
+ * 0.32 is where sRGB's most saturated colours actually sit in OKLCh (the same figure
+ * `palette/core/gradientMapChannels.ts` records), so the vivid end of the axis is painted
+ * as vivid as the screen can be. It was 0.22, which made the whole field — and the strip
+ * under it, which shares this scale — read dull (owner, 2026-09-09). Nothing is lost to
+ * the raise: `oklabToRgbSafe` walks chroma back down until the colour is in gamut, so
+ * every hue paints at ITS limit rather than at the most timid hue's limit.
+ *
+ * The midpoint is the useful check: 0.5 now paints C = 0.16, which is exactly the chroma
+ * `palette/core/facets.ts` calls fully vivid (`CHROMA_FULL`) when it scores the qC axis
+ * this pad filters on. The field and the data now mean the same thing by "vivid".
+ */
+const C_MAX = 0.32;
 const COLOUR_AXES: readonly ColourAxis[] = ['hue', 'lightness', 'chroma'];
 
 /** Normalised (0..1 per axis) → OKLab. Lightness spans L_LO..L_HI, chroma 0..C_MAX. */
@@ -253,16 +266,36 @@ export const HueLightnessPad: React.FC<Props> = ({
       )}
       {marker && (() => {
         // The wall's viewport as a lens: y is down, light is up (as the window above). It
-        // indicates only — every gesture on the field stays the window's.
-        // rounded the same way as the scrollbar's thumb beside the pad, so the two line up
-        const my0 = Math.round((1 - Math.max(marker[0], marker[1])) * height);
-        const my1 = Math.round((1 - Math.min(marker[0], marker[1])) * height);
+        // indicates only — every gesture on the field stays the window's. Geometry comes
+        // from the SAME function the scrollbar's thumb uses (palette/core/lensBand.ts), so
+        // the two cannot drift apart; the harness pins that.
+        const band = lensBand(marker, height);
+        // The lens belongs to the SELECTED REGION, not the whole field (owner, 2026-09-09:
+        // "instead of extending the whole way across, should be in the selected region, and
+        // extending to the right visually connecting to the scroll bar as a thinner line").
+        // With no window the selection IS the whole field, so this reads as before.
+        const sx0 = active ? box.x0 : 0;
+        const sx1 = active ? box.x1 : width;
         return (
-          <div
-            data-gx-pad-lens=""
-            className="absolute left-0 right-0 pointer-events-none bg-white/[.14] border-y border-white/60"
-            style={{ top: my0, height: Math.max(3, my1 - my0) }}
-          />
+          <>
+            <div
+              data-gx-pad-lens=""
+              className="absolute pointer-events-none bg-white/[.14] border-y border-white/50"
+              style={{ left: sx0, width: Math.max(0, sx1 - sx0), top: band.top, height: band.height }}
+            />
+            {/* the tail: ONE hairline out of the lens's middle to the pad's right edge, so
+                the eye is led across the gap onto the scrollbar's thumb (owner: "extending
+                to the right visually connecting to the scroll bar as a thinner line"). A
+                single line rather than the lens's two — a connector reads as thinner by
+                being one line, which is the only way to be thinner than 1 px. */}
+            {sx1 < width && (
+              <div
+                data-gx-pad-lens-tail=""
+                className="absolute pointer-events-none bg-white/40"
+                style={{ left: sx1, width: width - sx1, top: band.top + Math.floor(band.height / 2), height: 1 }}
+              />
+            )}
+          </>
         );
       })()}
     </div>
@@ -289,10 +322,10 @@ export const stripTrackFor = (axes: PadAxes, xWin: Range01, yWin: Range01): ((ct
     for (let x = 0; x < w; x++) {
       const t = x / (w - 1);
       const vv = { ...v, [axes.strip]: t } as Record<ColourAxis, number>;
-      // the chroma strip reaches further than the field (0.3) so its right end reads vivid
-      const lab = labOf(vv);
-      if (axes.strip === 'chroma') { const hRad = vv.hue * Math.PI * 2; lab.a = t * 0.3 * Math.cos(hRad); lab.b = t * 0.3 * Math.sin(hRad); }
-      const rgb = oklabToRgbSafe(lab);
+      // (until 2026-09-09 a chroma strip overrode a/b to reach 0.3, because the field only
+      // reached 0.22 and the strip's vivid end had to out-reach it. C_MAX is 0.32 now, so
+      // labOf already paints that — one scale for the field and the strip.)
+      const rgb = oklabToRgbSafe(labOf(vv));
       for (let y = 0; y < h; y++) {
         const i = (y * w + x) * 4;
         img.data[i] = rgb.r; img.data[i + 1] = rgb.g; img.data[i + 2] = rgb.b; img.data[i + 3] = 255;

@@ -14,6 +14,7 @@
  */
 
 import React from 'react';
+import { lensBand, axisToPx } from '../../../palette/core/lensBand';
 
 interface Props {
   /** The range on screen, or null for no thumb. */
@@ -30,19 +31,14 @@ interface Props {
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-/** The thumb is drawn at the range's EXACT size with the same rounding as the pad's lens, so
- *  the two always line up (owner, 2026-09-08: a 10 px minimum made the thumb overshoot a
- *  band's ~6 px range); it only needs to stay visible, since a press anywhere on the track
- *  seeks. */
-const MIN_THUMB = 3;
 
 export const MapScrollbar: React.FC<Props> = ({ range, reach = null, height, onSeek, onSeekStart, onSeekEnd, className = '' }) => {
   const trackRef = React.useRef<HTMLDivElement>(null);
   const grabRef = React.useRef<number>(0); // pointer offset from the thumb's top, in lightness
-  const y0 = range ? Math.round((1 - Math.max(range[0], range[1])) * height) : 0;
-  const y1 = range ? Math.round((1 - Math.min(range[0], range[1])) * height) : 0;
-  const thumbH = Math.max(MIN_THUMB, y1 - y0);
-  const thumbTop = Math.max(0, Math.min(height - thumbH, y0));
+  // The SAME geometry the pad's lens uses (palette/core/lensBand.ts) — the two are one
+  // instrument and the owner reads the lens's edges as pointing at this thumb, so they
+  // share the function rather than each keeping a copy of the arithmetic.
+  const band = range ? lensBand(range, height) : null;
   const span = range ? Math.abs(range[1] - range[0]) : 0;
 
   const lightAt = (e: React.PointerEvent): number => {
@@ -83,8 +79,10 @@ export const MapScrollbar: React.FC<Props> = ({ range, reach = null, height, onS
     >
       {reach && (() => {
         // the track in three parts: unreachable above, reachable, unreachable below
-        const rHi = Math.round((1 - Math.max(reach[0], reach[1])) * height);
-        const rLo = Math.round((1 - Math.min(reach[0], reach[1])) * height);
+        // same value→pixel mapping as the thumb above, so the reachable band's edges land
+        // on the thumb's grid rather than a parallel one
+        const rHi = axisToPx(Math.max(reach[0], reach[1]), height);
+        const rLo = axisToPx(Math.min(reach[0], reach[1]), height);
         return (
           <>
             {rHi > 0 && <div className="absolute left-0 right-0 top-0 rounded-t-full bg-line/15 opacity-50" style={{ height: rHi }} data-gx-map-unreachable="" />}
@@ -97,7 +95,7 @@ export const MapScrollbar: React.FC<Props> = ({ range, reach = null, height, onS
         <div
           data-gx-pad-marker=""
           className={`absolute left-0 right-0 rounded-full transition-colors ${onSeek ? 'bg-fg/35 hover:bg-fg/55' : 'bg-fg/25'}`}
-          style={{ top: thumbTop, height: thumbH }}
+          style={{ top: band!.top, height: band!.height }}
         />
       )}
     </div>
