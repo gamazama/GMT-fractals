@@ -18,10 +18,11 @@
  *   [8] the pad is the wall's map (D.2): on All the scrollbar beside the pad carries a thumb
  *       for the lightness on screen, and scrolling the wall moves it
  *   [9] the pad follows the Arrange state: Rows by = Vividness puts chroma on the pad's Y
- *       and lightness on the strip, with the lens still there; Rows by = Complexity falls
- *       back to the default pad and the chroma strip, the lens withheld but the scrollbar
- *       still there as a plain scroll position (owner: "rather than no lens, default to
- *       the standard display")
+ *       and lightness on the strip; Rows by = Complexity falls back to the default pad and
+ *       the chroma strip. The lens is there in BOTH — superseded 2026-09-09: it used to be
+ *       withheld when the rows were not on a colour axis, because it was derived from the
+ *       visible lightness bands. It is the scroll position now, which is always defined
+ *       (owner: "just map it by scroll position and not by lightness").
  *   (The old [9]–[10], the Snapshots set, were removed with the feature on 2026-09-08.)
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
@@ -32,6 +33,7 @@
  * Run: `npm run smoke:ge-ground` (needs `npm run dev` on :3400, or ENGINE_URL).
  */
 import { chromium, type Page } from 'playwright';
+import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
 
@@ -85,6 +87,7 @@ const working = (page: Page) =>
 async function main() {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await seedGeSmokeState(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -166,12 +169,21 @@ async function main() {
   if ((s.canvasLeft ?? 0) < 60) fail(`[5] the gutter did not come back (x=${s.canvasLeft})`);
   console.log('✓ [5] All is back: pad, Filters, four tools, the gutter');
 
-  // [6] Keep these N
-  await page.fill('input[placeholder^="Search"]', 'fire');
+  // [6] Keep these N.
+  //
+  // The term has to narrow All to at most KEEP_MAX (400 in BrowseStage.tsx) — the button is
+  // deliberately withheld above that. It was 'fire' until 2026-09-09, when the catalogue had
+  // grown enough that 'fire' matched 535 and the smoke went red without anything being
+  // broken. 'ember' matches 38. If this fails again, check the COUNT before the feature:
+  // the failure below prints it.
+  await page.fill('input[placeholder^="Search"]', 'ember');
   await page.waitForTimeout(500);
   s = await state(page);
   const m = /Keep these ([\d,]+)/.exec(s.keep ?? '');
-  if (!m) fail(`[6] "Keep these N" is not offered on a narrowed All (${s.keep})`);
+  if (!m) {
+    const narrowed = await page.evaluate(() => document.body.innerText.match(/([\d,]+) match/)?.[1] ?? '?');
+    fail(`[6] "Keep these N" is not offered on a narrowed All (${s.keep}) — the search matched ${narrowed}; the button is withheld above KEEP_MAX (400), so a count over that means this term has outgrown the fixture, not that the feature broke`);
+  }
   const n = Number(m![1].replace(/,/g, ''));
   await page.click('[data-gx-keep-these]');
   await page.waitForTimeout(700);
@@ -180,7 +192,8 @@ async function main() {
   const chip = s.chips.find((c) => c.id === s.ground);
   if (!chip || !chip.lit || chip.kind !== 'group') fail(`[6] no lit group chip for the ground (${JSON.stringify(s.chips)})`);
   if (chip.count !== n) fail(`[6] the group holds ${chip.count}, the wall offered ${n}`);
-  if (!s.title || !/Fire/.test(s.title)) fail(`[6] the title does not carry the label ("${s.title}")`);
+  // the label is the search term, capitalised — kept in step with the term above
+  if (!s.title || !/Ember/.test(s.title)) fail(`[6] the title does not carry the label ("${s.title}")`);
   console.log(`✓ [6] Keep these ${n} → group "${s.title}" on the ground, chip lit`);
   const groundBefore = s.ground;
 
@@ -221,12 +234,17 @@ async function main() {
   await page.waitForTimeout(600);
   s = await state(page);
   if (s.padAxes !== 'hue×lightness') fail(`[9] rows by complexity did not fall back to the default pad (${s.padAxes})`);
-  if (s.lens) fail('[9] a lens is shown although the bands are not on any pad axis');
+  // SUPERSEDED 2026-09-09: this used to assert the lens was WITHHELD here, because it was
+  // derived from which lightness bands were on screen and that is meaningless when the rows
+  // are not on a colour axis. The band is the SCROLL POSITION now (owner: "just map it by
+  // scroll position and not by lightness"), which is defined under every arrangement — so
+  // the lens and the scrollbar are both always present, and the pad no longer goes blank.
+  if (!s.lens) fail('[9] the lens is gone — since it is the scroll position it is shown under every arrangement');
   if (s.markerTop == null) fail('[9] the scrollbar is gone — it should fall back to the plain scroll position');
   if (s.stripAxis !== 'chroma') fail(`[9] the strip is not chroma again (${s.stripAxis})`);
   await setRows(1); // back to lightness
   await page.waitForTimeout(300);
-  console.log('✓ [9] the pad follows the Arrange state: vividness on Y with the lightness strip; complexity falls back with no lens');
+  console.log('✓ [9] the pad follows the Arrange state: vividness on Y with the lightness strip; complexity falls back to the default pad, lens still there');
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
   await browser.close();

@@ -46,6 +46,7 @@
  * Run: `npm run smoke:ge-tray`.
  */
 import { chromium, type Page } from 'playwright';
+import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
 
@@ -89,6 +90,7 @@ const state = (page: Page) =>
 async function main() {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await seedGeSmokeState(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));

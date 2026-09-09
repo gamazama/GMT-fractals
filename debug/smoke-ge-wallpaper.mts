@@ -22,6 +22,7 @@
  * [1] fails with that exact message. Restart `npm run dev` before believing a red run.
  */
 import { chromium } from 'playwright';
+import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
 function fail(msg: string): never { console.error(`✗ ${msg}`); process.exit(1); }
@@ -39,7 +40,9 @@ const NEON = [
 
 async function main() {
   const browser = await chromium.launch();
-  const page = await (await browser.newContext({ viewport: { width: 1100, height: 800 } })).newPage();
+  const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 } });
+  await seedGeSmokeState(ctx);
+  const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   // The licensed catalogue packs are fetched from the CDN, which allow-lists origins — a dev

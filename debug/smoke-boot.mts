@@ -2,14 +2,22 @@
  * Smoke test: boot the engine app in a headless browser and report
  * any page errors or console errors in the first ~8 seconds of load.
  * Run with:  npx tsx debug/smoke-boot.mts
+ *
+ * The context is seeded as a RETURNING visitor (`debug/geSmokeBoot.mts`). A fresh profile
+ * is a first-run user, and GE v2 opens a brightness dialogue over such a boot — harmless
+ * for the error check, but the text this smoke dumps would be the dialogue's rather than
+ * the app's, which makes the dump useless for reading what booted. Seeding is inert for
+ * every app that has no first-run surface.
  */
 import { chromium } from 'playwright';
+import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/';
 
 async function main() {
     const browser = await chromium.launch();
     const ctx = await browser.newContext();
+    await seedGeSmokeState(ctx);
     const page = await ctx.newPage();
 
     const errors: string[] = [];
