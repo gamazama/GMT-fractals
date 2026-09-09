@@ -30,11 +30,22 @@ the profile and image blocks, about twenty-seven rows, nothing recommended.
   output profile is a section like the others; the image row stays open. Then, per the owner,
   **a lighter strip behind every category name** (`BAND` in `ExportMenu.tsx`) — Again and As an
   image wear it too, or they read as a different kind of thing.
-- **One action per row.** The row IS the download (it carries the extension and the glyph);
-  Copy is a small icon beside it, only where there is a text form, drawn with the colour
-  picker's own `CopyGlyph` rather than a new one (owner: "we have a copy icon in the main
-  color picker that you can use"). The extension shows only where the label does not already
-  carry it. Again and the image row take the same anatomy — one row shape, not three.
+- **One action per row, on one grid.** The row IS the download; Copy is a small icon beside
+  it, only where there is a text form, drawn with the colour picker's own `CopyGlyph` rather
+  than a new one (owner: "we have a copy icon in the main color picker that you can use").
+  Then, per the owner ("there's a little column for the extension, we should make that a
+  thing"), `EXT_COL` and `COPY_SLOT` are fixed columns HELD OPEN on every row — a binary
+  format with no Copy button was 28 px wider and dragged its extension out of line with its
+  neighbours' (measured: x=1236 vs 1268). The column carries the extension and
+  `labelWithoutExt` takes it back out of the label; the registry's labels are untouched,
+  because the old shell's Extras `<select>` shows a bare list.
+- **Two silent defects fell out of measuring that column, and no smoke had caught either.**
+  A section could never be CLOSED (the re-home effect fired on a deliberate close and
+  re-opened the first section; both smokes missed it because the section they close first is
+  the one it re-opened). And `labelWithoutExt` MATCHED NOTHING: it was a `new RegExp` built
+  from a template literal, where the whitespace escape collapses before the RegExp sees it,
+  so the pattern was `s*.aseb` and every design-app row said its extension twice. It read
+  correctly and did nothing. Both now guarded and falsified.
 - **The rail has the hero's download icon**, at the right end beside the collection kebab. It
   exports THE GROUND (the union of the lit chips), not one set — the rail is multi-select, so
   one button at its end cannot mean "this set". `All` is the catalogue, so the icon disables

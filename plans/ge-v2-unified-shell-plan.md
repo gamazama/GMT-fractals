@@ -1599,6 +1599,30 @@ are where to START reading, not necessarily where the change lands.
    >   that way. The Again rows and the image row take the same anatomy, so there is one row
    >   shape in the window rather than three.
    >
+   > **Then: "there's a little column for the extension, we should make that a thing."** It
+   > became one. `EXT_COL` is a fixed width on every row of the window, held open even where
+   > there is nothing to put in it, and `COPY_SLOT` is held open the same way — a row that
+   > drops its Copy button is 28 px wider, and everything to its left, the extension included,
+   > shifts with it. Measured before the fix: the format rows' extensions started at x=1236
+   > and the Again and image rows' at x=1268, which is invisible unless you measure it. With
+   > the column carrying the extension, `labelWithoutExt` takes it back OUT of the label
+   > ("Adobe swatches .ase" becomes "Adobe swatches"); the registry keeps its labels intact,
+   > because the old shell's Extras `<select>` shows a bare list where "Fractint" alone would
+   > be worse.
+   >
+   > **Two silent defects came out of measuring that column, and neither smoke had caught
+   > either.**
+   >
+   > 1. **A section could never be CLOSED.** The effect that re-homes the accordion when the
+   >    subject empties the open section also fired on `open === null`, so clicking the open
+   >    header shut it and the effect immediately re-opened the first one. Both smokes missed
+   >    it because the section they close first is the one it re-opened.
+   > 2. **`labelWithoutExt` matched nothing.** It was `new RegExp(...)` built from a TEMPLATE
+   >    LITERAL, and the escape for whitespace collapses in the template before the RegExp
+   >    ever sees it — so the pattern was `s*.aseb` and every design-app row kept saying its
+   >    extension twice. It read correctly and did nothing. `indexOf` now, with a note saying
+   >    why.
+   >
    > **The owner then asked for "a lighter strip behind the category names"** — a resting
    > tint (`BAND` in `ExportMenu.tsx`) one step up from the floating surface, on every
    > category name in the window, not only the accordion heads: Again and As an image wear

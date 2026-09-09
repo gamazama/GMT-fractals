@@ -37,12 +37,16 @@
  *      closed by default, one open at a time, and the one that opens is the one holding your
  *      last export. Twenty visible rows become two to eight.
  *
- *   3. ONE ACTION PER ROW. The row IS the download — it carries the extension it will write
- *      and the download glyph, so nothing is hidden behind a whole-row click nobody expects
- *      — and Copy is a small icon beside it, only for the formats that have a text form.
- *      The glyph is the colour picker's `CopyGlyph` rather than a new one (owner,
- *      2026-09-09: "we have a copy icon in the main color picker that you can use"), so the
- *      set does not grow a near-duplicate of a drawing that already exists.
+ *   3. ONE ACTION PER ROW, ON ONE GRID. The row IS the download, and Copy is a small icon
+ *      beside it, only for the formats that have a text form. The glyph is the colour
+ *      picker's `CopyGlyph` rather than a new one (owner, 2026-09-09: "we have a copy icon
+ *      in the main color picker that you can use"). Every row then shares an anatomy —
+ *      label, `EXT_COL`, glyph, `COPY_SLOT` — with both fixed columns HELD OPEN whether or
+ *      not that row fills them, so a binary format with no Copy button does not sit 28 px
+ *      wider than its neighbour and drag its extension out of line with theirs. The
+ *      extension lives in that column and nowhere else: the registry's labels carry it
+ *      ("Adobe swatches .ase") for hosts that show a bare list, and `labelWithoutExt` takes
+ *      it back out here.
  *
  * The output profile is a section like the others with its value on the header — a setting
  * almost nobody touches, previously sitting between the formats and the image row at full
@@ -118,6 +122,38 @@ const Segment: React.FC<{ on: boolean; title: string; onClick: () => void; child
  *  category name in the window wears it — the accordion heads, Again, As an image — or the
  *  ones that are not accordion heads would read as a different kind of thing. */
 const BAND = 'w-full flex items-center gap-2 h-7 px-2 rounded-lg bg-line/[0.06]';
+
+/** THE EXTENSION COLUMN (owner, 2026-09-09: "there's a little column for the extension, we
+ *  should make that a thing"). A fixed width on EVERY row of the window — formats, Again,
+ *  the image — so the extensions start at one x and the download glyphs after them do too.
+ *  Reserved even when a row has nothing to put in it, because a column that collapses on
+ *  some rows is a hint, not a column. Sized for the longest the registry writes (`.idml`,
+ *  `.json`) with room to spare; it truncates rather than pushing the glyph out of line. */
+const EXT_COL = 'w-10 shrink-0 text-[11px] text-fg-dim truncate';
+
+/** The Copy slot, held open on every row of the window whether or not it holds a button —
+ *  the same reason `EXT_COL` is. A row that drops it is 28 px wider, and everything to its
+ *  left, the extension column included, shifts with it. */
+const COPY_SLOT = 'w-7 h-7 shrink-0';
+
+/** The label with its extension REMOVED, because the column carries it now: the registry
+ *  writes "Adobe swatches .ase" and "Fractint .map" for hosts that show a bare list (the old
+ *  shell's Extras `<select>`, where "Fractint" alone would be worse), so this is a display
+ *  decision local to this window rather than a rename in `exportFormats.ts`. Labels that
+ *  never carried one — "CSS variables", "Hex list (256)", "Paint.NET" — pass through. */
+const labelWithoutExt = (label: string, ext: string): string => {
+  const needle = `.${ext}`.toLowerCase();
+  const i = label.toLowerCase().indexOf(needle);
+  if (i < 0) return label;
+  // Only when it stands on its own: ".ai" inside a hypothetical ".aiff" is not this label's
+  // extension. Written with indexOf rather than a RegExp built from a TEMPLATE LITERAL: the
+  // first cut was, and an escape like the one for whitespace collapses in the template
+  // before the RegExp ever sees it, so the pattern matched nothing and every design-app row
+  // kept saying its extension twice. It read correctly and did nothing.
+  const after = label[i + needle.length];
+  if (after && /[a-z0-9]/i.test(after)) return label;
+  return `${label.slice(0, i).trimEnd()} ${label.slice(i + needle.length).trimStart()}`.trim() || label;
+};
 
 /** An accordion header: what the section is for, how much is in it, and a chevron. */
 const SectionHead: React.FC<{ title: string; note?: string; open: boolean; onClick: () => void }> = ({ title, note, open, onClick }) => (
@@ -234,8 +270,14 @@ export const ExportMenu: React.FC<{
     if (rest.length) out.push({ title: 'More', formats: rest });
     return out;
   }, [formats]);
+  // Re-home the accordion only when the OPEN SECTION HAS GONE (switching to Swatches empties
+  // "For fractal + 3D apps" outright, so it can vanish under the pointer). `open === null` is
+  // a deliberate close and must be left alone: without that guard, clicking the open header
+  // closed it and this immediately re-opened the FIRST section, so a section could never be
+  // shut. Measured 2026-09-09 — and neither smoke caught it, because the section they close
+  // first happens to be the one this would re-open.
   useEffect(() => {
-    if (open === PROFILE_SECTION) return;
+    if (open === null || open === PROFILE_SECTION) return;
     if (!sections.some((x) => x.title === open)) setOpen(sections[0]?.title ?? null);
   }, [sections, open]);
 
@@ -265,35 +307,33 @@ export const ExportMenu: React.FC<{
             }
             className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
           >
-            <span className="flex-1 min-w-0 truncate text-[13px] text-fg">{(swatches && f.swatchLabel) || f.label}</span>
-            {/* The extension, but only when the LABEL does not already carry it — "Adobe
-                swatches .ase" followed by ".ase" is the window telling you the same thing
-                twice, and half the design-app rows read that way. For a set the suffix is
-                new information either way (one file, or a .zip of many). */}
-            {(() => {
-              if (isSet) return <span className="text-[11px] text-fg-dim">{bundles ? `.${f.ext}` : '.zip'}</span>;
-              const label = ((swatches && f.swatchLabel) || f.label).toLowerCase();
-              return label.includes(`.${f.ext.toLowerCase()}`) ? null : (
-                <span className="text-[11px] text-fg-dim">.{f.ext}</span>
-              );
-            })()}
+            <span className="flex-1 min-w-0 truncate text-[13px] text-fg">
+              {labelWithoutExt((swatches && f.swatchLabel) || f.label, f.ext)}
+            </span>
+            {/* For a set the column says what LANDS, which is not always this format's own
+                extension: a format that bundles writes one file, everything else a .zip. */}
+            <span className={EXT_COL}>{isSet && !bundles ? '.zip' : `.${f.ext}`}</span>
             <span className="text-fg-dim group-hover:text-fg">
               <Icon name="download" size={14} />
             </span>
           </button>
           {/* Copy only where there IS a text form: never a binary format, never a set (which
-              has no single thing to put on the clipboard). */}
-          {!isSet && !f.binary && (
+              has no single thing to put on the clipboard). The SLOT is held open either way,
+              or a binary row would be wider than its neighbours and its extension column
+              would sit 28 px further right than theirs. */}
+          {!isSet && !f.binary ? (
             <button
               type="button"
               onClick={() => copy(f)}
               data-gx-copy={f.key}
               title={`Copy ${(swatches && f.swatchLabel) || f.label} to the clipboard`}
               aria-label={`Copy ${(swatches && f.swatchLabel) || f.label}`}
-              className="w-7 h-7 shrink-0 grid place-items-center rounded-lg text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
+              className={COPY_SLOT + ' grid place-items-center rounded-lg text-fg-muted hover:text-fg hover:bg-line/10 transition-colors'}
             >
               <CopyGlyph size={14} />
             </button>
+          ) : (
+            <span className={COPY_SLOT} />
           )}
         </div>
         {lossy > 0 && (
@@ -384,17 +424,22 @@ export const ExportMenu: React.FC<{
           </div>
           <div className="pt-1 px-1">
           {again.map((a) => (
-            <button
-              key={exportActionLabel(a)}
-              type="button"
-              onClick={() => runExport(a, ramp, name, palette)}
-              className="w-full flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
-            >
-              <span className="flex-1 min-w-0 truncate">{exportActionLabel(a)}</span>
-              <span className="text-fg-dim group-hover:text-fg">
-                {a.kind === 'copy' ? <CopyGlyph size={14} /> : <Icon name="download" size={14} />}
-              </span>
-            </button>
+            <div key={exportActionLabel(a)} className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => runExport(a, ramp, name, palette)}
+                className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
+              >
+                <span className="flex-1 min-w-0 truncate">{exportActionLabel(a)}</span>
+                {/* Nothing to say — an Again row already names its own format — but both
+                    columns are held open so the row lines up with every other one. */}
+                <span className={EXT_COL} />
+                <span className="text-fg-dim group-hover:text-fg">
+                  {a.kind === 'copy' ? <CopyGlyph size={14} /> : <Icon name="download" size={14} />}
+                </span>
+              </button>
+              <span className={COPY_SLOT} />
+            </div>
           ))}
           </div>
         </div>
@@ -432,22 +477,25 @@ export const ExportMenu: React.FC<{
           <ZoneLabel className="flex-1">As an image</ZoneLabel>
         </div>
         <div className="pt-1 px-1">
+          <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={image}
             data-gx-image
             title="Download a PNG"
-            className="w-full flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
+            className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
           >
             <span className="flex-1 min-w-0 truncate text-[13px] text-fg">
               {swatches ? 'Swatch sheet' : isSet ? 'Contact sheet' : 'PNG strip (1024 × 64)'}
             </span>
-            <span className="text-[11px] text-fg-dim">.png</span>
+            <span className={EXT_COL}>.png</span>
             <span className="text-fg-dim group-hover:text-fg">
               <Icon name="download" size={14} />
             </span>
           </button>
-          <div className="text-[13px] text-fg-muted mt-1">
+          <span className={COPY_SLOT} />
+          </div>
+          <div className="text-[11px] leading-snug text-fg-muted px-1 pt-1">
           {swatches
             ? isSet
               ? 'Every palette as labelled chips, one row per gradient.'

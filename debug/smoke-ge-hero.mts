@@ -133,8 +133,12 @@ async function main() {
         // title: two formats can share an extension (.css is both the linear-gradient and
         // the variable set), and a title test cannot tell them apart.
         visible: Array.from(w.querySelectorAll('[data-gx-format]')).map((e) => (e as HTMLElement).dataset.gxFormat ?? ''),
+        rowText: Array.from(w.querySelectorAll('[data-gx-format]')).map((e) => (e as HTMLElement).innerText.replace(/\s+/g, ' ').trim()),
         downloads: Array.from(w.querySelectorAll('[data-gx-download]')).map((e) => (e as HTMLElement).dataset.gxDownload ?? ''),
         copies: Array.from(w.querySelectorAll('[data-gx-copy]')).map((e) => (e as HTMLElement).dataset.gxCopy ?? ''),
+        // THE EXTENSION COLUMN's left edge on every row of the window that has one — format
+        // rows, Again rows, the image row. A column is a column only if they agree.
+        extXs: Array.from(w.querySelectorAll('.w-10.shrink-0')).map((e) => Math.round(e.getBoundingClientRect().x)),
         again: Array.from(w.querySelectorAll('[data-gx-export-again] button')).map((b) => (b as HTMLElement).innerText.trim()),
         image: w.innerText.includes('Swatch sheet') ? 'swatch-sheet' : w.innerText.includes('PNG strip') ? 'png-strip' : 'other',
       };
@@ -147,8 +151,13 @@ async function main() {
     const seen = new Map<string, string>(); // format key -> the section that showed it
     for (const title of first!.sections) {
       if (title === 'Output profile') continue;
-      await page.click(`[data-gx-section="${title}"]`);
-      await page.waitForTimeout(120);
+      // A header TOGGLES, so clicking the one that is already open would close it. Open it
+      // only when it is shut.
+      const before = await readWindow();
+      if (before!.openSections[0] !== title) {
+        await page.click(`[data-gx-section="${title}"]`);
+        await page.waitForTimeout(120);
+      }
       const st = await readWindow();
       if (st!.openSections.length !== 1) fail(`[5] ${st!.openSections.length} sections marked open at once (${st!.openSections.join(', ')})`);
       if (st!.openSections[0] !== title) fail(`[5] clicking "${title}" opened "${st!.openSections[0]}"`);
@@ -174,6 +183,21 @@ async function main() {
       for (const k of ['gpl', 'css', 'hex']) {
         if (st!.visible.includes(k) && !st!.copies.includes(k)) fail(`[5] ${k} has a text form and lost its Copy`);
       }
+      // THE EXTENSION COLUMN (owner, 2026-09-09: "make that a thing"). Every row that has one
+      // must start it at the same x. It did NOT before the copy slot was held open on rows
+      // that have no Copy button: a binary format's row was 28 px wider than its neighbour's
+      // and its extension sat 28 px further right, which is invisible unless measured.
+      // THE EXTENSION APPEARS ONCE PER ROW. The registry writes "Adobe swatches .ase" for
+      // hosts that show a bare list, so the window strips it and lets the column carry it;
+      // a stripper that silently matched nothing would leave every design-app row saying it
+      // twice, which is what the first cut of `labelWithoutExt` did.
+      const twice = st!.rowText.filter((t) => {
+        const m = t.match(/\.[a-z0-9]+/gi);
+        return m && m.length > 1 && m[m.length - 1] === m[m.length - 2];
+      });
+      if (twice.length) fail(`[5] the extension is written twice on: ${twice.join(' / ')}`);
+      const xs = Array.from(new Set(st!.extXs));
+      if (xs.length > 1) fail(`[5] the extension column starts at ${xs.sort((a, b) => a - b).join(' and ')} in "${title}" — it is not a column`);
       all.push(...st!.visible);
     }
     return { ...first!, formats: all };
@@ -187,6 +211,19 @@ async function main() {
   const openNow = await readWindow();
   if (openNow!.visible.length >= ramp.formats.length)
     fail(`[5] every format is on screen at once (${openNow!.visible.length} of ${ramp.formats.length}) — the accordion is not collapsing anything`);
+
+  // CLICKING THE OPEN SECTION CLOSES IT, and it stays closed. The re-home effect that keeps
+  // the accordion off a section the subject emptied used to fire on a deliberate close too,
+  // so shutting a section immediately re-opened the FIRST one and nothing could ever be shut.
+  // Neither smoke caught it, because the section they close first is the one it re-opened.
+  const openTitle = (await readWindow())!.openSections[0];
+  await page.click(`[data-gx-section="${openTitle}"]`);
+  await page.waitForTimeout(200);
+  const shut = await readWindow();
+  if (shut!.openSections.length) fail(`[5] clicking the open section did not close it — "${shut!.openSections[0]}" is open`);
+  if (shut!.visible.length) fail(`[5] the section closed but ${shut!.visible.length} format rows are still on screen`);
+  await page.click(`[data-gx-section="${openTitle}"]`);
+  await page.waitForTimeout(200);
 
   await page.click('[data-gx-subject="swatches"]');
   await page.waitForTimeout(250);
@@ -236,7 +273,13 @@ async function main() {
   // .grd lives in "For design apps"; opening on "For the web" would mean the window forgot.
   if (back!.openSections[0] !== 'For design apps')
     fail(`[6] the section holding the last export (.grd → For design apps) did not open — "${back!.openSections[0]}" did`);
-  console.log('✓ [6] Again lists the last exports, newest first, and opens the section holding one');
+  // [5]'s column check never sees an Again row — a fresh profile has no history — so this is
+  // where the third row kind is measured against the other two. Falsified by dropping the
+  // held-open copy slot from the Again rows: red with two different x values.
+  const againXs = Array.from(new Set(back!.extXs));
+  if (againXs.length > 1)
+    fail(`[6] with Again showing, the extension column starts at ${againXs.sort((a, b) => a - b).join(' and ')} — the row kinds do not line up`);
+  console.log('✓ [6] Again lists the last exports, opens the section holding one, and lines up with it');
 
   await browser.close();
   if (errors.length) {
