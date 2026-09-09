@@ -961,6 +961,11 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
                 <div 
                     ref={knotTrackRef} 
+                    // the span `t` is measured against. A host projecting a drop from
+                    // elsewhere onto this gradient must use THIS rect, not the ramp's outer
+                    // box: `chrome="strip"` insets the track 8 px each side for the gutters,
+                    // so the two disagree by up to ~0.7 % of t at the edges (GE v2 §8b item 1).
+                    data-gx-knot-track=""
                     className={`h-6 w-full bg-line/5 relative cursor-crosshair ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
                     onMouseDown={handleTrackMouseDown} 
                     title="Click & drag to add/move knot"

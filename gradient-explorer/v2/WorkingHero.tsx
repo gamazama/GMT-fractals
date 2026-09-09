@@ -145,6 +145,15 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // from anywhere on the gradient down onto the ramp needs its rect (§8b item 1).
   const rampElRef = useRef<HTMLDivElement | null>(null);
   const setRampEl = useCallback((el: HTMLDivElement | null) => { rampElRef.current = el; rampRef(el); }, [rampRef]);
+  /** The span a dropped colour's `t` is measured against: the editor's KNOT TRACK, which is
+   *  inset 8 px each side of the ramp's outer box for the gutters. Measuring against the
+   *  outer box instead skews t by up to ~0.7 % — small, but it means a colour dropped
+   *  directly above a knot does not land on it. */
+  const dropSpan = useCallback((): DOMRect | null => {
+    const ramp = rampElRef.current;
+    const track = ramp?.querySelector('[data-gx-knot-track]');
+    return (track ?? ramp)?.getBoundingClientRect() ?? null;
+  }, []);
   /** Where a colour in flight would land: px across the gradient body, and t on the ramp. */
   const [dropGhost, setDropGhost] = useState<{ x: number; t: number } | null>(null);
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
@@ -420,11 +429,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             className="px-4 pt-4 pb-2 flex flex-col relative"
             onDragOver={(e) => {
               if (emptySource || !isColorDrag(e.dataTransfer)) return;
-              const ramp = rampElRef.current;
-              if (!ramp) return;
+              const rr = dropSpan();
+              if (!rr) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';
-              const rr = ramp.getBoundingClientRect();
               const br = e.currentTarget.getBoundingClientRect();
               const t = Math.max(0, Math.min(1, (e.clientX - rr.left) / Math.max(1, rr.width)));
               setDropGhost({ x: rr.left - br.left + t * rr.width, t });
@@ -439,9 +447,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               const hex = readColorDrag(e.dataTransfer);
               if (!hex) return;
               e.preventDefault();
-              const ramp = rampElRef.current;
-              if (!ramp) return;
-              const rr = ramp.getBoundingClientRect();
+              const rr = dropSpan();
+              if (!rr) return;
               const t = Math.max(0, Math.min(1, (e.clientX - rr.left) / Math.max(1, rr.width)));
               ensureEditing();
               editorRef.current?.dropColourAt(t, hex);
