@@ -23,11 +23,15 @@
  *   • click — add that set to the ground, or take it off again;
  *   • ctrl / ⌘-click — that set ALONE on the ground;
  *   • double-click a named group — rename it in place (Enter commits, Esc cancels);
- *   • right-click a SET — Rename · Import into this set… · Export this set… · Delete
+ *   • right-click a SET — Rename · Import into this set… · Delete
  *     group · Manage… (§8b item 4, 2026-09-09: the operations that used to live only
  *     inside the My Gradients kebab, and only ever meant the WHOLE collection, now name
- *     the set you are pointing at — which is the noun Phase D created). A dated bin gets
- *     Export only: Recent is auto-managed, so there is nothing to rename, fill or delete.
+ *     the set you are pointing at — which is the noun Phase D created). A dated bin opens
+ *     NO menu: Recent is auto-managed, so there is nothing to rename, fill or delete, and
+ *     Export left this menu on 2026-09-09 for the rail's own icon.
+ *   • the DOWNLOAD icon at the rail's end — export what is on the ground, which with more
+ *     than one chip lit is the union. It is the hero's glyph, deliberately: the gesture
+ *     means the same thing wherever you meet it.
  *     Delete group re-homes its gradients to Kept and says how many before you agree —
  *     deleting a container must not silently delete what is in it.
  *   • drop a gradient on Kept or a named group — file it there (a favourite MOVES, a wall
@@ -82,15 +86,22 @@ interface Props {
   onSelect: (id: string) => void;
   /** Add / remove this set from the ground. */
   onToggle: (id: string) => void;
-  /** Open the export window over this set (the app hosts it, as it does the hero's). */
-  onExportSet: (set: GroundSetDesc) => void;
+  /** Open the export window over WHAT IS ON THE GROUND — the union of the lit chips (the
+   *  app hosts it, as it does the hero's). Not per-set: the rail is multi-select, so one
+   *  button at the rail's end cannot mean "this set", and "export what you are looking at"
+   *  is the reading that survives two chips being lit. Ctrl-click a chip first if you want
+   *  one set alone (owner, 2026-09-09). */
+  onExportGround: () => void;
+  /** What that export would carry, for the button's label and its disabled state. All is
+   *  the catalogue and holds no favourites, so it exports nothing. */
+  groundExportCount: number;
   /** Ask for gradient files to import into this group. */
   onImportInto: (group: string) => void;
 }
 
 const NEW_GROUP_LABEL = 'Group';
 
-export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, onExportSet, onImportInto }) => {
+export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, onExportGround, groundExportCount, onImportInto }) => {
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const removeGroup = useFavientsStore((s) => s.removeGroup);
   const removeFavient = useFavientsStore((s) => s.remove);
@@ -202,8 +213,11 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     const items: ContextMenuItem[] = [];
     if (named) items.push({ label: 'Rename', action: () => setRenaming({ group: s.group!, value: s.label }) });
     if (s.kind === 'group') items.push({ label: 'Import into this set…', action: () => onImportInto(s.group!) });
-    items.push({ label: 'Export this set…', disabled: s.count === 0, action: () => onExportSet(s) });
     if (named) items.push({ label: 'Delete group', danger: true, action: () => deleteGroup(s) });
+    // Export left this menu on 2026-09-09 for the rail's own icon, which exports the whole
+    // GROUND — so a dated bin now has nothing to offer and opens no menu at all rather than
+    // an empty box.
+    if (!items.length) return;
     openContextMenu(e.clientX, e.clientY, items);
   };
 
@@ -331,8 +345,28 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
         onDrop={dropOn(null)}
         title="Drop a gradient here to start a new group"
       />
-      {/* the collection menu — the whole of what "more" is now */}
-      <FavientsCollectionMenu onFlash={showToast} />
+      {/* EXPORT THE GROUND (owner, 2026-09-09) — the hero's own download glyph, so the
+          gesture reads the same wherever you are: this icon means "take this away with you".
+          It replaces the per-chip "Export this set" menu item AND the Export block that used
+          to live inside the collection menu beside it, which was whole-collection only, had
+          no subject switch, and was the third surface doing this job. */}
+      <button
+        type="button"
+        onClick={onExportGround}
+        disabled={groundExportCount === 0}
+        data-gx-export-ground=""
+        aria-label="Export what is on the ground"
+        title={
+          groundExportCount === 0
+            ? 'Nothing here to export — All is the whole library, not a set of your own. Pick a set.'
+            : `Export what is on the ground — ${groundExportCount} gradient${groundExportCount === 1 ? '' : 's'}`
+        }
+        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-lg text-fg-muted hover:text-fg hover:bg-line/10 disabled:opacity-35 disabled:hover:text-fg-muted disabled:hover:bg-transparent transition-colors"
+      >
+        <Icon name="download" size={16} />
+      </button>
+      {/* the collection menu — what is left of "more": import, save, load, clear */}
+      <FavientsCollectionMenu onFlash={showToast} withExport={false} />
     </div>
   );
 };

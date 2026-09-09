@@ -1,7 +1,14 @@
 /**
  * FavientsCollectionMenu — the kebab that manages the COLLECTION as a whole: import a
- * gradient file, save / merge / replace / clear the collection, export every gradient in
- * any of the 16 formats, and the contact sheet.
+ * gradient file, save / merge / replace / clear the collection, and — only where the host
+ * asks for it (`withExport`) — export every gradient in any registry format plus the contact
+ * sheet.
+ *
+ * The export block became optional on 2026-09-09 (§8b item 5's cleanup). It was the THIRD
+ * surface doing that job in v2, sitting an inch from the rail's own download icon, and the
+ * weakest of the three: whole-collection only, no ramp/swatches subject, a bare `<select>`
+ * of every format. v2 passes `withExport={false}`. The hosts that keep the full panel
+ * (app-gmt, fluid-toy, the old shell) have no other export surface, so they keep it.
  *
  * Lifted out of `FavientsPanel` on 2026-09-09, unchanged. GE v2 retired the rest of that
  * panel — grouping, dividers, search, list view, rename, trash and drag-to-reorder all
@@ -50,7 +57,15 @@ const menuItemCls =
  * it, and exports the gradients as a per-format .zip or a PNG contact sheet. Styled to
  * match the engine's system-menu popovers.
  */
-export const FavientsCollectionMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlash }) => {
+export const FavientsCollectionMenu: React.FC<{
+  onFlash: (m: string) => void;
+  /** Does this host need the menu to carry EXPORT? A host with an export surface of its own
+   *  passes false and the block is not rendered — v2's set rail has the download icon beside
+   *  this kebab, and two ways to do the same job an inch apart is how the "more" panel got
+   *  the way it was. The old shell, app-gmt and fluid-toy have no such icon, so they keep it.
+   *  A capability the host declares, not a name it is checked against. */
+  withExport?: boolean;
+}> = ({ onFlash, withExport = true }) => {
   const favients = useFavientsStore((s) => s.favients);
   const exportCollection = useFavientsStore((s) => s.exportCollection);
   const importCollection = useFavientsStore((s) => s.importCollection);
@@ -240,6 +255,8 @@ export const FavientsCollectionMenu: React.FC<{ onFlash: (m: string) => void }> 
           <button className={menuItemCls} onClick={() => pickFile('replace')}>Replace from file…</button>
           <button className={`${menuItemCls} hover:!text-danger`} onClick={doClear}>Clear collection</button>
 
+          {withExport && (
+          <>
           <div className="h-px bg-line/10 my-1" />
           <div className="text-[9px] font-bold text-fg-dim uppercase tracking-wider px-2 py-1">Export</div>
           <div className="flex items-center gap-1 px-2 py-1" onClick={(e) => e.stopPropagation()}>
@@ -267,6 +284,8 @@ export const FavientsCollectionMenu: React.FC<{ onFlash: (m: string) => void }> 
             </div>
           )}
           <button className={menuItemCls} onClick={exportSheet}>Contact sheet (PNG)</button>
+          </>
+          )}
         </div>
       )}
     </div>

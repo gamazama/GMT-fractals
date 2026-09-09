@@ -18,6 +18,40 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-09 (session 4, second pass) — the export window stops being a catalogue, and
+two more export surfaces retire.** The owner's words: "users will find the export overwhelming
+with the long list of options". Measured: twenty formats across four always-open sections plus
+the profile and image blocks, about twenty-seven rows, nothing recommended.
+
+- **AGAIN** — the last few exports at the top of the window, one click each. The app had
+  recorded them since Phase B; they were just not in the window.
+- **The group headers became the choice** — closed by default, one open at a time, and the one
+  that opens is the one holding your last export. Twenty visible rows become two to eight. The
+  output profile is a section like the others; the image row stays open. Then, per the owner,
+  **a lighter strip behind every category name** (`BAND` in `ExportMenu.tsx`) — Again and As an
+  image wear it too, or they read as a different kind of thing.
+- **The rail has the hero's download icon**, at the right end beside the collection kebab. It
+  exports THE GROUND (the union of the lit chips), not one set — the rail is multi-select, so
+  one button at its end cannot mean "this set". `All` is the catalogue, so the icon disables
+  itself and says why. It retires the per-chip "Export this set…" menu item AND the Export
+  block inside `FavientsCollectionMenu` — a fourth surface an inch away, whole-collection only,
+  no subject switch. That block is kept for `FavientsPanel`'s hosts (app-gmt, fluid-toy, the
+  old shell) through a `withExport` prop the HOST declares.
+
+Guards: `smoke:ge-hero` [5] rewritten (it must COLLECT the offer section by section) plus a new
+[6] for Again and its memory. **[5]'s first accordion check passed under mutation** — it read the
+headers' `data-open`, and a build that marks one header open while rendering every section's
+rows sails through that. It asserts DISJOINT rows across successive sections now. An assertion
+about a state flag is not an assertion about what is on screen.
+
+**⚠ `smoke:ge-ground` [3] is RED and was already red on a clean tree before this session.**
+Two stale expectations, the first masking the second. The tools half is fixed here (it counted
+`button[aria-label]`; session 3 put the list-view toggle in the same corner). The canvas half is
+LEFT RED on purpose: a set reserves an empty 24 px row-label column, which stops the canvas
+jumping sideways when you cross between All and a set — whether that is wanted is a decision,
+not something to loosen an assertion over. A `@stale` in `BrowseStage.tsx` names a related
+disagreement: its comment says a set keeps its carve tools, `TOOLS.filter` offers `zoom` alone.
+
 **📋 2026-09-09 (session 4) — §8b item 5: ONE export window, two axes.** The last open
 item in the live-testing queue. Every export in the app is now a cell in a 2×2: *what* is
 taken — the RAMP (the continuous gradient) or the SWATCHES (the palette composed on the hero)

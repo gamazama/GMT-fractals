@@ -1564,10 +1564,83 @@ are where to START reading, not necessarily where the change lands.
    >
    > **Left undone, deliberately:** §5.8's "default is remembered" (neither the format nor the
    > subject persists across opens — the recents flyout is the existing answer to repetition,
-   > and it now remembers the subject too); a set × swatches export applies `even` placement
+   > and it now remembers the subject too; the second pass below added the ACCORDION's memory,
+   > which is a different thing: which section opens, not which format is chosen); a set × swatches export applies `even` placement
    > rather than offering the hero's three rules; and `.ugr`'s silent reduction keeps its
    > standing `@assumption` in `collectionQualityWarnings` — its 64-stop budget still needs a
    > per-format threshold threaded through before it can warn honestly.
+
+   > **Amended 2026-09-09 (session 4, second pass — the owner had it in his hands).** Two
+   > asks, and the second turned up a third export surface nobody had counted.
+   >
+   > **1 · "Users will find the export overwhelming with the long list of options."** True,
+   > and measurable: the Ramp subject showed twenty formats across four always-open sections
+   > plus the profile block and the image block — about twenty-seven rows, nothing
+   > recommended, no way to skip what you will never use. A format CATALOGUE presented as a
+   > menu of actions. Two changes, neither of which removes a format:
+   >
+   > - **AGAIN** — the last few exports at the top, one click each. The app had recorded them
+   >   since Phase B (`exportActions.ts`, on the Export icon's hover flyout); they were simply
+   >   not in the WINDOW, which is where someone who has done this before is looking.
+   > - **The four group headers became the choice.** They already said what each group is
+   >   FOR, so they are closed by default, one open at a time, and the one that opens is the
+   >   one holding your last export — the window's only memory, and free, because the recents
+   >   already carry it. Twenty visible rows become two to eight. The output profile is a
+   >   section like the others with its value on the header; the image row stays open,
+   >   because it is one row and it is what most people came for.
+   >
+   > **The owner then asked for "a lighter strip behind the category names"** — a resting
+   > tint (`BAND` in `ExportMenu.tsx`) one step up from the floating surface, on every
+   > category name in the window, not only the accordion heads: Again and As an image wear
+   > it too, or they would read as a different kind of thing.
+   >
+   > **2 · The rail's own Export icon, and the surfaces it retires.** The hero's download
+   > glyph now sits at the right end of the set rail, beside the collection kebab. It
+   > exports **the GROUND** — the union of the lit chips — not one set: the rail is
+   > multi-select, so a single button at its end cannot mean "this set", and "export what
+   > you are looking at" is the reading that survives two chips being lit. Ctrl-click a chip
+   > first for one set alone. `All` is the catalogue and holds no favourites, so
+   > `membersOfMany` returns [] and the icon disables itself and says why.
+   >
+   > It replaces **two** surfaces, not one. The owner named the per-chip "Export this set…"
+   > menu item; auditing for it turned up a fourth export surface in v2 — the Export block
+   > inside `FavientsCollectionMenu`, an inch away from the new icon, and the weakest of all
+   > of them: whole-collection only, no ramp/swatches subject, a bare `<select>` of every
+   > format. It is gone from v2 and kept everywhere else through a `withExport` prop the HOST
+   > declares, because `FavientsPanel` (app-gmt, fluid-toy, the old shell) still mounts that
+   > menu and has no export icon of its own. A capability, not a name being checked against.
+   > A dated bin's context menu is now empty and so opens nothing at all, rather than a box
+   > with nothing in it.
+   >
+   > **Guards.** `smoke:ge-hero` [5] rewritten (it must now COLLECT the offer section by
+   > section) and a new [6] for Again and the memory behind it, seeded through localStorage
+   > rather than by exporting, because a real export downloads a file.
+   >
+   > **The assertion that passed under mutation, and why it is the interesting one.** [5]'s
+   > first accordion check read the section headers' own `data-open` and asserted exactly one
+   > was marked open. A build that marks one header open while RENDERING EVERY SECTION'S ROWS
+   > passes that, and passes "the section opened non-empty", and passes the subject checks —
+   > measured: the mutation sailed through with no output at all. What cannot survive it is
+   > asserting that successive sections show DISJOINT rows: if everything is always rendered,
+   > the second section shows the first one's formats again, and the failure names them
+   > (`"css" is on screen under both "For the web" and "For design apps"`). The lesson is the
+   > one CLAUDE.md keeps earning: an assertion about a STATE FLAG is not an assertion about
+   > what is on screen.
+   >
+   > **Found while running the guards, NOT caused here and NOT fixed:** `smoke:ge-ground` [3]
+   > was already red on a clean tree at `702dd3ec`, with two independent stale expectations,
+   > the first masking the second. (a) `s.tools !== 1` counted `button[aria-label]` inside the
+   > wall — session 3 put the ground's LIST VIEW toggle in the same corner, which carries one
+   > too. Fixed here, by NAME rather than by count, so a carve tool leaking back onto a set is
+   > still caught and is named when it happens. (b) The next assertion wants the set's canvas
+   > flush with the wall's left edge and it starts at x=24: an empty 24 px ROW-LABEL COLUMN is
+   > reserved on a set, where it draws nothing. That keeps the canvas from jumping sideways
+   > when you cross between All and a set, which may well be why it is unconditional — so it
+   > is left red rather than loosened, because which side is right is the owner's call, not a
+   > guess. Also marked `@stale` in `BrowseStage.tsx`: the comment above the tool-reset effect
+   > claims "the tools now stay" on a set and `TOOLS.filter` two hundred lines below still
+   > offers `zoom` alone.
+
 
 
 6. **The Wallpaper icon's silver must follow the theme.** Mine, from W.1: the sheen and its
@@ -1892,3 +1965,19 @@ phase now carries**. Items move out of this list only when a later phase's entry
   Phase F (phone) and Phase G (parity + the entry-point swap) are what is left of the plan.
   Phase F should measure the boot cost of the two licensed packs on a real phone (~8,000 extra
   entries, 11,131 total, carried since Phase A iteration 2) before anything else.
+- 2026-09-09 · session 4, second pass (the export window's presentation + the rail's icon).
+  **In scope, left undone:** the format ROWS still carry two labelled buttons (Copy · Download);
+  the third change proposed with the accordion — the row IS the download, Copy a small icon —
+  was not built, because the accordion took the visible count from twenty rows to two-to-eight
+  and the button weight stopped being the problem. It is still available and would want a
+  `copy` glyph, which the icon set does not have. The accordion remembers which SECTION was
+  open only within one opening; §5.8's "default is remembered" still is not done for the
+  format itself. **Noticed outside scope, and this is the one to read:** `smoke:ge-ground` [3]
+  was ALREADY RED on a clean tree before this session touched anything, with two independent
+  stale expectations and the first masking the second. The tools half is fixed here (it counted
+  `button[aria-label]`, and session 3 put the list-view toggle in the same corner); the canvas
+  half is deliberately left red — a set reserves an empty 24 px row-label column, which stops
+  the canvas jumping sideways when you cross between All and a set, and whether that is wanted
+  is a decision, not a guess. A `@stale` in `BrowseStage.tsx` names a second disagreement found
+  on the way: the comment above the tool-reset effect says a set keeps its carve tools and
+  `TOOLS.filter` still offers `zoom` alone. **Carried:** Phase F and Phase G, unchanged.

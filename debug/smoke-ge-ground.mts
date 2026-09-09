@@ -68,6 +68,7 @@ const state = (page: Page) =>
       lens: !!document.querySelector('[data-gx-pad-lens]'),
       stripAxis: (document.querySelector('[data-gx-pad-strip]') as HTMLElement | null)?.dataset.gxPadStrip ?? null,
       tools: wall?.querySelectorAll('button[aria-label]').length ?? 0,
+      toolLabels: Array.from(wall?.querySelectorAll('button[aria-label]') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
       canvases: canvases.length,
       canvasLeft: c0 && wr ? Math.round(c0.x - wr.x) : null,
       canvasH: c0 ? Math.round(c0.height) : null,
@@ -139,7 +140,13 @@ async function main() {
   if (s.ground !== today.id) fail(`[3] the ground did not switch (${s.ground})`);
   if (!s.title || !/Today/.test(s.title)) fail(`[3] the title does not say Today ("${s.title}")`);
   if (s.pad || s.filters) fail('[3] the pad / Filters are still there on a set');
-  if (s.tools !== 1) fail(`[3] ${s.tools} tools on a set, expected zoom only`);
+  // NAMED, not counted. This read `s.tools !== 1` and went red on 2026-09-09 for a reason
+  // that had nothing to do with the tools: session 3 put the ground's LIST VIEW toggle in
+  // the same corner, and it carries an aria-label too. The carve tools really are gone on
+  // a set (`TOOLS.filter` in BrowseStage) and that is the thing worth pinning, so the
+  // assertion names what should be there and says what turned up instead.
+  if (s.toolLabels.join(',') !== 'List view,Zoom')
+    fail(`[3] the corner should offer List view + Zoom on a set, not ${s.toolLabels.join(' + ') || 'nothing'} — a carve tool leaking back changes what a selection MEANS here`);
   if (s.canvases !== 1) fail(`[3] ${s.canvases} canvases for two tiles`);
   if ((s.canvasLeft ?? 99) > 2) fail(`[3] the set's canvas does not start at the wall's edge (x=${s.canvasLeft})`);
   if ((s.canvasH ?? 0) < 60) fail(`[3] the tiles did not grow (canvas height ${s.canvasH})`);

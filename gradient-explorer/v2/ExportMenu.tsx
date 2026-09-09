@@ -23,15 +23,33 @@
  *     reduces nothing), and the image row is a contact sheet of ramps or a sheet of
  *     labelled swatch chips.
  *
+ * THE LIST IS AN ACCORDION, ONE SECTION OPEN (owner, 2026-09-09: "users will find the
+ * export overwhelming with the long list of options"). Measured before the change: the Ramp
+ * subject showed twenty formats across four always-open sections, plus the profile block and
+ * the image block — about twenty-seven rows, nothing recommended, and no way to skip the
+ * formats you will never use. It is a format CATALOGUE presented as a menu of actions. Two
+ * things fix that and neither removes a format:
+ *
+ *   1. AGAIN — the last few exports, at the top, one click each. The app already recorded
+ *      them (`exportActions.ts`, shown on the Export icon's hover flyout); they were simply
+ *      not in the WINDOW, which is where someone who has done this before is looking.
+ *   2. The four group headers already say what each group is FOR, so they became the choice:
+ *      closed by default, one open at a time, and the one that opens is the one holding your
+ *      last export. Twenty visible rows become two to eight.
+ *
+ * The output profile is a section like the others with its value on the header — a setting
+ * almost nobody touches, previously sitting between the formats and the image row at full
+ * weight. The image row stays open: it is one row and it is what most people came for.
+ *
  * The doing lives in `exportActions.ts` (`runExport`, `runSetExport`, `runSetImage`),
  * shared with the hero's hover flyout of recent exports, so the two surfaces cannot drift.
  * This file is only the full window. It hangs off the hero BAND, not the card — the card
  * clips its children (2026-09-07).
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
-import { runExport, runSetExport, runSetImage, setLossyCount } from './exportActions';
+import { runExport, runSetExport, runSetImage, setLossyCount, useRecentExports, exportActionLabel } from './exportActions';
 import { AI_STOP_LIMIT } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
@@ -55,6 +73,13 @@ const PROFILES: { id: 'srgb' | 'linear' | 'aces_inverse'; label: string; title: 
   { id: 'aces_inverse', label: 'ACES', title: 'ACES inverse — for an ACES-managed pipeline' },
 ];
 
+/** The section the output profile occupies in the accordion — not a format group, but the
+ *  same affordance, so it stops competing with the formats for attention. */
+const PROFILE_SECTION = 'Output profile';
+
+/** Which group holds a format key, or null. */
+const groupOf = (key: string): string | null => GROUPS.find((g) => g.keys.includes(key))?.title ?? null;
+
 /** A segment of the subject / profile controls. Accent means "this one" (V3). */
 const Segment: React.FC<{ on: boolean; title: string; onClick: () => void; children: React.ReactNode; data?: string }> = ({
   on,
@@ -72,6 +97,28 @@ const Segment: React.FC<{ on: boolean; title: string; onClick: () => void; child
     data-on={on ? '' : undefined}
   >
     {children}
+  </button>
+);
+
+/** THE CATEGORY BAND (owner, 2026-09-09: "a lighter strip behind the category names").
+ *  A resting tint one step up from the floating surface, so the window reads as bands of
+ *  formats under labelled strips rather than one column of similar-weight rows. Every
+ *  category name in the window wears it — the accordion heads, Again, As an image — or the
+ *  ones that are not accordion heads would read as a different kind of thing. */
+const BAND = 'w-full flex items-center gap-2 h-7 px-2 rounded-lg bg-line/[0.06]';
+
+/** An accordion header: what the section is for, how much is in it, and a chevron. */
+const SectionHead: React.FC<{ title: string; note?: string; open: boolean; onClick: () => void }> = ({ title, note, open, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    data-gx-section={title}
+    data-open={open ? '' : undefined}
+    className={`${BAND} hover:bg-line/[0.12] transition-colors`}
+  >
+    <ZoneLabel className="flex-1 text-left">{title}</ZoneLabel>
+    {note && <span className="text-[13px] text-fg-dim tabular-nums">{note}</span>}
+    <Icon name={open ? 'chevronDown' : 'chevronRight'} size={14} />
   </button>
 );
 
@@ -137,6 +184,21 @@ export const ExportMenu: React.FC<{
     };
   }, [onClose]);
 
+  // AGAIN — the last few exports. A SET export is deliberately never recorded as a recent
+  // (`exportActions.ts`), so these are the working gradient's and the block only belongs in
+  // the working gradient's window.
+  const recents = useRecentExports();
+  const again = isSet ? [] : recents;
+
+  // WHICH SECTION OPENS FIRST is the window's only memory, and it costs nothing because the
+  // recents already carry it: the group holding your last export. With no history, the first
+  // group — so the window never opens as a column of closed headers with nothing to read.
+  const [open, setOpen] = useState<string | null>(() => {
+    const last = recents.find((a) => a.kind !== 'png') as { key: string } | undefined;
+    return (last && groupOf(last.key)) || GROUPS[0].title;
+  });
+  const toggle = (title: string) => setOpen((o) => (o === title ? null : title));
+
   const swatches = subject === 'swatches';
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
   const n = isSet ? count : palette.length;
@@ -147,8 +209,23 @@ export const ExportMenu: React.FC<{
   const image = () => (set ? void runSetImage(set, name, subject, count) : runExport({ kind: 'png', subject }, ramp, name, palette));
 
   const formats = formatsFor(subject);
-  const known = new Set(GROUPS.flatMap((g) => g.keys));
-  const rest = formats.filter((f) => !known.has(f.key));
+  // The sections that have anything in them under THIS subject. Switching to Swatches
+  // empties "For fractal + 3D apps" outright, so the open section can vanish under the
+  // pointer; the effect below re-homes the accordion rather than leaving it on nothing.
+  const sections = useMemo(() => {
+    const known = new Set(GROUPS.flatMap((g) => g.keys));
+    const out = GROUPS.map((g) => ({
+      title: g.title,
+      formats: g.keys.map((k) => formats.find((f) => f.key === k)).filter((f): f is ExportFormatDef => !!f),
+    })).filter((g) => g.formats.length > 0);
+    const rest = formats.filter((f) => !known.has(f.key));
+    if (rest.length) out.push({ title: 'More', formats: rest });
+    return out;
+  }, [formats]);
+  useEffect(() => {
+    if (open === PROFILE_SECTION) return;
+    if (!sections.some((x) => x.title === open)) setOpen(sections[0]?.title ?? null);
+  }, [sections, open]);
 
   const row = (f: ExportFormatDef) => {
     // A set in a format that BUNDLES is one file; in any other format it is one file per
@@ -260,43 +337,65 @@ export const ExportMenu: React.FC<{
         </div>
       )}
 
-      {GROUPS.map((g) => {
-        const fs = g.keys.map((k) => formats.find((f) => f.key === k)).filter((f): f is ExportFormatDef => !!f);
-        if (!fs.length) return null;
-        return (
-          <div key={g.title}>
-            <ZoneLabel className="block mb-1">{g.title}</ZoneLabel>
-            {fs.map(row)}
+      {again.length > 0 && (
+        <div data-gx-export-again>
+          <div className={BAND}>
+            <ZoneLabel className="flex-1">Again</ZoneLabel>
           </div>
-        );
-      })}
-      {rest.length > 0 && (
-        <div>
-          <ZoneLabel className="block mb-1">More</ZoneLabel>
-          {rest.map(row)}
+          <div className="pt-1 px-1">
+          {again.map((a) => (
+            <button
+              key={exportActionLabel(a)}
+              type="button"
+              onClick={() => runExport(a, ramp, name, palette)}
+              className="w-full flex items-center h-7 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors"
+            >
+              <span className="flex-1 min-w-0 truncate">{exportActionLabel(a)}</span>
+            </button>
+          ))}
+          </div>
         </div>
       )}
+
+      {sections.map((sec) => (
+        <div key={sec.title}>
+          <SectionHead title={sec.title} note={String(sec.formats.length)} open={open === sec.title} onClick={() => toggle(sec.title)} />
+          {open === sec.title && <div className="pt-1 px-1">{sec.formats.map(row)}</div>}
+        </div>
+      ))}
+
       {!isSet && colorSpace && onColorSpace && (
         <div>
-          <ZoneLabel className="block mb-1">Output profile</ZoneLabel>
-          <div className="inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
-            {PROFILES.map((p) => (
-              <Segment key={p.id} on={colorSpace === p.id} title={p.title} onClick={() => onColorSpace(p.id)}>
-                {p.label}
-              </Segment>
-            ))}
-          </div>
+          <SectionHead
+            title={PROFILE_SECTION}
+            note={PROFILES.find((p) => p.id === colorSpace)?.label}
+            open={open === PROFILE_SECTION}
+            onClick={() => toggle(PROFILE_SECTION)}
+          />
+          {open === PROFILE_SECTION && (
+            <div className="pt-1 inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
+              {PROFILES.map((p) => (
+                <Segment key={p.id} on={colorSpace === p.id} title={p.title} onClick={() => onColorSpace(p.id)}>
+                  {p.label}
+                </Segment>
+              ))}
+            </div>
+          )}
         </div>
       )}
+      {/* The image stays OPEN: one row, and the thing most people came for. */}
       <div>
-        <ZoneLabel className="block mb-1">As an image</ZoneLabel>
-        <div className="flex items-center gap-2 py-0.5">
-          <span className="flex-1 text-[13px] text-fg">
-            {swatches ? 'Swatch sheet' : isSet ? 'Contact sheet' : 'PNG strip (1024 × 64)'}
-          </span>
-          <Act onClick={image}>Download</Act>
+        <div className={BAND}>
+          <ZoneLabel className="flex-1">As an image</ZoneLabel>
         </div>
-        <div className="text-[13px] text-fg-muted mt-1">
+        <div className="pt-1 px-1">
+          <div className="flex items-center gap-2 py-0.5" data-gx-image>
+            <span className="flex-1 text-[13px] text-fg">
+              {swatches ? 'Swatch sheet' : isSet ? 'Contact sheet' : 'PNG strip (1024 × 64)'}
+            </span>
+            <Act onClick={image}>Download</Act>
+          </div>
+          <div className="text-[13px] text-fg-muted mt-1">
           {swatches
             ? isSet
               ? 'Every palette as labelled chips, one row per gradient.'
@@ -304,6 +403,7 @@ export const ExportMenu: React.FC<{
             : isSet
               ? 'A grid of the whole set, names included.'
               : 'For a full-size image use Wallpaper.'}
+          </div>
         </div>
       </div>
     </Floating>

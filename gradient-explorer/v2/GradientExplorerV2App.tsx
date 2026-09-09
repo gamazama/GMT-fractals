@@ -65,7 +65,7 @@ import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
 import { useGroundSets } from './useGroundSource';
 import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetId } from '../../palette/store/groundSet';
-import { membersOf, parseSetId, type GroundSetDesc } from '../../palette/core/groundSets';
+import { membersOfMany, parseSetId } from '../../palette/core/groundSets';
 import { useGlobalSet } from '../../palette/store/globalSetStore';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
@@ -127,7 +127,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const source = sourceOf(tray);
   const [exportOpen, setExportOpen] = useState(false);
   /** The set whose Export window is open (the rail's chip menu), or null. */
-  const [exportSet, setExportSet] = useState<GroundSetDesc | null>(null);
+  const [exportGround, setExportGround] = useState(false);
   const derived = useWorkingDerived();
   const candidate = useActiveHeroSelection();
   const pickSerial = usePickSerial();
@@ -140,6 +140,18 @@ export const GradientExplorerV2App: React.FC = () => {
   // made a cleared shelf unrecoverable (the migration audit §3.8a).
   const railSets = sets.length > 1 ? sets : [];
   const groundSetIds = useGroundSetIds();
+  // WHAT THE RAIL'S EXPORT ICON WOULD CARRY: the union of the lit chips, in shelf order.
+  // `All` is the catalogue, not a set of favourites, so `membersOfMany` gives [] for it and
+  // the icon disables itself — which is right, and says so in its title. The name is the
+  // lit sets joined, so the window's own header reads back what you pointed at.
+  const groundMembers = useMemo(
+    () => membersOfMany(groundSetIds, favients, globalEntries),
+    [groundSetIds, favients, globalEntries],
+  );
+  const groundExportName = useMemo(
+    () => groundSetIds.map((id) => sets.find((x) => x.id === id)?.label ?? id).join(' + ') || 'My Gradients',
+    [groundSetIds, sets],
+  );
   const armed = useArmedSlot();
   useGlobalContextMenu();
   const contextMenu = useEngineStore((s) => s.contextMenu);
@@ -446,20 +458,22 @@ export const GradientExplorerV2App: React.FC = () => {
           activeIds={groundSetIds}
           onSelect={setGroundSetId}
           onToggle={toggleGroundSetId}
-          onExportSet={setExportSet}
+          onExportGround={() => setExportGround(true)}
+          groundExportCount={groundMembers.length}
           onImportInto={askImportInto}
         />
-        {/* The set's own Export window — the same `ExportMenu`, pointed at a set instead of
-            the working gradient (§8b item 4 / the audit's M1). Hosted here, like the hero's,
-            so the rail stays a control. */}
-        {exportSet && (
+        {/* The GROUND's Export window — the same `ExportMenu`, pointed at what the wall is
+            showing instead of at the working gradient (§8b item 4 / the audit's M1; retargeted
+            from one set to the ground 2026-09-09). Hosted here, like the hero's, so the rail
+            stays a control. */}
+        {exportGround && groundMembers.length > 0 && (
           <ExportMenu
             ramp={[]}
-            name={exportSet.label}
+            name={groundExportName}
             // Deliberate: the SHARED set exports too. It is a public resource and taking a
             // copy of it is the point — stated here so it is a decision, not an accident.
-            set={membersOf(exportSet.id, favients, globalEntries)}
-            onClose={() => setExportSet(null)}
+            set={groundMembers}
+            onClose={() => setExportGround(false)}
             positionClass="absolute left-6 top-10 z-40"
           />
         )}
