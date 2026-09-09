@@ -3,7 +3,7 @@
  * configuration gallery (S6).
  *
  * A gradient's 256-step ramp reads very differently as a directional sweep, a ring, an
- * angular sweep, or an arched band — and that is where the gradient is actually used
+ * or an angular sweep — and that is where the gradient is actually used
  * (radial maps, fractal colouring, …). These mappings let the fullscreen overlay *show*
  * those geometries over the SAME ramp. They are DISPLAY-ONLY: nothing here mutates gradient
  * data — a mapping samples the existing ramp through a geometry and produces pixels.
@@ -50,14 +50,13 @@ import { clamp01 } from '../../utils/stopOps';
  *  one of the pure 2D `sampleGeometry` fields — the overlay mounts a WebGL canvas for it
  *  and bypasses `renderGeometry`. It lives in this union/list only so the selector offers
  *  it; `sampleGeometry`/`renderGeometry` treat it as a no-op flat field. */
-export type GeometryId = 'linear' | 'radial' | 'conic' | 'arched' | 'fractal';
+export type GeometryId = 'linear' | 'radial' | 'conic' | 'fractal';
 
 /** Ordered selector list (id + human label). */
 export const GEOMETRIES: ReadonlyArray<{ id: GeometryId; label: string }> = [
   { id: 'linear', label: 'Linear' },
   { id: 'radial', label: 'Radial' },
   { id: 'conic', label: 'Conic' },
-  { id: 'arched', label: 'Arched' },
   { id: 'fractal', label: 'Fractal' },
 ];
 
@@ -106,6 +105,12 @@ export interface GeometryParams {
   radialScale?: number;
   /** [radial] falloff bias (0 = linear falloff; ± eases it via {@link bias}). */
   radialBias?: number;
+  /** [radial] SINE modulation of the outer radius around the circle — the ring becomes a
+   *  flower. `radialSineAmp` 0 = a plain circle (byte-identical legacy); 0.5 = the radius
+   *  swings ±50 %. `radialSineFreq` is the lobe COUNT (integer values close seamlessly at
+   *  the ±π wrap; a fractional count leaves a visible seam, which is why the handle steps). */
+  radialSineAmp?: number;
+  radialSineFreq?: number;
   /** [conic] sweep rotation in radians (0 = the legacy orientation). */
   conicAngle?: number;
   /** [conic] centre offset in isotropic units (0,0 = frame centre). */
@@ -115,16 +120,16 @@ export interface GeometryParams {
    *  0 = collapsed (plain `0→1` wrap, byte-identical legacy); 0.5 = a symmetric mirror. >0
    *  reflects the sweep so there's no hard seam. */
   conicMirror?: number;
-  /** [conic] bias of the rising (`0→1`) and falling (`1→0`) mirror halves (0 = linear). */
+  /** [conic] bias of the rising (`0→1`) and falling (`1→0`) mirror halves (0 = linear).
+   *  With the mirror collapsed only `conicBiasA` is read — it eases the whole sweep. */
   conicBiasA?: number;
   conicBiasB?: number;
-  /** [arched] band geometry — centre-Y / radius / half-width / ± sweep span (isotropic units). */
-  archCy?: number;
-  archR?: number;
-  archHalfWidth?: number;
-  archSpan?: number;
-  /** [arched] spine curvature (0 = circular arc; ± bends the band flatter/tighter, independent of radius). */
-  archCurve?: number;
+  /** [conic] TWIST in turns — the sweep's angle advances with the radius, so the straight
+   *  spokes wind into a LOG SPIRAL. 0 = plain conic (byte-identical legacy). The law is the
+   *  house's own (`engine/fractal/shaders/gradientSample.ts`, "Angle: iteration log-spiral"):
+   *  `phi += twist · log(1 + r)`, r in isotropic units — constant winding per radius decade,
+   *  so the spiral looks the same everywhere rather than unwinding at the centre. */
+  conicTwist?: number;
   // ── spline (path) mode — the gradient flows along an editable Catmull-Rom path ──
   // Scalar shape controls only; the control-point LIST is mode-private (a variable-length
   // array can't be a flat scalar key) and lives in the spline mode's own store. These two
@@ -136,6 +141,26 @@ export interface GeometryParams {
   /** [spline] DEPTH shading −1..1 — perpendicular dimensionality. 0 = flat full-bleed fill;
    *  >0 darkens with distance (vignette); <0 lifts near the path (glow). */
   splineDepth?: number;
+  /** [spline] EXTEND 0..1 — how far the ramp carries on past the two ENDS of the path, along
+   *  the terminal tangents, as a multiple of the path's own length. 0 = the legacy behaviour:
+   *  everything beyond an endpoint clamps to that end's colour, so a straight path leaves a
+   *  flat band at each side. Turned up, the ends keep going and the whole ramp is redistributed
+   *  over the extended line — which is what makes a STRAIGHT path read as a plain linear ramp
+   *  across the frame rather than a stripe with two flat margins. */
+  splineExtend?: number;
+  // ── gradient map mode — recolour the Extract image through the ramp ──
+  // Like the two spline keys above, these live in the bag but OUTSIDE the gate:
+  // `sampleGeometry` never reads them, so the determinism harness's hand-maintained `cases`
+  // list is unaffected. @see gradient-explorer/fullscreen/modes/gradientMapMode.tsx
+  /** [gradientMap] blend 0..1 between the original image (0) and the fully mapped image (1). */
+  mapStrength?: number;
+  /** [gradientMap] flip the luminance lookup (0 = off, 1 = on) — dark pixels take the ramp's
+   *  END colour. Boolean-as-scalar because the params bag is numeric. */
+  mapInvert?: number;
+  /** [gradientMap] WHICH channel of the image drives the lookup — a {@link MapChannel} index,
+   *  0 = luma (the classic gradient map). Enum-as-scalar because the params bag is numeric.
+   *  @see palette/core/gradientMapChannels.ts */
+  mapChannel?: number;
 }
 
 /** Default value for every optional {@link GeometryParams} field. Omitting a field in a
@@ -148,22 +173,29 @@ export const GEOM_DEFAULTS = {
   radialCy: 0,
   radialScale: 1,
   radialBias: 0,
+  // Sine amplitude 0 = a plain circular falloff, so the frequency below is inert at rest and
+  // the default render is byte-identical to the pre-sine field. 5 is the count the flower
+  // opens with the first time the amplitude handle is pulled.
+  radialSineAmp: 0,
+  radialSineFreq: 5,
   conicAngle: 0,
   conicCx: 0,
   conicCy: 0,
   conicMirror: 0,
   conicBiasA: 0,
   conicBiasB: 0,
-  // Arched band: a circular arc whose centre sits below the frame so the band sweeps
-  // across the top. Tuned in isotropic units (uy = −1 at the top edge).
-  archCy: 1.35,
-  archR: 2.3,
-  archHalfWidth: 0.3,
-  archSpan: 1.15, // ± angle (radians) the band sweeps through
-  archCurve: 0,
+  conicTwist: 0,
   // Spline path: a gentle diffusion spread, flat depth (full-bleed fill) by default.
   splineSpread: 0.15,
   splineDepth: 0,
+  // Off by default: extending changes what an existing spline looks like, and the mode's
+  // saved-state contract is that an omitted key reproduces the old picture exactly.
+  splineExtend: 0,
+  // Gradient map: fully mapped, not inverted, driven by luma — the duotone look the mode
+  // exists for. Channel 0 IS luma (see MAP_CHANNELS), so the default is the classic map.
+  mapStrength: 1,
+  mapInvert: 0,
+  mapChannel: 0,
 } as const;
 
 /**
@@ -179,7 +211,9 @@ export interface GeometrySample {
   cov: Float32Array;
 }
 
-/** Default background painted where coverage < 1 (arched gaps, point-field void). */
+/** Default background painted where coverage < 1. No shipped geometry leaves a gap since
+ *  Arched was retired (2026-09-08), but the coverage channel and this blend stay part of the
+ *  field contract — a future masked geometry would use them. */
 export const DEFAULT_BACKGROUND: RGB = { r: 9, g: 9, b: 12 };
 
 // ── seeded PRNG ────────────────────────────────────────────────────────────────
@@ -219,12 +253,22 @@ export const bias = (t: number, b: number): number => {
   return u < 0.5 ? 0.5 * Math.pow(2 * u, k) : 1 - 0.5 * Math.pow(2 * (1 - u), k);
 };
 
-/** The arched band's target radius at sweep angle `ang` from straight-up. `archCurve === 0`
- *  is a plain circle (radius `archR`); ± bends the spine flatter/tighter. Exported as the
- *  SINGLE source of the curvature law so the on-screen handle's guide arcs trace the exact
- *  band `sampleGeometry` renders (they'd silently drift if each kept its own copy). */
-export const archRadiusAt = (archR: number, archCurve: number, ang: number): number =>
-  archR * (1 + archCurve * ang * ang);
+/**
+ * The conic sweep's TWIST offset, in turns, at isotropic radius `r` — `twist · log(1 + r)`,
+ * the house log-spiral law. Exported as the SINGLE source of the winding so the on-screen
+ * spiral guide traces the exact bands `sampleGeometry` renders (they would silently drift if
+ * the handle layer kept its own copy — the same reason {@link bias} is exported).
+ */
+export const conicTwistTurns = (twist: number, r: number): number =>
+  twist === 0 ? 0 : twist * Math.log(1 + r);
+
+/**
+ * The radial mode's modulated OUTER reach at angle `ang` — `scale · (1 + amp·sin(freq·ang))`.
+ * Exported for the same reason as {@link conicTwistTurns}: the handle layer draws this curve
+ * as its ring guide, so one law serves both the pixels and the signifier.
+ */
+export const radialSineReach = (scale: number, amp: number, freq: number, ang: number): number =>
+  amp === 0 ? scale : scale * (1 + amp * Math.sin(freq * ang));
 
 /**
  * Sample a geometry into a pure per-pixel position + coverage field. No colours, no
@@ -242,7 +286,7 @@ export const sampleGeometry = (
   const sample: GeometrySample = { width, height, pos, cov };
 
   // ── continuous geometries: every pixel is covered (cov = 1) unless a band masks it.
-  // Shape geometries (radial/conic/arched) work in CENTRED, ISOTROPIC units — pixel
+  // Shape geometries (radial/conic) work in CENTRED, ISOTROPIC units — pixel
   // offsets divided by half the SHORTER side — so a circle stays a circle on a wide
   // canvas instead of stretching into an ellipse. Linear projects onto its angle axis in
   // normalised box space (nx/ny).
@@ -257,17 +301,18 @@ export const sampleGeometry = (
   const radialCy = params.radialCy ?? GEOM_DEFAULTS.radialCy;
   const radialScale = Math.max(1e-3, params.radialScale ?? GEOM_DEFAULTS.radialScale);
   const radialBias = params.radialBias ?? GEOM_DEFAULTS.radialBias;
+  const radialSineAmp = params.radialSineAmp ?? GEOM_DEFAULTS.radialSineAmp;
+  const radialSineFreq = params.radialSineFreq ?? GEOM_DEFAULTS.radialSineFreq;
+  // At amplitude 0 the modulation is the identity, so the per-pixel `atan2` is skipped
+  // entirely and the field stays byte-identical to the pre-sine circle.
+  const radialWavy = radialSineAmp !== 0;
   const conicAngle = params.conicAngle ?? GEOM_DEFAULTS.conicAngle;
   const conicCx = params.conicCx ?? GEOM_DEFAULTS.conicCx;
   const conicCy = params.conicCy ?? GEOM_DEFAULTS.conicCy;
   const conicMirror = params.conicMirror ?? GEOM_DEFAULTS.conicMirror;
   const conicBiasA = params.conicBiasA ?? GEOM_DEFAULTS.conicBiasA;
   const conicBiasB = params.conicBiasB ?? GEOM_DEFAULTS.conicBiasB;
-  const archCy = params.archCy ?? GEOM_DEFAULTS.archCy;
-  const archR = params.archR ?? GEOM_DEFAULTS.archR;
-  const archHalfWidth = params.archHalfWidth ?? GEOM_DEFAULTS.archHalfWidth;
-  const archSpan = params.archSpan ?? GEOM_DEFAULTS.archSpan;
-  const archCurve = params.archCurve ?? GEOM_DEFAULTS.archCurve;
+  const conicTwist = params.conicTwist ?? GEOM_DEFAULTS.conicTwist;
 
   // Linear projection axis in ISOTROPIC units so the angle is screen-true (a 45° gradient
   // looks 45° on any aspect). The projection is remapped from its corner range to [0,1]. At
@@ -279,9 +324,10 @@ export const sampleGeometry = (
   const ay = cyp / half; // half-extent of uy at the frame edge
   const lProjAbs = Math.abs(lc) * ax + Math.abs(ls) * ay; // projection at the far corner
   const lSpan = Math.max(1e-6, 2 * lProjAbs);
-  // Conic at all-default centre + angle + mirror keeps the EXACT legacy expression (no
-  // wrap01) so a default-valued params is byte-identical to the pre-gate field.
-  const conicLegacy = conicCx === 0 && conicCy === 0 && conicAngle === 0 && conicMirror === 0;
+  // Conic at all-default centre + angle + mirror + twist keeps the EXACT legacy expression
+  // (no wrap01) so a default-valued params is byte-identical to the pre-gate field.
+  const conicLegacy =
+    conicCx === 0 && conicCy === 0 && conicAngle === 0 && conicMirror === 0 && conicTwist === 0;
   const conicSplit = 1 - conicMirror; // rising-arc fraction when mirrored
 
   for (let y = 0; y < height; y++) {
@@ -295,49 +341,33 @@ export const sampleGeometry = (
         case 'linear':
           p = bias((ux * lc + uy * ls + lProjAbs) / lSpan, linearBias);
           break;
-        case 'radial':
-          p = bias(
-            clamp01((Math.hypot(ux - radialCx, uy - radialCy) * radialNorm) / radialScale),
-            radialBias,
-          );
+        case 'radial': {
+          const rx = ux - radialCx;
+          const ry = uy - radialCy;
+          // The sine swells and pinches the OUTER radius around the circle, so the falloff
+          // rings become petals. Multiplying the reach (not the distance) keeps the centre
+          // exactly at position 0 whatever the amplitude — a flower, never an off-centre blob.
+          const reach = radialWavy
+            ? radialSineReach(radialScale, radialSineAmp, radialSineFreq, Math.atan2(ry, rx))
+            : radialScale;
+          p = bias(clamp01((Math.sqrt(rx * rx + ry * ry) * radialNorm) / Math.max(1e-3, reach)), radialBias);
           break;
+        }
         case 'conic': {
-          const ang = Math.atan2(uy - conicCy, ux - conicCx); // -π..π, true angle
+          const cdx = ux - conicCx;
+          const cdy = uy - conicCy;
+          const ang = Math.atan2(cdy, cdx); // -π..π, true angle
           if (conicLegacy) {
             p = bias((ang + Math.PI) / (2 * Math.PI), conicBiasA);
           } else {
-            const phi = wrap01((ang + conicAngle + Math.PI) / (2 * Math.PI)); // [0,1)
+            // Twist advances the sweep with the radius → a log spiral (see conicTwist). The
+            // term is in TURNS, which is what phi counts, so it simply adds before the wrap.
+            const spin = conicTwistTurns(conicTwist, Math.sqrt(cdx * cdx + cdy * cdy));
+            const phi = wrap01((ang + conicAngle + Math.PI) / (2 * Math.PI) + spin); // [0,1)
             if (conicMirror <= 0) p = bias(phi, conicBiasA);
             else if (phi < conicSplit) p = bias(phi / conicSplit, conicBiasA); // rising 0→1
             else p = bias(1 - (phi - conicSplit) / conicMirror, conicBiasB); // falling 1→0
           }
-          break;
-        }
-        case 'arched': {
-          const d = Math.hypot(ux, uy - archCy);
-          // Common case (curve=0 → circular band): the band test needs no angle, so the cheap
-          // `atan2` for the POSITION only runs for in-band pixels (most of the frame is void).
-          let ang: number;
-          let band: number;
-          if (archCurve === 0) {
-            band = archHalfWidth - Math.abs(d - archR);
-            if (band <= 0) {
-              c = 0; // outside the band → background (p stays 0)
-              break;
-            }
-            ang = Math.atan2(ux, archCy - uy);
-          } else {
-            // Curved spine: the target radius depends on the sweep angle, so compute it first.
-            ang = Math.atan2(ux, archCy - uy); // 0 at top, ± toward sides
-            band = archHalfWidth - Math.abs(d - archRadiusAt(archR, archCurve, ang));
-            if (band <= 0) {
-              c = 0;
-              break;
-            }
-          }
-          p = clamp01((ang + archSpan) / (2 * archSpan));
-          // Soft edge over the outer ~25% of the half-width for an anti-aliased band.
-          c = clamp01(band / (archHalfWidth * 0.25));
           break;
         }
       }
@@ -352,7 +382,7 @@ export const sampleGeometry = (
  * Render a geometry to an RGBA buffer by looking the per-pixel field up in `ramp`
  * (an RGB[256] from `renderStopsToRamp`). Pure: `(ramp, geom, params, w, h) → RGBA`;
  * the overlay component just `ctx.putImageData`s the result. Coverage < 1 blends
- * toward `background` (anti-aliased arch edges / dot disks; the point-field void).
+ * toward `background` where a geometry masks a pixel out.
  */
 export const renderGeometry = (
   ramp: RGB[],
@@ -417,22 +447,36 @@ export const renderFieldDithered = (
 ): Uint8ClampedArray => {
   const { width, height, pos, cov } = sample;
   const last = ramp.length - 1;
-  const bg = [background.r, background.g, background.b];
+  const bgR = background.r, bgG = background.g, bgB = background.b;
   const out = new Uint8ClampedArray(width * height * 4);
   // Carried error: `cur` for the current row (incl. the horizontal neighbour), `nxt` for the
   // row below. Padded by 1 px each side so the edge taps never go out of bounds. RGB interleaved.
   const cur = new Float32Array((width + 2) * 3);
   const nxt = new Float32Array((width + 2) * 3);
-  // LINEAR ramp lookup blended toward bg by coverage, per channel.
-  const target = (p: number, c: number, ch: number): number => {
-    const cc = c < 0 ? 0 : c > 1 ? 1 : c;
-    const t = (p < 0 ? 0 : p > 1 ? 1 : p) * last;
-    const i0 = Math.floor(t), f = t - i0;
-    const a = ramp[i0] ?? background, b = ramp[i0 < last ? i0 + 1 : last] ?? background;
-    const ca = ch === 0 ? a.r : ch === 1 ? a.g : a.b;
-    const cb = ch === 0 ? b.r : ch === 1 ? b.g : b.b;
-    return bg[ch] + (ca + (cb - ca) * f - bg[ch]) * cc;
-  };
+  // The ramp FLATTENED into one Float64Array (r,g,b interleaved). `ramp` is an array of RGB
+  // OBJECTS, and reading `.r/.g/.b` off two of them per channel per pixel — 22 M property loads
+  // at 2560×1440 — was most of this function's cost. A typed array is one indexed read.
+  // The `?? background` fallback the old per-channel lookup did is applied ONCE here, so a
+  // short or holey ramp still behaves identically without paying for the check 11 M times.
+  // An empty ramp has no colours to blend toward, so every covered pixel IS the background —
+  // stated up front because the flattened LUT below has no entry to fall back to (the old
+  // per-lookup `?? background` absorbed this case implicitly).
+  if (last < 0) {
+    for (let o = 0; o < out.length; o += 4) {
+      out[o] = bgR;
+      out[o + 1] = bgG;
+      out[o + 2] = bgB;
+      out[o + 3] = 255;
+    }
+    return out;
+  }
+  const lut = new Float64Array((last + 1) * 3);
+  for (let i = 0; i <= last; i++) {
+    const c = ramp[i] ?? background;
+    lut[i * 3] = c.r;
+    lut[i * 3 + 1] = c.g;
+    lut[i * 3 + 2] = c.b;
+  }
   for (let y = 0; y < height; y++) {
     nxt.fill(0);
     const ltr = (y & 1) === 0; // serpentine: alternate scan direction to break diffusion "worms"
@@ -441,16 +485,32 @@ export const renderFieldDithered = (
       const x = ltr ? ii : width - 1 - ii;
       const i = y * width + x;
       const o = i * 4;
+      // Position → ramp index and coverage are properties of the PIXEL, not of the channel.
+      // They used to be recomputed inside `target()` for each of r, g and b — three clamps,
+      // three multiplies and three floors per pixel where one of each will do.
+      const p = pos[i];
+      const c = cov[i];
+      const cc = c < 0 ? 0 : c > 1 ? 1 : c;
+      const t = (p < 0 ? 0 : p > 1 ? 1 : p) * last;
+      const i0 = t | 0; // t >= 0 here, so a truncation IS the floor (and is cheaper)
+      const f = t - i0;
+      const a = i0 * 3;
+      const b = (i0 < last ? i0 + 1 : last) * 3;
+      const e0 = (x + 1) * 3;
+      const e1 = (x + 1 + fwd) * 3;
+      const e2 = (x + 1 - fwd) * 3;
       for (let ch = 0; ch < 3; ch++) {
-        const v = target(pos[i], cov[i], ch) + (dither ? cur[(x + 1) * 3 + ch] : 0);
+        const ca = lut[a + ch];
+        const bgc = ch === 0 ? bgR : ch === 1 ? bgG : bgB;
+        const v = bgc + (ca + (lut[b + ch] - ca) * f - bgc) * cc + (dither ? cur[e0 + ch] : 0);
         const q = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
         out[o + ch] = q;
         if (dither) {
           const e = v - q;
-          cur[(x + 1 + fwd) * 3 + ch] += (e * 7) / 16;
-          nxt[(x + 1 - fwd) * 3 + ch] += (e * 3) / 16;
-          nxt[(x + 1) * 3 + ch] += (e * 5) / 16;
-          nxt[(x + 1 + fwd) * 3 + ch] += (e * 1) / 16;
+          cur[e1 + ch] += (e * 7) / 16;
+          nxt[e2 + ch] += (e * 3) / 16;
+          nxt[e0 + ch] += (e * 5) / 16;
+          nxt[e1 + ch] += (e * 1) / 16;
         }
       }
       out[o + 3] = 255;

@@ -483,6 +483,45 @@ export const kelvinToHex = (kelvin: number): string => {
 /**
  * Preset color temperatures for UI convenience
  */
+/**
+ * TINT: the second axis of a light's colour, green to magenta, which a temperature alone
+ * cannot express — the same pairing a camera's white balance uses (Kelvin plus tint). `t`
+ * runs -100 (green) to +100 (magenta). Done as a trade between the green channel and the
+ * red/blue pair, which is what that axis physically is; it stays in gamut by clamping.
+ */
+export const applyTint = (hex: string, t: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb || !t) return hex.toUpperCase();
+  const k = Math.max(-100, Math.min(100, t)) / 100;
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  return rgbToHex({
+    r: clamp(rgb.r * (1 + k * 0.18)),
+    g: clamp(rgb.g * (1 - k * 0.18)),
+    b: clamp(rgb.b * (1 + k * 0.18)),
+  });
+};
+
+/**
+ * Move ONE channel of a colour and leave the rest of it alone. This is what a channel slider
+ * means when several things are selected at once: everyone's red drops by the same amount,
+ * nobody's green or blue moves, and the differences that made you select them survive (owner,
+ * 2026-09-08). RGB clamps at the ends, per colour, so one hitting the wall does not drag the
+ * others; hue wraps, since it is an angle.
+ */
+export const nudgeChannel = (hex: string, channel: 'r' | 'g' | 'b' | 'h' | 's' | 'v', delta: number): string => {
+  const rgb = hexToRgb(hex);
+  if (!rgb || !delta) return hex.toUpperCase();
+  const clamp = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+  if (channel === 'r' || channel === 'g' || channel === 'b') {
+    return rgbToHex({ ...rgb, [channel]: Math.round(clamp(rgb[channel] + delta, 255)) });
+  }
+  const hsv = rgbToHsv(rgb);
+  const next = channel === 'h'
+    ? { ...hsv, h: wrapHue(hsv.h + delta) }
+    : { ...hsv, [channel]: clamp(hsv[channel] + delta, 100) };
+  return rgbToHex(hsvToRgb(next.h, next.s, next.v));
+};
+
 export const COLOR_TEMPERATURE_PRESETS = [
   { label: 'Candle', value: 1900 },
   { label: 'Tungsten', value: 2700 },
@@ -543,6 +582,83 @@ export const monochromatic = (base: string, n = 5): string[] => {
 
 /** `[base, opposite]` — hue + 180°. */
 export const complementary = (base: string): string[] => [base.toUpperCase(), rotateHue(base, 180)];
+
+/**
+ * The colour HARMONIES a wheel can hold, as HSV handles rather than hex strings, so a wheel
+ * can place them (hue = angle, saturation = radius) and a drag can re-derive them from a new
+ * base. The set follows the studio convention the owner referenced (Cinema 4D's Color
+ * Chooser): index 0 is always the BASE, i.e. the colour being edited.
+ *
+ *   free         the handles are wherever the user put them (the host stores them)
+ *   mono         one hue, spread along the radius — saturation is what differs, so the
+ *                handles do not stack on one point of the disc
+ *   complementary  two, opposite
+ *   analogous    n around the base at `stepDeg` (15° or 30°, the classic pair)
+ *   split        base + the two neighbours of its complement
+ *   tetrad       two analogous pairs, complementary to each other
+ *   equiangular  n spread evenly round the wheel
+ */
+export type ColorHarmony = 'free' | 'mono' | 'complementary' | 'analogous' | 'equiangular';
+
+export interface HsvHandle { h: number; s: number; v: number }
+
+/** Does this harmony take a handle COUNT, and within what range? */
+export const HARMONY_COUNT: Record<ColorHarmony, [number, number] | null> = {
+  free: null,
+  mono: [2, 8],
+  complementary: [2, 4],
+  analogous: [2, 8],
+  equiangular: [3, 8],
+};
+
+/**
+ * The ANGLE dial, where a harmony has one, as [min, max, default] in degrees. Split
+ * complementary and tetrad were separate modes until the owner noticed (2026-09-08) that they
+ * are one family: a complementary pair whose ends SPLIT by an amount. So Complementary now
+ * takes both a count and an angle — 2 is the classic pair, 3 splits the far end (the old split
+ * complementary at 30°), 4 splits both ends (the old tetrad at 60°) — and Analogous uses the
+ * same dial for its step, which used to be frozen at 30°.
+ */
+export const HARMONY_ANGLE: Record<ColorHarmony, [number, number, number] | null> = {
+  free: null,
+  mono: null,
+  complementary: [0, 90, 30],
+  analogous: [5, 60, 30],
+  equiangular: null,
+};
+
+/** The handles a harmony puts on the wheel for `base`. `s` is 0..1, `v` 0..100. */
+export const harmonyHandles = (base: HsvHandle, mode: ColorHarmony, count = 5, stepDeg = 30): HsvHandle[] => {
+  const at = (h: number, s = base.s, v = base.v): HsvHandle => ({ h: wrapHue(h), s: Math.max(0, Math.min(1, s)), v });
+  switch (mode) {
+    case 'mono': {
+      // along the radius: the base keeps its own saturation, the rest fan out from it
+      const n = Math.max(2, count);
+      return Array.from({ length: n }, (_, i) => (i === 0 ? at(base.h) : at(base.h, (i / (n - 1)) * 0.9 + 0.08)));
+    }
+    case 'complementary': {
+      // one family: a complementary pair, its ends split by `stepDeg`
+      const n = Math.max(2, Math.min(4, count));
+      if (n === 2) return [at(base.h), at(base.h + 180)];
+      if (n === 3) return [at(base.h), at(base.h + 180 - stepDeg), at(base.h + 180 + stepDeg)];
+      return [at(base.h), at(base.h + stepDeg), at(base.h + 180), at(base.h + 180 + stepDeg)];
+    }
+    case 'analogous': {
+      const n = Math.max(2, count);
+      const half = (n - 1) / 2;
+      // the base first, then its neighbours outward, so index 0 stays the edited colour
+      const rest = Array.from({ length: n }, (_, i) => (i - half) * stepDeg).filter((d) => Math.abs(d) > 1e-9);
+      return [at(base.h), ...rest.map((d) => at(base.h + d))];
+    }
+    case 'equiangular': {
+      const n = Math.max(3, count);
+      return Array.from({ length: n }, (_, i) => at(base.h + (i * 360) / n));
+    }
+    case 'free':
+    default:
+      return [at(base.h)];
+  }
+};
 
 /** `[base, base+150°, base+210°]` — the two neighbours of the complement. */
 export const splitComplementary = (base: string): string[] => [

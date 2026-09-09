@@ -36,7 +36,7 @@ import {
 import { EASING_NAMES, type EasingName } from '../core/easings';
 import { fitColorBoxToRamp } from '../core/colorBoxFit';
 import { showToast } from '../../engine/store/toastStore';
-import { rampToBezierTrack, trackToRamp } from '../core/channelCurve';
+import { rampToBezierTrack, rampToSteppedTrack, flatRuns, trackToRamp } from '../core/channelCurve';
 import { buildPresetCatalog, registerCustomRamp, registerCustomChannels } from '../core/presetCatalog';
 import { bufferToRamp } from '../core/stopFit';
 import { GENERATOR_PARAM_DEFAULTS } from '../features/paletteGenerator';
@@ -99,6 +99,11 @@ const sliceToColorBox = (s: GeneratorSlice): ColorBoxParams => {
 };
 
 const readSlice = (): GeneratorSlice => (useEngineStore.getState() as any).paletteGenerator as GeneratorSlice;
+/** Imperative read/write of the paletteGenerator DDFS slice for sibling stores (the v2
+ *  Working pipeline resets the Adjust chain on bake). Same cast, one place. */
+export const readGeneratorSlice = readSlice;
+export const setGeneratorSlice = (patch: Partial<GeneratorSlice>): void => setSlice(patch);
+export type { GeneratorSlice };
 const setSlice = (patch: Partial<GeneratorSlice>) => {
   const set = (useEngineStore.getState() as any).setPaletteGenerator as ((p: Record<string, unknown>) => void) | undefined;
   set?.(patch);
@@ -130,6 +135,10 @@ interface GeneratorState {
   slotB: number;
   tracks: ChannelTracks | null;
   curvesOn: boolean;
+  /** The tracks have been EDITED since they were fitted (a drag, the pencil, the brush, a
+   *  key added). An untouched fit is the source restated, so leaving the Curves face with
+   *  it must not bake — it just clears (v2, C.4 follow-up 2026-09-07 evening). */
+  tracksEdited: boolean;
   detail: number;
   smooth: number;
   noiseSeed: number;
@@ -152,6 +161,9 @@ interface GeneratorState {
    *  immediately drive the output. The P2 select/drop path onto the Curves widget. One
    *  undo entry. */
   fitCurvesFromRamp: (ramp: RGB[]) => void;
+  /** Fit editable curves from ANY base channels at the current detail/smooth (the v2
+   *  Working pipeline fits from its own input, which need not be the A/B mix). */
+  fitFromChannels: (base: Channels) => void;
   resetCurves: () => void;
   /** Reset the Mix channel (L/C/h) blend to defaults (0/0/0 = all source A). One undo entry. */
   resetMix: () => void;
@@ -179,7 +191,7 @@ const SLOT_DEFAULTS = (which: 'A' | 'B'): Partial<GeneratorSlice> => {
     [`${p}Reverse`]: false, [`${p}Repeats`]: 1, [`${p}Phase`]: 0, [`${p}Mirror`]: false,
   } as Partial<GeneratorSlice>;
 };
-const MAIN_DEFAULTS: Partial<GeneratorSlice> = {
+export const MAIN_DEFAULTS: Partial<GeneratorSlice> = {
   hueRotate: 0, chroma: 1, contrast: 1, bands: 0, repeats: 1, phase: 0, mirror: false, reverse: false, noise: 0,
 };
 
@@ -202,13 +214,23 @@ const slotChannels = (idx: number): Channels => {
 };
 
 /** Pure derive of the post-mix (or ColorBox) base channels (for "fit from source"). */
+/** Pure: the Build recipe base (post-mix, pre-curve; or the ColorBox base) for an explicit slice. */
+export const baseFromSlice = (s: GeneratorSlice, slotA: number, slotB: number, seed: number): Channels => {
+  if (generatorModeOf(s) === 'colorbox') return buildColorBoxRamp(sliceToColorBox(s)).base;
+  return buildGradientRamp(slotChannels(slotA), slotChannels(slotB), sliceToModsA(s), sliceToModsB(s), sliceToParams(s), null, seed).base;
+};
+/** Imperative: the Build recipe base for the LIVE slice (the v2 Working pipeline folds from it). */
+export const buildBaseNow = (): Channels => {
+  const g = useGeneratorStore.getState();
+  return baseFromSlice(readSlice(), g.slotA, g.slotB, g.noiseSeed);
+};
 const baseChannelsFrom = (slotA: number, slotB: number, seed: number): Channels => {
   const s = readSlice();
   if (generatorModeOf(s) === 'colorbox') return buildColorBoxRamp(sliceToColorBox(s)).base;
   return buildGradientRamp(slotChannels(slotA), slotChannels(slotB), sliceToModsA(s), sliceToModsB(s), sliceToParams(s), null, seed).base;
 };
 
-const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
+export const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
   on && tracks ? { L: trackToRamp(tracks.L), C: trackToRamp(tracks.C), h: trackToRamp(tracks.h) } : null;
 
 /**
@@ -218,12 +240,20 @@ const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
  * recipe — the faint ghost is therefore byte-faithful to what a bake will commit.
  * (Decision 3: detail/smooth = non-destructive, ghost-previewed, bake-to-commit.)
  */
-const fitChannelsToTracks = (base: Channels, detail: number, smooth: number): ChannelTracks => {
+export const fitChannelsToTracks = (base: Channels, detail: number, smooth: number): ChannelTracks => {
   const k = (11 - detail) / 3;
+  const h = unwrapHue(base.h);
+  // A banded source keeps its bands (C.4): its runs become Step keys, and Smooth is not
+  // applied (it would blur the very edges the holds reproduce). Smooth ramps: as before.
+  // Detail decides how SMALL a band still counts as one (10 → every 2-texel run; 2 → only
+  // runs of 10+), so the ghost answers the dial on a banded source too (owner, 2026-09-07
+  // evening: the ghost "needs to update when the slider moves").
+  const runs = flatRuns([base.L, base.C, h], Math.round(2 + (10 - detail)));
+  const sm = runs.length ? 0 : smooth;
   return {
-    L: rampToBezierTrack(smoothChannel(base.L, smooth), 'L', 'Lightness', { eps: 0.01 * k }),
-    C: rampToBezierTrack(smoothChannel(base.C, smooth), 'C', 'Chroma', { eps: 0.01 * k }),
-    h: rampToBezierTrack(smoothChannel(unwrapHue(base.h), smooth), 'h', 'Hue', { eps: 0.06 * k }),
+    L: rampToSteppedTrack(smoothChannel(base.L, sm), runs, 'L', 'Lightness', { eps: 0.01 * k }),
+    C: rampToSteppedTrack(smoothChannel(base.C, sm), runs, 'C', 'Chroma', { eps: 0.01 * k }),
+    h: rampToSteppedTrack(smoothChannel(h, sm), runs, 'h', 'Hue', { eps: 0.06 * k }),
   };
 };
 
@@ -274,6 +304,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   slotB: 5, // Inferno
   tracks: null,
   curvesOn: false,
+  tracksEdited: false,
   detail: 8,
   smooth: 5,
   noiseSeed: 1,
@@ -287,7 +318,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
     genEdit(() => set(which === 'A' ? { slotA: idx } : { slotB: idx }));
     return idx;
   },
-  setTracks: (tracks) => set({ tracks }),
+  setTracks: (tracks) => set({ tracks, tracksEdited: true }),
   setCurvesOn: (on) => genEdit(() => set((s) => ({ curvesOn: on && !!s.tracks }))),
   setDetail: (v) => set({ detail: v }),
   setSmooth: (v) => set({ smooth: v }),
@@ -307,7 +338,8 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       // gradient instead of the A/B mix (hue unwrapping happens inside fitChannelsToTracks).
       set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth), curvesOn: true });
     }),
-  resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false })),
+  fitFromChannels: (base) => genEdit(() => set({ tracks: fitChannelsToTracks(base, get().detail, get().smooth), curvesOn: true, tracksEdited: false })),
+  resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false, tracksEdited: false })),
   // Reset the Mix blend (mixL/mixC/mixH are DDFS params on the slice) to defaults —
   // 0/0/0 = all source A. Mirrors resetCurves: one genEdit() bracket = one undo entry.
   resetMix: () => genEdit(() => setSlice({ mixL: 0, mixC: 0, mixH: 0 })),
@@ -567,4 +599,42 @@ export const useGenParam = <T,>(param: string): [T, (v: T) => void] => {
     set?.({ [param]: v });
   };
   return [value, setValue];
+};
+
+// --- v2 Working pipeline seams -------------------------------------------------------
+// The Gradient Explorer v2 hero runs ONE pipeline over whatever gradient is in its input
+// slot (see palette/core/workingPipeline.ts): Build is just one producer of that input.
+// These hooks expose the three pieces the Working derive needs from this store without
+// duplicating the slice plumbing above. They subscribe (hooks), so a v2 shell re-renders
+// on the same edits the old GeneratorStage does.
+
+/** The Build recipe result the v2 Working pipeline consumes when its input is `build`:
+ *  post-mix / pre-curve channels (or the ColorBox base). Memoized on its real inputs. */
+export const useBuildBase = (): Channels => {
+  const sliceRaw = useEngineStore((s) => (s as any).paletteGenerator) as GeneratorSlice | undefined;
+  const slice = sliceRaw ?? (GENERATOR_PARAM_DEFAULTS as unknown as GeneratorSlice);
+  const slotA = useGeneratorStore((s) => s.slotA);
+  const slotB = useGeneratorStore((s) => s.slotB);
+  const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
+  return useMemo(() => baseFromSlice(slice, slotA, slotB, noiseSeed), [slice, slotA, slotB, noiseSeed]);
+};
+
+/** The Adjust chain (the global modifier params) read off the DDFS slice. The mix
+ *  fields ride along but the Working pipeline zeroes them (A === B there). */
+export const useAdjustParams = (): GeneratorParams => {
+  const sliceRaw = useEngineStore((s) => (s as any).paletteGenerator) as GeneratorSlice | undefined;
+  const slice = sliceRaw ?? (GENERATOR_PARAM_DEFAULTS as unknown as GeneratorSlice);
+  return useMemo(() => sliceToParams(slice), [slice]);
+};
+export const readAdjustParamsNow = (): GeneratorParams => sliceToParams(readSlice());
+
+/** The Shape override: the edited channel curves sampled to 256 values, or null when off. */
+export const useSampledCurves = (): ReturnType<typeof sampleCurves> => {
+  const curvesOn = useGeneratorStore((s) => s.curvesOn);
+  const tracks = useGeneratorStore((s) => s.tracks);
+  return useMemo(() => sampleCurves(tracks, curvesOn), [tracks, curvesOn]);
+};
+export const readSampledCurvesNow = (): ReturnType<typeof sampleCurves> => {
+  const g = useGeneratorStore.getState();
+  return sampleCurves(g.tracks, g.curvesOn);
 };

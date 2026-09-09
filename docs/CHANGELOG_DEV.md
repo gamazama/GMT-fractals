@@ -4,6 +4,80 @@ Chronological log of significant changes, newest first. Began with the v0.9.6
 engine-extraction cycle and continues past it. User-facing release notes live in
 [`docs/releases/`](releases/); this file is the engineering record.
 
+## 2026-09-09
+
+Released as **0.9.8.3** ([`docs/releases/0.9.8.3.md`](releases/0.9.8.3.md)). 131 commits
+since 0.9.8.2: 36 closing the overnight audit's backlog on `main`, 95 building the
+Gradient Explorer v2 shell on `ge-v2`.
+
+### The audit backlog — 15 "do later" rows, the tooling, and the annotation sweep
+
+**Where**
+- Verdicts per row are in the CLOSED block of [`plans/overnight-audit/TRIAGE-2026-08-02.md`](../plans/overnight-audit/TRIAGE-2026-08-02.md). What remains there is decision-gated (B1/B2, L2604, L2090, L3016, L3098, L2581, L921, L511, L73).
+- **`@invariant` → `@assumption` sweep.** 408 `@invariant` sites in tracked source; **365 named no proof and became `@assumption`**, 43 kept the tag — each of those carries a "proven by", a falsification record, or a named guard plus the assertion it pins. Only the tag word changed on any line (365 insertions, 365 deletions across 151 files). `grep -rn '@assumption'` is now the standing worklist CLAUDE.md says it is.
+- **Nine new guards**, each falsified before its invariant was written: `test:modular-parity`, `test:worklet-analysis`, `test:tick-registry`, `test:shortcuts-teardown`, `test:share-dictionary`, `test:palette-gradientseam`, `test:palette-favients`, `test:frag:catalog-drift`, plus the smokes `smoke:export-watchdog`, `smoke:compile-failed`, `smoke:mobile-layout`.
+- **`smoke:all` is a driver, not an `&&` chain** ([`debug/run-smokes.mts`](../debug/run-smokes.mts)). The chain stopped at the first red, which is how four dead members hid behind one another until 14 of 42 were found never to have run. The driver runs every member and exits with an "N of M failed" table; `--only`, `--from`, `--bail`, `--list`. `check:rule-guards` reads the member list out of its source so a `smoke:all` citation still resolves to the union of the members' reach.
+- **`check:rule-guards` scopes a guards-table row to the path it names** — blind spot 1 of the 2026-07-29 finding. Every `npm run X` in a rule file was flattened into one list matched against the rule's whole `paths:` set, so in a multi-app rule any guard satisfied every row. Falsified by moving `smoke:fluid-toy` into sibling-apps.md's gradient-explorer row: previously identical output, now reported and exit 1. The first clean run caught a real one — a "**Not** `npm run smoke:orbit`" warning that parsed as a citation.
+- **`context:cost` expands globs and refuses a zero-token Layer 2.** Both toy subsystems claimed `fluid-toy/*` / `fractal-toy/*`, which the map (keyed on concrete paths) never matched, so 78 real files costed 0 and the footer told the reader the source was free.
+- **`check:text-bytes`** is the NUL-byte sweep as a standing check: one NUL makes grep call a source file binary and every grep-driven audit goes blind to it. Clean on arrival — 2913 files, 0 findings.
+- `test:frag:scan` → **`report:frag:scan`**, with a REPORT ONLY banner at start. It has no assertion and always exits 0; a `test:*` name promised a gate it never was, and the audit found it cited as passing evidence once.
+
+### Five Modular node definitions corrupted every node after them
+
+**User-facing**
+- Scale, Twist, Bend, Smooth Union and Mix each read one input twice. **Saved Modular scenes containing them render differently now** — they read the values their sliders show.
+
+**Where**
+- [`engine-gmt/data/nodes/definitions.ts`](../engine-gmt/data/nodes/definitions.ts) — `compileGraph`'s `getParam` closure allocates one `uModularParams` slot per unbound call and ignores the key; `updateModularUniforms` writes one value per `def.inputs` entry. Each surplus read burned a slot the packer never filled, so the node read a neighbour's value **and every node compiled after it shifted**. Measured: a Scale in front of a Mandelbulb gave the bulb `power = 0.1` instead of 8. Fixed by hoisting each read into a local — the pattern `IFSScale` already used. `SmoothUnion`'s bare `float h` is scoped too; two in one graph would have redeclared it.
+- New guard [`debug/test-modular-slot-parity.mts`](../debug/test-modular-slot-parity.mts) (`npm run test:modular-parity`), **17 assertions red against the pre-fix definitions**.
+- [`engine-gmt/utils/graphAlg.ts`](../engine-gmt/utils/graphAlg.ts) — `isStructureEqual` is replaced by `structureKey(nodes, edges)`. The old diff compared nodes only and could not see wiring: deleting the output edge or swapping which node feeds a CSG `a`/`b` handle left it equal while `compileGraph`'s output changed, so the shader went stale with no signal. The key covers id/type/enabled/bindings (sorted) / `condition.active` plus sorted `source>target:handle` tuples; params and edge ids are excluded so slider retunes never read as structural.
+- The **Auto Compile** checkbox called `setAutoCompile`, which no slice implemented — clicking it threw, `autoCompile` was never initialised, its branch of `setGraph` was dead and COMPILE pulsed permanently. Control, state field and action deleted; COMPILE pulses only while the live key differs from the compiled one. The scene-load preset field records the key it compiled, and builds a default graph when the file carries none.
+
+### A render throw took the whole app down; a failed compile said nothing
+
+**Where**
+- [`engine/components/AppErrorBoundary.tsx`](../engine/components/AppErrorBoundary.tsx) — there was **no ErrorBoundary anywhere**. One root boundary now wraps every app entry (app-gmt, fluid-toy, fractal-toy, gradient-explorer, mesh-export). Zero store imports and inline colours on purpose: it has to render when the store or theme machinery is what broke. It publishes on `window.__lastBoundaryError`, which `smoke:boot` reads and fails on — so the boundary cannot turn a boot-breaking throw into a green smoke. app-gmt's pre-mount `loadScene` runs above `createRoot().render()`, so it is wrapped separately and hands its error in as `initialError`; the remaining pre-mount gaps are named in an `@assumption`.
+- [`engine-gmt/engine/worker/WorkerProxy.ts`](../engine-gmt/engine/worker/WorkerProxy.ts) gains `lastCompileFailed`. `hasCompiledShader` is set when a compile is **issued**, before the link result — deliberately, for the concurrency reason in `CompileScheduler` — and three call sites read it as success, so a failed compile rendered empty frames indefinitely with only a `console.error`. The new flag is fed by the worker's post-boot ERROR postMessage and cleared when a cycle ends without one; the latch's timing is untouched.
+- [`store/CompileProgressStore.ts`](../store/CompileProgressStore.ts) gains a sticky `failed` phase (`finish()` only leaves `compiling`, so the end of the same cycle cannot overwrite it), and `CompilingIndicator` renders it as a persistent dismissable red pill carrying the first GLSL error line.
+- New `npm run smoke:compile-failed` registers a Mandelbulb clone with a bare identifier in its loop body and asserts both signals, then switches back and asserts both clear. **Falsified twice, independently:** removing the store subscription reds the pill only; removing the proxy assignment reds the flag only.
+
+### An export frame with no timeout, and a share dictionary with no collision check
+
+**Where**
+- `renderExportFrame` had no timeout, so a dropped `EXPORT_FRAME_DONE` left the dialog pending forever. A fixed ceiling was rejected — it would abort a legitimate multi-minute 4K path-traced frame. The worker posts `EXPORT_HEARTBEAT` from inside the sample loop (about once per second of GPU time, after a 1-px readback drains the queue) and the proxy arms a **no-progress** watchdog per frame (60 s default, `opts.stallMs`, 0 disables). Heartbeats extend the window. New `npm run smoke:export-watchdog`: Part A drives the real proxy with synthetic messages on a 400 ms window, Part B renders one real frame on the live worker.
+- [`engine/FeatureSystem.ts`](../engine/FeatureSystem.ts) — `getDictionary()` is memoised, deep-frozen and collision-checked (feature aliases globally, wire keys within a feature, including a `shortId` equal to an un-aliased sibling's name); throws in DEV, warns once in prod. Two `shortId` collisions had shipped and silently dropped one feature's state from every share link for months. New `npm run test:share-dictionary` builds the real dictionary and round-trips a synthetic preset carrying a distinct value for **every param of every feature** through `UrlStateEncoder`, naming the first differing path — falsified by giving AO's Spread the intensity's shortId.
+
+### The Fragmentarium catalog had drifted for three months
+
+**Where**
+- `public/formulas/v3-v4-catalog.json` was generated 2026-04-18 and its builder stripped in `77f6d66a`; it drives the Workshop's pipeline auto-pick and its browse pickers. **87 of 511 rows disagreed with the importers in some column.** New `npm run test:frag:catalog-drift` re-derives V3 detect and V4 process over every manifest entry in node and gates the one provable direction — a catalog `pass` for a pipeline that hard-errors today. Soft drift is reported, not gated: parsing is not rendering. Red on arrival on exactly the two rows the audit named (`Experimental/Knot.frag`, `kosalos/KIFS.frag`, both v4); both demoted in place with a `corrections` array.
+- The Workshop's browse pickers no longer filter `recommended: 'none'` rows out — they are passed as `disabledIds` with a tooltip and "show broken" enables them. **21 shipped formulas were invisible on three-month-old data, all 21 parsing today**, which was the actual user harm.
+
+### The audio path was competing with the renderer for the GPU
+
+**User-facing**
+- Improvement, **not a cure** — see the verdict below.
+
+**Where**
+- Every frame the modulation tick published a fresh `liveModulations` map into the store. `PanelRouter` subscribes to the whole store and the modulated sliders read the map, so **every open panel re-rendered and repainted 60×/s** — GPU raster and composite in the same GPU process as the render worker's WebGL. app-gmt publishes at 20 Hz now (`setLiveModulationPublishInterval`; default 0 keeps fluid-toy and the demo on publish-per-change) and the render path reads this frame's map through `getLiveModulationsNow()`, so a modulated FOV still steps every frame. Measured under a running LFO: **15.6 store publishes/s against 60 ticks/s**.
+- `AudioSpectrum` rasterised on the GPU at 30 Hz; it is CPU raster now (`willReadFrequently`) and draws only while on screen (IntersectionObserver). The deck status poll re-rendered its row 10×/s on identical data.
+- New `?perf` probe ([`engine-gmt/renderer/perfProbe.ts`](../engine-gmt/renderer/perfProbe.ts)) — focus, pointer-over-canvas, audio input kind, rAF rate + gap p95, long tasks, RENDER_TICKs dispatched, frames delivered, hover pre-picks and latency. `raf 60 / ticks 60 / frames 30` means the worker is the bottleneck; `raf 30` means the main thread is.
+- **Owner verdict after testing: audio still drops the GPU consistently.** The probe *itself* cost frames (a per-second console line and a `position: fixed` overlay over the canvas), so `?perf` is quiet by default now — samples every second, prints every 10 s — with `?perf=live` restoring the per-second line and the overlay. Reasoning from source has run out; the next attempt is real profiling on the owner's machine (Chrome DevTools Performance with the GPU track), and `?perf` cannot see GPU time. Tracked as `@bug PRODUCTION` on `connectSystemAudio` in [`engine/features/audioMod/AudioTransport.ts`](../engine/features/audioMod/AudioTransport.ts). The earlier suspicion that the screen-share surface of system-audio capture was the cause is **disproved** — a plain audio file on a deck shows it too.
+
+### Gradient Explorer v2 — the unified shell (`ge-v2`, 95 commits)
+
+Built against [`plans/ge-v2-unified-shell-plan.md`](../plans/ge-v2-unified-shell-plan.md), phase by phase, each closed with an owner walk. Ships as a second entry point (`gradient-explorer-next.html`, already a `vite.config.ts` input) beside the untouched old shell; **Phase G — parity, polish and the swap that retires the old one — is not done**, and neither is Phase F (phone).
+
+**Where**
+- **Phase A** — the visual language primitives; **Phase B** — the hero as a card, designed in Figma with the owner; **Phase C** — the tray under the hero (Mix · Image · Curves · Adjust · stop inspector), one open at a time, each with one bake-or-cancel mechanism and a live preview; **Phase D** — one ground, many sets, the wall showing one set at a time with a rail naming them and the pad as its map; **Phase E** — the picker dialect, a colour wheel with draggable harmony handles replacing the printed harmony rows, shared with app-gmt; **Phase W** — the wallpaper's own controls as on-screen handles rather than sliders.
+- **The four `cpuField` geometry modes moved onto the GPU for live frames** — [`gradient-explorer/fullscreen/modes/geometryFrag.ts`](../gradient-explorer/fullscreen/modes/geometryFrag.ts), one shared body switched on `uGeomId`. The overlay already dropped the dither while anything moved, so every expensive frame was an **undithered** one; those now render through the GLSL mirror while the settled still keeps `renderFieldDithered` exactly as before. **Measured at 2560×1440: 120–151 ms → 0.8–2.3 ms** (50–160×). No quality traded: `debug/test-dither.mts` puts serpentine Floyd–Steinberg against the blue-noise tail at WIGGLE **0.040 vs 0.238** on shallow gradients, which is why the port to `glQuad` was rejected for the settled frame. The cost is two implementations of one law, paid with a guard rather than a promise — `npm run smoke:gx-geom-gpu` renders every geometry both ways at ten parameter sets and compares per pixel (worst max 3 levels, worst mean 0.750; falsified by flipping `BIAS_K` in the shader alone → max 115).
+- **The spline's Extend** took three attempts and the third settles what it *means*: the arc coordinate is no longer renormalised over the extended span, so each extension carries its end's coordinate outward and the extended stretch **repeats the edge colour** — which is what a linear gradient does outside its two stops. Measured on a straight path with a black→white ramp: Extend off leaves the margins drifting at 61 and 137 (mid-grey); Extend on puts them at 0 and 237.
+- **A stage with two canvases needs a guard that knows there are two.** The spline editor portals its own live preview canvas *over* the overlay's canvas; every probe used `querySelector('… canvas')` — the first match — so all of them reported success while the owner watched a frozen picture. `smoke:gx-spline` [4] now asserts both canvases agree.
+- **Slider ranges are not caps.** `ScalarInput`'s value cell is a text field and a drag, both of which go past the track's ends; the spline setters stopped clamping to the track range and keep only what the maths requires, each control declaring `hardMin`/`hardMax` far outside its track.
+- Guards for the area: `smoke:ge-next`, `smoke:ge-hero`, `smoke:ge-tray`, `smoke:ge-ground`, `smoke:ge-wallpaper`, `smoke:gx-spline`, `smoke:gx-handles`, `smoke:gx-geom-gpu`, `smoke:liquify`, `test:palette` (18 links), `test:dither`.
+
+**Ops note, twice-learned.** Editing a module a smoke drives by bare-URL import (`fullscreenStore`, `splineMode`) HMR-invalidates it and the smoke gets a **second instance**; both smokes name the hazard in their failure text. Restart the dev server after editing either. Separately: several "the app breaks all the time" reports traced to writing invented shapes into stores while probing (a fabricated `tracks.L` reaches `evaluateTrackValue` and the error boundary replaces the page) and to browsing a dev server mid-edit. Drive stores through the app's own setters; do not add guards for self-inflicted store corruption.
+
 ## 2026-09-01
 
 ### Mirror reflections had hard stair-stepped edges

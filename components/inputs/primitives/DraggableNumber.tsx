@@ -149,7 +149,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
                 onChange={(e) => handleInputChange(e.target.value)}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
-                className="w-full h-full bg-surface-sunken text-fg text-xs border-none outline-none font-mono text-center px-1"
+                className="w-full h-full bg-transparent text-fg text-xs border-none outline-none font-mono text-center px-1"
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
             />

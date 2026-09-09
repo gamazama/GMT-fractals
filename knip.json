@@ -8,6 +8,7 @@
     "fractal-toy/main.tsx",
     "mesh-export/main.tsx",
     "gradient-explorer/main.tsx",
+    "gradient-explorer/v2/main.tsx",
     "engine/plugins/**/*.{ts,tsx}",
     "debug/smoke-*.mts",
     "debug/test-*.mts",

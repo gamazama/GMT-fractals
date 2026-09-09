@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gradient Explorer v2 — mock C (one ground, one hero, one shelf)</title>
+<style>
+  /* light-grey scheme (engine preset brightness 81) */
+  :root {
+    --bg: #cfcfd2; --ground: #c6c6ca; --dock: #e4e4e7; --section: #ececee; --line: rgba(0,0,0,.14); --line2: rgba(0,0,0,.24);
+    --fg: #1e1f23; --muted: #55585f; --dim: #80838b; --accent: #0f7f93; --accent-dim: rgba(15,127,147,.14);
+    --star: #b8860b; --armed: #6b3fd6; --armed-dim: rgba(107,63,214,.10); --live: #1f8a4c; --edited: #b4611a;
+    --topbar-h: 48px; --hero-side: 88px; --use-w: 128px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #9d9da2; color: var(--fg); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; }
+  input[type=range] { accent-color: var(--accent); }
+  .frame { position: relative; width: 100%; height: 100vh; background: var(--bg); display: flex; flex-direction: column; overflow: hidden; margin: 0 auto; }
+  .frame > * { min-width: 0; }
+  .hidden { display: none !important; }
+
+  /* top bar — the app, not the gradient */
+  .topbar { height: var(--topbar-h); flex: none; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--dock); z-index: 6; }
+  .brand { font-weight: 700; font-size: 15px; margin-right: auto; }
+  .brand span { color: var(--dim); font-weight: 500; margin-left: 8px; font-size: 12px; }
+  .tb { height: 32px; padding: 0 12px; border-radius: 8px; color: var(--muted); }
+  .tb:hover { background: rgba(0,0,0,.06); color: var(--fg); }
+  .tb.icon { width: 32px; padding: 0; }
+  .tb.gmt { border: 1px solid var(--line); color: var(--fg); }
+
+  /* hero — the gradient: source · work · use */
+  .hero { position: relative; flex: none; display: grid; grid-template-columns: var(--hero-side) minmax(0,1fr) var(--use-w); gap: 16px; padding: 12px 24px 10px; background: var(--dock); border-bottom: 1px solid var(--line); z-index: 5; }
+  .imgslot { width: var(--hero-side); height: var(--hero-side); border-radius: 8px; border: 1.5px dashed var(--line2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--dim); font-size: 11px; cursor: pointer; text-align: center; background: var(--section); }
+  .imgslot:hover { border-color: var(--accent); color: var(--accent); }
+  .imgslot.filled { border: 1px solid var(--line2); color: #fff; text-shadow: 0 1px 2px #000; background: radial-gradient(circle at 30% 30%, #f8b26a 0, #d15a3a 30%, transparent 55%), radial-gradient(circle at 75% 60%, #2c5f9e 0, #172a4b 40%, transparent 70%), linear-gradient(180deg, #6b2a4d, #101a2e); }
+  .imgslot.on { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .side-lbl { font-size: 10.5px; color: var(--dim); text-align: center; margin-top: 4px; letter-spacing: .04em; text-transform: uppercase; }
+  .work { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .hrow { display: flex; align-items: center; gap: 8px; }
+  .hrow .name { font-size: 18px; font-weight: 600; background: transparent; border: 0; color: var(--fg); min-width: 60px; max-width: 320px; padding: 0; outline: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; color: #fff; border: 0; white-space: nowrap; font-weight: 600; }
+  .chip.state { background: var(--dim); }
+  .act { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 8px; font-size: 13px; color: var(--muted); border: 1px solid var(--line); white-space: nowrap; background: var(--section); }
+  .act:hover { color: var(--fg); border-color: var(--line2); }
+  .chip.live { background: var(--live); }
+  .chip.edited { background: var(--edited); }
+  .chip.ghost { background: transparent; color: var(--dim); font-weight: 500; }
+  
+  .srcband { height: 22px; border-radius: 5px; border: 1px solid var(--line); display: none; align-items: center; padding: 0 8px; font-size: 11px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+  .srcband.on { display: flex; }
+  .palette { display: flex; gap: 5px; height: 26px; align-items: center; }
+  .sw { flex: 1; height: 22px; border-radius: 5px; cursor: ew-resize; position: relative; border: 1px solid rgba(0,0,0,.25); }
+  .sw:hover { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .sw:hover::after { content: attr(data-hex); position: absolute; left: 50%; top: -24px; transform: translateX(-50%); background: var(--fg); color: #fff; font: 600 11px/1 ui-monospace, monospace; padding: 4px 6px; border-radius: 4px; white-space: nowrap; z-index: 2; }
+  .palette .pl { display: flex; gap: 2px; margin-left: 6px; }
+  .palette .pl button { height: 22px; padding: 0 7px; border-radius: 6px; font-size: 11px; color: var(--dim); }
+  .palette .pl button.on { background: var(--accent-dim); color: var(--accent); }
+  .ramp { height: 56px; border-radius: 8px; border: 1px solid var(--line2); position: relative; cursor: pointer; }
+  .stops { position: relative; height: 12px; }
+  .stop { position: absolute; top: 0; width: 11px; height: 11px; transform: translateX(-50%) rotate(45deg); border: 2px solid #fff; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.6); cursor: ew-resize; }
+  .stop.sel { border-color: var(--accent); }
+  .traytabs { display: flex; gap: 4px; align-items: center; margin-top: 2px; }
+  .traytabs button { height: 26px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: var(--muted); }
+  .traytabs button:hover { background: rgba(0,0,0,.05); color: var(--fg); }
+  .traytabs button.on { background: var(--accent-dim); color: var(--accent); }
+  .traytabs button.live::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 4px; background: var(--live); margin-left: 6px; vertical-align: middle; }
+  .traytabs .hint { margin-left: auto; font-size: 13px; color: var(--muted); }
+  .use { display: flex; flex-direction: column; gap: 6px; }
+  .use button { height: 30px; border-radius: 8px; border: 1px solid var(--line); font-size: 13px; color: var(--fg); background: var(--section); }
+  .use button:hover { border-color: var(--accent); color: var(--accent); }
+  .use button.star.on { color: var(--star); border-color: var(--star); }
+  .use .side-lbl { margin-top: auto; }
+
+  /* quiet hero: pointer lives in the wall */
+  .hero.quiet .palette, .hero.quiet .traytabs, .hero.quiet .srcband, .hero.quiet .stops { display: none; }
+  .hero.quiet .ramp { height: 34px; }
+  .hero.quiet .imgslot { height: 56px; width: var(--hero-side); }
+  .hero.quiet .use { flex-direction: row; flex-wrap: wrap; }
+  .hero.quiet .use button { height: 24px; font-size: 11px; padding: 0 6px; flex: 1; }
+  .hero.quiet .use .side-lbl { display: none; }
+
+  /* transform tray — overlays the top of the ground, one at a time */
+  .tray { position: absolute; left: 24px; right: 24px; top: 100%; z-index: 4; background: var(--section); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; padding: 10px 20px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.18); display: none; }
+  .tray.on { display: block; }
+  .tray .tt { display: none; }
+  .tray .tt.on { display: block; }
+  .tray .head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+  .tray .head b { color: var(--fg); font-weight: 600; }
+  .tray .head .x { margin-left: auto; color: var(--dim); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 20px; }
+  .sl { display: flex; align-items: center; gap: 10px; height: 30px; font-size: 13px; }
+  .sl label { width: 104px; color: var(--muted); }
+  .sl .bar { flex: 1; height: 22px; border-radius: 5px; background: var(--dock); border: 1px solid var(--line); position: relative; cursor: ew-resize; }
+  .sl .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-dim); border-right: 2px solid var(--accent); border-radius: 5px 0 0 5px; }
+  .sl output { width: 52px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+  .sl input[type=range] { position: absolute; inset: 0; width: 100%; opacity: 0; margin: 0; cursor: ew-resize; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { padding: 5px 12px; font-size: 13px; color: var(--muted); }
+  .seg button.on { background: var(--accent-dim); color: var(--accent); }
+  .curves { height: 160px; border-radius: 8px; background: var(--dock); border: 1px solid var(--line); width: 100%; }
+  /* mix tray */
+  .mixrow { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 16px; align-items: end; }
+  .mixmid .sl label { width: 84px; }
+  .mixmid .swap { margin-left: 6px; width: 28px; height: 26px; font-size: 14px; }
+  #tt-mix .head { margin-bottom: 6px; }
+  .slot .lbl { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--dim); margin-bottom: 5px; }
+  .slot .lbl b { color: var(--fg); font-size: 13px; font-weight: 600; }
+  .slot .sramp { height: 40px; border-radius: 8px; border: 1px solid var(--line2); }
+  .slot .sramp.armed { border: 2px dashed var(--armed); background: var(--armed-dim); display: flex; align-items: center; justify-content: center; color: var(--armed); font-size: 12px; }
+  .swap { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); font-size: 16px; }
+  /* extract tray */
+  .exgrid { display: grid; grid-template-columns: minmax(0, 420px) 1fr; gap: 20px; }
+  .photo { aspect-ratio: 4 / 3; border-radius: 10px; border: 1px solid var(--line2); position: relative; overflow: hidden; background: radial-gradient(circle at 30% 30%, #f8b26a 0, #d15a3a 30%, transparent 55%), radial-gradient(circle at 75% 60%, #2c5f9e 0, #172a4b 40%, transparent 70%), linear-gradient(180deg, #6b2a4d, #101a2e); }
+  .photo .path { position: absolute; left: 20%; top: 70%; width: 60%; height: 2px; background: #fff; transform: rotate(-24deg); transform-origin: left; display: none; }
+  .photo .h { position: absolute; width: 16px; height: 16px; border: 2px solid #fff; border-radius: 50%; background: rgba(0,0,0,.5); display: none; }
+  .photo.path .path, .photo.path .h { display: block; }
+  .dom { display: flex; gap: 8px; margin: 12px 0 4px; }
+  .dom i { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line2); cursor: grab; }
+
+  /* the ground: the wall, always */
+  .ground { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+  .wallwrap { position: absolute; inset: 0; overflow: auto; cursor: pointer; background: radial-gradient(circle at 1px 1px, rgba(0,0,0,.09) 1px, transparent 1px) 0 0 / 16px 16px, var(--ground); }
+  .wall { padding: 56px 24px 20px 96px; }
+  .band { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; position: relative; }
+  .band::before { content: attr(data-label); position: absolute; left: -80px; top: 2px; width: 68px; text-align: right; font-size: 11px; color: var(--dim); }
+  .tile { width: 44px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,.18); }
+  .tile:hover { outline: 2px solid var(--fg); }
+  .tile.sel { outline: 2px solid var(--accent); }
+  .tile.dim { opacity: .12; }
+  .float { position: absolute; z-index: 3; background: rgba(228,228,231,.94); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+  .search { top: 10px; left: 24px; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; width: 420px; }
+  .search input { background: transparent; border: 0; color: var(--fg); outline: 0; flex: 1; min-width: 0; }
+  .search .cnt { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .search .fb { position: relative; height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .search .fb .badge { position: absolute; top: -7px; right: -7px; min-width: 17px; height: 17px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; display: none; align-items: center; justify-content: center; padding: 0 4px; }
+  .search .fb .badge.on { display: inline-flex; }
+  .sentence { top: 10px; left: 456px; height: 34px; display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--muted); cursor: pointer; }
+  .tools { top: 10px; right: 18px; display: flex; gap: 2px; padding: 3px; }
+  .tools button { width: 30px; height: 28px; border-radius: 7px; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+  .tools svg, .ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .ic { color: var(--muted); }
+  .tools button.on { background: var(--accent-dim); color: var(--accent); }
+  .zoom { bottom: 12px; right: 18px; font-size: 12px; color: var(--dim); padding: 4px 10px; border-radius: 8px; }
+  .armedpill { bottom: 12px; left: 50%; transform: translateX(-50%); background: var(--armed); color: #fff; border-color: var(--armed); border-radius: 15px; padding: 0 6px 0 14px; height: 30px; display: none; align-items: center; gap: 8px; font-size: 13px; }
+  .armedpill.on { display: flex; }
+  .armedpill button { width: 22px; height: 22px; border-radius: 11px; color: #fff; background: rgba(255,255,255,.18); }
+  .welcome { top: 54px; left: 50%; transform: translateX(-50%); text-align: center; color: var(--muted); font-size: 13px; pointer-events: none; padding: 8px 16px; border-radius: 12px; }
+  .welcome b { display: block; color: var(--fg); font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .caption { bottom: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; color: var(--muted); padding: 5px 12px; border-radius: 8px; display: none; }
+  .caption.on { display: block; }
+
+  /* filters popover */
+  .pop { position: absolute; z-index: 10; background: var(--dock); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  #filters { left: 24px; top: 52px; width: 460px; }
+  .pop h4 { margin: 0 0 8px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  .hues { display: flex; gap: 6px; margin-bottom: 12px; }
+  .hue { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; }
+  .hue.on { border-color: var(--fg); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chips button { height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .chips button.on { color: var(--fg); border-color: var(--line2); background: rgba(0,0,0,.04); }
+  .chips button.lazy { border-style: dashed; }
+  .pop .foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--dim); }
+  .pop .foot a { color: var(--accent); cursor: pointer; }
+
+  /* the shelf — the only memory */
+  .shelf { flex: none; background: var(--dock); border-top: 1px solid var(--line); z-index: 5; }
+  .shelf .row { display: flex; align-items: center; gap: 6px; padding: 6px 24px; height: 50px; overflow-x: auto; }
+  .zone { display: flex; align-items: center; gap: 6px; padding-right: 14px; margin-right: 8px; border-right: 1px solid var(--line); flex: none; }
+  .zone:last-of-type { border-right: 0; }
+  .zone .z { font-size: 11px; color: var(--muted); margin-right: 6px; white-space: nowrap; text-transform: uppercase; letter-spacing: .06em; }
+  .mi { width: 56px; height: 30px; border-radius: 6px; border: 1px solid var(--line2); cursor: pointer; flex: none; position: relative; }
+  .mi:hover { outline: 2px solid var(--fg); }
+  .mi.star::after { content: "★"; position: absolute; right: 3px; top: 0; font-size: 11px; color: var(--star); text-shadow: 0 0 2px #000; }
+  .mi.snap::before { content: ""; position: absolute; right: -1px; top: -1px; width: 10px; height: 10px; border-radius: 0 6px 0 6px; background: var(--fg); border: 1px solid #fff; }
+  .mi.picked { outline: 2px solid var(--armed); }
+  .shelf .tail { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+  .shelf .tail button { height: 26px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .tween { display: none; align-items: center; gap: 8px; font-size: 12px; color: var(--armed); flex: none; }
+  .tween.on { display: flex; }
+  .tween input { width: 140px; accent-color: var(--armed); }
+  .shelf .full { display: none; padding: 4px 24px 14px; border-top: 1px dashed var(--line); }
+  .shelf.open .full { display: block; }
+  .grp { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+  .grp .g { width: 120px; font-size: 12px; color: var(--muted); flex: none; }
+  .grp .add { color: var(--dim); font-size: 12px; margin-left: 6px; }
+  .empty { font-size: 13px; color: var(--muted); }
+
+  /* overlays */
+  .ovl { position: absolute; inset: 0; background: rgba(40,40,44,.55); display: none; align-items: center; justify-content: center; z-index: 20; }
+  .ovl.on { display: flex; }
+  .dlg { width: min(680px, 92%); background: var(--dock); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .dlg h3 { margin: 0 0 14px; font-size: 16px; display: flex; align-items: center; }
+  .dlg h3 button { margin-left: auto; color: var(--muted); }
+  .fmtgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .fmtgrid h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .fmtgrid button { display: block; width: 100%; text-align: left; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+  .fmtgrid button:hover { background: var(--section); }
+  .wp { position: absolute; inset: 0; z-index: 20; display: none; flex-direction: column; }
+  .wp.on { display: flex; }
+  .wp .canvas { flex: 1; }
+  .wp .bar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--dock); border-top: 1px solid var(--line); flex-wrap: wrap; font-size: 13px; }
+  .toast { position: absolute; left: 50%; bottom: 70px; transform: translateX(-50%); background: var(--fg); color: #fff; border-radius: 10px; padding: 9px 16px; font-size: 13px; display: none; z-index: 30; }
+  .toast.on { display: block; }
+  .measure { position: absolute; right: 8px; bottom: 60px; z-index: 40; font: 11px/1.5 ui-monospace, monospace; color: var(--muted); background: rgba(228,228,231,.9); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; pointer-events: none; }
+
+  /* phone: three sheets, no tab bar */
+  .frame.phone { width: 390px; height: 800px; margin: 20px auto; border-radius: 24px; border: 6px solid #333; }
+  .phone .topbar { padding: 0 10px; }
+  .phone .topbar .brand span, .phone .topbar .tb.gmt { display: none; }
+  .phone .hero { grid-template-columns: 1fr; gap: 6px; padding: 8px 12px; }
+  .phone .hero .imgslot { width: 100%; height: 26px; flex-direction: row; gap: 6px; }
+  .phone .hero .imgslot.filled { height: 40px; }
+  .phone .side-lbl { display: none; }
+  .phone .use { flex-direction: row; }
+  .phone .use button { flex: 1; height: 28px; font-size: 12px; padding: 0; }
+  .phone .tray { top: auto; bottom: 0; left: 0; right: 0; border-radius: 14px 14px 0 0; border: 1px solid var(--line); border-bottom: 0; box-shadow: 0 -10px 30px rgba(0,0,0,.2); max-height: 60%; overflow: auto; }
+  .phone .wall { padding: 52px 12px 20px 12px; }
+  .phone .band::before { display: none; }
+  .phone .search { width: calc(100% - 24px); left: 12px; }
+  .phone .sentence, .phone .zoom { display: none; }
+  .phone .tools { top: auto; bottom: 10px; right: 12px; }
+  .phone .shelf .row { padding: 6px 12px; }
+  .phone .shelf .tail button:not(.exp) { display: none; }
+  .phone .hero.quiet .use { display: none; }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+
+  <div class="topbar">
+    <div class="brand">Gradient Explorer <span>mock C · one ground, one hero, one shelf</span></div>
+    <button class="tb icon" title="Undo (Ctrl+Z)">↶</button>
+    <button class="tb icon" title="Redo (Ctrl+Y)">↷</button>
+    <button class="tb" id="phoneBtn" title="Preview the phone layout">Phone</button>
+    <button class="tb icon" title="Settings">⚙</button>
+    <button class="tb gmt" id="gmtBtn" title="Carries the working gradient back">← Back to GMT</button>
+  </div>
+
+  <!-- HERO: source · work · use. Appears on the first pick. -->
+  <div class="hero hidden" id="hero">
+    <div>
+      <div class="imgslot" id="imgslot" title="Drop an image anywhere, or click"><span>image</span><span>drop here</span></div>
+      <div class="side-lbl">source</div>
+    </div>
+    <div class="work">
+      <div class="hrow">
+        <input class="name" id="name" value="Dusk over water">
+        <span class="chip state" id="state">picked</span>
+        <button class="act hidden" id="returnBtn" onclick="returnToSource()">↩ return to source</button>
+        <button class="act" onclick="likeThis()">≈ more like this</button>
+      </div>
+      <div class="srcband" id="srcband">A · Dusk over water</div>
+      <div class="palette" id="palette"></div>
+      <div class="ramp" id="ramp" onclick="editRamp()"></div>
+      <div class="stops" id="stopsRow"></div>
+      <div class="traytabs" id="traytabs">
+        <button data-t="mix" onclick="toggleTray('mix')">Mix ▾</button>
+        <button data-t="extract" onclick="toggleTray('extract')">Extract ▾</button>
+        <button data-t="curves" onclick="toggleTray('curves')">Curves ▾</button>
+        <button data-t="adjust" onclick="toggleTray('adjust')">Adjust ▾</button>
+        <span class="hint">one open at a time · Esc closes</span>
+      </div>
+    </div>
+    <div class="use">
+      <button class="star" id="starBtn" onclick="star()">★ Keep</button>
+      <button onclick="toast('Link copied — it opens this gradient')">Share</button>
+      <button onclick="show('export')">Export</button>
+      <button onclick="show('wallpaper')">Wallpaper</button>
+      <div class="side-lbl">use</div>
+    </div>
+
+    <!-- TRAY: overlays the top of the ground -->
+    <div class="tray" id="tray">
+      <div class="tt" id="tt-mix">
+        <div class="head"><b>Mix</b> A is your working gradient · pick B from the wall or the shelf <button class="x" onclick="closeTray()">✕</button></div>
+        <div class="mixrow">
+          <div class="slot"><div class="lbl"><b>A</b> <span id="mixAlbl">—</span></div><div class="sramp" id="mixA"></div></div>
+          <div class="mixmid">
+            <div class="sl"><label>Crossfade</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>0.50</output></div>
+            <div class="sl"><label>L · C · h split</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>0.50</output><button class="swap" title="Swap A and B">⇄</button></div>
+          </div>
+          <div class="slot"><div class="lbl"><b>B</b> <span id="mixBlbl">armed — next click fills</span></div><div class="sramp armed" id="mixB">pick one below</div></div>
+        </div>
+      </div>
+      <div class="tt" id="tt-extract">
+        <div class="head"><b>Extract</b> from the image in the source slot
+          <span class="seg" style="margin-left:8px"><button class="on" onclick="method(this,'dom')">Dominant</button><button onclick="method(this,'tones')">Tones</button><button onclick="method(this,'path')">Path</button></span>
+          <button class="x" onclick="closeTray()">✕</button></div>
+        <div class="exgrid">
+          <div class="photo" id="photo"><div class="path"></div><div class="h" style="left:18%;top:68%"></div><div class="h" style="left:76%;top:44%"></div></div>
+          <div>
+            <div class="sl"><label>Colours</label><div class="bar"><i style="width:60%"></i><input type="range" value="60" oninput="sl(this)"></div><output>7</output></div>
+            <div class="sl"><label>Smoothing</label><div class="bar"><i style="width:30%"></i><input type="range" value="30" oninput="sl(this)"></div><output>0.30</output></div>
+            <div class="sl"><label>Ignore greys</label><div class="bar"><i style="width:20%"></i><input type="range" value="20" oninput="sl(this)"></div><output>0.20</output></div>
+            <div class="dom"><i style="background:#f8b26a"></i><i style="background:#d15a3a"></i><i style="background:#6b2a4d"></i><i style="background:#2c5f9e"></i><i style="background:#172a4b"></i></div>
+            <div class="empty">drag a swatch onto the palette row to add a stop · the same image is the Gradient Map backdrop in Wallpaper</div>
+          </div>
+        </div>
+      </div>
+      <div class="tt" id="tt-curves">
+        <div class="head"><b>Curves</b> L / C / h shape · fitted from the source
+          <span class="seg" style="margin-left:8px"><button class="on">L</button><button>C</button><button>h</button></span>
+          <button class="act" style="margin-left:8px">Re-fit</button><button class="act">Smooth</button><button class="act">Off</button>
+          <button class="x" onclick="closeTray()">✕</button></div>
+        <svg class="curves" viewBox="0 0 800 160" preserveAspectRatio="none"><path d="M0 140 C 200 130, 300 40, 500 50 S 700 20, 800 30" fill="none" stroke="#0f7f93" stroke-width="2"/><path d="M0 140 C 220 140, 280 60, 500 60 S 720 40, 800 30" fill="none" stroke="#0f7f93" stroke-width="1" stroke-dasharray="4 4" opacity=".5"/></svg>
+      </div>
+      <div class="tt" id="tt-adjust">
+        <div class="head"><b>Adjust</b> live on the working gradient · bakes on the first stop edit <button class="act" style="margin-left:8px">Reset</button><button class="x" onclick="closeTray()">✕</button></div>
+        <div class="grid2">
+          <div class="sl"><label>Hue rotate</label><div class="bar"><i style="width:0%"></i><input type="range" value="0" oninput="sl(this)"></div><output>0°</output></div>
+          <div class="sl"><label>Repeats</label><div class="bar"><i style="width:10%"></i><input type="range" value="10" oninput="sl(this)"></div><output>1</output></div>
+          <div class="sl"><label>Chroma ×</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>1.00</output></div>
+          <div class="sl"><label>Phase</label><div class="bar"><i style="width:0%"></i><input type="range" value="0" oninput="sl(this)"></div><output>0.00</output></div>
+          <div class="sl"><label>Contrast</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>0.00</output></div>
+          <div class="sl"><label>Noise</label><div class="bar"><i style="width:0%"></i><input type="range" value="0" oninput="sl(this)"></div><output>0.00</output></div>
+          <div class="sl"><label>Posterize</label><div class="bar"><i style="width:0%"></i><input type="range" value="0" oninput="sl(this)"></div><output>off</output></div>
+          <div class="sl"><label>Mirror · Reverse</label><span class="seg"><button>Mirror</button><button>Reverse</button></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GROUND: the wall, always -->
+  <div class="ground" id="ground">
+    <div class="wallwrap" id="wallwrap"><div class="wall" id="wall"></div></div>
+    <div class="float search"><svg class="ic" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg><input id="q" placeholder="Search 3,014 gradients"><span class="cnt" id="cnt">3,014</span><button class="fb" onclick="togglePop('filters')">Filters <span class="badge" id="fbadge">0</span></button></div>
+    <div class="float sentence" onclick="togglePop('filters')">by theme · rows by lightness · sorted by hue</div>
+    <div class="float tools"><button title="Zoom" onclick="tool(this,'zoom')"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4M7 5v4"/></svg></button><button title="Box" onclick="tool(this,'box')"><svg viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="9" rx="1"/></svg></button><button title="Lasso" onclick="tool(this,'lasso')"><svg viewBox="0 0 16 16"><path d="M8 2.5c3.3 0 5.5 1.6 5.5 3.6S11.3 9.7 8 9.7 2.5 8.1 2.5 6.1 4.7 2.5 8 2.5zM5 9.5c-1 1.5-.5 3 1 4"/></svg></button><button title="Paint" onclick="tool(this,'paint')"><svg viewBox="0 0 16 16"><path d="M3 13l1-3 7-7 2 2-7 7-3 1zM10 4l2 2"/></svg></button></div>
+    <div class="float zoom">100 % · Fit</div>
+    <div class="float armedpill" id="armedpill"><span id="armedtxt">Picking for Mix slot B</span><button onclick="disarm()">✕</button></div>
+    <div class="float welcome" id="welcome"><b>Click any gradient to start</b>the same click again keeps it · drop an image anywhere</div>
+    <div class="float caption" id="caption">draw around the ones you like, then <a>keep</a> or <a>cut</a></div>
+
+    <div class="pop hidden" id="filters">
+      <h4>Hue</h4>
+      <div class="hues"><button class="hue" style="background:#e5484d" onclick="hue(this)"></button><button class="hue" style="background:#f0883e" onclick="hue(this)"></button><button class="hue" style="background:#f5c542" onclick="hue(this)"></button><button class="hue" style="background:#46a758" onclick="hue(this)"></button><button class="hue" style="background:#12a594" onclick="hue(this)"></button><button class="hue" style="background:#3e8fff" onclick="hue(this)"></button><button class="hue" style="background:#8e4ec6" onclick="hue(this)"></button><button class="hue" style="background:#e93d82" onclick="hue(this)"></button><button class="hue" style="background:#8f8f8f" onclick="hue(this)"></button></div>
+      <h4>Look</h4>
+      <div class="sl"><label>light ↔ dark</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>any</output></div>
+      <div class="sl"><label>muted ↔ vivid</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>any</output></div>
+      <div class="sl"><label>simple ↔ complex</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>any</output></div>
+      <div class="sl"><label>warm ↔ cool</label><div class="bar"><i style="width:50%"></i><input type="range" value="50" oninput="sl(this)"></div><output>any</output></div>
+      <h4 style="margin-top:10px">Sources</h4>
+      <div class="chips"><button class="on">Built-in</button><button class="on">cpt-city</button><button class="lazy">Fractint packs</button><button class="lazy">Softology</button><button class="lazy">Ultra Fractal</button></div>
+      <div class="foot"><span id="fcount">3,014 shown</span><a onclick="clearF()">Clear</a><span style="margin-left:auto">arrange: <a>by theme · rows by lightness · sorted by hue</a></span></div>
+    </div>
+  </div>
+
+  <!-- SHELF: the only memory -->
+  <div class="shelf hidden" id="shelf">
+    <div class="row">
+      <div class="zone" id="zRecent"><span class="z">Recent</span></div>
+      <div class="zone" id="zStar"><span class="z">Starred</span><span class="empty">★ on the hero files it here</span></div>
+      <div class="zone" id="zSnap"><span class="z">Snapshots</span><span class="empty" id="snapEmpty">a snapshot remembers everything, trays included</span></div>
+      <div class="tween" id="tween"><span>tween</span><input type="range" value="40"><span>0.40</span><button class="act" onclick="bakeTween()">Bake</button></div>
+      <div class="tail"><button onclick="snapshot()">+ Snapshot</button><button class="exp" onclick="document.getElementById('shelf').classList.toggle('open')">groups ▴</button></div>
+    </div>
+    <div class="full">
+      <div class="grp"><span class="g">Sunsets</span><div class="mi" style="background:linear-gradient(90deg,#ff7a3d,#e34b7d)"></div><div class="mi" style="background:linear-gradient(90deg,#f5c542,#d15a3a)"></div><span class="add">+ drop here</span></div>
+      <div class="grp"><span class="g">Presets</span><div class="mi" style="background:linear-gradient(90deg,#000,#fff)"></div><div class="mi" style="background:linear-gradient(90deg,#3e8fff,#12a594,#f5c542)"></div><div class="mi" style="background:linear-gradient(90deg,#8e4ec6,#e93d82)"></div></div>
+      <div class="grp"><span class="g"><a style="color:var(--accent)">+ New group</a></span><span class="empty" style="margin-left:auto">search · list view · rename · import / export · export a group as one file or zip · contact sheet</span></div>
+    </div>
+  </div>
+
+  <div class="ovl" id="export"><div class="dlg"><h3>Export · <span style="font-weight:400;margin-left:6px" id="expName">Dusk over water</span><button onclick="hide('export')">✕</button></h3>
+    <div class="fmtgrid">
+      <div><h4>Web</h4><button>CSS</button><button>SVG</button><button>Tailwind</button><button>Design tokens</button></div>
+      <div><h4>Design apps</h4><button>.ase</button><button>.grd Photoshop</button><button>.ai Illustrator</button><button>.idml InDesign</button><button>.gpl / .ggr GIMP</button><button>Paint.NET</button></div>
+      <div><h4>Fractal + 3D</h4><button>.map Fractint</button><button>.ugr Ultra Fractal</button><button>.cpt</button></div>
+      <div><h4>Code + data</h4><button>JSON</button><button>JS array</button><button>Python</button><button>CSV</button><button>Hex list</button><button>PNG strip</button></div>
+    </div>
+    <div class="empty" style="margin-top:12px">Copy or Download · the same dialog exports a shelf group</div>
+  </div></div>
+
+  <div class="wp" id="wallpaper"><div class="canvas" id="wpcanvas"></div>
+    <div class="bar"><span class="seg"><button class="on">Linear</button><button>Radial</button><button>Conic</button><button>Arch</button><button>Fractal</button><button>Liquify</button><button>Parallax</button><button>Spline</button><button id="gmapBtn">Gradient map</button></span>
+      <span style="margin-left:auto">Phone · Square · 1080p · 4K · custom</span><span class="seg"><button class="on">Landscape</button><button>Portrait</button></span><label><input type="checkbox" checked> dither</label><label><input type="checkbox"> ×2</label><button class="act">Export PNG · 3840×2160</button><button class="act" onclick="hide('wallpaper')">Close</button></div></div>
+
+  <div class="toast" id="toast"></div>
+  <div class="measure" id="measure"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const grads = [];
+const hues = [0,20,35,50,90,150,180,210,260,300,330];
+function rnd(a,b){return a+Math.random()*(b-a)}
+function mk(h){ const s=rnd(55,90), l1=rnd(30,55), l2=rnd(60,85), h2=(h+rnd(-60,60)+360)%360; return {h, css:`linear-gradient(90deg,hsl(${h} ${s}% ${l1}%),hsl(${h2} ${s}% ${l2}%))`, cols:[`hsl(${h} ${s}% ${l1}%)`,`hsl(${(h+h2)/2} ${s}% ${(l1+l2)/2}%)`,`hsl(${h2} ${s}% ${l2}%)`], name: ['Dusk','Ember','Tide','Meadow','Slate','Rose','Copper','Fjord','Velvet','Lime'][Math.floor(rnd(0,10))]+' '+['over water','glow','line','walk','shadow','haze','bloom','drift'][Math.floor(rnd(0,8))]}; }
+const wall=$('wall');
+['warm','cool','neutral','vivid','pastel'].forEach((lbl,bi)=>{ const b=document.createElement('div'); b.className='band'; b.dataset.label=lbl; for(let i=0;i<64;i++){ const g=mk(hues[(bi*3+i)%hues.length]); grads.push(g); const t=document.createElement('div'); t.className='tile'; t.style.background=g.css; t.dataset.i=grads.length-1; t.onclick=()=>pick(g,t); b.appendChild(t);} wall.appendChild(b); });
+
+let working=null, armed=null, state='picked', lastTile=null, sel=[];
+function pick(g,t){
+  if(armed){ fillB(g); return; }
+  if(lastTile===t){ star(); return; }
+  document.querySelectorAll('.tile.sel').forEach(x=>x.classList.remove('sel')); t.classList.add('sel'); lastTile=t;
+  setWorking(g,'picked','ghost'); $('welcome').classList.add('hidden');
+}
+function setWorking(g,txt,cls){
+  working=g; $('hero').classList.remove('hidden'); $('shelf').classList.remove('hidden');
+  $('ramp').style.background=g.css; $('mixA').style.background=g.css; $('mixAlbl').textContent=g.name; $('srcband').style.background=g.css; $('wpcanvas').style.background=g.css.replace('90deg','135deg');
+  $('name').value=g.name; $('expName').textContent=g.name;
+  $('state').textContent=txt; $('state').className='chip '+(cls==='ghost'?'state':cls); $('returnBtn').classList.toggle('hidden', cls!=='live' && cls!=='edited');
+  $('starBtn').classList.remove('on');
+  renderPalette(g); renderStops(g); collectRecent(g);
+}
+function renderPalette(g){ const p=$('palette'); p.innerHTML=''; g.cols.concat([g.cols[1],g.cols[2]]).slice(0,5).forEach((c,i)=>{ const s=document.createElement('div'); s.className='sw'; s.style.background=c; s.dataset.hex=c; s.title='click = its stop · drag = move along the ramp'; p.appendChild(s); }); const pl=document.createElement('div'); pl.className='pl'; pl.innerHTML='<button title="add at the largest gap">+</button><button class="on">Even</button><button>Perceptual</button><button>Stops</button>'; p.appendChild(pl); }
+function renderStops(g){ const r=$('stopsRow'); r.innerHTML=''; [0,0.5,1].forEach((t,i)=>{ const s=document.createElement('div'); s.className='stop'; s.style.left=(t*100)+'%'; s.style.background=g.cols[i]; r.appendChild(s);}); }
+function editRamp(){ if(state!=='edited'){ state='edited'; $('state').textContent='edited'; $('state').className='chip edited'; $('returnBtn').classList.remove('hidden'); $('srcband').classList.remove('on'); document.querySelectorAll('.traytabs button').forEach(b=>b.classList.remove('live')); } document.querySelectorAll('.stop')[1].classList.toggle('sel'); }
+function returnToSource(){ state='picked'; $('state').textContent='picked'; $('state').className='chip state'; $('returnBtn').classList.add('hidden'); $('srcband').classList.remove('on'); closeTray(); }
+function star(){ $('starBtn').classList.add('on'); addShelf('zStar', working, 'star'); toast('Kept · in Starred'); }
+function likeThis(){ document.querySelectorAll('.tile').forEach(t=>{ const g=grads[t.dataset.i]; t.classList.toggle('dim', Math.abs(((g.h-working.h+540)%360)-180)>50); }); toast('Wall sorted by likeness to '+working.name); }
+
+/* trays */
+let tray=null;
+function toggleTray(t){ if(tray===t){ closeTray(); return; } tray=t; $('tray').classList.add('on'); document.querySelectorAll('.tt').forEach(x=>x.classList.toggle('on', x.id==='tt-'+t)); document.querySelectorAll('.traytabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===t));
+  if(t==='mix'){ arm('Picking for Mix slot B'); $('srcband').textContent='A · '+working.name; $('srcband').classList.add('on'); live('live from Mix'); }
+  if(t==='extract'){ if(!$('imgslot').classList.contains('filled')) fillImage(); $('imgslot').classList.add('on'); $('srcband').textContent='image · Dominant'; $('srcband').classList.add('on'); live('live from the image'); }
+}
+function closeTray(){ tray=null; $('tray').classList.remove('on'); document.querySelectorAll('.traytabs button').forEach(b=>b.classList.remove('on')); $('imgslot').classList.remove('on'); disarm(); }
+function live(txt){ state='live'; $('state').textContent=txt; $('state').className='chip live'; $('returnBtn').classList.remove('hidden'); document.querySelector('.traytabs button[data-t='+tray+']').classList.add('live'); }
+function arm(txt){ armed=tray; $('armedtxt').textContent=txt; $('armedpill').classList.add('on'); $('mixB').className='sramp armed'; $('mixB').textContent='pick one below'; $('mixB').style.background=''; }
+function disarm(){ armed=null; $('armedpill').classList.remove('on'); }
+function fillB(g){ $('mixB').className='sramp'; $('mixB').textContent=''; $('mixB').style.background=g.css; $('mixBlbl').textContent=g.name; disarm(); $('ramp').style.background=`linear-gradient(90deg,${working.cols[0]},${g.cols[1]},${g.cols[2]})`; toast('B = '+g.name+' · the hero is the blend, live'); }
+function method(b,m){ b.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); $('photo').classList.toggle('path', m==='path'); $('srcband').textContent='image · '+b.textContent; }
+function fillImage(){ $('imgslot').classList.add('filled'); $('imgslot').innerHTML='<span>photo.jpg</span>'; if(!working){ setWorking(mk(25),'live from the image','live'); $('welcome').classList.add('hidden'); } }
+$('imgslot').onclick=()=>{ fillImage(); if(tray!=='extract') toggleTray('extract'); };
+window.addEventListener('dragover',e=>e.preventDefault()); window.addEventListener('drop',e=>{ e.preventDefault(); fillImage(); if(tray!=='extract') toggleTray('extract'); });
+
+/* shelf */
+function addShelf(zone,g,cls,onclick){ const z=$(zone); const e=z.querySelector('.empty'); if(e) e.remove(); const m=document.createElement('div'); m.className='mi'+(cls?' '+cls:''); m.style.background=g.css; m.title=g.name; m.onclick=onclick||(()=>{ if(armed){ fillB(g); return; } setWorking(g,'from the shelf','ghost'); }); z.insertBefore(m, z.children[1]); return m; }
+let recentFor=null;
+function collectRecent(g){ if(recentFor===g) return; recentFor=g; addShelf('zRecent', g); }
+let snaps=[];
+function snapshot(){ const g=working; const m=addShelf('zSnap', g, 'snap', ()=>{ if(m.classList.contains('picked')){ m.classList.remove('picked'); } else { m.classList.add('picked'); } const p=[...document.querySelectorAll('.mi.snap.picked')]; $('tween').classList.toggle('on', p.length===2); if(p.length===1){ setWorking(g,'snapshot','ghost'); } }); toast('Snapshot kept · click one to switch, two to tween'); }
+function bakeTween(){ document.querySelectorAll('.mi.snap.picked').forEach(x=>x.classList.remove('picked')); $('tween').classList.remove('on'); toast('Tween baked into the working gradient'); }
+
+/* filters, tools */
+function togglePop(id){ $(id).classList.toggle('hidden'); }
+let fc=0; function hue(b){ b.classList.toggle('on'); fc=document.querySelectorAll('.hue.on').length; $('fbadge').textContent=fc; $('fbadge').classList.toggle('on',fc>0); const on=[...document.querySelectorAll('.hue.on')].map(x=>x.style.background); document.querySelectorAll('.tile').forEach(t=>{ t.classList.toggle('dim', fc>0 && !on.some(c=>near(c,grads[t.dataset.i].h))); }); const n=document.querySelectorAll('.tile:not(.dim)').length; $('cnt').textContent=fc?n*47:'3,014'; $('fcount').textContent=(fc?n*47:'3,014')+' shown'; }
+function near(c,h){ const m={'rgb(229, 72, 77)':0,'rgb(240, 136, 62)':25,'rgb(245, 197, 66)':50,'rgb(70, 167, 88)':130,'rgb(18, 165, 148)':170,'rgb(62, 143, 255)':215,'rgb(142, 78, 198)':275,'rgb(233, 61, 130)':335,'rgb(143, 143, 143)':-1}; const t=m[c]; return t===-1?false:Math.abs(((h-t+540)%360)-180)<35; }
+function clearF(){ document.querySelectorAll('.hue.on').forEach(x=>x.classList.remove('on')); fc=0; $('fbadge').classList.remove('on'); document.querySelectorAll('.tile').forEach(t=>t.classList.remove('dim')); $('cnt').textContent='3,014'; }
+function tool(b,t){ const on=b.classList.contains('on'); b.parentNode.querySelectorAll('button').forEach(x=>x.classList.remove('on')); if(!on) b.classList.add('on'); $('caption').classList.toggle('on', !on && t!=='zoom'); $('wallwrap').style.cursor = on ? 'pointer' : (t==='zoom'?'zoom-in':'crosshair'); }
+function sl(i){ const v=i.value; i.previousElementSibling.style.width=v+'%'; const o=i.parentNode.nextElementSibling; if(o && o.tagName==='OUTPUT' && /^[0-9.]+$/.test(o.textContent)) o.textContent=(v/100).toFixed(2); }
+
+/* quiet hero while the pointer lives in the wall */
+let qt; $('wallwrap').addEventListener('mouseenter',()=>{ qt=setTimeout(()=>$('hero').classList.add('quiet'),900); }); $('wallwrap').addEventListener('mouseleave',()=>{ clearTimeout(qt); }); $('hero').addEventListener('mouseenter',()=>{ clearTimeout(qt); $('hero').classList.remove('quiet'); }); $('shelf').addEventListener('mouseenter',()=>{ clearTimeout(qt); });
+
+/* misc */
+function show(id){ $(id).classList.add('on'); } function hide(id){ $(id).classList.remove('on'); }
+let tt; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),2200); }
+$('gmtBtn').onclick=()=>toast('Back to GMT · carrying '+(working?working.name:'nothing yet'));
+$('phoneBtn').onclick=()=>{ $('frame').classList.toggle('phone'); measure(); };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ if(armed) disarm(); else if(tray) closeTray(); else { hide('export'); hide('wallpaper'); $('filters').classList.add('hidden'); } } if(e.key==='Enter' && document.activeElement===$('q')) toast('search: '+$('q').value); });
+function measure(){ const h=$('hero').classList.contains('hidden')?0:$('hero').offsetHeight; $('measure').textContent=`top ${$('frame').querySelector('.topbar').offsetHeight} · hero ${h}${$('hero').classList.contains('quiet')?' (quiet)':''} · wall ${$('ground').offsetHeight} · shelf ${$('shelf').classList.contains('hidden')?0:$('shelf').offsetHeight} · ${$('frame').offsetWidth}×${$('frame').offsetHeight}`; }
+new ResizeObserver(measure).observe($('ground')); new MutationObserver(measure).observe($('frame'),{attributes:true,subtree:true,attributeFilter:['class']}); measure();
+</script>
+</body>
+</html>

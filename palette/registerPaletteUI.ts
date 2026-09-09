@@ -46,6 +46,7 @@ import { setGradientEditorEntrance } from '../components/gradient/gradientEditor
 import { setGradientFavientsBridge } from '../components/gradient/gradientFavients';
 import { configToName } from './core/facetName';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
+import { PRESETS_GROUP } from './store/favientsStore';
 import type { GradientConfig } from '../types';
 
 export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}): void => {
@@ -168,7 +169,7 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
       name: p.name,
       config: { stops: p.stops, colorSpace: 'srgb', blendSpace: 'oklab' },
     })),
-    'g-presets',
+    PRESETS_GROUP,
     'Presets',
   );
 };

@@ -3,19 +3,21 @@
  * (Gradient Explorer fullscreen; v2 redesign 2026-06-10, see plans/gx-geometry-handles-v2.md).
  *
  * A 2D SVG layer mounted ABOVE the gradient stage (the same precedent as Liquify's
- * signifier overlay / Parallax's ring cursor: signifiers live in DOM/2D, never on the GL
+ * signifier overlay: signifiers live in DOM/2D, never on the GL
  * canvas). Per geometry mode it shows the shape params as draggable handles:
  *   • linear — a BIAS dot at the gradient-axis midpoint (drag ⟂ to the axis to ease the ramp
  *              into an S, riding a glyph of the real eased curve) + an ANGLE dot tethered to
  *              it on the axis (orbit the centre to rotate the gradient direction).
  *   • radial — a CENTRE dot · a SCALE diamond on the radius (how far the gradient reaches) ·
- *              a BIAS dot on the 50% ring (drag across the radius to ease the falloff).
+ *              a BIAS dot on the 50% ring (drag across the radius to ease the falloff) · a
+ *              WAVES ring on the reach that pulls out into petals, and once open a COUNT
+ *              diamond that orbits to add or remove them.
  *   • conic  — a CENTRE dot · a ROTATION dot on the seam · a MIRROR ring that starts UNDER
- *              the rotation dot and pulls off to reflect the sweep (0→1→0); once pulled out,
- *              a BIAS dot on each arc (rising / falling).
- *   • arched — apex / radius / width / span (as before) + a CURVATURE dot that bends the
- *              band's spine off a circular arc, over guide arcs that follow the bend.
- * Spline has its own on-screen path editor; Linear/Radial/Conic/Arched are the handled set.
+ *              the rotation dot and pulls off to reflect the sweep (0→1→0); a BIAS dot on the
+ *              rising arc always (it is the whole sweep's bias while the mirror is collapsed)
+ *              and a second on the falling arc once mirrored · a TWIST ring far out on the
+ *              seam that winds the spokes into a log spiral when orbited.
+ * Spline has its own on-screen path editor; Linear/Radial/Conic are the handled set.
  *
  * ── Determinism boundary ────────────────────────────────────────────────────────────────
  * Handles write ONLY `fullscreenStore.geomParams` (batched `setFullscreenGeomParams`); the
@@ -38,7 +40,13 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GEOM_DEFAULTS, bias, archRadiusAt, type GeometryParams } from '../../palette/core/rampGeometry';
+import {
+  GEOM_DEFAULTS,
+  bias,
+  conicTwistTurns,
+  radialSineReach,
+  type GeometryParams,
+} from '../../palette/core/rampGeometry';
 import {
   resetFullscreenGeomParams,
   setFullscreenGeomParams,
@@ -67,6 +75,10 @@ const BIAS_MAX = 2;
 const BIAS_REACH = 0.3;
 /** Linear axis half-length as a fraction of the shorter stage side. */
 const AXIS_FRAC = 0.42;
+/** How many petals one full orbit of the radial COUNT handle walks through. 12 covers the
+ *  param's whole 2–16 range in a little over one turn, which is the most a count that small
+ *  should ever ask for. */
+const LOBES_PER_TURN = 12;
 
 /** Clamp a value to the range the mode declared for the param in its `paramFields` —
  *  paramFields stays the single source of truth for ranges (no duplicated min/max). */
@@ -74,6 +86,22 @@ const clampToField = (geomId: string, key: HandleParamKey, v: number): number =>
   const f = getFullscreenMode(geomId)?.paramFields?.find((p) => p.key === key);
   if (!f) return v;
   return Math.min(f.max, Math.max(f.min, v));
+};
+
+/**
+ * Pull a value toward whole numbers WITHOUT gating it there. Exactly an integer at the notch,
+ * exactly the half-way point half-way between, and monotonic throughout — so the handle never
+ * jumps or reverses; it just moves slowly through a notch and quickly between them.
+ * `NOTCH_P` is the shape: 1 is no notching at all, higher is a deeper detent. 1.8 makes the
+ * value move about 23× slower at a whole petal than half-way between two — a detent you
+ * feel and can leave. 2.4 measured 211× and read as a magnet rather than a notch, which is
+ * not what "only softly notched" asked for.
+ */
+const NOTCH_P = 1.8;
+export const softNotch = (v: number): number => {
+  const n = Math.round(v);
+  const f = v - n; // -0.5 .. 0.5
+  return n + Math.sign(f) * (Math.abs(f) * 2) ** NOTCH_P * 0.5;
 };
 
 /** Wrap an angle into [-π, π) (orbital drags never hit a hard stop). */
@@ -230,6 +258,73 @@ const useBiasDrag = (
   });
 };
 
+/**
+ * Orbit drag onto a COUNT param (the radial mode's petal count): the pointer's angular travel
+ * around `centre` accumulates and passes through a SOFT NOTCH before it is emitted. One full
+ * orbit walks {@link LOBES_PER_TURN} of them at normal precision (Shift/Alt still apply).
+ * Delta-based like every other drag here, so grabbing the handle never jumps.
+ *
+ * Soft, not gated. A whole number of lobes closes seamlessly at the ±π wrap and a fractional
+ * one leaves a visible seam, so whole numbers are where you usually want to be — but they are
+ * not the only place you may be (owner, 2026-09-08: "only softly notched, instead of integer
+ * gated"). {@link softNotch} flattens the value's response near each integer and speeds it up
+ * between, so an ordinary drag settles on whole petals while a deliberate one can sit between
+ * two and take the seam on purpose.
+ */
+const useCountDrag = (
+  env: HandleEnv,
+  geomId: string,
+  key: HandleParamKey,
+  centre: { x: number; y: number },
+) => {
+  const acc = useRef({ v: 0, last: 0 });
+  const angOf = (pt: DragPoint): number => Math.atan2(pt.y - centre.y, pt.x - centre.x);
+  return useHandleDrag(env, {
+    onStart: (pt) => {
+      acc.current = { v: env.P[key], last: angOf(pt) };
+    },
+    onMove: (pt) => {
+      const a = acc.current;
+      const m = angOf(pt);
+      a.v = clampToField(geomId, key, a.v + wrapPi(m - a.last) * (LOBES_PER_TURN / (2 * Math.PI)) * pt.mult);
+      a.last = m;
+      setFullscreenGeomParams({ [key]: softNotch(a.v) });
+    },
+  });
+};
+
+/**
+ * Orbit drag onto a TWIST param measured in turns: the pointer's angular travel converts to
+ * turns through the log-spiral law at the handle's own radius, so the spoke under the pointer
+ * follows the pointer exactly. `winding` is `2π·log(1 + r)` — the radians of sweep one turn of
+ * twist produces THERE — and it is floored so a handle dragged near the centre (where a turn
+ * of twist barely moves the spoke) cannot divide by ~0 and fling the param.
+ */
+const useTwistDrag = (
+  env: HandleEnv,
+  geomId: string,
+  key: HandleParamKey,
+  centre: { x: number; y: number },
+  winding: number,
+) => {
+  const acc = useRef({ v: 0, last: 0 });
+  const angOf = (pt: DragPoint): number => Math.atan2(pt.y - centre.y, pt.x - centre.x);
+  return useHandleDrag(env, {
+    onStart: (pt) => {
+      acc.current = { v: env.P[key], last: angOf(pt) };
+    },
+    onMove: (pt) => {
+      const a = acc.current;
+      const m = angOf(pt);
+      // The seam runs CLOCKWISE as twist grows (θ = seam − 2π·turns), hence the negation.
+      const v = clampToField(geomId, key, a.v - (wrapPi(m - a.last) / winding) * pt.mult);
+      a.v = v;
+      a.last = m;
+      setFullscreenGeomParams({ [key]: v });
+    },
+  });
+};
+
 /** Two-axis centre drag (the gradient origin dot): batched delta accumulation on both keys,
  *  one emit per move. The 2D sibling of {@link useParamDrag} — radial + conic share it. */
 const useCentreDrag = (env: HandleEnv, geomId: string, keyX: HandleParamKey, keyY: HandleParamKey) => {
@@ -257,7 +352,13 @@ const pin = (u: StageUnits, p: { x: number; y: number }, m = 14): { x: number; y
   y: Math.min(u.h - m, Math.max(m, p.y)),
 });
 
-/** Shared handle chrome: oversized invisible hit-disc + the visible glyph + tooltip. */
+/** Shared handle chrome: oversized invisible hit-disc + the visible glyph + tooltip.
+ *
+ *  Each group is stamped `data-gx-handle` with the FIRST key it resets — a stable name for
+ *  the thing it drags. `smoke:gx-handles` selects by that attribute; it used to count `<g>`
+ *  elements in render order, which silently re-pointed every case the moment Phase W added a
+ *  handle in the middle of a list (the radial case started dragging Waves and asserting on
+ *  `radialCx`). A name cannot drift that way. */
 const Handle: React.FC<{
   x: number;
   y: number;
@@ -268,6 +369,7 @@ const Handle: React.FC<{
   children: React.ReactNode;
 }> = ({ x, y, title, cursor, drag, resetKeys, children }) => (
   <g
+    data-gx-handle={resetKeys[0]}
     transform={`translate(${x},${y})`}
     style={{ pointerEvents: 'auto', cursor, touchAction: 'none' }}
     {...drag}
@@ -351,6 +453,57 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const centreDrag = useCentreDrag(env, 'radial', 'radialCx', 'radialCy');
   const scaleDrag = useParamDrag(env, 'radial', 'radialScale', (pt) => Math.hypot(pt.x - gcx, pt.y - gcy) / diag);
 
+  // ── petals: the sine that swells and pinches the reach around the circle ──
+  // The stage is a uniform scale of the sampler's isotropic space (both axes divide by the
+  // same `half`), so a SCREEN angle is the sampler's angle and the ring can be traced
+  // directly. Reach → screen radius is × diag (the corner is position 1 at scale 1).
+  const wavy = P.radialSineAmp !== 0;
+  // NOT rounded any more: the count is softly notched, so a value can legitimately sit between
+  // two whole petals and the guide ring must draw what the pixels actually do.
+  const freq = Math.max(1, P.radialSineFreq);
+  const reachAt = useCallback(
+    (a: number) => diag * radialSineReach(P.radialScale, P.radialSineAmp, freq, a),
+    [diag, P.radialScale, P.radialSineAmp, freq],
+  );
+  // The waves handle rides the crest nearest STRAIGHT UP, well clear of the scale diamond
+  // (which runs toward the bottom-right corner). Crests sit at (π/2 + 2πk)/freq.
+  const crestθ = useMemo(() => {
+    let best = Math.PI / 2 / freq;
+    for (let k = 0; k < Math.ceil(freq); k++) {
+      const c = (Math.PI / 2 + 2 * Math.PI * k) / freq;
+      if (Math.abs(wrapPi(c + Math.PI / 2)) < Math.abs(wrapPi(best + Math.PI / 2))) best = c;
+    }
+    return best;
+  }, [freq]);
+  // At the crest sin() == 1, so the ring's radius there IS scale·(1 + amp): the pointer's own
+  // distance reads the amplitude straight off, with no gain to invent.
+  const wavesDrag = useParamDrag(
+    env,
+    'radial',
+    'radialSineAmp',
+    (pt) => Math.hypot(pt.x - gcx, pt.y - gcy) / diag / Math.max(1e-3, P.radialScale) - 1,
+  );
+  // The count handle rides the SAME ring as the waves handle (owner, 2026-09-08: "it should be
+  // on the same ring i think as the wave amp") — the two controls of one shape belong on the
+  // shape. Its ANGLE is fixed rather than tied to a crest: a slot that moved with the count
+  // would slide out from under the pointer as the count changed, and the gesture would fight
+  // itself. So it sits at a fixed bearing and simply rides the ring up and down as the petals
+  // grow, which is the wave shape showing you what it is doing.
+  const countθ = -Math.PI * 0.75;
+  const countR = reachAt(countθ);
+  const countDrag = useCountDrag(env, 'radial', 'radialSineFreq', { x: gcx, y: gcy });
+  const ringPath = useMemo(() => {
+    if (!wavy) return '';
+    const pts: string[] = [];
+    const N = Math.ceil(8 * freq) + 64;
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI;
+      const r = reachAt(a);
+      pts.push(`${(gcx + Math.cos(a) * r).toFixed(1)},${(gcy + Math.sin(a) * r).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }, [wavy, freq, reachAt, gcx, gcy]);
+
   // Scale handle runs toward the nearest stage corner from the gradient centre, so scale=1
   // lands on (roughly) that corner and stays reachable; the inner dot biases the falloff.
   const dirx = u.w - gcx;
@@ -367,10 +520,19 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const biasOff = (P.radialBias / BIAS_MAX) * reach;
   const biasPos = pin(u, { x: biasAnchor.x + dir.x * biasOff, y: biasAnchor.y + dir.y * biasOff });
   const cpos = pin(u, { x: gcx, y: gcy });
+  const crestR = reachAt(crestθ);
+  const wavesPos = pin(u, { x: gcx + Math.cos(crestθ) * crestR, y: gcy + Math.sin(crestθ) * crestR });
+  const countPos = pin(u, { x: gcx + Math.cos(countθ) * countR, y: gcy + Math.sin(countθ) * countR });
 
   return (
     <>
-      <circle cx={gcx} cy={gcy} r={scaleR} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
+      {/* The reach ring: a plain circle at rest, the real petal curve once the waves open —
+          traced through the SAME `radialSineReach` the pixels use, so it cannot drift. */}
+      {wavy ? (
+        <polyline points={ringPath} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
+      ) : (
+        <circle cx={gcx} cy={gcy} r={scaleR} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
+      )}
       <circle cx={gcx} cy={gcy} r={0.5 * scaleR} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} strokeDasharray="4 5" />
       <Handle x={scalePos.x} y={scalePos.y} title="Scale — drag in/out to set how far the gradient reaches" cursor="grab" drag={scaleDrag} resetKeys={['radialScale']}>
         <Diamond />
@@ -378,6 +540,23 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       <Handle x={biasPos.x} y={biasPos.y} title="Bias — drag across the radius to ease the falloff" cursor="move" drag={biasDrag} resetKeys={['radialBias']}>
         <Dot r={6} />
       </Handle>
+      {/* Waves: a faint dot ON the ring at rest (the same discoverable-hint language as the
+          conic's mirror tab) that becomes a full handle once pulled off it into petals. */}
+      <Handle
+        x={wavesPos.x}
+        y={wavesPos.y}
+        title="Waves — pull off the ring to swell the reach into petals, push through the centre to pinch them"
+        cursor="grab"
+        drag={wavesDrag}
+        resetKeys={['radialSineAmp', 'radialSineFreq']}
+      >
+        {wavy ? <Dot r={6} /> : <circle r={4.5} fill="none" stroke={GUIDE_SOFT} strokeWidth={2} />}
+      </Handle>
+      {wavy && (
+        <Handle x={countPos.x} y={countPos.y} title="Count — orbit the centre to add or remove petals (it eases through whole ones)" cursor="grab" drag={countDrag} resetKeys={['radialSineFreq']}>
+          <Diamond />
+        </Handle>
+      )}
       <Handle x={cpos.x} y={cpos.y} title="Centre — drag to move the gradient's origin" cursor="move" drag={centreDrag} resetKeys={['radialCx', 'radialCy']}>
         <circle r={12} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
         <Dot />
@@ -428,7 +607,32 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
   const tangB = { x: Math.cos(angB), y: Math.sin(angB) };
   const biasBDrag = useBiasDrag(env, 'conic', 'conicBiasB', tangB, reach);
 
+  // ── twist: the seam winds into a log spiral, so the handle rides the seam ITSELF ──
+  // The spoke at isotropic radius r sits `2π · conicTwistTurns(twist, r)` clockwise of the
+  // seam, so a handle placed there is always on the line it controls — orbit it and the
+  // spiral follows the pointer. `winding` is what one turn of twist is worth in radians there.
+  const twistR = 0.78 * u.half;
+  const twistIso = twistR / u.half;
+  const twistWind = 2 * Math.PI * Math.log(1 + twistIso);
+  const twistθ = seamθ - 2 * Math.PI * conicTwistTurns(P.conicTwist, twistIso);
+  const twistDrag = useTwistDrag(env, 'conic', 'conicTwist', { x: gcx, y: gcy }, twistWind);
+  const twisted = P.conicTwist !== 0;
+  // The spiral guide traces the seam out from the centre through the same law the pixels use.
+  const spiralPath = useMemo(() => {
+    if (!twisted) return '';
+    const maxR = Math.hypot(Math.max(gcx, u.w - gcx), Math.max(gcy, u.h - gcy));
+    const pts: string[] = [];
+    const N = 120;
+    for (let i = 1; i <= N; i++) {
+      const r = (i / N) * maxR;
+      const θ = seamθ - 2 * Math.PI * conicTwistTurns(P.conicTwist, r / u.half);
+      pts.push(`${(gcx + Math.cos(θ) * r).toFixed(1)},${(gcy + Math.sin(θ) * r).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }, [twisted, P.conicTwist, seamθ, gcx, gcy, u.w, u.h, u.half]);
+
   const cpos = pin(u, { x: gcx, y: gcy });
+  const twistPos = pin(u, { x: gcx + Math.cos(twistθ) * twistR, y: gcy + Math.sin(twistθ) * twistR });
   const rotPos = pin(u, { x: gcx + Math.cos(seamθ) * rHandle, y: gcy + Math.sin(seamθ) * rHandle });
   // Mirror tab sits a fixed step BEYOND the rotation handle (same ray when collapsed), so it
   // never overlaps/steals the rotation grab; orbiting it off the seam opens the mirror.
@@ -442,6 +646,7 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
     <>
       <line x1={cpos.x} y1={cpos.y} x2={rotPos.x} y2={rotPos.y} stroke={GUIDE_FAINT} strokeWidth={1.5} />
       {mirrored && <line x1={cpos.x} y1={cpos.y} x2={mirPos.x} y2={mirPos.y} stroke={GUIDE_FAINT} strokeWidth={1.5} strokeDasharray="3 4" />}
+      {twisted && <polyline points={spiralPath} fill="none" stroke={GUIDE_SOFT} strokeWidth={1} />}
       <Handle x={rotPos.x} y={rotPos.y} title="Rotation — drag around the centre to spin the sweep" cursor="grab" drag={rotDrag} resetKeys={['conicAngle']}>
         <Dot />
       </Handle>
@@ -450,101 +655,39 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       <Handle x={mirPos.x} y={mirPos.y} title="Mirror — pull off the rotation handle to reflect the sweep (0→1→0)" cursor="grab" drag={mirrorDrag} resetKeys={['conicMirror', 'conicBiasA', 'conicBiasB']}>
         <circle r={mirrored ? 6 : 4.5} fill="none" stroke={mirrored ? HANDLE_FILL : GUIDE_SOFT} strokeWidth={mirrored ? 2.5 : 2} />
       </Handle>
-      {mirrored && (
-        <Handle x={aPos.x} y={aPos.y} title="Bias (rising half) — drag in/out to ease the sweep" cursor="move" drag={biasADrag} resetKeys={['conicBiasA']}>
-          <Dot r={6} />
-        </Handle>
-      )}
+      {/* Bias A is reachable whether or not the mirror is open: with the mirror collapsed it
+          is the ONE bias the sampler reads, easing the whole sweep (it used to be hidden, so
+          the plain conic had no bias control at all). */}
+      <Handle
+        x={aPos.x}
+        y={aPos.y}
+        title={mirrored ? 'Bias (rising half) — drag in/out to ease the sweep' : 'Bias — drag in/out to ease the sweep'}
+        cursor="move"
+        drag={biasADrag}
+        resetKeys={['conicBiasA']}
+      >
+        <Dot r={6} />
+      </Handle>
       {mirrored && (
         <Handle x={bPos.x} y={bPos.y} title="Bias (falling half) — drag in/out to ease the return" cursor="move" drag={biasBDrag} resetKeys={['conicBiasB']}>
           <Dot r={6} />
         </Handle>
       )}
+      {/* Twist: a faint ring far out on the seam that winds the spokes into a log spiral when
+          orbited — the same hint→handle language the mirror tab uses. */}
+      <Handle
+        x={twistPos.x}
+        y={twistPos.y}
+        title="Twist — orbit the centre to wind the sweep into a spiral"
+        cursor="grab"
+        drag={twistDrag}
+        resetKeys={['conicTwist']}
+      >
+        {twisted ? <Dot r={6} /> : <circle r={4.5} fill="none" stroke={GUIDE_SOFT} strokeWidth={2} />}
+      </Handle>
       <Handle x={cpos.x} y={cpos.y} title="Centre — drag to move the sweep's origin" cursor="move" drag={centreDrag} resetKeys={['conicCx', 'conicCy']}>
         <circle r={12} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
         <Dot />
-      </Handle>
-    </>
-  );
-};
-
-// ── arched — apex / radius / width / span + curvature, over spine-following guide arcs ───────
-
-const ArchedHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
-  const { u, P } = env;
-  const { archCy, archR, archHalfWidth, archSpan, archCurve } = P;
-  // The band is an arc of the circle centred at (0, archCy) iso — usually OFF-screen below.
-  const Cx = u.cx;
-  const Cy = u.cy + archCy * u.half;
-  // Target radius bends with the sweep angle (curvature); the SAME law `sampleGeometry` uses
-  // (archRadiusAt), so the guide arcs trace the exact rendered band — no parallel formula.
-  const Rt = (a: number): number => archRadiusAt(archR, archCurve, a);
-  const at = (a: number, rad: number): { x: number; y: number } => ({
-    x: Cx + Math.sin(a) * rad * u.half,
-    y: Cy - Math.cos(a) * rad * u.half,
-  });
-  /** Guide polyline at a constant offset off the (possibly curved) spine. */
-  const arcPath = (off: number): string => {
-    const pts: string[] = [];
-    const N = 48;
-    for (let i = 0; i <= N; i++) {
-      const a = -archSpan + (2 * archSpan * i) / N;
-      const p = at(a, Rt(a) + off);
-      pts.push(`${p.x.toFixed(1)},${p.y.toFixed(1)}`);
-    }
-    return pts.join(' ');
-  };
-  /** Distance pointer→arc-centre, in iso units. */
-  const distOf = (pt: DragPoint): number => Math.hypot(pt.x - Cx, pt.y - Cy) / u.half;
-  /** Pointer angle from straight-up around the arc centre (the field's position angle). */
-  const angOf = (pt: DragPoint): number => Math.atan2(pt.x - Cx, Cy - pt.y);
-
-  const cyDrag = useParamDrag(env, 'arched', 'archCy', (pt) => pt.y / u.half);
-  const rDrag = useParamDrag(env, 'arched', 'archR', distOf);
-  const wDrag = useParamDrag(env, 'arched', 'archHalfWidth', distOf);
-  const sDrag = useParamDrag(env, 'arched', 'archSpan', angOf, { angular: true });
-  // Curvature: at a fixed sample angle, the pointer's arc-centre distance maps to the radius
-  // there (Rt = archR·(1+curve·a²)), so we back out `curve` and drag it directly. The aC²
-  // divisor is floored (max(·,0.2)) so a short span doesn't make the handle hypersensitive.
-  const aC = -0.7 * archSpan;
-  const curveDrag = useParamDrag(env, 'arched', 'archCurve', (pt) => (distOf(pt) / Math.max(1e-3, archR) - 1) / Math.max(aC * aC, 0.2));
-
-  // Handle layout along distinct angular slots so they never collide.
-  const apex = pin(u, at(0, Rt(0)));
-  const radiusP = pin(u, at(-0.45 * archSpan, Rt(-0.45 * archSpan)));
-  const widthP = pin(u, at(0.45 * archSpan, Rt(0.45 * archSpan) + archHalfWidth));
-  const spanP = pin(u, at(archSpan, Rt(archSpan)));
-  const curveP = pin(u, at(aC, Rt(aC)));
-  const mirror = at(-archSpan, Rt(-archSpan));
-  const deg = (a: number): number => (a * 180) / Math.PI;
-  // The three 49-point guide polylines rebuild only when the band shape/size changes — not on
-  // every pointer-rate re-render (the layer re-renders on each geomParams emit).
-  const paths = useMemo(
-    () => ({ inner: arcPath(-archHalfWidth), outer: arcPath(archHalfWidth), centre: arcPath(0) }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [archCy, archR, archHalfWidth, archSpan, archCurve, u.cx, u.cy, u.half],
-  );
-  return (
-    <>
-      {/* guide arcs: band edges (faint) + centre-line (softer), all following the curved spine */}
-      <polyline points={paths.inner} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
-      <polyline points={paths.outer} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
-      <polyline points={paths.centre} fill="none" stroke={GUIDE_SOFT} strokeWidth={1} strokeDasharray="4 5" />
-      <circle cx={mirror.x} cy={mirror.y} r={3.5} fill={GUIDE_SOFT} />
-      <Handle x={apex.x} y={apex.y} title="Position — drag up/down to slide the band" cursor="ns-resize" drag={cyDrag} resetKeys={['archCy']}>
-        <Dot />
-      </Handle>
-      <Handle x={radiusP.x} y={radiusP.y} title="Radius — drag to flatten or tighten the curve" cursor="grab" drag={rDrag} resetKeys={['archR']}>
-        <Diamond />
-      </Handle>
-      <Handle x={widthP.x} y={widthP.y} title="Width — drag across the band to thicken it" cursor="grab" drag={wDrag} resetKeys={['archHalfWidth']}>
-        <rect x={-3} y={-9} width={6} height={18} rx={2.5} transform={`rotate(${deg(0.45 * archSpan)})`} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={2} />
-      </Handle>
-      <Handle x={spanP.x} y={spanP.y} title="Span — drag along the arc to sweep further" cursor="grab" drag={sDrag} resetKeys={['archSpan']}>
-        <rect x={-9} y={-3} width={18} height={6} rx={3} transform={`rotate(${deg(archSpan)})`} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={2} />
-      </Handle>
-      <Handle x={curveP.x} y={curveP.y} title="Curvature — drag in/out to bend the band's spine" cursor="grab" drag={curveDrag} resetKeys={['archCurve']}>
-        <Dot r={6} />
       </Handle>
     </>
   );
@@ -556,7 +699,6 @@ const GEOM_HANDLES: Record<string, React.FC<{ env: HandleEnv }>> = {
   linear: LinearHandles,
   radial: RadialHandles,
   conic: ConicHandles,
-  arched: ArchedHandles,
 };
 
 /** Whether a mode id has on-screen handles (drives the toolbar "Handles" toggle visibility).

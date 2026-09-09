@@ -10,7 +10,9 @@
 
 import fs from 'fs';
 import path from 'path';
-import { rampToTrack, trackToRamp } from '../palette/core/channelCurve';
+import { rampToTrack, trackToRamp, flatRuns, rampToSteppedTrack } from '../palette/core/channelCurve';
+import { smoothSpan } from '../utils/CurveFitting';
+import { evaluateTrackValue } from '../utils/timelineUtils';
 import { rgbToOklab, type RGB } from '../palette/core/oklab';
 
 let failures = 0;
@@ -92,6 +94,65 @@ if (files.length === 0) {
     ok(rows[i].mean <= rows[i - 1].mean, `mean err should not rise as eps shrinks (${rows[i - 1].e}→${rows[i].e})`);
     ok(rows[i].keys >= rows[i - 1].keys, `keyframe count should not fall as eps shrinks (${rows[i - 1].e}→${rows[i].e})`);
   }
+}
+
+// Stepped sources (C.4): a 4-band channel (64 samples each) fits to Step keys — one hold per
+// band — and samples back EXACTLY, including the texel before each edge. A smooth ramp with
+// one short flat patch is not banded: no runs, no Step keys. Falsified by making flatRuns
+// return [] always: "4 bands → 4 Step keys" goes red; by dropping the final closing key in
+// rampToSteppedTrack: the last band's tail no longer round-trips.
+{
+  const bands = [0.2, 0.7, 0.4, 0.9];
+  const L = Array.from({ length: 256 }, (_, i) => bands[Math.min(3, i >> 6)]);
+  const C = L.map((v) => v * 0.1);
+  const h = L.map(() => 40);
+  const runs = flatRuns([L, C, h]);
+  ok(runs.length === 4 && runs[1].start === 64 && runs[1].end === 127, `4 bands → 4 runs (got ${runs.length})`);
+  const track = rampToSteppedTrack(L, runs, 'L', 'Lightness', { eps: 0.01 });
+  const steps = track.keyframes.filter((k) => k.interpolation === 'Step');
+  ok(steps.length === 5, `4 bands → 4 Step keys + the closing key (got ${steps.length})`);
+  const back = trackToRamp(track, 256);
+  const worst = Math.max(...back.map((v, i) => Math.abs(v - L[i])));
+  ok(worst < 1e-9, `a banded channel round-trips exactly through Step keys (worst ${worst.toExponential(2)})`);
+  const smooth = Array.from({ length: 256 }, (_, i) => (i < 100 || i > 105 ? i / 255 : 100 / 255));
+  ok(flatRuns([smooth, smooth, smooth]).length === 0, 'a smooth ramp with one flat patch is not banded');
+  // a banded ramp with a smooth stretch between two bands: the bands hold, the stretch fits
+  const mixed = Array.from({ length: 256 }, (_, i) => (i < 96 ? 0.2 : i < 160 ? 0.2 + ((i - 96) / 64) * 0.6 : 0.8));
+  const mr = flatRuns([mixed, mixed, mixed]);
+  ok(mr.length === 2, `two bands round a slope → 2 runs (got ${mr.length})`);
+  const mt = rampToSteppedTrack(mixed, mr, 'L', 'Lightness', { eps: 0.005 });
+  const mb = trackToRamp(mt, 256);
+  const worstBand = Math.max(...mb.map((v, i) => (i < 96 || i >= 160 ? Math.abs(v - mixed[i]) : 0)));
+  const worstSlope = Math.max(...mb.map((v, i) => (i >= 96 && i < 160 ? Math.abs(v - mixed[i]) : 0)));
+  ok(worstBand < 1e-9, `the bands hold exactly (worst ${worstBand.toExponential(2)})`);
+  ok(worstSlope < 0.03, `the slope between them is fitted (worst ${worstSlope.toFixed(4)})`);
+  console.log(`  stepped: 4 bands → ${track.keyframes.length} keys (${steps.length} Step); mixed → ${mt.keyframes.length} keys, slope err ${worstSlope.toFixed(4)}`);
+}
+
+// The smoothing brush (C.12): a jagged channel brushed over frames 96..160 gets smoother
+// THERE (its second differences shrink) while the samples outside the span stay exactly as
+// they were. Falsified by returning `keys` unchanged from smoothSpan: the first check goes
+// red; by dropping the `kept` filter: the second.
+{
+  const jag = Array.from({ length: 256 }, (_, i) => 0.5 + 0.25 * Math.sin(i / 12) + 0.08 * Math.sin(i * 1.05));
+  const track = rampToTrack(jag, 'L', 'Lightness', { eps: 0.001, interpolation: 'Linear' });
+  const sample = (ks: Parameters<typeof evaluateTrackValue>[0], f: number) => evaluateTrackValue(ks, f, false, false);
+  const before = Array.from({ length: 256 }, (_, f) => sample(track.keyframes, f));
+  const out = smoothSpan(track.keyframes, 96, 160, 0.004, 0.25, 'L-brush', sample);
+  ok(!!out, 'the brush returns a merged key list');
+  const after = Array.from({ length: 256 }, (_, f) => sample(out!, f));
+  const rough = (v: number[], a: number, b: number) => { let s = 0; for (let i = a + 1; i < b; i++) s += Math.abs(v[i - 1] - 2 * v[i] + v[i + 1]); return s / (b - a); };
+  const rb = rough(before, 100, 156), ra = rough(after, 100, 156);
+  ok(ra < rb * 0.7, `the brushed span is smoother (roughness ${rb.toFixed(4)} → ${ra.toFixed(4)})`);
+  const outside = Math.max(...before.map((v, f) => (f < 90 || f > 166 ? Math.abs(v - after[f]) : 0)));
+  ok(outside < 1e-9, `outside the span nothing moved (worst ${outside.toExponential(2)})`);
+  // incremental: a second stroke over the same span softens FURTHER (owner: "soften
+  // incrementally") — the brush works from the track as it now is, never from the original
+  const out2 = smoothSpan(out!, 96, 160, 0.004, 0.25, 'L-brush2', sample);
+  const after2 = Array.from({ length: 256 }, (_, f) => sample(out2!, f));
+  const ra2 = rough(after2, 100, 156);
+  ok(ra2 < ra * 0.85, `a second stroke softens further (${ra.toFixed(5)} → ${ra2.toFixed(5)})`);
+  console.log(`  brush: ${track.keyframes.length} keys → ${out!.length} → ${out2!.length}; roughness in span ${rb.toFixed(4)} → ${ra.toFixed(4)} → ${ra2.toFixed(4)}`);
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

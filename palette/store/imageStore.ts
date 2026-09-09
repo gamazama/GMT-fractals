@@ -126,3 +126,12 @@ export const useImageParam = <T,>(param: keyof ImageSlice): [T, (v: T) => void] 
   };
   return [value, setValue];
 };
+
+/** Imperative twin of useImageDerived for sibling stores: the v2 Working pipeline folds an
+ *  extraction into stops on bake, outside React. Same model + path + slice params. */
+export const imageDerivedNow = (): Img2GradResult | null => {
+  const { model, path } = useImageStore.getState();
+  if (!model) return null;
+  const raw = (useEngineStore.getState() as Record<string, any>).paletteImage as ImageSlice | undefined;
+  return extract(model, path, sliceToParams(raw ?? IMAGE_PARAM_DEFAULTS));
+};

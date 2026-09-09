@@ -23,7 +23,6 @@ const BLEND_OPTIONS = [
     { label: 'Oklab (perceptual)', value: 'oklab' },
     { label: 'RGB (standard)', value: 'rgb' },
     { label: 'HSV (short path)', value: 'hsv' },
-    { label: 'HSV (long path)', value: 'hsv-far' },
 ];
 
 const OUTPUT_OPTIONS = [

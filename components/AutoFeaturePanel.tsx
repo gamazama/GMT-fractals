@@ -20,6 +20,20 @@
  * @assumption `data-help-id` is set on every rendered control
  *   (line 492). `collectHelpIds` walks this attribute; do not
  *   strip it.
+ *
+ * `hints` and `keyframes` (added for the GE v2 unified shell, plans/ge-v2-unified-shell-plan.md
+ * §4 Phase A) are ADDITIVE: omitting them reproduces today's behaviour exactly (Hint boxes
+ * gated by the store's `showHints`, diamonds always rendered for animatable params).
+ *   - `hints`: 'inline' (default) = today's <Hint> box under a param/group; 'tooltip' puts the
+ *     same description text on the control's wrapping `title` attribute instead (and on the
+ *     group header); 'none' drops descriptions entirely. Only takes effect when explicitly
+ *     passed — omitting it still respects the store's `showHints` toggle exactly as before.
+ *   - `keyframes` (default true): when false, KeyframeButton diamonds are suppressed by
+ *     withholding the trackId/trackKeys a leaf control would otherwise derive — RangePairPad,
+ *     the scalar Slider path and the vec2/3/4 paths all gate this way. Does not reach the
+ *     `palette-quality-pad` customUI widget (QualityRangePadConnected) via this prop directly;
+ *     that widget reads its own forwarded `keyframes`/`hints` props (see this file's
+ *     `buildCustomItem`/`renderNode` customUI Component call sites).
  */
 
 import React, { useMemo, useState, Suspense } from 'react';
@@ -78,6 +92,24 @@ interface AutoFeaturePanelProps {
      *  body instead of being filtered out as "not roots". Also lifts
      *  customUI entries whose parentId matches. */
     liftChildrenOf?: string;
+    /** How param/group descriptions render. 'inline' (default) = today's behaviour
+     *  (the <Hint> box, gated by the store's showHints toggle when this prop is
+     *  omitted). 'tooltip' = description on the control/group's `title` attribute
+     *  instead of a Hint box. 'none' = drop descriptions entirely. See top-of-file JSDoc. */
+    hints?: 'inline' | 'tooltip' | 'none';
+    /** Render KeyframeButton diamonds (default true). false suppresses them by
+     *  withholding trackId/trackKeys from leaf controls — the v2 shell has no
+     *  timeline (plans/ge-v2-unified-shell-plan.md §7 "Keyframe diamonds"). */
+    keyframes?: boolean;
+    /** Skip the DDFS `dynamicVisible` gate for this mount only — the param definition
+     *  (shared with every other host) is untouched. Added for the v2 Gradient Explorer
+     *  hero (plans/ge-v2-design.md §5.1/§12): `paletteGenerator`'s Modify/Noise groups
+     *  carry `dynamicVisible: isMixed` (a Generator-era assumption — those dials hid
+     *  whenever the recipe wasn't the two-source mix), but v2's Adjust expander mounts
+     *  them on WORKING, which must stay visible under every Build recipe (and every
+     *  other source). `checkParamActive` (the `condition` gate, just above) is NOT
+     *  affected — only the two `dynamicVisible` checks are. */
+    ignoreDynamicVisible?: boolean;
 }
 
 /**
@@ -162,7 +194,7 @@ const RangePairPad: React.FC<{
 
 export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     featureId, groupFilter, className, isDisabled = false, disabledParams = [], excludeParams = [], whitelistParams = [], labelOverrides = {}, variant = 'default',
-    forcedState, onChangeOverride, pendingChanges, liftChildrenOf
+    forcedState, onChangeOverride, pendingChanges, liftChildrenOf, ignoreDynamicVisible = false, hints, keyframes = true
 }) => {
     const feature = featureRegistry.get(featureId);
     // Use forcedState if provided (for Engine Panel pending changes), otherwise fallback to Store
@@ -180,7 +212,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     const advancedMode = useEngineStore(s => s.advancedMode);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const showHints = useEngineStore(s => s.showHints);
-    
+    // `hints` omitted (undefined) reproduces today's showHints-gated behaviour exactly;
+    // an explicit value overrides it (opt-in per host — see top-of-file JSDoc).
+    const effectiveHints: 'inline' | 'tooltip' | 'none' = hints ?? (showHints ? 'inline' : 'none');
+
     const [confirming, setConfirming] = useState<{key: string, value: any, message: string} | null>(null);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
@@ -422,7 +457,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                         />
                         {/* Per-option hint uses the shared <Hint> chip so enum
                             captions match every other panel hint (and self-gate
-                            on showHints) instead of a bespoke italic caption. */}
+                            on showHints) instead of a bespoke italic caption.
+                            Unconditional pre-existing behaviour — not gated by
+                            `hints` (kept byte-identical when the prop is omitted;
+                            not part of this phase's scope to change). */}
                         {currentHint && <Hint text={currentHint} />}
                     </div>
                 );
@@ -455,8 +493,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                     step={config.step ?? 0.01}
                     format={config.format}
                     disabled={isParamDisabled}
-                    trackIdMin={bindMin.trackKeys[0]}
-                    trackIdMax={bindMax.trackKeys[0]}
+                    trackIdMin={keyframes ? bindMin.trackKeys[0] : undefined}
+                    trackIdMax={keyframes ? bindMax.trackKeys[0] : undefined}
                 /></div>;
             }
 
@@ -474,8 +512,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             // empty `axes` returns a single track ID matching AnimationEngine
             // case 4's scalar branch (F12 convention).
             const scalarBinding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: [] });
-            const trackId = scalarBinding.trackKeys[0];
-            const liveValue = liveModulations[trackId];
+            const trackId = keyframes ? scalarBinding.trackKeys[0] : undefined;
+            const liveValue = trackId ? liveModulations[trackId] : undefined;
 
             // Highlight if value differs from default, or if this param has a visibility condition (it's contextually relevant when shown)
             const isHighlighted = val !== config.default || !!config.condition;
@@ -494,7 +532,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const y = val?.y ?? config.default?.y ?? 0;
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y'], composeFrom: config.composeFrom });
             const liveVec2 = readLiveVec(liveModulations, binding, { x, y }) as THREE.Vector2 | undefined;
-            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector2Input label={config.label} value={new THREE.Vector2(x, y)} min={config.min ?? -1} max={config.max ?? 1} step={config.step} onChange={(v) => handleUpdate(key, { x: v.x, y: v.y })} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} liveValue={liveVec2} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec3') {
             const x = val?.x ?? config.default?.x ?? 0;
@@ -503,7 +541,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const v3 = new THREE.Vector3(x, y, z);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z'], composeFrom: config.composeFrom });
             const liveVec3 = readLiveVec(liveModulations, binding, { x, y, z }) as THREE.Vector3 | undefined;
-            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector3Input label={config.label} value={v3} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec3} showLiveIndicator={true} /></div>;
         }
         if (config.type === 'vec4') {
             const x = val?.x ?? config.default?.x ?? 0;
@@ -513,7 +551,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const v4 = new THREE.Vector4(x, y, z, w);
             const binding = deriveTrackBinding({ featureId, paramKey: key, label: config.label, axes: ['x', 'y', 'z', 'w'], composeFrom: config.composeFrom });
             const liveVec4 = readLiveVec(liveModulations, binding, { x, y, z, w }) as THREE.Vector4 | undefined;
-            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={binding.trackKeys} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
+            return <div className={`${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}><Vector4Input label={config.label} value={v4} min={config.min ?? -10} max={config.max ?? 10} step={config.step} onChange={(v) => handleUpdate(key, v)} disabled={isParamDisabled} trackKeys={keyframes ? binding.trackKeys : undefined} trackLabels={binding.trackLabels} mode={config.mode as BaseVectorInputProps['mode']} scale={config.scale as BaseVectorInputProps['scale']} linkable={config.linkable} liveValue={liveVec4} showLiveIndicator={true} /></div>;
         }
 
         if (config.type === 'image') {
@@ -578,8 +616,9 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         const config = feature.params[id];
         // EXCLUSION CHECK
         if (!config || config.hidden || excludeParams.includes(id) || rangePartnerKeys.has(id) || !checkParamActive(config.condition, sliceState, globalState, config.parentId)) return null;
-        // Dynamic visibility (DDFS) — checked after condition
-        if (config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
+        // Dynamic visibility (DDFS) — checked after condition. `ignoreDynamicVisible`
+        // skips ONLY this per-mount gate; the param definition is untouched.
+        if (!ignoreDynamicVisible && config.dynamicVisible && !config.dynamicVisible(sliceState)) return null;
         if (config.isAdvanced && !advancedMode) return null;
         const control = renderControl(id, config);
         const childIds = Object.keys(feature.params).filter(k => feature.params[k].parentId === id);
@@ -595,7 +634,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             if (!checkParamActive(c.condition, sliceState, globalState, c.parentId)) return;
             const Component = componentRegistry.get(c.componentId);
             if (!Component) return;
-            const node = <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} /></div>;
+            const node = <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`}><Component featureId={featureId} sliceState={sliceState} actions={actions} hints={effectiveHints} keyframes={keyframes} {...c.props} /></div>;
             if (c.placement === 'top') renderedChildren.unshift(node);
             else renderedChildren.push(node);
         });
@@ -605,8 +644,11 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
 
         // For parent params, inject description as first indented child.
         // The `?` help-link button comes free when config.helpId is set.
-        const showDescription = showHints && config.description && !isDisabled && variant !== 'dense'
+        const descriptionEligible = !!config.description && !isDisabled && variant !== 'dense'
             && (config.type !== 'boolean' || sliceState?.[id]);
+        const showDescription = effectiveHints === 'inline' && descriptionEligible;
+        // 'tooltip' mode: same description text, on the node's wrapping `title` instead of a Hint box.
+        const tooltipTitle = effectiveHints === 'tooltip' && descriptionEligible ? config.description : undefined;
         if (showDescription && isParentSlider) {
             renderedChildren.unshift(<Hint key={`desc-${id}`} text={config.description!} helpId={config.helpId} />);
         }
@@ -617,6 +659,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 key={id}
                 ref={(el) => { if (el) tutorAnchors.register(`param:${id}`, el); }}
                 data-help-id={config.helpId}
+                title={tooltipTitle}
                 className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}
             >
                 {isParentSlider && <div className={`absolute inset-0 bg-line/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
@@ -680,7 +723,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const id = roots[i];
             const config = feature.params[id];
             if (config.hidden || excludeParams.includes(id) || !checkParamActive(config.condition, sliceState, globalState)) continue;
-            if (config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
+            if (!ignoreDynamicVisible && config.dynamicVisible && !config.dynamicVisible(sliceState)) continue;
             if (config.layout === 'half' && variant !== 'dense') {
                 let nextId = roots[i + 1];
                 let nextConfig = nextId ? feature.params[nextId] : null;
@@ -726,7 +769,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
         if (!Component) return null;
         return (
             <div key={`custom-${c.componentId}-${c.group != null ? c.group + '-' + idx : idx}`} className={`flex flex-col ${isDisabled ? 'grayscale opacity-30 pointer-events-none' : ''}`}>
-                <Component featureId={featureId} sliceState={sliceState} actions={actions} {...c.props} />
+                <Component featureId={featureId} sliceState={sliceState} actions={actions} hints={effectiveHints} keyframes={keyframes} {...c.props} />
             </div>
         );
     };
@@ -770,10 +813,11 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
             const visibleItems = buildFlatItems(groupParams);
             if (visibleItems.every(item => item === null)) continue;
 
+            const groupTooltipTitle = effectiveHints === 'tooltip' && gc.description ? gc.description : undefined;
             if (gc.collapsible) {
                 const filtered = visibleItems.filter(Boolean);
                 renderItems.push(
-                    <div key={`group-${groupId}`} data-help-id={gc.helpId}>
+                    <div key={`group-${groupId}`} data-help-id={gc.helpId} title={groupTooltipTitle}>
                         <CollapsibleSection
                             label={gc.label}
                             open={!collapsedGroups.has(groupId)}
@@ -782,7 +826,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                             variant="panel"
                         >
                             <div className="flex flex-col">
-                                {showHints && gc.description &&
+                                {effectiveHints === 'inline' && gc.description &&
                                     <Hint key={`group-desc-${groupId}`} text={gc.description} helpId={gc.helpId} />}
                                 {filtered.map((item, idx) => (
                                     <div key={idx}>{item}</div>
@@ -794,8 +838,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 );
             } else {
                 renderItems.push(
-                    <div key={`group-${groupId}`} data-help-id={gc.helpId} className="flex flex-col">
-                        {showHints && gc.description &&
+                    <div key={`group-${groupId}`} data-help-id={gc.helpId} title={groupTooltipTitle} className="flex flex-col">
+                        {effectiveHints === 'inline' && gc.description &&
                             <Hint key={`group-desc-${groupId}`} text={gc.description} helpId={gc.helpId} />}
                         {visibleItems}
                     </div>
@@ -818,13 +862,15 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     // menus and a header-level hint can pick it up.
     const filteredGroupConfig = groupFilter ? groupConfigs?.[groupFilter] : undefined;
     const outerHelpId = filteredGroupConfig?.helpId;
-    const outerHint = showHints && filteredGroupConfig?.description &&
+    const outerHint = effectiveHints === 'inline' && filteredGroupConfig?.description &&
         <Hint key={`group-desc-${groupFilter}`} text={filteredGroupConfig.description} helpId={filteredGroupConfig.helpId} />;
+    const outerTooltipTitle = effectiveHints === 'tooltip' && filteredGroupConfig?.description ? filteredGroupConfig.description : undefined;
 
     return (
         <div
             className={`flex flex-col relative ${className || ''}`}
             data-help-id={outerHelpId}
+            title={outerTooltipTitle}
             onContextMenu={handleContextMenu}
         >
             {outerHint}

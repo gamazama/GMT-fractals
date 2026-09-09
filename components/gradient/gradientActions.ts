@@ -90,6 +90,22 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
       action: wrap(() => { emit(stopOps.delete(knots, ids)); setSelectedIds(new Set<string>()); }),
     },
 
+    // Interpolation of the SELECTED stops (owner review 2026-09-03: the per-stop inspector
+    // no longer carries position / bias / interpolation in the v2 hero; the menu does).
+    ...(selectedIds.size
+      ? (() => {
+          const sel = knots.filter((k) => selectedIds.has(k.id));
+          const common = sel.every((k) => (k.interpolation ?? 'smooth') === (sel[0].interpolation ?? 'smooth')) ? sel[0].interpolation ?? 'smooth' : null;
+          const setInterp = (mode: 'linear' | 'step' | 'smooth') =>
+            wrap(() => emit(knots.map((k) => (selectedIds.has(k.id) ? { ...k, interpolation: mode } : k))));
+          return [
+            { label: sel.length > 1 ? `Interpolation (${sel.length} stops)` : 'Interpolation', action: () => {}, isHeader: true },
+            { label: 'Smooth', checked: common === 'smooth', action: setInterp('smooth') },
+            { label: 'Linear', checked: common === 'linear', action: setInterp('linear') },
+            { label: 'Step', checked: common === 'step', action: setInterp('step') },
+          ];
+        })()
+      : []),
     { label: 'Clipboard', action: () => {}, isHeader: true },
     { label: 'Copy Gradient', action: copy },
     { label: 'Paste Gradient', action: paste },
@@ -108,8 +124,7 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
 
     { label: 'Blend Mode', action: () => {}, isHeader: true },
     { label: 'RGB (Standard)', checked: blendSpace === 'rgb', action: wrap(() => emit(knots, undefined, 'rgb')) },
-    { label: 'HSV (Short Path)', checked: blendSpace === 'hsv', action: wrap(() => emit(knots, undefined, 'hsv')) },
-    { label: 'HSV (Long Path)', checked: blendSpace === 'hsv-far', action: wrap(() => emit(knots, undefined, 'hsv-far')) },
+    { label: 'HSV', checked: blendSpace === 'hsv', action: wrap(() => emit(knots, undefined, 'hsv')) },
     { label: 'Oklab (Perceptual)', checked: blendSpace === 'oklab', action: wrap(() => emit(knots, undefined, 'oklab')) },
 
     { label: 'Output Mode', action: () => {}, isHeader: true },

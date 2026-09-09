@@ -25,6 +25,8 @@
  */
 
 import React from 'react';
+import { ScalarInput } from '../../../components/inputs/ScalarInput';
+import { canvasToPngBlob } from '../../../utils/SceneFormat';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
 import { LiquifyMesh, type BrushType } from './liquify/LiquifyMesh';
 import { LiquifyRenderer, screenToMesh, meshToScreen } from './liquify/LiquifyRenderer';
@@ -92,6 +94,8 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   let first = true;
   let unsub: (() => void) | undefined;
   let disposed = false;
+  /** True while `renderAt` holds the canvas at the export size — freezes the RAF loop. */
+  let exporting = false;
 
   // Cursor state for the brush-ring signifier (CSS px within the overlay; null when outside).
   let cursor: { x: number; y: number } | null = null;
@@ -252,6 +256,14 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
   // ── RAF loop ──
   const loop = (now: number): void => {
     if (disposed) return;
+    // An at-size export owns the GL canvas for a few frames. Freeze the loop while it runs:
+    // the sim must not advance (the exported frame would then differ from what is on screen,
+    // and the soft body would silently drift as a side effect of pressing Export) and the
+    // draw must not fight the temporarily-resized backing store.
+    if (exporting) {
+      raf = requestAnimationFrame(loop);
+      return;
+    }
     const dt = lastT ? Math.min((now - lastT) / 1000, 1 / 20) : 1 / 60;
     lastT = now;
     const st = getLiquifyState();
@@ -273,6 +285,25 @@ const mountLiquify = (host: OwnCanvasHost): OwnCanvasHandle => {
     onContext: (ctx) => { if (ctx.lut.length) renderer.setLut(ctx.lut); },
     setDither: (on) => { renderer.dither = on; },
     exportCanvas: () => { renderer.draw(mesh.pos); return glCanvas; },
+    // Export at size: the mesh is resolution-independent (positions are in mesh space, the
+    // vertex shader maps them to the viewport), so a wallpaper is just the SAME `mesh.pos`
+    // drawn into a bigger backing store. The sculpt, the physics state and the handles are
+    // untouched — the RAF freeze above guarantees the sim cannot even tick during the read.
+    renderAt: async (w, h) => {
+      const prevW = glCanvas.width;
+      const prevH = glCanvas.height;
+      exporting = true;
+      try {
+        renderer.setSize(w, h);
+        renderer.draw(mesh.pos);
+        return await canvasToPngBlob(glCanvas);
+      } finally {
+        renderer.setSize(prevW, prevH);
+        renderer.draw(mesh.pos);
+        lastT = 0; // the frozen frames must not land as one giant dt on resume
+        exporting = false;
+      }
+    },
     dispose: () => {
       disposed = true;
       cancelAnimationFrame(raf);
@@ -312,20 +343,30 @@ const DENSITIES: ReadonlyArray<{ id: LiquifyDensity; label: string }> = [
   { id: 'high', label: 'High' },
 ];
 
+/**
+ * The toolbar slider — a thin wrapper over the app's own {@link ScalarInput}, not a bare
+ * `<input type="range">` (owner, 2026-09-08: "all the sliders in the wallpaper mode are the
+ * main slider component we have used everywhere else"). Going through it brings right-click
+ * reset, the default tick, the live-value indicator, drag precision (Shift/Alt) and the shared
+ * input skin — none of which the hand-rolled range input had. The wrapper exists only to keep
+ * this file's call sites short and to fix the toolbar's column width in one place.
+ */
 const Slider: React.FC<{
   label: string; value: number; min: number; max: number; step: number;
-  onChange: (v: number) => void; fmt?: (v: number) => string;
-}> = ({ label, value, min, max, step, onChange, fmt }) => (
-  <label className="flex items-center gap-1.5 text-[11px] text-fg-muted">
-    {label}
-    <input
-      type="range" min={min} max={max} step={step} value={value}
-      onChange={(e) => onChange(parseFloat(e.target.value))}
-      className="w-20 accent-accent"
-      aria-label={label}
+  onChange: (v: number) => void; defaultValue?: number;
+}> = ({ label, value, min, max, step, onChange, defaultValue }) => (
+  <div className="w-28">
+    <ScalarInput
+      value={value}
+      onChange={onChange}
+      min={min}
+      max={max}
+      step={step}
+      defaultValue={defaultValue}
+      label={label}
+      trackHeight={14}
     />
-    <span className="tabular-nums w-6 text-right text-fg-dim">{(fmt ?? ((v) => String(Math.round(v * 100))))(value)}</span>
-  </label>
+  </div>
 );
 
 const LiquifyControls: React.FC = () => {
@@ -349,8 +390,9 @@ const LiquifyControls: React.FC = () => {
         ))}
       </div>
 
-      <Slider label="Size" value={st.radius} min={0.02} max={0.5} step={0.01} onChange={setLiquifyRadius}
-        fmt={(v) => String(Math.round(v * 100))} />
+      {/* The ×100 display the hand-rolled slider did is gone: ScalarInput shows the real
+          value, which is what every other slider in the app shows. */}
+      <Slider label="Size" value={st.radius} min={0.02} max={0.5} step={0.01} onChange={setLiquifyRadius} />
       <Slider label="Strength" value={st.strength} min={0} max={1} step={0.01} onChange={setLiquifyStrength} />
       <Slider label="Smooth" value={st.smooth} min={0} max={1} step={0.01} onChange={setLiquifySmooth} />
 
@@ -412,6 +454,9 @@ const LiquifyControls: React.FC = () => {
 
 /** LIQUIFY — the deformable colour-field mode (ownCanvas). */
 export const LIQUIFY_MODE: FullscreenMode = {
+  // Under construction (owner, 2026-09-08): reachable, tagged in the selector, and
+  // banners itself on the stage so it is not mistaken for finished work.
+  wip: true,
   id: 'liquify',
   label: 'Liquify',
   kind: 'ownCanvas',

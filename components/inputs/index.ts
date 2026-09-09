@@ -1,4 +1,5 @@
 export { ScalarInput } from './ScalarInput';
+export { InputSkinProvider, useInputSkin, type InputSkin } from './skin';
 export { DraggableNumber } from './primitives/DraggableNumber';
 export {
     formatDisplay,

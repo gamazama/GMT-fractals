@@ -9,17 +9,31 @@
  *
  * The dials live in the Image dock tab (DDFS params); this surface is visuals +
  * direct manipulation. Heavy state (the ImageModel, the trace path) is in imageStore.
+ *
+ * `chrome` (ADDITIVE, 2026-09-03, GE v2 S3; `'face'` added 2026-09-07 for the v2 tray's Image
+ * face — the preview as the working surface with the tools on it, the cloud a square beside
+ * it, no captions / source pane / hero; grep IMAGE_FACE_H): `'full'` (default, every existing host —
+ * the old shell, app-gmt) renders the mode tabs + Replace-image row and the Result hero
+ * exactly as before. `'bare'` — the v2 `ExtractStage` — skips both: v2 has no hero
+ * anywhere but the Working hero above, and supplies its own v2-labeled method chips
+ * (Dominant / Tones / Path) on the shared stage row instead of this component's old-
+ * vocabulary tabs. The cloud + image pane + trace toolbar render in both modes
+ * unchanged — that's the surface `ExtractStage` reuses.
  */
 
+import { createPortal } from 'react-dom';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useImageStore, useImageDerived, useImageMode, useImageParam } from '../store/imageStore';
-import { decodeAndIngest, autoPath, tracePolyline, type Img2GradMode } from '../core/img2grad';
+import type { Lab } from '../core/oklab';
+import { tracePolyline, autoPath, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
 import { fitRampToStops } from '../core/stopFit';
 import { clamp01 } from '../../utils/stopOps';
+import { rgbToOklab } from '../core/oklab';
 import { useFlash } from './useFlash';
+import { useImageDrop } from './useImageDrop';
 
 const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'distill', label: 'Distill' },
@@ -27,13 +41,32 @@ const MODES: { id: Img2GradMode; label: string }[] = [
   { id: 'trace', label: 'Trace' },
 ];
 
+/** The sRGB gamut, sampled 9 × 9 × 9, in OKLab — drawn faintly under the image's cloud in
+ *  'face' chrome so you can see where the picture's colours sit in what is possible (owner,
+ *  2026-09-07: "show a low opacity of the unused gamut"). Computed once. */
+type GamutPoint = { L: number; a: number; b: number; r: number; g: number; bl: number };
+let _gamut: GamutPoint[] | null = null;
+const gamutPoints = (): GamutPoint[] => {
+  if (_gamut) return _gamut;
+  const out: GamutPoint[] = [];
+  for (let ri = 0; ri < 9; ri++) for (let gi = 0; gi < 9; gi++) for (let bi = 0; bi < 9; bi++) {
+    const r = Math.round((ri / 8) * 255), g = Math.round((gi / 8) * 255), bl = Math.round((bi / 8) * 255);
+    const o = rgbToOklab({ r, g, b: bl });
+    out.push({ L: o.L, a: o.a, b: o.b, r, g, bl });
+  }
+  _gamut = out;
+  return out;
+};
+
 // --- 3D cloud projection (verbatim from the standalone proj()) ---
-const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number, pitch: number): [number, number, number] => {
+const proj = (L: number, a: number, b: number, W: number, H: number, yaw: number, pitch: number, zoom = 0.62, abScale = 1): [number, number, number] => {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
-  const X = a, Y = L - 0.5, Z = b;
+  // abScale: the chroma plane drawn wider than lightness (face chrome: 2x — the cloud read
+  // tall and narrow, owner 2026-09-07)
+  const X = a * abScale, Y = L - 0.5, Z = b * abScale;
   const x1 = X * cy - Z * sy, z1 = X * sy + Z * cy;
   const y1 = Y * cp - z1 * sp, z2 = Y * sp + z1 * cp;
-  const sc = Math.min(W, H) * 0.62;
+  const sc = Math.min(W, H) * zoom;
   return [W / 2 + x1 * sc, H / 2 - y1 * sc * 1.05, z2];
 };
 
@@ -83,19 +116,33 @@ const useHiDPICanvas = (ref: React.RefObject<HTMLCanvasElement>, active = true):
   return gen;
 };
 
-export const ImageStage: React.FC = () => {
+export interface ImageStageFaceProps {
+  /** 'face' only: where the colour cloud renders (the tray's Image face) — null = not shown. */
+  cloudHost?: HTMLElement | null;
+  /** 'face' only: where the Draw / Auto / Straight tools render (beside the method chips). */
+  toolsHost?: HTMLElement | null;
+  /** 'face' only: the Path handles are drawn and draggable (the Image face is open). Off, the
+   *  picture is just the picture. */
+  handles?: boolean;
+}
+
+export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageStageFaceProps> = ({ chrome = 'full', cloudHost = null, toolsHost = null, handles = true }) => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
   const loading = useImageStore((s) => s.loading);
   const path = useImageStore((s) => s.path);
-  const setModel = useImageStore((s) => s.setModel);
   const setPath = useImageStore((s) => s.setPath);
-  const setLoading = useImageStore((s) => s.setLoading);
 
   const mode = useImageMode();
   const [, setModeIdx] = useImageParam<number>('mode');
   const [catmull] = useImageParam<boolean>('catmullRom');
   const [drawing, setDrawing] = useState(false);
+  // ── face chrome: the cloud ↔ picture link (owner, 2026-09-07) ──
+  // Hover a cloud point → the picture shows where that colour lives (everything else dims);
+  // hover the picture → the cloud rings that pixel's colour. Refs, not state: hover moves
+  // every frame and both canvases redraw from them via rAF.
+  const hoverRef = useRef<{ lab: Lab; from: 'cloud' | 'pane' } | null>(null);
+  const maskRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
   const derived = useImageDerived();
   // Image extraction is ramp-only; fit to GMT stops once so it can be favourited as a
   // GradientConfig (the shelf's interchange representation).
@@ -104,85 +151,21 @@ export const ImageStage: React.FC = () => {
     [derived],
   );
 
-  const [over, setOver] = useState(false);
+  // Bottom-of-canvas message (unchanged spot/behaviour); image loading + the whole-
+  // window drop/paste listeners are useImageDrop (lifted 2026-09-03, GE v2 S3) so the
+  // v2 shell can mount a second instance at its root — see that hook's header.
   const { toast, flash } = useFlash(1400);
-
-  // --- image loading: decode → downsample to ≤160px → ingest (shared with the scene
-  // document round-trip via decodeAndIngest) ---
-  const loadImage = useCallback(
-    (src: string) => {
-      setLoading(true);
-      decodeAndIngest(src)
-        .then(({ model, thumb }) => {
-          setModel(model, thumb);
-          if (mode === 'trace') setPath(autoPath(model));
-        })
-        .catch(() => {
-          setLoading(false);
-          flash('could not load image');
-        });
-    },
-    [mode, setModel, setPath, setLoading, flash],
-  );
-
-  const fileToImg = useCallback(
-    (f: File | null | undefined): boolean => {
-      if (f && f.type.startsWith('image')) {
-        const r = new FileReader();
-        r.onload = () => loadImage(r.result as string);
-        r.readAsDataURL(f);
-        return true;
-      }
-      return false;
-    },
-    [loadImage],
-  );
-
-  // whole-window drop target + paste (active while the Image stage is mounted)
-  useEffect(() => {
-    let dragT: number | undefined;
-    // Coexistence with in-app drags: a gradient-swatch / favient drag carries a custom
-    // MIME and belongs to a send target (DropTargetLayer), not the image-file importer —
-    // it never carries 'Files'. So ImageStage proceeds ONLY for genuine OS file drops;
-    // any drag without a 'Files' type is an internal drag we stand down for (no overlay
-    // flash over it).
-    const isWellDrag = (e: DragEvent): boolean =>
-      !e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files');
-    const onDragOver = (e: DragEvent) => {
-      if (isWellDrag(e)) return;
-      e.preventDefault();
-      setOver(true);
-      window.clearTimeout(dragT);
-      dragT = window.setTimeout(() => setOver(false), 130);
-    };
-    const onDrop = (e: DragEvent) => {
-      if (isWellDrag(e)) return;
-      e.preventDefault();
-      setOver(false);
-      window.clearTimeout(dragT);
-      if (!fileToImg(e.dataTransfer?.files[0])) flash('not an image');
-    };
-    const onPaste = (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (items) for (const it of items) if (it.type.startsWith('image')) { fileToImg(it.getAsFile()); return; }
-      flash('no image in clipboard');
-    };
-    window.addEventListener('dragover', onDragOver);
-    window.addEventListener('drop', onDrop);
-    window.addEventListener('paste', onPaste);
-    return () => {
-      window.removeEventListener('dragover', onDragOver);
-      window.removeEventListener('drop', onDrop);
-      window.removeEventListener('paste', onPaste);
-      window.clearTimeout(dragT);
-    };
-  }, [fileToImg, flash]);
+  // In 'bare' chrome the v2 shell mounts the drop hook at its root, so the stage must not
+  // attach a second set of window listeners (one drop would decode twice).
+  const { over, fileToImg } = useImageDrop({ notify: flash, enabled: chrome === 'full' });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- cloud ---
   const cloudRef = useRef<HTMLCanvasElement>(null);
-  const cloudGen = useHiDPICanvas(cloudRef, !!model);
+  // the face's cloud canvas mounts only once its host exists (the tray face opens later
+  // than the picture) — `active` re-runs the fit when it does
+  const cloudGen = useHiDPICanvas(cloudRef, !!model && (chrome !== 'face' || !!cloudHost));
   const yawRef = useRef(-0.6);
   const pitchRef = useRef(0.5);
   const drawCloud = useCallback(() => {
@@ -194,10 +177,29 @@ export const ImageStage: React.FC = () => {
     // backing-px per CSS-px, so dot/line sizes stay visually constant across DPR
     const dpr = W / Math.max(1, cv.getBoundingClientRect().width);
     x.clearRect(0, 0, W, H);
-    x.fillStyle = '#08080c';
-    x.fillRect(0, 0, W, H);
+    // 'face' chrome (the v2 tray): the canvas sits on the panel's ground (its CSS
+    // background) and the cloud is projected larger — on a 640×340 canvas at 0.62 it read
+    // small and zoomed out (owner, 2026-09-07).
+    const zoom = chrome === 'face' ? 0.8 : 0.62;
+    const ab = chrome === 'face' ? 2 : 1;
+    if (chrome !== 'face') {
+      x.fillStyle = '#08080c';
+      x.fillRect(0, 0, W, H);
+    }
+    if (chrome === 'face') {
+      // the unused gamut, faint, under everything
+      x.globalAlpha = 0.12;
+      for (const q of gamutPoints()) {
+        const pr = proj(q.L, q.a, q.b, W, H, yaw, pitch, zoom, ab);
+        x.fillStyle = `rgb(${q.r},${q.g},${q.bl})`;
+        x.beginPath();
+        x.arc(pr[0], pr[1], 1.6 * dpr, 0, 7);
+        x.fill();
+      }
+      x.globalAlpha = 1;
+    }
     const pts = model.cloud
-      .map((p) => { const pr = proj(p.L, p.a, p.b, W, H, yaw, pitch); return { sx: pr[0], sy: pr[1], z: pr[2], p }; })
+      .map((p) => { const pr = proj(p.L, p.a, p.b, W, H, yaw, pitch, zoom, ab); return { sx: pr[0], sy: pr[1], z: pr[2], p }; })
       .sort((u, v) => u.z - v.z);
     const zmn = pts.length ? pts[0].z : 0;
     const zr = (pts.length ? pts[pts.length - 1].z - zmn : 1) || 1;
@@ -211,25 +213,79 @@ export const ImageStage: React.FC = () => {
       x.fill();
     }
     x.globalAlpha = 1;
+    if (chrome === 'face') {
+      // AXES: the lightness axis (a = b = 0, dark to light) and a chroma ring at mid-lightness,
+      // so the rotation has a frame (owner, 2026-09-07)
+      const P = (L: number, a: number, b: number) => proj(L, a, b, W, H, yaw, pitch, zoom, ab);
+      x.strokeStyle = 'rgba(255,255,255,0.35)';
+      x.lineWidth = 1 * dpr;
+      const d0 = P(0, 0, 0), d1 = P(1, 0, 0);
+      x.beginPath(); x.moveTo(d0[0], d0[1]); x.lineTo(d1[0], d1[1]); x.stroke();
+      x.beginPath();
+      for (let i = 0; i <= 48; i++) { const t = (i / 48) * Math.PI * 2; const q = P(0.5, 0.25 * Math.cos(t), 0.25 * Math.sin(t)); i ? x.lineTo(q[0], q[1]) : x.moveTo(q[0], q[1]); }
+      x.stroke();
+      x.fillStyle = 'rgba(255,255,255,0.6)';
+      x.font = `${10 * dpr}px ui-sans-serif, system-ui, sans-serif`;
+      x.textAlign = 'center';
+      x.fillText('light', d1[0], d1[1] - 6 * dpr);
+      x.fillText('dark', d0[0], d0[1] + 12 * dpr);
+      // HOVER from the picture: ring the pixel's colour, brighten the points near it
+      const hv = hoverRef.current;
+      if (hv) {
+        const q = P(hv.lab.L, hv.lab.a, hv.lab.b);
+        for (const c of model.cloud) {
+          const d = Math.hypot(c.L - hv.lab.L, c.a - hv.lab.a, c.b - hv.lab.b);
+          if (d < 0.06) { x.globalAlpha = 1; x.fillStyle = `rgb(${c.r},${c.g},${c.bl})`; const pr = P(c.L, c.a, c.b); x.beginPath(); x.arc(pr[0], pr[1], 4 * dpr, 0, 7); x.fill(); }
+        }
+        x.globalAlpha = 1;
+        x.strokeStyle = 'rgba(255,255,255,0.95)';
+        x.lineWidth = 2 * dpr;
+        x.beginPath(); x.arc(q[0], q[1], 7 * dpr, 0, 7); x.stroke();
+      }
+    }
     const ribbon = derived?.ribbon, ramp = derived?.ramp;
-    if (ribbon && ramp) {
+    if (ribbon && ramp && chrome === 'face') {
+      // the gradient's path as a THIN BRIGHT line over a dark halo (owner, 2026-09-07: "so
+      // it's visible") — the coloured ribbon vanished into the cloud it was drawn from
+      const pathOf = () => {
+        x.beginPath();
+        for (let i = 0; i < 256; i++) {
+          const q = proj(ribbon[i].L, ribbon[i].a, ribbon[i].b, W, H, yaw, pitch, zoom, ab);
+          i ? x.lineTo(q[0], q[1]) : x.moveTo(q[0], q[1]);
+        }
+      };
+      x.lineCap = 'round';
+      x.lineJoin = 'round';
+      x.strokeStyle = 'rgba(0,0,0,0.6)';
+      x.lineWidth = 3 * dpr;
+      pathOf();
+      x.stroke();
+      x.strokeStyle = 'rgba(255,255,255,0.95)';
+      x.lineWidth = 1.25 * dpr;
+      pathOf();
+      x.stroke();
+      const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch, zoom, ab);
+      const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch, zoom, ab);
+      x.fillStyle = '#fff';
+      [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3 * dpr, 0, 7); x.fill(); });
+    } else if (ribbon && ramp) {
       x.lineWidth = 4 * dpr;
       x.lineCap = 'round';
       for (let i = 1; i < 256; i++) {
-        const a = proj(ribbon[i - 1].L, ribbon[i - 1].a, ribbon[i - 1].b, W, H, yaw, pitch);
-        const b = proj(ribbon[i].L, ribbon[i].a, ribbon[i].b, W, H, yaw, pitch);
+        const a = proj(ribbon[i - 1].L, ribbon[i - 1].a, ribbon[i - 1].b, W, H, yaw, pitch, zoom, ab);
+        const b = proj(ribbon[i].L, ribbon[i].a, ribbon[i].b, W, H, yaw, pitch, zoom, ab);
         x.strokeStyle = `rgb(${Math.round(ramp[i].r)},${Math.round(ramp[i].g)},${Math.round(ramp[i].b)})`;
         x.beginPath();
         x.moveTo(a[0], a[1]);
         x.lineTo(b[0], b[1]);
         x.stroke();
       }
-      const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch);
-      const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch);
+      const e0 = proj(ribbon[0].L, ribbon[0].a, ribbon[0].b, W, H, yaw, pitch, zoom, ab);
+      const e1 = proj(ribbon[255].L, ribbon[255].a, ribbon[255].b, W, H, yaw, pitch, zoom, ab);
       x.fillStyle = '#fff';
       [e0, e1].forEach((e) => { x.beginPath(); x.arc(e[0], e[1], 3 * dpr, 0, 7); x.fill(); });
     }
-  }, [model, derived]);
+  }, [model, derived, chrome]);
 
   useEffect(() => { drawCloud(); }, [drawCloud, cloudGen]);
 
@@ -239,15 +295,39 @@ export const ImageStage: React.FC = () => {
     if (!cv) return;
     let dr = false, lx = 0, ly = 0, raf = 0;
     const schedule = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; drawCloud(); }); };
+    const paneRedraw = () => { if (chrome === 'face') requestAnimationFrame(() => drawPaneRef.current?.()); };
+    const local = (e: PointerEvent): [number, number] => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     const down = (e: PointerEvent) => { dr = true; lx = e.clientX; ly = e.clientY; cv.setPointerCapture(e.pointerId); cv.classList.add('cursor-grabbing'); };
     const move = (e: PointerEvent) => {
-      if (!dr) return;
+      if (!dr) {
+        // face chrome: hover a cloud point → the picture shows where that colour is
+        if (chrome === 'face' && model) {
+          const [mx, my] = local(e);
+          const dpr = cv.width / Math.max(1, cv.getBoundingClientRect().width);
+          let best: { d: number; lab: Lab } | null = null;
+          for (const c of model.cloud) {
+            const q = proj(c.L, c.a, c.b, cv.width, cv.height, yawRef.current, pitchRef.current, 0.8, 2);
+            const d = Math.hypot(q[0] / dpr - mx, q[1] / dpr - my);
+            if (d < 10 && (!best || d < best.d)) best = { d, lab: { L: c.L, a: c.a, b: c.b } };
+          }
+          const next = best ? { lab: best.lab, from: 'cloud' as const } : null;
+          const was = hoverRef.current;
+          if (!!next !== !!was || (next && was && (next.lab.L !== was.lab.L || next.lab.a !== was.lab.a || next.lab.b !== was.lab.b))) {
+            hoverRef.current = next;
+            schedule();
+            paneRedraw();
+          }
+        }
+        return;
+      }
       yawRef.current += (e.clientX - lx) * 0.01;
       pitchRef.current = Math.max(-1.4, Math.min(1.4, pitchRef.current + (e.clientY - ly) * 0.01));
       lx = e.clientX; ly = e.clientY;
       schedule();
     };
     const up = () => { dr = false; cv.classList.remove('cursor-grabbing'); };
+    const leave = () => { if (hoverRef.current?.from === 'cloud') { hoverRef.current = null; schedule(); paneRedraw(); } };
+    cv.addEventListener('pointerleave', leave);
     cv.addEventListener('pointerdown', down);
     cv.addEventListener('pointermove', move);
     cv.addEventListener('pointerup', up);
@@ -257,9 +337,10 @@ export const ImageStage: React.FC = () => {
       cv.removeEventListener('pointermove', move);
       cv.removeEventListener('pointerup', up);
       cv.removeEventListener('pointercancel', up);
+      cv.removeEventListener('pointerleave', leave);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [drawCloud]);
+  }, [drawCloud, cloudHost, chrome, model]);
 
   // --- image pane (source / trace path) ---
   const paneRef = useRef<HTMLCanvasElement>(null);
@@ -271,14 +352,17 @@ export const ImageStage: React.FC = () => {
     if (w / h > ar) w = h * ar; else h = w / ar;
     return { ox: (cv.width - w) / 2, oy: (cv.height - h) / 2, w, h };
   }, [model]);
+  const drawPaneRef = useRef<(() => void) | null>(null);
   const drawPane = useCallback(() => {
     const cv = paneRef.current;
     if (!cv) return;
     const x = cv.getContext('2d');
     if (!x) return;
     x.clearRect(0, 0, cv.width, cv.height);
-    x.fillStyle = '#08080c';
-    x.fillRect(0, 0, cv.width, cv.height);
+    if (chrome !== 'face') {
+      x.fillStyle = '#08080c';
+      x.fillRect(0, 0, cv.width, cv.height);
+    }
     if (!thumb || !model) return;
     const R = paneRect();
     // backing-px per CSS-px, so the overlay strokes/handles keep a constant visual
@@ -287,7 +371,27 @@ export const ImageStage: React.FC = () => {
     x.imageSmoothingEnabled = true;
     x.imageSmoothingQuality = 'high';
     x.drawImage(thumb, R.ox, R.oy, R.w, R.h);
-    if (mode === 'trace') {
+    // face chrome, hovering a cloud point: dim everything but the pixels of that colour
+    const hv = hoverRef.current;
+    if (chrome === 'face' && hv && hv.from === 'cloud') {
+      const key = `${hv.lab.L.toFixed(3)},${hv.lab.a.toFixed(3)},${hv.lab.b.toFixed(3)}`;
+      if (!maskRef.current || maskRef.current.key !== key) {
+        const mc = document.createElement('canvas');
+        mc.width = model.w; mc.height = model.h;
+        const mx = mc.getContext('2d')!;
+        const img = mx.createImageData(model.w, model.h);
+        const lab = model.lab;
+        for (let i = 0, n = model.w * model.h; i < n; i++) {
+          const d = Math.hypot(lab[i * 3] - hv.lab.L, lab[i * 3 + 1] - hv.lab.a, lab[i * 3 + 2] - hv.lab.b);
+          img.data[i * 4 + 3] = d < 0.06 ? 0 : 170;
+        }
+        mx.putImageData(img, 0, 0);
+        maskRef.current = { key, canvas: mc };
+      }
+      x.imageSmoothingEnabled = true;
+      x.drawImage(maskRef.current.canvas, R.ox, R.oy, R.w, R.h);
+    }
+    if (mode === 'trace' && (chrome !== 'face' || handles)) {
       // Dense curve in image px (same geometry the sampler walks) → pane coords.
       const poly = tracePolyline(path, model.w, model.h, catmull);
       const toPane = (p: Pt): [number, number] => [R.ox + (p.x / (model.w - 1)) * R.w, R.oy + (p.y / (model.h - 1)) * R.h];
@@ -305,8 +409,33 @@ export const ImageStage: React.FC = () => {
         x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill(); x.stroke();
       });
     }
-  }, [thumb, model, mode, path, catmull, paneRect]);
+  }, [thumb, model, mode, path, catmull, paneRect, chrome, handles]);
+  drawPaneRef.current = drawPane;
   useEffect(() => { drawPane(); }, [drawPane, paneGen]);
+
+  // face chrome: hover the PICTURE → the cloud rings that pixel's colour
+  useEffect(() => {
+    const cv = paneRef.current;
+    if (chrome !== 'face' || !cv || !model) return;
+    let raf = 0;
+    const redraw = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; drawCloud(); }); };
+    const move = (e: PointerEvent) => {
+      if (e.buttons) return; // a drag on the handles is not a hover
+      const r = cv.getBoundingClientRect();
+      const R = paneRect();
+      const sx = cv.width / Math.max(1, r.width), sy = cv.height / Math.max(1, r.height);
+      const px = Math.floor(((e.clientX - r.left) * sx - R.ox) / R.w * model.w);
+      const py = Math.floor(((e.clientY - r.top) * sy - R.oy) / R.h * model.h);
+      if (px < 0 || py < 0 || px >= model.w || py >= model.h) { if (hoverRef.current?.from === 'pane') { hoverRef.current = null; redraw(); } return; }
+      const i = (py * model.w + px) * 3;
+      hoverRef.current = { lab: { L: model.lab[i], a: model.lab[i + 1], b: model.lab[i + 2] }, from: 'pane' };
+      redraw();
+    };
+    const leave = () => { if (hoverRef.current?.from === 'pane') { hoverRef.current = null; redraw(); } };
+    cv.addEventListener('pointermove', move);
+    cv.addEventListener('pointerleave', leave);
+    return () => { cv.removeEventListener('pointermove', move); cv.removeEventListener('pointerleave', leave); if (raf) cancelAnimationFrame(raf); };
+  }, [chrome, model, paneRect, drawCloud]);
 
   // Live refs so the pointer listeners can stay attached for the whole drag. If the
   // effect depended on `path`, the first `setPath` would tear down + re-attach the
@@ -318,6 +447,8 @@ export const ImageStage: React.FC = () => {
   pathRef.current = path;
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
+  const handlesRef = useRef(handles);
+  handlesRef.current = chrome !== 'face' || handles;
   // Freehand recording buffer (non-null while a draw stroke is in progress).
   const recordRef = useRef<Pt[] | null>(null);
 
@@ -340,7 +471,7 @@ export const ImageStage: React.FC = () => {
     });
 
     const down = (e: PointerEvent) => {
-      if (modeRef.current !== 'trace') return;
+      if (modeRef.current !== 'trace' || !handlesRef.current) return;
       const [mx, my] = loc(e), R = paneRect();
       // Draw mode: begin a fresh freehand stroke.
       if (drawingRef.current) {
@@ -427,6 +558,70 @@ export const ImageStage: React.FC = () => {
   // Send-to-Generator is now the Generator · A / Generator · B bins in the dock
   // (select the result or drag it onto a bin) — no hardcoded buttons here.
 
+  // 'face' chrome — the v2 hero (plans/ge-v2-unified-shell-plan.md §4 C.6, owner 2026-09-07,
+  // second take: "the hero's own image slot IS the picture"). Rendered INSIDE the hero's slot:
+  // the pane fills the host, the Path handles draw on it while `handles` (the Image face is
+  // open), Replace image is a small button on the picture. The Draw / Auto / Straight tools
+  // and the colour cloud PORTAL into the tray's Image face (`toolsHost` / `cloudHost`) — one
+  // component, two homes, the same state. No captions, no source pane, no hero.
+  if (chrome === 'face') {
+    const tool = 'inline-flex items-center h-[26px] px-3 rounded-lg text-[13px] border transition-colors';
+    const toolIdle = `${tool} bg-surface-section border-line/20 text-fg-muted hover:text-fg hover:border-line/40`;
+    const toolOn = `${tool} bg-surface-section border-line/40 text-accent-300`;
+    return (
+      <div className="relative w-full h-full">
+        <canvas
+          ref={paneRef}
+          width={640}
+          height={340}
+          className={`w-full h-full block touch-none ${mode === 'trace' && handles ? (drawing ? 'cursor-crosshair' : 'cursor-grab') : ''}`}
+        />
+        {handles && !(mode === 'trace' && drawing) && (
+          <button
+            type="button"
+            className={`${toolIdle} absolute bottom-2 right-2 h-[24px] px-2 text-[12px] bg-surface-section/90`}
+            onClick={() => fileInputRef.current?.click()}
+            title="Choose another image (or drop one anywhere)"
+          >
+            Replace
+          </button>
+        )}
+        {toolsHost && mode === 'trace' && createPortal(
+          <div className="flex items-center gap-1.5">
+            <button type="button" className={drawing ? toolOn : toolIdle} onClick={() => setDrawing((d) => !d)} title="Draw the path across the image">
+              {drawing ? 'Drawing…' : 'Draw'}
+            </button>
+            <button type="button" className={toolIdle} onClick={() => model && (setDrawing(false), setPath(autoPath(model)))} title="Place the path automatically">
+              Auto
+            </button>
+            <button
+              type="button"
+              className={`${toolIdle} disabled:opacity-40`}
+              disabled={!path.points}
+              onClick={() => setPath({ x0: path.x0, y0: path.y0, x1: path.x1, y1: path.y1 })}
+              title="Reset to a straight line between the endpoints"
+            >
+              Straight
+            </button>
+          </div>,
+          toolsHost,
+        )}
+        {cloudHost && createPortal(
+          <canvas ref={cloudRef} width={340} height={340} className="w-full h-full block cursor-grab touch-none" title="Colour cloud (OKLab) — drag to rotate · the line is your gradient" />,
+          cloudHost,
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => { if (e.target.files?.[0] && !fileToImg(e.target.files[0])) flash('not an image'); e.target.value = ''; }}
+        />
+        {toast && <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-surface/80 text-fg-secondary text-xs px-3 py-1.5 rounded-full border border-line/10 shadow-xl z-40">{toast}</div>}
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-surface-dock relative overflow-hidden">
       {over && (
@@ -438,12 +633,15 @@ export const ImageStage: React.FC = () => {
       {!model ? (
         <div className="flex-1 flex items-center justify-center p-8">
           {/* Keep the always-visible mobile hero rail from showing a bare band before any
-              image exists — rail-only, so desktop's no-image screen is unchanged. */}
-          <HeroSlot railOnly>
-            <div className="text-[11px] text-fg-dim flex items-center h-full">
-              The image’s gradient appears here once you load one.
-            </div>
-          </HeroSlot>
+              image exists — rail-only, so desktop's no-image screen is unchanged.
+              v2 (`chrome="bare"`) has no hero rail at all — WorkingHero covers it. */}
+          {chrome === 'full' && (
+            <HeroSlot railOnly>
+              <div className="text-[11px] text-fg-dim flex items-center h-full">
+                The image’s gradient appears here once you load one.
+              </div>
+            </HeroSlot>
+          )}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="max-w-md text-center border border-dashed border-line/20 hover:border-accent-500/60 rounded-xl px-10 py-12 transition-colors"
@@ -456,7 +654,10 @@ export const ImageStage: React.FC = () => {
         </div>
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 flex flex-col gap-4">
-          {/* Mode tabs */}
+          {/* Mode tabs + Result hero — chrome="bare" (v2 ExtractStage) skips both: v2
+              supplies its own v2-labeled method chips and has no hero but WorkingHero. */}
+          {chrome === 'full' && (
+            <>
           <div className="flex items-center gap-2">
             <div className="flex gap-1 rounded-md bg-line/[0.04] p-0.5">
               {MODES.map((m, i) => (
@@ -503,6 +704,8 @@ export const ImageStage: React.FC = () => {
               </div>
             )}
           </HeroSlot>
+            </>
+          )}
 
           {/* Cloud + image pane */}
           <div className="flex gap-4 flex-wrap">

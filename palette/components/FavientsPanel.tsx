@@ -23,8 +23,12 @@ import {
   favientSig,
   newGroupId,
   DEFAULT_GROUP,
+  RECENT_LABEL,
+  isRecentGroup,
+  PRESETS_GROUP,
   type Favient,
 } from '../store/favientsStore';
+import { buildBlocks } from './favientBlocks';
 import {
   subscribeFavientHost,
   getFavientBrowseAction,
@@ -383,6 +387,8 @@ const FavientsSystemMenu: React.FC<{ onFlash: (m: string) => void }> = ({ onFlas
 // Swatch size + gap follow the picker's `paletteFilters` controls; fall back to these.
 const DEFAULT_SWATCH_W = 32;
 const DEFAULT_SWATCH_H = 18;
+const STRIP_SWATCH_W = 56;
+const STRIP_SWATCH_H = 30;
 
 /** A 256×1 canvas of an RGB ramp — the source the swatch + hover zoom both blit from. */
 const ramp256Canvas = (ramp: RGB[]): HTMLCanvasElement => {
@@ -439,7 +445,11 @@ const FavientSwatch: React.FC<{
   selected?: boolean;
   /** Host flips click apply→select + enables the enlarge/selectable treatment. */
   selectMode?: boolean;
-}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode }) => {
+  /** The v2 strip: 10 px corners (V8 as amended 2026-09-07 — large rounding on every
+   *  gradient bar). The panel layouts keep their 4 px. */
+  strip?: boolean;
+}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode, strip = false }) => {
+  const radius = strip ? 'rounded-[10px]' : 'rounded';
   const ref = useRef<HTMLCanvasElement>(null);
   const [editing, setEditing] = useState(false);
   const list = view === 'list';
@@ -529,7 +539,10 @@ const FavientSwatch: React.FC<{
           ref={ref}
           onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
           style={{ width: cw, height: ch }}
-          className="block shrink-0 rounded-[2px] ring-1 ring-line/10 overflow-hidden cursor-pointer"
+          // V8 gradient-bar spec (plans/ge-v2-unified-shell-plan.md §1), inlined rather
+          // than importing `gradient-explorer/v2/ui/bar.ts` — palette/** must never
+          // import an app (.claude/rules/palette.md).
+          className={`block shrink-0 ${radius} ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg overflow-hidden cursor-pointer`}
         />
         <div className="min-w-0 flex-1">
           {editing ? (
@@ -574,8 +587,11 @@ const FavientSwatch: React.FC<{
     >
       <button
         onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
-        className={`block rounded-[2px] origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
-          selected ? 'scale-[1.4] ring-2 ring-accent-400 shadow-[0_0_12px_rgb(var(--accent-glow)/0.45)]' : 'ring-1 ring-line/10 hover:ring-warn/80'
+        // V8 gradient-bar spec, inlined for the same app-boundary reason as above.
+        className={`block ${radius} origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
+          selected
+            ? 'scale-[1.4] outline outline-2 outline-accent-400 shadow-[0_0_12px_rgb(var(--accent-glow)/0.45)]'
+            : 'ring-1 ring-line/20 hover:outline hover:outline-2 hover:outline-fg'
         }`}
       >
         <canvas ref={ref} style={{ width: cw, height: ch }} className="block" />
@@ -591,11 +607,21 @@ const Placeholder: React.FC<{ w: number; h: number; list?: boolean }> = ({ w, h,
     <div className="shrink-0 rounded-[2px] border border-dashed border-accent-300/70 bg-accent-300/10" style={{ width: w, height: h }} />
   );
 
-const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; autoFocus: boolean }> = ({ label, onRename, autoFocus }) => {
+/** `fixed` = an auto-managed group (Recent): same divider chrome, static label, no rename.
+ *  The user still drags OUT of it into their own groups — that is the organising gesture —
+ *  they just don't get to name a group the app fills and caps. */
+const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; autoFocus: boolean; fixed?: boolean }> = ({ label, onRename, autoFocus, fixed }) => {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (autoFocus) ref.current?.focus();
-  }, [autoFocus]);
+    if (autoFocus && !fixed) ref.current?.focus();
+  }, [autoFocus, fixed]);
+  if (fixed)
+    return (
+      <div className="flex items-center gap-2 mt-2.5 mb-1 px-0.5">
+        <span className="text-[10px] uppercase tracking-wide text-fg-tertiary w-28">{label}</span>
+        <div className="flex-1 h-px bg-line/10" />
+      </div>
+    );
   return (
     <div className="flex items-center gap-2 mt-2.5 mb-1 px-0.5">
       <input
@@ -653,25 +679,24 @@ const StudioIcon: React.FC = () => (
   </svg>
 );
 
-interface Block {
-  group: string;
-  start: number;
-  favs: Favient[];
-}
-const buildBlocks = (favients: Favient[]): Block[] => {
-  const blocks: Block[] = [];
-  favients.forEach((f, i) => {
-    const g = f.group ?? DEFAULT_GROUP;
-    const last = blocks[blocks.length - 1];
-    if (last && last.group === g) last.favs.push(f);
-    else blocks.push({ group: g, start: i, favs: [f] });
-  });
-  return blocks;
-};
 
 type DropTarget = { kind: 'group'; group: string; index: number } | { kind: 'newgroup' } | { kind: 'trash' } | null;
 
-export const FavientsPanel: React.FC = () => {
+export interface FavientsPanelProps {
+  /**
+   * 'panel' (default) — the full shelf: destination row (dropdown hosts), toolbar, search,
+   *   hint, grouped grid/list with dividers, the new-group tail.
+   * 'strip' — ONE horizontal row for the Gradient Explorer v2 bottom edge
+   *   (plans/ge-v2-design.md §4): Recent first, then each group as a labelled run; no
+   *   toolbar, no hint, no search; the Presets group is hidden while Recent has anything
+   *   in it. Drag-reorder, drag-to-group, new-group and trash all still work in the row.
+   */
+  layout?: 'panel' | 'strip';
+  /** Override the intro hint text (panel layout). `null` hides it. */
+  hint?: string | null;
+}
+
+export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', hint }) => {
   const favients = useFavientsStore((s) => s.favients);
   const groupLabels = useFavientsStore((s) => s.groupLabels);
   const remove = useFavientsStore((s) => s.remove);
@@ -723,8 +748,11 @@ export const FavientsPanel: React.FC = () => {
   const filterActive = query.length > 0;
 
   const pf = useEngineStore((s) => (s as Record<string, any>).paletteFilters) as Record<string, any> | undefined;
-  const swatchW = Math.max(8, Math.round(pf?.swatchSize?.x ?? DEFAULT_SWATCH_W));
-  const swatchH = Math.max(6, Math.round(pf?.swatchSize?.y ?? DEFAULT_SWATCH_H));
+  // The strip is a one-row shelf at the bottom edge: bigger, fixed swatches (the picker
+  // swatch-size prefs are for the wall and the panel grid, not for this).
+  const strip = layout === 'strip';
+  const swatchW = strip ? STRIP_SWATCH_W : Math.max(8, Math.round(pf?.swatchSize?.x ?? DEFAULT_SWATCH_W));
+  const swatchH = strip ? STRIP_SWATCH_H : Math.max(6, Math.round(pf?.swatchSize?.y ?? DEFAULT_SWATCH_H));
   const gap = Math.max(0, Math.round(pf?.paddingSize ?? 1));
 
   // Search filter (transient): match name + source + group LABEL (what the user sees),
@@ -890,12 +918,128 @@ export const FavientsPanel: React.FC = () => {
     onDragBegin: beginDrag,
     swatchW,
     swatchH,
-    view: viewMode,
+    view: strip ? 'grid' : viewMode,
     canDrag: !filterActive,
     onRename: rename,
     onDragBlocked: () => flash('Clear the filter to reorder'),
     selectMode,
   };
+
+  if (strip) {
+    const hasRecent = blocks.some((b) => isRecentGroup(b.group) && b.favs.length > 0);
+    const shown = blocks.filter((b) => !(b.group === PRESETS_GROUP && hasRecent));
+    const dndOk = (e: React.DragEvent) => !filterActive && e.dataTransfer.types.includes(FAVIENT_DND_MIME);
+    return (
+      <div
+        className="h-full min-h-0 relative flex items-stretch text-fg-secondary"
+        onDragEnter={(e) => {
+          if (!dndOk(e)) return;
+          depth.current++;
+          setDragging(true);
+        }}
+        onDragLeave={() => {
+          depth.current = Math.max(0, depth.current - 1);
+          if (depth.current === 0) {
+            setDragging(false);
+            setDropTarget(null);
+          }
+        }}
+      >
+        <div data-gx-target="favients" className="flex-1 min-w-0 flex items-center gap-5 overflow-x-auto overflow-y-hidden px-6 py-1">
+          {favients.length === 0 ? (
+            <div className="text-[12px] text-fg-dim">Pick, mix or extract a gradient — it lands here.</div>
+          ) : (
+            shown.map((block) => {
+              const phIndex = dropTarget?.kind === 'group' && dropTarget.group === block.group ? dropTarget.index : -1;
+              const groupLabel = groupLabels[block.group] ?? '';
+              return (
+                <div
+                  key={block.key}
+                  className="flex items-center gap-1 shrink-0"
+                  data-gx-shelf-block={block.label ?? block.group}
+                  onDragOver={(e) => {
+                    if (!dndOk(e)) return;
+                    e.preventDefault();
+                    setDropTarget({ kind: 'group', group: block.group, index: insertIndexFromPointer(e.currentTarget, e.clientX, e.clientY) });
+                  }}
+                  onDrop={(e) => {
+                    if (filterActive) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const idx = insertIndexFromPointer(e.currentTarget, e.clientX, e.clientY);
+                    doDrop(readFavientDrag(e.dataTransfer), { kind: 'group', group: block.group, index: idx });
+                    endDrag();
+                  }}
+                >
+                  {block.group !== DEFAULT_GROUP && (
+                    <span className="text-[10px] uppercase tracking-wide text-fg-tertiary mr-1.5 whitespace-nowrap select-none">
+                      {block.label ?? (isRecentGroup(block.group) ? RECENT_LABEL : groupLabel || 'Group')}
+                    </span>
+                  )}
+                  {block.favs.map((f, i) => (
+                    <React.Fragment key={f.id}>
+                      {phIndex === i && <Placeholder w={swatchW} h={swatchH} />}
+                      <FavientSwatch fav={f} strip={strip} {...swatchProps} groupLabel={groupLabel} selected={selectMode && favActive && favPick?.key === f.id} />
+                    </React.Fragment>
+                  ))}
+                  {phIndex === block.favs.length && <Placeholder w={swatchW} h={swatchH} />}
+                </div>
+              );
+            })
+          )}
+          {dragging && !filterActive && (
+            <div
+              className={`shrink-0 h-[30px] px-3 rounded-md border border-dashed text-[11px] flex items-center transition-colors ${
+                dropTarget?.kind === 'newgroup' ? 'border-accent-300/70 bg-accent-300/5 text-accent-300' : 'border-line/20 text-fg-dim'
+              }`}
+              onDragOver={(e) => {
+                if (!dndOk(e)) return;
+                e.preventDefault();
+                setDropTarget({ kind: 'newgroup' });
+              }}
+              onDrop={(e) => {
+                if (!dndOk(e)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                doDrop(readFavientDrag(e.dataTransfer), { kind: 'newgroup' });
+                endDrag();
+              }}
+            >
+              + New group
+            </div>
+          )}
+        </div>
+
+        {dragging && (
+          <div
+            className={`absolute top-1 right-3 z-40 flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] transition-colors ${
+              dropTarget?.kind === 'trash' ? 'border-danger bg-danger/30 text-fg' : 'border-line/15 bg-surface/80 text-fg-tertiary'
+            }`}
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes(FAVIENT_DND_MIME)) return;
+              e.preventDefault();
+              setDropTarget({ kind: 'trash' });
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              doDrop(readFavientDrag(e.dataTransfer), { kind: 'trash' });
+              endDrag();
+            }}
+          >
+            🗑 <span>Remove</span>
+          </div>
+        )}
+
+        {toast && (
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-surface/80 text-fg-secondary text-[11px] px-3 py-1.5 rounded-full border border-line/10 shadow-xl z-50 whitespace-nowrap">
+            {toast}
+          </div>
+        )}
+        <GradientHoverPreview hover={hover} />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1013,8 +1157,8 @@ export const FavientsPanel: React.FC = () => {
 
       {/* Toggle-gated intro hint (shares the panel Hint chip styling). Suppressed when
           the shelf is empty — the empty-state below already carries the same guidance. */}
-      {favients.length > 0 && (
-        <Hint text="Where your favourite gradients go to die — kept here, and shared with the main GMT studio." />
+      {favients.length > 0 && hint !== null && (
+        <Hint text={hint ?? 'Where your favourite gradients go to die — kept here, and shared with the main GMT studio.'} />
       )}
 
       <div data-gx-target="favients" className="flex-1 min-h-0 overflow-y-auto p-2 flex flex-col">
@@ -1037,12 +1181,13 @@ export const FavientsPanel: React.FC = () => {
               const phIndex = dropTarget?.kind === 'group' && dropTarget.group === block.group ? dropTarget.index : -1;
               const groupLabel = groupLabels[block.group] ?? '';
               return (
-                <div key={block.group}>
+                <div key={block.key}>
                   {block.group !== DEFAULT_GROUP && (
                     <GroupDivider
-                      label={groupLabel}
+                      label={block.label ?? (isRecentGroup(block.group) ? RECENT_LABEL : groupLabel)}
                       onRename={(v) => renameGroup(block.group, v)}
                       autoFocus={focusGroup === block.group}
+                      fixed={isRecentGroup(block.group)}
                     />
                   )}
                   <div
@@ -1066,6 +1211,7 @@ export const FavientsPanel: React.FC = () => {
                       <React.Fragment key={f.id}>
                         {phIndex === i && <Placeholder w={swatchW} h={swatchH} list={viewMode === 'list'} />}
                         <FavientSwatch
+                          strip={strip}
                           fav={f}
                           {...swatchProps}
                           groupLabel={groupLabel}

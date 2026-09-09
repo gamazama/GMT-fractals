@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <title>Tray — Adjust open</title>
+  <style>
+/* GE v2 tokens — light-grey scheme snapshot 2026-09-07 (plans/ge-v2-figma/tokens.json).
+   Hero mapping as coded in gradient-explorer/v2/WorkingHero.tsx:
+   band = raised · card = section · panel = viewport · header = raised. */
+body { margin: 0; font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; font-size: 13px; color: #111111; background: #D1D1D1; }
+a { color: #0893AF; } a:hover { color: #0E7A90; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; }
+/* Act — 8 px pressable, 26 tall, hairline line/20, section fill */
+.act { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 12px; border-radius: 8px; font-size: 13px; color: #4B5563; background: #C5C5C5; border: 1px solid rgba(17,24,39,0.2); white-space: nowrap; }
+.act.on { color: #111111; border-color: rgba(17,24,39,0.4); }
+.act.accent { color: #0893AF; }
+.act.icon { width: 26px; padding: 0; justify-content: center; }
+/* the standard GMT slider — label · track · value */
+.slider { display: flex; flex-direction: column; gap: 6px; }
+.slider .row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: #111111; }
+.slider .track { position: relative; height: 8px; border-radius: 4px; background: rgba(17,24,39,0.12); }
+.slider .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: #0E7A90; }
+.slider .thumb { position: absolute; top: -3px; width: 4px; height: 14px; border-radius: 2px; background: #FFFFFF; box-shadow: 0 0 0 1px rgba(0,0,0,0.45); }
+/* the tray — hangs from the card, floats over the wall */
+.tray { position: absolute; left: 24px; width: 1232px; background: #C5C5C5; border: 1px solid rgba(17,24,39,0.2); border-top: 0; border-radius: 0 0 20px 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); display: flex; flex-direction: column; }
+.tabrow { display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 16px; }
+.tabrow .meta { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #6B7280; }
+.tabrow .meta b { color: #4B5563; font-weight: 600; }
+.face { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.zone { font-size: 11px; text-transform: uppercase; letter-spacing: 0.025em; color: #4B5563; }
+.bar { border-radius: 10px; box-shadow: 0 0 0 1px rgba(17,24,39,0.2); }
+
+  </style>
+</helmet>
+
+<div style="position: relative; width: 1280px; height: 800px; background: #D1D1D1; overflow: hidden; display: flex; flex-direction: column">
+  <div style="height: 48px; display: flex; align-items: center; padding: 0 16px; gap: 10px; background: #D3D3D3; border-bottom: 1px solid rgba(17,24,39,0.1); color: #111111; font-size: 15px"><b style="color: #0E7A90">GMT</b> Gradient Explorer</div>
+  
+<div style="padding: 10px; background: #D3D3D3; border-bottom: 1px solid rgba(17,24,39,0.1)">
+  <div style="display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; padding-left: 13px; border-radius: 20px; background: #C5C5C5; border: 1px solid rgba(17,24,39,0.2); overflow: hidden">
+    <div style="display: flex; flex-direction: column; justify-content: center; padding: 4px 0">
+      <div style="width: 45px; height: 84px; border-radius: 8px; border: 1px dashed rgba(17,24,39,0.4); color: #4B5563; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 21c-.55 0-1.02-.19-1.43-.58C3.19 20.03 3 19.55 3 19V5c0-.55.19-1.02.58-1.4C3.97 3.2 4.45 3 5 3h14c.55 0 1.02.2 1.4.6.4.38.6.85.6 1.4v14c0 .55-.2 1.03-.6 1.43-.38.38-.85.57-1.4.57H5zm0-2h14V5H5v14zm1-2h12l-3.75-5-3 4L9 13l-3 4z"></path></svg></div>
+    </div>
+    <div style="display: flex; flex-direction: column; border-radius: 20px; background: #B6B6B6; overflow: hidden; min-width: 0">
+      <div style="display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 16px; background: #D3D3D3">
+        <div style="font-size: 18px; font-weight: 600; color: #111111">Copper Dusk</div>
+        <div style="display: flex; align-items: center; gap: 6px; color: #4B5563"><div style="width: 8px; height: 8px; border-radius: 4px; background: #6B7280"></div><span>preview</span></div>
+        <div style="flex: 1"></div>
+        <div class="act "><span>More like this</span></div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-left: 4px">
+          <div class="act icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21l-1.45-1.3C8.87 18.18 7.48 16.88 6.38 15.78 5.28 14.68 4.4 13.69 3.75 12.83 3.1 11.94 2.64 11.13 2.38 10.4 2.13 9.67 2 8.92 2 8.15c0-1.57.53-2.88 1.58-3.93S5.93 2.65 7.5 2.65c.87 0 1.69.18 2.48.55.78.37 1.45.88 2.02 1.55.57-.67 1.24-1.18 2.03-1.55.78-.37 1.6-.55 2.47-.55 1.57 0 2.88.53 3.93 1.58S22 6.58 22 8.15c0 .77-.13 1.52-.4 2.25-.25.73-.7 1.54-1.35 2.43-.65.86-1.53 1.85-2.63 2.95-1.1 1.1-2.49 2.4-4.17 3.92L12 21zm0-2.7c1.6-1.43 2.92-2.66 3.95-3.68 1.03-1.03 1.85-1.92 2.45-2.67.6-.77 1.02-1.44 1.25-2.03.23-.6.35-1.19.35-1.77 0-1-.33-1.83-1-2.5s-1.5-1-2.5-1c-.78 0-1.51.23-2.18.68-.67.43-1.12.99-1.37 1.67h-1.9c-.25-.68-.71-1.24-1.38-1.67C8.99 4.88 8.27 4.65 7.5 4.65c-1 0-1.83.33-2.5 1S4 7.15 4 8.15c0 .58.12 1.17.35 1.77.23.59.65 1.26 1.25 2.03.6.75 1.42 1.64 2.45 2.67 1.03 1.02 2.35 2.25 3.95 3.68z"></path></svg></div><div class="act icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 22c-.83 0-1.54-.29-2.13-.88C14.29 20.54 14 19.83 14 19c0-.1.03-.33.08-.7l-7.03-4.1c-.27.25-.58.45-.93.59-.35.14-.72.21-1.12.21-.83 0-1.54-.29-2.13-.88C2.29 13.54 2 12.83 2 12s.29-1.54.88-2.13C3.46 9.29 4.17 9 5 9c.4 0 .78.07 1.13.21.35.14.66.34.92.59l7.03-4.1c-.03-.12-.05-.23-.06-.34S14 5.13 14 5c0-.83.29-1.54.88-2.13C15.46 2.29 16.17 2 17 2s1.54.29 2.13.88C19.71 3.46 20 4.17 20 5s-.29 1.54-.88 2.13C18.54 7.71 17.83 8 17 8c-.4 0-.78-.07-1.13-.21-.35-.14-.66-.34-.92-.59l-7.03 4.1c.03.12.05.23.06.34.01.11.02.23.02.36s-.01.25-.02.36c-.01.11-.03.22-.06.34l7.03 4.1c.27-.25.58-.45.93-.59.35-.14.72-.21 1.12-.21.83 0 1.54.29 2.13.88.58.58.87 1.29.87 2.12s-.29 1.54-.88 2.13c-.58.58-1.29.87-2.12.87z"></path></svg></div><div class="act icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 16l-5-5 1.4-1.45 2.6 2.6V4h2v8.15l2.6-2.6L17 11l-5 5zm-6 4c-.55 0-1.02-.2-1.41-.59C4.2 19.02 4 18.55 4 18v-3h2v3h12v-3h2v3c0 .55-.2 1.02-.59 1.41-.39.39-.86.59-1.41.59H6z"></path></svg></div><div class="act icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"></path></svg></div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; padding: 16px 16px 8px">
+        <div style="display: flex; align-items: center; gap: 6px; height: 36px; margin-bottom: 12px">
+          <div class="bar" style="flex: 1 1 0; height: 36px; background: #2B1B3D"></div><div class="bar" style="flex: 1 1 0; height: 36px; background: #5A2E5C"></div><div class="bar" style="flex: 1 1 0; height: 36px; background: #9B3F5C"></div><div class="bar" style="flex: 1 1 0; height: 36px; background: #C8624F"></div><div class="bar" style="flex: 1 1 0; height: 36px; background: #E8925A"></div><div class="bar" style="flex: 1 1 0; height: 36px; background: #F2C078"></div>
+          <div style="padding-left: 4px"><div class="act icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"></path></svg></div></div>
+          <div style="display: flex; gap: 6px; padding-left: 4px"><div class="act on accent"><span>Even</span></div><div class="act "><span>Perceptual</span></div><div class="act "><span>Stops</span></div></div>
+        </div>
+        <div style="border-radius: 10px; overflow: hidden; background: linear-gradient(to right, #2B1B3D 50%, #D9E4C9 50%)">
+          <div style="margin: 0 8px; height: 60px; background: linear-gradient(to right, #2B1B3D, #5A2E5C, #9B3F5C, #C8624F, #E8925A, #F2C078, #F7E2A8, #D9E4C9)"></div>
+          <div style="height: 24px; background: rgba(17,24,39,0.05); position: relative">
+            <div style="position: absolute; left: 2px; top: 4px; width: 12px; height: 14px; background: #FFFFFF; border: 1px solid #111111; border-radius: 2px"></div>
+            <div style="position: absolute; right: 2px; top: 4px; width: 12px; height: 14px; background: #FFFFFF; border: 1px solid #111111; border-radius: 2px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+  <div style="flex: 1; background: #B6B6B6"></div>
+  <div style="height: 88px; background: #D3D3D3; border-top: 1px solid rgba(17,24,39,0.1)"></div>
+  <div class="tray" style="top: 281px"><div class="tabrow"><div class="act "><span>Mix</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></div><div class="act "><span>Image</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></div><div class="act "><span>Curves</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></div><div class="act on"><span>Adjust</span><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10l4-4 4 4"></path></svg></div><div class="meta"><span>blend</span><b>Oklab</b><span>output</span><b>Linear</b><div class="act icon" style="height: 22px; width: 22px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h10"></path></svg></div></div></div>
+<div class="face" style="flex-direction: row; gap: 12px; align-items: stretch">
+  <div style="flex: 1.1; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #B6B6B6"><div class="slider"><div class="row"><span>Hue rotate</span><span class="mono">0</span></div><div class="track"><div class="fill" style="width: 50%"></div><div class="thumb" style="left: calc(50% - 2px)"></div></div></div><div class="slider"><div class="row"><span>Chroma ×</span><span class="mono">1.00</span></div><div class="track"><div class="fill" style="width: 40%"></div><div class="thumb" style="left: calc(40% - 2px)"></div></div></div><div class="slider"><div class="row"><span>Contrast</span><span class="mono">1.00</span></div><div class="track"><div class="fill" style="width: 35%"></div><div class="thumb" style="left: calc(35% - 2px)"></div></div></div></div>
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #B6B6B6"><div class="slider"><div class="row"><span>Phase</span><span class="mono">0.00</span></div><div class="track"><div class="fill" style="width: 0%"></div><div class="thumb" style="left: calc(0% - 2px)"></div></div></div><div class="slider"><div class="row"><span>Repeats</span><span class="mono">1</span></div><div class="track"><div class="fill" style="width: 0%"></div><div class="thumb" style="left: calc(0% - 2px)"></div></div></div><div class="slider"><div class="row"><span>Posterize bands</span><span class="mono">0</span></div><div class="track"><div class="fill" style="width: 0%"></div><div class="thumb" style="left: calc(0% - 2px)"></div></div></div></div>
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; border-radius: 10px; background: #B6B6B6"><div class="slider"><div class="row"><span>Noise: Strength</span><span class="mono">0</span></div><div class="track"><div class="fill" style="width: 0%"></div><div class="thumb" style="left: calc(0% - 2px)"></div></div></div><div class="slider"><div class="row"><span>Noise: Frequency</span><span class="mono">32</span></div><div class="track"><div class="fill" style="width: 25%"></div><div class="thumb" style="left: calc(25% - 2px)"></div></div></div><div style="display: flex; align-items: center; gap: 6px"><span class="zone" style="margin-right: 4px">Targets</span><div class="act on accent"><span>lightness</span></div><div class="act "><span>chroma</span></div><div class="act "><span>hue</span></div></div></div>
+</div></div>
+  
+</div>
+</x-dc>
+</body>
+</html>

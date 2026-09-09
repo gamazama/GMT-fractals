@@ -11,6 +11,29 @@
  *
  * Host-agnostic: no engine-store dependency. Apps register their apply targets in
  * the send-target registry; this store only holds the collection + the chosen target id.
+ *
+ * ── Groups, and the one auto-managed group ────────────────────────────────────
+ * Group ORDER is implicit in the flat `favients` array: a group is a CONTIGUOUS
+ * RUN, because FavientsPanel's `buildBlocks` starts a new block whenever `f.group`
+ * changes. Two non-adjacent runs carrying the same group id therefore render as two
+ * blocks with the same divider — which is why every insert here lands inside the
+ * target group's existing run rather than at a convenient array end.
+ *
+ * All groups are user-made EXCEPT `RECENT_GROUP`, which the app fills for the user:
+ * `collectRecent` is called when a gradient becomes the working gradient, is
+ * exported / shared / sent to wallpaper, or is starred — never on a mere wall click.
+ * It is deduped by `favientSig`, capped at `RECENT_CAP`, and it owns the front of
+ * the array (index 0). Organising is optional: named groups sit beside Recent and
+ * the user drags out of Recent into them. A gradient the user has already filed in
+ * a named group is never re-collected, and a user `add()` never lands in Recent.
+ * Its divider is not renamable (FavientsPanel renders a static label for it).
+ *
+ * ── The collection is SHARED ACROSS HOSTS ─────────────────────────────────────
+ * `gmt.favients` is one same-origin key read and written by app-gmt, fluid-toy and
+ * the Gradient Explorer alike (only the PANEL window state is split per host, by
+ * `installFavients`' `storageKey`). So the Recent group is not an Explorer-local
+ * convenience: whatever any host collects appears in EVERY host's shelf, live —
+ * the `storage` listener at the bottom of this file propagates it without a reload.
  */
 
 import { create } from 'zustand';
@@ -32,6 +55,21 @@ export interface Favient {
 
 /** The default (un-divided) group id. */
 export const DEFAULT_GROUP = '';
+
+/** The auto-collected group id. Not user-made: filled by `collectRecent`, capped at
+ *  `RECENT_CAP`, pinned to the front of the array, and its divider is not renamable. */
+export const RECENT_GROUP = 'g-recent';
+/** Divider label for RECENT_GROUP. Re-asserted on every collect (pruneLabels drops it
+ *  whenever the group empties out), and never routed through `uniqueGroupLabel`. */
+export const RECENT_LABEL = 'Recent';
+/** How many auto-collected favourites the Recent run keeps. Oldest fall off the tail. */
+export const RECENT_CAP = 60;
+/** The one-time seeded starter group (registerPaletteUI). The v2 strip hides it while
+ *  Recent has anything in it; the full panel always shows it. */
+export const PRESETS_GROUP = 'g-presets';
+
+/** True for the auto-managed Recent group. Undefined / '' is the default group, not Recent. */
+export const isRecentGroup = (id?: string): boolean => id === RECENT_GROUP;
 
 const LS_KEY = 'gmt.favients';
 const LS_TARGET = 'gmt.favients.target';
@@ -94,6 +132,16 @@ const saveLastGroup = (id: string): void => lsSet(LS_LASTGROUP, id);
  *  arrive from untrusted scene files (W8 import), so skip them defensively. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+/** Index just past the LEADING Recent run — 0 when the array does not start with one.
+ *  Recent owns the front of the array, so a default-group insert has to land after it
+ *  (otherwise the first user save would push Recent off index 0 and the next collect
+ *  would visibly shuffle that save back down under the divider). */
+const recentRunEnd = (favients: Favient[]): number => {
+  let i = 0;
+  while (i < favients.length && isRecentGroup(favients[i].group)) i++;
+  return i;
+};
+
 /** Drop labels for groups that no longer have any favourites. */
 const pruneLabels = (favients: Favient[], labels: Record<string, string>): Record<string, string> => {
   const used = new Set(favients.map((f) => f.group ?? DEFAULT_GROUP));
@@ -151,6 +199,32 @@ interface FavientsState {
   lastGroupId: string;
 
   add: (config: GradientConfig, name: string, source?: string) => string;
+  /**
+   * Auto-collect a gradient into the Recent group — the "My Gradients fills itself"
+   * path. Call it when a gradient BECOMES the working gradient, or is exported /
+   * shared / sent to wallpaper / starred. Do NOT call it on a picker-wall click:
+   * browsing is not keeping.
+   *
+   * Returns the Recent favourite's id, or `null` when the gradient is already filed
+   * in a non-Recent group (the user has kept it deliberately; nothing changes).
+   * Idempotent by `favientSig` — re-collecting promotes the existing entry to the
+   * front of the run instead of duplicating it. Undo is NOT bracketed here; a caller
+   * that wants the collect on the undo stack brackets it itself.
+   */
+  /** `fresh`: open a NEW Recent entry even if one with this signature exists (entering a
+   *  source — the Image again, a Mix — is a new piece of work; owner, 2026-09-07: "bringing
+   *  the image back as the source should also create a new item in the bin"). Without it the
+   *  matching entry is promoted to the head, which is right for a re-pick. */
+  collectRecent: (config: GradientConfig, name: string, source?: string, opts?: { fresh?: boolean }) => string | null;
+  /**
+   * Refresh a Recent entry IN PLACE — the v2 working session (owner, 2026-09-03: the bin
+   * "should be updating the gradient whenever the user modifies it"). Returns false when
+   * `id` is no longer a Recent entry (removed, or dragged into a user group — that IS
+   * keeping it, so it is left alone), which tells the caller to start a new one. Same
+   * content and name → true with no write. Any OTHER Recent entry already holding the new
+   * content is dropped, so the run stays one-per-gradient.
+   */
+  updateRecent: (id: string, config: GradientConfig, name: string) => boolean;
   remove: (id: string) => void;
   /** Content-presence query (used by the gradient-file import to skip duplicates). */
   isFav: (config: GradientConfig) => boolean;
@@ -161,6 +235,15 @@ interface FavientsState {
   moveFavient: (id: string, toIndex: number, group: string) => void;
   /** Insert a NEW favourite (from an external drag) at flat index `toIndex` in `group`. */
   insertFavient: (config: GradientConfig, name: string, source: string | undefined, toIndex: number, group: string) => string;
+  /**
+   * File MANY gradients into a group in one write (GE v2 Phase D: "Keep these N" saves a
+   * narrowed wall as a group). They join the START of the group's run in the given order,
+   * or the tail of the shelf when the group is new; `label` names a new group (made unique
+   * against the others, as `renameGroup` does) and is ignored for one that already has
+   * one. Content already in that group is skipped. Returns the ids filed. Undo is NOT
+   * bracketed here — the caller wraps it, as every panel gesture does.
+   */
+  insertMany: (items: { config: GradientConfig; name: string; source?: string }[], group: string, label?: string) => string[];
   /** Rename a group's divider label. */
   renameGroup: (groupId: string, label: string) => void;
   /** One-time seed of starter favourites into a named group (e.g. the built-in
@@ -225,21 +308,84 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
       lg === DEFAULT_GROUP ||
       !!get().groupLabels[lg] ||
       get().favients.some((f) => (f.group ?? DEFAULT_GROUP) === lg);
-    const group = present ? lg : DEFAULT_GROUP;
+    // Never land a deliberate user save in Recent. lastGroupId can only BE Recent if the
+    // user dragged a favourite into the Recent run (moveFavient writes lastGroupId), and
+    // Recent is auto-managed churn — a save parked there would silently fall off the cap.
+    const group = present && !isRecentGroup(lg) ? lg : DEFAULT_GROUP;
     const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group };
     const favients = [...get().favients];
     // Insert at the START of the target group's contiguous run so the new favourite
     // JOINS that group. Prepending to index 0 would split a mid-list group into two
     // separate blocks with the same divider (buildBlocks groups by contiguous runs) —
-    // i.e. a visually "duplicated" group. For the default top group (or a not-yet-
-    // populated named group) the front / end is the natural spot.
+    // i.e. a visually "duplicated" group. For a not-yet-populated named group the end is
+    // the natural spot; for an empty default group it is the front, EXCEPT that Recent
+    // owns index 0, so skip past its run.
     const firstInGroup = favients.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);
-    const at = firstInGroup >= 0 ? firstInGroup : group === DEFAULT_GROUP ? 0 : favients.length;
+    const at =
+      firstInGroup >= 0 ? firstInGroup : group === DEFAULT_GROUP ? recentRunEnd(favients) : favients.length;
     favients.splice(at, 0, fav);
     saveFavients(favients);
     saveLastGroup(group);
     set({ favients, lastGroupId: group });
     return fav.id;
+  },
+
+  /**
+   * @invariant After collectRecent, the Recent favourites form ONE contiguous run
+   *   starting at array index 0 — so FavientsPanel's `buildBlocks` (which opens a new
+   *   block on every `group` change) renders Recent as a single divider at the top,
+   *   never as two blocks reading "Recent" twice.
+   *   — proven by: `npx tsx debug/test-palette-favients.mts`
+   *     ("the Recent run is one contiguous block at index 0")
+   *   Falsified 2026-09-03 by emitting `[...rest, ...run]` instead of `[...run, ...rest]`.
+   */
+  collectRecent: (config, name, source, opts) => {
+    const sig = favientSig(config);
+    const cur = get().favients;
+
+    // Already filed somewhere the user chose — that IS keeping it. Leave everything alone
+    // rather than minting a Recent shadow copy of a gradient already on the shelf.
+    if (cur.some((f) => !isRecentGroup(f.group) && favientSig(f.config) === sig)) return null;
+
+    // Partition, don't splice: this also CONSOLIDATES any stray Recent entries that ended
+    // up mid-array (an import, or a drag that landed a favourite back in), preserving their
+    // relative order, so the run is contiguous at 0 by construction rather than by luck.
+    const recent = cur.filter((f) => isRecentGroup(f.group));
+    const rest = cur.filter((f) => !isRecentGroup(f.group));
+
+    const at = opts?.fresh ? -1 : recent.findIndex((f) => favientSig(f.config) === sig);
+    const head: Favient =
+      at >= 0
+        ? { ...recent[at], createdAt: Date.now() }
+        : { id: newId(), name, source, config, createdAt: Date.now(), group: RECENT_GROUP };
+    const tail = at >= 0 ? recent.filter((_, i) => i !== at) : recent;
+
+    // Newest first, oldest off the tail.
+    const run = [head, ...tail].slice(0, RECENT_CAP);
+    const favients = [...run, ...rest];
+    // Re-assert the label unconditionally: pruneLabels drops it the moment the run empties
+    // (last item removed / dragged out), and nothing else would ever put it back.
+    const groupLabels = { ...get().groupLabels, [RECENT_GROUP]: RECENT_LABEL };
+    saveFavients(favients);
+    saveGroupLabels(groupLabels);
+    // lastGroupId is deliberately NOT written. It is the landing group for the user's next
+    // `add()`, and an automatic collect must not steer where a deliberate save goes.
+    set({ favients, groupLabels });
+    return head.id;
+  },
+
+  updateRecent: (id, config, name) => {
+    const cur = get().favients;
+    const at = cur.findIndex((f) => f.id === id);
+    if (at < 0 || !isRecentGroup(cur[at].group)) return false;
+    const sig = favientSig(config);
+    if (favientSig(cur[at].config) === sig && cur[at].name === name) return true;
+    const favients = cur
+      .filter((f) => f.id === id || !(isRecentGroup(f.group) && favientSig(f.config) === sig))
+      .map((f) => (f.id === id ? { ...f, config, name } : f));
+    saveFavients(favients);
+    set({ favients });
+    return true;
   },
 
   remove: (id) => {
@@ -283,6 +429,31 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     saveLastGroup(group);
     set({ favients: arr, lastGroupId: group });
     return fav.id;
+  },
+
+  insertMany: (items, group, label) => {
+    const arr = [...get().favients];
+    const have = new Set(arr.filter((f) => (f.group ?? DEFAULT_GROUP) === group).map((f) => favientSig(f.config)));
+    const now = Date.now();
+    const fresh: Favient[] = [];
+    for (const it of items) {
+      const sig = favientSig(it.config);
+      if (have.has(sig)) continue;
+      have.add(sig);
+      fresh.push({ id: newId(), name: it.name, source: it.source, config: it.config, createdAt: now, group });
+    }
+    if (!fresh.length) return [];
+    const at = arr.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);
+    arr.splice(at < 0 ? arr.length : at, 0, ...fresh);
+    let groupLabels = get().groupLabels;
+    if (label && group !== DEFAULT_GROUP && !groupLabels[group]) {
+      groupLabels = { ...groupLabels, [group]: uniqueGroupLabel(label, group, groupLabels) };
+      saveGroupLabels(groupLabels);
+    }
+    saveFavients(arr);
+    saveLastGroup(group);
+    set({ favients: arr, groupLabels, lastGroupId: group });
+    return fresh.map((f) => f.id);
   },
 
   renameGroup: (groupId, label) => {

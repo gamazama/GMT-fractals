@@ -144,6 +144,8 @@ export default defineConfig({
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
         'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
         'gradient-explorer': path.resolve(__dirname, 'gradient-explorer.html'),
+        // v2 shell, built beside the old one until parity (plans/ge-v2-design.md §7).
+        'gradient-explorer-next': path.resolve(__dirname, 'gradient-explorer-next.html'),
         'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
       },

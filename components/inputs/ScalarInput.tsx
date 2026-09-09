@@ -15,6 +15,7 @@ import { ScalarInputProps } from './types';
 import { DraggableNumber } from './primitives';
 import { computePercentage, mappedDomain } from './primitives/FormatUtils';
 import { usePrecisionTrackDrag } from './usePrecisionTrackDrag';
+import { useInputSkin } from './skin';
 
 export const ScalarInput: React.FC<ScalarInputProps> = ({
     // Value props
@@ -44,6 +45,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     trackPosition = 'below',
     trackHeight = 20,
     variant = 'full',
+    dense = false,
     className = '',
 
     trackBackground,
@@ -141,6 +143,9 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     // Variant-based styling
     const isCompact = variant === 'compact';
     const isMinimal = variant === 'minimal';
+    // The 'soft' skin (see ./skin.tsx) restyles the FULL variant only; compact and minimal
+    // are the vector cells and bare numbers, which have no box to soften.
+    const soft = useInputSkin() === 'soft' && variant === 'full';
     
     if (isMinimal) {
         // Minimal variant - just the number (no fill bar, but still uses immediate display)
@@ -230,7 +235,138 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     
     // Full variant - like Slider (with header and track below)
     const headerHeight = "h-9 md:h-[26px]";
-    
+
+    if (soft) {
+        // The v2 skin (plans/ge-v2-figma/slider-skin.md, option B, owner's pick 2026-09-07):
+        // THUMBLESS — the fill's leading edge IS the value, with a 2 px accent cap so it never
+        // vanishes at 0 % or 100 %; a 10 px bar in the same radius family as the ramp; the
+        // default value a 1 px tick over the fill (its hit area resets); one quiet line of
+        // label · value, the value a DraggableNumber (click to TYPE — a text entry stays
+        // wherever a user expects one). `dense` (option C): label · bar · value on one 26 px row.
+        // The cap is an ::after on the fill, so the drag's single width write moves it.
+        const atDefault = defaultValue !== undefined && Math.abs(value - defaultValue) < 1e-9;
+        const capCls = trackBackground
+            ? 'after:bg-fg after:shadow-[0_0_0_1px_rgba(0,0,0,.4)]'
+            : disabled ? 'after:hidden' : isActive ? 'after:bg-accent-300' : atDefault ? 'after:bg-accent-400/60' : 'after:bg-accent-300';
+        const fillCls = trackBackground ? 'bg-transparent' : disabled ? 'bg-fg-muted/15' : isActive ? 'bg-accent-400/65' : atDefault ? 'bg-accent-400/30' : 'bg-accent-400/50';
+        // How many decimals the number shows follows the STEP: a slider that moves in whole
+        // numbers has no business printing 25.94594595, which is what the default 8-place
+        // format did with a value that came out of a colour conversion (owner, 2026-09-08).
+        const dp = (() => {
+            const t = String(step ?? 1);
+            const i = t.indexOf('.');
+            return i < 0 ? 0 : Math.min(3, t.length - i - 1);
+        })();
+        const softFormat = format ?? ((v: number) => v.toFixed(dp));
+        const number = (
+            <DraggableNumber
+                value={value}
+                onChange={onChange}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                step={step}
+                hardMin={hardMin}
+                hardMax={hardMax}
+                mapping={mapping}
+                format={overrideText ? () => overrideText : softFormat}
+                mapTextInput={mapTextInput}
+                defaultValue={defaultValue}
+                disabled={disabled}
+                highlight={isActive}
+                onImmediateChange={handleImmediateChange}
+            />
+        );
+        const bar = showTrack && hasBounds && (
+            <div
+                ref={trackContainerRef}
+                className={`relative flex items-center touch-none ${dense ? 'flex-1 min-w-[64px]' : ''} ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
+                style={{ touchAction: 'none', height: 14 }}
+                onPointerDown={track.onPointerDown}
+                onPointerMove={track.onPointerMove}
+                onPointerUp={track.onPointerUp}
+                onPointerCancel={track.onPointerUp}
+                onLostPointerCapture={track.onPointerUp}
+            >
+                <div className={`absolute left-0 right-0 rounded-[10px] overflow-hidden bg-line/[0.12] group-hover/soft:bg-line/20 ${isActive ? 'ring-1 ring-accent-400/30' : ''}`} style={{ top: 2, height: 10 }}>
+                    {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
+                    <div
+                        ref={fullTrackFillRef}
+                        className={`absolute top-0 bottom-0 left-0 rounded-[10px] ${fillCls} after:content-[''] after:absolute after:right-0 after:inset-y-0 after:w-[2px] group-hover/soft:after:w-[3px] ${capCls}`}
+                        style={{ width: `${valuePct}%` }}
+                    />
+                    {showLiveIndicator && liveValue !== undefined && !disabled && (
+                        <div className="absolute top-0 bottom-0 w-[3px] rounded-full bg-secondary transition-all duration-75 ease-out z-10" style={{ left: `calc(${livePct}% - 1.5px)` }} />
+                    )}
+                    {defaultPct !== null && (
+                        <div className="absolute top-0 bottom-0 w-px bg-fg/30 pointer-events-none z-10" style={{ left: `${defaultPct}%` }} />
+                    )}
+                </div>
+                {/* The default tick's hit area RESETS on a click but never swallows the
+                    pointer-down: with no thumb, the fill's edge at a default value sits exactly
+                    on this tick, and a drag that starts there must still be a drag (measured
+                    2026-09-07: Hue rotate at 0 could not be grabbed — "click a few times
+                    before it moves"). The track's own pointer-down runs first (bubbling), so
+                    a plain click lands on the tick's position and the reset then makes it
+                    exact; a drag just drags. */}
+                {defaultPct !== null && !disabled && (
+                    <button
+                        type="button"
+                        className="absolute top-0 bottom-0 w-[10px] -ml-[5px] z-20 cursor-ew-resize"
+                        style={{ left: `${defaultPct}%` }}
+                        title={`Reset to ${defaultValue}`}
+                        aria-label="Reset to default"
+                        tabIndex={-1}
+                        onClick={(e) => { e.preventDefault(); if (!track.dragged()) handleReset(); }}
+                    />
+                )}
+            </div>
+        );
+        const labelEl = label && (
+            <label className={`text-[13px] select-none flex items-center gap-2 truncate pointer-events-none ${dense ? 'shrink-0 max-w-[45%]' : ''} ${disabled ? 'text-fg-faint' : 'text-fg-muted'}`}>
+                {label}
+                {labelSuffix}
+                {liveValue !== undefined && !disabled && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
+                )}
+            </label>
+        );
+        // The number is a FIELD you can drag and type into, so it gets a zone of its own: a
+        // slightly darker well, which says "this is editable" without a border or a label
+        // (owner, 2026-09-08).
+        const valueEl = (
+            <div
+                className={`text-right text-[13px] tabular-nums group/num-area touch-none rounded px-1.5 transition-colors ${
+                    dense ? 'w-[56px] shrink-0' : 'ml-auto min-w-[60px]'
+                } ${disabled ? 'bg-line/[0.06]' : isActive ? 'bg-line/[0.16] text-fg font-medium' : 'bg-line/[0.10] hover:bg-line/[0.16]'}`}
+            >
+                {number}
+            </div>
+        );
+        if (dense) {
+            return (
+                <div className={`group/soft h-[22px] flex items-center gap-2.5 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                    {/* the keyframe diamond's home in this skin (headerRight) */}
+                    {labelEl}
+                    {bar}
+                    {valueEl}
+                    {headerRight}
+                </div>
+            );
+        }
+        return (
+            <div className={`group/soft py-px ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                {label && (
+                    <div className="flex items-center h-5 gap-2 min-w-0">
+                        {headerRight}
+                        {labelEl}
+                        {valueEl}
+                    </div>
+                )}
+                {bar}
+            </div>
+        );
+    }
+
     return (
         <div 
             className={`mt-px ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`}

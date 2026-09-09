@@ -23,6 +23,10 @@ interface Props {
   onSelectKeys: (key: ChannelKey) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
+  /** Non-selectable LAYERS listed under the channels (the fit ghost): an eye, no keys to
+   *  select (owner, 2026-09-07 evening: "a layer under chroma and hue, just has no points
+   *  to select"). */
+  layers?: { key: string; label: string; color: string; visible: boolean; onToggle: () => void; dashed?: boolean }[];
 }
 
 export const ChannelTrackSidebar: React.FC<Props> = ({
@@ -34,6 +38,7 @@ export const ChannelTrackSidebar: React.FC<Props> = ({
   onSelectKeys,
   onSelectAll,
   onDeselectAll,
+  layers = [],
 }) => (
   <div className="w-28 shrink-0 border-r border-line/10 bg-surface-dock/60 flex flex-col text-[11px]">
     <div className="flex items-center gap-1 px-2 py-1 border-b border-line/10">
@@ -61,6 +66,15 @@ export const ChannelTrackSidebar: React.FC<Props> = ({
         </div>
       );
     })}
+    {layers.map((l) => (
+      <div key={l.key} className="flex items-center gap-1.5 px-2 py-1 border-b border-line/5" data-gx-layer={l.key}>
+        <span className="w-2 h-2 rounded-full shrink-0 border" style={{ borderColor: l.color, borderStyle: l.dashed ? 'dashed' : 'solid' }} />
+        <span className={`flex-1 truncate ${l.visible ? 'text-fg-tertiary' : 'text-fg-faint'}`}>{l.label}</span>
+        <button onClick={l.onToggle} title={l.visible ? 'Hide' : 'Show'} className={l.visible ? 'text-fg-tertiary' : 'text-fg-faint'}>
+          <EyeIcon active={l.visible} />
+        </button>
+      </div>
+    ))}
   </div>
 );
 

@@ -74,6 +74,15 @@
   --secondary: 168 85 247;
   --secondary-strong: 126 34 206;
 
+  /* v2 shell meaning colours (plans/ge-v2-unified-shell-plan.md §1 V3): live = green
+     (reuses --ok), edited = amber (reuses --warn) — both already meaning-bearing status
+     tokens above. Only "armed" (violet) had no token; colorSchemeStore's `--secondary`
+     is hue-configurable branding, not a fixed meaning colour, so it is the wrong reuse
+     here. One fixed value for both light and dark: a mid-tone violet reads as a white-on-
+     fill chip and as a 2px outline against both a near-black and a near-white ground.
+     gradient-explorer/v2/ui/StateChip.tsx is the only consumer today. */
+  --gx-armed: 167 139 250;
+
   /* Global plain-CSS surfaces */
   --app-bg: 0 0 0;
   --scrollbar-track: 0 0 0;

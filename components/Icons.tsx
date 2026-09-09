@@ -246,6 +246,15 @@ export const WaveIcon = ({ active }: { active?: boolean }) => (
     </svg>
 );
 
+/** The smoothing brush (Gradient Explorer v2 Curves): a soft-tipped brush over a wave. */
+export const BrushIcon = ({ active }: { active?: boolean }) => (
+    <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke={active ? 'currentColor' : 'currentColor'} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M13 2.5 8.2 8.6" />
+        <path d="M8.6 9.1c-.9-.9-2.4-.8-3.1.2-.7 1-.3 2.4-1.9 3.2 1.9.6 3.9-.1 4.7-1.3.6-.8.6-1.6.3-2.1z" fill={active ? 'currentColor' : 'none'} />
+        <path d="M2 13.5c1.5-1 3-1 4.5 0s3 1 4.5 0 2.5-.7 3 0" opacity=".6" />
+    </svg>
+);
+
 export const PencilIcon = ({ active }: { active?: boolean }) => (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={active ? "rgb(var(--accent-400))" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 20h9" />

@@ -10,7 +10,16 @@ import {
     complementary,
     splitComplementary,
     wrapHue,
+    harmonyHandles,
+    HARMONY_COUNT,
+    HARMONY_ANGLE,
+    kelvinToHex,
+    applyTint,
+    type ColorHarmony,
+    type HsvHandle,
 } from '../utils/colorUtils';
+import { ColorWheel } from './ColorWheel';
+import { Dropdown } from './Dropdown';
 import { useStoreCallbacks } from './contexts/StoreCallbacksContext';
 import { useInteractionDrag } from '../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../engine-gmt/interaction/interactionSources';
@@ -19,6 +28,10 @@ import { useClipboardCopy } from '../hooks/useClipboardCopy';
 import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
 import { ChevronDown } from './Icons';
+import { useInputSkin } from './inputs/skin';
+import { setColorDrag } from './gradient/colorDrag';
+import { CopyGlyph, EyedropperGlyph, SpectrumGlyph, WheelGlyph, StopGlyph, HarmonyGlyph, ChannelsGlyph, KelvinGlyph, SwatchesGlyph } from './gradient/pickerIcons';
+import Slider from './Slider';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rich colour picker (W10): 2D saturation×brightness field + hue strip, RGB+HSB
@@ -58,6 +71,20 @@ interface EmbeddedColorPickerProps {
     onAlphaChange?: (alpha: number) => void;
     /** Optional host override for the fixed Palette row. Defaults to PALETTE_DEFAULT. */
     palette?: string[];
+    /**
+     * A host editing MORE THAN ONE thing at once (the gradient editor with several knots
+     * selected) passes this. Then a CHANNEL slider stops meaning "make everything this colour"
+     * and starts meaning "move this channel by this much on each of them", which is what a
+     * multi-selection is for: drop everyone's red a little, lift everyone's value, without
+     * flattening the differences that made you select them (owner, 2026-09-08).
+     * Setting a colour outright — the hex, the spectrum, the wheel, a swatch — still applies
+     * to all of them, because that is unambiguous.
+     */
+    onChannelAdjust?: (channel: 'r' | 'g' | 'b' | 'h' | 's' | 'v', delta: number) => void;
+    /** The controls for the KNOT being edited (position, bias, interpolation), supplied by the
+     *  host. Rendered as the 'stop' mode, first in the row — the owner asked for it on the left
+     *  and on a switch, in place of the old collapsing side column. */
+    stopBlock?: React.ReactNode;
 }
 
 // --- shared, capped, persisted recents (MRU) ---
@@ -118,26 +145,116 @@ const clampHsb = (h: number, s: number, v: number): HSB => ({
 });
 const hsbToHex = ({ h, s, v }: HSB): string => rgbToHex(hsbToRgb(h, s, v));
 
+// ── the v2 dialect (Phase E) ───────────────────────────────────────────────────────────
+// The picker is shared with app-gmt, so its LOOK follows the input skin the host provides
+// (components/inputs/skin.tsx — the same context the sliders read): 'default' is the studio's
+// picker, unchanged; 'soft' is Gradient Explorer v2's language — large rounding on every
+// gradient and swatch (10 px bars), one quiet 12 px line of text instead of 9 px uppercase
+// bold, no box of its own (the tray is the surface), and mono type on the hex alone.
+
+// Radii here are deliberately MODEST. The shell's large rounding is the GRADIENT language —
+// the hero ramp, the palette bars, the wall's tiles — and a picker is made of controls, not
+// gradients (owner, 2026-09-08: "the round edges are supposed to be for gradients"). So
+// nothing here becomes a pill: a track or a pad takes 6 px, a solid colour chip 4 px, and a
+// pressable keeps the shell's 8 px.
+/** Pads, strips and slider tracks. */
+const CTRL_R = 'rounded-md';
+/** Solid colour chips (harmony / recent / palette). */
+const CHIP_R = 'rounded';
+/** Spectrum and Wheel are the same size: they occupy one slot and toggle (owner). */
+const SURFACE_PX = 150;
+
+// ── selection MODES (soft dialect) ─────────────────────────────────────────────────────
+// The reference chooser's real cleverness is not any one control but that you CHOOSE which
+// controls are on: a toolbar of toggles under the swatch, several at once, and the
+// combination is remembered for next time (owner, 2026-09-08 — "the default is the regular
+// square picker … its cleverness is its configurability"). So the field is on by default and
+// the wheel is one option among several, not a replacement for anything.
+export type PickerMode = 'stop' | 'spectrum' | 'wheel' | 'harmony' | 'channels' | 'kelvin' | 'swatches';
+/** Spectrum and Wheel are two views of the same job, so they TOGGLE rather than stack. */
+const SURFACES: PickerMode[] = ['spectrum', 'wheel'];
+const MODES_KEY = 'gmt.colorpicker.modes';
+/** The owner's own working set, taken from their session (2026-09-08). */
+const MODE_DEFAULT: PickerMode[] = ['stop', 'spectrum', 'channels', 'swatches'];
+/** Stored sets from the first cut named this mode 'field'. */
+const migrateModes = (v: string[]): PickerMode[] => {
+    const named = v.map((m) => (m === 'field' ? 'spectrum' : m)) as PickerMode[];
+    // A stored set from before Spectrum and Wheel became one slot can hold both: keep the first.
+    let surfaceSeen = false;
+    return named.filter((m) => {
+        if (!SURFACES.includes(m)) return true;
+        if (surfaceSeen) return false;
+        surfaceSeen = true;
+        return true;
+    });
+};
+
+const MODE_GLYPH: Record<PickerMode, React.FC<{ size?: number }>> = {
+    stop: StopGlyph,
+    spectrum: SpectrumGlyph,
+    wheel: WheelGlyph,
+    harmony: HarmonyGlyph,
+    channels: ChannelsGlyph,
+    kelvin: KelvinGlyph,
+    swatches: SwatchesGlyph,
+};
+
+const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
+    const G = MODE_GLYPH[mode];
+    return <G size={14} />;
+};
+
+const MODE_TITLE: Record<PickerMode, string> = {
+    stop: 'Stop — this knot\u2019s position, bias and interpolation',
+    spectrum: 'Spectrum — saturation and brightness for one hue',
+    wheel: 'Wheel — hue and saturation on a disc',
+    harmony: 'Harmony — related colours, and this gradient\u2019s own',
+    channels: 'Channels — RGB and HSV sliders',
+    kelvin: 'Kelvin — colour temperature, and its green-to-magenta tint',
+    swatches: 'Recent colours — the ones you have used',
+};
+
 // A small clickable swatch strip used by harmony / recents / palette rows.
-const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: string) => void; current?: string }> = ({
+const SwatchRow: React.FC<{
+    label: string;
+    colors: string[];
+    onPick: (hex: string) => void;
+    /** Takes precedence over `onPick`: the row's colours ARE a set with identity (the wheel's
+     *  handles), so picking one selects that member rather than re-deriving from its colour. */
+    onPickIndex?: (index: number) => void;
+    current?: string;
+}> = ({
     label,
     colors,
     onPick,
+    onPickIndex,
     current,
-}) => (
-    <div className="flex items-center gap-1.5">
-        <div className="w-[52px] shrink-0 text-[9px] uppercase tracking-wide text-fg-dim font-bold">{label}</div>
-        <div className="flex-1 flex gap-[2px] overflow-hidden">
+}) => {
+    const soft = useInputSkin() === 'soft';
+    return (
+    <div className={`flex items-center ${soft ? 'gap-2' : 'gap-1.5'}`}>
+        <div className={soft
+            ? 'w-[52px] shrink-0 text-[12px] text-fg-muted select-none'
+            : 'w-[52px] shrink-0 text-[9px] uppercase tracking-wide text-fg-dim font-bold'}>{label}</div>
+        <div className={`flex-1 flex overflow-hidden ${soft ? 'gap-1' : 'gap-[2px]'}`}>
             {colors.length === 0 ? (
-                <div className="text-[9px] text-fg-faint italic py-[3px]">—</div>
+                <div className={soft ? 'text-[12px] text-fg-faint py-[3px]' : 'text-[9px] text-fg-faint italic py-[3px]'}>—</div>
             ) : (
                 colors.map((c, i) => (
                     <button
                         key={`${c}-${i}`}
-                        onClick={() => onPick(c)}
-                        className={`h-4 flex-1 min-w-0 rounded-[2px] border transition-transform hover:scale-110 hover:z-10 ${
-                            current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/10'
-                        }`}
+                        onClick={() => (onPickIndex ? onPickIndex(i) : onPick(c))}
+                        // drag a colour onto the ramp: over a knot it recolours it, over bare
+                        // track it inserts one (components/gradient/colorDrag.ts)
+                        draggable
+                        onDragStart={(e) => setColorDrag(e.dataTransfer, c)}
+                        className={soft
+                            ? `h-5 flex-1 min-w-0 ${CHIP_R} border transition-transform hover:scale-105 hover:z-10 ${
+                                current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/20'
+                            }`
+                            : `h-4 flex-1 min-w-0 rounded-[2px] border transition-transform hover:scale-110 hover:z-10 ${
+                                current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/10'
+                            }`}
                         style={{ backgroundColor: c }}
                         title={c}
                     />
@@ -145,14 +262,19 @@ const SwatchRow: React.FC<{ label: string; colors: string[]; onPick: (hex: strin
             )}
         </div>
     </div>
-);
+    );
+};
 
 /**
- * Bespoke value slider with a custom gradient track. Uses the SHARED
- * usePrecisionTrackDrag (the exact GMT slider interaction — click-to-position,
- * delta-drag, Shift ×10 coarse / Alt ×0.1 fine), so it feels identical to every
- * other GMT slider, but paints the channel/hue gradient as its track with a
- * GMT-style thumb on top (which ScalarInput can't do).
+ * The studio's compact channel slider: a custom gradient track with a bar thumb, drawn small
+ * enough for a 26 px dock row. Uses the SHARED usePrecisionTrackDrag so the feel matches.
+ *
+ * @deprecated for the v2 dialect. `ScalarInput` can paint a gradient track now
+ * (`trackBackground`), so the soft skin uses the REAL `Slider` instead — which brings
+ * right-click reset, the default-value tick, the live indicator, help ids and a typed value
+ * that this one never had (owner, 2026-09-08: "this component is missing a lot of
+ * functionality that the real slider component has"). Kept for `full` chrome, whose rows are
+ * half the height a full Slider needs.
  */
 const GradientSlider: React.FC<{
     label: string;
@@ -164,14 +286,43 @@ const GradientSlider: React.FC<{
     onStart: () => void;
     onEnd: () => void;
     trackBg: string;
-}> = ({ label, value, min, max, step, onChange, onStart, onEnd, trackBg }) => {
+    /** Where the value's tick sits, and what a right-click resets to (soft dialect). */
+    defaultValue?: number;
+}> = ({ label, value, min, max, step, onChange, onStart, onEnd, trackBg, defaultValue }) => {
     const track = usePrecisionTrackDrag({ min, max, step, onChange, onDragStart: onStart, onDragEnd: onEnd });
     const pct = ((value - min) / (max - min)) * 100;
+    const soft = useInputSkin() === 'soft';
+    // The v2 dialect uses the app's OWN slider, so the picker's channels behave like every
+    // other slider in the shell (and match their thickness).
+    if (soft) {
+        return (
+            <Slider
+                dense
+                label={label}
+                value={value}
+                min={min}
+                max={max}
+                step={step}
+                defaultValue={defaultValue}
+                trackBackground={trackBg}
+                onChange={onChange}
+                onDragStart={onStart}
+                onDragEnd={onEnd}
+            />
+        );
+    }
     return (
-        <div className="flex items-center gap-1.5">
-            <div className="w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none">{label}</div>
+        // One rhythm for the whole picker: a 20 px BAND on an 8 px gap. Matching the pitch was
+        // not enough — a 10 px track inside a 20 px row left 18 px of nothing between bars
+        // against 8 px between the swatch chips, and that is what read as loose (measured with
+        // the owner, 2026-09-08). The band itself fills the row, so every coloured element in
+        // the picker is 20 px with 8 px of air.
+        <div className={`flex items-center ${soft ? 'gap-2 h-4' : 'gap-1.5'}`}>
+            <div className={soft
+                ? 'w-3 shrink-0 text-[12px] text-fg-muted text-center select-none'
+                : 'w-3 shrink-0 text-[9px] font-bold text-fg-muted text-center select-none'}>{label}</div>
             <div
-                className="relative flex-1 h-3.5 rounded-sm cursor-ew-resize touch-none overflow-hidden"
+                className={`relative flex-1 cursor-ew-resize touch-none overflow-hidden ${soft ? `h-4 ${CTRL_R}` : 'h-3.5 rounded-sm'}`}
                 style={{ background: trackBg }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
@@ -179,9 +330,12 @@ const GradientSlider: React.FC<{
                 onPointerCancel={track.onPointerUp}
                 onLostPointerCapture={track.onPointerUp}
             >
-                {/* GMT-style thumb: a vertical bar spanning the track, dark-outlined for legibility on any gradient. */}
+                {/* The marker. The TRACK carries the meaning here, so unlike the thumbless v2
+                    slider the value needs a mark: a hairline that survives any hue under it. */}
                 <div
-                    className="absolute top-0 bottom-0 w-3.5 -ml-[7px] z-10 border-x-2 border-line/80 bg-line/10 shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none"
+                    className={soft
+                        ? 'absolute top-0 bottom-0 w-[2px] -ml-px z-10 bg-fg rounded-full shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none'
+                        : 'absolute top-0 bottom-0 w-3.5 -ml-[7px] z-10 border-x-2 border-line/80 bg-line/10 shadow-[0_0_0_1px_rgba(0,0,0,0.45)] pointer-events-none'}
                     style={{ left: `${pct}%` }}
                 />
             </div>
@@ -196,7 +350,13 @@ const GradientSlider: React.FC<{
                 // Native number spinners are browser chrome — they squish this 36px field
                 // and ignore the colour scheme. Hide them (the track drag already steps the
                 // value, with Shift ×10 / Alt ×0.1) and use a themed focus border instead.
-                className="w-9 shrink-0 bg-surface-sunken border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] text-right tabular-nums outline-none focus:border-accent-500/50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                // A text entry stays wherever a user expects one (owner): in the soft dialect
+                // it is a bare number that takes focus, not a boxed field.
+                className={`shrink-0 text-right tabular-nums outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 ${
+                    soft
+                        ? 'w-9 bg-transparent text-[12px] text-fg-muted focus:text-fg'
+                        : 'w-9 bg-surface-sunken border border-line/10 rounded text-[9px] text-fg-tertiary px-1 py-[1px] focus:border-accent-500/50'
+                }`}
             />
         </div>
     );
@@ -208,9 +368,52 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     alpha,
     onAlphaChange,
     palette = PALETTE_DEFAULT,
+    stopBlock,
+    onChannelAdjust,
 }) => {
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
+    // The host's input skin decides the dialect (see CTRL_R / CHIP_R above).
+    const soft = useInputSkin() === 'soft';
+    // ── the colour wheel (soft dialect) ────────────────────────────────────────────────
+    // The wheel replaces the saturation/value field AND the four static harmony rows: one
+    // 2D control does hue + saturation with value on the strip beside it, and its extra
+    // HANDLES are the harmony, live and draggable, rather than a printed list. Index 0 is
+    // always the colour being edited (utils/colorUtils harmonyHandles).
+    const [modes, setModes] = useState<PickerMode[]>(() => {
+        const raw = safeLocalGet(MODES_KEY);
+        if (!raw) return MODE_DEFAULT;
+        try {
+            const v = JSON.parse(raw);
+            return Array.isArray(v) && v.length ? migrateModes(v) : MODE_DEFAULT;
+        } catch { return MODE_DEFAULT; }
+    });
+    const on = useCallback((m: PickerMode) => modes.includes(m), [modes]);
+    const toggleMode = useCallback((m: PickerMode, keepOthers = false) => {
+        setModes((prev) => {
+            // a surface REPLACES the other surface, unless shift says keep both
+            const off = prev.filter((x) => x !== m && !(!keepOthers && SURFACES.includes(m) && SURFACES.includes(x)));
+            const next = prev.includes(m) ? (prev.length > 1 ? off : prev) : [...off, m];
+            safeLocalSet(MODES_KEY, JSON.stringify(next));
+            return next;
+        });
+    }, []);
+    const [kelvin, setKelvin] = useState(6500);
+    /** Green (−) to magenta (+): the axis a temperature cannot say on its own. */
+    const [tint, setTint] = useState(0);
+    const [harmony, setHarmony] = useState<ColorHarmony>('analogous');
+    const [harmonyCount, setHarmonyCount] = useState(5);
+    /** The angle a harmony spreads by, where it has one (see HARMONY_ANGLE). */
+    const [harmonyAngle, setHarmonyAngle] = useState(30);
+    // The handles are STATE, not a derivation. Deriving them from the live colour meant that
+    // merely ACTIVATING another handle re-derived the whole set around it, so a click walked
+    // every other colour (owner, 2026-09-08: "it must not recalculate all the colors to the
+    // new point"). Now: changing the rule, the count, or the active handle's own colour
+    // recomputes the followers; selecting a different handle only changes which one is live.
+    const [handles, setHandles] = useState<HsvHandle[]>([]);
+    const [activeHandle, setActiveHandle] = useState(0);
+    /** Set when a colour change came from ACTIVATING a handle — that must not recompute. */
+    const skipHandleSync = useRef(false);
     const [hexDraft, setHexDraft] = useState(color.toUpperCase());
     const clip = useClipboardCopy(1000);
     const copied = clip.state === 'copied';
@@ -220,9 +423,21 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
 
     const lastOutputHex = useRef(color.toUpperCase());
     const rootRef = useRef<HTMLDivElement>(null);
-    const fieldRef = useRef<HTMLCanvasElement>(null);
-    const hueRef = useRef<HTMLCanvasElement>(null);
-    const hlPadRef = useRef<HTMLCanvasElement>(null);
+    const fieldRef = useRef<HTMLCanvasElement | null>(null);
+    const hueRef = useRef<HTMLCanvasElement | null>(null);
+    const hlPadRef = useRef<HTMLCanvasElement | null>(null);
+    // A canvas that REMOUNTS comes back with a blank backing store, and a draw effect keyed
+    // on colour alone will not repaint it: the colour did not change. That used to be true
+    // only when the layout branch changed, so the effects listed `layout, minified` — then
+    // the mode toggles arrived and turning Spectrum off and on again left an empty pad until
+    // the next colour edit (owner, 2026-09-08). These callback refs bump a generation on
+    // every mount instead, so ANY future branch that remounts a canvas repaints it for free.
+    // Stable identities (deps []), or React would detach on every render and loop.
+    const [canvasGen, setCanvasGen] = useState(0);
+    const bumpCanvas = useCallback(() => setCanvasGen((g) => g + 1), []);
+    const setFieldCanvas = useCallback((el: HTMLCanvasElement | null) => { fieldRef.current = el; if (el) bumpCanvas(); }, [bumpCanvas]);
+    const setHueCanvas = useCallback((el: HTMLCanvasElement | null) => { hueRef.current = el; if (el) bumpCanvas(); }, [bumpCanvas]);
+    const setHlPadCanvas = useCallback((el: HTMLCanvasElement | null) => { hlPadRef.current = el; if (el) bumpCanvas(); }, [bumpCanvas]);
 
     // Container-responsive layout (NOT viewport — the picker is mounted both in a
     // ~260px dock and, since the Stops mode, on a very wide centre stage). Measure
@@ -296,6 +511,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     useEffect(() => () => { if (paramTxOpenRef.current) endColorTx(); }, [endColorTx]);
 
     const hex = useMemo(() => hsbToHex(hsb), [hsb]);
+    /** The live HSB, readable from callbacks that must not re-create on every colour change. */
+    const hsbRef = useRef(hsb);
+    hsbRef.current = hsb;
     const rgb = useMemo(() => hsbToRgb(hsb.h, hsb.s, hsb.v), [hsb]);
 
     // Emit without committing to recents (called continuously during a drag).
@@ -332,8 +550,21 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         emit(next);
     }, [rgb, hsb.h, hsb.s, emit]);
 
-    const handleSliderStart = useCallback(() => { beginColorTx(); colorSession.onPointerDown(); }, [colorSession, beginColorTx]);
-    const handleSliderEnd = useCallback(() => { colorSession.onPointerUp(); endColorTx(); pushRecent(lastOutputHex.current); }, [colorSession, endColorTx]);
+    // The colour a gesture STARTED from. While one is in flight the swatch splits and shows
+    // it beside the live colour, so you can see what you are changing away from (the owner's
+    // reference spec: "This color swatch is split when the color handle or slider is moved").
+    const [gestureFrom, setGestureFrom] = useState<string | null>(null);
+    const handleSliderStart = useCallback(() => {
+        setGestureFrom(hsbToHex(hsbRef.current));
+        beginColorTx();
+        colorSession.onPointerDown();
+    }, [colorSession, beginColorTx]);
+    const handleSliderEnd = useCallback(() => {
+        setGestureFrom(null);
+        colorSession.onPointerUp();
+        endColorTx();
+        pushRecent(lastOutputHex.current);
+    }, [colorSession, endColorTx]);
 
     // --- 2D field (saturation × brightness for the current hue) ---
     useEffect(() => {
@@ -354,10 +585,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         ctx.fillStyle = val;
         ctx.fillRect(0, 0, w, h);
         // `layout`/`minified` are deps: switching layout (stack→cols once measured) or
-        // expanding out of the minified pad renders a different branch, which REMOUNTS
-        // this canvas to a fresh blank backing store — repaint it (the effect runs
-        // post-commit, so the ref is the new canvas).
-    }, [hsb.h, layout, minified]);
+        // `canvasGen` is the remount signal (see setFieldCanvas): whenever this canvas is
+        // replaced — a layout branch, a mode toggle — the effect re-runs and repaints it.
+    }, [hsb.h, canvasGen]);
 
     // --- vertical hue strip ---
     useEffect(() => {
@@ -372,7 +602,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         ctx.fillRect(0, 0, w, h);
         // `layout`/`minified` deps so the strip repaints after a remount (see the field
         // effect above) — the gradient itself is static.
-    }, [layout, minified]);
+    }, [canvasGen]);
 
     // --- mini Hue×Lightness pad (minified view) ---
     // The classic HSL "spectrum": X = hue, Y = lightness — WHITE on top → full-saturation
@@ -536,6 +766,75 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     };
     const endHLPad = endDrag(hlPadDrag);
 
+    // Keep the set in step with the colour: the ACTIVE handle is always the live colour, and
+    // its followers are recomputed whenever that colour moves under the rule. Editing anywhere
+    // (a channel slider, the hex, the eyedropper) therefore moves the harmony with it.
+    useEffect(() => {
+        const base: HsvHandle = { h: hsb.h, s: hsb.s / 100, v: hsb.v };
+        if (skipHandleSync.current) { skipHandleSync.current = false; return; }
+        setHandles((prev) => {
+            if (!prev.length) return harmonyHandles(base, harmony, harmonyCount, harmonyAngle);
+            const cur = prev[Math.min(activeHandle, prev.length - 1)];
+            const same = cur && Math.abs(cur.h - base.h) < 1e-6 && Math.abs(cur.s - base.s) < 1e-6 && Math.abs(cur.v - base.v) < 1e-6;
+            if (same && prev.length === (harmony === 'free' ? prev.length : harmonyHandles(base, harmony, harmonyCount, harmonyAngle).length)) return prev;
+            if (harmony === 'free') return prev.map((f, i) => (i === activeHandle ? base : f));
+            return harmonyHandles(base, harmony, harmonyCount, harmonyAngle);
+        });
+        if (harmony !== 'free') setActiveHandle(0);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [hsb.h, hsb.s, hsb.v, harmony, harmonyCount, harmonyAngle]);
+
+    const wheelHandles = handles.length ? handles : [{ h: hsb.h, s: hsb.s / 100, v: hsb.v }];
+    const wheelActive = Math.min(activeHandle, wheelHandles.length - 1);
+
+    // through `emit`, like every other control here: it also carries the hex draft and the
+    // echo guard, which a hand-rolled setHsb would silently drop
+    const wheelMove = useCallback((h: number, s: number) => emit(clampHsb(h, s * 100, hsb.v)), [emit, hsb.v]);
+    const wheelValue = useCallback((v: number) => emit(clampHsb(hsb.h, hsb.s, v)), [emit, hsb.h, hsb.s]);
+    /** Selecting a handle makes it the live colour and moves NOTHING else. */
+    const wheelActivate = useCallback((i: number) => {
+        const t = wheelHandles[i];
+        if (!t) return;
+        skipHandleSync.current = true;
+        setActiveHandle(i);
+        setFromHex(hsbToHex({ h: t.h, s: t.s * 100, v: t.v }));
+    }, [wheelHandles, setFromHex]);
+    /** Ctrl/Cmd + click adds a handle — free mode only (a harmony's set is its rule). */
+    const wheelAdd = useCallback((h: number, s: number) => {
+        if (harmony !== 'free') return;
+        const next = [...wheelHandles.map((x) => ({ ...x })), { h, s, v: hsb.v }];
+        skipHandleSync.current = true;
+        setHandles(next);
+        setActiveHandle(next.length - 1);
+        setFromHex(hsbToHex({ h, s: s * 100, v: hsb.v }));
+    }, [harmony, wheelHandles, hsb.v, setFromHex]);
+
+    /** Free mode: drop the active handle (never the last one). */
+    const wheelRemove = useCallback(() => {
+        if (harmony !== 'free' || wheelHandles.length < 2) return;
+        const rest = wheelHandles.filter((_, i) => i !== wheelActive).map((x) => ({ ...x }));
+        const nextActive = Math.min(wheelActive, rest.length - 1);
+        skipHandleSync.current = true;
+        setHandles(rest);
+        setActiveHandle(nextActive);
+        const t = rest[nextActive];
+        if (t) setFromHex(hsbToHex({ h: t.h, s: t.s * 100, v: t.v }));
+    }, [harmony, wheelHandles, wheelActive, setFromHex]);
+
+    const countRange = HARMONY_COUNT[harmony];
+    const angleRange = HARMONY_ANGLE[harmony];
+
+    /** One channel moved. With a multi-selection host the move is a DELTA it applies to each
+     *  of its own things; otherwise it is just this colour's edit. */
+    const channelEdit = useCallback((ch: 'r' | 'g' | 'b' | 'h' | 's' | 'v', next: number, current: number, own: () => void) => {
+        if (onChannelAdjust) {
+            const delta = next - current;
+            if (delta) onChannelAdjust(ch, delta);
+            return;
+        }
+        own();
+    }, [onChannelAdjust]);
+
     const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
         const ED = getEyeDropper();
@@ -572,30 +871,35 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // "SL pad + H strip"). Shown when expanded / in the wide layouts.
     const fieldBlock = (
         // Field + hue strip (shrinks on narrow/mobile; Shift/Alt = coarse/fine)
-        <div className="flex gap-1.5">
+        <div className={`flex ${soft ? 'gap-2' : 'gap-1.5'}`} style={soft ? { width: SURFACE_PX + 8 + 16 } : undefined}>
             <div className="relative flex-1">
                 <canvas
-                    ref={fieldRef}
+                    ref={setFieldCanvas}
                     width={208}
                     height={120}
-                    className="w-full h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
+                    className={`w-full cursor-crosshair touch-none ${soft ? `h-[${SURFACE_PX}px] ${CTRL_R}` : 'h-[76px] md:h-[86px] rounded'}`}
+                    style={soft ? { height: SURFACE_PX } : undefined}
                     onPointerDown={beginField}
                     onPointerMove={moveField}
                     onPointerUp={endField}
                     onPointerCancel={endField}
                     onLostPointerCapture={endField}
                 />
+                {/* A NEUTRAL marker. `mix-blend-difference` inverts whatever is under it, so on a
+                    warm field it turned cyan and on a cool one it turned red — it read as a
+                    coloured thing rather than a pointer (owner, 2026-09-08). */}
                 <div
-                    className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
+                    className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-white/85 shadow-[0_0_0_1px_rgba(0,0,0,.55)] pointer-events-none"
                     style={{ left: `${hsb.s}%`, top: `${100 - hsb.v}%` }}
                 />
             </div>
             <div className="relative w-4 shrink-0">
                 <canvas
-                    ref={hueRef}
+                    ref={setHueCanvas}
                     width={16}
                     height={120}
-                    className="w-4 h-[76px] md:h-[86px] rounded cursor-crosshair touch-none"
+                    className={`w-4 cursor-crosshair touch-none ${soft ? CTRL_R : 'h-[76px] md:h-[86px] rounded'}`}
+                    style={soft ? { height: SURFACE_PX } : undefined}
                     onPointerDown={beginHue}
                     onPointerMove={moveHue}
                     onPointerUp={endHue}
@@ -618,10 +922,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const hlPad = (
         <div className="relative">
             <canvas
-                ref={hlPadRef}
+                ref={setHlPadCanvas}
                 width={208}
                 height={120}
-                className="w-full h-9 rounded cursor-crosshair touch-none"
+                className={`w-full h-9 cursor-crosshair touch-none ${soft ? CTRL_R : "rounded"}`}
                 onPointerDown={beginHLPad}
                 onPointerMove={moveHLPad}
                 onPointerUp={endHLPad}
@@ -629,7 +933,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 onLostPointerCapture={endHLPad}
             />
             <div
-                className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-fg shadow pointer-events-none mix-blend-difference"
+                className="absolute w-3 h-3 -ml-1.5 -mt-1.5 rounded-full border-2 border-white/85 shadow-[0_0_0_1px_rgba(0,0,0,.55)] pointer-events-none"
                 style={{ left: `${(hsb.h / 360) * 100}%`, top: `${(1 - padLightness) * 100}%` }}
             />
         </div>
@@ -650,20 +954,32 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     </span>
                 </button>
             )}
-            <div className="w-6 h-6 shrink-0 rounded border border-line/10" style={{ backgroundColor: hex }} />
+            <div
+                className={`shrink-0 border overflow-hidden ${soft ? 'w-7 h-7 rounded-lg border-line/20' : 'w-6 h-6 rounded border-line/10'}`}
+                style={gestureFrom
+                    // mid-gesture: the new colour on the left, the one you started from on the right
+                    ? { backgroundImage: `linear-gradient(to right, ${hex} 50%, ${gestureFrom} 50%)` }
+                    : { backgroundColor: hex }}
+                title={gestureFrom ? `${hex} \u2190 ${gestureFrom} (Esc to keep the original)` : hex}
+            />
             <input
                 value={hexDraft}
                 onChange={(e) => setHexDraft(e.target.value)}
                 onBlur={(e) => setFromHex(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                className="flex-1 min-w-0 bg-surface-sunken border border-line/10 rounded text-[11px] font-mono text-fg-secondary px-1.5 py-1 uppercase"
+                // mono type on the hex ALONE (V5): it is a code, the rest of the picker is not
+                className={`flex-1 min-w-0 font-mono uppercase outline-none ${
+                    soft
+                        ? 'h-7 bg-surface-viewport border border-line/20 rounded-lg text-[12px] text-fg px-2'
+                        : 'bg-surface-sunken border border-line/10 rounded text-[11px] text-fg-secondary px-1.5 py-1'
+                }`}
                 spellCheck={false}
             />
-            <button onClick={doCopy} title="Copy hex" className="w-6 h-6 shrink-0 grid place-items-center rounded border border-line/10 hover:bg-line/10 text-fg-tertiary text-[10px]">
-                {copied ? '✓' : '⧉'}
+            <button onClick={doCopy} title="Copy hex" className={`shrink-0 grid place-items-center border hover:bg-line/10 text-fg-tertiary ${soft ? 'w-7 h-7 rounded-lg border-line/20 text-[12px]' : 'w-6 h-6 rounded border-line/10 text-[10px]'}`}>
+                {copied ? '✓' : <CopyGlyph size={14} />}
             </button>
-            <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`w-6 h-6 shrink-0 grid place-items-center rounded border hover:bg-line/10 text-[11px] ${eyedropError ? 'border-amber-500/60 text-amber-400' : 'border-line/10 text-fg-tertiary'}`}>
-                ⦿
+            <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`shrink-0 grid place-items-center border hover:bg-line/10 ${soft ? 'w-7 h-7 rounded-lg text-[12px]' : 'w-6 h-6 rounded text-[11px]'} ${eyedropError ? 'border-amber-500/60 text-amber-400' : soft ? 'border-line/20 text-fg-tertiary' : 'border-line/10 text-fg-tertiary'}`}>
+                <EyedropperGlyph size={14} />
             </button>
         </div>
     );
@@ -672,25 +988,223 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // Group 2 — channels: the RGB + HSB (+ alpha) gradient sliders.
     const channelsBlock = (
         <>
-            <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
-                onChange={(r) => rgbEdit({ r })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
-                onChange={(g) => rgbEdit({ g })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
-                onChange={(b) => rgbEdit({ b })} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <div className="h-px bg-line/5 my-0.5" />
-            <GradientSlider label="H" value={hsb.h} min={0} max={360} step={1} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
-                onChange={(h) => emit(clampHsb(h, hsb.s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="S" value={hsb.s} min={0} max={100} step={1} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
-                onChange={(s) => emit(clampHsb(hsb.h, s, hsb.v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
-            <GradientSlider label="B" value={hsb.v} min={0} max={100} step={1} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
-                onChange={(v) => emit(clampHsb(hsb.h, hsb.s, v))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="R" value={rgb.r} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(0, rgb.g, rgb.b)}, ${rgbToHex(255, rgb.g, rgb.b)})`}
+                onChange={(r) => channelEdit('r', r, rgb.r, () => rgbEdit({ r }))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="G" value={rgb.g} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, 0, rgb.b)}, ${rgbToHex(rgb.r, 255, rgb.b)})`}
+                onChange={(g) => channelEdit('g', g, rgb.g, () => rgbEdit({ g }))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="B" value={rgb.b} min={0} max={255} step={1} defaultValue={128} trackBg={`linear-gradient(to right, ${rgbToHex(rgb.r, rgb.g, 0)}, ${rgbToHex(rgb.r, rgb.g, 255)})`}
+                onChange={(b) => channelEdit('b', b, rgb.b, () => rgbEdit({ b }))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            {/* RGB and HSV are two ways of saying the same colour, so they read as two groups */}
+            <div className={soft ? 'h-px bg-line/15' : 'h-px bg-line/5 my-0.5'} />
+            <GradientSlider label="H" value={Math.round(hsb.h)} min={0} max={360} step={1} defaultValue={0} trackBg="linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"
+                onChange={(h) => channelEdit('h', h, hsb.h, () => emit(clampHsb(h, hsb.s, hsb.v)))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            <GradientSlider label="S" value={Math.round(hsb.s)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, ${hsbToHex({ h: hsb.h, s: 0, v: hsb.v })}, ${hsbToHex({ h: hsb.h, s: 100, v: hsb.v })})`}
+                onChange={(s) => channelEdit('s', s, hsb.s, () => emit(clampHsb(hsb.h, s, hsb.v)))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
+            {/* The H/S/V numbers are ROUNDED for display: they come from a conversion, so the
+                raw values carry a colour's worth of decimals (25.94594595) that no one wants to
+                read. The drag still steps by 1 and the stored colour keeps its precision. */}
+            {/* V, not B: the trio is HSV — hue, saturation, VALUE (owner, 2026-09-08). The
+                store calls the same number `v` already; only the label was wrong. */}
+            <GradientSlider label="V" value={Math.round(hsb.v)} min={0} max={100} step={1} defaultValue={100} trackBg={`linear-gradient(to right, #000, ${hsbToHex({ h: hsb.h, s: hsb.s, v: 100 })})`}
+                onChange={(v) => channelEdit('v', v, hsb.v, () => emit(clampHsb(hsb.h, hsb.s, v)))} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             {alphaEnabled && (
                 <GradientSlider label="A" value={a} min={0} max={100} step={1}
                     trackBg={`linear-gradient(to right, rgba(${rgb.r},${rgb.g},${rgb.b},0), rgb(${rgb.r},${rgb.g},${rgb.b}))`}
                     onChange={(v) => onAlphaChange!(v)} onStart={handleSliderStart} onEnd={handleSliderEnd} />
             )}
         </>
+    );
+
+    // The mode toolbar — which controls are on. Sits at the end of the always-visible
+    // swatch/hex line, so the line reads: what the colour IS, then what you may pick it with.
+    // Spectrum and Wheel are ONE joined control — the shell's segmented-button language, the
+    // same shape as Even / Perceptual / Stops — because they are two answers to one question.
+    // Shift-click adds rather than replaces, for the rare "show me both"; either can still be
+    // turned off entirely (owner, 2026-09-08). The independent switches sit beside it and wear
+    // the same thin-bordered look when they are on.
+    const modeButton = (m: PickerMode, joined?: 'l' | 'r') => (
+        <button
+            key={m}
+            type="button"
+            onClick={(e) => toggleMode(m, e.shiftKey)}
+            title={`${MODE_TITLE[m]}${SURFACES.includes(m) ? ' \u00b7 shift-click to keep both' : ''}`}
+            aria-pressed={on(m)}
+            data-gx-picker-mode={m}
+            data-on={on(m) ? '' : undefined}
+            className={`h-7 grid place-items-center transition-colors ${
+                joined ? 'px-2.5' : 'w-7 rounded-lg border'
+            } ${joined === 'l' ? 'rounded-l-lg' : ''} ${joined === 'r' ? 'rounded-r-lg' : ''} ${
+                on(m)
+                    ? 'bg-accent-400/15 text-accent-300 border-accent-400/40'
+                    : `text-fg-dim hover:text-fg hover:bg-line/10 ${joined ? '' : 'border-transparent'}`
+            }`}
+        >
+            <ModeGlyph mode={m} />
+        </button>
+    );
+    const modeBar = (
+        <div className="flex items-center gap-1.5 shrink-0" data-gx-picker-modes>
+            <div className="inline-flex rounded-lg border border-line/20 overflow-hidden" data-gx-picker-surfaces>
+                {modeButton('spectrum', 'l')}
+                {modeButton('wheel', 'r')}
+            </div>
+            <div className="flex items-center gap-0.5">
+                {(['stop', 'harmony', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => modeButton(m))}
+            </div>
+        </div>
+    );
+
+    // Recent colours have their own space on the top line, after the mode switches, as SQUARE
+    // chips — a colour you used is a thing in itself, not a band of a gradient (owner,
+    // 2026-09-08). Draggable onto the ramp like every other chip here.
+    const recentStrip = (
+        <div className="flex items-center gap-1 shrink min-w-0 overflow-hidden" data-gx-recent-strip>
+            {recents.length === 0 ? (
+                <span className="text-[12px] text-fg-faint whitespace-nowrap">no recent colours</span>
+            ) : (
+                recents.map((c, i) => (
+                    <button
+                        key={`${c}-${i}`}
+                        type="button"
+                        onClick={() => setFromHex(c)}
+                        draggable
+                        onDragStart={(e) => setColorDrag(e.dataTransfer, c)}
+                        title={c}
+                        className={`w-5 h-5 shrink-0 ${CHIP_R} border transition-transform hover:scale-105 ${
+                            c.toUpperCase() === hex.toUpperCase() ? 'border-fg' : 'border-line/20'
+                        }`}
+                        style={{ backgroundColor: c }}
+                    />
+                ))
+            )}
+        </div>
+    );
+
+    // Kelvin — a light's temperature rather than a screen colour. One-way by nature (a
+    // rendered colour has no single temperature), so the slider proposes and the colour takes.
+    const kelvinBlock = (
+        <div className="flex flex-col gap-2 w-[190px]">
+            <GradientSlider
+                label="K"
+                value={kelvin}
+                min={1000}
+                max={15000}
+                step={50}
+                trackBg={`linear-gradient(to right, ${[1000, 2500, 4000, 5500, 7000, 9000, 12000, 15000].map(kelvinToHex).join(', ')})`}
+                onChange={(k) => { setKelvin(k); emit(safeHsb(applyTint(kelvinToHex(k), tint))); }}
+                onStart={handleSliderStart}
+                onEnd={handleSliderEnd}
+            />
+            <GradientSlider
+                label="T"
+                value={tint}
+                min={-100}
+                max={100}
+                step={1}
+                trackBg={`linear-gradient(to right, ${applyTint(kelvinToHex(kelvin), -100)}, ${kelvinToHex(kelvin)}, ${applyTint(kelvinToHex(kelvin), 100)})`}
+                onChange={(t) => { setTint(t); emit(safeHsb(applyTint(kelvinToHex(kelvin), t))); }}
+                onStart={handleSliderStart}
+                onEnd={handleSliderEnd}
+            />
+        </div>
+    );
+
+    // The wheel, its handle palette, and the harmony chooser (soft dialect only).
+    // With Harmony switched off the wheel is just a colour wheel: one handle, the colour you
+    // are editing. The set is still there underneath — turning Harmony back on shows it again
+    // unchanged (owner, 2026-09-08).
+    const shownHandles = on('harmony') ? wheelHandles : [wheelHandles[wheelActive] ?? wheelHandles[0]];
+    const wheelBlock = (
+        <ColorWheel
+            handles={shownHandles}
+            activeIndex={on('harmony') ? wheelActive : 0}
+            size={150}
+            soft
+            onActivate={(i) => wheelActivate(on('harmony') ? i : wheelActive)}
+            onMove={wheelMove}
+            onValue={wheelValue}
+            onDragStart={handleSliderStart}
+            onDragEnd={handleSliderEnd}
+            onAdd={harmony === 'free' ? wheelAdd : undefined}
+            onRemove={harmony === 'free' && wheelHandles.length > 1 ? wheelRemove : undefined}
+        />
+    );
+    const harmonyBlock = (
+        <div className="flex flex-col gap-2 w-[230px] shrink-0">
+            <div className="flex flex-col gap-2">
+                <div className="min-w-0">
+                    <Dropdown
+                        size="md"
+                        fullWidth
+                        label="Harmony"
+                        value={harmony}
+                        options={[
+                            { label: 'Free', value: 'free' },
+                            { label: 'Monochromatic', value: 'mono' },
+                            { label: 'Complementary', value: 'complementary' },
+                            { label: 'Analogous', value: 'analogous' },
+                            { label: 'Equiangular', value: 'equiangular' },
+                        ]}
+                        onChange={(v) => {
+                            const mode = v as ColorHarmony;
+                            // Free starts from whatever is on the wheel the FIRST time, and after
+                            // that it is the user's own set: re-seeding on every entry threw away
+                            // hand-placed handles as soon as you looked at another harmony and
+                            // came back (measured 2026-09-08 — four handles became five).
+                            const range = HARMONY_ANGLE[mode];
+                            if (range) setHarmonyAngle(range[2]);
+                            // a count carried over from another rule can sit outside this
+                            // one's range (5 handles under Complementary, which tops out at 4)
+                            const cr = HARMONY_COUNT[mode];
+                            if (cr) setHarmonyCount((n) => Math.max(cr[0], Math.min(cr[1], n)));
+                            setHarmony(mode);
+                        }}
+                    />
+                </div>
+                {countRange && (
+                    <div className="flex items-center gap-1 justify-end">
+                        <button
+                            type="button"
+                            className="w-6 h-6 rounded-lg border border-line/20 text-fg-muted hover:text-fg disabled:opacity-40"
+                            disabled={harmonyCount <= countRange[0]}
+                            onClick={() => setHarmonyCount((n) => Math.max(countRange[0], n - 1))}
+                            title="One fewer colour"
+                        >&minus;</button>
+                        <span className="w-3 text-center text-[12px] tabular-nums text-fg-muted select-none">{harmonyCount}</span>
+                        <button
+                            type="button"
+                            className="w-6 h-6 rounded-lg border border-line/20 text-fg-muted hover:text-fg disabled:opacity-40"
+                            disabled={harmonyCount >= countRange[1]}
+                            onClick={() => setHarmonyCount((n) => Math.min(countRange[1], n + 1))}
+                            title="One more colour"
+                        >+</button>
+                    </div>
+                )}
+            </div>
+            {angleRange && (
+                <Slider
+                    dense
+                    label={harmony === 'analogous' ? 'Step' : 'Spread'}
+                    value={harmonyAngle}
+                    min={angleRange[0]}
+                    max={angleRange[1]}
+                    step={1}
+                    defaultValue={angleRange[2]}
+                    onChange={(v) => setHarmonyAngle(Math.round(v))}
+                />
+            )}
+            <SwatchRow
+                label={harmony === 'free' ? 'Handles' : 'Harmony'}
+                colors={wheelHandles.map((h) => hsbToHex({ h: h.h, s: h.s * 100, v: h.v }))}
+                // by INDEX: picking a handle here selects it, it does not re-derive the set
+                onPickIndex={wheelActivate}
+                onPick={(c) => setFromHex(c)}
+                current={hex}
+            />
+            {/* the colours of the gradient being edited — its palette row, brought here so the
+                harmony and the thing it has to live with are side by side (owner) */}
+            <SwatchRow label="Gradient" colors={palette} onPick={(c) => setFromHex(c)} current={hex} />
+        </div>
     );
 
     // Group 3 — swatches: harmony rows + recents + palette.
@@ -709,24 +1223,51 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     return (
         <div
             ref={rootRef}
-            className="flex flex-col gap-1.5 w-full bg-surface-section border border-line/10 rounded p-2 gradient-interactive-element"
+            // soft: no box of its own — the tray IS the surface (no panel inside a panel)
+            className={`flex flex-col w-full gradient-interactive-element ${
+                soft ? 'gap-2' : 'gap-1.5 bg-surface-section border border-line/10 rounded p-2'
+            }`}
             data-help-id="ui.colorpicker"
+            data-gx-picker-skin={soft ? 'soft' : 'default'}
             onContextMenu={handleContainerContextMenu}
         >
-            {layout === 'cols' ? (
+            {soft && !minified ? (
+                // the chosen controls, in a fixed reading order; the hex line carries the
+                // toolbar so turning one on or off is one click from the colour itself
+                <>
+                    <div className="flex items-center gap-2">{hexRow}{modeBar}{on('swatches') && recentStrip}</div>
+                    <div className="flex flex-wrap gap-4 items-start">
+                        {on('stop') && stopBlock && <div className="flex flex-col gap-2 w-[210px] shrink-0">{stopBlock}</div>}
+                        {on('spectrum') && <div className="flex flex-col gap-2 shrink-0">{fieldBlock}</div>}
+                        {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
+                        {on('harmony') && harmonyBlock}
+                        {/* The channels stand exactly as tall as the spectrum / wheel beside them:
+                            the column takes the surface height and SPREADS its rows into it, so
+                            the two blocks line up by construction rather than by a tuned gap
+                            (owner, 2026-09-08). */}
+                        {on('channels') && (
+                            <div className="flex flex-col justify-between flex-1 min-w-[190px]" style={{ height: SURFACE_PX }}>
+                                {channelsBlock}
+                            </div>
+                        )}
+                        {on('kelvin') && kelvinBlock}
+
+                    </div>
+                </>
+            ) : layout === 'cols' ? (
                 // Widest — pads | channels | swatches, three columns side by side.
-                <div className="flex gap-3 items-start">
-                    <div className="flex-1 min-w-0 flex flex-col gap-1.5">{hexRow}{fieldBlock}</div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
-                    <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
+                <div className={`flex items-start ${soft ? 'gap-4' : 'gap-3'}`}>
+                    <div className={`min-w-0 flex flex-col ${soft ? 'gap-2 shrink-0' : 'flex-1 gap-1.5'}`}>{hexRow}{soft ? wheelBlock : fieldBlock}</div>
+                    <div className={`flex-1 min-w-0 flex flex-col ${soft ? 'gap-1.5' : 'gap-1'}`}>{channelsBlock}</div>
+                    <div className={`flex-1 min-w-0 flex flex-col ${soft ? 'gap-2' : 'gap-1'}`}>{soft ? harmonyBlock : swatchesBlock}</div>
                 </div>
             ) : layout === 'rows' ? (
                 // Medium — pads on top, channels | swatches side by side below.
                 <>
-                    <div className="flex flex-col gap-1.5">{hexRow}{fieldBlock}</div>
-                    <div className="flex gap-3 items-start pt-0.5 border-t border-line/5">
+                    <div className="flex flex-col gap-1.5">{hexRow}{soft ? wheelBlock : fieldBlock}</div>
+                    <div className={`flex items-start pt-0.5 ${soft ? 'gap-4' : 'gap-3 border-t border-line/5'}`}>
                         <div className="flex-1 min-w-0 flex flex-col gap-1">{channelsBlock}</div>
-                        <div className="flex-1 min-w-0 flex flex-col gap-1">{swatchesBlock}</div>
+                        <div className="flex-1 min-w-0 flex flex-col gap-1">{soft ? harmonyBlock : swatchesBlock}</div>
                     </div>
                 </>
             ) : minified ? (

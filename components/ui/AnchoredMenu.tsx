@@ -29,6 +29,10 @@ export interface AnchoredMenuProps {
     dismissOnEscape?: boolean;
     /** Capture-phase listeners. Default true. */
     capture?: boolean;
+    /** CSS selector for elements that count as "inside" even though they are not in the
+     *  menu — a trigger button rendered elsewhere, so re-clicking it toggles closed
+     *  instead of dismiss-then-reopen. Forwarded to `useDismiss`. */
+    ignore?: string;
     className?: string;
 }
 
@@ -43,6 +47,7 @@ export const AnchoredMenu: React.FC<AnchoredMenuProps> = ({
     dismissOnOutside = true,
     dismissOnEscape = true,
     capture = true,
+    ignore,
     className = '',
 }) => {
     const menuRef = useRef<HTMLDivElement>(null);
@@ -71,6 +76,7 @@ export const AnchoredMenu: React.FC<AnchoredMenuProps> = ({
         outside: dismissOnOutside,
         escape: dismissOnEscape,
         capture,
+        ignore,
     });
 
     if (!open) return null;

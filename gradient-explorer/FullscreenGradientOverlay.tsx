@@ -14,6 +14,16 @@
  * The chosen mode exports to PNG (the canvas snapshot IS the active mode). It never mutates
  * gradient data — the previewed config is a snapshot handed in via `openFullscreen`.
  *
+ * TWO export paths, both live here (S4 Wallpaper, 2026-09-03):
+ *   • the toolbar's **Export PNG** — the original: a snapshot of the ON-SCREEN canvas at
+ *     window size × DPR. Still the only path that embeds a fractal scene in the PNG, so it
+ *     stays the coordinate carrier for the fluid-toy handoff.
+ *   • the bottom bar's **Export panel** — pick a size (Phone / Square / 1080p / 4K / custom,
+ *     either orientation, optional ×2 supersample on the CPU kinds) and the frame is rendered
+ *     OFFSCREEN at exactly that size: a second `FullscreenCompositor` for cpuField/cpuRaster/
+ *     glQuad, the handle's `renderAt(w, h)` for ownCanvas modes. Capped at 4K, no tiling.
+ *     The visible canvas is never resized by either path.
+ *
  * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen" send-target
  * registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well in the P2-A dock).
  *
@@ -37,20 +47,31 @@ import {
   setFullscreenSplitY,
   setFullscreenDither,
   setFullscreenHandles,
+  setFullscreenResolved,
+  rampToLut,
   useFullscreenState,
+  getFullscreenLiveSource,
   type FullscreenState,
+  type LiveGradientSourceHook,
 } from '../palette/store/fullscreenStore';
 import { useActiveHeroSelection } from '../palette/store/heroSelection';
 import { useGeneratorDerived } from '../palette/store/generatorStore';
+import { useImageStore } from '../palette/store/imageStore';
+import { showToast } from '../engine/store/toastStore';
 import type { GradientConfig } from '../types';
+import type { RGB } from '../palette/core/oklab';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
 import { GeometryHandleLayer, hasGeometryHandles } from './fullscreen/GeometryHandleLayer';
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRegistry';
 import './fullscreen/modes'; // registers the builtin modes at import time
+import { ExportPanel } from './fullscreen/ExportPanel';
+import { exportFileName, type ExportSizePlan } from './fullscreen/exportSize';
+import { pngSizeOf, renderModeToBlob } from './fullscreen/exportRender';
 import { canvasToPngBlob, downloadBlob, embedScenePng } from '../utils/SceneFormat';
 import { getActiveFractalCoords } from './fullscreen/modes/fractalMode';
 import { buildFluidToyScene, openInFluidToy } from './fractalHandoff';
+import { InputSkinProvider } from '../components/inputs';
 import { Z } from '../components/ui/zIndex';
 
 /** Continuous geometries render up to this long edge. Higher than the old 1440 so the preview
@@ -63,20 +84,66 @@ const CONTINUOUS_MAX_DIM = 2560;
  *  renders at this cap (slightly soft, fast) and snaps back to full resolution on release. */
 const INTERACT_MAX_DIM = 1280;
 
+/** Idle time after the last change before a geometry mode re-renders its still image through
+ *  the CPU error-diffusion path. Long enough to coalesce a stream of edits into one expensive
+ *  render, short enough that the settle is not read as lag. */
+const SETTLE_MS = 180;
+
 /** The ctx params handed to modes: the handle-driven shape params. An unset key resolves to
  *  its GEOM_DEFAULT inside the pure mappers — byte-identical to the pre-handles render. ONE
  *  definition so the live-paint and ownCanvas-context paths can't drift. */
 const buildParams = (fs: FullscreenState) => fs.geomParams;
 
-/** Resolves the live "working" gradient (the last-modified hero) and reports it upward. Mounted
- *  whenever the overlay is open (split AND plain fullscreen now share this one live path), so the
- *  (heavy) generator derivation runs while the overlay is up — acceptable since fullscreen has no
- *  edit UI. For the editable surfaces (Stops / Generator) it reads the live store so edits reflect
- *  without re-selecting the hero; otherwise it follows the active hero's selected payload, and
- *  reports null (→ the open-time snapshot) when nothing is selected. */
-const SplitLiveSource: React.FC<{
-  onResolve: (r: { config: GradientConfig; name: string } | null) => void;
-}> = ({ onResolve }) => {
+type LiveSource = { config: GradientConfig; name: string; ramp?: RGB[] };
+type ResolveFn = (r: LiveSource | null) => void;
+
+/** A cheap content hash of a rendered ramp — FNV over its 768 bytes. The live source is watched
+ *  by VALUE, and when the host hands over a ramp the ramp is the value that matters: a Curves or
+ *  Adjust move can leave the stop refit byte-identical while the ramp itself moves. */
+const rampSignature = (ramp: RGB[]): string => {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < ramp.length; i++) {
+    const c = ramp[i];
+    h = Math.imul(h ^ (c.r & 0xff), 16777619) >>> 0;
+    h = Math.imul(h ^ (c.g & 0xff), 16777619) >>> 0;
+    h = Math.imul(h ^ (c.b & 0xff), 16777619) >>> 0;
+  }
+  return `r${h.toString(36)}:${ramp.length}`;
+};
+
+/** Push a resolved source upward only when its colour CONTENT changes — a value signature (not
+ *  object identity), so an unstable store ref can't drive a render loop. Shared by both
+ *  resolvers below so they cannot drift in when they report. */
+const usePushResolved = (
+  config: GradientConfig | null,
+  name: string,
+  onResolve: ResolveFn,
+  ramp?: RGB[],
+): void => {
+  // Watch the RAMP when there is one — it is what gets rendered, and it changes when the stop
+  // refit does not. Fall back to the stops for a host that only has a document.
+  const sig = !config
+    ? ''
+    : ramp && ramp.length
+      ? `${rampSignature(ramp)}:${name}`
+      : config.stops.map((s) => `${s.color}@${s.position}`).join('|') + `:${config.blendSpace}:${config.colorSpace}:${name}`;
+  const lastSig = useRef<string | null>(null);
+  useEffect(() => {
+    if (sig === lastSig.current) return;
+    lastSig.current = sig;
+    onResolve(config ? { config, name, ramp } : null);
+  }, [sig, name, config, ramp, onResolve]);
+  // Clear on unmount (the overlay closing) so the snapshot source resumes cleanly.
+  useEffect(() => () => { lastSig.current = null; onResolve(null); }, [onResolve]);
+};
+
+/** The OLD shell's live source: the last-modified hero. For the editable surfaces (Stops /
+ *  Generator) it reads the live store so edits reflect without re-selecting the hero; otherwise
+ *  it follows the active hero's selected payload, and reports null (→ the open-time snapshot)
+ *  when nothing is selected. The (heavy) Generator derivation runs while the overlay is up —
+ *  acceptable there since that shell's fullscreen has no edit UI, and it is why the v2 shell
+ *  registers its own hook instead of paying for a pipeline it never reads. */
+const HeroLiveSource: React.FC<{ onResolve: ResolveFn }> = ({ onResolve }) => {
   const hero = useActiveHeroSelection();
   // Generator covers Stops too now (its Stops sub-mode resolves to the stops gradient via
   // useGeneratorDerived().config), so there's no separate 'stops' hero mode to special-case.
@@ -84,20 +151,32 @@ const SplitLiveSource: React.FC<{
   let config: GradientConfig | null = hero?.payload.config ?? null;
   let name = hero?.payload.name ?? 'Gradient';
   if (hero?.mode === 'generator') { config = generatorConfig; name = hero.payload.name || 'Generator'; }
-  // Push only when the colour CONTENT changes — a value signature (not object identity) so an
-  // unstable store ref can't drive a render loop.
-  const sig = config
-    ? config.stops.map((s) => `${s.color}@${s.position}`).join('|') + `:${config.blendSpace}:${config.colorSpace}:${name}`
-    : '';
-  const lastSig = useRef<string | null>(null);
-  useEffect(() => {
-    if (sig === lastSig.current) return;
-    lastSig.current = sig;
-    onResolve(config ? { config, name } : null);
-  }, [sig, name, config, onResolve]);
-  // Clear on unmount (split toggled off) so the snapshot source resumes cleanly.
-  useEffect(() => () => { lastSig.current = null; onResolve(null); }, [onResolve]);
+  usePushResolved(config, name, onResolve);
   return null;
+};
+
+/** The host-registered live source (`setFullscreenLiveSource`) — the v2 shell's Working
+ *  pipeline, and whatever a future host registers. Resolved at module level, never
+ *  conditionally inside a component, so the hook the host supplied is called unconditionally
+ *  for this component's whole life. */
+const RegisteredLiveSource: React.FC<{ onResolve: ResolveFn; hook: LiveGradientSourceHook }> = ({
+  onResolve,
+  hook,
+}) => {
+  const live = hook();
+  usePushResolved(live?.config ?? null, live?.name ?? 'Gradient', onResolve, live?.ramp);
+  return null;
+};
+
+/** Resolves the gradient the wallpaper follows and reports it upward. Mounted whenever the
+ *  overlay is open (split AND plain fullscreen share this one live path). WHICH resolver runs
+ *  is decided by whether the host registered a hook — a value that is set at boot and does not
+ *  change, so the two are distinct component types with their own stable hook order. */
+const SplitLiveSource: React.FC<{ onResolve: ResolveFn }> = ({ onResolve }) => {
+  const hook = getFullscreenLiveSource();
+  return hook
+    ? <RegisteredLiveSource onResolve={onResolve} hook={hook} />
+    : <HeroLiveSource onResolve={onResolve} />;
 };
 
 export const FullscreenGradientOverlay: React.FC = () => {
@@ -114,6 +193,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // Set when an ownCanvas mode fails to mount (e.g. no WebGL2) — shows an error instead of a
   // forever-spinner.
   const [ownError, setOwnError] = useState(false);
+  // True while an at-size export is running (a 4K CPU field is a visible pause) — disables the
+  // panel's button so a second click can't start a parallel render.
+  const [exporting, setExporting] = useState(false);
+  // The Extract image's display thumbnail. The overlay does not draw it — the `gradientMap`
+  // cpuRaster mode reads it from `imageStore` inside its own `raster` — but the overlay is the
+  // only thing that can NOTICE it changed and repaint. Subscribed here so dropping an image
+  // while the split preview is up refreshes the map instead of leaving a stale frame.
+  const imageThumb = useImageStore((s) => s.thumb);
 
   // The active mode + whether it owns its canvas (vs flowing through the compositor). Modes are
   // registered at module import (above), so the registry is populated by first render.
@@ -126,7 +213,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // which reads the live Stops/Generator stores so edits reflect immediately. All modes read colour
   // from this resolved source — never the store directly. Fullscreen hides the app UI so there's no
   // edit path while open ⇒ live ≡ pinned in practice (no toggle; user-ratified 2026-06-10).
-  const [liveSplit, setLiveSplit] = useState<{ config: GradientConfig; name: string } | null>(null);
+  const [liveSplit, setLiveSplit] = useState<LiveSource | null>(null);
   const sourceConfig = liveSplit ? liveSplit.config : fs.config;
   const sourceName = liveSplit ? liveSplit.name : fs.name;
 
@@ -148,22 +235,39 @@ export const FullscreenGradientOverlay: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [fs.open]);
 
+  // The host's own rendered ramp wins over re-deriving one from the stops: a pipeline's stop
+  // refit is an approximation of what it is actually showing, and the wallpaper is supposed to
+  // show what the hero shows.
+  const liveRamp = liveSplit?.ramp ?? null;
   const ramp = useMemo(
     () =>
-      sourceConfig
-        ? renderStopsToRamp(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
-        : null,
-    [sourceConfig],
+      liveRamp && liveRamp.length
+        ? liveRamp
+        : sourceConfig
+          ? renderStopsToRamp(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
+          : null,
+    [liveRamp, sourceConfig],
   );
   // The 256×4 RGBA8 LUT (for glQuad modes' `uLut` upload + ownCanvas modes' colormap) — same
   // colours as `ramp`.
   const lut = useMemo(
     () =>
-      sourceConfig
-        ? renderStopsToBuffer(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
-        : null,
-    [sourceConfig],
+      liveRamp && liveRamp.length
+        ? rampToLut(liveRamp)
+        : sourceConfig
+          ? renderStopsToBuffer(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
+          : null,
+    [liveRamp, sourceConfig],
   );
+
+  // Publish what we resolved, so a mode that paints the gradient on its OWN compositor (the
+  // spline's editable path) draws the same colours as the stage under it instead of resolving
+  // a second time from a store this shell does not use.
+  useEffect(() => {
+    setFullscreenResolved(
+      sourceConfig ? { config: sourceConfig, name: sourceName, ramp: ramp ?? undefined } : null,
+    );
+  }, [sourceConfig, sourceName, ramp]);
 
   // The render context handed to modes (compositor paint + ownCanvas getContext). Kept in a ref so
   // an ownCanvas mode can pull the latest colour lazily inside its RAF loop. The fractal stage
@@ -187,6 +291,13 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // Reset to null whenever the compositor is (re)created so a fresh surface always paints.
   const lastFieldKeyRef = useRef<string | null>(null);
   const lastFieldRampRef = useRef<unknown>(null);
+  /** The Extract image the last cpuRaster present used — part of the same idempotence key. */
+  const lastImageRef = useRef<unknown>(null);
+
+  // Has the picture stopped changing? A geometry mode renders on the GPU until this flips, then
+  // once more through the CPU error-diffusion path for the still image the user actually looks
+  // at (and exports). Held in state — not a ref — because flipping it must re-run `paint`.
+  const [settled, setSettled] = useState(false);
 
   // Paint a compositor mode (cpuField / cpuRaster / glQuad) through the shared dither tail.
   // `ownCanvas` modes drive their own canvas and are skipped here.
@@ -217,22 +328,37 @@ export const FullscreenGradientOverlay: React.FC = () => {
     // arch r/w/pos/span/curvature) come from the store's `geomParams` — written by the on-screen
     // handle layer, threaded here from OUTSIDE the pure mappers.
     const ctx = { ramp, lut, params: buildParams(fs), width: w, height: h };
-    if (mode.kind === 'glQuad') {
-      comp.uploadLut(lut); // only glQuad modes sample uLut; cpuField bakes colour on the CPU
+    // A cpuField mode with a GLSL fast path renders on the GPU for LIVE frames and only pays
+    // for the CPU field + error diffusion once things settle (see `settle` below). The frames
+    // this replaces were never error-diffused anyway — the overlay drops the dither while
+    // `interacting` — so the still image is unchanged and the moving one is both faster and
+    // better dithered (it now gets the blue-noise tail instead of nothing).
+    const glFast = mode.kind === 'cpuField' && !!mode.fragBody && !settled;
+    if (mode.kind === 'glQuad' || glFast) {
+      comp.uploadLut(lut); // glQuad modes sample uLut; so does the geometry fast path
       comp.presentMode(mode, ctx);
-    } else if (mode.kind === 'cpuField') {
+      // The GPU path leaves no CPU field behind, so the settle pass must not be skipped by the
+      // idempotence key below — clear it.
+      if (glFast) lastFieldKeyRef.current = null;
+    } else {
       // Idempotent: an unrelated re-render (or a no-op upstream emit) with the SAME geom/params/
-      // dither/size/ramp re-runs nothing — the field stays as last rendered. Resize and the
-      // interacting→idle settle change `key`, so they still repaint.
+      // dither/size/ramp/image re-runs nothing — the field stays as last rendered. Resize and the
+      // interacting→idle settle change `key`, so they still repaint. Both CPU kinds are gated
+      // this way: cpuField costs a full error-diffusion pass, cpuRaster (gradientMap) an 8 MPx
+      // resample — neither is something to repeat on an unrelated render.
       const key = `${fs.geom}|${comp.dither ? 1 : 0}|${w}x${h}|${JSON.stringify(fs.geomParams)}`;
-      if (lastFieldKeyRef.current === key && lastFieldRampRef.current === ramp) return;
+      if (
+        lastFieldKeyRef.current === key &&
+        lastFieldRampRef.current === ramp &&
+        lastImageRef.current === imageThumb
+      ) return;
       lastFieldKeyRef.current = key;
       lastFieldRampRef.current = ramp;
-      comp.presentField(mode.field!(ctx), w, h, DEFAULT_BACKGROUND, ramp);
-    } else {
-      comp.presentRaster(mode.raster!(ctx), w, h);
+      lastImageRef.current = imageThumb;
+      if (mode.kind === 'cpuField') comp.presentField(mode.field!(ctx), w, h, DEFAULT_BACKGROUND, ramp);
+      else comp.presentRaster(mode.raster!(ctx), w, h);
     }
-  }, [ramp, lut, fs.geom, fs.geomParams, fs.dither, fs.interacting]);
+  }, [ramp, lut, fs.geom, fs.geomParams, fs.dither, fs.interacting, imageThumb, settled]);
 
   // Repaint on open + whenever the geometry / params / ramp change — COALESCED to one paint
   // per animation frame: a handle drag emits store updates at pointer rate, and each re-created
@@ -243,6 +369,22 @@ export const FullscreenGradientOverlay: React.FC = () => {
     const id = requestAnimationFrame(() => paint());
     return () => cancelAnimationFrame(id);
   }, [fs.open, paint]);
+
+  // The SETTLE. Anything that changes the picture drops `settled` (so the next paint takes the
+  // GPU fast path) and re-arms a timer; when the changes stop, `settled` flips and one final
+  // paint runs the CPU field + error diffusion. SETTLE_MS is short enough not to be noticed as
+  // a delay and long enough that a stream of edits — a drag, a slider, a gradient being
+  // rewritten stop by stop in split — coalesces into ONE expensive render at the end instead of
+  // one per change. A mode with no GPU fast path (cpuRaster, glQuad) is unaffected: `settled`
+  // gates nothing for them.
+  useEffect(() => {
+    if (!fs.open) return;
+    setSettled(false);
+    const t = window.setTimeout(() => setSettled(true), SETTLE_MS);
+    return () => window.clearTimeout(t);
+    // `settled` is deliberately NOT a dependency — it is what this effect sets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fs.open, fs.geom, fs.geomParams, fs.dither, fs.interacting, ramp, imageThumb]);
 
   // Repaint whenever the stage itself resizes — window resize, the toolbar wrapping when controls
   // appear, AND a late first measure. The latest `paint` is read through a ref so the observer is
@@ -339,9 +481,70 @@ export const FullscreenGradientOverlay: React.FC = () => {
     downloadBlob(blob, `${stem}-${fs.split ? 'split' : fs.geom}.png`);
   }, [sourceName, sourceConfig, fs.geom, fs.split, isOwnCanvas, activeMode]);
 
+  /**
+   * Export at a chosen size — the second, deliberate export path (the toolbar's Export PNG
+   * above stays exactly as it was). Nothing here touches the visible canvas:
+   *   • compositor modes render through a throwaway offscreen {@link FullscreenCompositor};
+   *   • ownCanvas modes go through their handle's `renderAt(w, h)`, and a mode that has not
+   *     implemented it yet falls back to the on-screen snapshot with a toast saying so.
+   *
+   * The file is named from the PNG's REAL pixel size, read back off its header — a mode may
+   * legitimately cap itself below the request (the Fractal renderer stops at 1600 px on the
+   * long edge), and a wallpaper named 3840×2160 that is really 1600×900 would be a lie.
+   *
+   * The at-size path deliberately does NOT embed the fractal scene in the PNG. That belongs to
+   * the on-screen Export PNG button, which stays the coordinate-carrier path; duplicating it
+   * here would make every 4K fractal export also a scene file with no way to opt out.
+   */
+  const exportAtSize = useCallback(async (plan: ExportSizePlan) => {
+    const mode = getFullscreenMode(fs.geom);
+    if (!mode || !ramp || !lut) return;
+    setExporting(true);
+    try {
+      let blob: Blob | null = null;
+      if (mode.kind === 'ownCanvas') {
+        const renderAt = ownHandleRef.current?.renderAt;
+        if (!renderAt) {
+          showToast(`${mode.label} exports at screen size — no at-size render yet`, 'warning', 4000);
+          await exportPng();
+          return;
+        }
+        blob = await renderAt(plan.renderWidth, plan.renderHeight);
+      } else {
+        blob = await renderModeToBlob(
+          mode,
+          { ramp, lut, params: buildParams(fs) },
+          plan,
+          fs.dither,
+        );
+      }
+      if (!blob) {
+        showToast('Export failed — the renderer produced no image', 'error', 4000);
+        return;
+      }
+      const real = (await pngSizeOf(blob)) ?? { width: plan.width, height: plan.height };
+      downloadBlob(blob, exportFileName(sourceName, mode.id, real.width, real.height));
+      const short =
+        real.width !== plan.width || real.height !== plan.height
+          ? ` (${mode.label} caps its own render)`
+          : '';
+      showToast(`Exported ${real.width}×${real.height}${short}`, short ? 'warning' : 'success', short ? 4000 : 2600);
+    } catch (e) {
+      console.error('[fullscreen export] at-size export failed:', e);
+      showToast('Export failed', 'error', 4000);
+    } finally {
+      setExporting(false);
+    }
+  }, [fs, ramp, lut, sourceName, exportPng]);
+
   if (!fs.open || !fs.config) return null;
 
   const ActiveControls = activeMode?.Controls;
+  const ActiveStage = activeMode?.Stage;
+  // A compositor mode always renders at any size (a second compositor on an offscreen canvas);
+  // an ownCanvas mode only if it implements the optional `renderAt` face. Read through the ref
+  // during render — `ownReady` re-renders once the mode has mounted, so this settles correctly.
+  const canRenderAtSize = !isOwnCanvas || !!ownHandleRef.current?.renderAt;
   // The bottom-right stage hint — split / per-mode / generic display-only.
   const hint = fs.split
     ? 'Live — follows the gradient you last edited · drag the divider to resize'
@@ -410,14 +613,32 @@ export const FullscreenGradientOverlay: React.FC = () => {
               }`}
             >
               {m.label}
+              {m.wip && (
+                <span
+                  className="ml-1.5 align-middle text-[9px] uppercase tracking-wide text-warn/90"
+                  title="Under construction — this mode is unfinished"
+                >
+                  wip
+                </span>
+              )}
             </button>
           ))}
         </div>
 
         {/* The active mode's own self-contained controls (the fractal's mapping/repeats/phase/
             cycle, Liquify's brushes/physics, …). The geometry modes drive their shape via the
-            on-screen handle layer, so they declare no toolbar controls. */}
-        {ActiveControls && <ActiveControls />}
+            on-screen handle layer, so they declare no toolbar controls.
+
+            Skinned SOFT, the same as the v2 hero, the tray and the Browse filters (owner,
+            2026-09-08: "look at the hero gradient as an example of finished ui"). Every mode's
+            sliders are the shared ScalarInput, so one provider here paints all of them without
+            any mode knowing about it — which is the whole point of the skin being a context and
+            not a second component. */}
+        {ActiveControls && (
+          <InputSkinProvider skin="soft">
+            <ActiveControls />
+          </InputSkinProvider>
+        )}
 
         <div className="flex items-center gap-2 ml-auto">
           <button
@@ -506,6 +727,21 @@ export const FullscreenGradientOverlay: React.FC = () => {
             reads the canvas back, can never contain it). The layer itself decides whether the
             active geometry has handles, fades on idle, and honours the toolbar toggle. */}
         {!isOwnCanvas && <GeometryHandleLayer />}
+        {/* The active mode's own stage layer (empty states / annotation). DOM, above the
+            canvas, so — like the handles — it can never appear in an exported PNG. */}
+        {ActiveStage && <ActiveStage />}
+        {/* An unfinished mode says so on the stage as well as in the selector — quiet, in a
+            corner, out of the picture's way. DOM, so it cannot bake into an export either. */}
+        {activeMode?.wip && (
+          <div
+            data-testid="fullscreen-wip-banner"
+            className="absolute left-3 bottom-3 pointer-events-none select-none flex items-center gap-1.5
+                       rounded-md border border-warn/40 bg-warn/10 px-2 py-1 text-[11px] text-warn"
+          >
+            <span aria-hidden>⚠</span>
+            {activeMode.label} is under construction
+          </div>
+        )}
         {isOwnCanvas && ownError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-black/60 text-center px-6">
             <div className="text-[13px] text-fg-secondary">Couldn’t start {activeMode!.label}</div>
@@ -521,6 +757,19 @@ export const FullscreenGradientOverlay: React.FC = () => {
           {hint}
         </div>
       </div>
+
+      {/* Bottom bar — export at a chosen size. Additive: the toolbar's Export PNG above still
+          snapshots the on-screen canvas (and is still the only path that embeds a fractal
+          scene in the file). */}
+      <ExportPanel
+        kind={activeMode?.kind ?? 'cpuField'}
+        modeLabel={activeMode?.label ?? 'This mode'}
+        canRenderAtSize={canRenderAtSize}
+        dither={fs.dither}
+        onDitherChange={setFullscreenDither}
+        onExport={(plan) => { void exportAtSize(plan); }}
+        busy={exporting}
+      />
     </div>,
     document.body,
   );
