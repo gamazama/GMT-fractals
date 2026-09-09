@@ -1112,6 +1112,55 @@ are where to START reading, not necessarily where the change lands.
 > swatch test on purpose (`pointOverTiles`: anywhere inside a chunk's box is the tiles, only
 > past their edges is the ground), and a native `dragstart` anywhere aborts a marquee already
 > in progress — the two gestures begin identically and only the browser knows which it is.
+
+> **Status 2026-09-09 (session 3, third pass): the list view, and the real cause of
+> "gradients get selected whenever I drag".**
+>
+> **The bug was never the marquee.** Two guesses were spent hardening the rubber band — a
+> coarser background test, an abort on `dragstart` — both reasonable, neither the cause. A
+> PROBE settled it in one reading: four real drags, `pointerdown → dragstart → drop →
+> dragend`, and the selection count stayed 0 the whole way. What the owner was seeing was
+> the PICK: `usePickerModel.onEntryDragStart` ended with `setHeroDrag(...)`, "drag mirrors
+> click", and in v2 **a pick is a Use** — so merely dragging a gradient to re-file it
+> replaced the one you were working on and ringed it on the wall.
+>
+> That line had two reasons behind it, and neither survives in v2: the avatar used to take
+> its ramp from the hero pick (it now reads its own payload slot, `setDragPayload`), and the
+> old shell's `DropTargetLayer` reads the pick to route a dropbox drop (v2 mounts no such
+> layer). So it is now `pickOnDrag`, defaulting TRUE on both `usePickerModel` and
+> `FavientsPanel` — every host built before today keeps exactly what it had — and v2 passes
+> false at both call sites. Measured after: picking one gradient and then dragging another
+> leaves the hero's name unchanged.
+>
+> **The lesson, which cost two commits:** when a report says "X happens", find out WHICH X
+> before hardening the thing you last touched. The marquee was the newest code and therefore
+> the first suspect, and being new is not evidence. A ten-line probe on the real gesture beat
+> two rounds of reasoning about the code — and both marquee fixes, while not the cause, are
+> correct on their own terms and stay.
+>
+> **The GROUND now has a list view** (`gradient-explorer/v2/GroundList.tsx`), which the owner
+> had asked for once already and had to ask for twice: "there is a list view option as well —
+> that's how you'll find names that can be renamed". It was read as a pointer to where
+> renaming lives rather than as a request, and it was neither. The wall draws bars, which is
+> right for choosing by colour and wrong for finding one you NAMED; the shelf panel has had
+> the toggle all along, so the only way to read your own names on the ground was to open a
+> floating panel over the wall you were looking at.
+>
+> It is the panel's list ANATOMY, not its code — a 56 px strip, the name, a muted
+> `source · group` caption — and a separate component on purpose: the wall is a canvas with
+> one `drawImage` per tile out of a shared sprite, virtualized by chunk, and rows are DOM.
+> Sharing one component across those would fork every hit-test. What IS shared is everything
+> that matters: the same entries, pick, drag payload, selection store, context menu and
+> filing rule. Set grounds only — 11,131 catalogue rows would want virtualizing, and the
+> catalogue's entries carry no name of yours to look for. Rows being real elements, the
+> keyboard comes free, and ctrl / shift-click select the file-manager way.
+>
+> **Still open, stated so nobody has to re-derive it:** §8b item 5 (one unified export);
+> app-gmt has not opted into the wall's `keyboard` prop (additive, deliberate); the pull-up
+> panel still shows the WHOLE shelf rather than the lit sets (re-audit §4.3); the old
+> shell's landing / cancel morphs are still unmounted in v2 (`GradientLandingLayer`, ~143
+> lines, the cheapest polish left); and `FavientsPanel layout="strip"` is still dead with
+> zero callers (S13, ~115 lines to delete).
 >
 > **Three things worth carrying forward.**
 >

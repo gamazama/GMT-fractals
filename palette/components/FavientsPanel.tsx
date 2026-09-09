@@ -408,10 +408,12 @@ const FavientSwatch: React.FC<{
   autoRename?: boolean;
   /** Fired once the rename editor has been opened, so the host can drop the request. */
   onRenameOpened?: () => void;
+  /** Whether a drag also sets the hero pick — see `FavientsPanelProps.pickOnDrag`. */
+  pickOnDrag?: boolean;
   /** The v2 strip: 10 px corners (V8 as amended 2026-09-07 — large rounding on every
    *  gradient bar). The panel layouts keep their 4 px. */
   strip?: boolean;
-}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode, strip = false, onMenu, onRemove, autoRename, onRenameOpened }) => {
+}> = ({ fav, onActivate, onHover, onDragBegin, swatchW, swatchH, view, groupLabel, canDrag, onRename, onDragBlocked, selected, selectMode, strip = false, onMenu, onRemove, autoRename, onRenameOpened, pickOnDrag = true }) => {
   const radius = strip ? 'rounded-[10px]' : 'rounded';
   const ref = useRef<HTMLCanvasElement>(null);
   const list = view === 'list';
@@ -504,7 +506,7 @@ const FavientSwatch: React.FC<{
       setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the swatch
       // Drag mirrors select — gives the avatar its ramp + lets the favourite be sent to
       // a dropbox (its own internal reorder still works via the FAVIENT_INTERNAL_MIME).
-      setHeroDrag({ mode: 'favients', key: fav.id, payload });
+      if (pickOnDrag) setHeroDrag({ mode: 'favients', key: fav.id, payload });
       onDragBegin(fav.id);
     },
     // Hover-enlarge is GRID-only: in list mode the popover would obscure the name and
@@ -692,9 +694,16 @@ export interface FavientsPanelProps {
   layout?: 'panel' | 'strip';
   /** Override the intro hint text (panel layout). `null` hides it. */
   hint?: string | null;
+  /**
+   * Whether starting a DRAG also makes the swatch the hero pick. True everywhere it has
+   * always been — the old shell's drop routing reads the pick to decide what a dropbox
+   * receives. GE v2 passes false: a pick there IS a Use, so dragging a gradient to re-file
+   * it silently replaced the one you were working on (owner, 2026-09-09).
+   */
+  pickOnDrag?: boolean;
 }
 
-export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', hint }) => {
+export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', hint, pickOnDrag = true }) => {
   const favients = useFavientsStore((s) => s.favients);
   const groupLabels = useFavientsStore((s) => s.groupLabels);
   const remove = useFavientsStore((s) => s.remove);
@@ -952,6 +961,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
     selectMode,
     onMenu: onSwatchMenu,
     onRemove: removeFav,
+    pickOnDrag,
   };
 
   if (strip) {

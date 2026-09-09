@@ -29,6 +29,8 @@ export type IconName =
   | 'pencil'
   | 'refresh'
   | 'trash'
+  | 'list'
+  | 'grid'
   | 'star'
   | 'heart'
   | 'share'
@@ -85,6 +87,17 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.React
   // The trash zone that appears while a favourite is in flight. Drawn, not 🗑 — no
   // emoji glyphs in this shell (V-rules), and the shelf panel's two trash zones were
   // waiting on exactly this icon (plan §10, Phase A).
+  // Grid ⇄ list, the ground's view toggle. Each shows the layout you would switch TO,
+  // which is the shelf panel's own convention (grep GridIcon / ListIcon there).
+  list: <path d="M6 4h8M6 8h8M6 12h8M3 4h.01M3 8h.01M3 12h.01" />,
+  grid: (
+    <>
+      <rect x="2.5" y="2.5" width="5" height="5" rx="1" />
+      <rect x="8.5" y="2.5" width="5" height="5" rx="1" />
+      <rect x="2.5" y="8.5" width="5" height="5" rx="1" />
+      <rect x="8.5" y="8.5" width="5" height="5" rx="1" />
+    </>
+  ),
   trash: <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2a1 1 0 0 0 1 .8h3.8a1 1 0 0 0 1-.8l.6-8.2M6.8 7v4M9.2 7v4" />,
 };
 

@@ -441,7 +441,7 @@ export const GradientExplorerV2App: React.FC = () => {
         />
         {mineOpen && (
           <Floating className="absolute left-6 right-6 top-10 z-30 h-[340px] overflow-hidden flex flex-col" data-gx-mine-panel="">
-            <FavientsPanel hint={null} />
+            <FavientsPanel hint={null} pickOnDrag={false} />
           </Floating>
         )}
         {/* The set's own Export window — the same `ExportMenu`, pointed at a set instead of

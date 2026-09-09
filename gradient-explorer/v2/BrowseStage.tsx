@@ -83,6 +83,7 @@ const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
   ((c as { options?: { value: number; label: string }[] }).options ?? []).map((o) => ({ value: o.value, label: o.label }));
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
+import { GroundList } from './GroundList';
 import { Act } from './ui/Act';
 import { useGroundSetIds, setGroundSetId } from '../../palette/store/groundSet';
 import { showToast } from '../../engine/store/toastStore';
@@ -113,6 +114,9 @@ const TOOLS = [
 ] as const;
 type ToolId = (typeof TOOLS)[number]['id'];
 
+/** Grid ⇄ list on the ground, remembered per browser (the shelf panel keeps its own). */
+const GROUND_VIEW_KEY = 'gx.v2.groundView';
+
 /** Faint dotted ground behind the swatches, so the wall reads as a canvas, not a list. */
 const GROUND: React.CSSProperties = {
   backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 1px)',
@@ -128,7 +132,11 @@ export const BrowseStage: React.FC = () => {
   const setIds = useGroundSetIds();
   const sets = useGroundSets();
   const source = useGroundSource(setIds, sets);
-  const m = usePickerModel({ source });
+  // `pickOnDrag: false` — dragging a gradient must not also PICK it. In v2 a pick is a Use,
+  // so the old "drag mirrors click" behaviour meant re-filing a gradient silently replaced
+  // the one you were working on (owner, 2026-09-09). The avatar reads its own payload slot,
+  // so nothing here needs the pick.
+  const m = usePickerModel({ source, pickOnDrag: false });
   // The ground can be several sets at once, so the title is their labels joined — the
   // model's `setId` is the joined selection and is not a label.
   const setTitle = sets.filter((s) => setIds.includes(s.id)).map((s) => s.label).join(' + ') || m.setId;
@@ -322,6 +330,21 @@ export const BrowseStage: React.FC = () => {
     setRenaming((cur) => {
       if (cur && v.trim() && v !== cur.name) paramEdit(() => useFavientsStore.getState().rename(cur.id, v.trim()));
       return null;
+    });
+  }, []);
+
+  // GRID or LIST, on a set (owner, 2026-09-09). The wall draws bars, which is right for
+  // choosing by colour and wrong for finding one you NAMED — the shelf panel has had this
+  // toggle all along and the ground had none, so reading your own names meant opening a
+  // floating panel over the wall you were looking at. Remembered, like the panel's.
+  const [listView, setListView] = useState<boolean>(() => {
+    try { return localStorage.getItem(GROUND_VIEW_KEY) === 'list'; } catch { return false; }
+  });
+  const toggleListView = useCallback(() => {
+    setListView((v) => {
+      const next = !v;
+      try { localStorage.setItem(GROUND_VIEW_KEY, next ? 'list' : 'grid'); } catch { /* private mode */ }
+      return next;
     });
   }, []);
 
@@ -574,6 +597,20 @@ export const BrowseStage: React.FC = () => {
       >
         {!m.loaded ? (
           <div className="h-full flex items-center justify-center text-[13px] text-fg-faint">Loading gradient library…</div>
+        ) : m.count > 0 && m.isSet && listView ? (
+          <GroundList
+            groups={m.rows.map((r) => ({ key: r.key, label: r.label, entries: r.entries }))}
+            itemOf={source!.itemOf}
+            selectedId={m.selectedId}
+            onPick={m.onPick}
+            onEntryDragStart={m.onEntryDragStart}
+            onEntryContextMenu={onTileMenu}
+            onRename={(favId, name) => {
+              if (name.trim()) paramEdit(() => useFavientsStore.getState().rename(favId, name.trim()));
+            }}
+            onBandDrop={onBandDrop}
+            canBandDrop={canBandDrop}
+          />
         ) : m.count > 0 ? (
           <PickerWall
             groups={m.rows}
@@ -641,6 +678,19 @@ export const BrowseStage: React.FC = () => {
 
         {/* floating tool palette */}
         <Floating ref={m.toolbarRef} className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${floatOver}`}>
+          {/* GRID ⇄ LIST, on a set only: the catalogue's 11,131 rows would want virtualizing,
+              and its entries carry no name of yours to look for. */}
+          {m.isSet && (
+            <button
+              onClick={toggleListView}
+              title={listView ? 'Show them as bars' : 'Show them as a list, with names'}
+              aria-label={listView ? 'Grid view' : 'List view'}
+              aria-pressed={listView}
+              className={`w-8 h-8 rounded-lg text-[15px] transition-colors ${listView ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
+            >
+              <Icon name={listView ? 'grid' : 'list'} />
+            </button>
+          )}
           {TOOLS.filter((t) => !m.isSet || t.id === 'zoom').map((t) => {
             const on = activeTool === t.id;
             return (

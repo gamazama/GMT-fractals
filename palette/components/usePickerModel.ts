@@ -203,8 +203,10 @@ export interface PickerModel {
   setPaletteFilters: ((u: Record<string, unknown>) => void) | undefined;
 }
 
-export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerModel => {
+export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag?: boolean }): PickerModel => {
   const source = opts?.source ?? null;
+  // Default TRUE: every host that existed before 2026-09-09 was built on drag-also-picks.
+  const pickOnDrag = opts?.pickOnDrag ?? true;
   const pf = useEngineStore((s) => (s as Record<string, any>).paletteFilters) as Record<string, any> | undefined;
   const setPaletteFilters = useEngineStore(
     (s) => (s as Record<string, any>).setPaletteFilters as ((u: Record<string, unknown>) => void) | undefined,
@@ -414,10 +416,19 @@ export const usePickerModel = (opts?: { source?: GroundSource | null }): PickerM
       : { config: entryToGradientConfig(e), name: e.name, source: 'Picker' };
     setFavientDrag(dt, payload);
     beginCustomAvatarDrag(dt); // register the drag + suppress the native image (avatar stands in)
-    // Drag mirrors click — picking the dragged swatch gives the avatar its ramp and
-    // leaves it the in-hand pick if dropped over nothing.
-    setHeroDrag({ mode: heroMode, key: e.id, payload });
-  }, [source, heroMode]);
+    // "Drag mirrors click" — the dragged swatch also becomes the hero PICK. Two things used
+    // to need that: the avatar got its ramp from the pick, and the old shell's drop routing
+    // (`DropTargetLayer`) reads the pick to decide what a dropbox receives.
+    //
+    // Neither is true in GE v2, and there the side effect is the whole problem: a pick IS a
+    // Use, so merely dragging a gradient to re-file it REPLACED the one you were working on
+    // and ringed it on the wall (owner, 2026-09-09: "gradients get selected whenever I
+    // drag"; measured with a probe over four real drags — the multi-selection stayed empty
+    // the whole time, so it was never the marquee). The avatar now reads its own payload
+    // slot (`setDragPayload` in `setFavientDrag`), so v2 opts out and every other host keeps
+    // the behaviour it was built on.
+    if (pickOnDrag) setHeroDrag({ mode: heroMode, key: e.id, payload });
+  }, [source, heroMode, pickOnDrag]);
 
   // The tile grows as the set shrinks; the wall's own setting is the floor.
   const baseTile: TileSize = { w: Math.round(pf?.swatchSize?.x ?? 32), h: Math.round(pf?.swatchSize?.y ?? 18) };
