@@ -78,6 +78,9 @@ export interface GroundListProps {
   onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
   /** Commit a rename (the caller brackets it for undo). */
   onRename: (favId: string, name: string) => void;
+  /** Delete on a focused row — the host decides whether that means the row or the whole
+   *  selection (it means the selection whenever there is one). */
+  onEntryDelete?: (entry: CatalogEntry) => void;
   /** A row dropped onto this band, in front of `beforeId` (null = the end). */
   onBandDrop: (bandKey: string, dt: DataTransfer, beforeId: string | null) => void;
   canBandDrop: (bandKey: string, dt: DataTransfer) => boolean;
@@ -91,6 +94,7 @@ export const GroundList: React.FC<GroundListProps> = ({
   onEntryDragStart,
   onEntryContextMenu,
   onRename,
+  onEntryDelete,
   onBandDrop,
   canBandDrop,
 }) => {
@@ -184,6 +188,10 @@ export const GroundList: React.FC<GroundListProps> = ({
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(entry); }
+                    else if ((e.key === 'Delete' || e.key === 'Backspace') && onEntryDelete) {
+                      e.preventDefault();
+                      onEntryDelete(entry);
+                    }
                   }}
                   onContextMenu={(e) => onEntryContextMenu?.(entry, e)}
                   className={`group flex items-center gap-2.5 px-1.5 py-1 rounded-lg transition-colors outline-none focus-visible:ring-1 focus-visible:ring-accent-400/60 cursor-pointer ${

@@ -951,24 +951,6 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     return out;
   };
 
-  /**
-   * Is this point over the TILES at all — as opposed to the empty ground around them?
-   *
-   * Deliberately coarser than `entryHitAtPoint`, which answers "which swatch" and so says
-   * no for the 1 px gap between two of them. The background marquee must not start from a
-   * gap: you were reaching for a gradient, missed it by a pixel, and instead of dragging it
-   * you rubber-banded across everything you meant to move (owner, 2026-09-09: "when
-   * dragging around gradients they shouldn't become selected"). Anywhere inside a chunk's
-   * box counts as the tiles; only past their edges is it the ground.
-   */
-  const pointOverTiles = (cx: number, cy: number): boolean => {
-    for (const d of registry.current.values()) {
-      const r = d.el.getBoundingClientRect();
-      if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return true;
-    }
-    return false;
-  };
-
   // The swatch under a screen point (for the paint brush + paint keep-click) → id + local box.
   const entryHitAtPoint = (cx: number, cy: number): { id: string; box: Box } | null => {
     const el = scrollRef.current;
@@ -1219,8 +1201,16 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // In SELECT MODE a left-drag from the BACKGROUND is a rubber band — no tool, the way
     // choosing several of anything works everywhere else (owner, 2026-09-09). A press ON a
     // tile is left alone: that is a pick, or the start of a drag.
+    // Anything that is not a SWATCH is the background — the gaps between tiles and the
+    // padding around them included (owner, 2026-09-09: "dragging from the open padding
+    // between the gradients isn't working, should be making selections"). This was briefly
+    // coarser, to stop a press that missed a tile by a pixel from rubber-banding instead of
+    // dragging. That turned out to be the wrong cure for the wrong disease: a drag was
+    // never starting a marquee at all — what looked like "selected" was the hero PICK
+    // (`pickOnDrag` in usePickerModel). With that fixed at its source the marquee can be as
+    // permissive as it should be, and the `dragstart` abort below is the real guard.
     const bgPress =
-      !!selectMode && !selectionTool && !zoomTool && e.button === 0 && !pointOverTiles(e.clientX, e.clientY);
+      !!selectMode && !selectionTool && !zoomTool && e.button === 0 && !entryHitAtPoint(e.clientX, e.clientY);
     // Assigned, never latched: a press on a tile must clear a flag a previous gesture left
     // behind, or the next pointer-up would be read as the end of a marquee.
     sel.current.bgMarquee = bgPress;
@@ -1543,6 +1533,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       }
       case 'Delete':
       case 'Backspace': {
+        // A SELECTION owns the key, and it is owned at the window (a marquee leaves focus
+        // on the body, so this handler would never see the press). Only the keyboard
+        // cursor's own tile is deleted here.
+        if (selectedIds?.size) return;
         if (!focusedId || !onEntryDelete) return;
         const en = entryById(focusedId);
         if (!en) return;

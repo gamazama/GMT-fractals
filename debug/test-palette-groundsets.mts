@@ -4,7 +4,8 @@
  *
  *   [1] the rail's order: All first, Recent's bins newest first (Today · Yesterday · a
  *       date), Kept, named groups in shelf order; a group split into two runs is ONE chip
- *       with the summed count; Presets hides once Recent has anything
+ *       with the summed count; Presets is a chip like any other (it used to hide once
+ *       Recent had anything — reversed 2026-09-09, see the assertion's comment)
  *   [2] membersOf resolves a bin to that day's Recent entries and a group to its run(s), in
  *       shelf order; All resolves to nothing
  *   [3] favientsToEntries numbers rows 0..n-1 in input order, ids are the favourites' ids,
@@ -94,10 +95,12 @@ console.log('[1] the rail order');
   ok(sets[3].kind === 'bin' && sets[3].label !== 'Today' && sets[3].label !== 'Yesterday', 'an older bin carries a date');
   ok(sets[4].kind === 'group' && sets[4].label === KEPT_LABEL && sets[4].count === 2, 'Kept follows the bins, split run summed to 2');
   ok(sets[5].label === 'Ocean' && sets[5].count === 2 && sets[5].id === groupSetId('g-ocean'), 'Ocean next, in shelf order');
-  ok(!sets.some((s) => s.group === PRESETS_GROUP), 'Presets hides while Recent has anything');
-  ok(sets[sets.length - 1].label === 'Ocean', 'the last chip is the last named group');
+  // Presets USED to hide the moment Recent had anything (the deleted shelf strip's rule).
+  // Reversed 2026-09-09: on the rail that made a whole group of gradients vanish on the
+  // user's first pick, unreachable. It is a chip like any other now.
+  ok(sets.some((s) => s.group === PRESETS_GROUP), 'Presets stays a chip even once Recent has something');
   const noRecent = listGroundSets({ favients: shelf.filter((f) => f.group !== RECENT_GROUP), groupLabels: labels, catalogTotal: 1, now });
-  ok(noRecent.some((s) => s.group === PRESETS_GROUP), 'Presets shows when Recent is empty');
+  ok(noRecent.some((s) => s.group === PRESETS_GROUP), 'and when Recent is empty');
   ok(listGroundSets({ favients: [], groupLabels: {}, catalogTotal: 5 }).length === 1, 'an empty shelf is All alone');
 }
 

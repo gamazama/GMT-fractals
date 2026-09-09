@@ -43,7 +43,7 @@ import type { CatalogEntry } from './presetCatalog';
 import { computeFacets } from './facets';
 import { renderStopsToRamp } from './gmtGradient';
 import type { RGB } from './oklab';
-import { DEFAULT_GROUP, PRESETS_GROUP, favientSig, isRecentGroup, type Favient } from '../store/favientsStore';
+import { DEFAULT_GROUP, favientSig, isRecentGroup, type Favient } from '../store/favientsStore';
 import { buildBlocks, dayKey } from '../components/favientBlocks';
 
 // --- ids ---------------------------------------------------------------------------
@@ -87,8 +87,15 @@ export interface ListGroundSetsInput {
 /**
  * The rail, in order. Recent's bins come from `buildBlocks` (newest first, since a collect
  * promotes to the head of the run); a named group whose favourites sit in two runs is ONE
- * chip with the summed count. The seeded Presets group hides once Recent has anything —
- * the strip's rule, kept: it is a starter, not a place the user made.
+ * chip with the summed count.
+ *
+ * PRESETS IS A CHIP LIKE ANY OTHER (2026-09-09). It used to hide the moment Recent had
+ * anything in it — the deleted shelf strip's rule, inherited here on the grounds that it is
+ * "a starter, not a place the user made". On a one-row strip with no room that was a
+ * reasonable trade; on the rail it means a whole group of gradients vanishes the first time
+ * you pick anything, with no way back to them (owner, 2026-09-09: "the presets were
+ * displaying as a group earlier, now they're not"). The rail has room, and a set the user
+ * can neither see nor reach is worse than a chip they can ignore.
  *
  * A group that has a LABEL but no favourites is a chip too (2026-09-09), at the end and
  * with a count of 0. Blocks are built from the favourites, so an empty group was invisible
@@ -100,10 +107,8 @@ export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date
   const out: GroundSetDesc[] = [{ id: ALL_SET_ID, kind: 'catalog', label: 'All', count: catalogTotal }];
   const bins: GroundSetDesc[] = [];
   const groups = new Map<string, GroundSetDesc>();
-  let hasRecent = false;
   for (const b of buildBlocks(favients, now)) {
     if (isRecentGroup(b.group)) {
-      hasRecent = true;
       const day = b.key.slice(b.group.length + 1);
       bins.push({ id: binSetId(day), kind: 'bin', label: b.label ?? day, count: b.favs.length, day });
       continue;
@@ -114,13 +119,9 @@ export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date
     else groups.set(g, { id: groupSetId(g), kind: 'group', label: groupLabels[g] ?? (g === DEFAULT_GROUP ? KEPT_LABEL : g), count: b.favs.length, group: g });
   }
   out.push(...bins);
-  for (const g of groups.values()) {
-    if (g.group === PRESETS_GROUP && hasRecent) continue;
-    out.push(g);
-  }
+  for (const g of groups.values()) out.push(g);
   for (const [id, label] of Object.entries(groupLabels)) {
     if (groups.has(id) || id === DEFAULT_GROUP || isRecentGroup(id)) continue;
-    if (id === PRESETS_GROUP && hasRecent) continue;
     out.push({ id: groupSetId(id), kind: 'group', label, count: 0, group: id });
   }
   return out;

@@ -1161,6 +1161,33 @@ are where to START reading, not necessarily where the change lands.
 > shell's landing / cancel morphs are still unmounted in v2 (`GradientLandingLayer`, ~143
 > lines, the cheapest polish left); and `FavientsPanel layout="strip"` is still dead with
 > zero callers (S13, ~115 lines to delete).
+
+> **Status 2026-09-09 (session 3, fourth pass): three from the owner's walk.**
+>
+> 1. **Presets is a chip again.** It used to disappear the moment Recent had anything in it
+>    — the deleted shelf strip's rule, inherited on the grounds that Presets is "a starter,
+>    not a place the user made". On a one-row strip with no room that was a fair trade; on
+>    the rail it means twenty-five gradients vanish on your first pick with no way back to
+>    them. The rail has room. `test-palette-groundsets`' assertion was inverted with a note
+>    saying why, rather than deleted.
+> 2. **Delete acts on the SELECTION, from anywhere on the ground.** It was wired only to the
+>    wall's keyboard cursor, and a marquee focuses nothing — so after choosing six tiles the
+>    key did nothing at all. It is a window listener now, owned by the selection whenever
+>    there is one (the wall's cursor keeps the no-selection case, and stands down otherwise
+>    so the two cannot both fire); it skips inputs, so the rename boxes and the search field
+>    are safe. One `replaceAll`, one undo entry, however many were chosen. Measured: 43 → 41
+>    on a two-tile marquee, bar cleared.
+> 3. **The marquee starts from the padding between gradients again.** Two passes ago the
+>    background test was widened to "anywhere inside a band's box counts as tiles", to stop a
+>    press that missed a swatch from rubber-banding. That was the wrong cure for a disease
+>    that turned out to be `pickOnDrag` — and it cost the gaps and the padding, which are
+>    exactly where you would start a selection. Back to the precise swatch test; the
+>    `dragstart` abort is the guard that actually earns its place.
+>
+> The through-line for all three: **each was a rule that made sense on the surface it was
+> written for and stopped making sense on this one.** Presets-hides was a strip rule; the
+> Delete key was written for a keyboard cursor before there was a selection to act on; the
+> coarse background test was written for a bug that was somewhere else entirely.
 >
 > **Three things worth carrying forward.**
 >

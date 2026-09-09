@@ -275,6 +275,53 @@ export const BrowseStage: React.FC = () => {
   // (the look ranges, the arrange params) go through AutoFeaturePanel below.
   const actions = useMemo(() => ({ setPaletteFilters: m.setPaletteFilters }), [m.setPaletteFilters]);
   const { handleInteractionStart, handleInteractionEnd, openContextMenu } = useStoreCallbacks();
+  /**
+   * Remove favourites — ONE path for every trigger (the bar's button, Delete on the wall,
+   * Delete on a list row, the tile menu). Whatever is SELECTED wins; `fallback` is the one
+   * gradient the gesture pointed at when nothing is selected. Owner, 2026-09-09: "delete
+   * key should work with single or multiple selections".
+   */
+  const removeFavourites = useCallback(
+    (fallback?: CatalogEntry) => {
+      const ids = m.selectedIds.size ? [...m.selectedIds] : fallback ? [fallback.id] : [];
+      if (!ids.length) return;
+      const set = new Set(ids);
+      // Read the name BEFORE the removal, or there is nothing left to name.
+      const only = ids.length === 1 ? useFavientsStore.getState().favients.find((f) => f.id === ids[0])?.name : undefined;
+      // One `replaceAll` rather than N `remove` calls: one localStorage write, one store
+      // notification, and — inside the bracket — one undo entry however many there were.
+      paramEdit(() => {
+        const st = useFavientsStore.getState();
+        st.replaceAll(st.favients.filter((f) => !set.has(f.id)));
+      });
+      m.clearSelection();
+      showToast(
+        ids.length === 1
+          ? `Removed “${only ?? fallback?.name ?? 'it'}” — undo with Ctrl+Z`
+          : `Removed ${ids.length} — undo with Ctrl+Z`,
+      );
+    },
+    [m.selectedIds, m.clearSelection],
+  );
+  const removeSelection = useCallback(() => removeFavourites(), [removeFavourites]);
+
+  // Delete acts on the SELECTION from anywhere on the ground (owner, 2026-09-09: "delete
+  // key should work with single or multiple selections"). At the window, not on the wall:
+  // a marquee never focuses anything, so the wall's own key handler would not see the
+  // press. Never while typing — the rename inputs and the search box are on this page.
+  useEffect(() => {
+    if (!m.selectedIds.size) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      removeFavourites();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [m.selectedIds, removeFavourites]);
+
   // A tile's right-click menu. "More like this" is on EVERY tile including the catalogue's
   // (the migration audit's M12: ranking the wall by one of your own gradients is the most
   // useful thing a kept tile can do, and it was reachable only from the hero); Remove is
@@ -299,20 +346,18 @@ export const BrowseStage: React.FC = () => {
           label: 'Rename',
           action: () => setRenaming({ id: fav.id, name: fav.name, x: e.clientX, y: e.clientY }),
         });
+        // With a selection, the menu acts on ALL of it — right-clicking one of six chosen
+        // gradients and being offered "remove this one" would be a lie about what is armed.
+        const n = m.selectedIds.has(entry.id) ? m.selectedIds.size : 1;
         items.push({
-          label: 'Remove from My Gradients',
+          label: n > 1 ? `Remove ${n} from My Gradients` : 'Remove from My Gradients',
           danger: true,
-          action: () => {
-            paramEdit(() => useFavientsStore.getState().remove(entry.id));
-            // The tile just vanishes off the wall, so say what happened and that it is
-            // reversible — the panel's own remove has always said so.
-            showToast(`Removed “${entry.name}” — undo with Ctrl+Z`);
-          },
+          action: () => removeFavourites(entry),
         });
       }
       openContextMenu(e.clientX, e.clientY, items);
     },
-    [source, openContextMenu],
+    [source, openContextMenu, m.selectedIds, removeFavourites],
   );
   // A gradient dropped ON a band files it into that set, at the position the caret shows
   // (owner, 2026-09-09: "I can't drag gradients from one to the other"). The band key IS
@@ -400,16 +445,6 @@ export const BrowseStage: React.FC = () => {
     openContextMenu(el ? el.left + 60 : 200, el ? el.top : 200, items);
   }, [m.selectedIds, m.clearSelection, sets, openContextMenu]);
 
-  const removeSelection = useCallback(() => {
-    const ids = [...m.selectedIds];
-    if (!ids.length) return;
-    paramEdit(() => {
-      const st = useFavientsStore.getState();
-      st.replaceAll(st.favients.filter((f) => !ids.includes(f.id)));
-    });
-    m.clearSelection();
-    showToast(`Removed ${ids.length} — undo with Ctrl+Z`);
-  }, [m.selectedIds, m.clearSelection]);
 
   const stripDef = QUALITY_AXES.find((a) => a.axis === WINDOW_KEY[pad.strip])!;
   // The strip is painted toward the pad window's average colour (owner).
@@ -608,6 +643,7 @@ export const BrowseStage: React.FC = () => {
             onRename={(favId, name) => {
               if (name.trim()) paramEdit(() => useFavientsStore.getState().rename(favId, name.trim()));
             }}
+            onEntryDelete={removeFavourites}
             onBandDrop={onBandDrop}
             canBandDrop={canBandDrop}
           />
@@ -641,14 +677,7 @@ export const BrowseStage: React.FC = () => {
             keyboard
             selectedIds={m.selectedIds}
             selectMode={m.isSet}
-            onEntryDelete={
-              source
-                ? (entry) => {
-                    paramEdit(() => useFavientsStore.getState().remove(entry.id));
-                    showToast(`Removed “${entry.name}” — undo with Ctrl+Z`);
-                  }
-                : undefined
-            }
+            onEntryDelete={source ? removeFavourites : undefined}
             selectionTool={m.tool}
             onSelectionCommit={m.onSelectionCommit}
             onSelectionCancel={() => m.setTool(null)}
