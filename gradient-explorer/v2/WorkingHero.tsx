@@ -376,7 +376,21 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 <Icon name="share" size={15} />
               </Act>
               <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} />
-              <Act icon onClick={onWallpaper} title="Wallpaper — fill the screen with it">
+              {/* Wallpaper is the door OUT of the shell — "a whole other world inside the
+                  app" (Phase W) — so alone among the use icons it carries a surface of its
+                  own: a brushed-silver sheen, quiet enough to sit in the header row and
+                  bright enough to say the click goes somewhere else. The glyph is pinned dark
+                  because the silver does not follow the theme. */}
+              <Act
+                icon
+                onClick={onWallpaper}
+                title="Wallpaper — fill the screen with it"
+                className="border-line/25 text-[#2b2f34] hover:text-black"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(135deg,#fbfcfd 0%,#dfe3e8 26%,#aeb6bf 48%,#f2f4f6 62%,#c3cad2 82%,#9aa3ad 100%)',
+                }}
+              >
                 <Icon name="fullscreen" size={15} />
               </Act>
             </div>

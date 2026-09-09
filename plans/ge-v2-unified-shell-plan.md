@@ -573,6 +573,32 @@ before Phase D unless the owner reorders:
 an owner walk in the wallpaper. **Files:** palette/store/fullscreenStore.ts and the fullscreen
 mode renderers (grep `ownCanvas`), gradient-explorer/v2/WorkingHero.tsx (the icon).
 
+**BUILT 2026-09-08 (W.1–W.4; awaiting the owner's walk).** The goal's second clause decided
+the shape of it: W.2 and W.3 are HANDLES, not sliders, because the geometry modes have no
+slider panel at all — `paramFields` exists so the handle layer knows what to clamp to, and the
+on-screen handles are the whole UI. So:
+- **W.1** — the Wallpaper `Act` is the one button in the use cluster with a surface of its own,
+  a brushed-silver sheen with a pinned dark glyph (the silver does not follow the theme).
+- **W.2 · conic** — `conicTwist`, in TURNS, winding the sweep into a LOG spiral by the house's
+  own law (`conicTwistTurns` = `twist · log(1 + r)`, the same rule as the fractal's "Angle:
+  iteration log-spiral"). Its handle rides the seam itself at 0.78 half, so orbiting it drags
+  the line it controls, with a spiral guide traced through the same law the pixels use. The
+  "bias control" turned out to already exist and be HIDDEN: `conicBiasA` is what the sampler
+  reads when the mirror is collapsed, but its handle only rendered when mirrored — so the plain
+  conic had no bias at all. It now renders always.
+- **W.3 · radial** — `radialSineAmp` + `radialSineFreq` swell and pinch the REACH around the
+  circle (`radialSineReach`), so the falloff rings become petals and the centre stays exactly
+  at position 0 whatever the amplitude. Amplitude rides a crest and reads straight off the
+  pointer's distance (at a crest the ring IS `scale·(1+amp)`, so there is no gain to invent);
+  the count orbits on the inner 50 % guide ring and emits whole lobes.
+- **W.4 · gradient map** — `mapChannel` picks which of SEVEN properties drives the lookup: luma
+  (unchanged default), R, G, B, and OKLCh hue / chroma / lightness. The maths is a new pure
+  module, `palette/core/gradientMapChannels.ts`; the mode keeps only the pixels.
+**Gates:** there is no `smoke:fullscreen` and none was added — `smoke:gx-handles` is the
+fullscreen guard and it now covers the new handles ([2c]). Also `test:palette` (with a new link,
+`test-palette-mapchannels`), `smoke:ge-hero`, `smoke:ge-next`, typecheck, knip, text-bytes,
+rule-guards. Every new assertion falsified; details in §8.
+
 ### Phase G — parity, polish, swap
 - Parity checklist vs the old shell (`gradient-explorer.html`), item by item from
   `plans/ge-v2-functionality.md`; `/polish` on the v2 shell; label sweep across the three hosts
@@ -782,6 +808,157 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   **V7/V8 extended in fact:** the gap between tiles scales with the tile as drawn (zoom or
   count), Padding being the floor.
 
+- 2026-09-08 · Phase W (wallpaper; built, awaiting the owner's walk). **The goal's second
+  clause is a principle, and it decides the UI: "its controls read without text, like the
+  on-screen controls already there."** The geometry modes have no slider panel — `paramFields`
+  exists only so the handle layer knows what to clamp to — so a new shape param is a HANDLE or
+  it is nothing. Both new controls are handles, and both ride the thing they control: the conic
+  twist handle sits ON the seam at the radius it winds, the radial waves handle ON a crest,
+  where the pointer's own distance IS the amplitude with no gain to invent. **A handle must not
+  move as the param it sets changes** — the petal COUNT first sat on the petals, so every lobe
+  step threw the handle out from under the pointer and the gesture fought itself; it moved to
+  the inner 50 % guide ring, whose radius no count can change. And the OUTER envelope is not a
+  home for a handle either: at scale 1 it passes through the frame's corner, where `pin()`
+  clamps it to the edge and an orbit has nowhere to travel. **A hidden control is a missing
+  one:** the conic's `conicBiasA` has always been the bias the sampler reads with the mirror
+  collapsed, but its handle rendered only when mirrored — the plain conic read as having no
+  bias, which is why W.2 asked for one that already existed. **New laws are exported from the
+  core, not copied into the layer** (`conicTwistTurns`, `radialSineReach`, joining `bias` and
+  `archRadiusAt`), so the guide the user sees is drawn by the function that draws the pixels.
+  **Twist follows the house's own log spiral** (`twist · log(1 + r)`, the fractal's "Angle:
+  iteration log-spiral") rather than a new winding law — constant winding per radius decade, so
+  the spiral looks the same at every scale. **W.4's channels are pure and live in `palette/core`**
+  (`gradientMapChannels.ts`), not in the mode's `.tsx`, so seven colour-space definitions can be
+  pinned on bare node without a canvas.
+
+- 2026-09-08 · Phase W, the owner's perf + split pass (built same day). **The wallpaper follows
+  the WORKING gradient now, through a seam rather than a branch.** The overlay resolved its live
+  colour from `heroSelection` + `useGeneratorDerived` — the OLD shell's stores — so in v2 the
+  split preview followed the wall PICK when there was one and otherwise froze on the snapshot
+  `openFullscreen` was handed; editing the hero with the wallpaper open changed nothing.
+  `setFullscreenLiveSource` (fullscreenStore) is now the host's hook and the overlay picks its
+  resolver component by whether one is registered — two distinct component types, so the hook
+  order stays stable and nothing is called conditionally. v2 registers `useWorkingDerived`,
+  which also takes v2 off the Generator pipeline it was running on every overlay render and
+  discarding (the migration audit's finding). **Measure before you optimise, and the measurement
+  moved the target twice.** A full-res radial frame at 2560×1440 cost 341 ms: the field was 82 ms
+  and the BLIT 259 — and of that blit only 73 ms was the error diffusion, the rest being a
+  closure called three times per pixel that recomputed the clamp, the multiply and the floor for
+  each channel and read colours through `.r/.g/.b` on an array of OBJECTS. Flattening the ramp
+  into a typed array and hoisting the per-pixel work out of the channel loop: 259 → 171 ms,
+  proven byte-identical against a verbatim copy of the old function across 48 cases. `Math.hypot`
+  measured 23× the cost of `Math.sqrt(x*x+y*y)` for the same values (45 ms vs 2 ms of real work
+  over 3.7 M pixels): radial 82 → 35 ms, arched 87 → 41. Conic is unchanged at ~71 ms and stays
+  there — it is `Math.atan2`-bound by definition, and an approximation would change the picture.
+  **A field that does not depend on the gradient must not be recomputed when the gradient
+  changes.** W.4's OKLCh channels cost 420–500 ms a repaint against ~85 for luma, all of it
+  `pow(x,2.4)` and `cbrt` re-derived per output pixel — and split mode changes the ramp on every
+  edit. The channel field is now computed once per (image, channel) at the SOURCE's resolution
+  and bilinearly resampled: 502 → 54 ms on the repaint that matters, and luma improved too
+  (90 → 53) because a full-strength map no longer reads the source colour at all. One correctness
+  consequence, taken deliberately: hue is an ANGLE, so its field is resampled wrap-aware — a
+  plain bilinear between 0.99 and 0.01 lands on cyan, the colour furthest from both.
+
+- 2026-09-08 · Phase W, the owner's mode-by-mode report ("linear, radial, conic, arched are
+  quite slow · spline is performing well · even fractal is getting better fps · gradient map is
+  fine"). **The report names the mode KIND exactly:** everything that renders on the GPU is
+  fast (spline is `glQuad`, fractal is `ownCanvas`) and everything that does its BLIT on the
+  CPU main thread is slow. Gradient map is CPU too but was never on the dithered path and had
+  just been cached, so it reads fine. The four slow ones are precisely the `cpuField` kind —
+  `presentField`'s only users. **The obvious fix is the wrong one, and the harness says so:**
+  porting them to `glQuad` outright would trade serpentine error diffusion for the blue-noise
+  tail, and `debug/test-dither.mts` measures that at WIGGLE 0.040 vs 0.238 — six times more
+  banding on exactly the shallow gradients this tool exists to show. **The right one turns on a
+  detail already in the code:** the overlay ALREADY drops the dither while anything is moving
+  (`comp.dither = fs.dither && !fs.interacting`), so the expensive frames were the undithered
+  ones. Those now render through a GLSL mirror (`modes/geometryFrag.ts`) and the still image
+  still goes through `renderFieldDithered` — **no quality is traded anywhere**, and the moving
+  frame is actually better than before because it gains the blue-noise tail it never had.
+  Measured at 2560×1440: a live frame goes **120–151 ms → 0.8–2.3 ms**. A `settled` flag plus a
+  180 ms idle timer decides which path runs, so a stream of edits coalesces into ONE expensive
+  render at the end instead of one per change. **Two implementations of one law is the cost, and
+  it is paid with a guard, not a promise:** `smoke:gx-geom-gpu` renders every geometry both ways
+  at ten parameter sets and compares per pixel (clean tree: worst max 3 levels, worst mean
+  0.750; flipping `BIAS_K` in the shader alone → max 115, three cases red). The repo's usual
+  answer — export the law, call it from both — cannot cross the JS/GLSL boundary, so a
+  comparison IS the seam.
+
+- 2026-09-08 · Phase W, the owner's cull and three fixes. **Arched and Parallax are GONE**
+  and Liquify is tagged unfinished rather than pretended finished — a `wip` flag on the mode
+  seam, so the selector tags it and the stage banners it, and the next half-built mode gets the
+  same treatment for free instead of a bespoke hack. Neither deletion needed a migration:
+  `fullscreenStore` is session-only and the share URL does not encode the mode, so a retired id
+  simply stops existing. **A geometry that leaves gaps is gone with Arched, and the coverage
+  channel stayed** — `renderGeometry` still blends toward the background and the harness now
+  proves that with a hand-built sample rather than leaning on a geometry that happened to mask
+  pixels. A contract with no live consumer is exactly the kind that rots. **The radial count was
+  wrong twice over** (owner: "its amount of symmetry / wave frequency selector feels weird, it
+  should be on the same ring i think as the wave amp, and only softly notched, instead of
+  integer gated"): it sat on a different ring from the amplitude it belongs with, and it was
+  GATED to whole numbers. Both fixed — same ring, fixed bearing (a slot that tracked a crest
+  would slide out from under the pointer as the count changed), and `softNotch`, which is exact
+  at each whole petal, exact half-way between, and monotone throughout. **The first notch
+  constant was too strong to be a notch:** 2.4 measured 211× slower at a whole petal than
+  between two, which is a magnet; 1.8 gives 23×, a detent you can feel and leave. Numbers, not
+  taste, because "softly" is measurable. **The spline's Extend took three attempts and the first
+  two were wrong in an instructive way.** Letting the end segments project as rays INSIDE the
+  Shepard sum did nothing: an inverse-square blend over ~50 tessellated segments washes toward
+  their mean, so one extended segment is outvoted and the far field went the wrong way
+  (measured). The extension had to be a separate answer computed OUTSIDE the diffusion — project
+  onto the terminal tangent, then redistribute the whole span over the ramp. Straight path,
+  Extend 1: the frame runs 0 → 255 rising the whole way. **And a slider that moves its own label
+  and nothing else is not a slider** — the three spline knobs wrote to the mode's private store,
+  which the overlay's `paint()` does not subscribe to, so the picture only caught up when
+  something unrelated forced a repaint. They go through the `geomParams` gate now, which is what
+  that gate is for.
+
+- 2026-09-08 · Phase W, the spline sliders — two bugs stacked, and the second was mine.
+  **The visible canvas is not always the canvas you are testing.** The spline editor portals its
+  own live preview OVER the overlay's canvas inside the same stage, so the preview is what the
+  user looks at — and it called `presentMode` with `params: {}`, an EMPTY bag, falling back to
+  the mode's private store for Spread / Depth / Extend. That was harmless for as long as the
+  sliders wrote to that store, and it became "the sliders do nothing" the moment they moved to
+  the `geomParams` gate: the hidden canvas moved correctly and the visible one froze. Both
+  canvases take the same params now. **The lesson for the guards, not just the code:** every
+  measurement I took sampled `querySelector('… canvas')` — the FIRST match, the overlay's — so
+  every one of them said the sliders worked while the owner was looking at a frozen picture.
+  `smoke:gx-spline` [4] now asserts both canvases in the stage agree, and it is the only step
+  that reds when the empty bag is restored. A stage with two canvases needs a guard that knows
+  there are two. **And the wallpaper's sliders are the app's slider** (owner: "look at the hero
+  gradient as an example of finished ui"): spline's three raw `<input type=range>` and Liquify's
+  hand-rolled `Slider` are now `ScalarInput`, and the overlay wraps every mode's controls in
+  `InputSkinProvider skin="soft"` — the same skin as the hero, the tray and the Browse filters.
+  Fractal and Gradient map already used it, so one provider finished the set; the skin being a
+  CONTEXT rather than a second component is what made that a three-line change.
+
+- 2026-09-08 · Phase W, the spline's controls — and what the mapping's parameters SHOULD be.
+  **A control on a gradient tool should change the MAPPING, not paint over it** (owner: "these
+  are supposed to be gradient spline mapping controls"). Depth multiplied the colour toward
+  black or white, which is lighting: it puts pixels on screen in colours the ramp does not
+  contain. It moves the ramp COORDINATE with perpendicular distance now, so the field gains a
+  second axis and every pixel stays a colour the gradient holds. **A slider whose top half all
+  looks the same has the wrong range** — Spread's core reached 0.2 where 1.2 is where the wash
+  actually happens. **Extend took three corrections, each of which taught something:** answering
+  beyond-the-ends OUTSIDE the diffusion seams the field along the perpendicular through each
+  endpoint and clamps into flat plates, so the extension has to be real polyline the blend can
+  see; a blend that SUMS OVER SAMPLES changes when the sampling changes, so it must weight each
+  segment by its LENGTH and be an integral instead; and extending must not restretch the ramp —
+  the path keeps 0…1 and the extension repeats its END COLOUR, which is what a linear gradient
+  does outside its stops and what "behave like a linear ramp" meant all along. **A guard written
+  from a wrong premise is worse than none:** `smoke:gx-spline` [2] asserted the opposite
+  behaviour (a ramp spanning the whole frame), measured it, and passed — it made the wrong
+  design look verified.
+  **The parameter set this mapping actually wants** (asked for, not yet built). The field is
+  `t = Σ segT·len/(d² + core) / Σ len/(d² + core)`, so its natural degrees of freedom are:
+  *(a)* the FALLOFF EXPONENT, hard-coded at 2 today — the single biggest look lever, taking the
+  field from a soft wash (≈1) through today's diffusion to crisp nearest-point bands with
+  medial-axis structure (≥4); *(b)* REPEAT and PHASE along the path (`t·repeats + phase`,
+  wrapped), the classic ramp controls, which turn one gradient into stripes following the curve;
+  *(c)* MIRROR / ping-pong on that wrap, so a repeat has no seam; *(d)* a WIDTH or falloff
+  distance for Depth, so its second axis can be tuned independently of Spread's. Spread, Depth
+  and Extend cover breadth, the perpendicular axis and the ends; (a) and (b) are what would make
+  the mode capable of visibly different LOOKS rather than one look with three trims.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on
@@ -974,3 +1151,64 @@ phase now carries**. Items move out of this list only when a later phase's entry
   "it's so beautiful"). **Session closed here (owner); Phase D awaits nothing but use.** Next
   buildable: Phase W (wallpaper) or Phase F (phone); C.5 Mix UI parked; the §8 L10 wording;
   Phase G decides the variants modules and ADR-0112.
+- 2026-09-08 · Phase W built (W.1–W.4, awaiting the owner's walk). **In scope, left undone:**
+  nothing from W.1–W.4 — but the walk should judge three things the code cannot: whether the
+  twist range (±3 turns) stays legible at its ends, whether the petal count's 12-per-orbit gain
+  feels right, and whether the silver on the Wallpaper icon reads as inviting or as disabled in
+  the LIGHT scheme (it was measured on dark). **Noticed, not fixed:** the gradient map's seven
+  channels have no live check at all — the mode's `raster` reads the image from `imageStore`
+  rather than from `ctx` (its own long-standing `@assumption`), so nothing outside a real
+  Extract image exercises them; the pure maths is guarded 44 ways, the pixels are not. Hue as a
+  driver WRAPS by nature, so a ramp whose two ends differ shows a seam on red — correct, and
+  worth a word in the tooltip if the walk trips on it. The `radialSineFreq` range stops at 16
+  because a finer flower stops reading at wallpaper scale; that is a taste call, not a limit.
+  **A guard defect found and fixed on the way, worth carrying:** `smoke:gx-handles` selected
+  handles by their INDEX in render order, so inserting a handle mid-list silently re-pointed
+  every case — the radial case began dragging Waves while still asserting on `radialCx`, and it
+  went red for the right reason only by luck. Handles now carry `data-gx-handle` (the first key
+  they reset) and the smoke selects by name. A second, quieter hole in the same file's new
+  step: asserting a param "changed from undefined" passes on a completely DEAD handle, because
+  a drag that emits its grab value still writes the default over an unset key — measured, then
+  tightened to assert the value moved off the default. **Checked and clean:** the per-mode
+  `hint` strings are the only prose describing these handles and both were updated in place
+  (`geometryModes.tsx`); `grep 'drag the centre\|rotation handle'` finds no second copy in the
+  old shell or in app-gmt, so there is nothing stale to carry to Phase G from this phase.
+- 2026-09-08 · Phase W, after the perf + split pass. **In scope, left undone:** conic is still
+  ~71 ms a full-res frame and the blit ~171 ms, so a 2560-capped settle render is ~240 ms of
+  blocked main thread — better than 341 but still a visible hitch on a mode switch or a big
+  edit. The three real options are all bigger than this pass: move the field+dither to a worker,
+  lower `CONTINUOUS_MAX_DIM`, or replace the CPU error diffusion with the GL blue-noise tail the
+  compositor already has (a QUALITY decision — `debug/test-dither.mts` chose error diffusion at
+  WIGGLE 0.04 vs 0.24, so that one is the owner's, not mine). **Not measured:** the three
+  ownCanvas modes (fractal / liquify / parallax) drive their own RAF and were not profiled in
+  this pass — if "some modes" meant those, say so and I will measure them next. **Noticed:** the
+  gradient map's `raster` still reads the image from `imageStore` rather than from `ctx` (its own
+  standing `@assumption`), so the channel-field cache is module state keyed on a store read —
+  correct today because the overlay includes the thumb in its repaint key, but it is the second
+  thing now relying on that. And `mapStrength < 1` re-enables the source-colour bilinear, so the
+  strength slider is measurably more expensive than the rest of the mode; nothing to fix, but
+  worth knowing before it is called a regression.
+- 2026-09-08 · Phase W, after the GPU fast path. **Now genuinely fast, and the earlier
+  "still ~240 ms of blocked main thread" note is superseded for anything MOVING** — it still
+  describes the settled render, which is once per gesture and is the frame you keep. **In scope,
+  left undone:** the settle threshold (180 ms) is a guess that felt right, not a measurement —
+  the walk should say whether the hand-off is invisible or whether the picture visibly
+  "sharpens" a beat after you stop. **Noticed:** `geometryFrag.ts` is the first place in this
+  subsystem where one law lives in two languages; if a fifth geometry is added it must be added
+  twice and `smoke:gx-geom-gpu`'s case list extended, which is a real tax on the next mode and
+  should be weighed against just accepting the blue-noise tail for a new one. The three
+  `ownCanvas` modes are still unprofiled — the owner reports fractal as fine, so that is
+  consistent, but liquify and parallax were never measured either way.
+- 2026-09-08 · Phase W, after the cull. **In scope, left undone:** Liquify is TAGGED, not
+  fixed — the `wip` flag says so honestly but nothing says what is unfinished about it, and that
+  belongs in the banner's wording once the owner says which part. **Noticed:** removing Arched
+  left `GeometryId` with three members and `DEFAULT_BACKGROUND` with no live consumer, both kept
+  deliberately (a masked geometry would want them) and both now guarded synthetically. The
+  spline's `setSplinePoints` is a new exported seam whose only caller is a smoke — justified
+  the way `fullscreenStore`'s is, but it is a seam, and a second caller should be a real feature
+  rather than another test. **A trap that cost real time twice today, worth reading before the
+  next session:** editing a module a smoke drives by bare-URL import (`fullscreenStore`,
+  `splineMode`) HMR-invalidates it, the smoke then gets a SECOND instance, and the failure looks
+  like a product regression — the spline smoke spent two runs "failing" on a picture that was
+  simply the untouched default curve. Both smokes now name the hazard in the failure text.
+  Restart the dev server after editing either.

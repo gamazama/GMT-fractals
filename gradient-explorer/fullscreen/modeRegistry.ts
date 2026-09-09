@@ -188,6 +188,10 @@ export interface FullscreenMode {
 
   // ── kind: 'glQuad' ──
   /** Fragment BODY defining `vec3 modeColor(vec2 uv)` (+ any helpers). */
+  /** Marks the mode as UNFINISHED: the selector tags it and the stage prints a quiet banner,
+   *  so a half-built mode can stay reachable without being mistaken for a finished one. Set on
+   *  Liquify 2026-09-08 at the owner's word. */
+  wip?: boolean;
   fragBody?: string;
   /** Extra `uniform …;` declarations the body reads (beyond the reserved preamble set). */
   fragUniforms?: string;

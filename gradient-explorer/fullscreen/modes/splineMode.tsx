@@ -37,8 +37,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExtern
 import { createPortal } from 'react-dom';
 import { GEOM_DEFAULTS } from '../../../palette/core/rampGeometry';
 import { renderStopsToBuffer } from '../../../palette/core/gmtGradient';
-import { useFullscreenState } from '../../../palette/store/fullscreenStore';
-import { useActiveHeroSelection } from '../../../palette/store/heroSelection';
+import { ScalarInput } from '../../../components/inputs/ScalarInput';
+import { useFullscreenState, setFullscreenGeomParam, rampToLut } from '../../../palette/store/fullscreenStore';
 import type { FullscreenMode } from '../modeRegistry';
 import { FullscreenCompositor } from '../FullscreenCompositor';
 import { clamp01 } from '../../../utils/stopOps';
@@ -54,6 +54,21 @@ export interface SplinePoint { x: number; y: number }
  *  224-vector GLSL ES 3.0 floor that ANGLE/integrated GPUs report, AND keeps the per-frag
  *  loop cheap. Control points tessellate to fit this budget. */
 const MAX_POLY = 64;
+
+/**
+ * The three knobs' SLIDER ranges, and their hard limits.
+ *
+ * The slider's range is where the useful values live; it is NOT a cap. `ScalarInput`'s value
+ * cell is a text field and a drag, and both go past the track's ends — so the hard limits are
+ * the only real bounds, and the maths must not clamp inside them (owner, 2026-09-08: "these
+ * sliders are not capped to min/max via the textfield so we shouldn't clamp our formulas so
+ * these outside of range values can still be accessed"). Everything downstream of these
+ * behaves sensibly out of range: the Shepard core keeps growing, Depth keeps walking the ramp,
+ * and the extension's point budget is capped by the polyline, not by the value.
+ */
+const SPREAD_MAX = 1, SPREAD_HARD = 8;
+const DEPTH_MAX = 1, DEPTH_HARD = 8;
+const EXTEND_MAX = 1, EXTEND_HARD = 20;
 
 
 /** The tessellated path. `poly` (x,y pairs) + `arc` (normalized cumulative length) drive the
@@ -147,8 +162,135 @@ export const tessellateSpline = (points: readonly SplinePoint[]): SplineTessella
     packed[i * 4] = poly[i * 2];
     packed[i * 4 + 1] = poly[i * 2 + 1];
     packed[i * 4 + 2] = arc[i];
+    // .w = this vertex's FORWARD segment length. The shader weights each segment by it, which
+    // makes the blend an integral along the path rather than a sum over however many samples
+    // the tessellator happened to lay down — see the note in SPLINE_FRAG_BODY.
+    packed[i * 4 + 3] = i + 1 < count ? seglen[i + 1] - seglen[i] : 0;
   }
 
+  return { poly, arc, packed, seg, count };
+};
+
+/**
+ * Lengthen a tessellated path at BOTH ends, along its terminal tangents, and renormalise the
+ * arc coordinate over the whole extended run. `extend` is the length added at each end as a
+ * multiple of the path's own length; 0 returns the input untouched.
+ *
+ * Why the extension is real POLYLINE and not a special case in the shader. The fragment blends
+ * every segment's coordinate by inverse-square distance (Shepard), and two earlier attempts to
+ * bolt extrapolation onto that failed in ways worth recording:
+ *   • letting the end segments project as unbounded RAYS inside the blend did nothing — one
+ *     extended segment is outvoted by the ~48 clamped ones and the far field washes to their
+ *     mean;
+ *   • answering beyond-the-ends separately, outside the blend, produced a hard SEAM along the
+ *     perpendicular through each endpoint (a visible diagonal line) and flat plates of colour
+ *     where the coordinate clamped — exactly what the owner reported (2026-09-08: "extend is
+ *     cutting off the gradient and introducing line artifacts").
+ * Extending the polyline has neither problem by construction: the extension is made of ordinary
+ * segments with ordinary weights, so the field stays continuous everywhere and there is nothing
+ * to clamp.
+ *
+ * The point budget is fixed ({@link MAX_POLY}), so the curve is RESAMPLED to make room — the
+ * extensions are straight and need few samples, the curve keeps the rest. Sample density
+ * matters here beyond looks: it sets each region's total weight in the blend.
+ */
+export const extendTessellation = (base: SplineTessellation, extend: number): SplineTessellation => {
+  if (extend <= 0 || base.count < 2) return base;
+  const poly = new Float32Array(MAX_POLY * 2);
+  const arc = new Float32Array(MAX_POLY);
+  const packed = new Float32Array(MAX_POLY * 4);
+  const seg = new Int32Array(MAX_POLY);
+
+  // Path length in uv units, and the outward unit tangents at each end.
+  let len = 0;
+  for (let i = 1; i < base.count; i++) {
+    len += Math.hypot(base.poly[i * 2] - base.poly[(i - 1) * 2], base.poly[i * 2 + 1] - base.poly[(i - 1) * 2 + 1]);
+  }
+  if (len < 1e-9) return base;
+  const dirOf = (ax: number, ay: number, bx: number, by: number): { x: number; y: number } => {
+    const dx = ax - bx, dy = ay - by;
+    const m = Math.hypot(dx, dy) || 1;
+    return { x: dx / m, y: dy / m };
+  };
+  const head = dirOf(base.poly[0], base.poly[1], base.poly[2], base.poly[3]);
+  const c = base.count;
+  const tail = dirOf(base.poly[(c - 1) * 2], base.poly[(c - 1) * 2 + 1], base.poly[(c - 2) * 2], base.poly[(c - 2) * 2 + 1]);
+  const reach = extend * len;
+
+  // Budget the fixed point count. NOT purely by length: Extend reaches 5, and a proportional
+  // split would leave the curve with a handful of samples and visibly straighten it. The curve
+  // keeps a floor of CURVE_FLOOR points because its SHAPE is what the samples describe; the
+  // extensions are straight lines carrying one constant coordinate each, so their samples only
+  // have to describe WEIGHT, and they are spaced for that below.
+  const CURVE_FLOOR = 28;
+  const byLength = Math.round((MAX_POLY * extend) / (1 + 2 * extend));
+  const nExt = Math.max(2, Math.min(byLength, Math.floor((MAX_POLY - CURVE_FLOOR) / 2)));
+  const nBase = Math.max(2, MAX_POLY - 2 * nExt);
+
+  let count = 0;
+  const push = (x: number, y: number, s: number, segIdx: number): void => {
+    if (count >= MAX_POLY) return;
+    poly[count * 2] = x; poly[count * 2 + 1] = y;
+    // The coordinate is NOT rescaled. The path keeps the whole ramp, 0 … 1, and each extension
+    // carries its END's coordinate outward unchanged — so the extended stretch repeats the edge
+    // COLOUR instead of stretching the gradient over a longer line (owner, 2026-09-08: "it needs
+    // to repeat the edge color of the gradient in the extended section instead of stretching
+    // it"). That is what a linear gradient does outside its two stops, and it is what the
+    // original ask — "so the ramp can behave like a linear ramp when it's a straight spline" —
+    // actually meant: without it the field beyond an end washes toward the average of the whole
+    // path rather than settling on that end's colour.
+    //
+    // It also removes, by construction, the reason Extend appeared to move Spread: nothing is
+    // compressed, so the ramp's rate along the path is the same at every Extend.
+    arc[count] = s;
+    seg[count] = segIdx;
+    count++;
+  };
+
+  // Leading extension, walking IN toward the path (so arc rises monotonically). Every point on
+  // it carries coordinate 0 — the ramp's first colour.
+  //
+  // Spaced QUADRATICALLY, dense near the path and sparse far out. The blend weights a segment
+  // by length / (distance² + core), so a long segment far away is represented well by one
+  // sample while a long segment near the path is not — its weight varies sharply along it.
+  // Even spacing wastes samples on the far end and under-describes the join; this puts them
+  // where the weight actually changes, which is what lets Extend reach 5 on a fixed budget.
+  for (let i = 0; i < nExt; i++) {
+    const f = ((nExt - i) / nExt) ** 2; // 1 … 1/nExt², outermost first
+    push(base.poly[0] + head.x * reach * f, base.poly[1] + head.y * reach * f, 0, base.seg[0]);
+  }
+  // The curve, resampled by arc length onto nBase points.
+  for (let i = 0; i < nBase; i++) {
+    const target = i / (nBase - 1);
+    let k = 1;
+    while (k < c - 1 && base.arc[k] < target) k++;
+    const a0 = base.arc[k - 1], a1 = base.arc[k];
+    const f = a1 - a0 > 1e-9 ? (target - a0) / (a1 - a0) : 0;
+    push(
+      base.poly[(k - 1) * 2] + (base.poly[k * 2] - base.poly[(k - 1) * 2]) * f,
+      base.poly[(k - 1) * 2 + 1] + (base.poly[k * 2 + 1] - base.poly[(k - 1) * 2 + 1]) * f,
+      target,
+      base.seg[k],
+    );
+  }
+  // Trailing extension, walking OUT from the path — every point carries coordinate 1.
+  for (let i = 1; i <= nExt; i++) {
+    const f = (i / nExt) ** 2; // dense at the join, sparse far out — see the leading loop
+    push(
+      base.poly[(c - 1) * 2] + tail.x * reach * f,
+      base.poly[(c - 1) * 2 + 1] + tail.y * reach * f,
+      1,
+      base.seg[c - 1],
+    );
+  }
+  for (let i = 0; i < count; i++) {
+    packed[i * 4] = poly[i * 2];
+    packed[i * 4 + 1] = poly[i * 2 + 1];
+    packed[i * 4 + 2] = arc[i];
+    packed[i * 4 + 3] = i + 1 < count
+      ? Math.hypot(poly[(i + 1) * 2] - poly[i * 2], poly[(i + 1) * 2 + 1] - poly[i * 2 + 1])
+      : 0;
+  }
   return { poly, arc, packed, seg, count };
 };
 
@@ -164,6 +306,8 @@ interface SplineState {
   selected: number | null;
   spread: number;
   depth: number;
+  /** How far the ramp carries past the two ends — see `splineExtend` in rampGeometry. */
+  extend: number;
   version: number;
 }
 
@@ -177,6 +321,7 @@ let state: SplineState = {
   selected: null,
   spread: GEOM_DEFAULTS.splineSpread,
   depth: GEOM_DEFAULTS.splineDepth,
+  extend: GEOM_DEFAULTS.splineExtend,
   version: 0,
 };
 const listeners = new Set<() => void>();
@@ -185,6 +330,19 @@ const emit = (next: Partial<SplineState>, bumpPoints = false): void => {
   listeners.forEach((l) => l());
 };
 const getSplineState = (): SplineState => state;
+
+/**
+ * Replace the control points outright. The interaction layer edits them one at a time through
+ * its own drag handlers; this is for a caller that needs a WHOLE curve at once — today that is
+ * `debug/smoke-gx-spline.mts`, which has to lay down a dead-straight path to check that Extend
+ * makes one read as a plain linear ramp. Named and exported on purpose: the smoke drives it by
+ * string through a bare-URL import, so `tsc` cannot see that edge (the same arrangement, and
+ * the same hazard, as `fullscreenStore`'s test seam).
+ */
+export const setSplinePoints = (pts: SplinePoint[]): void => {
+  if (pts.length < 2) return;
+  emit({ points: pts.map((p) => ({ ...p })), selected: null }, true);
+};
 
 export const useSplineState = (): SplineState =>
   useSyncExternalStore((l) => { listeners.add(l); return () => { listeners.delete(l); }; }, getSplineState, getSplineState);
@@ -226,8 +384,23 @@ const removePoint = (i: number): void => {
 };
 const selectPoint = (i: number | null): void => emit({ selected: i });
 const resetCurve = (): void => emit({ points: DEFAULT_POINTS.map((p) => ({ ...p })), selected: null }, true);
-const setSpread = (v: number): void => emit({ spread: Math.max(0, Math.min(1, v)) });
-const setDepth = (v: number): void => emit({ depth: Math.max(-1, Math.min(1, v)) });
+/**
+ * The three scalar knobs write to `fullscreenStore.geomParams`, NOT to this mode's own store.
+ *
+ * They are flat-optional `GeometryParams` keys and `setUniforms` already reads them from
+ * `ctx.params` first — but the overlay's `paint()` only re-runs when something in the
+ * fullscreen store changes, and it does not subscribe to this module. Writing here meant the
+ * slider's own label moved and the picture did not, until some unrelated change forced a
+ * repaint (owner, 2026-09-08: "extend slider is not update while dragging"). Through the param
+ * gate the overlay repaints on every input event, which is what a slider is for.
+ *
+ * `state.spread` / `.depth` / `.extend` stay as the FALLBACK the mode reads when a key is
+ * unset — that is the documented `ctx.params.x ?? state.x` shape, and it is what a reset
+ * (`resetFullscreenGeomParams`) returns to.
+ */
+const setSpread = (v: number): void => setFullscreenGeomParam('splineSpread', Math.max(0, v));
+const setDepth = (v: number): void => setFullscreenGeomParam('splineDepth', v);
+const setExtend = (v: number): void => setFullscreenGeomParam('splineExtend', Math.max(0, v));
 
 // ── glQuad shader: nearest-segment over the polyline → arc-length → LUT, band falloff ─────
 
@@ -236,7 +409,7 @@ const setDepth = (v: number): void => emit({ depth: Math.max(-1, Math.min(1, v))
 // loop is rejected by ANGLE/D3D11 (Firefox/Windows) with an empty compile log. texelFetch with a
 // computed coord is core-WebGL2 and portable, and sidesteps the fragment-uniform-vector budget.
 const SPLINE_FRAG_UNIFORMS = /* glsl */ `
-uniform sampler2D uPolyTex; // RGBA32F ${MAX_POLY}×1 — texel i = vec4(x, y, arc, 0)
+uniform sampler2D uPolyTex; // RGBA32F ${MAX_POLY}×1 — texel i = vec4(x, y, arc, segLen)
 uniform int uPolyN;
 uniform float uSpread;
 uniform float uDepth;
@@ -258,7 +431,11 @@ vec3 modeColor(vec2 uv) {
   float bestD = 1e9;
   // Spread → Shepard core radius: tiny (crisp, colours hug the path) up to large (flat weights,
   // colours wash across the whole field). Squared so the low end of the slider stays sensitive.
-  float core = mix(2e-4, 0.2, uSpread * uSpread);
+  // Spread → Shepard core radius. The old top end (0.2) barely flattened the weights, so the
+  // slider's upper half all looked alike (owner: "spread seems very underwhelming for what it
+  // could be"); 1.2 actually reaches a full wash where the whole field averages toward one
+  // colour. The bottom end drops too, for a harder edge right on the path.
+  float core = mix(4e-5, 1.2, uSpread * uSpread);
   for (int i = 0; i < ${MAX_POLY - 1}; i++) {
     if (i >= uPolyN - 1) break;
     vec4 va = texelFetch(uPolyTex, ivec2(i, 0), 0);
@@ -270,19 +447,30 @@ vec3 modeColor(vec2 uv) {
     float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-9), 0.0, 1.0); // IQ sdSegment clamp
     float d = length(pa - ba * h);
     float segT = mix(va.z, vb.z, h);
-    // Inverse-square Shepard; the core sets diffusion breadth — a tiny core hugs the path (crisp),
-    // a large core flattens the weights so colours blend across the whole field (soft wash).
-    float w = 1.0 / (d * d + core);
+    // Inverse-square Shepard, weighted by the segment's LENGTH. The length factor is what makes
+    // the blend an INTEGRAL along the path instead of a sum over samples, and it matters the
+    // moment the samples stop being evenly spaced: extending the path re-budgets MAX_POLY
+    // between the curve and its two extensions, so the curve's own sample density drops as
+    // Extend rises. Without the length term that thinning reads as the colours bleeding
+    // further — the Extend slider appeared to move Spread with it (owner, 2026-09-08: "when I
+    // adjust extend, it must compensate so it doesn't look like the spread is adjusting").
+    // With it, the field depends on the path's SHAPE and nothing else.
+    float w = va.w / (d * d + core);
     accT += segT * w;
     wsum += w;
     bestD = min(bestD, d);
   }
-  vec3 col = sampleLut(accT / max(wsum, 1e-6));
-  // Depth shading: a signed perpendicular dimension. >0 darkens with distance (in-hue vignette,
-  // never a hard cut); <0 lifts the colour near the path toward white (glow). 0 = flat fill.
-  float prox = smoothstep(0.6, 0.0, bestD); // 1 on the path → 0 far away
-  if (uDepth > 0.0) return col * (1.0 - uDepth * (1.0 - prox));
-  return mix(col, vec3(1.0), (-uDepth) * 0.5 * prox);
+  float t = accT / max(wsum, 1e-6);
+  // DEPTH is a MAPPING control, not a shading one (owner, 2026-09-08: "the depth seems to be
+  // adding some lightening and darkening, I'm sure that's not what was intended — these are
+  // supposed to be gradient spline mapping controls"). It used to multiply the colour toward
+  // black or white, which is a lighting effect painted over the gradient and puts colours on
+  // screen that are not in the ramp at all. Now the PERPENDICULAR distance walks the ramp
+  // coordinate instead: >0 reads further along the gradient as you move away from the path,
+  // <0 reads back toward its start. Every pixel is still a colour the gradient actually
+  // contains, and the field gains a second axis — bands that follow the curve.
+  vec3 col = sampleLut(t + uDepth * bestD);
+  return col;
 }
 `;
 
@@ -292,8 +480,25 @@ const SPLINE_UNIFORM_NAMES = ['uPolyTex', 'uPolyN', 'uSpread', 'uDepth', 'uAspec
 // preview are separate WebGL2 contexts, and a texture can't cross contexts. The WeakMap is
 // self-cleaning (entries drop when a context is GC'd after dispose/loseContext). Re-uploaded
 // only when the curve (version) changes.
-const polyTexByGl = new WeakMap<WebGL2RenderingContext, { tex: WebGLTexture; version: number }>();
-const bindPolyTex = (gl: WebGL2RenderingContext, unit: number): void => {
+/** The tessellation the SHADER sees — the curve plus its extensions, memoized on (points,
+ *  extend). Both inputs are cheap to compare and the rebuild walks MAX_POLY points, so this is
+ *  recomputed only when the curve or the Extend slider actually moves. */
+let extCacheKey = '';
+let extCacheVal: SplineTessellation | null = null;
+const getExtendedTess = (extend: number): SplineTessellation => {
+  const key = `${state.version}:${extend.toFixed(4)}`;
+  if (extCacheKey === key && extCacheVal) return extCacheVal;
+  extCacheVal = extendTessellation(getTess(), extend);
+  extCacheKey = key;
+  return extCacheVal;
+};
+
+/** The live Extend, resolved the way the shader resolves it (`ctx.params ?? the mode store`). */
+const currentExtend = (params?: { splineExtend?: number }): number =>
+  params?.splineExtend ?? state.extend;
+
+const polyTexByGl = new WeakMap<WebGL2RenderingContext, { tex: WebGLTexture; version: string }>();
+const bindPolyTex = (gl: WebGL2RenderingContext, unit: number, extend: number): void => {
   let entry = polyTexByGl.get(gl);
   gl.activeTexture(gl.TEXTURE0 + unit);
   if (!entry) {
@@ -303,14 +508,15 @@ const bindPolyTex = (gl: WebGL2RenderingContext, unit: number): void => {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    entry = { tex, version: -1 };
+    entry = { tex, version: '' };
     polyTexByGl.set(gl, entry);
   } else {
     gl.bindTexture(gl.TEXTURE_2D, entry.tex);
   }
-  if (entry.version !== state.version) {
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_POLY, 1, 0, gl.RGBA, gl.FLOAT, getTess().packed);
-    entry.version = state.version;
+  const key = `${state.version}:${extend.toFixed(4)}`;
+  if (entry.version !== key) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, MAX_POLY, 1, 0, gl.RGBA, gl.FLOAT, getExtendedTess(extend).packed);
+    entry.version = key;
   }
 };
 
@@ -323,16 +529,18 @@ export const splineMode: FullscreenMode = {
   // reads ctx.params FIRST so the future generic-slider wiring works, falling back to this mode's
   // live store today (the overlay doesn't thread arbitrary params yet — see the overlay's paint()).
   paramFields: [
-    { key: 'splineSpread', label: 'Spread', min: 0, max: 1, step: 0.01, default: GEOM_DEFAULTS.splineSpread },
-    { key: 'splineDepth', label: 'Depth', min: -1, max: 1, step: 0.01, default: GEOM_DEFAULTS.splineDepth },
+    { key: 'splineSpread', label: 'Spread', min: 0, max: SPREAD_MAX, step: 0.01, default: GEOM_DEFAULTS.splineSpread },
+    { key: 'splineDepth', label: 'Depth', min: -DEPTH_MAX, max: DEPTH_MAX, step: 0.01, default: GEOM_DEFAULTS.splineDepth },
+    { key: 'splineExtend', label: 'Extend', min: 0, max: EXTEND_MAX, step: 0.01, default: GEOM_DEFAULTS.splineExtend },
   ],
   fragBody: SPLINE_FRAG_BODY,
   fragUniforms: SPLINE_FRAG_UNIFORMS,
   uniformNames: SPLINE_UNIFORM_NAMES,
   setUniforms: (gl, loc, ctx) => {
-    bindPolyTex(gl, 3); // unit ≥3 — 0/1/2 are reserved (uSrc/uLut/uBlueNoise)
+    const extend = currentExtend(ctx.params);
+    bindPolyTex(gl, 3, extend); // unit ≥3 — 0/1/2 are reserved (uSrc/uLut/uBlueNoise)
     gl.uniform1i(loc('uPolyTex'), 3);
-    gl.uniform1i(loc('uPolyN'), getTess().count);
+    gl.uniform1i(loc('uPolyN'), getExtendedTess(extend).count);
     gl.uniform1f(loc('uSpread'), ctx.params.splineSpread ?? state.spread);
     gl.uniform1f(loc('uDepth'), ctx.params.splineDepth ?? state.depth);
     gl.uniform1f(loc('uAspect'), ctx.width / Math.max(1, ctx.height));
@@ -372,25 +580,64 @@ function SplineControls(): React.ReactElement {
   const fs = useFullscreenState();
   const spline = useSplineState();
   const stage = useStageElement(fs.open);
+  // Read through the same `ctx.params.x ?? state.x` resolution the shader uses, so the thumb
+  // and the picture can never disagree.
+  const spread = fs.geomParams.splineSpread ?? spline.spread;
+  const depth = fs.geomParams.splineDepth ?? spline.depth;
+  const extend = fs.geomParams.splineExtend ?? spline.extend;
 
   return (
     <div className="flex items-center gap-2">
-      <label className="flex items-center gap-1.5 text-[11px] text-fg-muted" title="How broadly each colour bleeds off the path">
-        Spread
-        <input
-          type="range" min={0} max={1} step={0.01} value={spline.spread}
-          onChange={(e) => setSpread(parseFloat(e.target.value))}
-          className="w-20 accent-accent" aria-label="Spline diffusion spread"
+      {/* The app's own slider, not a bare <input type=range> — right-click reset, the default
+          tick, the live indicator, drag precision and the shared skin all come with it (owner,
+          2026-09-08: "all the sliders in the wallpaper mode are the main slider component we
+          have used everywhere else"). Fractal and Gradient map already used it; these three and
+          Liquify's were the hold-outs. */}
+      <div className="w-28" title="How broadly each colour bleeds off the path">
+        <ScalarInput
+          value={spread}
+          onChange={setSpread}
+          min={0}
+          max={SPREAD_MAX}
+          hardMin={0}
+          hardMax={SPREAD_HARD}
+          step={0.01}
+          defaultValue={GEOM_DEFAULTS.splineSpread}
+          label="Spread"
+          trackHeight={14}
         />
-      </label>
-      <label className="flex items-center gap-1.5 text-[11px] text-fg-muted" title="Perpendicular depth — left glows near the path, right vignettes the edges">
-        Depth
-        <input
-          type="range" min={-1} max={1} step={0.01} value={spline.depth}
-          onChange={(e) => setDepth(parseFloat(e.target.value))}
-          className="w-20 accent-accent" aria-label="Spline depth shading"
+      </div>
+      <div className="w-28" title="Perpendicular depth — left glows near the path, right vignettes the edges">
+        <ScalarInput
+          value={depth}
+          onChange={setDepth}
+          min={-DEPTH_MAX}
+          max={DEPTH_MAX}
+          hardMin={-DEPTH_HARD}
+          hardMax={DEPTH_HARD}
+          step={0.01}
+          defaultValue={GEOM_DEFAULTS.splineDepth}
+          label="Depth"
+          trackHeight={14}
         />
-      </label>
+      </div>
+      <div
+        className="w-28"
+        title="Carry the ramp on past the two ends of the path, along its terminal tangents — a straight path then reads as a plain linear ramp instead of a stripe with soft margins"
+      >
+        <ScalarInput
+          value={extend}
+          onChange={setExtend}
+          min={0}
+          max={EXTEND_MAX}
+          hardMin={0}
+          hardMax={EXTEND_HARD}
+          step={0.01}
+          defaultValue={GEOM_DEFAULTS.splineExtend}
+          label="Extend"
+          trackHeight={14}
+        />
+      </div>
       <button
         onClick={resetCurve}
         title="Reset to the default curve"
@@ -430,7 +677,6 @@ const nearestOnPath = (
 function SplineEditor(): React.ReactElement {
   const fs = useFullscreenState();
   const spline = useSplineState();
-  const hero = useActiveHeroSelection();
   const wrapRef = useRef<HTMLDivElement>(null);
   const glHostRef = useRef<HTMLDivElement>(null);
   const compRef = useRef<FullscreenCompositor | null>(null);
@@ -440,10 +686,27 @@ function SplineEditor(): React.ReactElement {
   // Gradient colour source: the open-time snapshot in fullscreen; in split, live-follow the
   // last-selected hero (matching the overlay's split semantics). The shader samples only `uLut`,
   // so the CPU ramp isn't needed — pass an empty ramp.
-  const srcConfig = fs.split ? (hero?.payload.config ?? fs.config) : fs.config;
+  // The colour comes from what the OVERLAY resolved, never from a second resolution of our own.
+  // This used to read `useActiveHeroSelection()` — the old shell's store — while split, which in
+  // the v2 shell is the WALL PICK and not the gradient being edited, so knot edits never reached
+  // this canvas; plain fullscreen looked right only because that branch fell back to the
+  // open-time snapshot (owner, 2026-09-08: "when I edit the knots on a gradient, it is not
+  // updating the wallpaper's split view until I fullscreen it" · "it seems only spline mode is
+  // affected, like it's receiving data differently"). It was: every other mode takes colour from
+  // the render ctx the overlay hands it, and only this one had a second compositor resolving for
+  // itself. `resolved.ramp` is the host's real pipeline output when there is one, so Curves and
+  // Adjust land here too rather than an approximation refitted to stops.
+  const resolved = fs.resolved;
+  const srcConfig = resolved?.config ?? fs.config;
+  const srcRamp = resolved?.ramp ?? null;
   const lut = useMemo(
-    () => (srcConfig ? renderStopsToBuffer(srcConfig.stops, srcConfig.blendSpace, srcConfig.colorSpace) : null),
-    [srcConfig],
+    () =>
+      srcRamp && srcRamp.length
+        ? rampToLut(srcRamp)
+        : srcConfig
+          ? renderStopsToBuffer(srcConfig.stops, srcConfig.blendSpace, srcConfig.colorSpace)
+          : null,
+    [srcRamp, srcConfig],
   );
   const tess = getTess(); // module-memoized on the point version; stable ref between point edits.
 
@@ -467,8 +730,15 @@ function SplineEditor(): React.ReactElement {
     const h = Math.max(1, Math.round(ch * scale));
     comp.setSize(w, h);
     comp.dither = fs.dither;
-    comp.presentMode(splineMode, { ramp: [], lut, params: {}, width: w, height: h });
-  }, [lut, fs.dither]);
+    // Thread the REAL params, not an empty bag. The editor's preview canvas sits ON TOP of the
+    // overlay's inside the same stage, so it is the picture the user actually sees — and with
+    // `{}` here it fell back to this module's private store for Spread / Depth / Extend. That
+    // was invisible while the sliders wrote to that store; the moment they moved to the
+    // `geomParams` gate (so the overlay would repaint at all) the two disagreed and the visible
+    // canvas froze while the hidden one moved correctly (owner, 2026-09-08: "still the
+    // spread/depth/extend sliders are not working"). One source, both canvases.
+    comp.presentMode(splineMode, { ramp: [], lut, params: fs.geomParams, width: w, height: h });
+  }, [lut, fs.dither, fs.geomParams]);
 
   // Stable handle to the latest `render` so the create-once effect's onReady (and the resize
   // observer) never call a stale closure after `lut`/`dither` change.
@@ -500,8 +770,9 @@ function SplineEditor(): React.ReactElement {
     if (comp && lut) { comp.uploadLut(lut); renderRef.current(); }
   }, [lut]);
 
-  // Repaint on a curve / spread / depth / dither change (the gradient is handled by the [lut] effect).
-  useEffect(() => { render(); }, [render, spline.version, spline.spread, spline.depth]);
+  // Repaint on a curve or dither change; the knobs now ride `render`'s own deps (it closes over
+  // `fs.geomParams`), and the gradient is handled by the [lut] effect.
+  useEffect(() => { render(); }, [render, spline.version]);
 
   // Repaint on stage resize (window resize, split-divider drag, toolbar wrap).
   useEffect(() => {

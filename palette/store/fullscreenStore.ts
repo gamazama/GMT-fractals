@@ -49,6 +49,7 @@
 
 import { useSyncExternalStore } from 'react';
 import type { GradientConfig } from '../../types';
+import type { RGB } from '../core/oklab';
 import type { GeometryParams } from '../core/rampGeometry';
 
 export interface FullscreenState {
@@ -57,6 +58,9 @@ export interface FullscreenState {
   config: GradientConfig | null;
   /** A label for the source hero, shown in the overlay chrome / export name. */
   name: string;
+  /** What the overlay resolved to draw — see {@link ResolvedSource}. Published by the overlay,
+   *  read by any mode surface that paints the gradient itself. */
+  resolved: ResolvedSource | null;
   /** Active fullscreen-mode id (a registry key — `gradient-explorer/fullscreen/modeRegistry`).
    *  A string (not the `GeometryId` union) so parallel mode streams add ids without a store
    *  edit. */
@@ -91,6 +95,7 @@ const CLOSED: FullscreenState = {
   open: false,
   config: null,
   name: 'Gradient',
+  resolved: null,
   geom: 'linear',
   geomParams: {},
   handles: true,
@@ -214,3 +219,94 @@ export const getFullscreenState = (): FullscreenState => state;
 /** Non-hook subscription — an `ownCanvas` mode's `mount()` subscribes to push the live knobs it
  *  reads (e.g. the fractal's phase/repeats/mapping) to its renderer. Returns an unsubscribe fn. */
 export const subscribeFullscreen = (l: () => void): (() => void) => subscribe(l);
+
+// ── the LIVE gradient source seam ────────────────────────────────────────────────────────
+/**
+ * A host-supplied hook resolving the gradient the wallpaper should be following RIGHT NOW —
+ * `null` while the host has nothing live, which makes the overlay fall back to the snapshot
+ * handed to {@link openFullscreen}.
+ *
+ * It exists because the two shells keep their working gradient in different places and the
+ * overlay must not know which host it is in (CLAUDE.md: seams, never a branch on the app). The
+ * old shell's is the last-modified hero (`heroSelection` + the Generator's derivation); the v2
+ * shell's is the Working pipeline (`workingStore`, ADR-0111). Before this seam the overlay only
+ * knew the first pair, so in v2 the split preview followed the WALL PICK if there was one and
+ * otherwise froze on the open-time snapshot — it never followed the hero being edited.
+ *
+ * It is a REACT HOOK, called during render, so a host can subscribe to whatever stores it
+ * likes. Register it at boot, before the overlay first renders: the overlay picks its resolver
+ * component by whether one is registered, and swapping that mid-session remounts the resolver.
+ */
+export type LiveGradientSourceHook = () => {
+  config: GradientConfig;
+  name: string;
+  /**
+   * The host's ACTUAL rendered ramp, when it has one — 256 RGB entries, already carrying
+   * everything the host's pipeline does (Curves, Adjust, Mix, the image).
+   *
+   * Hand this over whenever it exists. `config` is not always a faithful description of what
+   * the host is showing: the v2 Working pipeline returns a stop REFIT of its processed ramp,
+   * which is lossy in two ways that both bite here — a small Curves or Adjust move can refit to
+   * byte-identical stops, so a config-only signature reports "nothing changed" and the wallpaper
+   * silently stops following (owner, 2026-09-08: "when I make curves and adjustments, they are
+   * not reflecting always in the split render"); and even when it does change, re-rendering the
+   * refit is an approximation of the ramp rather than the ramp. With the ramp present the
+   * overlay uses it verbatim and watches IT for changes.
+   */
+  ramp?: RGB[];
+} | null;
+
+let liveSourceHook: LiveGradientSourceHook | null = null;
+
+/** Register the host's live-gradient hook (see {@link LiveGradientSourceHook}). Pass `null` to
+ *  clear it and fall back to the overlay's built-in hero/Generator resolution. */
+export const setFullscreenLiveSource = (hook: LiveGradientSourceHook | null): void => {
+  liveSourceHook = hook;
+};
+
+/** The registered live-gradient hook, or null when the host registered none. */
+export const getFullscreenLiveSource = (): LiveGradientSourceHook | null => liveSourceHook;
+
+// ── the RESOLVED source (what the overlay decided to draw) ───────────────────────────────
+/**
+ * The colour the overlay is actually rendering right now — the live source when one resolves,
+ * the open-time snapshot otherwise, with the host's real ramp when it handed one over.
+ *
+ * It is published here because the overlay is not the only surface that paints the gradient: a
+ * mode may run its own second compositor for an interaction layer (the spline's editable path
+ * does, over the overlay's own canvas), and such a surface has no way to reach the overlay's
+ * resolution. The spline's editor used to resolve colour for itself out of `heroSelection` —
+ * the OLD shell's store — so in the v2 shell it followed the WALL PICK and never the gradient
+ * being edited: knot edits did not show in the split preview, while plain fullscreen looked
+ * right because that branch fell back to the open-time snapshot (owner, 2026-09-08). One
+ * resolution, published once, is the fix for that whole class.
+ */
+export interface ResolvedSource {
+  config: GradientConfig;
+  name: string;
+  ramp?: RGB[];
+}
+
+/** Pack a rendered ramp into the 256×4 RGBA8 LUT the GL modes upload. Shared so the overlay's
+ *  compositor and a mode's own compositor cannot end up showing different colours. */
+export const rampToLut = (ramp: RGB[]): Uint8Array => {
+  const buf = new Uint8Array(1024);
+  const last = ramp.length - 1;
+  for (let i = 0; i < 256; i++) {
+    const c = ramp[Math.min(last, Math.round((i / 255) * last))];
+    buf[i * 4] = c.r;
+    buf[i * 4 + 1] = c.g;
+    buf[i * 4 + 2] = c.b;
+    buf[i * 4 + 3] = 255;
+  }
+  return buf;
+};
+
+/** Publish what the overlay resolved. Compared by the identity of the parts, so re-publishing
+ *  the same resolution is a no-op and cannot drive a render loop. */
+export const setFullscreenResolved = (r: ResolvedSource | null): void => {
+  const cur = state.resolved;
+  if (cur === r) return;
+  if (cur && r && cur.config === r.config && cur.name === r.name && cur.ramp === r.ramp) return;
+  emit({ ...state, resolved: r });
+};
