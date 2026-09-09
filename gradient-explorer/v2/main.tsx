@@ -26,6 +26,8 @@ import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeSto
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
+import { FirstRunBrightness } from './FirstRunBrightness';
+import { decideFirstRun } from './firstRunDecision';
 
 registerUI();
 installShortcuts();
@@ -34,17 +36,36 @@ installShortcuts();
 installUndo({ hideTopBarButtons: true });
 registerCoreSettings();
 
-// Light grey by default (owner, 2026-09-06), the switch kept: Settings ▸ Colour still offers
-// every preset + the axes. The theme axes are SHARED across the GMT apps (gmt.brightness …,
-// engine/store/colorSchemeStore.ts), so this seeds the light-grey preset ONCE per browser
-// on the first v2 boot and never again — a user who switches back keeps their choice, and
-// app-gmt sees the same theme either way, as it always has.
+/**
+ * Light grey by default (owner, 2026-09-06), the switch kept: Settings ▸ Colour still offers
+ * every preset + the axes. The theme axes are SHARED across the GMT apps (gmt.brightness …,
+ * engine/store/colorSchemeStore.ts), so this runs ONCE per browser and never again.
+ *
+ * Until 2026-09-09 this applied Light Grey silently. It now applies the same preset and
+ * ASKS (§8b item 3, `FirstRunBrightness`) — brightness is the one default that cannot be
+ * right for everyone, because how bright the chrome is decides how the colours inside it
+ * read. Returns whether to ask.
+ *
+ * The `gmt.brightness === null` test is the part that matters, and it is a fix as well as a
+ * gate: the silent seed applied Light Grey whenever the SEED key was unset, which on a
+ * user's first v2 boot OVERRODE a brightness they had already chosen in app-gmt. Someone
+ * who has chosen keeps their choice and is not asked; only a genuinely new user is.
+ */
 const THEME_SEED_KEY = 'gmt.ge.themeSeeded';
-if (!safeLocalGet(THEME_SEED_KEY)) {
+const BRIGHTNESS_KEY = 'gmt.brightness';
+
+const decideFirstRunBrightness = (): boolean => {
+  const seeded = !!safeLocalGet(THEME_SEED_KEY);
+  const verdict = decideFirstRun({ seeded, chosenBrightness: safeLocalGet(BRIGHTNESS_KEY) });
+  // Written BEFORE the card can render, so a refresh mid-decision does not ask again.
+  if (!seeded) safeLocalSet(THEME_SEED_KEY, '1');
+  if (verdict === 'quiet') return false;
   const lightGrey = THEME_PRESETS.find((p) => p.id === 'light-grey');
   if (lightGrey) useColorScheme.getState().applyPreset(lightGrey);
-  safeLocalSet(THEME_SEED_KEY, '1');
-}
+  return true;
+};
+
+const askBrightness = decideFirstRunBrightness();
 
 // Browse filter prefs (shared `gmt.paletteFilters`) — restored + watched exactly as the
 // old shell's mountFavientsPanel did, minus the dock-panel state it also managed.
@@ -54,10 +75,21 @@ watchPaletteFilters();
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Could not find root element to mount to');
 
+/** The shell, plus the first-run ask when this browser has never chosen a brightness. */
+const Root: React.FC = () => {
+  const [asking, setAsking] = React.useState(askBrightness);
+  return (
+    <>
+      <GradientExplorerV2App />
+      {asking && <FirstRunBrightness onDone={() => setAsking(false)} />}
+    </>
+  );
+};
+
 ReactDOM.createRoot(rootElement).render(
   <AppErrorBoundary>
     <React.StrictMode>
-      <GradientExplorerV2App />
+      <Root />
     </React.StrictMode>
   </AppErrorBoundary>,
 );
