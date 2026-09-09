@@ -7,9 +7,9 @@
  },
  "policy": "V3 preferred when V3 passes (engine-feature compat); else V4 if V4 passes; else none",
  "summary": {
-  "v3Only": 71,
+  "v3Only": 73,
   "v4Only": 36,
-  "bothPass": 383,
+  "bothPass": 381,
   "bothFail": 21,
   "hidden": 21,
   "recommended": {
@@ -223,9 +223,10 @@
   "Experimental/Knot.frag": {
    "id": "Experimental/Knot.frag",
    "v3": "pass",
-   "v4": "pass",
+   "v4": "fail",
    "recommended": "v3",
-   "weavable": false
+   "weavable": false,
+   "v4FailGate": "provides_color: Knot: #define providesColor (custom color pipeline, deferred from V4)."
   },
   "Experimental/LogisticBulb.frag": {
    "id": "Experimental/LogisticBulb.frag",
@@ -1140,9 +1141,10 @@
   "kosalos/KIFS.frag": {
    "id": "kosalos/KIFS.frag",
    "v3": "pass",
-   "v4": "pass",
+   "v4": "fail",
    "recommended": "v3",
-   "weavable": false
+   "weavable": false,
+   "v4FailGate": "no_de_function: KIFS: no DE function found and no recognised 3D-raytracer include."
   },
   "kosalos/Mandelbulb.frag": {
    "id": "kosalos/Mandelbulb.frag",
@@ -3700,5 +3702,23 @@
    "recommended": "v3",
    "weavable": false
   }
- }
+ },
+ "corrections": [
+  {
+   "date": "2026-09-02",
+   "id": "Experimental/Knot.frag",
+   "field": "v4",
+   "from": "pass",
+   "to": "fail",
+   "why": "V4 hard-errors on this source today (provides_color); the 2026-04-18 pass predates that gate. Found by test:frag:catalog-drift."
+  },
+  {
+   "date": "2026-09-02",
+   "id": "kosalos/KIFS.frag",
+   "field": "v4",
+   "from": "pass",
+   "to": "fail",
+   "why": "V4 hard-errors on this source today (no_de_function); the 2026-04-18 pass predates that gate. Found by test:frag:catalog-drift."
+  }
+ ]
 }
