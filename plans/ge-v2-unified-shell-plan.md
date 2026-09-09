@@ -1360,8 +1360,25 @@ are where to START reading, not necessarily where the change lands.
 >
 > Backend in the sibling repo (`workspace-gmt/backend`, commit `87c1a72`):
 > `supabase/migrations/0005_gx_gradients.sql` and `supabase/functions/gx-gradients/`.
-> **Written, not deployed** — it needs `GXGLOBAL_IP_SALT` set, `--no-verify-jwt`, and 0005
-> applied first; all three are in the function's README.
+> **DEPLOYED and live, 2026-09-09.** `0005` applied (the dry run listed only it and the
+> already-live `0004`, which replayed as a no-op — the payoff of writing migrations
+> idempotently), `GXGLOBAL_IP_SALT` set, function deployed `--no-verify-jwt`. The owner made
+> the first contributions and they round-tripped: two rows, 34 stops on the first, bias and
+> interpolation preserved, colours canonicalised.
+>
+> Verified against the LIVE function before the app was pushed, by sending it bad input: one
+> stop → `400 a gradient needs between 2 and 64 stops`; `"not a colour"` → `400 every stop
+> needs a #RRGGBB colour`; position -5 → `400 every stop needs a position between 0 and 1`;
+> no stops → `400 stops must be an array`; `DELETE` → blocked at the preflight, since
+> `Allow-Methods` is `GET, POST, OPTIONS`. That proved reachability, the salt (a missing one
+> 500s), CORS from a real browser origin, and the `{error}` contract — **without writing a
+> public row**, which is the one branch that cannot be tested without meaning it.
+>
+> Two deploy notes for next time, both cost a round trip: the CLI is a devDependency of the
+> backend repo, so it is `npx supabase` **run from that directory** — it finds the project
+> ref by walking up for `supabase/config.toml`, and from `stable/` there is none, which
+> reports as "Cannot find project ref. Have you run supabase link?". And the shell there is
+> `cmd.exe`, where `$(...)` does not substitute and `<placeholder>` is read as redirection.
 >
 > **The shape, and why.** ONE anonymous endpoint serving both halves, the `ragrat-scores`
 > pattern. Reads come through the function rather than a select policy, and that is the

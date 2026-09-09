@@ -18,7 +18,10 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
-**📋 2026-09-09 (session 3) — SESSION CLOSED. §8b item 4 shipped, and the "more" panel is retired.** Seven commits on `main`, **unpushed** (`main` auto-deploys, so pushing is the owner's call). Full write-up: four `Status 2026-09-09 (session 3…)` blocks in [`plans/ge-v2-unified-shell-plan.md`](./plans/ge-v2-unified-shell-plan.md) §8b.
+**📋 2026-09-09 (session 3) — SESSION CLOSED. §8b item 4 shipped, and the "more" panel is retired.** **Pushed and live** — 11 commits, `62edc6a4..5bba8501`, plus 4 on the backend repo
+(`cfc7bc9..83b250d`, which also carried `share-scene` and `ragrat-scores`, deployed long ago
+but never pushed). The **GX GLOBAL** shared set is deployed and taking anonymous
+contributions. Full write-up: four `Status 2026-09-09 (session 3…)` blocks in [`plans/ge-v2-unified-shell-plan.md`](./plans/ge-v2-unified-shell-plan.md) §8b.
 
 **What shipped.** The audit's M1-M4, M7, M12 and its two defects (§3.8a lockout, §3.8b leak), then the five parity gaps a re-audit found, then what the owner asked for while testing:
 
