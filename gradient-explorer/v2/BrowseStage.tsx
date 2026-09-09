@@ -146,7 +146,18 @@ export const BrowseStage: React.FC = () => {
   // pad and only its HEIGHT twitched: "the visible/scrollable area is not relating at all to
   // the scroll on the page" (owner, 2026-09-09). `canSeek` below already excluded grouping
   // for the same reason — the mapping is not invertible — but the drawing did not.
-  const bandsByLight = onAll && pad.rowsOnY && m.axes.groupAxis === 'none';
+  // Two different questions, and collapsing them cost the scrollbar its third reading
+  // (owner, 2026-09-09: "we've lost the unusual property of this scrollbar — where the
+  // scrollbar shows both the selected area and the visible area and the total area").
+  //
+  //  • rowsOnAxis — is the pad's Y the axis the wall's bands carry at all? That is what
+  //    makes their lo/hi readable, so it is what REACH (the selected area: which part of
+  //    the axis the wall actually holds) depends on. Grouping does not affect it.
+  //  • bandsByLight — ...and can a POSITION on that axis be read off the scroll? Only when
+  //    the wall is ungrouped: grouped, the axis restarts inside every group, so the union
+  //    of the visible bands stops moving. This is what the LENS depends on.
+  const rowsOnAxis = onAll && pad.rowsOnY;
+  const bandsByLight = rowsOnAxis && m.axes.groupAxis === 'none';
   const lens = useMemo<[number, number] | null>(() => {
     if (!bandsByLight || !wallView.view.height) return null;
     const H = wallView.view.height;
@@ -188,11 +199,11 @@ export const BrowseStage: React.FC = () => {
   // The part of the pad's Y axis the wall can reach — the bands that exist. Outside it the
   // scrollbar's track dims (owner: "the section that is not reachable at 50% the opacity").
   const reach = useMemo<[number, number] | null>(() => {
-    if (!bandsByLight) return null;
+    if (!rowsOnAxis) return null;
     let lo = 1, hi = 0;
     for (const b of wallView.bands) if (b.lo != null && b.hi != null) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
     return hi > lo ? [lo, hi] : null;
-  }, [bandsByLight, wallView.bands]);
+  }, [rowsOnAxis, wallView.bands]);
   // (with grouping now folded into `bandsByLight`, seeking is possible in both remaining
   // cases: a lightness-banded wall seeks to a band, a plain one to a fraction.)
   const canSeek = onAll;
