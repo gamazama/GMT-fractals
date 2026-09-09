@@ -283,7 +283,15 @@ export const BrowseStage: React.FC = () => {
    */
   const removeFavourites = useCallback(
     (fallback?: CatalogEntry) => {
-      const ids = m.selectedIds.size ? [...m.selectedIds] : fallback ? [fallback.id] : [];
+      const asked = m.selectedIds.size ? [...m.selectedIds] : fallback ? [fallback.id] : [];
+      // Only what is actually ON THE SHELF can be removed from it. Without this, a
+      // selection of tiles that are not the user's own — a catalogue tile, or a gradient
+      // from a shared set — still ran the write below: it touched localStorage, notified
+      // the store, pushed an EMPTY undo entry, and toasted "Removed 3" having removed
+      // nothing. Filtering here rather than at each of the four callers (the bar's button,
+      // the Delete key, a list row, the tile menu) keeps it one rule.
+      const own = new Set(useFavientsStore.getState().favients.map((f) => f.id));
+      const ids = asked.filter((id) => own.has(id));
       if (!ids.length) return;
       const set = new Set(ids);
       // Read the name BEFORE the removal, or there is nothing left to name.

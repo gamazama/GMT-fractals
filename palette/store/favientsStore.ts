@@ -487,7 +487,10 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   },
 
   removeGroup: (groupId) => {
-    if (groupId === DEFAULT_GROUP || isRecentGroup(groupId)) return 0;
+    // Safe by construction, not by accident: a shared set has no group id and no members,
+    // so this would return 0 anyway — but an empty string or a stray id must not reach the
+    // rebuild below either.
+    if (!groupId || groupId === DEFAULT_GROUP || isRecentGroup(groupId)) return 0;
     const cur = get().favients;
     const members = cur.filter((f) => (f.group ?? DEFAULT_GROUP) === groupId);
     const labels = get().groupLabels;

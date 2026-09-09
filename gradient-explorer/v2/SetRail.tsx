@@ -160,6 +160,8 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
   // The set's own menu. A dated bin is auto-managed, so it offers Export only; All (the
   // catalogue) is not yours to manage and offers nothing.
   const menuFor = (s: GroundSetDesc) => (e: React.MouseEvent) => {
+    // The catalogue and the SHARED set are not yours to manage. The shared one still
+    // exports — it is a public resource, and taking a copy of it is the point.
     if (s.kind === 'catalog') return;
     e.preventDefault();
     e.stopPropagation();
@@ -189,6 +191,8 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
             title={[
               s.kind === 'catalog'
                 ? 'The whole library'
+                : s.kind === 'global'
+                  ? 'Shared with everyone using the app · drag one out to keep your own copy'
                 : s.kind === 'bin'
                   ? 'What you picked that day'
                   : renamable

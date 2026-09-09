@@ -66,6 +66,7 @@ import { SetRail } from './SetRail';
 import { useGroundSets } from './useGroundSource';
 import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetId } from '../../palette/store/groundSet';
 import { membersOf, parseSetId, type GroundSetDesc } from '../../palette/core/groundSets';
+import { useGlobalSet } from '../../palette/store/globalSetStore';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
 
@@ -132,6 +133,7 @@ export const GradientExplorerV2App: React.FC = () => {
   const pickSerial = usePickSerial();
   const sets = useGroundSets();
   const favients = useFavientsStore((s) => s.favients);
+  const globalEntries = useGlobalSet().entries;
   // L9, the screen grows with the user: the CHIPS appear only once there is a second set.
   // The rail ROW is always mounted, because its chevron is the door to My Gradients —
   // which now holds Import as well as export, and gating that door on the chips is what
@@ -439,7 +441,9 @@ export const GradientExplorerV2App: React.FC = () => {
           <ExportMenu
             ramp={[]}
             name={exportSet.label}
-            set={membersOf(exportSet.id, favients)}
+            // Deliberate: the SHARED set exports too. It is a public resource and taking a
+            // copy of it is the point — stated here so it is a decision, not an accident.
+            set={membersOf(exportSet.id, favients, globalEntries)}
             onClose={() => setExportSet(null)}
             positionClass="absolute left-6 top-10 z-40"
           />

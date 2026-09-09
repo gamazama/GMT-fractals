@@ -1299,6 +1299,59 @@ are where to START reading, not necessarily where the change lands.
 > not been told about; with no grouping it now says nothing about grouping. And the Filters
 > button wraps ONTO THE LINE ABOVE the search field when the row runs out of width, rather
 > than squeezing the field: measured side-by-side at 1600 px, wrapped at 1021 px.
+
+> **Status 2026-09-09 (session 3, addendum 2): the GX GLOBAL set — read-only, shipped.**
+> Owner: "a 'GX global' group that is a shared resource between anyone that uses the app."
+>
+> **A chip on the rail, right after All, holding gradients everyone sees.** 20 to start,
+> curated by name in `debug/bake-gx-global.mts` and shipped as `public/palette/gxglobal.json`.
+> Fetched once per tab, CDN first with the shipped copy as the fallback — not optional, that
+> one: `cdn.gmt-fractals.com` sends no CORS headers to `dev.gmt-fractals.com` or
+> `localhost:3499`, and the licensed packs' missing local fallback is exactly why a /dev walk
+> silently loses 11,131 gradients. A brand-new feature should not repeat that scar.
+>
+> **Read-only, and that is a scoping decision, not an oversight.** Making it writable is not
+> a hookup. This project has a complete Supabase + auth stack — profiles, admins, RLS with
+> no INSERT policy anywhere and every write behind a service-role Edge Function, a moderation
+> queue — and **the Gradient Explorer's bundle contains none of it**: `grep supabase|authStore`
+> across `gradient-explorer/` and `palette/` returns zero. Writes would mean porting sign-in
+> into a page that has never had it, and answering four things the code cannot: moderation of
+> the free-text NAME field (the one real abuse surface — a gradient is otherwise harmless),
+> what a duplicate submission means (`favientSig` is the right key, the behaviour is not
+> decided), who decides the ORDER when no user owns it, and a size cap (real ceiling:
+> `groundSets`' body cache clears wholesale past 4,000, and `favientsToEntries` renders every
+> ramp synchronously when the set is selected). All four are the owner's, not the compiler's.
+> The transport is one module; swapping it for a Supabase query changes nothing above it.
+>
+> **THE SAFETY ARGUMENT IS ONE LINE, and it is the finding worth carrying.** A shared tile's
+> `itemOf` omits `favId`. A tile without one already reads as "not yours" everywhere in this
+> app — the rail's trash refuses it, a drop FILES A COPY instead of moving it, the drag
+> payload carries no shelf identity, Delete finds nothing to remove. It is the catalogue's own
+> contract, reused rather than re-guarded. Giving the set its own `kind: 'global'` does the
+> rest for free, because every refusal in the shell was already written against
+> `kind === 'group'`: drops, rename, delete, reorder. Calling it a `catalog` would have worked
+> too and been a lie in the type.
+>
+> **A real bug fell out of the review, and it was live before any of this.**
+> `BrowseStage.removeFavourites` built its id set from the selection and called `replaceAll`
+> unconditionally. With a selection of tiles that are not on the shelf — a catalogue tile, or
+> now a shared one — it deleted nothing but still wrote localStorage, notified the store,
+> pushed an EMPTY undo entry and toasted "Removed 3". Fixed once, in that one function, since
+> all four triggers (the bar's button, the Delete key, a list row, the tile menu) go through
+> it. Measured after: 20 shared gradients selected, Delete pressed, `gmt.favients`
+> **byte-identical**, no toast.
+>
+> Also measured: dragging a shared tile onto Kept COPIES it (11→12, GX global still 20, and
+> the payload carries no `favId`).
+>
+> **Deliberate, so it is a decision and not an accident:** the shared set DOES export
+> (`Export this set…` on its chip). It is a public resource and taking a copy of it is the
+> point. And it survives *Clear collection*, being the one set that is not in the collection.
+>
+> **Still open for whoever makes it writable:** everything in the paragraph above, plus the
+> Edge Functions' CORS allowlist has the same `dev.` hole as the palette CDN's, and
+> `0001_security_baseline.sql` warns its policies were reconstructed from the live catalog
+> and should be diffed before trusting.
 >
 > **Three things worth carrying forward.**
 >

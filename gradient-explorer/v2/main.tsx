@@ -25,6 +25,7 @@ import { registerCoreSettings } from '../../store/coreSettings';
 import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeStore';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
+import { loadGlobalSetOnce } from '../../palette/store/globalSetStore';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
 import { decideFirstRun } from './firstRunDecision';
@@ -71,6 +72,11 @@ const askBrightness = decideFirstRunBrightness();
 // old shell's mountFavientsPanel did, minus the dock-panel state it also managed.
 restorePaletteFilters();
 watchPaletteFilters();
+
+// The GX GLOBAL set — gradients shared with everyone using the app. Fetched once per tab,
+// never persisted, never merged into the shelf. Failure is quiet: the chip simply does not
+// appear (`globalSetStore`), exactly as a licensed catalogue pack that will not load does.
+loadGlobalSetOnce();
 
 
 const rootElement = document.getElementById('root');

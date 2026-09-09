@@ -24,6 +24,9 @@
  *   [7] fileFavientsAt — a BATCH lands as one contiguous run, in the order given, at the
  *       place asked for, in one store write; and wallSelection's snapshot is
  *       reference-stable (the wall's paint effect has it in a dependency array)
+ *   [9] the GX GLOBAL set: a malformed payload yields nothing rather than throwing, ids
+ *       are namespaced, `membersOf`/`membersOfMany` resolve it from the SEPARATE list and
+ *       never from the shelf, and the chip appears only when there is something to show
  *   [8] fileFavientInto — the ONE rule behind every drop target (a rail chip, a band on
  *       the wall): a favourite MOVES rather than copying, a gradient that matches by
  *       CONTENT moves too, a drop onto its own group does nothing, and an unnamed payload
@@ -66,6 +69,14 @@
  *     publish a new reference"). That guard is not tidiness: the wall's per-swatch paint
  *     effect has the Set in its dependency array, so a fresh reference repaints every
  *     mounted chunk.
+ *
+ * Four more for [9], the shared set:
+ *   • `membersOf('gx-global')` returning the shelf as well as the shared list → 2 red. That
+ *     is the leak the whole design exists to prevent, and it is the assertion to keep.
+ *   • the chip hidden while still loading → 1 red (a slow fetch would otherwise reset the
+ *     user's remembered set, because `useGroundSource` prunes ids that name no chip).
+ *   • `parseGlobalSet` accepting anything with a truthy item → 5 red.
+ *   • ids not namespaced → 2 red (a shared id could then collide with a shelf id).
  */
 
 // ── localStorage shim, BEFORE any store loads ─────────────────────────────
@@ -95,7 +106,7 @@ const {
   GRADIENT_FILE_ACCEPT,
 } = await import('../palette/core/importGradientFiles');
 const { useFavientsStore, DEFAULT_GROUP, RECENT_GROUP, newGroupId } = await import('../palette/store/favientsStore');
-const { listGroundSets, membersOfMany, groupSetId, binSetId, ALL_SET_ID } = await import('../palette/core/groundSets');
+const { listGroundSets, membersOf, membersOfMany, groupSetId, binSetId, ALL_SET_ID } = await import('../palette/core/groundSets');
 
 // ── fixtures ──────────────────────────────────────────────────────────────
 /** A Fractint .map: four evenly-spaced anchors. */
@@ -332,6 +343,56 @@ console.log('[7] fileFavientsAt + wallSelection: a batch, and a stable snapshot'
   ok(sel.getWallSelection().has('y'), 'and adds one that is out');
   sel.clearWallSelection();
   ok(sel.getWallSelection().size === 0, 'clear empties it');
+}
+
+console.log('[9] the GX global set: shared, and never part of the shelf');
+{
+  reset();
+  const { parseGlobalSet, GLOBAL_ID_PREFIX } = await import('../palette/core/globalSet');
+  const { GLOBAL_SET_ID, GLOBAL_LABEL } = await import('../palette/core/groundSets');
+  const st = () => useFavientsStore.getState();
+  const cfg = parseGradientImports([{ name: 'x.map', text: MAP }]).items[0].config;
+
+  // untrusted payloads: anything malformed is dropped, nothing throws
+  let threw = false;
+  let got: ReturnType<typeof parseGlobalSet> = [];
+  try {
+    got = parseGlobalSet({ items: [
+      null, 42, 'nope', {}, { config: {} }, { config: { stops: [] } },
+      { id: 'ok', name: 'Good one', config: cfg },
+      { id: 'ok', name: 'Duplicate id', config: cfg },
+      { config: cfg },
+    ] });
+  } catch { threw = true; }
+  ok(!threw, 'global: a malformed payload never throws');
+  ok(got.length === 2, `global: only the readable items survive (got ${got.length})`);
+  ok(got.every((f) => f.id.startsWith(GLOBAL_ID_PREFIX)), 'global: ids are namespaced, so they cannot collide with a shelf id');
+  ok(got[0].name === 'Good one' && !!got[1].name.trim(), 'global: names are kept, and an unnamed item still gets one');
+  ok(got.every((f) => f.group === undefined), 'global: nothing carries a shelf group');
+  ok(parseGlobalSet(null).length === 0 && parseGlobalSet({}).length === 0, 'global: no items at all is empty, not an error');
+
+  // it resolves from the SEPARATE list, never from the shelf
+  importGradientsInto([{ name: 'mine.css', text: CSS }], DEFAULT_GROUP);
+  ok(membersOf(GLOBAL_SET_ID, st().favients).length === 0, 'global: with no shared list, the set is empty');
+  ok(membersOf(GLOBAL_SET_ID, st().favients, got).length === 2, 'global: it resolves from the shared list');
+  ok(!st().favients.some((f) => f.id.startsWith(GLOBAL_ID_PREFIX)), 'global: NOTHING shared ever enters the shelf array');
+  const both = membersOfMany([GLOBAL_SET_ID, groupSetId(DEFAULT_GROUP)], st().favients, got);
+  ok(both.length === 3, `global: it unions with a real set (got ${both.length})`);
+  ok(both.filter((f) => f.id.startsWith(GLOBAL_ID_PREFIX)).length === 2, 'global: and both shared ones come through');
+
+  // the chip only exists when there is something to show
+  const listWith = (global?: { count: number; loading?: boolean }) =>
+    listGroundSets({ favients: st().favients, groupLabels: st().groupLabels, catalogTotal: 10, global });
+  ok(!listWith().some((x) => x.id === GLOBAL_SET_ID), 'global: no chip when the set was never asked for');
+  ok(!listWith({ count: 0 }).some((x) => x.id === GLOBAL_SET_ID), 'global: no chip when the fetch came back empty');
+  ok(listWith({ count: 0, loading: true }).some((x) => x.id === GLOBAL_SET_ID), 'global: a chip WHILE LOADING, so a slow fetch cannot reset the remembered set');
+  const chip = listWith({ count: 2 }).find((x) => x.id === GLOBAL_SET_ID);
+  ok(chip?.kind === 'global' && chip.label === GLOBAL_LABEL && chip.count === 2, `global: the chip is its own kind (got ${chip?.kind})`);
+  ok(chip?.group === undefined, "global: the chip carries no group id, so nothing can try to delete or rename it");
+  ok(listWith({ count: 2 })[1].id === GLOBAL_SET_ID, 'global: it sits right after All, a fixed place that your own groups cannot shift');
+
+  // and the store refuses to act on it
+  ok(st().removeGroup('') === 0, 'global: removeGroup refuses an empty group id');
 }
 
 console.log('[8] fileFavientInto: one rule for every drop target');

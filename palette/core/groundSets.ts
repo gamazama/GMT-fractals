@@ -26,8 +26,8 @@
  * "there's no need to save tray states, they're baked after every action" — the gradient
  * itself is already in Recent and Kept).
  *
- * Set ids are strings so they persist: `all` · `bin:<YYYY-MM-DD>` · `group:<groupId>`
- * (`group:` with an empty id is the default group).
+ * Set ids are strings so they persist: `all` · `gx-global` · `bin:<YYYY-MM-DD>` ·
+ * `group:<groupId>` (`group:` with an empty id is the default group).
  *
  * @invariant `favientsToEntries` numbers rows 0..n-1 in input order and every entry's id is
  *   its favourite's id — proven by: `npx tsx debug/test-palette-groundsets.mts`
@@ -49,12 +49,22 @@ import { buildBlocks, dayKey } from '../components/favientBlocks';
 // --- ids ---------------------------------------------------------------------------
 
 export const ALL_SET_ID = 'all';
+/**
+ * The GX GLOBAL set — gradients shared with everyone using the app, fetched rather than
+ * kept. Its own KIND, not a group: every refusal in the shell is already written against
+ * `kind === 'group'` (drops, rename, delete, reorder), so a distinct kind means a shared
+ * set cannot be filed into, renamed, deleted or rearranged without someone deliberately
+ * adding it to those checks. Calling it a `catalog` would have worked too, and been a lie
+ * in the type.
+ */
+export const GLOBAL_SET_ID = 'gx-global';
+export const GLOBAL_LABEL = 'GX global';
 /** The shelf's default (un-divided) group, as a chip. */
 export const KEPT_LABEL = 'Kept';
 export const binSetId = (day: string): string => `bin:${day}`;
 export const groupSetId = (group: string): string => `group:${group}`;
 
-export type GroundSetKind = 'catalog' | 'bin' | 'group';
+export type GroundSetKind = 'catalog' | 'bin' | 'group' | 'global';
 
 export interface GroundSetDesc {
   id: string;
@@ -71,6 +81,7 @@ export interface GroundSetDesc {
 export const parseSetId = (id: string): { kind: GroundSetKind; key: string } => {
   if (id.startsWith('bin:')) return { kind: 'bin', key: id.slice(4) };
   if (id.startsWith('group:')) return { kind: 'group', key: id.slice(6) };
+  if (id === GLOBAL_SET_ID) return { kind: 'global', key: '' };
   return { kind: 'catalog', key: '' };
 };
 
@@ -81,6 +92,8 @@ export interface ListGroundSetsInput {
   groupLabels: Record<string, string>;
   /** Entries in the loaded catalogue (the All chip's count). */
   catalogTotal: number;
+  /** The shared set's size, and whether it is worth showing at all. Absent = no chip. */
+  global?: { count: number; loading?: boolean };
   now?: number;
 }
 
@@ -103,8 +116,15 @@ export interface ListGroundSetsInput {
  * emptied group vanish under the user rather than stay somewhere to refill. Recent and the
  * default group are never in `groupLabels`, so neither can arrive this way.
  */
-export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date.now() }: ListGroundSetsInput): GroundSetDesc[] => {
+export const listGroundSets = ({ favients, groupLabels, catalogTotal, global, now = Date.now() }: ListGroundSetsInput): GroundSetDesc[] => {
   const out: GroundSetDesc[] = [{ id: ALL_SET_ID, kind: 'catalog', label: 'All', count: catalogTotal }];
+  // Right after All: the two sets that are not yours, before the ones that are. It also
+  // keeps the chip's POSITION fixed as the user's own groups come and go, which is this
+  // module's whole thesis. Shown while still loading (count 0) so that a slow fetch cannot
+  // make `useGroundSource` treat the selection as stale and reset the remembered set.
+  if (global && (global.count > 0 || global.loading)) {
+    out.push({ id: GLOBAL_SET_ID, kind: 'global', label: GLOBAL_LABEL, count: global.count });
+  }
   const bins: GroundSetDesc[] = [];
   const groups = new Map<string, GroundSetDesc>();
   for (const b of buildBlocks(favients, now)) {
@@ -132,20 +152,25 @@ export const listGroundSets = ({ favients, groupLabels, catalogTotal, now = Date
  * shows when more than one chip is lit. `All` among them means the catalogue, which is not
  * a favourites set, so the caller handles that case before asking (it returns []).
  */
-export const membersOfMany = (setIds: readonly string[], favients: Favient[]): Favient[] => {
-  if (setIds.length === 1) return membersOf(setIds[0], favients);
+export const membersOfMany = (setIds: readonly string[], favients: Favient[], global: Favient[] = []): Favient[] => {
+  if (setIds.length === 1) return membersOf(setIds[0], favients, global);
   const want = new Set<string>();
-  for (const id of setIds) for (const f of membersOf(id, favients)) want.add(f.id);
+  for (const id of setIds) for (const f of membersOf(id, favients, global)) want.add(f.id);
   // Walk the shelf, not the ids: order is the shelf's, and a favourite in two sets
-  // (a Recent bin AND a group it was filed into) appears once.
-  return favients.filter((f) => want.has(f.id));
+  // (a Recent bin AND a group it was filed into) appears once. The shared set is not on the
+  // shelf and has an order of its own, so it follows, in the order it arrived in.
+  return [...favients.filter((f) => want.has(f.id)), ...global.filter((f) => want.has(f.id))];
 };
 
-/** The favourites a bin or group set holds, in shelf order. Empty for All. */
-export const membersOf = (setId: string, favients: Favient[]): Favient[] => {
+/**
+ * The favourites a bin or group set holds, in shelf order. Empty for All. The shared set
+ * comes from `global` rather than the shelf — it is not in `favients` and must never be.
+ */
+export const membersOf = (setId: string, favients: Favient[], global: Favient[] = []): Favient[] => {
   const { kind, key } = parseSetId(setId);
   if (kind === 'bin') return favients.filter((f) => isRecentGroup(f.group) && dayKey(f.createdAt) === key);
   if (kind === 'group') return favients.filter((f) => (f.group ?? DEFAULT_GROUP) === key);
+  if (kind === 'global') return global;
   return [];
 };
 
