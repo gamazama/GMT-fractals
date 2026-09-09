@@ -951,6 +951,24 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     return out;
   };
 
+  /**
+   * Is this point over the TILES at all — as opposed to the empty ground around them?
+   *
+   * Deliberately coarser than `entryHitAtPoint`, which answers "which swatch" and so says
+   * no for the 1 px gap between two of them. The background marquee must not start from a
+   * gap: you were reaching for a gradient, missed it by a pixel, and instead of dragging it
+   * you rubber-banded across everything you meant to move (owner, 2026-09-09: "when
+   * dragging around gradients they shouldn't become selected"). Anywhere inside a chunk's
+   * box counts as the tiles; only past their edges is it the ground.
+   */
+  const pointOverTiles = (cx: number, cy: number): boolean => {
+    for (const d of registry.current.values()) {
+      const r = d.el.getBoundingClientRect();
+      if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) return true;
+    }
+    return false;
+  };
+
   // The swatch under a screen point (for the paint brush + paint keep-click) → id + local box.
   const entryHitAtPoint = (cx: number, cy: number): { id: string; box: Box } | null => {
     const el = scrollRef.current;
@@ -1180,13 +1198,32 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ewW, ewH]);
 
+  // A native drag beginning ANYWHERE ends any marquee in progress. The two gestures start
+  // the same way — press, then move — and the browser decides which it is only once
+  // `dragstart` fires; if a marquee has already begun by then it would keep drawing under
+  // the drag and commit a selection on release. Belt to `pointOverTiles`' braces: that stops
+  // the common case (a press in the gap between two tiles), this stops the rest.
+  useEffect(() => {
+    const onDragStart = () => {
+      if (sel.current.active || sel.current.bgMarquee) {
+        sel.current.bgMarquee = false;
+        sel.current.active = false;
+        clearSelectionState();
+      }
+    };
+    window.addEventListener('dragstart', onDragStart, true);
+    return () => window.removeEventListener('dragstart', onDragStart, true);
+  }, [clearSelectionState]);
+
   const onPointerDown = (e: React.PointerEvent) => {
     // In SELECT MODE a left-drag from the BACKGROUND is a rubber band — no tool, the way
     // choosing several of anything works everywhere else (owner, 2026-09-09). A press ON a
     // tile is left alone: that is a pick, or the start of a drag.
     const bgPress =
-      selectMode && !selectionTool && !zoomTool && e.button === 0 && !entryHitAtPoint(e.clientX, e.clientY);
-    if (bgPress) sel.current.bgMarquee = true;
+      !!selectMode && !selectionTool && !zoomTool && e.button === 0 && !pointOverTiles(e.clientX, e.clientY);
+    // Assigned, never latched: a press on a tile must clear a flag a previous gesture left
+    // behind, or the next pointer-up would be read as the end of a marquee.
+    sel.current.bgMarquee = bgPress;
     // Selection (left button) takes over while a tool is active.
     if ((selectionTool || bgPress) && e.button === 0) {
       const el = scrollRef.current;
@@ -1529,7 +1566,13 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     <div className="absolute inset-0">
       <div
         ref={scrollRef}
-        className="absolute inset-0 overflow-auto custom-scroll outline-none focus-visible:ring-1 focus-visible:ring-accent-400/60"
+        // `pt` is on the SCROLL BOX, not on the content below it, and that placement is the
+        // whole point: the content div carries the live zoom transform, so padding inside it
+        // would be multiplied by the zoom — 12 px becomes ~190 px at 16× and the wall visibly
+        // lurches down mid-gesture. Out here it is a fixed margin at every zoom. It gives the
+        // first row — a band header on a set, the top swatches on the catalogue — room to
+        // breathe under the bar above (owner, 2026-09-09).
+        className="absolute inset-0 overflow-auto custom-scroll pt-3 outline-none focus-visible:ring-1 focus-visible:ring-accent-400/60"
         {...(keyboard ? { tabIndex: 0, role: 'grid', 'aria-label': 'Gradients' } : {})}
         onKeyDown={keyboard ? onWallKeyDown : undefined}
         style={{ cursor: toolCursor(selectionTool) }}
@@ -1547,10 +1590,12 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         // the cursor is precise and Esc is the explicit deselect there).
         onClick={() => { if (!selectionTool && !coarsePointer.current) onDeselect?.(); }}
       >
-        {/* `pb` keeps the last row clear of the floating readouts along the bottom edge;
-            the LEFT margin is the `gutter` (0 on the catalogue, where the row labels use
-            it; 24 on a set, where there are no labels but the tiles still want the shell's
-            margin — owner, 2026-09-09). */}
+        {/* `pb` keeps the last row clear of the floating readouts along the bottom edge. It
+            stays HERE rather than on the scroll box because padding-bottom on a scroll
+            container is unreliable, and unlike the top padding a zoomed one costs nothing:
+            it is empty space after the content, not a shove. The LEFT margin is the `gutter`
+            (0 on the catalogue, where the row labels use it; 24 on a set, where there are no
+            labels but the tiles still want the shell's margin — owner, 2026-09-09). */}
         <div ref={contentRef} className="pb-14" style={{ width: contentWidth, transformOrigin: '0 0' }}>
           {rows.map((g) => (
             <GroupRow

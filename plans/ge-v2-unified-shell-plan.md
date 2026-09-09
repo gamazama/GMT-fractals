@@ -1100,7 +1100,18 @@ are where to START reading, not necessarily where the change lands.
 > Plus, from the owner's walk: **the wall had no left margin on a set** ("the user areas are
 > very tight against the edge") — the gutter was set to 0 because a set draws no row labels,
 > so the tiles ran into the window edge, out of line with the rail chips and the header. It
-> is 24 px now, the shell's own gutter, using the mechanism that was already there.
+> is 24 px now, the shell's own gutter, using the mechanism that was already there. And a
+> **top** margin on both grounds, which had to go on the SCROLL BOX rather than the content:
+> the content div carries the live zoom transform, so padding inside it is multiplied by the
+> zoom — 12 px becomes ~190 px at 16× and the wall lurches mid-gesture.
+>
+> **And the marquee had to learn what it is not.** "When dragging around gradients they
+> shouldn't become selected" — a press that missed a tile by a pixel landed in the 1 px gap
+> between two of them, `entryHitAtPoint` said "no swatch here", and the rubber band started
+> over the very gradients you were reaching for. The background test is now COARSER than the
+> swatch test on purpose (`pointOverTiles`: anywhere inside a chunk's box is the tiles, only
+> past their edges is the ground), and a native `dragstart` anywhere aborts a marquee already
+> in progress — the two gestures begin identically and only the browser knows which it is.
 >
 > **Three things worth carrying forward.**
 >
