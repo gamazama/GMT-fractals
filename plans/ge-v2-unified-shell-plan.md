@@ -959,6 +959,69 @@ that changes is edited in §1 with a dated note; nothing is silently rewritten.
   and Extend cover breadth, the perpendicular axis and the ends; (a) and (b) are what would make
   the mode capable of visibly different LOOKS rather than one look with three trims.
 
+## 8b. Live-testing queue (from testers, 2026-09-09 — the first feedback on the deployed shell)
+
+The v2 shell went online at **https://app.gmt-fractals.com/gradient-explorer-next** (0.9.8.3,
+merge `690a3145`) and is NOT yet wired into GMT itself. These came back from real use. They are
+ordered as written, not by priority — the owner decides the order and which of them belongs to
+Phase F, Phase G or a phase of its own. File pointers were checked to exist on 2026-09-09; they
+are where to START reading, not necessarily where the change lands.
+
+1. **A dropped swatch should land anywhere on the gradient, not only on the bottom bar.**
+   Colour drag-and-drop works today only over the ramp strip. The payload and its MIME type are
+   `components/gradient/colorDrag.ts`; the editor's drop handling and `dropColourAt` are in
+   `components/AdvancedGradientEditor.tsx`, and the hero's palette swatches are drop targets via
+   `gradient-explorer/v2/PaletteRow.tsx`. The ask is to widen the target to the whole gradient
+   area — which means deciding what "the gradient" is when the hero is showing source bands
+   (Mix) or an image slot, since a drop there is ambiguous today.
+
+2. **The minimap wants rework — its look and its focus.** `palette/components/HueLightnessPad.tsx`
+   (the pad, which since Phase D paints whichever pair of colour axes the Arrange state selects)
+   plus `gradient-explorer/v2/ui/MapScrollbar.tsx` (the lens + scrollbar beside it) and the
+   `padAxes` table in `palette/core/padAxes.ts`. "Focus" is the owner's word and needs unpacking
+   before code: whether it means the lens's precision, what the pad is FOR at a glance, or both.
+
+3. **A first-run dialogue to set interface brightness.** The runtime theming this would drive is
+   ADR-0080 (`docs/adr/0080-runtime-color-scheme-system.md`), `engine/store/colorSchemeStore.ts`
+   and `components/ThemeControls.tsx`; v2 already seeds its light-grey scheme once behind
+   `gmt.ge.themeSeeded` (grep it). New surface: a first-visit modal with one slider. Note the
+   shell has no first-run modal today, so this sets the pattern for any that follow.
+
+4. **The "more" panel's features belong in the wall.** This is the migration audit's subject —
+   `plans/ge-v2-old-shell-migration-audit.md` names 15 MIGRATE items with sizes and hosts, and
+   the top of its list (whole-SET export, importing a gradient file, per-item remove and a
+   keyboard path, the hero as a drag source) is exactly this. Read that before starting; it is
+   the one piece of planning already done for this queue.
+
+5. **One unified export.** Today: `palette/core/exportFormats.ts` (the format registry and stop
+   budgets), `gradient-explorer/v2/ExportMenu.tsx` + `exportActions.ts` (the gradient's export),
+   and `palette/core/favientsExport.ts` (the shelf's, reached through the "more" panel's kebab
+   and always whole-collection). The ask is ONE export that covers a gradient, a palette, and a
+   SET — which is a design job first: three things with different natural formats behind one
+   surface. The audit's OD2 (does the contact sheet stay) and its "whole-set export" item are
+   part of this, and `membersOf` in `palette/core/groundSets.ts` is the one-line substitution
+   that makes a set exportable.
+
+6. **The Wallpaper icon's silver must follow the theme.** Mine, from W.1: the sheen and its
+   pinned-dark glyph are hard-coded hexes in `gradient-explorer/v2/WorkingHero.tsx` (grep
+   `brushed-silver`), deliberately outside the theme so it read as a door out of the shell. On a
+   light interface that reasoning fails. It needs to be a metal that takes the scheme's
+   foreground/background rather than two literals.
+
+7. **The Curves editor's out-of-bounds region must follow the theme.** The area outside the
+   channel's valid range in `palette/components/ChannelGraphEditor.tsx` (and the sidebar,
+   `ChannelTrackSidebar.tsx`) is painted with fixed values.
+
+8. **The eyedropper should show the image faithfully and large.** With an image loaded, picking a
+   colour should show it in full colour at the bigger size rather than the greyed, shrunk-to-84px
+   state the hero adopts once the gradient stops being the image (`imageIsTheGradient` in
+   `gradient-explorer/v2/WorkingHero.tsx`). The picker's eyedropper is
+   `components/EmbeddedColorPicker.tsx` with `palette/store/armedTarget.ts` carrying the armed
+   state; the image surface is `palette/components/ImageStage.tsx` inside
+   `gradient-explorer/v2/ImageSlot.tsx`. The rule to write down here is that the image's
+   presentation depends on what you are DOING, not only on whether the gradient still derives
+   from it.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

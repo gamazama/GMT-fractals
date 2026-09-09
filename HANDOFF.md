@@ -18,6 +18,18 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-09 — SESSION CLOSED. The v2 shell is LIVE; the next session starts on tester feedback:**
+
+**Where things stand.** Gradient Explorer v2 is online at **https://app.gmt-fractals.com/gradient-explorer-next** (0.9.8.3, merge `690a3145`), and it is **not yet wired into GMT** — the old `gradient-explorer.html` is still the one GMT knows about, and Phase G still owns the entry-point swap. Phase W (the wallpaper) is on `main`. The working tree is clean and in sync with `origin/main`.
+
+**START HERE next session: plan §8b, the live-testing queue.** Eight items came back from real use on the deployed shell and are written up with verified file pointers — a dropped swatch landing anywhere on the gradient rather than only on the ramp; the minimap's look and "focus"; a first-run interface-brightness dialogue; the "more" panel's features moving into the wall; ONE unified export covering a gradient, a palette and a set; the Wallpaper icon's silver and the Curves editor's out-of-bounds region both becoming theme-conscious; and the eyedropper showing a loaded image faithfully and large. Two of them are mine to answer for — the silver (I hard-coded it outside the theme on purpose in W.1, and that reasoning fails on a light interface) and nothing else from Phase W regressed in testing.
+
+**Read before starting item 4 or 5:** `plans/ge-v2-old-shell-migration-audit.md`. It is the only piece of this queue that is already planned — 15 MIGRATE items with sizes and hosts, 17 to scrap, 6 owner decisions — and items 4 and 5 are largely its top of list. Do not re-derive it.
+
+**Still open from Phase W, unchanged:** the §8 L10 wording; C.5 Mix UI (parked on the owner's design); Phase F (phone) and Phase G (parity, `/polish`, ADRs, the entry-point swap) both unstarted; and the spline mapping's missing parameters, analysed in §8 but not built — a falloff EXPONENT (hard-coded at 2, the biggest look lever), Repeat + Phase along the path, mirror/ping-pong, and a width for Depth.
+
+**Two working-method notes that cost real time and will again.** (1) Editing a module that a smoke drives by bare-URL import (`fullscreenStore`, `splineMode`) HMR-invalidates it, and the smoke then gets a SECOND module instance — failures look like product regressions when the app is simply running the pre-edit module. Both smokes now say so in their failure text; restart the dev server after editing either. (2) Do not probe stores by writing invented shapes into them: a fabricated `generatorStore.tracks.L` reaches `evaluateTrackValue` and the error boundary replaces the whole page, which then looks like an app defect. Drive stores through the app's own setters. And do not leave dev servers running — thirteen accumulated on 3402–3413 in one session and the owner kept landing on half-edited HMR states.
+
 **📋 2026-09-08 (last) — only SPLINE ignored the hero, and why (`ge-v2`, uncommitted):**
 
 The owner: "when I edit the knots on a gradient, it is not updating the wallpaper's split view until I fullscreen it", then the decisive narrowing — "it seems only spline mode is affected, like it's receiving data differently". It was, and the line said so:
