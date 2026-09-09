@@ -168,6 +168,12 @@ export interface PickerWallProps {
   /** Multi-selected tiles, drawn ringed + washed. Must be reference-stable. */
   selectedIds?: ReadonlySet<string>;
   /**
+   * Give each band's header room to breathe. The catalogue's category bands are many and
+   * dense, so their headers are one tight line; a user's own groups are few and named, and
+   * read as HEADINGS (GE v2, 2026-09-09).
+   */
+  spaciousBands?: boolean;
+  /**
    * SELECT MODE: a carve commits the moment the drag ends, and there is no keep-click and
    * no dim. The catalogue's carve asks a second question after the marquee ("isolate or
    * cut?"), which is what the `chosen` phase and its scrim exist for; a selection has no
@@ -609,7 +615,7 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, spaciousBands, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
@@ -620,6 +626,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
   selectedId?: string;
   focusedId?: string;
   selectedIds?: ReadonlySet<string>;
+  spaciousBands?: boolean;
   onHover: (h: Hover | null) => void;
   onPick: (e: CatalogEntry, ev?: React.MouseEvent) => void;
   onEntryContextMenu?: (entry: CatalogEntry, e: React.MouseEvent) => void;
@@ -681,7 +688,12 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
           the per-bucket left gutter so a sparse bucket's gutter is a single short line
           that fits inside the swatch-row height (no leftover vertical gap). */}
       {group.label && (
-        <div data-wall-header className="px-2 py-px text-[11px] leading-tight text-fg-secondary font-medium border-t border-line/10 truncate">
+        <div
+          data-wall-header
+          className={`px-2 text-[11px] leading-tight text-fg-secondary font-medium border-t border-line/10 truncate ${
+            spaciousBands ? 'pt-3 pb-1.5 text-[12px]' : 'py-px'
+          }`}
+        >
           {group.label}
         </div>
       )}
@@ -754,6 +766,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onEntryDelete,
   selectedIds,
   selectMode,
+  spaciousBands,
   selectedId,
   swatchW = 32,
   swatchH = 18,
@@ -1604,6 +1617,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               selectedId={selectedId}
               focusedId={focusedId}
               selectedIds={selectedIds}
+              spaciousBands={spaciousBands}
               toolActive={!!selectionTool}
               tileRadius={tileRadius}
               onHover={handleHover}

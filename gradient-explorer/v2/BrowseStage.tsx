@@ -495,7 +495,10 @@ export const BrowseStage: React.FC = () => {
               a gradient to preview it..' which is wrong anyway"). */}
           {nothingPicked && (
             <div className="text-[12px] text-fg-muted text-center leading-none" data-gx-map-hint="">
-              Click a gradient to start · click it again to keep and edit it
+              {/* "click it again to keep and edit it" is gone (owner, 2026-09-09): it taught
+                  the SECOND gesture before the first had been made, and the second one is
+                  discovered by doing it. The pad beside this line says what IT is for. */}
+              Click a gradient to start · or pick a colour range
             </div>
           )}
           {/* the pad, with the wall's scrollbar standing beside it: the lens on the pad and
@@ -523,7 +526,11 @@ export const BrowseStage: React.FC = () => {
           </div>
         </div>
         )}
-        <div className="flex items-center justify-end gap-3 min-w-0">
+        {/* Filters + Search. `flex-wrap` with the search box last and `justify-end`: while
+            there is room they sit side by side, and when the row runs out Filters wraps ONTO
+            the line above rather than squeezing the search field to nothing (owner,
+            2026-09-09: "filter to sit on top of search when there's not enough space"). */}
+        <div className="flex flex-wrap items-center justify-end gap-y-1.5 gap-x-3 min-w-0">
         {/* More like this — the wall is one band ordered by ramp distance to this gradient. */}
         {m.anchor && (
           <span className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-accent-400/40 bg-accent-400/10 text-[12px] text-accent-300 min-w-0">
@@ -669,6 +676,9 @@ export const BrowseStage: React.FC = () => {
             // user areas are very tight against the edge of the screen"). Below 28 px the
             // gutter draws nothing and is pure margin — which is exactly what is wanted.
             gutter={m.isSet ? 24 : undefined}
+            // Your own groups are few and named; the catalogue's category bands are many and
+            // dense. Give the named ones room to read as headings (owner, 2026-09-09).
+            spaciousBands={m.isSet}
             onViewport={onAll ? (bands, view) => setWallView({ bands, view }) : undefined}
             scrollToGroup={scrollTo}
             onEntryContextMenu={onTileMenu}

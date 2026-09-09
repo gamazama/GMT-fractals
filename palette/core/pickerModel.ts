@@ -276,9 +276,11 @@ export const arrangeRows = (
 
 /** The closed Arrange state as a sentence: "by category · rows by lightness · sorted by hue". */
 export const arrangeSentence = (axes: ArrangeAxes): string => {
+  // No grouping says NOTHING (owner, 2026-09-09) — "ungrouped" named the absence of a thing
+  // the reader had not been told about, in the one sentence meant to describe the wall.
   const group =
-    axes.groupAxis === 'theme' ? 'by category' : axes.groupAxis === 'bundle' ? 'by source' : 'ungrouped';
-  const parts = [group];
+    axes.groupAxis === 'theme' ? 'by category' : axes.groupAxis === 'bundle' ? 'by source' : '';
+  const parts = group ? [group] : [];
   if (FACET_OF[axes.rowsAxis]) parts.push(`rows by ${axes.rowsAxis}`);
   parts.push(`sorted by ${axes.sortAxis}${axes.reverse ? ', reversed' : ''}`);
   return parts.join(' · ');

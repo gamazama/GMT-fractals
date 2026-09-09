@@ -1289,6 +1289,16 @@ are where to START reading, not necessarily where the change lands.
 > 249,228,0, which is Plasma, which is what the hero showed); come back → marquee returns;
 > release on Kept → Presets 26→25, Kept 9→10, so it MOVED; release over the top bar → 0
 > drops, shelf unchanged; exactly 1 drop per drag.
+
+> **Four small ones, same day.** Band headers on a personal set get room to read as headings
+> (`spaciousBands` — the catalogue's category bands stay tight, because there are hundreds
+> of them and few of these). The map's line drops "click it again to keep and edit it": it
+> taught the SECOND gesture before the first had been made, and reads "Click a gradient to
+> start · or pick a colour range", which also says what the pad beside it is for. The arrange
+> sentence no longer says "ungrouped" — it was naming the absence of a thing the reader had
+> not been told about; with no grouping it now says nothing about grouping. And the Filters
+> button wraps ONTO THE LINE ABOVE the search field when the row runs out of width, rather
+> than squeezing the field: measured side-by-side at 1600 px, wrapped at 1021 px.
 >
 > **Three things worth carrying forward.**
 >

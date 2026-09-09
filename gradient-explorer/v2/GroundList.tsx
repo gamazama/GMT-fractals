@@ -152,7 +152,7 @@ export const GroundList: React.FC<GroundListProps> = ({
           }}
         >
           {g.label && (
-            <div className="px-1 py-px text-[11px] leading-tight text-fg-secondary font-medium border-t border-line/10 truncate">
+            <div className="px-1 pt-3 pb-1.5 text-[12px] leading-tight text-fg-secondary font-medium border-t border-line/10 truncate">
               {g.label}
             </div>
           )}

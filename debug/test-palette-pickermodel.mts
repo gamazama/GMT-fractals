@@ -360,7 +360,10 @@ console.log('[8] badge, narrowers, sentence');
       'by source · sorted by name, reversed',
     'sentence: rows-by is omitted when off; reverse is spelled out',
   );
-  ok(arrangeSentence({ groupAxis: 'none', rowsAxis: 'none', sortAxis: 'hue', reverse: false }).startsWith('ungrouped'), 'sentence: no grouping reads "ungrouped"');
+  // No grouping used to read "ungrouped" — the sentence naming the absence of a thing the
+  // reader had not been told about. It says nothing now (owner, 2026-09-09).
+  const noGroup = arrangeSentence({ groupAxis: 'none', rowsAxis: 'none', sortAxis: 'hue', reverse: false });
+  ok(noGroup === 'sorted by hue', `sentence: no grouping says nothing about grouping (got "${noGroup}")`);
 }
 
 {
