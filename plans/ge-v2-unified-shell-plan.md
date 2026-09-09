@@ -967,6 +967,45 @@ ordered as written, not by priority — the owner decides the order and which of
 Phase F, Phase G or a phase of its own. File pointers were checked to exist on 2026-09-09; they
 are where to START reading, not necessarily where the change lands.
 
+> **Status 2026-09-09 (session 2; nothing above is rewritten).** All eight are DONE except
+> where noted. Shipped on `main`, each with its own commit and, where the claim was pinnable,
+> a falsified harness:
+>
+> | # | What shipped | Guard |
+> |---|---|---|
+> | 1 | Drop anywhere on the hero, projecting down onto the ramp, with a colour ghost. `t` is measured against the editor's knot track (`data-gx-knot-track`), not the ramp's outer box — an 8 px inset that made a drop above a knot miss it. Refused while the source is empty. | verified live: aimed 50.09 % → landed 50.09 %, one knot |
+> | 2 | Minimap: lens spans the SELECTED region with the band's edges extended right to the bar; edges at 50 %; the band is now the SCROLL POSITION mapped into the reachable span, not a lightness range; field + strip chroma raised to sRGB's 0.32; empty-state text moved onto the map. | `npm run test:palette-lensband` |
+> | 3 | First-run brightness dialogue, live-previewing behind a transparent backdrop. Also fixes the silent seed OVERRIDING an app-gmt user's brightness on first v2 boot. | `npm run test:ge-first-run` |
+> | 4 | — not started (the migration audit's subject) | |
+> | 5 | — not started (design job first) | |
+> | 6 | `.gx-metal`: the Wallpaper sheen mixed from the scheme's ink + ground, so it inverts to a gunmetal on a light interface. Glyph measured 77 on dark, 236 on light. | — |
+> | 7 | The out-of-bounds veil is a wash of ink, not `rgba(0,0,0,0.6)`. Fixed for every graph editor in the suite, not just Curves. | `npm run test:theme-scrim` |
+> | 8 | The source image shows faithfully and large while the eyedropper is open — it samples what is painted. Transition skipped so a fast click cannot sample a half-grey pixel. | `npm run test:eyedropper` |
+>
+> **Three things worth carrying forward.**
+>
+> 1. **Item 2 was three separate bugs behind one symptom**, and the first two fixes each
+>    revealed the next. "Not lining up" was the lens having no relationship to the selection
+>    box at all; "not relating to the scroll" was the band being derived from which lightness
+>    BANDS were on screen, which freezes outright when the wall is grouped (measured: still
+>    at top 6 px through a 5,819 px scroll) and is coarse when it is not. The owner's call —
+>    "just map it by scroll position and not by lightness" — is the one that holds.
+>
+> 2. **Verification that compares two suspects proves nothing.** The first minimap commit
+>    reported the lens and the thumb aligned to 0 px across a scroll sweep. True, and useless:
+>    both were frozen, and frozen things align. Assert that a thing MOVES before asserting
+>    where it is.
+>
+> 3. **Three harness assertions passed under mutation and had to be rewritten** — one compared
+>    a constant against itself, one claimed `"0"` catches a truthiness bug (it does not; it is
+>    a non-empty string), one claimed to observe notifications it could not see. CLAUDE.md's
+>    falsification rule earned its place three times in one session; a guard nobody has broken
+>    on purpose is a guess about a guard.
+>
+> **Still open in this queue:** items 4 and 5, which are the migration audit's subject and
+> want reading rather than re-deriving. Item 8's visual half wants the owner's walk with an
+> image loaded — a native EyeDropper needs a user gesture and cannot be driven headlessly.
+
 1. **A dropped swatch should land anywhere on the gradient, not only on the bottom bar.**
    Colour drag-and-drop works today only over the ramp strip. The payload and its MIME type are
    `components/gradient/colorDrag.ts`; the editor's drop handling and `dropColourAt` are in

@@ -18,6 +18,34 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-09 (session 2) — six of the eight live-testing items are DONE and on `main`:**
+
+**Shipped:** §8b items 1, 2, 3, 6, 7, 8 — a colour dropped anywhere on the hero lands on the
+gradient with a ghost; the minimap's band, its saturation and its empty state; the first-run
+brightness dialogue; the Wallpaper metal and the graph editors' out-of-bounds veil following
+the interface's brightness; and the source image showing faithfully while the eyedropper is
+open. Four new falsified harnesses: `test:palette-lensband`, `test:theme-scrim`,
+`test:ge-first-run`, `test:eyedropper`. **Not started: items 4 and 5** (the "more" panel's
+features and one unified export) — read `plans/ge-v2-old-shell-migration-audit.md` first,
+it is already planned.
+
+**Two bugs found that nobody had reported.** The silent first-run seed OVERRODE the
+brightness of anyone arriving from app-gmt, because "v2 has not booted in this browser" is
+not the same question as "this person has not chosen". And the graph editors'
+out-of-bounds region was invisible on DARK too, not just a smear on light — black at 60 %
+over a viewport of 5 lands on 2, a difference of three levels.
+
+**Read plan §8b's status block before starting anything here.** It carries the three
+method notes this session cost, the important one being: **verification that compares two
+suspects proves nothing.** The first minimap fix reported the lens and thumb aligned to 0 px
+across a full scroll sweep — true, and useless, because both were frozen and frozen things
+align. Assert a thing MOVES before asserting where it is. Three harness assertions also
+passed under deliberate mutation and had to be rewritten, so falsify before citing.
+
+**Still open, unchanged:** §8 L10 wording; C.5 Mix UI; Phase F (phone); Phase G (parity,
+`/polish`, ADRs, the entry-point swap — v2 is still not wired into GMT); and the spline
+mapping's missing parameters.
+
 **📋 2026-09-09 — SESSION CLOSED. The v2 shell is LIVE; the next session starts on tester feedback:**
 
 **Where things stand.** Gradient Explorer v2 is online at **https://app.gmt-fractals.com/gradient-explorer-next** (0.9.8.3, merge `690a3145`), and it is **not yet wired into GMT** — the old `gradient-explorer.html` is still the one GMT knows about, and Phase G still owns the entry-point swap. Phase W (the wallpaper) is on `main`. The working tree is clean and in sync with `origin/main`.
