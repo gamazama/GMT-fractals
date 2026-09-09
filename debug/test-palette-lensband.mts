@@ -15,6 +15,7 @@
  *   [4] a vanishingly thin range still draws MIN_BAND tall, and still inside the track
  *   [5] the two consumers agree: same range + same height ⇒ same pixels
  *   [6] ...and are handed the same range to begin with, read from the wall's SCROLL
+ *   [7] the span that range is laid out over never leaves the selection window
  *
  * [3] is the one that was broken. [5] reads the two source files rather than the runtime —
  * a unit test cannot see a React style prop, but it CAN see whether either file went back
@@ -43,7 +44,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { lensBand, MIN_BAND } from '../palette/core/lensBand';
+import { lensBand, MIN_BAND, mapSpan } from '../palette/core/lensBand';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -104,6 +105,31 @@ console.log('[6] the pad and the scrollbar are fed the same range, from a readab
   ok(/scrollTop \+ height\) \/ scrollHeight/.test(stage), 'the band is read from scroll position');
   ok(!/b\.hi - fBot \*/.test(stage), 'the band is not derived from the visible bands again');
 }
+
+console.log('[7] the span the band is laid out over never leaves the selection');
+{
+  // A band reports its BUCKET's range, not the range of what is in it, so `reach` can be
+  // WIDER than a window drawn inside a bucket — and a band laid out over reach then sits
+  // outside the selection box. Measured before mapSpan: box 19-26 px, reach 17-28 px.
+  const inside = mapSpan([0.70, 0.80], [0.72, 0.78]);
+  ok(inside[0] >= 0.72 && inside[1] <= 0.78, 'never wider than the window');
+  ok(inside[0] === 0.72 && inside[1] === 0.78, '...and it is the window when the bucket contains it');
+
+  // the other direction: the wall holds less than the window asked for
+  const narrower = mapSpan([0.30, 0.40], [0, 1]);
+  ok(narrower[0] === 0.30 && narrower[1] === 0.40, 'a wall narrower than the window gives the wall');
+
+  ok(JSON.stringify(mapSpan(null, [0.2, 0.6])) === JSON.stringify([0.2, 0.6]), 'no bands ⇒ the window');
+  ok(JSON.stringify(mapSpan([0.8, 0.2], [0.6, 0.1])) === JSON.stringify(mapSpan([0.2, 0.8], [0.1, 0.6])),
+     'either order of either range gives the same span');
+
+  // stale bands (a filter just changed, the wall has not re-reported) must not collapse the
+  // span to nothing — an empty span makes the band undrawable rather than merely wrong.
+  const stale = mapSpan([0.9, 1.0], [0.1, 0.2]);
+  ok(stale[1] > stale[0], 'no overlap still yields a usable span');
+  ok(stale[0] === 0.1 && stale[1] === 0.2, '...the window, until the wall catches up');
+}
+
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

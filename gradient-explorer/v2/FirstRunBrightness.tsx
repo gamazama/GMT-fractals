@@ -30,7 +30,7 @@
  */
 import React, { useState } from 'react';
 import { Modal } from '../../components/ui/Modal';
-import { ThemePresetPicker, BrightnessControl } from '../../components/ThemeControls';
+import { ThemePresetPicker, BrightnessControl, HighContrastToggle } from '../../components/ThemeControls';
 
 export const FirstRunBrightness: React.FC<{ onDone: () => void }> = ({ onDone }) => {
   const [open, setOpen] = useState(true);
@@ -45,16 +45,14 @@ export const FirstRunBrightness: React.FC<{ onDone: () => void }> = ({ onDone })
       backdropClassName="bg-transparent"
     >
       <div className="w-[340px] rounded-xl border border-line/20 bg-surface shadow-[0_16px_48px_rgba(0,0,0,0.45)] p-4">
-        <h2 id="gx-first-run-title" className="text-[13px] font-semibold text-fg mb-1">
-          How bright should the interface be?
+        <h2 id="gx-first-run-title" className="text-[13px] font-semibold text-fg">
+          Welcome to Gradient Explorer
         </h2>
-        <p className="text-[11px] text-fg-tertiary leading-relaxed mb-3">
-          This changes the app around your gradients, not the gradients themselves. Pick
-          whatever lets you judge colour best — you can change it any time in Settings.
-        </p>
+        <p className="text-[11px] text-fg-tertiary mb-3">Please pick the interface's brightness.</p>
         <div className="mb-2"><ThemePresetPicker /></div>
         <BrightnessControl />
-        <div className="flex justify-end mt-3">
+        <div className="flex items-center justify-between mt-3">
+          <HighContrastToggle />
           <button
             type="button"
             onClick={close}

@@ -9,9 +9,14 @@ import { THUMB } from './HueControl';
  *    just set the three scheme axes; the active preset is highlighted.
  *  • `BrightnessControl` — a 0-100 slider over a dark→light track; text/borders/status
  *    auto-invert at the midpoint (handled in the store).
+ *  • `HighContrastToggle` — the same axis the SettingsPanel renders as a plain boolean
+ *    ('High contrast', store/coreSettings.ts), as a control that can be placed beside the
+ *    other two. Added for the GE v2 first-run dialogue, which asks for brightness and needs
+ *    to offer this with it; kept HERE rather than built there so there is one owner of the
+ *    theme axes' controls and Settings can adopt it.
  *
- * The Surface-tint and High-contrast toggles are plain boolean settings (rendered by the
- * SettingsPanel), and the surface-tint hue slider is `SurfaceHueControl` (HueControl.tsx).
+ * Surface tint stays a plain boolean setting, and the surface-tint hue slider is
+ * `SurfaceHueControl` (HueControl.tsx).
  *
  * @assumption Engine-core (components/) — consumes the colorScheme store only.
  */
@@ -69,5 +74,22 @@ export const BrightnessControl: React.FC = () => {
             />
             <span className="text-[10px] text-fg-dim font-mono w-9 text-right tabular-nums">{brightness}</span>
         </div>
+    );
+};
+
+/** The high-contrast axis as a checkbox — same state the SettingsPanel's boolean drives. */
+export const HighContrastToggle: React.FC<{ className?: string }> = ({ className = '' }) => {
+    const hc = useColorScheme((s) => s.highContrast);
+    const setHighContrast = useColorScheme((s) => s.setHighContrast);
+    return (
+        <label className={`flex items-center gap-2 cursor-pointer select-none text-[11px] text-fg-tertiary hover:text-fg-secondary transition-colors ${className}`}>
+            <input
+                type="checkbox"
+                checked={hc}
+                onChange={(e) => setHighContrast(e.target.checked)}
+                className="w-3.5 h-3.5 accent-accent-500 cursor-pointer"
+            />
+            High contrast
+        </label>
     );
 };

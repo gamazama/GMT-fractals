@@ -57,6 +57,7 @@ import { PickerBundleToggles } from '../../palette/components/PickerControls';
 import { QualityRangePadConnected } from '../../palette/components/QualityRangePadConnected';
 import { HueLightnessPad, stripTrackFor } from '../../palette/components/HueLightnessPad';
 import { padAxesFor, WINDOW_KEY } from '../../palette/core/padAxes';
+import { mapSpan } from '../../palette/core/lensBand';
 import { MapScrollbar } from './ui/MapScrollbar';
 import { useWorkingDerived } from '../../palette/store/workingStore';
 import { QUALITY_AXES } from '../../palette/features/paletteFilters';
@@ -165,11 +166,9 @@ export const BrowseStage: React.FC = () => {
     for (const b of wallView.bands) if (b.lo != null && b.hi != null) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
     return hi > lo ? [lo, hi] : null;
   }, [rowsOnAxis, wallView.bands]);
-  /** The span the scroll is laid out over: what the wall holds, else the selected window. */
-  const span = useMemo<[number, number]>(() => {
-    const r = reach ?? yWin;
-    return [Math.min(r[0], r[1]), Math.max(r[0], r[1])];
-  }, [reach, yWin[0], yWin[1]]);
+  /** Where the scroll is laid out, and what the scrollbar dims around — see `mapSpan`. */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const span = useMemo(() => mapSpan(reach, yWin), [reach, yWin[0], yWin[1]]);
   const marker = useMemo<[number, number] | null>(() => {
     const { scrollTop, height, scrollHeight } = wallView.view;
     if (!onAll || !height || scrollHeight <= height + 1) return null;
@@ -326,7 +325,9 @@ export const BrowseStage: React.FC = () => {
             height={56}
             marker={marker}
           />
-          <MapScrollbar range={marker} reach={reach} height={56} onSeek={canSeek ? seekBand : undefined} />
+          {/* `span`, not `reach`: the two differ when a window is drawn inside a bucket, and
+              the dimming has to agree with the box on the pad beside it. */}
+          <MapScrollbar range={marker} reach={rowsOnAxis ? span : null} height={56} onSeek={canSeek ? seekBand : undefined} />
           </div>
           {/* the third coordinate as a strip, in a picker's own language, under the field */}
           <div data-gx-pad-strip={pad.strip}>

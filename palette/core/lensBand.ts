@@ -49,3 +49,31 @@ export const lensBand = (range: [number, number], height: number): LensBand => {
   const h = Math.min(height, Math.max(MIN_BAND, y1 - y0));
   return { top: Math.max(0, Math.min(height - h, y0)), height: h };
 };
+
+/**
+ * The span the wall's scroll is laid out over — and the span dimmed around, so the two
+ * always agree.
+ *
+ * `reach` (what the wall's bands cover) is NOT it on its own. A band reports its BUCKET's
+ * range — 0.7-0.8 — not the range of what is inside it, so a window drawn INSIDE a bucket
+ * leaves reach wider than the selection, and a band laid out over reach then sits outside
+ * the selection box. Measured before this existed: box 19-26 px against a reach of 17-28.
+ *
+ * So it is the INTERSECTION: what the buckets cover AND what the window kept. With no
+ * window that is reach; with no bands it is the window.
+ *
+ * @invariant the span never reaches outside the selection window — proven by:
+ *   npx tsx debug/test-palette-lensband.mts ("never wider than the window")
+ */
+export const mapSpan = (
+  reach: [number, number] | null,
+  window: [number, number],
+): [number, number] => {
+  const y: [number, number] = [Math.min(window[0], window[1]), Math.max(window[0], window[1])];
+  if (!reach) return y;
+  const lo = Math.max(Math.min(reach[0], reach[1]), y[0]);
+  const hi = Math.min(Math.max(reach[0], reach[1]), y[1]);
+  // No overlap means the bands are stale w.r.t. the window — a filter just changed and the
+  // wall has not re-reported. Trust the window until it catches up.
+  return hi > lo ? [lo, hi] : y;
+};
