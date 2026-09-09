@@ -8,13 +8,17 @@
  * are least able to connect the interface's look to a setting they have never seen.
  *
  * So it asks instead, once, and shows the answer changing as it is chosen: the controls are
- * live (they ARE Settings' own, not copies — `ThemePresetPicker` + `BrightnessControl`), so
- * the whole interface repaints behind the card while the slider moves. That is why the
- * backdrop is transparent rather than the usual dim: a veil over the app would bias the
- * very judgement the dialogue exists to collect.
+ * live (they ARE Settings' own, not copies — `ThemePresetPicker`, `BrightnessControl` and
+ * `HighContrastToggle`), so the whole interface repaints behind the card while the slider
+ * moves. That is why the backdrop is transparent rather than the usual dim: a veil over the
+ * app would bias the very judgement the dialogue exists to collect.
+ *
+ * The copy is two lines because the owner asked for two (2026-09-09: "not so verbose"), and
+ * High contrast is offered beside the brightness because it changes the same thing the
+ * dialogue exists to settle.
  *
  * Three rules it follows, all of them about NOT asking:
- *  1. It opens on Light Grey already applied, so dismissing it — Escape, Done, anything —
+ *  1. It opens on Light Grey already applied, so dismissing it — Escape, Start, anything —
  *     leaves exactly the theme the silent seed used to produce. Doing nothing is not a
  *     worse outcome than before.
  *  2. It never asks a user who already has a brightness. The theme axes are SHARED across
