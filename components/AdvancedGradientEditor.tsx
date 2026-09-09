@@ -966,8 +966,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     title="Click & drag to add/move knot"
                     onDragOver={(e) => {
                         if (!isColorDrag(e.dataTransfer)) return;
-                        // preventDefault is what makes this a legal drop target at all
+                        // preventDefault is what makes this a legal drop target at all;
+                        // stopPropagation keeps the hero's own drop zone (which projects a
+                        // drop anywhere on the gradient down onto this track — §8b item 1)
+                        // from ALSO handling it and inserting the colour twice.
                         e.preventDefault();
+                        e.stopPropagation();
                         e.dataTransfer.dropEffect = 'copy';
                         const r = e.currentTarget.getBoundingClientRect();
                         setColourDropAt(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)));
@@ -982,6 +986,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         setColourDropAt(null);
                         if (!hex) return;
                         e.preventDefault();
+                        e.stopPropagation();
                         const r = e.currentTarget.getBoundingClientRect();
                         dropColourAt(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), hex);
                     }}

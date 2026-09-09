@@ -29,7 +29,7 @@ import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { usePrecisionTrackDrag, precisionMultiplier } from './inputs/usePrecisionTrackDrag';
 import { ChevronDown } from './Icons';
 import { useInputSkin } from './inputs/skin';
-import { setColorDrag } from './gradient/colorDrag';
+import { setColorDrag, endColorDrag } from './gradient/colorDrag';
 import { CopyGlyph, EyedropperGlyph, SpectrumGlyph, WheelGlyph, StopGlyph, HarmonyGlyph, ChannelsGlyph, KelvinGlyph, SwatchesGlyph } from './gradient/pickerIcons';
 import Slider from './Slider';
 
@@ -248,6 +248,7 @@ const SwatchRow: React.FC<{
                         // track it inserts one (components/gradient/colorDrag.ts)
                         draggable
                         onDragStart={(e) => setColorDrag(e.dataTransfer, c)}
+                        onDragEnd={endColorDrag}
                         className={soft
                             ? `h-5 flex-1 min-w-0 ${CHIP_R} border transition-transform hover:scale-105 hover:z-10 ${
                                 current && c.toUpperCase() === current.toUpperCase() ? 'border-fg' : 'border-line/20'

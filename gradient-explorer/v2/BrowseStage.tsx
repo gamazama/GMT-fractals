@@ -121,6 +121,14 @@ export const BrowseStage: React.FC = () => {
   // Nothing picked yet — the hero is absent (L8) and the bar says what to do (see below).
   const nothingPicked = useWorkingDerived().empty;
 
+  const win = (k: string): [number, number] => {
+    const o = m.sliceState?.[k] as { x?: number; y?: number } | undefined;
+    return [o?.x ?? 0, o?.y ?? 1];
+  };
+  const xWin = win(WINDOW_KEY[pad.x]);
+  const yWin = win(WINDOW_KEY[pad.y]);
+  const sWin = win(WINDOW_KEY[pad.strip]);
+
   // The pad as the wall's map (D.2): which bands are on screen → a lightness range.
   // The wall reports its bands AS DRAWN (merged small buckets carry the unioned range and
   // their own key), so the marker and the seek work on that, not on the model's rows.
@@ -130,7 +138,15 @@ export const BrowseStage: React.FC = () => {
   // The bands are on the pad's Y: the LENS shows the axis range on screen, continuous —
   // within a band (its high value at the top) the visible slice maps linearly onto the
   // band's bucket.
-  const bandsByLight = onAll && pad.rowsOnY;
+  // The lens can only say "this much of the AXIS is on screen" while the wall's Y really is
+  // that axis, run once, top to bottom. GROUPING breaks that: grouped by category the wall
+  // is category A's full lightness sweep, then category B's, then C's — 125 bands whose
+  // lightness restarts high-to-low inside each one. The union of the visible bands' ranges
+  // is then roughly the same at every scroll position, so the lens pinned to the top of the
+  // pad and only its HEIGHT twitched: "the visible/scrollable area is not relating at all to
+  // the scroll on the page" (owner, 2026-09-09). `canSeek` below already excluded grouping
+  // for the same reason — the mapping is not invertible — but the drawing did not.
+  const bandsByLight = onAll && pad.rowsOnY && m.axes.groupAxis === 'none';
   const lens = useMemo<[number, number] | null>(() => {
     if (!bandsByLight || !wallView.view.height) return null;
     const H = wallView.view.height;
@@ -147,15 +163,28 @@ export const BrowseStage: React.FC = () => {
     }
     return hi > lo ? [lo, hi] : null;
   }, [bandsByLight, wallView]);
-  // The scrollbar beside the pad always says where the wall is (owner, 2026-09-08: "rather
-  // than no lens, default to the standard display"): the lens range when the bands are on
-  // the pad's Y, else the plain scroll position — a scrollbar, which is always true.
+  // Where the wall is — and BOTH the pad's lens and the scrollbar's thumb draw this one
+  // value (owner, 2026-09-08: "rather than no lens, default to the standard display"). The
+  // lens range when the wall's Y really is the pad's axis, else the plain scroll position,
+  // which is always true of a scrollbar. The pad used to draw `lens` and the bar `marker`,
+  // so wherever the two differed the pad simply showed nothing while the bar showed a
+  // thumb — the "missing quite often" of §8b item 2.
   const marker = useMemo<[number, number] | null>(() => {
     if (lens) return lens;
     const { scrollTop, height, scrollHeight } = wallView.view;
     if (!onAll || !height || scrollHeight <= height + 1) return null;
-    return [1 - Math.min(1, (scrollTop + height) / scrollHeight), 1 - scrollTop / scrollHeight];
-  }, [lens, onAll, wallView.view]);
+    // Mapped into the SELECTED window, not across the pad's whole axis. The wall holds only
+    // what the window kept, so scrolling it top to bottom sweeps that window and nothing
+    // else; spread over the full axis the band walked below the selection box at the bottom
+    // of the wall — "the minimap showed us scrolling PAST the selected area" (owner,
+    // 2026-09-09), which claims you are looking at lightnesses the wall is not showing. With
+    // no window this is the identity, so an unfiltered pad is unchanged.
+    const lo = Math.min(yWin[0], yWin[1]);
+    const span = Math.abs(yWin[1] - yWin[0]);
+    const into = (v: number) => lo + v * span;
+    return [into(1 - Math.min(1, (scrollTop + height) / scrollHeight)), into(1 - scrollTop / scrollHeight)];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lens, onAll, wallView.view, yWin[0], yWin[1]]);
   // The part of the pad's Y axis the wall can reach — the bands that exist. Outside it the
   // scrollbar's track dims (owner: "the section that is not reachable at 50% the opacity").
   const reach = useMemo<[number, number] | null>(() => {
@@ -164,7 +193,9 @@ export const BrowseStage: React.FC = () => {
     for (const b of wallView.bands) if (b.lo != null && b.hi != null) { lo = Math.min(lo, b.lo); hi = Math.max(hi, b.hi); }
     return hi > lo ? [lo, hi] : null;
   }, [bandsByLight, wallView.bands]);
-  const canSeek = onAll && (!bandsByLight || m.axes.groupAxis === 'none');
+  // (with grouping now folded into `bandsByLight`, seeking is possible in both remaining
+  // cases: a lightness-banded wall seeks to a band, a plain one to a fraction.)
+  const canSeek = onAll;
   // Put value L at the top of the viewport: the band holding it and how far down it, or —
   // with no bands on the pad — the plain fraction of the wall.
   const seekBand = useCallback((L: number) => {
@@ -254,13 +285,6 @@ export const BrowseStage: React.FC = () => {
       ]);
     };
   }, [source, openContextMenu]);
-  const win = (k: string): [number, number] => {
-    const o = m.sliceState?.[k] as { x?: number; y?: number } | undefined;
-    return [o?.x ?? 0, o?.y ?? 1];
-  };
-  const xWin = win(WINDOW_KEY[pad.x]);
-  const yWin = win(WINDOW_KEY[pad.y]);
-  const sWin = win(WINDOW_KEY[pad.strip]);
   const stripDef = QUALITY_AXES.find((a) => a.axis === WINDOW_KEY[pad.strip])!;
   // The strip is painted toward the pad window's average colour (owner).
   const stripTrack = useMemo(() => stripTrackFor(pad, xWin, yWin) ?? undefined, [pad, xWin[0], xWin[1], yWin[0], yWin[1]]);
@@ -326,7 +350,7 @@ export const BrowseStage: React.FC = () => {
             onDragEnd={handleInteractionEnd}
             width={360}
             height={56}
-            marker={lens}
+            marker={marker}
           />
           <MapScrollbar range={marker} reach={reach} height={56} onSeek={canSeek ? seekBand : undefined} />
           </div>

@@ -134,6 +134,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             className={`relative flex-1 min-w-0 group ${dragging != null && !isDrag ? 'pointer-events-none' : ''}`}
             onDragOver={(e) => {
               if (!onDropColour || !isColorDrag(e.dataTransfer)) return;
+              e.stopPropagation();
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';
               setDropOver(i);
@@ -141,6 +142,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropOver(null); }}
             onDrop={(e) => {
               const hex = readColorDrag(e.dataTransfer);
+              e.stopPropagation();
               setDropOver(null);
               if (!hex || !onDropColour) return;
               e.preventDefault();
@@ -202,6 +204,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             // (owner, 2026-09-08).
             onDragOver={(e) => {
               if (!onDropColour || !isColorDrag(e.dataTransfer)) return;
+              e.stopPropagation();
               e.preventDefault();
               e.dataTransfer.dropEffect = 'copy';
               setDropOver(-1);
@@ -209,6 +212,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             onDragLeave={() => setDropOver(null)}
             onDrop={(e) => {
               const hex = readColorDrag(e.dataTransfer);
+              e.stopPropagation();
               setDropOver(null);
               if (!hex || !onDropColour) return;
               e.preventDefault();

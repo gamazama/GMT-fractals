@@ -283,16 +283,18 @@ export const HueLightnessPad: React.FC<Props> = ({
               className="absolute pointer-events-none bg-white/[.14] border-y border-white/50"
               style={{ left: sx0, width: Math.max(0, sx1 - sx0), top: band.top, height: band.height }}
             />
-            {/* the tail: ONE hairline out of the lens's middle to the pad's right edge, so
-                the eye is led across the gap onto the scrollbar's thumb (owner: "extending
-                to the right visually connecting to the scroll bar as a thinner line"). A
-                single line rather than the lens's two — a connector reads as thinner by
-                being one line, which is the only way to be thinner than 1 px. */}
+            {/* the tail: the SAME TWO EDGES carried on to the pad's right edge, fainter, so
+                the visible band keeps reading as a band all the way to the scrollbar's thumb
+                (owner, 2026-09-09: a single centre line "is a stray line coming from the
+                centre of the selected area … instead of the extended lines that should show
+                the scrolled visible area"). Thinner is opacity here, not width — under 1 px
+                is not drawable — and no fill, so it reads as the band continuing rather than
+                as more lens. */}
             {sx1 < width && (
               <div
                 data-gx-pad-lens-tail=""
-                className="absolute pointer-events-none bg-white/40"
-                style={{ left: sx1, width: width - sx1, top: band.top + Math.floor(band.height / 2), height: 1 }}
+                className="absolute pointer-events-none border-y border-white/30"
+                style={{ left: sx1, width: width - sx1, top: band.top, height: band.height }}
               />
             )}
           </>

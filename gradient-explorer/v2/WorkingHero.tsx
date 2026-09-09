@@ -74,6 +74,7 @@ import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../../palette/store/paletteEditorStore';
 import { applyEditorChange } from '../../palette/core/editorConfig';
 import { GradientStrip } from '../../palette/components/GradientStrip';
+import { isColorDrag, readColorDrag, colorInFlight } from '../../components/gradient/colorDrag';
 import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
@@ -140,6 +141,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   const favients = useFavientsStore((s) => s.favients);
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [rampRef, rampW] = useWidth();
+  // the ramp ELEMENT too: useWidth's callback ref does not retain it, and projecting a drop
+  // from anywhere on the gradient down onto the ramp needs its rect (§8b item 1).
+  const rampElRef = useRef<HTMLDivElement | null>(null);
+  const setRampEl = useCallback((el: HTMLDivElement | null) => { rampElRef.current = el; rampRef(el); }, [rampRef]);
+  /** Where a colour in flight would land: px across the gradient body, and t on the ramp. */
+  const [dropGhost, setDropGhost] = useState<{ x: number; t: number } | null>(null);
   const editorRef = useRef<AdvancedGradientEditorHandle>(null);
   // The tray's left edge = the panel's left edge PLUS the panel's corner radius (owner,
   // 2026-09-07: "include the corner radius too"), i.e. where the panel's flat bottom edge
@@ -395,7 +402,75 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             </div>
           </div>
 
-          <div className="px-4 pt-4 pb-2 flex flex-col">
+          {/* THE WHOLE GRADIENT takes a dropped colour, not just the ramp at the bottom
+              (owner, §8b item 1: "a dropped swatch should land anywhere on the gradient").
+              Anywhere in this body PROJECTS DOWN — the x is read against the ramp and the
+              colour lands there, whatever it was dropped over (a palette swatch, a source
+              band, the padding between them). The owner chose projection over letting a
+              source band edit its own source: there is one gradient being edited here, and
+              it is the ramp.
+
+              The inner targets that already handled drops — the knot track and the palette
+              swatches — stopPropagation, so they keep their finer behaviour (a swatch drop
+              recolours the nearest knot) and this never doubles them.
+
+              Refused while the source is EMPTY: the ramp is then the last gradient shown
+              but not editable (L8), so a ghost promising a landing would be lying. */}
+          <div
+            className="px-4 pt-4 pb-2 flex flex-col relative"
+            onDragOver={(e) => {
+              if (emptySource || !isColorDrag(e.dataTransfer)) return;
+              const ramp = rampElRef.current;
+              if (!ramp) return;
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+              const rr = ramp.getBoundingClientRect();
+              const br = e.currentTarget.getBoundingClientRect();
+              const t = Math.max(0, Math.min(1, (e.clientX - rr.left) / Math.max(1, rr.width)));
+              setDropGhost({ x: rr.left - br.left + t * rr.width, t });
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+              setDropGhost(null);
+            }}
+            onDrop={(e) => {
+              setDropGhost(null);
+              if (emptySource) return;
+              const hex = readColorDrag(e.dataTransfer);
+              if (!hex) return;
+              e.preventDefault();
+              const ramp = rampElRef.current;
+              if (!ramp) return;
+              const rr = ramp.getBoundingClientRect();
+              const t = Math.max(0, Math.min(1, (e.clientX - rr.left) / Math.max(1, rr.width)));
+              ensureEditing();
+              editorRef.current?.dropColourAt(t, hex);
+            }}
+            data-gx-hero-drop={dropGhost ? '' : undefined}
+          >
+            {/* The GHOST (owner: "just needs to be visible with a ghost so the user knows
+                what is getting dropped"): the colour itself, on a line down to the place on
+                the ramp it will land. The swatch is the answer to "what", the line to
+                "where" — a drop over the palette row is otherwise a guess. The colour comes
+                from the module, not the event, because a browser hides the payload during
+                dragover; see components/gradient/colorDrag.ts. */}
+            {dropGhost && (() => {
+              const hex = colorInFlight();
+              if (!hex) return null;
+              return (
+                <div
+                  className="absolute top-0 bottom-0 z-40 pointer-events-none"
+                  style={{ left: dropGhost.x }}
+                  data-gx-hero-drop-ghost=""
+                >
+                  <div className="absolute top-0 bottom-0 -left-px w-0.5 bg-fg/30" />
+                  <div
+                    className="absolute -top-1 -left-2.5 w-5 h-5 rounded-full border-2 border-surface shadow-[0_1px_4px_rgba(0,0,0,.45)] ring-1 ring-fg/25"
+                    style={{ background: hex }}
+                  />
+                </div>
+              );
+            })()}
             {/* the palette on top of the ramp — hidden only while the source is empty (there
                 is nothing live to sample from) */}
             {!emptySource && (
@@ -416,7 +491,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 there is no live document behind it until a source is back (L8). No hairline
                 and no hover outline here (owner, 2026-09-07: the border was unnecessary) —
                 the editor's strip chrome paints its own rounded, edge-filled bar. */}
-            <div ref={rampRef} className="relative rounded-[10px]">
+            <div ref={setRampEl} className="relative rounded-[10px]">
               {emptySource ? (
                 <>
                   <div className="px-2 mb-px">

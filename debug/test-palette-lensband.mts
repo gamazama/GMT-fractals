@@ -83,5 +83,15 @@ console.log('[5] both consumers use the shared function, not their own arithmeti
   ok(!inlined.test(bar), 'MapScrollbar does not re-inline the geometry');
 }
 
+console.log('[6] the pad and the scrollbar are fed the same range, from a readable wall');
+{
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const stage = readFileSync(join(root, 'gradient-explorer/v2/BrowseStage.tsx'), 'utf8');
+  ok(/marker=\{marker\}/.test(stage), 'the pad is given `marker`, not `lens`');
+  ok(/range=\{marker\}/.test(stage), 'the scrollbar is given `marker`');
+  ok(!/marker=\{lens\}/.test(stage), 'the pad is not given the bare `lens` again');
+  ok(/groupAxis === 'none'/.test(stage), 'the lens is gated on the wall being ungrouped');
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);
