@@ -376,24 +376,51 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // each render (it writes tracks, which re-renders) the listener would be torn
   // down mid-drag — the exact bug useGraphInteraction documents. So read the
   // current tracks from a ref and depend only on the (stable) setter.
+  //
+  // Every mutator below writes this ref EAGERLY, before calling onTracksChange —
+  // the effect only re-syncs it after the commit, so two mutations in the same tick
+  // would both read the pre-commit tracks and the second would silently discard the
+  // first. That composition is load-bearing: the selection box's Ctrl-drag calls
+  // `replaceKeyframes` (insert the copies) and then `updateKeyframes` (transform them)
+  // inside ONE mouse-move, and without the eager write the copies vanish and the
+  // selection points at ids that no longer exist.
   const tracksRef = useRef(tracks);
   useEffect(() => {
     tracksRef.current = tracks;
   });
+  /** Publish a new tracks object: ref first (so a same-tick follow-up composes), then up. */
+  const commitTracks = useCallback(
+    (next: ChannelTracks) => {
+      tracksRef.current = next;
+      onTracksChange(next);
+    },
+    [onTracksChange],
+  );
   const updateKeyframes = useCallback(
     (updates: { trackId: string; keyId: string; patch: Partial<Keyframe> }[]) => {
       const next: ChannelTracks = { ...tracksRef.current };
+      const touched = new Set<ChannelKey>();
       for (const { trackId, keyId, patch } of updates) {
         const tr = next[trackId as ChannelKey];
         if (!tr) continue;
+        touched.add(trackId as ChannelKey);
         next[trackId as ChannelKey] = {
           ...tr,
           keyframes: tr.keyframes.map((k) => (k.id === keyId ? { ...k, ...patch } : k)),
         };
       }
-      onTracksChange(next);
+      // Keep every touched track sorted by frame — parity with the timeline store
+      // (grep `touchedTracks` in store/animation/sequenceSlice.ts). trackToRamp samples
+      // through evaluateTrackValue, which early-outs on keys[0] / keys[last] and walks
+      // the array forward: an out-of-order array silently samples the wrong curve. Any
+      // patch that moves a key past its neighbour gets here — a key dragged across one,
+      // or a selection MIRRORED by the bbox's scale handles, which reverses a whole run.
+      touched.forEach((tid) => {
+        next[tid] = { ...next[tid], keyframes: [...next[tid].keyframes].sort((a, b) => a.frame - b.frame) };
+      });
+      commitTracks(next);
     },
-    [onTracksChange],
+    [commitTracks],
   );
 
   const selectKeyframes = useCallback((ids: string[], additive: boolean) => {
@@ -414,9 +441,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         const tr = next[trackId as ChannelKey];
         if (tr) next[trackId as ChannelKey] = { ...tr, keyframes: newKeys };
       }
-      onTracksChange(next);
+      commitTracks(next);
     },
-    [onTracksChange],
+    [commitTracks],
   );
 
   // Delete the selected keys, never stripping a channel below its two endpoints.
@@ -554,12 +581,12 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     commit: (tid, keys) =>
       genEdit(() => {
         const tr = tracksRef.current[tid as ChannelKey];
-        if (tr) onTracksChange({ ...tracksRef.current, [tid]: { ...tr, keyframes: keys } });
+        if (tr) commitTracks({ ...tracksRef.current, [tid]: { ...tr, keyframes: keys } });
       }),
     // the brush's live preview: a plain write (the pointer-down bracket spans the gesture)
     preview: (tid, keys) => {
       const tr = tracksRef.current[tid as ChannelKey];
-      if (tr) onTracksChange({ ...tracksRef.current, [tid]: { ...tr, keyframes: keys } });
+      if (tr) commitTracks({ ...tracksRef.current, [tid]: { ...tr, keyframes: keys } });
     },
   });
 
