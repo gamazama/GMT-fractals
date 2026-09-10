@@ -279,6 +279,10 @@ async function main() {
   // Falsified by seeding a design-app format and asserting the WEB section opens: red.
   await page.evaluate(() => {
     localStorage.setItem('gx.v2.recentExports', JSON.stringify([{ kind: 'download', key: 'grd' }, { kind: 'copy', key: 'hex' }]));
+    // FIRST USE is what this step is about: the last-export rule only chooses when nothing
+    // is remembered, and [5] left a category behind on its way through them all. ([6b]
+    // covers the other half — that a remembered category outranks this.)
+    localStorage.removeItem('gx.v2.exportSection');
   });
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1500);
@@ -303,6 +307,30 @@ async function main() {
   if (againXs.length > 1)
     fail(`[6] with Again showing, the extension column starts at ${againXs.sort((a, b) => a - b).join(' and ')} — the row kinds do not line up`);
   console.log('✓ [6] Again lists the last exports, opens the section holding one, and lines up with it');
+
+  // [6b] THE ACCORDION REMEMBERS BETWEEN SESSIONS (owner, 2026-09-10: "a user is likely to
+  // only require a few paths"). Open a different category, close the window, RELOAD, and it
+  // comes back on that one — outranking the last-export rule that chose the one above.
+  // Falsified by not writing `gx.v2.exportSection` in `toggle`: red, because the reload
+  // falls back to .grd's category, which is what it opened on before the click.
+  await page.click('[data-gx-section="For code + data"]');
+  await page.waitForTimeout(200);
+  const stored = await page.evaluate(() => localStorage.getItem('gx.v2.exportSection'));
+  if (stored !== 'For code + data') fail(`[6b] the open category was not written down (${JSON.stringify(stored)})`);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1500);
+  const wall3 = page.locator('[data-gx-keepselect] canvas').first();
+  await wall3.waitFor({ state: 'visible', timeout: 15000 });
+  const b3 = (await wall3.boundingBox())!;
+  await page.mouse.click(b3.x + 24, b3.y + 14);
+  await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[6b] no hero after a wall click'));
+  await page.waitForTimeout(600);
+  await page.click('[title^="Export"]');
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[6b] the Export window did not open'));
+  const remembered = await readWindow();
+  if (remembered!.openSections[0] !== 'For code + data')
+    fail(`[6b] a new session opened on "${remembered!.openSections[0]}", not the category left open`);
+  console.log('✓ [6b] the category you left open is the one a new session opens');
 
   // [7] THE NOTE ITSELF (owner, 2026-09-10). A bundling format flattens each gradient to
   // AI_STOP_LIMIT stops, and the ones that lose visible detail say so — on HOVER, in the

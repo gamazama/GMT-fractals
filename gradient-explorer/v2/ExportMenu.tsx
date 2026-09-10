@@ -66,6 +66,7 @@ import { AI_STOP_LIMIT } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
 import type { RGB } from '../../palette/core/oklab';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { Floating } from './ui/Floating';
 import { Icon } from './ui/Icon';
 import { ZoneLabel } from './ui/ZoneLabel';
@@ -92,6 +93,14 @@ const PROFILES: { id: 'srgb' | 'linear' | 'aces_inverse'; label: string; title: 
 /** The section the output profile occupies in the accordion — not a format group, but the
  *  same affordance, so it stops competing with the formats for attention. */
 const PROFILE_SECTION = 'Output profile';
+
+/** WHICH CATEGORY IS OPEN, remembered across sessions (owner, 2026-09-10: "the accordion
+ *  should remember, this is one area where a user is likely to only require a few paths").
+ *  A person who exports .ase every time should not reopen that category every time. The
+ *  empty string is a REMEMBERED CLOSE, not "nothing stored" — someone who shut every
+ *  category meant it, and gets it back that way. An unknown title (a renamed group) falls
+ *  through to the last-export rule below rather than opening on nothing. */
+const SECTION_KEY = 'gx.v2.exportSection';
 
 /** Which group holds a format key, or null. */
 const groupOf = (key: string): string | null => GROUPS.find((g) => g.keys.includes(key))?.title ?? null;
@@ -254,10 +263,18 @@ export const ExportMenu: React.FC<{
   // recents already carry it: the group holding your last export. With no history, the first
   // group — so the window never opens as a column of closed headers with nothing to read.
   const [open, setOpen] = useState<string | null>(() => {
+    const stored = safeLocalGet(SECTION_KEY);
+    if (stored === '') return null; // a remembered close
+    if (stored && (stored === PROFILE_SECTION || GROUPS.some((g) => g.title === stored))) return stored;
     const last = recents.find((a) => a.kind !== 'png') as { key: string } | undefined;
     return (last && groupOf(last.key)) || GROUPS[0].title;
   });
-  const toggle = (title: string) => setOpen((o) => (o === title ? null : title));
+  const toggle = (title: string) =>
+    setOpen((o) => {
+      const next = o === title ? null : title;
+      safeLocalSet(SECTION_KEY, next ?? '');
+      return next;
+    });
   /** What the open category's note strip is showing, or null. One at a time, because one
    *  category is open at a time and one row is hovered at a time. */
   const [notice, setNotice] = useState<string | null>(null);

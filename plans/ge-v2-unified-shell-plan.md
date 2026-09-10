@@ -1733,6 +1733,39 @@ are where to START reading, not necessarily where the change lands.
    > pointerdown clears first); a swap driven from inside the hero still could. Unverified as
    > a reachable user path, which is why it is a note and not a `@bug`.
 
+> **Owner's second walk, 2026-09-10 (§8b item 5's third pass).** Four calls, one question
+> answered, one confirmation.
+>
+> - **The rail's export icon lights like a chip.** Owner: "when enabled, should light up blue
+>   like its heading button counterparts (Kept, Presets..) look when they are lit up." It now
+>   carries the rail's own lit vocabulary verbatim — accent border, accent ink, accent wash —
+>   measured identical to a lit chip (border `rgb(34,202,236)`, ink `rgb(109,221,243)`, wash
+>   at 0.1, 26 px). Disabled (All on the ground) it falls back to a plain hairline.
+> - **The accordion remembers between sessions** (`gx.v2.exportSection`). Owner: "this is one
+>   area where a user is likely to only require a few paths." A remembered CLOSE is stored as
+>   the empty string and honoured; the last-export rule is now only the first-use fallback.
+>   Guard: `smoke:ge-hero` [6b], falsified both ways (never written, and written but never
+>   read back); [6] gained an explicit `removeItem` so it still tests the fallback it names.
+> - **Carve tools stay out of sets, and the render was right all along.** Owner: "we dont need
+>   carve tools in small sets." The `@stale` raised on 2026-09-09 is resolved and removed: the
+>   comment claimed the tools stayed, `TOOLS.filter` offered `zoom` alone, and the filter is
+>   the correct half. Carving is for finding your way through eleven thousand; choosing several
+>   on a set is the background rubber-band and never needed a tool button.
+> - **Illustrator, InDesign and .ase are confirmed working** by the owner against the real
+>   apps (2026-09-10). The §8b note that said the `.ase` writer was proven only against a
+>   reader written from the same spec no longer applies to those three.
+>
+> **Answered: user gradients do NOT load into All.** `All` is the catalogue and nothing else —
+> `useGroundSource` returns `null` for it (which means "show the catalogue"), `membersOf`
+> returns `[]`, and the catalogue is built in `pickerStore` from the loaded packs, with no path
+> by which a favourite enters it. Your own gradients live in Recent's dated bins, Kept and
+> named groups. Worth knowing because it is why the rail's export icon disables on All: there
+> is nothing of yours there to take.
+>
+> **Still open from the 2026-09-09 pass:** `smoke:ge-ground` [3]'s second assertion (the set's
+> canvas starts at x=24, an empty 24 px row-label column the wall reserves so the canvas does
+> not jump sideways when you cross between All and a set). Not answered on this walk.
+
 ## 9. Definition of done, per phase
 
 Gates green · owner visual walk done on light grey (and on dark for Phase A) · no new `fg-dim` on

@@ -361,7 +361,16 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
             ? 'Nothing here to export — All is the whole library, not a set of your own. Pick a set.'
             : `Export what is on the ground — ${groundExportCount} gradient${groundExportCount === 1 ? '' : 's'}`
         }
-        className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-lg text-fg-muted hover:text-fg hover:bg-line/10 disabled:opacity-35 disabled:hover:text-fg-muted disabled:hover:bg-transparent transition-colors"
+        className={[
+          'inline-flex items-center justify-center w-[26px] h-[26px] rounded-lg border transition-colors',
+          // LIT LIKE A CHIP when there is something to take (owner, 2026-09-10). The rail's
+          // own buttons are the vocabulary here, so "this will do something" reads the same
+          // on the icon as it does on Kept or Presets: accent border, accent ink, accent
+          // wash. Nothing else in the rail is blue unless it is live.
+          groundExportCount > 0
+            ? 'border-accent-400 text-accent-300 bg-accent-400/10 hover:bg-accent-400/20'
+            : 'border-line/20 text-fg-dim',
+        ].join(' ')}
       >
         <Icon name="download" size={16} />
       </button>

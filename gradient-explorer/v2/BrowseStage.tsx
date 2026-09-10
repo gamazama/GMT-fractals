@@ -209,13 +209,12 @@ export const BrowseStage: React.FC = () => {
   }, [span]);
   // Crossing between the catalogue and a set changes what a carve MEANS — narrowing there,
   // choosing here — so an active tool is dropped on the way rather than carried across with
-  // a new meaning.
-  // @stale (2026-09-09) this line used to end "(Until 2026-09-09 a set had no carve tools
-  //   at all; the tools now stay.)" and the render disagrees with it: grep `TOOLS.filter`
-  //   below — a set is still offered `zoom` ALONE. Measured on a two-tile Today bin: the
-  //   corner holds List view + Zoom and nothing else. Either the filter was meant to go
-  //   with that change and did not, or the sentence meant the background rubber-band
-  //   (which needs no tool button) and is loosely worded. Not guessed at here.
+  // a new meaning. A set is offered `zoom` ALONE (grep `TOOLS.filter` below): carving is for
+  // finding your way through eleven thousand, and a set you assembled yourself is small
+  // enough to point at — owner, 2026-09-10, "we dont need carve tools in small sets".
+  // (An earlier version of this comment claimed the tools stayed on a set, which the render
+  // never did; the render was right.) Choosing SEVERAL on a set is still there and never
+  // needed a tool: it is the rubber-band from the wall's background.
   useEffect(() => {
     if (m.tool) m.setTool(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
