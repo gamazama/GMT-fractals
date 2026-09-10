@@ -1,4 +1,5 @@
 
+import * as Spectral from 'spectral.js';
 import { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 
 /** Plain sRGB triple, 0–255 floats (pre-truncation). Structurally identical to palette `RGB`. */
@@ -134,45 +135,259 @@ const oklabToRgb = (lab: {L:number, a:number, b:number}): {r:number, g:number, b
     };
 };
 
-export const lerpOklab = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} => {
-    const lab1 = rgbToOklab(c1);
-    const lab2 = rgbToOklab(c2);
+/** Linear-light triple for an Oklab colour, BEFORE clamping — the gamut test below
+ *  needs to see the overflow that `linear01ToSrgb` would otherwise clip away. */
+const oklabToLinearTriple = (lab: {L:number, a:number, b:number}): [number, number, number] => {
+    const l = lab.L + 0.3963377774 * lab.a + 0.2158037573 * lab.b;
+    const m = lab.L - 0.1055613458 * lab.a - 0.0638541728 * lab.b;
+    const s = lab.L - 0.0894841775 * lab.a - 1.2914855480 * lab.b;
+    const l3 = l * l * l, m3 = m * m * m, s3 = s * s * s;
+    return [
+        +4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+        -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+        -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3,
+    ];
+};
 
-    // Use Oklch (polar) interpolation to preserve chroma/saturation.
-    // Rectangular a,b lerp cuts through the achromatic axis, causing grey midpoints.
-    const c1Chroma = Math.sqrt(lab1.a * lab1.a + lab1.b * lab1.b);
-    const c2Chroma = Math.sqrt(lab2.a * lab2.a + lab2.b * lab2.b);
+const oklabInGamut = (lab: {L:number, a:number, b:number}): boolean =>
+    oklabToLinearTriple(lab).every((v) => v >= -1e-4 && v <= 1 + 1e-4);
 
-    // If either color is near-achromatic, fall back to rectangular lerp
-    // (hue is undefined for greys)
-    if (c1Chroma < 0.005 || c2Chroma < 0.005) {
-        return oklabToRgb({
-            L: lab1.L + (lab2.L - lab1.L) * t,
-            a: lab1.a + (lab2.a - lab1.a) * t,
-            b: lab1.b + (lab2.b - lab1.b) * t
-        });
+/**
+ * Gamut-safe Oklab → sRGB: when the colour overflows sRGB, walk CHROMA down at
+ * constant L and h until it fits (binary search), instead of clamping each linear
+ * channel independently.
+ *
+ * Why this matters, measured 2026-09-10: `oklabToRgb`'s per-channel clamp shifts HUE,
+ * and a chroma-preserving polar blend deliberately bows OUT of gamut, so it hit that
+ * clamp constantly. #0000FF→#FFFF00 at t=0.25 came out #008DF8 (blue-cyan) where the
+ * correct hue-preserving answer is #0087AC (teal) — 25.8° of hue drift, and up to
+ * 25° across the other pairs tested. The polar path exists to protect hue; clamping
+ * was destroying exactly what it protects.
+ *
+ * @invariant oklabToRgbGamut never shifts hue by more than 1° for any in-range Oklab
+ *   input — proven by: `npm run test:palette-blendspaces`
+ *   ("gamut mapping preserves hue within 1 degree").
+ * @see palette/core/oklab.ts (oklabToRgbSafe — the same Ottosson chroma-clip, kept
+ *   separate because that copy serves the generator/stop-fitter, not the sampler)
+ */
+const oklabToRgbGamut = (lab: {L:number, a:number, b:number}): {r:number, g:number, b:number} => {
+    if (oklabInGamut(lab)) return oklabToRgb(lab);
+    const L = lab.L;
+    const C = Math.sqrt(lab.a * lab.a + lab.b * lab.b);
+    const h = Math.atan2(lab.b, lab.a);
+    let lo = 0, hi = C;
+    for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2;
+        if (oklabInGamut({ L, a: mid * Math.cos(h), b: mid * Math.sin(h) })) lo = mid; else hi = mid;
     }
+    return oklabToRgb({ L, a: lo * Math.cos(h), b: lo * Math.sin(h) });
+};
 
-    const h1 = Math.atan2(lab1.b, lab1.a);
-    const h2 = Math.atan2(lab2.b, lab2.a);
+/**
+ * Shared polar (LCh-style) interpolation for any Lab-like space: lerp L and chroma,
+ * take the SHORT hue arc.
+ *
+ * NEAR GREY, the polar path FADES into the rectangular one over `hueFade` of chroma
+ * rather than branching. Hue is genuinely undefined on the achromatic axis, so every
+ * hard rule here just relocates the cliff:
+ *   - the old `chroma < 0.005` branch put it at 0.005, where #827E7E and #847C7C —
+ *     indistinguishable greys — blended to #BFA765 and #D7996F against the same target;
+ *   - CSS Color 4's bare "powerless hue" rule puts it at exactly 0, where #808080 and
+ *     #817F7F still differ by 24/255 (measured 2026-09-10), because one step off grey has a
+ *     numerically real but meaningless hue that swings the whole arc.
+ * Smoothstepping the two paths together removes it outright, and costs one extra lerp
+ * only for colours within `hueFade` of grey.
+ *
+ * @invariant No blend cliff anywhere on the achromatic approach: a 1/255 change to a
+ *   near-grey stop moves its whole ramp by under 6/255 — proven by:
+ *   `npm run test:palette-blendspaces` ("no chroma cliff across a near-grey sweep").
+ */
+const HUE_FADE = 0.02;   // Oklab chroma below which an endpoint's hue is untrustworthy
+
+const lerpPolarLab = <T extends {L:number, a:number, b:number}>(
+    A: T,
+    B: T,
+    t: number,
+    toRgb: (lab: {L:number, a:number, b:number}) => {r:number, g:number, b:number},
+    hueFade: number = HUE_FADE,
+): {r:number, g:number, b:number} => {
+    const ca = Math.sqrt(A.a * A.a + A.b * A.b);
+    const cb = Math.sqrt(B.a * B.a + B.b * B.b);
+    const L = A.L + (B.L - A.L) * t;
+
+    // The rectangular path, which is what the polar path must decay INTO near grey.
+    const ra = A.a + (B.a - A.a) * t;
+    const rb = A.b + (B.b - A.b) * t;
+
+    // How much to trust the hues: a colour one 8-bit step off grey has a numerically
+    // real but meaningless hue, and honouring it swings the whole arc. Fade rather than
+    // branch — a hard `if (chroma < X)` just moves the cliff to X, which is exactly what
+    // the old `< 0.005` branch did and what a naive powerless-hue rule still does at 0.
+    const w = Math.min(ca, cb) / hueFade;
+    const trust = w >= 1 ? 1 : w * w * (3 - 2 * w);   // smoothstep
+    if (trust <= 0) return toRgb({ L, a: ra, b: rb });
+
+    let h1 = Math.atan2(A.b, A.a);
+    let h2 = Math.atan2(B.b, B.a);
+    // powerless hue: a truly achromatic endpoint has no hue, so it borrows the other's
+    if (ca < 1e-9) h1 = h2;
+    if (cb < 1e-9) h2 = h1;
     let dh = h2 - h1;
     if (dh > Math.PI) dh -= 2 * Math.PI;
     if (dh < -Math.PI) dh += 2 * Math.PI;
-
     const h = h1 + dh * t;
-    const c = c1Chroma + (c2Chroma - c1Chroma) * t;
-    const L = lab1.L + (lab2.L - lab1.L) * t;
+    const c = ca + (cb - ca) * t;
+    const pa = c * Math.cos(h);
+    const pb = c * Math.sin(h);
 
-    return oklabToRgb({ L, a: c * Math.cos(h), b: c * Math.sin(h) });
+    if (trust >= 1) return toRgb({ L, a: pa, b: pb });
+    return toRgb({ L, a: ra + (pa - ra) * trust, b: rb + (pb - rb) * trust });
+};
+
+/** POLAR Oklab (OkLCh) — chroma-preserving, short hue arc. This is the `oklab` wire
+ *  value and the mode labelled "OkLCh" in the pickers. @see types/graphics.ts */
+export const lerpOklab = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} =>
+    lerpPolarLab(rgbToOklab(c1), rgbToOklab(c2), t, oklabToRgbGamut);
+
+/**
+ * RECTANGULAR Oklab — the perceptual straight line, and the centre of the picker's
+ * pigment↔tint axis. It passes through lower chroma than the polar mode: that is the
+ * point, not a defect.
+ *
+ * "Straight" holds EXACTLY while the line stays inside sRGB; where it leaves (e.g.
+ * #3300CC→#00CC33) `oklabToRgbGamut` pulls the midpoint back and the path bows by
+ * ~0.004 in Oklab a/b. That is gamut mapping doing its job, not interpolation drift.
+ *
+ * @invariant Zero hue and lightness bow at the midpoint for any pair whose straight
+ *   line is in gamut — proven by: `npm run test:palette-blendspaces`
+ *   ("rectangular Oklab is exactly the straight line where it fits in sRGB").
+ *
+ * This is the `oklab-rect` wire value, labelled "Oklab". @see types/graphics.ts
+ */
+export const lerpOklabRect = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} => {
+    const A = rgbToOklab(c1), B = rgbToOklab(c2);
+    return oklabToRgbGamut({ L: A.L + (B.L - A.L) * t, a: A.a + (B.a - A.a) * t, b: A.b + (B.b - A.b) * t });
+};
+
+// --- CIE L*a*b* (D65, 2°) ---
+// Deliberately NOT Oklab: CIE Lab's hue circle is wound differently, so its short arc
+// takes a route no other mode offers (blue→yellow goes via magenta/red, not green).
+const CIE_M  = [[0.4124564, 0.3575761, 0.1804375], [0.2126729, 0.7151522, 0.0721750], [0.0193339, 0.1191920, 0.9503041]];
+const CIE_MI = [[3.2404542, -1.5371385, -0.4985314], [-0.9692660, 1.8760108, 0.0415560], [0.0556434, -0.2040259, 1.0572252]];
+const CIE_WN = [0.95047, 1.0, 1.08883];
+const cieF    = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (841 / 108) * t + 4 / 29);
+const cieFInv = (t: number) => (t > 6 / 29 ? t * t * t : (108 / 841) * (t - 4 / 29));
+
+const rgbToCieLab = (c: {r:number, g:number, b:number}): {L:number, a:number, b:number} => {
+    const v = [srgbToLinear01(c.r), srgbToLinear01(c.g), srgbToLinear01(c.b)];
+    const f = CIE_M.map((row) => row[0] * v[0] + row[1] * v[1] + row[2] * v[2]).map((x, i) => cieF(x / CIE_WN[i]));
+    return { L: 116 * f[1] - 16, a: 500 * (f[0] - f[1]), b: 200 * (f[1] - f[2]) };
+};
+
+const cieLabToRgb = (lab: {L:number, a:number, b:number}): {r:number, g:number, b:number} => {
+    const fy = (lab.L + 16) / 116, fx = fy + lab.a / 500, fz = fy - lab.b / 200;
+    const xyz = [cieFInv(fx) * CIE_WN[0], cieFInv(fy) * CIE_WN[1], cieFInv(fz) * CIE_WN[2]];
+    const v = CIE_MI.map((row) => row[0] * xyz[0] + row[1] * xyz[1] + row[2] * xyz[2]);
+    return { r: linear01ToSrgb(v[0]), g: linear01ToSrgb(v[1]), b: linear01ToSrgb(v[2]) };
+};
+
+/**
+ * POLAR CIE L*C*h — short hue arc on CIE Lab's differently-wound hue circle, which is
+ * why blue→yellow routes via magenta/red here and via green/teal in OkLCh.
+ *
+ * The hue-fade threshold is passed EXPLICITLY because CIE Lab's chroma is on a wholly
+ * different scale from Oklab's: sRGB tops out near C=133 here and near C=0.37 there, a
+ * factor of ~360. Reusing Oklab's 0.02 would make the fade fire only for colours ~360x
+ * closer to grey than intended, i.e. never.
+ */
+export const lerpCieLch = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} =>
+    lerpPolarLab(rgbToCieLab(c1), rgbToCieLab(c2), t, cieLabToRgb, 7);
+
+/**
+ * Kubelka–Munk pigment mixing via spectral.js (MIT, Ronald van Wijnen) — the only mode
+ * here that models absorption and scattering rather than interpolating coordinates, so
+ * blue and yellow reach green and complements go to genuine mud.
+ *
+ * PERF: building a spectral `Color` derives a 38-band reflectance spectrum, which is
+ * far more expensive than the mix itself. Memoising Colors on packed RGB takes a
+ * 256-texel segment from 0.94 ms to 0.30 ms of mixing (measured 2026-09-10); the hex
+ * round-trip through `toString` — which runs spectral's own gamut map — is the rest of
+ * the ~1.2 ms total. Nothing pays this unless a gradient actually selects `spectral`.
+ *
+ * @invariant Memoising Colors never changes the result — proven by:
+ *   `npm run test:palette-blendspaces` ("spectral memo matches a cold Color").
+ */
+const spectralColors = new Map<number, InstanceType<typeof Spectral.Color>>();
+const spectralColor = (c: {r:number, g:number, b:number}) => {
+    const key = (Math.round(c.r) << 16) | (Math.round(c.g) << 8) | Math.round(c.b);
+    let col = spectralColors.get(key);
+    if (!col) {
+        // The Map is keyed on a 24-bit int, so it is bounded at 16.7M entries in theory
+        // and at "distinct stop colours the user has touched" in practice.
+        col = new Spectral.Color(rgbToHex(c));
+        spectralColors.set(key, col);
+    }
+    return col;
+};
+
+export const lerpSpectral = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number): {r:number, g:number, b:number} => {
+    if (t <= 0) return c1;
+    if (t >= 1) return c2;
+    const mixed = Spectral.mix([spectralColor(c1), 1 - t], [spectralColor(c2), t]);
+    return hexToRgb(mixed.toString()) ?? lerpRGB(c1, c2, t);
+};
+
+/**
+ * The blend spaces a chooser offers, in the order they are shown.
+ *
+ * ORDER IS MEANINGFUL and measured (2026-09-10), not alphabetical or historical. It runs
+ * from pigment to tint by how a mode's midpoint departs from the perceptual straight
+ * line — chroma relative to a straight lerp, and lightness:
+ *
+ *   spectral  0.45 chroma, -9.01 lightness   pigment: darker and duller
+ *   rgb       0.45 chroma, -5.94 lightness
+ *   oklab-rect 0.45 chroma, 0.00 lightness   the straight line itself, zero bow
+ *   oklab     0.86 chroma, +0.00 lightness   (POLAR OkLCh)
+ *   cielch    0.97 chroma, +0.78 lightness
+ *   hsv       1.22 chroma, +9.15 lightness   tint: lighter and more saturated
+ *
+ * @see docs/adr/0113-blend-spaces-pigment-to-tint.md
+ *
+ * `hsv-far` is absent on purpose — retired from every chooser (owner, 2026-09-08) while
+ * the renderer still honours it. A chooser showing the ACTIVE mode must therefore handle
+ * a value that is not in this list.
+ *
+ * @invariant Every non-retired member of BlendColorSpace appears here exactly once —
+ *   proven by: `npm run test:palette-blendspaces` ("the chooser order covers every
+ *   non-retired blend space exactly once").
+ */
+export const BLEND_SPACE_ORDER: BlendColorSpace[] = ['spectral', 'rgb', 'oklab-rect', 'oklab', 'cielch', 'hsv'];
+
+/** Chooser labels. NAMES ONLY — no "(perceptual)" / "(standard)" / "(short path)"
+ *  descriptors (owner, 2026-09-10): the hover preview shows what a mode does, and a
+ *  one-word claim next to it is both redundant and easy to argue with. Note `oklab`
+ *  reads "OkLCh" and `oklab-rect` reads "Oklab"; @see types/graphics.ts for why the
+ *  keys cannot be renamed to match. */
+export const BLEND_SPACE_LABEL: Record<BlendColorSpace, string> = {
+    spectral: 'Spectral',
+    rgb: 'RGB',
+    'oklab-rect': 'Oklab',
+    oklab: 'OkLCh',
+    cielch: 'CIE LCh',
+    hsv: 'HSV',
+    'hsv-far': 'HSV Far',
 };
 
 /** Dispatch color interpolation based on blend space */
 export const blendLerp = (c1: {r:number, g:number, b:number}, c2: {r:number, g:number, b:number}, t: number, space: BlendColorSpace): {r:number, g:number, b:number} => {
     switch (space) {
-        case 'hsv':     return lerpHSV(c1, c2, t);
-        case 'hsv-far': return lerpHSVFar(c1, c2, t);
-        case 'oklab':   return lerpOklab(c1, c2, t);
-        default:        return lerpRGB(c1, c2, t);
+        case 'spectral':   return lerpSpectral(c1, c2, t);
+        case 'oklab-rect': return lerpOklabRect(c1, c2, t);
+        case 'oklab':      return lerpOklab(c1, c2, t);   // POLAR OkLCh — see types/graphics.ts
+        case 'cielch':     return lerpCieLch(c1, c2, t);
+        case 'hsv':        return lerpHSV(c1, c2, t);
+        case 'hsv-far':    return lerpHSVFar(c1, c2, t);
+        default:           return lerpRGB(c1, c2, t);
     }
 };
 

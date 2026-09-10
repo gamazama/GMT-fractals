@@ -17,13 +17,12 @@
 import React from 'react';
 import type { BlendColorSpace, ColorSpaceMode } from '../../types';
 import Dropdown from '../../components/Dropdown';
+import { BLEND_SPACE_ORDER, BLEND_SPACE_LABEL } from '../../utils/colorUtils';
 import { usePaletteEditorStore, editorEdit } from '../store/paletteEditorStore';
 
-const BLEND_OPTIONS = [
-    { label: 'Oklab (perceptual)', value: 'oklab' },
-    { label: 'RGB (standard)', value: 'rgb' },
-    { label: 'HSV (short path)', value: 'hsv' },
-];
+// Names only, no descriptors, in BLEND_SPACE_ORDER — one source shared with the strip
+// row's BlendSpacePicker and the gradient context menu. @see utils/colorUtils.ts
+const BLEND_OPTIONS = BLEND_SPACE_ORDER.map((sp) => ({ label: BLEND_SPACE_LABEL[sp], value: sp }));
 
 const OUTPUT_OPTIONS = [
     { label: 'sRGB (standard)', value: 'srgb' },

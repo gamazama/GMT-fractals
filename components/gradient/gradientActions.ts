@@ -18,6 +18,7 @@
 
 import type { ContextMenuItem } from '../../types/help';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../../types';
+import { BLEND_SPACE_ORDER, BLEND_SPACE_LABEL } from '../../utils/colorUtils';
 import { stopOps } from '../../utils/stopOps';
 import { getGradientFavientsBridge } from './gradientFavients';
 
@@ -122,10 +123,15 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
       action: wrap(() => { emit(stopOps.default(), 'linear', 'oklab'); setSelectedIds(new Set<string>()); }),
     },
 
+    // Names only, no "(Standard)" / "(Perceptual)" descriptors, and BLEND_SPACE_ORDER's
+    // order rather than a hand-written one — same list and same labels as the strip row's
+    // BlendSpacePicker, from one source. @see utils/colorUtils.ts
     { label: 'Blend Mode', action: () => {}, isHeader: true },
-    { label: 'RGB (Standard)', checked: blendSpace === 'rgb', action: wrap(() => emit(knots, undefined, 'rgb')) },
-    { label: 'HSV', checked: blendSpace === 'hsv', action: wrap(() => emit(knots, undefined, 'hsv')) },
-    { label: 'Oklab (Perceptual)', checked: blendSpace === 'oklab', action: wrap(() => emit(knots, undefined, 'oklab')) },
+    ...BLEND_SPACE_ORDER.map((sp) => ({
+      label: BLEND_SPACE_LABEL[sp],
+      checked: blendSpace === sp,
+      action: wrap(() => emit(knots, undefined, sp)),
+    })),
 
     { label: 'Output Mode', action: () => {}, isHeader: true },
     { label: 'sRGB (Standard)', checked: colorSpace === 'srgb', action: wrap(() => emit(knots, 'srgb')) },

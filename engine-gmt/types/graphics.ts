@@ -19,8 +19,18 @@ export type ColorSpaceMode = 'srgb' | 'linear' | 'aces_inverse';
 
 /** How colors blend between gradient stops */
 /** `hsv-far` is RETIRED from every chooser; the type and the renderer keep it so older
- *  gradients still render (owner, 2026-09-08). See types/graphics.ts. */
-export type BlendColorSpace = 'rgb' | 'hsv' | 'hsv-far' | 'oklab';
+ *  gradients still render (owner, 2026-09-08). See types/graphics.ts.
+ *
+ *  MUST stay identical to the union in types/graphics.ts — these two trees are
+ *  duplicated, and that file carries the naming trap for `oklab` vs `oklab-rect`. */
+export type BlendColorSpace =
+    | 'spectral'
+    | 'rgb'
+    | 'oklab-rect'
+    | 'oklab'
+    | 'cielch'
+    | 'hsv'
+    | 'hsv-far';
 
 // The new Rich Object container
 export interface GradientConfig {

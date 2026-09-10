@@ -20,8 +20,24 @@ export type ColorSpaceMode = 'srgb' | 'linear' | 'aces_inverse';
 /** How colors blend between gradient stops */
 /** `hsv-far` (hue the long way round) is RETIRED: no chooser offers it any more, but the
  *  type and the renderer keep it so gradients already saved in it still render (owner,
- *  2026-09-08). Do not add it back to a picker. */
-export type BlendColorSpace = 'rgb' | 'hsv' | 'hsv-far' | 'oklab';
+ *  2026-09-08). Do not add it back to a picker.
+ *
+ *  NAMING TRAP — `oklab` is the POLAR (OkLCh) blend and is labelled "OkLCh" in every
+ *  chooser; `oklab-rect` is the straight-line Oklab blend and is labelled "Oklab". The
+ *  key/label mismatch is deliberate: `oklab` is the wire value in every saved gradient,
+ *  share URL and preset since long before the rectangular mode existed, so renaming the
+ *  key would silently reset those to the fallback. Read the LABEL, not the key.
+ *
+ *  Ordered here along the axis the picker uses — pigment (darker, duller) through the
+ *  perceptual straight line to tint (lighter, more saturated). @see utils/colorUtils.ts */
+export type BlendColorSpace =
+    | 'spectral'    // Kubelka–Munk pigment mixing
+    | 'rgb'         // straight channel lerp
+    | 'oklab-rect'  // straight line in Oklab — zero hue bow by construction
+    | 'oklab'       // POLAR OkLCh (labelled "OkLCh")
+    | 'cielch'      // polar CIE L*C*h
+    | 'hsv'         // polar HSV, short hue arc
+    | 'hsv-far';    // retired, renderer-only
 
 // The new Rich Object container
 export interface GradientConfig {

@@ -18,6 +18,47 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-10 (session 5) — blend spaces: three new modes, and the polar one was wrong
+twice over.** Owner asked about RYB and LAB; the research pass measured the candidates and
+he took spectral, CIE LCh, rectangular Oklab, and a correction to the existing polar mode.
+**RYB was researched and REJECTED, not deferred** — see [ADR-0113](./docs/adr/0113-blend-spaces-pigment-to-tint.md).
+
+- **The polar `oklab` mode had two real defects.** It converted back with per-channel
+  clamping, and a chroma-preserving blend bows out of gamut by design, so it hit that clamp
+  constantly — and clamping shifts HUE, the one thing the mode exists to protect.
+  `#0000FF→#FFFF00` at t=0.25 gave `#008DF8` where the answer is `#0087AC`: **25.8° of
+  drift**. It also branched at `chroma < 0.005`, so `#827E7E` and `#847C7C` blended ~24/255
+  apart. Now: chroma-clip gamut mapping, and a chroma-weighted FADE instead of a threshold.
+  CSS Color 4's bare powerless-hue rule was tried first and rejected — it only moves the
+  cliff to exactly 0, where `#808080` and `#817F7F` still differ by 24/255.
+- **⚠ This changes saved work.** Any gradient whose polar blend left gamut renders a
+  different (correct) hue now. That is the fix working, but it is visible.
+- **`BLEND_SPACE_ORDER` is measured, not taste** — pigment→tint by midpoint departure from
+  the perceptual straight line. `oklab-rect` is the centre because its bow is EXACTLY zero
+  (2.9e-8), so the axis is a property of the maths.
+- **Naming trap:** `oklab` is the POLAR mode, labelled "OkLCh"; `oklab-rect` is labelled
+  "Oklab". The keys cannot be renamed — `oklab` is the wire value in every saved gradient,
+  share URL and preset, and `coerceGradientConfig` falls back rather than throwing.
+- **The picker opens on click, previews on hover** (re-renders the editor's own strip),
+  names only, no "(perceptual)" / "(standard)" descriptors. The options open into the gap
+  BESIDE a trigger that does not move: the first build expanded in place and the opening
+  gesture committed a mode by itself — caught in the browser, it silently switched a
+  gradient to Spectral.
+- **One dependency:** spectral.js 3.0.0 (MIT, ~32 KB), Kubelka–Munk over 38 bands. ~1.2 ms
+  per 256-texel segment with `Color`s memoised on packed RGB; only gradients selecting it
+  pay. Mixbox was rejected on licence (CC BY-NC vs the monetization path).
+- **Guard: `npm run test:palette-blendspaces`**, ten assertions, each falsified. **Four
+  passed under mutation on the first cut and were rewritten** — probes chosen for the old
+  threshold, a first-write-wins cache making both reads agree, and two paths that bypassed
+  the dispatch. Same shape every time: asserting something true-but-adjacent instead of the
+  claim. The file header names all four; read it before weakening one.
+- Verified live at `gradient-explorer-next.html`: Spectral `#398F54`, CIE LCh `#FF0050`,
+  OkLCh `#00BAAE`, each matching the harness, and leaving the row restores the committed
+  mode. `typecheck` / `test:palette` / `smoke:boot` / `check:rule-guards` /
+  `check:text-bytes` all green.
+- **Not done, deliberately:** rectangular CIE Lab. The conversions are in place so it is
+  ~2 lines, but the owner asked for LCh specifically.
+
 **📋 2026-09-10 (session 4, third pass) — export SETTINGS, and the stop budget stops being
 a private constant.** The owner's walk of the finished window asked which formats have a real
 option behind them. Four groups; he took two.

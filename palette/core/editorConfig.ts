@@ -20,8 +20,16 @@ import type { GradientConfig, GradientStop, ColorSpaceMode, BlendColorSpace, Jso
 import { stopOps } from '../../utils/stopOps';
 
 const COLOR_SPACES: ColorSpaceMode[] = ['srgb', 'linear', 'aces_inverse'];
-/** 'hsv-far' is retired from every chooser (owner, 2026-09-08); the renderer still knows it. */
-const BLEND_SPACES: BlendColorSpace[] = ['rgb', 'hsv', 'oklab'];
+/**
+ * Every blend space a saved gradient may name. 'hsv-far' is retired from every chooser
+ * (owner, 2026-09-08) but stays here so gradients already saved in it survive a load.
+ *
+ * ADDING A MODE? It must land here too. `coerceGradientConfig` FALLS BACK to 'oklab'
+ * for anything not in this list rather than throwing, so a mode missing from it looks
+ * like it works in the editor and then silently resets every gradient saved in it.
+ * Ordered along the picker's pigment↔tint axis. @see types/graphics.ts
+ */
+const BLEND_SPACES: BlendColorSpace[] = ['spectral', 'rgb', 'oklab-rect', 'oklab', 'cielch', 'hsv', 'hsv-far'];
 
 /** The Stops mode's starting gradient — a vivid 3-stop ramp so the mode looks
  *  alive on first open (and what "Reset to default" restores). */

@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import type { ContextMenuItem } from '../types/help';
 import { isColorDrag, readColorDrag } from './gradient/colorDrag';
-import { rgbToHex, nudgeChannel, sampleStops, renderStopsToRamp } from '../utils/colorUtils';
+import { rgbToHex, nudgeChannel, sampleStops, renderStopsToRamp, BLEND_SPACE_ORDER, BLEND_SPACE_LABEL } from '../utils/colorUtils';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
 const STRIP_PREVIEW_W = 1536;
@@ -52,6 +52,93 @@ interface DragPayload {
     startY: number;
     initialKnots: AdvancedGradientKnot[];
 }
+
+/**
+ * BlendSpacePicker — the active blend space as a chip; CLICK it and the full list opens
+ * inline, in the order defined by `BLEND_SPACE_ORDER` (pigment → straight line → tint;
+ * see utils/colorUtils.ts).
+ *
+ * It replaced a click-to-CYCLE control (owner, 2026-09-10). Cycling was tolerable at
+ * three modes and a guessing game at six. Click-to-open rather than always-on because
+ * the strip row is a working surface, not a settings panel — the row stays quiet until
+ * asked, then expands into the `ml-auto` gap that already sits beside it.
+ *
+ * HOVER PREVIEWS THE SWITCH: `onPreview` re-renders the editor's own strip in the hovered
+ * mode without emitting anything, so the choice is made by looking at the actual gradient
+ * rather than by reading a label. That is also why the labels carry no "(perceptual)" /
+ * "(standard)" descriptors — the preview is the explanation.
+ *
+ * Closing is by choosing, by Escape, or by clicking the chip again — deliberately NOT by
+ * backdrop click, which this project does not use. Leaving the row clears the preview but
+ * keeps it open, so overshooting the list costs nothing.
+ *
+ * A gradient saved in a RETIRED mode ('hsv-far') keeps rendering, so the active mode may
+ * not be in BLEND_SPACE_ORDER. It gets an extra chip at the end rather than vanishing —
+ * otherwise the list would show nothing selected and switching away would be a mystery.
+ */
+const BlendSpacePicker: React.FC<{
+    value: BlendColorSpace;
+    onSelect: (space: BlendColorSpace) => void;
+    onPreview: (space: BlendColorSpace | null) => void;
+    compact?: boolean;
+}> = ({ value, onSelect, onPreview, compact }) => {
+    const [open, setOpen] = useState(false);
+    const spaces = BLEND_SPACE_ORDER.includes(value) ? BLEND_SPACE_ORDER : [...BLEND_SPACE_ORDER, value];
+    const size = compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5';
+
+    const close = useCallback(() => { setOpen(false); onPreview(null); }, [onPreview]);
+
+    // Escape closes and drops the preview. Bound only while open.
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [open, close]);
+
+    return (
+        <div
+            className="flex items-center gap-0.5 gradient-interactive-element"
+            onMouseLeave={() => onPreview(null)}
+        >
+            {/* The options open to the LEFT and the trigger stays put. Opening must never
+                move a different control under the cursor: the first build expanded in
+                place, so the chip the pointer was already over became a mode chip and the
+                opening gesture committed a mode by itself (caught in the browser,
+                2026-09-10 — it silently switched a gradient to Spectral). Growing into the
+                gap beside the trigger keeps the pointer over the same button it pressed. */}
+            {open && spaces.map((sp) => {
+                const active = sp === value;
+                return (
+                    <button
+                        key={sp}
+                        type="button"
+                        aria-pressed={active}
+                        className={`${size} py-0.5 rounded-sm whitespace-nowrap transition-colors ${
+                            active ? 'bg-line/15 text-fg font-semibold' : 'text-fg-dim hover:text-fg hover:bg-line/10'
+                        }`}
+                        onMouseEnter={() => onPreview(sp)}
+                        onFocus={() => onPreview(sp)}
+                        onClick={() => { onSelect(sp); close(); }}
+                    >
+                        {BLEND_SPACE_LABEL[sp]}
+                    </button>
+                );
+            })}
+            <button
+                type="button"
+                aria-expanded={open}
+                className={`${size} py-0.5 rounded-sm font-semibold whitespace-nowrap transition-colors ${
+                    open ? 'text-fg bg-line/15' : 'text-fg-muted hover:text-fg hover:bg-line/10'
+                }`}
+                onClick={() => (open ? close() : setOpen(true))}
+                title="Blend space"
+            >
+                {BLEND_SPACE_LABEL[value]}
+            </button>
+        </div>
+    );
+};
 
 interface AdvancedGradientEditorProps {
     // Polymorphic input: Can be legacy Array OR new Object
@@ -320,6 +407,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         [knots, colorSpace, blendSpace],
     );
 
+    /** Blend space under the cursor in BlendSpacePicker — preview only, never emitted. */
+    const [hoverBlend, setHoverBlend] = useState<BlendColorSpace | null>(null);
+
     // Preview strip = the EXACT 256-step ramp (LOCKED P0c decision 2), rendered by
     // the engine canonical sampler so it matches the baked texture (no CSS-gradient
     // approximation). colorSpace is the OUTPUT-texture transform, not an authoring
@@ -327,7 +417,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // did), so it stays a faithful colour preview. Memoised so unrelated re-renders
     // (selection / marquee / expand) don't re-sample 256 texels.
     const previewStops = previewConfig?.stops ?? knots;
-    const previewBlend = previewConfig?.blendSpace ?? blendSpace;
+    // Hovering a chip in BlendSpacePicker re-renders THIS strip in that mode. It takes
+    // precedence over the host's previewConfig so the hover always wins visually, and it
+    // never emits — leaving the row restores the committed mode.
+    const previewBlend = hoverBlend ?? previewConfig?.blendSpace ?? blendSpace;
     const previewRamp = useMemo(() => renderStopsToRamp(previewStops, previewBlend), [previewStops, previewBlend]);
     // Strip chrome (the v2 hero, ~1100 px wide): the preview samples the STOPS once per
     // display pixel instead of stretching the 256-texel ramp — a bilinear scale-up softened
@@ -407,13 +500,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         editAction(() => emitChange(knots, nextMode));
     };
 
-    const cycleBlendSpace = () => {
-        // 'hsv-far' is retired (owner, 2026-09-08) — the cycle skips it; a gradient already
-        // saved in it still renders and simply moves on at the next click.
-        const order: BlendColorSpace[] = ['rgb', 'hsv', 'oklab'];
-        const next = order[(order.indexOf(blendSpace) + 1) % order.length];
-        editAction(() => emitChange(knots, undefined, next));
-    };
+    /** Commit a blend space chosen in BlendSpacePicker. Replaced `cycleBlendSpace`
+     *  (owner, 2026-09-10) — see BlendSpacePicker for why cycling had to go. */
+    const selectBlendSpace = useCallback((next: BlendColorSpace) => {
+        if (next === blendSpace) return;
+        editAction(() => emitChange(knotsRef.current, undefined, next));
+    }, [blendSpace, editAction, emitChange]);
 
     const handleColorChange = useCallback((color: string) => {
         if (selectedIds.size > 0) {
@@ -911,14 +1003,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         <span className={`transform transition-transform duration-200 text-base ${isExpanded ? 'rotate-90' : ''}`}>›</span>
                     </div>
 
-                    {/* Blend space indicator */}
-                    <div
-                        className={`text-[8px] font-bold cursor-pointer transition-colors select-none ${blendSpace === 'oklab' ? 'text-fg-faint hover:text-accent-400' : 'text-accent-400 hover:text-accent-300'}`}
-                        onClick={cycleBlendSpace}
-                        title="Click to switch Blend Mode (RGB → HSV → HSV Far → Oklab)"
-                    >
-                        {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
-                    </div>
+                    {/* Blend space — the same picker as the strip row, sized for this
+                        header. Not a cycle: six modes make cycling a guessing game. */}
+                    <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} compact />
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1167,9 +1254,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 const meta = (
                     <div className="flex items-center gap-2 text-[10px] text-fg-dim">
                         <span>blend</span>
-                        <button className="font-bold text-fg-muted hover:text-accent-300" onClick={cycleBlendSpace} title="Blend space (RGB → HSV → HSV Far → Oklab)">
-                            {blendSpace === 'rgb' ? 'RGB' : blendSpace === 'hsv' ? 'HSV' : blendSpace === 'hsv-far' ? 'HSV Far' : 'Oklab'}
-                        </button>
+                        <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} />
                         {/* the output profile is an EXPORT concern in v2 — it lives in the
                             Export window when the host hosts the inspector (C.15, owner) */}
                         {!inspectorHost && (
