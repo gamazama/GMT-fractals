@@ -35,7 +35,7 @@
  * `use`) — Phase B's tab semantics, re-hosted (P3).
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
@@ -75,27 +75,60 @@ interface Props {
   left: number;
 }
 
-export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left }) => (
+export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left }) => {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // The tray's shadow belongs to the WALL, and only to the wall (owner, 2026-09-10).
+  // Everything between the tray's top edge and the wall is chrome the tray is JOINED to,
+  // not ground it hovers above: the hero's bottom lip, the ACTIVE TAB'S TONGUE that
+  // bridges into it (grep data-gx-tab-tongue in WorkingHero), the set rail, the narrowing
+  // bar. A shadow across those reads as the tray floating over its own tab.
+  //
+  // It has to be CLIPPED, not offset. A CSS shadow is a Gaussian: its tail runs past the
+  // blur/2 that an offset can cancel, so the first attempt here — dropping the ambient by
+  // the 8 px it reached above — narrowed the bleed onto the tongue without ending it.
+  //
+  // `clipTop` is the wall's top edge in the tray's own coordinates. It cannot be a
+  // constant: it is the header band's whole height — the rail, the bar, the Filters rows
+  // when they are open, the armed line when a pick is armed — plus the 11 px the tray
+  // tucks up under the card.
+  const [clipTop, setClipTop] = useState(0);
+  useLayoutEffect(() => {
+    if (face === null) return;
+    const el = rootRef.current;
+    // `data-gx-keepselect` is already the shell's marker for "this is the wall".
+    const wall = document.querySelector('[data-gx-keepselect]');
+    if (!el || !wall) return;
+    const measure = () => setClipTop(Math.max(0, wall.getBoundingClientRect().top - el.getBoundingClientRect().top));
+    measure();
+    // The band above the wall grows and shrinks (Filters opening, a pick arming), and the
+    // wall is the flex child that gives up the room, so watching it catches both.
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(wall);
+    return () => ro.disconnect();
+  }, [face]);
+
+  return (
   <div
+    ref={rootRef}
     hidden={face === null}
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
-    // The tray hangs OVER the wall, further off the ground than anything else in the
-    // shell, so it casts the heaviest of the three shadows (owner, 2026-09-10). Two
-    // layers: a dropped key below, and an ambient that wraps the left and right flanks.
-    //
-    // NOTHING may reach above the top edge. That edge is welded to the hero's bottom
-    // (border-t-0) and the ACTIVE TAB'S TONGUE crosses it — the 9 px bridge that makes the
-    // tab and the tray read as one surface (grep data-gx-tab-tongue in WorkingHero). A
-    // shadow there lands straight on the join and breaks it. The ambient was `0 0 28px -6px`
-    // and did exactly that: a blur of 28 reaches blur/2 = 14 past the shadow rect, the -6
-    // spread pulls it back to 8, so it bled 8 px up onto a 9 px tongue. Offsetting it down
-    // by that same 8 puts its top edge flush with the tray's and leaves the flanks
-    // untouched (they still reach 14 - 6 = 8 px out). The key layer starts 24 down and
-    // reaches back only 12, so it never came near.
-    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.65),0_8px_28px_-6px_rgba(0,0,0,0.5)]"
+    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20"
     style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }}
   >
+    {/* The shadow rides its OWN element so the clip cannot touch the tray's content — a
+        face's dropdowns and the inspector's picker overflow the box on purpose. `-inset-px`
+        puts it on the border box, so `clipTop` measured off the root lines up exactly.
+        Two layers, the heaviest in the shell because the tray hangs furthest off the
+        ground: a dropped key below, an ambient wrapping the flanks. The -64s let both run
+        past the sides and the bottom; only the top is cut. */}
+    <div
+      aria-hidden
+      className="pointer-events-none absolute -inset-px rounded-b-[20px] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.65),0_0_28px_-6px_rgba(0,0,0,0.5)]"
+      style={{ clipPath: `inset(${clipTop}px -64px -64px -64px)` }}
+    />
     {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
         wiring; the studio keeps the default */}
     <InputSkinProvider skin="soft">
@@ -107,7 +140,8 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     {/* the inspector host lives whatever the face — the editor portals into it */}
     <div ref={inspectorHostRef} hidden={face !== 'inspector'} className="px-4 py-3" />
   </div>
-);
+  );
+};
 
 const MIX_CHANNELS: { param: 'mixL' | 'mixC' | 'mixH'; label: string }[] = [
   { param: 'mixL', label: 'Lightness' },
