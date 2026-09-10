@@ -33,6 +33,10 @@
  * Sources are still `workingStore` inputs: the shell maps the Mix face to `build` and the
  * Image face to `extract` (opening one enters the source live, closing it commits with
  * `use`) — Phase B's tab semantics, re-hosted (P3).
+ *
+ * The shadow rule this file obeys — a surface casts onto ground it floats over, never
+ * onto chrome it is joined to, and a clip is the only guarantee:
+ * @see docs/adr/0114-the-unified-shell-visual-language.md
  */
 
 import React, { useMemo, useState, useEffect } from 'react';

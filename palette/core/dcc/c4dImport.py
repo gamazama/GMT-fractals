@@ -7,16 +7,18 @@ import c4d
 # ---------------------------------------------------------------- payload ---
 # Everything above the line is written by Gradient Explorer.
 # >>> PAYLOAD — Gradient Explorer rewrites this block on export >>>
-GRADIENT = {
-    "name": "Sunset Drift",
-    "color_space": "srgb",          # "srgb" (web hex) | "linear" | "raw"
-    "stops": [
-        {"pos": 0.00, "color": "#0d0426", "alpha": 1.0},
-        {"pos": 0.35, "color": "#cc1a4d", "alpha": 1.0, "bias": 0.35, "interp": "linearknot"},
-        {"pos": 0.70, "color": "#fa9e19", "alpha": 1.0},
-        {"pos": 1.00, "color": "#fff2d9", "alpha": 0.0},
-    ],
-}
+GRADIENTS = [                       # one entry, or a whole set in one file
+    {
+        "name": "Sunset Drift",
+        "color_space": "srgb",      # "srgb" (web hex) | "linear" | "raw"
+        "stops": [
+            {"pos": 0.00, "color": "#0d0426", "alpha": 1.0},
+            {"pos": 0.35, "color": "#cc1a4d", "alpha": 1.0, "bias": 0.35, "interp": "linearknot"},
+            {"pos": 0.70, "color": "#fa9e19", "alpha": 1.0},
+            {"pos": 1.00, "color": "#fff2d9", "alpha": 0.0},
+        ],
+    },
+]
 # <<< PAYLOAD <<<
 
 TARGET = "auto"        # "auto" | "standard" | "redshift" | "both"
@@ -174,19 +176,32 @@ def redshift_available():
     return bool(c4d.plugins.FindPlugin(1036219, c4d.PLUGINTYPE_ANY))
 
 
+def notify(lines):
+    """Say so on screen. The Script Manager's console is not necessarily open, and a script
+    that finishes in silence looks like a script that did nothing."""
+    for line in lines:
+        print(line)
+    try:
+        c4d.gui.MessageDialog(chr(10).join(lines))
+    except Exception as exc:
+        print("Gradient Explorer: could not show the dialog (%s)" % exc)
+
+
 def main():
-    made = []
     target = TARGET
     if target == "auto":
         target = "redshift" if redshift_available() else "standard"
-    if target in ("standard", "both"):
-        made.append(make_standard_material(GRADIENT, doc))
-    if target in ("redshift", "both") and redshift_available():
-        made.append(make_redshift_material(GRADIENT, doc))
+    made = []
+    for spec in GRADIENTS:
+        if target in ("standard", "both"):
+            made.append(make_standard_material(spec, doc))
+        if target in ("redshift", "both") and redshift_available():
+            made.append(make_redshift_material(spec, doc))
     c4d.EventAdd()
-    print("Imported '%s' (%d stops) -> %s" %
-          (GRADIENT.get("name", "Gradient"), len(GRADIENT["stops"]),
-           ", ".join(m.GetName() for m in made)))
+    notify(["Gradient Explorer: imported %d gradient%s as %d material%s."
+            % (len(GRADIENTS), "" if len(GRADIENTS) == 1 else "s",
+               len(made), "" if len(made) == 1 else "s")]
+           + ["  " + m.GetName() for m in made])
 
 
 if __name__ == "__main__":

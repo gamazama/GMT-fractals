@@ -81,34 +81,35 @@ const withPayload = (template: string, payload: string): string => {
   return template.slice(0, a) + payload.trimEnd() + '\n' + template.slice(b + END.length + 1);
 };
 
-const stopLines = (ramp: RGB[], idx: number[], interp: string) =>
-  idx
-    .map((i) => `        {"pos": ${(i / 255).toFixed(4)}, "color": "${hex(ramp[i])}"${interp}},`)
-    .join('\n');
+/** One gradient's dict, indented to sit inside the GRADIENTS list. */
+const entry = (ramp: RGB[], name: string, idx: number[], extra: string, interp: string) =>
+  `    {
+        "name": ${pyStr(name)},
+        "color_space": "srgb",${extra}
+        "stops": [
+${idx.map((i) => `            {"pos": ${(i / 255).toFixed(4)}, "color": "${hex(ramp[i])}"${interp}},`).join('\n')}
+        ],
+    },`;
 
-/** Cinema 4D: per-knot interpolation, so each stop carries its own `linearknot`. */
-export const buildC4dScript = (ramp: RGB[], name: string, idx: number[]): string =>
-  withPayload(
-    c4dTemplate,
-    `GRADIENT = {
-    "name": ${pyStr(name)},
-    "color_space": "srgb",
-    "stops": [
-${stopLines(ramp, idx, ', "interp": "linearknot"')}
-    ],
-}`,
-  );
+/** The payload both scripts read: always a LIST, so one gradient and a whole set are the
+ *  same shape and `main()` has one path to walk. */
+const payload = (entries: string[]) => `GRADIENTS = [\n${entries.join('\n')}\n]`;
 
-/** Blender: interpolation is ramp-wide, so it is stated once and the stops stay bare. */
-export const buildBlenderScript = (ramp: RGB[], name: string, idx: number[]): string =>
+/** What `build`/`collection` are handed: a named ramp and the stops chosen for it. */
+export interface DccItem {
+  name: string;
+  ramp: RGB[];
+  idx: number[];
+}
+
+/** Cinema 4D: interpolation is per knot, so each stop carries its own `linearknot`. */
+export const buildC4dScript = (items: DccItem[]): string =>
+  withPayload(c4dTemplate, payload(items.map((it) => entry(it.ramp, it.name, it.idx, '', ', "interp": "linearknot"'))));
+
+/** Blender: interpolation is ramp-wide, so it is stated once per gradient and the stops
+ *  stay bare. */
+export const buildBlenderScript = (items: DccItem[]): string =>
   withPayload(
     blenderTemplate,
-    `GRADIENT = {
-    "name": ${pyStr(name)},
-    "color_space": "srgb",
-    "interpolation": "LINEAR",
-    "stops": [
-${stopLines(ramp, idx, '')}
-    ],
-}`,
+    payload(items.map((it) => entry(it.ramp, it.name, it.idx, '\n        "interpolation": "LINEAR",', ''))),
   );

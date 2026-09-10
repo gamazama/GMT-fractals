@@ -17,7 +17,7 @@
 
 import type { RGB } from './oklab';
 import { buildIdmlSwatchLibrary } from './indesignIdml';
-import { buildC4dScript, buildBlenderScript, DCC_MAX_STOPS } from './dccExport';
+import { buildC4dScript, buildBlenderScript, DCC_MAX_STOPS, type DccItem } from './dccExport';
 
 export interface ExportFormatDef {
   key: string;
@@ -125,6 +125,13 @@ export const reduceStopIndices = (ramp: RGB[], max: number): number[] => {
 };
 
 const grdStops = (ramp: RGB[], budget?: number): number[] => reduceStopIndices(ramp, budget ?? GRD_MAX);
+
+/** One gradient ready for a DCC script: the ramp, its name, and the stops chosen for it. */
+const dccItem = (ramp: RGB[], name: string, budget?: number): DccItem => ({
+  name,
+  ramp,
+  idx: reduceStopIndices(ramp, budget ?? DCC_MAX_STOPS),
+});
 
 /** Number of colour stops the .grd writer will emit for this ramp. */
 export const grdStopCount = (ramp: RGB[], budget?: number): number => grdStops(ramp, budget).length;
@@ -736,17 +743,22 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
   // ramp through the host's own API. Distinct `ext`s because they would otherwise both
   // land on disk as `<name>.py`. See dccExport.ts for why the stops are resampled and why
   // every one of them says linear.
+  // A SET is one script, not a zip of scripts (owner, 2026-09-10). The payload is a list
+  // either way and the script walks it, so importing forty gradients is one file, opened
+  // once — which is the whole reason to run a script rather than click through an importer.
   {
     key: 'c4d',
     label: 'Cinema 4D script (.py)',
     ext: 'c4d.py',
-    build: (r, stem, budget) => buildC4dScript(r, stem || 'Gradient', reduceStopIndices(r, budget ?? DCC_MAX_STOPS)),
+    build: (r, stem, budget) => buildC4dScript([dccItem(r, stem || 'Gradient', budget)]),
+    collection: (items, budget) => buildC4dScript(items.map((it) => dccItem(it.ramp, it.name, budget))),
   },
   {
     key: 'blender',
     label: 'Blender script (.py)',
     ext: 'blender.py',
-    build: (r, stem, budget) => buildBlenderScript(r, stem || 'Gradient', reduceStopIndices(r, budget ?? DCC_MAX_STOPS)),
+    build: (r, stem, budget) => buildBlenderScript([dccItem(r, stem || 'Gradient', budget)]),
+    collection: (items, budget) => buildBlenderScript(items.map((it) => dccItem(it.ramp, it.name, budget))),
   },
   {
     key: 'ai',

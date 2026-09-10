@@ -88,7 +88,7 @@ for (const f of ['c4dImport.py', 'blenderImport.py']) {
   const src = readFileSync(new URL(`../palette/core/dcc/${f}`, import.meta.url), 'utf8');
   if (!src.includes('# >>> PAYLOAD')) fails.push(`[2] ${f}: opening payload marker is gone — withPayload would throw`);
   if (!src.includes('# <<< PAYLOAD <<<')) fails.push(`[2] ${f}: closing payload marker is gone — withPayload would throw`);
-  if (!/GRADIENT\s*=\s*\{/.test(src)) fails.push(`[2] ${f}: no GRADIENT dict to replace`);
+  if (!/GRADIENTS\s*=\s*\[/.test(src)) fails.push(`[2] ${f}: no GRADIENTS list to replace`);
 }
 
 if (fails.length) {

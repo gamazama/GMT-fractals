@@ -21,6 +21,10 @@
  * a glyph whose parts share the box needs air or it fills in at 16 px — the gear's teeth
  * fuse into a disc and the two dashed outlines clog into solid ones. Checked by rasterising
  * at 16 px and magnifying, not by eye at 64. Same hierarchy the picker's sheet carries.
+ *
+ * The one-weight rule, the density exception and "rasterise at 16 px to judge a glyph"
+ * are the shell's visual language, recorded with the reasoning that produced them:
+ * @see docs/adr/0114-the-unified-shell-visual-language.md
  */
 
 import React from 'react';

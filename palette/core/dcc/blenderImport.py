@@ -6,17 +6,19 @@ import bpy
 
 # ---------------------------------------------------------------- payload ---
 # >>> PAYLOAD — Gradient Explorer rewrites this block on export >>>
-GRADIENT = {
-    "name": "Sunset Drift",
-    "color_space": "srgb",          # "srgb" (web hex) | "linear"
-    "interpolation": "EASE",        # EASE | CARDINAL | LINEAR | B_SPLINE | CONSTANT
-    "stops": [                      # 2..32 stops -- Blender's hard ceiling is 32
-        {"pos": 0.00, "color": "#0d0426", "alpha": 1.0},
-        {"pos": 0.35, "color": "#cc1a4d", "alpha": 1.0},
-        {"pos": 0.70, "color": "#fa9e19", "alpha": 1.0},
-        {"pos": 1.00, "color": "#fff2d9", "alpha": 0.0},
-    ],
-}
+GRADIENTS = [                       # one entry, or a whole set in one file
+    {
+        "name": "Sunset Drift",
+        "color_space": "srgb",      # "srgb" (web hex) | "linear"
+        "interpolation": "EASE",    # EASE | CARDINAL | LINEAR | B_SPLINE | CONSTANT
+        "stops": [                  # 2..32 stops -- Blender's hard ceiling is 32
+            {"pos": 0.00, "color": "#0d0426", "alpha": 1.0},
+            {"pos": 0.35, "color": "#cc1a4d", "alpha": 1.0},
+            {"pos": 0.70, "color": "#fa9e19", "alpha": 1.0},
+            {"pos": 1.00, "color": "#fff2d9", "alpha": 0.0},
+        ],
+    },
+]
 # <<< PAYLOAD <<<
 
 TARGET = "material"      # "material" (new material w/ ramp -> Base Color)
@@ -113,10 +115,32 @@ def make_node_group(spec):
     return group
 
 
+def notify(title, lines):
+    """Say so on screen. A script that prints into a console nobody has open has told
+    nobody anything -- so this pops the info menu as well, and falls back to the print
+    when there is no window manager to pop it (background, restricted context)."""
+    for line in lines:
+        print(line)
+    if bpy.app.background:
+        return
+    try:
+        def draw(self, _context):
+            for line in lines:
+                self.layout.label(text=line)
+        bpy.context.window_manager.popup_menu(draw, title=title, icon="COLOR")
+    except Exception as exc:
+        print("Gradient Explorer: could not pop the notice (%s)" % exc)
+
+
 def main():
-    made = make_node_group(GRADIENT) if TARGET == "node_group" else make_material(GRADIENT)
-    print("Imported '%s' (%d stops) -> %s"
-          % (GRADIENT.get("name", "Gradient"), len(GRADIENT["stops"]), made.name))
+    kind = "node group" if TARGET == "node_group" else "material"
+    made = []
+    for spec in GRADIENTS:
+        made.append(make_node_group(spec) if TARGET == "node_group" else make_material(spec))
+    notify("Gradient Explorer",
+           ["Imported %d gradient%s as %s%s:" % (len(made), "" if len(made) == 1 else "s",
+                                                 kind, "" if len(made) == 1 else "s")]
+           + ["  %s (%d stops)" % (m.name, len(s["stops"])) for m, s in zip(made, GRADIENTS)])
     return made
 
 
