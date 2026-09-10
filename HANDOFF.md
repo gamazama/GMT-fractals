@@ -18,6 +18,32 @@
 
 **Stale wording cleaned up:** several 2026-09-08 entries below are tagged "`ge-v2`, uncommitted". They were committed the same day and are now on `main`; read the tag as "uncommitted at the time of writing".
 
+**📋 2026-09-10 (session 4, third pass) — export SETTINGS, and the stop budget stops being
+a private constant.** The owner's walk of the finished window asked which formats have a real
+option behind them. Four groups; he took two.
+
+- **The stop budget**, merged into the profile category and renamed **Settings**. Six formats
+  flatten a 256-step ramp because their own format says so — `.ai` `.idml` `.ase` `.grd` at
+  40, `.svg` at 32, `.ugr` at 64 — and every budget was a constant nobody could see.
+  `STOP_BUDGETS` + `stopBudgetOf(key, override)` now, blank meaning each format's own, and it
+  reaches the BYTES: threaded through `build`, `collection`, the collection zip and both
+  Adobe writers.
+- **The PNG strip's size** is two number fields where "(1024 × 64)" used to sit in the label.
+- Skipped by the owner: the CSS angle and the Tailwind/tokens/CSS-vars identifier. Not
+  offered: formats whose count the format itself fixes.
+- Plus: **the rail's export icon lights like a lit chip**, **the accordion remembers across
+  sessions**, and the carve-tools contradiction resolved in favour of the render.
+
+**The budget closed a standing `@assumption`.** `collectionQualityWarnings` only ever covered
+`.ai`/`.idml`/`.ase`, because the one measurement available ran at 40 and `.ugr` reduces at
+64 — so `.ugr` lost detail silently. Every reducing format is measured at its own budget now.
+Guard: `test:palette-exportsubjects` [8], falsified three ways, including `.ai` ignoring the
+budget it is handed — caught by comparing an 8-stop file's SIZE against a 64-stop one rather
+than by counting, because a count can be right while the file is not.
+
+**Answered:** user gradients do NOT load into `All` — it is the catalogue and nothing else,
+which is why the rail's export icon disables there.
+
 **📋 2026-09-09 (session 4, second pass) — the export window stops being a catalogue, and
 two more export surfaces retire.** The owner's words: "users will find the export overwhelming
 with the long list of options". Measured: twenty formats across four always-open sections plus

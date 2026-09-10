@@ -162,7 +162,7 @@ async function main() {
     const all: string[] = [];
     const seen = new Map<string, string>(); // format key -> the section that showed it
     for (const title of first!.sections) {
-      if (title === 'Output profile') continue;
+      if (title === 'Settings') continue;
       // A header TOGGLES, so clicking the one that is already open would close it. Open it
       // only when it is shut.
       const before = await readWindow();

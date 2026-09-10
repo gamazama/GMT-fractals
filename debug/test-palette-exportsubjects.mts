@@ -25,6 +25,10 @@
  *       quietly exporting a ramp into a file the user asked colours from, and .ase carries
  *       the same lossy notice .ai does (they reduce at the same budget)
  *
+ *   [8] the stop budget: per-format defaults, a nonsense override falling back, the
+ *       reduction actually MOVING in the bytes a writer produces, and the lossy warning
+ *       moving with it (including .ugr, which reduced at 64 and warned about nothing)
+ *
  * Run: `npm run test:palette-exportsubjects` (also a link of `test:palette`).
  *
  * ── FALSIFIED 2026-09-09 ─────────────────────────────────────────────────
@@ -55,10 +59,15 @@ import {
   getExportFormat,
   buildAse,
   buildAseGroups,
+  stopBudgetOf,
+  grdStopCount,
+  aiStopCount,
+  buildAiSwatchLibrary,
   type ExportFormatDef,
 } from '../palette/core/exportFormats';
 import { buildSwatchZip, buildSwatchCollectionFile, collectionQualityWarnings, type NamedSwatches } from '../palette/core/favientsExport';
 import type { RGB } from '../palette/core/oklab';
+import { renderStopsToRamp } from '../palette/core/gmtGradient';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -96,6 +105,9 @@ const NOISY_STOPS = Array.from({ length: 60 }, (_, i) => ({
   color: i % 2 ? '#ffffff' : '#000000',
   interpolation: 'linear',
 }));
+
+/** The same swings as a 256-step ramp — what a writer is actually handed. */
+const NOISY_RAMP: RGB[] = renderStopsToRamp(NOISY_STOPS as never, 'rgb', 'srgb');
 
 // ── [1] every format still builds from a ramp ────────────────────────────
 section('[1] every registry format still builds from a 256-step ramp');
@@ -324,5 +336,33 @@ ok(collectionQualityWarnings(fussy, 'ase').length === collectionQualityWarnings(
 ok(collectionQualityWarnings(fussy, 'ase').length > 0, 'a ramp that .ai calls lossy is exported silently as .ase');
 ok(collectionQualityWarnings(fussy, 'css').length === 0, 'a format that does not reduce should not warn');
 
-console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry');
+// ── [8] THE STOP BUDGET (owner, 2026-09-10; the export window's Settings category) ──────
+// Every reducing format used to decide its budget privately. `stopBudgetOf` is the table
+// and the override, and the point of an override is that the FILES CHANGE — a budget that
+// only moved a number in the UI would be a lie this has to catch.
+ok(stopBudgetOf('ugr') === 64 && stopBudgetOf('ai') === 40 && stopBudgetOf('svg') === 32,
+  'the per-format defaults are not what the writers used before the override existed');
+ok(stopBudgetOf('map') === null && stopBudgetOf('pdn') === null,
+  'a format that does not reduce must report no budget, or it would be offered a meaningless setting');
+ok(stopBudgetOf('ai', 12) === 12, 'the override is not honoured');
+ok(stopBudgetOf('ai', 0) === 40 && stopBudgetOf('ai', 1) === 40,
+  'a nonsense override (0, 1) must fall back to the format default rather than write a one-stop file');
+// The reduction must MOVE, counted through the writers rather than the reducer, so this
+// covers the whole thread from the setting to the bytes.
+ok(grdStopCount(NOISY_RAMP) > grdStopCount(NOISY_RAMP, 8),
+  'a tighter budget did not reduce the .grd stop count — the override is not reaching the writer');
+ok(aiStopCount(NOISY_RAMP, 8) <= 8, '.ai wrote more stops than the budget allowed');
+ok(buildAiSwatchLibrary([{ name: 'W', ramp: NOISY_RAMP }], 64).length >
+   buildAiSwatchLibrary([{ name: 'W', ramp: NOISY_RAMP }], 8).length,
+  'a 64-stop .ai is not larger than an 8-stop one — the budget is not reaching the file');
+// And the WARNING moves with it: the whole reason the budget is exposed is that 40 was not
+// always right, so a generous budget must stop warning, and .ugr must start.
+ok(collectionQualityWarnings(fussy, 'ai', undefined, 200).length === 0,
+  'a budget wide enough to keep the detail still reports the gradient as lossy');
+ok(collectionQualityWarnings(fussy, 'ugr').length > 0,
+  '.ugr reduces at 64 and lost detail but reported nothing — this is the assumption the budget closed');
+ok(collectionQualityWarnings(fussy, 'map', undefined, 8).length === 0,
+  'a format that does not reduce warned because an override was passed to it');
+
+console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry, one stop budget');
 process.exit(failures ? 1 : 0);

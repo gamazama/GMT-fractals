@@ -12,7 +12,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Favient } from '../store/favientsStore';
 import { renderStopsToRamp } from './gmtGradient';
-import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA } from './exportFormats';
+import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA, stopBudgetOf } from './exportFormats';
 import { layoutPositions, swatchesAt, clampCount, type PaletteRule } from './paletteSample';
 import { canvasToPngBlob } from '../../utils/SceneFormat';
 import type { RGB } from './oklab';
@@ -28,11 +28,11 @@ const sanitize = (name: string): string =>
  * prefixed with a zero-padded index so collection order is preserved and same-named
  * gradients don't clobber each other.
  */
-export const buildCollectionZip = (favients: Favient[], fmtKey: string): Uint8Array => {
+export const buildCollectionZip = (favients: Favient[], fmtKey: string, budget?: number): Uint8Array => {
   const fmt = getExportFormat(fmtKey) ?? EXPORT_FORMATS[0];
   const files: Record<string, Uint8Array> = {};
   favients.forEach((f, i) => {
-    const out = fmt.build(rampOf(f)); // string | Uint8Array (binary formats)
+    const out = fmt.build(rampOf(f), f.name, budget); // string | Uint8Array (binary formats)
     const fname = `${String(i + 1).padStart(3, '0')}_${sanitize(f.name)}.${fmt.ext}`;
     files[fname] = typeof out === 'string' ? strToU8(out) : out;
   });
@@ -47,34 +47,34 @@ export const buildCollectionZip = (favients: Favient[], fmtKey: string): Uint8Ar
 export const buildCollectionFile = (
   favients: Favient[],
   fmtKey: string,
+  budget?: number,
 ): { data: string | Uint8Array; ext: string } | null => {
   const fmt = getExportFormat(fmtKey);
   if (!fmt?.collection) return null;
   const items = favients.map((f) => ({ name: f.name, ramp: rampOf(f) }));
-  return { data: fmt.collection(items), ext: fmt.ext };
+  return { data: fmt.collection(items, budget), ext: fmt.ext };
 };
 
 /**
- * Quality warnings for a collection export: favourites that lose visible detail
- * under the format's stop limit. Empty for lossless / non-collection formats.
+ * Quality warnings for a collection export: favourites that lose visible detail under the
+ * format's stop budget. Empty for formats that do not reduce at all.
  *
- * Covers `.ai`, `.idml` and `.ase` — all three reduce at the SAME budget (`ASE_MAX` is
- * defined as `AI_MAX` for exactly this reason), so one `aiLossyGradients` measurement is
- * valid for all of them. `.ugr` is the fourth collection format (added later) and is
- * also lossy — `exportFormats.ts` reduces it at `UGR_MAX_STOPS` (64) through the same
- * `reduceStopIndices` — but it returns no warnings here, because `aiLossyGradients` measures
- * error at the 40-stop budget and would over-report at 64. Warning on `.ugr` needs a
- * per-format budget threaded through, which is a product call, not a rename.
- * @assumption a silent `.ugr` collection export is acceptable because 64 RDP nodes are
- *   near-lossless for the smooth ramps fractal palettes usually are. Nothing measures this.
+ * Every REDUCING format is covered as of 2026-09-10 — `.ai`, `.idml`, `.ase`, `.grd`, `.svg`
+ * and `.ugr` — each measured at ITS OWN budget through `stopBudgetOf`, and at the user's
+ * override when the export window's Settings category carries one. That closes the standing
+ * assumption this block used to carry (it was an @-marker until today): `.ugr` reduced at 64
+ * and warned about nothing, because the only measurement available ran at 40 and would have
+ * over-reported. A per-format budget was exactly what was missing.
  */
 export const collectionQualityWarnings = (
   favients: Favient[],
   fmtKey: string,
   threshold = AI_LOSSY_DELTA,
+  budget?: number,
 ): { name: string; delta: number }[] => {
-  if (fmtKey !== 'ai' && fmtKey !== 'idml' && fmtKey !== 'ase') return []; // all three reduce to the same stop budget
-  return aiLossyGradients(favients.map((f) => ({ name: f.name, ramp: rampOf(f) })), threshold);
+  const cap = stopBudgetOf(fmtKey, budget);
+  if (cap === null) return []; // this format does not reduce; there is nothing to lose
+  return aiLossyGradients(favients.map((f) => ({ name: f.name, ramp: rampOf(f) })), threshold, cap);
 };
 
 // ---- the SWATCHES subject over a whole set (§8b item 5, 2026-09-09) ----

@@ -62,7 +62,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
 import { runExport, runSetExport, runSetImage, setLossyCount, useRecentExports, exportActionLabel } from './exportActions';
-import { AI_STOP_LIMIT } from '../../palette/core/exportFormats';
+import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
 import type { RGB } from '../../palette/core/oklab';
@@ -92,7 +92,60 @@ const PROFILES: { id: 'srgb' | 'linear' | 'aces_inverse'; label: string; title: 
 
 /** The section the output profile occupies in the accordion — not a format group, but the
  *  same affordance, so it stops competing with the formats for attention. */
-const PROFILE_SECTION = 'Output profile';
+const SETTINGS_SECTION = 'Settings';
+
+/** The Settings category's values, remembered like the open category is. Stops is the
+ *  override for every format that reduces (empty = each format's own budget); the two PNG
+ *  numbers size the strip. */
+const SETTINGS_KEY = 'gx.v2.exportSettings';
+interface ExportSettings { budget: number | null; pngW: number; pngH: number }
+const DEFAULT_SETTINGS: ExportSettings = { budget: null, pngW: 1024, pngH: 64 };
+const readSettings = (): ExportSettings => {
+  try {
+    const v = JSON.parse(safeLocalGet(SETTINGS_KEY) ?? 'null') as Partial<ExportSettings> | null;
+    if (!v || typeof v !== 'object') return DEFAULT_SETTINGS;
+    const num = (x: unknown, min: number, max: number, fallback: number) =>
+      typeof x === 'number' && Number.isFinite(x) ? Math.max(min, Math.min(max, Math.round(x))) : fallback;
+    return {
+      budget: typeof v.budget === 'number' && Number.isFinite(v.budget) ? Math.max(2, Math.min(256, Math.round(v.budget))) : null,
+      pngW: num(v.pngW, 1, 8192, DEFAULT_SETTINGS.pngW),
+      pngH: num(v.pngH, 1, 8192, DEFAULT_SETTINGS.pngH),
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+};
+
+/** A small number field. Blank is allowed and MEANS something on the stop budget (each
+ *  format's own), so the empty string is a state this holds rather than coerces to zero. */
+const NumField: React.FC<{
+  value: number | null;
+  onChange: (n: number | null) => void;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  title?: string;
+  ariaLabel: string;
+  width?: string;
+}> = ({ value, onChange, placeholder, min = 1, max = 8192, title, ariaLabel, width = 'w-16' }) => (
+  <input
+    type="number"
+    inputMode="numeric"
+    min={min}
+    max={max}
+    value={value === null ? '' : value}
+    placeholder={placeholder}
+    title={title}
+    aria-label={ariaLabel}
+    onChange={(e) => {
+      const raw = e.target.value.trim();
+      if (raw === '') return onChange(null);
+      const n = Number(raw);
+      onChange(Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : null);
+    }}
+    className={`${width} h-7 px-1.5 rounded-lg border border-line/20 bg-transparent text-[13px] font-mono text-fg text-right outline-none focus:border-accent-400`}
+  />
+);
 
 /** WHICH CATEGORY IS OPEN, remembered across sessions (owner, 2026-09-10: "the accordion
  *  should remember, this is one area where a user is likely to only require a few paths").
@@ -155,7 +208,7 @@ const NOTE_STRIP = 'h-4 px-1 text-[11px] leading-4 text-fg-muted truncate';
 /** What a lossy bundle costs, in as few words as it takes (owner, 2026-09-10 — the line
  *  used to read "2 of 12 use more than 40 colour stops, so they export simplified. Most apps
  *  cap stops similarly"). The count is what you need; the lecture is not. */
-const lossyNote = (n: number): string => `${n} gradient${n === 1 ? '' : 's'} reduced to ${AI_STOP_LIMIT} colour stops`;
+const lossyNote = (n: number, stops: number): string => `${n} gradient${n === 1 ? '' : 's'} reduced to ${stops} colour stops`;
 
 /** The label with its extension REMOVED, because the column carries it now: the registry
  *  writes "Adobe swatches .ase" and "Fractint .map" for hosts that show a bare list (the old
@@ -265,7 +318,7 @@ export const ExportMenu: React.FC<{
   const [open, setOpen] = useState<string | null>(() => {
     const stored = safeLocalGet(SECTION_KEY);
     if (stored === '') return null; // a remembered close
-    if (stored && (stored === PROFILE_SECTION || GROUPS.some((g) => g.title === stored))) return stored;
+    if (stored && (stored === SETTINGS_SECTION || GROUPS.some((g) => g.title === stored))) return stored;
     const last = recents.find((a) => a.kind !== 'png') as { key: string } | undefined;
     return (last && groupOf(last.key)) || GROUPS[0].title;
   });
@@ -278,15 +331,23 @@ export const ExportMenu: React.FC<{
   /** What the open category's note strip is showing, or null. One at a time, because one
    *  category is open at a time and one row is hovered at a time. */
   const [notice, setNotice] = useState<string | null>(null);
+  const [settings, setSettings] = useState<ExportSettings>(readSettings);
+  const saveSettings = (next: ExportSettings) => {
+    setSettings(next);
+    safeLocalSet(SETTINGS_KEY, JSON.stringify(next));
+  };
 
   const swatches = subject === 'swatches';
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
   const n = isSet ? count : palette.length;
 
-  const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key, subject }, ramp, name, palette);
+  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH };
+  const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key, subject }, ramp, name, palette, runOpts);
   const download = (f: ExportFormatDef) =>
-    set ? runSetExport(f.key, set, name, subject, count) : runExport({ kind: 'download', key: f.key, subject }, ramp, name, palette);
-  const image = () => (set ? void runSetImage(set, name, subject, count) : runExport({ kind: 'png', subject }, ramp, name, palette));
+    set
+      ? runSetExport(f.key, set, name, subject, count, settings.budget ?? undefined)
+      : runExport({ kind: 'download', key: f.key, subject }, ramp, name, palette, runOpts);
+  const image = () => (set ? void runSetImage(set, name, subject, count) : runExport({ kind: 'png', subject }, ramp, name, palette, runOpts));
 
   const formats = formatsFor(subject);
   // The sections that have anything in them under THIS subject. Switching to Swatches
@@ -312,7 +373,7 @@ export const ExportMenu: React.FC<{
     setNotice(null);
   }, [open, subject]);
   useEffect(() => {
-    if (open === null || open === PROFILE_SECTION) return;
+    if (open === null || open === SETTINGS_SECTION) return;
     if (!sections.some((x) => x.title === open)) setOpen(sections[0]?.title ?? null);
   }, [sections, open]);
 
@@ -322,13 +383,13 @@ export const ExportMenu: React.FC<{
     // group gradients, .ase groups swatch lists. Say which on the button, so the download
     // is not a surprise.
     const bundles = isSet && !!(swatches ? f.collectionSwatches : f.collection);
-    const lossy = isSet && bundles ? setLossyCount(set!, f.key, subject) : 0;
+    const lossy = isSet && bundles ? setLossyCount(set!, f.key, subject, settings.budget ?? undefined) : 0;
     return (
       <div
         key={f.key}
         data-gx-format={f.key}
         data-gx-lossy={lossy > 0 ? lossy : undefined}
-        onPointerEnter={() => setNotice(lossy > 0 ? lossyNote(lossy) : null)}
+        onPointerEnter={() => setNotice(lossy > 0 ? lossyNote(lossy, stopBudgetOf(f.key, settings.budget ?? undefined) ?? AI_STOP_LIMIT) : null)}
         onPointerLeave={() => setNotice(null)}
       >
         <div className="flex items-center gap-1">
@@ -463,7 +524,7 @@ export const ExportMenu: React.FC<{
             <div key={exportActionLabel(a)} className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => runExport(a, ramp, name, palette)}
+                onClick={() => runExport(a, ramp, name, palette, runOpts)}
                 className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
               >
                 <span className="flex-1 min-w-0 truncate">{exportActionLabel(a)}</span>
@@ -495,25 +556,52 @@ export const ExportMenu: React.FC<{
         </div>
       ))}
 
-      {!isSet && colorSpace && onColorSpace && (
-        <div>
-          <SectionHead
-            title={PROFILE_SECTION}
-            note={PROFILES.find((p) => p.id === colorSpace)?.label}
-            open={open === PROFILE_SECTION}
-            onClick={() => toggle(PROFILE_SECTION)}
-          />
-          {open === PROFILE_SECTION && (
-            <div className="pt-1 inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
-              {PROFILES.map((p) => (
-                <Segment key={p.id} on={colorSpace === p.id} title={p.title} onClick={() => onColorSpace(p.id)}>
-                  {p.label}
-                </Segment>
-              ))}
+      {/* SETTINGS (owner, 2026-09-10: "we can merge the stop budget into output profile and
+          name it 'settings'"). What the profile category was, plus the number every reducing
+          format used to decide privately. The profile belongs to the working DOCUMENT, so it
+          is gradient-only; the stop budget matters more on a SET, which is where the lossy
+          note lives — so the category itself shows for both and its contents do not. */}
+      <div>
+        <SectionHead
+          title={SETTINGS_SECTION}
+          note={settings.budget ? `${settings.budget} stops` : PROFILES.find((p) => p.id === colorSpace)?.label}
+          open={open === SETTINGS_SECTION}
+          onClick={() => toggle(SETTINGS_SECTION)}
+        />
+        {open === SETTINGS_SECTION && (
+          <div className="pt-1 px-1 flex flex-col gap-2" data-gx-settings>
+            {!isSet && colorSpace && onColorSpace && (
+              <div className="flex items-center gap-2">
+                <ZoneLabel className="flex-1">Output profile</ZoneLabel>
+                <div className="inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
+                  {PROFILES.map((p) => (
+                    <Segment key={p.id} on={colorSpace === p.id} title={p.title} onClick={() => onColorSpace(p.id)}>
+                      {p.label}
+                    </Segment>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <ZoneLabel className="flex-1">Colour stops</ZoneLabel>
+              <NumField
+                value={settings.budget}
+                onChange={(budget) => saveSettings({ ...settings, budget })}
+                placeholder="Auto"
+                min={2}
+                max={256}
+                ariaLabel="Colour stops"
+                title="How many stops the formats that reduce may write. Blank leaves each format its own."
+              />
             </div>
-          )}
-        </div>
-      )}
+            <div className="text-[11px] leading-snug text-fg-muted" data-gx-budget-note>
+              {settings.budget
+                ? `.ai .idml .ase .grd .svg .ugr write up to ${settings.budget} stops.`
+                : `Blank = each format’s own: 40 for .ai, .idml, .ase and .grd, 32 for .svg, 64 for .ugr.`}
+            </div>
+          </div>
+        )}
+      </div>
       {/* The image stays OPEN: one row, and the thing most people came for. */}
       <div>
         <div className={BAND}>
@@ -538,15 +626,36 @@ export const ExportMenu: React.FC<{
           </button>
           <span className={COPY_SLOT} />
           </div>
-          <div className="text-[11px] leading-snug text-fg-muted px-1 pt-1">
-          {swatches
-            ? isSet
-              ? 'Every palette as labelled chips, one row per gradient.'
-              : 'The palette as labelled chips, hex included.'
-            : isSet
-              ? 'A grid of the whole set, names included.'
-              : 'For a full-size image use Wallpaper.'}
-          </div>
+          {/* THE STRIP'S SIZE, editable (owner, 2026-09-10: "the 1024 x 64 comment turn into
+              two textfields"). It was a parenthesis in the row's label stating a number
+              nobody could change. Only the strip has one — a contact sheet lays itself out
+              from the set's count, a swatch sheet from the palette's. */}
+          {!swatches && !isSet ? (
+            <div className="flex items-center gap-1.5 px-1 pt-1.5" data-gx-png-size>
+              <NumField
+                value={settings.pngW}
+                onChange={(pngW) => saveSettings({ ...settings, pngW: pngW ?? DEFAULT_SETTINGS.pngW })}
+                ariaLabel="PNG width"
+                title="Width in pixels"
+              />
+              <span className="text-[13px] text-fg-dim">×</span>
+              <NumField
+                value={settings.pngH}
+                onChange={(pngH) => saveSettings({ ...settings, pngH: pngH ?? DEFAULT_SETTINGS.pngH })}
+                ariaLabel="PNG height"
+                title="Height in pixels"
+              />
+              <span className="flex-1 text-[11px] leading-snug text-fg-muted">For a full-size image use Wallpaper.</span>
+            </div>
+          ) : (
+            <div className="text-[11px] leading-snug text-fg-muted px-1 pt-1">
+              {swatches
+                ? isSet
+                  ? 'Every palette as labelled chips, one row per gradient.'
+                  : 'The palette as labelled chips, hex included.'
+                : 'A grid of the whole set, names included.'}
+            </div>
+          )}
         </div>
       </div>
     </Floating>

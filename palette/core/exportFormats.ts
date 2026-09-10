@@ -29,13 +29,15 @@ export interface ExportFormatDef {
   binary?: boolean;
   /** The RAMP subject: the continuous 256-step gradient. `stem` is the gradient's name,
    *  for formats that name what they write; older builders ignore it. */
-  build: (ramp: RGB[], stem?: string) => string | Uint8Array;
+  /** `budget` is the Settings category's stop override (`stopBudgetOf`); formats that do
+   *  not reduce ignore it. */
+  build: (ramp: RGB[], stem?: string, budget?: number) => string | Uint8Array;
   /**
    * Collection formats can bundle MANY named gradients into ONE file (e.g. an
    * Illustrator swatch library). When present, the Favients export emits a single
    * combined file instead of a per-gradient .zip.
    */
-  collection?: (items: { name: string; ramp: RGB[] }[]) => string | Uint8Array;
+  collection?: (items: { name: string; ramp: RGB[] }[], budget?: number) => string | Uint8Array;
   /**
    * The SWATCHES subject: build this format from a LIST OF COLOURS — the palette the
    * user composed on the hero — rather than from the 256-step ramp. Absent means the
@@ -121,14 +123,14 @@ export const reduceStopIndices = (ramp: RGB[], max: number): number[] => {
   return idx;
 };
 
-const grdStops = (ramp: RGB[]): number[] => reduceStopIndices(ramp, GRD_MAX);
+const grdStops = (ramp: RGB[], budget?: number): number[] => reduceStopIndices(ramp, budget ?? GRD_MAX);
 
 /** Number of colour stops the .grd writer will emit for this ramp. */
-export const grdStopCount = (ramp: RGB[]): number => grdStops(ramp).length;
+export const grdStopCount = (ramp: RGB[], budget?: number): number => grdStops(ramp, budget).length;
 
-const buildGRD = (ramp: RGB[]): Uint8Array => {
+const buildGRD = (ramp: RGB[], budget?: number): Uint8Array => {
   const gc = (i: number) => ri(ramp[i]);
-  const idx = grdStops(ramp);
+  const idx = grdStops(ramp, budget);
   const NS = idx.length;
   const size = 8 + 1 + 8 + 2 + NS * 20 + 2 + 2 * 10 + 6;
   const dv = new DataView(new ArrayBuffer(size));
@@ -219,11 +221,11 @@ const aiColorSpec = (c: RGB): string => {
   return `${aiNum(cy)} ${aiNum(m)} ${aiNum(y)} ${aiNum(k)} ${aiNum(r / 255)} ${aiNum(g / 255)} ${aiNum(b / 255)}`;
 };
 
-const aiGradientDef = (name: string, ramp: RGB[]): string => {
+const aiGradientDef = (name: string, ramp: RGB[], budget?: number): string => {
   // Illustrator lists gradient stops in DESCENDING rampPoint order (100 → 0); the
   // reducer returns ascending positions, so reverse before emitting. Getting this
   // wrong reverses + collapses the stops on import.
-  const idx = reduceStopIndices(ramp, AI_MAX).reverse();
+  const idx = reduceStopIndices(ramp, budget ?? AI_MAX).reverse();
   const n = psStr(name);
   const lines: string[] = [`%AI5_BeginGradient: (${n})`, `(${n}) 0 ${idx.length} Bd`, '['];
   for (let i = 0; i < idx.length - 1; i++) lines.push(`${aiColorSpec(ramp[idx[i]])} 4 %_Br`);
@@ -242,15 +244,15 @@ const aiSwatchCell = (name: string): string =>
   `Bb\n2 (${psStr(name)}) 0 0 0 1 1 0 0 1 0 0 1 Bg\n0 BB\n(${psStr(name)})\nPc`;
 
 /** Number of stops the .ai writer keeps for this ramp (after reduction). */
-export const aiStopCount = (ramp: RGB[]): number => reduceStopIndices(ramp, AI_MAX).length;
+export const aiStopCount = (ramp: RGB[], budget?: number): number => reduceStopIndices(ramp, budget ?? AI_MAX).length;
 
 /**
  * Worst-case colour error (0..~441, RGB euclidean) between the original 256-step
  * ramp and its ≤AI_MAX-stop Illustrator reduction — i.e. how much detail the
  * format limitation costs THIS gradient. ~24+ is visibly lossy.
  */
-export const aiReductionError = (ramp: RGB[]): number => {
-  const idx = reduceStopIndices(ramp, AI_MAX);
+export const aiReductionError = (ramp: RGB[], budget?: number): number => {
+  const idx = reduceStopIndices(ramp, budget ?? AI_MAX);
   let maxd = 0;
   for (let s = 0; s < idx.length - 1; s++) {
     const a = idx[s];
@@ -272,15 +274,20 @@ export const aiReductionError = (ramp: RGB[]): number => {
 export const AI_STOP_LIMIT = AI_MAX;
 export const AI_LOSSY_DELTA = 24;
 
-/** Named gradients whose .ai reduction exceeds `threshold` (the ones to warn about). */
+/**
+ * Named gradients whose reduction to `budget` stops exceeds `threshold` — the ones to warn
+ * about. `budget` defaults to the .ai/.idml/.ase limit, which is what this measured (and
+ * only ever measured) before the Settings category made the budget movable.
+ */
 export const aiLossyGradients = (
   items: { name: string; ramp: RGB[] }[],
   threshold = AI_LOSSY_DELTA,
+  budget?: number,
 ): { name: string; delta: number }[] =>
-  items.map((it) => ({ name: it.name, delta: aiReductionError(it.ramp) })).filter((x) => x.delta > threshold);
+  items.map((it) => ({ name: it.name, delta: aiReductionError(it.ramp, budget) })).filter((x) => x.delta > threshold);
 
 /** Build a complete Illustrator `.ai` swatch library from one or more named ramps. */
-export const buildAiSwatchLibrary = (items: { name: string; ramp: RGB[] }[]): string => {
+export const buildAiSwatchLibrary = (items: { name: string; ramp: RGB[] }[], budget?: number): string => {
   // De-dupe swatch names so Illustrator keeps same-named gradients distinct.
   const seen = new Map<string, number>();
   const named = items.map((it) => {
@@ -310,7 +317,7 @@ export const buildAiSwatchLibrary = (items: { name: string; ramp: RGB[] }[]): st
     'Np',
     `${named.length} Bn`,
   ];
-  const defs = named.map((it) => aiGradientDef(it.name, it.ramp));
+  const defs = named.map((it) => aiGradientDef(it.name, it.ramp, budget));
   const palette = ['%AI5_BeginPalette', '0 0 Pb', ...named.map((it) => aiSwatchCell(it.name)), 'PB', '%AI5_EndPalette'];
   return [...header, ...defs, '%AI5_End_NonPrinting--', '%%EndSetup', ...palette, '%%Trailer', '%%EOF', ''].join('\n');
 };
@@ -357,6 +364,33 @@ const UGR_INDICES = 400; // Ultra Fractal's native gradient resolution (index 0.
 // interp, not this budget; dense-400 would be needed for pixel-exact band edges.
 const UGR_MAX_STOPS = 64;
 
+/**
+ * THE STOP BUDGET, per format (owner, 2026-09-10 — folded into the export window's Settings
+ * category). Every format here flattens a 256-step ramp to a handful of stops because its
+ * own file format says so, and until now each budget was a private constant nobody could
+ * see or move. They are the DEFAULTS now: `stopBudgetOf` takes an override and hands back
+ * what a given format will actually write.
+ *
+ * A format absent from this table does not reduce at all (it writes the ramp, or a fixed
+ * count the format itself dictates — .map's 256, Paint.NET's 96), so an override means
+ * nothing to it and it is never offered one.
+ */
+export const STOP_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
+  grd: GRD_MAX,
+  svg: SVG_MAX,
+  ai: AI_MAX,
+  idml: AI_MAX,
+  ase: AI_MAX,
+  ugr: UGR_MAX_STOPS,
+});
+
+/** What `key` will actually reduce to, or null if it does not reduce. */
+export const stopBudgetOf = (key: string, override?: number): number | null => {
+  const base = STOP_BUDGETS[key];
+  if (base === undefined) return null;
+  return override && override > 1 ? Math.round(override) : base;
+};
+
 /** UF colour integer: R is the least-significant byte (R + G·256 + B·65536). */
 const ugrInt = (c: RGB): number => {
   const [r, g, b] = ri(c);
@@ -368,12 +402,12 @@ const ugrInt = (c: RGB): number => {
 const ugrName = (name: string): string =>
   (name || 'gradient').replace(/[{}"\r\n]+/g, '').replace(/\s+/g, '_').slice(0, 48) || 'gradient';
 
-const ugrBlock = (name: string, ramp: RGB[]): string => {
+const ugrBlock = (name: string, ramp: RGB[], budget?: number): string => {
   const safe = ugrName(name);
   const span = ramp.length - 1 || 1;
   const lines = [`${safe} {`, 'gradient:', ` title="${safe}" smooth=no`];
   let lastIdx = -1;
-  for (const i of reduceStopIndices(ramp, UGR_MAX_STOPS)) {
+  for (const i of reduceStopIndices(ramp, budget ?? UGR_MAX_STOPS)) {
     // Map the ramp position (0..len-1) onto the UF 0..399 ring; force strictly
     // increasing indices so no two stops land on the same slot (overwrite-on-import).
     const idx = Math.min(UGR_INDICES - 1, Math.max(lastIdx + 1, Math.round((i / span) * (UGR_INDICES - 1))));
@@ -386,13 +420,13 @@ const ugrBlock = (name: string, ramp: RGB[]): string => {
 
 /** Build a `.ugr` holding one or more named gradients (de-duped like the .ai
  *  builder so same-named palettes stay distinct in Ultra Fractal). */
-const buildUgr = (items: { name: string; ramp: RGB[] }[]): string => {
+const buildUgr = (items: { name: string; ramp: RGB[] }[], budget?: number): string => {
   const seen = new Map<string, number>();
   const blocks = items.map((it) => {
     const base = ugrName(it.name);
     const n = seen.get(base) ?? 0;
     seen.set(base, n + 1);
-    return ugrBlock(n ? `${base}_${n + 1}` : base, it.ramp);
+    return ugrBlock(n ? `${base}_${n + 1}` : base, it.ramp, budget);
   });
   return blocks.join('\n\n') + '\n';
 };
@@ -609,9 +643,9 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'svg',
     label: 'SVG',
     ext: 'svg',
-    build: (r) =>
+    build: (r, _stem, budget) =>
       '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="32"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0">' +
-      reduceStopIndices(r, SVG_MAX).map((i) => '<stop offset="' + ((i / 255) * 100).toFixed(1) + '%" stop-color="' + hx2(ri(r[i])) + '"/>').join('') +
+      reduceStopIndices(r, budget ?? SVG_MAX).map((i) => '<stop offset="' + ((i / 255) * 100).toFixed(1) + '%" stop-color="' + hx2(ri(r[i])) + '"/>').join('') +
       '</linearGradient></defs><rect width="256" height="32" fill="url(#g)"/></svg>',
   },
   {
@@ -690,28 +724,28 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     swatches: (c) =>
       '; paint.net Palette File\n' + c.map((x) => 'FF' + ri(x).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
   },
-  { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r) => buildGRD(r) },
+  { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r, _stem, budget) => buildGRD(r, budget) },
   {
     key: 'ai',
     label: 'Illustrator swatches .ai',
     ext: 'ai',
-    build: (r) => buildAiSwatchLibrary([{ name: 'gradient', ramp: r }]),
-    collection: (items) => buildAiSwatchLibrary(items),
+    build: (r, stem, budget) => buildAiSwatchLibrary([{ name: stem || 'gradient', ramp: r }], budget),
+    collection: (items, budget) => buildAiSwatchLibrary(items, budget),
   },
   {
     key: 'idml',
     label: 'InDesign swatches .idml',
     ext: 'idml',
     binary: true,
-    build: (r) => buildIdmlSwatchLibrary([{ name: 'gradient', ramp: r }]),
-    collection: (items) => buildIdmlSwatchLibrary(items),
+    build: (r, stem, budget) => buildIdmlSwatchLibrary([{ name: stem || 'gradient', ramp: r }], budget),
+    collection: (items, budget) => buildIdmlSwatchLibrary(items, budget),
   },
   {
     key: 'ugr',
     label: 'IFS / Ultra Fractal .ugr',
     ext: 'ugr',
-    build: (r) => buildUgr([{ name: 'gradient', ramp: r }]),
-    collection: (items) => buildUgr(items),
+    build: (r, stem, budget) => buildUgr([{ name: stem || 'gradient', ramp: r }], budget),
+    collection: (items, budget) => buildUgr(items, budget),
   },
   // ---- swatch-native formats (S5 / §8b item 5, 2026-09-09) ----
   //
@@ -726,7 +760,7 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     label: 'Adobe swatches .ase',
     ext: 'ase',
     binary: true,
-    build: (r, stem) => buildAse(reduceStopIndices(r, ASE_MAX).map((i) => r[i]), stem || 'gradient'),
+    build: (r, stem, budget) => buildAse(reduceStopIndices(r, budget ?? ASE_MAX).map((i) => r[i]), stem || 'gradient'),
     swatches: (c, stem) => buildAse(c, stem || 'gradient'),
     collection: (items) =>
       buildAseGroups(items.map((it) => ({ name: it.name, colors: reduceStopIndices(it.ramp, ASE_MAX).map((i) => it.ramp[i]) }))),

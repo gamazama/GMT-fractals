@@ -1762,6 +1762,43 @@ are where to START reading, not necessarily where the change lands.
 > named groups. Worth knowing because it is why the rail's export icon disables on All: there
 > is nothing of yours there to take.
 >
+> **Export options, decided the same day.** The question was which formats have a real option
+> behind them rather than a number the format itself dictates. The answer came to four groups,
+> and the owner took two:
+>
+> - **TAKEN — the stop budget**, folded into the profile category, which is renamed
+>   **Settings** ("we can merge the stop budget into output profile and name it 'settings'").
+>   Six formats reduce a 256-step ramp to a handful of stops because their own file format
+>   says so, and each budget was a private constant nobody could see: `.ai` `.idml` `.ase`
+>   `.grd` at 40, `.svg` at 32, `.ugr` at 64. `STOP_BUDGETS` is the table now and
+>   `stopBudgetOf(key, override)` is the resolver; blank means each format's own. It reaches
+>   the BYTES, not just the label — threaded through `build`, `collection`, the collection
+>   zip, and both Adobe writers.
+> - **TAKEN — the PNG strip's size** ("the 1024 x 64 comment turn into two textfields"). It
+>   was a parenthesis in the row's label stating a number nobody could change. Only the strip
+>   gets fields: a contact sheet lays itself out from the set's count, a swatch sheet from the
+>   palette's.
+> - **SKIPPED by the owner** — the CSS gradient's angle (hardcoded `90deg`) and the
+>   identifier/prefix on Tailwind, design tokens and CSS variables (currently derived from the
+>   gradient's name).
+> - **NOT OFFERED, deliberately** — `.map`, `.ggr`, `.cpt` and Paint.NET have counts the
+>   format itself fixes, and a colour COUNT under Ramp would duplicate the Swatches subject.
+>
+> **The budget closed a standing assumption on the way.** `collectionQualityWarnings` used to
+> return nothing for anything but `.ai`/`.idml`/`.ase`, because the only measurement available
+> ran at 40 and `.ugr` reduces at 64 — so `.ugr` lost detail silently and the doc block said
+> so and could not fix it. With a per-format budget threaded, every reducing format is
+> measured at its own, and the `@assumption` marker is gone. Guard: `test:palette-exportsubjects`
+> [8], falsified three ways — an ignored override, `.ai` writing its own budget whatever it is
+> told (caught by comparing an 8-stop file's SIZE against a 64-stop one, not by counting), and
+> the warning reverting to its three-format list.
+>
+> **Also answered:** user gradients do NOT load into `All`. It is the catalogue and nothing
+> else — `useGroundSource` returns `null` for it, `membersOf` returns `[]`, and `pickerStore`
+> builds the catalogue from loaded packs with no path by which a favourite enters. Yours live
+> in Recent's dated bins, Kept and named groups. It is also why the rail's export icon disables
+> on All: there is nothing of yours there to take.
+>
 > **Still open from the 2026-09-09 pass:** `smoke:ge-ground` [3]'s second assertion (the set's
 > canvas starts at x=24, an empty 24 px row-label column the wall reserves so the canvas does
 > not jump sideways when you cross between All and a set). Not answered on this walk.

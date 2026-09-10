@@ -94,14 +94,14 @@ interface Built {
   colorGroupSwatches: string; // <ColorGroupSwatch> lines for designmap
 }
 
-const buildGraphic = (items: { name: string; ramp: RGB[] }[]): Built => {
+const buildGraphic = (items: { name: string; ramp: RGB[] }[], budget?: number): Built => {
   const names = uniqueNames(items);
   const colors: string[] = [];
   const gradients: string[] = [];
   const cgSwatches: string[] = [];
 
   items.forEach((g, gi) => {
-    const idx = reduceStopIndices(g.ramp, AI_STOP_LIMIT); // ascending positions
+    const idx = reduceStopIndices(g.ramp, budget ?? AI_STOP_LIMIT); // ascending positions
     const stops: string[] = [];
     idx.forEach((ii, si) => {
       const [r, gg, b] = ri(g.ramp[ii]);
@@ -145,9 +145,9 @@ const patchDesignmap = (dm: string, cgSwatches: string): string => {
 };
 
 /** Build a complete InDesign `.idml` swatch library from one or more named ramps. */
-export const buildIdmlSwatchLibrary = (items: { name: string; ramp: RGB[] }[]): Uint8Array => {
+export const buildIdmlSwatchLibrary = (items: { name: string; ramp: RGB[] }[], budget?: number): Uint8Array => {
   const tpl = template();
-  const { graphicXml, colorGroupSwatches } = buildGraphic(items);
+  const { graphicXml, colorGroupSwatches } = buildGraphic(items, budget);
 
   const parts: Record<string, string> = { ...tpl.parts };
   parts['Resources/Graphic.xml'] = graphicXml;

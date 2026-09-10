@@ -45,6 +45,14 @@ import type { Favient } from '../../palette/store/favientsStore';
  * Optional, and absent means 'ramp' — recents written before 2026-09-09 have no subject
  * and must keep meaning what they meant.
  */
+/** The Settings category's values, carried to whatever does the writing. `budget` is the
+ *  stop override (undefined = each format's own); `pngW`/`pngH` size the PNG strip. */
+export interface ExportRunOpts {
+  budget?: number;
+  pngW?: number;
+  pngH?: number;
+}
+
 export type ExportAction =
   | { kind: 'copy' | 'download'; key: string; subject?: ExportSubject }
   | { kind: 'png'; subject?: ExportSubject };
@@ -115,32 +123,32 @@ export const slugName = (name: string): string => name.trim().replace(/[^\w-]+/g
 
 /** The bytes for one format and one subject. `palette` non-null selects the SWATCHES
  *  subject; the caller has already checked the format has a swatches builder. */
-const bytesFor = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null): string | Uint8Array =>
-  palette ? f.swatches!(palette, name) : f.build(ramp, name);
+const bytesFor = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number): string | Uint8Array =>
+  palette ? f.swatches!(palette, name) : f.build(ramp, name, budget);
 
-const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null) => {
-  const out = bytesFor(f, ramp, name, palette);
+const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number) => {
+  const out = bytesFor(f, ramp, name, palette, budget);
   navigator.clipboard?.writeText(out as string).then(
     () => showToast(`Copied ${(palette && f.swatchLabel) || f.label}`),
     () => showToast('Copy failed'),
   );
 };
 
-const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null) => {
-  const out = bytesFor(f, ramp, name, palette);
+const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number) => {
+  const out = bytesFor(f, ramp, name, palette, budget);
   const blob = f.binary ? new Blob([out as unknown as BlobPart], { type: 'application/octet-stream' }) : new Blob([out as string], { type: 'text/plain' });
   downloadBlob(blob, `${slugName(name)}${palette ? '-swatches' : ''}.${f.ext}`);
   // The .grd stop count is a RAMP fact (it is what the reduction left); a swatch export
   // writes exactly the colours it was handed, so it says how many rather than implying a
   // reduction that did not happen.
   if (palette) showToast(`Downloaded .${f.ext} (${palette.length} swatches)`);
-  else showToast(f.key === 'grd' ? `Downloaded .grd (${grdStopCount(ramp)} stops)` : `Downloaded .${f.ext}`);
+  else showToast(f.key === 'grd' ? `Downloaded .grd (${grdStopCount(ramp, budget)} stops)` : `Downloaded .${f.ext}`);
 };
 
-const downloadPng = (ramp: RGB[], name: string) => {
+const downloadPng = (ramp: RGB[], name: string, w = 1024, h = 64) => {
   const o = document.createElement('canvas');
-  o.width = 1024;
-  o.height = 64;
+  o.width = Math.max(1, Math.round(w));
+  o.height = Math.max(1, Math.round(h));
   const x = o.getContext('2d');
   const r = document.createElement('canvas');
   r.width = 256;
@@ -195,6 +203,7 @@ export const runSetExport = (
   setName: string,
   subject: ExportSubject = 'ramp',
   n = 7,
+  budget?: number,
 ): void => {
   if (!favients.length) {
     showToast('That set is empty');
@@ -219,14 +228,14 @@ export const runSetExport = (
     showToast(`Exported ${favients.length} palettes as .zip`);
     return;
   }
-  const file = buildCollectionFile(favients, key);
+  const file = buildCollectionFile(favients, key, budget);
   if (file) {
     const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
     downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `${stem}.${file.ext}`);
     showToast(`Exported ${favients.length} → .${file.ext}`);
     return;
   }
-  const bytes = buildCollectionZip(favients, key);
+  const bytes = buildCollectionZip(favients, key, budget);
   downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${stem}.zip`);
   showToast(`Exported ${favients.length} as .zip`);
 };
@@ -253,15 +262,15 @@ export const runSetImage = async (favients: Favient[], setName: string, subject:
  * SWATCHES subject reduces nothing (the palette is already the colour list the format
  * wants), so it never warns.
  */
-export const setLossyCount = (favients: Favient[], key: string, subject: ExportSubject = 'ramp'): number =>
-  subject === 'swatches' ? 0 : collectionQualityWarnings(favients, key).length;
+export const setLossyCount = (favients: Favient[], key: string, subject: ExportSubject = 'ramp', budget?: number): number =>
+  subject === 'swatches' ? 0 : collectionQualityWarnings(favients, key, undefined, budget).length;
 
 /**
  * Perform an export of the working gradient and remember it as a recent. `palette` is the
  * swatch row as composed on the hero — the SWATCHES subject exports exactly that, with no
  * count of its own, because the row IS the control and it lives on the hero (L2).
  */
-export const runExport = (a: ExportAction, ramp: RGB[], name: string, palette: RGB[] = []): void => {
+export const runExport = (a: ExportAction, ramp: RGB[], name: string, palette: RGB[] = [], opts: ExportRunOpts = {}): void => {
   const swatches = subjectOf(a) === 'swatches';
   if (swatches && !palette.length) {
     showToast('No swatches to export');
@@ -269,13 +278,13 @@ export const runExport = (a: ExportAction, ramp: RGB[], name: string, palette: R
   }
   if (a.kind === 'png') {
     if (swatches) void downloadSwatchSheet(palette, name);
-    else downloadPng(ramp, name);
+    else downloadPng(ramp, name, opts.pngW, opts.pngH);
   } else {
     const f = getExportFormat(a.key);
     if (!f) return;
     if (swatches && !f.swatches) return;
-    if (a.kind === 'copy') copyFormat(f, ramp, name, swatches ? palette : null);
-    else downloadFormat(f, ramp, name, swatches ? palette : null);
+    if (a.kind === 'copy') copyFormat(f, ramp, name, swatches ? palette : null, opts.budget);
+    else downloadFormat(f, ramp, name, swatches ? palette : null, opts.budget);
   }
   noteRecentExport(a);
 };
