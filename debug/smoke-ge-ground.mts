@@ -105,6 +105,9 @@ async function main() {
   const wall = page.locator('[data-gx-keepselect] canvas').first();
   await wall.waitFor({ state: 'visible', timeout: 15000 });
 
+  // The row-label column a SET reserves and leaves empty; All draws labels in a wider one.
+  const SET_GUTTER = 24;
+
   // [1]
   let s = await state(page);
   if (s.ground !== 'all') fail(`[1] the ground is not All (${s.ground})`);
@@ -160,11 +163,18 @@ async function main() {
   if (s.viewLabels.join(',') !== 'List view')
     fail(`[3] the corner should offer the view toggle on a set, not ${s.viewLabels.join(' + ') || 'nothing'}`);
   if (s.canvases !== 1) fail(`[3] ${s.canvases} canvases for two tiles`);
-  if ((s.canvasLeft ?? 99) > 2) fail(`[3] the set's canvas does not start at the wall's edge (x=${s.canvasLeft})`);
+  // A set RESERVES the shell's 24 px row-label column and draws nothing in it, so its canvas
+  // starts at 24 rather than 0 (grep `gutter={m.isSet ? 24 : undefined}` in BrowseStage). That
+  // is the point: the canvas does not jump sideways when you cross between All and a set.
+  // This line expected 0 for a long time and was red on a clean tree because of it (owner
+  // confirmed the reserved column is wanted, 2026-09-10) — so it now pins the reserve itself,
+  // which is the thing that would be a regression if it went missing.
+  if (Math.abs((s.canvasLeft ?? -99) - SET_GUTTER) > 1)
+    fail(`[3] a set should reserve the ${SET_GUTTER}px row-label column, canvas at x=${s.canvasLeft}`);
   if ((s.canvasH ?? 0) < 60) fail(`[3] the tiles did not grow (canvas height ${s.canvasH})`);
   if ((s.canvasH ?? 0) > 220) fail(`[3] two tiles wrapped into a wall (canvas height ${s.canvasH})`);
   if (!s.chips.find((c) => c.id === today.id)?.lit) fail('[3] the Today chip is not lit');
-  console.log(`✓ [3] Today on the ground: title "${s.title}", one canvas ${s.canvasW}×${s.canvasH} at x=${s.canvasLeft}, zoom only`);
+  console.log(`✓ [3] Today on the ground: title "${s.title}", one canvas ${s.canvasW}×${s.canvasH} at x=${s.canvasLeft} (the reserved gutter), zoom only`);
 
   // [4] a set tile is a shelf pick — the older one (index 1) is the first pick
   {

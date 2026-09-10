@@ -26,7 +26,6 @@
 import React from 'react';
 
 export type IconName =
-  | 'search'
   | 'zoom'
   | 'zoomOut'
   | 'box'
@@ -73,7 +72,6 @@ const FILLED: Record<'heart' | 'share' | 'download' | 'photo' | 'fullscreen', st
 };
 
 const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.ReactNode> = {
-  search: <circle cx="7" cy="7" r="4.5" />,
   zoom: <path d="M13.8 13.73L11.08 11.01M7.36 5.42L7.36 9.29M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
   zoomOut: <path d="M13.8 13.73L11.08 11.01M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
   box: <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.74" strokeDasharray="2.76" />,
