@@ -8,6 +8,12 @@
  * multiple feedback channels never stack on top of each other. The
  * container is pointer-events-none (never blocks the viewport); each
  * pill is clickable to dismiss early.
+ *
+ * The bottom offset carries `env(safe-area-inset-bottom)` (added
+ * 2026-09-10 for GE v2's phone layout): this host is `fixed`, so it is
+ * measured off the viewport and sits OUTSIDE any
+ * `MobileViewportShell` safe-area padding its app applies. `env()` is
+ * 0 wherever there is no inset, so every desktop app is unchanged.
  */
 import React from 'react';
 import { useToastStore, type ToastTone } from '../store/toastStore';
@@ -24,7 +30,16 @@ export const ToastHost: React.FC = () => {
     const dismiss = useToastStore((s) => s.dismiss);
     if (toasts.length === 0) return null;
     return (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[900] flex flex-col items-center gap-2 pointer-events-none">
+        // `fixed` is measured from the VIEWPORT, so it sits outside
+        // `MobileViewportShell`'s safe-area padding and a toast landed under
+        // the home indicator on a phone (GE v2 Phase F, 2026-09-10). The inset
+        // is added here rather than by the host because `fixed` children cannot
+        // inherit a parent's padding. `env()` resolves to 0 everywhere there is
+        // no inset, so this is 24 px on desktop exactly as `bottom-6` was.
+        <div
+            className="fixed left-1/2 -translate-x-1/2 z-[900] flex flex-col items-center gap-2 pointer-events-none"
+            style={{ bottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+        >
             {toasts.map((t) => {
                 const c = TONE[t.tone];
                 return (

@@ -15,7 +15,9 @@
  *   • the transient `pickerSearch` query and `pickerSimilarity` anchor;
  *   • the per-surface pick (`heroSelection`, mode `'picker'`) and the drag-out payload;
  *   • the active carve tool plus its Esc / click-outside cancel;
- *   • the wall's zoom readout and reset signal.
+ *   • the wall's zoom readout, its reset signal and its stepped-zoom signal (`stepZoom`,
+ *     for a host that offers − / + buttons instead of a drag-to-zoom tool — GE v2's phone
+ *     tool row). Both are RISING SERIALS, not values: the wall owns the transform.
  *
  * Undo / keyframe / preset semantics of `paletteFilters` are untouched: every write goes
  * through the auto-generated `setPaletteFilters` exactly as the old stage did.
@@ -203,6 +205,11 @@ export interface PickerModel {
   onZoomChange: (z: { x: number; y: number }) => void;
   resetZoomSignal: number;
   resetZoom: () => void;
+  /** A rising serial + a factor, for a host offering − / + instead of drag-to-zoom. Pass
+   *  it straight to `PickerWall`'s `zoomStep`; null until the host asks for a step. */
+  zoomStep: { serial: number; factor: number } | null;
+  /** Multiply the wall's zoom by `factor` about the viewport centre (the wall clamps). */
+  stepZoom: (factor: number) => void;
   zoomed: boolean;
 
   // --- swatch metrics (paletteFilters params) ---
@@ -279,6 +286,13 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
   const [zoom, setZoom] = useState({ x: 1, y: 1 });
   const [resetZoomSignal, setResetZoomSignal] = useState(0);
   const resetZoom = useCallback(() => setResetZoomSignal((n) => n + 1), []);
+  // A STEPPED zoom, for a host with no drag-to-zoom to offer — GE v2's phone tool row
+  // replaces the zoom TOOL with a − / + pair (Phase F, 2026-09-10). Same shape as the reset
+  // signal and for the same reason: the wall owns the transform, so this is an instruction
+  // carried by a rising serial, not a value the host holds. `factor` multiplies both axes
+  // about the viewport centre and the wall clamps it to its own limits.
+  const [zoomStep, setZoomStep] = useState<{ serial: number; factor: number } | null>(null);
+  const stepZoom = useCallback((factor: number) => setZoomStep((z) => ({ serial: (z?.serial ?? 0) + 1, factor })), []);
 
   const bundleLabel = useCallback((id: string) => bundles[id]?.label, [bundles]);
   const searchIndex = useMemo(() => buildSearchIndex(base, bundleLabel), [base, bundleLabel]);
@@ -492,6 +506,8 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
     onZoomChange: setZoom,
     resetZoomSignal,
     resetZoom,
+    zoomStep,
+    stepZoom,
     zoomed: zoom.x !== 1 || zoom.y !== 1,
     swatchW: tile.w,
     swatchH: tile.h,

@@ -143,6 +143,15 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
    rule that previously lived in gradient-explorer.html. */
 .dock-scroll { scrollbar-gutter: stable; }
 
+/* A run that scrolls SIDEWAYS with no bar of its own — GE v2's set rail on a phone
+   (Phase F, 2026-09-10). A 3 px webkit bar under a 34 px chip row reads as a hairline
+   under the chips rather than as a scrollbar, and the fade the rail paints over the run's
+   end already says "there is more this way". Named `gx-` like `.gx-metal` below: it lives
+   here rather than in one app's <style> block because it must survive Phase G's entry
+   swap, and index.css is what every entry imports. */
+.gx-rail-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+.gx-rail-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
 /* Engine component-utility classes (t-btn, glass-panel, t-section-*, icon-btn,
    t-input, t-dropdown, t-select, panel-*) that shared UI components reference.
    These were previously injected at runtime as a <style type="text/tailwindcss">

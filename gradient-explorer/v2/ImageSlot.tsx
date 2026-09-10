@@ -24,9 +24,24 @@
  *
  * Radius 8 (V2: something you press), hairline `line/20` (V8) — `gradientBarClass` is not
  * used here because the slot is a picture, not a gradient bar; it borrows its rules.
+ *
+ * PHONE (Phase F, 2026-09-10). A 390 px card has no column to spare, so the slot splits in
+ * two and the two halves are never mounted at once:
+ *   • `compact` — the DOOR, a 26 px button in the hero's header row alongside the use
+ *     icons. The photo glyph while empty, the stored thumbnail once an image is in. It
+ *     mounts NO `ImageStage`: it is a button, and the pane it used to carry has moved.
+ *   • `width` — the PICTURE at a given pixel width, which on a phone is the tray's Image
+ *     face (the shell hands it to `ExtractStage`'s `slot`). Everything the picture does —
+ *     the Path handles, the cloud ↔ pixel hover link, Replace — happens there, where there
+ *     is room for it, and the door is what opens it.
+ * So on a phone the slot DOES unmount when the Image face closes. The rule it breaks was
+ * about the slot never moving on a card wide enough to hold it; the model, the thumbnail
+ * and the path all live in `imageStore`, so nothing is lost by the pane going away.
+ *
+ * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useImageStore } from '../../palette/store/imageStore';
 import { ImageStage, type ImageStageFaceProps } from '../../palette/components/ImageStage';
 import { Icon } from './ui/Icon';
@@ -44,6 +59,13 @@ interface Props extends ImageStageFaceProps {
   /** The full picture's height (px): the panel's height minus the column's padding. The
    *  slot never sizes the card; the panel does. */
   bigH: number;
+  /** PHONE: the DOOR instead of the picture — a 26 px button in the hero's header row.
+   *  Mounts no `ImageStage`; the pane lives in the tray's Image face there. */
+  compact?: boolean;
+  /** PHONE: draw the picture at this pixel WIDTH (its height follows the aspect, capped by
+   *  `PHONE_MAX_H`) instead of at `bigH`. The face is the one wide thing on a phone, so
+   *  width is what is known and height is what follows — the reverse of the card. */
+  width?: number;
   onClick: () => void;
 }
 
@@ -52,10 +74,40 @@ const MAX_W = 520;
 /** The dimmed thumbnail: as tall as the empty slot, at the image's aspect, capped. */
 const SMALL_H = 84;
 const SMALL_MAX_W = 150;
+/** Phone, in the face: a portrait photo must still leave room for the methods under it. */
+const PHONE_MAX_H = 220;
+/** The door: the same 26 px square as every icon `Act` in the header row it joins. */
+const DOOR = 26;
 
-export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = false, bigH, onClick, cloudHost, toolsHost, handles = false }) => {
+export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = false, bigH, compact = false, width, onClick, cloudHost, toolsHost, handles = false }) => {
   const model = useImageStore((s) => s.model);
+  const thumb = useImageStore((s) => s.thumb);
   const ring = active ? 'outline outline-2 outline-accent-400 outline-offset-2' : '';
+  // The door's picture. `thumb` is a canvas the store already keeps; one `toDataURL` per
+  // image (memoised on the canvas identity) is cheaper than mounting a second stage, and a
+  // 26 px button has nothing to gain from a live one.
+  const thumbUrl = useMemo(() => {
+    if (!compact || !thumb) return null;
+    try { return thumb.toDataURL(); } catch { return null; }
+  }, [compact, thumb]);
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={model ? 'The image this gradient comes from — tap for the Image face' : 'Drop an image anywhere, or tap to choose one'}
+        aria-label={model ? 'Open the Image face' : 'Choose an image'}
+        data-gx-image-slot={model ? 'door' : 'door-empty'}
+        style={{ width: DOOR, height: DOOR, backgroundImage: thumbUrl ? `url(${thumbUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        className={`shrink-0 rounded-lg flex items-center justify-center overflow-hidden border transition-colors ${
+          model ? 'border-line/25' : 'border-dashed border-line/40 text-fg-muted hover:border-accent-400 hover:text-accent-300'
+        } ${ring}`}
+      >
+        {!model && <Icon name="photo" size={15} />}
+      </button>
+    );
+  }
 
   if (!model) {
     return (
@@ -71,8 +123,9 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = fals
   }
 
   const ar = model.w / Math.max(1, model.h);
-  const h = dim ? SMALL_H : bigH;
-  const w = dim ? Math.min(SMALL_MAX_W, Math.round(SMALL_H * ar)) : Math.min(MAX_W, Math.round(bigH * ar));
+  const wide = width != null;
+  const h = wide ? Math.min(PHONE_MAX_H, Math.round(width! / Math.max(0.05, ar))) : dim ? SMALL_H : bigH;
+  const w = wide ? Math.min(width!, Math.round(h * ar)) : dim ? Math.min(SMALL_MAX_W, Math.round(SMALL_H * ar)) : Math.min(MAX_W, Math.round(bigH * ar));
 
   // The picture at its own aspect, hosting the image pane. With the face closed a
   // transparent button over it opens the face (the pane is not interactive then); with it

@@ -49,6 +49,25 @@
  * popover (owner, 2026-09-08: tray states are baked after every action; the gradient is
  * already in Recent and Kept).
  *
+ * PHONE (Phase F, 2026-09-10). Every measured overflow at 390 px and what answers it:
+ *   • the narrowing bar wanted 422 px as a three-column grid, which put the Filters button
+ *     UNDER the saturation strip. It becomes three STACKED rows — Filters + search, then
+ *     the pad beside its scrollbar at a MEASURED width, then the strip — re-ordered with
+ *     `order-*` rather than a second copy of the tree. The arrange sentence goes (it
+ *     describes the wall; the count is still on the search pill).
+ *   • the Filters rows wanted ~550 px. Each label goes above its controls, one control per
+ *     line, and the block caps at 60 % of the viewport and scrolls.
+ *   • the TOOLS leave the left column for a 40 px-button ROW at the bottom-left — see the
+ *     comment there for why the column's reading does not survive a thumb — and the zoom
+ *     TOOL becomes a − / + pair (`stepZoom` in usePickerModel → `zoomStep` on PickerWall).
+ *     Fit joins that row; the corner zoom readout goes with the gesture it described.
+ *   • the wall's row-label gutter is pinned to 24 rather than the ~4 its own auto-shrink
+ *     lands on at this width.
+ * `data-gx-tools`, `data-gx-filters-trigger`, `data-gx-pad-*`, `data-gx-keepselect` and
+ * `data-gx-arrange-text` all survive both layouts — the smokes read them.
+ *
+ * @see docs/adr/0115-the-shell-on-a-phone.md
+ *
  * All of the behaviour is `usePickerModel` — the same hook the old `PickerStage` and
  * app-gmt's palette overlay run. This file is layout, wording and chrome. If you need the
  * wall to filter/sort/carve differently, change `palette/core/pickerModel.ts`, not this.
@@ -83,6 +102,7 @@ const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
   ((c as { options?: { value: number; label: string }[] }).options ?? []).map((o) => ({ value: o.value, label: o.label }));
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
+import { useIsPhone } from './useIsPhone';
 import { GroundList } from './GroundList';
 import { Act } from './ui/Act';
 import { useGroundSetIds, setGroundSetId } from '../../palette/store/groundSet';
@@ -122,6 +142,22 @@ const GROUND_VIEW_KEY = 'gx.v2.groundView';
  *  dead space before the labels start rather than on top of them. */
 const TOOLBAR_LEFT = 6;
 
+/** PHONE: the pad's own height. 56 is the desktop field; 48 keeps the three-row bar inside
+ *  the header without making the hue axis unpointable. */
+const PHONE_PAD_H = 48;
+/** PHONE: what the `MapScrollbar` beside the pad takes — its `w-[8px]` plus the row's
+ *  `gap-1.5`. The pad is given the container minus this, so the two exactly fill the row. */
+const PHONE_SCROLLBAR_COL = 8 + 6;
+/** PHONE: the wall's row-label gutter. `PickerWall` shrinks its 132 px default toward 0 on
+ *  a narrow wall, which at 390 lands on ~4 — the tiles then run flush into the window edge,
+ *  out of line with the rail chips and the bar above them. 24 is what a SET already asks
+ *  for, and below 28 the gutter draws nothing and is pure margin, so this is margin. */
+const PHONE_GUTTER = 24;
+/** PHONE: the tool ROW's buttons. 32 is the desktop column's; a fingertip wants 40. */
+const PHONE_TOOL = 40;
+/** PHONE: one step of the − / + zoom pair, which replaces the drag-to-zoom tool. */
+const ZOOM_STEP = 1.25;
+
 /** Faint dotted ground behind the swatches, so the wall reads as a canvas, not a list. */
 const GROUND: React.CSSProperties = {
   backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 1px)',
@@ -134,6 +170,23 @@ const GROUND: React.CSSProperties = {
 const floatOver = 'backdrop-blur-sm';
 
 export const BrowseStage: React.FC = () => {
+  const phone = useIsPhone();
+  // PHONE: the pad is drawn at a measured pixel width, not the desktop's fixed 360 — the
+  // bar needs 422 for the fixed one and has 390, which is what put the Filters button
+  // underneath the saturation strip. A callback ref + ResizeObserver, the pattern the hero
+  // already uses for the ramp: the bar can mount before the ground has settled, so an
+  // effect with an empty dep list would measure once and be wrong.
+  const [padW, setPadW] = useState(360);
+  const padRo = useRef<ResizeObserver | null>(null);
+  const padCellRef = useCallback((el: HTMLDivElement | null) => {
+    padRo.current?.disconnect();
+    padRo.current = null;
+    if (!el) return;
+    const update = () => setPadW(Math.max(160, el.clientWidth - PHONE_SCROLLBAR_COL));
+    update();
+    padRo.current = new ResizeObserver(update);
+    padRo.current.observe(el);
+  }, []);
   const setIds = useGroundSetIds();
   const sets = useGroundSets();
   const source = useGroundSource(setIds, sets);
@@ -263,6 +316,24 @@ export const BrowseStage: React.FC = () => {
   );
   const btnRef = useRef<HTMLButtonElement>(null);
   const toggleFilters = useCallback(() => setFiltersOpen((o) => !o), []);
+  // PHONE: how tall the Filters rows may grow. MEASURED from where the block starts, and a
+  // fraction of the room BELOW it — not `60vh`, which was the first cut and pushed the wall
+  // clean off the screen (measured: header 48 + hero 219 + rail 40 + bar 126 + a 506 px
+  // block is 939 in an 844 px viewport, and the wall came out 1 px tall). Filters is inline
+  // rows precisely so you can watch the wall answer them; a cap that hides the wall is the
+  // popover it replaced, with extra steps.
+  const [filtersMaxH, setFiltersMaxH] = useState(0);
+  const filtersRo = useRef<ResizeObserver | null>(null);
+  const filtersRef = useCallback((el: HTMLDivElement | null) => {
+    filtersRo.current?.disconnect();
+    filtersRo.current = null;
+    if (!el) return;
+    const update = () => setFiltersMaxH(Math.max(120, Math.round((window.innerHeight - el.getBoundingClientRect().top) * 0.6)));
+    update();
+    // the hero grows and shrinks under a tray face, which moves this block's top
+    filtersRo.current = new ResizeObserver(update);
+    filtersRo.current.observe(document.body);
+  }, []);
 
   // Esc closes the rows (capture phase, so the shell's plain keydown does not also dismiss
   // the candidate).
@@ -484,12 +555,20 @@ export const BrowseStage: React.FC = () => {
           and the wall host's `border-t` below becomes the seam. The set rail carries it too
           (grep bg-surface-raised in SetRail.tsx) — the band is only continuous if every row
           in it agrees. */}
-      <div className="shrink-0 relative px-6 pt-3 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 bg-surface-raised" data-gx-ground-set={m.setId}>
+      {/* PHONE: the same three cells, stacked and re-ordered — Filters + search first, then
+          the pad and its strip, then the sentence (which is a reading, not a control, and
+          on 390 px the controls come first). The order is `order-*` rather than a second
+          copy of the tree, so the two layouts cannot drift. */}
+      <div className={`shrink-0 relative px-6 bg-surface-raised ${phone ? 'pt-2 pb-2 flex flex-col gap-1.5' : 'pt-3 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3'}`} data-gx-ground-set={m.setId}>
         {/* left: the wall in a sentence (the research: a wall you cannot describe reads as
             noise) — on All the count and the arrangement; on a set, nothing (its name is
             in the centre where the pad was). */}
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="text-[12px] text-fg-dim tabular-nums truncate min-w-0" data-gx-arrange-text="">
+        <div className={`flex items-center gap-3 min-w-0 ${phone ? 'order-3 empty:hidden' : ''}`}>
+          {/* PHONE: the sentence itself goes. It is the wall described — worth a line on a
+              desktop, and on a phone it is a line of the wall it describes. The COUNT is
+              still on the search pill's right edge, and "Keep these N" stays: that one is
+              an action. */}
+          <span className={`text-[12px] text-fg-dim tabular-nums truncate min-w-0 ${phone ? 'hidden' : ''}`} data-gx-arrange-text="">
             {!m.isSet && m.loaded && (
               <>{m.count < m.total ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : m.total.toLocaleString()} · {m.anchor ? 'nearest first' : m.arrangeText}</>
             )}
@@ -505,14 +584,14 @@ export const BrowseStage: React.FC = () => {
         {m.isSet && !m.arrangeable ? (
           /* a set on the ground: its name where the pad was — the pad and Filters are the
              catalogue's lens (their windows, themes and carve ids mean nothing here) */
-          <div className="flex items-baseline gap-2 justify-self-center h-[56px] items-center" data-gx-set-title="">
+          <div className={`flex items-baseline gap-2 items-center ${phone ? 'order-2 h-9' : 'justify-self-center h-[56px]'}`} data-gx-set-title="">
             <span className="text-[15px] text-fg">{setTitle}</span>
             <span className="text-[13px] text-fg-muted tabular-nums">{m.count < m.total ? `${m.count} of ${m.total}` : m.total}</span>
           </div>
         ) : (
         /* The colour picker IS the main narrower (owner): hue × lightness with a box. On the
             bar, never over the wall it narrows. */
-        <div className="flex flex-col gap-1 justify-self-center">
+        <div ref={phone ? padCellRef : undefined} className={`flex flex-col gap-1 ${phone ? 'order-2 min-w-0' : 'justify-self-center'}`}>
           {/* Nothing picked yet: say so HERE, over the map, rather than in the corner below.
               This replaces the line that used to sit above the wall in GradientExplorerV2App
               ("Click a gradient to preview it above …") — which pointed at a hero that does
@@ -537,13 +616,13 @@ export const BrowseStage: React.FC = () => {
             onChange={(xr, yr) => m.setPaletteFilters?.({ [WINDOW_KEY[pad.x]]: { x: xr[0], y: xr[1] }, [WINDOW_KEY[pad.y]]: { x: yr[0], y: yr[1] } })}
             onDragStart={() => handleInteractionStart('param')}
             onDragEnd={handleInteractionEnd}
-            width={360}
-            height={56}
+            width={phone ? padW : 360}
+            height={phone ? PHONE_PAD_H : 56}
             marker={marker}
           />
           {/* `span`, not `reach`: the two differ when a window is drawn inside a bucket, and
               the dimming has to agree with the box on the pad beside it. */}
-          <MapScrollbar range={marker} reach={rowsOnAxis ? span : null} height={56} onSeek={canSeek ? seekBand : undefined} />
+          <MapScrollbar range={marker} reach={rowsOnAxis ? span : null} height={phone ? PHONE_PAD_H : 56} onSeek={canSeek ? seekBand : undefined} />
           </div>
           {/* the third coordinate as a strip, in a picker's own language, under the field */}
           <div data-gx-pad-strip={pad.strip}>
@@ -555,7 +634,11 @@ export const BrowseStage: React.FC = () => {
             there is room they sit side by side, and when the row runs out Filters wraps ONTO
             the line above rather than squeezing the search field to nothing (owner,
             2026-09-09: "filter to sit on top of search when there's not enough space"). */}
-        <div className="flex flex-wrap items-center justify-end gap-y-1.5 gap-x-3 min-w-0">
+        {/* PHONE: ONE line, Filters first and the search taking the rest — the desktop
+            wrap-Filters-above-search rule is for a row that has run out of a lot of room;
+            here it has run out of all of it, and two half-empty lines are worse than one
+            full one. */}
+        <div className={`flex items-center min-w-0 ${phone ? 'order-1 gap-2' : 'flex-wrap justify-end gap-y-1.5 gap-x-3'}`}>
         {/* More like this — the wall is one band ordered by ramp distance to this gradient. */}
         {m.anchor && (
           <span className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-accent-400/40 bg-accent-400/10 text-[12px] text-accent-300 min-w-0">
@@ -573,7 +656,7 @@ export const BrowseStage: React.FC = () => {
           ref={btnRef}
           data-gx-filters-trigger=""
           onClick={toggleFilters}
-          className={`h-[34px] px-3 rounded-[10px] border text-[13px] flex items-center gap-2 transition-colors ${
+          className={`h-[34px] px-3 shrink-0 rounded-[10px] border text-[13px] flex items-center gap-2 transition-colors ${
             filtersOpen ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40'
           }`}
           title="Look, sources and how the wall is arranged"
@@ -588,7 +671,7 @@ export const BrowseStage: React.FC = () => {
           </span>
         </button>
         )}
-        <div className="flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-line/20 bg-surface-dock w-[260px] max-w-full">
+        <div className={`flex items-center gap-2 h-[34px] px-3 rounded-[10px] border border-line/20 bg-surface-dock ${phone ? 'flex-1 min-w-0' : 'w-[260px] max-w-full'}`}>
           <svg className="w-3.5 h-3.5 shrink-0 text-fg-dim" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
             <circle cx="7" cy="7" r="4.5" />
             <path d="M11 11l3.6 3.6" strokeLinecap="round" />
@@ -612,27 +695,39 @@ export const BrowseStage: React.FC = () => {
 
       {/* ── Filters: three inline rows, never over the wall ────────────────── */}
       {filtersOpen && !m.isSet && (
-        <div className="shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10 bg-surface-raised" data-gx-selectable="">
+        /* PHONE: the rows need ~550 px side by side (a 72 px label plus three 160 px
+           dropdowns), so each label goes ABOVE its controls and each control takes the line.
+           That makes the block tall, so it is capped (`filtersMaxH` — measured, see there)
+           and scrolls: the wall it narrows updates live and must stay in sight, which is
+           the whole reason Filters is inline rows rather than a popover. */
+        <div
+          ref={phone ? filtersRef : undefined}
+          style={phone ? { maxHeight: filtersMaxH || undefined } : undefined}
+          className={`shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10 bg-surface-raised ${phone ? 'overflow-y-auto mobile-scroll' : ''}`}
+          data-gx-selectable=""
+        >
           {/* LOOK */}
-          <div className="flex items-center gap-3">
-            <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Look</span>
-            <div className="flex-1 grid grid-cols-2 gap-x-6">
+          <div className={`flex gap-3 ${phone ? 'flex-col gap-1 items-stretch' : 'items-center'}`}>
+            <span className={`shrink-0 text-[11px] uppercase tracking-wide text-fg-muted ${phone ? '' : 'w-[72px]'}`}>Look</span>
+            <div className={`flex-1 gap-x-6 grid ${phone ? 'grid-cols-1 gap-y-1' : 'grid-cols-2'}`}>
               {LOOK_AXES.map((ax) => (
                 <QualityRangePadConnected key={ax.axis} featureId="paletteFilters" sliceState={m.sliceState} actions={actions} {...ax} hints="tooltip" keyframes={false} />
               ))}
             </div>
           </div>
           {/* ARRANGE */}
-          <div className="flex items-center gap-3">
-            <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Arrange</span>
-            <div className="flex-1 flex items-center gap-3 flex-wrap">
-              <div className="flex-1 min-w-[160px]"><Dropdown size="md" fullWidth label="Group by" value={Number(m.sliceState?.groupBy ?? 0)} options={enumOptions(groupByParam.config)} onChange={(v) => m.setPaletteFilters?.({ groupBy: v })} /></div>
-              <div className="flex-1 min-w-[160px]"><Dropdown size="md" fullWidth label="Rows by" value={Number(m.sliceState?.rowsBy ?? 0)} options={enumOptions(rowsByParam.config)} onChange={(v) => m.setPaletteFilters?.({ rowsBy: v })} /></div>
-              <div className="flex-1 min-w-[160px]"><Dropdown size="md" fullWidth label="Sort by" value={Number(m.sliceState?.sortBy ?? 0)} options={enumOptions(sortByParam.config)} onChange={(v) => m.setPaletteFilters?.({ sortBy: v })} /></div>
+          <div className={`flex gap-3 ${phone ? 'flex-col gap-1 items-stretch' : 'items-center'}`}>
+            <span className={`shrink-0 text-[11px] uppercase tracking-wide text-fg-muted ${phone ? '' : 'w-[72px]'}`}>Arrange</span>
+            <div className={`flex-1 flex gap-3 ${phone ? 'flex-col gap-1.5 items-stretch' : 'items-center flex-wrap'}`}>
+              {/* PHONE: `w-full`, one per line. `min-w-[160px]` in a wrapping row put two on
+                  a line at 390 with their labels clipped to "Grou…". */}
+              <div className={phone ? 'w-full' : 'flex-1 min-w-[160px]'}><Dropdown size="md" fullWidth label="Group by" value={Number(m.sliceState?.groupBy ?? 0)} options={enumOptions(groupByParam.config)} onChange={(v) => m.setPaletteFilters?.({ groupBy: v })} /></div>
+              <div className={phone ? 'w-full' : 'flex-1 min-w-[160px]'}><Dropdown size="md" fullWidth label="Rows by" value={Number(m.sliceState?.rowsBy ?? 0)} options={enumOptions(rowsByParam.config)} onChange={(v) => m.setPaletteFilters?.({ rowsBy: v })} /></div>
+              <div className={phone ? 'w-full' : 'flex-1 min-w-[160px]'}><Dropdown size="md" fullWidth label="Sort by" value={Number(m.sliceState?.sortBy ?? 0)} options={enumOptions(sortByParam.config)} onChange={(v) => m.setPaletteFilters?.({ sortBy: v })} /></div>
               <label className="flex items-center gap-2 text-[13px] text-fg-muted select-none">
                 <input type="checkbox" checked={!!m.sliceState?.reverse} onChange={(e) => m.setPaletteFilters?.({ reverse: e.target.checked })} /> Reverse
               </label>
-              <span className="ml-auto text-[13px] text-fg-muted tabular-nums">
+              <span className={`text-[13px] text-fg-muted tabular-nums ${phone ? '' : 'ml-auto'}`}>
                 {m.loaded ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : 'loading…'}
               </span>
               {(m.narrowers.length > 0 || m.anchor) && (
@@ -643,8 +738,8 @@ export const BrowseStage: React.FC = () => {
             </div>
           </div>
           {/* SOURCES */}
-          <div className="flex items-center gap-3">
-            <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Sources</span>
+          <div className={`flex gap-3 ${phone ? 'flex-col gap-1 items-stretch' : 'items-center'}`}>
+            <span className={`shrink-0 text-[11px] uppercase tracking-wide text-fg-muted ${phone ? '' : 'w-[72px]'}`}>Sources</span>
             <div className="flex-1 min-w-0">
               <PickerBundleToggles featureId="paletteFilters" sliceState={m.sliceState} actions={actions} layout="row" />
             </div>
@@ -691,6 +786,9 @@ export const BrowseStage: React.FC = () => {
             gap={m.gap}
             onZoomChange={m.onZoomChange}
             resetZoomSignal={m.resetZoomSignal}
+            // the phone tool row's − / + (Phase F); harmless on a desktop, where nothing
+            // ever bumps the serial
+            zoomStep={m.zoomStep ?? undefined}
             zoomTool={zoomTool && !m.tool}
             /* V2 as amended: 10 px on a bar, 20 on a box — a tile that has grown toward a
                box takes more rounding (the wall caps it at a third of the short side) */
@@ -700,7 +798,9 @@ export const BrowseStage: React.FC = () => {
             // line with the rail chips and the header above them (owner, 2026-09-09: "the
             // user areas are very tight against the edge of the screen"). Below 28 px the
             // gutter draws nothing and is pure margin — which is exactly what is wanted.
-            gutter={m.isSet ? 24 : undefined}
+            // PHONE: the catalogue takes the same 24 (see PHONE_GUTTER) — its own
+            // auto-shrink lands on ~4 at 390 and runs the tiles into the window edge.
+            gutter={phone ? PHONE_GUTTER : m.isSet ? 24 : undefined}
             // Your own groups are few and named; the catalogue's category bands are many and
             // dense. Give the named ones room to read as headings (owner, 2026-09-09).
             spaciousBands={m.isSet}
@@ -748,8 +848,25 @@ export const BrowseStage: React.FC = () => {
             The VIEW toggle stayed behind in the corner: switching bars ⇄ list is not
             something the pointer does to the wall, and putting it in the tool column would
             re-make the muddle this move undoes. */}
-        <Floating ref={m.toolbarRef} data-gx-tools="tools" className={`absolute top-2.5 flex flex-col gap-0.5 p-[3px] ${floatOver}`} style={{ left: TOOLBAR_LEFT }}>
-          {TOOLS.filter((t) => !m.isSet || t.id === 'zoom').map((t) => {
+        {/* PHONE: the same cluster, laid along the BOTTOM-LEFT as a row of 40 px buttons.
+            A column down the left edge is where a drawing application puts its tools and
+            that reading is not phone-specific — but a phone's left edge is where the thumb
+            already is, so a column there covers the first column of tiles for the whole
+            session. Along the bottom it covers one row's end and sits where the thumb
+            reaches. It stays ONE element carrying `data-gx-tools`, so the click-away
+            exemption that stops a stray pointerdown cancelling an active tool moves with it
+            (ADR-0114 rule 4). It needs no safe-area offset of its own: the wall host is
+            inside `MobileViewportShell`'s padded box, so `bottom-3` is already above the
+            home indicator.
+            The zoom TOOL is not offered: drag-to-zoom competes with the wall's own touch
+            panning. A − / + pair does the same job with no mode to be stuck in. */}
+        <Floating
+          ref={m.toolbarRef}
+          data-gx-tools="tools"
+          className={`absolute flex gap-0.5 p-[3px] ${floatOver} ${phone ? 'bottom-3 left-4 items-center' : 'top-2.5 flex-col'}`}
+          style={phone ? undefined : { left: TOOLBAR_LEFT }}
+        >
+          {TOOLS.filter((t) => (phone ? !m.isSet && t.id !== 'zoom' : !m.isSet || t.id === 'zoom')).map((t) => {
             const on = activeTool === t.id;
             return (
               <button
@@ -758,12 +875,47 @@ export const BrowseStage: React.FC = () => {
                 title={t.title}
                 aria-label={t.label}
                 aria-pressed={on}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
+                style={phone ? { width: PHONE_TOOL, height: PHONE_TOOL } : undefined}
+                className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
               >
                 <Icon name={t.glyph} />
               </button>
             );
           })}
+          {phone && (
+            <>
+              <button
+                onClick={() => m.stepZoom(1 / ZOOM_STEP)}
+                title="Zoom out"
+                aria-label="Zoom out"
+                style={{ width: PHONE_TOOL, height: PHONE_TOOL }}
+                className="rounded-lg flex items-center justify-center transition-colors text-fg-muted hover:text-fg hover:bg-white/5"
+              >
+                <Icon name="zoomOut" />
+              </button>
+              <button
+                onClick={() => m.stepZoom(ZOOM_STEP)}
+                title="Zoom in"
+                aria-label="Zoom in"
+                style={{ width: PHONE_TOOL, height: PHONE_TOOL }}
+                className="rounded-lg flex items-center justify-center transition-colors text-fg-muted hover:text-fg hover:bg-white/5"
+              >
+                <Icon name="zoom" />
+              </button>
+              {/* Fit lives here rather than in the corner readout, which the phone drops —
+                  it is the third thing the zoom pair needs and nothing else in that corner
+                  survived. Disabled until there is something to fit, exactly as before. */}
+              <button
+                onClick={m.resetZoom}
+                disabled={!m.zoomed}
+                title="Back to 1:1"
+                style={{ height: PHONE_TOOL }}
+                className={`px-2.5 rounded-lg text-[13px] flex items-center justify-center transition-colors ${m.zoomed ? 'text-accent-300' : 'text-fg-faint cursor-default'}`}
+              >
+                Fit
+              </button>
+            </>
+          )}
         </Floating>
 
         {/* GRID ⇄ LIST, on a set only: the catalogue's 11,131 rows would want virtualizing,
@@ -813,7 +965,9 @@ export const BrowseStage: React.FC = () => {
             carries the batch; these are the same actions without a drag. */}
         {m.selectedIds.size > 0 && (
           <Floating
-            className={`absolute bottom-3 left-4 flex items-center gap-2 px-3 py-1.5 text-[13px] ${floatOver}`}
+            /* PHONE: above the tool row, which now owns the bottom-left corner. 52 = the
+               row's 40 px button plus its 3 px padding each side, plus a 6 px gap. */
+            className={`absolute left-4 flex items-center gap-2 px-3 py-1.5 text-[13px] ${floatOver} ${phone ? 'bottom-[64px] max-w-[calc(100%-2rem)] flex-wrap' : 'bottom-3'}`}
             data-gx-selection-bar=""
           >
             <span className="text-fg">
@@ -828,7 +982,11 @@ export const BrowseStage: React.FC = () => {
           </Floating>
         )}
 
-        {/* zoom readout + Fit */}
+        {/* zoom readout + Fit. PHONE: gone. The readout is a number about a gesture the
+            phone does not have (middle-drag / right-drag), it sat over the tiles in the
+            other bottom corner, and Fit — the one control in it that still means something
+            — has moved into the tool row. */}
+        {!phone && (
         <Floating className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-muted tabular-nums ${floatOver}`}>
           {/* C.11 (owner): with the zoom tool active, the wall's Padding is here too — the
               gap between swatches is what you tune while zoomed in on them */}
@@ -849,6 +1007,7 @@ export const BrowseStage: React.FC = () => {
             Fit
           </button>
         </Floating>
+        )}
       </div>
 
       {/* Rename in place. Fixed to the pointer, because a tile is a region of a canvas and

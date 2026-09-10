@@ -27,7 +27,17 @@
  * root (`palette/components/useImageDrop.ts`, lifted out of ImageStage) so a drop while
  * on Browse or Build still loads the image and switches here.
  *
+ * PHONE (Phase F, 2026-09-10). The two fixed columns — 560 for the methods and their
+ * dials, 280 for the colour cloud — need 888 px, so on a phone the face becomes ONE
+ * COLUMN, each block at the tray's full width, and it gains a third block at the top:
+ * `slot`, the PICTURE itself. On a wide card the picture is the hero's own image column
+ * and this face is what goes with it; on a phone the card has no column, so the picture
+ * comes here and the hero keeps only a 26 px door to it (`ImageSlot compact`). Order down
+ * the column is picture · method + tools · dials · cloud — the thing you point at, then
+ * what you point at it with.
+ *
  * @see plans/ge-v2-design.md §5.4
+ * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
 import React, { useCallback } from 'react';
@@ -47,7 +57,13 @@ const METHODS: { id: number; label: string; title: string }[] = [
 // customUI when whitelisting params) — see the file header.
 const DIAL_PARAMS = ['colours', 'saliency', 'tonalDetail', 'chromaBoost', 'bandWidth', 'smoothing', 'catmullRom', 'goldenHour', 'spacing', 'reverse'];
 
-export const ExtractStage: React.FC<{ cloudHostRef: (el: HTMLDivElement | null) => void; toolsHostRef: (el: HTMLDivElement | null) => void }> = ({ cloudHostRef, toolsHostRef }) => {
+export const ExtractStage: React.FC<{
+  cloudHostRef: (el: HTMLDivElement | null) => void;
+  toolsHostRef: (el: HTMLDivElement | null) => void;
+  /** PHONE: the picture, rendered above the methods (the hero has no image column there). */
+  slot?: React.ReactNode;
+  phone?: boolean;
+}> = ({ cloudHostRef, toolsHostRef, slot, phone = false }) => {
   const model = useImageStore((s) => s.model);
   const setPath = useImageStore((s) => s.setPath);
   const [modeIdx, setModeIdx] = useImageParam<number>('mode');
@@ -63,9 +79,11 @@ export const ExtractStage: React.FC<{ cloudHostRef: (el: HTMLDivElement | null) 
   );
 
   return (
-    <div className="flex items-stretch gap-4 px-4 py-3">
+    <div className={`flex gap-4 px-4 py-3 ${phone ? 'flex-col' : 'items-stretch'}`}>
+      {/* PHONE only: the picture leads, because it is what the methods below act on */}
+      {slot}
       {/* left, under the picture: the method, its tools, its dials */}
-      <div className="w-[560px] shrink-0 flex flex-col gap-3">
+      <div className={`${phone ? 'w-full' : 'w-[560px] shrink-0'} flex flex-col gap-3`}>
         <div className="flex items-center gap-4 flex-wrap">
           {/* the same segmented control as the palette's Even · Perceptual · Stops (owner) */}
           <div className="inline-flex border border-line/20 rounded-lg overflow-hidden shrink-0">
@@ -89,7 +107,7 @@ export const ExtractStage: React.FC<{ cloudHostRef: (el: HTMLDivElement | null) 
       </div>
       {/* beside the dials: the colour cloud (portalled in by the picture) — the tray is as
           wide as the dials and this, no further (owner, 2026-09-07) */}
-      <div ref={cloudHostRef} className="w-[280px] self-stretch min-h-[220px] shrink-0 rounded-[10px] bg-surface-viewport overflow-hidden" />
+      <div ref={cloudHostRef} className={`${phone ? 'w-full h-[220px]' : 'w-[280px] self-stretch shrink-0'} min-h-[220px] rounded-[10px] bg-surface-viewport overflow-hidden`} />
     </div>
   );
 };

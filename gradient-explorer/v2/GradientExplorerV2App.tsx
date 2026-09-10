@@ -37,6 +37,7 @@ import { useGlobalContextMenu } from '../../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../../components/GlobalContextMenu';
 import { StoreCallbacksProvider, type StoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { ToastHost } from '../../engine/components/ToastHost';
+import { MobileViewportShell } from '../../engine/components/MobileViewportShell';
 import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
@@ -375,16 +376,33 @@ export const GradientExplorerV2App: React.FC = () => {
 
   return (
     <StoreCallbacksProvider value={storeCallbacks}>
-    <div className="fixed inset-0 bg-surface text-fg select-none flex flex-col overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
+    {/* THE FRAME (Phase F). `MobileViewportShell` branches on `isDeviceMobile` itself and
+        its DESKTOP branch is `fixed inset-0 w-full h-full` — the box this shell already
+        drew by hand — so it is mounted UNCONDITIONALLY rather than behind a `useIsPhone`
+        of our own: one place decides, and desktop keeps the identical box. On a phone it
+        swaps in `sticky top-0 h-[100dvh]` (the address bar / keyboard tracker) and pads all
+        four edges by `env(safe-area-inset-*)`, which is what gets the wall's bottom
+        controls off the home indicator — they are `absolute` inside this padded box, so
+        they inherit the inset for free. `ToastHost` is `fixed` and cannot, so it carries
+        the bottom inset itself (see its own comment). */}
+    <MobileViewportShell className="bg-surface text-fg select-none">
+    <div className="w-full h-full flex flex-col overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
       {/* top bar */}
       <header className="h-12 shrink-0 flex items-center gap-1.5 px-4 bg-surface-dock border-b border-line/10">
-        <a href="app-gmt.html" className="flex items-center gap-2 mr-auto no-underline" title="GMT">
-          <GmtWordmark className="h-3.5 w-auto opacity-80" />
-          <span className="text-[15px] font-semibold text-fg">Gradient Explorer</span>
-          <span className="text-[11px] text-fg-dim border border-line/20 rounded px-1">next</span>
+        {/* `min-w-0` + a truncating title: on a phone the brand is the one elastic thing in
+            this row, and without it the wordmark pushed undo / redo / settings off the
+            right edge (measured 390 px, Phase F). */}
+        <a href="app-gmt.html" className="flex items-center gap-2 mr-auto min-w-0 no-underline" title="GMT">
+          <GmtWordmark className="h-3.5 w-auto shrink-0 opacity-80" />
+          <span className="text-[15px] font-semibold text-fg truncate">Gradient Explorer</span>
+          {/* the build badge is for whoever is testing the two shells side by side; a phone
+              has no room to spend on it */}
+          <span className="max-md:hidden text-[11px] text-fg-dim border border-line/20 rounded px-1">next</span>
         </a>
-        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={24} /></button>
-        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={24} /></button>
+        {/* 40 px hit boxes on a phone (`max-md:`): 32 is comfortable for a pointer and
+            under the ~44 px a fingertip wants. The GLYPH stays 24 either way. */}
+        <button className={`${tb} w-8 px-0 max-md:w-10 max-md:h-10 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={24} /></button>
+        <button className={`${tb} w-8 px-0 max-md:w-10 max-md:h-10 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={24} /></button>
         {/* Back to GMT is a plain link (owner, 2026-09-07): the working gradient is already
             in GMT's My Gradients panel through the shared `gmt.favients` Recent group, so
             the link carries nothing. Only shown when this page was opened from the studio. */}
@@ -547,6 +565,7 @@ export const GradientExplorerV2App: React.FC = () => {
       <ToastHost />
       <FullscreenGradientOverlay />
     </div>
+    </MobileViewportShell>
     </StoreCallbacksProvider>
   );
 };

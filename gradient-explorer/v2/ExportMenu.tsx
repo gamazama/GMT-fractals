@@ -57,6 +57,15 @@
  * shared with the hero's hover flyout of recent exports, so the two surfaces cannot drift.
  * This file is only the full window. It hangs off the hero BAND, not the card — the card
  * clips its children (2026-09-07).
+ *
+ * PHONE (Phase F, 2026-09-10): a full-screen SHEET, and the `positionClass` the host passes
+ * is ignored. Both hosts anchor a 360 px window in a corner and both ran it off the screen
+ * at 390; where it came from does not change the answer, so the branch is here rather than
+ * two `phone ?` strings at the call sites. `fixed` inside `env(safe-area-inset-*)`, its own
+ * scroll, and the rows that carried fixed pairs — the subject segments, the swatch stepper,
+ * the PNG W × H — wrap. The × stays where it was, at the top right.
+ *
+ * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -69,6 +78,7 @@ import type { RGB } from '../../palette/core/oklab';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { Floating } from './ui/Floating';
 import { Icon } from './ui/Icon';
+import { useIsPhone } from './useIsPhone';
 import { ZoneLabel } from './ui/ZoneLabel';
 // The copy glyph is the colour picker's, not a second drawing of the same idea (owner,
 // 2026-09-09: "we have a copy icon in the main color picker that you can use"). It is a
@@ -271,6 +281,7 @@ export const ExportMenu: React.FC<{
   palette = [],
 }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const phone = useIsPhone();
   const isSet = !!set;
   // The window's ceiling is MEASURED, not a fraction of the viewport. Both call sites
   // position it absolutely inside a container the page has already pushed down (the hero's
@@ -452,8 +463,14 @@ export const ExportMenu: React.FC<{
     // and the group headers below painted over where they should have been.
     <Floating
       ref={ref}
-      className={`${positionClass} w-[360px] overflow-y-auto p-4 flex flex-col gap-3 [&>*]:shrink-0`}
-      style={{ maxHeight: maxH }}
+      /* PHONE (Phase F): a full-screen SHEET, and `positionClass` is deliberately ignored —
+         both hosts (the hero's `right-2.5 top-[56px]`, the ground's `left-6 top-10`) put a
+         360 px window off both axes at 390, and the answer is the same whichever opened it.
+         `fixed` inside the safe area, its own scroll, the × already at the top right. The
+         one thing kept from the desktop window is `[&>*]:shrink-0`, which is what stops a
+         scrolling flex column squashing its children instead of scrolling (see below). */
+      className={`${phone ? 'fixed left-0 right-0 z-40 rounded-none border-x-0' : `${positionClass} w-[360px]`} overflow-y-auto p-4 flex flex-col gap-3 [&>*]:shrink-0`}
+      style={phone ? { top: 'env(safe-area-inset-top)', bottom: 'env(safe-area-inset-bottom)' } : { maxHeight: maxH }}
       data-gx-export
     >
       <div className="flex items-center">
@@ -465,8 +482,10 @@ export const ExportMenu: React.FC<{
         </button>
       </div>
 
-      {/* THE SUBJECT (§8b item 5): which face of the gradient is exported. */}
-      <div className="inline-flex self-start border border-line/20 rounded-lg overflow-hidden" data-gx-export-subject>
+      {/* THE SUBJECT (§8b item 5): which face of the gradient is exported.
+          PHONE: `flex-wrap`, so a long "Swatches · 12" drops to its own line rather than
+          pushing the pill past the sheet's edge. */}
+      <div className={`inline-flex self-start border border-line/20 rounded-lg overflow-hidden ${phone ? 'flex-wrap max-w-full' : ''}`} data-gx-export-subject>
         <Segment on={!swatches} title="The gradient itself — a continuous ramp" onClick={() => setSubject('ramp')} data="ramp">
           Ramp
         </Segment>
@@ -481,7 +500,7 @@ export const ExportMenu: React.FC<{
       </div>
 
       {swatches && isSet && (
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${phone ? 'flex-wrap' : ''}`}>
           <ZoneLabel className="flex-1">Swatches per gradient</ZoneLabel>
           <div className="inline-flex items-center border border-line/20 rounded-lg overflow-hidden" data-gx-swatch-count>
             <button
@@ -631,7 +650,7 @@ export const ExportMenu: React.FC<{
               nobody could change. Only the strip has one — a contact sheet lays itself out
               from the set's count, a swatch sheet from the palette's. */}
           {!swatches && !isSet ? (
-            <div className="flex items-center gap-1.5 px-1 pt-1.5" data-gx-png-size>
+            <div className={`flex items-center gap-1.5 px-1 pt-1.5 ${phone ? 'flex-wrap' : ''}`} data-gx-png-size>
               <NumField
                 value={settings.pngW}
                 onChange={(pngW) => saveSettings({ ...settings, pngW: pngW ?? DEFAULT_SETTINGS.pngW })}

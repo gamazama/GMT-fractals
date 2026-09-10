@@ -27,6 +27,25 @@
  * in-progress selection — zoom/pan move the wall out from under viewport-pinned coords).
  *
  * Pure / host-agnostic: groups + sprite in, onPick + selection callbacks out.
+ *
+ * Touch (Phase F, 2026-09-10). Two additions, neither of which a mouse can tell apart from
+ * what was here before:
+ *   • the scroll box declares `touch-action: (selectionTool || zoomTool) ? 'none' : 'pan-y'`
+ *     — with no tool a finger scrolls the wall natively; with one the drag belongs to the
+ *     tool (marquee / lasso / paint / zoom) and the browser must not claim it. The handlers
+ *     were already Pointer Events, so a touch drag runs the same path a left-mouse drag does.
+ *   • `zoomStep` — a serial-bumped multiply about the viewport CENTRE, for a host's − / +
+ *     buttons (a phone has no middle button to drag). It reuses the drag-zoom's commit
+ *     anchor verbatim, so the point under the centre stays put exactly as a grabbed point does.
+ * There is deliberately NO pinch — see `zoomStep`'s own note for what was measured and why.
+ *
+ * @invariant the scroll box hands a finger's drag to the active tool and, with no tool, to
+ *   the browser — proven by: `npx tsx debug/smoke-ge-walltouch.mts` ("a tool drag is the
+ *   tool's: N shapes painted, scrollTop still X" / "no tool: touch-action pan-y, a swipe
+ *   scrolled the wall"). Falsified three ways, including one that leaves the declaration
+ *   correct and breaks the pointer path.
+ * @invariant a `zoomStep` leaves the tile under the viewport centre under the viewport
+ *   centre — proven by: `npx tsx debug/test-palette-wallzoom.mts` (see `zoomStepPlan`).
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -191,6 +210,26 @@ export interface PickerWallProps {
   onZoomChange?: (zoom: { x: number; y: number }) => void;
   /** Increment to reset the zoom to 1:1 (e.g. a header "reset" button). */
   resetZoomSignal?: number;
+  /**
+   * A zoom STEP (additive, 2026-09-10, Phase F): every NEW `serial` multiplies both zoom
+   * axes by `factor` (clamped to the wall's own limits) about the CENTRE of the visible
+   * viewport, keeping the point under the centre fixed the way the middle-drag zoom keeps
+   * its grabbed point fixed — it commits through the same anchor. Reports up through
+   * `onZoomChange` + `onGesture('zoom')`, exactly as a gesture would.
+   *
+   * This is what a host's − / + buttons drive: a phone has no middle button to drag. A
+   * serial of 0 never fires, so a host that renders the buttons without pressing one
+   * changes nothing.
+   *
+   * Why not PINCH. Measured 2026-09-10 on a Pixel 5 profile: with the no-tool `pan-y` the
+   * wall still SEES both fingers (2 pointerdowns, 20 pointermoves, 0 pointercancels on a
+   * two-finger spread), so a pinch is implementable — but it would have to share the
+   * gesture with the browser's own vertical pan, which takes any pinch with a vertical
+   * component and cancels the pointers mid-gesture. Buying reliability by declaring `none`
+   * with no tool active would cost the wall its native scroll, which is the one thing a
+   * finger most needs from it. Left out on purpose, not overlooked.
+   */
+  zoomStep?: { serial: number; factor: number };
   /** Active spatial-selection tool (null = normal pick/drag interaction). */
   selectionTool?: SelectionTool | null;
   /** Zoom tool (additive, 2026-09-03, Gradient Explorer v2 Browse): while true and no
@@ -752,6 +791,80 @@ const ZOOM_PX_PER_DOUBLE = 260;
 const ZOOM_MIN = 0.3;
 const ZOOM_MAX = 16;
 
+/** The wall's zoom limits. Every path that changes the zoom goes through this. */
+export const clampWallZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+
+/**
+ * The gap between tiles as DRAWN: the host's `gap` (Padding) is the floor, and the gap
+ * grows with the tile so a zoomed-in wall breathes. Module-level so the pure commit maths
+ * below computes the SAME gap the layout does — a second copy is how the two drift.
+ */
+const gapForTile = (floor: number, w: number): number => Math.max(floor, Math.round(w / 14));
+
+/**
+ * What a zoom commit needs to put the anchored point back where it was: where it sat in the
+ * viewport (`relX/relY`), where it sat in the content (`ax`, and the header/swatch split of
+ * `ay` — headers are fixed-height and do NOT scale), and the zoom it was anchored at.
+ */
+export interface WallZoomAnchor {
+  relX: number;
+  relY: number;
+  ax: number;
+  czx: number;
+  czy: number;
+  headerAbove: number;
+  swatchAbove: number;
+}
+
+/**
+ * Plan a zoom STEP about the centre of the viewport: the new zoom, plus the anchor that
+ * pins the point under the centre. Returns null when the clamp makes it a no-op (already
+ * at a limit), so the caller does not commit a zoom that is not a change.
+ *
+ * `headerAbove` is the summed height of the fixed category-header bands above the anchor —
+ * measured from the DOM by the caller, since only it can see them.
+ *
+ * @invariant a step by `factor` leaves the tile under the viewport centre under the viewport
+ *   centre — proven by: `npx tsx debug/test-palette-wallzoom.mts` ("the tile under the centre
+ *   is the same tile after the step"), which composes this with `pinnedContentPoint`.
+ */
+export const zoomStepPlan = (
+  view: { scrollLeft: number; scrollTop: number; clientWidth: number; clientHeight: number },
+  headerAbove: number,
+  cur: { x: number; y: number },
+  factor: number,
+): { anchor: WallZoomAnchor; next: { x: number; y: number } } | null => {
+  const next = { x: clampWallZoom(cur.x * factor), y: clampWallZoom(cur.y * factor) };
+  if (next.x === cur.x && next.y === cur.y) return null;
+  const relX = view.clientWidth / 2;
+  const relY = view.clientHeight / 2;
+  const ax = view.scrollLeft + relX;
+  const ay = view.scrollTop + relY;
+  return { anchor: { relX, relY, ax, czx: cur.x, czy: cur.y, headerAbove, swatchAbove: ay - headerAbove }, next };
+};
+
+/**
+ * Where the anchored point lands in CONTENT coordinates once the wall has re-rendered at the
+ * new tile size — the drag-zoom's commit maths, lifted out so a step and a drag cannot
+ * disagree and so it can be checked without a browser.
+ *
+ * Scaled by the ACTUAL rounded rendered swatch sizes (the layout rounds every swatch, and
+ * the unrounded zoom ratio lets that rounding accumulate into visible drift over many rows).
+ * The caller clamps the result to the scroll range — that needs the live scroll box.
+ */
+export const pinnedContentPoint = (
+  a: WallZoomAnchor,
+  g: { labelW: number; swatchW: number; swatchH: number; ewW: number; ewH: number; effGap: number; gap: number },
+): { contentX: number; contentY: number } => {
+  const ewWStart = Math.max(1, Math.round(g.swatchW * a.czx));
+  const ewHStart = Math.max(1, Math.round(g.swatchH * a.czy));
+  const gapStart = gapForTile(g.gap, ewWStart);
+  return {
+    contentX: g.labelW + (a.ax - g.labelW) * ((g.ewW + g.effGap) / (ewWStart + gapStart)),
+    contentY: a.headerAbove + a.swatchAbove * ((g.ewH + g.effGap) / (ewHStart + gapStart)),
+  };
+};
+
 export const PickerWall: React.FC<PickerWallProps> = ({
   groups,
   sprite,
@@ -774,6 +887,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onGesture,
   onZoomChange,
   resetZoomSignal,
+  zoomStep,
   selectionTool = null,
   zoomTool = false,
   tileRadius = 0,
@@ -817,7 +931,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // set is small (owner, 2026-09-08: "when the wall is zoomed in, or with fewer tiles,
   // there should be more padding between gradients"). The host's `gap` (Padding) is the
   // floor; a 32 px tile keeps 2 px, a 96 px tile gets 7, a 192 px tile 14.
-  const gapAt = (w: number) => Math.max(gap, Math.round(w / 14));
+  const gapAt = (w: number) => gapForTile(gap, w);
   const baseGap = gapAt(swatchW);
   const cols = Math.max(1, Math.floor((width - labelW - baseGap) / (swatchW + baseGap)));
   // Effective (zoomed) swatch render size + the resulting content width.
@@ -1150,6 +1264,23 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // else: a stray click with nothing selected — ignore.
   };
 
+  /**
+   * Sum the fixed-height category-header bands above a content-y (one-time, at grab). They
+   * do NOT scale with the zoom, so the swatch content above the anchor scales and they don't
+   * — which is the whole reason the commit anchor carries the two apart.
+   */
+  const headersAbove = (el: HTMLDivElement, ay: number): number => {
+    const rect = el.getBoundingClientRect();
+    let headerAbove = 0;
+    el.querySelectorAll('[data-wall-header]').forEach((h) => {
+      const r = (h as HTMLElement).getBoundingClientRect();
+      const top = r.top - rect.top + el.scrollTop;
+      if (top + r.height <= ay) headerAbove += r.height;
+      else if (top < ay) headerAbove += ay - top;
+    });
+    return headerAbove;
+  };
+
   const applyLiveZoom = (clientX: number, clientY: number) => {
     const d = drag.current;
     const cw = contentRef.current;
@@ -1180,18 +1311,35 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     if (cw) cw.style.transform = '';
     const el = scrollRef.current;
     if (!el) return;
-    // Scale by the ACTUAL rounded rendered swatch sizes (ewW/ewH vs the committed-start
-    // equivalents) — the layout rounds every swatch, and using the unrounded zoom ratio
-    // instead lets that rounding accumulate into visible drift over many rows.
-    const ewWStart = Math.max(1, Math.round(swatchW * c.czx));
-    const ewHStart = Math.max(1, Math.round(swatchH * c.czy));
-    const gapStart = gapAt(ewWStart);
-    const contentX = labelW + (c.ax - labelW) * ((ewW + effGap) / (ewWStart + gapStart));
-    const contentY = c.headerAbove + c.swatchAbove * ((ewH + effGap) / (ewHStart + gapStart));
+    // Where the anchor lands at the new tile size — the same pure function a zoomStep
+    // commits through (see `pinnedContentPoint` for why it scales by the ROUNDED sizes).
+    const { contentX, contentY } = pinnedContentPoint(c, { labelW, swatchW, swatchH, ewW, ewH, effGap, gap });
     el.scrollLeft = Math.max(0, Math.min(contentX - c.relX, contentWidth - el.clientWidth));
     el.scrollTop = Math.max(0, Math.min(contentY - c.relY, el.scrollHeight - el.clientHeight));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ewW, ewH]);
+
+  /**
+   * A zoom STEP from the host (its − / + buttons): multiply both axes about the centre of the
+   * viewport and commit through the SAME anchor the drag-zoom commits through, so the point
+   * under the centre stays under the centre. `onZoomChange` rides the `zoom` effect above and
+   * `onGesture('zoom')` fires here, so a host cannot tell a stepped zoom from a dragged one.
+   */
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!zoomStep?.serial || !el) return;
+    const plan = zoomStepPlan(
+      { scrollLeft: el.scrollLeft, scrollTop: el.scrollTop, clientWidth: el.clientWidth, clientHeight: el.clientHeight },
+      headersAbove(el, el.scrollTop + el.clientHeight / 2),
+      zoom,
+      zoomStep.factor,
+    );
+    if (!plan) return; // already at a limit — not a change, so not a commit
+    commit.current = plan.anchor;
+    setZoom(plan.next);
+    onGesture?.('zoom');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoomStep?.serial]);
 
   // A native drag beginning ANYWHERE ends any marquee in progress. The two gestures start
   // the same way — press, then move — and the browser decides which it is only once
@@ -1284,14 +1432,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const rect = el.getBoundingClientRect();
       const relX = e.clientX - rect.left, relY = e.clientY - rect.top;
       const ax = el.scrollLeft + relX, ay = el.scrollTop + relY;
-      // Sum the fixed-height category-header bands above the cursor (one-time, at grab).
-      let headerAbove = 0;
-      el.querySelectorAll('[data-wall-header]').forEach((h) => {
-        const r = (h as HTMLElement).getBoundingClientRect();
-        const top = r.top - rect.top + el.scrollTop;
-        if (top + r.height <= ay) headerAbove += r.height;
-        else if (top < ay) headerAbove += ay - top;
-      });
+      const headerAbove = headersAbove(el, ay);
       drag.current = { mode: 'zoom', sx: e.clientX, sy: e.clientY, czx: zoom.x, czy: zoom.y, ax, ay, relX, relY, headerAbove, swatchAbove: ay - headerAbove, lzx: zoom.x, lzy: zoom.y };
       el.style.cursor = 'move';
     }
@@ -1582,7 +1723,13 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         className="absolute inset-0 overflow-auto custom-scroll pt-3 outline-none focus-visible:ring-1 focus-visible:ring-accent-400/60"
         {...(keyboard ? { tabIndex: 0, role: 'grid', 'aria-label': 'Gradients' } : {})}
         onKeyDown={keyboard ? onWallKeyDown : undefined}
-        style={{ cursor: toolCursor(selectionTool) }}
+        // touch-action decides who owns a finger's drag, and it has to be declared BEFORE
+        // the gesture starts — the browser has already committed by the first pointermove.
+        // With no tool the wall is a scroller (`pan-y`, so a finger flicks it the way every
+        // other list on the phone flicks); with a tool the drag is the tool's (marquee,
+        // lasso, paint, or the zoom tool's left-drag) and the browser must not take it for
+        // scrolling. A mouse ignores this property entirely, so the desktop is untouched.
+        style={{ cursor: toolCursor(selectionTool), touchAction: selectionTool || zoomTool ? 'none' : 'pan-y' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

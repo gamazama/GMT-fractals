@@ -34,12 +34,27 @@
  * Image face to `extract` (opening one enters the source live, closing it commits with
  * `use`) — Phase B's tab semantics, re-hosted (P3).
  *
+ * PHONE (Phase F, 2026-09-10). The tray is still HUNG FROM ITS TAB — same tongue, same
+ * TUCK_PX clip, same z-30 — but it spans the shell (`left: 10; right: 10`) instead of
+ * following the panel's left edge: at 390 px the panel-aligned box was 257 px wide and
+ * every face overflowed it. Two more things follow from the width:
+ *   • its HEIGHT is capped at `PHONE_MAX_FRACTION` of the room between the card's bottom
+ *     and the viewport (measured, from `maxH` — the same "measure, don't guess a vh"
+ *     rule `ExportMenu` learned) and it scrolls inside, so the wall is never wholly
+ *     covered by the thing floating over it;
+ *   • the faces re-flow to one column: Mix's sliders go full width, Adjust's three bins
+ *     stack, Curves puts its controls above the plot, and the Image face grows the picture
+ *     (see `ExtractStage`).
+ * `ChannelGraphEditor` collapses its keyframe inspector to a rail below 560 px on its own
+ * (grep `width < 560` there), so Curves needs nothing passed for that.
+ *
  * The shadow rule this file obeys — a surface casts onto ground it floats over, never
  * onto chrome it is joined to, and a clip is the only guarantee:
  * @see docs/adr/0114-the-unified-shell-visual-language.md
+ * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
@@ -77,6 +92,10 @@ interface Props {
    *  (owner, 2026-09-07: inline with the gradient panel, not under the image column). The
    *  Image face ignores it and spans the full width — the one face that grows to a pane. */
   left: number;
+  /** PHONE (Phase F): span the shell, cap the height, scroll inside, one column per face. */
+  phone?: boolean;
+  /** PHONE: the picture, handed to the Image face (the hero has no image column there). */
+  imageSlot?: React.ReactNode;
 }
 
 /**
@@ -87,13 +106,46 @@ interface Props {
  */
 const TUCK_PX = 11;
 
-export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left }) => (
+/** Phone: the tray's inset from each side of the shell. It is the hero band's own phone
+ *  padding (`p-2` in WorkingHero — 10 on a wide screen, 8 here), because the tray hangs
+ *  from the card and its sides must land on the card's: change one and change the other. */
+const PHONE_INSET = 8;
+/** Phone: how much of the room BELOW the card the tray may take before it scrolls. Just
+ *  over half — enough that a face is worth opening, little enough that the wall it floats
+ *  over is still visibly there (which is the whole reason the tray floats). */
+const PHONE_MAX_FRACTION = 0.55;
+
+export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left, phone = false, imageSlot }) => {
+  // The cap is MEASURED from where the tray actually starts, not guessed as a `vh`: the
+  // hero's height moves with the source (a split ramp, a Mix band), so a fraction of the
+  // viewport would be a ceiling on the wrong number — the mistake `ExportMenu`'s `maxH`
+  // records. Re-measured on resize and whenever the face changes (the face is what makes
+  // the tray tall enough to care).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [maxH, setMaxH] = useState<number>(0);
+  useEffect(() => {
+    if (!phone || face === null) return;
+    const measure = () => {
+      const top = rootRef.current?.getBoundingClientRect().top ?? 0;
+      setMaxH(Math.max(160, Math.round((window.innerHeight - top) * PHONE_MAX_FRACTION)));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [phone, face]);
+
+  return (
   <div
+    ref={rootRef}
     hidden={face === null}
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
     className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20"
-    style={{ top: `calc(100% - ${TUCK_PX}px)`, left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }}
+    style={
+      phone
+        ? { top: `calc(100% - ${TUCK_PX}px)`, left: PHONE_INSET, right: PHONE_INSET, maxHeight: maxH || undefined }
+        : { top: `calc(100% - ${TUCK_PX}px)`, left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }
+    }
   >
     {/* THE SHADOW, and where it is allowed to fall (owner, 2026-09-10). The tray floats
         over the GROUND — the set rail, the narrowing bar and the wall below them — and it
@@ -114,18 +166,26 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
       className="pointer-events-none absolute -inset-px rounded-b-[20px] shadow-[0_24px_48px_-12px_rgba(0,0,0,0.65),0_0_28px_-6px_rgba(0,0,0,0.5)]"
       style={{ clipPath: `inset(${TUCK_PX}px -64px -64px -64px)` }}
     />
-    {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
-        wiring; the studio keeps the default */}
-    <InputSkinProvider skin="soft">
-      {face === 'mix' && <MixFace />}
-      {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} />}
-      {face === 'curves' && <CurvesFace derived={derived} width={width} />}
-      {face === 'adjust' && <AdjustFace />}
-    </InputSkinProvider>
-    {/* the inspector host lives whatever the face — the editor portals into it */}
-    <div ref={inspectorHostRef} hidden={face !== 'inspector'} className="px-4 py-3" />
+    {/* PHONE: the SCROLL lives here, not on the root. The root must keep `overflow:
+        visible` — the shadow above rides an element that reaches outside the box, and a
+        face's dropdowns and the inspector's colour picker overflow it on purpose. On
+        desktop this is `display: contents`, i.e. not a box at all, so the faces lay out
+        exactly as they did before it existed. */}
+    <div className={phone ? 'min-h-0 overflow-y-auto overflow-x-hidden mobile-scroll rounded-b-[20px]' : 'contents'}>
+      {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
+          wiring; the studio keeps the default */}
+      <InputSkinProvider skin="soft">
+        {face === 'mix' && <MixFace phone={phone} />}
+        {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} slot={imageSlot} phone={phone} />}
+        {face === 'curves' && <CurvesFace derived={derived} width={width} phone={phone} />}
+        {face === 'adjust' && <AdjustFace phone={phone} />}
+      </InputSkinProvider>
+      {/* the inspector host lives whatever the face — the editor portals into it */}
+      <div ref={inspectorHostRef} hidden={face !== 'inspector'} className="px-4 py-3" />
+    </div>
   </div>
-);
+  );
+};
 
 const MIX_CHANNELS: { param: 'mixL' | 'mixC' | 'mixH'; label: string }[] = [
   { param: 'mixL', label: 'Lightness' },
@@ -133,7 +193,7 @@ const MIX_CHANNELS: { param: 'mixL' | 'mixC' | 'mixH'; label: string }[] = [
   { param: 'mixH', label: 'Hue' },
 ];
 
-const MixFace: React.FC = () => {
+const MixFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
   const swap = useGeneratorStore((s) => s.swap);
   const [mixL, setL] = useGenParam<number>('mixL');
   const [mixC, setC] = useGenParam<number>('mixC');
@@ -149,13 +209,15 @@ const MixFace: React.FC = () => {
     } else setters[param](v);
   };
   return (
-    <div className="flex items-stretch gap-4 px-4 py-3">
+    /* PHONE: the bar and the three sliders stack — 320 px of slider beside a bar needs a
+       card this shell does not have at 390 (the two overlapped, measured Phase F). */
+    <div className={`flex gap-4 px-4 py-3 ${phone ? 'flex-col' : 'items-stretch'}`}>
       {/* the gradient you're mixing with — the bar the next pick fills */}
       <div className="flex-1 min-w-0 flex flex-col justify-center">
         <MixBandB height={36} />
       </div>
       {/* the three channel blends, A (0) → B (1); Link moves them as one */}
-      <div className="w-[320px] shrink-0 flex flex-col gap-0.5">
+      <div className={`${phone ? 'w-full' : 'w-[320px] shrink-0'} flex flex-col gap-0.5`}>
         {MIX_CHANNELS.map((c) => (
           <Slider key={c.param} dense label={c.label} value={values[c.param]} min={0} max={1} step={0.01} defaultValue={0} onChange={(v) => change(c.param, v)} onDragStart={genEditStart} onDragEnd={genEditEnd} />
         ))}
@@ -176,10 +238,12 @@ const MixFace: React.FC = () => {
  *  `dynamicVisible: isMixed` (a Generator-era assumption); Adjust belongs to WORKING, so
  *  `ignoreDynamicVisible` skips that gate for this mount only — the shared param definition
  *  (also read by GeneratorStage / app-gmt) is untouched. @see plans/ge-v2-design.md §12 item 4 */
-const AdjustFace: React.FC = () => {
+const AdjustFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
   const bin = 'flex-1 min-w-0 rounded-[10px] bg-surface-viewport px-3.5 py-3';
   return (
-    <div className="flex items-stretch gap-3 px-4 py-3">
+    /* PHONE: the three bins STACK. Side by side they are ~110 px each at 390, which puts a
+       slider's label on top of its own number — the tray scrolls instead. */
+    <div className={`flex gap-3 px-4 py-3 ${phone ? 'flex-col' : 'items-stretch'}`}>
       <div className={bin}>
         <AutoFeaturePanel featureId="paletteGenerator" whitelistParams={['hueRotate', 'chroma', 'contrast']} hints="tooltip" keyframes={false} ignoreDynamicVisible />
       </div>
@@ -205,7 +269,7 @@ const AdjustFace: React.FC = () => {
  * working pipeline's base. The prospective-fit ghost + ghost points use the Generator's
  * recipe, computed here because the base is no longer the A×B mix.
  */
-const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ derived, width }) => {
+const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boolean }> = ({ derived, width, phone = false }) => {
   const tracks = useGeneratorStore((s) => s.tracks);
   const curvesOn = useGeneratorStore((s) => s.curvesOn);
   const detail = useGeneratorStore((s) => s.detail);
@@ -241,6 +305,10 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // PHONE: the plot loses 40 px so the controls above it and the wall below both stay
+  // visible inside the tray's cap; the editor collapses its own inspector to a rail below
+  // 560 px, so the whole width goes to the curve.
+  const plotH = phone ? 200 : 240;
   return (
     <div className="flex flex-col gap-3 px-4 py-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -254,16 +322,16 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number }> = ({ deri
           Reset
         </Act>
         {/* the fit recipe; while either is being dragged the editor shows its ghost (C.16) */}
-        <div className="w-[170px] ml-2"><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
-        <div className="w-[170px]"><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+        <div className={`${phone ? 'w-full' : 'w-[170px] ml-2'}`}><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+        <div className={phone ? 'w-full' : 'w-[170px]'}><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
       </div>
       {tracks ? (
-        <div className="relative rounded-[10px] overflow-hidden" style={{ height: 240 }}>
+        <div className="relative rounded-[10px] overflow-hidden" style={{ height: plotH }}>
           <ChannelGraphEditor
             tracks={tracks}
             onTracksChange={g.setTracks}
             width={width}
-            height={240}
+            height={plotH}
             previewRamp={derived.ramp ?? undefined}
             ghost={ghost}
             ghostPoints={ghostPoints}

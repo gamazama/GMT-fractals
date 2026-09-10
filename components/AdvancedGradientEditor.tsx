@@ -1,4 +1,29 @@
 
+/**
+ * AdvancedGradientEditor — the stops editor, shared by three hosts: app-gmt's DDFS gradient
+ * param (`chrome="full"`), the palette suite's generator panel, and the Gradient Explorer
+ * v2 hero (`chrome="strip"`). It owns the strip, the knot track, the bias handles, the
+ * selection brackets and the marquee; undo is the host's, through the bracket contract on
+ * `AdvancedGradientEditorProps` (interface (d)).
+ *
+ * Touch (Phase F, 2026-09-10). Every drag runs on POINTER events — `onPointerDown` plus
+ * window `pointermove` / `pointerup` / `pointercancel` — so a finger moves knots, bias
+ * handles, brackets and the marquee down the same path a left mouse button always did, and
+ * the surfaces that host a drag (the strip, the knot track, the knots, the brackets)
+ * declare `touch-action: none` so the browser cannot take the gesture for a scroll. Two
+ * details are load-bearing and easy to undo by accident:
+ *   • the default is cancelled on the compatibility `mousedown`, NOT on the `pointerdown` —
+ *     cancelling a pointerdown suppresses the rest of the gesture's mouse events, which the
+ *     v2 hero's marquee-escape handoff and every close-on-outside-press listener still need.
+ *     See `startDrag`, which carries the measurement.
+ *   • `showBias` treats SELECTION as hover on a coarse pointer, because a finger never
+ *     hovers and the strip chrome gates the handles on hover.
+ * Guard: `npm run smoke:ge-phone` step [7] — a CDP touch drag on `[data-gx-knot]` must move
+ * a stop in `window.__gxWorking().config.stops`; it is red against the pre-conversion file.
+ * The desktop path is guarded by `npm run smoke:ge-hero` and `npm run smoke:ge-tray`, which
+ * drive this editor with a real mouse.
+ */
+
 import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
@@ -51,6 +76,8 @@ interface DragPayload {
     startX: number;
     startY: number;
     initialKnots: AdvancedGradientKnot[];
+    /** The pointer that started it. A second finger's moves are not this drag's (Phase F). */
+    pointerId: number;
 }
 
 /**
@@ -375,7 +402,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // 'strip' chrome: the bias handles show only while the pointer is over the bar (C.7,
     // owner 2026-09-07: "hero bias handles to only be visible when over the gradient").
     const [stripHover, setStripHover] = useState(false);
-    const showBias = isBiasHandlesVisible && (chrome !== 'strip' || stripHover);
+    /**
+     * Touch (Phase F, 2026-09-10): a coarse pointer never hovers, so `stripHover` is never
+     * true there and the hover gate above would hide the bias handles for good — the one
+     * control on the bar a finger could never reach. On a coarse pointer SELECTION stands in
+     * for hover: choose a knot and the handles appear. Read once, like the picker wall's own
+     * coarse seam; a desktop mouse takes the hover path exactly as before.
+     */
+    const coarsePointer = useRef(
+        typeof window !== 'undefined' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(pointer: coarse)').matches,
+    );
+    const showBias = isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
     
     const dragPayloadRef = useRef<DragPayload | null>(null);
     const [isDragRemoving, setIsDragRemoving] = useState(false);
@@ -652,10 +691,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         paste: handlePaste,
     })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost]);
 
-    const handleMouseMove = useCallback((e: MouseEvent) => {
+    const handlePointerMove = useCallback((e: PointerEvent) => {
         const payload = dragPayloadRef.current;
-        if (!payload) return;
-        
+        if (!payload || e.pointerId !== payload.pointerId) return;
+
         const { type, ids, startX, startY, initialKnots } = payload;
         const trackRect = knotTrackRef.current?.getBoundingClientRect();
         if (!trackRect) return;
@@ -717,9 +756,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         }
     }, [emitChange]);
 
-    const handleMouseUp = useCallback((e: MouseEvent) => {
+    const handlePointerUp = useCallback((e: PointerEvent) => {
         const payload = dragPayloadRef.current;
-        if (!payload) return;
+        if (!payload || e.pointerId !== payload.pointerId) return;
 
         if (payload.type === 'marquee' && marqueeEscapedRef.current) {
             // It left, and whoever took it over owns the release. Select nothing.
@@ -760,13 +799,14 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
         dragPayloadRef.current = null;
         document.body.style.cursor = '';
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerUp);
         // knotSession intentionally omitted: useInteractionGesture returns a fresh
         // wrapper object each render, but its end() closes over a stable ref, so a
         // captured-stale knotSession.end() is correct. Listing it would churn this
         // callback's identity every render (the original omitted it for the same reason).
-    }, [emitChange, handleMouseMove, editEnd]);
+    }, [emitChange, handlePointerMove, editEnd]);
 
     /**
      * Has a marquee wandered far enough from the knots that it is no longer about them?
@@ -782,7 +822,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     };
     /** True while the current marquee is suspended because it escaped. */
     const marqueeEscapedRef = useRef(false);
-    // `handleMouseMove` is a `useCallback` memoised on `[emitChange]` and is registered as a
+    // `handlePointerMove` is a `useCallback` memoised on `[emitChange]` and is registered as a
     // window listener for the life of a gesture, so anything it closes over can be several
     // renders old. The host's escape callback closes over the CURRENT gradient — read it
     // through a ref, or a drag that escapes hands over the gradient that was showing when
@@ -793,8 +833,25 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const marqueeEscapeRef = useRef(marqueeEscape);
     marqueeEscapeRef.current = marqueeEscape;
 
-    const startDrag = (type: DragPayload['type'], ids: string[], e: React.MouseEvent, overrideKnots?: AdvancedGradientKnot[], skipSnapshot?: boolean) => {
-        e.preventDefault(); e.stopPropagation();
+    /**
+     * Cancel the default of the mouse's own `mousedown`, which arrives immediately after the
+     * `pointerdown` that starts a drag. See `startDrag` for why it cannot be cancelled on the
+     * pointerdown itself.
+     */
+    const preventNextMouseDown = (ev: MouseEvent) => ev.preventDefault();
+
+    const startDrag = (type: DragPayload['type'], ids: string[], e: React.PointerEvent, overrideKnots?: AdvancedGradientKnot[], skipSnapshot?: boolean) => {
+        e.stopPropagation();
+        // Touch (Phase F, 2026-09-10). The drag runs on POINTER events, so a finger drives the
+        // same path a left mouse button does — but the default is still cancelled on the
+        // compatibility `mousedown`, not here. Cancelling a `pointerdown` suppresses the whole
+        // gesture's compatibility mouse events (measured in Chromium, 2026-09-10: of an
+        // 11-move drag, mousedown 0, mousemove 1, mouseup 0), and things outside this file
+        // listen for those — the v2 hero's marquee-escape handoff (`pointerGradientDrag`)
+        // drives its avatar off window `mousemove`/`mouseup`, and close-on-outside-press
+        // handlers watch `mousedown`. A finger has nothing left to cancel: `touch-action:
+        // none` on the track and the strip already tells the browser this is not a scroll.
+        if (e.pointerType === 'mouse') window.addEventListener('mousedown', preventNextMouseDown, { capture: true, once: true });
 
         if (type !== 'marquee' && !skipSnapshot) {
             editStart();
@@ -802,14 +859,20 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         }
 
         dragPayloadRef.current = {
-            type, ids, startX: e.clientX, startY: e.clientY,
+            type, ids, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId,
             initialKnots: JSON.parse(JSON.stringify(overrideKnots || knots))
         };
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('mouseup', handleMouseUp);
+        // Listened for on the WINDOW, not captured on the element: a release outside the
+        // window still ends the drag, which is what the mouse listeners always guaranteed. A
+        // touch pointer is implicitly captured by its target anyway, so its moves keep
+        // arriving here even when the finger leaves the knot. `pointercancel` ends the gesture
+        // the same way a release does — leaving the payload set would wedge the editor.
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointercancel', handlePointerUp);
     };
 
-    const handleTrackMouseDown = (e: React.MouseEvent) => {
+    const handleTrackPointerDown = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
         if ((e.target as HTMLElement).closest('.gradient-interactive-element') || !knotTrackRef.current) return;
 
@@ -983,8 +1046,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             ref={containerRef}
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
-            onMouseDown={(e) => {
-                if (e.button !== 0) return; 
+            onPointerDown={(e) => {
+                if (e.button !== 0) return;
                 if (!(e.target as HTMLElement).closest('.gradient-interactive-element')) {
                     if (knotTrackRef.current?.contains(e.target as Node)) return; // the track's own handlers
                     if (!e.shiftKey && !e.ctrlKey) setSelectedIds(new Set<string>());
@@ -1059,7 +1122,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             >
                 <div
                     className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick || chrome !== 'strip' ? 'cursor-pointer' : 'cursor-default'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
-                    style={{ height: stripHeight }}
+                    // The bar hosts drags of its own — the bias handles, and a marquee from the
+                    // bar's background — so a finger on it belongs to the editor, not to
+                    // whatever scrolls behind it. A mouse ignores `touch-action` entirely.
+                    style={{ height: stripHeight, touchAction: 'none' }}
                     onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
                     onClick={onStripClick ? (e) => { if (!(e.target as HTMLElement).closest('.bias-handle')) onStripClick(); } : undefined}
                     onMouseEnter={chrome === 'strip' ? () => setStripHover(true) : undefined}
@@ -1084,9 +1150,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         return (
                             <div 
                                 key={`bias-${k.id}`} 
-                                className="bias-handle gradient-interactive-element absolute top-1/2 -translate-y-1/2 w-3 h-3 transform -translate-x-1/2 cursor-ew-resize z-10" 
-                                style={{ left: `${visualPos * 100}%` }} 
-                                onMouseDown={(e) => {
+                                className="bias-handle gradient-interactive-element absolute top-1/2 -translate-y-1/2 w-3 h-3 transform -translate-x-1/2 cursor-ew-resize z-10"
+                                style={{ left: `${visualPos * 100}%`, touchAction: 'none' }}
+                                onPointerDown={(e) => {
                                     if(e.button === 0) startDrag('bias', [k.id], e);
                                 }}
                             >
@@ -1104,7 +1170,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     // so the two disagree by up to ~0.7 % of t at the edges (GE v2 §8b item 1).
                     data-gx-knot-track=""
                     className={`h-6 w-full bg-line/5 relative cursor-crosshair ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
-                    onMouseDown={handleTrackMouseDown} 
+                    // Every drag that starts here is the track's own (add / move a knot, the
+                    // brackets, the marquee) — the browser must not read it as a scroll.
+                    style={{ touchAction: 'none' }}
+                    onPointerDown={handleTrackPointerDown}
                     title="Click & drag to add/move knot"
                     onDragOver={(e) => {
                         if (!isColorDrag(e.dataTransfer)) return;
@@ -1145,10 +1214,13 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     {knots.map(knot => (
                         <div 
                             key={knot.id} 
-                            className={`gradient-interactive-element absolute top-0 w-4 h-5 -ml-2 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center group transition-opacity duration-200 ${isDragRemoving && selectedIds.has(knot.id) ? 'opacity-30' : 'opacity-100'}`} 
-                            style={{ left: `${knot.position * 100}%` }} 
+                            // `data-gx-knot` is the only handle a test has on a knot: the class
+                            // list is layout and the position is a style. Structure-neutral.
+                            data-gx-knot=""
+                            className={`gradient-interactive-element absolute top-0 w-4 h-5 -ml-2 cursor-grab active:cursor-grabbing z-20 flex flex-col items-center group transition-opacity duration-200 ${isDragRemoving && selectedIds.has(knot.id) ? 'opacity-30' : 'opacity-100'}`}
+                            style={{ left: `${knot.position * 100}%`, touchAction: 'none' }}
                             onContextMenu={(e) => openKnotContextMenu(e, knot.id)}
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                                 e.stopPropagation();
                                 const isRightClick = e.button === 2;
 
@@ -1200,8 +1272,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             {/* Selection background — solid fill behind handles, dashed bottom for drag affordance */}
                             <div
                                 className="gradient-interactive-element absolute top-0 z-[5] cursor-move bg-accent-400/10 border-b-[2px] border-dashed border-accent-400/40"
-                                style={{ left: `calc(${selectionRange.min * 100}% - 8px)`, width: `calc(${(selectionRange.max - selectionRange.min) * 100}% + 16px)`, bottom: '-6px' }}
-                                onMouseDown={(e) => {
+                                style={{ left: `calc(${selectionRange.min * 100}% - 8px)`, width: `calc(${(selectionRange.max - selectionRange.min) * 100}% + 16px)`, bottom: '-6px', touchAction: 'none' }}
+                                onPointerDown={(e) => {
                                     if (e.button !== 0) return;
                                     // Ctrl+drag: duplicate selected knots then drag copies
                                     if (e.ctrlKey) {
@@ -1228,8 +1300,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             {/* Left bracket [ */}
                             <div
                                 className="gradient-interactive-element absolute top-0 w-[16px] z-30 cursor-ew-resize group"
-                                style={{ left: `calc(${selectionRange.min * 100}% - 18px)`, bottom: '-6px' }}
-                                onMouseDown={(e) => { e.stopPropagation(); if(e.button===0) startDrag('bracket_scale_left', Array.from(selectedIds) as string[], e); }}
+                                style={{ left: `calc(${selectionRange.min * 100}% - 18px)`, bottom: '-6px', touchAction: 'none' }}
+                                onPointerDown={(e) => { e.stopPropagation(); if(e.button===0) startDrag('bracket_scale_left', Array.from(selectedIds) as string[], e); }}
                             >
                                 <svg width="16" height="100%" viewBox="0 0 16 30" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
                                     <path d="M 14 1.5 L 4 1.5 L 4 28.5 L 14 28.5" fill="none" stroke="rgb(34 211 238)" strokeWidth="2.5" strokeLinecap="round" className="opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -1238,8 +1310,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             {/* Right bracket ] */}
                             <div
                                 className="gradient-interactive-element absolute top-0 w-[16px] z-30 cursor-ew-resize group"
-                                style={{ left: `calc(${selectionRange.max * 100}% + 2px)`, bottom: '-6px' }}
-                                onMouseDown={(e) => { e.stopPropagation(); if(e.button===0) startDrag('bracket_scale_right', Array.from(selectedIds) as string[], e); }}
+                                style={{ left: `calc(${selectionRange.max * 100}% + 2px)`, bottom: '-6px', touchAction: 'none' }}
+                                onPointerDown={(e) => { e.stopPropagation(); if(e.button===0) startDrag('bracket_scale_right', Array.from(selectedIds) as string[], e); }}
                             >
                                 <svg width="16" height="100%" viewBox="0 0 16 30" preserveAspectRatio="none" className="absolute inset-0 w-full h-full">
                                     <path d="M 2 1.5 L 12 1.5 L 12 28.5 L 2 28.5" fill="none" stroke="rgb(34 211 238)" strokeWidth="2.5" strokeLinecap="round" className="opacity-60 group-hover:opacity-100 transition-opacity" />

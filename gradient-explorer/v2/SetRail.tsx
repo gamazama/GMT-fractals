@@ -61,6 +61,24 @@
  *
  * Store writes go through `paramEdit`, so a drop or a rename is one undo step, exactly as
  * the panel's gestures are.
+ *
+ * PHONE (Phase F, 2026-09-10). One row of chips in a FIXED order is still the rule, and on
+ * a 390 px screen the way to keep it is to let the row SCROLL: `overflow-x` with the bar
+ * hidden (`.gx-rail-scroll`, index.css), `snap-x snap-proximity` so a flick parks a chip's
+ * edge rather than half of one, chips 34 px tall for a fingertip, and a short fade over the
+ * run's end saying there is more. Measured before: the row clipped past the 4th chip with
+ * no way at all to reach the 5th.
+ *
+ * The + · export · collection-menu cluster is PINNED outside that run, at the right end —
+ * a control you can scroll away from is a control you cannot find. The order is otherwise
+ * the desktop one: on a desktop the + still sits between the chips and the tail.
+ *
+ * The trash drop-well and the "drop a gradient here" tail are NOT RENDERED on a phone.
+ * Touch fires no HTML drag events, so neither has anything to answer; the tail is also the
+ * desktop rail's spacer, so hiding it (rather than leaving it out) would have left a
+ * flexible box of nothing shoving the pinned tools around.
+ *
+ * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -77,6 +95,7 @@ import { showToast } from '../../engine/store/toastStore';
 import { useNativeDragging, useDragPayload } from '../../palette/store/dragVisual';
 import { FavientsCollectionMenu } from '../../palette/components/FavientsCollectionMenu';
 import { Icon } from './ui/Icon';
+import { useIsPhone } from './useIsPhone';
 
 interface Props {
   sets: GroundSetDesc[];
@@ -102,6 +121,7 @@ interface Props {
 const NEW_GROUP_LABEL = 'Group';
 
 export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, onExportGround, groundExportCount, onImportInto }) => {
+  const phone = useIsPhone();
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const removeGroup = useFavientsStore((s) => s.removeGroup);
   const removeFavient = useFavientsStore((s) => s.remove);
@@ -221,8 +241,12 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     openContextMenu(e.clientX, e.clientY, items);
   };
 
-  return (
-    <div className="flex items-center gap-1.5 px-6 h-10 shrink-0 bg-surface-raised" data-gx-set-rail="">
+  // PHONE (Phase F): the chips become a scrolling RUN and the three tools pin to the right
+  // of it. The run is built once and placed by the branch below, so a chip is the same
+  // chip either way — including its drop handlers, which is what keeps the desktop
+  // gestures out of this change.
+  const chips = (
+    <>
       {sets.map((s) => {
         const lit = activeIds.includes(s.id);
         const renamable = s.kind === 'group' && s.group !== DEFAULT_GROUP;
@@ -259,7 +283,11 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
             onDragLeave={() => { if (over === s.id) setOver(null); }}
             onDrop={dropOn(s)}
             className={[
-              'inline-flex items-center h-[26px] px-3 rounded-lg text-[13px] whitespace-nowrap border transition-colors',
+              // 34 px tall on a phone: a 26 px chip is a comfortable click and a poor tap.
+              // `snap-start` pairs with the run's `snap-x snap-proximity` so a flick parks a
+              // chip's left edge at the run's, never half a chip in.
+              phone ? 'inline-flex items-center h-[34px] px-3 shrink-0 snap-start' : 'inline-flex items-center h-[26px] px-3',
+              'rounded-lg text-[13px] whitespace-nowrap border transition-colors',
               lit ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40',
               over === s.id ? 'outline outline-2 outline-dashed outline-gx-armed' : '',
             ].join(' ')}
@@ -323,28 +351,44 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
           <Icon name="trash" /> {(inFlight?.count ?? 1) > 1 ? `Remove ${inFlight!.count}` : 'Remove'}
         </div>
       )}
-      {/* a new, EMPTY group — the same thing the tail's drop makes, without needing a
-          gradient in hand first */}
-      {sets.length > 0 && (
-        <button
-          type="button"
-          onClick={newGroup}
-          title="New group"
-          aria-label="New group"
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-lg border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 transition-colors"
-        >
-          <Icon name="plus" />
-        </button>
-      )}
-      {/* the tail: drop a gradient here for a new group */}
-      <div
-        className={`flex-1 self-stretch min-w-[48px] rounded-lg transition-colors ${over === 'tail' ? 'outline outline-2 outline-dashed outline-gx-armed' : ''}`}
-        data-gx-set-tail=""
-        onDragOver={dragOver(null, 'tail')}
-        onDragLeave={() => { if (over === 'tail') setOver(null); }}
-        onDrop={dropOn(null)}
-        title="Drop a gradient here to start a new group"
-      />
+    </>
+  );
+
+  /* The tail: drop a gradient here for a new group. It also does the SPACING on a desktop
+     rail (`flex-1`) — which is why it is not simply hidden on a phone but left out of the
+     tree there: a phone fires no drag events, so it would be a flexible box of nothing
+     pushing the tools around, and the scrolling run needs that space. */
+  const tail = (
+    <div
+      className={`flex-1 self-stretch min-w-[48px] rounded-lg transition-colors ${over === 'tail' ? 'outline outline-2 outline-dashed outline-gx-armed' : ''}`}
+      data-gx-set-tail=""
+      onDragOver={dragOver(null, 'tail')}
+      onDragLeave={() => { if (over === 'tail') setOver(null); }}
+      onDrop={dropOn(null)}
+      title="Drop a gradient here to start a new group"
+    />
+  );
+
+  // The three TOOLS at the rail's end. On a phone they are pinned outside the scrolling
+  // run — a control you can scroll away from is a control you cannot find — and they take
+  // the chips' 34 px so the row reads as one band of touch targets.
+  const tool = phone ? 'w-[34px] h-[34px]' : 'w-[26px] h-[26px]';
+  /* a new, EMPTY group — the same thing the tail's drop makes, without needing a gradient
+     in hand first. On a desktop it sits where it always did, right after the chips and
+     before the tail; on a phone there is no tail, so it joins the pinned cluster. */
+  const plus = sets.length > 0 && (
+    <button
+      type="button"
+      onClick={newGroup}
+      title="New group"
+      aria-label="New group"
+      className={`inline-flex items-center justify-center shrink-0 ${tool} rounded-lg border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 transition-colors`}
+    >
+      <Icon name="plus" />
+    </button>
+  );
+  const endTools = (
+    <>
       {/* EXPORT THE GROUND (owner, 2026-09-09) — the hero's own download glyph, so the
           gesture reads the same wherever you are: this icon means "take this away with you".
           It replaces the per-chip "Export this set" menu item AND the Export block that used
@@ -362,7 +406,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
             : `Export what is on the ground — ${groundExportCount} gradient${groundExportCount === 1 ? '' : 's'}`
         }
         className={[
-          'inline-flex items-center justify-center w-[26px] h-[26px] rounded-lg border transition-colors',
+          `inline-flex items-center justify-center shrink-0 ${tool} rounded-lg border transition-colors`,
           // LIT LIKE A CHIP when there is something to take (owner, 2026-09-10). The rail's
           // own buttons are the vocabulary here, so "this will do something" reads the same
           // on the icon as it does on Kept or Presets: accent border, accent ink, accent
@@ -376,6 +420,33 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
       </button>
       {/* the collection menu — what is left of "more": import, save, load, clear */}
       <FavientsCollectionMenu onFlash={showToast} withExport={false} />
+    </>
+  );
+
+  return (
+    <div className="flex items-center gap-1.5 px-6 h-10 shrink-0 bg-surface-raised" data-gx-set-rail="">
+      {phone ? (
+        /* PHONE: the chips SCROLL sideways and the tools stay put. Measured at 390 the row
+           clipped past the 4th chip with no way to reach the 5th; the desktop answer —
+           more room — is not available, and wrapping would grow the header the wall is
+           trying to keep. The trash and the tail are simply not in the tree here: touch
+           fires no drag events, so neither has anything to answer. */
+        <div className="relative flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto gx-rail-scroll snap-x snap-proximity">{chips}</div>
+          {/* the short fade over the run's END — the one thing that says there is more this
+              way, now that the scrollbar is hidden. `from-surface-raised`, the rail's own
+              ground, so it reads as the band swallowing the chips rather than as a panel. */}
+          <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-surface-raised to-transparent" />
+        </div>
+      ) : (
+        <>
+          {chips}
+          {plus}
+          {tail}
+        </>
+      )}
+      {phone && plus}
+      {endTools}
     </div>
   );
 };

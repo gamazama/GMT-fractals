@@ -2095,3 +2095,52 @@ phase now carries**. Items move out of this list only when a later phase's entry
   is a decision, not a guess. A `@stale` in `BrowseStage.tsx` names a second disagreement found
   on the way: the comment above the tool-reset effect says a set keeps its carve tools and
   `TOOLS.filter` still offers `zoom` alone. **Carried:** Phase F and Phase G, unchanged.
+- 2026-09-10 · **Phase F BUILT — the shell on a phone.** Owner-confirmed plan of eight
+  items, redrawn against the shell as it stands (the §4 text predated the tool column, the
+  rail on top and the shelf's removal; see ADR-0115). **Measured before, 390×844 Pixel 5:**
+  hero 285 with the use cluster clipped off the right and the Mix name overprinting its
+  chip; the narrowing bar needed 422 px so the Filters button sat UNDER the saturation strip
+  and could not be tapped; the rail clipped past its 4th chip; the tray 257 wide (Adjust's
+  bins overlapping, Curves a 100 px plot, the Image face 888 by construction); both Export
+  windows off both axes; the tool column over the first tile column; the stops editor
+  mouse-only; nothing honouring the safe area. **After:** header 48 · hero **219** (236 with
+  Curves, 235 with Mix) · rail 40, a scrolling chip run with + · export · menu pinned outside
+  it · bar 126 (Filters + search on one row, the pad at a MEASURED 328 beside its scrollbar,
+  the strip full width) · wall 411 with a 24 px gutter · tools a 252×48 row at bottom-left
+  with − / + and Fit · tray 374 wide, capped at 55 % of the room below the card, scrolling
+  inside · Export a 390×844 sheet · `scrollWidth` 390 everywhere. **Desktop:** seven 1280×800
+  screenshots byte-identical before and after. Seam = `useIsPhone` (the engine's
+  `isDeviceMobile`, structure only) + Tailwind `max-md:` for paint. **Touch:** the stops
+  editor runs on pointer events (knots, bias, brackets, marquee; `touch-action: none` on the
+  drag surfaces; the default cancelled on the compatibility `mousedown`, not the pointerdown
+  — cancelling the latter starves the marquee-escape handoff of its mouse events, measured);
+  on a coarse pointer a SELECTED knot stands in for hover so the bias handles are reachable;
+  the wall declares `touch-action` from its tool props (`none` with a tool, `pan-y` without)
+  and gained `zoomStep` (a serial + factor, anchored at the viewport centre through the
+  drag-zoom's own commit maths). **No pinch, on purpose:** under `pan-y` the browser's
+  vertical pan takes any pinch with a vertical component; buying it would cost the wall its
+  native scroll. **Boot cost, as asked:** the packs load BEFORE first paint; at a 6× CPU
+  throttle boot is 3.7 s without them and 4.3 s with, heap 51 → 73 MB — not a blocker, left
+  as is. **Guards:** `smoke:ge-phone` (8 steps; falsified two ways, see its header),
+  `smoke:ge-walltouch` (CDP touch, falsified three ways), `test:palette-wallzoom` (pure
+  maths, falsified five ways, appended to the `test:palette` chain); rule rows added in
+  `sibling-apps.md` and `palette.md`; `check:rule-guards` green. ADR-0115 written.
+  **Still missing — the owner's phone walk carries:** (1) NOT verified on hardware —
+  `env(safe-area-inset-*)` is 0 in emulation, so the notch / home-indicator padding is
+  reasoned, not seen; (2) the name truncates hard in the hero header ("Snap…") — the chip's
+  second clause was dropped for it, and "More like this" is the word "Similar", not a glyph
+  (the set has none for "rank by likeness"; drawing one is the owner's call under ADR-0114
+  rule 3); (3) the first tap after a touch SWIPE is swallowed by Chromium to stop the fling,
+  so a tool button tapped straight after scrolling the wall does nothing once — real, worth
+  a decision (a larger tool row? accept?); (4) native drags still do not exist on touch —
+  keeping is the ♥, filing is brush-select + "Move to…", a new group is the rail's +; the
+  colour-swatch → ramp drag and the marquee-escape → gradient-drag handoff
+  (`pointerGradientDrag`, window `mousemove`) have no touch path; (5) the Curves plot's own
+  point drags are still mouse-only — `ChannelGraphEditor` → `GraphCanvas` →
+  `hooks/useGraphInteraction.ts` (873 lines, also the main app's animation curve editor), a
+  shared-hook conversion, not a mechanical one; (6) the picture UNMOUNTS on phone when the
+  Image face closes (state lives in `imageStore`, nothing lost); (7) the LOOK filter rows'
+  number boxes wrap to two lines (`QualityRangePadConnected`'s own layout); the
+  `FavientsCollectionMenu` kebab keeps its desktop hit box; the hover-only recent-exports
+  flyout is simply absent on phone. **Carried:** Phase G (parity + the entry-point swap),
+  unchanged. Landed on `main` and pushed — the preview URL IS the phone test bed.

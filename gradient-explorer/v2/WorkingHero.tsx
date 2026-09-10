@@ -59,6 +59,32 @@
  * first ramp gesture edits. States: hidden (nothing yet) · working · live from Mix /
  * Image · edited (return to source).
  *
+ * PHONE (Phase F, 2026-09-10) — the card is COMPACT, not a sheet. Everything above still
+ * holds; four things change, and each was a measured overflow at 390 px:
+ *   • the card is ONE COLUMN. The image column goes, and with it the panel's left shadow —
+ *     that shadow exists because the image column is the one side the panel has anything
+ *     under it (ADR-0114 rule 1), and with no column there is nothing for it to fall on.
+ *     The picture moves into the tray's Image face; a 26 px DOOR (`ImageSlot compact`)
+ *     takes its place in the header row, and its click is the same `onTray('image')`.
+ *   • the name TAKES WHAT IS LEFT (`flex-1 min-w-0`) instead of hugging its text under a
+ *     `max-w-[60%]` cap. The hug is a grid whose column is sized by an invisible mirror
+ *     span; a flex row narrower than that mirror shrinks the SPAN but not the column, so
+ *     the input painted its full width over the state chip beside it — the Mix overprint.
+ *     One column that can shrink to nothing cannot overprint anything.
+ *   • "More like this" shortens to "Similar", so the four use icons fit on the row with it.
+ *     (The phase asked for a glyph; this set has none that means "rank the wall by likeness"
+ *     and drawing one is the owner's call — ADR-0114 rule 3.)
+ *   • the row's padding and the use cluster's gaps tighten (`px-3`, `gap-1`), which is the
+ *     ~24 px that decides whether the name is legible or a stub.
+ *
+ * The card also gives up ~62 px of HEIGHT to come in under the phase's 220 px ceiling
+ * (measured 285 before, 219 after, at 390×844). Where it came from, largest first: the tab
+ * pill's side padding, because at 390 the tabs and the editor's blend / output / menu group
+ * came to 338 px in a 320 px line and WRAPPED — 4 tabs × 4 px un-wrapped them and bought
+ * 30 px; then the unsplit ramp 60 → 44; then the band, body and palette-row paddings.
+ * Every one of those is a `phone ?` at its own site with the reason beside it.
+ * @see docs/adr/0115-the-shell-on-a-phone.md
+ *
  * Editor wiring: while the input is NOT the stops document, the editor shows the derived
  * config (verbatim for a picked gradient, fitted for a live one) and the bracket hooks fold
  * it into the document on the first gesture; afterwards it edits paletteEditorStore through
@@ -100,6 +126,7 @@ import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
 import { InputSkinProvider } from '../../components/inputs';
 import { Floating } from './ui/Floating';
+import { useIsPhone } from './useIsPhone';
 import { runExport, useRecentExports, exportActionLabel } from './exportActions';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
@@ -152,6 +179,7 @@ interface Props {
 }
 
 export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onExport, onWallpaper, exportOpen, exportMenu }) => {
+  const phone = useIsPhone();
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
   const favients = useFavientsStore((s) => s.favients);
@@ -269,7 +297,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // (owner, 2026-09-07); the other split states keep the thin labelled source band.
   const mix = derived.input.kind === 'build';
   const sourceH = mix ? mixSourceHeight() : SOURCE_BAND_H;
-  const resultH = split ? (mix ? MIX_RESULT_H : 42) : 60;
+  // PHONE: an unsplit ramp is 44 rather than 60. Split heights are untouched — those bands
+  // are already thin and a source you cannot read is worse than a tall card.
+  const resultH = split ? (mix ? MIX_RESULT_H : 42) : phone ? 44 : 60;
   const favOf = useMemo(() => {
     const c = derived.config ?? lastGood.current?.config;
     if (!c) return null;
@@ -328,7 +358,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       onClick={liveFrom ? onCancelFace : undefined}
       data-gx-state="live"
     >
-      live from {liveName}{liveFrom ? ' · cancel' : ''}
+      {/* PHONE: the chip STATES and the title EXPLAINS. " · cancel" is an affordance hint,
+          and at 390 px those ~60 px are the difference between a readable name and none at
+          all — measured: with "editing · return to source" the name collapsed to zero. The
+          tap still cancels, and the title still says so. */}
+      live from {liveName}{liveFrom && !phone ? ' · cancel' : ''}
     </StateChip>
   ) : derived.edited ? (
     <StateChip
@@ -338,7 +372,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       onClick={bakedFrom ? () => useWorkingStore.getState().returnToSource() : undefined}
       data-gx-state="edited"
     >
-      editing{bakedFrom ? ' · return to source' : ''}
+      editing{bakedFrom && !phone ? ' · return to source' : ''}
     </StateChip>
   ) : (
     <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it" data-gx-state="preview">preview</StateChip>
@@ -354,7 +388,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
 
   return (
     <section
-      className="relative shrink-0 p-2.5 bg-surface-raised border-b border-line/10"
+      /* PHONE: 8 px of band instead of 10 — the tray's `PHONE_INSET` is the same number, so
+         the two stay aligned by reading it from here (Tray.tsx names the pairing). */
+      className={`relative shrink-0 bg-surface-raised border-b border-line/10 ${phone ? 'p-2' : 'p-2.5'}`}
       data-gx-hero
       data-gx-selectable
     >
@@ -362,9 +398,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
           2026-09-07); the 24 px gutter is 10 (band) + 1 (card border) + 13 */}
       {/* a LEFT-ALIGNED tray (Image) grows out of the card's left edge: no bottom-left corner
           then (owner, 2026-09-07) */}
-      <div className={`grid gap-4 pl-[13px] rounded-[20px] bg-surface-section border border-line/20 overflow-hidden ${tray === 'image' ? 'rounded-bl-none' : ''}`} style={{ gridTemplateColumns: 'auto minmax(0,1fr)' }}>
+      {/* PHONE: one column — no image column, so no `pl-[13px]` gutter for it and no
+          column gap either. */}
+      <div className={`grid rounded-[20px] bg-surface-section border border-line/20 overflow-hidden ${phone ? '' : 'gap-4 pl-[13px]'} ${tray === 'image' ? 'rounded-bl-none' : ''}`} style={{ gridTemplateColumns: phone ? 'minmax(0,1fr)' : 'auto minmax(0,1fr)' }}>
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
+        {!phone && (
         <div className="flex flex-col justify-center py-4">
           <ImageSlot
             active={source === 'extract'}
@@ -381,13 +420,17 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             handles={tray === 'image'}
           />
         </div>
+        )}
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}
         {/* It sits ABOVE the card, so it casts. The shadow is offset LEFT only: the panel is
             flush with the card's top / right / bottom, so those sides have nowhere to fall
             and the card's `overflow-hidden` would clip them anyway — the one open side is
-            the image column, which is what the shading reads against. */}
-        <div ref={panelRef} className="min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden shadow-[-10px_0_18px_-8px_rgba(0,0,0,0.55)]">
+            the image column, which is what the shading reads against.
+            PHONE: there IS no image column, so the shadow has nothing under it and goes —
+            depth means what a surface floats over (ADR-0114 rule 1), and a shadow on a
+            joined edge is a claim about a gap that is not there. */}
+        <div ref={panelRef} className={`min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden ${phone ? '' : 'shadow-[-10px_0_18px_-8px_rgba(0,0,0,0.55)]'}`}>
           {/* Owner, 2026-09-06 / 07: the name is the HEADER of the panel — one object with
               the ramp beneath it — the state reads inline, and the outputs (Keep · Share ·
               Export · Wallpaper) sit at its right edge as icons (L2), no use column. */}
@@ -400,7 +443,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               A drag begun inside the name input is left alone so selecting its text still
               works, and an empty source has nothing to hand over. */}
           <div
-            className="flex items-center gap-1.5 h-[42px] px-4 bg-surface-raised"
+            className={`flex items-center gap-1.5 h-[42px] bg-surface-raised ${phone ? 'px-3' : 'px-4'}`}
             draggable={!emptySource}
             title={emptySource ? undefined : 'Drag onto a set below to file this gradient'}
             onDragStart={(e) => {
@@ -412,8 +455,36 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               setDragOrigin(e.currentTarget.getBoundingClientRect()); // the avatar morphs out of the header
             }}
           >
+            {/* PHONE: the DOOR to the picture, first in the row — the image is a SOURCE, and
+                a source belongs at the start of the line that names what you are looking at.
+                It replaces the card's image column (see the file header). */}
+            {phone && (
+              <ImageSlot
+                compact
+                active={source === 'extract'}
+                bigH={0}
+                onClick={() => onTray('image')}
+              />
+            )}
             {/* the name HUGS its text (a mirror span sizes the grid cell; the input fills it)
-                instead of clipping at a fixed width — owner, 2026-09-07 */}
+                instead of clipping at a fixed width — owner, 2026-09-07.
+                PHONE: it takes what is left instead. The hug's grid column is sized by the
+                mirror span, and `w-full` on a grid item is 100 % of that COLUMN — so once
+                the flex row squeezed the span below the mirror, the input went on painting
+                its full width straight over the state chip. `flex-1 min-w-0` with no mirror
+                is one box that can actually shrink. */}
+            {phone ? (
+              <input
+                /* `min-w-[56px]`: `min-w-0` alone let the row's fixed parts squeeze the name
+                   out of existence entirely, which is worse than a clipped one. 56 is about
+                   four characters at 18 px semibold — enough to tell two gradients apart. */
+                className="flex-1 min-w-[56px] bg-transparent border-0 outline-none text-fg text-[18px] font-semibold text-ellipsis"
+                value={derived.name}
+                onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
+                title="Name"
+                aria-label="Name"
+              />
+            ) : (
             <span className="inline-grid min-w-[40px] max-w-[60%] text-[18px] font-semibold">
               <span className="invisible col-start-1 row-start-1 whitespace-pre pr-0.5" aria-hidden>{derived.name || ' '}</span>
               <input
@@ -424,16 +495,32 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 title="Name"
               />
             </span>
-            {stateChip && <span className="ml-2 inline-flex">{stateChip}</span>}
-            <span className="flex-1" />
+            )}
+            {/* PHONE: no `ml-2` — the row's own `gap` already separates them, and on a 390 px
+                row every doubled gap comes out of the name beside it. */}
+            {stateChip && <span className={`inline-flex shrink-0 ${phone ? '' : 'ml-2'}`}>{stateChip}</span>}
+            {!phone && <span className="flex-1" />}
             {source === 'browse' && !emptySource && (
+              phone ? (
+                /* The same action under a shorter word. NOT a glyph, which is what the phase
+                   brief asked for: this set has none that means "rank the wall by likeness",
+                   and inventing one is a design decision for the owner, not a layout fix
+                   (ADR-0114 rule 3 — one set, one weight, drawings refitted not retyped).
+                   The full sentence stays on the title. It costs ~46 px against a glyph's 26. */
+                <Act className="shrink-0 px-2" title="Sort the wall by similarity to this gradient" onClick={() => setSimilarityAnchor({ config: shown.config, name: derived.name })}>
+                  Similar
+                </Act>
+              ) : (
               <Act className="mr-1" title="Sort the wall by similarity to this gradient" onClick={() => setSimilarityAnchor({ config: shown.config, name: derived.name })}>
                 More like this
               </Act>
+              )
             )}
             {/* USE — the shell still owns what these DO (P3). Export's full window hangs
                 off the BAND (below), outside the card's clip; its icon carries the flyout. */}
-            <div className="flex items-center gap-1.5">
+            {/* PHONE: 4 px gaps rather than 6 — 6 px reclaimed across the cluster, which is
+                6 px the name keeps. The 26 px targets themselves are untouched. */}
+            <div className={`flex items-center shrink-0 ${phone ? 'gap-1' : 'gap-1.5'}`}>
               <Act icon active={!!favOf} className={favOf ? 'text-warn' : ''} onClick={toggleStar} title={favOf ? 'Saved in My Gradients — click to remove' : 'Keep — save to My Gradients'}>
                 <Icon name="heart" size={15} />
               </Act>
@@ -475,7 +562,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               Refused while the source is EMPTY: the ramp is then the last gradient shown
               but not editable (L8), so a ghost promising a landing would be lying. */}
           <div
-            className="px-4 pt-4 pb-2 flex flex-col relative"
+            /* PHONE: 4 px off the top and 2 off the bottom of the panel's body — part of the
+               ~65 px the card had to give up to come in under the phase's 220 px ceiling. */
+            className={`px-4 flex flex-col relative ${phone ? 'pt-3 pb-1' : 'pt-4 pb-2'}`}
             onDragOver={(e) => {
               if (emptySource || !isColorDrag(e.dataTransfer)) return;
               const rr = dropSpan();
@@ -538,7 +627,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 // a colour dragged from the picker onto a palette swatch lands on the ramp at
                 // that swatch's position (the editor recolours the nearest knot, or inserts one)
                 onDropColour={(t, hex) => { ensureEditing(); editorRef.current?.dropColourAt(t, hex); }}
-                className="h-9 mb-3"
+                /* PHONE: 32 px of swatch and 8 of gap — still a comfortable touch target,
+                   8 px cheaper than the card's own row. */
+                className={phone ? 'h-8 mb-1.5' : 'h-9 mb-3'}
               />
             )}
 
@@ -620,7 +711,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                               <button
                                 key={t.face}
                                 type="button"
-                                className={`relative px-2.5 h-7 text-[13px] ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                                /* PHONE: 8 px of side padding, not 10. The editor's own row
+                                   holds this pill and the blend / output / menu group, and at
+                                   390 the two came to 338 in a 320 px line — so they WRAPPED,
+                                   and the wrap cost the card 30 px of height. 4 tabs × 4 px is
+                                   what puts them back on one line. */
+                                className={`relative h-7 text-[13px] ${phone ? 'px-2' : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
                                 onClick={() => onTray(t.face)}
                                 title={t.title}
                                 data-gx-tray-tab={t.face}
@@ -656,8 +752,34 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
           </div>
         </div>
       </div>
-      {/* the TRAY (Phase C): one surface under the card, one face at a time */}
-      <Tray face={tray} derived={derived} width={rampW} inspectorHostRef={setInspectorEl} imageCloudRef={setImageCloudEl} imageToolsRef={setImageToolsEl} left={panelLeft} />
+      {/* the TRAY (Phase C): one surface under the card, one face at a time.
+          PHONE: it also carries the PICTURE, since the card no longer has a column for it —
+          `rampW` is the tray's inner width there (both are the card's width less the same
+          paddings), so it is what the picture is drawn at. */}
+      <Tray
+        face={tray}
+        derived={derived}
+        width={rampW}
+        inspectorHostRef={setInspectorEl}
+        imageCloudRef={setImageCloudEl}
+        imageToolsRef={setImageToolsEl}
+        left={panelLeft}
+        phone={phone}
+        imageSlot={
+          phone ? (
+            <ImageSlot
+              active={source === 'extract'}
+              instant={eyedropping}
+              bigH={0}
+              width={rampW}
+              onClick={() => onTray('image')}
+              cloudHost={imageCloudEl}
+              toolsHost={imageToolsEl}
+              handles
+            />
+          ) : undefined
+        }
+      />
       {exportMenu}
     </section>
   );
@@ -686,7 +808,12 @@ const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; n
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const btn = useRef<HTMLDivElement>(null);
   const leaveTimer = useRef<number | null>(null);
-  const enter = () => {
+  const enter = (e: React.PointerEvent) => {
+    // MOUSE ONLY (Phase F). A touch fires pointerenter on the way to the tap, so on a phone
+    // this flyout opened under the finger and the tap that opened the full window landed on
+    // a recent-export row instead. Hover is not a gesture a phone has; the full window is
+    // one tap away and carries the same rows.
+    if (e.pointerType !== 'mouse') return;
     if (leaveTimer.current) window.clearTimeout(leaveTimer.current);
     const r = btn.current?.getBoundingClientRect();
     if (r) setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
