@@ -80,7 +80,11 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     hidden={face === null}
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
-    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-lg"
+    // The tray hangs OVER the wall, further off the ground than anything else in the
+    // shell, so it casts the heaviest of the three shadows (owner, 2026-09-10). Two
+    // layers: a dropped key below, and an un-offset ambient that wraps the left and right
+    // flanks. Nothing above — that edge is welded to the hero's bottom (border-t-0).
+    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.65),0_0_28px_-6px_rgba(0,0,0,0.5)]"
     style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }}
   >
     {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face

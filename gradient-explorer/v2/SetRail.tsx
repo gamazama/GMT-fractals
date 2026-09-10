@@ -222,7 +222,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
   };
 
   return (
-    <div className="flex items-center gap-1.5 px-6 h-10 shrink-0" data-gx-set-rail="">
+    <div className="flex items-center gap-1.5 px-6 h-10 shrink-0 bg-surface-raised" data-gx-set-rail="">
       {sets.map((s) => {
         const lit = activeIds.includes(s.id);
         const renamable = s.kind === 'group' && s.group !== DEFAULT_GROUP;

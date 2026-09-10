@@ -67,8 +67,14 @@ const state = (page: Page) =>
       padAxes: (document.querySelector('[data-gx-pad-axes]') as HTMLElement | null)?.dataset.gxPadAxes ?? null,
       lens: !!document.querySelector('[data-gx-pad-lens]'),
       stripAxis: (document.querySelector('[data-gx-pad-strip]') as HTMLElement | null)?.dataset.gxPadStrip ?? null,
-      tools: wall?.querySelectorAll('button[aria-label]').length ?? 0,
-      toolLabels: Array.from(wall?.querySelectorAll('button[aria-label]') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
+      // The tool COLUMN and the VIEW corner are read separately (they were one cluster
+      // until 2026-09-10, when the tools moved to a column down the wall's left edge and
+      // the view toggle stayed in the right corner). Reading them apart pins WHERE each
+      // control lives, which is the thing that moved; a flat list over the whole wall
+      // could not tell a tool in the corner from a tool in the column.
+      tools: wall?.querySelectorAll('[data-gx-tools="tools"] button[aria-label]').length ?? 0,
+      toolLabels: Array.from(wall?.querySelectorAll('[data-gx-tools="tools"] button[aria-label]') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
+      viewLabels: Array.from(wall?.querySelectorAll('[data-gx-tools="view"] button[aria-label]') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
       canvases: canvases.length,
       canvasLeft: c0 && wr ? Math.round(c0.x - wr.x) : null,
       canvasH: c0 ? Math.round(c0.height) : null,
@@ -104,6 +110,7 @@ async function main() {
   if (s.ground !== 'all') fail(`[1] the ground is not All (${s.ground})`);
   if (!s.pad || !s.filters) fail('[1] the pad / Filters are missing on All');
   if (s.tools !== 4) fail(`[1] ${s.tools} tools on All, expected 4`);
+  if (s.viewLabels.length) fail(`[1] the view corner should be empty on the catalogue, found ${s.viewLabels.join(' + ')}`);
   if (s.chips.some((c) => c.kind === 'bin')) fail('[1] a dated bin exists on a fresh shelf');
   if (!/sorted by/.test(s.sentence)) fail(`[1] the arrange sentence is not on screen ("${s.sentence}")`);
   const gutterAll = s.canvasLeft ?? 0;
@@ -145,8 +152,13 @@ async function main() {
   // the same corner, and it carries an aria-label too. The carve tools really are gone on
   // a set (`TOOLS.filter` in BrowseStage) and that is the thing worth pinning, so the
   // assertion names what should be there and says what turned up instead.
-  if (s.toolLabels.join(',') !== 'List view,Zoom')
-    fail(`[3] the corner should offer List view + Zoom on a set, not ${s.toolLabels.join(' + ') || 'nothing'} — a carve tool leaking back changes what a selection MEANS here`);
+  // 2026-09-10: the two are no longer one cluster, so they are asserted one by one — the
+  // column holds Zoom alone, the corner holds the view toggle alone. Reading them together
+  // is what made this line depend on DOM order, which is how it went red the first time.
+  if (s.toolLabels.join(',') !== 'Zoom')
+    fail(`[3] the tool column should offer Zoom alone on a set, not ${s.toolLabels.join(' + ') || 'nothing'} — a carve tool leaking back changes what a selection MEANS here`);
+  if (s.viewLabels.join(',') !== 'List view')
+    fail(`[3] the corner should offer the view toggle on a set, not ${s.viewLabels.join(' + ') || 'nothing'}`);
   if (s.canvases !== 1) fail(`[3] ${s.canvases} canvases for two tiles`);
   if ((s.canvasLeft ?? 99) > 2) fail(`[3] the set's canvas does not start at the wall's edge (x=${s.canvasLeft})`);
   if ((s.canvasH ?? 0) < 60) fail(`[3] the tiles did not grow (canvas height ${s.canvasH})`);

@@ -383,7 +383,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         </div>
 
         {/* the PANEL — header strip, palette, ramp, expanders; the gradient's own ground */}
-        <div ref={panelRef} className="min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden">
+        {/* It sits ABOVE the card, so it casts. The shadow is offset LEFT only: the panel is
+            flush with the card's top / right / bottom, so those sides have nowhere to fall
+            and the card's `overflow-hidden` would clip them anyway — the one open side is
+            the image column, which is what the shading reads against. */}
+        <div ref={panelRef} className="min-w-0 flex flex-col rounded-[20px] bg-surface-viewport overflow-hidden shadow-[-10px_0_18px_-8px_rgba(0,0,0,0.55)]">
           {/* Owner, 2026-09-06 / 07: the name is the HEADER of the panel — one object with
               the ramp beneath it — the state reads inline, and the outputs (Keep · Share ·
               Export · Wallpaper) sit at its right edge as icons (L2), no use column. */}

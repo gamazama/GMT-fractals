@@ -117,6 +117,11 @@ type ToolId = (typeof TOOLS)[number]['id'];
 /** Grid ⇄ list on the ground, remembered per browser (the shelf panel keeps its own). */
 const GROUND_VIEW_KEY = 'gx.v2.groundView';
 
+/** Where the tool column sits, measured from the wall's left edge. The wall draws its
+ *  row labels in a gutter on that edge, so the column is inset just enough to sit in the
+ *  dead space before the labels start rather than on top of them. */
+const TOOLBAR_LEFT = 6;
+
 /** Faint dotted ground behind the swatches, so the wall reads as a canvas, not a list. */
 const GROUND: React.CSSProperties = {
   backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 1px)',
@@ -472,7 +477,14 @@ export const BrowseStage: React.FC = () => {
       {/* ── one narrowing row (C.10, owner 2026-09-07 evening): the main gradient — the hue ×
           lightness pad — WIDER and CENTRED; Search at the right with Filters to its left;
           with Filters closed, "clear all" sits right-aligned on this same row. ── */}
-      <div className="shrink-0 relative px-6 pt-3 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3" data-gx-ground-set={m.setId}>
+      {/* The wall's HEADER wears the hero's surface, not the wall's (owner, 2026-09-10).
+          The rail, this bar and the Filters rows are one band of controls between the card
+          and the canvas; on the wall's own dark ground they read as part of the canvas they
+          narrow. `bg-surface-raised` is the hero band's colour, so the two meet as one sheet
+          and the wall host's `border-t` below becomes the seam. The set rail carries it too
+          (grep bg-surface-raised in SetRail.tsx) — the band is only continuous if every row
+          in it agrees. */}
+      <div className="shrink-0 relative px-6 pt-3 pb-2.5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 bg-surface-raised" data-gx-ground-set={m.setId}>
         {/* left: the wall in a sentence (the research: a wall you cannot describe reads as
             noise) — on All the count and the arrangement; on a set, nothing (its name is
             in the centre where the pad was). */}
@@ -600,7 +612,7 @@ export const BrowseStage: React.FC = () => {
 
       {/* ── Filters: three inline rows, never over the wall ────────────────── */}
       {filtersOpen && !m.isSet && (
-        <div className="shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10" data-gx-selectable="">
+        <div className="shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10 bg-surface-raised" data-gx-selectable="">
           {/* LOOK */}
           <div className="flex items-center gap-3">
             <span className="w-[72px] shrink-0 text-[11px] uppercase tracking-wide text-fg-muted">Look</span>
@@ -728,21 +740,15 @@ export const BrowseStage: React.FC = () => {
           </div>
         )}
 
-        {/* floating tool palette */}
-        <Floating ref={m.toolbarRef} className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${floatOver}`}>
-          {/* GRID ⇄ LIST, on a set only: the catalogue's 11,131 rows would want virtualizing,
-              and its entries carry no name of yours to look for. */}
-          {m.isSet && (
-            <button
-              onClick={toggleListView}
-              title={listView ? 'Show them as bars' : 'Show them as a list, with names'}
-              aria-label={listView ? 'Grid view' : 'List view'}
-              aria-pressed={listView}
-              className={`w-8 h-8 rounded-lg text-[15px] transition-colors ${listView ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
-            >
-              <Icon name={listView ? 'grid' : 'list'} />
-            </button>
-          )}
+        {/* THE TOOLBAR — down the wall's left edge, a column, where a drawing app puts its
+            tools (owner, 2026-09-10). It was a horizontal strip in the top-right corner
+            beside the view toggle, which made a tool look like a view control; a column on
+            the left reads as "pick what your pointer does" the moment you see it. It clears
+            the row-label gutter rather than floating over the labels — see TOOLBAR_LEFT.
+            The VIEW toggle stayed behind in the corner: switching bars ⇄ list is not
+            something the pointer does to the wall, and putting it in the tool column would
+            re-make the muddle this move undoes. */}
+        <Floating ref={m.toolbarRef} data-gx-tools="tools" className={`absolute top-2.5 flex flex-col gap-0.5 p-[3px] ${floatOver}`} style={{ left: TOOLBAR_LEFT }}>
           {TOOLS.filter((t) => !m.isSet || t.id === 'zoom').map((t) => {
             const on = activeTool === t.id;
             return (
@@ -752,13 +758,32 @@ export const BrowseStage: React.FC = () => {
                 title={t.title}
                 aria-label={t.label}
                 aria-pressed={on}
-                className={`w-8 h-8 rounded-lg text-[15px] transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
               >
                 <Icon name={t.glyph} />
               </button>
             );
           })}
         </Floating>
+
+        {/* GRID ⇄ LIST, on a set only: the catalogue's 11,131 rows would want virtualizing,
+            and its entries carry no name of yours to look for. `data-gx-tools` marks it
+            exempt from the click-away that cancels an active tool (grep the attribute in
+            usePickerModel) — it used to share the tool palette's ref and that exemption,
+            and switching view should not cancel the zoom you were using. */}
+        {m.isSet && (
+          <Floating data-gx-tools="view" className={`absolute top-2.5 right-4 flex gap-0.5 p-[3px] ${floatOver}`}>
+            <button
+              onClick={toggleListView}
+              title={listView ? 'Show them as bars' : 'Show them as a list, with names'}
+              aria-label={listView ? 'Grid view' : 'List view'}
+              aria-pressed={listView}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${listView ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
+            >
+              <Icon name={listView ? 'grid' : 'list'} />
+            </button>
+          </Floating>
+        )}
 
         {/* one-line caption while the zoom tool is active */}
         {zoomTool && !m.tool && (

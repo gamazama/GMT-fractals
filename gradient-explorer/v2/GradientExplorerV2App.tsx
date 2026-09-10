@@ -447,6 +447,17 @@ export const GradientExplorerV2App: React.FC = () => {
         className="flex-1 min-h-0 flex flex-col relative"
         onPointerDownCapture={() => { if (trayRef.current === 'inspector') openTray(null); }}
       >
+        {/* The hero's shadow, falling onto the top of the ground — the set rail sits UNDER
+            the card, not beside it, and without this the two read as one flat sheet
+            (owner, 2026-09-10). Absolute, so it costs the flex column nothing.
+            z-20 is deliberate and load-bearing: above the wall and the rail (both z-auto),
+            below the tray (z-30) and the two ExportMenus (z-40). The tray is further off
+            the ground than the hero is, so it must not be dimmed by the hero's shadow —
+            when a face is open you see this band only to the left and right of the tray. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-3 z-20 bg-gradient-to-b from-black/30 to-transparent"
+        />
         {/* The SET RAIL (Phase D): the top of the ground names the sets — All · Today ·
             Yesterday · the date · Kept · named groups — and the lit one is on the ground; the
             wall's own header (how the set is narrowed) sits under it. Silent until there is
@@ -485,7 +496,7 @@ export const GradientExplorerV2App: React.FC = () => {
             was not there, in the corner furthest from where the eye is. BrowseStage now
             says it over the map instead (owner, 2026-09-09). */}
         {armed && (
-          <div className="shrink-0 flex items-center gap-2 px-6 pt-2.5 text-[13px]">
+          <div className="shrink-0 flex items-center gap-2 px-6 pt-2.5 text-[13px] bg-surface-raised">
             <span className="text-gx-armed">{armed === 'B' ? 'Pick a gradient to mix with · Esc cancels' : 'Pick a gradient to replace this one · Esc cancels'}</span>
           </div>
         )}

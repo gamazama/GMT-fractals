@@ -7,6 +7,20 @@
  * Every emoji / unicode glyph in the v2 files this component covers (↶ ↷ ▾ ▴ ✕ ⚙ etc.)
  * is replaced with `<Icon name=… />` at its call site (V6: "No emoji, no unicode glyph
  * buttons").
+ *
+ * OWNER'S GLYPHS (H:\GMT\assets\GXN\someIcons2.svg, 2026-09-10) — undo, redo, zoom,
+ * zoomOut, box, lasso, brush and settings are the owner's own drawings, the second sheet
+ * after the picker's (see components/gradient/pickerIcons.tsx for the same house rules).
+ * They are the authored geometry, refitted from the sheet's 8-unit tiles onto this 16-unit
+ * grid with the ink filling 2.2 … 13.8 — NOT re-typed by hand, and NOT framed at the exact
+ * bounding box, which is what clipped every stroke the first time the picker's sheet came
+ * in (see commit b1361884). box and lasso are DASHED as drawn: they are the wall's carve
+ * tools and a dashed outline is what a marquee means.
+ *
+ * WEIGHT. The set is one weight, 1.5 (V6). Two glyphs' worth of exception, `WEIGHT` below:
+ * a glyph whose parts share the box needs air or it fills in at 16 px — the gear's teeth
+ * fuse into a disc and the two dashed outlines clog into solid ones. Checked by rasterising
+ * at 16 px and magnifying, not by eye at 64. Same hierarchy the picker's sheet carries.
  */
 
 import React from 'react';
@@ -14,6 +28,7 @@ import React from 'react';
 export type IconName =
   | 'search'
   | 'zoom'
+  | 'zoomOut'
   | 'box'
   | 'lasso'
   | 'brush'
@@ -59,24 +74,20 @@ const FILLED: Record<'heart' | 'share' | 'download' | 'photo' | 'fullscreen', st
 
 const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.ReactNode> = {
   search: <circle cx="7" cy="7" r="4.5" />,
-  zoom: (
-    <>
-      <circle cx="7" cy="7" r="4.5" />
-      <path d="M7 5v4M5 7h4" />
-    </>
-  ),
-  box: <rect x="3" y="3" width="10" height="10" rx="1.5" />,
-  lasso: <path d="M8 2.5c-3.6 0-6 2-6 4.6 0 1.9 1.6 3.4 3.8 3.9-.3.5-.5 1-.5 1.5 0 .9.9 1.6 2 1.6.7 0 1.3-.3 1.7-.8M8 2.5c3.6 0 6 2 6 4.6 0 2.3-2 4.2-4.7 4.6" />,
-  brush: <path d="M3 13c0-2.5 1.5-4 3-4 1 0 1.5.7 1.5 1.5S6.8 12 6 12M11.5 2.5l2 2L7 11l-2.6.6.6-2.6 6.5-6.5z" />,
-  undo: <path d="M4 4v3.5H7.5M4 7.5C5 5.5 7 4.2 9.3 4.2c3 0 5.3 2.3 5.3 5.1S12.3 14.5 9.3 14.5c-2 0-3.8-1.1-4.7-2.7" />,
-  redo: <path d="M12 4v3.5H8.5M12 7.5C11 5.5 9 4.2 6.7 4.2c-3 0-5.3 2.3-5.3 5.1s2.3 5.2 5.3 5.2c2 0 3.8-1.1 4.7-2.7" />,
+  zoom: <path d="M13.8 13.73L11.08 11.01M7.36 5.42L7.36 9.29M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
+  zoomOut: <path d="M13.8 13.73L11.08 11.01M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
+  box: <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.74" strokeDasharray="2.76" />,
+  lasso: <path d="M5.38 4.81L8.83 3.02C9.8 3.02 13.8 9.37 13.8 9.37 13.8 10.33 12.97 11.02 12.14 11.02L7.86 10.2C6.9 10.2 2.2 13.79 2.2 12.82L3.72 6.47C3.72 5.5 4.55 4.81 5.38 4.81Z" strokeDasharray="2.49" />,
+  brush: <path d="M6.3 7.44L8.49 9.63M5.71 13.15C4.83 14.02 3.37 13.73 2.2 13.73 2.79 12.56 2.05 10.95 2.79 10.22 3.66 9.34 4.98 9.34 5.71 10.22 6.59 11.1 6.59 12.41 5.71 13.15ZM8.05 10.22L13.47 4.36C13.91 3.78 13.91 3.05 13.47 2.61 13.03 2.17 12.15 2.02 11.71 2.61L5.86 8.02C5.57 8.32 5.42 8.46 5.27 8.61 5.13 8.9 4.98 9.34 5.27 9.78 5.27 9.93 5.57 10.07 5.86 10.37 6.15 10.66 6.3 10.8 6.44 10.95 6.88 11.1 7.32 11.1 7.62 10.95 7.76 10.95 7.91 10.66 8.2 10.37Z" />,
+  undo: <path d="M2.2 5.1L9.45 5.1C11.92 5.1 13.8 6.99 13.8 9.45 13.8 11.91 11.92 13.8 9.45 13.8L8 13.8M2.2 5.1L5.1 2.2M2.2 5.1L5.1 8" />,
+  redo: <path d="M8 13.8L6.55 13.8C4.09 13.8 2.2 11.91 2.2 9.45 2.2 6.99 4.09 5.1 6.55 5.1L13.8 5.1M10.9 2.2L13.8 5.1M10.9 8L13.8 5.1" />,
   chevronDown: <path d="M4 6l4 4 4-4" />,
   chevronRight: <path d="M6 4l4 4-4 4" />,
   chevronUp: <path d="M4 10l4-4 4 4" />,
   settings: (
     <>
-      <circle cx="8" cy="8" r="2.2" />
-      <path d="M8 2.5v1.6M8 11.9v1.6M13.5 8h-1.6M4.1 8H2.5M11.7 4.3l-1.1 1.1M5.4 10.6l-1.1 1.1M11.7 11.7l-1.1-1.1M5.4 5.4L4.3 4.3" />
+      <path d="M8.32 9.61C9.29 9.61 9.93 8.97 9.93 8 9.93 7.03 9.29 6.39 8.32 6.39 7.36 6.39 6.71 7.03 6.71 8 6.71 8.97 7.36 9.61 8.32 9.61Z" />
+      <path d="M12.19 9.61C12.19 9.77 12.19 9.93 12.19 10.09 12.19 10.26 12.19 10.42 12.35 10.58L12.35 10.58C12.35 10.58 12.51 10.9 12.51 10.9 12.51 10.9 12.51 11.22 12.51 11.38 12.51 11.54 12.51 11.71 12.51 11.87 12.51 11.87 12.51 12.19 12.35 12.19 12.35 12.19 12.19 12.35 12.03 12.35 12.03 12.35 11.71 12.35 11.54 12.35 11.38 12.35 11.22 12.35 11.06 12.35 11.06 12.35 10.74 12.35 10.74 12.19L10.74 12.19C10.74 12.19 10.42 12.03 10.26 11.87 10.09 11.71 9.93 11.87 9.77 11.87 9.77 11.87 9.45 12.03 9.45 12.19 9.45 12.19 9.45 12.51 9.45 12.67L9.45 12.67C9.45 12.99 9.45 13.32 9.13 13.48 8.97 13.64 8.64 13.8 8.32 13.8 8 13.8 7.84 13.8 7.52 13.48 7.36 13.32 7.19 12.99 7.19 12.67L7.19 12.67C7.19 12.51 7.19 12.35 7.03 12.19 7.03 12.19 6.71 11.87 6.55 11.87 6.39 11.87 6.23 11.87 6.07 11.87 5.91 11.87 5.74 11.87 5.58 12.03L5.58 12.03C5.58 12.03 5.42 12.19 5.26 12.35 5.26 12.35 4.94 12.35 4.78 12.35 4.62 12.35 4.46 12.35 4.29 12.35 4.29 12.35 3.97 12.35 3.97 12.19 3.97 12.19 3.81 12.03 3.81 11.87 3.81 11.71 3.81 11.54 3.81 11.38 3.81 11.22 3.81 11.06 3.81 10.9 3.81 10.74 3.81 10.58 3.97 10.58L3.97 10.58C3.97 10.58 4.13 10.26 4.13 10.09 4.13 9.93 4.13 9.77 4.13 9.61 4.13 9.61 3.97 9.29 3.81 9.29 3.81 9.29 3.49 9.29 3.33 9.29L3.33 9.29C3.01 9.29 2.84 9.29 2.52 8.97 2.36 8.81 2.2 8.48 2.2 8.16 2.2 7.84 2.2 7.68 2.52 7.36 2.68 7.19 3.01 7.03 3.33 7.03L3.33 7.03C3.49 7.03 3.65 7.03 3.81 6.87 3.81 6.87 4.13 6.55 4.13 6.39 4.13 6.23 4.13 6.07 4.13 5.91 4.13 5.74 4.13 5.58 3.97 5.42L3.97 5.42C3.97 5.42 3.81 5.1 3.81 5.1 3.81 5.1 3.81 4.78 3.81 4.62 3.81 4.46 3.81 4.29 3.81 4.13 3.81 4.13 3.81 3.81 3.97 3.81 3.97 3.81 4.13 3.65 4.29 3.65 4.29 3.65 4.62 3.65 4.78 3.65 4.94 3.65 5.1 3.65 5.26 3.65 5.26 3.65 5.58 3.65 5.58 3.81L5.58 3.81C5.58 3.81 5.91 3.97 6.07 4.13 6.23 4.13 6.39 4.13 6.55 4.13L6.55 4.13C6.55 4.13 6.87 3.97 6.87 3.81 6.87 3.81 6.87 3.49 6.87 3.33L6.87 3.33C6.87 3.01 6.87 2.68 7.19 2.52 7.36 2.36 7.68 2.2 8 2.2 8.32 2.2 8.48 2.2 8.81 2.52 8.97 2.68 9.13 3.01 9.13 3.33L9.13 3.33C9.13 3.49 9.13 3.65 9.13 3.81 9.13 3.81 9.29 4.13 9.45 4.13 9.61 4.13 9.77 4.13 9.93 4.13 10.09 4.13 10.26 4.13 10.42 3.97L10.42 3.97C10.42 3.97 10.58 3.81 10.74 3.65 10.74 3.65 11.06 3.65 11.22 3.65 11.38 3.65 11.54 3.65 11.71 3.65 11.71 3.65 12.03 3.65 12.03 3.81 12.03 3.81 12.19 3.97 12.19 4.13 12.19 4.13 12.19 4.46 12.19 4.62 12.19 4.78 12.19 4.94 12.19 5.1 12.19 5.1 12.19 5.42 12.03 5.42L12.03 5.42C12.03 5.42 11.87 5.74 11.87 5.91 11.87 6.07 11.87 6.23 11.87 6.39L11.87 6.39C11.87 6.55 12.03 6.71 12.19 6.87 12.19 6.87 12.51 6.87 12.67 6.87L12.67 6.87C12.99 6.87 13.16 6.87 13.48 7.19 13.64 7.36 13.8 7.68 13.8 8 13.8 8.32 13.8 8.48 13.48 8.81 13.32 8.97 12.99 9.13 12.67 9.13L12.67 9.13C12.51 9.13 12.35 9.13 12.19 9.13 12.19 9.13 11.87 9.29 11.87 9.45Z" />
     </>
   ),
   close: <path d="M4 4l8 8M12 4l-8 8" />,
@@ -100,6 +111,13 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.React
   ),
   trash: <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2a1 1 0 0 0 1 .8h3.8a1 1 0 0 0 1-.8l.6-8.2M6.8 7v4M9.2 7v4" />,
 };
+
+/**
+ * Stroke weight per glyph, where the set's 1.5 fills the drawing in at 16 px. Only glyphs
+ * whose parts share the box need it — the dashed carve outlines and the gear's teeth.
+ * Everything absent from here is 1.5.
+ */
+const WEIGHT: Partial<Record<IconName, number>> = { box: 1.25, lasso: 1.25, settings: 1.25 };
 
 const STAR_PATH = 'M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4L2.2 6.5l4-.6z';
 
@@ -130,7 +148,7 @@ export const Icon: React.FC<{ name: IconName; className?: string; title?: string
       height={size}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.5}
+      strokeWidth={WEIGHT[name] ?? 1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

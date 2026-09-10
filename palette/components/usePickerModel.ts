@@ -390,6 +390,10 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node | null;
       if (wallHostRef.current?.contains(t) || toolbarRef.current?.contains(t)) return;
+      // The tool controls are no longer one element: v2's wall puts the tool COLUMN on the
+      // left and leaves the view toggle in the right corner, and both must be exempt. A ref
+      // reaches one subtree, so the exemption is also an attribute.
+      if (t instanceof Element && t.closest('[data-gx-tools]')) return;
       setTool(null);
     };
     window.addEventListener('keydown', onKey);
