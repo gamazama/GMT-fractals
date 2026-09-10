@@ -9,10 +9,11 @@
       /* `overflow-x: clip` (NOT hidden) stops sideways scroll-off without
          turning the root into its own scroll container; `overscroll-behavior:
          none` on both axes kills rubber-band bounce so a touch the canvas
-         doesn't consume can't drag the page off an edge. (GE mounts the
-         dvh MobileViewportShell but no MobileScrollIntro spacer, so there's
-         no document scroll to address-bar-collapse — these are purely the
-         off-edge guards. See ADR-0039.) */
+         doesn't consume can't drag the page off an edge. (GE v2 mounts the
+         dvh MobileViewportShell — true only since Phase F, 2026-09-10; this
+         line claimed it beforehand and was wrong — but no MobileScrollIntro
+         spacer, so there is no document scroll to address-bar-collapse and
+         these stay purely the off-edge guards. See ADR-0039.) */
       body { margin: 0; padding: 0; width: 100%; min-height: 100%; background-color: #000; overflow-x: clip; overscroll-behavior: none; }
       @media (hover: hover) and (pointer: fine) {
         html, body { height: 100vh; overflow: hidden; }
@@ -26,29 +27,29 @@
     <link rel="icon" type="image/x-icon" href="./favicon.ico" />
     <!-- Paint the saved UI theme before first frame (shared gmt.themeVars cache). -->
     <script>try{var s=localStorage.getItem('gmt.themeVars');if(s)document.documentElement.style.cssText+=s;}catch(e){}</script>
-    <script type="module" crossorigin src="./assets/gradient-explorer-next-dQQ0GRQa.js"></script>
+    <script type="module" crossorigin src="./assets/gradient-explorer-next-DBDC5GZd.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/three-t6Th-fjv.js">
     <link rel="modulepreload" crossorigin href="./assets/three-fiber--Vn4pD-S.js">
     <link rel="modulepreload" crossorigin href="./assets/three-drei-D8iNvdld.js">
     <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
-    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-Bi1Z_wy8.js">
+    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-JQLyz3gr.js">
     <link rel="modulepreload" crossorigin href="./assets/createSingleSlot-BAHyf9Ga.js">
     <link rel="modulepreload" crossorigin href="./assets/gradientEditorEntrance-CfFverW5.js">
-    <link rel="modulepreload" crossorigin href="./assets/paletteFiltersPersist-CdlRZwuJ.js">
-    <link rel="modulepreload" crossorigin href="./assets/Undo-C9qSoND-.js">
-    <link rel="modulepreload" crossorigin href="./assets/colorSchemeStore-BDqzYrrb.js">
-    <link rel="modulepreload" crossorigin href="./assets/coreSettings-DweGvu_-.js">
-    <link rel="modulepreload" crossorigin href="./assets/createBlueNoiseWebGL2-B3cQuikt.js">
-    <link rel="modulepreload" crossorigin href="./assets/KeyframeInspector-BsnpEUSz.js">
-    <link rel="modulepreload" crossorigin href="./assets/gradientSeam-DQUzzJx8.js">
-    <link rel="modulepreload" crossorigin href="./assets/GmtWordmark-Cj8smMmp.js">
-    <link rel="modulepreload" crossorigin href="./assets/ImageStage-DyRmuhlT.js">
+    <link rel="modulepreload" crossorigin href="./assets/paletteFiltersPersist-Choce_K2.js">
+    <link rel="modulepreload" crossorigin href="./assets/Undo-DFRmkCnl.js">
+    <link rel="modulepreload" crossorigin href="./assets/colorSchemeStore-BkcM8TnI.js">
+    <link rel="modulepreload" crossorigin href="./assets/coreSettings-BLVN99gZ.js">
+    <link rel="modulepreload" crossorigin href="./assets/createBlueNoiseWebGL2-UhTs12Hj.js">
+    <link rel="modulepreload" crossorigin href="./assets/KeyframeInspector-749_PxVZ.js">
+    <link rel="modulepreload" crossorigin href="./assets/gradientSeam-Da8MH0Oa.js">
+    <link rel="modulepreload" crossorigin href="./assets/MobileViewportShell-nKL-1owA.js">
+    <link rel="modulepreload" crossorigin href="./assets/ImageStage-InIQtyNu.js">
     <link rel="modulepreload" crossorigin href="./assets/AppErrorBoundary-pMODHUdl.js">
-    <link rel="modulepreload" crossorigin href="./assets/useGlobalContextMenu-fhgzCVg4.js">
-    <link rel="modulepreload" crossorigin href="./assets/AnchoredMenu-as3ENMQp.js">
-    <link rel="modulepreload" crossorigin href="./assets/AdvancedGradientEditor-BDNpfD4F.js">
-    <link rel="modulepreload" crossorigin href="./assets/Modal-DGE_a8ks.js">
-    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-CKUFS_fS.css">
+    <link rel="modulepreload" crossorigin href="./assets/useGlobalContextMenu-C9ZWeWFh.js">
+    <link rel="modulepreload" crossorigin href="./assets/AnchoredMenu-QvvHOSfp.js">
+    <link rel="modulepreload" crossorigin href="./assets/AdvancedGradientEditor-bdrkpjrO.js">
+    <link rel="modulepreload" crossorigin href="./assets/Modal-DNTcthvb.js">
+    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-B2zVAJmw.css">
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
