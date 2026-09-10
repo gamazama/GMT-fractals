@@ -82,9 +82,18 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     data-gx-tray={face ?? undefined}
     // The tray hangs OVER the wall, further off the ground than anything else in the
     // shell, so it casts the heaviest of the three shadows (owner, 2026-09-10). Two
-    // layers: a dropped key below, and an un-offset ambient that wraps the left and right
-    // flanks. Nothing above — that edge is welded to the hero's bottom (border-t-0).
-    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.65),0_0_28px_-6px_rgba(0,0,0,0.5)]"
+    // layers: a dropped key below, and an ambient that wraps the left and right flanks.
+    //
+    // NOTHING may reach above the top edge. That edge is welded to the hero's bottom
+    // (border-t-0) and the ACTIVE TAB'S TONGUE crosses it — the 9 px bridge that makes the
+    // tab and the tray read as one surface (grep data-gx-tab-tongue in WorkingHero). A
+    // shadow there lands straight on the join and breaks it. The ambient was `0 0 28px -6px`
+    // and did exactly that: a blur of 28 reaches blur/2 = 14 past the shadow rect, the -6
+    // spread pulls it back to 8, so it bled 8 px up onto a 9 px tongue. Offsetting it down
+    // by that same 8 puts its top edge flush with the tray's and leaves the flanks
+    // untouched (they still reach 14 - 6 = 8 px out). The key layer starts 24 down and
+    // reaches back only 12, so it never came near.
+    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.65),0_8px_28px_-6px_rgba(0,0,0,0.5)]"
     style={{ top: 'calc(100% - 11px)', left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }}
   >
     {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
