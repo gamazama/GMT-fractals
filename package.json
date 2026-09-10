@@ -146,7 +146,9 @@
     "test:weave-sweep": "tsx debug/native-weave-sweep.mts --fresh",
     "test:worklet-analysis": "tsx debug/test-worklet-analysis.mts",
     "test:zindex": "tsx debug/test-zindex.mts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "gen:dcc": "node debug/gen-dcc-templates.mjs",
+    "check:dcc": "tsx debug/check-dcc-resample.mts"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",

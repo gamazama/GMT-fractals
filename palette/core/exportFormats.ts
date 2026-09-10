@@ -17,6 +17,7 @@
 
 import type { RGB } from './oklab';
 import { buildIdmlSwatchLibrary } from './indesignIdml';
+import { buildC4dScript, buildBlenderScript, DCC_MAX_STOPS } from './dccExport';
 
 export interface ExportFormatDef {
   key: string;
@@ -382,6 +383,11 @@ export const STOP_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
   idml: AI_MAX,
   ase: AI_MAX,
   ugr: UGR_MAX_STOPS,
+  // Blender's ColorRamp throws above 32; C4D has no ceiling worth naming but its UI is
+  // unusable long before one. Raising this past 32 makes a Blender script that dies on
+  // import, so the override is a foot-gun there and a convenience in C4D.
+  c4d: DCC_MAX_STOPS,
+  blender: DCC_MAX_STOPS,
 });
 
 /** What `key` will actually reduce to, or null if it does not reduce. */
@@ -725,6 +731,23 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
       '; paint.net Palette File\n' + c.map((x) => 'FF' + ri(x).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
   },
   { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r, _stem, budget) => buildGRD(r, budget) },
+  // Cinema 4D and Blender have no gradient file to import, but both run Python from a
+  // plain text file with nothing installed — so the "format" is a script that rebuilds the
+  // ramp through the host's own API. Distinct `ext`s because they would otherwise both
+  // land on disk as `<name>.py`. See dccExport.ts for why the stops are resampled and why
+  // every one of them says linear.
+  {
+    key: 'c4d',
+    label: 'Cinema 4D script (.py)',
+    ext: 'c4d.py',
+    build: (r, stem, budget) => buildC4dScript(r, stem || 'Gradient', reduceStopIndices(r, budget ?? DCC_MAX_STOPS)),
+  },
+  {
+    key: 'blender',
+    label: 'Blender script (.py)',
+    ext: 'blender.py',
+    build: (r, stem, budget) => buildBlenderScript(r, stem || 'Gradient', reduceStopIndices(r, budget ?? DCC_MAX_STOPS)),
+  },
   {
     key: 'ai',
     label: 'Illustrator swatches .ai',

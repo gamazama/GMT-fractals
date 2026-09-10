@@ -79,7 +79,7 @@ import { CopyGlyph } from '../../components/gradient/pickerIcons';
 const GROUPS: { title: string; keys: string[] }[] = [
   { title: 'For the web', keys: ['css', 'cssvars', 'svg', 'tw', 'tokens', 'hex', 'json', 'js'] },
   { title: 'For design apps', keys: ['ase', 'grd', 'ai', 'idml', 'gpl', 'pdn'] },
-  { title: 'For fractal + 3D apps', keys: ['map', 'ggr', 'cpt', 'ugr'] },
+  { title: 'For fractal + 3D apps', keys: ['map', 'ggr', 'cpt', 'ugr', 'c4d', 'blender'] },
   { title: 'For code + data', keys: ['csv', 'py'] },
 ];
 
