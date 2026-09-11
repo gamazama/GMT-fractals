@@ -582,6 +582,9 @@ const FractalControls: React.FC = () => {
           )}
         </>
       )}
+      {/* PHONE (owner, 2026-09-11): no Iterations — raising the budget is the one control
+          that is not performant on a phone GPU; the default stays. */}
+      {!COARSE_POINTER && (
       <div className="w-32">
         <ScalarInput
           value={fr.iterMul}
@@ -597,6 +600,7 @@ const FractalControls: React.FC = () => {
           trackHeight={14}
         />
       </div>
+      )}
       {!fr.animate && (
         <div className="w-32">
           <ScalarInput
@@ -691,6 +695,9 @@ const FractalControls: React.FC = () => {
           </div>
         </>
       )}
+      {/* PHONE (owner, 2026-09-11): no Cycling — a per-frame re-render is not performant on a
+          phone GPU. */}
+      {!COARSE_POINTER && (
       <button
         onClick={() => setFractalAnimate(!fr.animate)}
         title="Auto-cycle the colormap phase (palette cycling)"
@@ -702,6 +709,7 @@ const FractalControls: React.FC = () => {
       >
         {fr.animate ? '❚❚ Cycling' : '▶ Cycle'}
       </button>
+      )}
       <button
         onClick={copyCoords}
         title="Copy the exact view coordinates (for reporting a render artifact)"

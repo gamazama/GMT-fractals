@@ -664,9 +664,22 @@ export const FullscreenGradientOverlay: React.FC = () => {
         {/* The name gives up its 28ch reservation on a phone — `min-w-0` lets it shrink so the
             truncation is what yields the row, not an overflow. */}
         <div className={`text-sm font-medium text-fg-secondary mr-1 truncate flex items-center gap-1.5 ${phone ? 'min-w-0' : 'max-w-[28ch]'}`}>
-          {fs.split && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-accent-500/25 text-accent-300">LIVE</span>}
+          {fs.split && !phone && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-accent-500/25 text-accent-300">LIVE</span>}
           {sourceName}
         </div>
+        {/* PHONE: the close lives in the NAME ROW (owner, 2026-09-11: "the X can go in the
+            header"), and the right cluster below is not rendered at all — Export PNG is in
+            the export panel already, and Handles / Dither / Fluid Toy are not for a phone. */}
+        {phone && (
+          <button
+            onClick={closeFullscreen}
+            title="Close"
+            aria-label="Close fullscreen preview"
+            className="ml-auto px-3 min-h-[36px] text-[16px] leading-none rounded-md border border-line/10 text-fg-tertiary"
+          >
+            ✕
+          </button>
+        )}
 
         {/* Seven mode chips are ~500 px of non-wrapping run. On a 390 px screen that used to
             overflow to the right and get CLIPPED by the page's `overflow-x: clip` — the last
@@ -725,7 +738,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
           </div>
         )}
 
-        <div className={`flex items-center gap-2 ml-auto ${phone ? 'flex-wrap' : ''}`}>
+        <div className={`flex items-center gap-2 ml-auto ${phone ? 'hidden' : ''}`}>
           <button
             onClick={() => {
               // Leaving split: promote the live gradient we're viewing into the snapshot so the

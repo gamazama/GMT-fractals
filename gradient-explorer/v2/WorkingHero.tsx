@@ -367,7 +367,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
           and at 390 px those ~60 px are the difference between a readable name and none at
           all — measured: with "editing · return to source" the name collapsed to zero. The
           tap still cancels, and the title still says so. */}
-      live from {liveName}{liveFrom && !phone ? ' · cancel' : ''}
+      {/* PHONE, later that day: the chip is the DOT alone — the fold's ▴ was half off-screen
+          with the words in the row (owner). The colour still states, the title still explains,
+          the tap still cancels. */}
+      {phone ? null : <>live from {liveName}{liveFrom ? ' · cancel' : ''}</>}
     </StateChip>
   ) : derived.edited ? (
     <StateChip
@@ -377,10 +380,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       onClick={bakedFrom ? () => useWorkingStore.getState().returnToSource() : undefined}
       data-gx-state="edited"
     >
-      editing{bakedFrom && !phone ? ' · return to source' : ''}
+      {phone ? null : <>editing{bakedFrom ? ' · return to source' : ''}</>}
     </StateChip>
   ) : (
-    <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it" data-gx-state="preview">preview</StateChip>
+    <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it" data-gx-state="preview">{phone ? null : 'preview'}</StateChip>
   );
 
   // What the EMPTY source band says (L8): the source is selected but has nothing in it.

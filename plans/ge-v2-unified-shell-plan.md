@@ -2182,3 +2182,6 @@ phase now carries**. Items move out of this list only when a later phase's entry
   stop fit is HELD while a slider drags (`holdFit` through the param-edit bracket depth);
   Curves on a phone: Detail / Smooth one row, no side padding, 320 px plot, inspector below.
   **Still owed:** the owner's phone walk; the fractal toolbar fold; Liquify / Spline touch.
+- 2026-09-11 · Phase F, sixth round (owner's trims): no colour cloud on the phone's Image
+  face; the state chip is a dot on phone (the fold's ▴ fits); Wallpaper's ✕ in the name row
+  and no right cluster on phone; Fractal hides Iterations + Cycle on a coarse pointer.

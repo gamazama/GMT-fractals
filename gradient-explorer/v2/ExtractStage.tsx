@@ -107,7 +107,12 @@ export const ExtractStage: React.FC<{
       </div>
       {/* beside the dials: the colour cloud (portalled in by the picture) — the tray is as
           wide as the dials and this, no further (owner, 2026-09-07) */}
-      <div ref={cloudHostRef} className={`${phone ? 'w-full h-[220px]' : 'w-[280px] self-stretch shrink-0'} min-h-[220px] rounded-[10px] bg-surface-viewport overflow-hidden`} />
+      {/* PHONE: no colour cloud (owner, 2026-09-11: "doesn't need the 3D gamut display on
+          mobile"). With no host the picture never portals it and never allocates its HiDPI
+          canvas (grep `cloudHost` in ImageStage) — the face is picture, method, dials. */}
+      {!phone && (
+        <div ref={cloudHostRef} className="w-[280px] self-stretch shrink-0 min-h-[220px] rounded-[10px] bg-surface-viewport overflow-hidden" />
+      )}
     </div>
   );
 };
