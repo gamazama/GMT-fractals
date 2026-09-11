@@ -2189,3 +2189,20 @@ phase now carries**. Items move out of this list only when a later phase's entry
   (`BrowseStage` `heroFolded` / `onFoldHero`), folding HIDES the band entirely (mounted, L8),
   a pick shows it again. Guards: `smoke:ge-phone` [3b] / [6]; `smoke:ge-ground` excludes
   the fold from its tool count.
+- 2026-09-11 · **PHASE F CLOSED** — owner: "I've walked it a few times. Mobile support is
+  acceptable for now." Seven rounds in two days (commits 42226a60 … eaf6ee89), all on `main`
+  and live at the preview URL. **Carried into the backlog, not blocking:** the fractal's
+  remaining Wallpaper controls want a per-mode fold (~205 px of a phone); Liquify / Spline have
+  no touch gestures; pinch is unguarded; geometry handles are mouse-sized; a phone-centric
+  Curves editor was proposed (three stacked strips over the same tracks document) and NOT
+  built — the owner's list of fixes to the existing editor was enough for now.
+  **THE NEXT SESSION STARTS PHASE G**, and §4's Phase G text is partly history now: `ge-v2`
+  is already merged and v2 is live on `main`, so "merge after the /dev walk" is moot, and
+  ADR-0111 (pipeline input slot), ADR-0112 (variants), ADR-0114 (the shell's visual language)
+  and ADR-0115 (the shell on a phone) are written. What G still means: (1) the PARITY
+  CHECKLIST against the old shell, item by item from `plans/ge-v2-functionality.md`; (2) the
+  label sweep across the three hosts (the S5 remainder — the swatch-native export formats
+  landed in §8b item 5); (3) the **Recent auto-collect ADR** (the last owed); (4) `/polish` on
+  the v2 shell; (5) the ENTRY-POINT SWAP — GMT and the old page point at v2, the old shell
+  retires, `npm run context:map`, the What's New entry; then the owner's final walk. §8's L10
+  wording and C.5 (Mix UI) remain parked on the owner.
