@@ -13,8 +13,9 @@
  * DOM-free / portable-library contract intact.
  *
  * Stable import path retained for existing palette consumers:
- *   `renderStopsToRamp` / `renderStopsToBuffer` / `sampleStops` / `hexToRgb` / `rgbToHex`.
+ *   `renderStopsToRamp` / `renderStopsToBuffer` / `sampleStops` / `sampleSortedStops` /
+ *   `hexToRgb` / `rgbToHex`.
  */
 
-export { renderStopsToRamp, renderStopsToBuffer, sampleStops, hexToRgb, rgbToHex } from '../../utils/colorUtils';
+export { renderStopsToRamp, renderStopsToBuffer, sampleStops, sampleSortedStops, hexToRgb, rgbToHex } from '../../utils/colorUtils';
 export type { RGB } from './oklab';

@@ -61,6 +61,11 @@ const ALLOWLIST = new Set([
     'engine/components/StateLibraryToast.tsx',
     'engine/plugins/TopBar.tsx',
     'engine-gmt/components/FirstRunHint.tsx',
+    // A DIAGNOSTIC that must outrank the scale. The \?diag boot trace exists to be readable
+    // when the app is broken — including when a surface it does not know about is covering the
+    // screen — so it sits above every tier on purpose, and routing it through z('tier') would
+    // make it obey the thing it is there to diagnose. It renders only behind \?diag.
+    'gradient-explorer/v2/bootTrace.ts',
     // (b) ⌛ portal backlog — migrate to z('tier') / <Layer>
     'engine-gmt/topbar/CenterHUD.tsx',                       // hover-bridge zIndex:9990 → contextMenu
     'engine-gmt/components/FormulaPicker/FormulaPicker.tsx', // popover/thumb 9999/10000 → popover/tooltip

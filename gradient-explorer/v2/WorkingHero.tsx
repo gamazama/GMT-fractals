@@ -117,6 +117,7 @@ import { applyEditorChange } from '../../palette/core/editorConfig';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { isColorDrag, readColorDrag, colorInFlight } from '../../components/gradient/colorDrag';
 import { useEyedropperActive } from '../../components/gradient/eyedropperActive';
+import { flashSaveWhereItLanded } from './setSaveFlash';
 import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
@@ -327,8 +328,17 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       st.remove(favOf.id);
       return;
     }
-    useWorkingStore.getState().syncRecent();
-    st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
+    // The ♥ is a long way from the rail it files into, so the chip that takes the gradient
+    // says so: it fills with the gradient and the fill collapses away, slower and with a
+    // bloom because nothing else points at where this one went (owner, 2026-09-11).
+    flashSaveWhereItLanded(
+      shown.config,
+      () => {
+        useWorkingStore.getState().syncRecent();
+        st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
+      },
+      { slow: true },
+    );
   };
 
   // ── editor wiring ─────────────────────────────────────────────────────────────
@@ -703,8 +713,19 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                         );
                       }}
                       stripHeight={resultH}
+                      // PHONE: the tray hands the inspector face the room below the card, so
+                      // the picker in it opens rather than starting on its 36 px mini pad.
+                      pickerRoomy={phone}
                       stripCorners={split ? 'bottom' : 'all'}
                       previewConfig={derived.edited && !derived.passthrough && config ? config : undefined}
+                      // THE BAR PAINTS THE PIPELINE'S OWN RAMP whenever the pipeline is doing
+                      // anything. Through the stops it went ramp → fit → stops → resample, and
+                      // the fit is HELD mid-drag — so the bar drew held positions wearing live
+                      // colours, which a curve edit turns into visible nonsense (owner,
+                      // 2026-09-11: "a weird mix of the previous stops and the current colors").
+                      // A passthrough gradient keeps the stops route: there the stops ARE the
+                      // gradient, at full authored precision rather than 256 texels.
+                      previewRamp={derived.passthrough ? undefined : derived.ramp ?? undefined}
                       onStripClick={gesture ? onBake : undefined}
                       stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
                       stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}

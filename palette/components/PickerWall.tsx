@@ -259,6 +259,21 @@ export interface PickerWallProps {
    *  narrow wall. A host showing an unlabelled set (GE v2's user sets) passes 0 so the
    *  tiles start at the wall's own left edge instead of behind an empty column. */
   gutter?: number;
+  /**
+   * A floor under the left margin, whatever the labels ask for (px). A host that FLOATS
+   * something over the wall's left edge — GE v2 puts its tool column there — says how much
+   * room that thing needs, and the wall keeps its content clear of it. Without this the
+   * toolbar sat on the first column of tiles on every ground whose gutter is small: a set
+   * asks for 24 and the column is ~44 wide (owner, 2026-09-11: "the wall's toolbar is
+   * obscuring the wall").
+   *
+   * It raises the same `labelW` the labels and the tile grid are both laid out from, so the
+   * two stay in step and every hit test follows for free. On a ground whose gutter is already
+   * wider than this it does nothing.
+   *
+   * @see docs/adr/0118-a-surface-says-what-it-does.md
+   */
+  minGutter?: number;
 }
 
 const LABEL_W = 132;
@@ -899,6 +914,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   onDeselect,
   inHand = false,
   gutter,
+  minGutter = 0,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -927,7 +943,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // The left label gutter is the lowest-priority column: full width on a roomy wall,
   // shrinking linearly to 0 as the wall narrows (≥700 → full, ≤380 → gone), so the
   // swatches keep their size on narrow screens instead of the gutter stealing space.
-  const labelW = gutter != null ? Math.max(0, gutter) : Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
+  const labelW = Math.max(
+    minGutter,
+    gutter != null ? Math.max(0, gutter) : Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320))),
+  );
   // cols is derived from the BASE swatch width (NOT the zoom), so horizontal zoom never
   // reflows the grid — it only widens the swatches + the content, which then scrolls.
   // The gap between tiles grows with the tile as DRAWN — zoomed in, or grown because the
@@ -963,7 +982,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // headers (which don't scale, so the swatch content above the cursor scales but they don't).
   const contentRef = useRef<HTMLDivElement>(null);
   const drag = useRef<
-    | { mode: 'zoom'; sx: number; sy: number; czx: number; czy: number; ax: number; ay: number; relX: number; relY: number; headerAbove: number; swatchAbove: number; lzx: number; lzy: number }
+    | { mode: 'zoom'; sx: number; sy: number; czx: number; czy: number; ax: number; ay: number; relX: number; relY: number; headerAbove: number; swatchAbove: number; lzx: number; lzy: number;
+        /** The ZOOM TOOL started this (a left press), not a middle-click. A tap then picks
+         *  the gradient under it instead of resetting the view — see `endDrag`. */
+        viaTool: boolean }
     | { mode: 'pan'; sx: number; sy: number; scrollLeft: number; scrollTop: number }
     | null
   >(null);
@@ -1082,7 +1104,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   };
 
   // The swatch under a screen point (for the paint brush + paint keep-click) → id + local box.
-  const entryHitAtPoint = (cx: number, cy: number): { id: string; box: Box } | null => {
+  const entryHitAtPoint = (cx: number, cy: number): { id: string; box: Box; entry: CatalogEntry } | null => {
     const el = scrollRef.current;
     if (!el) return null;
     const host = el.getBoundingClientRect();
@@ -1094,7 +1116,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       if (col < 0 || row < 0 || row >= d.nrows || col >= d.cols) continue;
       const k = indexAt(col, row, d.cols, d.nrows, d.rowMajor);
       if (k < 0 || k >= d.entries.length) continue;
-      return { id: d.entries[k].id, box: { x: r.left - host.left + col * d.cellW, y: r.top - host.top + row * d.cellH, w: d.swatchW, h: d.swatchH } };
+      return { id: d.entries[k].id, entry: d.entries[k], box: { x: r.left - host.left + col * d.cellW, y: r.top - host.top + row * d.cellH, w: d.swatchW, h: d.swatchH } };
     }
     return null;
   };
@@ -1436,7 +1458,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const relX = e.clientX - rect.left, relY = e.clientY - rect.top;
       const ax = el.scrollLeft + relX, ay = el.scrollTop + relY;
       const headerAbove = headersAbove(el, ay);
-      drag.current = { mode: 'zoom', sx: e.clientX, sy: e.clientY, czx: zoom.x, czy: zoom.y, ax, ay, relX, relY, headerAbove, swatchAbove: ay - headerAbove, lzx: zoom.x, lzy: zoom.y };
+      drag.current = { mode: 'zoom', sx: e.clientX, sy: e.clientY, czx: zoom.x, czy: zoom.y, ax, ay, relX, relY, headerAbove, swatchAbove: ay - headerAbove, lzx: zoom.x, lzy: zoom.y, viaTool: e.button === 0 };
       el.style.cursor = 'move';
     }
     el.setPointerCapture(e.pointerId);
@@ -1486,6 +1508,23 @@ export const PickerWall: React.FC<PickerWallProps> = ({
         clearSelectionState();
         onSelectionCancel?.();
       }
+      return;
+    }
+    /**
+     * A TAP with the ZOOM TOOL selects the gradient under it (owner, 2026-09-11: "when the
+     * zoom tool is active - a click should select a gradient, not reset the view").
+     *
+     * The tool borrows the middle-drag path, and middle-CLICK means "reset to 1:1" — a mouse
+     * convention that made sense for the button and not for the tool, where every click that
+     * missed a drag threshold threw the zoom away. Picking a gradient is what a click on this
+     * wall means everywhere else, and the tool is a modifier on the drag, not on the click.
+     * The middle button keeps its reset: `viaTool` is what separates them.
+     */
+    if (moved < 5 && d.viaTool) {
+      if (contentRef.current) contentRef.current.style.transform = '';
+      const hit = entryHitAtPoint(e.clientX, e.clientY);
+      if (hit) onPick(hit.entry);
+      else onDeselect?.();
       return;
     }
     const nzx = moved < 5 ? 1 : d.lzx; // middle-click (no drag) resets to 1:1

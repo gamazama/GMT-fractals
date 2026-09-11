@@ -75,6 +75,7 @@ import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
 import type { RGB } from '../../palette/core/oklab';
+import { rampToCss, swatchesToCss } from '../../palette/core/gradientCss';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { Floating } from './ui/Floating';
 import { Icon } from './ui/Icon';
@@ -186,6 +187,55 @@ const Segment: React.FC<{ on: boolean; title: string; onClick: () => void; child
   >
     {children}
   </button>
+);
+
+/**
+ * THE SUBJECT SEGMENTS, each showing the thing it exports (owner, 2026-09-11: "Ramp |
+ * Swatches - should be full width, and their backgrounds should be either the gradient or
+ * the swatches").
+ *
+ * They were two text pills in an `inline-flex` at the left of the window. Full width and
+ * painted, the choice stops being a word and becomes the two pictures you are choosing
+ * between — the continuous ramp against the same colours cut into steps.
+ *
+ * A label over a gradient of unknown lightness needs a floor under it, not a colour that
+ * happens to work — but a scrim over the WHOLE segment is a floor that eats the picture:
+ * over `snowstorm` (near-white) both faces came out the same grey and the choice went back
+ * to being two words. So the floor is a PILL behind the label only, and the gradient is
+ * full-bleed around it. The one you are not using is dimmed instead, which is what makes
+ * the chosen face read forward.
+ */
+const SubjectSegment: React.FC<{
+    on: boolean;
+    title: string;
+    background?: string;
+    onClick: () => void;
+    data: string;
+    children: React.ReactNode;
+}> = ({ on, title, background, onClick, data, children }) => (
+    <button
+        type="button"
+        className={`relative flex-1 min-w-0 h-11 grid place-items-center overflow-hidden transition-shadow ${on ? 'ring-2 ring-inset ring-accent-300' : ''}`}
+        style={background ? { backgroundImage: background } : undefined}
+        title={title}
+        onClick={onClick}
+        data-gx-subject={data}
+        data-on={on ? '' : undefined}
+    >
+        {/* dim the face you are not using — the gradient itself stays untouched on the one
+            you are, which is the whole point of painting them */}
+        {background && <span aria-hidden className={`absolute inset-0 transition-colors ${on ? '' : 'bg-surface-raised/55'}`} />}
+        {!background && on && <span aria-hidden className="absolute inset-0 bg-accent-400/15" />}
+        <span
+            className={`relative inline-flex items-center rounded-full transition-colors ${
+                background
+                    ? `px-2.5 py-[3px] ${on ? 'bg-black/65 text-white' : 'bg-black/45 text-white/80'}`
+                    : on ? 'text-accent-300' : 'text-fg-muted'
+            } text-[13px] ${on ? 'font-semibold' : ''}`}
+        >
+            {children}
+        </span>
+    </button>
 );
 
 /** THE CATEGORY BAND (owner, 2026-09-09: "a lighter strip behind the category names").
@@ -349,6 +399,17 @@ export const ExportMenu: React.FC<{
   };
 
   const swatches = subject === 'swatches';
+  /**
+   * What each subject LOOKS like. For a single gradient both come from what is in hand: the
+   * ramp continuous, and the hero's own palette cut into steps. For a SET there is no one
+   * ramp or palette, so the segments stay plain text — painting one gradient's colours on a
+   * button that exports sixty would be a picture of the wrong thing.
+   */
+  const rampBg = useMemo(() => (isSet ? undefined : rampToCss(ramp)), [isSet, ramp]);
+  const swatchBg = useMemo(
+    () => (isSet ? undefined : swatchesToCss(palette)),
+    [isSet, palette],
+  );
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
   const n = isSet ? count : palette.length;
 
@@ -485,18 +546,19 @@ export const ExportMenu: React.FC<{
       {/* THE SUBJECT (§8b item 5): which face of the gradient is exported.
           PHONE: `flex-wrap`, so a long "Swatches · 12" drops to its own line rather than
           pushing the pill past the sheet's edge. */}
-      <div className={`inline-flex self-start border border-line/20 rounded-lg overflow-hidden ${phone ? 'flex-wrap max-w-full' : ''}`} data-gx-export-subject>
-        <Segment on={!swatches} title="The gradient itself — a continuous ramp" onClick={() => setSubject('ramp')} data="ramp">
+      <div className="flex w-full border border-line/20 rounded-lg overflow-hidden" data-gx-export-subject>
+        <SubjectSegment on={!swatches} title="The gradient itself — a continuous ramp" background={rampBg} onClick={() => setSubject('ramp')} data="ramp">
           Ramp
-        </Segment>
-        <Segment
+        </SubjectSegment>
+        <SubjectSegment
           on={swatches}
           title={isSet ? 'Each gradient as a palette of colours' : 'The palette you laid out on the hero'}
+          background={swatchBg}
           onClick={() => setSubject('swatches')}
           data="swatches"
         >
-          Swatches{!isSet && palette.length > 0 && <span className="text-fg-muted"> · {palette.length}</span>}
-        </Segment>
+          Swatches{!isSet && palette.length > 0 && <span className="opacity-70"> · {palette.length}</span>}
+        </SubjectSegment>
       </div>
 
       {swatches && isSet && (

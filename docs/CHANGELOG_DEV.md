@@ -4,6 +4,166 @@ Chronological log of significant changes, newest first. Began with the v0.9.6
 engine-extraction cycle and continues past it. User-facing release notes live in
 [`docs/releases/`](releases/); this file is the engineering record.
 
+## 2026-09-11
+
+Not a release: no version bump and no `docs/releases/` note. Everything here lands on
+`gradient-explorer-next.html`, which is live but still not linked from the studio (the
+entry-point swap is Phase G), so arming the in-app What's New dot would point every app-gmt
+user at changes they cannot reach. ADRs [0116](adr/0116-the-colour-picker-on-a-phone-and-without-a-pipette.md),
+[0117](adr/0117-one-sort-per-render-not-one-per-texel.md),
+[0118](adr/0118-a-surface-says-what-it-does.md),
+[0119](adr/0119-a-save-is-drawn-where-it-lands.md).
+
+### The colour picker's pipette worked in one browser family
+
+**User-facing**
+- "Pick from screen" did nothing in Firefox or Safari, and on every phone. `window.EyeDropper`
+  is Chromium-only; the button's whole failure path was an amber flash reading "Eyedropper
+  unsupported". Where the API is absent the picker now runs a PAGE-scoped pick instead — an
+  overlay takes the pointer, the colour under the cursor reads live into a follower chip, a
+  click commits and Esc cancels. The button's title says which of the two you have, because
+  the native one reaches the whole screen and this one reaches the page.
+
+**Where**
+- `components/gradient/pagePick.ts` (new), wired in `components/EmbeddedColorPicker.tsx`.
+  Guard `npm run smoke:ge-pagepick` — four steps in chromium with `EyeDropper` deleted, the
+  same three in real firefox (`BROWSER=firefox`).
+- The find worth keeping: **`elementsFromPoint` honours `pointer-events`**, so it is blind to
+  exactly the canvases worth picking from — the hero's ramp is `pointer-events-none` because
+  the knots below it need the clicks. The first cut picked #050505 off a ramp showing #EAEDF3.
+
+### The colour picker had never had a phone pass, and one defect was not cosmetic
+
+**User-facing**
+- At 390 px the soft dialect laid its top line out in one non-wrapping row, so the MODE BAR ran
+  off the right edge — the toggles that choose which controls you get were unreachable, which
+  meant a phone was stuck with whatever modes had last been chosen on a desktop.
+- The dialect re-flows at `stack`: hex line and mode bar a row each and both wrap, blocks full
+  width in one column, the spectrum surface grown to 220 px with a 24 px hue strip, 36 px hit
+  boxes. Bias handles now default OFF on a coarse pointer (the hamburger menu turns them on).
+
+**Where**
+- `components/EmbeddedColorPicker.tsx` (grep `narrow`, `surfacePx`, `ctrlBox`, `roomy`).
+  Desktop verified unchanged at 1280. Tool: `npm run shot:ge-picker [w] [h]` prints anything
+  laid out past the picker's own right edge — that list must stay empty.
+- **Whether a narrow mount starts FOLDED is the host's declaration (`roomy`), not a
+  measurement.** The picker sizes to its content and its host sizes to the picker, so asked
+  from the inside a folded picker in a 609 px tray reports 104 px of room.
+
+### Adjust and Curves lagged — three pieces of wasted work
+
+**Where**
+- **A sort per pixel.** The 1536-px strip preview sorted its stops once and then called
+  `sampleStops`, which copies and re-sorts on every call: at 40 stops, 61k element copies and
+  ~330k comparisons a frame. `stopFit`'s `segmentError` did the same up to 512 iterations deep.
+  The per-texel core is exported as `sampleSortedStops` — the same function, named so that
+  `sampleStops` in a loop reads as the error it is.
+- **A 256-texel ramp nobody painted**, kept alive for two endpoint texels. Plus a hex to
+  packed-int cache: `sampleSorted` parsed two colours per sample, 3072 regexes a frame for ~40
+  distinct colours.
+- **The fit hold missed the face with the most dials.** It keyed on `paramUndoBracket`'s depth,
+  which only the palette's own gestures open; the Adjust face is DDFS sliders bracketing through
+  the engine's `handleInteractionStart('param')`. `useWorkingDerived` reads both sources now.
+- Measured: `sampleSorted` 112 to 28 ms of self time, `fitRampToStops` out of the profile, total
+  scripting down 47%. Production build holds 60 fps with no long tasks in Chromium (median
+  16.2 ms, p95 21.4) and Firefox (17.0 / 25.0). Tool kept: `npm run prof:ge-drag` — **read its
+  totals against a production build**, because React's dev build spends more in its own prop
+  validation than this app spends in colour maths.
+
+### Then the hold froze the gradient, twice, in two different ways
+
+**User-facing**
+- The hero's bar stopped moving during a drag while the palette swatches kept going. The
+  swatches sample the ramp; the bar painted from the held fit.
+- Fixed once by re-colouring the held stops each frame — which repaints but not CORRECTLY: a
+  held fit keeps stop POSITIONS, so a curve edit (which moves features ALONG the ramp) drew the
+  old stops wearing the new colours. The bar now paints the pipeline's own 256-texel ramp and
+  skips ramp to fit to stops to resample entirely: cheaper AND exact.
+- The knots are hidden while the bar is showing something other than them, which is also what
+  makes the bake click easy to hit.
+
+**Where**
+- `palette/core/workingPipeline.ts` (`recolourHeldFit`, now only for the KNOTS),
+  `components/AdvancedGradientEditor.tsx` (`previewRamp`, `knotsStale`).
+- Guard `npm run smoke:ge-livedrag`, and **its tolerance is the lesson**: with the fix the bar is
+  byte-identical to the ramp; the old paint measured 6 channel levels off on a Phase drag, so a
+  "within a few levels" threshold would have passed the broken build. It also asserts the
+  gradient MOVED — two earlier cuts of that step compared two things that were both standing
+  still and passed on a broken build.
+
+### The wall, the cursors, and a tab that took two clicks
+
+**User-facing**
+- The tool column sat on the wall's first tiles. `PickerWall` takes `minGutter` — a floor under
+  the left margin that raises the same `labelW` the labels and the grid are laid out from, so
+  every hit test follows for free.
+- A tap with the zoom tool threw the zoom away (it borrows the middle-drag path, and middle-CLICK
+  means reset). It picks the gradient under it now; the middle button keeps its reset.
+- Cursors: `crosshair` means SELECT and lives on the bar (a drag there marquees the knots);
+  `copy` means MAKE and lives on the knot track. The wall's spectrum strip reads `ew-resize` at a
+  bound and `move` inside. And a gesture under way KEEPS its own cursor —
+  `document.body.style.cursor` is not the fix, because a descendant setting its own cursor beats
+  an inherited one.
+- Switching from the colour picker to a tray face took two clicks. The editor announced its
+  selection from an effect with the CALLBACK in its deps, so it re-fired on every host render;
+  the host reads that as an event ("a stop is selected and the tray is elsewhere, so open the
+  inspector") and undid the tab's own `openTray`. **Worth looking for that shape wherever
+  `on*Change` meets `useEffect`.**
+
+**Where**
+- `palette/components/PickerWall.tsx`, `gradient-explorer/v2/BrowseStage.tsx`,
+  `components/QualityRangePad.tsx`, `components/AdvancedGradientEditor.tsx`.
+  Guards `npm run smoke:ge-cursors` (new), `smoke:ge-tray` [14], `smoke:ge-ground` [3].
+
+### GX global was invisible when it was the only set lit
+
+**User-facing**
+- It is the one set arranged by COLOUR, so the catalogue's hue / lightness windows carry into it
+  — and two shared gradients fall outside almost any narrowing. The empty state then said
+  "Nothing here yet", denying they exist. A set that HAS members now says how many are hidden and
+  offers to show them.
+- It also carries a **"Share your gradient"** button while it is the ground. Contributing had
+  been a drag onto its chip and nothing else.
+
+### Saving into a set is drawn where it lands
+
+**User-facing**
+- The chip under a gradient in flight fills with it; on the save the fill collapses to the chip's
+  centre line and the label lights through it. The heart runs the same thing slower, with a
+  bloom, because that press is at the other end of the screen from the chip it lands on.
+- The export window's Ramp | Swatches are full width and painted with what they export.
+
+**Where**
+- `gradient-explorer/v2/setSaveFlash.ts`, `contributeToGlobal.ts`, `palette/core/gradientCss.ts`
+  (all new), keyframes in `index.css`. Guard `npm run smoke:ge-setsave`.
+- The heart's target is OBSERVED (snapshot the counts, write, flash the set that grew) rather
+  than reconstructed from `listGroundSets`'s binning.
+- **Known gap:** the flash is invisible when the set rail is covered by a panel or the chip is
+  scrolled out of its run. Raised with the owner 2026-09-11; deliberately not built.
+
+### The stop fitter made a step stop per 8-bit level on shallow gradients
+
+**User-facing**
+- `#202024` to `#232328` fitted to 9 stops, 8 of them STEPS; `#808088` to `#8A8A92` to 12 stops,
+  11 steps. Those now fit to 2 stops and no steps. Banded palettes are untouched.
+
+**Where**
+- `palette/core/stopFit.ts` (grep `QUANTISATION_DE`). A shallow ramp is mostly flat texels for
+  the same reason a banded one is — it crosses few 8-bit levels — so the `bandedRamp` escape
+  hatch fired and took the band-edge gate off. The discriminator is the size of the edges BETWEEN
+  the runs, not how flat the ramp is: quantisation is dE 0.003 to 0.004, a real band edge is far
+  above it (0.057 on 16 bands, 0.008 on the seam's deliberately-subtle 64-band test).
+- Guard `debug/test-palette-stopfit.mts` [9], falsified by removing the gate: all three shallow
+  cases red, the banded case green.
+
+### Housekeeping
+
+- `check:zindex` was red on arrival and is green: `gradient-explorer/v2/bootTrace.ts` (the
+  `?diag` overlay) is allowlisted with its reason — a diagnostic that must outrank the scale,
+  because it exists to be readable when a surface it does not know about is covering the screen.
+- `context:check` was red on arrival (map stale by 299 files since 2026-07-13) and is green after
+  `npm run context:map`, committed separately.
+
 ## 2026-09-09
 
 Released as **0.9.8.3** ([`docs/releases/0.9.8.3.md`](releases/0.9.8.3.md)). 131 commits

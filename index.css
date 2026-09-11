@@ -299,4 +299,36 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
 
   @keyframes pop-in { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
   .animate-pop-in { animation: pop-in 0.15s ease-out forwards; }
+
+  /* ── A GRADIENT BEING FILED (GE v2, owner 2026-09-11) ───────────────────────────
+     The gradient fills its set's chip, then collapses to the chip's own centre LINE and
+     goes: `scaleY` about the middle, eased out, so it reads as the thing being taken in
+     rather than merely fading. The duration lives in TS (`setSaveFlash.ts` SAVE_MS /
+     SAVE_SLOW_MS) and is passed in as `--save-ms`, because the module also has to know
+     when to stop announcing the save — two copies of one number would drift.
+     `-slow` is the ♥: the same shape with a white bloom held over it, because that press
+     happens at the other end of the screen from the chip it lands on. */
+  @keyframes set-save-out {
+    0%   { transform: scaleY(1); opacity: 1; }
+    55%  { transform: scaleY(1); opacity: 1; }
+    100% { transform: scaleY(0); opacity: 0; }
+  }
+  .animate-set-save { animation: set-save-out var(--save-ms, 460ms) cubic-bezier(0.4, 0, 0.2, 1) forwards; transform-origin: center; }
+
+  /* the label lighting up THROUGH the fill — brightness, not a colour, so it works on a
+     lit chip and an unlit one without either needing a second rule */
+  @keyframes set-save-text {
+    0%   { filter: brightness(1); }
+    25%  { filter: brightness(2.4); }
+    100% { filter: brightness(1); }
+  }
+  .animate-set-save-text { animation: set-save-text var(--save-ms, 460ms) ease-out forwards; }
+
+  /* the ♥'s extra: a white bloom over the fill, peaking later and fading with it */
+  @keyframes set-save-bloom {
+    0%   { opacity: 0; }
+    30%  { opacity: 0.55; }
+    100% { opacity: 0; }
+  }
+  .animate-set-save-bloom { animation: set-save-bloom var(--save-ms, 780ms) ease-out forwards; }
 }

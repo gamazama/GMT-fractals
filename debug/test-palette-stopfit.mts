@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 import type { GradientStop, GradientConfig } from '../types';
 import { generateGradientTextureBuffer } from '../utils/colorUtils';
-import { renderStopsToBuffer } from '../palette/core/gmtGradient';
+import { renderStopsToBuffer, renderStopsToRamp } from '../palette/core/gmtGradient';
 import { fitRampToStops, measureFit, rgbToOklab } from '../palette/core/stopFit';
 import { oklabDistance, type RGB } from '../palette/core/oklab';
 
@@ -286,6 +286,51 @@ if (files.length === 0) {
   const worst = Math.max(...ramp.map((c, i) => oklabDistance(c, back[i])));
   ok(worst < 0.012, `and renders the bands back within tolerance (worst ΔE ${worst.toFixed(4)})`);
 }
+
+// [9] A VERY SHALLOW gradient is not a banded one. It crosses so few 8-bit levels that each
+//     holds for dozens of texels, so "most of the ramp is flat" — which is what `bandedRamp`
+//     tests, and it took the whole band-edge gate off for them. Measured 2026-09-11 before the
+//     fix, target 0.012: #202024 → #232328 fitted to 9 stops, 8 of them STEPS; #808088 →
+//     #8A8A92 to 12 stops, 11 steps (owner: "at verry shallow gradients, it is creating a
+//     whole bunch of linear/stepped stops"). The discriminator is the size of the edges BETWEEN
+//     the flat runs: quantisation is ΔE ~0.003–0.004, a real band edge is far above it.
+//
+//     Falsified by removing the `quantisedOnly` branch in `stopFit.ts`: all three shallow cases
+//     red on the step count, and the banded case below stays green through it — which is why
+//     both halves are here. The band case is the one that says the fix did not overreach.
+console.log('\n[9] a shallow gradient fits as a smooth ramp, not as bands');
+{
+  const shallow = (a: RGB, b: RGB): RGB[] =>
+    Array.from({ length: 256 }, (_, i) => {
+      const t = i / 255;
+      // 8-bit quantised, as any real ramp is — the flat runs ARE the phenomenon under test
+      return { r: Math.round(a.r + (b.r - a.r) * t), g: Math.round(a.g + (b.g - a.g) * t), b: Math.round(a.b + (b.b - a.b) * t) };
+    });
+  const shallowCases: Array<[string, RGB, RGB]> = [
+    ['dark  #202024 -> #232328', { r: 32, g: 32, b: 36 }, { r: 35, g: 35, b: 40 }],
+    ['mid   #808088 -> #8A8A92', { r: 128, g: 128, b: 136 }, { r: 138, g: 138, b: 146 }],
+    ['light #F0F0F2 -> #F6F6F8', { r: 240, g: 240, b: 242 }, { r: 246, g: 246, b: 248 }],
+  ];
+  for (const [name, a, b] of shallowCases) {
+    const ramp = shallow(a, b);
+    const fit = fitRampToStops(ramp, { targetDE: 0.012, maxStops: 128, fitBias: true });
+    const steps = fit.stops.filter((st) => st.interpolation === 'step').length;
+    ok(steps === 0, `${name}: no stepped stops (got ${steps} of ${fit.stops.length})`);
+    ok(fit.stops.length <= 4, `${name}: a handful of stops, not one per 8-bit level (${fit.stops.length})`);
+    const back = renderStopsToRamp(fit.stops, 'oklab', 'srgb');
+    const worst = Math.max(...ramp.map((c, i) => oklabDistance(c, back[i])));
+    ok(worst < 0.012, `${name}: and still renders within tolerance (worst dE ${worst.toFixed(4)})`);
+  }
+  // the other half of the rule: a ramp with REAL edges is still read as bands
+  const banded16: RGB[] = Array.from({ length: 256 }, (_, i) => {
+    const v = Math.round((Math.floor(i / 16) / 15) * 255);
+    return { r: v, g: Math.round(v * 0.6), b: 255 - v };
+  });
+  const bf = fitRampToStops(banded16, { targetDE: 0.012, maxStops: 128, fitBias: true });
+  const bsteps = bf.stops.filter((st) => st.interpolation === 'step').length;
+  ok(bsteps === 16, `16 real bands still fit as 16 step stops (got ${bsteps})`);
+}
+
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

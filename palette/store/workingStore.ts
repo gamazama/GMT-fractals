@@ -571,7 +571,19 @@ export const useWorkingDerived = (): WorkingDerived => {
   // lets go. So while any param bracket is open the last fitted config is handed back in
   // (`holdFit`) and only the ramp is rebuilt; the release re-fits once. `deriveWorkingNow`
   // (bake, export) always fits — it is imperative and never runs mid-frame.
-  const dragging = useSyncExternalStore(subscribeParamDragging, isParamDragging, () => false);
+  // TWO sources, because a param drag reaches this store by two routes and the hold has to
+  // cover both. `paramUndoBracket`'s depth covers the palette's own gestures (the Mix
+  // sliders, a curve knot, Detail / Smooth — anything that calls `genEditStart`). The
+  // engine's `isUserInteracting` covers the DDFS sliders, which are the whole ADJUST face:
+  // `AutoFeaturePanel` brackets those through `handleInteractionStart('param')`, which never
+  // touches the palette depth. Measured 2026-09-11: with only the first source, an Adjust
+  // drag re-fit the stops on every pointer move (`fitRampToStops` was live in the profile
+  // throughout) — the exact work the hold exists to defer, on the exact face that has the
+  // most dials. Both routes end at `beginParamTransaction`, so the two flags agree.
+  // @see docs/adr/0117-one-sort-per-render-not-one-per-texel.md
+  const bracketDrag = useSyncExternalStore(subscribeParamDragging, isParamDragging, () => false);
+  const engineDrag = useEngineStore((s) => s.isUserInteracting);
+  const dragging = bracketDrag || engineDrag;
   const lastFit = useRef<GradientConfig | null>(null);
   const core = useMemo(
     () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim, input.kind === 'build' ? input.seeds : undefined, dragging ? lastFit.current : null) : null),

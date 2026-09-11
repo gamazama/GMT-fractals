@@ -130,6 +130,8 @@ tells the reader which harness covers what:
 | `core/wallLayout.ts` | `debug/test-palette-walllayout.mts` |
 | `core/paletteSample.ts` (v2 palette face, More like this) | `debug/test-palette-sample.mts` |
 | `core/workingPipeline.ts` (v2 Working pipeline) | `debug/test-palette-working.mts` |
+| `core/gradientCss.ts` (a gradient as a CSS background — the export window's subjects, a set chip filling with what is being filed) and `components/PickerWall.tsx`'s `minGutter` / zoom-tool tap (ADR-0118) | `debug/smoke-ge-setsave.mts` (`npm run smoke:ge-setsave`) and `debug/smoke-ge-ground.mts` step [3] (`npm run smoke:ge-ground`; its `SET_GUTTER` pins the left margin the wall keeps clear of a floating toolbar — change `TOOLBAR_CLEAR` in BrowseStage and this goes red, which is the point) |
+| `core/workingPipeline.ts` `recolourHeldFit` + `store/workingStore.ts`'s drag hold — the gradient must DRAW during a drag while only the knots wait for the release (owner, 2026-09-11; ADR-0117 §5) | `debug/smoke-ge-livedrag.mts` (`npm run smoke:ge-livedrag`; falsified by restoring the frozen `holdFit ??`, and again by sampling the wrong canvas — read its header, two of its four steps stay GREEN through the break it exists to catch) |
 | `store/favientsStore.ts` `collectRecent` (v2 Recent zone) | `debug/test-palette-favients.mts` section [6] |
 | `core/pickerModel.ts` (the wall: search, filter windows, arrange, carve, More like this) | `debug/test-palette-pickermodel.mts` |
 | `components/PickerWall.tsx` `zoomStep` / `zoomStepPlan` / `pinnedContentPoint` (the − / + zoom step a phone host drives, Phase F 2026-09-10) | `debug/test-palette-wallzoom.mts` (`npm run test:palette-wallzoom`; falsified five ways, see its header) |

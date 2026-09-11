@@ -436,6 +436,32 @@ async function main() {
   if (s.picker) fail('[13] the wall click closed the face but the stop stayed selected (the picker is still in the host)');
   console.log('✓ [13] a click on the wall closes the inspector and clears the stop selection');
 
+  /**
+   * [14] ONE CLICK leaves the inspector for another face (owner, 2026-09-11: "when switching
+   * to them from the color picker, it is requiring 2 clicks as the first click is leaving the
+   * picker").
+   *
+   * The editor told the host about the selection from an effect that listed the CALLBACK in
+   * its deps, so it re-fired on every render where the host passed a fresh arrow — which the
+   * shell does on every render. The host reads that as an event and its rule is "a stop is
+   * selected and the tray is elsewhere → open the inspector", so the tab's own `openTray` was
+   * immediately undone, the hero's leave-the-inspector effect then cleared the stop, and the
+   * zero-count notification closed the tray. Net: nothing opened.
+   *
+   * Mix / Curves / Adjust only. IMAGE is not a bug when it does not switch: with no image
+   * loaded that tab opens the file dialog first and the tray stays where it was, by design.
+   */
+  for (const tab of ['adjust', 'curves', 'mix'] as const) {
+    await page.locator('[data-gx-hero] button[title*="click to edit its stop"]').first().click();
+    await page.waitForTimeout(600);
+    if ((await state(page)).face !== 'inspector') fail(`[14] could not get back to the inspector before trying ${tab}`);
+    await page.click(`[data-gx-tray-tab="${tab}"]`);
+    await page.waitForTimeout(600);
+    const got = (await state(page)).face;
+    if (got !== tab) fail(`[14] one click on ${tab} from the picker landed on ${got} — it should open ${tab}`);
+  }
+  console.log('✓ [14] one click leaves the picker for Mix / Curves / Adjust — not two');
+
   await browser.close();
   if (errors.length) {
     errors.forEach((e) => console.log(e));

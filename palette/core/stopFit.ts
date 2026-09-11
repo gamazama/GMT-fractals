@@ -29,12 +29,12 @@
  *      segment under tolerance. Measured on 40 synthetic gradients with random biases:
  *      13.3 → 7.4 stops (linear), 14.6 → 8.6 (smooth), at a LOWER worst error; plain
  *      bias-0.5 gradients unchanged (5.0 → 5.1). Trials are evaluated on the segment's
- *      own texels only (`sampleStops`), not a full re-render, so a fit stays a few ms.
+ *      own texels only (`sampleSortedStops`), not a full re-render, so a fit stays a few ms.
  */
 
 import type { GradientStop, GradientConfig } from '../../types';
 import { rgbToOklab, oklabDistance, type RGB } from './oklab';
-import { renderStopsToRamp, sampleStops, rgbToHex } from './gmtGradient';
+import { renderStopsToRamp, sampleSortedStops, rgbToHex } from './gmtGradient';
 
 export interface StopFitOptions {
   /** Perceptual stop tolerance (OKLab ΔE). Lower = more stops, higher fidelity. */
@@ -72,6 +72,15 @@ export interface StopFitOptions {
    *  v2 working pipeline opts in. */
   fitBias?: boolean;
 }
+
+/**
+ * The ΔE of one 8-bit step, with room over it. Below this an "edge" between two flat runs is
+ * the file format talking, not the gradient: one sRGB level is ΔE ≈ 0.003–0.004 at its worst
+ * (the darks). Set under the seam's 64-band test (edges of 0.008) so a deliberately subtle
+ * BANDED palette still reads as banded — the gap between the two cases is wide enough that
+ * this number does not need to be tuned.
+ */
+const QUANTISATION_DE = 0.006;
 
 const DEFAULTS: Required<StopFitOptions> = {
   targetDE: 0.02,
@@ -230,7 +239,34 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     // are quantisation, and only count as a band when one end is a real edge.
     const flatTexels = all.reduce((n, r) => n + (r.end - r.start + 1), 0);
     const bandedRamp = flatTexels >= 0.6 * 256;
-    const runs = bandedRamp ? all : all.filter((r) => Math.max(edge(r.start - 1, r.start), edge(r.end, r.end + 1)) >= o.bandEdgeDE);
+    /**
+     * …UNLESS EVERY EDGE IS QUANTISATION. A very SHALLOW gradient is mostly flat texels for
+     * the same reason a banded one is — it crosses so few 8-bit levels that each holds for
+     * dozens of texels — so `bandedRamp` is true for it by accident, and it took the whole
+     * `bandEdgeDE` gate off. Measured 2026-09-11, target 0.012: #202024 → #232328 came out as
+     * 9 stops, 8 of them STEPS; #808088 → #8a8a92 as 12 stops, 11 steps (owner: "at verry
+     * shallow gradients, it is creating a whole bunch of linear/stepped stops").
+     *
+     * The discriminator is the size of the edges BETWEEN the runs, not how much of the ramp is
+     * flat. One sRGB level is ΔE ≈ 0.003–0.004 at its worst; a real band edge is far above it
+     * (0.057 on a 16-band palette, 0.008 on the seam's deliberately-subtle 64-band test). So
+     * if the biggest inter-run edge in the whole ramp is at quantisation scale, this ramp has
+     * no bands in it at all and the plateau pass does nothing — it is a smooth ramp, and the
+     * refine below fits it with a handful of linear stops.
+     *
+     * The ramp's own two ENDS are excluded from that measurement: `edge` reports 1 past either
+     * end so that a genuine first or last band always seeds, and counting those would make
+     * every ramp look like it had a real edge.
+     */
+    let biggestEdge = 0;
+    for (const r of all) {
+      if (r.start > 0) biggestEdge = Math.max(biggestEdge, edge(r.start - 1, r.start));
+      if (r.end < 255) biggestEdge = Math.max(biggestEdge, edge(r.end, r.end + 1));
+    }
+    const quantisedOnly = all.length > 0 && biggestEdge < QUANTISATION_DE;
+    const runs = quantisedOnly
+      ? []
+      : bandedRamp ? all : all.filter((r) => Math.max(edge(r.start - 1, r.start), edge(r.end, r.end + 1)) >= o.bandEdgeDE);
     const bandStart = new Set(runs.map((r) => r.start));
     for (const r of runs) {
       if (stops.length >= o.maxStops) break;
@@ -290,7 +326,10 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     let at = from;
     for (let i = from; i <= to; i++) {
       if (used.has(i)) continue;
-      const d = oklabDistance(sampleStops(st, i / 255, 'oklab', 'srgb'), ramp[i]);
+      // `st` is sorted by the caller on every pass of the refine loop below, so sample it
+      // PRE-SORTED: `sampleStops` would copy and re-sort it once per texel, up to 512
+      // iterations deep (measured 2026-09-11 — the fit is the expensive half of a derive).
+      const d = oklabDistance(sampleSortedStops(st, i / 255, 'oklab', 'srgb'), ramp[i]);
       if (d > max) {
         max = d;
         at = i;

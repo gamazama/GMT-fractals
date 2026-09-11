@@ -359,8 +359,15 @@ export const GradientExplorerV2App: React.FC = () => {
   }, [openTray]);
 
   // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
+  // `ramp` is the pipeline's OWN output and is the only thing here that is true mid-drag:
+  // `config` comes from a fit, and `deriveWorkingNow` always fits afresh rather than reusing
+  // the one the UI is holding (ADR-0117). `smoke:ge-livedrag` compares the hero's bar against
+  // this ramp to prove the bar is painting the pipeline and not a held approximation of it.
   useEffect(() => {
-    (window as unknown as { __gxWorking?: () => unknown }).__gxWorking = () => ({ config: deriveWorkingNow()?.config ?? usePaletteEditorStore.getState().config, input: useWorkingStore.getState().input });
+    (window as unknown as { __gxWorking?: () => unknown }).__gxWorking = () => {
+      const d = deriveWorkingNow();
+      return { config: d?.config ?? usePaletteEditorStore.getState().config, ramp: d?.ramp ?? null, input: useWorkingStore.getState().input };
+    };
   }, []);
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();

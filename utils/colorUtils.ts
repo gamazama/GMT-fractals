@@ -5,13 +5,35 @@ import { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '.
 /** Plain sRGB triple, 0–255 floats (pre-truncation). Structurally identical to palette `RGB`. */
 export type RGB = { r: number; g: number; b: number };
 
-export const hexToRgb = (hex: string) => {
+/**
+ * Parsed hex → packed 24-bit int, or -1 for "not a hex colour". The regex + three
+ * `parseInt`s are the per-texel cost of every gradient render: `sampleSorted` parses TWO
+ * stop colours per sample, so a 1536-px strip preview ran the regex 3072 times a frame for
+ * the ~40 distinct colours a gradient actually has (measured 2026-09-11 profiling the
+ * Adjust drag). Keyed on the string, so it is bounded by distinct colour literals in play.
+ * `hexToRgb` still returns a FRESH object each call — several callers mutate what they get
+ * back, and handing out a shared one would make this cache a source of colour corruption.
+ */
+const hexParseCache = new Map<string, number>();
+const HEX_CACHE_CAP = 4096;
+const parseHex = (hex: string): number => {
+  const hit = hexParseCache.get(hex);
+  if (hit !== undefined) return hit;
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null;
+  const packed = result ? (parseInt(result[1], 16) << 16) | (parseInt(result[2], 16) << 8) | parseInt(result[3], 16) : -1;
+  // Plain cap rather than an LRU: the miss is cheap and the working set is tiny.
+  if (hexParseCache.size >= HEX_CACHE_CAP) hexParseCache.clear();
+  hexParseCache.set(hex, packed);
+  return packed;
+};
+
+export const hexToRgb = (hex: string) => {
+  const packed = parseHex(hex);
+  return packed < 0 ? null : {
+    r: (packed >> 16) & 255,
+    g: (packed >> 8) & 255,
+    b: packed & 255
+  };
 };
 
 export const rgbToHex = (r: number | {r:number, g:number, b:number}, g?: number, b?: number): string => {
@@ -502,10 +524,23 @@ const inverseACES = (c: number) => {
 
 /**
  * Sample a PRE-SORTED stop list at a single position — the per-texel core that
- * `renderStopsToRamp` / `generateGradientTextureBuffer` loop over. Kept private so
- * the ramp renderer and the single-position `sampleStops` share ONE code path and
- * stay byte-identical by construction. Honours bias + step/smooth/cubic easing +
- * the colorSpace output transform.
+ * `renderStopsToRamp` / `generateGradientTextureBuffer` loop over. The ramp renderer and
+ * the single-position `sampleStops` share ONE code path through it and stay byte-identical
+ * by construction. Honours bias + step/smooth/cubic easing + the colorSpace output
+ * transform.
+ *
+ * Exported as `sampleSortedStops` for the two callers that already hold a sorted list and
+ * sample it MANY times — the 1536-px strip preview in `AdvancedGradientEditor` and
+ * `stopFit`'s `segmentError`. Both used to go through `sampleStops`, which copies and sorts
+ * the list on every call: at 1536 px × ~40 stops that is 61k element copies and ~330k
+ * comparisons a frame, all of it re-deriving an order the caller had already established
+ * (measured 2026-09-11 profiling an Adjust drag). Sampling in a loop through `sampleStops`
+ * is the mistake this export exists to prevent.
+ *
+ * The contract the name states: `sorted` MUST be ascending by `position`. Unsorted input
+ * does not throw, it samples wrong — so sort at the seam, once, and pass it in.
+ *
+ * @see docs/adr/0117-one-sort-per-render-not-one-per-texel.md
  */
 const sampleSorted = (
   sorted: GradientStop[],
@@ -514,6 +549,16 @@ const sampleSorted = (
   colorSpace: ColorSpaceMode,
 ): RGB => {
   let raw: RGB = { r: 0, g: 0, b: 0 };
+
+  // An EMPTY list is a real state at this seam — a gradient mid-construction, a fit called
+  // before its stops exist — and it used to be caught one level up in `sampleStops`. Now
+  // that this function is exported the guard has to live here, or the first exported caller
+  // reads `sorted[0].position` off undefined (it did, 2026-09-11). Same greyscale ramp
+  // `sampleStops` always returned, so the two stay byte-identical.
+  if (!sorted || sorted.length === 0) {
+    const v = Math.floor(Math.max(0, Math.min(1, pos)) * 255);
+    return { r: v, g: v, b: v };
+  }
 
   if (pos <= sorted[0].position) {
     raw = hexToRgb(sorted[0].color) || { r: 0, g: 0, b: 0 };
@@ -546,6 +591,10 @@ const sampleSorted = (
   if (colorSpace === 'aces_inverse') return { r: inverseACES(raw.r), g: inverseACES(raw.g), b: inverseACES(raw.b) };
   return raw;
 };
+
+/** The per-texel sampler, for callers that already hold an ascending-by-position list and
+ *  sample it many times. See `sampleSorted` above for why looping `sampleStops` is wrong. */
+export const sampleSortedStops = sampleSorted;
 
 /**
  * @assumption The CANONICAL single-position gradient sampler (engine-core). It is

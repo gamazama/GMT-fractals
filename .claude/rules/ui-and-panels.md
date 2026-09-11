@@ -52,13 +52,40 @@ Self-contained widgets ported from GMT (FormulaSelect, AudioSpectrum, FlowEditor
 EnginePanel) were ported **verbatim** with path rewrites and registered in
 `componentRegistry`. Don't rewrite their internals.
 
+## The colour picker is mounted by three hosts, and answers to all of them
+
+`components/EmbeddedColorPicker.tsx` is THE picker (every colour DDFS param, the gradient
+editor's stop inspector, the drawing and lighting panels). Two things about it are easy to
+break from the outside, both recorded in
+[ADR-0116](../../docs/adr/0116-the-colour-picker-on-a-phone-and-without-a-pipette.md):
+
+- It is **container-responsive, not viewport-responsive** — a ResizeObserver on its own root,
+  three layout branches (`cols` / `rows` / `stack`), plus a `narrow` re-flow of the `soft`
+  dialect for phones. Adding a control to the soft dialect means checking it at 390 px:
+  `npm run shot:ge-picker` prints anything laid out past the picker's own right edge, and
+  that list must stay empty. Anything past it is unreachable, not merely ugly.
+- **Whether a narrow mount starts FOLDED is the host's declaration (`roomy`), not a
+  measurement.** The picker sizes to its content and its host sizes to the picker, so asked
+  from the inside a folded picker always reports a cramped box. `AdvancedGradientEditor`
+  passes it through as `pickerRoomy`; only GE v2's hero sets it today.
+
+Its pipette is `window.EyeDropper` where that exists and a page-scoped pick
+(`components/gradient/pagePick.ts`) where it does not — Firefox, Safari, every phone. That
+hit-test deliberately does not trust `elementsFromPoint` alone: it honours `pointer-events`,
+and this app's most pickable canvases are `pointer-events-none`.
+
 ## Guards
 
 ```
 npm run typecheck
 npm run smoke:boot        # renders the whole panel tree headlessly; fails on pageerrors
 npm run smoke:interact    # DDFS state flow end-to-end (demo feature)
+npm run smoke:ge-pagepick # the picker's pipette with `EyeDropper` deleted, and with it present
 ```
+
+`smoke:ge-pagepick` is the only guard on `components/gradient/pagePick.ts` and on the picker's
+pipette branch; `BROWSER=firefox` runs the same four steps in real firefox. Like every `ge-*`
+smoke it wants `npm run dev` on 3400.
 
 **Known coverage gap — read before trusting a green run.** `smoke:ui-primitives`
 is often cited here. It is a genuine guard, not a dead one, but it is narrow: it

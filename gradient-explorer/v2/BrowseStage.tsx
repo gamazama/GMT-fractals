@@ -86,7 +86,8 @@ import { HueLightnessPad, stripTrackFor } from '../../palette/components/HueLigh
 import { padAxesFor, WINDOW_KEY } from '../../palette/core/padAxes';
 import { mapSpan } from '../../palette/core/lensBand';
 import { MapScrollbar } from './ui/MapScrollbar';
-import { useWorkingDerived } from '../../palette/store/workingStore';
+import { useWorkingDerived, deriveWorkingNow, useWorkingStore } from '../../palette/store/workingStore';
+import { contributeToGlobal } from './contributeToGlobal';
 import { QUALITY_AXES } from '../../palette/features/paletteFilters';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { Dropdown } from '../../components/Dropdown';
@@ -110,7 +111,7 @@ import { showToast } from '../../engine/store/toastStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { fileFavientAt, fileFavientsAt } from '../../palette/store/favientFiling';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../../palette/core/favientDnd';
-import { parseSetId } from '../../palette/core/groundSets';
+import { parseSetId, GLOBAL_SET_ID } from '../../palette/core/groundSets';
 import type { ContextMenuItem } from '../../types/help';
 import { useGroundSets, useGroundSource } from './useGroundSource';
 import { groupSetId } from '../../palette/core/groundSets';
@@ -141,6 +142,13 @@ const GROUND_VIEW_KEY = 'gx.v2.groundView';
  *  row labels in a gutter on that edge, so the column is inset just enough to sit in the
  *  dead space before the labels start rather than on top of them. */
 const TOOLBAR_LEFT = 6;
+
+/** How much of the wall's left edge the tool column occupies, plus a breath: `TOOLBAR_LEFT`
+ *  + the `Floating` box's 3 px padding either side + a 32 px button, rounded up past its
+ *  border. The wall keeps its content clear of this (`minGutter`) — before it did not, and on
+ *  any ground with a small gutter (a set asks for 24) the column sat on the first tiles
+ *  (owner, 2026-09-11). Phone is exempt: there the cluster is a row along the BOTTOM. */
+const TOOLBAR_CLEAR = TOOLBAR_LEFT + 3 + 32 + 3 + 8;
 
 /** PHONE: the pad's own height. 56 is the desktop field; 48 keeps the three-row bar inside
  *  the header without making the hue axis unpointable. */
@@ -205,6 +213,25 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
   // The ground can be several sets at once, so the title is their labels joined — the
   // model's `setId` is the joined selection and is not a label.
   const setTitle = sets.filter((s) => setIds.includes(s.id)).map((s) => s.label).join(' + ') || m.setId;
+
+  /**
+   * THE SHARED SET IS THE ONLY GROUND WITH A WAY IN THAT NOBODY FINDS. Contributing to
+   * GX global was a drag onto its chip and nothing else — a gesture you have to already
+   * know about, on a set whose whole point is that strangers add to it (owner, 2026-09-11:
+   * it "needs a button that says submit gradient or something, to entice people to save
+   * there"). So while it is the ground, the bar carries the invitation.
+   *
+   * The gradient it offers is the WORKING one, read imperatively on the click: subscribing
+   * to the derive here would re-render the whole wall on every frame of a slider drag, for
+   * a button that only needs an answer when it is pressed.
+   */
+  const onGlobalGround = m.setId === GLOBAL_SET_ID;
+  const workingKind = useWorkingStore((st) => st.input.kind);
+  const shareToGlobal = useCallback(() => {
+    const cfg = deriveWorkingNow()?.config;
+    if (!cfg) { showToast('Pick or build a gradient first — then share it here'); return; }
+    contributeToGlobal(cfg);
+  }, []);
   // The pad follows the Arrange state (owner, 2026-09-08): rows on its Y, sort on its X when
   // they are colour axes, the third on the strip — so the pad is the wall's map for any
   // arrangement it can paint (`palette/core/padAxes.ts`; the harness pins the table).
@@ -653,6 +680,21 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
             <button onClick={() => m.setAnchor(null)} className="underline shrink-0 hover:text-fg">clear</button>
           </span>
         )}
+        {/* The invitation, while the shared set is the ground. `Act` is the bar's own button
+            language; the accent ring is the one thing on this row that asks rather than
+            narrows, which is the point of it. Hidden on a phone only when there is nothing
+            to give: an empty working slot makes the button a dead end, and the empty-state
+            line below offers the same thing in a sentence. */}
+        {onGlobalGround && workingKind !== 'empty' && (
+          <Act
+            onClick={shareToGlobal}
+            data-gx-share-global=""
+            title="Add the gradient you are working on to GX global — everyone using the app will see it"
+            className="shrink-0 border-accent-400/40 bg-accent-400/10 text-accent-300"
+          >
+            <Icon name="plus" /> Share your gradient
+          </Act>
+        )}
         {!filtersOpen && (m.narrowers.length > 0 || m.anchor) && (
           <button onClick={m.clearAll} className="text-[13px] text-accent-300 underline hover:text-fg whitespace-nowrap" title="Clear search, look ranges, sources, the carve and the similarity sort">
             clear all
@@ -808,6 +850,8 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
             // PHONE: the catalogue takes the same 24 (see PHONE_GUTTER) — its own
             // auto-shrink lands on ~4 at 390 and runs the tiles into the window edge.
             gutter={phone ? PHONE_GUTTER : m.isSet ? 24 : undefined}
+            // Keep the tiles and the row labels clear of the floating tool column.
+            minGutter={phone ? 0 : TOOLBAR_CLEAR}
             // Your own groups are few and named; the catalogue's category bands are many and
             // dense. Give the named ones room to read as headings (owner, 2026-09-09).
             spaciousBands={m.isSet}
@@ -828,7 +872,24 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
           />
         ) : (
           <div className="h-full flex items-center justify-center text-[13px] text-fg-muted px-8 text-center" data-gx-ground-empty="">
-            {m.isSet && !m.search.trim() ? (
+            {/* A SET that HAS members but is showing none is being hidden by the bar above,
+                not empty — and it used to say "Nothing here yet" regardless, which denies
+                that its gradients exist. GX global reaches this the most easily: it is the
+                one set arranged by COLOUR, so the catalogue's hue / lightness windows carry
+                straight into it, and two shared gradients fall outside almost any narrowing
+                (owner, 2026-09-11: "gx global is not displaying when its the only one
+                selected" — reproduced by narrowing the pad on All, then lighting it). This
+                branch comes FIRST for that reason: the old one swallowed every narrowed set. */}
+            {m.isSet && m.total > 0 ? (
+              <span>
+                {m.total.toLocaleString()} {m.total === 1 ? 'gradient is' : 'gradients are'} here, hidden by what this bar is narrowed to —{' '}
+                <button onClick={m.clearAll} className="text-accent-300 underline">show {m.total === 1 ? 'it' : 'them'}</button>.
+              </span>
+            ) : m.setId === GLOBAL_SET_ID ? (
+              <span>
+                Nothing has been shared yet — <button onClick={shareToGlobal} className="text-accent-300 underline">yours could be the first</button>.
+              </span>
+            ) : m.isSet && !m.search.trim() ? (
               <span>Nothing here yet — pick gradients from All and they land in Today; drop one on a chip below to file it.</span>
             ) : m.search.trim() ? (
               <span>

@@ -107,7 +107,15 @@ async function main() {
   await wall.waitFor({ state: 'visible', timeout: 15000 });
 
   // The row-label column a SET reserves and leaves empty; All draws labels in a wider one.
-  const SET_GUTTER = 24;
+  /**
+   * The wall's left margin on a SET. It was the shell's 24 px row-label reserve; since
+   * 2026-09-11 it is the room the floating TOOL COLUMN needs, because the column was sitting
+   * on the first tiles of every ground whose gutter is smaller than it (owner: "the wall's
+   * toolbar is obscuring the wall"). `PickerWall`'s `minGutter` puts a floor under the margin
+   * and BrowseStage passes `TOOLBAR_CLEAR` — grep both; this number is that one, and the two
+   * must move together.
+   */
+  const SET_GUTTER = 52;
 
   // [1]
   let s = await state(page);
@@ -164,14 +172,14 @@ async function main() {
   if (s.viewLabels.join(',') !== 'List view')
     fail(`[3] the corner should offer the view toggle on a set, not ${s.viewLabels.join(' + ') || 'nothing'}`);
   if (s.canvases !== 1) fail(`[3] ${s.canvases} canvases for two tiles`);
-  // A set RESERVES the shell's 24 px row-label column and draws nothing in it, so its canvas
-  // starts at 24 rather than 0 (grep `gutter={m.isSet ? 24 : undefined}` in BrowseStage). That
-  // is the point: the canvas does not jump sideways when you cross between All and a set.
+  // A set RESERVES a left margin and draws nothing in it, so its canvas starts there rather
+  // than at 0. That is the point: the canvas does not jump sideways when you cross between All
+  // and a set, and the tool column has somewhere to float that is not on top of a tile.
   // This line expected 0 for a long time and was red on a clean tree because of it (owner
-  // confirmed the reserved column is wanted, 2026-09-10) — so it now pins the reserve itself,
+  // confirmed the reserved column is wanted, 2026-09-10) — so it pins the reserve itself,
   // which is the thing that would be a regression if it went missing.
   if (Math.abs((s.canvasLeft ?? -99) - SET_GUTTER) > 1)
-    fail(`[3] a set should reserve the ${SET_GUTTER}px row-label column, canvas at x=${s.canvasLeft}`);
+    fail(`[3] a set should reserve the ${SET_GUTTER}px left margin the tool column needs, canvas at x=${s.canvasLeft}`);
   if ((s.canvasH ?? 0) < 60) fail(`[3] the tiles did not grow (canvas height ${s.canvasH})`);
   if ((s.canvasH ?? 0) > 220) fail(`[3] two tiles wrapped into a wall (canvas height ${s.canvasH})`);
   if (!s.chips.find((c) => c.id === today.id)?.lit) fail('[3] the Today chip is not lit');

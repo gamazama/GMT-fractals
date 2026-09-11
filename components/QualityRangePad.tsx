@@ -27,7 +27,7 @@
 // constants stay in normalised track space so the feel is scale-invariant.
 // Defaults (0..1, step 0.01) keep the original GX behaviour byte-identical.
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DraggableNumber } from './inputs/primitives';
 import { clamp } from '../utils/stopOps';
 import type { KeyStatus } from './Icons';
@@ -186,6 +186,30 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
     [posOf, onDragStart],
   );
 
+  /**
+   * WHAT THE CURSOR PROMISES (owner, 2026-09-11: "mouse cursors need to show the move and
+   * resize events (not draw)"). This track wore `crosshair` everywhere, which in this suite
+   * means "place or draw here" — and nothing here is drawn. A press within `EDGE_HIT` of a
+   * bound RESIZES that bound; anywhere else MOVES the window (and drags vertically to widen
+   * it). So the cursor is read off the same test `onPointerDown` uses, and stays on whatever
+   * the drag actually grabbed while one is open.
+   */
+  const [hoverMode, setHoverMode] = useState<DragState['mode'] | null>(null);
+  const cursorFor = (m: DragState['mode'] | null): string =>
+    m === 'min' || m === 'max' ? 'cursor-ew-resize' : m === 'move' ? 'cursor-move' : 'cursor-default';
+
+  const onPointerHover = useCallback(
+    (e: React.PointerEvent) => {
+      if (dragRef.current) return;
+      const [px] = posOf(e);
+      const [va, vb] = valueRef.current;
+      const da = Math.abs(px - va);
+      const db = Math.abs(px - vb);
+      setHoverMode(da < EDGE_HIT || db < EDGE_HIT ? (da <= db ? 'min' : 'max') : 'move');
+    },
+    [posOf],
+  );
+
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       const st = dragRef.current;
@@ -250,10 +274,11 @@ export const QualityRangePad: React.FC<QualityRangePadProps> = ({
   const trackNode = (
     <div
       ref={trackRef}
-      className={`relative w-full overflow-hidden cursor-crosshair select-none touch-none ${variant !== 'default' ? 'rounded ring-1 ring-line/20' : ''}`}
+      className={`relative w-full overflow-hidden select-none touch-none ${cursorFor(dragRef.current?.mode ?? hoverMode)} ${variant !== 'default' ? 'rounded ring-1 ring-line/20' : ''}`}
       style={{ height }}
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
+      onPointerMove={(e) => { onPointerHover(e); onPointerMove(e); }}
+      onPointerLeave={() => { if (!dragRef.current) setHoverMode(null); }}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
     >

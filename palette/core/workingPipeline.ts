@@ -41,7 +41,7 @@ import {
   type Channels,
   type GeneratorParams,
 } from './generatorPipeline';
-import { renderStopsToRamp } from './gmtGradient';
+import { renderStopsToRamp, rgbToHex } from './gmtGradient';
 import { fitRampToStops } from './stopFit';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { RGB } from './oklab';
@@ -102,6 +102,40 @@ export const stopBudget = (detail: number): { targetDE: number; maxStops: number
 };
 
 /**
+ * A HELD fit, re-coloured from the live ramp: the same stops in the same places, carrying the
+ * colours the gradient has right now.
+ *
+ * Holding the fit during a drag must not freeze the GRADIENT (owner, 2026-09-11: "the gradient
+ * needs to respond live … it is only the knots build and fit that we don't need during a
+ * drag"). Handing the held config straight back did freeze it, and in a way that looked like
+ * half the app was broken: the palette swatches sample `ramp` and kept moving, while the hero's
+ * bar paints from `config` — through `previewConfig` on an edited document, through `value`
+ * otherwise — and so sat still.
+ *
+ * Re-colouring is the cheap half of a fit and the half that carries the motion. WHERE each stop
+ * sits, and its bias and interpolation, are what the expensive refinement decides and what the
+ * owner asked to defer; WHAT colour sits there is one array lookup. So the bar is exact at every
+ * stop and interpolated between them by the same rules the last fit chose — visibly live,
+ * a little coarser than the settled render, and replaced by a real fit on release.
+ *
+ * Returns `held` ITSELF when no colour moved, so a bracket that opens without a value change
+ * costs no re-render.
+ */
+const recolourHeldFit = (held: GradientConfig, ramp: RGB[]): GradientConfig => {
+    if (ramp.length === 0) return held;
+    const last = ramp.length - 1;
+    let changed = false;
+    const stops = held.stops.map((s) => {
+        const c = ramp[Math.round(Math.max(0, Math.min(1, s.position)) * last)];
+        const color = rgbToHex(c);
+        if (color === s.color) return s;
+        changed = true;
+        return { ...s, color };
+    });
+    return changed ? { ...held, stops } : held;
+};
+
+/**
  * Run the pipeline. `verbatim` is the input's own config when it has one (`gradient` /
  * `stops` kinds), else null; it is returned untouched when nothing would change it.
  */
@@ -113,7 +147,9 @@ export const runWorkingPipeline = (
   detail: number,
   verbatim: GradientConfig | null,
   seedStops: SeedStop[] = [],
-  /** A previous fit to REUSE instead of fitting (a slider is mid-drag — see useWorkingDerived). */
+  /** A previous fit to REUSE instead of fitting (a slider is mid-drag — see useWorkingDerived).
+   *  Its stops are re-coloured from the live ramp, never handed back verbatim: the positions
+   *  are what we are deferring, the colours are what makes the bar move. See `recolourHeldFit`. */
   holdFit?: GradientConfig | null): WorkingDerivedCore => {
   const passthrough = !!verbatim && !curves && isIdentityAdjust(params);
   const built = buildGradientRamp(
@@ -134,5 +170,11 @@ export const runWorkingPipeline = (
       passthrough: true,
     };
   }
-  return { base, ramp: built.ramp, final: built.final, config: holdFit ?? fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops, fitBias: true }), passthrough: false };
+  return {
+    base,
+    ramp: built.ramp,
+    final: built.final,
+    config: holdFit ? recolourHeldFit(holdFit, built.ramp) : fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops, fitBias: true }),
+    passthrough: false,
+  };
 };

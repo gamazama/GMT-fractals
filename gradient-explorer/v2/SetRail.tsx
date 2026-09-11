@@ -81,11 +81,13 @@
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_GROUP, newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
 import { fileFavientInto } from '../../palette/store/favientFiling';
-import { submitToGlobalSet, GlobalSetError } from '../../palette/core/globalSet';
-import { refreshGlobalSet } from '../../palette/store/globalSetStore';
+import { contributeToGlobal } from './contributeToGlobal';
+import { flashSetSave, useSetSaveFlash, SAVE_MS, SAVE_SLOW_MS } from './setSaveFlash';
+import { configToCss } from '../../palette/core/gradientCss';
+import type { GradientConfig } from '../../types';
 import { FAVIENT_DND_MIME, readFavientDrag, type FavientDragPayload } from '../../palette/core/favientDnd';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
 import { groupSetId, type GroundSetDesc } from '../../palette/core/groundSets';
@@ -131,6 +133,21 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
   const inFlight = useDragPayload();
   const trashable = dragging && !!inFlight?.favId;
   const [over, setOver] = useState<string | null>(null);
+  /**
+   * THE SAVE, DRAWN WHERE IT LANDS (owner, 2026-09-11). Two halves:
+   *   • HOVER — while a gradient is in flight, the chip under it fills with that gradient, so
+   *     the drop is aimed at a picture of what you are giving it. `useDragPayload` is the
+   *     cursor avatar's own source (`palette/store/dragVisual.ts`); the DataTransfer cannot
+   *     be read during a dragover, which is why that module exists at all.
+   *   • SAVE — the fill collapses to the chip's centre line and goes, and the label lights
+   *     through it. Announced through `setSaveFlash` so the ♥, which is nowhere near this
+   *     rail, can play the same thing (slower, with a bloom).
+   */
+  const flightCss = useMemo(
+    () => (inFlight?.config ? configToCss(inFlight.config as GradientConfig) : undefined),
+    [inFlight?.config],
+  );
+  const saved = useSetSaveFlash();
   const [renaming, setRenaming] = useState<{ group: string; value: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -149,38 +166,20 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     (s === null || (s.kind === 'group' && s.group !== undefined) || s.kind === 'global') &&
     Array.from(dt.types).includes(FAVIENT_DND_MIME);
 
-  /**
-   * Contribute a gradient to the SHARED set. The same gesture as filing one into a group
-   * of your own — drag it onto the chip — because it means the same thing, except that
-   * this shelf is everyone's. It asks first: the set is public and there is no un-sending.
-   *
-   * Not undoable, and deliberately not wrapped in `paramEdit`: nothing local changed, so
-   * there is nothing for Ctrl+Z to put back. Your own copy stays exactly where it was.
-   */
-  const contribute = (p: FavientDragPayload): void => {
-    const msg = 'Add this gradient to GX global?' + String.fromCharCode(10, 10) +
-      'Everyone using the app will see it, and it cannot be taken back. Your own copy stays where it is.';
-    if (!window.confirm(msg)) return;
-    showToast('Adding it to GX global…');
-    void submitToGlobalSet(p.config).then(
-      (r) => {
-        showToast(r.added ? 'Added to GX global — thank you' : 'That one is already in GX global');
-        if (r.added) refreshGlobalSet();
-      },
-      (err) => showToast(err instanceof GlobalSetError ? err.message : 'Could not add it to GX global'),
-    );
-  };
-
   const dropOn = (s: GroundSetDesc | null) => (e: React.DragEvent) => {
     if (!canTake(s, e.dataTransfer)) return;
     e.preventDefault();
     setOver(null);
     const p = readFavientDrag(e.dataTransfer);
     if (!p) return;
+    // The confirmation, on the chip that took it. Fired BEFORE the write so the animation
+    // starts on the frame the pointer released, not after the store has re-rendered the rail.
+    const flash = () => { const css = configToCss(p.config); if (css && s) flashSetSave(s.id, css); };
     if (s?.kind === 'global') {
-      contribute(p);
+      contributeToGlobal(p.config);
       return;
     }
+    flash();
     paramEdit(() => {
       if (s) {
         fileFavientInto(s.group!, p);
@@ -251,6 +250,12 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
         const lit = activeIds.includes(s.id);
         const renamable = s.kind === 'group' && s.group !== DEFAULT_GROUP;
         const isRenaming = renaming?.group !== undefined && renaming.group === s.group && renamable;
+        // A chip only paints a gradient it could actually take (`canTake`'s rule, minus the
+        // DataTransfer): the catalogue and the date bins are not drop targets, and offering
+        // them a fill would promise a save that will not happen.
+        const takes = s.kind === 'group' || s.kind === 'global';
+        const hoverFill = takes ? flightCss : undefined;
+        const savedHere = saved?.setId === s.id;
         return (
           <button
             key={s.id}
@@ -287,11 +292,37 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
               // `snap-start` pairs with the run's `snap-x snap-proximity` so a flick parks a
               // chip's left edge at the run's, never half a chip in.
               phone ? 'inline-flex items-center h-[34px] px-3 shrink-0 snap-start' : 'inline-flex items-center h-[26px] px-3',
-              'rounded-lg text-[13px] whitespace-nowrap border transition-colors',
+              // `relative overflow-hidden`: the fill below is an absolutely positioned child
+              // and must be clipped to the chip's rounded box, or a collapsing gradient
+              // paints over its neighbours.
+              'relative overflow-hidden rounded-lg text-[13px] whitespace-nowrap border transition-colors',
               lit ? 'border-accent-400 text-accent-300 bg-accent-400/10' : 'border-line/20 text-fg-muted hover:text-fg hover:border-line/40',
               over === s.id ? 'outline outline-2 outline-dashed outline-gx-armed' : '',
             ].join(' ')}
           >
+            {/* HOVER: the gradient in flight, filling the chip it would land in. Dimmed, so
+                the label it sits under stays readable — this is an aim, not the confirmation. */}
+            {hoverFill && over === s.id && (
+              <span
+                aria-hidden
+                data-gx-set-hover-fill=""
+                className="absolute inset-0 opacity-55 pointer-events-none"
+                style={{ backgroundImage: hoverFill }}
+              />
+            )}
+            {/* SAVE: the same gradient, at full strength, collapsing to the chip's centre. */}
+            {savedHere && (
+              <span
+                aria-hidden
+                data-gx-set-save=""
+                className="absolute inset-0 animate-set-save pointer-events-none"
+                style={{ backgroundImage: saved!.css, ['--save-ms' as string]: `${saved!.slow ? SAVE_SLOW_MS : SAVE_MS}ms` }}
+              >
+                {/* the ♥'s bloom — held a beat longer and brighter, because that press is at
+                    the other end of the screen from this chip */}
+                {saved!.slow && <span className="absolute inset-0 bg-white animate-set-save-bloom" style={{ ['--save-ms' as string]: `${SAVE_SLOW_MS}ms` }} />}
+              </span>
+            )}
             {isRenaming ? (
               <input
                 ref={inputRef}
@@ -308,10 +339,13 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
                 className="bg-transparent outline-none text-[13px] text-fg w-[96px]"
               />
             ) : (
-              <>
+              <span
+                className={`relative inline-flex items-center ${savedHere ? 'animate-set-save-text' : ''}`}
+                style={savedHere ? { ['--save-ms' as string]: `${saved!.slow ? SAVE_SLOW_MS : SAVE_MS}ms` } : undefined}
+              >
                 {s.label}
                 <span className={`ml-1.5 tabular-nums ${lit ? 'text-accent-300/70' : 'text-fg-dim'}`}>{s.count.toLocaleString()}</span>
-              </>
+              </span>
             )}
           </button>
         );

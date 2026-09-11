@@ -29,7 +29,7 @@ import { createPortal } from 'react-dom';
 import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
 import type { ContextMenuItem } from '../types/help';
 import { isColorDrag, readColorDrag } from './gradient/colorDrag';
-import { rgbToHex, nudgeChannel, sampleStops, renderStopsToRamp, BLEND_SPACE_ORDER, BLEND_SPACE_LABEL } from '../utils/colorUtils';
+import { rgbToHex, nudgeChannel, sampleStops, sampleSortedStops, renderStopsToRamp, BLEND_SPACE_ORDER, BLEND_SPACE_LABEL, type RGB } from '../utils/colorUtils';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
 const STRIP_PREVIEW_W = 1536;
@@ -273,6 +273,25 @@ interface AdvancedGradientEditorProps {
      *  document (measured 2026-09-07: after a Curves bake the bar showed the stops document,
      *  so Adjust moved the palette swatches and not the ramp). The knots stay the document's. */
     previewConfig?: GradientConfig;
+    /**
+     * 'strip' chrome: paint the bar from THIS 256-texel ramp, in preference to any stops.
+     *
+     * It is the pipeline's OUTPUT, and it is what the bar should show whenever the pipeline is
+     * doing anything: the stops route goes ramp → fit → stops → resample, and the fit is both
+     * the expensive step and an approximation. Worse, the fit is HELD during a drag (ADR-0117),
+     * so painting through it showed the held stop POSITIONS carrying live colours — "a weird
+     * mix of the previous stops and the current colors" (owner, 2026-09-11), which a curve edit
+     * makes obvious because a curve moves features along the ramp rather than merely retinting
+     * them. Painting the ramp skips the round trip entirely and is exact by construction.
+     *
+     * The knots are unaffected: they keep describing the stops document, and hide themselves
+     * when that is no longer what the bar shows (`knotsStale`).
+     */
+    previewRamp?: RGB[];
+    /** 'strip' chrome: the host is giving the portalled inspector picker REAL vertical room
+     *  (the v2 tray on a phone), so a narrow mount opens instead of starting folded. Passed
+     *  straight through — @see EmbeddedColorPicker's `roomy`. */
+    pickerRoomy?: boolean;
     /** 'strip' chrome: a single click on the bar (not on a bias handle) — the v2 hero's
      *  BAKE gesture while a face is open (C.9). Absent = the bar takes no single click. */
     onStripClick?: () => void;
@@ -299,7 +318,11 @@ interface AdvancedGradientEditorProps {
  * CURSORS, one scheme across the whole editor (owner's walk, 2026-09-08). A cursor is a
  * promise about the next click, so each shape means exactly one thing here:
  *
- *   crosshair    place or draw ON the track  — add a knot, drag a marquee
+ *   crosshair    SELECT — drag a marquee across the knots. It is the bar's cursor, because
+ *                the bar is the marquee's surface (the container's `pointerdown` starts one
+ *                for any press that is not on an interactive child or the knot track).
+ *   copy         MAKE — press here and a knot appears. The knot track's cursor, and nothing
+ *                else's.
  *   grab/grabbing  pick a knot up and move it
  *   move         move a whole selection
  *   ew-resize    change a value along the axis — scale a selection, a bias handle, a slider,
@@ -310,6 +333,14 @@ interface AdvancedGradientEditorProps {
  *
  * The rule that keeps it honest: a surface only wears `pointer` while it actually has a
  * click to give. The bar used to wear it always, including when a click did nothing.
+ *
+ * `crosshair` and `copy` were ONE cursor until 2026-09-11, and the owner named the cost:
+ * "the main bar … its drag makes a selection of the knots — thats why its confusing that the
+ * bottom strip has the selection crosshair, when the bottom strip of the hero creates a new
+ * knot". Two gestures wearing one cursor, and the surface that actually had the selection
+ * wore no cursor at all. They are separate now, and each sits on the element that performs it.
+ *
+ * @see docs/adr/0118-a-surface-says-what-it-does.md
  */
 
 /** Imperative seam for a host that owns a palette face over the strip (the v2 hero). */
@@ -351,7 +382,7 @@ const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelec
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -438,7 +469,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const [isExpandedState, setIsExpanded] = useState(true);
     // Strip chrome has no toggle: the inspector is always reachable.
     const isExpanded = chrome === 'strip' ? true : isExpandedState;
-    const [isBiasHandlesVisible, setIsBiasHandlesVisible] = useState(true);
+    /** Default OFF on a phone (owner, 2026-09-11: "in mobile we should hide the bias handles
+     *  by default"). They are a fine-adjustment affordance drawn at mouse scale, and on a
+     *  390 px bar they crowd the knots a finger is trying to hit. The ☰ menu's "Bias handles"
+     *  item turns them on, so nothing becomes unreachable — and `showBias` below still gates
+     *  them on a SELECTION there, so even switched on they appear only when you mean them. */
+    const [isBiasHandlesVisible, setIsBiasHandlesVisible] = useState(() => !COARSE_POINTER);
     // 'strip' chrome: the bias handles show only while the pointer is over the bar (C.7,
     // owner 2026-09-07: "hero bias handles to only be visible when over the gradient").
     const [stripHover, setStripHover] = useState(false);
@@ -454,9 +490,42 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             typeof window.matchMedia === 'function' &&
             window.matchMedia('(pointer: coarse)').matches,
     );
-    const showBias = isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
+    /**
+     * ARE THE KNOTS A DESCRIPTION OF WHAT THE BAR IS SHOWING? (owner, 2026-09-11: "the stops
+     * should only be visible when they are current. that would reduce clutter all around and
+     * make it easier to press on the gradient to bake it".)
+     *
+     * `previewConfig` means exactly "paint THIS on the bar instead of the edited stops" — the
+     * v2 hero passes it while Adjust or Curves is live over a baked document. The knots then
+     * belong to the document underneath and describe a gradient that is no longer on screen:
+     * they sat still through a whole drag and stayed wrong after it, which reads as a bug and
+     * was reported as one. They are also physically in the way of the click that BAKES.
+     *
+     * So the presence of `previewConfig` is the rule: while the bar is showing something else,
+     * the knot layer goes — markers, bias handles and the track's own gestures. The track KEEPS
+     * its height, because the hero must not change size when a face opens (`smoke:ge-tray` [2]
+     * and [5] assert the wall never moves). Baking brings them straight back, describing the
+     * thing you baked.
+     */
+    const knotsStale = !!previewConfig;
+    // `previewRamp` alone does NOT make them stale: with a live source the knots are the fit of
+    // that same ramp and describe it truly once the drag lets go. `previewConfig` is the case
+    // where a baked document sits underneath something else — see its own note above.
+    const showBias = !knotsStale && isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
     
     const dragPayloadRef = useRef<DragPayload | null>(null);
+    /**
+     * THE DRAG OWNS THE CURSOR FOR ITS DURATION (owner, 2026-09-11: "during a selection drag,
+     * the cursor should stay selection drag and not be changing mid drag").
+     *
+     * Every surface here names its own gesture — the bar selects, the track makes, a knot grabs
+     * — which is right until a gesture is UNDER WAY, and then the cursor kept announcing
+     * whatever the pointer happened to be passing over: a marquee begun on the bar turned into
+     * `copy` the moment it crossed the knot track. `document.body.style.cursor` does not fix
+     * it, because a descendant that sets its own `cursor` wins over an inherited one; the root
+     * carries the cursor and forces every descendant to inherit it instead.
+     */
+    const [dragCursor, setDragCursor] = useState<string | null>(null);
     const [isDragRemoving, setIsDragRemoving] = useState(false);
     const isDragRemovingRef = useRef(false);
     
@@ -500,7 +569,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // precedence over the host's previewConfig so the hover always wins visually, and it
     // never emits — leaving the row restores the committed mode.
     const previewBlend = hoverBlend ?? previewConfig?.blendSpace ?? blendSpace;
-    const previewRamp = useMemo(() => renderStopsToRamp(previewStops, previewBlend), [previewStops, previewBlend]);
+    // 'strip' chrome paints from `previewWide` below and never reads a texel of this, so it
+    // is not computed there: 256 oklab samples per keystroke of an Adjust dial, thrown away
+    // (measured 2026-09-11). The two END colours the gutters want come from `previewWide`
+    // instead — see `stripEnds`.
+    // Named for its one consumer, so it cannot be confused with the `previewRamp` PROP (which
+    // is strip chrome's, and is the pipeline's output rather than a render of these stops).
+    const fullChromeRamp = useMemo(
+        () => (chrome === 'strip' ? null : renderStopsToRamp(previewStops, previewBlend)),
+        [previewStops, previewBlend, chrome],
+    );
     // Strip chrome (the v2 hero, ~1100 px wide): the preview samples the STOPS once per
     // display pixel instead of stretching the 256-texel ramp — a bilinear scale-up softened
     // every step edge into a little gradient, and nearest would band the smooth ones
@@ -509,13 +587,39 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const previewWide = useMemo(() => {
         if (chrome !== 'strip') return null;
         const out = new Uint8ClampedArray(STRIP_PREVIEW_W * 4);
+        // A RAMP beats stops: it is the pipeline's own output, with no fit in between. Upsampled
+        // NEAREST, and 1536 / 256 is exactly 6, so every texel becomes a clean 6 px run — a step
+        // edge stays hard (which is the whole reason this bar samples per display pixel) and a
+        // smooth ramp bands at 1/256 of a channel, which is nothing.
+        if (previewRamp && previewRamp.length > 1) {
+            const n = previewRamp.length;
+            for (let x = 0; x < STRIP_PREVIEW_W; x++) {
+                const c = previewRamp[Math.min(n - 1, Math.floor((x * n) / STRIP_PREVIEW_W))];
+                out[x * 4] = c.r; out[x * 4 + 1] = c.g; out[x * 4 + 2] = c.b; out[x * 4 + 3] = 255;
+            }
+            return out;
+        }
         const sorted = [...previewStops].sort((a, b) => a.position - b.position);
         for (let x = 0; x < STRIP_PREVIEW_W; x++) {
-            const c = sampleStops(sorted, x / (STRIP_PREVIEW_W - 1), previewBlend, 'srgb');
+            // `sampleSortedStops`, NOT `sampleStops`: the latter copies and re-sorts the list
+            // on every call, which threw this loop's one sort away 1536 times a frame.
+            const c = sampleSortedStops(sorted, x / (STRIP_PREVIEW_W - 1), previewBlend, 'srgb');
             out[x * 4] = c.r; out[x * 4 + 1] = c.g; out[x * 4 + 2] = c.b; out[x * 4 + 3] = 255;
         }
         return out;
-    }, [previewStops, previewBlend, chrome]);
+    }, [previewStops, previewBlend, chrome, previewRamp]);
+
+    /** 'strip' chrome only: the ramp's two END colours, for the 8 px gutters either side.
+     *  Read out of the strip buffer that is being painted anyway — they used to be
+     *  `previewRamp[0]` / `[255]`, which is what kept the whole 256-texel ramp alive here. */
+    const stripEnds = useMemo(() => {
+        if (!previewWide) return null;
+        const last = (STRIP_PREVIEW_W - 1) * 4;
+        return {
+            a: `rgb(${previewWide[0]} ${previewWide[1]} ${previewWide[2]})`,
+            b: `rgb(${previewWide[last]} ${previewWide[last + 1]} ${previewWide[last + 2]})`,
+        };
+    }, [previewWide]);
 
     useEffect(() => {
         const cv = previewCanvasRef.current;
@@ -528,17 +632,18 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             ctx.putImageData(img, 0, 0);
             return;
         }
+        if (!fullChromeRamp) return;
         const img = ctx.createImageData(256, 1);
         for (let i = 0; i < 256; i++) {
-            img.data[i * 4] = previewRamp[i].r;
-            img.data[i * 4 + 1] = previewRamp[i].g;
-            img.data[i * 4 + 2] = previewRamp[i].b;
+            img.data[i * 4] = fullChromeRamp[i].r;
+            img.data[i * 4 + 1] = fullChromeRamp[i].g;
+            img.data[i * 4 + 2] = fullChromeRamp[i].b;
             img.data[i * 4 + 3] = 255;
         }
         // 256×1 backing store stretched by CSS to the strip's full width/height —
         // the browser's display scaling smooths it into a continuous gradient.
         ctx.putImageData(img, 0, 0);
-    }, [previewRamp, previewWide]);
+    }, [fullChromeRamp, previewWide]);
 
     // --- OUTPUT LOGIC ---
     // Always emits the Object format if we detect we are in "Advanced Mode" (internal check), 
@@ -774,7 +879,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 // match what the element under the pointer already promised: a knot is
                 // GRABBED, a selection is MOVED. It used to say ew-resize for both, which
                 // contradicted the knot's own grab cursor (owner's cursor walk, 2026-09-08).
-                document.body.style.cursor = isPullingAway ? 'no-drop' : type === 'knot' ? 'grabbing' : 'move';
+                const c = isPullingAway ? 'no-drop' : type === 'knot' ? 'grabbing' : 'move';
+                setDragCursor(c);
+                document.body.style.cursor = c;
             }
 
             // Engine stop-op: move selected stops by the pointer delta (shift-snaps).
@@ -838,6 +945,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         }
 
         dragPayloadRef.current = null;
+        setDragCursor(null);
         document.body.style.cursor = '';
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
@@ -902,6 +1010,14 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             type, ids, startX: e.clientX, startY: e.clientY, pointerId: e.pointerId,
             initialKnots: JSON.parse(JSON.stringify(overrideKnots || knots))
         };
+        // What this gesture IS, held until it ends. `bracket_move` moves a whole selection;
+        // the two `bracket_scale_*` and `bias` change a value along the axis.
+        const held = type === 'marquee' ? 'crosshair'
+            : type === 'knot' ? 'grabbing'
+            : type === 'bracket_move' ? 'move'
+            : 'ew-resize';
+        setDragCursor(held);
+        document.body.style.cursor = held;
         // Listened for on the WINDOW, not captured on the element: a release outside the
         // window still ends the drag, which is what the mouse listeners always guaranteed. A
         // touch pointer is implicitly captured by its target anyway, so its moves keep
@@ -984,7 +1100,26 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
     const selectedNodes = useMemo(() => knots.filter(k => selectedIds.has(k.id)), [knots, selectedIds]);
     const selectionCount = selectedIds.size;
-    useEffect(() => { onSelectionChange?.(selectionCount); }, [selectionCount, onSelectionChange]);
+    /**
+     * Tell the host when the SELECTION CHANGES — and only then.
+     *
+     * `onSelectionChange` used to be a dep of this effect, so it re-fired on every render in
+     * which the host passed a fresh callback (GE v2's hero takes an inline arrow, so: every
+     * shell render). The host reads the notification as an EVENT and acts on it, and its rule
+     * is "a stop is selected and the tray is elsewhere → open the inspector". Put together,
+     * any re-render while a stop was selected hauled the tray back:
+     *
+     *   click Adjust → tray = adjust → this effect re-fires with the SAME count → the hero
+     *   opens the inspector again → the hero's own "left the inspector" effect then clears the
+     *   selection → count 0 → the hero closes the tray. Net: nothing opened, and the owner had
+     *   to click the tab twice (reproduced 2026-09-11, every one of the four tabs).
+     *
+     * The callback lives in a ref instead, so its identity cannot make this an event that did
+     * not happen.
+     */
+    const onSelectionChangeRef = useRef(onSelectionChange);
+    onSelectionChangeRef.current = onSelectionChange;
+    useEffect(() => { onSelectionChangeRef.current?.(selectionCount); }, [selectionCount]);
     // The stop column (position · bias · interpolation) beside the picker in the portalled
     // inspector — collapsed until asked for (owner, 2026-09-07: "another hidden column").
     const [stopColumnOpen, setStopColumnOpen] = useState(false);
@@ -1082,7 +1217,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
     return (
         <div 
-            className={`w-full select-none rounded ${chrome === 'strip' ? '' : 'bg-surface-raised'}`}
+            className={`w-full select-none rounded ${chrome === 'strip' ? '' : 'bg-surface-raised'} ${dragCursor ? '[&_*]:!cursor-[inherit]' : ''}`}
+            style={dragCursor ? { cursor: dragCursor } : undefined}
             ref={containerRef}
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
@@ -1153,15 +1289,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 chrome (GMT main) is unchanged. */}
             <div
                 className={`relative px-2 ${chrome === 'strip' ? `${stripCorners === 'bottom' ? 'rounded-b-[10px]' : 'rounded-[10px]'} overflow-hidden` : ''}`}
-                style={chrome === 'strip' ? {
-                    backgroundImage: `linear-gradient(to right, rgb(${previewRamp[0].r} ${previewRamp[0].g} ${previewRamp[0].b}) 50%, rgb(${previewRamp[255].r} ${previewRamp[255].g} ${previewRamp[255].b}) 50%)`,
+                style={chrome === 'strip' && stripEnds ? {
+                    backgroundImage: `linear-gradient(to right, ${stripEnds.a} 50%, ${stripEnds.b} 50%)`,
                     backgroundSize: `100% ${stripHeight}px`,
                     backgroundRepeat: 'no-repeat',
                 } : undefined}
                 onContextMenu={openTrackContextMenu}
             >
                 <div
-                    className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick || chrome !== 'strip' ? 'cursor-pointer' : 'cursor-default'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
+                    // `pointer` while a click BAKES (a face is open), otherwise `crosshair`:
+                    // a drag here marquees the knots. It wore `pointer` unconditionally in full
+                    // chrome and `default` in strip chrome, so the one surface with a real
+                    // gesture on it was the one saying nothing happens here.
+                    className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick ? 'cursor-pointer' : 'cursor-crosshair'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
                     // The bar hosts drags of its own — the bias handles, and a marquee from the
                     // bar's background — so a finger on it belongs to the editor, not to
                     // whatever scrolls behind it. A mouse ignores `touch-action` entirely.
@@ -1175,9 +1315,15 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 >
                      {stripHint}
                      {/* Exact 256-ramp preview (engine sampler) — pointer-events-none so
-                         the strip's double-click + bias handles still receive events. */}
+                         the strip's double-click + bias handles still receive events.
+                         `data-gx-ramp` is the handle a test has on the RESULT bar, and it earns
+                         its keep: with a face live the hero shows a SOURCE band above this one,
+                         also a canvas, also 1136 px wide, and correctly frozen — `[data-gx-hero]
+                         canvas` picks whichever of them is first in the DOM, which flips as the
+                         split opens and closes. Same spirit as `data-gx-knot` below. */}
                      <canvas
                         ref={previewCanvasRef}
+                        data-gx-ramp=""
                         width={chrome === 'strip' ? STRIP_PREVIEW_W : 256}
                         height={1}
                         className="absolute inset-0 w-full h-full pointer-events-none"
@@ -1209,12 +1355,13 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     // box: `chrome="strip"` insets the track 8 px each side for the gutters,
                     // so the two disagree by up to ~0.7 % of t at the edges (GE v2 §8b item 1).
                     data-gx-knot-track=""
-                    className={`h-6 w-full bg-line/5 relative cursor-crosshair ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
+                    data-gx-knots-stale={knotsStale ? '' : undefined}
+                    className={`h-6 w-full bg-line/5 relative ${knotsStale ? 'cursor-default' : 'cursor-copy'} ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
                     // Every drag that starts here is the track's own (add / move a knot, the
                     // brackets, the marquee) — the browser must not read it as a scroll.
                     style={{ touchAction: 'none' }}
-                    onPointerDown={handleTrackPointerDown}
-                    title="Click & drag to add/move knot"
+                    onPointerDown={knotsStale ? undefined : handleTrackPointerDown}
+                    title={knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click & drag to add/move knot'}
                     onDragOver={(e) => {
                         if (!isColorDrag(e.dataTransfer)) return;
                         // preventDefault is what makes this a legal drop target at all;
@@ -1251,7 +1398,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             data-gx-colour-drop-new
                         />
                     )}
-                    {knots.map(knot => (
+                    {!knotsStale && knots.map(knot => (
                         <div 
                             key={knot.id} 
                             // `data-gx-knot` is the only handle a test has on a knot: the class
@@ -1484,6 +1631,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                         palette={pickerPalette}
                                         stopBlock={stopFields}
                                         onChannelAdjust={selectedNodes.length > 1 ? adjustChannel : undefined}
+                                        roomy={pickerRoomy}
                                     />
                                 </div>,
                                 inspectorHost,

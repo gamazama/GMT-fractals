@@ -31,6 +31,7 @@ import { ChevronDown } from './Icons';
 import { useInputSkin } from './inputs/skin';
 import { setColorDrag, endColorDrag } from './gradient/colorDrag';
 import { setEyedropperActive } from './gradient/eyedropperActive';
+import { pickFromPage, hasNativeEyeDropper } from './gradient/pagePick';
 import { CopyGlyph, EyedropperGlyph, SpectrumGlyph, WheelGlyph, StopGlyph, HarmonyGlyph, ChannelsGlyph, KelvinGlyph, SwatchesGlyph } from './gradient/pickerIcons';
 import Slider from './Slider';
 
@@ -60,6 +61,15 @@ import Slider from './Slider';
 // Theming: all chrome uses scheme tokens (bg-surface-*, text-fg-*, border-line/*) so it
 // reads cleanly in every colour scheme; only the colour-space gradients painted into the
 // canvases are literal (they ARE colours, not UI).
+//
+// PHONE (2026-09-11): at `stack` the soft dialect re-flows into one column — the hex line and
+// the mode bar take a row each and wrap, blocks go full width, the surfaces grow into it, and
+// the chrome goes to 36 px boxes. Grep `narrow`. Whether a narrow mount starts FOLDED is the
+// host's call, not a measurement (`roomy`) — the picker sizes to its content and its host
+// sizes to the picker, so asked from the inside a folded picker always reports a cramped box.
+// The pipette falls back to a page-scoped pick where `window.EyeDropper` is absent (Firefox,
+// Safari, every phone) — components/gradient/pagePick.ts.
+// @see docs/adr/0116-the-colour-picker-on-a-phone-and-without-a-pipette.md
 // ─────────────────────────────────────────────────────────────────────────────
 
 type HSB = { h: number; s: number; v: number };
@@ -82,6 +92,12 @@ interface EmbeddedColorPickerProps {
      * to all of them, because that is unambiguous.
      */
     onChannelAdjust?: (channel: 'r' | 'g' | 'b' | 'h' | 's' | 'v', delta: number) => void;
+    /**
+     * The host is giving this picker REAL vertical room (the v2 tray on a phone), so a narrow
+     * mount should open rather than start folded. Absent = the dense-dock assumption that
+     * narrow also means short. See the `detailsChosen` effect for why this cannot be measured.
+     */
+    roomy?: boolean;
     /** The controls for the KNOT being edited (position, bias, interpolation), supplied by the
      *  host. Rendered as the 'stop' mode, first in the row — the owner asked for it on the left
      *  and on a switch, in place of the old collapsing side column. */
@@ -117,6 +133,9 @@ const pushRecent = (hex: string) => {
 // swatch rows once expanded.
 const DETAILS_KEY = 'gmt.colorpicker.details';
 const loadDetailsOpen = (): boolean => safeLocalGet(DETAILS_KEY) === '1';
+/** Has the user ever opened or closed the picker themselves? A stored '0' is a CHOICE and
+ *  outranks any default; never having touched it is not. */
+const detailsWasChosen = (): boolean => safeLocalGet(DETAILS_KEY) !== null;
 const saveDetailsOpen = (open: boolean) => safeLocalSet(DETAILS_KEY, open ? '1' : '0');
 const CHANNELS_KEY = 'gmt.colorpicker.channels';
 const loadChannelsOpen = (): boolean => safeLocalGet(CHANNELS_KEY) === '1';
@@ -129,7 +148,9 @@ const PALETTE_DEFAULT = [
     '#1166FF', '#7733FF', '#FF33AA', '#A0522D',
 ];
 
-// EyeDropper is Chromium-only and not in lib.dom yet.
+// `EyeDropper` is Chromium-only and not in lib.dom yet. Firefox and Safari have no screen
+// pipette at all, so the button falls back to a PAGE-scoped pick instead of refusing —
+// see components/gradient/pagePick.ts for what that can and cannot see.
 interface EyeDropperResult { sRGBHex: string; }
 interface EyeDropperCtor { new (): { open(): Promise<EyeDropperResult> }; }
 const getEyeDropper = (): EyeDropperCtor | null =>
@@ -372,6 +393,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     palette = PALETTE_DEFAULT,
     stopBlock,
     onChannelAdjust,
+    roomy = false,
 }) => {
     const [hsb, setHsb] = useState<HSB>(() => safeHsb(color));
     const [recents, setRecents] = useState<string[]>(recentsCache);
@@ -420,6 +442,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const clip = useClipboardCopy(1000);
     const copied = clip.state === 'copied';
     const [eyedropError, setEyedropError] = useState(false);
+    /** Whether the pipette reaches the whole SCREEN or only this page — it changes what the
+     *  button promises, so it is read once per mount rather than assumed. */
+    const nativePipette = useMemo(() => hasNativeEyeDropper(), []);
     const [detailsOpen, setDetailsOpen] = useState<boolean>(() => loadDetailsOpen());
     const [channelsOpen, setChannelsOpen] = useState<boolean>(() => loadChannelsOpen());
 
@@ -459,6 +484,45 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         return () => ro.disconnect();
     }, []);
     const layout: 'cols' | 'rows' | 'stack' = width >= 600 ? 'cols' : width >= 400 ? 'rows' : 'stack';
+    /**
+     * A phone is NARROW but not CRAMPED, and only the host can tell the two apart.
+     *
+     * The MINI default was written for the dense dock, where narrow really does mean short.
+     * The v2 phone tray is also 390 px wide and hands the picker ~600 px of height, and there
+     * the fold spent 170 of it on a 36 px pad and left the rest black (measured 390x844,
+     * 2026-09-11). The picker cannot measure its way out of this: it sizes to its content, and
+     * the tray's scroller sizes to the picker — asked from the inside, a folded picker in a
+     * 609 px tray reports 104 px of room. So the host declares it (`roomy`), and the picker
+     * opens ONCE on a roomy mount — unless the user has ever folded or unfolded it themselves,
+     * which is a choice and outranks any default. Read through a ref so a later toggle (which
+     * writes the key) cannot make this fire again mid-session.
+     */
+    const detailsChosen = useRef(detailsWasChosen());
+    useEffect(() => {
+        if (detailsChosen.current || detailsOpen || !roomy) return;
+        if (width > 0 && width < 400) setDetailsOpen(true);
+    }, [width, roomy, detailsOpen]);
+    /**
+     * PHONE / narrow dock (Phase G, 2026-09-11). The `soft` dialect was drawn for the tray on
+     * a wide screen and laid out in ONE non-wrapping row plus a wrapping row of fixed-width
+     * blocks. Measured at 390 px (the phone tray is 390 wide, ~358 inside): the top row ran
+     * off the right edge, taking the MODE BAR with it — half the picker's controls, the ones
+     * that choose which controls you get, were unreachable. Below it, 210 px and 174 px blocks
+     * left a ragged gap, and the 150 px surfaces used under half the width available.
+     *
+     * So at `stack` the soft dialect re-flows: the hex line and the mode bar take a row each
+     * (both wrap), every block goes full width in ONE column, the surfaces grow into that
+     * width, and the hit boxes grow to a fingertip. Nothing is hidden that a wide screen
+     * shows — it is the same picker, folded.
+     */
+    const narrow = layout === 'stack';
+    /** The spectrum / wheel surface: fixed at a desk, grown to the column on a phone (capped,
+     *  so the pads never push the channels below them off the tray on their own). */
+    const surfacePx = soft && narrow && width > 0
+        ? Math.round(Math.min(220, Math.max(SURFACE_PX, width * 0.62)))
+        : SURFACE_PX;
+    /** Touch-sized chrome on a phone: 36 px boxes instead of 28 (`w-7`). */
+    const ctrlBox = soft ? (narrow ? 'w-9 h-9' : 'w-7 h-7') : 'w-6 h-6';
     // Narrow dock (stack): default to a compact MINI state — the swatch/hex line plus a
     // 2D Hue×Lightness pad (picks any colour in one control). The chevron expands to the
     // full Saturation×Value field + vertical hue strip; channels + swatches sit behind a
@@ -840,16 +904,25 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     const doCopy = () => { void clip.copy(hex); };
     const doEyedrop = async () => {
         const ED = getEyeDropper();
-        if (!ED) { setEyedropError(true); setTimeout(() => setEyedropError(false), 2000); return; }
         // Announce the pick BEFORE opening, and give the interface two frames to repaint.
-        // EyeDropper samples what is painted, so a surface that presents an image faithfully
+        // Both paths sample what is PAINTED, so a surface that presents an image faithfully
         // only while you are picking (GE v2's hero — see components/gradient/eyedropperActive.ts)
         // has to have finished doing so before the first sample can be taken.
         setEyedropperActive(true);
         await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
         try {
-            const res = await new ED().open();
-            setFromHex(res.sRGBHex);
+            if (ED) {
+                const res = await new ED().open();
+                setFromHex(res.sRGBHex);
+            } else {
+                // No screen pipette in this browser (Firefox, Safari, every phone): pick from
+                // the page instead. It returns null when cancelled, and also when the thing
+                // clicked has no readable colour — the amber flash then says so, which is the
+                // only case left where the button cannot deliver.
+                const hex = await pickFromPage();
+                if (hex) setFromHex(hex);
+                else if (hex === null) { setEyedropError(true); setTimeout(() => setEyedropError(false), 1400); }
+            }
         } catch {
             /* user cancelled - no-op */
         } finally {
@@ -881,14 +954,14 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // "SL pad + H strip"). Shown when expanded / in the wide layouts.
     const fieldBlock = (
         // Field + hue strip (shrinks on narrow/mobile; Shift/Alt = coarse/fine)
-        <div className={`flex ${soft ? 'gap-2' : 'gap-1.5'}`} style={soft ? { width: SURFACE_PX + 8 + 16 } : undefined}>
+        <div className={`flex ${soft ? 'gap-2' : 'gap-1.5'}`} style={soft ? { width: narrow ? '100%' : SURFACE_PX + 8 + 16 } : undefined}>
             <div className="relative flex-1">
                 <canvas
                     ref={setFieldCanvas}
                     width={208}
                     height={120}
-                    className={`w-full cursor-crosshair touch-none ${soft ? `h-[${SURFACE_PX}px] ${CTRL_R}` : 'h-[76px] md:h-[86px] rounded'}`}
-                    style={soft ? { height: SURFACE_PX } : undefined}
+                    className={`w-full cursor-crosshair touch-none ${soft ? CTRL_R : 'h-[76px] md:h-[86px] rounded'}`}
+                    style={soft ? { height: surfacePx } : undefined}
                     onPointerDown={beginField}
                     onPointerMove={moveField}
                     onPointerUp={endField}
@@ -903,13 +976,13 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                     style={{ left: `${hsb.s}%`, top: `${100 - hsb.v}%` }}
                 />
             </div>
-            <div className="relative w-4 shrink-0">
+            <div className={`relative shrink-0 ${soft && narrow ? 'w-6' : 'w-4'}`}>
                 <canvas
                     ref={setHueCanvas}
                     width={16}
                     height={120}
-                    className={`w-4 cursor-crosshair touch-none ${soft ? CTRL_R : 'h-[76px] md:h-[86px] rounded'}`}
-                    style={soft ? { height: SURFACE_PX } : undefined}
+                    className={`w-full cursor-crosshair touch-none ${soft ? CTRL_R : 'h-[76px] md:h-[86px] rounded'}`}
+                    style={soft ? { height: surfacePx } : undefined}
                     onPointerDown={beginHue}
                     onPointerMove={moveHue}
                     onPointerUp={endHue}
@@ -965,7 +1038,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 </button>
             )}
             <div
-                className={`shrink-0 border overflow-hidden ${soft ? 'w-7 h-7 rounded-lg border-line/20' : 'w-6 h-6 rounded border-line/10'}`}
+                className={`shrink-0 border overflow-hidden ${soft ? `${ctrlBox} rounded-lg border-line/20` : 'w-6 h-6 rounded border-line/10'}`}
                 style={gestureFrom
                     // mid-gesture: the new colour on the left, the one you started from on the right
                     ? { backgroundImage: `linear-gradient(to right, ${hex} 50%, ${gestureFrom} 50%)` }
@@ -980,15 +1053,15 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // mono type on the hex ALONE (V5): it is a code, the rest of the picker is not
                 className={`flex-1 min-w-0 font-mono uppercase outline-none ${
                     soft
-                        ? 'h-7 bg-surface-viewport border border-line/20 rounded-lg text-[12px] text-fg px-2'
+                        ? `${narrow ? 'h-9' : 'h-7'} bg-surface-viewport border border-line/20 rounded-lg text-[12px] text-fg px-2`
                         : 'bg-surface-sunken border border-line/10 rounded text-[11px] text-fg-secondary px-1.5 py-1'
                 }`}
                 spellCheck={false}
             />
-            <button onClick={doCopy} title="Copy hex" className={`shrink-0 grid place-items-center border hover:bg-line/10 text-fg-tertiary ${soft ? 'w-7 h-7 rounded-lg border-line/20 text-[12px]' : 'w-6 h-6 rounded border-line/10 text-[10px]'}`}>
+            <button onClick={doCopy} title="Copy hex" className={`shrink-0 grid place-items-center border hover:bg-line/10 text-fg-tertiary ${soft ? `${ctrlBox} rounded-lg border-line/20 text-[12px]` : 'w-6 h-6 rounded border-line/10 text-[10px]'}`}>
                 {copied ? '✓' : <CopyGlyph size={14} />}
             </button>
-            <button onClick={doEyedrop} title={eyedropError ? 'Eyedropper unsupported' : 'Pick from screen'} className={`shrink-0 grid place-items-center border hover:bg-line/10 ${soft ? 'w-7 h-7 rounded-lg text-[12px]' : 'w-6 h-6 rounded text-[11px]'} ${eyedropError ? 'border-amber-500/60 text-amber-400' : soft ? 'border-line/20 text-fg-tertiary' : 'border-line/10 text-fg-tertiary'}`}>
+            <button onClick={doEyedrop} title={eyedropError ? 'Nothing to sample there — try the ramp, a swatch or the image' : nativePipette ? 'Pick a colour from anywhere on screen' : 'Pick a colour from this page — click the ramp, a swatch, the image (Esc cancels)'} className={`shrink-0 grid place-items-center border hover:bg-line/10 ${soft ? `${ctrlBox} rounded-lg text-[12px]` : 'w-6 h-6 rounded text-[11px]'} ${eyedropError ? 'border-amber-500/60 text-amber-400' : soft ? 'border-line/20 text-fg-tertiary' : 'border-line/10 text-fg-tertiary'}`}>
                 <EyedropperGlyph size={14} />
             </button>
         </div>
@@ -1128,7 +1201,7 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
         <ColorWheel
             handles={shownHandles}
             activeIndex={on('harmony') ? wheelActive : 0}
-            size={150}
+            size={surfacePx}
             soft
             onActivate={(i) => wheelActivate(on('harmony') ? i : wheelActive)}
             onMove={wheelMove}
@@ -1245,18 +1318,32 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // the chosen controls, in a fixed reading order; the hex line carries the
                 // toolbar so turning one on or off is one click from the colour itself
                 <>
-                    <div className="flex items-center gap-2">{hexRow}{modeBar}{on('swatches') && recentStrip}</div>
-                    <div className="flex flex-wrap gap-4 items-start">
-                        {on('stop') && stopBlock && <div className="flex flex-col gap-2 w-[210px] shrink-0">{stopBlock}</div>}
-                        {on('spectrum') && <div className="flex flex-col gap-2 shrink-0">{fieldBlock}</div>}
-                        {on('wheel') && <div className="flex flex-col gap-2 shrink-0">{wheelBlock}</div>}
+                    {/* NARROW: the hex line and the mode bar take a row each and both wrap. In
+                        one row at 390 px the mode bar ran off the edge — see `narrow` above. */}
+                    {narrow ? (
+                        <>
+                            {hexRow}
+                            <div className="flex items-center gap-2 flex-wrap">{modeBar}{on('swatches') && recentStrip}</div>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-2">{hexRow}{modeBar}{on('swatches') && recentStrip}</div>
+                    )}
+                    <div className={narrow ? 'flex flex-col gap-3' : 'flex flex-wrap gap-4 items-start'}>
+                        {on('stop') && stopBlock && <div className={`flex flex-col gap-2 ${narrow ? 'w-full' : 'w-[210px] shrink-0'}`}>{stopBlock}</div>}
+                        {on('spectrum') && <div className={`flex flex-col gap-2 ${narrow ? 'w-full' : 'shrink-0'}`}>{fieldBlock}</div>}
+                        {on('wheel') && <div className={`flex flex-col gap-2 ${narrow ? 'w-full items-center' : 'shrink-0'}`}>{wheelBlock}</div>}
                         {on('harmony') && harmonyBlock}
                         {/* The channels stand exactly as tall as the spectrum / wheel beside them:
                             the column takes the surface height and SPREADS its rows into it, so
                             the two blocks line up by construction rather than by a tuned gap
-                            (owner, 2026-09-08). */}
+                            (owner, 2026-09-08). NARROW: there is nothing beside them to line up
+                            with, so they take their natural height in the column instead —
+                            pinning it to the surface height squeezed six sliders into 150 px. */}
                         {on('channels') && (
-                            <div className="flex flex-col justify-between flex-1 min-w-[190px]" style={{ height: SURFACE_PX }}>
+                            <div
+                                className={`flex flex-col ${narrow ? 'w-full gap-2.5' : 'justify-between flex-1 min-w-[190px]'}`}
+                                style={narrow ? undefined : { height: SURFACE_PX }}
+                            >
                                 {channelsBlock}
                             </div>
                         )}
