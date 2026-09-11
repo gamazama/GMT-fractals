@@ -18,6 +18,19 @@
  *
  * Behaviour is identical to the pre-seam inline implementation — this is a lift, not a rewrite.
  *
+ * PHONE (2026-09-11). Zoom used to be `wheel` ONLY, so on a touch device the fractal rendered
+ * and panned and could not be zoomed at all (the owner, on an iPhone 6: "the fractal renders!
+ * zooming doesn't work though"). `mount()` now tracks live pointers in a Map keyed by
+ * `pointerId`: one pointer pans (and only THAT pointer's moves pan — a second finger used to
+ * overwrite the pan origin and snap the view), two pinch — the pair's distance drives
+ * `zoomAt` and the pair's midpoint travel drives `pan`, so a pinch can be moved as well as
+ * spread. Lifting one finger re-seeds the pan origin from the one still down, so a pinch
+ * decaying into a drag does not jump. The wheel path is untouched. The stage `hint` names the
+ * gesture that actually works: `(pointer: coarse)` is read once at module load (the seam
+ * `palette/components/PickerWall.tsx` uses) and reads "pinch to zoom" there.
+ * Guarded by `npm run smoke:ge-phone` step [8] only as far as the overlay chrome goes — the
+ * pinch itself is unguarded, verify it by pinching the Fractal mode in the running app.
+ *
  * @see gradient-explorer/fullscreen/modeRegistry.ts (OwnCanvasHost/Handle + the mount face)
  * @see engine/fractal/FractalColorRenderer.ts (the renderer it drives)
  */
@@ -137,22 +150,6 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
   let cancelled = false;
 
   // ── pan/zoom gestures (mutate the renderer directly — no React render) ──
-  let dragging = false;
-  let lastX = 0;
-  let lastY = 0;
-  const onPointerDown = (e: PointerEvent): void => {
-    if (!renderer) return;
-    dragging = true;
-    lastX = e.clientX;
-    lastY = e.clientY;
-    canvas.setPointerCapture(e.pointerId);
-  };
-  const onPointerMove = (e: PointerEvent): void => {
-    if (!renderer || !dragging) return;
-    renderer.pan(e.clientX - lastX, e.clientY - lastY);
-    lastX = e.clientX;
-    lastY = e.clientY;
-  };
   // Rebuild the deep-zoom reference orbit once a gesture settles (commit on gesture-end, not
   // per-frame). Cheap no-op when deep zoom is off.
   const scheduleDeepRebuild = (delayMs: number): void => {
@@ -163,10 +160,86 @@ const mountFractal = (host: OwnCanvasHost): OwnCanvasHandle => {
       void renderer?.rebuildDeepZoom();
     }, delayMs);
   };
+
+  type Pt = { x: number; y: number };
+  /** Every pointer currently down on the canvas, by `pointerId`, at its last known position.
+   *  One entry pans, two pinch. A Map rather than the old single `dragging` flag because that
+   *  flag had no id: a second finger's `pointermove` overwrote the pan origin and the view
+   *  jumped by the distance between the fingers. Insertion-ordered, so a third finger is
+   *  ignored rather than fighting the first two. */
+  const active = new Map<number, Pt>();
+  let lastX = 0;
+  let lastY = 0;
+  /** The previous move's two-finger distance and midpoint — the pinch baseline. */
+  let pinchDist = 0;
+  let pinchX = 0;
+  let pinchY = 0;
+
+  const pinchPair = (): [Pt, Pt] | null => {
+    const pts = Array.from(active.values());
+    return pts.length >= 2 ? [pts[0], pts[1]] : null;
+  };
+  /** (Re-)seed the pinch baseline from where the fingers are NOW. Called whenever the gesture
+   *  changes shape (a finger added or removed) so the next move measures a delta rather than
+   *  the whole discontinuity. */
+  const seedPinch = (): void => {
+    const p = pinchPair();
+    if (!p) return;
+    pinchDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    pinchX = (p[0].x + p[1].x) / 2;
+    pinchY = (p[0].y + p[1].y) / 2;
+  };
+
+  const onPointerDown = (e: PointerEvent): void => {
+    if (!renderer) return;
+    canvas.setPointerCapture(e.pointerId);
+    active.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    lastX = e.clientX;
+    lastY = e.clientY;
+    if (active.size >= 2) seedPinch();
+  };
+  const onPointerMove = (e: PointerEvent): void => {
+    if (!renderer) return;
+    const pt = active.get(e.pointerId);
+    if (!pt) return; // a hover, or a pointer that went down elsewhere — not part of this gesture
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    if (active.size >= 2) {
+      const pair = pinchPair();
+      if (!pair) return;
+      const dist = Math.hypot(pair[0].x - pair[1].x, pair[0].y - pair[1].y);
+      const mx = (pair[0].x + pair[1].x) / 2;
+      const my = (pair[0].y + pair[1].y) / 2;
+      // `zoomAt`'s factor MULTIPLIES the view's half-span, so a factor > 1 zooms OUT — that is
+      // why the wheel handler passes exp(+delta) for a scroll DOWN. Fingers spreading (dist
+      // growing) must zoom IN, so the ratio is prev/now, not now/prev.
+      if (pinchDist > 0 && dist > 0) renderer.zoomAt(mx, my, pinchDist / dist);
+      // The midpoint's own travel pans, so a pinch can be dragged as well as spread — without
+      // this a two-finger gesture is pinned to wherever it started.
+      renderer.pan(mx - pinchX, my - pinchY);
+      pinchDist = dist;
+      pinchX = mx;
+      pinchY = my;
+      scheduleDeepRebuild(300); // debounced, like the wheel: rebuild once the pinch stops
+      return;
+    }
+    renderer.pan(e.clientX - lastX, e.clientY - lastY);
+    lastX = e.clientX;
+    lastY = e.clientY;
+  };
   const onPointerUp = (e: PointerEvent): void => {
-    dragging = false;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-    scheduleDeepRebuild(0); // pan ended → rebuild orbit at the new centre
+    if (!active.delete(e.pointerId)) return;
+    if (active.size >= 2) { seedPinch(); return; } // three fingers → two: re-baseline
+    if (active.size === 1) {
+      // A pinch decaying into a one-finger drag: re-seed the pan origin from the finger still
+      // down, or the next move would pan by the whole gap between the two.
+      const rest = Array.from(active.values())[0];
+      lastX = rest.x;
+      lastY = rest.y;
+      return;
+    }
+    scheduleDeepRebuild(0); // gesture over → rebuild the orbit at the new centre
   };
   const onWheel = (e: WheelEvent): void => {
     if (!renderer) return;
@@ -651,12 +724,22 @@ const FractalControls: React.FC = () => {
   );
 };
 
+/** Coarse pointer (phone / tablet): there is no wheel there, so the stage hint must name the
+ *  gesture that actually zooms. Read ONCE at module load — the same `(pointer: coarse)` seam
+ *  `palette/components/PickerWall.tsx` uses for its hover-preview suppression. A device that
+ *  changes pointer class mid-session (a tablet gaining a mouse) keeps the hint it booted with;
+ *  both gestures work regardless, so the cost is one word of stale copy in a corner. */
+const COARSE_POINTER =
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(pointer: coarse)').matches;
+
 /** The live fractal mode — the reference `ownCanvas` consumer of the seam. */
 export const FRACTAL_MODE: FullscreenMode = {
   id: 'fractal',
   label: 'Fractal',
   kind: 'ownCanvas',
-  hint: 'Esc to close · drag to pan · scroll to zoom',
+  hint: COARSE_POINTER ? 'drag to pan · pinch to zoom' : 'Esc to close · drag to pan · scroll to zoom',
   mount: mountFractal,
   Controls: FractalControls,
 };

@@ -17,7 +17,14 @@
  *       (owner, 2026-09-11: Box / Lasso / Paint are not for a phone) and, at 1:1, exactly
  *       the zoom-in button (− and Fit appear only once zoomed).
  *   [7] a TOUCH drag on a knot moves a stop (the stops editor is pointer-driven now).
- *   [8] desktop 1280×800: the tools are a column at the top-left, the hero keeps its image
+ *   [8] the WALLPAPER overlay on a phone (added 2026-09-11): tapping the hero's Wallpaper
+ *       button opens an overlay that (a) declares `touch-action: none` on its root and (b)
+ *       pins `document.body` to `overflow: hidden` while it is up — together, the two halves
+ *       of "the page is scrolling with them"; (c) its export panel arrives COLLAPSED at ≤ 48
+ *       px; (d) its mode selector actually scrolls (`scrollWidth > clientWidth`) instead of
+ *       running off a 390 px row; (e) the whole overlay is inside 390×844. Then Escape closes
+ *       it and the body's overflow comes back to what it was before the overlay opened.
+ *   [9] desktop 1280×800: the tools are a column at the top-left, the hero keeps its image
  *       column (grid of two columns) — the phone branch is gated, not global.
  *
  * Falsified 2026-09-10, each reverted:
@@ -27,6 +34,22 @@
  *     ("found 0 knots" — `data-gx-knot` arrived with the conversion); HEAD plus only the
  *     attribute → [7] red on the drag itself: positions 0.000,0.537,1.000 unchanged after a
  *     60 px touch drag, where the converted editor reads 0.000,0.721,1.000.
+ *
+ * Falsified 2026-09-11 for [8], each break reverted:
+ *   · `touchAction: 'none'` dropped from the overlay root → "the overlay root's touch-action is
+ *     'auto', not none".
+ *   · the document-lock effect neutered (the two `style.overflow = 'hidden'` writes removed,
+ *     the restore left in place) → "document.body overflow is 'clip visible' with the overlay
+ *     open, not hidden".
+ *   · `ExportPanel`'s `collapsed` seeded `false` → "the export panel is 169 px tall — it should
+ *     arrive collapsed (≤ 48)". 169 is what the wrapped desktop bar actually costs at 390 px.
+ *   · the mode selector reverted to its pre-2026-09-11 form (no phone branch: `overflow-hidden`,
+ *     no width cap, no `shrink-0` on the chips) → "the mode selector's overflow-x is 'hidden'".
+ *     NOTE the two selector assertions are not interchangeable and the SECOND is the load-bearing
+ *     one: a width-capped `overflow: hidden` run still reports scrollWidth 466 > clientWidth 356
+ *     while clipping the last chips out of reach, and that half-broken build passed the
+ *     scrollWidth line alone (measured). The scrollWidth line stays because without it a
+ *     scroller with nothing in it would pass vacuously.
  *
  * Two things a run can trip over that are not product bugs: the first tap after a touch
  * SWIPE is swallowed by Chromium to stop the fling (so tap, do not swipe, before a control),
@@ -178,6 +201,57 @@ async function main() {
   const moved = after.some((p, i) => Math.abs(p - (before[i] ?? p)) > 0.01);
   if (!moved) fail(`[7] a 60 px touch drag moved no stop (before ${before.map((p) => p.toFixed(2)).join(',')} after ${after.map((p) => p.toFixed(2)).join(',')})`);
   console.log('✓ [7] a touch drag moves a knot');
+
+  // [8] the Wallpaper overlay on a phone
+  const bodyBefore = (await page.evaluate(`getComputedStyle(document.body).overflow`)) as string;
+  // [7] ended in a touch DRAG, and Chromium swallows the first tap after one to stop the fling
+  // (see the header) — so the tap gets one retry before it counts as a failure.
+  const OVERLAY = '[data-testid="fullscreen-gradient-overlay"]';
+  const wallpaperBtn = page.locator('[data-gx-hero] [title^="Wallpaper"]');
+  let opened = false;
+  for (let attempt = 0; attempt < 2 && !opened; attempt++) {
+    await wallpaperBtn.tap();
+    opened = await page.waitForSelector(OVERLAY, { timeout: 4000 }).then(() => true).catch(() => false);
+  }
+  if (!opened) fail('[8] the Wallpaper overlay did not open');
+  await page.waitForTimeout(700);
+  const fsv = (await page.evaluate(`(() => {
+    var q = function (sel) { var el = document.querySelector(sel); if (!el) return null; var b = el.getBoundingClientRect(); return { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), r: Math.round(b.right), b: Math.round(b.bottom) }; };
+    var modes = document.querySelector('[data-gx-fs-modes]');
+    var root = document.querySelector('[data-testid="fullscreen-gradient-overlay"]');
+    return {
+      touch: root ? getComputedStyle(root).touchAction : 'no overlay',
+      bodyOverflow: getComputedStyle(document.body).overflow,
+      htmlOverflow: getComputedStyle(document.documentElement).overflow,
+      root: q('[data-testid="fullscreen-gradient-overlay"]'),
+      panel: q('[data-testid="fullscreen-export-panel"]'),
+      modes: q('[data-gx-fs-modes]'),
+      modesScroll: modes ? modes.scrollWidth : 0,
+      modesClient: modes ? modes.clientWidth : 0,
+      modesOverflowX: modes ? getComputedStyle(modes).overflowX : 'no selector',
+    };
+  })()`)) as { touch: string; bodyOverflow: string; htmlOverflow: string; root: Box; panel: Box; modes: Box; modesScroll: number; modesClient: number; modesOverflowX: string };
+  if (fsv.touch !== 'none') fail(`[8] the overlay root's touch-action is "${fsv.touch}", not none — a touch it ignores scrolls the page under it`);
+  if (fsv.bodyOverflow !== 'hidden') fail(`[8] document.body overflow is "${fsv.bodyOverflow}" with the overlay open, not hidden`);
+  if (!inside(fsv.root, W, H)) fail(`[8] the overlay is not inside the screen: ${fmt(fsv.root)}`);
+  if (!fsv.panel) fail('[8] no export panel in the overlay');
+  if (fsv.panel!.h > 48) fail(`[8] the export panel is ${fsv.panel!.h} px tall — it should arrive collapsed (≤ 48)`);
+  if (!fsv.modes) fail('[8] no mode selector in the overlay');
+  if (!inside(fsv.modes, W, H)) fail(`[8] the mode selector runs past the screen: ${fmt(fsv.modes)}`);
+  // BOTH halves, because either one alone passes a half-broken selector: the content has to
+  // be wider than the box (else there is nothing to reach) AND the box has to be a scroller
+  // (a width-capped `overflow: hidden` still reports scrollWidth > clientWidth while clipping
+  // the last chips out of existence — measured 2026-09-11, which is why this line is two).
+  if (fsv.modesScroll <= fsv.modesClient) fail(`[8] the mode selector does not scroll: scrollWidth ${fsv.modesScroll} ≤ clientWidth ${fsv.modesClient}`);
+  if (!/auto|scroll/.test(fsv.modesOverflowX)) fail(`[8] the mode selector's overflow-x is "${fsv.modesOverflowX}" — the modes past its right edge cannot be reached`);
+  console.log(`✓ [8] wallpaper on a phone: touch-action ${fsv.touch}, body ${fsv.bodyOverflow}, export panel ${fsv.panel!.h} px, modes ${fsv.modesOverflowX} ${fsv.modesScroll}/${fsv.modesClient}`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  const stillThere = await page.evaluate(`document.querySelector('[data-testid="fullscreen-gradient-overlay"]') !== null`);
+  if (stillThere) fail('[8] Escape did not close the Wallpaper overlay');
+  const bodyAfter = (await page.evaluate(`getComputedStyle(document.body).overflow`)) as string;
+  if (bodyAfter !== bodyBefore) fail(`[8] body overflow was not restored on close: was "${bodyBefore}", now "${bodyAfter}"`);
+  console.log(`✓ [8] Esc closes it and body overflow goes back to "${bodyAfter}"`);
   await ctx.close();
 
   // ── desktop: the phone branch did not leak ─────────────────────────────────────────
@@ -186,14 +260,14 @@ async function main() {
   const dpage = await boot(dctx, errors);
   const dwall = (await dpage.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
   await dpage.mouse.click(dwall.x + 160, dwall.y + 30);
-  await dpage.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[8] no hero on desktop'));
+  await dpage.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[9] no hero on desktop'));
   await dpage.waitForTimeout(300);
   const d = await boxes(dpage);
-  if (!d.tools || d.tools.h <= d.tools.w) fail(`[8] desktop tools are not a column: ${fmt(d.tools)}`);
-  if (d.tools.y > d.wall!.y + d.wall!.h / 2) fail(`[8] desktop tools are at the bottom: ${fmt(d.tools)}`);
+  if (!d.tools || d.tools.h <= d.tools.w) fail(`[9] desktop tools are not a column: ${fmt(d.tools)}`);
+  if (d.tools.y > d.wall!.y + d.wall!.h / 2) fail(`[9] desktop tools are at the bottom: ${fmt(d.tools)}`);
   const cols = await dpage.evaluate(`(() => { var card = document.querySelector('[data-gx-hero] > div'); return card ? getComputedStyle(card).gridTemplateColumns.split(' ').length : 0; })()`);
-  if (cols !== 2) fail(`[8] the desktop hero card has ${cols} grid columns, expected 2 (image column + panel)`);
-  console.log('✓ [8] desktop keeps the tool column and the hero\'s image column');
+  if (cols !== 2) fail(`[9] the desktop hero card has ${cols} grid columns, expected 2 (image column + panel)`);
+  console.log('✓ [9] desktop keeps the tool column and the hero\'s image column');
   await dctx.close();
 
   await browser.close();

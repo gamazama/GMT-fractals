@@ -2162,3 +2162,16 @@ phase now carries**. Items move out of this list only when a later phase's entry
   the whole room and hides the ground (`FULL_FACES`); Even / Perceptual / Stops one cycling
   button; `blend` opens a dropdown on a coarse pointer; no Split in Wallpaper on phone.
   **Still owed:** the iPhone's verdict from `?diag` / `?lite`, and the hardware walk itself.
+- 2026-09-11 · Phase F, third round. `?lite` runs the whole Explorer on the owner's iPhone 6,
+  so the licensed packs were the killer (a 1 GB phone's ceiling at the 11,131-row rebuild).
+  Core only is the phone default (`registerFeatures.ts`); `?lite` / `?packs` force either
+  way. No carving tools on a phone; zoom buttons only when they act; 32 px top bar; less
+  hero top padding. `smoke:ge-walltouch` boots a desktop layout with CDP touch emulation now.
+  **Open:** a phone-centric Curves editor (owner: 'problematic'); the fullscreen phone pass.
+- 2026-09-11 · Phase F, fourth round: the Wallpaper overlay on a phone. Root touch-action
+  none + document lock while open (the page scrolled under the handles — WebKit ignores
+  touch-action on SVG); safe-area padding; Export panel collapsible, collapsed on phone;
+  scrolling mode selector, wrapping right cluster, 36 px buttons; PINCH zoom in Fractal
+  (ratio prev/now — `zoomAt` multiplies the half-span). Guard: `smoke:ge-phone` [8].
+  **Still missing:** pinch unguarded; handle hit size; the fractal toolbar's ~205 px on a
+  phone wants a per-mode 'more'; Liquify / Spline have no touch gestures.

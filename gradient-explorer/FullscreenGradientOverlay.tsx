@@ -31,6 +31,26 @@
  * `fullscreenStore` (not DDFS, not persisted). The geometry mappings are pure; this component owns
  * the canvas paint + the chrome, and dispatches mode lifecycle to the registry.
  *
+ * PHONE (2026-09-11). This overlay is portalled to `document.body`, i.e. OUTSIDE the app's
+ * `MobileViewportShell` — nothing above it supplies safe-area padding or a `touch-action`, and
+ * the host page (`gradient-explorer-next.html`) scopes its `html, body { overflow: hidden }` to
+ * `(hover: hover) and (pointer: fine)`, so on a phone the body is still scrollable under this
+ * fixed layer. That is the owner's "fullscreen controls are problematic because the page is
+ * scrolling with them". Three answers, all here:
+ *   • the root declares `touchAction: 'none'` + `overscrollBehavior: 'none'` — a touch the
+ *     overlay does not consume now goes nowhere instead of scrolling the document beneath it
+ *     (the geometry handles are SVG, and WebKit does not honour `touch-action` on SVG nodes,
+ *     so the guard has to sit on an HTML ancestor);
+ *   • an effect pins `overflow: hidden` on documentElement + body for as long as the overlay is
+ *     open, remembering and restoring the previous values on close;
+ *   • on a phone the root pads by `env(safe-area-inset-top/bottom)` (the page sets
+ *     `viewport-fit=cover`, so the insets are real on an iPhone).
+ * A region inside that legitimately scrolls re-declares its own axis: the mode selector is a
+ * horizontally scrolling run (`gx-rail-scroll`, `touchAction: 'pan-x'`) so all seven modes stay
+ * reachable in a 390 px row, the right cluster wraps, Handles/Dither shrink to their glyphs
+ * (their `title` already carries the word) and every toolbar control is ≥ 36 px tall.
+ * Guarded by `npm run smoke:ge-phone` step [8].
+ *
  * @see palette/core/rampGeometry.ts (the pure mappings)
  * @see gradient-explorer/fullscreen/modeRegistry.ts (the mode plug-in seam + ownCanvas mount face)
  */
@@ -241,6 +261,27 @@ export const FullscreenGradientOverlay: React.FC = () => {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
+  }, [fs.open]);
+
+  // PIN THE DOCUMENT while the overlay is open. `position: fixed` does not stop the page
+  // underneath from scrolling, and on a coarse-pointer device this page's body IS scrollable
+  // (its `html, body { overflow: hidden }` is inside a `(hover: hover) and (pointer: fine)`
+  // media query), so every touch the overlay did not consume dragged the document under it —
+  // the owner's "the page is scrolling with them", 2026-09-11. Unconditional, not phone-gated:
+  // pinning a document that is already pinned is a no-op, and the previous values are restored
+  // verbatim on close, so a host that manages its own overflow is left exactly as it was found.
+  useEffect(() => {
+    if (!fs.open) return;
+    const root = document.documentElement;
+    const body = document.body;
+    const prevRoot = root.style.overflow;
+    const prevBody = body.style.overflow;
+    root.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    return () => {
+      root.style.overflow = prevRoot;
+      body.style.overflow = prevBody;
+    };
   }, [fs.open]);
 
   // The host's own rendered ramp wins over re-deriving one from the stops: a pipeline's stop
@@ -559,6 +600,10 @@ export const FullscreenGradientOverlay: React.FC = () => {
     : activeMode?.hint ?? 'Esc to close · display-only preview';
   // App fraction (0..1) the divider sits at, as a percentage for ARIA + drag math.
   const appPct = Math.round(fs.splitY * 100);
+  // PHONE: every toolbar control gets a ≥36 px tap target. 36 rather than the 44 the platform
+  // guidelines ask for because the toolbar already costs two rows on a 390 px screen and the
+  // stage — the thing the user opened Wallpaper to look at — pays for every pixel of chrome.
+  const tapY = phone ? 'py-2 min-h-[36px]' : 'py-1';
 
   return createPortal(
     <div
@@ -567,7 +612,19 @@ export const FullscreenGradientOverlay: React.FC = () => {
           ? 'bg-surface-dock/95 border-t border-line/15 shadow-[0_-12px_40px_rgba(0,0,0,0.5)]'
           : 'inset-0 bg-surface backdrop-blur-sm'
       }`}
-      style={fs.split ? { zIndex: Z.overlay, top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : { zIndex: Z.overlay }}
+      style={{
+        zIndex: Z.overlay,
+        // Consume every touch that lands on the overlay itself. Without this the handle layer's
+        // SVG `touchAction: 'none'` is not enough (WebKit ignores touch-action on SVG nodes) and
+        // a handle drag scrolls the page instead of moving the handle. Scrolling regions inside
+        // re-declare their own axis — see the mode selector's `pan-x` below.
+        touchAction: 'none',
+        overscrollBehavior: 'none',
+        // Portalled to document.body ⇒ outside MobileViewportShell ⇒ nothing above supplies the
+        // safe area. The page carries `viewport-fit=cover`, so these insets are real on an iPhone.
+        ...(phone ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : null),
+        ...(fs.split ? { top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : null),
+      }}
       data-testid="fullscreen-gradient-overlay"
     >
       {/* Live source — resolves the last-modified hero (Stops/Generator live) for BOTH split and
@@ -604,17 +661,30 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
       {/* Toolbar: mode selector + the active mode's own controls + split/dither/export/close. */}
       <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-line/10 bg-surface-dock/80">
-        <div className="text-sm font-medium text-fg-secondary mr-1 truncate max-w-[28ch] flex items-center gap-1.5">
+        {/* The name gives up its 28ch reservation on a phone — `min-w-0` lets it shrink so the
+            truncation is what yields the row, not an overflow. */}
+        <div className={`text-sm font-medium text-fg-secondary mr-1 truncate flex items-center gap-1.5 ${phone ? 'min-w-0' : 'max-w-[28ch]'}`}>
           {fs.split && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-accent-500/25 text-accent-300">LIVE</span>}
           {sourceName}
         </div>
 
-        <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
+        {/* Seven mode chips are ~500 px of non-wrapping run. On a 390 px screen that used to
+            overflow to the right and get CLIPPED by the page's `overflow-x: clip` — the last
+            modes were literally unreachable. On a phone the run takes its own line and scrolls
+            horizontally instead (`gx-rail-scroll` hides the bar, `pan-x` is the one touch axis
+            this overlay hands back to the browser). */}
+        <div
+          data-gx-fs-modes
+          className={`flex items-center rounded-md border border-line/10 divide-x divide-line/10 ${
+            phone ? 'basis-full w-full min-w-0 overflow-x-auto gx-rail-scroll' : 'overflow-hidden'
+          }`}
+          style={phone ? { touchAction: 'pan-x' } : undefined}
+        >
           {listFullscreenModes().map((m) => (
             <button
               key={m.id}
               onClick={() => setFullscreenGeom(m.id)}
-              className={`px-3 py-1.5 text-[12px] transition-colors ${
+              className={`shrink-0 whitespace-nowrap px-3 ${phone ? 'py-2 min-h-[36px]' : 'py-1.5'} text-[12px] transition-colors ${
                 fs.geom === m.id
                   ? 'bg-accent-500/25 text-accent-300 font-medium'
                   : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
@@ -641,14 +711,21 @@ export const FullscreenGradientOverlay: React.FC = () => {
             2026-09-08: "look at the hero gradient as an example of finished ui"). Every mode's
             sliders are the shared ScalarInput, so one provider here paints all of them without
             any mode knowing about it — which is the whole point of the skin being a context and
-            not a second component. */}
+            not a second component.
+
+            A phone bounds them: `basis-full min-w-0` gives the block its own line and a real
+            width to wrap inside, so a mode with a dozen controls (the fractal's) can never make
+            the toolbar row wider than the screen. Desktop keeps the exact previous layout —
+            `contents` makes the wrapper disappear from the flex formatting context. */}
         {ActiveControls && (
-          <InputSkinProvider skin="soft">
-            <ActiveControls />
-          </InputSkinProvider>
+          <div className={phone ? 'basis-full w-full min-w-0 max-w-full' : 'contents'}>
+            <InputSkinProvider skin="soft">
+              <ActiveControls />
+            </InputSkinProvider>
+          </div>
         )}
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className={`flex items-center gap-2 ml-auto ${phone ? 'flex-wrap' : ''}`}>
           <button
             onClick={() => {
               // Leaving split: promote the live gradient we're viewing into the snapshot so the
@@ -658,7 +735,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
             }}
             title="Split: keep the app on top, dock this preview on the bottom — it live-follows the gradient you last edited"
             aria-pressed={fs.split}
-            className={`${phone ? 'hidden ' : ''}px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            className={`${phone ? 'hidden ' : ''}px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
               fs.split
                 ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                 : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
@@ -671,26 +748,28 @@ export const FullscreenGradientOverlay: React.FC = () => {
               onClick={() => setFullscreenHandles(!fs.handles)}
               title="On-screen shape handles — drag them on the image to reshape the gradient (they fade when idle and never export)"
               aria-pressed={fs.handles}
-              className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+              className={`px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
                 fs.handles
                   ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                   : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
               }`}
             >
-              ◉ Handles
+              {/* Glyph-only on a phone — the `title` above already carries the word, and the
+                  row has to fit Export PNG and ✕ unabbreviated. */}
+              {phone ? '◉' : '◉ Handles'}
             </button>
           )}
           <button
             onClick={() => setFullscreenDither(!fs.dither)}
             title="Blue-noise dither — smooths 8-bit banding on the ramp (bakes into the PNG)"
             aria-pressed={fs.dither}
-            className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            className={`px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
               fs.dither
                 ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                 : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
             }`}
           >
-            ▦ Dither
+            {phone ? '▦' : '▦ Dither'}
           </button>
           {activeMode?.id === 'fractal' && (
             <button
@@ -699,14 +778,14 @@ export const FullscreenGradientOverlay: React.FC = () => {
                 if (coords) openInFluidToy(coords, sourceConfig, sourceName);
               }}
               title="Open this fractal view (and its gradient) in the Fluid Toy"
-              className="px-3 py-1 text-[12px] rounded-md border border-secondary/30 bg-secondary/15 text-secondary hover:bg-secondary/25 transition-colors"
+              className={`px-3 ${tapY} text-[12px] rounded-md border border-secondary/30 bg-secondary/15 text-secondary hover:bg-secondary/25 transition-colors`}
             >
-              ≈ Open in Fluid Toy
+              {phone ? '≈ Fluid Toy' : '≈ Open in Fluid Toy'}
             </button>
           )}
           <button
             onClick={exportPng}
-            className="px-3 py-1 text-[12px] rounded-md border border-accent-500/30 bg-accent-500/15 text-accent-300 hover:bg-accent-500/25 transition-colors"
+            className={`px-3 ${tapY} text-[12px] rounded-md border border-accent-500/30 bg-accent-500/15 text-accent-300 hover:bg-accent-500/25 transition-colors`}
           >
             Export PNG
           </button>
@@ -714,7 +793,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
             onClick={closeFullscreen}
             title="Close (Esc)"
             aria-label="Close fullscreen preview"
-            className="px-2.5 py-1 text-[14px] leading-none rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
+            className={`px-2.5 ${tapY} text-[14px] leading-none rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors`}
           >
             ✕
           </button>
@@ -768,8 +847,11 @@ export const FullscreenGradientOverlay: React.FC = () => {
 
       {/* Bottom bar — export at a chosen size. Additive: the toolbar's Export PNG above still
           snapshots the on-screen canvas (and is still the only path that embeds a fractal
-          scene in the file). */}
+          scene in the file). On a phone it arrives COLLAPSED — six wrapped rows of size
+          controls cost ~200 px of a 844 px screen and the stage is what Wallpaper is for
+          (owner, 2026-09-11: "fullscreen mode needs the export section collapsed"). */}
       <ExportPanel
+        phone={phone}
         kind={activeMode?.kind ?? 'cpuField'}
         modeLabel={activeMode?.label ?? 'This mode'}
         canRenderAtSize={canRenderAtSize}

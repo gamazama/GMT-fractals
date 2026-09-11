@@ -14,6 +14,17 @@
  * button — one piece of state shown twice, never a parallel copy. It is a checkbox rather than
  * a button so a `getByRole('button', …)` in an existing smoke cannot become ambiguous.
  *
+ * PHONE (2026-09-11). At 390 px the bar wrapped to five or six rows and took ~200 px off the
+ * stage — so with `phone` it is COLLAPSIBLE and starts COLLAPSED (owner: "fullscreen mode needs
+ * the export section collapsed"). Collapsed is ONE row: a chevron toggle carrying the chosen
+ * size ("▸ Export · 1170×2532") plus the primary Export PNG button, which stays reachable
+ * without expanding anything — one tap to export at the remembered size. Expanded, the same
+ * controls appear in the same order, capped at 45 % of the viewport with their own `pan-y`
+ * scroller so the stage can never disappear behind them. DESKTOP IS UNTOUCHED: `phone` false
+ * takes the original single-`div` branch with the original class list and the original children,
+ * so `data-testid="fullscreen-export-panel"` still names the same shape a desktop smoke sees.
+ * Guarded by `npm run smoke:ge-phone` step [8] (the collapsed bar is ≤ 48 px).
+ *
  * @see gradient-explorer/fullscreen/exportSize.ts (every number in this panel comes from there)
  * @see plans/ge-v2-design.md §5.7 (Wallpaper — export at size)
  */
@@ -44,6 +55,12 @@ export interface ExportPanelProps {
   onExport: (plan: ExportSizePlan) => void;
   /** True while an export is in flight — a 4K CPU field takes a visible moment. */
   busy: boolean;
+  /**
+   * Phone layout: the panel becomes collapsible and starts collapsed. Left undefined (or false)
+   * the component renders EXACTLY the desktop DOM it always has — same root div, same classes,
+   * same children, always expanded, no toggle.
+   */
+  phone?: boolean;
 }
 
 const chip = (active: boolean): string =>
@@ -61,12 +78,17 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   onDitherChange,
   onExport,
   busy,
+  phone = false,
 }) => {
   const [preset, setPreset] = useState<ExportPresetId>('hd');
   const [orientation, setOrientation] = useState<ExportOrientation>('landscape');
   const [customWidth, setCustomWidth] = useState(2560);
   const [customHeight, setCustomHeight] = useState(1440);
   const [supersample, setSupersample] = useState(false);
+  // Collapsed by default. Only the phone branch reads it, so seeding it `true` cannot change
+  // the desktop panel — and a phone that expands, rotates to a tablet width and comes back
+  // finds it as it left it rather than re-collapsing under them.
+  const [collapsed, setCollapsed] = useState(true);
 
   const plan = useMemo(
     () => resolveExportSize({ preset, customWidth, customHeight, orientation, supersample, kind }),
@@ -91,11 +113,10 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
           ? `rendering ${plan.renderWidth}×${plan.renderHeight}, downsampled`
           : null;
 
-  return (
-    <div
-      className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2 border-t border-line/10 bg-surface-dock/80"
-      data-testid="fullscreen-export-panel"
-    >
+  /** The panel's controls, in order. ONE definition, shared by the desktop bar and the phone's
+   *  expanded sheet — so the two can never drift into different panels. */
+  const rows = (
+    <>
       <div className="text-[11px] font-medium text-fg-tertiary tracking-wide uppercase mr-1">Export</div>
 
       <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
@@ -181,6 +202,68 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
           {busy ? 'Exporting…' : `Export PNG · ${plan.width}×${plan.height}`}
         </button>
       </div>
+    </>
+  );
+
+  // DESKTOP — the original bar, unchanged: same root, same classes, same children, no toggle.
+  if (!phone) {
+    return (
+      <div
+        className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2 border-t border-line/10 bg-surface-dock/80"
+        data-testid="fullscreen-export-panel"
+      >
+        {rows}
+      </div>
+    );
+  }
+
+  // The toggle: a chevron, the word, and the size it would export at — so the collapsed bar
+  // still answers "what will Export PNG give me" without being opened.
+  const toggle = (
+    <button
+      onClick={() => setCollapsed((c) => !c)}
+      aria-expanded={!collapsed}
+      title={collapsed ? 'Show the export size controls' : 'Hide the export size controls'}
+      data-gx-fs-export-toggle
+      className="flex min-h-[36px] min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[12px] text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors"
+    >
+      <span aria-hidden className="text-[10px]">{collapsed ? '▸' : '▾'}</span>
+      <span className="truncate">Export · {plan.width}×{plan.height}</span>
+    </button>
+  );
+
+  // COLLAPSED — one 45 px row (36 px of tap target + 8 px of padding + the 1 px rule), which is
+  // what `smoke:ge-phone` [8] pins at ≤ 48. The primary action stays IN that row: the common
+  // phone case is "export the size I already picked", and that must not cost an expand first.
+  if (collapsed) {
+    return (
+      <div
+        className="shrink-0 flex items-center gap-2 px-3 py-1 border-t border-line/10 bg-surface-dock/80"
+        data-testid="fullscreen-export-panel"
+      >
+        {toggle}
+        <button
+          onClick={() => onExport(plan)}
+          disabled={busy}
+          className="ml-auto shrink-0 px-3 py-1 min-h-[36px] text-[12px] rounded-md border border-accent-500/30 bg-accent-500/15 text-accent-300 hover:bg-accent-500/25 disabled:opacity-50 disabled:cursor-wait transition-colors"
+        >
+          {busy ? 'Exporting…' : 'Export PNG'}
+        </button>
+      </div>
+    );
+  }
+
+  // EXPANDED — the same controls, wrapping, and hard-capped at 45 % of the viewport with its
+  // own scroller. `pan-y` hands this one axis back to the browser; the overlay root takes
+  // `touch-action: none` precisely so nothing else can scroll.
+  return (
+    <div
+      className="shrink-0 flex flex-col gap-2 px-3 py-2 border-t border-line/10 bg-surface-dock/80 max-h-[45vh] overflow-y-auto"
+      style={{ touchAction: 'pan-y' }}
+      data-testid="fullscreen-export-panel"
+    >
+      <div className="flex items-center">{toggle}</div>
+      <div className="flex flex-wrap items-center gap-3">{rows}</div>
     </div>
   );
 };
