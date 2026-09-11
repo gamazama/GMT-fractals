@@ -322,10 +322,13 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
   // PHONE: the plot loses 40 px so the controls above it and the wall below both stay
   // visible inside the tray's cap; the editor collapses its own inspector to a rail below
   // 560 px, so the whole width goes to the curve.
-  const plotH = phone ? 200 : 240;
+  // PHONE (owner, 2026-09-11): the face has the whole room now, so the plot grows to 320
+  // (the editor's eight tool icons then fit one column), the plot runs edge to edge (no
+  // side padding on the widget), and Detail / Smooth share ONE row.
+  const plotH = phone ? 320 : 240;
   return (
-    <div className="flex flex-col gap-3 px-4 py-3">
-      <div className="flex items-center gap-2 flex-wrap">
+    <div className={`flex flex-col gap-3 py-3 ${phone ? 'px-0' : 'px-4'}`}>
+      <div className={`flex items-center gap-2 flex-wrap ${phone ? 'px-3' : ''}`}>
         <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit the curves from the source again (Detail and Smooth are the recipe; the faint ghost previews it)">
           Re-fit
         </Act>
@@ -336,16 +339,21 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
           Reset
         </Act>
         {/* the fit recipe; while either is being dragged the editor shows its ghost (C.16) */}
-        <div className={`${phone ? 'w-full' : 'w-[170px] ml-2'}`}><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
-        <div className={phone ? 'w-full' : 'w-[170px]'}><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+        {/* PHONE: Detail and Smooth share ONE row of their own (`basis-full`), so neither
+            wraps up beside the buttons and gets its readout clipped at the edge. */}
+        <div className={phone ? 'basis-full flex items-center gap-3 min-w-0' : 'contents'}>
+          <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+          <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+        </div>
       </div>
       {tracks ? (
-        <div className="relative rounded-[10px] overflow-hidden" style={{ height: plotH }}>
+        <div className={`relative overflow-hidden ${phone ? '' : 'rounded-[10px]'}`} style={phone ? undefined : { height: plotH }}>
           <ChannelGraphEditor
             tracks={tracks}
             onTracksChange={g.setTracks}
-            width={width}
+            width={phone ? width + 32 : width}
             height={plotH}
+            phone={phone}
             previewRamp={derived.ramp ?? undefined}
             ghost={ghost}
             ghostPoints={ghostPoints}

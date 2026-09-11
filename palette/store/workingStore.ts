@@ -50,7 +50,8 @@
  */
 
 import { create } from 'zustand';
-import { useMemo } from 'react';
+import { useMemo, useRef, useSyncExternalStore } from 'react';
+import { isParamDragging, subscribeParamDragging } from './paramUndoBracket';
 import { useEngineStore } from '../../store/engineStore';
 import {
   useGeneratorStore,
@@ -564,10 +565,19 @@ export const useWorkingDerived = (): WorkingDerived => {
     }
   }, [input, buildBase, extracted, stopsConfig]);
 
+  // HOLD THE FIT WHILE A SLIDER DRAGS (owner, 2026-09-11). The knots are a fit over the
+  // 256-texel ramp — the expensive half of a derive, and visually the half nobody needs
+  // per frame: a drag wants the ramp to follow the finger and the knots to land when it
+  // lets go. So while any param bracket is open the last fitted config is handed back in
+  // (`holdFit`) and only the ramp is rebuilt; the release re-fits once. `deriveWorkingNow`
+  // (bake, export) always fits — it is imperative and never runs mid-frame.
+  const dragging = useSyncExternalStore(subscribeParamDragging, isParamDragging, () => false);
+  const lastFit = useRef<GradientConfig | null>(null);
   const core = useMemo(
-    () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim, input.kind === 'build' ? input.seeds : undefined) : null),
-    [resolved, params, curves, noiseSeed, detail, input],
+    () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim, input.kind === 'build' ? input.seeds : undefined, dragging ? lastFit.current : null) : null),
+    [resolved, params, curves, noiseSeed, detail, input, dragging],
   );
+  if (core && !dragging) lastFit.current = core.config;
   const palette = useMemo(() => (core ? swatchesAt(core.ramp, positions) : []), [core, positions]);
   const name = useMemo(
     () => nameState ?? autoWorkingName(input, bakedFrom),

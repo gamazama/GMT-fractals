@@ -155,6 +155,20 @@ async function main() {
   }
   console.log(`✓ [3] a tap makes a ${b.hero!.h} px hero with Export and Wallpaper on screen`);
 
+  // [3b] the hero FOLDS to a strip and the wall gets the room back; the strip opens it again
+  const tall = b.hero!.h;
+  await page.locator('[data-gx-hero] [data-gx-fold]').tap();
+  await page.waitForTimeout(300);
+  b = await boxes(page);
+  if (!b.hero) fail('[3b] the hero unmounted on fold (L8)');
+  if (b.hero!.h > 90) fail(`[3b] the folded hero is ${b.hero!.h} px, expected a header + strip under 90`);
+  if (b.tray && b.tray.h > 2) fail('[3b] a tray face survived the fold');
+  await page.locator('[data-gx-hero] [data-gx-folded-strip]').tap();
+  await page.waitForTimeout(300);
+  b = await boxes(page);
+  if (Math.abs(b.hero!.h - tall) > 2) fail(`[3b] the strip did not open the hero back to ${tall} (got ${b.hero!.h})`);
+  console.log(`✓ [3b] the hero folds to ${Math.round(tall)} → strip and back`);
+
   // [4] each tray face opens inside the viewport
   for (const face of ['adjust', 'curves', 'mix']) {
     await page.locator(`[data-gx-tray-tab="${face}"]`).tap();

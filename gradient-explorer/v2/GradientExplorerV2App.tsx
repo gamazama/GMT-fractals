@@ -132,6 +132,9 @@ export const GradientExplorerV2App: React.FC = () => {
   // under it — nothing to see, nothing to paint (owner, 2026-09-11). `invisible` keeps the
   // layout and the wall's scroll position; only its paint and hit-testing go.
   const groundHidden = phone && tray !== null && FULL_FACES.has(tray);
+  // FOLDED hero (owner, 2026-09-11): the card keeps its header + a strip, the wall gets the
+  // screen. `fold` is defined below `openTray`, which it calls to close an open face.
+  const [folded, setFolded] = useState(false);
   const source = sourceOf(tray);
   const [exportOpen, setExportOpen] = useState(false);
   /** The set whose Export window is open (the rail's chip menu), or null. */
@@ -279,6 +282,9 @@ export const GradientExplorerV2App: React.FC = () => {
     setTray(null);
   }, []);
   const bakeFace = useCallback(() => openTray(null), [openTray]);
+  // Folding closes any open face first (a face hangs from the tabs, and the tabs go away with
+  // the body); `openTray(null)` so leaving the face commits exactly as a tab close would.
+  const fold = useCallback((next: boolean) => { if (next && trayRef.current !== null) openTray(null); setFolded(next); }, [openTray]);
 
   // An image dropped/pasted ANYWHERE in the shell routes to Extract (§5.4) — a second
   // useImageDrop instance mounted once here at the root; ImageStage keeps its own for the
@@ -431,6 +437,8 @@ export const GradientExplorerV2App: React.FC = () => {
         onTray={(face) => (face === 'image' ? requestImageOrOpen() : openTray(face))}
         onCancelFace={cancelFace}
         onBake={bakeFace}
+        folded={folded}
+        onFold={fold}
         onShare={share}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}

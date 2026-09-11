@@ -2175,3 +2175,10 @@ phase now carries**. Items move out of this list only when a later phase's entry
   (ratio prev/now — `zoomAt` multiplies the half-span). Guard: `smoke:ge-phone` [8].
   **Still missing:** pinch unguarded; handle hit size; the fractal toolbar's ~205 px on a
   phone wants a per-mode 'more'; Liquify / Spline have no touch gestures.
+- 2026-09-11 · Phase F, fifth round: the document never scrolls on this page; the curves plot
+  takes a finger through a touch→mouse translation in GraphCanvas (the shared hook is
+  untouched); Settings is a sheet on a phone; the HERO FOLDS to header + strip (▴ in the use
+  cluster, `smoke:ge-phone` [3b]) so the wall gets the screen back — phone and desktop; the
+  stop fit is HELD while a slider drags (`holdFit` through the param-edit bracket depth);
+  Curves on a phone: Detail / Smooth one row, no side padding, 320 px plot, inspector below.
+  **Still owed:** the owner's phone walk; the fractal toolbar fold; Liquify / Spline touch.

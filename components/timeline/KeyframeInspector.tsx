@@ -72,9 +72,13 @@ interface KeyframeInspectorProps {
      *  — otherwise the panel can render expanded (256px) while the canvas was sized for the
      *  28px rail, overflowing + clipping the inspector. Omit it (the timeline) → internal. */
     collapsed?: boolean;
+    /** WIDE (2026-09-11): the inspector as a full-width block UNDER a plot rather than a
+     *  256 px column beside it — the phone form of the palette's curves editor, where a
+     *  column left ~200 px of curve. Never collapsed in this form. */
+    wide?: boolean;
 }
 
-export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource, onCollapsedChange, collapsed: collapsedProp }) => {
+export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource, onCollapsedChange, collapsed: collapsedProp, wide = false }) => {
     // Default to the live-timeline store data source (narrow per-field subs +
     // stable action refs). A provided dataSource (palette) is used as-is and the
     // store hook is skipped — each call site is consistent, so this is safe.
@@ -292,7 +296,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
 
     return (
         <div
-            className="w-64 bg-surface border-l border-line/10 flex flex-col shrink-0 overflow-y-auto animate-fade-in-left select-none h-full"
+            className={`bg-surface border-line/10 flex flex-col shrink-0 overflow-y-auto select-none ${wide ? 'w-full border-t max-h-[40vh]' : 'w-64 border-l animate-fade-in-left h-full'}`}
             data-help-id="anim.keyframes"
         >
             <div className="flex items-center gap-1 px-2 py-2 border-b border-line/10 bg-line/5 shrink-0 h-8">

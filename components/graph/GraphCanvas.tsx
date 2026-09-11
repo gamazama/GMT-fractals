@@ -103,10 +103,60 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
         });
     }, [props.width, props.height, props.view, props.currentFrame, props.selectionBox, themeRev]);
 
+    // TOUCH (2026-09-11). The graph's interaction hook (hooks/useGraphInteraction.ts) is
+    // mouse-only — `onMouseDown` here and window `mousemove` / `mouseup` — and it is shared
+    // with the animation editor, so it is not converted. Instead a finger is TRANSLATED:
+    // a native, non-passive `touchstart` on the overlay canvas becomes a `mousedown`
+    // dispatched on the same element (React's delegated `onMouseDown` sees it), and the
+    // touch's moves and end become window `mousemove` / `mouseup`, which the hook already
+    // listens for. `preventDefault` on the touchstart stops the browser's own compatibility
+    // mouse events (a second mousedown) and, with `touch-action: none` on the wrapper, the
+    // scroll that used to take the drag — on a phone the curves face slid instead of
+    // moving a point (owner). One finger only; a second is ignored.
+    useEffect(() => {
+        const el = overlayRef.current;
+        if (!el) return;
+        let id: number | null = null;
+        const synth = (type: string, t: Touch, target: EventTarget) =>
+            target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: t.clientX, clientY: t.clientY, button: 0, buttons: type === 'mouseup' ? 0 : 1 }));
+        const onMove = (e: TouchEvent) => {
+            const t = Array.from(e.changedTouches).find((x) => x.identifier === id);
+            if (!t) return;
+            e.preventDefault();
+            synth('mousemove', t, window);
+        };
+        const onEnd = (e: TouchEvent) => {
+            const t = Array.from(e.changedTouches).find((x) => x.identifier === id);
+            if (!t) return;
+            id = null;
+            synth('mouseup', t, window);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+            window.removeEventListener('touchcancel', onEnd);
+        };
+        const onStart = (e: TouchEvent) => {
+            if (id !== null || e.changedTouches.length === 0) return;
+            const t = e.changedTouches[0];
+            id = t.identifier;
+            e.preventDefault();
+            synth('mousedown', t, el);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+            window.addEventListener('touchcancel', onEnd);
+        };
+        el.addEventListener('touchstart', onStart, { passive: false });
+        return () => {
+            el.removeEventListener('touchstart', onStart);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('touchend', onEnd);
+            window.removeEventListener('touchcancel', onEnd);
+        };
+    }, []);
+
     return (
         <div
             className="block"
-            style={{ position: 'relative', width: props.width, height: props.height }}
+            style={{ position: 'relative', width: props.width, height: props.height, touchAction: 'none' }}
         >
             <canvas
                 ref={backRef}

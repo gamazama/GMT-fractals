@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useReducer, useState } from 'react';
 import { FloatingPanel, Z } from './ui';
+import { useMobileLayout } from '../hooks/useMobileLayout';
 import { GhostButton } from './GhostButton';
 import { CloseIcon } from './Icons';
 import {
@@ -166,14 +167,22 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
 
     const currentSections = byTab.get(current);
 
+    // PHONE (2026-09-11): the window is the whole screen — nothing to drag or resize, and
+    // a 440×560 box placed at (200, 64) ran off a 390 px screen on both axes (owner: "the
+    // settings panel needs phone compat"). The engine's device flag, not a width: a coarse
+    // pointer above 768 px wants this too.
+    const { isDeviceMobile: phone } = useMobileLayout();
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 440;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 560;
+
     return (
         <FloatingPanel
             z={Z.modal}
-            initialPosition={initialPos}
-            initialSize={{ width: 440, height: 560 }}
+            initialPosition={phone ? { x: 0, y: 0 } : initialPos}
+            initialSize={phone ? { width: vw, height: vh } : { width: 440, height: 560 }}
             minSize={{ width: 340, height: 280 }}
-            draggable
-            resizable
+            draggable={!phone}
+            resizable={!phone}
             dismissOnEscape
             onClose={onClose}
             showClose

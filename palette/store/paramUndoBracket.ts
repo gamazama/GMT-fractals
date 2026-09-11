@@ -21,9 +21,26 @@ const eng = () =>
   useEngineStore.getState() as unknown as { beginParamTransaction?: () => void; endParamTransaction?: () => void };
 
 /** Open an undo bracket (snapshot every history provider + the param slices). */
-export const paramEditStart = (): void => eng().beginParamTransaction?.();
+/**
+ * HOW MANY DRAGS ARE OPEN (2026-09-11). Every slider in the suite brackets its drag with
+ * `paramEditStart` / `paramEditEnd` for undo, so the pair is also the one honest signal
+ * that "a value is being scrubbed right now". `useWorkingDerived` reads it to HOLD the
+ * stop fit during a drag: the ramp keeps updating every frame, the knots (a fit over 256
+ * texels, the expensive half of a derive) wait for the release (owner, 2026-09-11: "the
+ * gradient can update, but we don't need all the stops' knots to update during a drag").
+ * A depth, not a boolean, because nested one-shot `paramEdit`s inside a drag must not
+ * end it early.
+ */
+let dragDepth = 0;
+const dragListeners = new Set<() => void>();
+const notifyDrag = () => dragListeners.forEach((l) => l());
+/** True while at least one param bracket is open (a slider drag, typically). */
+export const isParamDragging = (): boolean => dragDepth > 0;
+export const subscribeParamDragging = (l: () => void): (() => void) => { dragListeners.add(l); return () => { dragListeners.delete(l); }; };
+
+export const paramEditStart = (): void => { dragDepth++; if (dragDepth === 1) notifyDrag(); eng().beginParamTransaction?.(); };
 /** Close the bracket — diff against the snapshot, push one entry if anything changed. */
-export const paramEditEnd = (): void => eng().endParamTransaction?.();
+export const paramEditEnd = (): void => { eng().endParamTransaction?.(); dragDepth = Math.max(0, dragDepth - 1); if (dragDepth === 0) notifyDrag(); };
 /** Discrete one-shot: bracket a synchronous mutation as a single undo entry. */
 export const paramEdit = (fn: () => void): void => {
   paramEditStart();

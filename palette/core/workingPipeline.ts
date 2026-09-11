@@ -113,7 +113,8 @@ export const runWorkingPipeline = (
   detail: number,
   verbatim: GradientConfig | null,
   seedStops: SeedStop[] = [],
-): WorkingDerivedCore => {
+  /** A previous fit to REUSE instead of fitting (a slider is mid-drag — see useWorkingDerived). */
+  holdFit?: GradientConfig | null): WorkingDerivedCore => {
   const passthrough = !!verbatim && !curves && isIdentityAdjust(params);
   const built = buildGradientRamp(
     base,
@@ -133,5 +134,5 @@ export const runWorkingPipeline = (
       passthrough: true,
     };
   }
-  return { base, ramp: built.ramp, final: built.final, config: fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops, fitBias: true }), passthrough: false };
+  return { base, ramp: built.ramp, final: built.final, config: holdFit ?? fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops, fitBias: true }), passthrough: false };
 };

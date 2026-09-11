@@ -132,6 +132,8 @@ interface ChannelGraphEditorProps {
   tracks: ChannelTracks;
   onTracksChange: (tracks: ChannelTracks) => void;
   width: number;
+  /** PHONE (2026-09-11): the keyframe inspector goes below the plot, full width, open. */
+  phone?: boolean;
   height: number;
   /** Optional result ramp, drawn as a thin strip under the graph for context. */
   previewRamp?: RGB[];
@@ -181,8 +183,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   ghostDefault = true,
   ghostActive = false,
   normalizeToggle = true,
-  interactive = true,
-}) => {
+  interactive = true, phone = false }) => {
   const interactionRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLCanvasElement>(null);
   const ghostRef = useRef<HTMLCanvasElement>(null);
@@ -221,7 +222,10 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // width/height are the full graph AREA; the canvas sits between the track
   // sidebar and the keyframe inspector, with the result strip below. The canvas
   // reclaims the inspector's space when it's collapsed to its rail.
-  const inspectorW = inspectorCollapsed ? INSPECTOR_W_COLLAPSED : INSPECTOR_W;
+  // PHONE (owner, 2026-09-11): the keyframe inspector moves BELOW the plot, full width and
+  // open, where there is room; beside the plot it left ~200 px of curve on a 390 px
+  // screen. The plot then spans `width - SIDEBAR_W`.
+  const inspectorW = phone ? 0 : inspectorCollapsed ? INSPECTOR_W_COLLAPSED : INSPECTOR_W;
   const canvasWidth = Math.max(120, width - SIDEBAR_W - inspectorW);
   const canvasHeight = Math.max(80, height - STRIP_H);
 
@@ -781,9 +785,10 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       ref={focusRef}
       tabIndex={0}
       onPointerDownCapture={interactive ? () => genEditStart() : undefined}
-      className="flex w-full outline-none select-none"
-      style={{ height }}
+      className={`w-full outline-none select-none ${phone ? 'flex flex-col' : 'flex'}`}
+      style={phone ? undefined : { height }}
     >
+      <div className={phone ? 'flex' : 'contents'} style={phone ? { height } : undefined}>
       <ChannelTrackSidebar
         channels={CHANNELS}
         visible={visible}
@@ -907,8 +912,11 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         </div>
         <canvas ref={stripRef} width={canvasWidth} height={STRIP_H} className="block" style={{ width: canvasWidth, height: STRIP_H }} />
       </div>
+      </div>
 
-      <KeyframeInspector dataSource={dataSource} collapsed={inspectorCollapsed} onCollapsedChange={setInspectorCollapsed} />
+      {/* PHONE: the inspector sits under the plot, open; a collapse would only hide the
+          fields a finger came for. Desktop keeps it beside the plot, collapsible. */}
+      <KeyframeInspector dataSource={dataSource} collapsed={phone ? false : inspectorCollapsed} onCollapsedChange={phone ? undefined : setInspectorCollapsed} wide={phone} />
     </div>
   );
 };
