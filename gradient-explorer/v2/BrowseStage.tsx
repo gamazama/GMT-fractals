@@ -169,7 +169,14 @@ const GROUND: React.CSSProperties = {
 // `backdrop-blur-sm` stays: the wall scrolls under them.
 const floatOver = 'backdrop-blur-sm';
 
-export const BrowseStage: React.FC = () => {
+interface Props {
+  /** The hero band is hidden — the wall has the screen (owner, 2026-09-11). The button
+   *  that toggles it lives HERE, with the wall's tools, so the band leaves no remnant. */
+  heroFolded?: boolean;
+  onFoldHero?: (folded: boolean) => void;
+}
+
+export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero }) => {
   const phone = useIsPhone();
   // PHONE: the pad is drawn at a measured pixel width, not the desktop's fixed 360 — the
   // bar needs 422 for the fixed one and has 390, which is what put the Filters button
@@ -870,6 +877,24 @@ export const BrowseStage: React.FC = () => {
               keeping is the heart, and a group is made on a desktop. What is left is zoom,
               and each of its buttons shows ONLY when it would do something: − above 1:1,
               + below the ceiling, Fit when zoomed. At 1:1 the row is the single + button. */}
+          {/* THE HERO'S FOLD sits with the wall's tools (owner, 2026-09-11: "move the
+              'minimize hero' into the wall's toolbar — this way we don't need to leave a
+              remnant of the hero when the wall is fullscreened"). Phone and desktop, every
+              ground. A pick brings the hero back. The one text glyph among the icons: the
+              set has no chevron. */}
+          {onFoldHero && (
+            <button
+              onClick={() => onFoldHero(!heroFolded)}
+              title={heroFolded ? 'Show the gradient' : 'Hide the gradient — the wall gets the screen'}
+              aria-label={heroFolded ? 'Show the gradient' : 'Hide the gradient'}
+              aria-pressed={heroFolded}
+              data-gx-fold=""
+              style={phone ? { width: PHONE_TOOL, height: PHONE_TOOL } : undefined}
+              className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${heroFolded ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
+            >
+              <span className="text-[14px] leading-none">{heroFolded ? '▾' : '▴'}</span>
+            </button>
+          )}
           {TOOLS.filter((t) => (phone ? false : !m.isSet || t.id === 'zoom')).map((t) => {
             const on = activeTool === t.id;
             return (

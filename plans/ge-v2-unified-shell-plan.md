@@ -2185,3 +2185,7 @@ phase now carries**. Items move out of this list only when a later phase's entry
 - 2026-09-11 · Phase F, sixth round (owner's trims): no colour cloud on the phone's Image
   face; the state chip is a dot on phone (the fold's ▴ fits); Wallpaper's ✕ in the name row
   and no right cluster on phone; Fractal hides Iterations + Cycle on a coarse pointer.
+- 2026-09-11 · Phase F, seventh round: the hero's fold moved into the wall's tool cluster
+  (`BrowseStage` `heroFolded` / `onFoldHero`), folding HIDES the band entirely (mounted, L8),
+  a pick shows it again. Guards: `smoke:ge-phone` [3b] / [6]; `smoke:ge-ground` excludes
+  the fold from its tool count.

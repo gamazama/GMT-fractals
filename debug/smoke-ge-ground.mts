@@ -72,8 +72,9 @@ const state = (page: Page) =>
       // the view toggle stayed in the right corner). Reading them apart pins WHERE each
       // control lives, which is the thing that moved; a flat list over the whole wall
       // could not tell a tool in the corner from a tool in the column.
-      tools: wall?.querySelectorAll('[data-gx-tools="tools"] button[aria-label]').length ?? 0,
-      toolLabels: Array.from(wall?.querySelectorAll('[data-gx-tools="tools"] button[aria-label]') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
+      // the hero's fold button rides in this cluster since 2026-09-11 and is not a wall tool
+      tools: wall?.querySelectorAll('[data-gx-tools="tools"] button[aria-label]:not([data-gx-fold])').length ?? 0,
+      toolLabels: Array.from(wall?.querySelectorAll('[data-gx-tools="tools"] button[aria-label]:not([data-gx-fold])') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
       viewLabels: Array.from(wall?.querySelectorAll('[data-gx-tools="view"] button[aria-label]') ?? []).map((b) => b.getAttribute('aria-label') ?? ''),
       canvases: canvases.length,
       canvasLeft: c0 && wr ? Math.round(c0.x - wr.x) : null,

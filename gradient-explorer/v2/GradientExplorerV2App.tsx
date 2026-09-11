@@ -189,6 +189,8 @@ export const GradientExplorerV2App: React.FC = () => {
   trayRef.current = tray;
   useEffect(() => {
     if (!candidate) return;
+    // A pick is a request to SEE the gradient: a hidden hero comes back (owner, 2026-09-11).
+    setFolded(false);
     const p = candidate.payload;
     // On the Mix tab a pick always lands in a slot — B unless A is armed.
     const slot = getArmedSlot() ?? (trayRef.current === 'mix' ? 'B' : null);
@@ -438,7 +440,6 @@ export const GradientExplorerV2App: React.FC = () => {
         onCancelFace={cancelFace}
         onBake={bakeFace}
         folded={folded}
-        onFold={fold}
         onShare={share}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}
@@ -536,7 +537,7 @@ export const GradientExplorerV2App: React.FC = () => {
           </div>
         )}
         <div className="flex-1 min-h-0 flex flex-col relative">
-          <BrowseStage />
+          <BrowseStage heroFolded={folded} onFoldHero={fold} />
         </div>
       </div>
 

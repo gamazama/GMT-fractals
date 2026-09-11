@@ -155,19 +155,22 @@ async function main() {
   }
   console.log(`✓ [3] a tap makes a ${b.hero!.h} px hero with Export and Wallpaper on screen`);
 
-  // [3b] the hero FOLDS to a strip and the wall gets the room back; the strip opens it again
+  // [3b] the wall's fold button HIDES the hero (still mounted, L8) and shows it again
   const tall = b.hero!.h;
-  await page.locator('[data-gx-hero] [data-gx-fold]').tap();
+  const foldBtn = page.locator('[data-gx-tools="tools"] [data-gx-fold]');
+  if (!(await foldBtn.count())) fail('[3b] no fold button among the wall tools');
+  await foldBtn.tap();
   await page.waitForTimeout(300);
+  const mounted = await page.evaluate(`!!document.querySelector('[data-gx-hero]')`);
+  if (!mounted) fail('[3b] the hero unmounted on fold (L8)');
   b = await boxes(page);
-  if (!b.hero) fail('[3b] the hero unmounted on fold (L8)');
-  if (b.hero!.h > 90) fail(`[3b] the folded hero is ${b.hero!.h} px, expected a header + strip under 90`);
+  if (b.hero && b.hero.h > 0) fail(`[3b] the folded hero still shows ${b.hero.h} px — it should be hidden entirely`);
   if (b.tray && b.tray.h > 2) fail('[3b] a tray face survived the fold');
-  await page.locator('[data-gx-hero] [data-gx-folded-strip]').tap();
+  await foldBtn.tap();
   await page.waitForTimeout(300);
   b = await boxes(page);
-  if (Math.abs(b.hero!.h - tall) > 2) fail(`[3b] the strip did not open the hero back to ${tall} (got ${b.hero!.h})`);
-  console.log(`✓ [3b] the hero folds to ${Math.round(tall)} → strip and back`);
+  if (Math.abs((b.hero?.h ?? 0) - tall) > 2) fail(`[3b] the button did not show the hero back at ${tall} (got ${b.hero?.h})`);
+  console.log(`✓ [3b] the wall's fold button hides the ${Math.round(tall)} px hero and shows it again`);
 
   // [4] each tray face opens inside the viewport
   for (const face of ['adjust', 'curves', 'mix']) {
@@ -198,8 +201,10 @@ async function main() {
   const labels = await page.evaluate(`Array.from(document.querySelectorAll('[data-gx-tools="tools"] button')).map(function (b) { return b.getAttribute('aria-label') || b.textContent.trim(); })`) as string[];
   const carving = labels.filter((l) => /box|lasso|paint|rect/i.test(l));
   if (carving.length) fail(`[6] carving tools on a phone: ${carving.join(', ')}`);
-  if (labels.join('|') !== 'Zoom in') fail(`[6] at 1:1 the cluster should be the zoom-in button alone, got: ${labels.join(', ') || 'nothing'}`);
-  console.log(`✓ [6] the tools at the bottom are just Zoom in at 1:1: ${fmt(b.tools)}`);
+  const zoomish = labels.filter((l) => /zoom|fit/i.test(l));
+  if (zoomish.join('|') !== 'Zoom in') fail(`[6] at 1:1 the zoom controls should be the zoom-in button alone, got: ${zoomish.join(', ') || 'nothing'}`);
+  if (!labels.some((l) => /gradient/i.test(l))) fail(`[6] the hero's fold button is not among the wall tools: ${labels.join(', ')}`);
+  console.log(`✓ [6] the tools at the bottom: the fold + Zoom in at 1:1: ${fmt(b.tools)}`);
 
   // [7] a touch drag moves a knot
   const knotSel = '[data-gx-hero] [data-gx-knot]';

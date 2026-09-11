@@ -170,11 +170,12 @@ interface Props {
   /** Bake the open face's result (C.9: a click on the ramp's RESULT half) — the face closes
    *  and its transformations reset; the stops are the result. */
   onBake: () => void;
-  /** FOLDED (owner, 2026-09-11: "we need to be able to get back to the fullscreen wall"):
-   *  the card keeps its header and shows the gradient as a thin strip; the palette row,
-   *  the editor and the tabs are away and the wall has the screen. Never an unmount (L8). */
+  /** FOLDED (owner, 2026-09-11: "we need to be able to get back to the fullscreen wall",
+   *  then: "we don't need to leave a remnant of the hero when the wall is fullscreened"):
+   *  the whole band is HIDDEN — `hidden`, not unmounted (L8: the hero never unmounts; the
+   *  editor keeps its state). The control lives with the wall's tools (BrowseStage), and a
+   *  pick shows the band again. */
   folded: boolean;
-  onFold: (folded: boolean) => void;
   onShare: () => void;
   onExport: () => void;
   onWallpaper: () => void;
@@ -183,7 +184,7 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onExport, onWallpaper, exportOpen, exportMenu, folded, onFold }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onExport, onWallpaper, exportOpen, exportMenu, folded }) => {
   const phone = useIsPhone();
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
@@ -401,6 +402,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
          `PHONE_INSET` is that same side number (0), so the two stay aligned by reading it
          from here (Tray.tsx names the pairing). */
       className={`relative shrink-0 bg-surface-raised border-b border-line/10 ${phone ? 'pt-1 pb-2 px-0' : 'p-2.5'}`}
+      hidden={folded}
       data-gx-hero
       data-gx-selectable
     >
@@ -559,28 +561,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               >
                 <Icon name="fullscreen" size={15} />
               </Act>
-              {/* FOLD: the wall gets the screen back; the header and a strip of the
-                  gradient stay, so a pick still shows what you picked (owner, 2026-09-11).
-                  The ONE text glyph in the row: the icon set has no chevron. */}
-              <Act
-                icon
-                onClick={() => onFold(!folded)}
-                title={folded ? 'Open the gradient' : 'Fold the gradient away — the wall gets the screen'}
-                aria-expanded={!folded}
-                data-gx-fold=""
-              >
-                <span className="text-[13px] leading-none">{folded ? '▾' : '▴'}</span>
-              </Act>
             </div>
           </div>
 
-          {/* FOLDED: the gradient as a 14 px strip; a tap opens the card again. */}
-          {folded && shown && (
-            <div className={`${phone ? 'px-3' : 'px-4'} pt-2 pb-2.5 cursor-pointer`} onClick={() => onFold(false)} title="Open the gradient" data-gx-folded-strip="">
-              <GradientStrip ramp={shown.ramp} height={14} className="w-full block" />
-            </div>
-          )}
-          {!folded && (<>
+          {<>
 
           {/* THE WHOLE GRADIENT takes a dropped colour, not just the ramp at the bottom
               (owner, §8b item 1: "a dropped swatch should land anywhere on the gradient").
@@ -785,7 +769,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             </div>
 
           </div>
-          </>)}
+          </>}
         </div>
       </div>
       {/* the TRAY (Phase C): one surface under the card, one face at a time.
