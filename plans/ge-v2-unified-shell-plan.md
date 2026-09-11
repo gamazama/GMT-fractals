@@ -2144,3 +2144,13 @@ phase now carries**. Items move out of this list only when a later phase's entry
   `FavientsCollectionMenu` kebab keeps its desktop hit box; the hover-only recent-exports
   flyout is simply absent on phone. **Carried:** Phase G (parity + the entry-point swap),
   unchanged. Landed on `main` and pushed — the preview URL IS the phone test bed.
+- 2026-09-11 · Phase F, the owner's first real-phone test: FAILED on an iPhone (WebKit) and a
+  Huawei P20 Pro, for two reasons outside the layout. iPhone: `roundRect` (Safari 16+) in the
+  wall's tile drawing, present since the rounded tiles of Phase C — the error boundary took the
+  app. P20 Pro: the viewport shell's `100dvh` (Chrome 108+) with no fallback, Phase F's own
+  regression — the shell collapsed and the wall was 0 px tall under a header that drew. Both
+  fixed (`utils/roundRectPath.ts`; `MobileViewportShell` = `h-screen` class + inline `100dvh`;
+  the boundary's fallback now leads with the message, which a WebKit stack does not carry).
+  New guard `smoke:ge-floor` boots the shell with `roundRect` deleted. **The phone walk is
+  still owed** — nothing in the Phase F list above has been seen on hardware yet; the retest
+  should name the iOS / Chrome versions, which decide what else is below the floor.

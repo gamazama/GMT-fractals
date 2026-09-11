@@ -161,7 +161,11 @@ const AppErrorFallback: React.FC<{ error: unknown }> = ({ error }) => {
                     notice instead of going blank. Reload to get back to a working app. The full error and
                     component stack are in the browser console.
                 </p>
-                <pre style={S.pre}>{stack ?? message}</pre>
+                {/* V8 stacks begin with "Name: message"; JavaScriptCore and SpiderMonkey
+                    stacks do NOT — a Safari user pasting this block sent frames and no
+                    message (owner, 2026-09-11). So the message leads unless the stack
+                    already carries it. */}
+                <pre style={S.pre}>{stack ? (stack.startsWith(message) ? stack : `${message}\n${stack}`) : message}</pre>
                 <button type="button" style={S.button} onClick={() => window.location.reload()}>
                     Reload
                 </button>

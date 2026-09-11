@@ -46,6 +46,7 @@
     "smoke:ge-wallpaper": "tsx debug/smoke-ge-wallpaper.mts",
     "smoke:ge-phone": "tsx debug/smoke-ge-phone.mts",
     "smoke:ge-walltouch": "tsx debug/smoke-ge-walltouch.mts",
+    "smoke:ge-floor": "tsx debug/smoke-ge-floor.mts",
     "smoke:camera": "tsx debug/smoke-camera.mts",
     "smoke:canvas-menu": "tsx debug/smoke-canvas-menu.mts",
     "smoke:canvas-pan-zoom": "tsx debug/smoke-canvas-pan-zoom.mts",

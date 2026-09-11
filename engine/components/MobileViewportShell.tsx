@@ -3,7 +3,8 @@
  * fixed-inset layout and the mobile dynamic-viewport layout.
  *
  * Mobile:
- *   - `sticky top-0 h-[100dvh]` — `dvh` (dynamic viewport height)
+ *   - `sticky top-0` at `100dvh` (inline, over an `h-screen` = 100vh class as the
+ *     fallback for browsers without `dvh` — see MOBILE_STYLE_DVH) — `dvh` (dynamic viewport height)
  *     tracks the visual viewport, so the shell shrinks/grows when the
  *     mobile keyboard opens/closes and when the address bar collapses.
  *     `vh` would leave a black band after the keyboard dismisses.
@@ -51,6 +52,20 @@ const DESKTOP_STYLE: React.CSSProperties = {};
  *   both, the body's scroll could rest half-collapsed or drift past the
  *   shell off the bottom. See ADR-0039.
  */
+/**
+ * The mobile box is `100dvh` WITH A `100vh` FALLBACK, and the two are declared in two
+ * places on purpose: the class carries `h-screen` (100vh) and the inline style carries
+ * `100dvh`. A browser that knows `dvh` applies the inline value over the class, as
+ * always; one that does not (Chrome < 108, Safari < 15.4) REJECTS the inline assignment
+ * as an invalid value and the class's 100vh stands. Before this the shell had only
+ * `h-[100dvh]`, and on a Huawei P20 Pro that dropped the declaration: the sticky box
+ * collapsed to its content, and the Gradient Explorer's wall — a region whose only
+ * children are absolutely positioned — came out 0 px tall while the header, hero and rail
+ * above it drew normally (owner, 2026-09-11). React sets `style.height = '100dvh'`
+ * exactly like a hand-written assignment, so the rejection is the browser's, not ours.
+ */
+const MOBILE_STYLE_DVH: React.CSSProperties = { ...MOBILE_STYLE, height: '100dvh' };
+
 export const MobileViewportShell: React.FC<MobileViewportShellProps> = ({ children, className = '' }) => {
     // Use `isDeviceMobile` (raw device flag) — the sticky+dvh trick is
     // meant to handle iOS address bar / Android keyboard. Force Mobile
@@ -59,11 +74,11 @@ export const MobileViewportShell: React.FC<MobileViewportShellProps> = ({ childr
     const { isDeviceMobile } = useMobileLayout();
 
     const positioning = isDeviceMobile
-        ? 'sticky top-0 h-[100dvh] overflow-hidden shadow-2xl'
+        ? 'sticky top-0 h-screen overflow-hidden shadow-2xl'
         : 'fixed inset-0 w-full h-full';
 
     return (
-        <div className={`${positioning} ${className}`} style={isDeviceMobile ? MOBILE_STYLE : DESKTOP_STYLE}>
+        <div className={`${positioning} ${className}`} style={isDeviceMobile ? MOBILE_STYLE_DVH : DESKTOP_STYLE}>
             {children}
         </div>
     );

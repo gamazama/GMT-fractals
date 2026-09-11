@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { roundRectPath } from '../utils/roundRectPath';
 import { useLiveModulations } from '../engine/typedSlices';
 import type { FeatureComponentProps } from '../components/registry/ComponentRegistry';
 import type { DemoState } from './DemoFeature';
@@ -113,11 +114,7 @@ export const DemoOverlay: React.FC<FeatureComponentProps> = ({ sliceState }) => 
             const half = size * 0.5;
             const radius = Math.min(8, half);
             ctx.beginPath();
-            if (typeof ctx.roundRect === 'function') {
-                ctx.roundRect(-half, -half, size, size, radius);
-            } else {
-                ctx.rect(-half, -half, size, size);
-            }
+            roundRectPath(ctx, -half, -half, size, size, radius);
             ctx.fill();
             ctx.stroke();
             ctx.restore();

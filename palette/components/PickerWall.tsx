@@ -50,6 +50,8 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../core/presetCatalog';
+// `roundRect` is Safari 16 / Chrome 99 — the wall must draw on older phones (see the helper).
+import { roundRectPath } from '../../utils/roundRectPath';
 import type { PickerRow as PickerGroup } from '../core/pickerModel';
 import { GradientHoverPreview } from './GradientHoverPreview';
 import {
@@ -414,7 +416,7 @@ const SwatchCanvas: React.FC<{
       if (r > 0) {
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(col * cellW, row * cellH, swatchW, swatchH, r);
+        roundRectPath(ctx, col * cellW, row * cellH, swatchW, swatchH, r);
         ctx.clip();
       }
       ctx.drawImage(sprite, 0, entries[k].row, 256, 1, col * cellW, row * cellH, swatchW, swatchH);
@@ -438,7 +440,7 @@ const SwatchCanvas: React.FC<{
         ctx.strokeStyle = style;
         ctx.lineWidth = width;
         ctx.beginPath();
-        if (r > 0) ctx.roundRect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2, Math.max(0, r - inset));
+        if (r > 0) roundRectPath(ctx, x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2, Math.max(0, r - inset));
         else ctx.rect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2);
         ctx.stroke();
       };
@@ -458,7 +460,7 @@ const SwatchCanvas: React.FC<{
         const { col, row } = cellOf(k, cols, nrows, rowMajor);
         const x = col * cellW, y = row * cellH;
         ctx.beginPath();
-        if (rr > 0) ctx.roundRect(x + 1, y + 1, swatchW - 2, swatchH - 2, Math.max(0, rr - 1));
+        if (rr > 0) roundRectPath(ctx, x + 1, y + 1, swatchW - 2, swatchH - 2, Math.max(0, rr - 1));
         else ctx.rect(x + 1, y + 1, swatchW - 2, swatchH - 2);
         ctx.stroke();
         // a translucent wash so a selected tile reads as chosen at a glance, not just edged
@@ -480,7 +482,7 @@ const SwatchCanvas: React.FC<{
         ctx.strokeStyle = style;
         ctx.lineWidth = width;
         ctx.beginPath();
-        if (rr > 0) ctx.roundRect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2, Math.max(0, rr - inset));
+        if (rr > 0) roundRectPath(ctx, x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2, Math.max(0, rr - inset));
         else ctx.rect(x + inset, y + inset, swatchW - inset * 2, swatchH - inset * 2);
         ctx.stroke();
       };

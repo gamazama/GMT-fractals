@@ -62,6 +62,9 @@ no-regression cover only:
 npm run smoke:mobile-layout   # gradient-explorer.html in a Pixel 5 context and a desktop one:
                               # boot seed of isDeviceMobile/isPortrait, the sticky-vs-fixed shell
                               # branch, and the resize listener across 768px / orientation
+npm run smoke:ge-floor        # the v2 Gradient Explorer in a Pixel 5 context on the PHONE FLOOR: roundRect deleted,
+                              # the wall must still paint, and MobileViewportShell must carry BOTH heights
+                              # (h-screen class + inline 100dvh) - the fallback a Huawei P20 Pro needed, 2026-09-11
 npm run typecheck
 npm run smoke:boot
 ```
