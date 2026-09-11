@@ -19,6 +19,12 @@
  * It drives the v2 shell because that is the only host with a tool palette a browser can
  * arm; the behaviour under test is the wall's, shared with app-gmt's picker overlay.
  *
+ * The context is a DESKTOP layout (1280×800) with touch emulation switched on through CDP
+ * AFTER boot: since 2026-09-11 the phone layout offers no carving tool at all (owner), so
+ * Paint can only be armed on the desktop tool column — and a touch laptop is exactly a
+ * desktop layout with fingers, which is what this then proves. `isDeviceMobile` is seeded
+ * at boot and only a resize re-reads it, so enabling touch afterwards leaves the layout.
+ *
  * Falsified 2026-09-10, three ways, each reverted:
  *   · pinning the wall's `touchAction` to `'auto'` → [1] red on the declared value
  *   · pinning it to `'none'` → [2] red on the declared value ([1] still passes, which is
@@ -29,7 +35,7 @@
  *
  * Run: `npx tsx debug/smoke-ge-walltouch.mts` (needs `npm run dev`; ENGINE_URL overrides).
  */
-import { chromium, devices, type Browser, type Page, type BrowserContext } from 'playwright';
+import { chromium, type Browser, type Page, type BrowserContext } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
@@ -56,7 +62,7 @@ const touchDrag = async (ctx: BrowserContext, page: Page, from: [number, number]
 };
 
 async function run(browser: Browser) {
-  const ctx = await browser.newContext({ ...devices['Pixel 5'] });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await seedGeSmokeState(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
@@ -64,6 +70,9 @@ async function run(browser: Browser) {
   await page.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
   await page.waitForSelector('[data-gx-keepselect] canvas', { timeout: 20000 });
   await page.waitForTimeout(900);
+  // fingers on a desktop layout (see the header)
+  const touch = await ctx.newCDPSession(page);
+  await touch.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 });
 
   /** The wall's scroll box as the browser sees it, plus what the carve overlay is drawing. */
   const read = () => page.evaluate(`(() => {
@@ -82,7 +91,7 @@ async function run(browser: Browser) {
 
   // [1] a tool armed: the drag is the tool's
   if (!(await paint.count())) fail('[1] no Paint tool on this ground — the wall’s tool column changed');
-  await paint.tap();
+  await paint.click();
   await page.waitForTimeout(350);
   const armed = await read();
   if (armed.armed !== 'true') fail(`[1] the Paint tool did not arm (aria-pressed ${armed.armed})`);

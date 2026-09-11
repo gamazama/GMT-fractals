@@ -791,7 +791,8 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
 /** Drag-per-doubling: pixels of pointer travel that double the zoom. */
 const ZOOM_PX_PER_DOUBLE = 260;
 const ZOOM_MIN = 0.3;
-const ZOOM_MAX = 16;
+/** Exported so a host can hide a zoom-in control that would be a no-op at the ceiling. */
+export const ZOOM_MAX = 16;
 
 /** The wall's zoom limits. Every path that changes the zoom goes through this. */
 export const clampWallZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));

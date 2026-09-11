@@ -76,7 +76,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PickerWall, type WallBand, type WallView } from '../../palette/components/PickerWall';
+import { PickerWall, type WallBand, type WallView, ZOOM_MAX } from '../../palette/components/PickerWall';
 import { usePickerModel } from '../../palette/components/usePickerModel';
 import Slider from '../../components/Slider';
 import { InputSkinProvider } from '../../components/inputs';
@@ -866,7 +866,11 @@ export const BrowseStage: React.FC = () => {
           className={`absolute flex gap-0.5 p-[3px] ${floatOver} ${phone ? 'bottom-3 left-4 items-center' : 'top-2.5 flex-col'}`}
           style={phone ? undefined : { left: TOOLBAR_LEFT }}
         >
-          {TOOLS.filter((t) => (phone ? !m.isSet && t.id !== 'zoom' : !m.isSet || t.id === 'zoom')).map((t) => {
+          {/* PHONE: no carving tools at all (owner, 2026-09-11: "not so useful for mobile") —
+              keeping is the heart, and a group is made on a desktop. What is left is zoom,
+              and each of its buttons shows ONLY when it would do something: − above 1:1,
+              + below the ceiling, Fit when zoomed. At 1:1 the row is the single + button. */}
+          {TOOLS.filter((t) => (phone ? false : !m.isSet || t.id === 'zoom')).map((t) => {
             const on = activeTool === t.id;
             return (
               <button
@@ -884,6 +888,7 @@ export const BrowseStage: React.FC = () => {
           })}
           {phone && (
             <>
+              {m.zoom.x > 1 && (
               <button
                 onClick={() => m.stepZoom(1 / ZOOM_STEP)}
                 title="Zoom out"
@@ -893,6 +898,8 @@ export const BrowseStage: React.FC = () => {
               >
                 <Icon name="zoomOut" />
               </button>
+              )}
+              {m.zoom.x < ZOOM_MAX && (
               <button
                 onClick={() => m.stepZoom(ZOOM_STEP)}
                 title="Zoom in"
@@ -902,18 +909,20 @@ export const BrowseStage: React.FC = () => {
               >
                 <Icon name="zoom" />
               </button>
+              )}
               {/* Fit lives here rather than in the corner readout, which the phone drops —
                   it is the third thing the zoom pair needs and nothing else in that corner
-                  survived. Disabled until there is something to fit, exactly as before. */}
+                  survived. Shown only while there is something to fit. */}
+              {m.zoomed && (
               <button
                 onClick={m.resetZoom}
-                disabled={!m.zoomed}
                 title="Back to 1:1"
                 style={{ height: PHONE_TOOL }}
-                className={`px-2.5 rounded-lg text-[13px] flex items-center justify-center transition-colors ${m.zoomed ? 'text-accent-300' : 'text-fg-faint cursor-default'}`}
+                className="px-2.5 rounded-lg text-[13px] flex items-center justify-center transition-colors text-accent-300"
               >
                 Fit
               </button>
+              )}
             </>
           )}
         </Floating>

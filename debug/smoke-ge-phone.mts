@@ -13,7 +13,9 @@
  *       (Share · Export · Wallpaper) is inside the screen, not clipped off the right.
  *   [4] each tray face — Adjust, Curves, Mix — opens INSIDE the viewport on both axes.
  *   [5] the Export window is a sheet inside the viewport.
- *   [6] the wall tools are a ROW in the bottom half of the wall, not a column at the top.
+ *   [6] the wall's tool cluster sits in the bottom half of the wall, carries NO carving tool
+ *       (owner, 2026-09-11: Box / Lasso / Paint are not for a phone) and, at 1:1, exactly
+ *       the zoom-in button (− and Fit appear only once zoomed).
  *   [7] a TOUCH drag on a knot moves a stop (the stops editor is pointer-driven now).
  *   [8] desktop 1280×800: the tools are a column at the top-left, the hero keeps its image
  *       column (grid of two columns) — the phone branch is gated, not global.
@@ -151,13 +153,16 @@ async function main() {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
-  // [6] the tools are a row in the bottom half of the wall
+  // [6] the tool cluster: bottom half, no carving tools, zoom-in alone at 1:1
   b = await boxes(page);
   if (!b.tools || !b.wall) fail('[6] no tool cluster / wall');
-  if (b.tools!.w <= b.tools!.h) fail(`[6] the tools are a column on a phone: ${fmt(b.tools)}`);
   if (b.tools!.y < b.wall!.y + b.wall!.h / 2) fail(`[6] the tools sit in the top half of the wall: tools ${fmt(b.tools)} wall ${fmt(b.wall)}`);
-  if (!inside(b.tools, W, H)) fail(`[6] the tool row is off screen: ${fmt(b.tools)}`);
-  console.log(`✓ [6] the tools are a row at the bottom: ${fmt(b.tools)}`);
+  if (!inside(b.tools, W, H)) fail(`[6] the tool cluster is off screen: ${fmt(b.tools)}`);
+  const labels = await page.evaluate(`Array.from(document.querySelectorAll('[data-gx-tools="tools"] button')).map(function (b) { return b.getAttribute('aria-label') || b.textContent.trim(); })`) as string[];
+  const carving = labels.filter((l) => /box|lasso|paint|rect/i.test(l));
+  if (carving.length) fail(`[6] carving tools on a phone: ${carving.join(', ')}`);
+  if (labels.join('|') !== 'Zoom in') fail(`[6] at 1:1 the cluster should be the zoom-in button alone, got: ${labels.join(', ') || 'nothing'}`);
+  console.log(`✓ [6] the tools at the bottom are just Zoom in at 1:1: ${fmt(b.tools)}`);
 
   // [7] a touch drag moves a knot
   const knotSel = '[data-gx-hero] [data-gx-knot]';

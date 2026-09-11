@@ -17,6 +17,7 @@
  */
 
 import { usePickerStore } from '../../palette/store/pickerStore';
+import { isMobileViewport } from '../../engine/HardwareDetection';
 import { registerPaletteUI } from '../../palette/registerPaletteUI';
 import { installWorking } from '../../palette/installWorking';
 import { useFavientsStore } from '../../palette/store/favientsStore';
@@ -40,11 +41,17 @@ setFavientSelectMode(true);
 
 // Owner, 2026-09-06: the licensed packs (Softology, cpt-city) are on by default in the
 // Explorer — fetched at boot alongside the core groups. app-gmt keeps them off until toggled.
-// `?lite` keeps the two licensed packs OFF (core only, 3,076): a bisect for a phone that dies
-// after the wall first paints — the packs arrive a moment later and rebuild the 11,131-row
-// sprite (owner's iPhone, 2026-09-11). Filters ▸ Sources still loads them on demand.
-const LITE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('lite');
-if (!LITE) {
+// PHONES START WITHOUT THEM. Measured on the owner's iPhone 6 (1 GB of RAM), 2026-09-11:
+// with the packs the tab is killed by Safari a second after the wall first paints — the
+// moment they arrive and the wall is rebuilt at 11,131 rows — and with `?lite` the same
+// phone runs the whole Explorer, fractal wallpaper included. Chromium on a Pixel 5 sits at
+// ~20 MB of heap either way, so this is the phone's memory ceiling, not the page's size;
+// a 6 GB Android handled 11,131 fine. Core only (3,076) is the phone default; Filters ▸
+// Sources still loads a pack on demand. `?lite` forces the phone default anywhere and
+// `?packs` forces the desktop default on a phone — both for testing a specific device.
+const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+const PACKS_OFF = q?.has('lite') || (isMobileViewport() && !q?.has('packs'));
+if (!PACKS_OFF) {
   usePickerStore.getState().setGroupLoaded('softology', true);
   usePickerStore.getState().setGroupLoaded('cptcity', true);
 }

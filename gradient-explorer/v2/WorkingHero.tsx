@@ -392,7 +392,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
          on the sides that can be removed") — the card runs edge to edge as a BAND. The tray's
          `PHONE_INSET` is that same side number (0), so the two stay aligned by reading it
          from here (Tray.tsx names the pairing). */
-      className={`relative shrink-0 bg-surface-raised border-b border-line/10 ${phone ? 'py-2 px-0' : 'p-2.5'}`}
+      className={`relative shrink-0 bg-surface-raised border-b border-line/10 ${phone ? 'pt-1 pb-2 px-0' : 'p-2.5'}`}
       data-gx-hero
       data-gx-selectable
     >
