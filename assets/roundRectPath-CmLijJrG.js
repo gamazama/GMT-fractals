@@ -1,0 +1,1 @@
+const d=typeof CanvasRenderingContext2D<"u"&&typeof CanvasRenderingContext2D.prototype.roundRect=="function",i=(e,o,n,a,t,s)=>{if(d){e.roundRect(o,n,a,t,s);return}const r=Math.max(0,Math.min(s,a/2,t/2));e.moveTo(o+r,n),e.arcTo(o+a,n,o+a,n+t,r),e.arcTo(o+a,n+t,o,n+t,r),e.arcTo(o,n+t,o,n,r),e.arcTo(o,n,o+a,n,r),e.closePath()};export{i as r};
