@@ -103,6 +103,18 @@ interface DragPayload {
  * not be in BLEND_SPACE_ORDER. It gets an extra chip at the end rather than vanishing —
  * otherwise the list would show nothing selected and switching away would be a mystery.
  */
+/**
+ * A coarse pointer (a phone) gets a different BlendSpacePicker: one button that reads
+ * "blend" and opens the modes as a DROPDOWN menu (the same `ContextMenu` the stops menu
+ * uses), the active one checked. Owner, 2026-09-11: "the blend/oklch switch can just be
+ * 'blend' and open a dropdown with the modes." The inline chip row was designed around
+ * hover preview, which a finger cannot do, and it expanded INTO the tabs row, which at
+ * 390 px has no gap to expand into. Read once at module load, like the wall's own seam.
+ */
+const COARSE_POINTER = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
+
 const BlendSpacePicker: React.FC<{
     value: BlendColorSpace;
     onSelect: (space: BlendColorSpace) => void;
@@ -110,8 +122,36 @@ const BlendSpacePicker: React.FC<{
     compact?: boolean;
 }> = ({ value, onSelect, onPreview, compact }) => {
     const [open, setOpen] = useState(false);
+    const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
     const spaces = BLEND_SPACE_ORDER.includes(value) ? BLEND_SPACE_ORDER : [...BLEND_SPACE_ORDER, value];
     const size = compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5';
+
+    if (COARSE_POINTER) {
+        return (
+            <div className="flex items-center gradient-interactive-element">
+                <button
+                    type="button"
+                    aria-expanded={!!menuAt}
+                    className={`${size} py-0.5 rounded-sm font-semibold whitespace-nowrap transition-colors ${menuAt ? 'text-fg bg-line/15' : 'text-fg-muted'}`}
+                    onClick={(e) => {
+                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setMenuAt(menuAt ? null : { x: r.left, y: r.bottom + 5 });
+                    }}
+                    title={`Blend space — ${BLEND_SPACE_LABEL[value]}`}
+                >
+                    blend ▾
+                </button>
+                {menuAt && (
+                    <PresetMenu
+                        x={menuAt.x}
+                        y={menuAt.y}
+                        onClose={() => setMenuAt(null)}
+                        options={spaces.map((sp) => ({ label: BLEND_SPACE_LABEL[sp], checked: sp === value, action: () => onSelect(sp) }))}
+                    />
+                )}
+            </div>
+        );
+    }
 
     const close = useCallback(() => { setOpen(false); onPreview(null); }, [onPreview]);
 
@@ -1325,7 +1365,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             {isExpanded && chrome === 'strip' && (() => {
                 const meta = (
                     <div className="flex items-center gap-2 text-[10px] text-fg-dim">
-                        <span>blend</span>
+                        {/* on a coarse pointer the picker IS the word "blend" (see BlendSpacePicker) */}
+                        {!COARSE_POINTER && <span>blend</span>}
                         <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} />
                         {/* the output profile is an EXPORT concern in v2 — it lives in the
                             Export window when the host hosts the inspector (C.15, owner) */}

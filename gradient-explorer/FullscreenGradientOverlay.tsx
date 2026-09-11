@@ -61,6 +61,7 @@ import { showToast } from '../engine/store/toastStore';
 import type { GradientConfig } from '../types';
 import type { RGB } from '../palette/core/oklab';
 import { FullscreenCompositor } from './fullscreen/FullscreenCompositor';
+import { useMobileLayout } from '../hooks/useMobileLayout';
 import { GeometryHandleLayer, hasGeometryHandles } from './fullscreen/GeometryHandleLayer';
 import { getFullscreenMode, listFullscreenModes } from './fullscreen/modeRegistry';
 import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRegistry';
@@ -181,6 +182,13 @@ const SplitLiveSource: React.FC<{ onResolve: ResolveFn }> = ({ onResolve }) => {
 
 export const FullscreenGradientOverlay: React.FC = () => {
   const fs = useFullscreenState();
+  // PHONE: no Split layout (owner, 2026-09-11) — the app-on-top / preview-below stack has no
+  // room on a phone screen and the preview is the whole point of opening Wallpaper there.
+  // The button is hidden AND the state is forced off, so a split left on by a desktop
+  // session (the store is session-only, but a resize past 768 mid-session is not) cannot
+  // strand the phone in it.
+  const { isDeviceMobile: phone } = useMobileLayout();
+  useEffect(() => { if (phone && fs.split) setFullscreenSplit(false); }, [phone, fs.split]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const compositorRef = useRef<FullscreenCompositor | null>(null);
@@ -650,7 +658,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
             }}
             title="Split: keep the app on top, dock this preview on the bottom — it live-follows the gradient you last edited"
             aria-pressed={fs.split}
-            className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
+            className={`${phone ? 'hidden ' : ''}px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
               fs.split
                 ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                 : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'

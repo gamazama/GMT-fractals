@@ -388,9 +388,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
 
   return (
     <section
-      /* PHONE: 8 px of band instead of 10 — the tray's `PHONE_INSET` is the same number, so
-         the two stay aligned by reading it from here (Tray.tsx names the pairing). */
-      className={`relative shrink-0 bg-surface-raised border-b border-line/10 ${phone ? 'p-2' : 'p-2.5'}`}
+      /* PHONE: 8 px above and below and NONE at the sides (owner, 2026-09-11: "extra padding
+         on the sides that can be removed") — the card runs edge to edge as a BAND. The tray's
+         `PHONE_INSET` is that same side number (0), so the two stay aligned by reading it
+         from here (Tray.tsx names the pairing). */
+      className={`relative shrink-0 bg-surface-raised border-b border-line/10 ${phone ? 'py-2 px-0' : 'p-2.5'}`}
       data-gx-hero
       data-gx-selectable
     >
@@ -400,7 +402,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
           then (owner, 2026-09-07) */}
       {/* PHONE: one column — no image column, so no `pl-[13px]` gutter for it and no
           column gap either. */}
-      <div className={`grid rounded-[20px] bg-surface-section border border-line/20 overflow-hidden ${phone ? '' : 'gap-4 pl-[13px]'} ${tray === 'image' ? 'rounded-bl-none' : ''}`} style={{ gridTemplateColumns: phone ? 'minmax(0,1fr)' : 'auto minmax(0,1fr)' }}>
+      {/* PHONE: the card is a BAND — square corners and no side borders, because it now
+          meets the screen's edges (a 20 px radius at x = 0 shows the band colour in the
+          corner, and a hairline border at the edge is a glitch). It also answers the tab
+          artifact the owner saw: with the tray spanning the same width, a rounded bottom
+          corner left a notch on each side above the tray's square top. */}
+      <div className={`grid bg-surface-section border border-line/20 overflow-hidden ${phone ? 'rounded-none border-x-0' : 'rounded-[20px] gap-4 pl-[13px]'} ${tray === 'image' && !phone ? 'rounded-bl-none' : ''}`} style={{ gridTemplateColumns: phone ? 'minmax(0,1fr)' : 'auto minmax(0,1fr)' }}>
         {/* SOURCE — the image slot (L3). Slim while empty; a square as tall as the card
             once an image is in. It never moves and never unmounts. */}
         {!phone && (

@@ -2154,3 +2154,11 @@ phase now carries**. Items move out of this list only when a later phase's entry
   New guard `smoke:ge-floor` boots the shell with `roundRect` deleted. **The phone walk is
   still owed** — nothing in the Phase F list above has been seen on hardware yet; the retest
   should name the iOS / Chrome versions, which decide what else is below the floor.
+- 2026-09-11 · Phase F, second round. The P20 Pro works after the floor fix. The iPhone still
+  dies (tab killed after the wall paints; not reproducible in Chromium or WebKit 26), so the
+  shell carries a bisect: `?diag` (boot trace, `bootTrace.ts`) and `?lite` (licensed packs
+  off). The owner's six layout notes are built: the hero as an edge-to-edge BAND on phone
+  (no side padding, square sides - also the fix for the tab notch); every face but Mix takes
+  the whole room and hides the ground (`FULL_FACES`); Even / Perceptual / Stops one cycling
+  button; `blend` opens a dropdown on a coarse pointer; no Split in Wallpaper on phone.
+  **Still owed:** the iPhone's verdict from `?diag` / `?lite`, and the hardware walk itself.

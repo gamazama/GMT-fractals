@@ -40,8 +40,14 @@ setFavientSelectMode(true);
 
 // Owner, 2026-09-06: the licensed packs (Softology, cpt-city) are on by default in the
 // Explorer — fetched at boot alongside the core groups. app-gmt keeps them off until toggled.
-usePickerStore.getState().setGroupLoaded('softology', true);
-usePickerStore.getState().setGroupLoaded('cptcity', true);
+// `?lite` keeps the two licensed packs OFF (core only, 3,076): a bisect for a phone that dies
+// after the wall first paints — the packs arrive a moment later and rebuild the 11,131-row
+// sprite (owner's iPhone, 2026-09-11). Filters ▸ Sources still loads them on demand.
+const LITE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('lite');
+if (!LITE) {
+  usePickerStore.getState().setGroupLoaded('softology', true);
+  usePickerStore.getState().setGroupLoaded('cptcity', true);
+}
 
 // The Wallpaper's live source. The overlay calls this as a HOOK during its own render, so the
 // fullscreen preview re-resolves whenever the Working pipeline emits — a stop dragged, a Curves

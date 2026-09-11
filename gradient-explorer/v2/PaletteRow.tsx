@@ -24,6 +24,7 @@ import { showToast } from '../../engine/store/toastStore';
 import { gradientBarClass } from './ui/bar';
 import { Icon } from './ui/Icon';
 import { Act } from './ui/Act';
+import { useIsPhone } from './useIsPhone';
 import { isColorDrag, readColorDrag } from '../../components/gradient/colorDrag';
 
 const hexOf = (c: RGB): string =>
@@ -58,6 +59,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
   /** Which swatch a dragged colour is over (index), or null. */
   const [dropOver, setDropOver] = useState<number | null>(null);
   const rule = useWorkingStore((s) => s.rule);
+  const phone = useIsPhone();
   const [dragging, setDragging] = useState<number | null>(null);
   const drag = useRef<{ index: number; startX: number; startT: number; moved: boolean } | null>(null);
 
@@ -228,6 +230,21 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
       )}
       {!readOnly && (
         <div className="flex flex-col justify-center pl-1">
+          {/* PHONE: ONE button that cycles (owner, 2026-09-11: "click to switch on a single
+              button to save space") — three modes is cycle-able; the title names the next. */}
+          {phone ? (() => {
+            const i = Math.max(0, RULES.findIndex((r) => r.id === rule));
+            const next = RULES[(i + 1) % RULES.length];
+            return (
+              <button
+                className="px-2 h-7 text-[13px] border border-line/20 rounded-lg text-accent-300 bg-accent-400/15 whitespace-nowrap"
+                title={`${RULES[i].title} — tap for ${next.label}`}
+                onClick={() => useWorkingStore.getState().layoutPalette(next.id)}
+              >
+                {RULES[i].label}
+              </button>
+            );
+          })() : (
           <div className="inline-flex border border-line/20 rounded-lg overflow-hidden">
             {RULES.map((r) => (
               <button
@@ -240,6 +257,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
               </button>
             ))}
           </div>
+          )}
         </div>
       )}
     </div>

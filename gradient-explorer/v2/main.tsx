@@ -29,6 +29,11 @@ import { loadGlobalSetOnce } from '../../palette/store/globalSetStore';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
 import { decideFirstRun } from './firstRunDecision';
+import { startBootTrace, BootDiag, diagWanted } from './bootTrace';
+
+// First thing after the imports: a phone that dies mid-boot leaves its last mark behind
+// (`?diag` shows the previous run's trail — see bootTrace.ts).
+startBootTrace();
 
 registerUI();
 installShortcuts();
@@ -89,6 +94,7 @@ const Root: React.FC = () => {
     <>
       <GradientExplorerV2App />
       {asking && <FirstRunBrightness onDone={() => setAsking(false)} />}
+      {diagWanted && <BootDiag />}
     </>
   );
 };

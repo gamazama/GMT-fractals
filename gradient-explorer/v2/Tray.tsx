@@ -109,7 +109,11 @@ const TUCK_PX = 11;
 /** Phone: the tray's inset from each side of the shell. It is the hero band's own phone
  *  padding (`p-2` in WorkingHero — 10 on a wide screen, 8 here), because the tray hangs
  *  from the card and its sides must land on the card's: change one and change the other. */
-const PHONE_INSET = 8;
+const PHONE_INSET = 0;
+/** Phone: the faces that take the WHOLE room below the card and hide the wall (owner,
+ *  2026-09-11: "except for mix mode, the other tabs don't need the wall visible at all").
+ *  Mix is the exception because the wall IS its picker for the other gradient. */
+export const FULL_FACES: ReadonlySet<Exclude<TrayFace, null>> = new Set(['image', 'curves', 'adjust', 'inspector'] as const);
 /** Phone: how much of the room BELOW the card the tray may take before it scrolls. Just
  *  over half — enough that a face is worth opening, little enough that the wall it floats
  *  over is still visibly there (which is the whole reason the tray floats). */
@@ -127,11 +131,21 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     if (!phone || face === null) return;
     const measure = () => {
       const top = rootRef.current?.getBoundingClientRect().top ?? 0;
-      setMaxH(Math.max(160, Math.round((window.innerHeight - top) * PHONE_MAX_FRACTION)));
+      // Mix keeps the wall in view (its cap); every other face takes the whole room, since
+      // the wall under it is hidden by the shell while it is open (FULL_FACES).
+      const room = window.innerHeight - top;
+      setMaxH(Math.max(160, Math.round(face !== null && FULL_FACES.has(face) ? room : room * PHONE_MAX_FRACTION)));
     };
     measure();
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    // The tray hangs from the hero band, and the band's height moves AFTER a face opens
+    // (Curves shows the source band, Mix its bars): measured 2026-09-11, the Curves face
+    // ran 17 px past the viewport because the cap was taken before the hero grew. So the
+    // band's own size is observed and the cap re-measured whenever it changes.
+    const band = rootRef.current?.parentElement ?? null;
+    const ro = typeof ResizeObserver !== 'undefined' && band ? new ResizeObserver(measure) : null;
+    if (ro && band) ro.observe(band);
+    return () => { window.removeEventListener('resize', measure); ro?.disconnect(); };
   }, [phone, face]);
 
   return (
@@ -140,10 +154,10 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     hidden={face === null}
     data-gx-tray-root=""
     data-gx-tray={face ?? undefined}
-    className="absolute z-30 flex flex-col rounded-b-[20px] bg-surface-section border border-t-0 border-line/20"
+    className={`absolute z-30 flex flex-col bg-surface-section border border-t-0 border-line/20 ${phone ? 'rounded-none border-x-0' : 'rounded-b-[20px]'}`}
     style={
       phone
-        ? { top: `calc(100% - ${TUCK_PX}px)`, left: PHONE_INSET, right: PHONE_INSET, maxHeight: maxH || undefined }
+        ? { top: `calc(100% - ${TUCK_PX}px)`, left: PHONE_INSET, right: PHONE_INSET, maxHeight: maxH || undefined, height: face !== null && FULL_FACES.has(face) ? maxH || undefined : undefined }
         : { top: `calc(100% - ${TUCK_PX}px)`, left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }
     }
   >
@@ -171,7 +185,7 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
         face's dropdowns and the inspector's colour picker overflow it on purpose. On
         desktop this is `display: contents`, i.e. not a box at all, so the faces lay out
         exactly as they did before it existed. */}
-    <div className={phone ? 'min-h-0 overflow-y-auto overflow-x-hidden mobile-scroll rounded-b-[20px]' : 'contents'}>
+    <div className={phone ? 'min-h-0 overflow-y-auto overflow-x-hidden mobile-scroll' : 'contents'}>
       {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
           wiring; the studio keeps the default */}
       <InputSkinProvider skin="soft">

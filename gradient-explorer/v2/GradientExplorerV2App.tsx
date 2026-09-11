@@ -38,6 +38,8 @@ import GlobalContextMenu from '../../components/GlobalContextMenu';
 import { StoreCallbacksProvider, type StoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { ToastHost } from '../../engine/components/ToastHost';
 import { MobileViewportShell } from '../../engine/components/MobileViewportShell';
+import { useIsPhone } from './useIsPhone';
+import { FULL_FACES } from './Tray';
 import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
@@ -125,6 +127,11 @@ const addMixSeeds = (stops: GradientConfig['stops']): void => {
 
 export const GradientExplorerV2App: React.FC = () => {
   const [tray, setTray] = useState<TrayFace>(null);
+  const phone = useIsPhone();
+  // PHONE: a face that takes the whole room (every face but Mix, FULL_FACES) hides the ground
+  // under it — nothing to see, nothing to paint (owner, 2026-09-11). `invisible` keeps the
+  // layout and the wall's scroll position; only its paint and hit-testing go.
+  const groundHidden = phone && tray !== null && FULL_FACES.has(tray);
   const source = sourceOf(tray);
   const [exportOpen, setExportOpen] = useState(false);
   /** The set whose Export window is open (the rail's chip menu), or null. */
@@ -462,7 +469,7 @@ export const GradientExplorerV2App: React.FC = () => {
           The top bar is deliberately NOT a click-away target: Undo / Redo while inspecting a
           stop must not also drop your place in the gradient. */}
       <div
-        className="flex-1 min-h-0 flex flex-col relative"
+        className={`flex-1 min-h-0 flex flex-col relative ${groundHidden ? 'invisible' : ''}`}
         onPointerDownCapture={() => { if (trayRef.current === 'inspector') openTray(null); }}
       >
         {/* The hero's shadow, falling onto the top of the ground — the set rail sits UNDER
