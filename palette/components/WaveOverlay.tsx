@@ -12,8 +12,8 @@
  * grain scale and nothing else has to change.
  *
  *   circle, on the crest     drag X → phase             drag Y → amplitude
- *   crosshair, under the mid drag X → bias              drag Y → skew
- *   caliper, under that      width IS one wavelength    drag X → wavelength
+ *   crosshair, in its zone   drag X → bias              drag Y → skew
+ *   caliper, on the floor    width IS one wavelength    drag X → wavelength
  *   grey squares (feather)   drag X → feather, then span
  *   coral squares (span)     drag X → span
  *   the wave itself          drag Y → offset
@@ -35,6 +35,32 @@
  *   same power law, the same {@link BIAS_OCTAVE} px per power-of-two, the same `↔ / ↕`
  *   readout, and the same handle glyph (an accent circle carrying a crosshair and two
  *   offset dots). Grep `biasPow` in components/graph/GraphSelectionBBox.tsx.
+ *
+ *   THE Y AXIS WAS INVERTED against that claim until 2026-09-12 (owner: "i think its y axis
+ *   feels flipped"). It was, and provably: `GraphSelectionBBox` computes `gy` from `+bdy`
+ *   and says so in a comment — "up → bunch toward higher values" — while this took `-dyp`,
+ *   so dragging UP pushed the wave DOWN. Both now read `2 ** (dyp / BIAS_OCTAVE)`, and the
+ *   curve follows the finger. (X is deliberately the other sign from the editor's `gx`, and
+ *   that is not a matching bug: the editor biases key POSITIONS, this biases PHASE, and
+ *   phase moves a feature the opposite way from the number that warps it. Drag right, the
+ *   crest goes right — which is the test that matters.)
+ *
+ * • THE TWO SHAPE HANDLES SIT ON THE FLOOR, not on the curve. They hung from `curveY(mid)`,
+ *   so every amplitude or phase drag made them jump around under the pointer (owner: "the
+ *   wavelength and bias controls bouncing up and down - they should stay at the min point").
+ *   They are pinned to the bottom of the plot now: a fixed dock that cannot move while you
+ *   are dragging something else. Bias and skew warp the WHOLE waveform and a wavelength is a
+ *   property of the whole span, so neither was ever pointing at a place on the curve — the
+ *   crest circle is the one that genuinely is, and it still rides the line.
+ *
+ * • THE BIAS HANDLE HAS A ZONE (owner: "should have a little zone that denotes its
+ *   position"). A relative drag with the handle nailed to one spot could not answer "am I
+ *   biased, and how far?" — the pill said so only while a drag was live. The crosshair now
+ *   walks a small square whose centre is neutral (1, 1) and whose walls are the clamp
+ *   (0.2 … 5, so ±log2(5) octaves). It is a GAUGE, not a pad: the drag stays at the tuned
+ *   150 px per octave, and the marker crosses its zone over the full 696 px that the whole
+ *   range costs. Grabbing anywhere inside the square starts the drag, which also makes it a
+ *   far bigger target than the 15 px circle it replaces.
  *
  * • THIS OVERLAY DRAWS NO CURVE. It used to draw the filtered result, because when it was
  *   written that was the only way to see one. Then the live preview landed (the filter is
@@ -152,21 +178,29 @@ export const WaveOverlay: React.FC<Props> = ({
   );
 
   /**
-   * Where the CREST handle sits: the wave's maximum inside the first period after the span
-   * opens. Found by scanning rather than solved analytically because it has to be right for a
+   * Where the CREST handle sits: the wave's maximum in the LAST PERIOD BEFORE THE SPAN'S
+   * CENTRE (owner, 2026-09-12: "the amplitude control feels hidden and should maybe rather be
+   * on the first crest left of the centre").
+   *
+   * It used to take the first crest after the span OPENS, which put it in the busiest place
+   * on the plot — inside the feather shoulder, among the span square, the feather square and
+   * whatever the curve was doing as it climbed out of the envelope. Hidden was the right
+   * word. A period in from the middle is open ground, and it is still a real crest of the
+   * real wave rather than a marker parked at a convenient spot.
+   *
+   * Found by scanning rather than solved analytically because it has to be right for a
    * sawtooth, a pulse and noise too, none of which have a closed form — and 96 samples of a
-   * cheap function is nothing next to a drag frame. (It still takes a sign: the trough was
-   * the bias handle's home until that moved to the span's midpoint, and a minimum is the
-   * obvious next thing to want.)
+   * cheap function is nothing next to a drag frame.
    */
-  const extremum = useCallback((sign: 1 | -1) => {
-    const lo = p.span[0];
-    const hi = Math.min(p.span[1], lo + Math.max(1e-4, p.wavelength));
+  const crest = useCallback(() => {
+    const m = (p.span[0] + p.span[1]) / 2;
+    // A span narrower than one period has no "period before the middle"; take what there is.
+    const lo = Math.max(p.span[0], m - Math.max(1e-4, p.wavelength));
     let bt = lo;
     let bv = -Infinity;
     for (let i = 0; i <= 96; i++) {
-      const t = lo + (hi - lo) * (i / 96);
-      const v = waveValue(t, p) * sign;
+      const t = lo + (m - lo) * (i / 96);
+      const v = waveValue(t, p);
       if (v > bv) { bv = v; bt = t; }
     }
     return bt;
@@ -251,7 +285,10 @@ export const WaveOverlay: React.FC<Props> = ({
         break;
       case 'bs':
         next.bias = clamp(o.bias * Math.pow(2, dxp / BIAS_OCTAVE), 0.2, 5);
-        next.skew = clamp(o.skew * Math.pow(2, -dyp / BIAS_OCTAVE), 0.2, 5);
+        // `+dyp`, matching GraphSelectionBBox's `gy` ("up -> bunch toward higher values").
+        // Skew > 1 pushes the wave's value DOWN (`biasPow` on (w+1)/2), so a downward drag
+        // raising skew is what makes the curve follow the finger. See the header.
+        next.skew = clamp(o.skew * Math.pow(2, dyp / BIAS_OCTAVE), 0.2, 5);
         pill = `↔ ${next.bias.toFixed(2)}   ↕ ${next.skew.toFixed(2)}`;
         break;
     }
@@ -273,30 +310,37 @@ export const WaveOverlay: React.FC<Props> = ({
   const mid = (p.span[0] + p.span[1]) / 2;
   const halfLam = Math.min(p.wavelength, len) / 2;
   /**
-   * THE TWO GLOBAL-SHAPE HANDLES STACK UNDER THE SPAN'S MIDPOINT: bias/skew above, the
-   * wavelength caliper below it.
+   * THE TWO SHAPE HANDLES DOCK TO THE PLOT'S FLOOR, under the span's midpoint: the bias zone
+   * above, the wavelength caliper below it (the order the owner asked for on 2026-09-12).
    *
-   * Bias used to sit on the first TROUGH, mirroring the crest circle — which was tidy until
-   * a shallow or long wave brought crest and trough together and the crosshair covered the
-   * phase handle (owner, 2026-09-12: "its sometimes obscuring the phase handle - can you put
-   * it above the wavelength handle"). Moving it is not just de-cluttering: bias and skew warp
-   * the WHOLE waveform, so a position at the span's centre says what they do more honestly
-   * than sitting on one trough ever did. The crest keeps phase and amplitude, which really
-   * are properties of that crest.
+   * They used to hang from `curveY(mid)` so they read as belonging to the curve. The cost was
+   * that they MOVED while you dragged something else — every amplitude or phase change lifted
+   * or dropped the pair under the pointer (owner, same day: "the wavelength and bias controls
+   * bouncing up and down - they should stay at the min point"). A fixed dock is the honest
+   * place for both: bias and skew warp the whole waveform and a wavelength is a property of
+   * the whole span, so neither was ever pointing at a place on the curve. The crest circle is
+   * the one that genuinely is, and it still rides the line.
    *
-   * Both hang BELOW the curve and flip ABOVE it together when there is no room, so the stack
-   * never turns inside out. The offsets (18 / 46) clear the wave's own 20 px grab stroke and
-   * keep the two handles' 30 px hit circles from touching.
+   * X still follows the span's centre — the pair belongs to the span, and that never bounced.
    */
-  const flip = curveY(mid) + 46 > height - 16;
-  const stackY = (d: number) => Math.max(16, Math.min(height - 16, curveY(mid) + (flip ? -d : d)));
-  const biasY = stackY(18);
-  const calY = stackY(46);
-  const ct = extremum(1);
+  const calY = height - 13;
+  /** Side of the bias gauge. Its walls are the clamp: bias and skew live in 0.2 .. 5. */
+  const ZONE = 48;
+  // Clear of the caliper's 26 px grab box, and never off the top of a short plot.
+  const zoneY = Math.max(2, calY - 13 - 6 - ZONE);
+  const zx = tToX(mid) - ZONE / 2;
+  /** Half-range in octaves - `log2(5)`, since the clamp is 2**+-that. */
+  const OCT = Math.log2(5);
+  /** How far the marker may walk from the zone's centre, leaving its own radius inside. */
+  const reach = ZONE / 2 - 7;
+  const ct = crest();
   const cx = tToX(ct);
   const cy = valueToPixelY(applyWaveSample(baseAt(ct), ct, p, range));
-  const bx = tToX(mid);
-  const by = biasY;
+  // Bias right of centre = the crest arrives later; skew below centre = the wave sits lower.
+  // Both are the direction the corresponding drag moves the pointer, which is the whole point
+  // of drawing them in a zone at all.
+  const bx = zx + ZONE / 2 + clamp(Math.log2(p.bias) / OCT, -1, 1) * reach;
+  const by = zoneY + ZONE / 2 + clamp(Math.log2(p.skew) / OCT, -1, 1) * reach;
   const faX = tToX(p.span[0] + p.feather[0] * len);
   const fbX = tToX(p.span[1] - p.feather[1] * len);
 
@@ -341,13 +385,24 @@ export const WaveOverlay: React.FC<Props> = ({
         <circle cx={cx} cy={cy} r={14} fill="transparent" />
       </g>
 
-      {/* trough: bias (X) + skew (Y) — the graph editor's own Bias glyph */}
+      {/* bias (X) + skew (Y) in their zone — the graph editor's own Bias glyph, walking a
+          gauge whose centre is neutral and whose walls are the clamp. The square itself is
+          the grab target, so the handle is as big as the picture. */}
       <g onPointerDown={onPointerDown('bs')} style={{ cursor: 'crosshair' }}>
-        <circle cx={bx} cy={by} r={8} fill="rgb(var(--accent-500) / 0.3)" stroke="rgb(var(--accent-300) / 0.7)" strokeWidth={1.5} />
+        <rect
+          x={zx} y={zoneY} width={ZONE} height={ZONE} rx={6}
+          fill="rgb(var(--accent-500) / 0.07)" stroke="rgb(var(--accent-300) / 0.22)" strokeWidth={1}
+        />
+        {/* neutral: bias 1, skew 1 */}
+        <path
+          d={`M${zx + ZONE / 2} ${zoneY + 6}V${zoneY + ZONE - 6}M${zx + 6} ${zoneY + ZONE / 2}H${zx + ZONE - 6}`}
+          stroke="rgb(var(--accent-300) / 0.16)" strokeWidth={1}
+        />
+        <circle cx={bx} cy={by} r={7} fill="rgb(var(--accent-500) / 0.3)" stroke="rgb(var(--accent-300) / 0.7)" strokeWidth={1.5} />
         <path d={`M${bx} ${by - 4.5}V${by + 4.5}M${bx - 4.5} ${by}H${bx + 4.5}`} stroke="rgb(var(--accent-100))" strokeWidth={1.4} opacity={0.6} />
         <circle cx={bx - 2.2} cy={by - 2.2} r={1.5} fill="rgb(var(--accent-100))" />
         <circle cx={bx + 2.2} cy={by + 2.2} r={1.5} fill="rgb(var(--accent-100))" />
-        <circle cx={bx} cy={by} r={15} fill="transparent" />
+        <rect x={zx} y={zoneY} width={ZONE} height={ZONE} fill="transparent" />
       </g>
     </svg>
   );

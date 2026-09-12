@@ -2775,3 +2775,71 @@ phase now carries**. Items move out of this list only when a later phase's entry
   behaviour rather than the wave's, it predates all of this, and a wave fired at a curve that
   already folds will sample the fold through `solveBezierY`'s Newton solve and inherit it.
   Worth knowing before blaming the filter.
+
+- 2026-09-12 · **One joined switch for the whole shell, and it becomes a button on a phone.**
+  Owner: "on mobile the wave types for the function tool need to be switches on one button.
+  in general the switches need to follow the same joined style as Even/Perceptual/Stops."
+
+  The joined style existed as nine Tailwind classes copied into two files, with the phone's
+  one-button cycle hand-rolled inside one of them. That is exactly why the function tool grew
+  eight separately bordered boxes with dividers between them instead: there was nothing to
+  reach for, so it invented its own. `components/ui/Segmented` is that thing now — a pure
+  primitive, no store, `cycle` passed in by the caller because the phone predicate reads the
+  store and this file may not. The palette's Even / Perceptual / Stops and the extract face's
+  Dominant / Tones / Path are the same COMPONENT now, not the same string.
+
+  **Reseeding survived the collapse.** Noise redraws when you click the already-active glyph
+  — there is no dice — and a cycle button has no such click. `repeat` therefore fires on
+  ARRIVAL in cycle mode: cycling onto Noise draws afresh, so a lap is what a reseed costs on
+  a phone. Verified: a full lap changed the curve (signature 4056395928 → 396080008).
+
+  **The channel dot left the head for the plot's left gutter**, at 8 px, centred in the phone's
+  30 px gutter (owner: "remove that colored circle in its toolbar - it can be smaller in the
+  left gutter of the curves canvas"). It was the one thing in a row of controls that was not
+  itself a control, and against the value axis it names the units of, it reads better.
+
+  **The head's dividers are desktop-only.** Measured at 375: the head's scroll width was 376
+  against 363 of room, so the ✓ and ✕ that END the gesture were over the edge. Three dividers
+  cost 39 px and the switches' own borders already say where one question stops and the next
+  begins. 363 of 363 now, nothing clipped.
+
+- 2026-09-12 · **The wave's handles, on the owner's third bench pass.** Three complaints, and
+  one of them was a real inconsistency rather than a preference.
+
+  **They bounced** — "the wavelength and bias controls bouncing up and down - they should stay
+  at the min point". Both hung from `curveY(mid)`, so every amplitude or phase drag lifted or
+  dropped them under the pointer. They dock to the plot's FLOOR now. Worth saying why that is
+  not a retreat: bias and skew warp the whole waveform and a wavelength is a property of the
+  whole span, so neither was ever pointing at a place on the curve. The crest circle is the
+  one handle that genuinely is, and it still rides the line. Measured: an amplitude drag moved
+  the crest 94.3 → 43.7 px while the zone (216) and the caliper (259) did not move at all.
+
+  **THE Y AXIS WAS INVERTED, PROVABLY** — "i think its y axis feels flipped". The file's own
+  header claims bias/skew ARE `GraphSelectionBBox`'s Bias: same power law, same 150 px per
+  octave, same readout. That editor computes `gy` from `+bdy` and says so in a comment ("up →
+  bunch toward higher values"); this took `-dyp`. So dragging UP pushed the wave DOWN, against
+  the claim in its own header. Both read `2 ** (dyp / BIAS_OCTAVE)` now. Measured on the
+  greyscale ramp: dragging the handle down took the gradient's mean luminance from 158.7 to
+  90.0. X keeps the other sign from the editor's `gx` and that is NOT a matching bug — the
+  editor biases key POSITIONS, this biases PHASE, and phase moves a feature the opposite way
+  from the number that warps it. Drag right, the crest goes right, which is the test that
+  matters.
+
+  **Bias had no sense of place** — "should have a little zone that denotes its position". A
+  relative drag with the handle nailed to one spot could only answer "how biased am I?" while
+  a drag was live, through the pill. It walks a 48 px square now: centre is neutral (1, 1),
+  the walls are the clamp (0.2 … 5, so ±log2(5) octaves). It is a GAUGE, not a pad — the drag
+  stays at the tuned 150 px per octave and the marker crosses its zone over the 696 px the
+  whole range costs. The square is the grab target, which also makes it a far bigger one than
+  the 15 px circle it replaces. Measured: marker 199 → 224.7 across the range, zone centre 216
+  throughout.
+
+  **The crest was hidden** — "the amplitude control feels hidden and should maybe rather be on
+  the first crest left of the centre". It sat on the first crest after the span OPENS, which
+  is the busiest place on the plot: inside the feather shoulder, among the span square, the
+  feather square and a curve still climbing out of the envelope. It takes the last crest
+  before the span's CENTRE now — open ground, and still a real crest of the real wave rather
+  than a marker parked somewhere convenient.
+
+  No guard on any of this: it is React geometry, and `test:palette` reaches `palette/core/**`
+  only. Verified in the browser, numbers above.
