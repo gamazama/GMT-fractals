@@ -159,6 +159,18 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
         return safeLocalKeys().sort().map((k) => ({ key: k, value: safeLocalGet(k) ?? '' }));
     }, [tick]);
 
+    // PHONE (2026-09-11): the window is the whole screen — nothing to drag or resize, and
+    // a 440×560 box placed at (200, 64) ran off a 390 px screen on both axes (owner: "the
+    // settings panel needs phone compat"). The engine's device flag, not a width: a coarse
+    // pointer above 768 px wants this too.
+    //
+    // ABOVE the `!open` early return, and it must stay there: this is a HOOK, so calling it
+    // only on the open render makes React see hook #9 appear out of nowhere and throw
+    // "Rendered more hooks than during the previous render" — which the AppErrorBoundary
+    // catches as a full-app crash the first time anyone clicks the gear (shipped 2026-09-11,
+    // found 2026-09-12). Every hook in this component belongs before that return.
+    const { isDeviceMobile: phone } = useMobileLayout();
+
     if (!open) return null;
 
     const initialPos = typeof window !== 'undefined'
@@ -167,11 +179,6 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
 
     const currentSections = byTab.get(current);
 
-    // PHONE (2026-09-11): the window is the whole screen — nothing to drag or resize, and
-    // a 440×560 box placed at (200, 64) ran off a 390 px screen on both axes (owner: "the
-    // settings panel needs phone compat"). The engine's device flag, not a width: a coarse
-    // pointer above 768 px wants this too.
-    const { isDeviceMobile: phone } = useMobileLayout();
     const vw = typeof window !== 'undefined' ? window.innerWidth : 440;
     const vh = typeof window !== 'undefined' ? window.innerHeight : 560;
 
