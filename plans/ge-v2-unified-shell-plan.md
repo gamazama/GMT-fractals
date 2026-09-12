@@ -2675,3 +2675,24 @@ phase now carries**. Items move out of this list only when a later phase's entry
   weak wave is not a short strong one, and outside the span strength changes nothing.
   Verified in the browser: preset applies (1081), half is halfway (465), zero is byte-exact,
   cancel restores.
+
+- 2026-09-12 · **The wave was being drawn twice, plus a construction line.** Owner: "while in
+  creating waves - there's two displays of the wave happening at the same time, as well as a
+  dashed line". Both were mine, and the first is a straightforward consequence of shipping two
+  things in the wrong order.
+
+  `WaveOverlay` drew the filtered result as a bold path, because when it was written that was
+  the ONLY way to see one. Then the live preview landed — the filter is written into the track
+  every frame so the hero follows the drag — and `GraphCanvas` started drawing the same curve
+  from the real keyframes. Two cyan lines a pixel apart, one the exact filter and one its
+  Douglas-Peucker fit. The overlay's copy is gone; what remains of the path is an INVISIBLE fat
+  stroke along it so the wave stays grabbable. **The canvas owns the picture, the overlay owns
+  the handles**, which is the division it should have had from the start.
+
+  The dashed line was the "axis" — the filter at zero amplitude — drawn so the span and feather
+  squares had a rail to sit on and the offset had something to grab. Both jobs the result curve
+  does itself: the squares ride the curve at their own t now, which is where they were pointing
+  anyway, and offset keeps the wave-body drag it already had. Three lines became one.
+
+  Verified: the overlay renders ONE path (was four) and seven handle groups, the squares still
+  drag, and `test:palette-wavegen` is unaffected — none of this is maths.
