@@ -132,6 +132,7 @@ tells the reader which harness covers what:
 | `core/workingPipeline.ts` (v2 Working pipeline) | `debug/test-palette-working.mts` |
 | `core/gradientCss.ts` (a gradient as a CSS background — the export window's subjects, a set chip filling with what is being filed) and `components/PickerWall.tsx`'s `minGutter` / zoom-tool tap (ADR-0118) | `debug/smoke-ge-setsave.mts` (`npm run smoke:ge-setsave`) and `debug/smoke-ge-ground.mts` step [3] (`npm run smoke:ge-ground`; its `SET_GUTTER` pins the left margin the wall keeps clear of a floating toolbar — change `TOOLBAR_CLEAR` in BrowseStage and this goes red, which is the point) |
 | `core/workingPipeline.ts` `recolourHeldFit` + `store/workingStore.ts`'s drag hold — the gradient must DRAW during a drag while only the knots wait for the release (owner, 2026-09-11; ADR-0117 §5) | `debug/smoke-ge-livedrag.mts` (`npm run smoke:ge-livedrag`; falsified by restoring the frozen `holdFit ??`, and again by sampling the wrong canvas — read its header, two of its four steps stay GREEN through the break it exists to catch) |
+| `gradient-explorer/v2/uiHistory.ts` + `WorkingHero.tsx`'s ♥ (`onRevealGround`) — the v2 shell's INTERFACE state rides the param undo entry, so a gesture may close a surface to show you its result (ADR-0120, owner 2026-09-12) | `debug/smoke-ge-uiundo.mts` (`npm run smoke:ge-uiundo`; falsified three ways, one of them the `flushSync` that makes the bracket see the close at all — read its header before removing it) |
 | `store/favientsStore.ts` `collectRecent` (v2 Recent zone) | `debug/test-palette-favients.mts` section [6] |
 | `core/pickerModel.ts` (the wall: search, filter windows, arrange, carve, More like this) | `debug/test-palette-pickermodel.mts` |
 | `components/PickerWall.tsx` `zoomStep` / `zoomStepPlan` / `pinnedContentPoint` (the − / + zoom step a phone host drives, Phase F 2026-09-10) | `debug/test-palette-wallzoom.mts` (`npm run test:palette-wallzoom`; falsified five ways, see its header) |
@@ -141,6 +142,19 @@ tells the reader which harness covers what:
 | `core/groundSets.ts` (GE v2 Phase D, 2026-09-08 — the rail's set order, favourite → wall entry, tile size by count), `core/padAxes.ts` (which colour axes the pad shows for an Arrange state) and `store/favientsStore.ts` `insertMany` | `debug/test-palette-groundsets.mts` (falsified four ways the day it was written — see its header) |
 | `utils/colorUtils.ts` blend spaces (`blendLerp` and every `lerp*`, `BLEND_SPACE_ORDER`/`BLEND_SPACE_LABEL`) plus `core/editorConfig.ts`'s `BLEND_SPACES` whitelist — the spectral / CIE LCh / rectangular-Oklab modes and the OkLCh gamut + achromatic corrections, 2026-09-10 | `debug/test-palette-blendspaces.mts` (`npm run test:palette-blendspaces`; ten assertions, each falsified against a broken build — and FOUR of them passed under mutation on the first cut and were rewritten, so read its header before weakening one) |
 | `core/exportFormats.ts` (the registry, the two subjects, the .ase / Tailwind / design-token / CSS-variable writers) and `core/favientsExport.ts` swatch builders (GE v2 §8b item 5, 2026-09-09) | `debug/test-palette-exportsubjects.mts` (`npm run test:palette-exportsubjects`; falsified six ways, and its §[7] was rewritten after the first cut reported a break as a stack trace instead of naming it — see its header) |
+
+**The curve editor's LEFT GUTTER is a contract across four files, and it has already been
+broken once.** `palette/components/ChannelGraphEditor.tsx` is the only caller that overrides it
+(30 px on a phone, against the 62 px `GRAPH_LEFT_GUTTER_WIDTH` the animation editor uses), and
+the number has to reach ALL of: the editor's own `frameToCanvasPixel` / `canvasPixelToFrame`,
+the interaction hook it passes them to, `drawGraph` / `drawGraphOverlay` via `leftGutter`, AND
+`GraphRendererBuilder`, which builds the cached polylines and key shapes — plus the polyline
+and mask CACHE KEYS, since a bitmap built at one gutter and blitted at another is the same bug
+in a different place. On 2026-09-12 the builder was the one that was missed: the ruler, the grid
+and the hit test moved to 30 while the curve and every diamond stayed at 62, so each key sat
+exactly 32 px right of where a click found it. There is no guard on this — it wants a browser
+probe that finds a key's pixel and compares it with where a click selects, which is buildable
+and not built. If you touch the gutter, check the four by hand.
 
 The two img2grad harnesses are **not** redundant — the overshoot sweep is the
 only thing that catches the `resample()` overshoot regression, proven by removing

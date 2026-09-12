@@ -544,8 +544,11 @@ the peek question above.
 - **Worth its own thought:** the wheel's handles are a palette of harmonious colours sitting one
   gesture away from a gradient that wants stops. "Send these handles to the ramp as stops" would
   make the picker a gradient-authoring tool rather than a colour-authoring one.
-- Decide (owner) whether the harmony rows stay in strip chrome at all; §12 item 2 leaned to hiding
-  them.
+- ~~Decide (owner) whether the harmony rows stay in strip chrome at all; §12 item 2 leaned to
+  hiding them.~~ **Moot, closed 2026-09-12.** The line predates the mode toggles: harmony was
+  four printed swatch rows that were always there, and the question was whether to hide them.
+  It is a MODE now, switched on when wanted and not in the default set (`stop · spectrum ·
+  channels · swatches`). There is nothing left to decide.
 **Gates:** + `smoke:interact`, `smoke:undo` (the editor's undo bracket), owner walk in BOTH the v2
 shell and app-gmt's palette overlay.
 **Files:** components/AdvancedGradientEditor.tsx, components/EmbeddedColorPicker (wherever it lives —
@@ -2206,3 +2209,46 @@ phase now carries**. Items move out of this list only when a later phase's entry
   the v2 shell; (5) the ENTRY-POINT SWAP — GMT and the old page point at v2, the old shell
   retires, `npm run context:map`, the What's New entry; then the owner's final walk. §8's L10
   wording and C.5 (Mix UI) remain parked on the owner.
+- 2026-09-12 · **Eleven tweaks off the owner's bench, conferred first.** The substantive one
+  is ADR-0120: the shell's INTERFACE state now rides the param undo entry (a history
+  provider), which is what lets the ♥ CLOSE the surface covering the set rail so its save
+  flash can be seen — closing is only honest because one Ctrl+Z brings the surface back.
+  GE v2 only, on the owner's call. Two finds: the ♥ was not undoable at all (no bracket), and
+  a plain `setState` inside the bracket is invisible to it, since `paramEdit` diffs
+  synchronously — `flushSync` is load-bearing. Guard `smoke:ge-uiundo`, falsified three ways.
+  Also: the curves editor on a phone puts its track list and tools in strips ABOVE a 4:3
+  edge-to-edge plot and cuts the value gutter 62 → 30 (a new optional `leftGutter` on
+  `drawGraph`, so the animation editor is byte-identical); "Curves on" / "Reset" removed as
+  vestigial; the keyframe inspector minimized by default, with a full-width bar for its
+  under-the-plot form; a coarse pointer's tap now wins the overlap against a tangent handle
+  (14 px, carrying an `@assumption` — it has no guard and wants the phone walk); the picker's
+  mode bar is a column on a phone, 601 → **549** px and no longer forcing the tray to scroll;
+  the noise targets read the input skin (and so does `AutoFeaturePanel`'s nesting bracket);
+  fullscreen loses the duplicate Export PNG and pins its ✕ to the toolbar corner, with the
+  fractal scene-embedding moved onto the at-size export; spline defaults Spread 0 / Extend 1,
+  knowingly breaking that bag's omitted-key contract for spline alone; the desktop Image face
+  caps at 1.2× its height; the undo glyphs 24 → 20.
+  **A second pass the same day, on the owner's report.** The undo fix had a stuck state: every
+  entry on the stack had been made while a face was open, so every undo restored it while the
+  document kept walking back to nothing — ending on a face with nothing under it over a wall
+  the phone hides for a full-height face. A face edits a document, so it may not be open when
+  `input.kind === 'empty'`; stated as a render-time invariant, not a clamp inside the restore,
+  because the two providers apply in map order and reading "is there a document" from inside
+  one of them is a race. And the phone gutter had a HALF-DONE twin: `GraphRendererBuilder`
+  built the cached polylines and key shapes from the module constant, so the curve and every
+  diamond stayed at 62 while the ruler, the grid and the hit test moved to 30 — every key sat
+  exactly 32 px right of where a click found it. The gutter is an argument there now AND part
+  of the cache key. Also: Re-fit / Detail / Smooth on one phone row — by dropping the two
+  sliders' VALUE WELLS (`noValueField`, dense-only, new on `ScalarInput`), since that 56 px
+  cell is most of what a dense slider costs and three of them need 409 px of 363; the track
+  strip wraps to two rows with full names and the dot is inside the name's hit target; the picker's left strip gets its own
+  ground and takes Recent into it, and a phone's first mode set drops the knot's own fields —
+  **429 px, from 601 before this session**.
+  **`smoke:ge-wallpaper` and `smoke:gx-spline` [5] are NOT a bug**, contrary to the entry above
+  as first written: both went green on the next run after `npm run dev` was restarted. It is
+  the Vite dual-instance hazard, and the lesson is that `git stash` does NOT clear it — a red
+  run on a clean tree proves nothing when the dev server keeps its module graph. Both headers
+  now say so on the step it actually breaks.
+  **Still missing:** the curve hit-test radius is unproven (an `@assumption`). **Phase G is
+  still what is left**, unchanged: the parity checklist, the label sweep, the Recent
+  auto-collect ADR, `/polish`, the entry-point swap.

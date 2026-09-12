@@ -148,6 +148,20 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     [inFlight?.config],
   );
   const saved = useSetSaveFlash();
+  const railRef = useRef<HTMLDivElement>(null);
+  /**
+   * A flash nobody can see is not an announcement. On a phone the chip run SCROLLS, so the set
+   * that took the gradient can be off the end of it — the third way the rail could swallow a
+   * save (the other two, a tray face and an Export window over the rail, the ♥ now closes
+   * before it writes: `onRevealGround` in WorkingHero). Keyed on the flash's `serial` so the
+   * same set saved twice scrolls again, and `nearest` so a chip already in view does not move.
+   */
+  useEffect(() => {
+    if (!saved) return;
+    railRef.current
+      ?.querySelector(`[data-gx-set="${CSS.escape(saved.setId)}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [saved?.serial]);
   const [renaming, setRenaming] = useState<{ group: string; value: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -458,7 +472,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
   );
 
   return (
-    <div className="flex items-center gap-1.5 px-6 h-10 shrink-0 bg-surface-raised" data-gx-set-rail="">
+    <div ref={railRef} className="flex items-center gap-1.5 px-6 h-10 shrink-0 bg-surface-raised" data-gx-set-rail="">
       {phone ? (
         /* PHONE: the chips SCROLL sideways and the tools stay put. Measured at 390 the row
            clipped past the 4th chip with no way to reach the 5th; the desktop answer —

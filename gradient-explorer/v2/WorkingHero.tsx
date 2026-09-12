@@ -93,6 +93,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
@@ -113,6 +114,7 @@ import { setDragOrigin } from '../../palette/store/dragVisual';
 import { useFavientsStore, favientSig, isRecentGroup } from '../../palette/store/favientsStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../../palette/store/paletteEditorStore';
+import { paramEdit } from '../../palette/store/paramUndoBracket';
 import { applyEditorChange } from '../../palette/core/editorConfig';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { isColorDrag, readColorDrag, colorInFlight } from '../../components/gradient/colorDrag';
@@ -178,6 +180,9 @@ interface Props {
    *  pick shows the band again. */
   folded: boolean;
   onShare: () => void;
+  /** Close whatever covers the SET RAIL (a tray face, the Export windows), so a save can be
+   *  seen landing there. The ♥ calls it inside its own undo bracket — @see ./uiHistory. */
+  onRevealGround: () => void;
   onExport: () => void;
   onWallpaper: () => void;
   exportOpen: boolean;
@@ -185,7 +190,7 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onExport, onWallpaper, exportOpen, exportMenu, folded }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, exportOpen, exportMenu, folded }) => {
   const phone = useIsPhone();
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
@@ -322,23 +327,45 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // L9 — before the first pick there is no hero at all; that state is unchanged.
   if (!shown) return null;
 
+  /**
+   * The ♥ — file the working gradient, and make sure you can SEE where it landed.
+   *
+   * Bracketed with `paramEdit` (2026-09-12): the favients shelf rides Ctrl+Z through its own
+   * history provider, but only inside a bracket, and this handler never opened one — so a ♥
+   * was not undoable at all. The bracket also carries the two things below it.
+   *
+   * `onRevealGround` closes whatever covers the rail before the write, because the flash on
+   * the chip is the ONLY thing that names the set that took it, and a flash behind a tray face
+   * or an Export window is no announcement (the open item raised 2026-09-11). Closing a
+   * surface out from under the user is acceptable here and nowhere else, because it is inside
+   * the bracket: one Ctrl+Z un-files the gradient and puts the face back exactly as it was.
+   *
+   * `flushSync` is load-bearing, not defensive. The bracket DIFFS the interface state when it
+   * closes, and `paramEdit` closes synchronously — so a plain `setState` inside it is still
+   * pending when the diff runs, the before and after both read "the face is open", and the
+   * entry carries the save without the surfaces. Measured: the ♥ undid the save and left the
+   * tray shut. Committing the close inside the bracket is what puts it on the entry.
+   */
   const toggleStar = () => {
     const st = useFavientsStore.getState();
     if (favOf) {
-      st.remove(favOf.id);
+      paramEdit(() => st.remove(favOf.id));
       return;
     }
     // The ♥ is a long way from the rail it files into, so the chip that takes the gradient
     // says so: it fills with the gradient and the fill collapses away, slower and with a
     // bloom because nothing else points at where this one went (owner, 2026-09-11).
-    flashSaveWhereItLanded(
-      shown.config,
-      () => {
-        useWorkingStore.getState().syncRecent();
-        st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
-      },
-      { slow: true },
-    );
+    paramEdit(() => {
+      flushSync(onRevealGround);
+      flashSaveWhereItLanded(
+        shown.config,
+        () => {
+          useWorkingStore.getState().syncRecent();
+          st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
+        },
+        { slow: true },
+      );
+    });
   };
 
   // ── editor wiring ─────────────────────────────────────────────────────────────

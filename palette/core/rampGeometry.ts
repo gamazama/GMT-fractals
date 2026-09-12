@@ -185,12 +185,19 @@ export const GEOM_DEFAULTS = {
   conicBiasA: 0,
   conicBiasB: 0,
   conicTwist: 0,
-  // Spline path: a gentle diffusion spread, flat depth (full-bleed fill) by default.
-  splineSpread: 0.15,
+  // Spline path: crisp by default (colours hug the path), flat depth (full-bleed fill), and
+  // the ramp carried a full length past each end.
+  //
+  // These two changed on 2026-09-12 (owner) from 0.15 / 0 — knowingly BREAKING this bag's
+  // "an omitted key reproduces the old picture exactly" contract for the spline mode alone:
+  // a spline saved before that date and carrying neither key re-renders tighter and longer.
+  // The owner's call ("don't care about old spline saves"), taken because the old defaults
+  // made a straight path read as a stripe with two flat margins rather than a ramp across
+  // the frame, which is the picture the mode exists for. Every OTHER key here still holds
+  // the contract, and a saved bag that carries these keys explicitly is unaffected.
+  splineSpread: 0,
   splineDepth: 0,
-  // Off by default: extending changes what an existing spline looks like, and the mode's
-  // saved-state contract is that an omitted key reproduces the old picture exactly.
-  splineExtend: 0,
+  splineExtend: 1,
   // Gradient map: fully mapped, not inverted, driven by luma — the duotone look the mode
   // exists for. Channel 0 IS luma (see MAP_CHANNELS), so the default is the classic map.
   mapStrength: 1,

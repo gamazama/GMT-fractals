@@ -76,6 +76,11 @@ const CHANNELS: ChannelInfo[] = [
 ];
 
 const SIDEBAR_W = 112;
+/** PHONE (owner, 2026-09-12): the value-axis gutter, cut from 62 px. 62 is sized for the
+ *  animation editor's arbitrary values; these curves are normalised, so the column only ever
+ *  prints "1.0" and "0.0" and the other 32 px were a sixth of a 390 px screen given to
+ *  nothing. The plot's own maths reads this through `gutter`, and so does the renderer. */
+const PHONE_GUTTER = 30;
 // Shared KeyframeInspector widths: full (w-64) vs collapsed rail (w-7).
 const INSPECTOR_W = 256;
 const INSPECTOR_W_COLLAPSED = 28;
@@ -191,7 +196,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
 
   const [activeChannel, setActiveChannel] = useState<ChannelKey>('L');
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<string[]>([]);
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  // MINIMIZED BY DEFAULT (owner, 2026-09-12), on every host and both pointer kinds: the
+  // inspector is where you go to type an exact value, and the plot is what you came for.
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(true);
   // The sidebar (112) + inspector (256) + a usable canvas don't fit on a narrow
   // (phone) editor, so the inspector overflows over the graph. Auto-collapse it to
   // its rail when the area is narrow; only fires on a width change, so the user can
@@ -226,13 +233,19 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // open, where there is room; beside the plot it left ~200 px of curve on a 390 px
   // screen. The plot then spans `width - SIDEBAR_W`.
   const inspectorW = phone ? 0 : inspectorCollapsed ? INSPECTOR_W_COLLAPSED : INSPECTOR_W;
-  const canvasWidth = Math.max(120, width - SIDEBAR_W - inspectorW);
-  const canvasHeight = Math.max(80, height - STRIP_H);
+  // PHONE (owner, 2026-09-12): the track list and the tool column BOTH move above the plot,
+  // so neither takes width from it, and the plot then spans the editor edge to edge at a
+  // fixed 4:3 — `height` is ignored there, since a shape is what was asked for and a phone's
+  // width is what is actually known. The strip rides under it as always.
+  const sidebarW = phone ? 0 : SIDEBAR_W;
+  const gutter = phone ? PHONE_GUTTER : GRAPH_LEFT_GUTTER_WIDTH;
+  const canvasWidth = Math.max(120, width - sidebarW - inspectorW);
+  const canvasHeight = phone ? Math.round((canvasWidth * 3) / 4) : Math.max(80, height - STRIP_H);
 
   // Fit the t-axis (0..CURVE_FRAMES) across the canvas and the normalized
   // vertical [0,1] into the plot area whenever the size changes.
   useEffect(() => {
-    const available = canvasWidth - GRAPH_LEFT_GUTTER_WIDTH;
+    const available = canvasWidth - gutter;
     if (available <= 0) return;
     setFrameWidth(available / CURVE_FRAMES);
     setScrollLeft(0);
@@ -325,13 +338,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     (py: number, tid: string) => pixelToChannelValue(py, view, trackRanges[tid], normalized),
     [view, normalized, trackRanges],
   );
-  const frameToCanvasPixel = useCallback((f: number) => frameToPixel(f, view) + GRAPH_LEFT_GUTTER_WIDTH, [view]);
-  const canvasPixelToFrame = useCallback((px: number) => pixelToFrame(px - GRAPH_LEFT_GUTTER_WIDTH, view), [view]);
+  const frameToCanvasPixel = useCallback((f: number) => frameToPixel(f, view) + gutter, [view, gutter]);
+  const canvasPixelToFrame = useCallback((px: number) => pixelToFrame(px - gutter, view), [view, gutter]);
 
   // --- view fitting (ported from GraphEditor) ---
   const applyFit = useCallback(
     (bounds: { minV: number; maxV: number; minF: number; maxF: number } | null, norm: boolean) => {
-      const availW = Math.max(10, canvasWidth - GRAPH_LEFT_GUTTER_WIDTH);
+      const availW = Math.max(10, canvasWidth - gutter);
       const availH = Math.max(40, canvasHeight - GRAPH_RULER_HEIGHT - 30);
       if (!bounds) {
         setFrameWidth(availW / CURVE_FRAMES);
@@ -510,7 +523,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     setViewY,
     frameToCanvasPixel,
     canvasPixelToFrame,
-    GRAPH_LEFT_GUTTER_WIDTH,
+    gutter,
     dataSource,
   );
 
@@ -681,8 +694,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     tmp.height = 1;
     tmp.getContext('2d')!.putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(tmp, 0, 0, 256, 1, GRAPH_LEFT_GUTTER_WIDTH, 0, cv.width - GRAPH_LEFT_GUTTER_WIDTH, cv.height);
-  }, [previewRamp, canvasWidth]);
+    ctx.drawImage(tmp, 0, 0, 256, 1, gutter, 0, cv.width - gutter, cv.height);
+  }, [previewRamp, canvasWidth, gutter]);
 
   // The "source ghost" — faint dashed per-channel polylines of the RESULT channels
   // (`ghost`, post-global Modify chain) behind the editable bezier. Drawn with the
@@ -780,6 +793,63 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     };
   }, [interactive]);
 
+  /* Graph tools: fit all, fit selection, normalize, pencil, simplify, bake, smooth, ghost.
+     In read-only scope mode only the view tools (fit-all, normalize) + the ghost toggle are
+     shown — the editing tools need editable curves. (Bias + move are handles in the selection
+     box now.) Rendered into a floating COLUMN over the plot on a desk, which wraps into
+     evenly-split columns when it is taller than the plot, and into a horizontal STRIP above
+     the plot on a phone (owner, 2026-09-12) — where a column over the curve costs the left of
+     every gesture aimed at it. */
+  const toolButtons = (
+    <>
+      <ToolButton onClick={fitAll} icon={<FitIcon />} tooltip="Fit all" />
+      {interactive && <ToolButton onClick={fitSelection} icon={<FitSelectionIcon />} tooltip="Fit selection" />}
+      {normalizeToggle && <ToolButton onClick={toggleNormalize} active={normalized} icon={<NormIcon active={normalized} />} tooltip="Normalize (0–1)" />}
+      {interactive && (
+        <ToolButton
+          onClick={() => { setPencilMode((p) => !p); setBrushMode(false); }}
+          active={pencilMode}
+          icon={<PencilIcon active={pencilMode} />}
+          tooltip="Pencil — draw the active channel's curve (click-drag across the plot)"
+        />
+      )}
+      {interactive && (
+        <ToolButton
+          onClick={() => { setBrushMode((b) => !b); setPencilMode(false); }}
+          active={brushMode}
+          icon={<BrushIcon active={brushMode} />}
+          tooltip="Smoothing brush — drag over a stretch to bake, smooth and simplify the active channel there"
+          tag="smooth-brush"
+        />
+      )}
+      {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
+      {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
+      {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left) — bakes the selected keys and their neighbours first" tag="smooth" />}
+    </>
+  );
+
+  const trackList = (
+    <ChannelTrackSidebar
+      horizontal={phone}
+      channels={CHANNELS}
+      visible={visible}
+      activeChannel={activeChannel}
+      onToggleVisible={(k) => setVisible((v) => ({ ...v, [k]: v[k] === false }))}
+      onSelectChannel={setActiveChannel}
+      onSelectKeys={(k) => {
+        const tr = tracks[k];
+        if (tr) setSelectedKeyframeIds(tr.keyframes.map((kf) => `${k}::${kf.id}`));
+      }}
+      layers={ghost ? [{ key: 'ghost', label: 'Fit ghost', color: '#9ca3af', dashed: true, visible: showGhost, onToggle: () => setGhostVisible((g) => !g) }] : []}
+      onSelectAll={() => {
+        const all: string[] = [];
+        displayTrackIds.forEach((t) => tracks[t as ChannelKey]?.keyframes.forEach((kf) => all.push(`${t}::${kf.id}`)));
+        setSelectedKeyframeIds(all);
+      }}
+      onDeselectAll={() => setSelectedKeyframeIds([])}
+    />
+  );
+
   return (
     <div
       ref={focusRef}
@@ -788,61 +858,30 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       className={`w-full outline-none select-none ${phone ? 'flex flex-col' : 'flex'}`}
       style={phone ? undefined : { height }}
     >
-      <div className={phone ? 'flex' : 'contents'} style={phone ? { height } : undefined}>
-      <ChannelTrackSidebar
-        channels={CHANNELS}
-        visible={visible}
-        activeChannel={activeChannel}
-        onToggleVisible={(k) => setVisible((v) => ({ ...v, [k]: v[k] === false }))}
-        onSelectChannel={setActiveChannel}
-        onSelectKeys={(k) => {
-          const tr = tracks[k];
-          if (tr) setSelectedKeyframeIds(tr.keyframes.map((kf) => `${k}::${kf.id}`));
-        }}
-        layers={ghost ? [{ key: 'ghost', label: 'Fit ghost', color: '#9ca3af', dashed: true, visible: showGhost, onToggle: () => setGhostVisible((g) => !g) }] : []}
-        onSelectAll={() => {
-          const all: string[] = [];
-          displayTrackIds.forEach((t) => tracks[t as ChannelKey]?.keyframes.forEach((kf) => all.push(`${t}::${kf.id}`)));
-          setSelectedKeyframeIds(all);
-        }}
-        onDeselectAll={() => setSelectedKeyframeIds([])}
-      />
+      {/* PHONE: the track list and the tools are two strips ABOVE the plot, so the plot keeps
+          the whole width. Both scroll sideways rather than wrapping — a second line of either
+          would come out of the curve, which is the thing being looked at. */}
+      {phone && trackList}
+      {phone && (
+        <div className="w-full flex items-center gap-1 px-2 py-1 overflow-x-auto gx-rail-scroll border-b border-line/10 bg-surface-dock/60">
+          {toolButtons}
+        </div>
+      )}
+      <div className="contents">
+      {!phone && trackList}
 
       <div className="flex-1 min-w-0 flex flex-col">
         <div ref={interactionRef} className="relative" style={{ width: canvasWidth, height: canvasHeight, cursor: pencilMode || brushMode ? PENCIL_CURSOR : undefined }}>
-          {/* Graph tools: fit all, fit selection, normalize, pencil, simplify, bake,
-              smooth, ghost. In read-only scope mode only the view tools (fit-all,
-              normalize) + the ghost toggle are shown — the editing tools need editable
-              curves. (Bias + move are handles in the selection box now.) The column WRAPS
-              into evenly-split columns when it's taller than the plot. */}
-          <div
-            className="absolute top-1 left-1 flex flex-col flex-wrap content-start gap-1 z-20"
-            style={{ maxHeight: balancedToolColumnMaxHeight(interactive ? 8 : 3, canvasHeight - 4 - 8) }}
-          >
-            <ToolButton onClick={fitAll} icon={<FitIcon />} tooltip="Fit all" />
-            {interactive && <ToolButton onClick={fitSelection} icon={<FitSelectionIcon />} tooltip="Fit selection" />}
-            {normalizeToggle && <ToolButton onClick={toggleNormalize} active={normalized} icon={<NormIcon active={normalized} />} tooltip="Normalize (0–1)" />}
-            {interactive && (
-              <ToolButton
-                onClick={() => { setPencilMode((p) => !p); setBrushMode(false); }}
-                active={pencilMode}
-                icon={<PencilIcon active={pencilMode} />}
-                tooltip="Pencil — draw the active channel's curve (click-drag across the plot)"
-              />
-            )}
-            {interactive && (
-              <ToolButton
-                onClick={() => { setBrushMode((b) => !b); setPencilMode(false); }}
-                active={brushMode}
-                icon={<BrushIcon active={brushMode} />}
-                tooltip="Smoothing brush — drag over a stretch to bake, smooth and simplify the active channel there"
-                tag="smooth-brush"
-              />
-            )}
-            {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
-            {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
-            {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left) — bakes the selected keys and their neighbours first" tag="smooth" />}
-          </div>
+          {/* Graph tools — DESKTOP position: a column floating over the plot's top-left.
+              On a phone the same buttons are a strip above the plot (see the root). */}
+          {!phone && (
+            <div
+              className="absolute top-1 left-1 flex flex-col flex-wrap content-start gap-1 z-20"
+              style={{ maxHeight: balancedToolColumnMaxHeight(interactive ? 8 : 3, canvasHeight - 4 - 8) }}
+            >
+              {toolButtons}
+            </div>
+          )}
           <GraphCanvas
             width={canvasWidth}
             height={canvasHeight}
@@ -864,6 +903,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             onContextMenu={handleContextMenu}
             onDoubleClick={handleDoubleClick}
             cursor={pencilMode || brushMode ? PENCIL_CURSOR : undefined}
+            leftGutter={gutter}
           />
           {/* Source ghost — overlays the graph, faint + pointer-events-none (see effect). */}
           <canvas
@@ -914,9 +954,10 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       </div>
       </div>
 
-      {/* PHONE: the inspector sits under the plot, open; a collapse would only hide the
-          fields a finger came for. Desktop keeps it beside the plot, collapsible. */}
-      <KeyframeInspector dataSource={dataSource} collapsed={phone ? false : inspectorCollapsed} onCollapsedChange={phone ? undefined : setInspectorCollapsed} wide={phone} />
+      {/* PHONE: the inspector sits under the plot rather than beside it; desktop keeps it
+          beside. Either way it starts MINIMIZED and the user opens it (owner, 2026-09-12) —
+          on the phone that is a full-width bar, on the desk the side rail. */}
+      <KeyframeInspector dataSource={dataSource} collapsed={inspectorCollapsed} onCollapsedChange={setInspectorCollapsed} wide={phone} />
     </div>
   );
 };

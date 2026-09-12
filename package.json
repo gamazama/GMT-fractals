@@ -45,6 +45,7 @@
     "shot:ge-picker": "tsx debug/shot-ge-picker.mts",
     "smoke:ge-cursors": "tsx debug/smoke-ge-cursors.mts",
     "smoke:ge-livedrag": "tsx debug/smoke-ge-livedrag.mts",
+    "smoke:ge-uiundo": "tsx debug/smoke-ge-uiundo.mts",
     "smoke:ge-setsave": "tsx debug/smoke-ge-setsave.mts",
     "smoke:ge-pagepick": "tsx debug/smoke-ge-pagepick.mts",
     "smoke:ge-pagepick:firefox": "cross-env BROWSER=firefox tsx debug/smoke-ge-pagepick.mts",

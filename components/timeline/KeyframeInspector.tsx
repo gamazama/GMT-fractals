@@ -74,7 +74,8 @@ interface KeyframeInspectorProps {
     collapsed?: boolean;
     /** WIDE (2026-09-11): the inspector as a full-width block UNDER a plot rather than a
      *  256 px column beside it — the phone form of the palette's curves editor, where a
-     *  column left ~200 px of curve. Never collapsed in this form. */
+     *  column left ~200 px of curve. Collapsible since 2026-09-12 (owner: minimized by
+     *  default) — in this form the collapsed state is a full-width BAR, not the side rail. */
     wide?: boolean;
 }
 
@@ -272,6 +273,23 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
             ? `${sequence.tracks[firstTrackId].label} (${selectedKeys.length})`
             : `Attributes (${selectedKeys.length})`)
         : "Global Properties";
+
+    // Collapsed, WIDE (the phone's curves editor, where the inspector sits UNDER the plot):
+    // a full-width bar, not the side rail — a 28 px vertical strip below a plot reads as a
+    // stray column and the chevron points the wrong way for the direction it opens.
+    if (collapsed && wide) {
+        return (
+            <button
+                onClick={toggleCollapsed}
+                title="Show keyframe inspector"
+                data-help-id="anim.keyframes"
+                className="w-full shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-surface border-t border-line/10 text-fg-muted hover:text-fg select-none"
+            >
+                <span className="rotate-90 flex"><ChevronLeft /></span>
+                <span className="text-[10px] font-bold text-fg-dim tracking-wide">KEYFRAME</span>
+            </button>
+        );
+    }
 
     // Collapsed: a thin rail with an expand chevron + vertical label.
     if (collapsed) {

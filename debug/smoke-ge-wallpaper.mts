@@ -20,6 +20,15 @@
  * server started makes the app hold a `?t=`-timestamped instance while this import yields a
  * second one — whose `liveSourceHook` is null because the v2 boot registered on the other copy.
  * [1] fails with that exact message. Restart `npm run dev` before believing a red run.
+ *
+ * ⚠⚠ IT IS NOT ONLY [1], and this is the part that cost a session on 2026-09-12. [2] drives
+ * `paletteEditorStore` through the same kind of import: on a stale server it sets the config on
+ * a copy the app is not rendering, nothing repaints, and the failure reads as a PRODUCT bug —
+ * "the wallpaper did not follow the working gradient — it is frozen on the snapshot". It was
+ * reported as one, alongside `smoke:gx-spline` [5], which fails the same way for the same
+ * reason. **Stashing your changes does not clear it**: the dev server keeps its module graph,
+ * so a red run on a clean tree is not evidence of anything. The FIRST thing to do with a red
+ * run here is restart the server; both were green on the next run after one.
  */
 import { chromium } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';

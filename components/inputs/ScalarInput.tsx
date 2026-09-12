@@ -46,6 +46,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     trackHeight = 20,
     variant = 'full',
     dense = false,
+    noValueField = false,
     className = '',
 
     trackBackground,
@@ -348,7 +349,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     {/* the keyframe diamond's home in this skin (headerRight) */}
                     {labelEl}
                     {bar}
-                    {valueEl}
+                    {!noValueField && valueEl}
                     {headerRight}
                 </div>
             );

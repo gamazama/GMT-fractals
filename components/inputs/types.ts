@@ -93,6 +93,13 @@ export interface ScalarInputProps extends DraggableNumberProps {
     /** 'soft' skin only: label · bar · value on ONE 26 px row (the study's option C) — for
      *  full-width rows; the default soft look stacks the bar under the label line. */
     dense?: boolean;
+    /** DENSE only: drop the value well, leaving label · bar. The number is a 56 px fixed cell,
+     *  which is most of what a dense slider costs; where two of them have to share a phone's
+     *  row (the Curves face's Detail / Smooth) the readout is what has to go — the bar already
+     *  says where the value is, and these two are 2..10 integers (owner, 2026-09-12: "I'd make
+     *  the call that we don't need the textfields for these sliders"). Reach for it only when
+     *  the room is genuinely gone: dragging AND typing a value both live in that cell. */
+    noValueField?: boolean;
     /** Additional CSS class */
     className?: string;
     

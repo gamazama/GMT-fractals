@@ -34,6 +34,9 @@ interface GraphRenderProps {
     softSelectionType: any;
     softInteraction: { isAdjusting: boolean, anchorKey: string | null };
     highlightedTracks: Set<string>;
+    /** Value-axis gutter width, px. Defaults to GRAPH_LEFT_GUTTER_WIDTH; the caller must use
+     *  the same number in its own frame↔pixel maths (ChannelGraphEditor's `gutter`). */
+    leftGutter?: number;
 }
 
 /** Subset of GraphRenderProps needed for the per-frame overlay layer
@@ -47,6 +50,8 @@ export interface GraphOverlayProps {
     view: GraphViewTransform;
     currentFrame: number;
     selectionBox: { x: number, y: number, w: number, h: number } | null;
+    /** @see GraphRenderProps.leftGutter */
+    leftGutter?: number;
 }
 
 /** Module-scoped polyline cache. One entry per visible track; entries persist across
@@ -115,6 +120,12 @@ export const drawGraph = (props: GraphRenderProps) => {
         selectedKeyframeIds, normalized, trackRanges,
         softSelectionEnabled, softSelectionRadius, softSelectionType, softInteraction, highlightedTracks
     } = props;
+    /* The value-axis gutter, PER INSTANCE. It shadows the module constant of the same name
+     * on purpose: the constant is this function's default and is read on ~16 lines below, so
+     * naming the local the same keeps one spelling in the body and leaves the animation
+     * editor (which passes nothing) byte-identical. Only the palette's curves editor on a
+     * phone overrides it — 62 px of number column is a sixth of a 390 px screen. */
+    const LEFT_GUTTER_WIDTH = props.leftGutter ?? GRAPH_LEFT_GUTTER_WIDTH;
 
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - LEFT_GUTTER_WIDTH, view);
@@ -205,12 +216,15 @@ export const drawGraph = (props: GraphRenderProps) => {
         const isHighlighted = highlightedTracks.has(tid);
         const range = trackRanges[tid];
         const bold = isHighlighted;
-        const viewKey = `${buildPolylineViewKey(view.scaleX, view.scaleY, normalized, range?.min ?? 0, range?.max ?? 0)}|p=${view.panX}|${view.panY}|b=${bold ? 1 : 0}`;
+        // `g=` is the GUTTER, and it is in the key for the reason the builder's header gives:
+        // a bitmap built at one gutter and blitted at another puts the whole curve — keys
+        // included — beside the ruler that measures it and the hit test that reads it.
+        const viewKey = `${buildPolylineViewKey(view.scaleX, view.scaleY, normalized, range?.min ?? 0, range?.max ?? 0)}|p=${view.panX}|${view.panY}|b=${bold ? 1 : 0}|g=${LEFT_GUTTER_WIDTH}`;
         let cached = _polylineCache.get(tid, keys, viewKey);
         if (!cached) {
             const trackCanvas = buildTrackPolyline({
                 track, view, canvasWidth: width, canvasHeight: height,
-                normalized, range, color, bold,
+                normalized, range, color, bold, leftGutter: LEFT_GUTTER_WIDTH,
             });
             _polylineCache.set(tid, keys, viewKey, trackCanvas, width, height);
             cached = { canvas: trackCanvas, width, height };
@@ -228,7 +242,7 @@ export const drawGraph = (props: GraphRenderProps) => {
     if (softSelectionEnabled && softSelectionRadius > 0 && selectedKeyframeIds.length > 0) {
         const maskKey =
             `${buildMaskViewKey(selectedKeyframeIds, softSelectionRadius, softSelectionType, view.scaleX)}` +
-            `|sy=${view.scaleY}|px=${view.panX}|py=${view.panY}|n=${normalized ? 1 : 0}`;
+            `|sy=${view.scaleY}|px=${view.panX}|py=${view.panY}|n=${normalized ? 1 : 0}|g=${LEFT_GUTTER_WIDTH}`;
         let maskCached = _softMaskCache.get(maskKey);
         if (!maskCached) {
             const maskCanvas = buildSoftSelectionMask({
@@ -236,7 +250,7 @@ export const drawGraph = (props: GraphRenderProps) => {
                 trackColors: TRACK_COLORS,
                 softSelectionRadius, softSelectionType,
                 view, canvasWidth: width, canvasHeight: height,
-                normalized, trackRanges,
+                normalized, trackRanges, leftGutter: LEFT_GUTTER_WIDTH,
             });
             _softMaskCache.set(maskKey, maskCanvas, width, height);
             maskCached = { canvas: maskCanvas, width, height };
@@ -415,6 +429,8 @@ export const drawGraph = (props: GraphRenderProps) => {
  *  (+ view, for the frame→pixel conversion). */
 export const drawGraphOverlay = (props: GraphOverlayProps) => {
     const { ctx, width, height, view, currentFrame, selectionBox } = props;
+    /** @see the same shadow in drawGraph. */
+    const LEFT_GUTTER_WIDTH = props.leftGutter ?? GRAPH_LEFT_GUTTER_WIDTH;
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + LEFT_GUTTER_WIDTH;
 
     ctx.clearRect(0, 0, width, height);

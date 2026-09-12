@@ -14,15 +14,17 @@
  * The chosen mode exports to PNG (the canvas snapshot IS the active mode). It never mutates
  * gradient data — the previewed config is a snapshot handed in via `openFullscreen`.
  *
- * TWO export paths, both live here (S4 Wallpaper, 2026-09-03):
- *   • the toolbar's **Export PNG** — the original: a snapshot of the ON-SCREEN canvas at
- *     window size × DPR. Still the only path that embeds a fractal scene in the PNG, so it
- *     stays the coordinate carrier for the fluid-toy handoff.
+ * ONE export path since 2026-09-12 (the owner removed the toolbar's duplicate button), with
+ * the old on-screen snapshot kept as its fallback:
+ *   • `exportPng` — a snapshot of the ON-SCREEN canvas at window size × DPR. No longer has a
+ *     button: it is what an ownCanvas mode with no `renderAt` falls back to, with a toast.
  *   • the bottom bar's **Export panel** — pick a size (Phone / Square / 1080p / 4K / custom,
  *     either orientation, optional ×2 supersample on the CPU kinds) and the frame is rendered
  *     OFFSCREEN at exactly that size: a second `FullscreenCompositor` for cpuField/cpuRaster/
  *     glQuad, the handle's `renderAt(w, h)` for ownCanvas modes. Capped at 4K, no tiling.
- *     The visible canvas is never resized by either path.
+ *     The visible canvas is never resized by either path. In Fractal mode it embeds the view
+ *     as a fluid-toy scene in the PNG — the coordinate carrier, which used to live on the
+ *     toolbar's button.
  *
  * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen" send-target
  * registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well in the P2-A dock).
@@ -192,7 +194,16 @@ const RegisteredLiveSource: React.FC<{ onResolve: ResolveFn; hook: LiveGradientS
 /** Resolves the gradient the wallpaper follows and reports it upward. Mounted whenever the
  *  overlay is open (split AND plain fullscreen share this one live path). WHICH resolver runs
  *  is decided by whether the host registered a hook — a value that is set at boot and does not
- *  change, so the two are distinct component types with their own stable hook order. */
+ *  change, so the two are distinct component types with their own stable hook order.
+ *
+ *  NOT A BUG, though it looked like one on 2026-09-12: `smoke:ge-wallpaper` and
+ *  `smoke:gx-spline` [5] both reported that the split preview had stopped following an edit,
+ *  and both were green the moment `npm run dev` was restarted. It is the Vite dual-instance
+ *  hazard those smokes' headers name — they drive the app through bare-URL dynamic imports,
+ *  and after any HMR edit to a store the app holds a `?t=`-stamped copy while the smoke gets a
+ *  second one, so the smoke edits a store nothing is rendering. **Stashing your changes does
+ *  not clear it** — the dev server keeps its module graph — so "red on a clean tree" is NOT
+ *  evidence of a pre-existing fault here. Restart the server first. */
 const SplitLiveSource: React.FC<{ onResolve: ResolveFn }> = ({ onResolve }) => {
   const hook = getFullscreenLiveSource();
   return hook
@@ -571,6 +582,17 @@ export const FullscreenGradientOverlay: React.FC = () => {
         showToast('Export failed — the renderer produced no image', 'error', 4000);
         return;
       }
+      // Fractal mode: embed the exact view + gradient as a fluid-toy scene, so the export
+      // doubles as a coordinate carrier. This moved here on 2026-09-12 when the toolbar's
+      // own Export PNG — until then the ONLY path that embedded it — was removed as a
+      // duplicate button (owner). The earlier note above this function said embedding here
+      // "would make every 4K fractal export also a scene file with no way to opt out": that
+      // is now the deliberate behaviour, since fractal saves want the metadata and this is
+      // the only export path left. Other modes still export a plain image.
+      if (mode.id === 'fractal') {
+        const coords = getActiveFractalCoords();
+        if (coords) blob = (await embedScenePng(blob, buildFluidToyScene(coords, sourceConfig, sourceName))) ?? blob;
+      }
       const real = (await pngSizeOf(blob)) ?? { width: plan.width, height: plan.height };
       downloadBlob(blob, exportFileName(sourceName, mode.id, real.width, real.height));
       const short =
@@ -584,7 +606,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
     } finally {
       setExporting(false);
     }
-  }, [fs, ramp, lut, sourceName, exportPng]);
+  }, [fs, ramp, lut, sourceName, sourceConfig, exportPng]);
 
   if (!fs.open || !fs.config) return null;
 
@@ -659,27 +681,33 @@ export const FullscreenGradientOverlay: React.FC = () => {
         </div>
       )}
 
-      {/* Toolbar: mode selector + the active mode's own controls + split/dither/export/close. */}
-      <div className="shrink-0 flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-line/10 bg-surface-dock/80">
+      {/* Toolbar: mode selector + the active mode's own controls + split/dither + close. */}
+      {/* `relative` + the reserved right padding are for the CLOSE button, which is absolutely
+          placed at the toolbar's top-right on a desk (see it below). In the flow it could not
+          stay in the header: this row WRAPS as soon as a mode brings its own controls, and a
+          ✕ ordered last then rides down to the bottom of the second line, away from the name
+          it closes. */}
+      <div className={`shrink-0 relative flex flex-wrap items-center gap-3 py-2.5 border-b border-line/10 bg-surface-dock/80 ${phone ? 'px-4' : 'pl-4 pr-14'}`}>
         {/* The name gives up its 28ch reservation on a phone — `min-w-0` lets it shrink so the
             truncation is what yields the row, not an overflow. */}
         <div className={`text-sm font-medium text-fg-secondary mr-1 truncate flex items-center gap-1.5 ${phone ? 'min-w-0' : 'max-w-[28ch]'}`}>
           {fs.split && !phone && <span className="text-[9px] font-semibold tracking-wide px-1 py-0.5 rounded bg-accent-500/25 text-accent-300">LIVE</span>}
           {sourceName}
         </div>
-        {/* PHONE: the close lives in the NAME ROW (owner, 2026-09-11: "the X can go in the
-            header"), and the right cluster below is not rendered at all — Export PNG is in
-            the export panel already, and Handles / Dither / Fluid Toy are not for a phone. */}
-        {phone && (
-          <button
-            onClick={closeFullscreen}
-            title="Close"
-            aria-label="Close fullscreen preview"
-            className="ml-auto px-3 min-h-[36px] text-[16px] leading-none rounded-md border border-line/10 text-fg-tertiary"
-          >
-            ✕
-          </button>
-        )}
+        {/* The close lives in the NAME ROW (owner, 2026-09-11 for the phone, 2026-09-12 for
+            the desk: "the X can go in the header"). On a phone the right cluster below is not
+            rendered at all — Handles / Dither / Fluid Toy are not for a phone. */}
+        <button
+          onClick={closeFullscreen}
+          title="Close (Esc)"
+          aria-label="Close fullscreen preview"
+          // PHONE: the modes take their own line, so the name row ends here and `ml-auto` puts
+          // the ✕ at its right edge. DESKTOP: pinned to the toolbar's top-right corner, out of
+          // the wrap — see the row's own comment.
+          className={`${phone ? 'ml-auto px-3 min-h-[36px] text-[16px]' : 'absolute right-3 top-2 px-2.5 py-1 text-[14px] hover:text-fg hover:bg-line/[0.06]'} leading-none rounded-md border border-line/10 text-fg-tertiary transition-colors`}
+        >
+          ✕
+        </button>
 
         {/* Seven mode chips are ~500 px of non-wrapping run. On a 390 px screen that used to
             overflow to the right and get CLIPPED by the page's `overflow-x: clip` — the last
@@ -796,20 +824,6 @@ export const FullscreenGradientOverlay: React.FC = () => {
               {phone ? '≈ Fluid Toy' : '≈ Open in Fluid Toy'}
             </button>
           )}
-          <button
-            onClick={exportPng}
-            className={`px-3 ${tapY} text-[12px] rounded-md border border-accent-500/30 bg-accent-500/15 text-accent-300 hover:bg-accent-500/25 transition-colors`}
-          >
-            Export PNG
-          </button>
-          <button
-            onClick={closeFullscreen}
-            title="Close (Esc)"
-            aria-label="Close fullscreen preview"
-            className={`px-2.5 ${tapY} text-[14px] leading-none rounded-md border border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06] transition-colors`}
-          >
-            ✕
-          </button>
         </div>
       </div>
 

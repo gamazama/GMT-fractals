@@ -31,6 +31,34 @@ type KeyStateMap = Record<string, { f: number, v: number }>;
 type DragMode = 'pan' | 'zoom' | 'scrub' | 'scrub_passive' | 'key' | 'handle' | 'box' | 'soft_radius';
 
 const HIT_TOLERANCE = 8;
+/**
+ * A FINGER's tolerance, and the reason the hit order flips under one.
+ *
+ * A key's Bezier tangent handles are only hit-testable while that key is SELECTED, and they
+ * sit a short distance from the key itself — so with a mouse, testing handles first is right
+ * (an 8 px disc you aimed at) and the key is never shadowed in practice. On a touch screen
+ * the contact patch is ~10 mm: the finger that means "move this key" lands inside BOTH discs,
+ * the handle is tested first, and the curve bends instead of the key moving. That is the
+ * owner's report of 2026-09-12 ("on the phone it's easy to mis-press and get beziers").
+ *
+ * So on a coarse pointer the KEY wins the overlap: keys are tested first, at a fingertip's
+ * radius. A handle drawn further from its key than this stays reachable; one drawn closer is
+ * not, which is the trade — an all-but-unhittable handle for a key that moves when aimed at.
+ * Mouse behaviour is byte-identical (this whole branch is behind the media query), which
+ * matters because the animation curve editor shares this hook.
+ *
+ * @assumption 14 px is the right radius, and a handle inside it is one nobody was aiming at.
+ * Unproven: `getHit` is a closure inside this hook, so there is nothing pure to test, and a
+ * browser guard would have to find a key's pixel on a canvas and then tell a key-drag from a
+ * tangent-drag through the inspector's fields — buildable, not built. What IS known is the
+ * behaviour it replaces, which the owner reported from a phone. The number wants the owner's
+ * next phone walk: too small and the mis-press comes back, too large and the tangent handles
+ * become unreachable on touch.
+ */
+const TOUCH_KEY_TOLERANCE = 14;
+const isCoarsePointer = (): boolean =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+        && window.matchMedia('(pointer: coarse)').matches;
 const RULER_HEIGHT = 24;
 
 export const useGraphInteraction = (
@@ -119,6 +147,24 @@ export const useGraphInteraction = (
 
     const getHit = (mx: number, my: number) => {
         const { sequence, selectedKeyframeIds } = ds;
+
+        // Keys, at a fingertip's radius, BEFORE the handles — coarse pointers only.
+        // @see TOUCH_KEY_TOLERANCE for why the order flips.
+        const coarse = isCoarsePointer();
+        if (coarse) {
+            for (const tid of trackIds) {
+                const track = sequence.tracks[tid];
+                if (!track) continue;
+                for (const k of track.keyframes) {
+                    const kx = frameToCanvasPixel(k.frame);
+                    const ky = v2p(k.value, tid);
+                    if (Math.abs(mx - kx) < TOUCH_KEY_TOLERANCE && Math.abs(my - ky) < TOUCH_KEY_TOLERANCE) {
+                        return { type: 'key', trackId: tid, keyId: k.id, key: k } as const;
+                    }
+                }
+            }
+        }
+
         for (const tid of trackIds) {
             const track = sequence.tracks[tid];
             if (!track) continue;

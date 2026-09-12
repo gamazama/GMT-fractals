@@ -55,6 +55,7 @@ import type { BaseVectorInputProps } from './vector-input/types';
 import { Knob } from './Knob';
 import { collectHelpIds } from '../utils/helpUtils';
 import { componentRegistry } from './registry/ComponentRegistry';
+import { useInputSkin } from './inputs';
 import { AlertIcon, CloseIcon } from './Icons';
 import { Hint } from './Hint';
 
@@ -209,6 +210,10 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
     globalStateRef.current = useEngineStore.getState();
     const globalState = globalStateRef.current;
     const actions = globalState;
+    // The host's dialect (@see components/inputs/skin.tsx). Sliders already read it through
+    // ScalarInput; the panel itself reads it for the NESTING chrome around a parent param's
+    // children, which is studio-dock furniture the v2 tray does not want.
+    const softSkin = useInputSkin() === 'soft';
     const advancedMode = useEngineStore(s => s.advancedMode);
     const openGlobalMenu = useEngineStore(s => s.openContextMenu);
     const showHints = useEngineStore(s => s.showHints);
@@ -662,7 +667,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                 title={tooltipTitle}
                 className={`w-full ${containerClass} ${isParentSlider ? 'rounded-t-sm relative' : ''}`}
             >
-                {isParentSlider && <div className={`absolute inset-0 bg-line/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
+                {isParentSlider && !softSkin && <div className={`absolute inset-0 bg-line/[0.06] rounded-t-sm pointer-events-none transition-opacity ${hasChildren ? 'opacity-100' : 'opacity-0'}`} />}
                 {control}
                 {showDescription && !isParentSlider && <Hint key={`leaf-desc-${id}`} text={config.description!} helpId={config.helpId} />}
                 {renderedChildren.length > 0 && (
@@ -673,6 +678,16 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                          * because the parent label was already rendered
                          * above by `control` — only the indented
                          * children portion is needed. */}
+                        {/* SOFT skin (GE v2): no bracket at all. The rail, the raised ground
+                            and the scrim over each child are the studio dock's way of saying
+                            "these belong to the row above", and in the v2 tray — where a face
+                            is already one flat bin per group — they read as the old dialect
+                            sitting inside the new one (owner, 2026-09-12, of the Adjust face's
+                            noise targets). Nesting there is carried by the child's own indent
+                            and by standing directly under its parent. */}
+                        {softSkin ? (
+                            <div className="flex flex-col">{renderedChildren.map((child, i) => <div key={i}>{child}</div>)}</div>
+                        ) : (
                         <div className="flex flex-col bg-surface-raised">
                             {renderedChildren.map((child, i) => {
                                 const isLast = i === renderedChildren.length - 1;
@@ -687,7 +702,8 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
                                 );
                             })}
                         </div>
-                        <SectionDivider nested={isNested} />
+                        )}
+                        {!softSkin && <SectionDivider nested={isNested} />}
                     </>
                 )}
             </div>

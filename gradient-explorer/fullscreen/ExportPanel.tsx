@@ -6,9 +6,10 @@
  * the resulting numbers, and hands the finished plan to its `onExport` prop. It never renders
  * a pixel — the overlay owns the compositor and the ownCanvas handle, so it owns the render.
  *
- * ADDITIVE: the overlay's existing top-bar "Export PNG" (the on-screen snapshot, and the only
- * path that embeds a fractal scene in the PNG) is untouched and still works. This bar is the
- * second, deliberate path — pick a size, get that size.
+ * THE export path since 2026-09-12: the overlay's top-bar "Export PNG" was a duplicate button
+ * and the owner removed it, so this bar is how a wallpaper leaves the app — pick a size, get
+ * that size. The fractal scene-embedding that used to belong to that button came with it (see
+ * `exportAtSize` in the overlay), which is why a Fractal export is also a coordinate carrier.
  *
  * The Dither checkbox here drives the SAME `fullscreenStore.dither` as the toolbar's ▦ Dither
  * button — one piece of state shown twice, never a parallel copy. It is a checkbox rather than

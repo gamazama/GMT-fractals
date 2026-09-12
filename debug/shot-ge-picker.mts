@@ -24,7 +24,10 @@ import { seedGeSmokeState } from './geSmokeBoot.mts';
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
 const W = Number(process.argv[2] || 390);
 const H = Number(process.argv[3] || 844);
-const OUT = process.argv[4] || 'picker';
+// Default under debug/scratch/ (gitignored). It used to be a bare 'picker', which dropped two
+// untracked PNGs in the REPO ROOT every run — noticed 2026-09-12 when a `git stash pop` failed
+// on them. Pass a 4th argument to write somewhere else.
+const OUT = process.argv[4] || 'debug/scratch/picker';
 
 /** What a layout pass needs to know about the picker and the box it sits in. */
 const MEASURE = `(() => {

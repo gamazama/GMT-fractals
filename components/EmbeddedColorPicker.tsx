@@ -198,6 +198,11 @@ const SURFACES: PickerMode[] = ['spectrum', 'wheel'];
 const MODES_KEY = 'gmt.colorpicker.modes';
 /** The owner's own working set, taken from their session (2026-09-08). */
 const MODE_DEFAULT: PickerMode[] = ['stop', 'spectrum', 'channels', 'swatches'];
+/** A PHONE's first set (owner, 2026-09-12): the same, without the knot's own fields. On a
+ *  screen this size the interpolation / position / bias block is the one you reach for least
+ *  and the one that costs the most rows — it is a mode, so it is one tap away when wanted.
+ *  Only a default: a set the user has actually chosen is stored and outranks this. */
+const MODE_DEFAULT_PHONE: PickerMode[] = MODE_DEFAULT.filter((m) => m !== 'stop');
 /** Stored sets from the first cut named this mode 'field'. */
 const migrateModes = (v: string[]): PickerMode[] => {
     const named = v.map((m) => (m === 'field' ? 'spectrum' : m)) as PickerMode[];
@@ -404,13 +409,16 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // 2D control does hue + saturation with value on the strip beside it, and its extra
     // HANDLES are the harmony, live and draggable, rather than a printed list. Index 0 is
     // always the colour being edited (utils/colorUtils harmonyHandles).
+    // `roomy` is the phone's declaration (@see below), and it is the only thing here that
+    // knows which screen this is — so it also picks which DEFAULT set applies.
     const [modes, setModes] = useState<PickerMode[]>(() => {
+        const fallback = roomy ? MODE_DEFAULT_PHONE : MODE_DEFAULT;
         const raw = safeLocalGet(MODES_KEY);
-        if (!raw) return MODE_DEFAULT;
+        if (!raw) return fallback;
         try {
             const v = JSON.parse(raw);
-            return Array.isArray(v) && v.length ? migrateModes(v) : MODE_DEFAULT;
-        } catch { return MODE_DEFAULT; }
+            return Array.isArray(v) && v.length ? migrateModes(v) : fallback;
+        } catch { return fallback; }
     });
     const on = useCallback((m: PickerMode) => modes.includes(m), [modes]);
     const toggleMode = useCallback((m: PickerMode, keepOthers = false) => {
@@ -516,10 +524,17 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
      * shows — it is the same picker, folded.
      */
     const narrow = layout === 'stack';
+    /** The phone's mode COLUMN: a 28 px button plus the gap to the blocks beside it. */
+    const MODE_COL_W = 36;
     /** The spectrum / wheel surface: fixed at a desk, grown to the column on a phone (capped,
-     *  so the pads never push the channels below them off the tray on their own). */
+     *  so the pads never push the channels below them off the tray on their own).
+     *
+     *  The phone cap came down 220 → 180 on 2026-09-12 (owner: "the colour picker itself is
+     *  too tall"). 220 was the width-driven number with the mode bar still costing a row of
+     *  its own; with the bar moved to a column beside the blocks that row is back, and 180
+     *  is what leaves the channels under it visible without scrolling the tray. */
     const surfacePx = soft && narrow && width > 0
-        ? Math.round(Math.min(220, Math.max(SURFACE_PX, width * 0.62)))
+        ? Math.round(Math.min(180, Math.max(SURFACE_PX, (width - MODE_COL_W) * 0.62)))
         : SURFACE_PX;
     /** Touch-sized chrome on a phone: 36 px boxes instead of 28 (`w-7`). */
     const ctrlBox = soft ? (narrow ? 'w-9 h-9' : 'w-7 h-7') : 'w-6 h-6';
@@ -1105,7 +1120,9 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
     // Shift-click adds rather than replaces, for the rare "show me both"; either can still be
     // turned off entirely (owner, 2026-09-08). The independent switches sit beside it and wear
     // the same thin-bordered look when they are on.
-    const modeButton = (m: PickerMode, joined?: 'l' | 'r') => (
+    // `joined`: l/r are the horizontal pair's ends, t/b the same pair stood on its end for
+    // the phone's mode column — a joined segment is rounded only on its outer side.
+    const modeButton = (m: PickerMode, joined?: 'l' | 'r' | 't' | 'b') => (
         <button
             key={m}
             type="button"
@@ -1115,8 +1132,10 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             data-gx-picker-mode={m}
             data-on={on(m) ? '' : undefined}
             className={`h-7 grid place-items-center transition-colors ${
-                joined ? 'px-2.5' : 'w-7 rounded-lg border'
-            } ${joined === 'l' ? 'rounded-l-lg' : ''} ${joined === 'r' ? 'rounded-r-lg' : ''} ${
+                joined === 'l' || joined === 'r' ? 'px-2.5' : 'w-7'
+            } ${!joined ? 'rounded-lg border' : ''} ${joined === 'l' ? 'rounded-l-lg' : ''} ${
+                joined === 'r' ? 'rounded-r-lg' : ''
+            } ${joined === 't' ? 'rounded-t-lg' : ''} ${joined === 'b' ? 'rounded-b-lg' : ''} ${
                 on(m)
                     ? 'bg-accent-400/15 text-accent-300 border-accent-400/40'
                     : `text-fg-dim hover:text-fg hover:bg-line/10 ${joined ? '' : 'border-transparent'}`
@@ -1134,6 +1153,56 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
             <div className="flex items-center gap-0.5">
                 {(['stop', 'harmony', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => modeButton(m))}
             </div>
+        </div>
+    );
+    /**
+     * PHONE: the same bar stood on its end, down the LEFT of the picker (owner, 2026-09-12).
+     * It is the same seven buttons and the same `data-gx-picker-mode` marks — only the axis
+     * changes — and it buys back a whole row of a screen that had none to spare, which is
+     * half of why the picker was too tall. The spectrum / wheel pair stays joined, now as a
+     * stacked segment, because they are still two answers to one question.
+     */
+    const modeColumn = (
+        // The strip carries its OWN GROUND (owner, 2026-09-12: "darken the strip behind the
+        // left's toolbar for better separation") — the blocks beside it are borderless in the
+        // soft dialect, so without it the switches read as part of whatever they sit next to.
+        // It also holds RECENT, stacked under the switches: they had a row of their own in a
+        // column where rows are the scarce thing, and the strip's lower two thirds were empty.
+        <div
+            // `bg-surface-viewport` is the shell's own inner-container ground — the same one the
+            // Adjust face's bins sit on — so the strip reads as a container rather than a tint.
+            className="flex flex-col items-center gap-1.5 shrink-0 self-stretch rounded-lg bg-surface-viewport border border-line/10 py-1.5"
+            style={{ width: MODE_COL_W - 4 }}
+            data-gx-picker-modes
+        >
+            <div className="inline-flex flex-col rounded-lg border border-line/20 overflow-hidden" data-gx-picker-surfaces>
+                {modeButton('spectrum', 't')}
+                {modeButton('wheel', 'b')}
+            </div>
+            <div className="flex flex-col items-center gap-0.5">
+                {(['stop', 'harmony', 'channels', 'kelvin', 'swatches'] as PickerMode[]).map((m) => modeButton(m))}
+            </div>
+            {on('swatches') && recents.length > 0 && (
+                <>
+                    <div className="w-4 h-px bg-line/15 my-0.5" />
+                    <div className="flex flex-col items-center gap-1" data-gx-recent-strip>
+                        {recents.slice(0, 8).map((c, i) => (
+                            <button
+                                key={`${c}-${i}`}
+                                type="button"
+                                onClick={() => setFromHex(c)}
+                                draggable
+                                onDragStart={(e) => setColorDrag(e.dataTransfer, c)}
+                                title={`${c} — a colour you used`}
+                                className={`w-5 h-5 shrink-0 ${CHIP_R} border ${
+                                    c.toUpperCase() === hex.toUpperCase() ? 'border-fg' : 'border-line/20'
+                                }`}
+                                style={{ backgroundColor: c }}
+                            />
+                        ))}
+                    </div>
+                </>
+            )}
         </div>
     );
 
@@ -1318,16 +1387,18 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                 // the chosen controls, in a fixed reading order; the hex line carries the
                 // toolbar so turning one on or off is one click from the colour itself
                 <>
-                    {/* NARROW: the hex line and the mode bar take a row each and both wrap. In
-                        one row at 390 px the mode bar ran off the edge — see `narrow` above. */}
-                    {narrow ? (
-                        <>
-                            {hexRow}
-                            <div className="flex items-center gap-2 flex-wrap">{modeBar}{on('swatches') && recentStrip}</div>
-                        </>
-                    ) : (
+                    {/* NARROW: the mode bar is a COLUMN down the left (owner, 2026-09-12), so
+                        the hex line keeps its own row and the blocks keep theirs — at 390 px
+                        in one row the bar ran off the edge, and given a row of its own it ate
+                        one of the few the tray has. The column wraps the whole picker, so the
+                        `narrow` branch below is what sits beside it. */}
+                    {!narrow && (
                         <div className="flex items-center gap-2">{hexRow}{modeBar}{on('swatches') && recentStrip}</div>
                     )}
+                    <div className={narrow ? 'flex gap-2 items-start' : 'contents'}>
+                    {narrow && modeColumn}
+                    <div className={narrow ? 'flex-1 min-w-0 flex flex-col gap-2' : 'contents'}>
+                    {narrow && hexRow}
                     <div className={narrow ? 'flex flex-col gap-3' : 'flex flex-wrap gap-4 items-start'}>
                         {on('stop') && stopBlock && <div className={`flex flex-col gap-2 ${narrow ? 'w-full' : 'w-[210px] shrink-0'}`}>{stopBlock}</div>}
                         {on('spectrum') && <div className={`flex flex-col gap-2 ${narrow ? 'w-full' : 'shrink-0'}`}>{fieldBlock}</div>}
@@ -1349,6 +1420,8 @@ const EmbeddedColorPicker: React.FC<EmbeddedColorPickerProps> = ({
                         )}
                         {on('kelvin') && kelvinBlock}
 
+                    </div>
+                    </div>
                     </div>
                 </>
             ) : layout === 'cols' ? (

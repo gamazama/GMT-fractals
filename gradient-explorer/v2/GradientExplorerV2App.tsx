@@ -66,6 +66,7 @@ import { GradientDragAvatar } from '../../palette/components/GradientDragAvatar'
 import { WorkingHero } from './WorkingHero';
 import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
+import { useShellUiHistory } from './uiHistory';
 import { useGroundSets } from './useGroundSource';
 import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetId } from '../../palette/store/groundSet';
 import { membersOfMany, parseSetId } from '../../palette/core/groundSets';
@@ -164,6 +165,34 @@ export const GradientExplorerV2App: React.FC = () => {
     [groundSetIds, sets],
   );
   const armed = useArmedSlot();
+  // The surfaces ride the undo stack (owner, 2026-09-12) — @see ./uiHistory. This is what
+  // makes it safe for a gesture to CLOSE something to show you a result: `revealGround` below.
+  useShellUiHistory(
+    { tray, folded, exportOpen, exportGround },
+    (s) => { setTray(s.tray); setFolded(s.folded); setExportOpen(s.exportOpen); setExportGround(s.exportGround); },
+  );
+  /**
+   * A FACE EDITS A DOCUMENT, so it may not be open when there is none.
+   *
+   * Found by the owner 2026-09-12, undoing out of the Adjust face on a phone: every entry on
+   * the stack had been made WHILE that face was open, so every undo restored it — while the
+   * working store's own provider kept walking the document back to nothing. The end state was
+   * a face with nothing under it over a wall the phone hides for a full-height face
+   * (`groundHidden`), and more undo could not get out of it, because there was no older entry
+   * that remembered a closed tray.
+   *
+   * The rule is a render-time invariant rather than a clamp inside the restore, deliberately:
+   * the two providers are applied in map order, so reading "is there a document" from inside
+   * one of them is a race. Stated here it holds however the state was reached.
+   *
+   * `input.kind === 'empty'` is the discriminator, NOT `derived.empty` — the latter is also
+   * true for the Image face with no image and a Mix with nothing in it, and those faces must
+   * stay open and say what is missing (L8).
+   */
+  const noDocument = derived.input.kind === 'empty';
+  useEffect(() => {
+    if (noDocument && tray !== null) setTray(null);
+  }, [noDocument, tray]);
   useGlobalContextMenu();
   const contextMenu = useEngineStore((s) => s.contextMenu);
   const closeContextMenu = useEngineStore((s) => s.closeContextMenu);
@@ -390,6 +419,19 @@ export const GradientExplorerV2App: React.FC = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
     setExportOpen((o) => !o);
   };
+  /**
+   * Clear the ground so the SET RAIL is visible — called by a gesture whose result is drawn
+   * there and nowhere else (the ♥'s save flash). Closing a surface to show a result is only
+   * honest if the surface comes back, which is what `useShellUiHistory` above buys: the caller
+   * runs this INSIDE its undo bracket, so one Ctrl+Z puts the face and the window back with the
+   * save it announced. Returns nothing — a caller that needs to know simply looks at the state
+   * it is about to change.
+   */
+  const revealGround = useCallback(() => {
+    setTray(null);
+    setExportOpen(false);
+    setExportGround(false);
+  }, []);
   const wallpaper = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
     useWorkingStore.getState().syncRecent();
@@ -425,8 +467,8 @@ export const GradientExplorerV2App: React.FC = () => {
         </a>
         {/* 40 px hit boxes on a phone (`max-md:`): 32 is comfortable for a pointer and
             under the ~44 px a fingertip wants. The GLYPH stays 24 either way. */}
-        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={phone ? 20 : 24} /></button>
-        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={phone ? 20 : 24} /></button>
+        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={phone ? 18 : 20} /></button>
+        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={phone ? 18 : 20} /></button>
         {/* Back to GMT is a plain link (owner, 2026-09-07): the working gradient is already
             in GMT's My Gradients panel through the shared `gmt.favients` Recent group, so
             the link carries nothing. Only shown when this page was opened from the studio. */}
@@ -448,6 +490,7 @@ export const GradientExplorerV2App: React.FC = () => {
         onBake={bakeFace}
         folded={folded}
         onShare={share}
+        onRevealGround={revealGround}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}
         exportOpen={exportOpen}

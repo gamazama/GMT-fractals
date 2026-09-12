@@ -124,3 +124,12 @@ item handling still need a manual pass.
 (Guard names in this paragraph are deliberately written without the `npm run`
 prefix: `check:rule-guards` parses that prefix out of the whole rule body, so
 prefixing a name here would mint a citation from a sentence explaining a gap.)
+
+**The INPUT SKIN reaches the panel itself, not only its sliders.** `AutoFeaturePanel`
+reads `useInputSkin()` (grep `softSkin`) for the chrome it draws around a PARENT param's
+children — the raised ground, the bracket rail and the scrim that say "these belong to the
+row above". Under `soft` all three go: in GE v2's tray a face is already one flat bin per
+group, and the dock's bracket reads as the old dialect sitting inside the new one (owner,
+2026-09-12, of the Adjust face's noise targets). `InlineToggleButtons` reads the same
+context for the same reason. Neither is a fork — the skin is a look on the master, @see
+`components/inputs/skin.tsx` — and app-gmt, which provides no skin, is byte-identical.

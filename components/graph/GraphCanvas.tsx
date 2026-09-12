@@ -30,6 +30,9 @@ interface GraphCanvasProps {
     /** Overrides the default crosshair cursor on the interactive (overlay) canvas —
      *  e.g. the pencil cursor while pencil mode is active. */
     cursor?: string;
+    /** Value-axis gutter width, px (default GRAPH_LEFT_GUTTER_WIDTH). The caller must use
+     *  the same number in its own frame↔pixel maths. */
+    leftGutter?: number;
 }
 
 /**
@@ -76,13 +79,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
             softSelectionType: props.softSelectionType,
             softInteraction: props.softInteraction,
             highlightedTracks: props.highlightedTracks,
+            leftGutter: props.leftGutter,
         });
     }, [
         props.width, props.height, props.view, props.sequence, props.trackIds,
         props.durationFrames, props.selectedKeyframeIds,
         props.normalized, props.trackRanges,
         props.softSelectionEnabled, props.softSelectionRadius, props.softSelectionType,
-        props.softInteraction, props.highlightedTracks, themeRev,
+        props.softInteraction, props.highlightedTracks, props.leftGutter, themeRev,
     ]);
 
     // Overlay layer: playhead + selection box. Cheap; runs every frame during
@@ -100,8 +104,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
             view: props.view,
             currentFrame: props.currentFrame,
             selectionBox: props.selectionBox,
+            leftGutter: props.leftGutter,
         });
-    }, [props.width, props.height, props.view, props.currentFrame, props.selectionBox, themeRev]);
+    }, [props.width, props.height, props.view, props.currentFrame, props.selectionBox, props.leftGutter, themeRev]);
 
     // TOUCH (2026-09-11). The graph's interaction hook (hooks/useGraphInteraction.ts) is
     // mouse-only — `onMouseDown` here and window `mousemove` / `mouseup` — and it is shared

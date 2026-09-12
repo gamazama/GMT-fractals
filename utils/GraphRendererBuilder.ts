@@ -77,9 +77,21 @@ export interface BuildTrackPolylineArgs {
     color: string;
     /** Bold-weight stroke for the "highlighted" (track-with-selected-key) state. */
     bold?: boolean;
+    /** Value-axis gutter, px (default GRAPH_LEFT_GUTTER_WIDTH). MUST match what drawGraph was
+     *  given, and MUST be part of the cache key — @see the note below. */
+    leftGutter?: number;
 }
 
-const LEFT_GUTTER_WIDTH = GRAPH_LEFT_GUTTER_WIDTH;
+/**
+ * THE DEFAULT gutter. It used to be the only one: this module read the constant directly, and
+ * on 2026-09-12 — when the palette's curves editor started passing its own 30 px gutter on a
+ * phone — that made the cached POLYLINES and KEY SHAPES the one thing in the picture still
+ * drawn at 62. The ruler, the grid and the hit test moved; the curve and its diamonds did not,
+ * so every key sat exactly 32 px right of the place a click found it (owner: "clicks and
+ * handles are occurring to the left of their actual position"). The gutter is now an argument,
+ * and it is in the cache key at the call site — a cached bitmap built at one gutter blitted at
+ * another is the same bug wearing a different hat.
+ */
 const RULER_HEIGHT = GRAPH_RULER_HEIGHT;
 
 const drawPostBehaviorTail = (
@@ -91,6 +103,9 @@ const drawPostBehaviorTail = (
     v2p: (val: number) => number,
     frameToPx: (f: number) => number,
     pxToFrame: (px: number) => number,
+    /** The caller's gutter — the tail is clipped to it, so it must be the same number the
+     *  caller drew the curve with. Passed rather than read from the module (2026-09-12). */
+    LEFT_GUTTER_WIDTH: number,
 ) => {
     const behavior = track.postBehavior || 'Hold';
     const startPx = frameToPx(lastKey.frame);
@@ -169,6 +184,8 @@ const drawPostBehaviorTail = (
 /** Build a per-track polyline canvas. Pure: same args → same pixels. */
 export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas => {
     const { track, view, canvasWidth, canvasHeight, normalized, range, color, bold } = args;
+    /** Shadows nothing now — the module constant is gone. @see the note beside RULER_HEIGHT. */
+    const LEFT_GUTTER_WIDTH = args.leftGutter ?? GRAPH_LEFT_GUTTER_WIDTH;
     const canvas = createCacheCanvas(canvasWidth, canvasHeight);
     const ctx = getCacheCtx2D(canvas);
     if (!ctx) return canvas;
@@ -263,6 +280,7 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
         v2p,
         frameToCanvasPixel,
         canvasPixelToFrame,
+        LEFT_GUTTER_WIDTH,
     );
 
     // Track-default-coloured diamonds for every key. Selection-aware overrides
@@ -301,6 +319,8 @@ export interface BuildSoftMaskArgs {
     canvasHeight: number;
     normalized: boolean;
     trackRanges: Record<string, { min: number; max: number; span: number }>;
+    /** @see BuildTrackPolylineArgs.leftGutter — same rule, same cache-key obligation. */
+    leftGutter?: number;
 }
 
 /** Pre-render the soft-selection-tint overlay for ALL visible tracks into one
@@ -319,6 +339,7 @@ export const buildSoftSelectionMask = (args: BuildSoftMaskArgs): CacheCanvas => 
         softSelectionRadius, softSelectionType,
         view, canvasWidth, canvasHeight, normalized, trackRanges,
     } = args;
+    const LEFT_GUTTER_WIDTH = args.leftGutter ?? GRAPH_LEFT_GUTTER_WIDTH;
     const canvas = createCacheCanvas(canvasWidth, canvasHeight);
     const ctx = getCacheCtx2D(canvas);
     if (!ctx) return canvas;

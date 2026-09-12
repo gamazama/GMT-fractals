@@ -69,8 +69,13 @@ interface Props extends ImageStageFaceProps {
   onClick: () => void;
 }
 
-/** The widest the full picture may go (px) — a panorama must not eat the panel. */
-const MAX_W = 520;
+/** The widest the full picture may go, as a MULTIPLE OF ITS OWN HEIGHT (owner, 2026-09-12:
+ *  "loading a wide image is taking too much of the screen"). A flat pixel cap was wrong at
+ *  both ends — it let a panorama eat the panel at a tall `bigH` and clipped a merely-wide
+ *  photo at a short one. Tying it to the height the card already chose keeps the picture in
+ *  proportion to the room it was given: past 1.2:1 the image is letterboxed by its own width
+ *  cap, which is what a 3:1 panorama should look like in a slot this shape. */
+const MAX_W_PER_H = 1.2;
 /** The dimmed thumbnail: as tall as the empty slot, at the image's aspect, capped. */
 const SMALL_H = 84;
 const SMALL_MAX_W = 150;
@@ -124,8 +129,13 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = fals
 
   const ar = model.w / Math.max(1, model.h);
   const wide = width != null;
-  const h = wide ? Math.min(PHONE_MAX_H, Math.round(width! / Math.max(0.05, ar))) : dim ? SMALL_H : bigH;
-  const w = wide ? Math.min(width!, Math.round(h * ar)) : dim ? Math.min(SMALL_MAX_W, Math.round(SMALL_H * ar)) : Math.min(MAX_W, Math.round(bigH * ar));
+  // The full picture on a desk: the width cap is what bites on a panorama, and the height
+  // then FOLLOWS it. Capping the width alone would letterbox the picture inside its own
+  // bordered box (ImageStage centres at the source aspect — `paneRect`), leaving dead bands
+  // top and bottom; shrinking the box instead keeps it hugging the picture.
+  const bigW = Math.min(Math.round(bigH * MAX_W_PER_H), Math.round(bigH * ar));
+  const h = wide ? Math.min(PHONE_MAX_H, Math.round(width! / Math.max(0.05, ar))) : dim ? SMALL_H : Math.min(bigH, Math.round(bigW / Math.max(0.05, ar)));
+  const w = wide ? Math.min(width!, Math.round(h * ar)) : dim ? Math.min(SMALL_MAX_W, Math.round(SMALL_H * ar)) : bigW;
 
   // The picture at its own aspect, hosting the image pane. With the face closed a
   // transparent button over it opens the face (the pane is not interactive then); with it

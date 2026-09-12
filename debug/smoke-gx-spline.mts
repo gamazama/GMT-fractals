@@ -13,9 +13,24 @@
  * the coordinate:
  *   [1] with Extend OFF the row spans only ~70 of 255 levels and dips repeatedly — NOT a ramp;
  *   [2] with Extend ON it runs 0 → 255 rising the whole way — a plain linear ramp;
- *   [3] omitting the param renders exactly what Extend 0 renders (it is additive).
+ *   [3] omitting the param renders what the DEFAULT renders — which since 2026-09-12 is
+ *       Extend 1, not Extend 0. The owner changed `GEOM_DEFAULTS` (Spread 0.15 → 0, Extend
+ *       0 → 1) knowing it breaks that bag's "an omitted key reproduces the old picture
+ *       exactly" contract for the spline mode alone, because the old defaults made a straight
+ *       path read as a stripe with two flat margins rather than a ramp across the frame —
+ *       which is the very thing [1] and [2] measure. This step still guards the same
+ *       property, that omitting a key and setting it to its default are one picture; only the
+ *       number it compares against moved. Before that date it read Extend 0, and a build
+ *       carrying the old default now fails it, which is correct.
  *
  * A tolerance absorbs the blue-noise dither tail, which is ±1 LSB.
+ *
+ * ⚠ Step [5] drives the app's stores through bare-URL dynamic imports, so it is exposed to the
+ * Vite dual-instance hazard: on a dev server that has hot-reloaded a store since it started,
+ * the smoke edits a copy the app is not rendering and [5] fails with "a knot edit did not reach
+ * canvas 0 while split" — which reads as a product bug and was reported as one on 2026-09-12.
+ * Stashing does not clear it (the server keeps its module graph). RESTART `npm run dev` before
+ * believing a red [5]. @see the longer note in debug/smoke-ge-wallpaper.mts.
  *
  * Run (needs `npm run dev`):  npx tsx debug/smoke-gx-spline.mts
  */
@@ -113,7 +128,9 @@ async function main() {
   if (r - l < 180) fail(`the path should still carry the whole ramp between the margins (got ${(r - l).toFixed(0)} of 255)`);
   console.log(`[2] Extend on: margins repeat the edge colours (${l.toFixed(0)} … ${r.toFixed(0)}) and the ramp survives between them ✓`);
 
-  // [3] the param is ADDITIVE — omitting it renders what Extend 0 renders.
+  // [3] omitting the param renders what its DEFAULT renders — read from GEOM_DEFAULTS rather
+  // than written here, so the day the owner moves the default again this step moves with it
+  // instead of pinning a number nothing else believes.
   const omitted = await page.evaluate(async () => {
     const fs = await import('/palette/store/fullscreenStore.ts');
     (fs as any).resetFullscreenGeomParams(['splineExtend']);
@@ -126,10 +143,15 @@ async function main() {
     const d = cx.getImageData(0, 0, 48, 1).data;
     return [...Array(48)].map((_, i) => d[i * 4]);
   });
+  const defExtend = await page.evaluate(async () => {
+    const g = await import('/palette/core/rampGeometry.ts');
+    return (g as any).GEOM_DEFAULTS.splineExtend as number;
+  });
+  const atDefault = await rowAt(defExtend);
   let worst = 0;
-  for (let i = 0; i < 48; i++) worst = Math.max(worst, Math.abs(omitted[i] - off[i]));
-  if (worst > DITHER_SLACK) fail(`omitting splineExtend differs from splineExtend:0 by ${worst} levels — not additive`);
-  console.log(`[3] omitting the param == Extend 0 (worst Δ${worst}) ✓`);
+  for (let i = 0; i < 48; i++) worst = Math.max(worst, Math.abs(omitted[i] - atDefault[i]));
+  if (worst > DITHER_SLACK) fail(`omitting splineExtend differs from splineExtend:${defExtend} (its default) by ${worst} levels`);
+  console.log(`[3] omitting the param == its default, Extend ${defExtend} (worst Δ${worst}) ✓`);
 
   // [4] BOTH canvases in the stage agree. The spline editor portals its own live preview OVER
   // the overlay's canvas, so the preview is the picture the user actually looks at — and it

@@ -314,44 +314,59 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
   // Fit on entry (C.4, owner: "curved mode should start fitting when we enter that mode"):
   // the face opens with the curves already editable. Leaving the face bakes (C.3) and
   // resets the tracks, so the next entry fits the baked gradient afresh.
+  //
+  // The second line is what makes the removed "Curves on / off" button safe (owner,
+  // 2026-09-12: obsolete). `fitFromChannels` turns curves on itself, but tracks that
+  // survive from elsewhere — the Generator dock in app-gmt shares this store and has its
+  // own toggle — could arrive with `curvesOn` false, and with no button here the face
+  // would show a plot that changes nothing and no way to say so. Entering the face means
+  // editing the curves, so entering turns them on.
   useEffect(() => {
     if (!tracks && base) g.fitFromChannels(base);
+    else if (tracks && !curvesOn) g.setCurvesOn(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // PHONE: the plot loses 40 px so the controls above it and the wall below both stay
   // visible inside the tray's cap; the editor collapses its own inspector to a rail below
   // 560 px, so the whole width goes to the curve.
-  // PHONE (owner, 2026-09-11): the face has the whole room now, so the plot grows to 320
-  // (the editor's eight tool icons then fit one column), the plot runs edge to edge (no
-  // side padding on the widget), and Detail / Smooth share ONE row.
+  // PHONE (owner, 2026-09-12): the plot's HEIGHT is no longer set from here — the editor
+  // puts its track list and tools in strips above the curve and then draws the curve at 4:3
+  // across whatever width it is given, so a fixed height would only fight the ratio. What is
+  // set here is that width: the face's full bleed (`px-0`, hence `+ 32`) less a 6 px gutter
+  // each side, which is the "min padding" the owner asked for.
   const plotH = phone ? 320 : 240;
+  const PHONE_SIDE_PAD = 6;
+  const plotW = phone ? width + 32 - PHONE_SIDE_PAD * 2 : width;
   return (
     <div className={`flex flex-col gap-3 py-3 ${phone ? 'px-0' : 'px-4'}`}>
-      <div className={`flex items-center gap-2 flex-wrap ${phone ? 'px-3' : ''}`}>
+      <div className={`flex items-center gap-2 ${phone ? 'px-3 flex-nowrap' : 'flex-wrap'}`}>
         <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit the curves from the source again (Detail and Smooth are the recipe; the faint ghost previews it)">
           Re-fit
         </Act>
-        <Act disabled={!tracks} onClick={() => g.setCurvesOn(!curvesOn)}>
-          {curvesOn ? 'Curves on' : 'Curves off'}
-        </Act>
-        <Act disabled={!tracks} onClick={() => g.resetCurves()}>
-          Reset
-        </Act>
         {/* the fit recipe; while either is being dragged the editor shows its ghost (C.16) */}
-        {/* PHONE: Detail and Smooth share ONE row of their own (`basis-full`), so neither
-            wraps up beside the buttons and gets its readout clipped at the edge. */}
-        <div className={phone ? 'basis-full flex items-center gap-3 min-w-0' : 'contents'}>
-          <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
-          <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+        {/* PHONE (owner, 2026-09-12): Re-fit, Detail and Smooth share ONE row — and the two
+            sliders drop their VALUE WELLS to make it fit. Measured: a dense slider's floor is
+            ~150 px (a 45 % label, a 64 px track, a 56 px fixed value cell), so Re-fit's 57
+            plus two of them is 409 px of content in 363 and Detail's readout landed on
+            Smooth's label. The 56 px cell is what the row cannot afford; the bar still says
+            where the value is, and these two are small integers (owner: "I'd make the call
+            that we don't need the textfields for these sliders"). Typing a value goes with
+            it — the well is also the text field — which is the trade, on this screen only. */}
+        <div className={phone ? 'flex-1 flex items-center gap-3 min-w-0' : 'contents'}>
+          <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense noValueField={phone} label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+          <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense noValueField={phone} label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
         </div>
       </div>
       {tracks ? (
-        <div className={`relative overflow-hidden ${phone ? '' : 'rounded-[10px]'}`} style={phone ? undefined : { height: plotH }}>
+        <div
+          className={`relative overflow-hidden ${phone ? '' : 'rounded-[10px]'}`}
+          style={phone ? { paddingLeft: PHONE_SIDE_PAD, paddingRight: PHONE_SIDE_PAD } : { height: plotH }}
+        >
           <ChannelGraphEditor
             tracks={tracks}
             onTracksChange={g.setTracks}
-            width={phone ? width + 32 : width}
+            width={plotW}
             height={plotH}
             phone={phone}
             previewRamp={derived.ramp ?? undefined}
