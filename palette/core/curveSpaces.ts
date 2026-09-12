@@ -76,10 +76,21 @@ export const DEFAULT_CURVE_SPACE: CurveSpace = 'oklab'; // POLAR OkLCh — what 
 
 export const curveSpaceLabel = (s: CurveSpace): string => BLEND_SPACE_LABEL[s];
 
+/**
+ * What a channel MEANS, independent of the space it lives in. A wave preset says "put a
+ * monotone ramp on lightness"; only the space knows that lightness is `L` in OkLCh, `V` in
+ * HSV, `L*` in CIE LCh — and that RGB has no lightness channel at all, which is why
+ * `component` exists and why {@link channelForRole} can return null.
+ */
+export type ChannelRole = 'lightness' | 'chroma' | 'hue' | 'component';
+
 export interface CurveChannelDef {
   /** Track key, and the key this channel occupies in a persisted `ChannelTracks`. */
   key: string;
   label: string;
+  /** Which of the three perceptual jobs this channel does, or `component` for a channel
+   *  that does not separate them (R, G, B, and Oklab's a/b). */
+  role: ChannelRole;
   /** Plot colour, matching GraphRenderer's track colours for OkLCh and semantic elsewhere. */
   color: string;
   /** The channel's RELEVANT range in its own units — the normalized plot's extent. */
@@ -165,9 +176,9 @@ const SPACES: Record<CurveSpace, CurveSpaceDef> = {
     label: BLEND_SPACE_LABEL.oklab,
     gamutBound: false,
     channels: [
-      { key: 'L', label: 'Lightness', color: '#22d3ee', min: 0, max: 1, eps: 0.01 },
-      { key: 'C', label: 'Chroma', color: '#a855f7', min: 0, max: 0.4, eps: 0.01 },
-      { key: 'h', label: 'Hue', color: '#22c55e', min: 0, max: TURN, eps: 0.06, angular: true },
+      { key: 'L', label: 'Lightness', color: '#22d3ee', min: 0, max: 1, eps: 0.01, role: 'lightness' },
+      { key: 'C', label: 'Chroma', color: '#a855f7', min: 0, max: 0.4, eps: 0.01, role: 'chroma' },
+      { key: 'h', label: 'Hue', color: '#22c55e', min: 0, max: TURN, eps: 0.06, angular: true, role: 'hue' },
     ],
     fromOklch: (ch) => [ch.L.slice(), ch.C.slice(), ch.h.slice()],
     toOklch: (L, C, h) => ({ L: L.slice(), C: C.slice(), h: h.slice() }),
@@ -181,9 +192,9 @@ const SPACES: Record<CurveSpace, CurveSpaceDef> = {
     label: BLEND_SPACE_LABEL['oklab-rect'],
     gamutBound: false,
     channels: [
-      { key: 'L', label: 'Lightness', color: '#22d3ee', min: 0, max: 1, eps: 0.01 },
-      { key: 'a', label: 'Green–red', color: '#f472b6', min: -0.4, max: 0.4, eps: 0.01 },
-      { key: 'b', label: 'Blue–yellow', color: '#fbbf24', min: -0.4, max: 0.4, eps: 0.01 },
+      { key: 'L', label: 'Lightness', color: '#22d3ee', min: 0, max: 1, eps: 0.01, role: 'lightness' },
+      { key: 'a', label: 'Green–red', color: '#f472b6', min: -0.4, max: 0.4, eps: 0.01, role: 'component' },
+      { key: 'b', label: 'Blue–yellow', color: '#fbbf24', min: -0.4, max: 0.4, eps: 0.01, role: 'component' },
     ],
     fromOklch: (ch) => mapFrom(ch, (L, C, h) => [L, C * Math.cos(h), C * Math.sin(h)]),
     toOklch: (L, a, b) => ({
@@ -198,9 +209,9 @@ const SPACES: Record<CurveSpace, CurveSpaceDef> = {
     label: BLEND_SPACE_LABEL.rgb,
     gamutBound: true,
     channels: [
-      { key: 'R', label: 'Red', color: '#ef4444', min: 0, max: 1, eps: 0.01 },
-      { key: 'G', label: 'Green', color: '#22c55e', min: 0, max: 1, eps: 0.01 },
-      { key: 'B', label: 'Blue', color: '#3b82f6', min: 0, max: 1, eps: 0.01 },
+      { key: 'R', label: 'Red', color: '#ef4444', min: 0, max: 1, eps: 0.01, role: 'component' },
+      { key: 'G', label: 'Green', color: '#22c55e', min: 0, max: 1, eps: 0.01, role: 'component' },
+      { key: 'B', label: 'Blue', color: '#3b82f6', min: 0, max: 1, eps: 0.01, role: 'component' },
     ],
     fromOklch: (ch) => mapFrom(ch, (L, C, h) => {
       const c = oklchToRgb255(L, C, h);
@@ -224,9 +235,9 @@ const SPACES: Record<CurveSpace, CurveSpaceDef> = {
       // DISTINCT from OkLCh's. A persisted `ChannelTracks` is then self-describing — a
       // document whose stored space id is wrong or missing is detectable rather than
       // silently reinterpreted as the other polar space.
-      { key: 'L*', label: 'Lightness', color: '#22d3ee', min: 0, max: 100, eps: 1 },
-      { key: 'C*', label: 'Chroma', color: '#a855f7', min: 0, max: 133, eps: 1.3 },
-      { key: 'h*', label: 'Hue', color: '#22c55e', min: 0, max: TURN, eps: 0.06, angular: true },
+      { key: 'L*', label: 'Lightness', color: '#22d3ee', min: 0, max: 100, eps: 1, role: 'lightness' },
+      { key: 'C*', label: 'Chroma', color: '#a855f7', min: 0, max: 133, eps: 1.3, role: 'chroma' },
+      { key: 'h*', label: 'Hue', color: '#22c55e', min: 0, max: TURN, eps: 0.06, angular: true, role: 'hue' },
     ],
     fromOklch: (ch) => mapFrom(ch, (L, C, h) => {
       const lab = rgbToCieLab(oklchToRgb255(L, C, h));
@@ -243,9 +254,9 @@ const SPACES: Record<CurveSpace, CurveSpaceDef> = {
     label: BLEND_SPACE_LABEL.hsv,
     gamutBound: true,
     channels: [
-      { key: 'H', label: 'Hue', color: '#22c55e', min: 0, max: TURN, eps: 0.06, angular: true },
-      { key: 'S', label: 'Saturation', color: '#a855f7', min: 0, max: 1, eps: 0.01 },
-      { key: 'V', label: 'Value', color: '#22d3ee', min: 0, max: 1, eps: 0.01 },
+      { key: 'H', label: 'Hue', color: '#22c55e', min: 0, max: TURN, eps: 0.06, angular: true, role: 'hue' },
+      { key: 'S', label: 'Saturation', color: '#a855f7', min: 0, max: 1, eps: 0.01, role: 'chroma' },
+      { key: 'V', label: 'Value', color: '#22d3ee', min: 0, max: 1, eps: 0.01, role: 'lightness' },
     ],
     // `rgbToHsv` reports S and V on 0..100 and `hsvToRgb` expects them there, while this
     // editor plots every unit-ish channel on 0..1 — hence the /100 and *100. Getting that
@@ -269,6 +280,14 @@ const SPACES: Record<CurveSpace, CurveSpaceDef> = {
  *  document can never resolve to nothing and strand the editor with no axes. */
 export const curveSpace = (id: CurveSpace | string | undefined): CurveSpaceDef =>
   SPACES[(id as CurveSpace)] ?? SPACES[DEFAULT_CURVE_SPACE];
+
+/**
+ * The key of the channel doing `role` in this space, or null when it has none — RGB has no
+ * single lightness channel, so a preset that wants one cannot apply there, and the caller
+ * must offer it as unavailable rather than picking a channel at random.
+ */
+export const channelForRole = (id: CurveSpace | string | undefined, role: ChannelRole): string | null =>
+  curveSpace(id).channels.find((c) => c.role === role)?.key ?? null;
 
 /** The space's three track keys, in channel order. */
 export const curveSpaceKeys = (id: CurveSpace | string | undefined): [string, string, string] => {

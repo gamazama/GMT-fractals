@@ -56,7 +56,8 @@ import { genEdit, genEditStart, genEditEnd } from '../store/generatorStore';
 import { WaveOverlay } from './WaveOverlay';
 import { WaveToolHead, SHAPE_PATHS } from './WaveToolHead';
 import { DEFAULT_WAVE, applyWaveSample, sampleWaveSpan, waveSpanFrames, type WaveParams } from '../core/waveGen';
-import { DEFAULT_CURVE_SPACE, curveSpace, curveSpaceKeys, type CurveSpace } from '../core/curveSpaces';
+import { DEFAULT_CURVE_SPACE, channelForRole, curveSpace, curveSpaceKeys, type CurveSpace } from '../core/curveSpaces';
+import { presetParams, type WavePreset } from '../core/wavePresets';
 import { fitSamplesToKeys, spliceSpan } from '../../utils/CurveFitting';
 import { evaluateTrackValue } from '../../utils/timelineUtils';
 
@@ -248,6 +249,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   const [waveOn, setWaveOn] = useState(false);
   const [waveParams, setWaveParams] = useState<WaveParams>(lastWave);
   const [wavePill, setWavePill] = useState<string | null>(null);
+  /** Bumped whenever `waveBaseRef` is re-snapshotted. A ref change triggers no render, so
+   *  without this the preview below never re-runs after a channel switch re-bases it. */
+  const [waveBaseTick, setWaveBaseTick] = useState(0);
   const waveArmed = interactive && waveOn;
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   // Source-ghost visibility — a transient local UI flag (like `normalized` / `visible`),
@@ -326,6 +330,10 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
    * each preview would compound onto the last and one drag would stack a hundred waves.
    */
   const waveBaseRef = useRef<Keyframe[] | null>(null);
+  /** WHICH channel `waveBaseRef` belongs to, so switching channel mid-tool can put the old
+   *  one back before adopting the new one. Without it the previous channel kept whatever the
+   *  live preview had written into it — a wave you never committed, left behind. */
+  const waveChanRef = useRef<string | null>(null);
 
   // The channel's OWN relevant range (L 1.0, chroma 0.4, one hue turn), not the plotted
   // one. Two reasons: a fractional amplitude then means the same thing whatever the plot
@@ -735,6 +743,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     setBrushMode(false);
     setSelectedKeyframeIds([]);
     waveBaseRef.current = tracksRef.current[activeChannel]?.keyframes ?? null;
+    waveChanRef.current = activeChannel;
+    setWaveBaseTick((n) => n + 1);
     // Fit the t axis before arming (owner, 2026-09-12: "we need to do a graph resize to
     // ensure the outermost handles are visible"). The span squares sit at t=0 and t=1 by
     // default, so a zoomed-in view puts both off-screen with no way back — every gesture
@@ -756,6 +766,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     // no entry at all.
     if (waveBaseRef.current) writeWave(waveBaseRef.current);
     waveBaseRef.current = null;
+    waveChanRef.current = null;
     genEditEnd();
     setWavePill(null);
     setWaveOn(false);
@@ -768,6 +779,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     if (keys) writeWave(keys);
     lastWave = waveParams;
     waveBaseRef.current = null;
+    waveChanRef.current = null;
     genEditEnd();
     setWavePill(null);
     setWaveOn(false);
@@ -781,16 +793,66 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
    */
   useEffect(() => {
     if (!waveArmed) return;
+    // The base must belong to the channel being written. React runs this effect BEFORE the
+    // channel effect below in the same commit, so right after a channel switch the ref still
+    // holds the OLD channel's keyframes — sampling those and writing them into the new
+    // channel is a real edit nobody asked for. It is invisible for a `replace` preset (which
+    // ignores the base) and plainly wrong for an `add` one, which is the worst way for a bug
+    // to behave. The channel effect re-bases and bumps the tick, which brings us back here.
+    if (waveChanRef.current !== activeChannel) return;
     const keys = waveKeys(waveParams);
     if (keys) writeWave(keys);
-  }, [waveArmed, waveParams, waveKeys, writeWave]);
+  }, [waveArmed, waveParams, waveKeys, writeWave, waveBaseTick, activeChannel]);
 
-  /** Switching channel mid-tool: put the old one back, and adopt the new one as the base. */
+  /**
+   * Switching channel mid-tool (by the track list, or by applying a preset that names
+   * another channel): put the OLD channel back first, then adopt the new one as the base.
+   * Restoring is the half that is easy to miss — the live preview has been writing into the
+   * old channel, and leaving it would strand a wave the user never committed.
+   */
   useEffect(() => {
     if (!waveArmed) return;
+    const prev = waveChanRef.current;
+    // ONLY an actual switch. `armWave` already took the pristine snapshot, and this effect
+    // also runs on arm (waveArmed is in its deps) — AFTER the preview effect has written.
+    // Re-snapshotting there captures the already-previewed track as the "original", so Esc
+    // restored to the wave instead of removing it (measured 2026-09-12: arm-then-cancel did
+    // not return the gradient).
+    if (prev === activeChannel) return;
+    if (prev && waveBaseRef.current) {
+      const tr = tracksRef.current[prev];
+      if (tr) commitTracks({ ...tracksRef.current, [prev]: { ...tr, keyframes: waveBaseRef.current } });
+    }
+    waveChanRef.current = activeChannel;
     waveBaseRef.current = tracksRef.current[activeChannel]?.keyframes ?? null;
+    setWaveBaseTick((n) => n + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChannel]);
+  }, [activeChannel, waveArmed]);
+
+  /**
+   * Apply a preset: its params, and the CHANNEL it names (owner: "preset carries its
+   * channel"). A preset for a role this space does not have is never offered, so the
+   * resolve below only fails if one slips through — then the channel is left alone rather
+   * than the preset landing somewhere it does not mean.
+   */
+  const applyPreset = useCallback(
+    (preset: WavePreset) => {
+      const key = preset.role === 'active' ? activeChannel : channelForRole(space, preset.role);
+      if (key && key !== activeChannel) setActiveChannel(key);
+      setWaveParams((w) => presetParams(preset, w));
+    },
+    [activeChannel, space],
+  );
+  /** A preset's channel colour in THIS space, or null when the space has no such channel —
+   *  which is how the head decides not to offer it (no lightness channel in RGB). */
+  const presetColor = useCallback(
+    (preset: WavePreset): string | null => {
+      if (preset.role === 'active') return chanDef(activeChannel).color;
+      const key = channelForRole(space, preset.role);
+      return key ? chanDef(key).color : null;
+    },
+    [space, activeChannel, chanDef],
+  );
 
   /** An unmount while armed (the face closes, the tracks go null) must not leak the open
    *  bracket — every later discrete edit would land inside it. */
@@ -1052,6 +1114,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       onShape={(shape) => setWaveParams((w) => ({ ...w, shape }))}
       onMode={(mode) => setWaveParams((w) => ({ ...w, mode }))}
       onReseed={() => setWaveParams((w) => ({ ...w, seed: (w.seed + 1 + Math.floor(Math.random() * 97)) | 0 }))}
+      onPreset={applyPreset}
+      presetColor={presetColor}
       onCommit={commitWave}
       onCancel={closeWave}
       channelColor={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}

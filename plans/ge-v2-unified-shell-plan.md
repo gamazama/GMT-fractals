@@ -2522,3 +2522,91 @@ phase now carries**. Items move out of this list only when a later phase's entry
   instead of assumed — the ramp and the stops both came back faithful to the source
   (`#00545F → … → #000000 → #383838`), the owner could not reproduce it on the current build,
   and nothing was walked back.
+- 2026-09-12 · **The function tool grows PRESETS, and they are where the scientific
+  colormap shapes live.** This began as a design conversation about a separate
+  scientific/accessibility compliance tool (`plans/ge-ramp-analysis-and-deep-fit.md` Part A)
+  and the owner collapsed most of it: **"thats more of a preset i guess that could be part of
+  the wave function tool hey?"** He was right, and checking it holds is the whole entry.
+
+  **Three of the four standard colormap shapes ARE wave settings.** A Sawtooth at one cycle
+  in `replace` mode on Lightness IS a monotone lightness rise; a Triangle is low-high-low, so
+  it IS diverging; a Sine starts and ends at the same value, which IS what cyclic means.
+  Nothing new was needed for any of them. Better: the diverging PIVOT, which an earlier
+  compliance sketch drew as a separate vertical handle, is already there — bias moves the
+  peak within its period, and on a one-cycle triangle that is the pivot.
+
+  **The one thing that genuinely is not a preset** is perceptual uniformity. Even *pacing* is
+  a warp of t, not a shape written into a channel: same colours, redistributed. It cannot be
+  a wave. It is, however, very close to the reading of `bias` we did NOT take — bias across
+  the whole span rather than within each cycle bunches the cycles toward one end, which is
+  the re-pacing operation. If uniformity is ever built, it lands there rather than in a new
+  tool. Written down because it is the kind of thing that gets re-derived from scratch.
+
+  **AND THERE IS NO EASING LIBRARY, on purpose.** The first cut was going to add an `Easing`
+  shape backed by the 25 Penner curves in `palette/core/easings.ts`; the owner stopped it —
+  **"we dont need easing we can build these waves from our existing biase skew and other
+  params"** — and that is correct in a way worth stating, because it will come up again:
+  **`bias` IS a continuous gamma, and the Penner in/out families are discrete samples of that
+  same gamma.** `inQuad` / `inCubic` / `inQuart` are γ = 2, 3, 4. Naming 25 fixed points on a
+  dial that already moves continuously would add vocabulary and REMOVE reach. The one ease
+  that is not a gamma is in-out, and that is a rising half-period of a sine — `Sine` at
+  wavelength 2, phase 0.75 — which the tool already made. So the eases ship as four presets
+  built from the existing controls, and `easings.ts` is untouched.
+
+  **Presets carry their CHANNEL** (owner: "go with the first"), named by ROLE rather than by
+  key, because the key depends on the space: lightness is `L` in OkLCh, `V` in HSV, `L*` in
+  CIE LCh — and RGB has no lightness channel at all, so `channelForRole` returns null there
+  and those presets are simply not offered rather than landing on red. `CurveChannelDef`
+  gained `role`; `role: 'active'` is the honest declaration for the presets that genuinely do
+  not care (Ripple, Bands, Grain).
+
+  **They come first, and each button is its own wave** (owner: "presets can come first and
+  can be a preview of their wave shape instead of text"), traced by `waveValue` from the
+  preset's own params and stroked in its channel's colour — which is what tells Sequential
+  lightness from Hue sweep, the same sawtooth in cyan and green. A preset's glyph therefore
+  cannot advertise a shape the click does not produce, and there is a guard asserting exactly
+  that. **The dice is gone**: reseeding moved onto the Noise glyph (clicking an
+  already-active shape does that shape's own thing), which freed a permanent slot that meant
+  something for one shape in five.
+
+  **Five defects found by building it, four of them mine and all found by measuring:**
+
+  - **`% 1` resolves one full period to the period's START.** A Sawtooth used as a monotone
+    rise therefore dropped to its floor on the last texel — a one-sample spike at the end of
+    every sequential gradient. The endpoint now resolves to the period's END. Sine and
+    Triangle are unaffected (their period start and end are the same value).
+  - **The preview effect runs BEFORE the channel effect in the same commit**, so a preset
+    that switches channel sampled the OLD channel's base and wrote it into the NEW one.
+    Invisible for a `replace` preset (which ignores the base) and plainly wrong for an `add`
+    one — the worst way for a bug to behave. Guarded by a channel check plus a tick, because
+    a ref change triggers no render and the corrected preview would otherwise never run.
+  - **Adding `waveArmed` to the channel effect's deps made it run on ARM**, after the preview
+    had already written — so it re-snapshotted the already-previewed track as the "original"
+    and **Esc restored to the wave instead of removing it**. `armWave` owns the initial
+    snapshot; the effect only handles real switches now. Caught by bisecting to the simplest
+    case: arm, then cancel, and compare the ramp.
+  - **A texture preset inherited `offset`** from whatever ran before it, picking up the 0.55
+    that whole-gradient presets use to sit a ramp in 0.15..0.95, and quietly lifting the
+    channel by 5% of its range. Every texture pins `offset: 0.5` now. Textures still inherit
+    SPAN and FEATHER on purpose — that is where you put them, and the tool remembers it like
+    it remembers the channel — so the guard holds those equal and demands the rest be
+    identical.
+  - **`ml-auto` inside a scrolling flex container** pushes to the end of the SCROLL width,
+    not the visible edge, so ✓ and ✕ went off-screen; and putting eleven presets in the same
+    scrolling row took the MODE glyphs with them, leaving no way to see whether the wave was
+    adding or replacing. Only the preset gallery scrolls now — it is a gallery you browse;
+    everything else is state you must be able to read at a glance.
+
+  **One assertion was wrong rather than the code**, and rewritten rather than loosened: a
+  cycle-count test leaned on `sin(0)` being exactly 0 (counted as a crossing) where `sin(2π)`
+  is −2.4e-16 (not counted), so the endpoint fix correctly changed 10 to 9. It samples the
+  half-open interval now and asserts `2n+1` — the +1 being the crossing at t=0 that a
+  half-open interval can never count.
+
+  **Guards:** `test:palette-wavegen` section [8] — eleven presets, role resolution across all
+  five spaces, and the claim the whole scheme rests on (the glyph traces exactly what
+  applying it produces). Falsified three ways: `channelForRole` falling back instead of
+  returning null reds the RGB assertion; whole-gradient presets not resetting the span reds
+  seven; reverting the endpoint rule reds four. Verified in the browser across six
+  round-trips — arm/cancel, same-channel, cross-channel, three channels in one session,
+  commit, and one Ctrl+Z after two presets.

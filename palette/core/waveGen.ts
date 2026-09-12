@@ -133,8 +133,14 @@ export const waveValue = (t: number, p: WaveParams): number => {
     // wavelength, which keeps the caliper meaningful (drag it wider, the grain coarsens).
     w = valueNoise(t / lam + p.phase, p.seed);
   } else {
-    let ph = (t / lam + p.phase) % 1;
-    if (ph < 0) ph += 1;
+    // The endpoint rule: a periodic function's value at EXACTLY one full period is
+    // ambiguous, and `% 1` resolves it to the period's START. For a ramp that is wrong at
+    // the last texel — a Sawtooth used as a monotone rise would drop back to its floor on
+    // sample 255, a one-texel spike at the end of the gradient. Resolved to the END here.
+    // Sine and Triangle are unaffected (their period start and end are the same value).
+    const raw = t / lam + p.phase;
+    let ph = raw - Math.floor(raw);
+    if (ph === 0 && raw > 0) ph = 1;
     ph = biasPow(ph, p.bias);
     switch (p.shape) {
       case 'Sine': w = Math.sin(ph * Math.PI * 2); break;

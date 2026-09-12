@@ -80,15 +80,36 @@ console.log('[1] shapes');
     ok(off <= 4 && wrong > 100, `${shape}: repeats after one wavelength (${off}/200 off; a half-wavelength shift moves ${wrong})`);
   }
   // The caliper's claim in the other direction: halving the wavelength doubles the cycles.
+  // Sampled over [0,1) — the final sample is EXCLUDED on purpose. This assertion is about
+  // the period, and including t=1 made it depend on an endpoint float artifact instead:
+  // `sin(0)` is exactly 0 and counted as a crossing, `sin(2*PI)` is -2.4e-16 and does not,
+  // so the endpoint rule below (correctly) changed the count from 10 to 9 and reddened a
+  // test that was never about endpoints (2026-09-12).
   const count = (lam: number) => {
     const p = P({ shape: 'Sine', wavelength: lam });
     let n = 0;
-    for (let i = 1; i <= 4000; i++) {
+    for (let i = 1; i < 4000; i++) {
       if (waveValue((i - 1) / 4000, p) < 0 && waveValue(i / 4000, p) >= 0) n++;
     }
     return n;
   };
-  ok(count(0.1) === 10 && count(0.05) === 20, `halving the wavelength doubles the cycles (${count(0.1)} → ${count(0.05)})`);
+  // 2n+1, not 2n: over a HALF-OPEN interval the crossing at t=0 is never counted (there is
+  // no previous sample to have been below zero), so halving the period adds one interior
+  // crossing beyond doubling. Asserted exactly rather than as a ratio, so a genuinely wrong
+  // period still reds it.
+  ok(count(0.05) === count(0.1) * 2 + 1, `halving the wavelength doubles the cycles (${count(0.1)} → ${count(0.05)})`);
+  ok(count(0.1) === 9, `and the count itself is right (${count(0.1)} in [0,1) at one cycle per 0.1)`);
+
+  // THE ENDPOINT RULE, which is what the presets depend on: a Sawtooth at one cycle across
+  // the whole axis is a monotone RISE, and it must still be rising at t=1. Resolving `% 1`
+  // to the period's start there instead drops the last texel back to the floor — a
+  // one-sample spike at the end of every "sequential lightness" gradient.
+  const ramp = P({ shape: 'Sawtooth', wavelength: 1, phase: 0 });
+  ok(waveValue(1, ramp) > 0.99, `a one-cycle sawtooth is at its ceiling at t=1 (${waveValue(1, ramp).toFixed(3)})`);
+  ok(waveValue(0, ramp) < -0.99, `and at its floor at t=0 (${waveValue(0, ramp).toFixed(3)})`);
+  let rising = true;
+  for (let i = 1; i <= 400; i++) if (waveValue(i / 400, ramp) < waveValue((i - 1) / 400, ramp)) rising = false;
+  ok(rising, 'and it never steps back on the way — a monotone ramp, end to end');
 }
 
 // --- [2] the span envelope --------------------------------------------------------------
@@ -216,6 +237,108 @@ console.log('[7] span → frames');
   ok(waveSpanFrames(P({ span: [0.5, 0.503] }), 255) === null, 'a sub-2-frame span commits nothing');
   const w = waveSpanFrames(P({ span: [0.25, 0.75] }), 255);
   ok(w?.lo === 64 && w?.hi === 191, `a half span is frames 64..191 (${w?.lo}..${w?.hi})`);
+}
+
+// --- [8] the presets ----------------------------------------------------------------------
+console.log('[8] presets');
+{
+  const { WAVE_PRESETS, presetParams } = await import('../palette/core/wavePresets');
+  const { CURVE_SPACE_ORDER, channelForRole, curveSpace } = await import('../palette/core/curveSpaces');
+
+  ok(WAVE_PRESETS.length > 0, `there are presets (${WAVE_PRESETS.length})`);
+  ok(new Set(WAVE_PRESETS.map((x) => x.id)).size === WAVE_PRESETS.length, 'their ids are unique');
+
+  // Every preset must resolve to a real channel in at least one space, or it can never be
+  // offered anywhere and is dead weight in the head.
+  for (const preset of WAVE_PRESETS) {
+    if (preset.role === 'active') { ok(true, `${preset.id}: channel-agnostic, offered everywhere`); continue; }
+    const spaces = CURVE_SPACE_ORDER.filter((sp) => channelForRole(sp, preset.role) !== null);
+    ok(spaces.length > 0, `${preset.id}: lands on a real ${preset.role} channel in ${spaces.length} space(s)`);
+  }
+  // ...and the space that has NO lightness channel must say so, rather than picking one.
+  ok(channelForRole('rgb', 'lightness') === null, 'RGB has no lightness channel, and says so');
+  ok(channelForRole('oklab', 'lightness') === 'L', 'OkLCh lightness is L');
+  ok(channelForRole('hsv', 'lightness') === 'V', 'HSV lightness is V');
+  ok(channelForRole('cielch', 'hue') === 'h*', 'CIE LCh hue is h*');
+  for (const sp of CURVE_SPACE_ORDER) {
+    const roles = curveSpace(sp).channels.map((c) => c.role);
+    ok(roles.length === 3 && roles.every(Boolean), `${sp}: every channel declares a role (${roles.join('/')})`);
+  }
+
+  // THE CLAIM THE WHOLE SCHEME RESTS ON: the button is traced from the same params the click
+  // applies. Asserted by tracing both and demanding they agree sample for sample — if a
+  // preset's glyph were drawn from anything else, the head would advertise a shape the tool
+  // does not make.
+  for (const preset of WAVE_PRESETS) {
+    const applied = presetParams(preset, DEFAULT_WAVE);
+    const drawn = presetParams(preset, DEFAULT_WAVE);
+    let worst = 0;
+    for (let i = 0; i <= 200; i++) worst = Math.max(worst, Math.abs(waveValue(i / 200, applied) - waveValue(i / 200, drawn)));
+    ok(worst === 0, `${preset.id}: the glyph traces exactly what applying it produces`);
+  }
+
+  // The whole-gradient lightness presets are statements about the WHOLE ramp, so they must
+  // reset the span — applying one inside a leftover narrow span would silently do a fraction
+  // of what its picture shows.
+  const narrow = P({ span: [0.4, 0.6], feather: [0.3, 0.3] });
+  for (const id of ['linear', 'ease-in', 'ease-out', 'ease-in-out', 'diverging', 'cyclic', 'hue-sweep']) {
+    const preset = WAVE_PRESETS.find((x) => x.id === id)!;
+    const q = presetParams(preset, narrow);
+    ok(q.span[0] === 0 && q.span[1] === 1, `${id}: takes the whole axis, whatever span was set`);
+    ok(q.mode === 'replace', `${id}: replaces rather than adds — it IS the curve, not a texture on it`);
+  }
+  // The textures do the opposite: they ride inside whatever span the user already set.
+  for (const id of ['ripple', 'bands', 'grain']) {
+    const preset = WAVE_PRESETS.find((x) => x.id === id)!;
+    const q = presetParams(preset, narrow);
+    ok(q.span[0] === 0.4 && q.span[1] === 0.6, `${id}: keeps the span you set`);
+    ok(q.mode === 'add', `${id}: adds to the curve rather than replacing it`);
+  }
+  // A texture inherits the SPAN and the FEATHER on purpose — they are where you put it, and
+  // the tool remembers that like it remembers the channel. It must inherit nothing else. So
+  // the comparison holds span and feather equal and demands the rest be identical: applying
+  // Ripple after Diverging used to pick up that preset's 0.55 offset and lift the whole
+  // channel by 5% of its range (measured 2026-09-12 — Ripple, Diverging, Ripple gave two
+  // different gradients), which is the kind of inheritance a preset must not do.
+  const sameGeom = (q: WaveParams): WaveParams => ({ ...q, span: [0, 1], feather: [0, 0] });
+  for (const id of ['ripple', 'bands', 'grain', 'vivid']) {
+    const preset = WAVE_PRESETS.find((x) => x.id === id)!;
+    const fresh = sameGeom(presetParams(preset, DEFAULT_WAVE));
+    const afterWhole = sameGeom(presetParams(preset, presetParams(WAVE_PRESETS.find((x) => x.id === 'diverging')!, DEFAULT_WAVE)));
+    let worst = 0;
+    for (let i = 0; i <= 200; i++) {
+      worst = Math.max(worst, Math.abs(applyWaveSample(0.5, i / 200, fresh, 1) - applyWaveSample(0.5, i / 200, afterWhole, 1)));
+    }
+    ok(worst === 0, `${id}: inherits span and feather, and nothing else (worst Δ ${worst.toFixed(4)})`);
+  }
+
+  // and a preset must not alias the caller's arrays
+  const src = P({ span: [0.2, 0.8] });
+  const got = presetParams(WAVE_PRESETS.find((x) => x.id === 'ripple')!, src);
+  got.span[0] = 0.9;
+  ok(src.span[0] === 0.2, 'applying a preset never writes through to the live params');
+
+  // THE EASES ARE BIAS, and that is the reason there is no easing library here. Each must be
+  // a monotone rise (they are ramps), and they must differ from linear in the right
+  // direction: ease-in sits BELOW the straight line, ease-out ABOVE it.
+  const at = (id: string, t: number) => waveValue(t, presetParams(WAVE_PRESETS.find((x) => x.id === id)!, DEFAULT_WAVE));
+  for (const id of ['linear', 'ease-in', 'ease-out', 'ease-in-out']) {
+    let rising = true;
+    for (let i = 1; i <= 200; i++) if (at(id, i / 200) < at(id, (i - 1) / 200) - 1e-9) rising = false;
+    ok(rising, `${id}: monotone rise, end to end`);
+    ok(Math.abs(at(id, 0) + 1) < 0.02 && Math.abs(at(id, 1) - 1) < 0.02, `${id}: spans floor to ceiling`);
+  }
+  ok(at('ease-in', 0.5) < at('linear', 0.5) - 0.05, `ease-in is below the straight line at the midpoint (${at('ease-in', 0.5).toFixed(2)} < ${at('linear', 0.5).toFixed(2)})`);
+  ok(at('ease-out', 0.5) > at('linear', 0.5) + 0.05, `ease-out is above it (${at('ease-out', 0.5).toFixed(2)})`);
+  ok(Math.abs(at('ease-in-out', 0.5) - at('linear', 0.5)) < 0.02, 'ease-in-out crosses at the midpoint, being symmetric');
+  ok(at('ease-in-out', 0.25) < at('linear', 0.25) && at('ease-in-out', 0.75) > at('linear', 0.75),
+    'and it is an S — under the line in the first half, over it in the second');
+
+  // Diverging is the one with an interior extremum; cyclic starts and ends together.
+  const div = presetParams(WAVE_PRESETS.find((x) => x.id === 'diverging')!, DEFAULT_WAVE);
+  ok(waveValue(0.5, div) > 0.99 && waveValue(0, div) < -0.99, 'diverging peaks in the middle and is low at both ends');
+  const cyc = presetParams(WAVE_PRESETS.find((x) => x.id === 'cyclic')!, DEFAULT_WAVE);
+  ok(Math.abs(waveValue(0, cyc) - waveValue(1, cyc)) < 1e-6, 'cyclic ends where it began');
 }
 
 console.log(failures === 0 ? '\nAll wave-filter checks passed.' : `\n${failures} FAILED`);
