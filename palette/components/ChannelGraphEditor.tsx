@@ -99,6 +99,9 @@ const PHONE_GUTTER = 30;
 const INSPECTOR_W = 256;
 const INSPECTOR_W_COLLAPSED = 28;
 const STRIP_H = 12;
+/** Right-hand breathing room for the t-axis, so frame 255's glyph is not half off-canvas.
+ *  @see the fit effect, which is the only thing that reads it. */
+const T_AXIS_END_PAD = 8;
 
 /**
  * Left/right insets of the graph's PLOT area within the editor's full width, so the
@@ -301,10 +304,20 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   const canvasWidth = Math.max(120, width - sidebarW - inspectorW);
   const canvasHeight = phone ? Math.round((canvasWidth * 3) / 4) : Math.max(80, height - STRIP_H);
 
-  // Fit the t-axis (0..CURVE_FRAMES) across the canvas and the normalized
-  // vertical [0,1] into the plot area whenever the size changes.
+  /**
+   * Fit the t-axis (0..CURVE_FRAMES) across the canvas and the normalized vertical [0,1]
+   * into the plot area whenever the size changes.
+   *
+   * `T_AXIS_END_PAD` is why frame 255 is reachable without zooming out. At
+   * `available / CURVE_FRAMES` the last frame lands on pixel `gutter + available`, which is
+   * `canvasWidth` — one past the last drawable pixel — so the final keyframe's glyph and the
+   * curve's own end sat half outside the canvas and the only way to see them was to zoom out
+   * (owner, 2026-09-12). The pad is the glyph's reach, not a round number picked to look
+   * right: a key is drawn as a diamond about 5 px to each side and a selected one carries a
+   * ring, so 8 px clears both and leaves the axis label room.
+   */
   useEffect(() => {
-    const available = canvasWidth - gutter;
+    const available = canvasWidth - gutter - T_AXIS_END_PAD;
     if (available <= 0) return;
     setFrameWidth(available / CURVE_FRAMES);
     setScrollLeft(0);
@@ -976,8 +989,31 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     tmp.height = 1;
     tmp.getContext('2d')!.putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(tmp, 0, 0, 256, 1, gutter, 0, cv.width - gutter, cv.height);
-  }, [previewRamp, canvasWidth, gutter]);
+    /**
+     * THROUGH THE GRAPH'S OWN TRANSFORM, so the strip is under the frame it belongs to
+     * (owner, 2026-09-12: "can it always be in line with the correct position relative to
+     * the graph itself").
+     *
+     * It used to paint the whole 256-wide ramp from `gutter` to the canvas edge — a fixed
+     * mapping that is only right at the default zoom. `frameToCanvasPixel` honours
+     * `scrollLeft` and `frameWidth`, so the moment the view was panned or zoomed the strip
+     * stayed put while the curve moved over it, and the two disagreed about where t was.
+     * Mapping the source's ends through the same function keeps them locked at any zoom,
+     * including off-canvas, where the browser clips what it must.
+     *
+     * The clip is the gutter's: panned right, frame 0 lands left of the value labels, and
+     * the strip has no business painting over them.
+     */
+    const x0 = frameToCanvasPixel(0);
+    const x1 = frameToCanvasPixel(CURVE_FRAMES);
+    if (x1 - x0 <= 0) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(gutter, 0, Math.max(0, cv.width - gutter), cv.height);
+    ctx.clip();
+    ctx.drawImage(tmp, 0, 0, 256, 1, x0, 0, x1 - x0, cv.height);
+    ctx.restore();
+  }, [previewRamp, canvasWidth, gutter, frameToCanvasPixel]);
 
   // The "source ghost" — faint dashed per-channel polylines of the RESULT channels
   // (`ghost`, post-global Modify chain) behind the editable bezier. Drawn with the

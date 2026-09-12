@@ -17,6 +17,8 @@
  *   • getTarget() — which track to draw, its colour, fit tolerance, and the pixel→value map
  *   • getKeys(trackId) — the track's current keyframes (to merge with)
  *   • commit(trackId, newKeys) — write them back as ONE undo entry (host brackets)
+ *   • preview(trackId, keys) — the same keys mid-gesture, so both tools show on the gradient
+ *     while the pointer is still down
  */
 
 import { useState, useRef, useCallback } from 'react';
@@ -59,11 +61,13 @@ interface PencilOpts {
    *  also reaches, and the elastic smooth's strength per stroke (strokes accumulate).
    *  Defaults 6 / 0.25. */
   brush?: { radius?: number; strength?: number };
-  /** The brush's LIVE preview while the pointer moves (owner: "live update while brushing"):
-   *  the host writes these keys straight to its state, no undo bracket of its own — the
-   *  pointer-down bracket already spans the gesture; `commit` lands the final keys. Each
-   *  preview is computed from the keys as they were at pen-down, so one stroke's softening
-   *  does not compound with itself as the pointer wanders. */
+  /** LIVE preview while the pointer moves, for BOTH tools (owner: "live update while
+   *  brushing", 2026-09-07; "the pencil, can we have it update the gradient live?",
+   *  2026-09-12): the host writes these keys straight to its state, no undo bracket of its
+   *  own — the pointer-down bracket already spans the gesture; `commit` lands the final keys.
+   *  Every preview is computed from the keys as they were at PEN-DOWN, so a stroke never fits
+   *  its own output: the brush's softening would compound as the pointer wandered, and the
+   *  pencil would re-fit the span it had just written. */
   preview?: (trackId: string, keys: Keyframe[]) => void;
 }
 
@@ -127,13 +131,53 @@ export const usePencilTool = ({
     return smoothSpan(keys, lo, hi, st.target.eps, brushOpts.strength, `${st.target.trackId}-brush-${Math.round(lo)}-${Math.round(hi)}-${Date.now().toString(36)}`, (ks, f) => evaluateTrackValue(ks, f, false, false));
   }, [brushSpan, brushOpts.strength]);
 
+  /**
+   * The drawn stroke as spliced keys, from `base` — the track as it was at PEN-DOWN, never
+   * from the tool's own previous preview, or a live stroke would fit its own output and drift
+   * (the same rule `brushKeys` follows, and for the same reason).
+   *
+   * Extracted from `onUp` so the stroke can preview LIVE (owner, 2026-09-12: "the pencil, can
+   * we have it update the gradient live?"). The brush already worked this way; the pencil drew
+   * on its overlay and the gradient only caught up on release.
+   */
+  const pencilKeys = useCallback((st: NonNullable<typeof strokeRef.current>, base: Keyframe[]): Keyframe[] | null => {
+    // Map the stroke into channel-value space through the basis frozen at pen-down,
+    // clamp frames into range, and sort by frame.
+    const pts = st.points
+      .map((p) => ({ f: Math.max(0, Math.min(maxFrame, p.frame)), v: st.target.toValue(p.py, st.frozenView) }))
+      .sort((a, b) => a.f - b.f);
+    const lo = Math.round(pts[0].f);
+    const hi = Math.round(pts[pts.length - 1].f);
+    if (hi <= lo) return null; // a dot, not a stroke
+
+    // Rasterize the drawn span to consecutive integer frames (linear interp between
+    // stroke samples), then fit. Only the [lo,hi] span is touched.
+    const spanVals: number[] = [];
+    let j = 0;
+    for (let f = lo; f <= hi; f++) {
+      while (j < pts.length - 1 && pts[j + 1].f < f) j++;
+      const a = pts[j];
+      const b = pts[Math.min(pts.length - 1, j + 1)];
+      const t = b.f > a.f ? (f - a.f) / (b.f - a.f) : 0;
+      spanVals.push(a.v + (b.v - a.v) * t);
+    }
+    const spanKeys = fitSamplesToKeys(spanVals, lo, st.target.eps, `${st.target.trackId}-pen-${lo}-${hi}`);
+
+    // Keep existing keys OUTSIDE the drawn span, splice the drawn keys in, and heal the
+    // seam - all three in `spliceSpan`, shared with the smoothing brush and the wave
+    // filter. Null = the splice would leave a track with fewer than two keys.
+    return spliceSpan(base, lo, hi, spanKeys);
+  }, [maxFrame]);
+
   const onMove = useCallback((e: MouseEvent) => {
     const st = strokeRef.current;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!st || !rect) return;
     st.points.push({ frame: canvasPixelToFrame(e.clientX - rect.left), py: e.clientY - rect.top });
     draw();
-    if (st.brush && preview && st.origin) {
+    if (!preview || !st.origin) return;
+    if (st.brush) {
+      // the brush's span is all that matters, so an unchanged span does not recompute
       const { lo, hi } = brushSpan(st);
       const key = `${Math.round(lo)}-${Math.round(hi)}`;
       if (key !== st.lastSpan) {
@@ -141,8 +185,13 @@ export const usePencilTool = ({
         const out = brushKeys(st, st.origin);
         if (out) preview(st.target.trackId, out);
       }
+      return;
     }
-  }, [interactionRef, canvasPixelToFrame, draw, preview, brushSpan, brushKeys]);
+    // the pencil: every move changes the drawn shape, so there is nothing to skip on. The
+    // pointer-down bracket spans the gesture, so these are plain writes and one undo entry.
+    const drawn = pencilKeys(st, st.origin);
+    if (drawn) preview(st.target.trackId, drawn);
+  }, [interactionRef, canvasPixelToFrame, draw, preview, brushSpan, brushKeys, pencilKeys]);
 
   const onUp = useCallback(() => {
     const st = strokeRef.current;
@@ -162,34 +211,10 @@ export const usePencilTool = ({
       return;
     }
 
-    // Map the stroke into channel-value space through the basis frozen at pen-down,
-    // clamp frames into range, and sort by frame.
-    const pts = st.points
-      .map((p) => ({ f: Math.max(0, Math.min(maxFrame, p.frame)), v: st.target.toValue(p.py, st.frozenView) }))
-      .sort((a, b) => a.f - b.f);
-    const lo = Math.round(pts[0].f);
-    const hi = Math.round(pts[pts.length - 1].f);
-    if (hi <= lo) return; // a dot, not a stroke
-
-    // Rasterize the drawn span to consecutive integer frames (linear interp between
-    // stroke samples), then fit. Only the [lo,hi] span is touched.
-    const spanVals: number[] = [];
-    let j = 0;
-    for (let f = lo; f <= hi; f++) {
-      while (j < pts.length - 1 && pts[j + 1].f < f) j++;
-      const a = pts[j];
-      const b = pts[Math.min(pts.length - 1, j + 1)];
-      const t = b.f > a.f ? (f - a.f) / (b.f - a.f) : 0;
-      spanVals.push(a.v + (b.v - a.v) * t);
-    }
-    const spanKeys = fitSamplesToKeys(spanVals, lo, st.target.eps, `${st.target.trackId}-pen-${lo}-${hi}`);
-
-    // Keep existing keys OUTSIDE the drawn span, splice the drawn keys in, and heal the
-    // seam - all three in `spliceSpan`, shared with the smoothing brush and the wave
-    // filter. Null = the splice would leave a track with fewer than two keys.
-    const merged = spliceSpan(getKeys(st.target.trackId), lo, hi, spanKeys);
+    // From the pen-down keys, so the committed result is exactly the last thing previewed.
+    const merged = pencilKeys(st, st.origin ?? getKeys(st.target.trackId));
     if (merged) commit(st.target.trackId, merged);
-  }, [overlayRef, maxFrame, getKeys, commit, onMove, brushKeys]);
+  }, [overlayRef, getKeys, commit, onMove, brushKeys, pencilKeys]);
 
   const beginBrush = useCallback((e: React.MouseEvent) => {
     const rect = interactionRef.current?.getBoundingClientRect();
@@ -214,10 +239,12 @@ export const usePencilTool = ({
       target,
       frozenView: view,
       points: [{ frame: canvasPixelToFrame(e.clientX - rect.left), py: e.clientY - rect.top }],
+      // the pencil previews live now, so it needs the same pen-down snapshot the brush keeps
+      origin: getKeys(target.trackId),
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [interactionRef, getTarget, view, canvasPixelToFrame, onMove, onUp]);
+  }, [interactionRef, getTarget, getKeys, view, canvasPixelToFrame, onMove, onUp]);
 
   return { pencilMode, setPencilMode, beginPencil, brushMode, setBrushMode, beginBrush };
 };

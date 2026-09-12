@@ -54,7 +54,7 @@
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, fitChannelsToTracks, prospectiveFitCurves, prospectiveFitFrames, readAdjustParamsNow, readSampledCurvesNow } from '../../palette/store/generatorStore';
 import { CURVE_SPACE_ORDER, curveSpaceKeys, toCurveChannels, type CurveSpace } from '../../palette/core/curveSpaces';
@@ -324,6 +324,8 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
   const g = useGeneratorStore.getState();
   // Detail / Smooth being dragged: the ghost layer shows itself (C.16)
   const [fitting, setFitting] = useState(false);
+  /** the plot box's ResizeObserver, held so a re-mount disconnects the old one */
+  const plotBoxRef = useRef<ResizeObserver | null>(null);
   // Fit on entry (C.4, owner: "curved mode should start fitting when we enter that mode"):
   // the face opens with the curves already editable. Leaving the face bakes (C.3) and
   // resets the tracks, so the next entry fits the baked gradient afresh.
@@ -389,7 +391,34 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
 
   const plotH = phone ? 320 : 240;
   const PHONE_SIDE_PAD = 6;
-  const plotW = phone ? width + 32 - PHONE_SIDE_PAD * 2 : width;
+  /**
+   * MEASURED, not derived from `width` (owner, 2026-09-12: the curve view "seems to be
+   * cropping 255 so we have to zoom out to see that point", and "the keyframe inspector is
+   * hidden so we cant open it" — one cause, this one).
+   *
+   * `width` is the RAMP's pixel width. The plot's box is this component's padded content
+   * width, which is 32 px narrower on a desk (`px-4`) and was not a different number by
+   * coincidence — measured 940 against 901. `ChannelGraphEditor` lays out sidebar + canvas +
+   * inspector rail to whatever width it is handed, so being handed 39 px too many put the
+   * canvas's right edge past the box: the t-axis end (frame 255) was clipped away, and the
+   * canvas overflowed ON TOP of the inspector rail, where it swallowed its clicks —
+   * `elementFromPoint` over the rail returned the canvas.
+   *
+   * So measure the box. A ResizeObserver rather than a second guess at the padding, because
+   * the next person to change `px-4` will not think to come back here.
+   */
+  const [plotBoxW, setPlotBoxW] = useState(0);
+  const plotBox = useCallback((el: HTMLDivElement | null) => {
+    plotBoxRef.current?.disconnect();
+    plotBoxRef.current = null;
+    if (!el) return;
+    setPlotBoxW(Math.round(el.getBoundingClientRect().width));
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => setPlotBoxW(Math.round(entries[0].contentRect.width)));
+    ro.observe(el);
+    plotBoxRef.current = ro;
+  }, []);
+  const plotW = phone ? width + 32 - PHONE_SIDE_PAD * 2 : plotBoxW || width;
   return (
     <div className={`flex flex-col gap-3 py-3 ${phone ? 'px-0' : 'px-4'}`}>
       <div className={`flex items-center gap-2 ${phone ? 'px-3 flex-nowrap' : 'flex-wrap'}`}>
@@ -421,6 +450,7 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
       </div>
       {shownTracks ? (
         <div
+          ref={plotBox}
           className={`relative overflow-hidden ${phone ? '' : 'rounded-[10px]'}`}
           style={phone ? { paddingLeft: PHONE_SIDE_PAD, paddingRight: PHONE_SIDE_PAD } : { height: plotH }}
         >
