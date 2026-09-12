@@ -295,6 +295,7 @@ export const GeneratorStage: React.FC = () => {
             previewRamp={ramp}
             ghost={ghost}
             ghostPoints={ghostPoints}
+            epsScale={(11 - detail) / 3}
             interactive={!!tracks}
           />
           {!tracks && (

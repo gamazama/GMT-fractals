@@ -22,6 +22,7 @@ import { registerUI } from '../../engine/features/ui';
 import { installShortcuts } from '../../engine/plugins/Shortcuts';
 import { installUndo } from '../../engine/plugins/Undo';
 import { registerCoreSettings } from '../../store/coreSettings';
+import { registerPaletteSettings } from '../../palette/installPaletteSettings';
 import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeStore';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
@@ -41,6 +42,7 @@ installShortcuts();
 // the shell renders its own undo control against the store.
 installUndo({ hideTopBarButtons: true });
 registerCoreSettings();
+registerPaletteSettings();
 
 /**
  * Light grey by default (owner, 2026-09-06), the switch kept: Settings ▸ Colour still offers

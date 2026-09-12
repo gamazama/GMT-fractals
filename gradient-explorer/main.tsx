@@ -20,6 +20,7 @@ import { wireGradientExplorer } from './setup';
 import { registerUI } from '../engine/features/ui';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
 import { registerCoreSettings } from '../store/coreSettings';
+import { registerPaletteSettings } from '../palette/installPaletteSettings';
 import { SettingsButton } from '../components/SettingsAccess';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
@@ -71,6 +72,7 @@ topbar.register({ id: 'fps', slot: 'right', order: -10, component: FpsCounterDes
 // Settings — colour scheme + accent hues (shared across all GMT apps), autosave.
 // The gear opens the floating Settings panel (SettingsHost mounted in the app).
 registerCoreSettings();
+registerPaletteSettings();
 topbar.register({ id: 'settings', slot: 'right', order: 100, component: SettingsButton });
 
 // Animation glue — param sliders show the keyframe diamond and key onto the

@@ -17,7 +17,7 @@
 
 import type { Track, Keyframe } from '../../types';
 import { evaluateTrackValue } from '../../utils/timelineUtils';
-import { dpIndices, reTangentBezier } from '../../utils/CurveFitting';
+import { dpIndices, fitKeysToSamples, optimalKnotIndices, reTangentBezier } from '../../utils/CurveFitting';
 
 // reTangentBezier lives in the shared CurveFitting util (so the graph editors'
 // Bias/Pencil tools share it); re-exported here for the palette's existing callers.
@@ -33,6 +33,18 @@ export interface RampToTrackOptions {
   /** Keyframe interpolation for the initial fit. Linear is exact between vertices;
    *  the user can convert to Bezier in the editor. */
   interpolation?: Keyframe['interpolation'];
+  /**
+   * How `rampToBezierTrack` chooses WHERE the keys go. `'dp'` (default) is Douglas-Peucker,
+   * which measures each sample against the chord; `'optimal'` asks the question the fit
+   * actually cares about — can one cubic cover this span within eps — so it needs fewer keys
+   * for the same tolerance, at ~10x the (still sub-millisecond) cost. Unlike `'dp'` it also
+   * holds eps on the curve it stores, rather than on a chord.
+   *
+   * An OPTION rather than something read from a preference here, because `palette/core` is
+   * the portable, store-free half of the library. The caller that owns the preference
+   * (`fitChannelsToTracks`) resolves it; see `palette/store/curveFitPref.ts`.
+   */
+  placement?: 'dp' | 'optimal';
 }
 
 /** Fit a 256-value channel to an editable Track. */
@@ -57,10 +69,21 @@ export const rampToTrack = (
 /**
  * Fit a 256-value channel to an editable Track with smooth, DRAGGABLE Bezier
  * keyframes — the curve-editor's authoring representation. Keyframe POSITIONS
- * come from the same Douglas-Peucker placement as rampToTrack (error bounded by
- * eps); each is then given Catmull-Rom-style auto-tangents (AnimationMath) so the
- * curve is smooth out of the box and the user can drag the handles. Sampling
+ * come from the same Douglas-Peucker placement as rampToTrack; the tangents are
+ * then SOLVED against the samples each span covers (`fitKeysToSamples`). Sampling
  * (trackToRamp) is unchanged — it evaluates whatever curve the user shapes.
+ *
+ * The tangents used to come from `reTangentBezier`'s Catmull-Rom pass, which reads only the
+ * neighbouring key VALUES and never the ~250 samples between them. On an 8-bit channel —
+ * a staircase — its monotonicity guard flattened every key's arms, and a flat arm governing
+ * a long span made the curve sag: a plain black→white gradient baked back 0.141 low in
+ * lightness at mid-ramp. Fitting the tangents removes that and needs far fewer keys for the
+ * same fidelity (measured over the 25 built-in presets, matched at OKLab ΔE 0.02: 94.9 keys
+ * per gradient → 16.3). See `fitKeysToSamples` for the mechanism and the guard.
+ *
+ * `reTangentBezier` is unchanged and still owns the AUTHORING convention (add-key, the
+ * pencil's seam heal, the Bias tool). Fitting and authoring want different tangents; this is
+ * the fitting one.
  */
 export const rampToBezierTrack = (
   vals: number[],
@@ -69,14 +92,10 @@ export const rampToBezierTrack = (
   opts: RampToTrackOptions = {},
 ): Track => {
   const eps = opts.eps ?? 0.01;
-  const idx = dpIndices(vals, eps);
-  const base: Keyframe[] = idx.map((i, n) => ({
-    id: `${id}-k${n}`,
-    frame: (i / (vals.length - 1)) * CURVE_FRAMES,
-    value: vals[i],
-    interpolation: 'Bezier' as const,
-  }));
-  return { id, type: 'float', label, keyframes: reTangentBezier(base), color: opts.color };
+  const last = vals.length - 1;
+  const idx = opts.placement === 'optimal' ? optimalKnotIndices(vals, eps) : dpIndices(vals, eps);
+  const keyframes = fitKeysToSamples(vals, idx, (i) => (i / last) * CURVE_FRAMES, id);
+  return { id, type: 'float', label, keyframes, color: opts.color };
 };
 
 /** A run of identical samples: a BAND in a stepped gradient (`start`..`end` inclusive). */
@@ -152,6 +171,11 @@ export const rampToSteppedTrack = (
   // The gap keys are Linear, not Bezier: DP's error bound holds only for straight
   // segments, and Catmull-Rom tangents computed against a neighbouring HOLD overshoot
   // (measured: 0.08 on a 0.6 slope between two bands). The editor converts on request.
+  //
+  // `opts.placement` therefore does NOT reach the gaps, only the unbanded delegation above:
+  // `optimalKnotIndices` accepts a span when a CUBIC covers it within eps, and these keys
+  // interpolate LINEARLY — knots chosen for a curve, joined by straight lines, would break
+  // the very bound eps is here to give.
   return { id, type: 'float', label, keyframes: keys, color: opts.color };
 };
 

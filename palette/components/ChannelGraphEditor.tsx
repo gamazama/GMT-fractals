@@ -179,6 +179,18 @@ interface ChannelGraphEditorProps {
   ghostDefault?: boolean;
   /** The host is adjusting Detail / Smooth right now: the ghost shows whatever the eye says. */
   ghostActive?: boolean;
+  /**
+   * The host's DETAIL setting, as a multiplier on each channel's own `eps`, so the tools that
+   * simplify — the Pencil, the smoothing brush, the wave stamp — fit at the same tolerance
+   * the Detail slider is asking the main fit for.
+   *
+   * Without it they used the channel's BASE eps, which happens to equal Detail 8 exactly
+   * (`fitChannelsToTracks` scales by `(11 - detail) / 3`, and (11-8)/3 = 1). So the dial moved
+   * the fit and the tools stayed pinned to one end of it — a stroke drawn at Detail 2 came
+   * back four times denser than the curve around it. Default 1, which is that same
+   * behaviour, so a host that does not pass it is unchanged.
+   */
+  epsScale?: number;
   /** Show the Normalize (0–1) toggle. The v2 Curves face passes false: there the plot is
    *  ALWAYS on the channels' relevant ranges (L 0–1 = C 0–0.4 = one hue turn; owner,
    *  2026-09-07 evening) — the un-normalized view was where Fit all / Fit selection broke. */
@@ -208,6 +220,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   ghostPoints,
   ghostDefault = true,
   ghostActive = false,
+  epsScale = 1,
   normalizeToggle = true,
   interactive = true, phone = false, space = DEFAULT_CURVE_SPACE, spaceChooser }) => {
   const interactionRef = useRef<HTMLDivElement>(null);
@@ -682,7 +695,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       return {
         trackId: activeChannel,
         color: info?.color,
-        eps: chanDef(activeChannel).eps,
+        // the Detail dial reaches the tools too, so a Pencil stroke or a brush pass simplifies
+        // at the tolerance the curve around it was fitted at (see `epsScale`)
+        eps: chanDef(activeChannel).eps * epsScale,
         toValue: (py, v) => pixelToChannelValue(py, v, trackRanges[activeChannel], normalized),
       };
     },
@@ -705,7 +720,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // pencil's: samples → fitSamplesToKeys → spliceSpan, which keeps every key outside the
   // span and heals the seam. One `genEdit` bracket, so it is one Ctrl+Z.
   // @see palette/core/waveGen.ts · palette/components/WaveOverlay.tsx
-  const waveEps = chanDef(activeChannel).eps;
+  const waveEps = chanDef(activeChannel).eps * epsScale;
   const sampleWaveBase = useCallback(
     (frame: number) => {
       const tr = tracksRef.current[activeChannel];

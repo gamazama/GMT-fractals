@@ -404,10 +404,18 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
             Smooth's label. The 56 px cell is what the row cannot afford; the bar still says
             where the value is, and these two are small integers (owner: "I'd make the call
             that we don't need the textfields for these sliders"). Typing a value goes with
-            it — the well is also the text field — which is the trade, on this screen only. */}
+            it — the well is also the text field — which is the trade, on this screen only.
+
+            THE NUMBER CAME BACK IN THE LABEL (owner, 2026-09-12: "the display is not
+            showing"). Dropping the well took the value away entirely, and a bar alone does
+            not read as a value — least of all Smooth, whose new default of 0 leaves the track
+            EMPTY, so the control looked broken rather than merely terse. A one-or-two digit
+            suffix inside the existing label costs ~14 px against the 56 the row could not
+            afford, and the label is already `truncate` + `max-w-[45%]`, so it cannot push the
+            track out. Typing a value is still desk-only, which was the accepted trade. */}
         <div className={phone ? 'flex-1 flex items-center gap-3 min-w-0' : 'contents'}>
-          <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense noValueField={phone} label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
-          <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense noValueField={phone} label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+          <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense noValueField={phone} label="Detail" labelSuffix={phone ? <span className="tabular-nums text-fg">{detail}</span> : undefined} value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
+          <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense noValueField={phone} label="Smooth" labelSuffix={phone ? <span className="tabular-nums text-fg">{smooth}</span> : undefined} value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
         </div>
         {!phone && <div className="ml-auto flex items-center">{spaceChooser}</div>}
       </div>
@@ -425,6 +433,9 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
             previewRamp={derived.ramp ?? undefined}
             ghost={ghost}
             ghostPoints={ghostPoints}
+            // the same scale fitChannelsToTracks applies, so the Pencil, the brush and the
+            // wave simplify at the tolerance Detail is asking of the main fit
+            epsScale={(11 - detail) / 3}
             ghostDefault={false}
             ghostActive={fitting}
             normalizeToggle={false}

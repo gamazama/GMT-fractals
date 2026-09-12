@@ -37,6 +37,7 @@ import { EASING_NAMES, type EasingName } from '../core/easings';
 import { fitColorBoxToRamp } from '../core/colorBoxFit';
 import { showToast } from '../../engine/store/toastStore';
 import { rampToBezierTrack, rampToSteppedTrack, flatRuns, trackToRamp } from '../core/channelCurve';
+import { resolveKnotPlacement } from './curveFitPref';
 import { buildPresetCatalog, registerCustomRamp, registerCustomChannels } from '../core/presetCatalog';
 import { bufferToRamp } from '../core/stopFit';
 import { GENERATOR_PARAM_DEFAULTS } from '../features/paletteGenerator';
@@ -286,8 +287,9 @@ export const fitChannelsToTracks = (base: Channels, detail: number, smooth: numb
   const out: ChannelTracks = {};
   // eps comes off the CHANNEL, not the space: CIE L* spans 100 where Oklab L spans 1, and
   // one number for both would mean one Detail setting buying 100x the keys.
+  const placement = resolveKnotPlacement();
   def.channels.forEach((c, i) => {
-    out[c.key] = rampToSteppedTrack(smoothChannel(chans[i], sm), runs, c.key, c.label, { eps: c.eps * k });
+    out[c.key] = rampToSteppedTrack(smoothChannel(chans[i], sm), runs, c.key, c.label, { eps: c.eps * k, placement });
   });
   return out;
 };
@@ -357,7 +359,13 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   curveSpace: DEFAULT_CURVE_SPACE,
   tracksEdited: false,
   detail: 8,
-  smooth: 5,
+  // 0, not the 5 this shipped with (owner, 2026-09-12: "smooth can be 0 by default"). The
+  // pre-smoothing pass existed to keep the old Catmull-Rom fit from sagging on an 8-bit
+  // staircase; the fit solves its tangents against the samples now, so blurring the source
+  // before fitting only costs fidelity. Measured over the 25 presets: with smooth 5 on, three
+  // of them could not reach OKLab ΔE 0.02 at ANY Detail setting. The dial still works for
+  // anyone who wants a deliberately softer curve.
+  smooth: 0,
   noiseSeed: 1,
   exportFmt: 'map',
 
@@ -442,8 +450,9 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       // owner is drawing in RGB must hand back RGB curves, not L/C/h ones.
       const chans = toCurveChannels(g.curveSpace, ch);
       const tracks: ChannelTracks = {};
+      const placement = resolveKnotPlacement();
       curveSpace(g.curveSpace).channels.forEach((c, i) => {
-        tracks[c.key] = rampToBezierTrack(chans[i], c.key, c.label, { eps: c.eps * k });
+        tracks[c.key] = rampToBezierTrack(chans[i], c.key, c.label, { eps: c.eps * k, placement });
       });
       set({ tracks, curvesOn: true });
       setSlice(MAIN_DEFAULTS);
