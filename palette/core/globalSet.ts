@@ -46,6 +46,7 @@
 import type { GradientConfig } from '../../types';
 import type { Favient } from '../store/favientsStore';
 import { PALETTE_CDN_BASE, PALETTE_LOCAL_BASE } from './catalogLoader';
+import { coerceGradientConfig } from './editorConfig';
 
 /** The shared endpoint — GET the set, POST one to it. Hardcoded, as every other
  *  function URL in this app is (grep SUBMIT_URL / SHARE_URL). */
@@ -57,7 +58,9 @@ const FILE = 'gxglobal.json';
 /** Reserved id prefix, so a global gradient can never be confused with a shelf one. */
 export const GLOBAL_ID_PREFIX = 'gx-global:';
 
-/** The wire shape. Deliberately the stops document, so a curator can hand-write one. */
+/** The wire shape. Deliberately the stops document, so a curator can hand-write one.
+ *  NOTE the stops carry no `id`: an id is a LOCAL handle, and putting one on the wire would
+ *  change the server's canonical signature and break dedupe. `parseGlobalSet` mints them. */
 interface WireItem {
   id?: string;
   name?: string;
@@ -68,8 +71,6 @@ interface WireFile {
   items?: WireItem[];
 }
 
-const isConfig = (c: unknown): c is GradientConfig =>
-  !!c && typeof c === 'object' && Array.isArray((c as GradientConfig).stops) && (c as GradientConfig).stops.length > 0;
 
 /**
  * Validate and normalise the payload. Untrusted input: anything malformed is dropped, and
@@ -81,7 +82,18 @@ export const parseGlobalSet = (raw: unknown): Favient[] => {
   const out: Favient[] = [];
   const seen = new Set<string>();
   items.forEach((it, i) => {
-    if (!it || !isConfig(it.config)) return;
+    if (!it) return;
+    // The SHARED untrusted-gradient gate, not a local shape check. It was a local one
+    // (`Array.isArray(stops) && length > 0`) until 2026-09-12, and because the wire format
+    // carries no stop ids — they are local handles, and including them would break the
+    // server's dedupe signature — every global gradient reached the editor with `id:
+    // undefined` on every stop. That is not cosmetic: `stopOps` keys selection, delete,
+    // move and distribute BY id, so selecting one stop selected all of them and deleting
+    // one emptied the gradient (measured: deleteStops left 0 of 4). `coerceGradientConfig`
+    // runs `normalizePaste` (which mints `p<idx>` for a missing id) and then
+    // `ensureUniqueIds`, so a config that leaves here is one the editor can key on.
+    const config = coerceGradientConfig(it.config);
+    if (!config) return;
     const id = `${GLOBAL_ID_PREFIX}${typeof it.id === 'string' && it.id ? it.id : i}`;
     if (seen.has(id)) return;
     seen.add(id);
@@ -89,7 +101,7 @@ export const parseGlobalSet = (raw: unknown): Favient[] => {
       id,
       name: typeof it.name === 'string' && it.name.trim() ? it.name.trim().slice(0, 64) : `Gradient ${i + 1}`,
       source: 'GX global',
-      config: it.config,
+      config,
       createdAt: 0,
       // No group: it is not in any shelf group, and nothing may file it into one.
       group: undefined,

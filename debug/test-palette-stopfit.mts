@@ -310,13 +310,22 @@ console.log('\n[9] a shallow gradient fits as a smooth ramp, not as bands');
     ['dark  #202024 -> #232328', { r: 32, g: 32, b: 36 }, { r: 35, g: 35, b: 40 }],
     ['mid   #808088 -> #8A8A92', { r: 128, g: 128, b: 136 }, { r: 138, g: 138, b: 146 }],
     ['light #F0F0F2 -> #F6F6F8', { r: 240, g: 240, b: 242 }, { r: 246, g: 246, b: 248 }],
+    // THE DEEP DARKS, added 2026-09-12 (owner: "it still seems to be an issue with some very
+    // dark gradients"). The "dark" case above is level 32, where one 8-bit step is ΔE 0.0042 —
+    // under the old fixed 0.006 constant, so it passed for the wrong reason and this section
+    // read as covering the darks when it did not. Below level ~8 a single step is 0.0054 to
+    // 0.0672, i.e. ABOVE that constant, so every quantisation edge there read as a real band.
+    // These two are not a shallower version of the cases above; they are the other side of a
+    // threshold. Measured before the fix: 18 stops / 17 steps, and 10 / 9.
+    ['black -> #101010 (levels 0-16)', { r: 0, g: 0, b: 0 }, { r: 16, g: 16, b: 16 }],
+    ['black -> #080808 (levels 0-8)', { r: 0, g: 0, b: 0 }, { r: 8, g: 8, b: 8 }],
   ];
   for (const [name, a, b] of shallowCases) {
     const ramp = shallow(a, b);
     const fit = fitRampToStops(ramp, { targetDE: 0.012, maxStops: 128, fitBias: true });
     const steps = fit.stops.filter((st) => st.interpolation === 'step').length;
     ok(steps === 0, `${name}: no stepped stops (got ${steps} of ${fit.stops.length})`);
-    ok(fit.stops.length <= 4, `${name}: a handful of stops, not one per 8-bit level (${fit.stops.length})`);
+    ok(fit.stops.length <= 6, `${name}: a handful of stops, not one per 8-bit level (${fit.stops.length})`);
     const back = renderStopsToRamp(fit.stops, 'oklab', 'srgb');
     const worst = Math.max(...ramp.map((c, i) => oklabDistance(c, back[i])));
     ok(worst < 0.012, `${name}: and still renders within tolerance (worst dE ${worst.toFixed(4)})`);

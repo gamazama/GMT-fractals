@@ -43,14 +43,26 @@ export const makeDefaultEditorConfig = (): GradientConfig => ({
     blendSpace: 'oklab',
 });
 
-/** Reassign any duplicate stop ids to fresh unused ones (normalizePaste fills only
- *  MISSING ids, so a hostile/hand-edited scene can still repeat one — which would
- *  make the editor's id-keyed selection/drag act on the wrong knot). Valid docs
- *  (all ids already unique) pass through untouched. */
-const ensureUniqueIds = (stops: GradientStop[]): GradientStop[] => {
+/**
+ * Give every stop a UNIQUE, non-empty id, minting only where one is missing or repeated.
+ * Valid docs (all ids already unique strings) pass through untouched, same objects.
+ *
+ * Why both halves matter: the editor keys its knots, its bias handles, its selection, its
+ * drag and every `stopOps` operation BY id. A repeated id makes those act on the wrong
+ * knot. A MISSING one is worse, because `undefined === undefined` — `deleteStops` on a
+ * selection of one then removes every stop in the gradient (measured 2026-09-12 on a GX
+ * global gradient: 0 of 4 left).
+ *
+ * Exported because two surfaces need it and they are not the same surface:
+ * `coerceGradientConfig` below runs it on anything being deserialized, and
+ * `favientsStore.loadFavients` runs it to HEAL shelf entries that were persisted before
+ * this existed — a filter can reject a bad entry but it cannot repair one already on disk.
+ */
+export const ensureStopIds = (stops: GradientStop[]): GradientStop[] => {
     const seen = new Set<string>();
     return stops.map((s, i) => {
-        if (!seen.has(s.id)) { seen.add(s.id); return s; }
+        const has = typeof s.id === 'string' && s.id.length > 0;
+        if (has && !seen.has(s.id)) { seen.add(s.id); return s; }
         let id: string;
         let n = i;
         do { id = `s${n++}`; } while (seen.has(id));
@@ -73,7 +85,7 @@ export const coerceGradientConfig = (snap: unknown): GradientConfig | null => {
     const stops = stopOps.normalizePaste(s.stops);
     if (!stops || stops.length < 2) return null;
     return {
-        stops: ensureUniqueIds(stops),
+        stops: ensureStopIds(stops),
         colorSpace: COLOR_SPACES.includes(s.colorSpace as ColorSpaceMode) ? (s.colorSpace as ColorSpaceMode) : 'srgb',
         blendSpace: BLEND_SPACES.includes(s.blendSpace as BlendColorSpace) ? (s.blendSpace as BlendColorSpace) : 'oklab',
     };

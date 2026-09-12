@@ -74,13 +74,37 @@ export interface StopFitOptions {
 }
 
 /**
- * The ΔE of one 8-bit step, with room over it. Below this an "edge" between two flat runs is
- * the file format talking, not the gradient: one sRGB level is ΔE ≈ 0.003–0.004 at its worst
- * (the darks). Set under the seam's 64-band test (edges of 0.008) so a deliberately subtle
- * BANDED palette still reads as banded — the gap between the two cases is wide enough that
- * this number does not need to be tuned.
+ * How much bigger than ONE 8-BIT STEP an edge must be before it counts as a real band.
+ *
+ * This replaced a fixed `QUANTISATION_DE = 0.006` on 2026-09-12, because that constant's
+ * premise was measurably false. Its comment claimed "one sRGB level is DeltaE ~ 0.003-0.004
+ * at its worst (the darks)". The darks are the worst case by an order of magnitude, not the
+ * best: sRGB's transfer curve is near-LINEAR below level ~10, so one 8-bit step there is a
+ * huge relative jump, and OkLab's cube root amplifies it further. Measured on a grey ramp:
+ *
+ *     level   0 -> 1     DeltaE 0.0672      <- eleven times the old constant
+ *     level   3 -> 4     DeltaE 0.0098
+ *     level   8 -> 9     DeltaE 0.0054      <- first level that fits under it
+ *     level 128 -> 129   DeltaE 0.0034      <- the figure the old comment generalised from
+ *
+ * So every quantisation edge below level ~8 read as a REAL BAND, and a smooth dark fade came
+ * out as a staircase: black -> #101010 fitted to 18 stops, 17 of them `step` (owner,
+ * 2026-09-12: "it still seems to be an issue with some very dark gradients"). The identical
+ * 16-level span at mid grey fitted to 2 stops and no steps, which is what gave it away.
+ *
+ * The floor is therefore computed PER EDGE from the ramp itself (see `stepFloor`), and this
+ * is only the slack over it. 1.05 is float headroom, not a tuning knob: an edge of exactly
+ * one level should compare equal to a one-level floor.
+ *
+ * @invariant A smooth ramp is fitted with NO stepped stops at any brightness, and a genuinely
+ *   banded one still becomes step stops — proven by: `npm run test:palette-stopfit` section
+ *   [9] (the five shallow cases, two of them in the deep darks, plus the 16-band case that is
+ *   there to catch over-reach). Falsified BOTH WAYS on 2026-09-12, which is what fixes the
+ *   threshold between them: restoring the fixed 0.006 constant reds only the two dark cases
+ *   (18 stops/17 step, 10/9 — the measured before-figures), and widening the slack to 20x
+ *   reds only the banded ones. A guard for a threshold needs both walls or it only pins one.
  */
-const QUANTISATION_DE = 0.006;
+const QUANTISATION_SLACK = 1.05;
 
 const DEFAULTS: Required<StopFitOptions> = {
   targetDE: 0.02,
@@ -231,7 +255,30 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   //    inclusive step boundary — see edgeRightPosition) and starts whatever follows: the
   //    next band (then it is that band's step stop) or a ramp (then it is linear).
   if (o.seedPlateaus) {
-    const edge = (a: number, b: number) => (a < 0 || b > 255 ? 1 : oklabDistance(ramp[a], ramp[b]));
+    const rawEdge = (a: number, b: number) => (a < 0 || b > 255 ? 1 : oklabDistance(ramp[a], ramp[b]));
+    /**
+     * The DeltaE that ONE 8-bit step would produce between these two texels, in the direction
+     * this edge actually moves. That is the quantisation floor HERE — it is ~20x larger at
+     * level 0 than at level 128, which is why a single constant could not serve both (see
+     * QUANTISATION_SLACK). Taking the direction from the edge itself matters too: a ramp that
+     * moves in one channel must not be compared against a diagonal step, which is ~sqrt(3)
+     * larger and would swallow a real edge.
+     */
+    const stepFloor = (a: number, b: number): number => {
+      const p = ramp[a];
+      const q = ramp[b];
+      const d = [q.r - p.r, q.g - p.g, q.b - p.b];
+      const m = Math.max(Math.abs(d[0]), Math.abs(d[1]), Math.abs(d[2]));
+      if (m === 0) return 0;
+      return oklabDistance(p, { r: p.r + d[0] / m, g: p.g + d[1] / m, b: p.b + d[2] / m });
+    };
+    /** The edge, with quantisation-scale ones reported as NO edge. Past either end it stays 1,
+     *  so a genuine first or last band still seeds (unchanged). */
+    const edge = (a: number, b: number): number => {
+      if (a < 0 || b > 255) return 1;
+      const e = rawEdge(a, b);
+      return e <= stepFloor(a, b) * QUANTISATION_SLACK ? 0 : e;
+    };
     const all = detectPlateaus(ramp, o.plateauMin);
     // A BANDED ramp (most texels inside flat runs) is bands wherever it is flat, however
     // small the edges between them (the seam's 64-band test has edges of 0.008; adjacent
@@ -263,7 +310,9 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
       if (r.start > 0) biggestEdge = Math.max(biggestEdge, edge(r.start - 1, r.start));
       if (r.end < 255) biggestEdge = Math.max(biggestEdge, edge(r.end, r.end + 1));
     }
-    const quantisedOnly = all.length > 0 && biggestEdge < QUANTISATION_DE;
+    // Every measurable inter-run edge was quantisation (`edge` reported 0 for each), so
+    // this ramp has no bands in it at all: let the refine below fit it smoothly.
+    const quantisedOnly = all.length > 0 && biggestEdge === 0;
     const runs = quantisedOnly
       ? []
       : bandedRamp ? all : all.filter((r) => Math.max(edge(r.start - 1, r.start), edge(r.end, r.end + 1)) >= o.bandEdgeDE);

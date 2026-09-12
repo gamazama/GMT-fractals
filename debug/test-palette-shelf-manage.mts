@@ -428,5 +428,61 @@ console.log('[8] fileFavientInto: one rule for every drop target');
   ok(!!added && added.name.trim().length > 0, `an unnamed payload is still named (got "${added?.name}")`);
 }
 
+// -- [10] every stop reaches the editor with a unique id --------------------------------
+console.log('[10] stop IDS survive the wire, and the shelf heals old ones');
+{
+  const { parseGlobalSet } = await import('../palette/core/globalSet');
+  const { ensureStopIds } = await import('../palette/core/editorConfig');
+  const { deleteStops, move } = await import('../utils/stopOps');
+
+  // The wire format carries NO stop ids on purpose - an id is a local handle, and putting
+  // one on the wire would change the server's canonical signature and break dedupe. So the
+  // parser has to mint them, and until 2026-09-12 it did not.
+  const wire = {
+    items: [{ name: 'g', config: { colorSpace: 'srgb', blendSpace: 'oklab', stops: [
+      { position: 0, color: '#71BBE1', bias: 0.4, interpolation: 'linear' },
+      { position: 0.5, color: '#64B0D6' },
+      { position: 1, color: '#1F3127' },
+    ] } }],
+  };
+  const [g] = parseGlobalSet(wire);
+  ok(!!g, 'a wire gradient with id-less stops still parses');
+  const ids = g.config.stops.map((s) => s.id);
+  ok(ids.every((i) => typeof i === 'string' && i.length > 0), `every stop got an id (${ids.join(',')})`);
+  ok(new Set(ids).size === ids.length, 'and they are distinct');
+
+  // WHY it matters, asserted rather than asserted about: stopOps keys by id, so a shared
+  // (or undefined) id makes one selection mean all of them.
+  const one = [g.config.stops[1].id];
+  ok(deleteStops(g.config.stops, one).length === 2, 'deleting ONE stop leaves the other two');
+  const moved = move(g.config.stops, one, 0.1).filter((s, i) => s.position !== g.config.stops[i].position);
+  ok(moved.length === 1, `moving ONE stop moves one stop (moved ${moved.length})`);
+
+  // The same claim against the un-minted shape, so the assertions above are known to bite.
+  const raw = wire.items[0].config.stops as unknown as typeof g.config.stops;
+  ok(deleteStops(raw, [raw[1].id]).length === 0, 'CONTROL: with no ids, deleting one stop empties the gradient');
+
+  // ensureStopIds: mints the missing, replaces the repeated, leaves a good doc alone.
+  const good = [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 1, color: '#FFFFFF' }];
+  ok(ensureStopIds(good as never).every((s, i) => s === (good as never[])[i]),
+    'a document whose ids are already unique passes through untouched');
+  const dupes = ensureStopIds([{ id: 'a', position: 0, color: '#000000' }, { id: 'a', position: 1, color: '#FFFFFF' }] as never);
+  ok(dupes[0].id !== dupes[1].id, 'a repeated id is replaced, not kept');
+  const blanks = ensureStopIds([{ id: '', position: 0, color: '#000000' }, { position: 1, color: '#FFFFFF' }] as never);
+  ok(blanks.every((s) => !!s.id) && blanks[0].id !== blanks[1].id, 'an empty id counts as missing, not as a value');
+
+  // The shelf HEALS what is already on disk - a filter can reject a bad entry, not repair one.
+  mem.set('gmt.favients', JSON.stringify([{
+    id: 'old', name: 'legacy', createdAt: 1, group: DEFAULT_GROUP,
+    config: { colorSpace: 'srgb', blendSpace: 'oklab', stops: [
+      { position: 0, color: '#000000' }, { position: 1, color: '#FFFFFF' },
+    ] },
+  }]));
+  const fresh = await import(`../palette/store/favientsStore?heal=${Date.now()}`);
+  const healed = fresh.useFavientsStore.getState().favients.find((f: { id: string }) => f.id === 'old');
+  ok(!!healed, 'a legacy entry with id-less stops still loads (it is not thrown away)');
+  ok(!!healed && healed.config.stops.every((s: { id?: string }) => !!s.id), 'and its stops come back with ids');
+}
+
 console.log(failures === 0 ? '\nPASS test-palette-shelf-manage' : `\nFAIL test-palette-shelf-manage (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

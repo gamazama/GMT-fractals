@@ -38,6 +38,7 @@
 
 import { create } from 'zustand';
 import type { GradientConfig } from '../../types';
+import { ensureStopIds } from '../core/editorConfig';
 import { lsGet, lsSet, lsRemove, lsGetJson, lsSetJson } from '../core/storage';
 import { clamp } from '../../utils/stopOps';
 
@@ -99,10 +100,26 @@ const isWellFormedFavient = (f: unknown): f is Favient => {
   );
 };
 
+/**
+ * HEAL a loaded entry's stop ids rather than only accepting or rejecting it. Entries
+ * favourited before 2026-09-12 can carry stops with NO id — the GX global wire format does
+ * not send them, and nothing minted any on the way in — and `isWellFormedFavient` above
+ * checks colour and position but not id, so those entries are already on disk and would
+ * stay there forever. An id-less stop is not cosmetic: `stopOps` keys selection, delete and
+ * move by id, so one selected stop reads as all of them. Entries whose ids are already fine
+ * come back as the same object, so this costs a walk and nothing else.
+ */
+const healStopIds = (f: Favient): Favient => {
+  const stops = ensureStopIds(f.config.stops);
+  return stops === f.config.stops || stops.every((s, i) => s === f.config.stops[i])
+    ? f
+    : { ...f, config: { ...f.config, stops } };
+};
+
 const loadFavients = (): Favient[] => {
   const arr = lsGetJson<unknown[]>(LS_KEY, []);
   if (!Array.isArray(arr)) return [];
-  return arr.filter(isWellFormedFavient);
+  return arr.filter(isWellFormedFavient).map(healStopIds);
 };
 
 const saveFavients = (favients: Favient[]): void => lsSetJson(LS_KEY, favients);

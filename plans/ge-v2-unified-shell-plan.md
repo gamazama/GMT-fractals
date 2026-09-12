@@ -2455,3 +2455,70 @@ phase now carries**. Items move out of this list only when a later phase's entry
   catches the React-level faults this build hit (the remount that killed the squares, the pill
   landing on the head, a handle drifting from its hit target). That is the same shape of hole
   as the curve editor's unproven hit-test radius, and it wants the same kind of probe.
+- 2026-09-12 · **Two defects the curves work surfaced in passing, both worse than they looked.**
+
+  **(a) Every GX global gradient reached the editor with no stop ids at all.** It showed as a
+  React duplicate-key warning (`bias-undefined`, repeated), which is why it read as cosmetic.
+  It is not: `stopOps` keys selection, delete, move, distribute and `double` BY id, and
+  `undefined === undefined`, so one selected stop was every stop. Measured on a real global
+  gradient: **`deleteStops` with one id selected left 0 of 4** — selecting a knot and pressing
+  Delete emptied the gradient. `double` produced `undefined-dup`, `undefined-dup2`, … .
+
+  The cause is a seam, not a typo. The wire format carries no stop ids ON PURPOSE — an id is
+  a LOCAL handle, and putting one on the wire would change the server's canonical signature
+  and break the dedupe that `unique (sig)` depends on. So `parseGlobalSet` has to mint them,
+  and it did not: it minted an id for the GRADIENT and passed `it.config` through verbatim
+  behind a local `isConfig` check that only asked whether `stops` was a non-empty array. Every
+  other untrusted entry — share URLs, scene load, the working store — already went through
+  `coerceGradientConfig`, which runs `normalizePaste` (mints `p<idx>`) and then an id-uniqueness
+  pass. `parseGlobalSet` was the one door with its own lock. It uses the shared gate now.
+
+  **That fix alone was not enough**, and this is the part worth remembering: anything
+  favourited from the global set BEFORE it is already on disk with id-less stops, and
+  `favientsStore`'s `isWellFormedFavient` checks colour and position but not id — and it is a
+  FILTER, so it can reject a bad entry but never repair one. `loadFavients` HEALS now, through
+  an `ensureStopIds` lifted out of `editorConfig`'s private `ensureUniqueIds` (which treated a
+  missing id as a value, so the first id-less stop kept its `undefined`). Guard:
+  `test-palette-shelf-manage` [10], with a CONTROL assertion that runs the same delete against
+  the un-minted shape and demands 0 survivors, so the other assertions are known to bite.
+
+  **(b) The stop fitter's quantisation threshold had its premise backwards, and very dark
+  gradients paid for it.** `QUANTISATION_DE = 0.006` existed to stop a shallow ramp being read
+  as bands, and its comment justified the number with "one sRGB level is ΔE ≈ 0.003–0.004 at
+  its worst (the darks)". The darks are the worst case by an order of magnitude, not the best
+  — sRGB's transfer curve is near-LINEAR below level ~10, so one 8-bit step there is a large
+  relative jump, and OkLab's cube root amplifies it. Measured on a grey ramp:
+
+  | one 8-bit step | ΔE |
+  | --- | --- |
+  | level 0 → 1 | **0.0672** — eleven times the constant |
+  | level 3 → 4 | 0.0098 |
+  | level 8 → 9 | 0.0054 — the first level that fits under it |
+  | level 128 → 129 | 0.0034 — the figure the comment generalised from |
+
+  So every quantisation edge below level ~8 read as a real band: a smooth **black → #101010
+  fade fitted to 18 stops, 17 of them `step`**, and black → #080808 to 10 / 9. The identical
+  16-level span at mid grey fitted to 2 stops with no steps, which is what gave it away — the
+  two cases are not "shallower and less shallow", they are opposite sides of a threshold. The
+  section [9] that was supposed to cover this had a case labelled `dark`, at **level 32**,
+  where a step is ΔE 0.0042 — under the constant, so it passed for the wrong reason and the
+  section read as covering the darks when it never went near them.
+
+  The floor is now computed PER EDGE from the ramp (`stepFloor`): the ΔE one 8-bit step would
+  produce between those two texels, **in the direction that edge actually moves** — taking the
+  direction from the edge matters, because a ramp moving in one channel compared against a
+  diagonal step would be measured against something ~√3 too large and a real edge would be
+  swallowed. `QUANTISATION_SLACK` is float headroom over that, not a tuning knob.
+
+  **Falsified BOTH WAYS, which is what fixes a threshold rather than merely moving it:**
+  restoring the fixed constant reds only the two dark cases, at exactly the measured
+  before-figures (18/17 and 10/9); widening the slack to 20× reds only the banded cases (the
+  16-band palette and the seam's deliberately-subtle 64-band test). A threshold guarded on one
+  side only pins one wall.
+
+  **Not reverted, and worth stating because it was suspected:** the Curves face's hero looked
+  low-res and the live-preview work was the obvious suspect (arming the wave holds one param
+  bracket open, and `useWorkingDerived` reads exactly that to hold the stop fit). Measured
+  instead of assumed — the ramp and the stops both came back faithful to the source
+  (`#00545F → … → #000000 → #383838`), the owner could not reproduce it on the current build,
+  and nothing was walked back.
