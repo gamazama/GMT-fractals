@@ -2714,3 +2714,18 @@ phase now carries**. Items move out of this list only when a later phase's entry
   there — instead of two unrelated squares that happen to be near each other. Verified in the
   browser: span A and feather A both at y=392, span B and feather B both at y=464, with
   feather A dragged past 90 % of the span to prove the new reach.
+
+- 2026-09-12 · **Bias moved off the trough and under the midpoint.** Owner: "the bias handle -
+  its sometimes obscuring the phase handle - can you put it above the wavelength handle".
+
+  It sat on the first TROUGH, mirroring the crest circle, which was tidy until a shallow or
+  long wave brought crest and trough together and the crosshair covered the phase handle. It
+  now stacks under the span's midpoint with the wavelength caliper: bias above, caliper below,
+  both hanging from the curve and flipping above it together when there is no room, so the
+  stack never turns inside out.
+
+  Not only de-cluttering, and worth saying because it reads better than the original: **bias
+  and skew warp the WHOLE waveform**, so a position at the span's centre says what they do
+  more honestly than sitting on one trough ever did. The crest keeps phase and amplitude,
+  which really are properties of that crest. Measured after the move: bias and caliper share
+  x, 28 px apart vertically, and the crest is 304 px away instead of underneath.
