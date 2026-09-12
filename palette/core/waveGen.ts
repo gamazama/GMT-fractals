@@ -81,6 +81,14 @@ export interface WaveParams {
   skew: number;
   /** Noise draw. Any integer; the dice bumps it. */
   seed: number;
+  /**
+   * HOW MUCH of the filtered result to take, 0..1 — a blend from the curve as it was to the
+   * curve as the filter makes it. Distinct from `amplitude`, which is how BIG the wave is:
+   * a tall wave at a third strength is a different thing from a short wave at full. It
+   * matters most in `replace` mode, which is otherwise all-or-nothing — a preset that
+   * rewrites the whole lightness path is a statement you often want to make only partly.
+   */
+  strength: number;
 }
 
 export const DEFAULT_WAVE: WaveParams = {
@@ -95,6 +103,7 @@ export const DEFAULT_WAVE: WaveParams = {
   bias: 1,
   skew: 1,
   seed: 3,
+  strength: 1,
 };
 
 /**
@@ -189,7 +198,12 @@ export const waveEnvelope = (t: number, p: WaveParams): number => {
  * replace snapping to the offset line at the span edge instead of returning to the curve.
  */
 export const applyWaveSample = (base: number, t: number, p: WaveParams, range: number): number => {
-  const e = waveEnvelope(t, p);
+  // Strength folds into the ENVELOPE rather than into the wave: the envelope is already the
+  // "how much of the target do I take" term (`base + (target - base) * e`), so scaling it is
+  // exactly a wet/dry blend and it composes with the feather for free. Scaling the wave
+  // instead would only shrink the oscillation and would do nothing at all in `replace` mode,
+  // where the target barely depends on the wave's size.
+  const e = waveEnvelope(t, p) * Math.max(0, Math.min(1, p.strength));
   if (e <= 0) return base;
   const w = waveValue(t, p) * p.amplitude * range;
   const dc = (p.offset - 0.5) * range;

@@ -2610,3 +2610,68 @@ phase now carries**. Items move out of this list only when a later phase's entry
   seven; reverting the endpoint rule reds four. Verified in the browser across six
   round-trips — arm/cancel, same-channel, cross-channel, three channels in one session,
   commit, and one Ctrl+Z after two presets.
+- 2026-09-12 · **The preset row became a dropdown, and the tool grew a STRENGTH control.**
+  Both on the owner's bench report against the build above: "the ui had no space for these -
+  i was thinking a Dropdown like we described before" and "we will need a control for how
+  strong to apply the effect".
+
+  **The dropdown.** Eleven preset buttons measured wider than the plot, and the horizontal
+  scroll that fixed the width took the MODE glyphs out of sight with it — leaving no way to
+  see whether the wave was adding or replacing, which is most of what it does. One trigger
+  and one `ContextMenu` now, the same component the blend chooser opens on a coarse pointer,
+  so this is the app's existing dialect rather than a second one. The rows keep the preview:
+  each carries its own wave as an ICON, traced from that preset's params and stroked in its
+  channel's colour, with the name beside it — which a row has room for where a 28 px button
+  did not. Grouped by role ("On lightness" / "On hue" / "Texture") using the header items
+  `ContextMenu` already supports.
+
+  `ContextMenuItem` has carried an `icon` field since it was written and **nothing ever
+  rendered it**. That gap is closed generically rather than worked around, so any menu in the
+  app that wants a glyph now gets one.
+
+  **Strength — how much of the filtered curve to take, 0..1.** Distinct from `amplitude`,
+  which is how BIG the wave is: a tall wave at a quarter strength is not a short wave at
+  full, and the guard asserts exactly that. It matters most in `replace` mode, which is
+  otherwise all-or-nothing — a preset that rewrites the whole lightness path is a statement
+  you often want to make only partly.
+
+  It folds into the ENVELOPE, not into the wave. The envelope is already the "how much of the
+  target do I take" term (`base + (target - base) * e`), so scaling it IS a wet/dry blend and
+  it composes with the feather for free. Scaling the wave instead only shrinks the
+  oscillation and does nothing at all in `replace` mode, where the target barely depends on
+  the wave's size — falsified exactly that way: strength 0 stopped being the identity and
+  strength 0.5 stopped being halfway.
+
+  **Where it lives, and why it is not an eighth handle.** Every handle in `WaveOverlay` moves
+  something that HAS a position — a span end, a crest, a period. "How much of this do I take"
+  has no position on the plot, so it is a small fader in the head rather than another thing
+  competing for the canvas. Its fill IS its value and the drag reports into the editor's
+  existing pill, which is the same bargain every other glyph in that row makes: no label, a
+  title, and the picture carries the meaning.
+
+  **Three defects found by using it:**
+
+  - **A glyph's trace argument is a RANGE OF t, not a period count**, and `waveValue` divides
+    t by the wavelength — so asking for "4" of a 0.12-wavelength texture drew 33 periods and
+    Ripple and Bands came out as solid blocks. To show N periods the range is N × the
+    wavelength.
+  - **Strength 0 was not exactly nothing.** The samples equal the base at 0, but they still
+    went through `fitSamplesToKeys` — a Douglas-Peucker approximation of the curve by itself,
+    which drifts within eps (measured ~1% of full scale). Every other strength pays that
+    refit because it is being changed anyway; zero must not, so it short-circuits to the
+    untouched keys. A "how much" control at zero has to mean it.
+  - **`ml-auto` on the pinned ✓ / ✕ group** had been doing nothing once the scrolling box
+    around the presets was removed; it is back where it belongs so the two buttons still sit
+    against the right edge.
+
+  Also recorded because it surprised me and is probably correct: **closing the Curves face
+  with a wave still armed BAKES the preview.** The face bakes on leave by design (C.3), the
+  hero showed the wave the whole time, and baking what was shown is the honest reading — but
+  it is inconsistent with Esc, which discards. The unmount cleanup closes the undo bracket
+  either way, so it is one Ctrl+Z. Flagged rather than changed.
+
+  Guard: `test:palette-wavegen` section [7b] — strength 0 is the identity in all three modes,
+  strength 1 is the filter in full, strength 0.5 is EXACTLY halfway (worst Δ 0.0), a tall
+  weak wave is not a short strong one, and outside the span strength changes nothing.
+  Verified in the browser: preset applies (1081), half is halfway (465), zero is byte-exact,
+  cancel restores.

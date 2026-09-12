@@ -13,22 +13,37 @@
  * preset and its icon exists), and a picture of the wave needs no word beside it, which is
  * most of how this tool stays wordless.
  *
- * PRESETS COME FIRST (owner, 2026-09-12: "presets can come first and can be a preview of
- * their wave shape instead of text") — they are the starting points, so they are the first
- * thing the head offers. Each is drawn in ITS CHANNEL'S COLOUR, which is what tells
- * "sequential lightness" from "hue sweep": the same sawtooth, cyan and green. A preset whose
- * channel the current space does not have (any lightness preset in RGB) is not offered.
+ * PRESETS COME FIRST, in a DROPDOWN (owner, 2026-09-12: "the ui had no space for these - i
+ * was thinking a Dropdown like we described before"). Eleven of them in a row was measured
+ * at wider than the plot, and the scrolling that fixed the width took the mode glyphs out of
+ * sight with it. One trigger, one menu — the same `ContextMenu` the blend chooser opens on a
+ * coarse pointer, so this is the app's existing dialect rather than a new one.
+ *
+ * The menu keeps the preview (owner: "a preview of their wave shape instead of text"): each
+ * row carries its own wave as an icon, traced by `waveValue` from that preset's params and
+ * stroked in ITS CHANNEL'S COLOUR — which is what tells "sequential lightness" from "hue
+ * sweep", the same sawtooth in cyan and green. The name rides beside it, which a row has
+ * room for where a 28 px button did not. A preset whose channel the current space does not
+ * have (any lightness preset in RGB) is not listed.
  *
  * THERE IS NO DICE. Reseeding moved onto the Noise glyph — clicking an ALREADY-ACTIVE shape
  * does that shape's own thing — which frees a permanent slot that meant something for one
  * shape in five, and costs no new width.
  *
+ * STRENGTH is the one continuous control that is not a place on the plot. Every handle in
+ * `WaveOverlay` moves something with a position (a span end, a crest, a period); "how much of
+ * this do I take" has no position, so it is a small fader here rather than an eighth handle
+ * competing for the canvas. Its fill IS its value, and the drag pill gives the number — the
+ * same bargain every other glyph in this row makes: no label, a title, and the picture
+ * carries the meaning.
+ *
  * @see palette/core/wavePresets.ts · palette/core/waveGen.ts · palette/components/WaveOverlay.tsx
  */
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { DEFAULT_WAVE, WAVE_MODES, WAVE_SHAPES, waveValue, type WaveMode, type WaveParams, type WaveShape } from '../core/waveGen';
 import { WAVE_PRESETS, presetParams, type WavePreset } from '../core/wavePresets';
+import { ContextMenu } from '../../components/gradient/GradientContextMenu';
 
 /**
  * Trace a wave into a 22×18 box. `span` is how many periods to show: the shape buttons show
@@ -64,9 +79,13 @@ export const SHAPE_PATHS: Record<WaveShape, string> = WAVE_SHAPES.reduce((acc, s
 /** A preset's glyph traces the preset's OWN params, so the button is a true preview. */
 const PRESET_PATHS: Record<string, string> = WAVE_PRESETS.reduce((acc, preset) => {
   const p = presetParams(preset);
-  // One wavelength's worth, but never more than four periods — a fine grain would otherwise
-  // be thirty periods of noise in 18 px of height.
-  acc[preset.id] = trace(p, Math.min(4, 1 / Math.max(0.25, p.wavelength)));
+  // `trace`'s second argument is a RANGE OF t, not a period count — and waveValue divides t
+  // by the wavelength, so asking for "4" of a 0.12-wavelength texture drew 33 periods and the
+  // glyph came out a solid block (seen in the browser, 2026-09-12). To show N periods the
+  // range is N × the wavelength. Three periods, capped at the whole axis: a whole-gradient
+  // preset (wavelength 1) shows its single period, and the ease-in-out (wavelength 2) shows
+  // the rising half-period that IS its S-curve.
+  acc[preset.id] = trace(p, Math.min(3 * p.wavelength, 1));
   return acc;
 }, {} as Record<string, string>);
 
@@ -105,6 +124,48 @@ const Btn: React.FC<{
 
 const Sep = () => <span className="shrink-0 w-px h-4 bg-line/20 mx-1" />;
 
+/**
+ * The strength fader: a 52 px track whose FILL is the value. No label and no number — the
+ * drag reports into the editor's pill like every other gesture the tool has, and the title
+ * says what it is for anyone who hovers. Pointer capture on the track, so a drag that leaves
+ * it keeps working.
+ */
+const Strength: React.FC<{ value: number; onChange: (v: number) => void; onPill: (s: string | null) => void }> = ({ value, onChange, onPill }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const set = useCallback((clientX: number) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (!r || r.width <= 0) return;
+    const v = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    onChange(v);
+    onPill(`strength ${Math.round(v * 100)}%`);
+  }, [onChange, onPill]);
+  return (
+    <div
+      ref={ref}
+      data-gx-wave="strength"
+      title={`Strength — how much of the filtered curve to take (${Math.round(value * 100)}%)`}
+      aria-label="Strength"
+      role="slider"
+      aria-valuenow={Math.round(value * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      tabIndex={0}
+      className="shrink-0 relative w-[52px] h-5 rounded border border-line/15 bg-surface/80 overflow-hidden cursor-ew-resize"
+      onPointerDown={(e) => { (e.currentTarget as Element).setPointerCapture(e.pointerId); e.preventDefault(); set(e.clientX); }}
+      onPointerMove={(e) => { if (e.buttons & 1) set(e.clientX); }}
+      onPointerUp={() => onPill(null)}
+      onPointerCancel={() => onPill(null)}
+      onKeyDown={(e) => {
+        const d = e.key === 'ArrowLeft' ? -0.05 : e.key === 'ArrowRight' ? 0.05 : 0;
+        if (d) { e.preventDefault(); onChange(Math.max(0, Math.min(1, value + d))); }
+      }}
+    >
+      <div className="absolute inset-y-0 left-0 bg-accent-500/45 pointer-events-none" style={{ width: `${value * 100}%` }} />
+      <div className="absolute inset-y-0 w-px bg-accent-300 pointer-events-none" style={{ left: `calc(${value * 100}% - 0.5px)` }} />
+    </div>
+  );
+};
+
 interface Props {
   shape: WaveShape;
   mode: WaveMode;
@@ -113,6 +174,10 @@ interface Props {
   /** Clicking the ALREADY-ACTIVE Noise glyph — the dice, without the slot. */
   onReseed: () => void;
   onPreset: (p: WavePreset) => void;
+  strength: number;
+  onStrength: (v: number) => void;
+  /** The editor's drag readout — the fader borrows it rather than printing a number. */
+  onPill: (s: string | null) => void;
   onCommit: () => void;
   onCancel: () => void;
   /** The channel being filtered — one at a time (owner), so this is a read-only dot. */
@@ -125,8 +190,9 @@ interface Props {
 
 export const WaveToolHead: React.FC<Props> = ({
   shape, mode, onShape, onMode, onReseed, onPreset, onCommit, onCancel,
-  channelColor, channelLabel, presetColor,
+  channelColor, channelLabel, presetColor, strength, onStrength, onPill,
 }) => {
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const presets = useMemo(
     () => WAVE_PRESETS.map((p) => ({ p, color: presetColor(p) })).filter((x) => x.color !== null),
     [presetColor],
@@ -136,22 +202,48 @@ export const WaveToolHead: React.FC<Props> = ({
       className="w-full shrink-0 flex items-center gap-1 px-2 py-1 border-b border-line/10 bg-surface-dock/95 backdrop-blur-sm"
       data-gx-wave="head"
     >
-      {/* ONLY THE PRESETS SCROLL, and everything else is pinned. Two browser findings, both
-          2026-09-12: an `ml-auto` inside a scrolling flex container pushes ✓ / ✕ to the end
-          of the SCROLL width rather than the visible edge, so the buttons that END the
-          gesture went off-screen; and with eleven presets in one scrolling row the MODE
-          glyphs went with them, leaving no way to see whether the wave was adding or
-          replacing — which is most of what it does. The presets are a gallery you browse;
-          the controls are state you must be able to read at a glance. */}
-      <div className="flex-1 min-w-0 flex items-center gap-1 overflow-x-auto gx-rail-scroll">
-      {presets.map(({ p, color }) => (
-        <Btn key={p.id} onClick={() => onPreset(p)} title={p.label} tag={`preset-${p.id}`}>
-          <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true">
-            <path d={PRESET_PATHS[p.id]} fill="none" stroke={color ?? 'currentColor'} strokeWidth={1.6} strokeLinejoin="round" />
-          </svg>
-        </Btn>
-      ))}
-      </div>
+      <button
+        type="button"
+        aria-expanded={!!menuAt}
+        data-gx-wave="presets"
+        title="Presets — a starting shape for this channel"
+        className={`shrink-0 h-6 px-2 flex items-center gap-1 rounded border text-[11px] whitespace-nowrap transition-all ${
+          menuAt ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' : 'bg-surface/80 text-fg-muted border-line/10 hover:text-fg'
+        }`}
+        onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setMenuAt(menuAt ? null : { x: r.left, y: r.bottom + 5 });
+        }}
+      >
+        <svg width="20" height="14" viewBox="0 0 22 18" aria-hidden="true">
+          <path d={PRESET_PATHS[presets[0]?.p.id] ?? SHAPE_PATHS.Sine} fill="none" stroke="currentColor" strokeWidth={1.6} />
+        </svg>
+        ▾
+      </button>
+      {menuAt && (
+        <ContextMenu
+          x={menuAt.x}
+          y={menuAt.y}
+          onClose={() => setMenuAt(null)}
+          options={presets.flatMap(({ p, color }, i) => {
+            const head = i === 0 || presets[i - 1].p.role !== p.role
+              ? [{ isHeader: true, label: p.role === 'active' ? 'Texture' : `On ${p.role}` }]
+              : [];
+            return [
+              ...head,
+              {
+                label: p.label,
+                action: () => onPreset(p),
+                icon: (
+                  <svg width="24" height="16" viewBox="0 0 22 18" aria-hidden="true">
+                    <path d={PRESET_PATHS[p.id]} fill="none" stroke={color ?? 'currentColor'} strokeWidth={1.7} strokeLinejoin="round" />
+                  </svg>
+                ),
+              },
+            ];
+          })}
+        />
+      )}
       <Sep />
       <span
         className="shrink-0 w-3.5 h-3.5 rounded-full border"
@@ -180,7 +272,9 @@ export const WaveToolHead: React.FC<Props> = ({
           </svg>
         </Btn>
       ))}
-      <div className="shrink-0 flex items-center gap-1 pl-2 border-l border-line/10 ml-1">
+      <Sep />
+      <Strength value={strength} onChange={onStrength} onPill={onPill} />
+      <div className="shrink-0 flex items-center gap-1 pl-2 border-l border-line/10 ml-auto">
         <Btn onClick={onCommit} title="Bake the wave into the curve (Enter)" tag="commit">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M5 13l4 4L19 7" />

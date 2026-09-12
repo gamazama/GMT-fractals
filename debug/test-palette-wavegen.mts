@@ -239,6 +239,45 @@ console.log('[7] span → frames');
   ok(w?.lo === 64 && w?.hi === 191, `a half span is frames 64..191 (${w?.lo}..${w?.hi})`);
 }
 
+// --- [7b] strength -------------------------------------------------------------------------
+console.log('[7b] strength — how much of the filtered curve to take');
+{
+  const base = (t: number) => 0.5 + 0.3 * Math.sin(t * 7.3 + 1.1);
+  for (const mode of WAVE_MODES) {
+    const full = P({ mode, shape: 'Sine', amplitude: 0.4, offset: 0.3, feather: [0, 0], strength: 1 });
+    const none = P({ ...full, strength: 0 });
+    const half = P({ ...full, strength: 0.5 });
+    let offBy = 0;
+    let halfErr = 0;
+    let moved = 0;
+    for (let i = 0; i <= 400; i++) {
+      const t = i / 400;
+      const b = base(t);
+      offBy = Math.max(offBy, Math.abs(applyWaveSample(b, t, none, 1) - b));
+      moved = Math.max(moved, Math.abs(applyWaveSample(b, t, full, 1) - b));
+      // half must land exactly midway between doing nothing and doing all of it
+      const mid = (b + applyWaveSample(b, t, full, 1)) / 2;
+      halfErr = Math.max(halfErr, Math.abs(applyWaveSample(b, t, half, 1) - mid));
+    }
+    ok(offBy === 0, `${mode}: strength 0 is the curve untouched`);
+    ok(moved > 0.05, `${mode}: strength 1 is the filter in full (${moved.toFixed(3)})`);
+    ok(halfErr < 1e-12, `${mode}: strength 0.5 is exactly halfway (worst Δ ${halfErr.toExponential(1)})`);
+  }
+  // Strength is NOT amplitude: in replace mode, shrinking the wave does not undo the
+  // replacement, which is the whole reason this parameter exists.
+  const tallWeak = P({ mode: 'replace', shape: 'Sine', amplitude: 0.4, offset: 0.3, feather: [0, 0], strength: 0.25 });
+  const shortFull = P({ ...tallWeak, amplitude: 0.1, strength: 1 });
+  let apart = 0;
+  for (let i = 0; i <= 400; i++) {
+    const t = i / 400;
+    apart = Math.max(apart, Math.abs(applyWaveSample(base(t), t, tallWeak, 1) - applyWaveSample(base(t), t, shortFull, 1)));
+  }
+  ok(apart > 0.05, `a tall wave at quarter strength is not a short wave at full (apart by ${apart.toFixed(3)})`);
+  // and it composes with the feather rather than replacing it
+  const feathered = P({ shape: 'Sine', span: [0.2, 0.8], feather: [0.3, 0.3], strength: 0.5, amplitude: 0.4 });
+  ok(applyWaveSample(base(0.05), 0.05, feathered, 1) === base(0.05), 'outside the span, strength changes nothing (still exact)');
+}
+
 // --- [8] the presets ----------------------------------------------------------------------
 console.log('[8] presets');
 {

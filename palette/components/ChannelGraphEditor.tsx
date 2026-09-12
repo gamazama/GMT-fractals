@@ -719,6 +719,12 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       const src = waveBaseRef.current;
       const win = waveSpanFrames(p, CURVE_FRAMES);
       if (!src || !win) return null;
+      // Strength 0 means DO NOTHING, and it has to mean it exactly. The samples would already
+      // equal the base at 0, but they would still go through `fitSamplesToKeys` — a
+      // Douglas-Peucker approximation of the curve by itself, which drifts within eps and is
+      // not the keys you started with (measured 2026-09-12: ~1% of full-scale). Every other
+      // strength pays that refit because it is being changed anyway; zero must not.
+      if (p.strength <= 0) return src;
       const samples = sampleWaveSpan(p, win.lo, win.hi, CURVE_FRAMES, waveRange, (f) =>
         evaluateTrackValue(src, f, false, false),
       );
@@ -1116,6 +1122,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       onReseed={() => setWaveParams((w) => ({ ...w, seed: (w.seed + 1 + Math.floor(Math.random() * 97)) | 0 }))}
       onPreset={applyPreset}
       presetColor={presetColor}
+      strength={waveParams.strength}
+      onStrength={(v) => setWaveParams((w) => ({ ...w, strength: v }))}
+      onPill={setWavePill}
       onCommit={commitWave}
       onCancel={closeWave}
       channelColor={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}

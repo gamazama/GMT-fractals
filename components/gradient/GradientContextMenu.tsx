@@ -65,7 +65,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
                                 : 'text-fg-secondary hover:bg-line/10 hover:text-fg'
                         }`}
                     >
-                        <span className={`truncate mr-2 ${opt.checked ? 'text-accent-400 font-bold' : ''}`}>{opt.label}</span>
+                        {/* `icon` has been on ContextMenuItem since it was written and was
+                            never rendered here. The wave tool's preset menu needs it — each
+                            preset's icon is its own wave, traced by the same function that
+                            produces it — and any menu that wants a glyph now gets one. */}
+                        {opt.icon && <span className="shrink-0 mr-2 flex items-center text-fg-muted group-hover:text-fg">{opt.icon}</span>}
+                        <span className={`truncate mr-2 flex-1 ${opt.checked ? 'text-accent-400 font-bold' : ''}`}>{opt.label}</span>
                         {opt.checked && <span className="text-accent-400 shrink-0"><CheckIcon /></span>}
                         {opt.stops && <LazyGradientPreview stops={opt.stops} />}
                     </button>
