@@ -139,6 +139,32 @@ console.log('[2] span envelope');
   ok(rIn < 1e-2, `slope vanishes where the shoulder leaves the curve (${rIn.toExponential(1)} of mid-slope; linear would be 1)`);
   ok(rOut < 1e-2, `and where it reaches full (${rOut.toExponential(1)} of mid-slope)`);
   ok(mid > 5, `and it is genuinely climbing in between (${mid.toFixed(1)})`);
+
+  // FULLY FEATHERED: 99% from both ends (the UI's new ceiling, raised from 50% on
+  // 2026-09-12). The two shoulders overlap and `min` resolves them into one smooth bump —
+  // a legitimate shape, and the maths must not produce a negative, a >1, or a kink for it.
+  const soft = P({ span: [0.1, 0.9], feather: [0.99, 0.99] });
+  let lo = Infinity;
+  let hi = -Infinity;
+  let peakAt = 0;
+  for (let i = 0; i <= 600; i++) {
+    const t = i / 600;
+    const e = waveEnvelope(t, soft);
+    if (e < lo) lo = e;
+    if (e > hi) { hi = e; peakAt = t; }
+  }
+  ok(lo === 0, 'fully feathered: still exactly 0 outside the span');
+  ok(hi > 0 && hi <= 1, `fully feathered: peaks inside (0,1] — ${hi.toFixed(3)}`);
+  ok(Math.abs(peakAt - 0.5) < 0.02, `fully feathered: and it peaks at the span's middle (t=${peakAt.toFixed(3)})`);
+  // one rise then one fall — no ripple from the two shoulders fighting
+  let turns = 0;
+  for (let i = 2; i <= 600; i++) {
+    const a0 = waveEnvelope((i - 2) / 600, soft);
+    const b0 = waveEnvelope((i - 1) / 600, soft);
+    const c0 = waveEnvelope(i / 600, soft);
+    if ((b0 - a0) > 1e-9 !== (c0 - b0) > 1e-9) turns++;
+  }
+  ok(turns <= 3, `fully feathered: one bump, not a ripple (${turns} turning points)`);
 }
 
 // --- [3] a wave never leaves its span ---------------------------------------------------

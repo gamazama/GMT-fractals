@@ -2696,3 +2696,21 @@ phase now carries**. Items move out of this list only when a later phase's entry
 
   Verified: the overlay renders ONE path (was four) and seven handle groups, the squares still
   drag, and `test:palette-wavegen` is unaffected — none of this is maths.
+
+- 2026-09-12 · **Feather reach and the shoulder pairing.** Owner, on the cleaned-up overlay:
+  "the feather controls need to be able to go to 99%, and stay in line (Y) with the handles
+  they are feathering from".
+
+  The cap was HALF the span, which stopped a shoulder at the middle and made a fully-soft
+  wave impossible to ask for. It is 99 % now. At 99 % from both ends the shoulders overlap and
+  `waveEnvelope`'s `min` resolves them into one smooth bump that peaks a little above half —
+  a legitimate shape to want, so nothing clamps it further. Not 100 %: a shoulder the full
+  width of the span leaves no span. Guarded: fully feathered is still exactly 0 outside the
+  span, peaks inside (0,1] at the span's midpoint, and is ONE bump rather than a ripple from
+  the two shoulders fighting (measured: peak 0.508 at t=0.500, two turning points).
+
+  A shoulder is a DISTANCE FROM its span end, so it is drawn at that end's height rather than
+  at the curve's height beneath itself. The pair then reads as one bracket — this far in from
+  there — instead of two unrelated squares that happen to be near each other. Verified in the
+  browser: span A and feather A both at y=392, span B and feather B both at y=464, with
+  feather A dragged past 90 % of the span to prove the new reach.

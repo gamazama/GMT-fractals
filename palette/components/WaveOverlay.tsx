@@ -95,6 +95,16 @@ interface Props {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 /**
+ * How far a shoulder may reach, as a fraction of the span (owner, 2026-09-12: "the feather
+ * controls need to be able to go to 99%"). It was half, which stopped a shoulder at the
+ * middle and made a fully-soft wave impossible. At 99 % from both ends the two shoulders
+ * overlap and `waveEnvelope`'s `min` resolves it into a smooth bump that peaks a little above
+ * half — which is a legitimate shape to want, not a degenerate one, so nothing clamps it
+ * further. Not 100 %: a shoulder the full width of the span leaves no span.
+ */
+const FEATHER_MAX = 0.99;
+
+/**
  * A square handle: 10 px drawn, 26 px hit — a coarse pointer needs the second number, and
  * it is the same 14 px-ish reach the phone pass gave the tangent handles.
  *
@@ -203,7 +213,7 @@ export const WaveOverlay: React.FC<Props> = ({
         // end (owner) — so a finger never has to find the square behind this one.
         const want = o.feather[0] + dx / len;
         if (want >= 0) {
-          next.feather = [Math.min(0.5, want), o.feather[1]];
+          next.feather = [Math.min(FEATHER_MAX, want), o.feather[1]];
         } else {
           next.feather = [0, o.feather[1]];
           next.span = [clamp(o.span[0] + o.feather[0] * len + dx, 0, o.span[1] - 0.01), o.span[1]];
@@ -216,7 +226,7 @@ export const WaveOverlay: React.FC<Props> = ({
       case 'fb': {
         const want = o.feather[1] - dx / len;
         if (want >= 0) {
-          next.feather = [o.feather[0], Math.min(0.5, want)];
+          next.feather = [o.feather[0], Math.min(FEATHER_MAX, want)];
         } else {
           next.feather = [o.feather[0], 0];
           next.span = [o.span[0], clamp(o.span[1] - o.feather[1] * len + dx, o.span[0] + 0.01, 1)];
@@ -301,8 +311,13 @@ export const WaveOverlay: React.FC<Props> = ({
       {/* span ends BEHIND, feather shoulders IN FRONT (they push the span past zero) */}
       <Square x={xa} y={curveY(p.span[0])} stroke="#f0997b" onDown={onPointerDown('a')} />
       <Square x={xb} y={curveY(p.span[1])} stroke="#f0997b" onDown={onPointerDown('b')} />
-      <Square x={faX} y={curveY(p.span[0] + p.feather[0] * len)} stroke="#9ca3af" onDown={onPointerDown('fa')} />
-      <Square x={fbX} y={curveY(p.span[1] - p.feather[1] * len)} stroke="#9ca3af" onDown={onPointerDown('fb')} />
+      {/* A shoulder is a DISTANCE FROM its span end, so it is drawn at that end's height
+          rather than at the curve's height beneath itself (owner, 2026-09-12: "stay in line
+          (Y) with the handles they are feathering from"). The pair then reads as one
+          bracket — this far in from there — instead of as two unrelated squares that happen
+          to be near each other. */}
+      <Square x={faX} y={curveY(p.span[0])} stroke="#9ca3af" onDown={onPointerDown('fa')} />
+      <Square x={fbX} y={curveY(p.span[1])} stroke="#9ca3af" onDown={onPointerDown('fb')} />
 
       {/* crest: phase (X) + amplitude (Y) */}
       <g onPointerDown={onPointerDown('pa')} style={{ cursor: 'move' }}>
