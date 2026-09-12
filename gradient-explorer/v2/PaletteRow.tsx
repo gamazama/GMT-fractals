@@ -26,14 +26,17 @@ import { Icon } from './ui/Icon';
 import { Act } from './ui/Act';
 import { useIsPhone } from './useIsPhone';
 import { isColorDrag, readColorDrag } from '../../components/gradient/colorDrag';
+import { Segmented, type SegmentedOption } from '../../components/ui/Segmented';
 
 const hexOf = (c: RGB): string =>
   '#' + [c.r, c.g, c.b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 
-const RULES: { id: PaletteRule; label: string; title: string }[] = [
-  { id: 'even', label: 'Even', title: 'Space the swatches evenly along the ramp' },
-  { id: 'perceptual', label: 'Perceptual', title: 'Space them by equal colour change' },
-  { id: 'stops', label: 'Stops', title: 'One swatch per stop' },
+/** The switch this whole dialect is named after — `Segmented` carries the look and the
+ *  phone's one-button cycle for every other switch in the shell now. */
+const RULES: SegmentedOption<PaletteRule>[] = [
+  { id: 'even', name: 'Even', title: 'Space the swatches evenly along the ramp' },
+  { id: 'perceptual', name: 'Perceptual', title: 'Space them by equal colour change' },
+  { id: 'stops', name: 'Stops', title: 'One swatch per stop' },
 ];
 
 interface Props {
@@ -231,33 +234,16 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
       {!readOnly && (
         <div className="flex flex-col justify-center pl-1">
           {/* PHONE: ONE button that cycles (owner, 2026-09-11: "click to switch on a single
-              button to save space") — three modes is cycle-able; the title names the next. */}
-          {phone ? (() => {
-            const i = Math.max(0, RULES.findIndex((r) => r.id === rule));
-            const next = RULES[(i + 1) % RULES.length];
-            return (
-              <button
-                className="px-2 h-7 text-[13px] border border-line/20 rounded-lg text-accent-300 bg-accent-400/15 whitespace-nowrap"
-                title={`${RULES[i].title} — tap for ${next.label}`}
-                onClick={() => useWorkingStore.getState().layoutPalette(next.id)}
-              >
-                {RULES[i].label}
-              </button>
-            );
-          })() : (
-          <div className="inline-flex border border-line/20 rounded-lg overflow-hidden">
-            {RULES.map((r) => (
-              <button
-                key={r.id}
-                className={`px-2 h-7 text-[13px] ${rule === r.id ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg'}`}
-                title={r.title}
-                onClick={() => useWorkingStore.getState().layoutPalette(r.id)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          )}
+              button to save space"). Both halves live in `Segmented` now — this was the
+              original, and copying it by hand is how the function tool ended up with a row
+              of separate boxes instead. */}
+          <Segmented
+            name="palette-rule"
+            options={RULES}
+            value={rule}
+            onChange={(id) => useWorkingStore.getState().layoutPalette(id)}
+            cycle={phone}
+          />
         </div>
       )}
     </div>

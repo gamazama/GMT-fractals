@@ -44,11 +44,12 @@ import React, { useCallback } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
 import { useImageStore, useImageParam } from '../../palette/store/imageStore';
 import { autoPath } from '../../palette/core/img2grad';
+import { Segmented, type SegmentedOption } from '../../components/ui/Segmented';
 
-const METHODS: { id: number; label: string; title: string }[] = [
-  { id: 0, label: 'Dominant', title: 'Saliency-weighted dominant colours, ordered into a smooth ramp.' },
-  { id: 1, label: 'Tones', title: "The image's own colour at each brightness level. Unfakeably smooth." },
-  { id: 2, label: 'Path', title: 'The colour journey along a line — drag the handles on the image.' },
+const METHODS: SegmentedOption<number>[] = [
+  { id: 0, name: 'Dominant', title: 'Saliency-weighted dominant colours, ordered into a smooth ramp.' },
+  { id: 1, name: 'Tones', title: "The image's own colour at each brightness level. Unfakeably smooth." },
+  { id: 2, name: 'Path', title: 'The colour journey along a line — drag the handles on the image.' },
 ];
 
 // Only the per-method DIALS — `mode` itself is the chips above (not a second dropdown),
@@ -85,20 +86,9 @@ export const ExtractStage: React.FC<{
       {/* left, under the picture: the method, its tools, its dials */}
       <div className={`${phone ? 'w-full' : 'w-[560px] shrink-0'} flex flex-col gap-3`}>
         <div className="flex items-center gap-4 flex-wrap">
-          {/* the same segmented control as the palette's Even · Perceptual · Stops (owner) */}
-          <div className="inline-flex border border-line/20 rounded-lg overflow-hidden shrink-0">
-            {METHODS.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => modeIdx !== m.id && switchMethod(m.id)}
-                title={m.title}
-                aria-pressed={modeIdx === m.id}
-                className={`px-2 h-7 text-[13px] ${modeIdx === m.id ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg'}`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          {/* the same segmented control as the palette's Even · Perceptual · Stops (owner) —
+              literally the same component since 2026-09-12, not the same class string */}
+          <Segmented name="extract-method" options={METHODS} value={modeIdx} onChange={switchMethod} />
           {/* the Path tools portal in here (Draw · Auto · Straight) when Path is the method */}
           <div ref={toolsHostRef} className="flex items-center" />
         </div>

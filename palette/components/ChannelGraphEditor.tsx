@@ -1176,10 +1176,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       strength={waveParams.strength}
       onStrength={(v) => setWaveParams((w) => ({ ...w, strength: v }))}
       onPill={setWavePill}
+      phone={phone}
       onCommit={commitWave}
       onCancel={closeWave}
-      channelColor={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}
-      channelLabel={CHANNELS.find((c) => c.key === activeChannel)?.label ?? activeChannel}
     />
   );
 
@@ -1319,6 +1318,24 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
               sampleBase={sampleWaveBase}
               range={waveRange}
               color={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}
+            />
+          )}
+          {/* WHICH CHANNEL THE WAVE IS SHAPING — a dot in the LEFT GUTTER (owner, 2026-09-12:
+              "remove that colored circle in its toolbar - it can be smaller in the left gutter
+              of the curves canvas"). It was a 14 px dot in the head, where it was the only
+              thing in a row of controls that was not itself a control. Here it sits against
+              the value axis whose units it names, at 8 px, centred in the gutter — and the
+              head is 22 px narrower, which on a 375 px phone is most of what was over the
+              edge. Armed only: unarmed, the track list already says which channel is live. */}
+          {waveArmed && (
+            <span
+              data-gx-wave="channel"
+              className="absolute top-1.5 w-2 h-2 rounded-full pointer-events-none z-30"
+              style={{
+                left: Math.max(2, gutter / 2 - 4),
+                background: CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee',
+              }}
+              title={`Shaping ${CHANNELS.find((c) => c.key === activeChannel)?.label ?? activeChannel}`}
             />
           )}
           {(tools.isSmoothing || tools.isBaking || tools.isSimplifying) && (

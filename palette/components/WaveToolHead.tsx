@@ -1,6 +1,27 @@
 /**
- * WaveToolHead — the function tool's glyphs: presets, the active-channel dot, five shapes,
- * three modes, ✓ and ✕. No labels anywhere.
+ * WaveToolHead — the function tool's glyphs: presets, five shapes, three modes, ✓ and ✕. No
+ * labels anywhere.
+ *
+ * THE ACTIVE-CHANNEL DOT IS NOT HERE. It moved into the plot's LEFT GUTTER and got smaller
+ * (owner, 2026-09-12: "remove that colored circle in its toolbar - it can be smaller in the
+ * left gutter of the curves canvas") — see `ChannelGraphEditor`, grep `data-gx-wave="channel"`.
+ * It reads better there and it is not really a toolbar item: everything else in this row is
+ * something you press, and the dot was the one thing that only told you something. In the
+ * gutter it sits against the value axis it is the units of, and it gives the phone back the
+ * 22 px it was costing.
+ *
+ * THE SHAPES AND THE MODES ARE `Segmented` (owner, 2026-09-12: "in general the switches need
+ * to follow the same joined style as Even/Perceptual/Stops"). They were eight separately
+ * bordered boxes with dividers between them, which read as eight buttons rather than two
+ * questions with one answer each — and it was eight boxes because the joined style existed
+ * only as a Tailwind string copied into two files, with nothing to reach for. It is a
+ * component now, in `components/ui`, so the palette and the extract face share it.
+ *
+ * ON A PHONE THE SHAPES ARE ONE BUTTON that advances on tap (owner: "on mobile the wave types
+ * for the function tool need to be switches on one button") — five glyphs is 170 px the head
+ * does not have at 390. The modes stay a row: three is already narrow, and which of add /
+ * replace / multiply is on is most of what the tool is doing, so it has to be readable at a
+ * glance rather than one tap at a time.
  *
  * Placement (owner, 2026-09-12): "on mobile it can replace the graph's upper head type
  * section, on desktop it can just appear in the head as you have it there." So arming the
@@ -28,7 +49,9 @@
  *
  * THERE IS NO DICE. Reseeding moved onto the Noise glyph — clicking an ALREADY-ACTIVE shape
  * does that shape's own thing — which frees a permanent slot that meant something for one
- * shape in five, and costs no new width.
+ * shape in five, and costs no new width. On a phone the cycle button has no such click, so
+ * `Segmented` fires the repeat on ARRIVAL: cycling onto Noise draws a fresh seed, and a lap
+ * of the cycle is what a reseed costs there.
  *
  * STRENGTH is the one continuous control that is not a place on the plot. Every handle in
  * `WaveOverlay` moves something with a position (a span end, a crest, a period); "how much of
@@ -44,6 +67,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { DEFAULT_WAVE, WAVE_MODES, WAVE_SHAPES, waveValue, type WaveMode, type WaveParams, type WaveShape } from '../core/waveGen';
 import { WAVE_PRESETS, presetParams, type WavePreset } from '../core/wavePresets';
 import { ContextMenu } from '../../components/gradient/GradientContextMenu';
+import { Segmented, type SegmentedOption } from '../../components/ui/Segmented';
 
 /**
  * Trace a wave into a 22×18 box. `span` is how many periods to show: the shape buttons show
@@ -94,6 +118,8 @@ const MODE_GLYPH: Record<WaveMode, React.ReactNode> = {
   replace: <rect x="5" y="5" width="14" height="14" rx="2" />,
   multiply: <path d="M6 6l12 12M18 6L6 18" />,
 };
+/** The bare word, for titles and the accessibility tree — the segment itself shows a glyph. */
+const MODE_NAME: Record<WaveMode, string> = { add: 'Add', replace: 'Replace', multiply: 'Multiply' };
 const MODE_TITLE: Record<WaveMode, string> = {
   add: 'Add — the wave rides on top of the curve',
   replace: 'Replace — the wave becomes the curve, inside the span',
@@ -114,7 +140,7 @@ const Btn: React.FC<{
     aria-label={title}
     aria-pressed={active}
     data-gx-wave={tag}
-    className={`shrink-0 w-7 h-6 flex items-center justify-center rounded border transition-all ${
+    className={`shrink-0 w-7 h-7 flex items-center justify-center rounded border transition-all ${
       active ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' : 'bg-surface/80 text-fg-muted border-line/10 hover:text-fg'
     }`}
   >
@@ -122,7 +148,14 @@ const Btn: React.FC<{
   </button>
 );
 
-const Sep = () => <span className="shrink-0 w-px h-4 bg-line/20 mx-1" />;
+/**
+ * A hairline between groups — DESKTOP ONLY. Three of them cost 39 px of a 375 px phone
+ * (measured: the head's scroll width was 376 against 363 of room, so the ✓ and ✕ that END the
+ * gesture were over the edge), and they were doing the least work in the row: since the
+ * shapes and the modes became joined switches, the switch's own border is what says where one
+ * question stops and the next begins. */
+const Sep: React.FC<{ on?: boolean }> = ({ on = true }) =>
+  on ? <span className="shrink-0 w-px h-4 bg-line/20 mx-1" /> : null;
 
 /**
  * The strength fader: a 52 px track whose FILL is the value. No label and no number — the
@@ -150,7 +183,7 @@ const Strength: React.FC<{ value: number; onChange: (v: number) => void; onPill:
       aria-valuemin={0}
       aria-valuemax={100}
       tabIndex={0}
-      className="shrink-0 relative w-[52px] h-5 rounded border border-line/15 bg-surface/80 overflow-hidden cursor-ew-resize"
+      className="shrink-0 relative w-[52px] h-7 rounded border border-line/15 bg-surface/80 overflow-hidden cursor-ew-resize"
       onPointerDown={(e) => { (e.currentTarget as Element).setPointerCapture(e.pointerId); e.preventDefault(); set(e.clientX); }}
       onPointerMove={(e) => { if (e.buttons & 1) set(e.clientX); }}
       onPointerUp={() => onPill(null)}
@@ -180,9 +213,8 @@ interface Props {
   onPill: (s: string | null) => void;
   onCommit: () => void;
   onCancel: () => void;
-  /** The channel being filtered — one at a time (owner), so this is a read-only dot. */
-  channelColor: string;
-  channelLabel: string;
+  /** Collapse the shape switch to one cycling button — the phone layout. */
+  phone?: boolean;
   /** Resolve a preset's role to a channel colour, or null when this space has no such
    *  channel (every lightness preset in RGB) — those are not offered at all. */
   presetColor: (p: WavePreset) => string | null;
@@ -190,9 +222,36 @@ interface Props {
 
 export const WaveToolHead: React.FC<Props> = ({
   shape, mode, onShape, onMode, onReseed, onPreset, onCommit, onCancel,
-  channelColor, channelLabel, presetColor, strength, onStrength, onPill,
+  presetColor, strength, onStrength, onPill, phone = false,
 }) => {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const shapeOptions = useMemo<SegmentedOption<WaveShape>[]>(
+    () => WAVE_SHAPES.map((sh) => ({
+      id: sh,
+      name: sh,
+      repeat: sh === 'Noise',
+      repeatTitle: 'Noise — again for another draw',
+      label: (
+        <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true">
+          <path d={SHAPE_PATHS[sh]} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
+        </svg>
+      ),
+    })),
+    [],
+  );
+  const modeOptions = useMemo<SegmentedOption<WaveMode>[]>(
+    () => WAVE_MODES.map((m) => ({
+      id: m,
+      name: MODE_NAME[m],
+      title: MODE_TITLE[m],
+      label: (
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
+          {MODE_GLYPH[m]}
+        </svg>
+      ),
+    })),
+    [],
+  );
   const presets = useMemo(
     () => WAVE_PRESETS.map((p) => ({ p, color: presetColor(p) })).filter((x) => x.color !== null),
     [presetColor],
@@ -207,7 +266,7 @@ export const WaveToolHead: React.FC<Props> = ({
         aria-expanded={!!menuAt}
         data-gx-wave="presets"
         title="Presets — a starting shape for this channel"
-        className={`shrink-0 h-6 px-2 flex items-center gap-1 rounded border text-[11px] whitespace-nowrap transition-all ${
+        className={`shrink-0 h-7 px-2 flex items-center gap-1 rounded border text-[11px] whitespace-nowrap transition-all ${
           menuAt ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' : 'bg-surface/80 text-fg-muted border-line/10 hover:text-fg'
         }`}
         onClick={(e) => {
@@ -244,35 +303,18 @@ export const WaveToolHead: React.FC<Props> = ({
           })}
         />
       )}
-      <Sep />
-      <span
-        className="shrink-0 w-3.5 h-3.5 rounded-full border"
-        style={{ background: channelColor, borderColor: channelColor }}
-        title={`Shaping ${channelLabel} — pick another channel in the track list`}
+      <Sep on={!phone} />
+      <Segmented
+        name="wave-shape"
+        options={shapeOptions}
+        value={shape}
+        onChange={onShape}
+        onRepeat={onReseed}
+        cycle={phone}
+        pad="px-1.5"
       />
-      <Sep />
-      {WAVE_SHAPES.map((s) => (
-        <Btn
-          key={s}
-          onClick={() => (shape === s && s === 'Noise' ? onReseed() : onShape(s))}
-          active={shape === s}
-          title={shape === s && s === 'Noise' ? 'Noise — click again for another draw' : s}
-          tag={`shape-${s.toLowerCase()}`}
-        >
-          <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden="true">
-            <path d={SHAPE_PATHS[s]} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" />
-          </svg>
-        </Btn>
-      ))}
-      <Sep />
-      {WAVE_MODES.map((m) => (
-        <Btn key={m} onClick={() => onMode(m)} active={mode === m} title={MODE_TITLE[m]} tag={`mode-${m}`}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
-            {MODE_GLYPH[m]}
-          </svg>
-        </Btn>
-      ))}
-      <Sep />
+      <Segmented name="wave-mode" options={modeOptions} value={mode} onChange={onMode} pad="px-1.5" className="ml-1" />
+      <Sep on={!phone} />
       <Strength value={strength} onChange={onStrength} onPill={onPill} />
       <div className="shrink-0 flex items-center gap-1 pl-2 border-l border-line/10 ml-auto">
         <Btn onClick={onCommit} title="Bake the wave into the curve (Enter)" tag="commit">
