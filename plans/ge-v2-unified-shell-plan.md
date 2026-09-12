@@ -2729,3 +2729,49 @@ phase now carries**. Items move out of this list only when a later phase's entry
   more honestly than sitting on one trough ever did. The crest keeps phase and amplitude,
   which really are properties of that crest. Measured after the move: bias and caliper share
   x, 28 px apart vertically, and the crest is 304 px away instead of underneath.
+
+- 2026-09-12 · **The wave no longer folds the curve back on itself at the seam.** Owner: "the
+  wave - can it bake the keys that its applying to as a pre-filter step - sometimes sparse
+  keys make it loop back upon itself". The diagnosis he gave is right about WHEN — sparse keys
+  — and the bake turned out not to be the lever, so this records why.
+
+  **The base curves were already clean.** Measured across a 2-key, a 3-key and a 17-key
+  track: the x-component of every segment's cubic is exactly linear in the Bezier parameter,
+  which is what `FIT_TANGENT_WEIGHT` buys. So there was nothing to bake out. The fold is
+  introduced by the SPLICE, and a pre-bake would only have hidden it by making every
+  neighbour close enough that no arm could overreach — at the cost of ~128 keys per channel
+  on every use, with the same defect still live for the Pencil and the smoothing brush.
+
+  **What actually happens.** `spliceSpan` already rescaled the SPAN keys' outward arms, and
+  `reTangentBezier` heals the flanking KEPT keys — but it skips `autoTangent: false` by
+  contract, and after any bake that is every key in the track. So a kept key's inward arm kept
+  the length it was given for the neighbour the splice had just removed, and the new boundary
+  key is nearer. `GraphRendererBuilder` strokes each segment as a real `bezierCurveTo` with
+  those handles as control points, so an arm that reaches past the next key draws a literal
+  loop. Sparse is where it shows because the arm is a third of a LONG segment: on the two-key
+  greyscale ramp (arms of 85 frames) spliced at frame 13, the x-derivative reached **-5.2x the
+  segment width**. Not only sparse, though — a 16-frame-spaced track folded at -0.44x whenever
+  a span boundary happened to land within about five frames of a kept key.
+
+  **The fix is four lines in `spliceSpan`**, so the Pencil and the smoothing brush get it too.
+  The kept keys' seam-facing arms are CLAMPED to a third of the new gap — clamped, not set,
+  because a kept arm is authored shape where a span key's placeholder means nothing. That
+  asymmetry is also what makes the result provable rather than merely measured: with the
+  inward arm `a <= d/3` and the span key's outward arm `b == d/3`, `a + b <= 2d/3 < d`, so the
+  x control polygon is monotone and **no fold is representable**.
+
+  What the user sees: on that greyscale ramp with a partial span, the hero's biggest
+  neighbouring-pixel step fell from **60/255 to 9** (the 9 is the wave's own steepest slope,
+  not a break) and the count of visible steps from 15 to 4; in the graph, columns where the
+  curve appears in more than one piece went **5 → 0**.
+
+  Guard: `test:palette-wavegen` section [9]. Falsified both halves — dropping the two new
+  `reach` calls reds five assertions at -5.2x, and making them set instead of clamp reds the
+  one that says a hand-dragged short arm survives untouched.
+
+  One thing left standing, deliberately: `AnimationMath.constrainHandles` takes a
+  `clampToOneThird` option and **nothing in the app calls it**, so a hand-dragged tangent can
+  still be pulled long enough to fold a segment on its own. That is the graph editor's
+  behaviour rather than the wave's, it predates all of this, and a wave fired at a curve that
+  already folds will sample the fold through `solveBezierY`'s Newton solve and inherit it.
+  Worth knowing before blaming the filter.

@@ -348,6 +348,16 @@ export const fitKeysToSamples = (
  *   `kept` the whole key list: three assertions went red, including the <2-key refusals,
  *   which is the shape of the bug — a span edit that keeps what it replaced leaves two keys
  *   at the same frame and the evaluator walks the wrong one.
+ *
+ * @invariant No segment touching the seam doubles back in time — the graph strokes each
+ *   segment as a real cubic with these handles as control points, so an arm that overreaches
+ *   draws a literal loop. Held by keeping the two seam arms at a third of the gap each: with
+ *   a + b <= 2d/3 < d the x control polygon is monotone, so no fold is representable. Proven
+ *   by: `npm run test:palette-wavegen` section [9] ("no segment folds across 3 bases x 6
+ *   spans"). Falsified 2026-09-12 two ways — dropping the two kept-key `reach` calls reds
+ *   five assertions (worst x-derivative -5.2x the segment width, on the two-key ramp the
+ *   owner reported); making them set instead of clamp reds the one that says a hand-dragged
+ *   short arm survives.
  */
 export const spliceSpan = (
     keys: Keyframe[],
@@ -374,18 +384,41 @@ export const spliceSpan = (
      * neighbour happened to be close).
      *
      * Scaling x and y together keeps the slope and only changes how far the arm reaches.
+     *
+     * THE KEPT KEYS' ARMS FACE THE SEAM TOO, and that is the half that folds the curve.
+     * A kept key's inward arm was sized for the neighbour the splice just REMOVED, and the
+     * new boundary key is usually much closer — so the arm reaches past it, the segment's
+     * x-cubic doubles back, and `GraphRendererBuilder` strokes a literal loop (owner,
+     * 2026-09-12: "sometimes sparse keys make it loop back upon itself"). Sparse keys are
+     * where it shows because the arm is a third of a LONG segment: measured on a two-key
+     * ramp (arms of 85 frames) spliced at frame 13, the x-derivative reached -5.2x the
+     * segment width. It is not only sparse tracks — a 16-frame-spaced track folded at
+     * -0.44x whenever a span boundary landed within ~5 frames of a kept key.
+     *
+     * `reTangentBezier` cannot reach these either: they are `autoTangent: false` after any
+     * previous bake, and GX bakes after most every step, so in practice they all are.
+     *
+     * CLAMP, don't set. The span keys' outward arms are SET to d/3 because they arrive with
+     * a placeholder that means nothing. A kept key's arm is real authored shape, so it is
+     * only shortened when it overreaches — which is also what makes the result provable:
+     * with the inward arm a <= d/3 and the span key's outward arm b == d/3, a + b <= 2d/3 < d,
+     * so the control polygon is monotone in x and no fold is representable.
      */
-    const reach = (i: number, side: 'leftTangent' | 'rightTangent', nbIdx: number) => {
+    const reach = (i: number, side: 'leftTangent' | 'rightTangent', nbIdx: number, clampOnly = false) => {
         const k = merged[i];
         const nb = merged[nbIdx];
         if (!k || !nb || k.autoTangent !== false) return;
         const t = k[side];
         if (!t || !t.x) return;
-        const s = (Math.abs(nb.frame - k.frame) * FIT_TANGENT_WEIGHT) / Math.abs(t.x);
+        const want = Math.abs(nb.frame - k.frame) * FIT_TANGENT_WEIGHT;
+        if (clampOnly && Math.abs(t.x) <= want) return;
+        const s = want / Math.abs(t.x);
         merged[i] = { ...k, [side]: { x: t.x * s, y: t.y * s } };
     };
     reach(firstSpan, 'leftTangent', firstSpan - 1);
     reach(lastSpan, 'rightTangent', lastSpan + 1);
+    reach(firstSpan - 1, 'rightTangent', firstSpan, true);
+    reach(lastSpan + 1, 'leftTangent', lastSpan, true);
     return seamOnly
         ? reTangentBezier(merged, (_k, i) => i === firstSpan - 1 || i === firstSpan || i === lastSpan || i === lastSpan + 1)
         : reTangentBezier(merged, (_k, i) => i >= firstSpan - 1 && i <= lastSpan + 1);

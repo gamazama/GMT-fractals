@@ -16,7 +16,9 @@
  *   [5] amplitude is a FRACTION of the channel range, so one drag feels the same on L,
  *       chroma and hue (ranges 1, 0.4 and 2π);
  *   [6] spliceSpan keeps every key outside the span, lands the span's keys inside it, and
- *       refuses rather than returning a track with fewer than two keys.
+ *       refuses rather than returning a track with fewer than two keys;
+ *   [9] and it never hands back a segment whose Bezier DOUBLES BACK in time — the fold the
+ *       graph strokes as a literal loop.
  *
  * Run: npx tsx debug/test-palette-wavegen.mts
  */
@@ -32,7 +34,9 @@ import {
   waveValue,
   type WaveParams,
 } from '../palette/core/waveGen';
-import { spliceSpan, fitSamplesToKeys } from '../utils/CurveFitting';
+import { sampleWaveSpan } from '../palette/core/waveGen';
+import { spliceSpan, fitSamplesToKeys, FIT_TANGENT_WEIGHT } from '../utils/CurveFitting';
+import { evaluateTrackValue } from '../utils/timelineUtils';
 import type { Keyframe } from '../types';
 
 let failures = 0;
@@ -404,6 +408,119 @@ console.log('[8] presets');
   ok(waveValue(0.5, div) > 0.99 && waveValue(0, div) < -0.99, 'diverging peaks in the middle and is low at both ends');
   const cyc = presetParams(WAVE_PRESETS.find((x) => x.id === 'cyclic')!, DEFAULT_WAVE);
   ok(Math.abs(waveValue(0, cyc) - waveValue(1, cyc)) < 1e-6, 'cyclic ends where it began');
+}
+
+// --- [9] a spliced track never folds back in time ---------------------------------------
+// The graph strokes each segment as a real `bezierCurveTo` with the stored handles as its
+// control points, so an arm that reaches past the next key makes the curve double back on
+// itself — a visible loop, not a subtle error (owner, 2026-09-12: "sometimes sparse keys
+// make it loop back upon itself"). SPARSE keys are where it shows, because a kept key's arm
+// is a third of a LONG segment and the span boundary the splice puts next to it is close.
+//
+// The measure is the x-cubic's minimum derivative over the segment, divided by the segment
+// width: 1 means x is exactly linear in the parameter (which is what FIT_TANGENT_WEIGHT
+// buys), anything below 0 is a fold.
+console.log('[9] no fold at the seam');
+{
+  const F = 255;
+  /** A GX-style baked key list: `autoTangent: false`, arms exactly a third of their own
+   *  segment. Every track in the Curves face looks like this after any bake, which is why
+   *  `reTangentBezier` (which skips hand-broken keys by contract) cannot heal these. */
+  const baked = (pts: [number, number][]): Keyframe[] => {
+    const keys: Keyframe[] = pts.map(([f, v], n) => ({
+      id: `b${n}`, frame: f, value: v, interpolation: 'Bezier' as const,
+      autoTangent: false, brokenTangents: false,
+      leftTangent: { x: -1, y: 0 }, rightTangent: { x: 1, y: 0 },
+    }));
+    for (let n = 0; n < keys.length - 1; n++) {
+      const arm = (keys[n + 1].frame - keys[n].frame) * FIT_TANGENT_WEIGHT;
+      const slope = (keys[n + 1].value - keys[n].value) / (keys[n + 1].frame - keys[n].frame);
+      keys[n].rightTangent = { x: arm, y: arm * slope };
+      keys[n + 1].leftTangent = { x: -arm, y: -arm * slope };
+    }
+    keys[0].leftTangent = { x: -keys[0].rightTangent!.x, y: -keys[0].rightTangent!.y };
+    const L = keys.length - 1;
+    keys[L].rightTangent = { x: -keys[L].leftTangent!.x, y: -keys[L].leftTangent!.y };
+    return keys;
+  };
+
+  const worstSlope = (keys: Keyframe[]): { v: number; at: string } => {
+    let v = Infinity; let at = '';
+    for (let i = 0; i < keys.length - 1; i++) {
+      const a = keys[i]; const b = keys[i + 1];
+      const d = b.frame - a.frame;
+      if (a.interpolation !== 'Bezier' || d <= 0) continue;
+      const p1 = a.rightTangent?.x ?? d / 3;
+      const p2 = d + (b.leftTangent?.x ?? -d / 3);
+      for (let n = 0; n <= 200; n++) {
+        const t = n / 200, u = 1 - t;
+        const dx = 3 * u * u * p1 + 6 * u * t * (p2 - p1) + 3 * t * t * (d - p2);
+        if (dx / d < v) { v = dx / d; at = `${a.frame}->${b.frame}`; }
+      }
+    }
+    return { v, at };
+  };
+
+  const stamp = (src: Keyframe[], p: WaveParams): Keyframe[] | null => {
+    const win = waveSpanFrames(p, F);
+    if (!win) return null;
+    const samples = sampleWaveSpan(p, win.lo, win.hi, F, 1, (f) => evaluateTrackValue(src, f, false, false));
+    return spliceSpan(src, win.lo, win.hi, fitSamplesToKeys(samples, win.lo, 0.004, `w${win.lo}`));
+  };
+
+  const bases: [string, Keyframe[]][] = [
+    ['2-key ramp', baked([[0, 0.1], [255, 0.9]])],
+    ['3-key ramp', baked([[0, 0.1], [128, 0.6], [255, 0.9]])],
+    ['17-key ramp', baked(Array.from({ length: 17 }, (_, i): [number, number] => [i * 16, 0.1 + 0.8 * (i / 16)]))],
+  ];
+  // The bases themselves are clean — worth asserting, because it is what says the fold is
+  // introduced by the SPLICE and not inherited from a badly-shaped source curve. It is also
+  // the reason the fix is here rather than a bake of the source before the filter runs.
+  for (const [label, src] of bases) {
+    ok(worstSlope(src).v >= 0, `${label}: the base itself does not fold`);
+  }
+
+  const spans: [number, number][] = [[0.05, 0.95], [0.1, 0.9], [0.2, 0.8], [0.3, 0.7], [0.4, 0.6], [0.45, 0.55]];
+  let worstSeen = Infinity; let worstLabel = '';
+  for (const [label, src] of bases) {
+    for (const span of spans) {
+      const out = stamp(src, P({ span, amplitude: 0.3, wavelength: 0.15, strength: 1 }));
+      if (!out) continue;
+      const w = worstSlope(out);
+      if (w.v < worstSeen) { worstSeen = w.v; worstLabel = `${label} span ${span[0]}..${span[1]} at ${w.at}`; }
+    }
+  }
+  ok(worstSeen >= 0, `no segment folds across 3 bases x 6 spans (worst dx/d ${worstSeen.toFixed(3)} — ${worstLabel})`);
+  // Not merely non-negative: with the kept arm clamped to d/3 and the span key's set to d/3,
+  // x is exactly linear in the Bezier parameter, which is the condition FIT_TANGENT_WEIGHT
+  // exists to hold. Anything less means an arm escaped one of the two.
+  ok(worstSeen > 0.999, `and x stays linear in the parameter throughout (${worstSeen.toFixed(4)})`);
+
+  // The seam is where it happens, so name the two segments the clamp exists for.
+  const sparse = bases[0][1];
+  const wide = stamp(sparse, P({ span: [0.05, 0.95], amplitude: 0.3, wavelength: 0.15, strength: 1 }))!;
+  const head = wide[0]; const nextK = wide[1];
+  ok(Math.abs(head.rightTangent!.x) <= (nextK.frame - head.frame) * FIT_TANGENT_WEIGHT + 1e-9,
+    `the kept head key's arm is cut to the new gap (${Math.abs(head.rightTangent!.x).toFixed(2)} <= ${((nextK.frame - head.frame) * FIT_TANGENT_WEIGHT).toFixed(2)}, was 85)`);
+  const tail = wide[wide.length - 1]; const prevK = wide[wide.length - 2];
+  ok(Math.abs(tail.leftTangent!.x) <= (tail.frame - prevK.frame) * FIT_TANGENT_WEIGHT + 1e-9,
+    `and so is the kept tail key's (${Math.abs(tail.leftTangent!.x).toFixed(2)} <= ${((tail.frame - prevK.frame) * FIT_TANGENT_WEIGHT).toFixed(2)})`);
+
+  // CLAMP, not set: a kept arm that already fits is authored shape and must survive.
+  //
+  // Reaching this branch takes a HAND-DRAGGED arm. On a purely baked track it is unreachable
+  // by construction — the kept key's arm is a third of the way to a neighbour the splice
+  // removed, and that neighbour is always further off than the boundary key that replaced
+  // it, so the arm always overreaches. Handle dragging is what puts a short arm on a key
+  // whose neighbour is far, and that arm is the user's shape: setting it to d/3 would bend a
+  // segment nobody asked about.
+  const dragged = baked([[0, 0.1], [255, 0.9]]);
+  dragged[0] = { ...dragged[0], rightTangent: { x: 2, y: 0.01 } };
+  const narrowSpan = stamp(dragged, P({ span: [0.45, 0.55], amplitude: 0.3, wavelength: 0.15, strength: 1 }))!;
+  const room = (narrowSpan[1].frame - narrowSpan[0].frame) * FIT_TANGENT_WEIGHT;
+  ok(room > 2, `the test is live: there is room to lengthen (${room.toFixed(1)} > 2)`);
+  ok(narrowSpan[0].rightTangent!.x === 2 && narrowSpan[0].rightTangent!.y === 0.01,
+    'a short hand-set arm survives the splice untouched — the clamp only ever shortens');
 }
 
 console.log(failures === 0 ? '\nAll wave-filter checks passed.' : `\n${failures} FAILED`);
