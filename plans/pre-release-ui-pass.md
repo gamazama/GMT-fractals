@@ -68,13 +68,44 @@ which is shared anyway. Copying them into GE is the copy-paste-shared-resources 
 (CLAUDE.md #2). Move them to the engine (or `engine-gmt/`) taking `topicId` and `label` as options;
 app-gmt then passes GMT's and GE passes its own. The version-gated localStorage dot comes along free.
 
-Open, and genuinely GE's call: **does GX get its own changelog topic, or share GMT's?**
-`data/help/topics/changelog.ts` is GMT's release history. GE v2 has had its own visible arc that GMT
-users don't care about, which argues for a separate topic — but two changelogs is two things to
-remember to write. See `project_whats_new_changelog` for where entries currently live.
-
 Phone: `installHelp`'s menu already handles phone widths wherever GMT and fluid-toy do. Do not invent
 a second pattern.
+
+### 1b. GX is a standalone app (owner, 2026-09-12)
+
+That settles the changelog question — **GX gets its own topic**, not a share of
+`data/help/topics/changelog.ts`. It also pulls three more things into this section:
+
+- **Its own version.** `pkg.version` is `gmt-engine 0.9.8.3`, monorepo-wide. An About box and a
+  version-gated What's-New dot for a standalone product should key off GX's own version, not the
+  engine's. This is the concrete reason the What's New hoist (above) must take its version source as
+  an option, not read `pkg` directly.
+- **"Support GMT" needs an app-name seam.** `gmtSupportConfig()`'s copy is GMT-branded ("GMT is free
+  & open source…") and its header says change-it-here-and-every-app-follows. A standalone GX asking
+  people to support GMT is either a mistake or a deliberate umbrella — owner's call. The *resolution*
+  is not to fork the file: parameterise the app name and keep one definition.
+- **"Back to GMT" changes meaning.** `GradientExplorerV2App.tsx:472` renders it as a plain link. For a
+  satellite it's "return to the parent"; for a standalone product it's a cross-link to a sibling.
+  Keep or drop is an owner call, but it should not read as a back button.
+
+### 1c. The question that decides whether this is small or not
+
+**Standalone as a separate entry on `app.gmt-fractals.com`, or standalone on its own domain?**
+
+Today `gradient-explorer-next` is a Vite entry (`vite.config.ts:148`) on the same origin as app-gmt.
+Every shared key is `gmt.*` in **localStorage**, which is **origin-scoped**:
+
+- `gmt.favients`, `.groups`, `.target`, `.seeded`, `.lastgroup` — the user's whole saved collection
+- the colour scheme / accent / `gmt.highContrast` — "persists across all same-origin GMT apps"
+- `gmt.whatsNew.seenVersion`, and the GE-local `gx.v2.*` keys
+
+**Same origin → nothing breaks, and 1b is the whole job.** Own domain → a returning user arrives at a
+brand-new app with an empty shelf, default theme, and every group they made gone, **silently**. That
+would need an explicit migration path (an export/import handoff, or a one-time read from the old
+origin before the switch) and it is release-blocking in a way none of the rest of this doc is.
+
+Nothing else in this plan depends on the answer, so it isn't blocking the slider work or §1a — but it
+should be settled before the entry-point swap, not after.
 
 ---
 

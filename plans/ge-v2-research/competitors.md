@@ -152,6 +152,14 @@ Ranked by how defensible they look:
 2. **No front door.** Every competitor has a URL a stranger can land on that shows gradients
    immediately and costs nothing to understand. GE loads a studio. Galleries win on SEO because they
    are *pages of gradients*; GX global is the seed of this but isn't a browsable public index.
+
+   > **Update 2026-09-12 — GX is to be a standalone app** (owner). That converts half this gap by
+   > itself: a standalone product has its own front door by definition, and the "six half-products to
+   > a visitor" problem in §1 mostly dissolves once GE stops being a room inside a fractal studio.
+   > What remains is narrower and still real — the wall is behind an app shell rather than a set of
+   > crawlable pages, so there is still nothing for a search engine to index or a stranger to land on
+   > without loading the studio. The public gradient index (§8.2) stays on the list; the framing
+   > shifts from "GE needs a front door" to "GE's front door needs pages behind it".
 3. **No accessibility layer *on the gradient*.** To be precise about which thing is missing: the
    **app's own chrome** is well served — `engine/store/colorSchemeStore.ts` carries a `highContrast`
    axis (surfaces to the extremes plus a higher-contrast text ladder), exposed in Settings and as
@@ -196,6 +204,14 @@ audience who already pay Ultra Fractal. The Figma number is the interesting outl
 a Constructr app-template called "Color Gradient Explorer". Neither is a trademark or traffic threat,
 but the phrase has no SEO headroom and describes the least differentiated half of the product. If GE
 ever gets its own front door, the name should point at the wall or the render, not the verb.
+
+> **Update 2026-09-12 — this got more important, not less.** With GX standalone, "Gradient Explorer"
+> stops being a feature name inside GMT and becomes a **product name competing for its own search
+> traffic**. A generic phrase, already used by two other things, competing against "gradient
+> generator / maker / picker" — which is what people actually type — is a weak position to launch
+> from. Still no legal issue and still not a rebrand emergency; but the naming decision now wants
+> making *before* the standalone launch rather than whenever. One caveat repeated from above: this is
+> an observation about search results, not a trademark search — no register was checked.
 
 ## 8. What I'd do about it
 
