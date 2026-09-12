@@ -150,12 +150,25 @@ export default defineConfig({
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),
       },
       output: {
+        // FORCED vendor chunks. Only for libraries that are (a) big, (b) genuinely shared
+        // across entries, so one cached copy serves all of them.
+        //
+        // `@react-three/drei` and `@react-three/fiber` were listed here until 2026-09-12 and
+        // should not be again. Forcing a package into a named chunk makes every entry that
+        // touches the chunk GROUP carry it, and neither is imported by anything reachable
+        // from the Gradient Explorer, the old Explorer, mesh-export or fluid-toy — yet all
+        // four preloaded both at boot. Removing the two entries took 146 kB off each of them
+        // and left app-gmt, which does use them, unchanged (measured, both ways, per entry).
+        //
+        // `three` STAYS, and not because it helps this build shake: three publishes one
+        // bundled ESM file, so importing `Vector3` pulls all 674 kB whatever the chunking
+        // says — removing this entry changed the total by 500 bytes. It stays because a
+        // single shared chunk is one cached copy across five entries instead of a copy
+        // inlined into each. The way to stop PAYING for three is to stop importing it; see
+        // the note in docs/adr or grep `import * as THREE` for who still does.
         manualChunks: {
-          // Core vendor libraries (eagerly loaded)
           'three': ['three'],
           'react': ['react', 'react-dom'],
-          'three-drei': ['@react-three/drei'],
-          'three-fiber': ['@react-three/fiber'],
           // Compression (needed at startup for URL parsing)
           'pako': ['pako'],
         }
