@@ -82,6 +82,7 @@ import {
 import { layoutPositions, swatchesAt, insertAtLargestGap, movePosition, clampCount, PALETTE_MIN, PALETTE_MAX, type PaletteRule, type PaletteSwatch } from '../core/paletteSample';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import type { ChannelTracks } from '../components/ChannelGraphEditor';
+import { CURVE_SPACE_ORDER, DEFAULT_CURVE_SPACE, curveSpaceKeys, type CurveSpace } from '../core/curveSpaces';
 import type { GradientConfig, JsonValue } from '../../types';
 import type { Channels } from '../core/generatorPipeline';
 import type { RGB } from '../core/oklab';
@@ -96,6 +97,10 @@ export interface BakedFrom {
   adjust: Partial<GeneratorSlice>;
   tracks: ChannelTracks | null;
   curvesOn: boolean;
+  /** The authoring space the tracks were drawn in — carried with them, since the same key
+   *  triple means different axes in different spaces. Absent on a pre-2026-09-12 snapshot,
+   *  which is OkLCh by construction. */
+  curveSpace?: CurveSpace;
 }
 
 export type RecentCollector = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean }) => string | null;
@@ -326,7 +331,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     const baked: BakedFrom =
       s.input.kind === 'stops' && s.bakedFrom
         ? s.bakedFrom
-        : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn };
+        : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn, curveSpace: gen.curveSpace };
     paramEdit(() => {
       usePaletteEditorStore.getState().setConfig(config);
       setGeneratorSlice({ ...MAIN_DEFAULTS });
@@ -341,7 +346,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     const gen = useGeneratorStore.getState();
     const liveFrom: BakedFrom | null = live
       ? s.liveFrom
-      : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn };
+      : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn, curveSpace: gen.curveSpace };
     paramEdit(() => set({ input, bakedFrom: null, liveFrom, sessionId: null, sessionPinned: false }));
   },
 
@@ -360,7 +365,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     if (!b || !(s.input.kind === 'build' || s.input.kind === 'extract')) return;
     paramEdit(() => {
       setGeneratorSlice(b.adjust);
-      useGeneratorStore.setState({ tracks: b.tracks, curvesOn: b.curvesOn });
+      useGeneratorStore.setState({ tracks: b.tracks, curvesOn: b.curvesOn, curveSpace: b.curveSpace ?? DEFAULT_CURVE_SPACE });
       set({ input: b.input, name: b.name, bakedFrom: null, liveFrom: null, sessionId: null, sessionPinned: false });
     });
   },
@@ -371,7 +376,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     if (s.input.kind !== 'stops' || !b) return;
     paramEdit(() => {
       setGeneratorSlice(b.adjust);
-      useGeneratorStore.setState({ tracks: b.tracks, curvesOn: b.curvesOn });
+      useGeneratorStore.setState({ tracks: b.tracks, curvesOn: b.curvesOn, curveSpace: b.curveSpace ?? DEFAULT_CURVE_SPACE });
       set({ input: b.input, name: b.name, bakedFrom: null, sessionId: null, sessionPinned: false });
     });
   },
@@ -469,24 +474,29 @@ const coerceAdjust = (v: unknown): Partial<GeneratorSlice> => {
   }
   return out;
 };
-const coerceTracks = (v: unknown): ChannelTracks | null => {
+/** Tracks are valid when they carry the three keys the SPACE names — 'L','C','h' in OkLCh,
+ *  'R','G','B' in RGB. A snapshot whose space and tracks disagree is rejected as no-curves
+ *  rather than sampled through the wrong axes, which would silently recolour the gradient. */
+const coerceTracks = (v: unknown, space: CurveSpace): ChannelTracks | null => {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
-  return o.L && o.C && o.h && typeof o.L === 'object' && typeof o.C === 'object' && typeof o.h === 'object'
-    ? (v as ChannelTracks)
-    : null;
+  return curveSpaceKeys(space).every((k) => o[k] && typeof o[k] === 'object') ? (v as ChannelTracks) : null;
 };
+const coerceSpace = (v: unknown): CurveSpace =>
+  CURVE_SPACE_ORDER.includes(v as CurveSpace) ? (v as CurveSpace) : DEFAULT_CURVE_SPACE;
 const coerceBaked = (v: unknown): BakedFrom | null => {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
   const input = coerceInput(o.input);
   if (!input) return null;
+  const curveSpace = coerceSpace(o.curveSpace);
   return {
     input,
     name: typeof o.name === 'string' ? o.name : null,
     adjust: coerceAdjust(o.adjust),
-    tracks: coerceTracks(o.tracks),
+    tracks: coerceTracks(o.tracks, curveSpace),
     curvesOn: o.curvesOn === true,
+    curveSpace,
   };
 };
 /** Validate an untrusted snapshot (undo history or a scene file). Never throws; null on garbage. */

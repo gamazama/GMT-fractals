@@ -36,6 +36,11 @@ interface Props {
   layers?: { key: string; label: string; color: string; visible: boolean; onToggle: () => void; dashed?: boolean }[];
   /** Lay the list out as one horizontal strip instead of a side rail (phone). */
   horizontal?: boolean;
+  /** The colour-space chooser, rendered at the head of the list. It belongs HERE rather than
+   *  in the controls row because it names what these three tracks ARE — switch it and every
+   *  row below changes name, colour and range (2026-09-12). On the desk it replaces the
+   *  "Tracks" caption, which was saying less. */
+  spaceChooser?: React.ReactNode;
 }
 
 export const ChannelTrackSidebar: React.FC<Props> = ({
@@ -49,6 +54,7 @@ export const ChannelTrackSidebar: React.FC<Props> = ({
   onDeselectAll,
   layers = [],
   horizontal = false,
+  spaceChooser,
 }) =>
   horizontal ? (
     /* WRAPS to two rows rather than scrolling (owner, 2026-09-12: "they are not fitting, we
@@ -56,6 +62,7 @@ export const ChannelTrackSidebar: React.FC<Props> = ({
        track called "L" — or controls past the end that nothing says are there. Two rows of
        full names costs ~22 px and reads. */
     <div className="w-full flex items-center gap-x-2 gap-y-1 flex-wrap px-2 py-1 border-b border-line/10 bg-surface-dock/60 text-[11px]">
+      {spaceChooser && <div className="shrink-0 flex items-center">{spaceChooser}</div>}
       {channels.map((c) => {
         const vis = visible[c.key] !== false;
         return (
@@ -108,7 +115,9 @@ export const ChannelTrackSidebar: React.FC<Props> = ({
   ) : (
   <div className="w-28 shrink-0 border-r border-line/10 bg-surface-dock/60 flex flex-col text-[11px]">
     <div className="flex items-center gap-1 px-2 py-1 border-b border-line/10">
-      <span className="text-[9px] uppercase tracking-wide text-fg-faint mr-auto">Tracks</span>
+      {spaceChooser
+        ? <div className="mr-auto min-w-0 flex items-center">{spaceChooser}</div>
+        : <span className="text-[9px] uppercase tracking-wide text-fg-faint mr-auto">Tracks</span>}
       <button onClick={onSelectAll} className="text-[9px] text-fg-muted hover:text-fg-secondary">All</button>
       <button onClick={onDeselectAll} className="text-[9px] text-fg-muted hover:text-fg-secondary">None</button>
     </div>

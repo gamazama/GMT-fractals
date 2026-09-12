@@ -2252,3 +2252,206 @@ phase now carries**. Items move out of this list only when a later phase's entry
   **Still missing:** the curve hit-test radius is unproven (an `@assumption`). **Phase G is
   still what is left**, unchanged: the parity checklist, the label sweep, the Recent
   auto-collect ADR, `/polish`, the entry-point swap.
+- 2026-09-12 · **The Curves face grows a function tool and stops being OkLCh-only.** Two
+  features, conferred on the owner's bench before a line was written, specced here because
+  neither is a tweak: the first is a new tool, the second changes what a "channel" is.
+
+  **A. The wave filter — a FILTER, not a layer.** Owner, asked directly: "the wave is a
+  filter that is applied and then baked. its only live while the parameters are being
+  chosen. GX is not a parametric editor — it bakes after most every step." So there is no
+  stored wave, no new pipeline stage, no document field. Arm the tool, shape it against a
+  live preview, commit — and what lands is keyframes, indistinguishable from hand-drawn
+  ones, inside one `genEdit` bracket. Esc writes nothing.
+
+  That decision is what makes the build cheap, because the commit path already exists.
+  `usePencilTool` rasterises a stroke to integer frames, calls `fitSamplesToKeys`, splices
+  the result into the track across ONLY the drawn span, and re-tangents the four seam keys
+  so the join does not bow into a loop. **The wave is the pencil with the samples coming
+  from a function instead of a pointer.** That splice + seam-heal block comes OUT of the
+  pencil into `CurveFitting` as `spliceSpan` and both callers share it — grep `spliceSpan`.
+  Parallelling it would have been the easy mistake, and the seam-heal is exactly the part
+  nobody would have remembered to copy.
+
+  Shape maths is likewise not new: `LfoShape` (Sine · Triangle · Sawtooth · Pulse · Noise,
+  `types/animation.ts`) and its evaluation in `ModulationEngine` (grep `rawWave`) are
+  lifted into `palette/core/waveGen.ts`, so a Sine here and a Sine LFO are the same curve.
+  The head's shape glyphs are DRAWN BY that same function at 22 px rather than hand-authored
+  icon paths — they cannot drift out of sync with what the tool produces, and they need no
+  labels, which is most of how the tool stays wordless.
+
+  **The handle language, and the rule under it: X is always rate along t, Y is always
+  amount.** That is what lets one gesture set cover five shapes including Noise, which has
+  no "cycles" and reads X as grain scale instead.
+
+  | on the plot | drag X | drag Y |
+  | --- | --- | --- |
+  | caliper under the span line, **width == one wavelength** | wavelength | — |
+  | circle, sitting on the first crest | phase | amplitude |
+  | crosshair handle, sitting on the first trough | bias | skew |
+  | grey squares (feather shoulders), drawn IN FRONT | feather, then span | — |
+  | coral squares (span ends), behind | span | — |
+  | the wave itself, or its dashed centreline | — | offset |
+
+  Four decisions inside that table are load-bearing:
+
+  - **The caliper IS the wavelength**, not a control that sets one — its drawn width is the
+    period, so "visualise wavelength on x" (owner) costs no extra ink. It clamps its drawing
+    to the span when the period runs longer; the value keeps going, the picture stops.
+  - **The crest circle carries amplitude on Y** (owner: "the phase control can also control
+    amplitude"), which frees the wave body — so dragging the wave, or its dashed centreline,
+    is the offset. Direct manipulation both ways: the handle you lift is sitting on the
+    crest that rises.
+  - **Bias and skew are the graph editor's OWN bias**, not a second meaning of the word.
+    `GraphSelectionBBox` already redistributes by a 2D power law — grep `biasPow` and
+    `BIAS_OCTAVE` (150 px per power-of-two), an `↔ / ↕` readout, cursor `crosshair`, and a
+    handle glyph that is an accent circle carrying a crosshair and two offset dots. All of
+    it is reused, glyph included. Bias applies to the position WITHIN each cycle, so it
+    leans the waveform (a sine slides toward a sawtooth) rather than bunching cycles toward
+    one end; skew is the same power law on the wave's value, so it sharpens crests and
+    flattens troughs.
+  - **The feather squares are in front and they push the span** (owner). Dragging a feather
+    shoulder inward grows the feather; dragging it outward shrinks it to zero and then
+    carries the span end along with it. Four squares on one line would collide on a 390 px
+    phone when the span is narrow — this removes the collision instead of spacing around it,
+    and it means a finger only ever needs the two front squares. The span squares stay
+    grabbable for anyone who aims at them.
+
+  **The only text in the whole tool is the pill, and only while a drag is live** — the same
+  top-centre pill that already reads `Smooth 1.2` / `Bake every 4`. Permanent labels: none.
+
+  **The head.** Owner: "on mobile it can replace the graph's upper head type section, on
+  desktop it can just appear in the head as you have it there." So arming the tool SWAPS the
+  strip that already sits above the plot on a phone, and adds the same row above the plot on
+  the desk. Contents: the active-channel dot (read-only), five shape glyphs, three mode
+  glyphs (add · replace · multiply), the dice for Noise, ✓ and ✕. Eleven glyphs.
+
+  **One channel at a time** (owner), which deletes the per-channel-phase question the first
+  draft raised. The tool works on whatever the track list says is active, and its settings
+  SURVIVE the close — so applying the same wave to chroma after lightness is a reopen and a
+  nudge, not a re-dial.
+
+  **Armed is a MODE.** Owner: "other canvas handles, beziers, etc should not be active while
+  the function tool runs." While the wave is live, keyframe hit-testing, tangent handles,
+  the selection bbox, pencil/brush and the three drag tools are all suppressed. A stray grab
+  at a tangent mid-wave would commit an edit the preview never showed.
+
+  Amplitude is a FRACTION of the channel's range, not a value — 0.17 means 0.17 on L, 0.068
+  on chroma and 1.07 radians on hue, so the drag feels identical on channels whose ranges
+  differ 15×. The pill therefore reads a proportion.
+
+  **B. Curves in the other colour spaces.** Owner: the axes are "the same ones available in
+  the 'blend' section of the picker", minus Spectral and with HSL skipped. That is exactly
+  `BLEND_SPACE_ORDER` less `spectral` — **RGB · Oklab · OkLCh · CIE LCh · HSV**, same keys,
+  same labels, same order, no new vocabulary invented. (`oklab` is the POLAR one and reads
+  "OkLCh"; @see types/graphics.ts for why the keys cannot be renamed.)
+
+  The chooser is not new either. `BlendSpacePicker` inside `AdvancedGradientEditor.tsx` is
+  already the polished article — hover previews the switch so the choice is made by looking
+  rather than by reading a label, a coarse pointer gets a dropdown instead because a finger
+  cannot hover, Esc closes, backdrop click does not. It is EXTRACTED to
+  `components/gradient/BlendSpacePicker.tsx` with its option list parameterised, and both
+  callers share it. In Curves the hover preview redraws the tracks in the hovered space, so
+  you can see whether RGB gives this gradient a simpler line than OkLCh before committing.
+
+  **The pipeline does not change.** `palette/core/curveSpaces.ts` is a registry — each space
+  declares its three channels (key, label, colour, range, `angular`, fit epsilon) plus
+  `fromOklch` / `toOklch` — and the conversion happens once, at `sampleCurves`. Tracks are
+  authored in the chosen space, sampled, converted to OkLCh, handed to `buildGradientRamp`
+  exactly as before. What spreads is the channel KEY: `ChannelKey` stops being the literal
+  `'L'|'C'|'h'`, which reaches `ChannelTrackSidebar`, `generatorStore`, `workingStore` and
+  `generatorDocument` (whose `sanitizeTracks` hard-validates `{L,C,h}` today).
+
+  Three things that are easy to miss and would each ship broken:
+  - **The fit ghost must be converted too**, or the prospective fit and the editable curve
+    stop overlaying and the Detail / Smooth sliders read as noise.
+  - **Fit epsilon is per-CHANNEL, not per-space** — `fitChannelsToTracks` hand-tunes `0.01`
+    for L and C against `0.06` for hue. A registry carrying one eps per space would give RGB
+    and hue wildly different key counts off the same Detail number, so eps belongs on the
+    channel.
+  - **RGB and HSV are gamut-bounded and OkLCh is not.** A curve that swings out of gamut
+    survives in OkLCh and is CLIPPED on the way into RGB. Switching space is lossy in that
+    direction, inherently. Switching also re-fits, since a bezier in L/C/h has no counterpart
+    in R/G/B — one re-fit, one undo entry.
+
+  **Not sticky** (owner: "GX rebuilds on every transform") — the Curves face already bakes
+  and resets on leave, and the space resets with it.
+
+  **Guards.** `debug/test-palette-wavegen.mts` for the wave maths, the feather envelope, the
+  bias/skew power law and the splice; `debug/test-palette-curvespaces.mts` for a round-trip
+  of every space over the RGB cube and for re-fit-on-switch reproducing the ramp. Both are
+  pure-maths harnesses in the `test-palette-mapchannels` mould, and per CLAUDE.md every
+  `@invariant` written against them is falsified against a deliberately broken build before
+  it is committed to.
+  **Built the same day, and four things changed under the owner's eye while it was running.**
+
+  Three were his notes on the working tool, and each has an answer that is more than a flag:
+
+  - **"the gradient needs to update during the tool's use so user can see what theyre doing."**
+    The filtered curve is now WRITTEN INTO the track on every parameter change, so the hero
+    ramp, the result strip and the stops all follow the drag — the overlay's own painted
+    curve only ever moved the plot. That needs two things to stay honest. Every preview is
+    computed against `waveBaseRef`, the keyframes the channel had at ARM time, or each frame
+    would compound onto the last and one drag would stack a hundred waves. And the tool holds
+    ONE undo bracket across its whole session — opened on arm, closed by ✓ or ✕ — with the
+    editor's own per-drag bracketing suppressed while it is armed, so the result is one
+    Ctrl+Z and not one per handle. Esc restores the snapshot BEFORE closing the bracket, so
+    `endParamTransaction` diffs to nothing and a cancelled wave leaves no entry at all.
+  - **"the other nodes must become invisible as they are cluttering the view."** `drawGraph`
+    and `GraphRendererBuilder` take a `hideKeyframes` flag: the curve paints, its diamonds do
+    not. It is in the polyline CACHE KEY (`|k=`) for exactly the reason the gutter is — a
+    bitmap built with diamonds and blitted without them still shows them. With the preview now
+    written into the track, this stopped being cosmetic: the DP re-fit puts a fresh key at
+    every crest and trough, so an un-hidden preview draws its own clutter.
+  - **"we need to do a graph resize to ensure the outermost handles are visible."** Two
+    halves. The t axis is fitted on arm (`fitAll`), because the span squares sit at t=0 and
+    t=1 and a zoomed-in view puts both out of reach with every panning gesture suppressed.
+    The VALUE axis folds the wave's own extent into `trackRanges` — sampled from the filter,
+    NOT read off the fitted keys, which leaves the curve 3 px over the top edge (measured:
+    Douglas-Peucker undershoots a peak it places no key exactly on). That fold also forced
+    amplitude's denominator to become the CHANNEL's range rather than the plotted one, which
+    is the more principled reading anyway and breaks what would have been a circular memo.
+
+  The fourth is a placement the mock could not have predicted: **the space chooser sits in a
+  different place on each pointer**, because the control itself differs. On a desk it expands
+  its five modes INLINE — that is what makes hover-preview possible — and the 112 px track
+  rail cannot hold them (tried it; the list overflowed and clipped). So the desk puts it in
+  the controls row beside Detail and Smooth, which is the right company: the space is part of
+  the fit recipe. A phone gets the same component's dropdown variant, one compact button, in
+  the track strip.
+
+  **Four bugs the build turned up, all of them the kind that look fine until they are used:**
+
+  - **A component defined inside a render is a new component type every render.** `Square`
+    started life inside `WaveOverlay`, so React unmounted and remounted its DOM on every
+    frame — which destroyed the node holding the pointer capture the moment the first drag
+    frame landed. The caliper (inline JSX, stable) dragged; all four squares died after one
+    pixel. Hoisted to module scope.
+  - **`rgbToHsv` reports S and V on 0..100**, not 0..1, and `hsvToRgb` expects them there.
+    Reading them as 0..1 clamped a saturation of 85 to 1 and the whole gradient came back
+    grey — caught only by the round-trip assertion (max Δ 233/255).
+  - **`hsvToRgb`'s `i % 6` takes JavaScript's signed modulo**, so an UNWRAPPED hue — which is
+    exactly what the editor hands back, possibly negative — matches no case in its switch and
+    returns pure black. `wrapHue` on the way in is load-bearing.
+  - **CIE LCh and OkLCh would have shared the key triple `L/C/h`**, so a persisted
+    `ChannelTracks` could not say which space it was drawn in. CIE's channels are `L*`, `C*`,
+    `h*` now — the convention, and it makes the tracks self-describing, which is what lets
+    `sanitizeTracks` reject a snapshot whose space and tracks disagree instead of silently
+    recolouring the gradient through the wrong axes.
+
+  Two assertions in the wave harness were also wrong on the first cut and were rewritten
+  rather than loosened: a pointwise periodicity test a DISCONTINUOUS pulse cannot pass (it is
+  counted now, with a wrong-period control proving the loose bound still bites), and two
+  thresholds picked rather than derived (the shoulder test is a RATIO against the shoulder's
+  own mid-slope now — smoothstep gives ~1e-4, a linear ramp gives exactly 1).
+
+  **Guards run green:** `npm run test:palette` (30 harnesses, now including both new ones),
+  `test-graph-renderer-cache` (28), `check:rule-guards`, `check:text-bytes`, `smoke:ge-tray`,
+  `smoke:ge-uiundo`, `smoke:ge-phone`. Verified in the browser on both a desk and a phone: the
+  wave arms, drags, previews live, bakes to one undo entry, and works identically after
+  switching the axes to RGB — where the round trip moved the gradient by at most 3 of 255,
+  which is the re-fit, not the conversion.
+
+  **Still missing:** the wave tool has no BROWSER guard — the pure maths is pinned but nothing
+  catches the React-level faults this build hit (the remount that killed the squares, the pill
+  landing on the head, a handle drifting from its hit target). That is the same shape of hole
+  as the curve editor's unproven hit-test radius, and it wants the same kind of probe.

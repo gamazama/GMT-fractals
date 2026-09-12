@@ -56,7 +56,10 @@
 
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, prospectiveFitChannels, prospectiveFitFrames, readAdjustParamsNow } from '../../palette/store/generatorStore';
+import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, fitChannelsToTracks, prospectiveFitCurves, prospectiveFitFrames, readAdjustParamsNow, readSampledCurvesNow } from '../../palette/store/generatorStore';
+import { CURVE_SPACE_ORDER, curveSpaceKeys, toCurveChannels, type CurveSpace } from '../../palette/core/curveSpaces';
+import { BlendSpacePicker } from '../../components/gradient/BlendSpacePicker';
+import type { BlendColorSpace } from '../../types/graphics';
 import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
 import Slider from '../../components/Slider';
 import { InputSkinProvider } from '../../components/inputs';
@@ -290,24 +293,34 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
   const smooth = useGeneratorStore((s) => s.smooth);
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
   const base = derived.base;
+  const space = useGeneratorStore((st) => st.curveSpace);
 
-  const ghost = useMemo((): Channels | null => {
+  // The ghost is built in OkLCh (the pipeline's space) and converted ONCE at the end into
+  // the authoring space, so it shares the editable curve's axes and overlays it. That
+  // conversion also does the unwrapping the old `unwrapHue` call did — for whichever
+  // angular channel the space actually has, which for RGB and Oklab is none.
+  const ghost = useMemo((): Record<string, number[]> | null => {
     if (!base) return null;
+    let oklch: Channels | null;
     if (curvesOn && tracks) {
-      const f = buildGradientRamp(
+      oklch = buildGradientRamp(
         base,
         base,
         DEFAULT_SLOT_MODS,
         DEFAULT_SLOT_MODS,
         { ...readAdjustParamsNow(), mixL: 0, mixC: 0, mixH: 0 },
-        prospectiveFitChannels(base, detail, smooth),
+        prospectiveFitCurves(base, detail, smooth, space),
         noiseSeed,
       ).final;
-      return { L: f.L, C: f.C, h: unwrapHue(f.h) };
+    } else {
+      oklch = derived.final ?? null;
     }
-    return derived.final ? { L: derived.final.L, C: derived.final.C, h: unwrapHue(derived.final.h) } : null;
-  }, [base, curvesOn, tracks, detail, smooth, noiseSeed, derived.final]);
-  const ghostPoints = useMemo(() => (base ? prospectiveFitFrames(base, detail, smooth) : null), [base, detail, smooth]);
+    if (!oklch) return null;
+    const [a, b, c] = toCurveChannels(space, oklch);
+    const keys = curveSpaceKeys(space);
+    return { [keys[0]]: a, [keys[1]]: b, [keys[2]]: c };
+  }, [base, curvesOn, tracks, detail, smooth, noiseSeed, derived.final, space]);
+  const ghostPoints = useMemo(() => (base ? prospectiveFitFrames(base, detail, smooth, space) : null), [base, detail, smooth, space]);
   const g = useGeneratorStore.getState();
   // Detail / Smooth being dragged: the ghost layer shows itself (C.16)
   const [fitting, setFitting] = useState(false);
@@ -335,6 +348,45 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
   // across whatever width it is given, so a fixed height would only fight the ratio. What is
   // set here is that width: the face's full bleed (`px-0`, hence `+ 32`) less a 6 px gutter
   // each side, which is the "min padding" the owner asked for.
+  /**
+   * THE SPACE CHOOSER, and its hover preview. The shared `BlendSpacePicker` previews a mode
+   * by SHOWING it rather than by labelling it (which is why its labels carry no descriptors
+   * — @see components/gradient/BlendSpacePicker.tsx). Here that means re-fitting the current
+   * curve into the hovered space and drawing THAT: you can see whether RGB gives this
+   * gradient a simpler line than OkLCh before you commit to redrawing in it.
+   *
+   * The preview is local and never written to the store — `onTracksChange` is a no-op while
+   * one is showing, so a hover cannot edit the document.
+   */
+  const [previewSpace, setPreviewSpace] = useState<CurveSpace | null>(null);
+  const shownSpace = previewSpace ?? space;
+  const previewTracks = useMemo(() => {
+    if (!previewSpace || !tracks) return null;
+    // The LIVE curve, not the source: the owner's edits are what they expect to see redrawn.
+    const live = readSampledCurvesNow() ?? base;
+    return live ? fitChannelsToTracks(live, detail, smooth, previewSpace) : null;
+  }, [previewSpace, tracks, detail, smooth, base]);
+  const shownTracks = previewTracks ?? tracks;
+  /**
+   * WHERE it goes differs by pointer, because the control itself does. On a desk it expands
+   * its five modes INLINE (that is what makes hover-preview possible), and the 112 px track
+   * rail cannot hold them — measured: the list overflowed and clipped. So the desk puts it in
+   * the controls row beside Detail and Smooth, which is the right company anyway: the space
+   * is part of the fit recipe. A phone gets the same component's dropdown variant — one
+   * compact button, no inline expansion — which fits the track strip fine, and the controls
+   * row there is already 409 px of content in 363.
+   */
+  const spaceChooser = (
+    <BlendSpacePicker
+      value={space}
+      order={CURVE_SPACE_ORDER as readonly BlendColorSpace[]}
+      noun="axes"
+      onSelect={(sp) => { setPreviewSpace(null); g.setCurveSpace(sp as CurveSpace, base); }}
+      onPreview={(sp) => setPreviewSpace((sp as CurveSpace) ?? null)}
+      compact
+    />
+  );
+
   const plotH = phone ? 320 : 240;
   const PHONE_SIDE_PAD = 6;
   const plotW = phone ? width + 32 - PHONE_SIDE_PAD * 2 : width;
@@ -357,15 +409,16 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
           <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense noValueField={phone} label="Detail" value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
           <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense noValueField={phone} label="Smooth" value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
         </div>
+        {!phone && <div className="ml-auto flex items-center">{spaceChooser}</div>}
       </div>
-      {tracks ? (
+      {shownTracks ? (
         <div
           className={`relative overflow-hidden ${phone ? '' : 'rounded-[10px]'}`}
           style={phone ? { paddingLeft: PHONE_SIDE_PAD, paddingRight: PHONE_SIDE_PAD } : { height: plotH }}
         >
           <ChannelGraphEditor
-            tracks={tracks}
-            onTracksChange={g.setTracks}
+            tracks={shownTracks}
+            onTracksChange={previewTracks ? () => {} : g.setTracks}
             width={plotW}
             height={plotH}
             phone={phone}
@@ -375,6 +428,8 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
             ghostDefault={false}
             ghostActive={fitting}
             normalizeToggle={false}
+            space={shownSpace}
+            spaceChooser={phone ? spaceChooser : undefined}
             interactive
           />
         </div>

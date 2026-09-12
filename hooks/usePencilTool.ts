@@ -22,7 +22,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type { Keyframe } from '../types';
 import type { GraphViewTransform } from '../utils/GraphUtils';
-import { fitSamplesToKeys, reTangentBezier, smoothSpan } from '../utils/CurveFitting';
+import { fitSamplesToKeys, smoothSpan, spliceSpan } from '../utils/CurveFitting';
 import { evaluateTrackValue } from '../utils/timelineUtils';
 
 /**
@@ -184,23 +184,11 @@ export const usePencilTool = ({
     }
     const spanKeys = fitSamplesToKeys(spanVals, lo, st.target.eps, `${st.target.trackId}-pen-${lo}-${hi}`);
 
-    // Keep existing keys OUTSIDE the drawn span; splice the drawn keys in.
-    const kept = getKeys(st.target.trackId).filter((k) => k.frame < lo || k.frame > hi);
-    const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
-    if (merged.length < 2) return; // never leave a track with <2 keys
-
-    // Heal the seam. The span was fit in isolation, so its boundary keys carry
-    // flat stub handles (prev/next were undefined during the fit), and the kept
-    // keys flanking the span still carry handles sized for their *old* neighbours
-    // inside the now-removed span. Both extend far past the new, much closer
-    // boundary key and bow the curve into a big loop on either side of the draw.
-    // Re-tangent just the four seam keys with their real neighbours in the merged
-    // line (auto keys only — reTangentBezier leaves hand-broken handles alone).
-    const firstSpan = merged.findIndex((k) => k.frame >= lo);
-    let lastSpan = firstSpan;
-    while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
-    const seam = new Set([firstSpan - 1, firstSpan, lastSpan, lastSpan + 1]);
-    commit(st.target.trackId, reTangentBezier(merged, (_k, i) => seam.has(i)));
+    // Keep existing keys OUTSIDE the drawn span, splice the drawn keys in, and heal the
+    // seam - all three in `spliceSpan`, shared with the smoothing brush and the wave
+    // filter. Null = the splice would leave a track with fewer than two keys.
+    const merged = spliceSpan(getKeys(st.target.trackId), lo, hi, spanKeys);
+    if (merged) commit(st.target.trackId, merged);
   }, [overlayRef, maxFrame, getKeys, commit, onMove, brushKeys]);
 
   const beginBrush = useCallback((e: React.MouseEvent) => {

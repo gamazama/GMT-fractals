@@ -122,6 +122,8 @@ tells the reader which harness covers what:
 | `core/stopFit.ts`, `core/gmtGradient.ts` | `debug/test-palette-stopfit.mts` |
 | `core/oklab.ts`, `utils/stopOps.ts` | `debug/test-palette-stopops.mts` |
 | `core/channelCurve.ts` | `debug/test-palette-channelcurve.mts` |
+| `core/waveGen.ts` (the Curves editor's FUNCTION TOOL — the five shapes, the span envelope, bias/skew) and `utils/CurveFitting.ts` `spliceSpan` (the span-local commit the Pencil, the smoothing brush and the wave all share) | `debug/test-palette-wavegen.mts` (`npm run test:palette-wavegen`; falsified three ways — the span bound, the amplitude-as-a-fraction scaling and the splice's `kept` filter — and two of its own assertions were wrong on the first cut and rewritten: a pointwise periodicity test that a DISCONTINUOUS pulse cannot pass, and two thresholds picked rather than derived. Read its header before tightening one) |
+| `core/curveSpaces.ts` (WHICH three axes Curves draws — RGB / Oklab / OkLCh / CIE LCh / HSV, the round trips, the per-channel epsilon and the angular unwrap) | `debug/test-palette-curvespaces.mts` (`npm run test:palette-curvespaces`; falsified three ways. Note `rgbToHsv` reports S and V on **0..100** — dropping that scaling turns the whole gradient grey and the round-trip assertion is the only thing that catches it) |
 | `core/facets.ts` / `core/facetName.ts` | `debug/test-palette-facets.mts` / `-facetname.mts` |
 | `core/easings.ts` | `debug/test-palette-easings.mts` |
 | `core/generatorPipeline.ts`, `core/colorBoxFit.ts` | `debug/test-palette-generator.mts` |
@@ -142,6 +144,15 @@ tells the reader which harness covers what:
 | `core/groundSets.ts` (GE v2 Phase D, 2026-09-08 — the rail's set order, favourite → wall entry, tile size by count), `core/padAxes.ts` (which colour axes the pad shows for an Arrange state) and `store/favientsStore.ts` `insertMany` | `debug/test-palette-groundsets.mts` (falsified four ways the day it was written — see its header) |
 | `utils/colorUtils.ts` blend spaces (`blendLerp` and every `lerp*`, `BLEND_SPACE_ORDER`/`BLEND_SPACE_LABEL`) plus `core/editorConfig.ts`'s `BLEND_SPACES` whitelist — the spectral / CIE LCh / rectangular-Oklab modes and the OkLCh gamut + achromatic corrections, 2026-09-10 | `debug/test-palette-blendspaces.mts` (`npm run test:palette-blendspaces`; ten assertions, each falsified against a broken build — and FOUR of them passed under mutation on the first cut and were rewritten, so read its header before weakening one) |
 | `core/exportFormats.ts` (the registry, the two subjects, the .ase / Tailwind / design-token / CSS-variable writers) and `core/favientsExport.ts` swatch builders (GE v2 §8b item 5, 2026-09-09) | `debug/test-palette-exportsubjects.mts` (`npm run test:palette-exportsubjects`; falsified six ways, and its §[7] was rewritten after the first cut reported a break as a stack trace instead of naming it — see its header) |
+
+**The Curves editor is no longer OkLCh-only, and the channel KEY is now the space's.**
+`ChannelKey` widened from `'L' | 'C' | 'h'` to `string` on 2026-09-12: the live keys are
+`curveSpaceKeys(space)` — `'R','G','B'` in RGB, `'L*','C*','h*'` in CIE LCh — and anything
+that persists a `ChannelTracks` must persist the space beside it and validate against it
+(`generatorDocument.sanitizeTracks`, `workingStore.coerceTracks`). A snapshot whose space
+and tracks disagree is rejected as no-curves rather than sampled through the wrong axes,
+which would silently recolour the gradient. The pipeline did NOT change: `Channels` is still
+OkLCh and the one conversion seam is `generatorStore.sampleCurves`.
 
 **The curve editor's LEFT GUTTER is a contract across four files, and it has already been
 broken once.** `palette/components/ChannelGraphEditor.tsx` is the only caller that overrides it

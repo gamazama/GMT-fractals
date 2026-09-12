@@ -57,6 +57,52 @@ export const reTangentBezier = (
         return { ...k, leftTangent: l, rightTangent: r, tangentMode: 'Aligned' as const, autoTangent: true };
     });
 
+/**
+ * Splice a run of new keys into a track across [lo, hi] ONLY, keeping every key outside
+ * that span, and HEAL THE SEAM. Shared by every span-local edit — the Pencil's stroke,
+ * the smoothing brush (`smoothSpan`, below) and the wave filter's stamp — because the
+ * heal is the part that is easy to forget and impossible to notice until it bites.
+ *
+ * Why the heal. The span's keys were fit in isolation, so its boundary keys carry flat
+ * stub handles (prev/next were undefined during the fit), and the kept keys flanking the
+ * span still carry handles sized for their OLD neighbours inside the now-removed span.
+ * Both extend far past the new, much closer boundary key and bow the curve into a big loop
+ * on either side of the edit. Re-tangenting against the real neighbours in the merged line
+ * is the fix; `reTangentBezier` leaves hand-broken handles alone, so a user's own tangents
+ * survive it.
+ *
+ * `seamOnly` (default true) re-tangents just the four seam keys — right for span keys that
+ * arrived already auto-tangented (`fitSamplesToKeys`). Pass false when the span keys came
+ * straight from Douglas-Peucker with no tangents at all, so the whole span needs them.
+ *
+ * Returns null rather than a one-key track: a Track with fewer than two keys has no curve
+ * to evaluate, and every caller's right move on that is to leave the track alone.
+ *
+ * @invariant Every key outside [lo, hi] survives verbatim and every key inside it is replaced
+ *   — proven by: `npm run test:palette-wavegen` section [6] ("every key outside the span
+ *   survives", "the key that was inside the span is gone"). Falsified 2026-09-12 by making
+ *   `kept` the whole key list: three assertions went red, including the <2-key refusals,
+ *   which is the shape of the bug — a span edit that keeps what it replaced leaves two keys
+ *   at the same frame and the evaluator walks the wrong one.
+ */
+export const spliceSpan = (
+    keys: Keyframe[],
+    lo: number,
+    hi: number,
+    spanKeys: Keyframe[],
+    seamOnly = true,
+): Keyframe[] | null => {
+    const kept = keys.filter((k) => k.frame < lo || k.frame > hi);
+    const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
+    if (merged.length < 2) return null;
+    const firstSpan = merged.findIndex((k) => k.frame >= lo);
+    let lastSpan = firstSpan;
+    while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
+    return seamOnly
+        ? reTangentBezier(merged, (_k, i) => i === firstSpan - 1 || i === firstSpan || i === lastSpan || i === lastSpan + 1)
+        : reTangentBezier(merged, (_k, i) => i >= firstSpan - 1 && i <= lastSpan + 1);
+};
+
 /** Fit a run of consecutive-integer-frame samples to sparse, auto-tangented Bezier
  *  keys: Douglas-Peucker placement (eps in value units) then Catmull-Rom tangents.
  *  `samples[i]` is the value at frame `startFrame + i`. Used for both the full-channel
@@ -109,13 +155,9 @@ export const smoothSpan = (
     const vals = smoothed.map((k) => k.value);
     const idx = dpIndices(vals, eps / 3);
     const spanKeys: Keyframe[] = idx.map((i, n) => ({ id: `${idPrefix}-${n}`, frame: smoothed[i].frame, value: smoothed[i].value, interpolation: 'Bezier' as const }));
-    const merged = [...kept, ...spanKeys].sort((a, b) => a.frame - b.frame);
-    if (merged.length < 2) return null;
-    const firstSpan = merged.findIndex((k) => k.frame >= lo);
-    let lastSpan = firstSpan;
-    while (lastSpan + 1 < merged.length && merged[lastSpan + 1].frame <= hi) lastSpan++;
-    // the span's keys get auto-tangents, and so do the two kept keys flanking it
-    return reTangentBezier(merged, (_k, i) => i >= firstSpan - 1 && i <= lastSpan + 1);
+    // seamOnly=false: these came straight from Douglas-Peucker with no tangents, so the
+    // whole span needs them, not only the four seam keys.
+    return spliceSpan(keys, lo, hi, spanKeys, false);
 };
 
 export const fitSamplesToKeys = (

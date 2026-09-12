@@ -33,6 +33,8 @@ interface GraphCanvasProps {
     /** Value-axis gutter width, px (default GRAPH_LEFT_GUTTER_WIDTH). The caller must use
      *  the same number in its own frame↔pixel maths. */
     leftGutter?: number;
+    /** Draw the curves but not their keyframe diamonds (a modal tool owns the canvas). */
+    hideKeyframes?: boolean;
 }
 
 /**
@@ -80,13 +82,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = (props) => {
             softInteraction: props.softInteraction,
             highlightedTracks: props.highlightedTracks,
             leftGutter: props.leftGutter,
+            hideKeyframes: props.hideKeyframes,
         });
     }, [
         props.width, props.height, props.view, props.sequence, props.trackIds,
         props.durationFrames, props.selectedKeyframeIds,
         props.normalized, props.trackRanges,
         props.softSelectionEnabled, props.softSelectionRadius, props.softSelectionType,
-        props.softInteraction, props.highlightedTracks, props.leftGutter, themeRev,
+        props.softInteraction, props.highlightedTracks, props.leftGutter, props.hideKeyframes, themeRev,
     ]);
 
     // Overlay layer: playhead + selection box. Cheap; runs every frame during

@@ -300,13 +300,16 @@ const CIE_WN = [0.95047, 1.0, 1.08883];
 const cieF    = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : (841 / 108) * t + 4 / 29);
 const cieFInv = (t: number) => (t > 6 / 29 ? t * t * t : (108 / 841) * (t - 4 / 29));
 
-const rgbToCieLab = (c: {r:number, g:number, b:number}): {L:number, a:number, b:number} => {
+/** sRGB (0-255) → CIE L*a*b* (D65). Exported for `palette/core/curveSpaces.ts`, which
+ *  offers CIE LCh as a curve-editing space — one implementation, not two. */
+export const rgbToCieLab = (c: {r:number, g:number, b:number}): {L:number, a:number, b:number} => {
     const v = [srgbToLinear01(c.r), srgbToLinear01(c.g), srgbToLinear01(c.b)];
     const f = CIE_M.map((row) => row[0] * v[0] + row[1] * v[1] + row[2] * v[2]).map((x, i) => cieF(x / CIE_WN[i]));
     return { L: 116 * f[1] - 16, a: 500 * (f[0] - f[1]), b: 200 * (f[1] - f[2]) };
 };
 
-const cieLabToRgb = (lab: {L:number, a:number, b:number}): {r:number, g:number, b:number} => {
+/** CIE L*a*b* → sRGB (0-255, unclamped). Exported alongside {@link rgbToCieLab}. */
+export const cieLabToRgb = (lab: {L:number, a:number, b:number}): {r:number, g:number, b:number} => {
     const fy = (lab.L + 16) / 116, fx = fy + lab.a / 500, fz = fy - lab.b / 200;
     const xyz = [cieFInv(fx) * CIE_WN[0], cieFInv(fy) * CIE_WN[1], cieFInv(fz) * CIE_WN[2]];
     const v = CIE_MI.map((row) => row[0] * xyz[0] + row[1] * xyz[1] + row[2] * xyz[2]);

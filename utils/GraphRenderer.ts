@@ -36,6 +36,9 @@ interface GraphRenderProps {
     highlightedTracks: Set<string>;
     /** Value-axis gutter width, px. Defaults to GRAPH_LEFT_GUTTER_WIDTH; the caller must use
      *  the same number in its own frame↔pixel maths (ChannelGraphEditor's `gutter`). */
+    /** Draw the curves but not their keyframe diamonds — for a modal tool that owns the
+     *  canvas and puts its own handles on it. @see utils/GraphRendererBuilder.ts */
+    hideKeyframes?: boolean;
     leftGutter?: number;
 }
 
@@ -219,12 +222,15 @@ export const drawGraph = (props: GraphRenderProps) => {
         // `g=` is the GUTTER, and it is in the key for the reason the builder's header gives:
         // a bitmap built at one gutter and blitted at another puts the whole curve — keys
         // included — beside the ruler that measures it and the hit test that reads it.
-        const viewKey = `${buildPolylineViewKey(view.scaleX, view.scaleY, normalized, range?.min ?? 0, range?.max ?? 0)}|p=${view.panX}|${view.panY}|b=${bold ? 1 : 0}|g=${LEFT_GUTTER_WIDTH}`;
+        // `k=` is hideKeyframes, in the key for the same reason `g=` is: a cached bitmap
+        // painted with diamonds and blitted while the wave tool is armed still shows them.
+        const viewKey = `${buildPolylineViewKey(view.scaleX, view.scaleY, normalized, range?.min ?? 0, range?.max ?? 0)}|p=${view.panX}|${view.panY}|b=${bold ? 1 : 0}|g=${LEFT_GUTTER_WIDTH}|k=${props.hideKeyframes ? 1 : 0}`;
         let cached = _polylineCache.get(tid, keys, viewKey);
         if (!cached) {
             const trackCanvas = buildTrackPolyline({
                 track, view, canvasWidth: width, canvasHeight: height,
                 normalized, range, color, bold, leftGutter: LEFT_GUTTER_WIDTH,
+                hideKeyframes: props.hideKeyframes,
             });
             _polylineCache.set(tid, keys, viewKey, trackCanvas, width, height);
             cached = { canvas: trackCanvas, width, height };

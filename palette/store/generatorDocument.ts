@@ -30,6 +30,7 @@
 import type { JsonValue } from '../../types';
 import type { RGB } from '../core/oklab';
 import { useGeneratorStore, slotSnapshot, restoreGeneratorHistory } from './generatorStore';
+import { CURVE_SPACE_ORDER, DEFAULT_CURVE_SPACE, curveSpaceKeys, type CurveSpace } from '../core/curveSpaces';
 import { registerCustomRamp } from '../core/presetCatalog';
 import { num, bool, str, isPlainObject } from './coerceJson';
 
@@ -44,6 +45,7 @@ export const serializeGeneratorDocument = (): JsonValue => {
     slotBName: b.name,
     tracks: (s.tracks ?? null) as unknown as JsonValue,
     curvesOn: s.curvesOn,
+    curveSpace: s.curveSpace,
     detail: s.detail,
     smooth: s.smooth,
     noiseSeed: s.noiseSeed,
@@ -64,20 +66,30 @@ const sanitizeRamp = (v: unknown): RGB[] | null => {
   return out;
 };
 
+/** A stored authoring space, or the default. Unknown ids (an older scene, a hand-edited
+ *  one, a space we later retire) fall back rather than stranding the editor with no axes. */
+const sanitizeSpace = (v: unknown): CurveSpace =>
+  CURVE_SPACE_ORDER.includes(v as CurveSpace) ? (v as CurveSpace) : DEFAULT_CURVE_SPACE;
+
 /**
- * A valid ChannelTracks ({L,C,h}, each a Track with a `keyframes` array), else null
- * (no curves). Checking the keyframes array — not just key presence — is what makes the
- * "malformed scene can never throw inside the curve sampler" guarantee hold: trackToRamp
- * runs at React render time, OUTSIDE the document registry's restore() try/catch, so a
- * shape that fooled a key-only check ({L:5,…}) would crash the Generator view on load.
+ * A valid ChannelTracks for `space` — each of ITS three channel keys present and carrying a
+ * `keyframes` array — else null (no curves). Checking the keyframes array, not just key
+ * presence, is what makes the "malformed scene can never throw inside the curve sampler"
+ * guarantee hold: trackToRamp runs at React render time, OUTSIDE the document registry's
+ * restore() try/catch, so a shape that fooled a key-only check ({L:5,…}) would crash the
+ * Generator view on load.
+ *
+ * The keys are the SPACE's since 2026-09-12 ('R','G','B' in RGB, 'L*','C*','h*' in CIE LCh),
+ * so a scene whose stored space and stored tracks disagree is rejected as no-curves rather
+ * than sampled through the wrong axes — which would silently recolour the gradient.
  */
-const sanitizeTracks = (t: unknown): JsonValue => {
+const sanitizeTracks = (t: unknown, space: CurveSpace): JsonValue => {
   if (!isPlainObject(t)) return null;
   const ok = (k: string): boolean => {
     const tr = t[k];
     return isPlainObject(tr) && Array.isArray((tr as { keyframes?: unknown }).keyframes);
   };
-  return ok('L') && ok('C') && ok('h') ? (t as JsonValue) : null;
+  return curveSpaceKeys(space).every(ok) ? (t as JsonValue) : null;
 };
 
 /**
@@ -96,11 +108,13 @@ export const restoreGeneratorDocument = (snap: JsonValue): void => {
   const slotA = rampA ? registerCustomRamp(rampA, str(s.slotAName) ?? 'Slot A') : cur.slotA;
   const slotB = rampB ? registerCustomRamp(rampB, str(s.slotBName) ?? 'Slot B') : cur.slotB;
 
-  const tracks = sanitizeTracks(s.tracks);
+  const curveSpace = sanitizeSpace(s.curveSpace);
+  const tracks = sanitizeTracks(s.tracks, curveSpace);
   restoreGeneratorHistory({
     slotA,
     slotB,
     tracks,
+    curveSpace,
     // curvesOn only makes sense with tracks to drive — keep them coherent.
     curvesOn: tracks ? bool(s.curvesOn, false) : false,
     detail: num(s.detail, 8),

@@ -53,27 +53,40 @@ import type { GraphDataSource } from '../../utils/GraphDataSource';
 import { KeyframeInspector } from '../../components/timeline/KeyframeInspector';
 import { ChannelTrackSidebar, type ChannelInfo } from './ChannelTrackSidebar';
 import { genEdit, genEditStart, genEditEnd } from '../store/generatorStore';
+import { WaveOverlay } from './WaveOverlay';
+import { WaveToolHead, SHAPE_PATHS } from './WaveToolHead';
+import { DEFAULT_WAVE, applyWaveSample, sampleWaveSpan, waveSpanFrames, type WaveParams } from '../core/waveGen';
+import { DEFAULT_CURVE_SPACE, curveSpace, curveSpaceKeys, type CurveSpace } from '../core/curveSpaces';
+import { fitSamplesToKeys, spliceSpan } from '../../utils/CurveFitting';
+import { evaluateTrackValue } from '../../utils/timelineUtils';
 
-export type ChannelKey = 'L' | 'C' | 'h';
-export type ChannelTracks = Record<ChannelKey, Track>;
+/**
+ * A channel key is the ACTIVE SPACE's channel key — 'L' | 'C' | 'h' in OkLCh, 'R' | 'G' | 'B'
+ * in RGB, 'L*' | 'C*' | 'h*' in CIE LCh, and so on. It widened from that literal union when
+ * Curves stopped being OkLCh-only (2026-09-12); the space registry is the authority on which
+ * three keys are live, and `curveSpaceKeys(space)` is how to ask.
+ * @see palette/core/curveSpaces.ts
+ */
+export type ChannelKey = string;
+export type ChannelTracks = Record<string, Track>;
 
-// Colours match GraphRenderer.TRACK_COLORS by index (L cyan, C purple, h green).
-/** Each channel's RELEVANT range for the normalized plot. Hue is in RADIANS here (the
- *  pipeline's `h` is atan2 output, unwrapped by unwrapHue in ±π steps): one turn = 2π, and
- *  trackRanges grows it to whole turns when the unwrapped hue runs past one. Chroma's 0.4:
- *  OKLCH chroma of the sRGB gamut peaks near 0.32 (pure blue and green); 0.4 is that with
- *  headroom, the same ceiling the Adjust dials use. */
-const CHANNEL_RANGE: Record<ChannelKey, { min: number; max: number }> = {
-  L: { min: 0, max: 1 },
-  C: { min: 0, max: 0.4 },
-  h: { min: 0, max: Math.PI * 2 },
-};
+/**
+ * The channel table is the SPACE's, not a constant. Each entry carries its relevant plot
+ * range in its own units, its fit epsilon and whether it is an angle — see
+ * palette/core/curveSpaces.ts, which is the authority. An angular channel's range is grown
+ * to whole turns below when the unwrapped value runs past one.
+ */
+const channelsOf = (space: CurveSpace): ChannelInfo[] =>
+  curveSpace(space).channels.map((c) => ({ key: c.key, label: c.label, color: c.color }));
 
-const CHANNELS: ChannelInfo[] = [
-  { key: 'L', label: 'Lightness', color: '#22d3ee' },
-  { key: 'C', label: 'Chroma', color: '#a855f7' },
-  { key: 'h', label: 'Hue', color: '#22c55e' },
-];
+/**
+ * The wave filter's settings SURVIVE closing the tool (owner, 2026-09-12: "loading it again
+ * keeps the same settings if they wish to apply it to other channels after tweaking") — so
+ * putting the same ripple on chroma after lightness is a reopen and a nudge, not a re-dial.
+ * Module-level rather than component state because the Curves face unmounts this editor
+ * whenever the tracks go null, and a re-fit must not cost the dial-in.
+ */
+let lastWave: WaveParams = DEFAULT_WAVE;
 
 const SIDEBAR_W = 112;
 /** PHONE (owner, 2026-09-12): the value-axis gutter, cut from 62 px. 62 is sized for the
@@ -149,14 +162,14 @@ interface ChannelGraphEditorProps {
    * committing it. detail/smooth move this ghost, never the live curve.
    * (Decision 3 — see generatorStore.prospectiveFitChannels.)
    */
-  ghost?: Channels | null;
+  ghost?: Record<string, number[]> | null;
   /**
    * Per-channel prospective-fit keyframe FRAMES at the host's current detail/smooth —
    * drawn as faint "ghost points" ON the ghost curve so those two sliders are legible:
    * detail = how many points; smooth = where they land. Frames are 0..CURVE_FRAMES (==
    * the ghost sample index). (generatorStore.prospectiveFitFrames.)
    */
-  ghostPoints?: Record<ChannelKey, number[]> | null;
+  ghostPoints?: Record<string, number[]> | null;
   /** The ghost's resting visibility (the eye toggles it). Default true (the studio); the v2
    *  Curves face passes false — there the ghost is a layer that shows itself only while the
    *  fit recipe is being adjusted (`ghostActive`), unless the user turns the eye on (owner,
@@ -175,6 +188,13 @@ interface ChannelGraphEditorProps {
    * channel scope (and the Modify chain's effect) is always visible. Default true.
    */
   interactive?: boolean;
+  /** WHICH three axes to draw. Defaults to OkLCh, which is what every host passed before
+   *  the space chooser existed. @see palette/core/curveSpaces.ts */
+  space?: CurveSpace;
+  /** The space chooser, rendered at the head of the track list (it names what the tracks
+   *  are). The editor does not own the choice — the host does, since the tracks have to be
+   *  re-fit into the new space and only the host knows what to re-fit them FROM. */
+  spaceChooser?: React.ReactNode;
 }
 
 export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
@@ -188,13 +208,27 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   ghostDefault = true,
   ghostActive = false,
   normalizeToggle = true,
-  interactive = true, phone = false }) => {
+  interactive = true, phone = false, space = DEFAULT_CURVE_SPACE, spaceChooser }) => {
   const interactionRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLCanvasElement>(null);
   const ghostRef = useRef<HTMLCanvasElement>(null);
   const pencilRef = useRef<HTMLCanvasElement>(null);
 
-  const [activeChannel, setActiveChannel] = useState<ChannelKey>('L');
+  const CHANNELS = useMemo(() => channelsOf(space), [space]);
+  const spaceDef = useMemo(() => curveSpace(space), [space]);
+  /** The active space's definition for one channel key, falling back to its first channel
+   *  for the render between a space switch and the activeChannel effect below. */
+  const chanDef = useCallback(
+    (key: string) => spaceDef.channels.find((c) => c.key === key) ?? spaceDef.channels[0],
+    [spaceDef],
+  );
+  const [activeChannel, setActiveChannel] = useState<ChannelKey>(() => channelsOf(space)[0].key);
+  // A space switch renames every channel, so an activeChannel from the old space would
+  // point at a track that no longer exists (and the pencil / wave would target nothing).
+  useEffect(() => {
+    if (!CHANNELS.some((c) => c.key === activeChannel)) setActiveChannel(CHANNELS[0].key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [CHANNELS]);
   const [selectedKeyframeIds, setSelectedKeyframeIds] = useState<string[]>([]);
   // MINIMIZED BY DEFAULT (owner, 2026-09-12), on every host and both pointer kinds: the
   // inspector is where you go to type an exact value, and the plot is what you came for.
@@ -207,7 +241,15 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     if (width > 0 && width < 560) setInspectorCollapsed(true);
   }, [width]);
   const [normalized, setNormalized] = useState(true);
-  const [visible, setVisible] = useState<Record<string, boolean>>({ L: true, C: true, h: true });
+  // The FUNCTION TOOL. `waveOn` is a MODE: while it is live every other canvas gesture is
+  // suppressed (owner, 2026-09-12: "other canvas handles, beziers, etc should not be active
+  // while the function tool runs") — a stray grab at a tangent mid-wave would commit an edit
+  // the preview never showed. Params seed from the module-level carry-over, see `lastWave`.
+  const [waveOn, setWaveOn] = useState(false);
+  const [waveParams, setWaveParams] = useState<WaveParams>(lastWave);
+  const [wavePill, setWavePill] = useState<string | null>(null);
+  const waveArmed = interactive && waveOn;
+  const [visible, setVisible] = useState<Record<string, boolean>>({});
   // Source-ghost visibility — a transient local UI flag (like `normalized` / `visible`),
   // NOT a DDFS param. Default on so the prospective fit is visible the moment curves exist.
   const [ghostVisible, setGhostVisible] = useState(ghostDefault);
@@ -257,7 +299,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     [tracks],
   );
 
-  const trackIds = useMemo(() => CHANNELS.map((c) => c.key), []);
+  const trackIds = useMemo(() => CHANNELS.map((c) => c.key), [CHANNELS]);
   // Only visible channels are drawn / hit-tested / fit / tooled.
   const displayTrackIds = useMemo(() => trackIds.filter((t) => visible[t] !== false), [trackIds, visible]);
 
@@ -278,6 +320,44 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // editable curve's scale — they overlay where equal and diverge to show what Modify did.
   // Gated on `ghostVisible`: hiding the ghost must also drop its range contribution, else
   // the editable bezier would stay compressed with no visible cause.
+  /**
+   * The keyframes the armed channel had BEFORE the tool touched it. Every preview frame and
+   * the final commit are computed against THIS, never against the live track — otherwise
+   * each preview would compound onto the last and one drag would stack a hundred waves.
+   */
+  const waveBaseRef = useRef<Keyframe[] | null>(null);
+
+  // The channel's OWN relevant range (L 1.0, chroma 0.4, one hue turn), not the plotted
+  // one. Two reasons: a fractional amplitude then means the same thing whatever the plot
+  // happens to be zoomed to, and `trackRanges` folds the wave's extent in below — reading
+  // the plotted span here would make that circular.
+  const waveRange = useMemo(() => {
+    const c = chanDef(activeChannel);
+    return Math.max(1e-6, c.max - c.min);
+  }, [chanDef, activeChannel]);
+
+  /**
+   * The armed wave's TRUE value extent, sampled from the filter itself rather than read off
+   * the fitted keys. `trackRanges` folds this in so the crest and trough stay on the plot
+   * (owner, 2026-09-12: "we need to do a graph resize to ensure the outermost handles are
+   * visible"). Reading the keys instead leaves the curve 3 px over the top edge, measured:
+   * the Douglas-Peucker fit slightly undershoots a peak it places no key exactly on.
+   */
+  const waveExtent = useMemo(() => {
+    const src = waveBaseRef.current;
+    if (!waveArmed || !src) return null;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let i = 0; i <= 128; i++) {
+      const t = i / 128;
+      const v = applyWaveSample(evaluateTrackValue(src, t * CURVE_FRAMES, false, false), t, waveParams, waveRange);
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+    return { lo, hi };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waveArmed, waveParams, waveRange, activeChannel]);
+
   const trackRanges = useMemo(() => {
     const ranges: Record<string, { min: number; max: number; span: number }> = {};
     trackIds.forEach((tid) => {
@@ -288,10 +368,14 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
         if (k.value < min) min = k.value;
         if (k.value > max) max = k.value;
       });
-      const g = showGhost ? ghost?.[tid as ChannelKey] : undefined;
+      const g = showGhost ? ghost?.[tid] : undefined;
       if (g) for (let i = 0; i < g.length; i++) {
         if (g[i] < min) min = g[i];
         if (g[i] > max) max = g[i];
+      }
+      if (waveExtent && tid === activeChannel) {
+        min = Math.min(min, waveExtent.lo);
+        max = Math.max(max, waveExtent.hi);
       }
       if (!isFinite(min) || !isFinite(max)) {
         min = 0;
@@ -299,8 +383,8 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       }
       if (normalized) {
         // the channel's relevant range, grown only where the data runs past it
-        const rel = CHANNEL_RANGE[tid as ChannelKey];
-        if (tid === 'h') {
+        const rel = chanDef(tid);
+        if (rel.angular) {
           const turn = Math.PI * 2;
           const lo = Math.floor(Math.min(min, 0) / turn) * turn;
           const hi = Math.ceil(Math.max(max, turn) / turn - 1e-9) * turn;
@@ -316,7 +400,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       ranges[tid] = { min, max, span: max - min };
     });
     return ranges;
-  }, [tracks, trackIds, ghost, showGhost, normalized]);
+  }, [tracks, trackIds, ghost, showGhost, normalized, chanDef, waveExtent, activeChannel]);
 
   const getLocalY = useCallback(
     (val: number, tid: string) => {
@@ -567,7 +651,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   );
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    if (!interactive || pencilMode || brushMode) return;
+    if (!interactive || pencilMode || brushMode || waveArmed) return;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!rect) return;
     addKeyAtMouse(e.clientX - rect.left, e.clientY - rect.top);
@@ -590,7 +674,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       return {
         trackId: activeChannel,
         color: info?.color,
-        eps: activeChannel === 'h' ? 0.06 : 0.01,
+        eps: chanDef(activeChannel).eps,
         toValue: (py, v) => pixelToChannelValue(py, v, trackRanges[activeChannel], normalized),
       };
     },
@@ -607,9 +691,114 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     },
   });
 
+  // --- FUNCTION TOOL (the wave filter) ------------------------------------------
+  // A filter, not a layer: live only while its parameters are being chosen, then baked to
+  // keyframes and gone (owner — "GX is not a parametric editor"). The commit path is the
+  // pencil's: samples → fitSamplesToKeys → spliceSpan, which keeps every key outside the
+  // span and heals the seam. One `genEdit` bracket, so it is one Ctrl+Z.
+  // @see palette/core/waveGen.ts · palette/components/WaveOverlay.tsx
+  const waveEps = chanDef(activeChannel).eps;
+  const sampleWaveBase = useCallback(
+    (frame: number) => {
+      const tr = tracksRef.current[activeChannel];
+      return tr ? evaluateTrackValue(tr.keyframes, frame, false, false) : 0;
+    },
+    [activeChannel],
+  );
+  /** The filtered track for a given wave, or null when the span is too narrow to commit. */
+  const waveKeys = useCallback(
+    (p: WaveParams): Keyframe[] | null => {
+      const src = waveBaseRef.current;
+      const win = waveSpanFrames(p, CURVE_FRAMES);
+      if (!src || !win) return null;
+      const samples = sampleWaveSpan(p, win.lo, win.hi, CURVE_FRAMES, waveRange, (f) =>
+        evaluateTrackValue(src, f, false, false),
+      );
+      const spanKeys = fitSamplesToKeys(samples, win.lo, waveEps, `${activeChannel}-wave-${win.lo}-${win.hi}`);
+      return spliceSpan(src, win.lo, win.hi, spanKeys);
+    },
+    [activeChannel, waveRange, waveEps],
+  );
+
+  /** Write a keyframe list to the armed channel WITHOUT a bracket — the tool holds one open
+   *  across its whole session, so these are preview frames inside it, not undo entries. */
+  const writeWave = useCallback(
+    (keys: Keyframe[]) => {
+      const tr = tracksRef.current[activeChannel];
+      if (tr) commitTracks({ ...tracksRef.current, [activeChannel]: { ...tr, keyframes: keys } });
+    },
+    [activeChannel, commitTracks],
+  );
+
+  const armWave = useCallback(() => {
+    setPencilMode(false);
+    setBrushMode(false);
+    setSelectedKeyframeIds([]);
+    waveBaseRef.current = tracksRef.current[activeChannel]?.keyframes ?? null;
+    // Fit the t axis before arming (owner, 2026-09-12: "we need to do a graph resize to
+    // ensure the outermost handles are visible"). The span squares sit at t=0 and t=1 by
+    // default, so a zoomed-in view puts both off-screen with no way back — every gesture
+    // that could pan is suppressed while the tool is modal. The VALUE axis needs no help:
+    // the live preview is written into the track, so `trackRanges` grows with the wave and
+    // the normalized plot keeps the crest and trough inside it by construction.
+    fitAll();
+    setWaveParams(lastWave);
+    // ONE bracket for the whole tool session (closed by commit or cancel), so the live
+    // preview writes below are invisible to undo and the result is a single Ctrl+Z.
+    genEditStart();
+    setWaveOn(true);
+  }, [setPencilMode, setBrushMode, activeChannel, fitAll]);
+
+  const closeWave = useCallback(() => {
+    lastWave = waveParams; // the settings outlive the tool, on purpose
+    // Put the channel back as it was, THEN close the bracket: endParamTransaction diffs
+    // against the arm-time snapshot, so a restored track diffs to nothing and Esc leaves
+    // no entry at all.
+    if (waveBaseRef.current) writeWave(waveBaseRef.current);
+    waveBaseRef.current = null;
+    genEditEnd();
+    setWavePill(null);
+    setWaveOn(false);
+  }, [waveParams, writeWave]);
+
+  const commitWave = useCallback(() => {
+    // The track already HOLDS the previewed result (the effect below wrote it), so the
+    // commit is just closing the bracket over it.
+    const keys = waveKeys(waveParams);
+    if (keys) writeWave(keys);
+    lastWave = waveParams;
+    waveBaseRef.current = null;
+    genEditEnd();
+    setWavePill(null);
+    setWaveOn(false);
+  }, [waveParams, waveKeys, writeWave]);
+
+  /**
+   * THE LIVE PREVIEW (owner, 2026-09-12: "the gradient needs to update during the tool's use
+   * so user can see what theyre doing"). The filtered curve is written into the track on
+   * every parameter change, so the hero ramp, the result strip and the stops all follow the
+   * drag — the overlay's own painted curve alone only ever showed the plot.
+   */
+  useEffect(() => {
+    if (!waveArmed) return;
+    const keys = waveKeys(waveParams);
+    if (keys) writeWave(keys);
+  }, [waveArmed, waveParams, waveKeys, writeWave]);
+
+  /** Switching channel mid-tool: put the old one back, and adopt the new one as the base. */
+  useEffect(() => {
+    if (!waveArmed) return;
+    waveBaseRef.current = tracksRef.current[activeChannel]?.keyframes ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChannel]);
+
+  /** An unmount while armed (the face closes, the tracks go null) must not leak the open
+   *  bracket — every later discrete edit would land inside it. */
+  useEffect(() => () => { if (waveOn) genEditEnd(); }, [waveOn]);
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (!interactive || shouldSuppressContextMenu()) return;
+    if (!interactive || waveArmed || shouldSuppressContextMenu()) return;
     const rect = interactionRef.current?.getBoundingClientRect();
     if (!rect) return;
     const hit = getHit(e.clientX - rect.left, e.clientY - rect.top);
@@ -630,6 +819,9 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
 
   const handleMouseDownWrapped = (e: React.MouseEvent) => {
     if (!interactive) return; // read-only scope: no drag / pan / add
+    // The wave filter is a MODE (owner): while it is armed no key, tangent or box gesture
+    // reaches the canvas, so the only thing a pointer can move is the wave.
+    if (waveArmed) return;
     // Smoothing brush (C.12): a left-drag over a stretch smooths the active channel there.
     if (brushMode && e.button === 0 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
@@ -665,6 +857,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     const onKey = (e: KeyboardEvent) => {
       if (!interactive) return;
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+      // While the wave is armed the keyboard belongs to it: Enter bakes, Esc discards, and
+      // Delete must NOT reach the selection (there is none, and the tool owns the canvas).
+      if (waveArmed) {
+        if (e.key === 'Enter') { e.preventDefault(); commitWave(); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWave(); }
+        return;
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelected();
@@ -672,7 +871,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     };
     el.addEventListener('keydown', onKey);
     return () => el.removeEventListener('keydown', onKey);
-  }, [deleteSelected, interactive]);
+  }, [deleteSelected, interactive, waveArmed, commitWave, closeWave]);
 
   // Result strip under the graph.
   useEffect(() => {
@@ -783,7 +982,10 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   // is now always-mounted this avoids firing endParamTransaction on every app-wide
   // pointerup while the Generator panel is just showing the scope.
   useEffect(() => {
-    if (!interactive) return;
+    // Suppressed while the wave is armed: that tool holds ONE bracket across its whole
+    // session, and a per-drag pointerup close inside it would push an undo entry per handle
+    // drag instead of one per wave.
+    if (!interactive || waveArmed) return;
     const end = () => genEditEnd();
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
@@ -791,7 +993,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
     };
-  }, [interactive]);
+  }, [interactive, waveArmed]);
 
   /* Graph tools: fit all, fit selection, normalize, pencil, simplify, bake, smooth, ghost.
      In read-only scope mode only the view tools (fit-all, normalize) + the ghost toggle are
@@ -825,12 +1027,42 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
       {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
       {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
       {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left) — bakes the selected keys and their neighbours first" tag="smooth" />}
+      {/* The FUNCTION TOOL. Its icon is the Sine glyph the tool itself traces (SHAPE_PATHS),
+          not a hand-drawn one — so it cannot say something the tool does not do. */}
+      {interactive && (
+        <ToolButton
+          onClick={armWave}
+          active={waveOn}
+          icon={
+            <svg width="18" height="15" viewBox="0 0 22 18" aria-hidden="true">
+              <path d={SHAPE_PATHS.Sine} fill="none" stroke="currentColor" strokeWidth={1.6} />
+            </svg>
+          }
+          tooltip="Function — add a sine / saw / pulse / noise wave to this channel, then bake it"
+          tag="wave"
+        />
+      )}
     </>
+  );
+
+  const waveHead = (
+    <WaveToolHead
+      shape={waveParams.shape}
+      mode={waveParams.mode}
+      onShape={(shape) => setWaveParams((w) => ({ ...w, shape }))}
+      onMode={(mode) => setWaveParams((w) => ({ ...w, mode }))}
+      onReseed={() => setWaveParams((w) => ({ ...w, seed: (w.seed + 1 + Math.floor(Math.random() * 97)) | 0 }))}
+      onCommit={commitWave}
+      onCancel={closeWave}
+      channelColor={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}
+      channelLabel={CHANNELS.find((c) => c.key === activeChannel)?.label ?? activeChannel}
+    />
   );
 
   const trackList = (
     <ChannelTrackSidebar
       horizontal={phone}
+      spaceChooser={spaceChooser}
       channels={CHANNELS}
       visible={visible}
       activeChannel={activeChannel}
@@ -854,7 +1086,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     <div
       ref={focusRef}
       tabIndex={0}
-      onPointerDownCapture={interactive ? () => genEditStart() : undefined}
+      onPointerDownCapture={interactive && !waveArmed ? () => genEditStart() : undefined}
       className={`w-full outline-none select-none ${phone ? 'flex flex-col' : 'flex'}`}
       style={phone ? undefined : { height }}
     >
@@ -862,19 +1094,32 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
           the whole width. Both scroll sideways rather than wrapping — a second line of either
           would come out of the curve, which is the thing being looked at. */}
       {phone && trackList}
-      {phone && (
+      {/* PHONE: arming the wave SWAPS this strip for the tool's head (owner, 2026-09-12:
+          "on mobile it can replace the graph's upper head type section") — same row, same
+          height, so the plot never moves under the finger that armed it. */}
+      {phone && (waveArmed ? waveHead : (
         <div className="w-full flex items-center gap-1 px-2 py-1 overflow-x-auto gx-rail-scroll border-b border-line/10 bg-surface-dock/60">
           {toolButtons}
         </div>
-      )}
+      ))}
       <div className="contents">
       {!phone && trackList}
 
       <div className="flex-1 min-w-0 flex flex-col">
         <div ref={interactionRef} className="relative" style={{ width: canvasWidth, height: canvasHeight, cursor: pencilMode || brushMode ? PENCIL_CURSOR : undefined }}>
+          {/* DESK: the wave's head takes the floating tool column's place — a bar across the
+              plot's top edge while the tool is armed. It FLOATS rather than sitting in the
+              flex column because that column's canvas has an explicit height: an in-flow row
+              there is crushed to 9 px (measured, 2026-09-12), and giving it real height would
+              shrink the canvas and re-run the fit effect, throwing away the user's zoom every
+              time the tool is armed. The tool column is suppressed while armed, so the two
+              never overlap. */}
+          {!phone && waveArmed && (
+            <div className="absolute top-0 left-0 right-0 z-30">{waveHead}</div>
+          )}
           {/* Graph tools — DESKTOP position: a column floating over the plot's top-left.
               On a phone the same buttons are a strip above the plot (see the root). */}
-          {!phone && (
+          {!phone && !waveArmed && (
             <div
               className="absolute top-1 left-1 flex flex-col flex-wrap content-start gap-1 z-20"
               style={{ maxHeight: balancedToolColumnMaxHeight(interactive ? 8 : 3, canvasHeight - 4 - 8) }}
@@ -903,6 +1148,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             onContextMenu={handleContextMenu}
             onDoubleClick={handleDoubleClick}
             cursor={pencilMode || brushMode ? PENCIL_CURSOR : undefined}
+            hideKeyframes={waveArmed}
             leftGutter={gutter}
           />
           {/* Source ghost — overlays the graph, faint + pointer-events-none (see effect). */}
@@ -923,16 +1169,34 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
             className="absolute top-0 left-0 pointer-events-none"
             style={{ width: canvasWidth, height: canvasHeight }}
           />
-          <GraphSelectionBBox
-            sequence={sequence}
-            selectedKeyframeIds={selectedKeyframeIds}
-            view={view}
-            normalized={normalized}
-            frameToCanvasPixel={frameToCanvasPixel}
-            v2p={v2p}
-            dataSource={dataSource}
-            p2v={p2v}
-          />
+          {/* The selection box is one of the "other canvas handles" the wave suppresses. */}
+          {!waveArmed && (
+            <GraphSelectionBBox
+              sequence={sequence}
+              selectedKeyframeIds={selectedKeyframeIds}
+              view={view}
+              normalized={normalized}
+              frameToCanvasPixel={frameToCanvasPixel}
+              v2p={v2p}
+              dataSource={dataSource}
+              p2v={p2v}
+            />
+          )}
+          {waveArmed && (
+            <WaveOverlay
+              params={waveParams}
+              onChange={setWaveParams}
+              onPill={setWavePill}
+              width={canvasWidth}
+              height={canvasHeight}
+              maxFrame={CURVE_FRAMES}
+              frameToCanvasPixel={frameToCanvasPixel}
+              valueToPixelY={(v) => v2p(v, activeChannel)}
+              sampleBase={sampleWaveBase}
+              range={waveRange}
+              color={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}
+            />
+          )}
           {(tools.isSmoothing || tools.isBaking || tools.isSimplifying) && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-surface/80 text-accent-300 px-2 py-0.5 rounded-full border border-accent-500/40 text-[10px] z-30 pointer-events-none">
               {tools.isSmoothing
@@ -947,6 +1211,15 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
           {pencilMode && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-surface/80 text-accent-300 px-2 py-0.5 rounded-full border border-accent-500/40 text-[10px] z-30 pointer-events-none">
               Pencil — drag to draw {CHANNELS.find((c) => c.key === activeChannel)?.label}
+            </div>
+          )}
+          {/* The wave's ONLY text, and only while a drag is live — the same pill the drag
+              tools above already use, so the function tool adds no chrome of its own. It
+              sits BELOW the head rather than at the usual top-2: on a desk the head floats
+              over the plot's top edge, and the pill landed on top of the mode buttons. */}
+          {waveArmed && wavePill && (
+            <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-surface/80 text-accent-300 px-2 py-0.5 rounded-full border border-accent-500/40 text-[10px] z-30 pointer-events-none tabular-nums">
+              {wavePill}
             </div>
           )}
         </div>

@@ -41,6 +41,15 @@ import { buildPresetCatalog, registerCustomRamp, registerCustomChannels } from '
 import { bufferToRamp } from '../core/stopFit';
 import { GENERATOR_PARAM_DEFAULTS } from '../features/paletteGenerator';
 import type { ChannelTracks } from '../components/ChannelGraphEditor';
+import {
+  CURVE_SPACE_ORDER,
+  DEFAULT_CURVE_SPACE,
+  curveSpace,
+  curveSpaceKeys,
+  fromCurveChannels,
+  toCurveChannels,
+  type CurveSpace,
+} from '../core/curveSpaces';
 import { paramEditStart, paramEditEnd, paramEdit } from './paramUndoBracket';
 
 /** Shape of the paletteGenerator DDFS slice (the dials). */
@@ -135,6 +144,9 @@ interface GeneratorState {
   slotB: number;
   tracks: ChannelTracks | null;
   curvesOn: boolean;
+  /** WHICH three axes the curves are drawn along. Authoring only — the pipeline stays
+   *  OkLCh and the conversion happens at `sampleCurves`. @see palette/core/curveSpaces.ts */
+  curveSpace: CurveSpace;
   /** The tracks have been EDITED since they were fitted (a drag, the pencil, the brush, a
    *  key added). An untouched fit is the source restated, so leaving the Curves face with
    *  it must not bake — it just clears (v2, C.4 follow-up 2026-09-07 evening). */
@@ -150,6 +162,9 @@ interface GeneratorState {
   sendRampToSlot: (which: 'A' | 'B', ramp: RGB[], name: string) => number;
   setTracks: (tracks: ChannelTracks | null) => void;
   setCurvesOn: (on: boolean) => void;
+  /** Switch the authoring space. The tracks RE-FIT from the given base, because a bezier in
+   *  L/C/h has no counterpart in R/G/B — one re-fit, one undo entry. */
+  setCurveSpace: (space: CurveSpace, base: Channels | null) => void;
   setDetail: (v: number) => void;
   setSmooth: (v: number) => void;
   reseedNoise: () => void;
@@ -230,8 +245,23 @@ const baseChannelsFrom = (slotA: number, slotB: number, seed: number): Channels 
   return buildGradientRamp(slotChannels(slotA), slotChannels(slotB), sliceToModsA(s), sliceToModsB(s), sliceToParams(s), null, seed).base;
 };
 
-export const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
-  on && tracks ? { L: trackToRamp(tracks.L), C: trackToRamp(tracks.C), h: trackToRamp(tracks.h) } : null;
+/**
+ * THE conversion seam. Tracks are authored in whatever space the owner picked; the pipeline
+ * is OkLCh. This is the single place the two meet — sample the three tracks in their own
+ * space, convert once, hand OkLCh to `buildGradientRamp` exactly as before. Nothing
+ * downstream knows a space exists.
+ *
+ * Returns null when the space's keys are not all present, which happens legitimately for one
+ * render after a space switch (the tracks are the old space's until the re-fit lands). Null
+ * means "no curve override", i.e. the mix shows through — the right thing to draw for a
+ * frame, and never a throw.
+ */
+export const sampleCurves = (tracks: ChannelTracks | null, on: boolean, space: CurveSpace) => {
+  if (!on || !tracks) return null;
+  const [k0, k1, k2] = curveSpaceKeys(space);
+  if (!tracks[k0] || !tracks[k1] || !tracks[k2]) return null;
+  return fromCurveChannels(space, trackToRamp(tracks[k0]), trackToRamp(tracks[k1]), trackToRamp(tracks[k2]));
+};
 
 /**
  * The fit RECIPE: decompose a post-mix BASE into editable channel Tracks at the given
@@ -240,21 +270,26 @@ export const sampleCurves = (tracks: ChannelTracks | null, on: boolean) =>
  * recipe — the faint ghost is therefore byte-faithful to what a bake will commit.
  * (Decision 3: detail/smooth = non-destructive, ghost-previewed, bake-to-commit.)
  */
-export const fitChannelsToTracks = (base: Channels, detail: number, smooth: number): ChannelTracks => {
+export const fitChannelsToTracks = (base: Channels, detail: number, smooth: number, space: CurveSpace): ChannelTracks => {
   const k = (11 - detail) / 3;
-  const h = unwrapHue(base.h);
+  const def = curveSpace(space);
+  // Into the AUTHORING space (angular channels unwrapped there, not here — a space may have
+  // none, or its angle may not be OkLCh's h).
+  const chans = toCurveChannels(space, base);
   // A banded source keeps its bands (C.4): its runs become Step keys, and Smooth is not
   // applied (it would blur the very edges the holds reproduce). Smooth ramps: as before.
   // Detail decides how SMALL a band still counts as one (10 → every 2-texel run; 2 → only
   // runs of 10+), so the ghost answers the dial on a banded source too (owner, 2026-09-07
   // evening: the ghost "needs to update when the slider moves").
-  const runs = flatRuns([base.L, base.C, h], Math.round(2 + (10 - detail)));
+  const runs = flatRuns(chans, Math.round(2 + (10 - detail)));
   const sm = runs.length ? 0 : smooth;
-  return {
-    L: rampToSteppedTrack(smoothChannel(base.L, sm), runs, 'L', 'Lightness', { eps: 0.01 * k }),
-    C: rampToSteppedTrack(smoothChannel(base.C, sm), runs, 'C', 'Chroma', { eps: 0.01 * k }),
-    h: rampToSteppedTrack(smoothChannel(h, sm), runs, 'h', 'Hue', { eps: 0.06 * k }),
-  };
+  const out: ChannelTracks = {};
+  // eps comes off the CHANNEL, not the space: CIE L* spans 100 where Oklab L spans 1, and
+  // one number for both would mean one Detail setting buying 100x the keys.
+  def.channels.forEach((c, i) => {
+    out[c.key] = rampToSteppedTrack(smoothChannel(chans[i], sm), runs, c.key, c.label, { eps: c.eps * k });
+  });
+  return out;
 };
 
 /**
@@ -266,9 +301,25 @@ export const fitChannelsToTracks = (base: Channels, detail: number, smooth: numb
  * ghost previews exactly what a bake produces. (`final` is rejected: it is post-curve,
  * so it would fold the very edits you are comparing against back into the ghost.)
  */
-export const prospectiveFitChannels = (base: Channels, detail: number, smooth: number): Channels => {
-  const t = fitChannelsToTracks(base, detail, smooth);
-  return { L: trackToRamp(t.L), C: trackToRamp(t.C), h: trackToRamp(t.h) };
+export const prospectiveFitChannels = (base: Channels, detail: number, smooth: number, space: CurveSpace): Record<string, number[]> => {
+  const t = fitChannelsToTracks(base, detail, smooth, space);
+  const out: Record<string, number[]> = {};
+  // Keyed by the SPACE's channel keys, and left in the space's units: the ghost has to share
+  // the editable curve's axes or the two stop overlaying and Detail / Smooth read as noise.
+  for (const key of Object.keys(t)) out[key] = trackToRamp(t[key]);
+  return out;
+};
+
+/**
+ * The prospective fit as an OkLCh CURVE OVERRIDE — what `buildGradientRamp` wants, as
+ * against {@link prospectiveFitChannels}, which returns the same fit in the EDITING space
+ * for the ghost to draw. Two readers of one fit, and they genuinely need different spaces:
+ * the pipeline only speaks OkLCh, the plot only draws the space the owner picked.
+ */
+export const prospectiveFitCurves = (base: Channels, detail: number, smooth: number, space: CurveSpace): Channels => {
+  const t = fitChannelsToTracks(base, detail, smooth, space);
+  const [k0, k1, k2] = curveSpaceKeys(space);
+  return fromCurveChannels(space, trackToRamp(t[k0]), trackToRamp(t[k1]), trackToRamp(t[k2]));
 };
 
 /**
@@ -283,13 +334,12 @@ export const prospectiveFitFrames = (
   base: Channels,
   detail: number,
   smooth: number,
-): Record<'L' | 'C' | 'h', number[]> => {
-  const t = fitChannelsToTracks(base, detail, smooth);
-  return {
-    L: t.L.keyframes.map((k) => k.frame),
-    C: t.C.keyframes.map((k) => k.frame),
-    h: t.h.keyframes.map((k) => k.frame),
-  };
+  space: CurveSpace,
+): Record<string, number[]> => {
+  const t = fitChannelsToTracks(base, detail, smooth, space);
+  const out: Record<string, number[]> = {};
+  for (const key of Object.keys(t)) out[key] = t[key].keyframes.map((k) => k.frame);
+  return out;
 };
 
 /** Run the full pipeline: the two-source mix chain, or the ColorBox sweep. */
@@ -304,6 +354,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   slotB: 5, // Inferno
   tracks: null,
   curvesOn: false,
+  curveSpace: DEFAULT_CURVE_SPACE,
   tracksEdited: false,
   detail: 8,
   smooth: 5,
@@ -320,6 +371,19 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   },
   setTracks: (tracks) => set({ tracks, tracksEdited: true }),
   setCurvesOn: (on) => genEdit(() => set((s) => ({ curvesOn: on && !!s.tracks }))),
+  setCurveSpace: (space, base) =>
+    genEdit(() =>
+      set((s) => {
+        if (space === s.curveSpace || !CURVE_SPACE_ORDER.includes(space)) return {};
+        // No tracks yet: the space is all there is to change, and the next fit uses it.
+        if (!s.tracks || !base) return { curveSpace: space };
+        // With tracks, the switch must carry the CURRENT curve across, not the source: the
+        // owner's edits are what they expect to see redrawn on the new axes. Sampling the
+        // live tracks back through the old space gives exactly that.
+        const live = sampleCurves(s.tracks, true, s.curveSpace) ?? base;
+        return { curveSpace: space, tracks: fitChannelsToTracks(live, s.detail, s.smooth, space), curvesOn: true };
+      }),
+    ),
   setDetail: (v) => set({ detail: v }),
   setSmooth: (v) => set({ smooth: v }),
   reseedNoise: () => genEdit(() => set((s) => ({ noiseSeed: s.noiseSeed + 1 }))),
@@ -329,16 +393,16 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
   fitFromSource: () => {
     const s = get();
     const base = baseChannelsFrom(s.slotA, s.slotB, s.noiseSeed);
-    set({ tracks: fitChannelsToTracks(base, s.detail, s.smooth), curvesOn: true });
+    set({ tracks: fitChannelsToTracks(base, s.detail, s.smooth, s.curveSpace), curvesOn: true });
   },
   fitCurvesFromRamp: (ramp) =>
     genEdit(() => {
       // Decompose the dropped gradient into L/C/h channels, then fit editable bezier curves
       // at the current detail/smooth — the inverse of "Fit from source", but from any sent
       // gradient instead of the A/B mix (hue unwrapping happens inside fitChannelsToTracks).
-      set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth), curvesOn: true });
+      set({ tracks: fitChannelsToTracks(decomposeRamp(ramp), get().detail, get().smooth, get().curveSpace), curvesOn: true });
     }),
-  fitFromChannels: (base) => genEdit(() => set({ tracks: fitChannelsToTracks(base, get().detail, get().smooth), curvesOn: true, tracksEdited: false })),
+  fitFromChannels: (base) => genEdit(() => set({ tracks: fitChannelsToTracks(base, get().detail, get().smooth, get().curveSpace), curvesOn: true, tracksEdited: false })),
   resetCurves: () => genEdit(() => set({ tracks: null, curvesOn: false, tracksEdited: false })),
   // Reset the Mix blend (mixL/mixC/mixH are DDFS params on the slice) to defaults —
   // 0/0/0 = all source A. Mirrors resetCurves: one genEdit() bracket = one undo entry.
@@ -372,16 +436,16 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       // Fit the curves from the UN-CLIPPED post-global channels (not the gamut-clipped RGB
       // ramp), so the baked transform stays faithful even at extreme values; with the global
       // dials then reset the curve override reproduces the same result. detail sets eps.
-      const ch = fullResult(g.slotA, g.slotB, sampleCurves(g.tracks, g.curvesOn), g.noiseSeed).final;
+      const ch = fullResult(g.slotA, g.slotB, sampleCurves(g.tracks, g.curvesOn, g.curveSpace), g.noiseSeed).final;
       const k = (11 - g.detail) / 3;
-      set({
-        tracks: {
-          L: rampToBezierTrack(ch.L, 'L', 'Lightness', { eps: 0.01 * k }),
-          C: rampToBezierTrack(ch.C, 'C', 'Chroma', { eps: 0.01 * k }),
-          h: rampToBezierTrack(unwrapHue(ch.h), 'h', 'Hue', { eps: 0.06 * k }),
-        },
-        curvesOn: true,
+      // Into the ACTIVE authoring space, with each channel's own eps — a bake while the
+      // owner is drawing in RGB must hand back RGB curves, not L/C/h ones.
+      const chans = toCurveChannels(g.curveSpace, ch);
+      const tracks: ChannelTracks = {};
+      curveSpace(g.curveSpace).channels.forEach((c, i) => {
+        tracks[c.key] = rampToBezierTrack(chans[i], c.key, c.label, { eps: c.eps * k });
       });
+      set({ tracks, curvesOn: true });
       setSlice(MAIN_DEFAULTS);
     }),
   resetMainMods: () => genEdit(() => setSlice(MAIN_DEFAULTS)),
@@ -411,7 +475,7 @@ export const useColorBoxParams = (): ColorBoxParams => {
  */
 export const captureGeneratorHistory = () => {
   const s = useGeneratorStore.getState();
-  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed };
+  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, curveSpace: s.curveSpace, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed };
 };
 export const restoreGeneratorHistory = (snap: unknown): void => {
   useGeneratorStore.setState({ ...(snap as Partial<ReturnType<typeof captureGeneratorHistory>>) });
@@ -439,17 +503,19 @@ export interface GeneratorDerived {
   base: Channels;
   /**
    * The editor's "ghost" scope: the RESULT output channels (post-global Modify chain),
-   * hue unwrapped. Tracks the Modify dials and is defined even with curves off (then it
-   * is the live result). With curves ON it is built from the PROSPECTIVE fit instead of
-   * the committed curve, so detail/smooth preview a re-fit before any bake.
+   * IN THE AUTHORING SPACE and keyed by its channel keys, with any angular channel
+   * unwrapped — it is drawn on the editor's axes, so it has to share them. Tracks the
+   * Modify dials and is defined even with curves off (then it is the live result). With
+   * curves ON it is built from the PROSPECTIVE fit instead of the committed curve, so
+   * detail/smooth preview a re-fit before any bake.
    */
-  ghost: Channels;
+  ghost: Record<string, number[]>;
   /**
    * Per-channel prospective-fit keyframe FRAMES at the current detail/smooth — the
    * editor draws these as faint "ghost points" on the ghost curve to explain those two
    * sliders. Null in ColorBox (no curve-fit layer). (See prospectiveFitFrames.)
    */
-  ghostPoints: Record<'L' | 'C' | 'h', number[]> | null;
+  ghostPoints: Record<string, number[]> | null;
   config: GradientConfig;
 }
 
@@ -462,6 +528,7 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   const slotA = useGeneratorStore((s) => s.slotA);
   const slotB = useGeneratorStore((s) => s.slotB);
   const curvesOn = useGeneratorStore((s) => s.curvesOn);
+  const space = useGeneratorStore((s) => s.curveSpace);
   const tracks = useGeneratorStore((s) => s.tracks);
   const detail = useGeneratorStore((s) => s.detail);
   const smooth = useGeneratorStore((s) => s.smooth);
@@ -533,20 +600,28 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     // chain with the fitted curves). ColorBox has no curve override, so fall through
     // to the live ghost (built.final) there.
     if (mode === 'colorbox' || !curvesOn || !hasTracks) return null;
-    const f = buildGradientRamp(srcA, srcB, modsA, modsB, params, prospectiveFitChannels(base, detail, smooth), noiseSeed).final;
-    return { L: f.L, C: f.C, h: unwrapHue(f.h) };
-  }, [mode, curvesOn, hasTracks, base, detail, smooth, srcA, srcB, modsA, modsB, params, noiseSeed]);
-  const liveGhost = useMemo(() => ({ L: built.final.L, C: built.final.C, h: unwrapHue(built.final.h) }), [built]);
+    return buildGradientRamp(srcA, srcB, modsA, modsB, params, prospectiveFitCurves(base, detail, smooth, space), noiseSeed).final;
+  }, [mode, curvesOn, hasTracks, base, detail, smooth, srcA, srcB, modsA, modsB, params, noiseSeed, space]);
+  const liveGhost = built.final;
   // When the override supersedes (curves on), the ghost is referentially stable across
   // keyframe edits (which only churn `built`/`liveGhost`), so trackRanges doesn't rebuild.
-  const ghost = overrideGhost ?? liveGhost;
+  // ONE conversion, at the end: the ghost is drawn on the editor's axes, so it must live in
+  // the authoring space or it stops overlaying the curve it is there to be compared with.
+  // (This also subsumes the old `unwrapHue` — `toCurveChannels` unwraps whatever angular
+  // channel the space actually has, which for RGB and Oklab is none.)
+  const oklchGhost = overrideGhost ?? liveGhost;
+  const ghost = useMemo(() => {
+    const [a, b, c] = toCurveChannels(space, oklchGhost);
+    const keys = curveSpaceKeys(space);
+    return { [keys[0]]: a, [keys[1]]: b, [keys[2]]: c } as Record<string, number[]>;
+  }, [space, oklchGhost]);
 
   // Ghost POINTS — the control-point frames a re-fit would place at the current
   // detail/smooth. Keyed only on the fit's real inputs (NOT tracks/built) so editing
   // keyframes doesn't re-run the Douglas-Peucker fit each drag frame. Null in ColorBox.
   const ghostPoints = useMemo(
-    () => (mode === 'colorbox' ? null : prospectiveFitFrames(base, detail, smooth)),
-    [mode, base, detail, smooth],
+    () => (mode === 'colorbox' ? null : prospectiveFitFrames(base, detail, smooth, space)),
+    [mode, base, detail, smooth, space],
   );
 
   const mixedConfig = useMemo(() => {
@@ -631,10 +706,11 @@ export const readAdjustParamsNow = (): GeneratorParams => sliceToParams(readSlic
 /** The Shape override: the edited channel curves sampled to 256 values, or null when off. */
 export const useSampledCurves = (): ReturnType<typeof sampleCurves> => {
   const curvesOn = useGeneratorStore((s) => s.curvesOn);
+  const space = useGeneratorStore((s) => s.curveSpace);
   const tracks = useGeneratorStore((s) => s.tracks);
-  return useMemo(() => sampleCurves(tracks, curvesOn), [tracks, curvesOn]);
+  return useMemo(() => sampleCurves(tracks, curvesOn, space), [tracks, curvesOn, space]);
 };
 export const readSampledCurvesNow = (): ReturnType<typeof sampleCurves> => {
   const g = useGeneratorStore.getState();
-  return sampleCurves(g.tracks, g.curvesOn);
+  return sampleCurves(g.tracks, g.curvesOn, g.curveSpace);
 };

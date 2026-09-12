@@ -80,6 +80,12 @@ export interface BuildTrackPolylineArgs {
     /** Value-axis gutter, px (default GRAPH_LEFT_GUTTER_WIDTH). MUST match what drawGraph was
      *  given, and MUST be part of the cache key — @see the note below. */
     leftGutter?: number;
+    /** Draw the CURVE but not its keys. For a modal tool that owns the canvas and puts its
+     *  own handles on it — the palette's wave filter — where a track's diamonds are clutter
+     *  a click cannot reach anyway (owner, 2026-09-12: "the other nodes must become invisible
+     *  as they are cluttering the view"). Like `leftGutter`, it MUST be in the cache key:
+     *  a bitmap built with diamonds and blitted without them shows the diamonds. */
+    hideKeyframes?: boolean;
 }
 
 /**
@@ -287,17 +293,19 @@ export const buildTrackPolyline = (args: BuildTrackPolylineArgs): CacheCanvas =>
     // (selection rings, keySelectedColor fills, handle lines, soft-weight
     // tinting) happen in the per-render foreground pass on top of this cached
     // layer.
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    for (let i = 0; i < keys.length; i++) {
-        const k = keys[i];
-        const kx = frameToCanvasPixel(k.frame);
-        const ky = v2p(k.value);
-        // Conservative viewport cull — same predicate the per-render loop used.
-        if (ky < RULER_HEIGHT - 10 || ky > canvasHeight + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > canvasWidth + 10) continue;
-        traceKeyframeShape(ctx, kx, ky, k.interpolation, shapeSize(k.interpolation));
+    if (!args.hideKeyframes) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (let i = 0; i < keys.length; i++) {
+            const k = keys[i];
+            const kx = frameToCanvasPixel(k.frame);
+            const ky = v2p(k.value);
+            // Conservative viewport cull — same predicate the per-render loop used.
+            if (ky < RULER_HEIGHT - 10 || ky > canvasHeight + 10 || kx < LEFT_GUTTER_WIDTH - 5 || kx > canvasWidth + 10) continue;
+            traceKeyframeShape(ctx, kx, ky, k.interpolation, shapeSize(k.interpolation));
+        }
+        ctx.fill();
     }
-    ctx.fill();
 
     ctx.restore();
     return canvas;
