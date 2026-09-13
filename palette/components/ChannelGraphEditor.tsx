@@ -265,6 +265,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
   const [waveOn, setWaveOn] = useState(false);
   const [waveParams, setWaveParams] = useState<WaveParams>(lastWave);
   const [wavePill, setWavePill] = useState<string | null>(null);
+  /** The desk's floating tool head covers the top of the plot; the overlay keeps the crest
+   *  handle out from under it. Measured rather than assumed, so a restyled head cannot
+   *  silently reopen the gap. */
+  const [waveHeadH, setWaveHeadH] = useState(0);
+  const measureWaveHead = useCallback((el: HTMLDivElement | null) => {
+    if (el) setWaveHeadH(el.offsetHeight);
+  }, []);
   /** Bumped whenever `waveBaseRef` is re-snapshotted. A ref change triggers no render, so
    *  without this the preview below never re-runs after a channel switch re-bases it. */
   const [waveBaseTick, setWaveBaseTick] = useState(0);
@@ -1238,7 +1245,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
               time the tool is armed. The tool column is suppressed while armed, so the two
               never overlap. */}
           {!phone && waveArmed && (
-            <div className="absolute top-0 left-0 right-0 z-30">{waveHead}</div>
+            <div ref={measureWaveHead} className="absolute top-0 left-0 right-0 z-30">{waveHead}</div>
           )}
           {/* Graph tools — DESKTOP position: a column floating over the plot's top-left.
               On a phone the same buttons are a strip above the plot (see the root). */}
@@ -1318,6 +1325,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
               sampleBase={sampleWaveBase}
               range={waveRange}
               color={CHANNELS.find((c) => c.key === activeChannel)?.color ?? '#22d3ee'}
+              topInset={phone ? 0 : waveHeadH}
             />
           )}
           {/* WHICH CHANNEL THE WAVE IS SHAPING — a dot in the LEFT GUTTER (owner, 2026-09-12:

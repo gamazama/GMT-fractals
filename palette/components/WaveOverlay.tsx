@@ -11,7 +11,7 @@
  * X is always RATE ALONG T. Y is always AMOUNT. Noise has no cycles, so its X reads as
  * grain scale and nothing else has to change.
  *
- *   circle, on the crest     drag X → phase             drag Y → amplitude
+ *   circle, on the crest     drag X → phase             drag Y → amplitude  (held on the plot)
  *   crosshair, in its zone   drag X → bias              drag Y → skew
  *   caliper, on the floor    width IS one wavelength    drag X → wavelength
  *   grey squares (feather)   drag X → feather, then span
@@ -88,11 +88,15 @@ import {
   waveValue,
   type WaveParams,
 } from '../core/waveGen';
+import { GRAPH_RULER_HEIGHT } from '../../data/constants';
 
 /** Handles this overlay owns. `dc` is the wave body (offset). */
 type HandleId = 'a' | 'b' | 'fa' | 'fb' | 'lam' | 'pa' | 'bs' | 'dc';
 
 interface Props {
+  /** Pixels at the TOP of the plot that something else covers — the tool head floats there
+   *  on a desk. The crest handle is kept below this (and below the ruler, whichever is more). */
+  topInset?: number;
   params: WaveParams;
   onChange: (next: WaveParams) => void;
   /** Opens the parent's undo bracket on the first move of a drag, closes it on release. */
@@ -153,6 +157,7 @@ const Square: React.FC<{
 export const WaveOverlay: React.FC<Props> = ({
   params, onChange, onDragStart, onDragEnd, onPill,
   width, height, maxFrame, frameToCanvasPixel, valueToPixelY, sampleBase, range, color,
+  topInset = 0,
 }) => {
   const p = params;
   const tToX = useCallback((t: number) => frameToCanvasPixel(t * maxFrame), [frameToCanvasPixel, maxFrame]);
@@ -335,7 +340,26 @@ export const WaveOverlay: React.FC<Props> = ({
   const reach = ZONE / 2 - 7;
   const ct = crest();
   const cx = tToX(ct);
-  const cy = valueToPixelY(applyWaveSample(baseAt(ct), ct, p, range));
+  /**
+   * THE CREST HANDLE STAYS ON THE PLOT (owner, 2026-09-13: "at high amplitude, the phas/amp
+   * control goes off the canvas, can we limit it"). It is drawn at the wave's true crest, and
+   * the view is fitted once, when the tool arms — so a tall enough amplitude carries the crest
+   * past the top edge, or under the ruler, and takes the only amplitude control with it.
+   *
+   * The DRAWN position is clamped, not the amplitude. The drag is relative (a pointer delta
+   * added to the value at pointer-down), so a pinned handle keeps working in both directions,
+   * and a tall wave stays a thing you are allowed to make. While pinned it carries a chevron
+   * pointing at where the crest really is, so the handle never pretends to be on the curve
+   * when it is not.
+   */
+  const CREST_R = 6;
+  // Under the ruler, and on a desk under the floating tool head too — measured on the first
+  // cut, clearing only the ruler left the pinned circle half beneath the head.
+  const crestTop = Math.max(GRAPH_RULER_HEIGHT, topInset) + CREST_R + 9; // + room for the chevron
+  const crestBottom = height - CREST_R - 9;
+  const rawCy = valueToPixelY(applyWaveSample(baseAt(ct), ct, p, range));
+  const cy = clamp(rawCy, crestTop, Math.max(crestTop, crestBottom));
+  const pinned: -1 | 0 | 1 = rawCy < cy ? -1 : rawCy > cy ? 1 : 0;
   // Bias right of centre = the crest arrives later; skew below centre = the wave sits lower.
   // Both are the direction the corresponding drag moves the pointer, which is the whole point
   // of drawing them in a zone at all.
@@ -380,8 +404,15 @@ export const WaveOverlay: React.FC<Props> = ({
       <Square x={fbX} y={curveY(p.span[1])} stroke="#9ca3af" onDown={onPointerDown('fb')} />
 
       {/* crest: phase (X) + amplitude (Y) */}
-      <g onPointerDown={onPointerDown('pa')} style={{ cursor: 'move' }}>
-        <circle cx={cx} cy={cy} r={6} fill="rgb(var(--surface))" stroke={color} strokeWidth={2} />
+      <g onPointerDown={onPointerDown('pa')} style={{ cursor: 'move' }} data-gx-wave="crest" data-pinned={pinned || undefined}>
+        <circle cx={cx} cy={cy} r={CREST_R} fill="rgb(var(--surface))" stroke={color} strokeWidth={2} />
+        {/* pinned to an edge: a chevron toward the crest it stands in for */}
+        {pinned !== 0 && (
+          <path
+            d={`M${cx - 3.5} ${cy + pinned * 9}L${cx} ${cy + pinned * 12.5}L${cx + 3.5} ${cy + pinned * 9}`}
+            fill="none" stroke={color} strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round"
+          />
+        )}
         <circle cx={cx} cy={cy} r={14} fill="transparent" />
       </g>
 

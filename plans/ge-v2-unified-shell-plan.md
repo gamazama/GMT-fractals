@@ -2843,3 +2843,16 @@ phase now carries**. Items move out of this list only when a later phase's entry
 
   No guard on any of this: it is React geometry, and `test:palette` reaches `palette/core/**`
   only. Verified in the browser, numbers above.
+
+- 2026-09-13 · **The crest handle stays on the plot.** Owner: "at high amplitude, the phas/amp
+  control goes off the canvas, can we limit it". It is drawn at the wave's true crest and the
+  view is fitted once, when the tool arms, so a tall amplitude carried the only amplitude
+  control off the top. The DRAWN position is clamped now, not the amplitude: the drag is
+  relative, so a pinned handle keeps working both ways, and a tall wave stays allowed. While
+  pinned it carries a chevron pointing at where the crest really is. The top bound is the
+  ruler on a phone and the floating tool head on a desk — measured, not assumed (the first cut
+  cleared only the ruler and left the pinned circle half under the head). Verified with real
+  drags: up pins at 398 px against a head bottom of 383; dragging the pinned handle down
+  releases it back onto the curve. (Synthetic pointer events cannot drive these handles at all
+  — `setPointerCapture` rejects a pointer id the browser never issued — so any future smoke
+  needs CDP input, not `dispatchEvent`.)
