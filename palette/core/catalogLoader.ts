@@ -129,6 +129,16 @@ export const PALETTE_LOCAL_BASE = `${VITE_BASE}palette/`;
 /** Canonical CDN base for the licence-encumbered / long-tail bundles (Cloudflare R2). */
 export const PALETTE_CDN_BASE = 'https://cdn.gmt-fractals.com/palette/';
 
+/**
+ * The CDN files' REVISION, sent as `?v=` on every non-local fetch. Bump it whenever re-baked
+ * packs are uploaded over the same object names: the packs uploaded before 2026-09-13 carried a
+ * one-year `immutable` cache header, so browsers and Cloudflare's edge would otherwise keep
+ * serving the old files at the old URL (the pre-licensing cpt-city pack, ElvenSword and the
+ * non-commercial sets still inside it). A new query string is a new cache key for both.
+ */
+export const PALETTE_CDN_REV = '2026-09-13';
+const revFor = (base: string): string => (base === PALETTE_LOCAL_BASE ? '' : `?v=${PALETTE_CDN_REV}`);
+
 // Overridable at runtime (e.g. a self-hosted mirror) without rebuilding.
 let _cdnBase = PALETTE_CDN_BASE;
 const withSlash = (b: string): string => (b.endsWith('/') ? b : b + '/');
@@ -244,8 +254,8 @@ export const loadGroup = async (groupId: string, base?: string): Promise<Catalog
   for (const b of bases) {
     try {
       [binBuf, jsonBuf] = await Promise.all([
-        fetchOk(`${b}${groupId}.bin.gz`),
-        fetchOk(`${b}${groupId}.json.gz`),
+        fetchOk(`${b}${groupId}.bin.gz${revFor(b)}`),
+        fetchOk(`${b}${groupId}.json.gz${revFor(b)}`),
       ]);
       loadedFrom = b;
       break;
@@ -269,7 +279,7 @@ export const loadGroup = async (groupId: string, base?: string): Promise<Catalog
   _counts = merged.counts;
   _manifestVersion = merged.version;
   if (meta.collections) _collections = { ..._collections, ...meta.collections };
-  if (typeof meta.credits === 'string' && meta.credits) _creditsUrl[groupId] = `${loadedFrom}${meta.credits}`;
+  if (typeof meta.credits === 'string' && meta.credits) _creditsUrl[groupId] = `${loadedFrom}${meta.credits}${revFor(loadedFrom)}`;
   const stride = meta.stride; // 768 = 256×3
 
   const out: CatalogEntry[] = new Array(meta.entries.length);
