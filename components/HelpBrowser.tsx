@@ -444,12 +444,20 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
         return roots.map(t => renderNode(t, 0));
     };
 
+    // The window is 700×600 at (100, 100) wherever that fits — every desktop — and is clamped
+    // into a viewport that is smaller (2026-09-13: on a 390 px phone it ran 410 px off the
+    // right edge, in every app). Above 816×716 these resolve to exactly the old numbers.
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const winW = Math.min(700, vw - 16);
+    const winH = Math.min(600, vh - 16);
+
     return (
-        <DraggableWindow 
-            title="Library" 
-            onClose={onClose} 
-            initialPos={{ x: 100, y: 100 }} 
-            initialSize={{ width: 700, height: 600 }}
+        <DraggableWindow
+            title="Library"
+            onClose={onClose}
+            initialPos={{ x: Math.min(100, Math.max(8, vw - winW - 8)), y: Math.min(100, Math.max(8, vh - winH - 8)) }}
+            initialSize={{ width: winW, height: winH }}
             zIndex={z('tool')}
         >
             <div className="flex h-full -m-3">

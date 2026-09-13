@@ -13,6 +13,11 @@
  *       ...
  *   });
  */
-export { openFeedback, closeFeedback, feedbackMenuItem, registerFeedbackUI, feedbackPanelEntry } from './installFeedback';
-export { submitFeedback, FeedbackError } from './FeedbackClient';
-export type { FeedbackCategory, FeedbackInput } from './FeedbackClient';
+export { openFeedback, closeFeedback, useFeedbackOpen, feedbackMenuItem, registerFeedbackUI, feedbackPanelEntry } from './installFeedback';
+// For hosts without a panel router — render it in your own surface while useFeedbackOpen().
+export { FeedbackPanel } from './FeedbackPanel';
+// A viewport JPEG inside a JSON attachment; modern-screenshot is import()ed on first use.
+export { captureViewportJpeg, FEEDBACK_NO_CAPTURE_ATTR } from './feedbackScreenshot';
+export type { ScreenshotResult, ScreenshotOptions } from './feedbackScreenshot';
+export { submitFeedback, FeedbackError, configureFeedback, getFeedbackAttachments } from './FeedbackClient';
+export type { FeedbackCategory, FeedbackInput, FeedbackAttachment, FeedbackConfig, FeedbackFile } from './FeedbackClient';

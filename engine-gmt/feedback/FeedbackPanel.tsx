@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { submitFeedback, FeedbackError, FeedbackCategory } from './FeedbackClient';
+import { submitFeedback, FeedbackError, FeedbackCategory, getFeedbackAttachments, type FeedbackFile } from './FeedbackClient';
 import { useAuthStore } from '../auth/authStore';
 import { useEngineStore } from '../../store/engineStore';
 import { stopNavKeys } from '../../components/ui';
@@ -32,6 +32,35 @@ export const FeedbackPanel: React.FC = () => {
     const [done, setDone]                 = useState(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    // What this app offers to attach (configureFeedback) — GMT's scene unless the app
+    // declared its own. ONE option is the checkbox (GMT's form, unchanged); SEVERAL are a
+    // one-of choice with None, still sending one file; none hides the row.
+    const [options] = useState(getFeedbackAttachments);
+    const attachment = options.length === 1 ? options[0] : null;
+    const multi = options.length > 1;
+    const [choice, setChoice]             = useState<string | null>(multi ? (options[0].id ?? null) : null);
+    // A captureOnSelect option's file, built when chosen — the thumbnail is what is sent.
+    const [prepared, setPrepared]         = useState<{ id: string; file: FeedbackFile | null } | null>(null);
+    const [preparing, setPreparing]       = useState(false);
+    const chosen = multi ? options.find((o) => o.id === choice) ?? null : null;
+
+    const choose = (id: string | null) => {
+        setChoice(id);
+        setError(null);
+        const opt = options.find((o) => o.id === id);
+        if (!opt?.captureOnSelect || !id) return;
+        if (prepared?.id === id) return;
+        setPreparing(true);
+        Promise.resolve()
+            .then(() => opt.capture())
+            .then((file) => setPrepared({ id, file }))
+            .catch((err) => {
+                setPrepared(null);
+                setChoice(null);
+                setError(err instanceof Error ? err.message : 'Could not prepare the attachment');
+            })
+            .finally(() => setPreparing(false));
+    };
 
     useEffect(() => {
         const t = setTimeout(() => textareaRef.current?.focus(), 50);
@@ -51,7 +80,16 @@ export const FeedbackPanel: React.FC = () => {
         }
         setSubmitting(true);
         try {
-            await submitFeedback({ category, message, contactEmail, includeScene });
+            if (multi) {
+                await submitFeedback({
+                    category, message, contactEmail,
+                    includeScene: !!chosen,
+                    attachmentId: chosen?.id,
+                    preparedAttachment: chosen?.captureOnSelect ? (prepared && prepared.id === chosen.id ? prepared.file : null) : undefined,
+                });
+            } else {
+                await submitFeedback({ category, message, contactEmail, includeScene: includeScene && !!attachment });
+            }
             setDone(true);
         } catch (err) {
             if (err instanceof FeedbackError) setError(err.message);
@@ -147,7 +185,8 @@ export const FeedbackPanel: React.FC = () => {
                         className="w-full px-2 py-1.5 text-xs bg-surface-sunken text-fg-secondary border border-line/10 rounded focus:outline-none focus:border-accent-400/50 mb-3"
                     />
 
-                    {/* Include scene */}
+                    {/* The app's attachment (GMT: include scene) */}
+                    {attachment && (
                     <label className="flex items-start gap-2 mb-4 cursor-pointer group">
                         <input
                             type="checkbox"
@@ -158,14 +197,55 @@ export const FeedbackPanel: React.FC = () => {
                         />
                         <div className="flex-1">
                             <div className="text-[11px] font-bold text-fg-tertiary group-hover:text-accent-300 transition-colors">
-                                Include current scene
+                                {attachment.label}
                             </div>
                             <div className="text-[9px] text-fg-dim leading-snug">
-                                Attaches a .gmf file of your scene (sky + heavy data stripped)
-                                so I can reproduce what you're seeing.
+                                {attachment.hint}
                             </div>
                         </div>
                     </label>
+                    )}
+
+                    {/* Several options (an app's choice): one of them, or none */}
+                    {multi && (
+                    <div className="mb-4" data-feedback-attachments="">
+                        <label className="block text-[10px] font-bold uppercase tracking-wide text-fg-muted mb-1">
+                            Attach
+                        </label>
+                        <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `repeat(${options.length + 1}, minmax(0, 1fr))` }}>
+                            {[{ id: null as string | null, label: 'Nothing' }, ...options.map((o) => ({ id: o.id ?? null, label: o.label }))].map((o) => (
+                                <button
+                                    key={o.id ?? 'none'}
+                                    type="button"
+                                    onClick={() => choose(o.id)}
+                                    disabled={submitting}
+                                    aria-pressed={choice === o.id}
+                                    data-feedback-attachment={o.id ?? 'none'}
+                                    className={`px-2 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                                        choice === o.id
+                                            ? 'bg-accent-500/25 text-cyan-200 border border-accent-400/40'
+                                            : 'bg-line/5 text-fg-muted border border-transparent hover:bg-line/10'
+                                    }`}
+                                >
+                                    {o.label}
+                                </button>
+                            ))}
+                        </div>
+                        {chosen && <p className="text-[9px] text-fg-dim italic mb-2">{chosen.hint}</p>}
+                        {chosen?.captureOnSelect && (
+                            preparing ? (
+                                <p className="text-[10px] text-fg-muted" data-feedback-preparing="">Preparing…</p>
+                            ) : prepared && prepared.id === chosen.id && prepared.file?.preview ? (
+                                <img
+                                    src={prepared.file.preview}
+                                    alt="What will be attached"
+                                    data-feedback-preview=""
+                                    className="max-h-28 max-w-full rounded border border-line/15"
+                                />
+                            ) : null
+                        )}
+                    </div>
+                    )}
 
                     {error && (
                         <ErrorNote className="text-[11px] text-danger px-2 py-1.5 mb-3">
@@ -183,7 +263,7 @@ export const FeedbackPanel: React.FC = () => {
                         </button>
                         <button
                             onClick={trySubmit}
-                            disabled={submitting || !message.trim()}
+                            disabled={submitting || preparing || !message.trim()}
                             className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 text-cyan-200 hover:bg-accent-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             {submitting ? 'Sending…' : 'Send'}

@@ -8,6 +8,9 @@
  *   3. The "H" keyboard shortcut flips store.showHints.
  *   4. Clicking the Show Hints item flips store.showHints.
  *   5. Clicking "Getting Started" opens the HelpBrowser overlay.
+ *   6. (2026-09-13) The per-app help seams left this app on GMT's defaults: the menu still
+ *      says "Support GMT" (gmtSupportConfig with no appName) and the Help browser shows
+ *      GMT's "Welcome to GMT" (no setHelpTopicsLoader call → GMT's topic bundle).
  */
 import { chromium } from 'playwright';
 
@@ -44,6 +47,12 @@ async function main() {
         }
     }
     console.log('✓ popover has expected items');
+    // 2b. (2026-09-13) the per-app seams left this app on GMT's defaults: gmtSupportConfig()
+    // without an appName still says "Support GMT".
+    if (!items.some((t) => t.includes('Support GMT'))) {
+        throw new Error(`menu has no "Support GMT" — gmtSupportConfig's default name changed\nfound items: ${JSON.stringify(items.slice(0, 40))}`);
+    }
+    console.log('✓ Support is still "Support GMT"');
 
     // 3. Click the Show Hints toggle (popover already open from step 2)
     const before = await page.evaluate(() => (window as any).__store?.getState?.().showHints);
@@ -75,6 +84,15 @@ async function main() {
     const helpVisible = await page.evaluate(() => (window as any).__store?.getState?.().helpWindow?.visible);
     if (!helpVisible) throw new Error('Getting Started did not open HelpBrowser');
     console.log('✓ Getting Started opened HelpBrowser');
+    // 6. (2026-09-13) an app that never calls setHelpTopicsLoader still gets GMT's topics.
+    // 30 s, not 8: headless fluid-toy renders its fractal on the software GPU, and the lazy
+    // Help browser took ~12 s to reach the DOM (measured 2026-09-13). Falsified by pointing
+    // the registry's default loader at an empty map: red with the message below.
+    const gmtTopics = await page
+        .waitForFunction(() => document.body.innerText.includes('Welcome to GMT'), null, { timeout: 30000 })
+        .then(() => true).catch(() => false);
+    if (!gmtTopics) throw new Error('Getting Started did not show GMT\'s "Welcome to GMT" — the default help topic source changed');
+    console.log('✓ the Help browser shows GMT\'s own topics');
 
     if (errors.length > 0) {
         console.log('\nerrors:');

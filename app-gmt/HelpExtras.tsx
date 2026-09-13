@@ -9,8 +9,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { getProxy } from '../engine-gmt';
-import { useEngineStore } from '../store/engineStore';
-import { menu, type MenuItem } from '../engine/plugins/Menu';
+import { type MenuItem } from '../engine/plugins/Menu';
+import { createWhatsNew } from '../engine/plugins/WhatsNew';
 import pkg from '../package.json';
 
 // Kept as a string literal (NOT imported from data/help/topics/changelog) so the
@@ -24,52 +24,30 @@ const CHANGELOG_TOPIC_ID = 'changelog.whats-new';
 // Persisted in localStorage so it survives reloads and re-appears on the next
 // release. First run (no stored value) counts as unseen, giving existing users
 // a one-time nudge for the current release. Cleared when they open the page.
-const SEEN_KEY = 'gmt.whatsNew.seenVersion';
-let _unseen: boolean | null = null;
+// The mechanism is engine/plugins/WhatsNew.tsx (hoisted 2026-09-13 so the
+// Gradient Explorer can have its own); these are GMT's values for it.
+const whatsNew = createWhatsNew({
+    topicId: CHANGELOG_TOPIC_ID,
+    version: pkg.version,
+    seenKey: 'gmt.whatsNew.seenVersion',
+    title: 'See the latest GMT updates and full version history',
+});
 
 /** True when there's a release the user hasn't opened the changelog for. */
-export const isWhatsNewUnseen = (): boolean => {
-    if (_unseen === null) {
-        try { _unseen = localStorage.getItem(SEEN_KEY) !== pkg.version; }
-        catch { _unseen = false; }
-    }
-    return _unseen;
-};
+export const isWhatsNewUnseen = whatsNew.isUnseen;
 
 /** Mark the current version's changelog as seen — clears the dot + highlight. */
-export const markWhatsNewSeen = (): void => {
-    try { localStorage.setItem(SEEN_KEY, pkg.version); } catch { /* private mode */ }
-    _unseen = false;
-    menu.refresh(); // re-render the ? anchor so the dot clears immediately
-};
+export const markWhatsNewSeen = whatsNew.markSeen;
 
 /** Open the "What's New" changelog help page (and mark it seen). */
-const openChangelog = () => {
-    markWhatsNewSeen();
-    (useEngineStore.getState() as any).openHelp?.(CHANGELOG_TOPIC_ID);
-};
-
-const SparkleIcon: React.FC = () => (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7z" />
-        <path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
-    </svg>
-);
+const openChangelog = whatsNew.open;
 
 /**
  * MenuItem for `installHelp({ extraItems: [...] })` — mirrors feedbackMenuItem's
  * wiring. Opens the changelog help page. Fixed id so re-registering replaces
  * rather than duplicates.
  */
-export const whatsNewMenuItem = (opts: { id?: string; label?: string } = {}): MenuItem => ({
-    id: opts.id ?? 'whats-new',
-    type: 'button',
-    label: opts.label ?? "What's New",
-    icon: <SparkleIcon />,
-    title: 'See the latest GMT updates and full version history',
-    badge: () => isWhatsNewUnseen(),
-    onSelect: () => openChangelog(),
-});
+export const whatsNewMenuItem = (opts: { id?: string; label?: string } = {}): MenuItem => whatsNew.menuItem(opts);
 
 export const AboutGmtBody: React.FC = () => {
     const [gpuInfo, setGpuInfo] = useState<string>('');

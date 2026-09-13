@@ -28,23 +28,6 @@ ADRs 0024-0026 (adaptive resolution), ADRs 0029-0032 (camera / StateLibrary),
 ADRs 0009-0010 (tutorial — actionBus over store-monkeypatch, anchor registry
 over `data-tut` attributes).
 
-## Two autosaves, and each app has its own settings
-
-Autosave preferences are PER APP (`engine/store/autosaveStore.ts`,
-`createAutosaveSettingsStore(keys)`, memoised by key; opt-in everywhere). app-gmt's
-`useAutosaveSettings` (`gmt-autosave-enabled` / `gmt-autosave-interval-sec`) governs its
-`<UnsavedWorkGuard/>` + SceneIO (stash a dirty scene, restore by hand from File ▸ Restore Last
-Session). The Gradient Explorer v2's `gxAutosaveSettings` (`gmt.ge.autosave-*`) governs
-`engine/plugins/Session.ts` (restore at boot, flush on `pagehide`). They are not
-interchangeable: Session never goes near `getPreset` / `loadPreset`, whose undo wipe and
-favourites merge are wrong for it (ADR-0112, ADR-0121). Two things keep the scopes apart and
-are easy to undo: Session takes its store as a REQUIRED option (no default to fall back on),
-and the Files ▸ Autosave rows bind whatever store the app hands `registerCoreSettings({ autosave })`
-— an app that calls it bare gets app-gmt's rows, so an app with no autosave passes
-`{ autosave: null }` (fluid-toy and the old Explorer shell do, since 2026-09-13; fractal-toy
-registers no core settings at all). Session's node guard is
-`test:gx-session` [4]–[7]; its wiring guard is `smoke:ge-session` (see `sibling-apps.md`).
-
 ## Invariants
 
 - **Undo uses per-scope stacks.** Engine-core's unified `undoStack` is the history.
@@ -68,6 +51,52 @@ registers no core settings at all). Session's node guard is
   MUST carry top-of-file JSDoc covering purpose, integration seams and known
   pitfalls. Don't make callers rediscover the contract from three sibling files.
 
+## Menus without a TopBarHost
+
+A registered menu renders in THREE hosts, all through one row renderer
+(`MenuItemList` in `Menu.tsx`): the topbar popover (`MenuAnchor`),
+`<MobileMenuHost />`, and an app's own button via `useMenuItems(menuId)` +
+`MenuItemList` inside a surface it owns (added 2026-09-13 for the Gradient Explorer
+v2 shell, which has no TopBarHost — `gradient-explorer/v2/ShellMenu.tsx`). A host may
+prepend its own `MenuItem`s; it must not copy another plugin's items. Changing a row's
+markup changes all three. The topbar path is guarded by `smoke:help-menu`
+(fluid-toy); the host-button path only by `smoke:ge-phone` steps [2b] and [10], which
+also cover Feedback hosted outside a panel router (`useFeedbackOpen`).
+
+## Per-app help (2026-09-13)
+
+Four seams let an app have its own help without forking the Help plugin, all defaulting
+to exactly what GMT had: `setHelpTopicsLoader` in `data/help/registry.ts` (the topic map
+HelpBrowser, the context menu and installHelp's links read), installHelp's
+`shortcutsWhen`, `createWhatsNew` in `engine/plugins/WhatsNew.tsx` (hoisted from
+`app-gmt/HelpExtras.tsx`, which now passes GMT's values — its seen key MUST be per app,
+see the file's pitfall), and `gmtSupportConfig({ appName })` / `configureFeedback` on the
+engine-gmt side. That the defaults held is guarded by `smoke:help-menu` step 6 (fluid-toy:
+"Support GMT", "Welcome to GMT"); the Gradient Explorer's use of all four by `smoke:ge-phone`
+[11]. Also `installHelp({ hideHints })` — no Show Hints row and no `H` shortcut, for an app
+where `store.showHints` gates nothing (GX; guarded by `smoke:ge-phone` [2b]/[11]). Feedback
+attachments are app-declared (`configureFeedback({ attachments })`, one-of in the form;
+`engine-gmt/feedback/feedbackScreenshot.ts` puts a viewport JPEG inside the one JSON file the
+endpoint takes, lazily importing the `modern-screenshot` dependency) — guarded by
+`smoke:ge-phone` [3c]/[12] with the endpoint intercepted.
+
+## Two autosaves, and each app has its own settings
+
+Autosave preferences are PER APP (`engine/store/autosaveStore.ts`,
+`createAutosaveSettingsStore(keys)`, memoised by key; opt-in everywhere). app-gmt's
+`useAutosaveSettings` (`gmt-autosave-enabled` / `gmt-autosave-interval-sec`) governs its
+`<UnsavedWorkGuard/>` + SceneIO (stash a dirty scene, restore by hand from File ▸ Restore Last
+Session). The Gradient Explorer v2's `gxAutosaveSettings` (`gmt.ge.autosave-*`) governs
+`engine/plugins/Session.ts` (restore at boot, flush on `pagehide`). They are not
+interchangeable: Session never goes near `getPreset` / `loadPreset`, whose undo wipe and
+favourites merge are wrong for it (ADR-0112, ADR-0121). Two things keep the scopes apart and
+are easy to undo: Session takes its store as a REQUIRED option (no default to fall back on),
+and the Files ▸ Autosave rows bind whatever store the app hands `registerCoreSettings({ autosave })`
+— an app that calls it bare gets app-gmt's rows, so an app with no autosave passes
+`{ autosave: null }` (fluid-toy and the old Explorer shell do, since 2026-09-13; fractal-toy
+registers no core settings at all). Session's node guard is
+`test:gx-session` [4]–[7]; its wiring guard is `smoke:ge-session` (see `sibling-apps.md`).
+
 ## Scope app-specific behaviour properly
 
 No feature flag for "the GMT case". Scope it via a registered handler,
@@ -84,6 +113,7 @@ npm run smoke:camera
 npm run smoke:viewport
 npm run smoke:viewport-fixed
 npm run smoke:help-menu
+npm run smoke:ge-phone           # the host-button menu path only: steps [2b] + [10]
 npm run smoke:hud-hint
 npm run smoke:pause-controls
 npm run test:gx-session          # engine/plugins/Session.ts boot restore + autosave loop; per-app autosave stores + rows

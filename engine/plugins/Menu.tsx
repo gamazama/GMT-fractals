@@ -44,6 +44,24 @@
  * installMenu() is idempotent. It has no side effects beyond subscribing
  * to the topbar registry on first call, so apps can skip it and just
  * call menu.register() when they want their first menu.
+ *
+ * Hosting a menu WITHOUT a TopBarHost (added 2026-09-13, the Gradient
+ * Explorer v2 shell): `menu.register()` still slots an anchor into the
+ * topbar registry, but nothing renders it when the app mounts no
+ * TopBarHost. Such a host opens the menu from its own button instead:
+ *
+ *   const { def, items } = useMenuItems('help');   // live, `when`-filtered
+ *   <MenuItemList items={items} close={close} />   // the engine's own rows
+ *
+ * inside whatever positioned surface it owns (`AnchoredMenu` is the
+ * primitive). The rows are the SAME renderer the topbar popover and
+ * <MobileMenuHost /> use, so an item registered once — a toggle's live
+ * ON/OFF, a custom Support row — behaves identically in every host, and a
+ * host can prepend its own MenuItem objects to compose one menu from
+ * several. Toggle rows re-render on store changes only once installMenu()
+ * has run (it is what subscribes the registry to the store).
+ * Pitfall: do not copy another plugin's items into a host-local list — the
+ * copy stops following re-registration, `when` predicates and badges.
  */
 
 import React, { useSyncExternalStore, useCallback, useState, useRef, useEffect, useLayoutEffect } from 'react';
@@ -439,12 +457,7 @@ const MenuAnchor: React.FC<MenuAnchorProps> = ({ menuId }) => {
                     }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    {items.map((item) => (
-                        <MenuItemView key={item.id} item={item} close={close} />
-                    ))}
-                    {items.length === 0 && (
-                        <div className="px-3 py-2 text-[10px] text-fg-faint italic">(empty)</div>
-                    )}
+                    <MenuItemList items={items} close={close} />
                 </Layer>
             )}
         </div>
@@ -558,6 +571,36 @@ const MenuItemView: React.FC<MenuItemViewProps> = ({ item, close }) => {
     }
 };
 
+/**
+ * The engine's rows for a list of menu items, plus the "(empty)" line — the ONE render
+ * path shared by the topbar popover, <MobileMenuHost /> and any app that hosts a menu
+ * from its own button (see the module header). Renders a fragment, so a host's own
+ * container decides the chrome.
+ */
+export const MenuItemList: React.FC<{ items: MenuItem[]; close: () => void }> = ({ items, close }) => (
+    <>
+        {items.map((item) => (
+            <MenuItemView key={item.id} item={item} close={close} />
+        ))}
+        {items.length === 0 && (
+            <div className="px-3 py-2 text-[10px] text-fg-faint italic">(empty)</div>
+        )}
+    </>
+);
+
+/**
+ * A registered menu's definition and its visible items, live: re-renders on
+ * (un)registration, badge changes and — once installMenu() has run — any engine-store
+ * change, so toggle rows show the current ON/OFF. For hosts without a TopBarHost.
+ */
+export const useMenuItems = (menuId: string): { def: MenuDef | undefined; items: MenuItem[] } => {
+    useSyncExternalStore(subscribe, () => _notifyRev, () => _notifyRev);
+    return {
+        def: _menus.get(menuId),
+        items: menu.listItems(menuId).filter((i) => !i.when || i.when()),
+    };
+};
+
 // ── Mobile menu host ──────────────────────────────────────────────────
 //
 // On mobile, menus replace the right dock instead of overflowing as a
@@ -630,12 +673,7 @@ export const MobileMenuHost: React.FC<MobileMenuHostProps> = ({ width = 'w-72', 
                 </button>
             </header>
             <div className="flex-1 overflow-y-auto mobile-scroll p-1">
-                {items.map((item) => (
-                    <MenuItemView key={item.id} item={item} close={close} />
-                ))}
-                {items.length === 0 && (
-                    <div className="px-3 py-2 text-[10px] text-fg-faint italic">(empty)</div>
-                )}
+                <MenuItemList items={items} close={close} />
             </div>
         </aside>
     );

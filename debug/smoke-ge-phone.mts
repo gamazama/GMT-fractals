@@ -26,6 +26,86 @@
  *       it and the body's overflow comes back to what it was before the overlay opened.
  *   [9] desktop 1280×800: the tools are a column at the top-left, the hero keeps its image
  *       column (grid of two columns) — the phone branch is gated, not global.
+ *   [2b] the phone's ONE menu (added 2026-09-13, gradient-explorer/v2/ShellMenu.tsx): the top bar
+ *       does not overflow, carries exactly one menu button and no separate Settings gear, and
+ *       its controls take no more than the 100 px undo · redo · gear took before; the menu opens
+ *       inside the screen with Settings, Support and Send Feedback; Send Feedback closes the
+ *       menu and opens a full-width sheet with the form's Send button, no sideways scroll, no
+ *       page error and no error-boundary fallback; its × closes it.
+ *   [10] desktop Help (added 2026-09-13): one help button beside a still-separate gear; it
+ *       opens the registered Help menu with Support and Send Feedback (and not Settings); Send
+ *       Feedback opens the form in a floating window inside the viewport, no page error, no
+ *       error-boundary fallback; its × closes it.
+ *       [2b] also: the phone menu has NO Keyboard Shortcuts (a phone has no keyboard).
+ *   [11] GX's OWN help (added 2026-09-13, gradient-explorer/v2/help/): a fresh browser shows a
+ *       What's New dot on the help button; the menu says "Support Gradient Explorer" and not
+ *       "Support GMT"; Send Feedback offers the choice Nothing · Gradient · Screenshot, not GMT's
+ *       "Include current scene"; Getting Started shows "Welcome to Gradient Explorer" and not
+ *       "Welcome to GMT"; About expands with at least one attribution line read from the loaded
+ *       catalogue; What's New opens GX's changelog, the dot goes, `gx.whatsNew.seenVersion` is
+ *       written and GMT's `gmt.whatsNew.seenVersion` is not.
+ *       NO HINTS (owner, 2026-09-13): the help menu names no hints ([2b] phone, [11] desktop),
+ *       and pressing H leaves `store.showHints` where it was.
+ *   [3c] (phone) and [12] (desktop) the feedback ATTACHMENT, with the endpoint intercepted by
+ *       `page.route` so no report is ever sent: choosing Screenshot shows a thumbnail, and Send
+ *       carries `screenshot.json` whose `kind` is gx-screenshot, whose `image` is a
+ *       data:image/jpeg, whose size by the endpoint's own estimate (¾ of the base64) is under
+ *       200 000, with no gradient in it, `attachment_kind: screenshot` in the context, and a
+ *       luminance spread of at least 8 over a 64×64 downsample (a blank capture measures 0; the
+ *       real shell measured 68–75). [12] also: choosing Gradient carries `gradient.json`, kind
+ *       gx-gradient, at least two stops and no image. Measured 2026-09-13: phone 591×1280 q0.8
+ *       153 630 bytes; desktop busy wall 1280×800 q0.6 173 397 bytes; gradient 4 014 bytes.
+ *
+ * Falsified 2026-09-13 for the hint checks, [3c] and [12], each break reverted:
+ *   · `hideHints: true` dropped from installGxHelp → "[2b] the phone menu offers hints".
+ *   · the H shortcut registered regardless of `hideHints` (engine/plugins/Help.tsx) → "[11] H
+ *     still toggles showHints (true → false) in an app with no hints".
+ *   · the capture replaced by an empty canvas of the same size → "[3c] the screenshot is blank
+ *     — luminance spread 0.0".
+ *   · the screenshot file's `preview` dropped → "[3c] choosing Screenshot showed no thumbnail".
+ *   · the size loop starting at quality 1.0 with a 9 MB ceiling → "[3c] the screenshot payload
+ *     is 640215 bytes — the endpoint refuses 200 000 and over".
+ *   · a `config` added to the screenshot document → "[3c] the screenshot payload carries a
+ *     gradient too".
+ *   · an `image` added to the gradient document → "[12] the gradient payload carries an image too".
+ *   · the gradient capture returning null → "[12] the gradient went as "null", not gradient.json".
+ *
+ * Falsified 2026-09-13 for the [2b] Keyboard Shortcuts line and [11], each break reverted:
+ *   · `shortcutsWhen` dropped from installGxHelp → "[2b] the phone menu offers Keyboard Shortcuts".
+ *   · `gmtSupportConfig()` called without `appName` → "[11] no "Support Gradient Explorer"".
+ *   · `configureFeedback(...)` not called → first cut "[11] the feedback form does not offer to
+ *     attach the gradient"; since [3c] exists (same day, re-run) it reds earlier, at "[3c] the
+ *     feedback form offers no "screenshot" attachment".
+ *   · `setHelpTopicsLoader(...)` not called → "[11] Getting Started opened GMT's "Welcome to GMT"".
+ *   · AboutGx's loaded-group filter never matching → "[11] About opened with no attribution line".
+ *   · GX's seen key set to GMT's `gmt.whatsNew.seenVersion` → "[11] GX wrote GMT's
+ *     gmt.whatsNew.seenVersion" (this check runs BEFORE the "stored no gx key" one, which the
+ *     first cut had first and which reported this break under the wrong name).
+ *   · `menu.setBadge('help', …)` dropped → "[11] no What's New dot on the help button".
+ *   · the What's New item pointed at GMT's topic id → "[11] What's New did not open the
+ *     Gradient Explorer changelog".
+ *   · `markSeen` no longer clearing its cached unseen (engine/plugins/WhatsNew.tsx) →
+ *     "[11] the What's New dot stayed after opening the changelog".
+ *   Not separately falsified: the two "still offers / still says GMT" negatives — they can only
+ *   fail with their positive twin passing if both labels render at once.
+ *
+ * Falsified 2026-09-13 for [2b] and [10], each break reverted:
+ *   · the phone given the desktop controls (`phone ?` → `false ?` in GradientExplorerV2App) →
+ *     "[2b] the Settings gear is still its own button on a phone".
+ *   · the menu button widened to 32 px (`w-8` on ShellMenuButton) → "[2b] the top bar's
+ *     controls take 108 px — wider than the 100 px they took before the menu".
+ *   · the phone menu's own rows dropped (`phoneMenuItems().slice(1)`) → "[2b] the phone menu has
+ *     no "Settings"".
+ *   · `feedbackMenuItem()` dropped from installHelp's extraItems (v2/main.tsx) → "[2b] the phone
+ *     menu has no "Send Feedback"".
+ *   · `applyPanelManifest([feedbackPanelEntry()])` disabled (v2/main.tsx) — the silent case:
+ *     the item is there and does nothing → "[2b] Send Feedback opened no feedback sheet".
+ *   · `FeedbackWindow` throwing on open → "[2b] the error boundary replaced the app after Send
+ *     Feedback"; throwing on desktop only → the same message at [10]. A render crash is caught
+ *     by AppErrorBoundary and is NOT a pageerror, which is why both steps look for the fallback
+ *     BEFORE they look for the window (first cut checked the window first and reported the
+ *     crash as "opened no feedback sheet").
+ *   · the desktop help button removed → "[10] the desktop top bar has 0 help buttons".
  *
  * Falsified 2026-09-10, each reverted:
  *   · `useIsPhone` pinned to `false` (the seam off) → [1] red at once: "filters runs past the
@@ -86,6 +166,9 @@ const boxes = (page: Page) =>
     };
   })()`) as Promise<Record<string, Box> & { scrollW: number; innerW: number; innerH: number }>;
 
+/** The AppErrorBoundary fallback is up — a render crash is caught there and is NOT a pageerror. */
+const crashed = (page: Page) => page.evaluate(`document.body.innerText.indexOf('Something broke while drawing the app') >= 0`) as Promise<boolean>;
+
 const inside = (b: Box, w: number, h: number) => !!b && b.x >= 0 && b.y >= 0 && b.r <= w + 1 && b.b <= h + 1;
 const fmt = (b: Box) => (b ? `x${b.x} y${b.y} ${b.w}×${b.h} (right ${b.r}, bottom ${b.b})` : 'missing');
 
@@ -102,6 +185,74 @@ const touchDrag = async (ctx: BrowserContext, page: Page, from: [number, number]
   }
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await cdp.detach();
+};
+
+/** What a Send carried, with the feedback endpoint INTERCEPTED — no report leaves the machine. */
+type Sent = { filename: string | null; bytes: number; doc: Record<string, unknown> | null; context: Record<string, unknown> };
+
+/**
+ * Open the feedback form (the store's own open state), choose an attachment, write a message,
+ * press Send, and return the request body the endpoint would have received. For the
+ * screenshot, also the preview thumbnail's size and the pixel spread of the image sent.
+ */
+const sendFeedbackWith = async (page: Page, step: string, choice: 'gradient' | 'screenshot', tap: boolean) => {
+  let body: { gmf?: { filename: string; content: string }; app_context?: Record<string, unknown> } | null = null;
+  await page.unroute('**/functions/v1/submit-feedback').catch(() => {});
+  await page.route('**/functions/v1/submit-feedback', async (route) => {
+    body = JSON.parse(route.request().postData() || '{}');
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, id: 'smoke' }) });
+  });
+  await page.evaluate(`window.__engineStore.getState().togglePanel('Feedback', true)`);
+  await page.waitForSelector('[data-gx-feedback]', { timeout: 4000 }).catch(() => fail(`[${step}] the feedback form did not open`));
+  const btn = page.locator(`[data-gx-feedback] [data-feedback-attachment="${choice}"]`);
+  if (!(await btn.count())) fail(`[${step}] the feedback form offers no "${choice}" attachment`);
+  if (tap) await btn.tap(); else await btn.click();
+  let preview: { w: number; h: number } | null = null;
+  if (choice === 'screenshot') {
+    const shown = await page.waitForSelector('[data-gx-feedback] [data-feedback-preview]', { timeout: 30000 }).then(() => true).catch(() => false);
+    if (!shown) fail(`[${step}] choosing Screenshot showed no thumbnail`);
+    preview = (await page.evaluate(`(() => { var i = document.querySelector('[data-feedback-preview]'); return i && i.complete ? { w: i.getBoundingClientRect().width, h: i.getBoundingClientRect().height } : null; })()`)) as { w: number; h: number } | null;
+    if (!preview || preview.w < 20 || preview.h < 20) fail(`[${step}] the screenshot thumbnail is not showing (${JSON.stringify(preview)})`);
+  }
+  await page.fill('[data-gx-feedback] textarea', 'smoke:ge-phone — intercepted, never sent');
+  const send = page.locator('[data-gx-feedback] button', { hasText: /^Send$/ });
+  if (tap) await send.tap(); else await send.click();
+  for (let i = 0; i < 40 && !body; i++) await page.waitForTimeout(250);
+  if (!body) fail(`[${step}] Send made no request to the feedback endpoint`);
+  const b = body as unknown as { gmf?: { filename: string; content: string }; app_context?: Record<string, unknown> };
+  const text = b.gmf ? Buffer.from(b.gmf.content, 'base64').toString('utf8') : '';
+  let doc: Record<string, unknown> | null = null;
+  try { doc = text ? JSON.parse(text) : null; } catch { fail(`[${step}] the attachment is not JSON`); }
+  // the endpoint's own estimate of the decoded size: 3/4 of the base64 length
+  const bytes = b.gmf ? Math.floor(b.gmf.content.length * 0.75) : 0;
+  let spread = -1;
+  if (doc && typeof doc.image === 'string') {
+    spread = (await page.evaluate(`new Promise(function (res) {
+      var img = new Image(); img.onload = function () {
+        var c = document.createElement('canvas'); c.width = 64; c.height = 64; var x = c.getContext('2d');
+        x.drawImage(img, 0, 0, 64, 64); var d = x.getImageData(0, 0, 64, 64).data; var n = 0, m = 0, v = 0, i;
+        for (i = 0; i < d.length; i += 4) { m += (d[i] + d[i + 1] + d[i + 2]) / 3; n++; } m /= n;
+        for (i = 0; i < d.length; i += 4) { var l = (d[i] + d[i + 1] + d[i + 2]) / 3 - m; v += l * l; }
+        res(Math.sqrt(v / n));
+      }; img.onerror = function () { res(-2); }; img.src = ${JSON.stringify(doc.image)};
+    })`)) as number;
+  }
+  await page.evaluate(`window.__engineStore.getState().togglePanel('Feedback', false)`);
+  await page.waitForTimeout(200);
+  return { sent: { filename: b.gmf?.filename ?? null, bytes, doc, context: b.app_context ?? {} } as Sent, spread, raw: text };
+};
+
+/** A screenshot payload: a JPEG data URL, under the endpoint's 200 KB, not blank, no gradient. */
+const assertScreenshotPayload = (step: string, r: Awaited<ReturnType<typeof sendFeedbackWith>>) => {
+  const { sent, spread, raw } = r;
+  if (sent.filename !== 'screenshot.json') fail(`[${step}] the screenshot went as "${sent.filename}", not screenshot.json`);
+  if (sent.doc?.kind !== 'gx-screenshot') fail(`[${step}] the screenshot's kind is "${String(sent.doc?.kind)}"`);
+  if (typeof sent.doc?.image !== 'string' || !(sent.doc.image as string).startsWith('data:image/jpeg;base64,')) fail(`[${step}] the screenshot payload has no data:image/jpeg`);
+  if (sent.bytes >= 200_000) fail(`[${step}] the screenshot payload is ${sent.bytes} bytes — the endpoint refuses 200 000 and over`);
+  if (sent.doc && 'config' in sent.doc) fail(`[${step}] the screenshot payload carries a gradient too`);
+  if (sent.context.attachment_kind !== 'screenshot') fail(`[${step}] app_context.attachment_kind is "${String(sent.context.attachment_kind)}"`);
+  if (spread < 8) fail(`[${step}] the screenshot is blank — luminance spread ${spread.toFixed(1)} (a real shell measures tens)`);
+  return `${sent.bytes} bytes, ${sent.doc?.width}×${sent.doc?.height} q${sent.doc?.quality}, spread ${spread.toFixed(0)}${raw.includes('data:image/png') ? ' (!png)' : ''}`;
 };
 
 const boot = async (ctx: BrowserContext, errors: string[]) => {
@@ -141,6 +292,60 @@ async function main() {
   if (under !== 'self') fail(`[2] the Filters button is covered — under its centre is ${under}`);
   console.log('✓ [2] the Filters button is tappable');
 
+  // [2b] the phone's ONE menu (2026-09-13): in the gear's place, the bar no wider, and it holds
+  // Settings + the Help menu's Support and Send Feedback; Send Feedback opens a sheet.
+  const bar = (await page.evaluate(`(() => {
+    var h = document.querySelector('header'); if (!h) return null;
+    var undo = h.querySelector('[title^="Undo"]'), last = h.lastElementChild;
+    return {
+      sw: h.scrollWidth, cw: h.clientWidth,
+      cluster: undo && last ? Math.round(last.getBoundingClientRect().right - undo.getBoundingClientRect().left) : -1,
+      triggers: h.querySelectorAll('[data-gx-menu-trigger]').length,
+      gears: h.querySelectorAll('[aria-label="Settings"]').length,
+    };
+  })()`)) as { sw: number; cw: number; cluster: number; triggers: number; gears: number } | null;
+  if (!bar) fail('[2b] no header');
+  if (bar!.sw > bar!.cw) fail(`[2b] the top bar overflows: scrollWidth ${bar!.sw} > clientWidth ${bar!.cw}`);
+  if (bar!.triggers !== 1) fail(`[2b] the phone top bar has ${bar!.triggers} menu buttons, expected exactly one`);
+  if (bar!.gears !== 0) fail('[2b] the Settings gear is still its own button on a phone — it belongs in the menu');
+  // undo · redo · gear measured 100 px before the menu existed (2026-09-13); the menu takes the
+  // gear's 24 px box, so the cluster may not grow past that.
+  if (bar!.cluster > 100) fail(`[2b] the top bar's controls take ${bar!.cluster} px — wider than the 100 px they took before the menu`);
+  await page.locator('header [data-gx-menu-trigger]').tap();
+  await page.waitForSelector('[data-gx-menu]', { timeout: 4000 }).catch(() => fail('[2b] tapping the menu button opened no menu'));
+  const menuText = ((await page.textContent('[data-gx-menu]')) ?? '').replace(/\s+/g, ' ');
+  for (const want of ['Settings', 'Support', 'Send Feedback']) {
+    if (!menuText.includes(want)) fail(`[2b] the phone menu has no "${want}" (it reads: ${menuText})`);
+  }
+  // a phone has no keyboard (owner, 2026-09-13)
+  if (menuText.includes('Keyboard Shortcuts')) fail(`[2b] the phone menu offers Keyboard Shortcuts (it reads: ${menuText})`);
+  // GX has no hints (owner, 2026-09-13)
+  if (/hints/i.test(menuText)) fail(`[2b] the phone menu offers hints (it reads: ${menuText})`);
+  const menuBox = (await page.locator('[data-gx-menu]').boundingBox())!;
+  const mb: Box = { x: Math.round(menuBox.x), y: Math.round(menuBox.y), w: Math.round(menuBox.width), h: Math.round(menuBox.height), r: Math.round(menuBox.x + menuBox.width), b: Math.round(menuBox.y + menuBox.height) };
+  if (!inside(mb, W, H)) fail(`[2b] the phone menu runs out of the viewport: ${fmt(mb)}`);
+  await page.locator('[data-gx-menu] button', { hasText: 'Send Feedback' }).tap();
+  await page.waitForSelector('[data-gx-feedback], [role="alert"]', { timeout: 4000 }).catch(() => {});
+  if (await crashed(page)) fail('[2b] the error boundary replaced the app after Send Feedback');
+  if (!(await page.locator('[data-gx-feedback]').count())) fail('[2b] Send Feedback opened no feedback sheet');
+  await page.waitForTimeout(300);
+  const fb = (await page.evaluate(`(() => {
+    var el = document.querySelector('[data-gx-feedback]'); var b = el.getBoundingClientRect();
+    return { box: { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), r: Math.round(b.right), b: Math.round(b.bottom) },
+      sw: el.scrollWidth, cw: el.clientWidth, send: !!Array.from(el.querySelectorAll('button')).find(function (x) { return x.textContent.trim() === 'Send'; }),
+      fallback: document.body.innerText.indexOf('Something broke while drawing the app') >= 0, menuGone: !document.querySelector('[data-gx-menu]') };
+  })()`)) as { box: Box; sw: number; cw: number; send: boolean; fallback: boolean; menuGone: boolean };
+  if (fb.fallback) fail('[2b] the error boundary replaced the app after Send Feedback');
+  if (errors.length) fail(`[2b] page error after Send Feedback: ${errors[0]}`);
+  if (!fb.menuGone) fail('[2b] the menu stayed open over the feedback sheet');
+  if (!inside(fb.box, W, H) || fb.box!.w < W - 2) fail(`[2b] the feedback sheet is not a full-width sheet inside the screen: ${fmt(fb.box)}`);
+  if (fb.sw > fb.cw) fail(`[2b] the feedback sheet scrolls sideways: ${fb.sw} > ${fb.cw}`);
+  if (!fb.send) fail('[2b] the feedback sheet has no Send button — the form did not render');
+  await page.locator('[data-gx-feedback] [aria-label="Close feedback"]').tap();
+  await page.waitForTimeout(300);
+  if (await page.locator('[data-gx-feedback]').count()) fail('[2b] the feedback sheet did not close');
+  console.log(`✓ [2b] one menu (controls ${bar!.cluster} px, no overflow) with Settings · Support · Send Feedback; the feedback sheet ${fmt(fb.box)}`);
+
   // [3] tap a tile → a compact hero with its use cluster on screen
   const wall = (await page.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
   await page.touchscreen.tap(wall.x + 160, wall.y + 30);
@@ -171,6 +376,11 @@ async function main() {
   b = await boxes(page);
   if (Math.abs((b.hero?.h ?? 0) - tall) > 2) fail(`[3b] the button did not show the hero back at ${tall} (got ${b.hero?.h})`);
   console.log(`✓ [3b] the wall's fold button hides the ${Math.round(tall)} px hero and shows it again`);
+
+  // [3c] feedback screenshot on a phone: a tap on Screenshot shows the thumbnail, and Send
+  // carries a JPEG inside the one JSON attachment, under 200 KB, not blank, no gradient.
+  const phoneShot = await sendFeedbackWith(page, '3c', 'screenshot', true);
+  console.log(`✓ [3c] a phone screenshot: thumbnail shown; ${assertScreenshotPayload('3c', phoneShot)}`);
 
   // [4] each tray face opens inside the viewport
   for (const face of ['adjust', 'curves', 'mix']) {
@@ -287,6 +497,109 @@ async function main() {
   const cols = await dpage.evaluate(`(() => { var card = document.querySelector('[data-gx-hero] > div'); return card ? getComputedStyle(card).gridTemplateColumns.split(' ').length : 0; })()`);
   if (cols !== 2) fail(`[9] the desktop hero card has ${cols} grid columns, expected 2 (image column + panel)`);
   console.log('✓ [9] desktop keeps the tool column and the hero\'s image column');
+
+  // [10] desktop Help: its own button beside a still-separate gear, the registered Help menu with
+  // Support and Send Feedback, and Send Feedback opening the form in a floating window.
+  const dhdr = (await dpage.evaluate(`(() => { var h = document.querySelector('header'); return { help: h.querySelectorAll('[data-gx-menu-trigger="help"]').length, gear: h.querySelectorAll('[aria-label="Settings"]').length }; })()`)) as { help: number; gear: number };
+  if (dhdr.help !== 1) fail(`[10] the desktop top bar has ${dhdr.help} help buttons, expected one`);
+  if (dhdr.gear !== 1) fail('[10] the desktop Settings gear is gone — only the phone folds it into the menu');
+  await dpage.click('header [data-gx-menu-trigger="help"]');
+  await dpage.waitForSelector('[data-gx-menu="help"]', { timeout: 4000 }).catch(() => fail('[10] the help button opened no menu'));
+  const dmenu = ((await dpage.textContent('[data-gx-menu="help"]')) ?? '').replace(/\s+/g, ' ');
+  for (const want of ['Support', 'Send Feedback']) {
+    if (!dmenu.includes(want)) fail(`[10] the help menu has no "${want}" (it reads: ${dmenu})`);
+  }
+  if (dmenu.includes('Settings')) fail('[10] Settings is in the desktop help menu — it has its own gear there');
+  await dpage.locator('[data-gx-menu="help"] button', { hasText: 'Send Feedback' }).click();
+  await dpage.waitForSelector('[data-gx-feedback], [role="alert"]', { timeout: 4000 }).catch(() => {});
+  if (await crashed(dpage)) fail('[10] the error boundary replaced the app after Send Feedback');
+  if (!(await dpage.locator('[data-gx-feedback]').count())) fail('[10] Send Feedback opened no feedback window');
+  await dpage.waitForTimeout(300);
+  const dfb = (await dpage.evaluate(`(() => {
+    var el = document.querySelector('[data-gx-feedback]'); var b = el.getBoundingClientRect();
+    return { box: { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height), r: Math.round(b.right), b: Math.round(b.bottom) },
+      send: !!Array.from(el.querySelectorAll('button')).find(function (x) { return x.textContent.trim() === 'Send'; }),
+      fallback: document.body.innerText.indexOf('Something broke while drawing the app') >= 0 };
+  })()`)) as { box: Box; send: boolean; fallback: boolean };
+  if (dfb.fallback) fail('[10] the error boundary replaced the app after Send Feedback');
+  if (errors.length) fail(`[10] page error after Send Feedback: ${errors[0]}`);
+  if (!dfb.send) fail('[10] the feedback window has no Send button — the form did not render');
+  if (!inside(dfb.box, 1280, 800)) fail(`[10] the feedback window runs out of the viewport: ${fmt(dfb.box)}`);
+  await dpage.click('[data-gx-feedback] [aria-label="Close feedback"]');
+  await dpage.waitForTimeout(300);
+  if (await dpage.locator('[data-gx-feedback]').count()) fail('[10] the feedback window did not close');
+  console.log(`✓ [10] desktop: ? opens Help with Support + Send Feedback; the feedback window ${fmt(dfb.box)}`);
+
+  // [11] GX's OWN help (owner, 2026-09-13): its name on Support, its attachment on Feedback,
+  // its Getting Started (not GMT's), About with the catalogue's attribution, its What's New
+  // behind a dot that the page clears.
+  const bodyHas = (page: Page, text: string) => page.evaluate(`document.body.innerText.indexOf(${JSON.stringify(text)}) >= 0`) as Promise<boolean>;
+  const openHelpMenu = async () => {
+    if (!(await dpage.locator('[data-gx-menu="help"]').count())) await dpage.click('header [data-gx-menu-trigger="help"]');
+    await dpage.waitForSelector('[data-gx-menu="help"]', { timeout: 4000 }).catch(() => fail('[11] the help button opened no menu'));
+  };
+  const helpRow = (label: string) => dpage.locator('[data-gx-menu="help"] button', { hasText: label }).first();
+  const closeHelp = () => dpage.evaluate(`window.__engineStore.getState().closeHelp()`);
+  if (!(await dpage.locator('[data-gx-menu-badge="help"]').count())) fail("[11] no What's New dot on the help button for a browser that has never opened it");
+  await openHelpMenu();
+  const m11 = ((await dpage.textContent('[data-gx-menu="help"]')) ?? '').replace(/\s+/g, ' ');
+  if (!m11.includes('Support Gradient Explorer')) fail(`[11] no "Support Gradient Explorer" in the help menu (it reads: ${m11})`);
+  if (m11.includes('Support GMT')) fail('[11] the help menu still says "Support GMT"');
+  // GX has no hints: no Show Hints row, and H does not flip the invisible flag
+  if (/hints/i.test(m11)) fail(`[11] the help menu offers hints (it reads: ${m11})`);
+  await dpage.keyboard.press('Escape');
+  await dpage.evaluate(`document.activeElement && document.activeElement.blur && document.activeElement.blur()`);
+  const hintsBefore = await dpage.evaluate(`window.__engineStore.getState().showHints`);
+  await dpage.keyboard.press('KeyH');
+  await dpage.waitForTimeout(150);
+  const hintsAfter = await dpage.evaluate(`window.__engineStore.getState().showHints`);
+  if (hintsAfter !== hintsBefore) fail(`[11] H still toggles showHints (${hintsBefore} → ${hintsAfter}) in an app with no hints`);
+  await openHelpMenu();
+  // the feedback form offers GX's attachment, not GMT's scene
+  await helpRow('Send Feedback').click();
+  await dpage.waitForSelector('[data-gx-feedback]', { timeout: 4000 }).catch(() => fail('[11] Send Feedback opened no window'));
+  const fbText = ((await dpage.textContent('[data-gx-feedback]')) ?? '');
+  const choices = await dpage.locator('[data-gx-feedback] [data-feedback-attachment]').evaluateAll((els) => els.map((e) => e.getAttribute('data-feedback-attachment')).join(','));
+  if (choices !== 'none,gradient,screenshot') fail(`[11] the feedback form's attachment choice is "${choices}", expected none,gradient,screenshot`);
+  if (fbText.includes('Include current scene')) fail(`[11] the feedback form still offers GMT's "Include current scene"`);
+  await dpage.click('[data-gx-feedback] [aria-label="Close feedback"]');
+  // Getting Started is GX's
+  await openHelpMenu();
+  await helpRow('Getting Started').click();
+  const gsOk = await dpage.waitForFunction(`document.body.innerText.indexOf('Welcome to Gradient Explorer') >= 0`, null, { timeout: 8000 }).then(() => true).catch(() => false);
+  if (await bodyHas(dpage, 'Welcome to GMT')) fail(`[11] Getting Started opened GMT's "Welcome to GMT"`);
+  if (!gsOk) fail('[11] Getting Started did not open "Welcome to Gradient Explorer"');
+  await closeHelp();
+  // About: expands in the menu, with at least one attribution line read from the catalogue
+  await openHelpMenu();
+  await helpRow('About Gradient Explorer').click();
+  const attrib = await dpage.waitForSelector('[data-gx-menu="help"] [data-gx-about-attribution]', { timeout: 8000 }).then(() => true).catch(() => false);
+  if (!attrib) fail('[11] About opened with no attribution line (or did not open)');
+  const attribN = await dpage.locator('[data-gx-about-attribution]').count();
+  // What's New: opens GX's changelog and clears the dot
+  await helpRow("What's New").click();
+  const wnOk = await dpage.waitForFunction(`document.body.innerText.indexOf('the new Gradient Explorer') >= 0`, null, { timeout: 8000 }).then(() => true).catch(() => false);
+  if (!wnOk) fail("[11] What's New did not open the Gradient Explorer changelog");
+  await dpage.waitForTimeout(200);
+  if (await dpage.locator('[data-gx-menu-badge="help"]').count()) fail("[11] the What's New dot stayed after opening the changelog");
+  const seen = (await dpage.evaluate(`[localStorage.getItem('gx.whatsNew.seenVersion'), localStorage.getItem('gmt.whatsNew.seenVersion')]`)) as [string | null, string | null];
+  if (seen[1] !== null) fail(`[11] GX wrote GMT's gmt.whatsNew.seenVersion (${seen[1]}) — the two apps' dots would clear each other`);
+  if (!seen[0]) fail("[11] opening What's New stored no gx.whatsNew.seenVersion");
+  await closeHelp();
+  // [12] the two attachments are one-of: Gradient sends the gradient and no image, Screenshot
+  // sends the image and no gradient (desktop, a busy wall, a gradient on the hero).
+  const grad = await sendFeedbackWith(dpage, '12', 'gradient', false);
+  if (grad.sent.filename !== 'gradient.json') fail(`[12] the gradient went as "${grad.sent.filename}", not gradient.json`);
+  if (grad.sent.doc?.kind !== 'gx-gradient') fail(`[12] the gradient's kind is "${String(grad.sent.doc?.kind)}"`);
+  const stops = (grad.sent.doc?.config as { stops?: unknown[] } | undefined)?.stops;
+  if (!Array.isArray(stops) || stops.length < 2) fail(`[12] the gradient payload has no stops (${JSON.stringify(grad.sent.doc?.config)?.slice(0, 80)})`);
+  if (grad.raw.includes('data:image')) fail('[12] the gradient payload carries an image too');
+  if (grad.sent.context.attachment_kind !== 'gradient') fail(`[12] app_context.attachment_kind is "${String(grad.sent.context.attachment_kind)}"`);
+  const deskShot = await sendFeedbackWith(dpage, '12', 'screenshot', false);
+  const deskShotLine = assertScreenshotPayload('12', deskShot);
+  console.log(`✓ [12] Gradient sends ${stops!.length} stops and no image (${grad.sent.bytes} bytes); Screenshot sends ${deskShotLine}`);
+
+  console.log(`✓ [11] GX help: Support Gradient Explorer, Nothing · Gradient · Screenshot, GX Getting Started, About with ${attribN} attribution lines, What's New clears its dot (seen ${seen[0]}, GMT's key untouched)`);
   await dctx.close();
 
   await browser.close();

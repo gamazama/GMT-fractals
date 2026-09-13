@@ -20,8 +20,91 @@ export interface FeedbackInput {
     category: FeedbackCategory;
     message: string;
     contactEmail?: string;
+    /** Attach the app's declared attachment (see `configureFeedback`) — GMT's default is
+     *  the slim scene. The name predates the seam and is kept for its callers. */
     includeScene: boolean;
+    /** Which declared option, when the app declares several. Default: the first. */
+    attachmentId?: string;
+    /** A file the form already built (an option with `captureOnSelect`, so what the user
+     *  previewed is what is sent). Takes precedence over `includeScene` / `attachmentId`. */
+    preparedAttachment?: FeedbackFile | null;
 }
+
+// ── App-declared attachment + context ──────────────────────────────────
+//
+// The feedback endpoint (backend/supabase/functions/submit-feedback) takes exactly ONE
+// attachment — `gmf: { filename, content }`, base64, ≤ 200 KB decoded — and emails it
+// with content_type application/json whatever the filename says. So a report carries at
+// most one attachment, and it is text: binary content (a screenshot) rides INSIDE a JSON
+// file as a data URL, with a `kind` field saying what it is (see feedbackScreenshot.ts).
+//
+// An app may declare SEVERAL options; the form then offers a one-of choice (None + each
+// option) instead of the single checkbox, and still sends one file.
+
+/** The file an option produces. */
+export interface FeedbackFile {
+    filename: string;
+    /** Sent base64-encoded as the attachment's content. */
+    text: string;
+    stripped?: string[];
+    /** An image data URL the form shows as a thumbnail (what is being sent). */
+    preview?: string;
+    /** Extra `app_context` fields for this file, e.g. `{ attachment_kind: 'screenshot' }`. */
+    context?: Record<string, unknown>;
+}
+
+/** A thing an app offers to attach to a report. */
+export interface FeedbackAttachment {
+    /** Needed when an app declares more than one option. */
+    id?: string;
+    /** Checkbox / choice label, e.g. "Include current scene". */
+    label: string;
+    /** One line under the label saying what is sent. */
+    hint: string;
+    /** Build it. `null` = nothing to attach right now; the report goes without.
+     *  Throw a FeedbackError for a problem the user should see (too large, …). */
+    capture: () => FeedbackFile | null | Promise<FeedbackFile | null>;
+    /** Build it when the user CHOOSES this option (multi-option forms), not at send — for a
+     *  capture of the moment (a screenshot) and so its `preview` can be shown first. */
+    captureOnSelect?: boolean;
+}
+
+export interface FeedbackConfig {
+    /** The attachment the form offers; `null` hides the checkbox. Default: GMT's scene. */
+    attachment?: FeedbackAttachment | null;
+    /** Several options, one of which (or none) is sent. Wins over `attachment`. */
+    attachments?: FeedbackAttachment[];
+    /** Extra `app_context` fields (after the built-in version/url/formula), e.g. which app. */
+    context?: () => Record<string, unknown>;
+}
+
+/** GMT's attachment — what every app sent before the seam existed. */
+const GMT_SCENE_ATTACHMENT: FeedbackAttachment = {
+    label: 'Include current scene',
+    hint: "Attaches a .gmf file of your scene (sky + heavy data stripped) so I can reproduce what you're seeing.",
+    capture: () => {
+        const slim = captureSlimGmf();
+        return slim ? { filename: 'scene.gmf', text: slim.gmf, stripped: slim.stripped } : null;
+    },
+};
+
+let _config: { attachments: FeedbackAttachment[]; context?: FeedbackConfig['context'] } = { attachments: [GMT_SCENE_ATTACHMENT] };
+
+/**
+ * Declare this app's attachment / context. Call once at boot; apps that never call it
+ * (app-gmt, fluid-toy, the old Gradient Explorer) keep GMT's scene attachment and send
+ * exactly the payload they always did.
+ */
+export const configureFeedback = (config: FeedbackConfig): void => {
+    const single = config.attachment === undefined ? GMT_SCENE_ATTACHMENT : config.attachment;
+    _config = {
+        attachments: config.attachments ?? (single ? [single] : []),
+        context: config.context,
+    };
+};
+
+/** The options the form should offer — one (a checkbox), several (a choice), or none. */
+export const getFeedbackAttachments = (): FeedbackAttachment[] => _config.attachments;
 
 export interface FeedbackResult {
     ok: true;
@@ -108,6 +191,7 @@ interface AppContext {
     url: string;
     formula?: string;
     stripped_fields?: string[];
+    [extra: string]: unknown;
 }
 
 // Vite inlines __APP_VERSION__ at build via define{} in vite.config.ts. The
@@ -118,7 +202,7 @@ function appVersion(): string {
     return typeof v === 'string' ? v : 'unknown';
 }
 
-function collectAppContext(strippedFields?: string[]): AppContext {
+function collectAppContext(strippedFields?: string[], fileContext?: Record<string, unknown>): AppContext {
     const store = useEngineStore.getState() as any;
     const ctx: AppContext = {
         version: appVersion(),
@@ -126,6 +210,8 @@ function collectAppContext(strippedFields?: string[]): AppContext {
     };
     if (typeof store.formula === 'string') ctx.formula = store.formula;
     if (strippedFields && strippedFields.length > 0) ctx.stripped_fields = strippedFields;
+    if (_config.context) Object.assign(ctx, _config.context());
+    if (fileContext) Object.assign(ctx, fileContext);
     return ctx;
 }
 
@@ -135,21 +221,24 @@ export async function submitFeedback(input: FeedbackInput): Promise<FeedbackResu
 
     let gmfPayload: { filename: string; content: string } | null = null;
     let stripped: string[] | undefined;
-    if (input.includeScene) {
-        const slim = captureSlimGmf();
-        if (slim) {
-            stripped   = slim.stripped;
-            gmfPayload = { filename: 'scene.gmf', content: utf8ToBase64(slim.gmf) };
-        }
-        // If captureSlimGmf returned null (no preset), silently send without
+    let file: FeedbackFile | null = input.preparedAttachment ?? null;
+    if (!file && input.includeScene) {
+        const options = _config.attachments;
+        const option = input.attachmentId ? options.find((o) => o.id === input.attachmentId) : options[0];
+        if (option) file = await option.capture();
+        // If capture returned null (e.g. no preset), silently send without
         // the attachment — the user clearly has nothing meaningful to attach.
+    }
+    if (file) {
+        stripped   = file.stripped;
+        gmfPayload = { filename: file.filename, content: utf8ToBase64(file.text) };
     }
 
     const body: Record<string, unknown> = {
         category:      input.category,
         message,
         contact_email: input.contactEmail?.trim() || null,
-        app_context:   collectAppContext(stripped),
+        app_context:   collectAppContext(stripped, file?.context),
     };
     if (gmfPayload) body.gmf = gmfPayload;
 

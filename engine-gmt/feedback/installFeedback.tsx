@@ -31,6 +31,20 @@ export const openFeedback = () => {
 
 export const closeFeedback = () => useEngineStore.getState().togglePanel('Feedback', false);
 
+/**
+ * Whether the Feedback panel is open — for a host with NO panel router (the Gradient
+ * Explorer v2 shell), which spreads `feedbackPanelEntry()` into `applyPanelManifest` so the
+ * open state exists, then renders `<FeedbackPanel />` in a surface of its own while this is
+ * true. `openFeedback` / `closeFeedback` and the form's own Cancel / Close stay the one open
+ * state, so nothing about opening or closing it is host-specific.
+ *
+ * Pitfall: without the manifest entry `togglePanel` finds no 'Feedback' panel and does
+ * nothing, so the menu item goes dead silently — and the entry only reaches the store when
+ * `applyPanelManifest` runs AFTER the store exists (it defers otherwise; see PanelManifest).
+ */
+export const useFeedbackOpen = (): boolean =>
+    useEngineStore((s) => !!(s.panels as Record<string, { isOpen?: boolean } | undefined>)['Feedback']?.isOpen);
+
 // ── Menu icon + item ──────────────────────────────────────────────────
 
 /**

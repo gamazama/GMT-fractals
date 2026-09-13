@@ -2,7 +2,8 @@
  * GradientExplorerV2App — the streamlined shell (plans/ge-v2-design.md §6b, mock B).
  *
  * Top to bottom: the top bar — which is for the APP, not the gradient (L2), so since Phase B
- * it is brand · undo · redo · Back to GMT · settings (Variants left it in Phase D: snapshots
+ * it is brand · undo · redo · Back to GMT · help (?) · settings — on a phone brand · undo · redo
+ * · ONE menu holding the rest (2026-09-13, @see ./ShellMenu) (Variants left it in Phase D: snapshots
  * are a SET on the ground, captured from the rail), and ★ Keep /
  * Share / Export / Wallpaper live in the hero's use cluster · the Working hero (absent until
  * the first pick, and never unmounted after it — L8; it IS the stops editor, with the palette
@@ -73,6 +74,26 @@ import { membersOfMany, parseSetId } from '../../palette/core/groundSets';
 import { useGlobalSet } from '../../palette/store/globalSetStore';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
+import { ShellMenuButton, FeedbackWindow } from './ShellMenu';
+import { HelpOverlay } from '../../engine/plugins/Help';
+import type { MenuItem } from '../../engine/plugins/Menu';
+import { openSettings } from '../../store/settingsPanelState';
+import { GearIcon, HelpIcon, MenuIcon } from '../../components/Icons';
+
+/**
+ * The PHONE's one menu, above the Help menu's own items (owner, 2026-09-13: "mobile will have
+ * to get one general purpose menu"). What moves in is what would otherwise need a button of
+ * its own and is not used constantly: Settings, and Back to GMT when this page came from the
+ * studio (a text link ~100 px wide in a 390 px bar). Undo / Redo stay buttons — they are hit
+ * again and again, and a menu would turn each one into two taps.
+ */
+const phoneMenuItems = (): MenuItem[] => [
+  { id: 'gx-settings', type: 'button', label: 'Settings', icon: <GearIcon />, onSelect: openSettings },
+  ...(cameFromGmt
+    ? [{ id: 'gx-back-to-gmt', type: 'button', label: 'Back to GMT', title: 'Back to the GMT studio', onSelect: () => { window.location.href = 'app-gmt.html'; } } as MenuItem]
+    : []),
+  { id: 'gx-sep', type: 'separator' },
+];
 
 export type SourceId = 'browse' | 'build' | 'extract';
 /** Phase C: the source follows the TRAY — the Mix face is the `build` input, the Image face
@@ -485,12 +506,22 @@ export const GradientExplorerV2App: React.FC = () => {
         {/* Back to GMT is a plain link (owner, 2026-09-07): the working gradient is already
             in GMT's My Gradients panel through the shared `gmt.favients` Recent group, so
             the link carries nothing. Only shown when this page was opened from the studio. */}
-        {cameFromGmt && (
+        {cameFromGmt && !phone && (
           <a className={`${tb} flex items-center no-underline`} href="app-gmt.html" title="Back to the GMT studio">
             Back to GMT
           </a>
         )}
-        <SettingsButton />
+        {/* Help · Support · Feedback — installHelp's registered menu (v2/main.tsx), opened
+            from the shell's own buttons because there is no TopBarHost (@see ./ShellMenu).
+            PHONE: ONE menu in the gear's place, the gear folded into it (owner, 2026-09-13). */}
+        {phone ? (
+          <ShellMenuButton menuId="help" icon={<MenuIcon />} title="Menu" prepend={phoneMenuItems()} />
+        ) : (
+          <>
+            <ShellMenuButton menuId="help" icon={<HelpIcon />} />
+            <SettingsButton />
+          </>
+        )}
       </header>
 
       <div className="shrink-0">
@@ -643,6 +674,10 @@ export const GradientExplorerV2App: React.FC = () => {
           it augments the drags where you expect it, above all hero → shelf). */}
       <GradientDragAvatar />
       <SettingsHost />
+      {/* the Help browser (Getting Started / Keyboard Shortcuts, and the context menu's
+          Help) and the Support modal — the Help menu's surfaces outside the menu itself */}
+      <HelpOverlay />
+      <FeedbackWindow />
       <ToastHost />
       <FullscreenGradientOverlay />
     </div>

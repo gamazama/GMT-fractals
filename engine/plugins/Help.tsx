@@ -269,6 +269,14 @@ export interface InstallHelpOptions {
     shortcutsTopicId?: string;
     /** Override the topic ID opened by "Getting Started". */
     gettingStartedTopicId?: string | null;
+    /** If true, skip the "Show Hints" toggle AND the global `H` shortcut — for an app that
+     *  renders nothing gated on `store.showHints` (e.g. every panel passes `hints="tooltip"`),
+     *  where both would flip a state nobody sees. HUD hints (`help.registerHudHint`) stay
+     *  gated on the flag, so such an app should not register any. */
+    hideHints?: boolean;
+    /** Visibility predicate for the "Keyboard Shortcuts" item, re-evaluated each render —
+     *  e.g. hide it on a touch phone, which has no keyboard. Absent = always shown. */
+    shortcutsWhen?: () => boolean;
     /** Adds a Tutorials section with one button per registered lesson and
      *  a live completion checkmark from `tutorialCompleted` in the store.
      *  Lessons must be registered separately via `registerLessons(...)` from
@@ -353,11 +361,13 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
                 const s = useEngineStore.getState() as any;
                 s.openHelp?.(options.shortcutsTopicId ?? 'general.shortcuts');
             },
+            // spread only when given, so an app that passes nothing registers the same item
+            ...(options.shortcutsWhen ? { when: options.shortcutsWhen } : {}),
         });
         menu.registerItem('help', { id: 'sep-topics', type: 'separator' });
     }
 
-    menu.registerItem('help', {
+    if (!options.hideHints) menu.registerItem('help', {
         id: 'show-hints',
         type: 'toggle',
         label: 'Show Hints',
@@ -424,7 +434,7 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
         });
     }
 
-    shortcuts.register({
+    if (!options.hideHints) shortcuts.register({
         id: 'help.toggle-hints',
         key: 'H',
         description: 'Show / hide control hints',

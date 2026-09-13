@@ -1,10 +1,12 @@
 /**
  * GMT Gradient Explorer v2 — entry point (gradient-explorer-next.html).
  *
- * The streamlined shell (plans/ge-v2-design.md §6b): no Dock, no TopBarHost, no Menu /
- * Help / Hud / SceneIO / timeline. What is installed is exactly what the pieces the shell
+ * The streamlined shell (plans/ge-v2-design.md §6b): no Dock, no TopBarHost, no Hud /
+ * SceneIO / timeline. What is installed is exactly what the pieces the shell
  * mounts need — the engine UI registry for AutoFeaturePanel, keyboard shortcuts + undo,
- * and the core settings for the Settings panel. Toasts need only their host component.
+ * the core settings for the Settings panel, and (since 2026-09-13) the Menu + Help plugins,
+ * whose registered Help menu the shell opens from its own top-bar buttons rather than a
+ * TopBarHost. Toasts need only their host component.
  *
  * Built beside the old shell (gradient-explorer/main.tsx) until parity; the old entry
  * page is untouched.
@@ -23,6 +25,10 @@ import { installShortcuts } from '../../engine/plugins/Shortcuts';
 import { installUndo } from '../../engine/plugins/Undo';
 import { registerCoreSettings } from '../../store/coreSettings';
 import { registerPaletteSettings } from '../../palette/installPaletteSettings';
+import { installMenu } from '../../engine/plugins/Menu';
+import { applyPanelManifest } from '../../engine/PanelManifest';
+import { feedbackPanelEntry } from '../../engine-gmt/feedback';
+import { installGxHelp } from './help/installGxHelp';
 import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeStore';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
@@ -48,6 +54,17 @@ installUndo({ hideTopBarButtons: true });
 // Files ▸ Autosave governs THIS app's autosave (its own keys, ./session), never app-gmt's.
 registerCoreSettings({ autosave: { store: gxAutosaveSettings, ...GX_AUTOSAVE_TEXT } });
 registerPaletteSettings();
+
+// The Help menu — GX's own topics, About, What's New, Support and Send Feedback, all through
+// the engine's seams (./help/installGxHelp). No TopBarHost renders the menu here: the shell
+// opens it from its own top-bar buttons (./ShellMenu). installMenu() first — it is what re-renders
+// the rows (a `when`, a badge) when the store changes. The 'Feedback' panel entry gives openFeedback() an open
+// state to flip; there is no panel router, so ShellMenu's FeedbackWindow draws it. That apply
+// needs the LIVE store (it defers otherwise, see applyPanelManifest) — installMenu's store
+// subscription has materialised it by this line.
+installMenu();
+installGxHelp();
+applyPanelManifest([feedbackPanelEntry()]);
 
 /**
  * Light grey by default (owner, 2026-09-06), the switch kept: Settings ▸ Colour still offers
