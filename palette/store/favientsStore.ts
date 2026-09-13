@@ -36,6 +36,7 @@
  * the `storage` listener at the bottom of this file propagates it without a reload.
  */
 
+import { coerceOrigin, type CatalogOrigin } from '../core/catalogOrigin';
 import { create } from 'zustand';
 import type { GradientConfig } from '../../types';
 import { ensureStopIds } from '../core/editorConfig';
@@ -47,6 +48,15 @@ export interface Favient {
   name: string;
   /** Provenance label, e.g. "Generator", "Image · distill", "Picker · Turbo". */
   source?: string;
+  /**
+   * Catalogue provenance (2026-09-13, additive): which archive / package the gradient came
+   * from and the credit an export carries, stamped with the content key of the config it was
+   * picked as. Honoured ONLY while `config` still has that key (`catalogOrigin.unmodifiedOrigin`),
+   * so an in-place Recent refresh or any edit silently retires it. Favourites saved before this
+   * existed have none and export exactly as they did. Untrusted when loaded — read it through
+   * `coerceOrigin`, never directly.
+   */
+  origin?: CatalogOrigin;
   config: GradientConfig;
   createdAt: number;
   /** Group id this favourite belongs to. '' / undefined = the default (top) group,
@@ -200,6 +210,12 @@ export const favientSig = (c: GradientConfig): string =>
 
 let _seq = 0;
 const newId = (): string => `fav-${Date.now().toString(36)}-${_seq++}`;
+/** `{ origin }` for a well-formed origin, `{}` otherwise — so a favourite without one has no
+ *  `origin` key at all and stays byte-identical to what was written before 2026-09-13. */
+const withOrigin = (o: unknown): { origin?: CatalogOrigin } => {
+  const c = coerceOrigin(o);
+  return c ? { origin: c } : {};
+};
 let _groupSeq = 0;
 /** Generate a fresh group id (collision-safe across reloads via the timestamp). */
 export const newGroupId = (): string => `grp-${Date.now().toString(36)}-${_groupSeq++}`;
@@ -215,7 +231,7 @@ interface FavientsState {
    *  to localStorage but EXCLUDED from undo history. */
   lastGroupId: string;
 
-  add: (config: GradientConfig, name: string, source?: string) => string;
+  add: (config: GradientConfig, name: string, source?: string, origin?: CatalogOrigin) => string;
   /**
    * Auto-collect a gradient into the Recent group — the "My Gradients fills itself"
    * path. Call it when a gradient BECOMES the working gradient, or is exported /
@@ -232,7 +248,7 @@ interface FavientsState {
    *  source — the Image again, a Mix — is a new piece of work; owner, 2026-09-07: "bringing
    *  the image back as the source should also create a new item in the bin"). Without it the
    *  matching entry is promoted to the head, which is right for a re-pick. */
-  collectRecent: (config: GradientConfig, name: string, source?: string, opts?: { fresh?: boolean }) => string | null;
+  collectRecent: (config: GradientConfig, name: string, source?: string, opts?: { fresh?: boolean; origin?: CatalogOrigin }) => string | null;
   /**
    * Refresh a Recent entry IN PLACE — the v2 working session (owner, 2026-09-03: the bin
    * "should be updating the gradient whenever the user modifies it"). Returns false when
@@ -251,7 +267,7 @@ interface FavientsState {
    *  swatch), and set its group. The caller keeps (toIndex, group) contiguous. */
   moveFavient: (id: string, toIndex: number, group: string) => void;
   /** Insert a NEW favourite (from an external drag) at flat index `toIndex` in `group`. */
-  insertFavient: (config: GradientConfig, name: string, source: string | undefined, toIndex: number, group: string) => string;
+  insertFavient: (config: GradientConfig, name: string, source: string | undefined, toIndex: number, group: string, origin?: CatalogOrigin) => string;
   /**
    * File MANY gradients into a group in one write (GE v2 Phase D: "Keep these N" saves a
    * narrowed wall as a group). They join the START of the group's run in the given order,
@@ -260,7 +276,7 @@ interface FavientsState {
    * one. Content already in that group is skipped. Returns the ids filed. Undo is NOT
    * bracketed here — the caller wraps it, as every panel gesture does.
    */
-  insertMany: (items: { config: GradientConfig; name: string; source?: string }[], group: string, label?: string) => string[];
+  insertMany: (items: { config: GradientConfig; name: string; source?: string; origin?: CatalogOrigin }[], group: string, label?: string) => string[];
   /**
    * Replace the whole shelf array in ONE write, and set the landing group. The batched
    * primitive behind a multi-item move (`fileFavientsAt`): moving six favourites through
@@ -334,7 +350,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   selectedTargetId: loadTarget(),
   lastGroupId: loadLastGroup(),
 
-  add: (config, name, source) => {
+  add: (config, name, source, origin) => {
     // Land in the last-used group — but fall back to the default if it has since vanished
     // (group deleted / its only favourites removed) so we never resurrect an orphan group.
     const lg = get().lastGroupId;
@@ -346,7 +362,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     // user dragged a favourite into the Recent run (moveFavient writes lastGroupId), and
     // Recent is auto-managed churn — a save parked there would silently fall off the cap.
     const group = present && !isRecentGroup(lg) ? lg : DEFAULT_GROUP;
-    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group };
+    const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: Date.now(), group };
     const favients = [...get().favients];
     // Insert at the START of the target group's contiguous run so the new favourite
     // JOINS that group. Prepending to index 0 would split a mid-list group into two
@@ -390,8 +406,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const at = opts?.fresh ? -1 : recent.findIndex((f) => favientSig(f.config) === sig);
     const head: Favient =
       at >= 0
-        ? { ...recent[at], createdAt: Date.now() }
-        : { id: newId(), name, source, config, createdAt: Date.now(), group: RECENT_GROUP };
+        ? { ...recent[at], ...(recent[at].origin ? {} : withOrigin(opts?.origin)), createdAt: Date.now() }
+        : { id: newId(), name, source, ...withOrigin(opts?.origin), config, createdAt: Date.now(), group: RECENT_GROUP };
     const tail = at >= 0 ? recent.filter((_, i) => i !== at) : recent;
 
     // Newest first, oldest off the tail.
@@ -455,8 +471,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     set({ favients: arr, groupLabels, lastGroupId: group });
   },
 
-  insertFavient: (config, name, source, toIndex, group) => {
-    const fav: Favient = { id: newId(), name, source, config, createdAt: Date.now(), group };
+  insertFavient: (config, name, source, toIndex, group, origin) => {
+    const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: Date.now(), group };
     const arr = [...get().favients];
     arr.splice(clamp(toIndex, 0, arr.length), 0, fav);
     saveFavients(arr);
@@ -474,7 +490,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
       const sig = favientSig(it.config);
       if (have.has(sig)) continue;
       have.add(sig);
-      fresh.push({ id: newId(), name: it.name, source: it.source, config: it.config, createdAt: now, group });
+      fresh.push({ id: newId(), name: it.name, source: it.source, ...withOrigin(it.origin), config: it.config, createdAt: now, group });
     }
     if (!fresh.length) return [];
     const at = arr.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);

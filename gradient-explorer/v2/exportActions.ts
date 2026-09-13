@@ -11,6 +11,15 @@
  * Recents persist in localStorage (`gx.v2.recentExports`); an unknown format key (a
  * renamed registry entry) is dropped on load, never shown.
  *
+ * THE EXPORTED NAME is formed here and only here (owner, 2026-09-13): an UNMODIFIED catalogue
+ * gradient exports as "Name (cpt-city/gacruxa, CC BY 3.0)" — the name is the one field every
+ * format carries, so the credit goes in it, kept small — and anything modified exports exactly as
+ * before. `exportNameFor` (`palette/core/catalogOrigin.ts`) decides; `runExport` applies it to the
+ * working gradient (`opts.origin` + `opts.config`) and `runSetExport` / `runSetImage` to each
+ * member of a set by the favourite's own `origin`. The RAMP subject only: a swatch palette is
+ * sampled at positions the user laid out, so it is a derivative, not the gradient as published.
+ * The filename follows the name, so a .map or a PNG strip (no name field) still carries it.
+ *
  * `runSetExport` is the same registry pointed at a SET of gradients rather than one
  * (§8b item 4, the 2026-09-08 migration audit's M1): a collection format bundles the set
  * into one file, everything else becomes a .zip of one file per gradient, and the contact
@@ -38,6 +47,8 @@ import {
   setSwatches,
 } from '../../palette/core/favientsExport';
 import type { Favient } from '../../palette/store/favientsStore';
+import { exportNameFor, withExportName } from '../../palette/core/catalogOrigin';
+import type { GradientConfig } from '../../types';
 
 /**
  * One export. `subject` is WHICH FACE of the gradient it takes (§8b item 5): 'ramp' is the
@@ -51,7 +62,12 @@ export interface ExportRunOpts {
   budget?: number;
   pngW?: number;
   pngH?: number;
+  /** The working gradient's catalogue origin and the config it must still match for the name to
+   *  carry the credit (`useWorkingDerived().origin` / `.config`). Absent → the name as given. */
+  origin?: unknown;
+  config?: GradientConfig | null;
 }
+
 
 export type ExportAction =
   | { kind: 'copy' | 'download'; key: string; subject?: ExportSubject }
@@ -121,6 +137,18 @@ export const exportActionLabel = (a: ExportAction): string => {
 
 export const slugName = (name: string): string => name.trim().replace(/[^\w-]+/g, '_').slice(0, 48) || 'gradient';
 
+/**
+ * The file stem of a download whose name CARRIES A CREDIT: the credit is kept whole and the
+ * name gives way, because a 48-character slug would otherwise cut exactly the part that matters
+ * ("A_long_gradient_name_cpt-city_jjg_ccolo_ev"). Only for a credited name — every other
+ * download keeps `slugName`, so nothing that is not a catalogue gradient changes filename.
+ */
+export const creditedFileStem = (plainName: string, credited: string): string => {
+  const credit = credited.trim().slice(plainName.trim().length).replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!credit) return slugName(credited);
+  return `${slugName(plainName).slice(0, Math.max(12, 48 - credit.length - 1))}_${credit}`;
+};
+
 /** The bytes for one format and one subject. `palette` non-null selects the SWATCHES
  *  subject; the caller has already checked the format has a swatches builder. */
 const bytesFor = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number): string | Uint8Array =>
@@ -134,10 +162,10 @@ const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[
   );
 };
 
-const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number) => {
+const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number, stem = slugName(name)) => {
   const out = bytesFor(f, ramp, name, palette, budget);
   const blob = f.binary ? new Blob([out as unknown as BlobPart], { type: 'application/octet-stream' }) : new Blob([out as string], { type: 'text/plain' });
-  downloadBlob(blob, `${slugName(name)}${palette ? '-swatches' : ''}.${f.ext}`);
+  downloadBlob(blob, `${stem}${palette ? '-swatches' : ''}.${f.ext}`);
   // The .grd stop count is a RAMP fact (it is what the reduction left); a swatch export
   // writes exactly the colours it was handed, so it says how many rather than implying a
   // reduction that did not happen.
@@ -145,7 +173,7 @@ const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: 
   else showToast(f.key === 'grd' ? `Downloaded .grd (${grdStopCount(ramp, budget)} stops)` : `Downloaded .${f.ext}`);
 };
 
-const downloadPng = (ramp: RGB[], name: string, w = 1024, h = 64) => {
+const downloadPng = (ramp: RGB[], name: string, w = 1024, h = 64, stem = slugName(name)) => {
   const o = document.createElement('canvas');
   o.width = Math.max(1, Math.round(w));
   o.height = Math.max(1, Math.round(h));
@@ -167,7 +195,7 @@ const downloadPng = (ramp: RGB[], name: string, w = 1024, h = 64) => {
   x.drawImage(r, 0, 0, 256, 1, 0, 0, o.width, o.height);
   o.toBlob((bl) => {
     if (!bl) return;
-    downloadBlob(bl, `${slugName(name)}.png`);
+    downloadBlob(bl, `${stem}.png`);
     showToast('Downloaded .png strip');
   });
 };
@@ -210,6 +238,7 @@ export const runSetExport = (
     return;
   }
   const stem = slugName(setName);
+  if (subject !== 'swatches') favients = favients.map(withExportName);
   if (subject === 'swatches') {
     const items = setSwatches(favients, n);
     const one = buildSwatchCollectionFile(items, key);
@@ -247,7 +276,7 @@ export const runSetImage = async (favients: Favient[], setName: string, subject:
     return;
   }
   const blob =
-    subject === 'swatches' ? await buildSwatchSheet(setSwatches(favients, n), setName) : await buildContactSheet(favients, setName);
+    subject === 'swatches' ? await buildSwatchSheet(setSwatches(favients, n), setName) : await buildContactSheet(favients.map(withExportName), setName);
   if (!blob) {
     showToast('Could not draw the sheet');
     return;
@@ -285,21 +314,23 @@ export const gradientLossyCount = (ramp: RGB[], name: string, key: string, subje
  * swatch row as composed on the hero — the SWATCHES subject exports exactly that, with no
  * count of its own, because the row IS the control and it lives on the hero (L2).
  */
-export const runExport = (a: ExportAction, ramp: RGB[], name: string, palette: RGB[] = [], opts: ExportRunOpts = {}): void => {
+export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palette: RGB[] = [], opts: ExportRunOpts = {}): void => {
   const swatches = subjectOf(a) === 'swatches';
+  const name = swatches ? plainName : exportNameFor(plainName, opts.origin, opts.config);
+  const stem = name === plainName ? slugName(name) : creditedFileStem(plainName, name);
   if (swatches && !palette.length) {
     showToast('No swatches to export');
     return;
   }
   if (a.kind === 'png') {
     if (swatches) void downloadSwatchSheet(palette, name);
-    else downloadPng(ramp, name, opts.pngW, opts.pngH);
+    else downloadPng(ramp, name, opts.pngW, opts.pngH, stem);
   } else {
     const f = getExportFormat(a.key);
     if (!f) return;
     if (swatches && !f.swatches) return;
     if (a.kind === 'copy') copyFormat(f, ramp, name, swatches ? palette : null, opts.budget);
-    else downloadFormat(f, ramp, name, swatches ? palette : null, opts.budget);
+    else downloadFormat(f, ramp, name, swatches ? palette : null, opts.budget, stem);
   }
   noteRecentExport(a);
 };

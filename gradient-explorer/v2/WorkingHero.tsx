@@ -92,6 +92,7 @@
  * the fitter, so the fold hands the editor the same ids it already holds.
  */
 
+import { unmodifiedOrigin, type CatalogOrigin } from '../../palette/core/catalogOrigin';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
@@ -361,7 +362,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         shown.config,
         () => {
           useWorkingStore.getState().syncRecent();
-          st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working');
+          // The favourite keeps the catalogue origin when the gradient is still the one picked.
+          st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working', unmodifiedOrigin(derived.origin, shown.config) ?? undefined);
         },
         { slow: true },
       );
@@ -581,7 +583,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               <Act icon onClick={onShare} title="Share — copy a link that opens this gradient">
                 <Icon name="share" size={15} />
               </Act>
-              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} palette={paletteRgb} />
+              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} palette={paletteRgb} origin={derived.origin} config={derived.config} />
               {/* Wallpaper is the door OUT of the shell — "a whole other world inside the
                   app" (Phase W) — so alone among the use icons it carries a surface of its
                   own: a brushed sheen, quiet enough to sit in the header row and bright
@@ -870,7 +872,7 @@ const HalfHint: React.FC<{ className?: string; children: React.ReactNode }> = ({
  * flyout is `fixed`, measured off the button, because everything inside the card is
  * clipped by it.
  */
-const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string; palette: RGB[] }> = ({ open, onOpen, ramp, name, palette }) => {
+const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string; palette: RGB[]; origin: CatalogOrigin | null; config: GradientConfig | null }> = ({ open, onOpen, ramp, name, palette, origin, config }) => {
   const recents = useRecentExports();
   const [hover, setHover] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -905,7 +907,7 @@ const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; n
               type="button"
               className="text-left text-[13px] text-fg px-2 py-1 rounded-lg hover:bg-line/10 whitespace-nowrap"
               onClick={() => {
-                runExport(a, ramp, name, palette);
+                runExport(a, ramp, name, palette, { origin, config });
                 setHover(false);
               }}
             >

@@ -20,6 +20,9 @@ import { useSyncExternalStore } from 'react';
 import { createSingleSlot } from '../../store/createSingleSlot';
 import { loadGlobalSet } from '../core/globalSet';
 import type { Favient } from './favientsStore';
+import type { CatalogEntry } from '../core/presetCatalog';
+import type { LiveSource } from '../core/catalogLoader';
+import { favientsToEntries } from '../core/groundSets';
 
 export type GlobalSetStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -60,5 +63,55 @@ export const refreshGlobalSet = (): void => {
 };
 
 export const getGlobalSet = (): GlobalSetState => get();
+
+/** Resolve once the set has settled (ready or error), starting the load if nobody has. */
+const settled = (): Promise<GlobalSetState> => {
+  loadGlobalSetOnce();
+  const now = get();
+  if (now.status === 'ready' || now.status === 'error') return Promise.resolve(now);
+  return new Promise((resolve) => {
+    const off = slot.subscribe(() => {
+      const s = get();
+      if (s.status === 'ready' || s.status === 'error') { off(); resolve(s); }
+    });
+  });
+};
+
+/** The bundle / group id GX Global uses as a catalogue SOURCE (Filters ▸ Sources). */
+export const GX_GLOBAL_SOURCE_ID = 'gx-global';
+
+/**
+ * GX Global as a LIVE CATALOGUE SOURCE (2026-09-13): the same set the rail's GX global chip
+ * shows, offered in Filters ▸ Sources as a toggle that adds its gradients to the All wall.
+ * Registered by `registerPaletteUI`, so every host that shows the wall gets it.
+ *
+ * NOT SHOWN TWICE: on All the catalogue is the ground and the global set is not (the rail's chip
+ * is a DIFFERENT ground — `useGroundSource` — and All is exclusive), so the toggle is the only way
+ * these gradients reach the All wall. Ids keep `GLOBAL_ID_PREFIX`, so they cannot collide with a
+ * catalogue id. The name says what it is and carries no licence tag — the gradients are
+ * user-made — and `userMade` keeps an export of one uncredited.
+ */
+export const GX_GLOBAL_SOURCE: LiveSource = {
+  id: GX_GLOBAL_SOURCE_ID,
+  info: {
+    label: 'GX Global',
+    tag: 'shared by users',
+    license: 'Contributed anonymously by people using the Gradient Explorer; no licence is recorded',
+    attribution: 'Gradients shared by the Gradient Explorer community',
+    url: 'https://app.gmt-fractals.com/gradient-explorer-next.html',
+    userMade: true,
+  },
+  load: async (): Promise<CatalogEntry[]> => {
+    const s = await settled();
+    return favientsToEntries(s.entries).map((e) => ({ ...e, bundle: GX_GLOBAL_SOURCE_ID, theme: undefined }));
+  },
+  subscribe: (onChange) => {
+    let last = get().entries;
+    return slot.subscribe(() => {
+      const next = get().entries;
+      if (next !== last && get().status === 'ready') { last = next; onChange(); }
+    });
+  },
+};
 
 export const useGlobalSet = (): GlobalSetState => useSyncExternalStore(slot.subscribe, get, get);

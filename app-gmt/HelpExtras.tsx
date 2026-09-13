@@ -12,6 +12,8 @@ import { getProxy } from '../engine-gmt';
 import { type MenuItem } from '../engine/plugins/Menu';
 import { createWhatsNew } from '../engine/plugins/WhatsNew';
 import pkg from '../package.json';
+import { usePickerStore } from '../palette/store/pickerStore';
+import { getGroupCreditsUrl, PALETTE_GROUPS, PALETTE_LOCAL_BASE } from '../palette/core/catalogLoader';
 
 // Kept as a string literal (NOT imported from data/help/topics/changelog) so the
 // lazy ~8KB changelog content stays out of the main bundle. Matches how the Help
@@ -48,6 +50,28 @@ const openChangelog = whatsNew.open;
  * rather than duplicates.
  */
 export const whatsNewMenuItem = (opts: { id?: string; label?: string } = {}): MenuItem => whatsNew.menuItem(opts);
+
+/**
+ * One line: the palette catalogue's credits (2026-09-13). The core pack's credits ship in
+ * `public/palette/` whether or not the Palettes overlay was ever opened; any other pack the
+ * overlay has loaded adds its own file, resolved where that pack came from. Deliberately not a
+ * catalogue section — GX's About carries the per-source list.
+ */
+const CatalogueCreditsLine: React.FC = () => {
+    const loadedGroups = usePickerStore((s) => s.loadedGroups);
+    const extra = PALETTE_GROUPS.filter((g) => !g.core && loadedGroups.includes(g.id))
+        .map((g) => ({ id: g.id, url: getGroupCreditsUrl(g.id) }))
+        .filter((g): g is { id: string; url: string } => !!g.url);
+    return (
+        <div className="flex items-center gap-2 flex-wrap" data-gmt-about-credits="">
+            <span>Gradient catalogue:</span>
+            <a href={getGroupCreditsUrl('core') ?? `${PALETTE_LOCAL_BASE}credits.core.txt`} target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">credits &amp; licences</a>
+            {extra.map((g) => (
+                <a key={g.id} href={g.url} target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">{g.id}</a>
+            ))}
+        </div>
+    );
+};
 
 export const AboutGmtBody: React.FC = () => {
     const [gpuInfo, setGpuInfo] = useState<string>('');
@@ -102,6 +126,7 @@ export const AboutGmtBody: React.FC = () => {
                     <span>Source:</span>
                     <span className="text-accent-400 hover:underline">GitHub (GPL-3.0)</span>
                 </a>
+                <CatalogueCreditsLine />
             </div>
 
             <div className="pt-2 border-t border-line/10">

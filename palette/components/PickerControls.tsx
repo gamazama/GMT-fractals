@@ -8,7 +8,8 @@
 import React from 'react';
 import type { FeatureComponentProps } from '../../components/registry/ComponentRegistry';
 import { usePickerStore, MULTI_HUE_THEMES } from '../store/pickerStore';
-import { PALETTE_GROUPS, groupOfBundle } from '../core/catalogLoader';
+import { PALETTE_GROUPS, groupOfBundle, getLiveSources } from '../core/catalogLoader';
+import { categoryName } from '../core/catalogOrigin';
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const RAINBOW = 'linear-gradient(90deg,#f55,#fd5,#5e6,#5dd,#56f,#e5e)';
@@ -72,32 +73,51 @@ const orderedBundleIds = (counts: Record<string, number>): string[] => {
   const out: string[] = [];
   for (const g of PALETTE_GROUPS)
     for (const b of [...g.bundles].sort()) if (counts[b] != null && !seen.has(b)) { seen.add(b); out.push(b); }
-  // Any bundle not declared in a group (defensive) trails alphabetically.
-  for (const b of Object.keys(counts).sort()) if (!seen.has(b)) out.push(b);
+  // Any bundle not declared in a group (defensive) trails alphabetically. Live sources are NOT
+  // bundles of a pack: they have their own rows (below), so they are left out here.
+  const live = new Set(getLiveSources().map((s) => s.id));
+  for (const b of Object.keys(counts).sort()) if (!seen.has(b) && !live.has(b)) out.push(b);
   return out;
 };
 
 /**
- * Sources toggle list. Core (redistributable) bundles are always loaded → the checkbox
- * HIDES/SHOWS them (paletteFilters.hiddenBundles). Licensed bundles (softology, cptcity)
- * live in lazy groups → the checkbox LOADS/UNLOADS the group (fetch on demand), so a
- * public build needn't ship them at all.
+ * Sources toggle list. Core bundles are always loaded → the checkbox HIDES/SHOWS them
+ * (paletteFilters.hiddenBundles). The other bundles live in lazy groups → the checkbox
+ * LOADS/UNLOADS the group (fetch on demand), so a public build needn't ship them at all.
+ *
+ * Every toggle is a CATEGORY NAME carrying its provenance — "uiGradients (MIT)", "ElvenSword
+ * (free with credit)", "cpt-city · COLOURlovers (CC BY-NC-SA 3.0)" (owner, 2026-09-13;
+ * `categoryName`). Order: the packs, then the LIVE sources (GX Global — "GX Global (shared by
+ * users)"), then the OPTIONAL packs after a divider; the divider exists only while there is an
+ * optional pack under it. No host loads an optional pack at boot, so ticking it is the only way in.
+ *
+ * A live source loads on tick. When its load yields nothing (GX Global unreachable and no shipped
+ * copy), its box is DISABLED for the session with a count of "—" and a title saying why — kept
+ * visible rather than hidden, so the list does not change shape under the pointer and the reason
+ * is readable.
  */
 export const PickerBundleToggles: React.FC<FeatureComponentProps & { layout?: 'column' | 'row' }> = ({ featureId, sliceState, actions, layout = 'column' }) => {
   const bundles = usePickerStore((s) => s.bundles);
   const counts = usePickerStore((s) => s.bundleCounts);
   const loadedGroups = usePickerStore((s) => s.loadedGroups);
   const loadingGroups = usePickerStore((s) => s.loadingGroups);
+  const failedGroups = usePickerStore((s) => s.failedGroups);
   const setGroupLoaded = usePickerStore((s) => s.setGroupLoaded);
   const setter = (actions as Record<string, (u: Record<string, unknown>) => void>)[`set${cap(featureId)}`];
   const hidden: string[] = sliceState?.hiddenBundles ?? [];
-  const ids = orderedBundleIds(counts);
-  if (!ids.length) return null;
+  const packIds = orderedBundleIds(counts);
+  if (!packIds.length) return null;
+  const liveIds = getLiveSources().map((s) => s.id);
+  const optionalOf = (id: string) => !!PALETTE_GROUPS.find((g) => g.id === groupOfBundle(id))?.optional;
+  // packs · live sources · optional packs (after their divider)
+  const ids = [...packIds.filter((id) => !optionalOf(id)), ...liveIds, ...packIds.filter(optionalOf)];
+  const isLive = (id: string) => liveIds.includes(id);
 
   const groupCore = (id: string) => {
     const gid = groupOfBundle(id);
     return PALETTE_GROUPS.find((g) => g.id === gid)?.core ?? true;
   };
+  const firstOptional = ids.find(optionalOf);
   const toggleHide = (id: string) =>
     setter?.({ hiddenBundles: hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id] });
 
@@ -108,23 +128,37 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps & { layout?: 'c
       <div className={row ? 'contents' : 'flex flex-col gap-0.5'}>
         {ids.map((id) => {
           const info = bundles[id];
-          const isCore = groupCore(id);
+          const isCore = !isLive(id) && groupCore(id);
           const gid = groupOfBundle(id);
           const loading = gid != null && loadingGroups.includes(gid);
+          const failed = isLive(id) && failedGroups.includes(id);
           // Core: checkbox = visible. Licensed: checkbox = group loaded (fetch on demand).
           const on = isCore ? !hidden.includes(id) : gid != null && loadedGroups.includes(gid);
           const onToggle = () => {
             if (isCore) toggleHide(id);
             else if (gid) setGroupLoaded(gid, !on);
           };
+          const name = info ? categoryName(info.label, info.tag) : id;
           return (
-            <label key={id} className={`flex items-center gap-2 cursor-pointer ${row ? 'text-[13px] text-fg-muted' : 'text-[11px] text-fg-tertiary'}`}>
-              <input type="checkbox" checked={on} disabled={loading} onChange={onToggle} className="accent-accent-500" />
-              <span className={`flex-1 truncate ${!isCore && !on ? 'text-fg-dim' : ''}`} title={info?.attribution}>
-                {info?.label ?? id}
+            <React.Fragment key={id}>
+            {id === firstOptional && (
+              <span className={row ? 'basis-full text-[11px] text-fg-dim' : 'mt-1 text-[10px] uppercase tracking-wide text-fg-dim'} data-gx-optional-packs="">
+                Optional packs — their own licences, off unless ticked
+              </span>
+            )}
+            <label
+              className={`flex items-center gap-2 ${failed ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'} ${row ? 'text-[13px] text-fg-muted' : 'text-[11px] text-fg-tertiary'}`}
+              data-gx-source={id}
+              data-gx-source-name={name}
+              {...(failed ? { 'data-gx-source-failed': '' } : {})}
+              title={failed ? `${info?.label ?? id} could not be loaded this session` : undefined}
+            >
+              <input type="checkbox" checked={on} disabled={loading || failed} onChange={onToggle} className="accent-accent-500" />
+              <span className={`flex-1 truncate ${!isCore && !on ? 'text-fg-dim' : ''}`} title={failed ? undefined : info ? `${info.attribution} — ${info.license}` : undefined}>
+                {name}
                 {!isCore && <span className="ml-1 text-warn/70" title={`${info?.license ?? 'licensed source'} — loaded on demand`}>•</span>}
               </span>
-              <span className="text-fg-faint tabular-nums">{loading ? '…' : counts[id]}</span>
+              <span className="text-fg-faint tabular-nums">{failed ? '—' : loading ? '…' : counts[id]}</span>
               {info?.url && (
                 <a
                   href={info.url}
@@ -138,12 +172,13 @@ export const PickerBundleToggles: React.FC<FeatureComponentProps & { layout?: 'c
                 </a>
               )}
             </label>
+            </React.Fragment>
           );
         })}
       </div>
       {!row && (
         <div className="mt-1 text-[9px] text-fg-faint leading-tight">
-          <span className="text-warn/70">•</span> licensed source — loaded on demand, omittable from a public build
+          <span className="text-warn/70">•</span> loaded on demand — see About for each source's credits and licence
         </div>
       )}
     </div>

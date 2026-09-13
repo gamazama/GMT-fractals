@@ -75,6 +75,8 @@
  * @see plans/ge-v2-design.md §5.2
  */
 
+import { entryOrigin } from '../../palette/core/catalogOrigin';
+import { usePickerStore } from '../../palette/store/pickerStore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickerWall, type WallBand, type WallView, ZOOM_MAX } from '../../palette/components/PickerWall';
 import { usePickerModel } from '../../palette/components/usePickerModel';
@@ -321,7 +323,13 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
     paramEdit(() => {
       // the theme rides along as provenance, so the panel's search still finds a
       // gradient that matched by theme rather than by name
-      useFavientsStore.getState().insertMany(entries.map((e) => ({ config: entryToGradientConfig(e), name: e.name, source: e.theme ? `Browse · ${e.theme}` : 'Browse' })), g, label);
+      // …and the catalogue ORIGIN rides along too (2026-09-13), so an unedited member of the new
+      // group still exports with its credit.
+      const { bundles, collections } = usePickerStore.getState();
+      useFavientsStore.getState().insertMany(entries.map((e) => {
+        const config = entryToGradientConfig(e);
+        return { config, name: e.name, source: e.theme ? `Browse · ${e.theme}` : 'Browse', origin: entryOrigin(e, config, bundles, collections) ?? undefined };
+      }), g, label);
     });
     // The narrowing has become a place: the search that made it is done (measured: a
     // catalogue match by THEME is not a match by name once it is a favourite, so the new

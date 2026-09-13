@@ -25,6 +25,24 @@
  *       neither the window nor the rows below it move when it does
  *   [7b] the same gradient ALONE on the hero warns in the same words from the hero's own
  *       Export window, and a two-stop gradient never warns (2026-09-13)
+ *   [8] EXPORT NAMES CARRY THE SOURCE ONLY WHILE UNMODIFIED (owner, 2026-09-13): a wall pick
+ *       downloaded as .json is named "<name> (<credit>)" inside the file and in the filename;
+ *       one Adjust dial later it is named exactly as before; the dial back and the credit is
+ *       back (a key comparison, not a sticky flag). Then a SET of three — an unedited
+ *       catalogue favourite, the same one edited, a favourite with no origin (what every
+ *       favourite saved before today is) — downloads as a .zip in which only the first is
+ *       credited.
+ *   [9] GX GLOBAL REFUSES AN UNEDITED CATALOGUE GRADIENT (owner, 2026-09-13), with the
+ *       endpoint INTERCEPTED (`page.route`, nothing is sent): the share button on the GX
+ *       global ground toasts the refusal, asks nothing and POSTs nothing; after one Adjust
+ *       dial the same button asks (the confirm is dismissed, so still nothing is sent).
+ *
+ * [8] and [9] falsified 2026-09-13, each reverted: `runExport` passing `plainName` through
+ * (red "[8] the unedited pick exported as …, without its credit"); `exportNameFor` ignoring the
+ * key (red "[8] one Adjust dial later the export still carries the credit"); `withExportName`
+ * dropped from `runSetExport` (red "[8] the set's unedited catalogue member is not credited");
+ * `contributeToGlobal` without the catalogue check (red "[9] an unedited catalogue gradient
+ * reached the confirm").
  *
  * Falsified 2026-09-06 by re-introducing the old hide (`if (!shown) return null` →
  * `if (emptySource) return null`): step [3] goes red with "the hero unmounted on an empty
@@ -40,6 +58,8 @@
  *
  * Run: `npm run smoke:ge-hero`.
  */
+import fs from 'fs';
+import { unzipSync, strFromU8 } from 'fflate';
 import { chromium, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
@@ -468,13 +488,146 @@ async function main() {
   if (plain.text) fail(`[7b] a two-stop gradient's .ai row says "${plain.text}" on hover`);
   console.log('✓ [7b] one gradient warns the way a set does: the 60-stop one on hover, the two-stop one never');
 
+  // [8] EXPORT NAMES. Fresh shelf and ground; the wall's first tile is a catalogue entry from a
+  // v2 pack, so the pick stamps an origin (read back through the shell's own debug handle).
+  await page.evaluate(() => {
+    for (const k of ['gmt.favients', 'gmt.favients.groups', 'gmt.ge.groundSet', 'gx.v2.recentExports', 'gx.v2.exportSection']) localStorage.removeItem(k);
+  });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1800);
+  const wall8 = page.locator('[data-gx-keepselect] canvas').first();
+  await wall8.waitFor({ state: 'visible', timeout: 15000 });
+  const b8 = (await wall8.boundingBox())!;
+  await page.mouse.click(b8.x + 24, b8.y + 14);
+  await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[8] no hero after a wall click'));
+  await page.waitForTimeout(700);
+  const picked = await page.evaluate(() => {
+    const w = (window as any).__gxWorking?.();
+    return {
+      origin: w?.input?.origin ?? null,
+      config: w?.input?.config ?? null,
+      name: (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '',
+    };
+  });
+  if (!picked.origin?.credit) fail(`[8] a wall pick carries no catalogue origin (${JSON.stringify(picked.origin)}) — is the core pack format v2?`);
+  const credit: string = picked.origin.credit;
+  /** Download the working gradient as .json from the hero's Export window; returns the name inside and the filename. */
+  const exportJson = async (): Promise<{ inside: string; file: string }> => {
+    await page.mouse.move(5, 5);
+    await page.click('[data-gx-hero] [title^="Export"]');
+    await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[8] the Export window did not open'));
+    if (!(await page.$('[data-gx-export] [data-gx-download="json"]'))) {
+      const titles = await page.evaluate(() => Array.from(document.querySelectorAll('[data-gx-export] [data-gx-section]')).map((h) => (h as HTMLElement).dataset.gxSection ?? ''));
+      for (const t of titles) {
+        if (t === 'Settings') continue;
+        const open = await page.evaluate(() => (document.querySelector('[data-gx-export] [data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null);
+        if (open !== t) { await page.click(`[data-gx-export] [data-gx-section="${t}"]`); await page.waitForTimeout(150); }
+        if (await page.$('[data-gx-export] [data-gx-download="json"]')) break;
+      }
+    }
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('[data-gx-export] [data-gx-download="json"]')]);
+    const p = await dl.path();
+    const inside = JSON.parse(fs.readFileSync(p!, 'utf8')).name as string;
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    return { inside, file: dl.suggestedFilename() };
+  };
+  const creditSlug = credit.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
+  let ex = await exportJson();
+  if (ex.inside !== `${picked.name} (${credit})`) fail(`[8] the unedited pick exported as "${ex.inside}", without its credit (wanted "${picked.name} (${credit})")`);
+  if (!ex.file.includes(creditSlug)) fail(`[8] the filename "${ex.file}" lost the credit ("${creditSlug}")`);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ reverse: true }));
+  await page.waitForTimeout(600);
+  ex = await exportJson();
+  if (ex.inside !== picked.name) fail(`[8] one Adjust dial later the export still carries the credit ("${ex.inside}")`);
+  if (ex.file.includes(creditSlug)) fail(`[8] one Adjust dial later the filename still carries the credit ("${ex.file}")`);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ reverse: false }));
+  await page.waitForTimeout(600);
+  ex = await exportJson();
+  if (ex.inside !== `${picked.name} (${credit})`) fail(`[8] with the dial back the gradient is unmodified again, but exported as "${ex.inside}"`);
+
+  // …and a SET: three favourites, only the unedited catalogue one credited.
+  await page.evaluate(({ config, origin }) => {
+    const edited = JSON.parse(JSON.stringify(config));
+    edited.stops[0].color = edited.stops[0].color.toUpperCase() === '#000000' ? '#010101' : '#000000';
+    const other = { stops: [{ id: 'o0', position: 0, color: '#203040' }, { id: 'o1', position: 1, color: '#E0C080' }], colorSpace: 'srgb', blendSpace: 'oklab' };
+    const t = Date.now();
+    localStorage.setItem('gmt.favients', JSON.stringify([
+      { id: 'c-kept', name: 'Kept', config, origin, createdAt: t, group: 'credited' },
+      { id: 'c-edit', name: 'Edited', config: edited, origin, createdAt: t - 1, group: 'credited' },
+      { id: 'c-old', name: 'Old', config: other, source: 'Picker', createdAt: t - 2, group: 'credited' },
+    ]));
+    localStorage.setItem('gmt.favients.groups', JSON.stringify({ credited: 'Credited' }));
+    localStorage.setItem('gmt.ge.groundSet', JSON.stringify(['group:credited']));
+    localStorage.removeItem('gx.v2.exportSection');
+  }, { config: picked.config, origin: picked.origin });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1800);
+  const ground8 = await page.$('[data-gx-export-ground]');
+  if (!ground8) fail('[8] the rail has no ground-export icon');
+  await ground8!.click();
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[8] the ground Export window did not open'));
+  for (const t of await page.evaluate(() => Array.from(document.querySelectorAll('[data-gx-export] [data-gx-section]')).map((h) => (h as HTMLElement).dataset.gxSection ?? ''))) {
+    if (await page.$('[data-gx-export] [data-gx-download="json"]')) break;
+    if (t === 'Settings') continue;
+    const open = await page.evaluate(() => (document.querySelector('[data-gx-export] [data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null);
+    if (open !== t) { await page.click(`[data-gx-export] [data-gx-section="${t}"]`); await page.waitForTimeout(150); }
+  }
+  const [zipDl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('[data-gx-export] [data-gx-download="json"]')]);
+  const files = unzipSync(new Uint8Array(fs.readFileSync((await zipDl.path())!)));
+  const names = Object.values(files).map((u) => JSON.parse(strFromU8(u)).name as string).sort();
+  const want = ['Edited', `Kept (${credit})`, 'Old'].sort();
+  if (JSON.stringify(names) !== JSON.stringify(want)) {
+    if (!names.includes(`Kept (${credit})`)) fail(`[8] the set's unedited catalogue member is not credited (${names.join(' | ')})`);
+    fail(`[8] the set exported as ${names.join(' | ')} — wanted ${want.join(' | ')}`);
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  console.log(`✓ [8] "${picked.name} (${credit})" while unmodified, plain after one dial, credited again with it back; a set credits only its unedited catalogue member`);
+
+  // [9] GX GLOBAL. Intercept the endpoint: GET answers an empty set, a POST is recorded and refused.
+  const posts: string[] = [];
+  const dialogs: string[] = [];
+  await page.route('**/functions/v1/gx-gradients', async (route) => {
+    if (route.request().method() === 'POST') {
+      posts.push(route.request().postData() ?? '');
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"intercepted by smoke"}' });
+    } else await route.fulfill({ status: 200, contentType: 'application/json', body: '{"version":1,"items":[]}' });
+  });
+  page.on('dialog', (d) => { dialogs.push(d.message()); void d.dismiss(); });
+  await page.evaluate(() => { localStorage.setItem('gmt.ge.groundSet', JSON.stringify(['all'])); });
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(1800);
+  const wall9 = page.locator('[data-gx-keepselect] canvas').first();
+  await wall9.waitFor({ state: 'visible', timeout: 15000 });
+  const b9 = (await wall9.boundingBox())!;
+  await page.mouse.click(b9.x + 24, b9.y + 14);
+  await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[9] no hero after a wall click'));
+  await page.waitForTimeout(600);
+  await page.click('[data-gx-set="gx-global"]');
+  await page.waitForSelector('[data-gx-share-global]', { timeout: 5000 }).catch(() => fail('[9] the GX global ground has no share button'));
+  const toasts = () => page.evaluate(() => Array.from(document.querySelectorAll('button[title="Dismiss"]')).map((b) => b.textContent ?? '').join(' | '));
+  await page.click('[data-gx-share-global]');
+  await page.waitForTimeout(1200);
+  if (dialogs.length) fail(`[9] an unedited catalogue gradient reached the confirm ("${dialogs[0].slice(0, 40)}…")`);
+  if (posts.length) fail('[9] an unedited catalogue gradient was POSTed to GX global');
+  if (!/straight from the catalogue/i.test(await toasts())) fail(`[9] no refusal toast (toasts: ${(await toasts()) || 'none'})`);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ reverse: true }));
+  await page.waitForTimeout(600);
+  await page.click('[data-gx-share-global]');
+  await page.waitForTimeout(1200);
+  if (dialogs.length !== 1) fail(`[9] an EDITED gradient did not reach the confirm (${dialogs.length} dialogs) — the check refuses everything`);
+  if (posts.length) fail('[9] a dismissed confirm still POSTed');
+  await page.unroute('**/functions/v1/gx-gradients');
+  console.log('✓ [9] GX global refuses the unedited pick with a toast and no request; the same gradient edited is offered');
+
   await browser.close();
   if (errors.length) {
     errors.forEach((e) => console.log(e));
     console.log('\nFAIL — page errors');
     process.exit(1);
   }
-  console.log('\nPASS — the hero never unmounts (L8); one export window, two subjects, one reserved note line');
+  console.log('\nPASS — the hero never unmounts (L8); one export window, two subjects, one reserved note line; credits ride unmodified exports; GX global refuses the catalogue');
 }
 
 main().catch((e) => {

@@ -632,7 +632,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ layout = 'panel', 
     }
     const existing = favients.find((f) => favientSig(f.config) === favientSig(p.config));
     if (existing) place(existing.id, flat, group);
-    else insertFavient(p.config, favientDropName(p), p.source, flat, group);
+    else insertFavient(p.config, favientDropName(p), p.source, flat, group, p.origin);
   };
 
   // Apply a drop described by `t`, given the drag payload. The mutation is bracketed

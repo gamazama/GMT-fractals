@@ -66,7 +66,7 @@ export const fileFavientInto = (group: string, p: FavientDragPayload): void => {
     return;
   }
   const at = st.favients.findIndex((f) => groupOf(f) === group);
-  st.insertFavient(p.config, favientDropName(p), p.source, at < 0 ? st.favients.length : at, group);
+  st.insertFavient(p.config, favientDropName(p), p.source, at < 0 ? st.favients.length : at, group, p.origin);
 };
 
 /**
@@ -121,5 +121,5 @@ export const fileFavientAt = (group: string, p: FavientDragPayload, beforeId: st
         : rest.length;
   const index = at < 0 ? (members.length ? members[members.length - 1].i + 1 : rest.length) : at;
   if (existing) st.moveFavient(existing.id, index, group);
-  else st.insertFavient(p.config, favientDropName(p), p.source, index, group);
+  else st.insertFavient(p.config, favientDropName(p), p.source, index, group, p.origin);
 };

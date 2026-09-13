@@ -48,6 +48,8 @@ import { configToName } from './core/facetName';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import { PRESETS_GROUP } from './store/favientsStore';
 import type { GradientConfig } from '../types';
+import { registerLiveSource } from './core/catalogLoader';
+import { GX_GLOBAL_SOURCE } from './store/globalSetStore';
 
 export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}): void => {
   // standaloneStopsMode — register the standalone "Stops" MODE tab (PaletteEditorFeature).
@@ -64,6 +66,9 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   // Picker dock tab: theme chips + source (bundle) toggles (read pickerStore).
   componentRegistry.register('palette-theme-chips', PickerThemeChips);
   componentRegistry.register('palette-bundle-toggles', PickerBundleToggles);
+  // GX Global as a catalogue SOURCE beside the packs (Filters ▸ Sources). Nothing loads until
+  // the toggle is ticked; the rail's GX global chip is unaffected.
+  registerLiveSource(GX_GLOBAL_SOURCE);
   // Generator dock tab: the dials are native DDFS params; this is the bottom
   // actions + export block (uses the shared generatorStore, not the slice).
   componentRegistry.register('palette-generator-extras', GeneratorExtrasPanel);

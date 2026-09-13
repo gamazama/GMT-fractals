@@ -70,20 +70,29 @@ export interface PickerRow {
 
 /**
  * Per-entry lowercased search haystack = name + theme + bundle LABEL (not the synthetic
- * `preset-N` id, not the bundle id). `bundleLabel` resolves a bundle id to its display
- * label; a host without a manifest can pass `() => undefined`.
+ * `preset-N` id, not the bundle id) + the COLLECTION's category name when there is one. `bundleLabel`
+ * resolves a bundle id to its display label; a host without a manifest can pass `() => undefined`.
+ * Hosts pass the category names (`palette/core/catalogOrigin.ts` `categoryName`), so "gacruxa" or
+ * "CC BY" finds what the category names say.
  */
 export const buildSearchIndex = (
   catalog: CatalogEntry[],
   bundleLabel: (bundleId: string) => string | undefined,
+  collectionLabel: (key: string) => string | undefined = () => undefined,
 ): Map<string, string> => {
   const m = new Map<string, string>();
   for (const e of catalog) {
     const label = e.bundle ? bundleLabel(e.bundle) : undefined;
-    m.set(e.id, `${e.name} ${e.theme ?? ''} ${label ?? ''}`.toLowerCase());
+    const col = e.bundle && e.src ? collectionLabel(collectionKeyOf(e)) : undefined;
+    m.set(e.id, `${e.name} ${e.theme ?? ''} ${label ?? ''}${col ? ` ${col}` : ''}`.toLowerCase());
   }
   return m;
 };
+
+/** The collection key an entry belongs to: `<bundle>:<src>`, or the bare bundle for an entry
+ *  from a v1 pack (no `src`). The same key `getCatalogCollections()` uses. */
+export const collectionKeyOf = (e: Pick<CatalogEntry, 'bundle' | 'src'>): string =>
+  e.src ? `${e.bundle ?? ''}:${e.src}` : e.bundle ?? '—';
 
 // --- filtering -------------------------------------------------------------------
 
@@ -203,7 +212,8 @@ export const FACET_OF: Record<string, (e: CatalogEntry) => number> = {
 export const ROW_BUCKETS = 10;
 
 export interface ArrangeAxes {
-  /** 'none' | 'theme' (Category) | 'bundle' (Source). */
+  /** 'none' | 'theme' (Category) | 'bundle' (Source) | 'collection' (Collection — the archive /
+   *  package / family inside a source, 2026-09-13). */
   groupAxis: string;
   /** A FACET_OF key, or 'none' for one band per group. */
   rowsAxis: string;
@@ -216,12 +226,16 @@ export const DEFAULT_AXES: ArrangeAxes = { groupAxis: 'theme', rowsAxis: 'lightn
 
 /**
  * Partition into group bands, bucket each into facet sub-rows, sort each sub-row.
- * `bundleLabel` names a source band; category bands use the theme string itself.
+ * `bundleLabel` names a source band and `collectionLabel` a collection band (hosts pass the
+ * category names, so a band reads "cpt-city · gacruxa (CC BY 3.0)" — provenance lives in the
+ * category names, owner 2026-09-13); category bands use the theme string itself. A collection
+ * band for an entry from a v1 pack (no `src`) falls back to its source's name.
  */
 export const arrangeRows = (
   list: CatalogEntry[],
   axes: ArrangeAxes,
   bundleLabel: (bundleId: string) => string | undefined = () => undefined,
+  collectionLabel: (key: string) => string | undefined = () => undefined,
 ): PickerRow[] => {
   const { groupAxis, rowsAxis, sortAxis, reverse } = axes;
   const cmp = (a: CatalogEntry, b: CatalogEntry) => {
@@ -262,14 +276,22 @@ export const arrangeRows = (
     });
   };
 
-  if (groupAxis === 'theme' || groupAxis === 'bundle') {
+  if (groupAxis === 'theme' || groupAxis === 'bundle' || groupAxis === 'collection') {
     const map = new Map<string, CatalogEntry[]>();
     for (const e of list) {
-      const k = (groupAxis === 'theme' ? e.theme : e.bundle) ?? '—';
+      const k = (groupAxis === 'theme' ? e.theme : groupAxis === 'bundle' ? e.bundle : collectionKeyOf(e)) ?? '—';
       (map.get(k) ?? map.set(k, []).get(k)!).push(e);
     }
     const order = [...map.keys()].sort((a, b) => map.get(b)!.length - map.get(a)!.length);
-    return order.flatMap((k) => buildBands(map.get(k)!, groupAxis === 'bundle' ? (bundleLabel(k) ?? k) : k, k));
+    const labelOf = (k: string): string => {
+      if (groupAxis === 'bundle') return bundleLabel(k) ?? k;
+      if (groupAxis === 'collection') {
+        const first = map.get(k)![0];
+        return collectionLabel(k) ?? (first.bundle ? bundleLabel(first.bundle) : undefined) ?? k;
+      }
+      return k;
+    };
+    return order.flatMap((k) => buildBands(map.get(k)!, labelOf(k), k));
   }
   return buildBands(list, '', 'all');
 };
@@ -279,7 +301,7 @@ export const arrangeSentence = (axes: ArrangeAxes): string => {
   // No grouping says NOTHING (owner, 2026-09-09) — "ungrouped" named the absence of a thing
   // the reader had not been told about, in the one sentence meant to describe the wall.
   const group =
-    axes.groupAxis === 'theme' ? 'by category' : axes.groupAxis === 'bundle' ? 'by source' : '';
+    axes.groupAxis === 'theme' ? 'by category' : axes.groupAxis === 'bundle' ? 'by source' : axes.groupAxis === 'collection' ? 'by collection' : '';
   const parts = group ? [group] : [];
   if (FACET_OF[axes.rowsAxis]) parts.push(`rows by ${axes.rowsAxis}`);
   parts.push(`sorted by ${axes.sortAxis}${axes.reverse ? ', reversed' : ''}`);

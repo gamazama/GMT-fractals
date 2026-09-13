@@ -78,6 +78,34 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
   `PalettePickerOverlay` — and `gradient-explorer/v2/BrowseStage.tsx` are chrome over that
   hook and nothing else. A host that calls `catalog.filter(...)` itself is a fork; extend
   the model. Guard: `npx tsx debug/test-palette-pickermodel.mts`.
+- **The catalogue's LICENSING is data with five seams, and none of them is a label you
+  can edit in place** (owner decisions 2026-09-13; `plans/palette-catalogue-licensing.md`,
+  "What was done"). (1) WHICH PACK a gradient lands in: `palette/core/catalogPacks.ts`
+  (`PACK_PUBLISH` — the ONE publish switch — and `PACK_BUNDLES`), read by both the bake and
+  `catalogLoader.PALETTE_GROUPS` (derived by `paletteGroupsFrom`, never hand-listed). A pack at
+  `false` is never registered, never written under `public/` (the bake deletes its stale files)
+  and never in `debug/palette-upload-manifest.json`; `optional` is uploaded but no host loads
+  it at boot. The classifiers and licence tags are `debug/palette-packs.mts`. Labels and tags per source live in palette-lab's
+  `bundles/manifest.json`; re-bake rather than hand-editing a `.json.gz`. (2) PROVENANCE IS
+  SHOWN ONLY IN CATEGORY NAMES — `catalogOrigin.categoryName` for the Sources toggles, the
+  source / collection bands (`arrangeRows`' `collectionLabel`, Group by = Collection, appended
+  at enum index 3 — never insert before it) and the search index. No per-tile or hero
+  provenance UI (owner). (3) AN EXPORT NAME carries the credit only while the gradient is
+  unmodified: a pick STAMPS a `CatalogOrigin` whose `key` is the config's `originKey`, the
+  origin rides `FavientDragPayload` → the working `gradient` input → `Favient.origin`
+  untouched, and `exportNameFor` / `withExportName` (applied in
+  `gradient-explorer/v2/exportActions.ts` only) honour it iff the key still matches. Never
+  "clear the origin on edit" — the key comparison is the mechanism, and an origin is
+  untrusted on the way in (`coerceOrigin`). (4) GX GLOBAL refuses unedited catalogue
+  gradients twice: `catalogSigs.ts` on the client and the backend's
+  `supabase/functions/gx-gradients/validate.ts`, two hand mirrors of one canonicaliser, held
+  equal only by the harness. The bake writes BOTH signature lists; re-deploy the function
+  after a re-bake. (5, second pass) A source that is not a baked pack — GX Global — joins the
+  catalogue as a LIVE SOURCE (`catalogLoader.registerLiveSource`, registered in
+  `registerPaletteUI`), loaded and unloaded by `pickerStore.setGroupLoaded` like a pack. Its
+  entries must be COPIED before `row` is reassigned (the set ground draws the same cached
+  bodies with its own rows), an empty load is `failedGroups` (the toggle disables), and
+  `BundleInfo.userMade` keeps its gradients out of export credits.
 - **Host-agnosticism goes through registries, never a branch on the host.**
   `componentRegistry` ids, `store/sendTargetRegistry`, the capability flags in
   `palette/core/favientTargets.ts` (select-mode / browse / studio), and the
@@ -105,6 +133,7 @@ npm run test:palette-favients  # favientsStore: the load/import gate, dedupe, __
 npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
 npm run test:gx-session      # the GE v2 session: workingSession + the studio snapshot variants share (node, ~5 s)
+npm run test:palette-licensing  # the catalogue packs, category names, export credits and the GX Global catalogue check (node, ~2 s)
 ```
 
 `smoke:boot` is the most useful citation for the store/feature layer: it boots
@@ -112,8 +141,9 @@ npm run test:gx-session      # the GE v2 session: workingSession + the studio sn
 both persisters, `favientsStore.seedPresets` and all four feature registrations.
 Falsified 2026-07-29 with a planted throw in `mountFavientsPanel`.
 
-`test:palette` chains 31 harnesses as of 2026-09-13 — count the `tsx` links in `package.json`
-rather than trusting this number; it said 28 while the chain was 30. `check:rule-guards` resolves the union of all
+`test:palette` chains 32 harnesses as of 2026-09-13 (the licensing harness joined it that
+evening) — count the `tsx` links in `package.json` rather than trusting this number; it said
+28 while the chain was 30. `check:rule-guards` resolves the union of all
 of them (the direct-file composite case was fixed 2026-07-29 — before that it saw only
 member 1, and older notes claiming a `test:palette` citation "only reaches
 stopfit" are stale). Cite the specific link anyway when you mean one, because it
@@ -146,6 +176,7 @@ tells the reader which harness covers what:
 | `core/globalSet.ts` + `store/globalSetStore.ts` (the GX global shared set), `core/importGradientFiles.ts`, `store/favientFiling.ts` (incl. `fileFavientAt` / `fileFavientsAt`), `store/wallSelection.ts`, `store/groundSet.ts`, `store/favientsStore.ts` `removeGroup` + `replaceAll`, `core/groundSets.ts` `membersOfMany` + the empty-group chip (the shelf's MANAGE surface, 2026-09-09 — §8b item 4) | `debug/test-palette-shelf-manage.mts` (`npm run test:palette-shelf`; falsified fifteen ways, three of them assertions that passed under mutation first and were rewritten — see its header) |
 | `core/groundSets.ts` (GE v2 Phase D, 2026-09-08 — the rail's set order, favourite → wall entry, tile size by count), `core/padAxes.ts` (which colour axes the pad shows for an Arrange state) and `store/favientsStore.ts` `insertMany` | `debug/test-palette-groundsets.mts` (falsified four ways the day it was written — see its header) |
 | `utils/colorUtils.ts` blend spaces (`blendLerp` and every `lerp*`, `BLEND_SPACE_ORDER`/`BLEND_SPACE_LABEL`) plus `core/editorConfig.ts`'s `BLEND_SPACES` whitelist — the spectral / CIE LCh / rectangular-Oklab modes and the OkLCh gamut + achromatic corrections, 2026-09-10 | `debug/test-palette-blendspaces.mts` (`npm run test:palette-blendspaces`; ten assertions, each falsified against a broken build — and FOUR of them passed under mutation on the first cut and were rewritten, so read its header before weakening one) |
+| `core/catalogPacks.ts` (the publish switch), `store/pickerStore.ts` live sources + `store/globalSetStore.ts` `GX_GLOBAL_SOURCE`, `debug/palette-packs.mts` + `debug/bake-palette-catalog.mts` (which pack, which collection, which tag; the credits files; the signature lists), `core/catalogLoader.ts` `PALETTE_GROUPS` + `mergeManifest` (a v1 CDN file cannot overwrite a v2 manifest), `core/catalogOrigin.ts` (category names, export credits, the origin key), `core/catalogSigs.ts` (the client half of the GX Global catalogue check), `core/pickerModel.ts`'s collection axis, the `origin` carried by `store/favientsStore.ts` and `store/workingStore.ts` — all 2026-09-13 | `debug/test-palette-catalog-licensing.mts` (`npm run test:palette-licensing`; falsified ten ways in the first pass and six more in the second (ElvenSword, COLOURlovers, the publish switch, the live source) — read its header: the old core pack is caught by the COLLECTION check, not by the "no severance" one, which reads a field v1 files lack; and the client/server mirror only went red once the corpus held lower-case hex). It imports the backend's `validate.ts` by path, so it needs `H:/GMT/workspace-gmt/backend` beside this repo. The WIRING is the browser: `debug/smoke-ge-hero.mts` [8] (a real .json download named with the credit, plain after one Adjust dial, a set crediting only its unedited member) and [9] (the GX global share button refusing an unedited pick with the endpoint intercepted), `debug/smoke-ge-ground.mts` [12] (Sources names incl. "ElvenSword (free with credit)" and "GX Global (shared by users)", the optional pack behind its divider, source and collection band headers), [12b] (GX Global ticked adds exactly its gradients to All, endpoint intercepted) and [12c] (GX Global unreachable → row disabled), `debug/smoke-ge-phone.mts` [11] (About links the core credits file and it resolves) — each falsified, see their headers |
 | `core/exportFormats.ts` (the registry, the two subjects, the .ase / Tailwind / design-token / CSS-variable writers) and `core/favientsExport.ts` swatch builders (GE v2 §8b item 5, 2026-09-09) | `debug/test-palette-exportsubjects.mts` (`npm run test:palette-exportsubjects`; falsified six ways, and its §[7] was rewritten after the first cut reported a break as a stack trace instead of naming it — see its header) |
 
 **The Curves editor is no longer OkLCh-only, and the channel KEY is now the space's.**

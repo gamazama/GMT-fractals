@@ -85,6 +85,7 @@ import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import type { ChannelTracks } from '../components/ChannelGraphEditor';
 import { CURVE_SPACE_ORDER, DEFAULT_CURVE_SPACE, curveSpaceKeys, type CurveSpace } from '../core/curveSpaces';
 import type { GradientConfig, JsonValue } from '../../types';
+import { coerceOrigin, unmodifiedOrigin, type CatalogOrigin } from '../core/catalogOrigin';
 import type { Channels } from '../core/generatorPipeline';
 import type { RGB } from '../core/oklab';
 
@@ -104,7 +105,7 @@ export interface BakedFrom {
   curveSpace?: CurveSpace;
 }
 
-export type RecentCollector = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean }) => string | null;
+export type RecentCollector = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean; origin?: CatalogOrigin }) => string | null;
 export type RecentUpdater = (id: string, config: GradientConfig, name: string) => boolean;
 
 export interface WorkingState {
@@ -134,7 +135,7 @@ export interface WorkingState {
    *  Image committed on leaving it) — reset them, as beginEdit does, or they apply AGAIN on
    *  the next pass. Measured 2026-09-07: a leftover Phase of 0.02 shifted every stop 2 %
    *  further right on each Mix toggle. */
-  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean; bakes?: boolean }) => void;
+  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean; bakes?: boolean; origin?: CatalogOrigin }) => void;
   setName: (name: string | null) => void;
   /** Fold the live pipeline into editable stops (no-op when already editing an untouched
    *  stops input). Collects the folded gradient into Recent. */
@@ -182,7 +183,7 @@ export const setRecentCollector = (fn: RecentCollector | null): void => {
 export const setRecentUpdater = (fn: RecentUpdater | null): void => {
   _update = fn;
 };
-const collect = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean }): string | null => {
+const collect = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean; origin?: CatalogOrigin }): string | null => {
   try {
     return _collect?.(config, name, source, opts) ?? null;
   } catch {
@@ -207,6 +208,14 @@ const pickAdjust = (s: GeneratorSlice): Partial<GeneratorSlice> => {
   for (const k of ADJUST_KEYS) (out as Record<string, unknown>)[k] = s[k];
   return out;
 };
+/**
+ * The catalogue origin the working gradient descends from — the input's own, or the one the
+ * fold remembered (a knot clicked without moving folds an unedited pick into stops). Whether it
+ * still APPLIES is a separate question, answered by the content key (`unmodifiedOrigin`).
+ */
+export const originOfWorking = (input: WorkingInput, bakedFrom: BakedFrom | null): CatalogOrigin | undefined =>
+  input.kind === 'gradient' ? input.origin : input.kind === 'stops' && bakedFrom?.input.kind === 'gradient' ? bakedFrom.input.origin : undefined;
+
 const sourceOf = (input: WorkingInput): string =>
   input.kind === 'gradient' ? input.source : input.kind === 'build' ? 'Build' : input.kind === 'extract' ? 'Extract' : input.kind === 'stops' ? 'Edited' : '';
 
@@ -307,8 +316,9 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
 
   use: (config, name, source, opts) => {
     const c = cloneConfig(config);
+    const origin = coerceOrigin(opts?.origin) ?? undefined;
     paramEdit(() => {
-      set({ input: { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, liveFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent });
+      set({ input: origin ? { kind: 'gradient', config: c, name, source, origin } : { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, liveFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent });
       if (opts?.bakes) {
         setGeneratorSlice({ ...MAIN_DEFAULTS });
         useGeneratorStore.setState({ tracks: null, curvesOn: false });
@@ -396,7 +406,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     // A session just opened on a live SOURCE (Image again, a Mix) is new work: a fresh
     // entry, even when its first output matches one already in the bin (owner, 2026-09-07).
     const fresh = !s.sessionId && (s.input.kind === 'extract' || s.input.kind === 'build');
-    const next = collect(d.config, name, sourceOf(s.input), { fresh });
+    const next = collect(d.config, name, sourceOf(s.input), { fresh, origin: originOfWorking(s.input, s.bakedFrom) });
     // Transient bookkeeping, outside any undo bracket (the next bracket snapshots it).
     set({ sessionId: next, sessionPinned: next ? s.sessionPinned && next === s.sessionId : false });
   },
@@ -473,11 +483,13 @@ const coerceInput = (v: unknown): WorkingInput | null => {
   if (kind === 'gradient') {
     const config = coerceGradientConfig(o.config);
     if (!config) return null;
+    const origin = coerceOrigin(o.origin);
     return {
       kind,
       config,
       name: typeof o.name === 'string' ? o.name : 'Gradient',
       source: typeof o.source === 'string' ? o.source : '',
+      ...(origin ? { origin } : {}),
     };
   }
   return null;
@@ -560,6 +572,9 @@ export interface WorkingDerived {
   final: Channels | null;
   config: GradientConfig | null;
   palette: PaletteSwatch[];
+  /** The catalogue origin, ONLY while the output is still exactly the gradient it was picked as
+   *  (null once anything changed it). What an export's name carries — `exportActions.ts`. */
+  origin: CatalogOrigin | null;
 }
 
 export const useWorkingDerived = (): WorkingDerived => {
@@ -638,5 +653,6 @@ export const useWorkingDerived = (): WorkingDerived => {
     final: core?.final ?? null,
     config: core?.config ?? null,
     palette,
+    origin: core ? unmodifiedOrigin(originOfWorking(input, bakedFrom), core.config) : null,
   };
 };

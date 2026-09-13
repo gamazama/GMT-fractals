@@ -46,6 +46,7 @@ import { renderStopsToRamp, rgbToHex } from './gmtGradient';
 import { fitRampToStops } from './stopFit';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { RGB } from './oklab';
+import type { CatalogOrigin } from './catalogOrigin';
 
 export type SeedStop = { position: number; interpolation?: GradientStop['interpolation']; bias?: number };
 
@@ -55,7 +56,9 @@ export type WorkingInput =
    *  2026-09-07) — the fit keeps them so a bake does not walk the stops; absent = the plain fit. */
   | { kind: 'build'; seeds?: SeedStop[] }
   | { kind: 'extract' }
-  | { kind: 'gradient'; config: GradientConfig; name: string; source: string }
+  /** `origin`: the catalogue provenance a wall pick stamped (2026-09-13, additive) — honoured by
+   *  an export only while the output still has the key it was stamped with. */
+  | { kind: 'gradient'; config: GradientConfig; name: string; source: string; origin?: CatalogOrigin }
   | { kind: 'stops' };
 
 export const WORKING_INPUT_KINDS = ['empty', 'build', 'extract', 'gradient', 'stops'] as const;

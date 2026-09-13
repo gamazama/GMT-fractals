@@ -231,7 +231,7 @@ export const registerGradientTargets = (): void => {
         accepts: (p) => !p.favId,
         dragPassthrough: true,
         apply: (p) =>
-            useFavientsStore.getState().add(p.config, p.name?.trim() || configToName(p.config), p.source),
+            useFavientsStore.getState().add(p.config, p.name?.trim() || configToName(p.config), p.source, p.origin),
     });
 
     // Bottom wells (no on-screen anchor).

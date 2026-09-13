@@ -73,6 +73,7 @@
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
+import type { GradientConfig } from '../../types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
 import { runExport, runSetExport, runSetImage, setLossyCount, gradientLossyCount, useRecentExports, exportActionLabel } from './exportActions';
@@ -325,6 +326,10 @@ export const ExportMenu: React.FC<{
    *  single gradient, verbatim. Empty (a set, or a hero with no palette) means the subject
    *  falls back to a count. */
   palette?: RGB[];
+  /** The working gradient's catalogue origin + its config: an unmodified catalogue gradient's
+   *  export name carries its credit (`exportActions.ts`). Unused for a set — each member's own. */
+  origin?: unknown;
+  config?: GradientConfig | null;
 }> = ({
   ramp,
   name,
@@ -334,6 +339,8 @@ export const ExportMenu: React.FC<{
   onColorSpace,
   set,
   palette = [],
+  origin,
+  config,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const phone = useIsPhone();
@@ -418,7 +425,7 @@ export const ExportMenu: React.FC<{
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
   const n = isSet ? count : palette.length;
 
-  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH };
+  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH, origin, config };
   const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key, subject }, ramp, name, palette, runOpts);
   const download = (f: ExportFormatDef) =>
     set

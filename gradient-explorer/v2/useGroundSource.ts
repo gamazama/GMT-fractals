@@ -71,7 +71,7 @@ export const useGroundSource = (setIds: readonly string[], sets: GroundSetDesc[]
         // to remove, and the drag payload carries no shelf identity. The catalogue's own
         // contract, reused rather than re-guarded.
         const shared = f.source === 'GX global';
-        return { config: f.config, name: f.name, source: f.source, favId: shared ? undefined : f.id };
+        return { config: f.config, name: f.name, source: f.source, favId: shared ? undefined : f.id, origin: shared ? undefined : f.origin };
       },
       // One band per lit set, keyed by SET ID — which is what lets a drop on the wall know
       // where it landed, and so is supplied even for a single set (a drop then REORDERS

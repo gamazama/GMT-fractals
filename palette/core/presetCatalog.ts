@@ -17,6 +17,9 @@ export interface CatalogEntry {
   name: string;
   /** Source bundle id (loaded catalog) — undefined for the built-in presets. */
   bundle?: string;
+  /** The collection within the bundle — a cpt-city archive, a PyPalettes package, a Matplotlib
+   *  family (v2 baked packs, 2026-09-13). `<bundle>:<src>` keys `getCatalogCollections()`. */
+  src?: string;
   /** Semantic theme (loaded catalog). */
   theme?: string;
   /** Stops, when the gradient came from a stop-based source (presets). Loaded

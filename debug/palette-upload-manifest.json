@@ -1,0 +1,140 @@
+{
+ "note": "Written by npm run bake:palette. NOT uploaded by the bake. `repo` files ship in git; `cdn` and `optional` files go to R2 under palette/ (optional = published, but off by default in the app). publish:false packs are never listed here. The switch is PACK_PUBLISH in palette/core/catalogPacks.ts.",
+ "base": "public/palette/",
+ "r2Prefix": "palette/",
+ "packs": [
+  {
+   "pack": "core",
+   "publish": "repo",
+   "files": [
+    {
+     "name": "core.bin.gz",
+     "bytes": 413547,
+     "sha256": "aea2906a190f4e23180b80f61acac8608918badcc93499cc9203bbedca025fe8"
+    },
+    {
+     "name": "core.json.gz",
+     "bytes": 80669,
+     "sha256": "e117606db0a46ff1f1cf0f679f90774ccd2bf9a30700785a1efc19e3361dfdd9"
+    },
+    {
+     "name": "credits.core.txt",
+     "bytes": 108714,
+     "sha256": "d033bbc1dc348235658e04c85b006c7f3f3f3040e59e94c7e7ba9a03dfe2f33e"
+    },
+    {
+     "name": "credits.core.json",
+     "bytes": 56919,
+     "sha256": "cac1efcf46708a4eb276921d893fda531f450dc572a442c0c785d516fafae485"
+    }
+   ]
+  },
+  {
+   "pack": "softology",
+   "publish": "cdn",
+   "files": [
+    {
+     "name": "softology.bin.gz",
+     "bytes": 1126298,
+     "sha256": "7a5e083d8c66898d3b1d59765e491212261f1836579807ce002e330c0d2ec0a8"
+    },
+    {
+     "name": "softology.json.gz",
+     "bytes": 84819,
+     "sha256": "efc5540c0dab5bc9107b4cfd5cf85dcb8807029b79b7b9546ac1ada8951b738f"
+    },
+    {
+     "name": "credits.softology.txt",
+     "bytes": 10861,
+     "sha256": "09fbe6463c92380a23365e2a8ee169ad2475ef953b3f2ba4e28ec359cbf1b7bf"
+    },
+    {
+     "name": "credits.softology.json",
+     "bytes": 14868,
+     "sha256": "814304e5d6587557c6296d16923af1d4287bc2d217d691974f2da511b1e4c3f7"
+    }
+   ]
+  },
+  {
+   "pack": "cptcity",
+   "publish": "cdn",
+   "files": [
+    {
+     "name": "cptcity.bin.gz",
+     "bytes": 307967,
+     "sha256": "2abd69248e10966860de230058a765e8922fe75fc3425a167c050b126b98556f"
+    },
+    {
+     "name": "cptcity.json.gz",
+     "bytes": 90718,
+     "sha256": "79067b1e898756e9fa91a1ee1d6b736b9daffef9692378c71e1d589f9fc2b38e"
+    },
+    {
+     "name": "credits.cptcity.txt",
+     "bytes": 147701,
+     "sha256": "99d36bea0aead3ff09a706af09032a38c7ce0190199007f4b136c64280b3bdbf"
+    },
+    {
+     "name": "credits.cptcity.json",
+     "bytes": 73577,
+     "sha256": "1c63fb4c5576284c77f5c013367b40129db404fa3e57ff25a315318ed0edcd73"
+    }
+   ]
+  },
+  {
+   "pack": "elvensword",
+   "publish": "cdn",
+   "files": [
+    {
+     "name": "elvensword.bin.gz",
+     "bytes": 71556,
+     "sha256": "1d5d928e00424347b07066c5d0d9aa2eaa96d9e86f72d0f69e399671a49b8e70"
+    },
+    {
+     "name": "elvensword.json.gz",
+     "bytes": 18334,
+     "sha256": "0e8ec2cb11f27fe198e65e0e9340c3f7aea08489041f87f41e2d9019c33d2cfe"
+    },
+    {
+     "name": "credits.elvensword.txt",
+     "bytes": 4071,
+     "sha256": "0811199af49ebe645f57b9b65bd9923f20e127120d42366767aed0e5f337ef6a"
+    },
+    {
+     "name": "credits.elvensword.json",
+     "bytes": 3902,
+     "sha256": "ef07e03a3b5d874d6d88b38a8eace138317af7d74a77bc85db398acd304c5fe1"
+    }
+   ]
+  },
+  {
+   "pack": "noncommercial",
+   "publish": "optional",
+   "files": [
+    {
+     "name": "noncommercial.bin.gz",
+     "bytes": 33927,
+     "sha256": "2c87a72f959a48bc07e48786361d86566e7d7c046d6a7bcd315f9a456142fc29"
+    },
+    {
+     "name": "noncommercial.json.gz",
+     "bytes": 13255,
+     "sha256": "2763389bf3a50d549bfd5c654abdc7db90ac762ffdfa667961e6936bc1ce706b"
+    },
+    {
+     "name": "credits.noncommercial.txt",
+     "bytes": 17631,
+     "sha256": "5582302f1fdb5281dbebd4172dd16b79a6582f615f6f64b2731ac80bbd9bc18a"
+    },
+    {
+     "name": "credits.noncommercial.json",
+     "bytes": 24436,
+     "sha256": "4eed8e146d5056794b977b045e837bcf024eb8ef166422cc16d2d0111f9bd0a8"
+    }
+   ]
+  }
+ ],
+ "alsoRepo": [
+  "catalog-sigs.json"
+ ]
+}

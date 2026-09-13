@@ -38,6 +38,28 @@
  *       with the gradient first, which used to swallow the image. Falsified the same day by
  *       restoring the first-file-only test (`if (fileToImg(files?.[0])) return;`): red on
  *       "an image first in a drop swallowed the gradient file after it".
+ *   [12] PROVENANCE IN THE CATEGORY NAMES (owner, 2026-09-13): Filters ▸ Sources names every
+ *       source with its licence tag ("uiGradients (MIT)", "ColorBrewer (Apache-2.0)"), lists
+ *       the OPTIONAL packs after their divider and unticked, and offers no unpublished bundle;
+ *       Arrange ▸ Group by Source draws bands that carry the tag, and Group by Collection draws
+ *       bands named by archive / package ("PyPalettes · nord (MIT)"). Falsified the same day
+ *       three ways, each reverted: the wall's `bundleLabel` back to the bare label (red "[12] a
+ *       source band has no licence tag"); the toggles back to the bare label (red "[12] Sources
+ *       names … without its licence tag"); `optional` dropped from the noncommercial group (red
+ *       "[12] the optional packs are not behind their divider").
+ *       SECOND PASS (same evening): ElvenSword is its own source "ElvenSword (free with
+ *       credit)", ON with the other CDN packs and NOT behind the divider; there is no Mossman
+ *       and no cpt-city · es; the non-commercial pack now includes "Softology · COLOURlovers";
+ *       and GX GLOBAL is a source row, "GX Global (shared by users)", between the packs and the
+ *       divider. [12b] with the endpoint INTERCEPTED to a two-gradient set, ticking it adds
+ *       exactly those two to the All wall's count and unticking takes them away; [12c] in a
+ *       fresh page with every GX Global request aborted, ticking it leaves it unloaded and the
+ *       row DISABLED with "—". Falsified, each reverted: not registering the live source in
+ *       registerPaletteUI (red "[12] Sources has no GX Global row"); elvensword marked optional
+ *       in PACK_PUBLISH-derived groups (red "[12] ElvenSword is behind the optional divider");
+ *       pickerStore ignoring a live toggle (red "[12b] ticking GX Global did not add its 2
+ *       gradients"); the failed state not recorded (red "[12c] an unreachable GX Global is not
+ *       disabled").
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
  * [3] "the title does not say Today"; `tileSizeFor` returning the base for every count reds
@@ -396,6 +418,126 @@ async function main() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     console.log('✓ [11] a mixed drop loads the image and imports the gradient, whichever comes first');
+  }
+
+  // [12] provenance in the category names
+  {
+    if (await page.evaluate(() => !!(document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray)) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    }
+    if (!(await page.$('[data-gx-set="all"][aria-pressed="true"]'))) {
+      await page.click('[data-gx-set="all"]');
+      await page.waitForTimeout(500);
+    }
+    await page.click('[data-gx-filters-trigger]');
+    await page.waitForSelector('[data-gx-source]', { timeout: 5000 }).catch(() => fail('[12] Filters ▸ Sources shows no source toggles'));
+    const sources = await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll('[data-gx-source], [data-gx-optional-packs]')) as HTMLElement[];
+      const divider = all.findIndex((e) => e.hasAttribute('data-gx-optional-packs'));
+      return all.filter((e) => e.hasAttribute('data-gx-source')).map((e) => ({
+        id: e.dataset.gxSource ?? '',
+        name: e.dataset.gxSourceName ?? '',
+        checked: (e.querySelector('input[type="checkbox"]') as HTMLInputElement | null)?.checked ?? null,
+        afterDivider: divider >= 0 && all.indexOf(e) > divider,
+      }));
+    });
+    const byId = new Map(sources.map((s) => [s.id, s] as const));
+    for (const [id, want] of [['uigradients', 'uiGradients (MIT)'], ['colorbrewer', 'ColorBrewer (Apache-2.0)'], ['pypalettes', 'PyPalettes (per package)']] as const)
+      if (byId.get(id)?.name !== want) fail(`[12] Sources names ${id} "${byId.get(id)?.name}" without its licence tag (wanted "${want}")`);
+    const untagged = sources.filter((s) => !/\([^()]+\)$/.test(s.name));
+    if (untagged.length) fail(`[12] Sources names ${untagged.map((s) => s.id).join(', ')} without its licence tag`);
+    const elven = byId.get('elvensword');
+    if (!elven) fail('[12] Sources has no ElvenSword row');
+    if (elven!.name !== 'ElvenSword (free with credit)') fail(`[12] ElvenSword is named "${elven!.name}"`);
+    if (elven!.afterDivider) fail('[12] ElvenSword is behind the optional divider — it is a normal published pack');
+    if (sources.some((s) => s.id === 'cptcity-es' || s.id === 'cptcity-jm' || /mossman/i.test(s.name))) fail('[12] Sources still offers cpt-city · es or Jim Mossman');
+    const gx = byId.get('gx-global');
+    if (!gx) fail('[12] Sources has no GX Global row');
+    if (gx!.name !== 'GX Global (shared by users)') fail(`[12] GX Global is named "${gx!.name}"`);
+    if (gx!.afterDivider) fail('[12] GX Global is behind the optional divider');
+    if (sources.indexOf(gx!) < sources.indexOf(elven!)) fail('[12] GX Global is listed before the packs');
+    const optional = ['cptcity-nc', 'pypalettes-nc', 'softology-nc'];
+    const misplaced = optional.filter((id) => !byId.get(id)?.afterDivider);
+    if (misplaced.length) fail(`[12] the optional packs are not behind their divider (${misplaced.join(', ')})`);
+    const ticked = optional.filter((id) => byId.get(id)?.checked);
+    if (ticked.length) fail(`[12] an optional pack is loaded without being asked for (${ticked.join(', ')})`);
+    const nc = byId.get('cptcity-nc')?.name ?? '';
+    if (nc !== 'cpt-city · COLOURlovers (CC BY-NC-SA 3.0)') fail(`[12] the non-commercial source is named "${nc}"`);
+    if (sources.some((s) => s.id === 'cptcity-noredist' || s.id === 'pypalettes-nolicence')) fail('[12] Sources offers an unpublished bundle');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    const headers = async (groupBy: number) => {
+      await page.evaluate((n) => (window as any).__store.getState().setPaletteFilters({ groupBy: n, rowsBy: 0 }), groupBy);
+      await page.waitForTimeout(900);
+      return page.evaluate(() => Array.from(document.querySelectorAll('[data-wall-header]')).map((h) => (h as HTMLElement).innerText.trim()).filter(Boolean));
+    };
+    const src = await headers(2);
+    if (!src.length) fail('[12] Group by Source drew no band headers');
+    const bare = src.filter((h) => !/\([^()]+\)$/.test(h));
+    if (bare.length) fail(`[12] a source band has no licence tag (${bare.join(' | ')})`);
+    const col = await headers(3);
+    if (!col.length) fail('[12] Group by Collection drew no band headers');
+    if (!col.some((h) => /^\S.* · .+ \([^()]+\)$/.test(h))) fail(`[12] collection bands are not named "source · collection (tag)" (${col.slice(0, 4).join(' | ')})`);
+    await page.evaluate(() => (window as any).__store.getState().setPaletteFilters({ groupBy: 0, rowsBy: 1 }));
+    await page.waitForTimeout(400);
+    console.log(`✓ [12] names carry provenance: "${byId.get('uigradients')?.name}", "${elven!.name}", "${gx!.name}", "${nc}" (optional, unticked); bands "${src[0]}", "${col[0]}"`);
+  }
+
+  // [12b] GX Global as a source, with the endpoint intercepted to a known two-gradient set
+  {
+    const gpage = await ctx.newPage();
+    gpage.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+    const two = { version: 1, items: [
+      { id: 'smoke-a', config: { stops: [{ position: 0, color: '#123456' }, { position: 1, color: '#FEDCBA' }], colorSpace: 'srgb', blendSpace: 'oklab' } },
+      { id: 'smoke-b', config: { stops: [{ position: 0, color: '#0A0B0C' }, { position: 0.5, color: '#C0FFEE' }, { position: 1, color: '#FACADE' }], colorSpace: 'srgb', blendSpace: 'oklab' } },
+    ] };
+    await gpage.route('**/functions/v1/gx-gradients', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(two) }));
+    await gpage.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+    await gpage.waitForTimeout(1800);
+    const total = async () => Number(((await state(gpage)).sentence.match(/^[\d,]+/)?.[0] ?? '0').replace(/,/g, ''));
+    await gpage.click('[data-gx-filters-trigger]');
+    await gpage.waitForSelector('[data-gx-source="gx-global"]', { timeout: 5000 }).catch(() => fail('[12b] no GX Global row'));
+    const before = await total();
+    await gpage.click('[data-gx-source="gx-global"] input');
+    await gpage.waitForTimeout(1200);
+    const after = await total();
+    const row = await gpage.evaluate(() => {
+      const el = document.querySelector('[data-gx-source="gx-global"]') as HTMLElement;
+      return { checked: (el.querySelector('input') as HTMLInputElement).checked, text: el.innerText.replace(/\s+/g, ' ') };
+    });
+    if (after - before !== 2) fail(`[12b] ticking GX Global did not add its 2 gradients to the All wall (${before} → ${after})`);
+    if (!row.checked || !/\b2\b/.test(row.text)) fail(`[12b] the GX Global row does not show it loaded with 2 (${JSON.stringify(row)})`);
+    await gpage.click('[data-gx-source="gx-global"] input');
+    await gpage.waitForTimeout(800);
+    if ((await total()) !== before) fail(`[12b] unticking GX Global did not take its gradients off the wall (${await total()} vs ${before})`);
+    await gpage.close();
+    console.log(`✓ [12b] GX Global (shared by users) adds its 2 gradients to All when ticked (${before} → ${after}) and removes them when unticked`);
+  }
+
+  // [12c] GX Global unreachable: every request for it aborted, in a fresh page
+  {
+    const dpage = await ctx.newPage();
+    dpage.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+    await dpage.route('**/functions/v1/gx-gradients', (route) => route.abort());
+    await dpage.route('**/gxglobal.json', (route) => route.abort());
+    await dpage.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+    await dpage.waitForTimeout(1800);
+    await dpage.click('[data-gx-filters-trigger]');
+    await dpage.waitForSelector('[data-gx-source="gx-global"]', { timeout: 5000 }).catch(() => fail('[12c] no GX Global row'));
+    await dpage.click('[data-gx-source="gx-global"] input').catch(() => { /* already disabled is fine */ });
+    await dpage.waitForTimeout(1200);
+    const dead = await dpage.evaluate(() => {
+      const el = document.querySelector('[data-gx-source="gx-global"]') as HTMLElement;
+      const input = el.querySelector('input') as HTMLInputElement;
+      return { failed: el.hasAttribute('data-gx-source-failed'), disabled: input.disabled, checked: input.checked, text: el.innerText.replace(/\s+/g, ' ') };
+    });
+    if (!dead.failed || !dead.disabled) fail(`[12c] an unreachable GX Global is not disabled (${JSON.stringify(dead)})`);
+    if (dead.checked) fail('[12c] an unreachable GX Global shows as loaded');
+    if (!/—/.test(dead.text)) fail(`[12c] the unreachable row does not say "—" (${dead.text})`);
+    await dpage.close();
+    console.log('✓ [12c] GX Global unreachable: the row stays, unticked, disabled, "—"');
   }
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);

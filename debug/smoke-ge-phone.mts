@@ -43,7 +43,8 @@
  *       "Include current scene"; Getting Started shows "Welcome to Gradient Explorer" and not
  *       "Welcome to GMT"; About expands with at least one attribution line read from the loaded
  *       catalogue; What's New opens GX's changelog, the dot goes, `gx.whatsNew.seenVersion` is
- *       written and GMT's `gmt.whatsNew.seenVersion` is not.
+ *       written and GMT's `gmt.whatsNew.seenVersion` is not. About also links each loaded
+ *       pack's credits file, and the core one resolves to the baked credits (2026-09-13).
  *       NO HINTS (owner, 2026-09-13): the help menu names no hints ([2b] phone, [11] desktop),
  *       and pressing H leaves `store.showHints` where it was.
  *   [3c] (phone) and [12] (desktop) the feedback ATTACHMENT, with the endpoint intercepted by
@@ -576,6 +577,13 @@ async function main() {
   const attrib = await dpage.waitForSelector('[data-gx-menu="help"] [data-gx-about-attribution]', { timeout: 8000 }).then(() => true).catch(() => false);
   if (!attrib) fail('[11] About opened with no attribution line (or did not open)');
   const attribN = await dpage.locator('[data-gx-about-attribution]').count();
+  // …and the CREDITS FILE of every loaded pack (2026-09-13): the core pack's link must be there
+  // and must resolve to the baked credits, not to a 404. Falsified by hiding the credits line
+  // (`false && credits.length`): red "[11] About links no credits file for the core pack".
+  const coreCredits = await dpage.locator('[data-gx-about-credits-pack="core"]').getAttribute('href').catch(() => null);
+  if (!coreCredits) fail('[11] About links no credits file for the core pack');
+  const creditsBody = await dpage.evaluate(async (u) => { const r = await fetch(u); return r.ok ? (await r.text()).slice(0, 400) : `HTTP ${r.status}`; }, coreCredits!);
+  if (!/^Core pack — credits and licences/.test(creditsBody)) fail(`[11] the core credits link does not open the credits file (${creditsBody.slice(0, 60)})`);
   // What's New: opens GX's changelog and clears the dot
   await helpRow("What's New").click();
   const wnOk = await dpage.waitForFunction(`document.body.innerText.indexOf('the new Gradient Explorer') >= 0`, null, { timeout: 8000 }).then(() => true).catch(() => false);

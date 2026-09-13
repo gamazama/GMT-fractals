@@ -29,13 +29,16 @@ export const QUALITY_AXES = [
 //   • Group by — Category/Source → top-level bands.
 //   • Rows by  — a facet bucketed into sub-rows WITHIN each group.
 //   • Sort within — orders the columns within each row.
-export const groupByParam = defineEnumParam(['none', 'theme', 'bundle'] as const, 'Group by', {
+// `collection` was APPENDED 2026-09-13 (index 3) — never insert before it: a saved `groupBy` is
+// an index, and shifting 'bundle' would silently regroup everyone's wall.
+export const groupByParam = defineEnumParam(['none', 'theme', 'bundle', 'collection'] as const, 'Group by', {
   defaultIndex: 0, // None (owner, 2026-09-06: the wall opens ungrouped)
-  optionLabels: { none: 'None', theme: 'Category', bundle: 'Source' },
+  optionLabels: { none: 'None', theme: 'Category', bundle: 'Source', collection: 'Collection' },
   optionHints: {
     none: 'No category grouping.',
     theme: 'Top-level bands by semantic theme (rainbow, fire, ocean…).',
-    bundle: 'Top-level bands by source library.',
+    bundle: 'Top-level bands by source library, each with its licence.',
+    collection: 'Top-level bands by the archive, package or family each gradient came from, with its licence.',
   },
 });
 export const GROUP_BY = groupByParam.values;

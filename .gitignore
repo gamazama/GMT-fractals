@@ -93,14 +93,30 @@ debug/engine-gmt-smoke.png
 prototype/deep-zoom/
 
 # Palette library — baked by `npm run bake:palette` from H:/GMT/stuff/palette-lab
-# (NOT in this repo, so a clean checkout / CI cannot regenerate these).
-#  • core.*       = TRACKED — clean, redistributable (MIT/Apache/BSD/CC0), ~0.5 MB. Ships always.
-#  • softology.*  = ignored — provenance-unverified aggregate. Lazy-loaded; serve from R2 or omit.
-#  • cptcity.*    = ignored — per-collection redistribution-bound. Lazy-loaded; serve from R2 or omit.
+# (NOT in this repo, so a clean checkout / CI cannot regenerate these). Which gradient lands in
+# which pack is debug/palette-packs.mts; what each pack's sources require is its credits file.
+#  • core.*, credits.core.*, catalog-sigs.json = TRACKED. Always loaded. NOT a single permissive
+#    licence: uiGradients MIT, ColorBrewer Apache-2.0, Matplotlib per family, and PyPalettes, a
+#    GPL-3.0 package whose palettes keep their upstream licences (MIT, GPL-2/3, CC0, Apache-2.0,
+#    CC BY 4.0, CC BY-SA 4.0). The credits file is what makes shipping it honest — keep them together.
+#  • softology.*  = ignored — Softology/Visions of Chaos aggregate, origins unverified. R2 CDN, lazy.
+#  • cptcity.*    = ignored — per-archive licences (restricted archives separated out). R2 CDN, lazy.
+#  • elvensword.* = ignored — ElvenSword under its own name. R2 CDN, lazy.
+#  • noncommercial.* = ignored — the OPTIONAL non-commercial pack: uploaded, off by default in the app.
+#  • publish:false packs (palette/core/catalogPacks.ts) are written to palette-lab/out/unpublished/,
+#    never here; the bake deletes a pack's files from here once it is switched to false.
 public/palette/softology.bin.gz
 public/palette/softology.json.gz
 public/palette/cptcity.bin.gz
 public/palette/cptcity.json.gz
+public/palette/noncommercial.bin.gz
+public/palette/noncommercial.json.gz
+public/palette/elvensword.bin.gz
+public/palette/elvensword.json.gz
+public/palette/credits.softology.*
+public/palette/credits.cptcity.*
+public/palette/credits.noncommercial.*
+public/palette/credits.elvensword.*
 
 # Claude Code — personal config stays local, shared steering is tracked
 .claude/*

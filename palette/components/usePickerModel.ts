@@ -48,6 +48,7 @@ import { usePickerSearch, setPickerSearch } from '../store/pickerSearch';
 import { useSimilarityAnchor, setSimilarityAnchor, type SimilarityAnchor } from '../store/pickerSimilarity';
 import { useWallSelection, setWallSelection, clearWallSelection, getWallSelection } from '../store/wallSelection';
 import { entryToGradientConfig } from '../core/gradientSeam';
+import { categoryName, entryOrigin, type CatalogOrigin } from '../core/catalogOrigin';
 import { renderStopsToRamp } from '../core/gmtGradient';
 import { GROUP_BY, ROWS_BY, SORT_BY } from '../features/paletteFilters';
 import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
@@ -90,6 +91,9 @@ export interface GroundItem {
   source?: string;
   /** The favourite's id when the item IS a favourite (a drop elsewhere then MOVES it). */
   favId?: string;
+  /** The catalogue provenance the favourite kept (2026-09-13), so a shelf pick of an unedited
+   *  catalogue gradient still exports with its credit (`palette/core/catalogOrigin.ts`). */
+  origin?: CatalogOrigin;
 }
 
 /**
@@ -234,6 +238,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
   const catalog = usePickerStore((s) => s.catalog);
   const loaded = usePickerStore((s) => s.loaded);
   const bundles = usePickerStore((s) => s.bundles);
+  const collections = usePickerStore((s) => s.collections);
   const load = usePickerStore((s) => s.load);
   useEffect(() => { load(); }, [load]);
   // The list the wall shows: the catalogue, or the set's own entries.
@@ -294,8 +299,12 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
   const [zoomStep, setZoomStep] = useState<{ serial: number; factor: number } | null>(null);
   const stepZoom = useCallback((factor: number) => setZoomStep((z) => ({ serial: (z?.serial ?? 0) + 1, factor })), []);
 
-  const bundleLabel = useCallback((id: string) => bundles[id]?.label, [bundles]);
-  const searchIndex = useMemo(() => buildSearchIndex(base, bundleLabel), [base, bundleLabel]);
+  // CATEGORY NAMES carry the provenance (owner, 2026-09-13): "cpt-city (per archive)",
+  // "cpt-city · gacruxa (CC BY 3.0)". The same names feed the search index, so what a band says
+  // is what a search finds.
+  const bundleLabel = useCallback((id: string) => (bundles[id] ? categoryName(bundles[id].label, bundles[id].tag) : undefined), [bundles]);
+  const collectionLabel = useCallback((key: string) => (collections[key] ? categoryName(collections[key].label, collections[key].tag) : undefined), [collections]);
+  const searchIndex = useMemo(() => buildSearchIndex(base, bundleLabel, collectionLabel), [base, bundleLabel, collectionLabel]);
 
   // Shared 256×N sprite — each entry's `row` is its sprite row. Built once per list (the
   // catalogue once; a set's own small sheet whenever the set changes).
@@ -343,7 +352,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
   const bandKey = source?.bands?.map((b) => `${b.key}:${b.ids.size}`).join('|') ?? '';
   const { rows, count, ids } = useMemo(() => {
     const list = filterCatalog(base, criteria, searchIndex);
-    let result = distance ? similarityRows(list, distance) : arrangeRows(list, axes, bundleLabel);
+    let result = distance ? similarityRows(list, distance) : arrangeRows(list, axes, bundleLabel, collectionLabel);
     // SEVERAL sets on one ground: a band each, labelled, in the order the rail names them.
     // Sorting by similarity is a re-rank of the whole ground and outranks the division —
     // it is asking one question ACROSS the sets, so it keeps its single band.
@@ -368,7 +377,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
     return { rows: result, count: list.length, ids: result.flatMap((g) => g.entries.map((e) => e.id)) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, searchIndex, bundleLabel, distance, key, !!source, bandKey]);
+  }, [base, searchIndex, bundleLabel, collectionLabel, distance, key, !!source, bandKey]);
   idsRef.current = ids;
 
   // --- carve commit / clear ---------------------------------------------------------
@@ -422,13 +431,17 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
       // A set tile is a shelf item: the same pick the strip made (mode `favients`, the
       // favourite's id as the key), so the shell's rules apply unchanged.
       const it = source.itemOf(e);
-      setHeroPick({ mode: 'favients', key: e.id, payload: { config: it.config, name: it.name, source: it.source, favId: it.favId } });
+      setHeroPick({ mode: 'favients', key: e.id, payload: { config: it.config, name: it.name, source: it.source, favId: it.favId, origin: it.origin } });
       return;
     }
+    // A catalogue pick stamps its ORIGIN on the config it produced — the credit rides along for
+    // as long as that config is unchanged (`palette/core/catalogOrigin.ts`).
+    const config = entryToGradientConfig(e);
+    const origin = entryOrigin(e, config, usePickerStore.getState().bundles, usePickerStore.getState().collections) ?? undefined;
     setHeroPick({
       mode: 'picker',
       key: e.id,
-      payload: { config: entryToGradientConfig(e), name: e.name, source: 'Picker' },
+      payload: { config, name: e.name, source: 'Picker', origin },
     });
   }, [source]);
   // Drag a swatch out of the wall to drop it into the Favients shelf.
@@ -443,8 +456,12 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
         ? [it.favId, ...idsRef.current.filter((id) => id !== e.id && sel.has(id))]
         : undefined;
     const payload = it
-      ? { config: it.config, name: it.name, source: it.source, favId: it.favId, favIds }
-      : { config: entryToGradientConfig(e), name: e.name, source: 'Picker' };
+      ? { config: it.config, name: it.name, source: it.source, favId: it.favId, favIds, origin: it.origin }
+      : (() => {
+          const config = entryToGradientConfig(e);
+          const origin = entryOrigin(e, config, usePickerStore.getState().bundles, usePickerStore.getState().collections) ?? undefined;
+          return { config, name: e.name, source: 'Picker', origin };
+        })();
     setFavientDrag(dt, payload);
     beginCustomAvatarDrag(dt); // register the drag + suppress the native image (avatar stands in)
     // "Drag mirrors click" — the dragged swatch also becomes the hero PICK. Two things used

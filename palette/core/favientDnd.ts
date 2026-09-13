@@ -5,6 +5,7 @@
  */
 
 import type { GradientConfig } from '../../types';
+import type { CatalogOrigin } from './catalogOrigin';
 import { beginNativeDrag, setDragPayload } from '../store/dragVisual';
 
 export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
@@ -31,6 +32,10 @@ export interface FavientDragPayload {
   favIds?: string[];
   /** Provenance, carried so a drop-to-favourite keeps the gradient's origin label. */
   source?: string;
+  /** Catalogue provenance (2026-09-13): stamped by a wall pick or drag, kept by a favourite,
+   *  honoured by an export only while the config is unchanged. UNTRUSTED on the way in (a drag
+   *  payload is a string anyone can put on a DataTransfer) — read it through `coerceOrigin`. */
+  origin?: CatalogOrigin;
   /** Set when the drag originates from an existing Favients swatch — enables
    *  drop-on-another-swatch reordering (and tells the shelf not to re-add it). */
   favId?: string;
