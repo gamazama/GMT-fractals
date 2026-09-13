@@ -72,7 +72,7 @@ const BounceSettingsMenu = () => {
                  <Slider 
                     label="Tension (Spring)" 
                     value={bounceTension}
-                    min={0.1} max={2.0} step={0.1}
+                    min={0.1} max={2.0} step={0.01}
                     onChange={(v) => setBouncePhysics(v, bounceFriction)}
                 />
              </div>
@@ -80,7 +80,7 @@ const BounceSettingsMenu = () => {
                  <Slider 
                     label="Friction (Damping)" 
                     value={bounceFriction}
-                    min={0.1} max={1.0} step={0.1}
+                    min={0.1} max={1.0} step={0.01}
                     onChange={(v) => setBouncePhysics(bounceTension, v)}
                 />
              </div>

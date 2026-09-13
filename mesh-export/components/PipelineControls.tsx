@@ -75,7 +75,7 @@ export function PipelineControls() {
             label="Pixel Threshold"
             value={qs.pixelThreshold}
             onChange={(v) => s.updateQuality('pixelThreshold', v)}
-            min={0.1} max={2.0} step={0.1}
+            min={0.1} max={2.0} step={0.01}
             variant="full"
           />
         </Row>

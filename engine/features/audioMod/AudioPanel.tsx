@@ -401,11 +401,11 @@ const AnalysisControls: React.FC = () => {
                 <Slider
                     label="Tilt"
                     value={audio?.spectralTilt ?? 3}
-                    min={0} max={TILT_MAX_DB_PER_OCT} step={0.5}
+                    min={0} max={TILT_MAX_DB_PER_OCT} step={0.05}
                     onChange={(v) => setAudio({ spectralTilt: v })}
                 />
                 <Hint text={`Lifts the highs to offset music's natural roll-off — `
-                    + `${(audio?.spectralTilt ?? 3).toFixed(1)} dB/octave, so 16 kHz reads `
+                    + `${(audio?.spectralTilt ?? 3).toFixed(2)} dB/octave, so 16 kHz reads `
                     + `+${((audio?.spectralTilt ?? 3) * Math.log2(16000 / BANK_MIN_HZ)).toFixed(0)} dB `
                     + `against 25 Hz. A fixed offset, so it costs no dynamics. 0 is the raw spectrum.`} />
 

@@ -176,6 +176,56 @@ confirm before assuming.
 3. **Hit areas + stacking** (2.3, 2.4 second half). Same layout pass.
 4. **Stripes** (2.4). Cosmetic, last, safe.
 
+### 2.6 Status 2026-09-13 — built (uncommitted at time of writing)
+
+**The inventory** (706 controls, AST scan; CSV kept out of the tree) corrected §2.1: the mismatch
+runs BOTH ways. Median number drag was 2.7× slower than its track; 31 % were faster (GE / palette
+counts — a 1..8 count crossed its range in 14 px), and ~20 log params were effectively stuck (Shadow
+Bias needed ~2e8 px). `sensitivity` had been dropped on the floor since v0.8.8 (`RawDraggableNumber`
+never forwarded it), and the range-derived branch in `useDragValue` could never run because
+`ScalarInput` never passed `min`/`max`.
+
+**The rule (owner):** the number field is the PRECISION control — always slower than the track, in a
+band: GMT 2–10× ("10× slower is quite usable for the 1e-6 range GMT supports"), GX 2–2.5×. The
+floor of 2 is this session's pick for "always slower"; one constant. Code: grep `numberDragRate`
+(the pure band), `NumberDragFeelProvider` (GX's ceiling, `gradient-explorer/v2/main.tsx`), and
+`getTrackPx` in `ScalarInput`. Beside a track the number also snaps to the step. Vector cells and bare
+numbers have no track and keep the step rate. Guard `npm run test:number-drag-rate`, falsified 3 ways.
+
+**2.3 — found in GX's Image and Adjust faces (owner).** The soft skin's number well was 60×16 with only
+48 px live, and the full-width bar ran on underneath it (its hit box starting 2 px below the well).
+The owner marked the spot on the Adjust face: the SLIDER must not go under the text field, and the
+field sits in line with the slider, not superscript on the label. The stacked soft row is now the
+label on its own line, then bar and number side by side on the line below (centres level), the bar
+stopping 10 px short of the number. Row height unchanged (36 px); the bar is
+narrower (250 → 143 px in the Adjust face) and the drag band follows the measured width. Dense rows
+were already side by side. `shot:ge-picker` at 390: nothing past the picker's edge.
+
+**2.4 — GX v2 only (owner: "no issue with gmt's colour").** A narrower, quieter hatch on the soft
+well (`SOFT_WELL_HATCH`: 2.5 px stripes at `--line` / 0.035), theme-aware.
+
+**2.2 — the step fixes the owner approved.** Done: SSAA Internal Scale 0.1→0.01 (readout rounded
+so it does not print float noise), Pixel threshold 0.1→0.01 (GMT + mesh-export), composition Opacity
+0.1→0.01 / Line Width 0.5→0.05, graph Tension / Friction 0.1→0.01, audio Tilt 0.5→0.05 (the DDFS
+param AND AudioPanel's hand-built slider on the same key), Menger "Center Z" → `mode: 'toggle'` (the
+shader reads `uParamC > 0.5`, so 0/1 keeps its meaning and old saves load), and the imported-.frag
+degree step (`param-builder.ts`: V4 gave range/200 in DEGREES, 1.8 on a ±180 slider whose display
+span is 2 — 3 track positions; now range/180/200 in display units, 201 positions, equal to V3's 0.01).
+Checked by `test:frag`, `test:frag:integration`, `test:frag:catalog-drift`, `test:compat`,
+`test:param-mapping`.
+
+**Held, with reasons — owner, 2026-09-13: leave both as they are.**
+- **GX fractal Iterations** (0.5..8 step 0.25). A finer step is meaningful (count = round(base × mul)),
+  but every change calls `rebuildDeepZoom()`, the deep-zoom worker runs each request to completion
+  (its cancel is a no-op), and a build measured ~165–190 ms at 5.7e-25. At step 0.05 one drag across
+  its 128 px slider queues ~128 builds (~21 s of backlog at depth) vs ~30 today. Fix the queue first —
+  coalesce to one in-flight build + a dirty flag in the `subscribeFractal` handler — then the step.
+- **Borromean "Invert"** (-1..1 step 2). The shader MULTIPLIES by it (`invert * connect * 2.0 * …`), and
+  both toggle widgets write 0 for off — which deletes the connection term, and a saved -1 reads as
+  off. Options: shader `uParamF >= 0.5 ? 1.0 : -1.0` (keyframes on it then snap); an `options`
+  dropdown Normal=1 / Inverted=-1 (exact values, no shader change; mesh-export ignores `options`
+  and keeps its 2-position slider); or toggles that declare their two values (both widgets).
+
 ---
 
 ## 3. The guard gap this exposed

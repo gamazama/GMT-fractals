@@ -70,7 +70,10 @@ export const MengerSponge: FractalDefinition = {
         { label: 'Scale', id: 'paramA', min: 1.0, max: 4.0, step: 0.001, default: 3.0 },
         { label: 'Offset', id: 'vec3B', type: 'vec3', min: 0.0, max: 2.0, step: 0.001, default: { x: 1, y: 1, z: 1 }, linkable: true },
         { label: 'Rotation', id: 'vec3A', type: 'vec3', min: -6.28, max: 6.28, step: 0.001, default: { x: 0, y: 0, z: 0 }, mode: 'rotation' },
-        { label: 'Center Z', id: 'paramC', min: 0.0, max: 1.0, step: 1.0, default: 1.0 },
+        // Toggle: the shader reads this as a threshold (`uParamC > 0.5`), so the
+        // toggle's 0/1 writes keep the uniform's meaning and old saves (0 or 1) load
+        // unchanged — the same shape as Apollonian's Inversion.
+        { label: 'Center Z', id: 'paramC', min: 0.0, max: 1.0, step: 1.0, default: 1.0, mode: 'toggle' },
     ],
 
     defaultPreset: {

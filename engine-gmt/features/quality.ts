@@ -139,7 +139,7 @@ export const QualityFeature: FeatureDefinition = {
         },
         pixelThreshold: {
             type: 'float', default: 0.5, label: 'Pixel threshold', shortId: 'pt', uniform: 'uPixelThreshold',
-            min: 0.1, max: 2.0, step: 0.1, group: 'kernel',
+            min: 0.1, max: 2.0, step: 0.01, group: 'kernel',
             description: 'Pixel size at which a ray is considered to have hit the surface.',
             helpId: 'quality.threshold',
         },

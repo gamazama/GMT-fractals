@@ -318,9 +318,19 @@ export function buildFractalParams(mappings: WorkshopParam[], formulaName: strin
         }
 
         const rawDef = Array.isArray(p.uiDefault) ? (p.uiDefault[0] || 0) : (p.uiDefault as number || 0);
-        let min = p.uiMin, max = p.uiMax, step = p.uiStep, defaultVal = rawDef;
+        const min = p.uiMin, max = p.uiMax, defaultVal = rawDef;
         // isDegrees: keep internal value in DEGREES (what the GLSL code expects).
         // Use scale='degrees' so FormulaPanel displays π notation while sending degrees to shader.
+        //
+        // A degrees param's STEP is in DISPLAY units (π-units, deg/180), not degrees: the
+        // widget's degrees branch hands the slider DEGREES_PI_MAPPING plus this raw step, and
+        // the track and the number-drag both snap the DISPLAY value to it
+        // (grep `quantize` in components/inputs/usePrecisionTrackDrag.ts). V4 derives uiStep as
+        // range/200 in degrees — 1.8 on a [-180,180] slider, whose display span is only 2, so the
+        // track reached 3 positions (-π, 0, π). range/180/200 gives the ~200 positions every other
+        // imported slider gets, and equals V3's 0.01 on the common ±180 / 0..360 ranges.
+        // Scalar degrees params only: vec/component-packed params above never carry the mapping.
+        const step = p.isDegrees ? ((max - min) / 180) / 200 || 0.01 : p.uiStep;
         uiParams.push({ label: p.name, id: p.mappedSlot, min, max, step, default: defaultVal, scale: p.isDegrees ? 'degrees' : undefined });
         defaultPreset.features.coreMath[p.mappedSlot] = defaultVal;
     }

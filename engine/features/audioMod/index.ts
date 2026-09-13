@@ -158,7 +158,7 @@ export const AudioFeature: FeatureDefinition = {
         spectralTilt: {
             type: 'float', default: 3, label: 'Tilt', shortId: 'st', group: 'system',
             noAccumReset: true, preserveOnApply: true,
-            min: 0, max: 6, step: 0.5,
+            min: 0, max: 6, step: 0.05,
             description: 'Lift the high bands to compensate for music\'s natural roll-off. A fixed offset, so it costs no dynamics — 3 is neutral for typical material, 0 is the raw spectrum.',
         },
     },

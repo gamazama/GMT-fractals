@@ -255,9 +255,9 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
             <Slider
                 label="Internal Scale (SSAA)"
                 value={extra.internalScale}
-                min={1.0} max={2.0} step={0.1}
+                min={1.0} max={2.0} step={0.01}
                 onChange={(v) => patchExtra({ internalScale: v })}
-                overrideInputText={`${extra.internalScale}x`}
+                overrideInputText={`${+extra.internalScale.toFixed(2)}x`}
                 highlight={extra.internalScale > 1.0}
             />
             <div className="px-2 text-[8px] text-fg-dim mb-2">

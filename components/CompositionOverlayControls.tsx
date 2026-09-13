@@ -72,10 +72,10 @@ export const CompositionOverlayControls: React.FC<CompositionOverlayControlsProp
             {compositionOverlay !== 'none' && (
                 <>
                     <Slider label="Opacity" value={settings.opacity}
-                        min={0.1} max={1} step={0.1}
+                        min={0.1} max={1} step={0.01}
                         onChange={(v) => setSettings({ opacity: v })} />
                     <Slider label="Line Width" value={settings.lineThickness}
-                        min={0.5} max={3} step={0.5}
+                        min={0.5} max={3} step={0.05}
                         onChange={(v) => setSettings({ lineThickness: v })} />
 
                     <div>
