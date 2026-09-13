@@ -15,7 +15,10 @@ import { HelpSection } from '../../../types/help';
  * a short list of user-facing highlights, then a `---` divider above the prior
  * entry. Source the highlights from `docs/releases/<version>.md` (the
  * going-forward home) and keep them marketing-toned, not implementation detail.
- * Bump the version shown in the About body (`app-gmt/AboutGmtBody`) to match.
+ * Bump `version` in package.json (and package-lock.json) to match: About, the
+ * loading screen and the unseen-update dot all read it, so there is no string
+ * to edit in `app-gmt/HelpExtras.tsx`. Gradient Explorer v2 has its own version
+ * and its own What's New topic.
  *
  * VERSION BOUNDARIES are taken from package.json bump commits, not Reddit
  * announcement dates (the owner announces cumulatively, so a feature often ships
@@ -36,6 +39,21 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         title: 'Version History',
         content: `
 Every GMT release, newest first.
+
+## 0.9.8.4 — Sliders and gradients
+> September 14, 2026
+
+- **Better fine control on slider text fields.**
+- **Three new gradient blend modes:** Spectral (mixes like paint), CIE LCh, and Oklab as a straight line.
+- **The Graph Editor's selection box can mirror keys.** Drag a side handle past the opposite edge to flip them; hold Alt to scale around the centre, Ctrl to transform a copy. The top and bottom handles now work in normalised view too.
+- **Pencil strokes in the Graph Editor follow what you drew more closely** and join the existing curve without a kink or loop at either end.
+- **Export gradients to Cinema 4D and Blender** — one .py script rebuilds every gradient as a ramp — and to Adobe .ase swatches, Tailwind, design tokens and CSS variables.
+- **Gradient stops drag with a finger** on phones and tablets, and the blend mode opens as a list there.
+- **The Help window fits on a phone screen.**
+
+**Gradient Explorer v2 is coming along** — it works on phones, and adds a wave tool to Curves. Not yet linked from GMT.
+
+---
 
 ## 0.9.8.3 — Repairs, and a new Gradient Explorer
 > September 9, 2026
