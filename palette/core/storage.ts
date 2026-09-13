@@ -8,7 +8,9 @@
 import { safeLocalGet, safeLocalSet, safeLocalRemove } from '../../store/safeLocalStorage';
 
 export const lsGet = (key: string): string | null => safeLocalGet(key);
-export const lsSet = (key: string, value: string): void => safeLocalSet(key, value);
+export const lsSet = (key: string, value: string): void => {
+  safeLocalSet(key, value);
+};
 export const lsRemove = (key: string): void => safeLocalRemove(key);
 
 /** Parse JSON from a key, returning `fallback` on missing/malformed data. */

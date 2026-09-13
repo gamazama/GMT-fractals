@@ -9,14 +9,20 @@
  */
 import { createElement } from 'react';
 import { registerSetting } from './settingsRegistry';
-import { useAutosaveSettings } from '../engine/store/autosaveStore';
+import { useAutosaveSettings, registerAutosaveSettings, type AutosaveSettingsStore, type AutosaveSettingsText } from '../engine/store/autosaveStore';
 import { useColorScheme } from '../engine/store/colorSchemeStore';
 import { AccentHueControl, SecondaryHueControl, SurfaceHueControl } from '../components/HueControl';
 import { ThemePresetPicker, BrightnessControl } from '../components/ThemeControls';
 
 let registered = false;
 
-export const registerCoreSettings = (): void => {
+export interface CoreSettingsOptions {
+    /** Which app's autosave the Files ▸ Autosave rows read and write. Default: app-gmt's
+     *  (`useAutosaveSettings`, keys `gmt-autosave-*`). `null` registers no autosave rows. */
+    autosave?: ({ store: AutosaveSettingsStore } & AutosaveSettingsText) | null;
+}
+
+export const registerCoreSettings = (opts: CoreSettingsOptions = {}): void => {
     if (registered) return;
     registered = true;
 
@@ -101,29 +107,10 @@ export const registerCoreSettings = (): void => {
         order: 6,
     });
 
-    registerSetting({
-        id: 'autosave.enabled',
-        tab: 'Files',
-        section: 'Autosave',
-        label: 'Autosave to browser',
-        description: 'Periodically stash the current scene to local storage as a crash backstop.',
-        control: { kind: 'boolean' },
-        get: () => useAutosaveSettings.getState().enabled,
-        set: (v) => useAutosaveSettings.getState().setEnabled(!!v),
-        subscribe: (cb) => useAutosaveSettings.subscribe(cb),
-        order: 0,
-    });
-
-    registerSetting({
-        id: 'autosave.interval',
-        tab: 'Files',
-        section: 'Autosave',
-        label: 'Autosave interval',
-        description: 'How often to stash the scene, in seconds.',
-        control: { kind: 'number', min: 5, max: 600, step: 5, unit: 'sec' },
-        get: () => useAutosaveSettings.getState().intervalSec,
-        set: (v) => useAutosaveSettings.getState().setIntervalSec(Number(v)),
-        subscribe: (cb) => useAutosaveSettings.subscribe(cb),
-        order: 1,
-    });
+    // Files ▸ Autosave, for THIS app's store (keys are per app — engine/store/autosaveStore.ts).
+    // `null` = the app has no autosave, so no rows that would do nothing.
+    if (opts.autosave !== null) {
+        const a = opts.autosave ?? { store: useAutosaveSettings };
+        registerAutosaveSettings(a.store, a);
+    }
 };

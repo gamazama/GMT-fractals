@@ -27,6 +27,7 @@ import { useColorScheme, THEME_PRESETS } from '../../engine/store/colorSchemeSto
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { restorePaletteFilters, watchPaletteFilters } from '../../palette/store/paletteFiltersPersist';
 import { loadGlobalSetOnce } from '../../palette/store/globalSetStore';
+import { installGxSession, gxAutosaveSettings, GX_AUTOSAVE_TEXT } from './session';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
 import { decideFirstRun } from './firstRunDecision';
@@ -44,7 +45,8 @@ installShortcuts();
 // Ctrl+Z / Ctrl+Y — the topbar buttons are skipped because there is no TopBarHost here;
 // the shell renders its own undo control against the store.
 installUndo({ hideTopBarButtons: true });
-registerCoreSettings();
+// Files ▸ Autosave governs THIS app's autosave (its own keys, ./session), never app-gmt's.
+registerCoreSettings({ autosave: { store: gxAutosaveSettings, ...GX_AUTOSAVE_TEXT } });
 registerPaletteSettings();
 
 /**
@@ -82,6 +84,11 @@ const askBrightness = decideFirstRunBrightness();
 // old shell's mountFavientsPanel did, minus the dock-panel state it also managed.
 restorePaletteFilters();
 watchPaletteFilters();
+
+// The working session: restored from the autosave BEFORE the first render (so the hero's
+// first paint is yesterday's gradient, with no undo entry), kept current while you work, and
+// saved / loaded as a file from Settings ▸ Files ▸ Session. A share link wins. See ./session.
+installGxSession();
 
 // The GX GLOBAL set — gradients shared with everyone using the app. Fetched once per tab,
 // never persisted, never merged into the shelf. Failure is quiet: the chip simply does not

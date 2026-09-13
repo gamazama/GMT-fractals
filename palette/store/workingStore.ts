@@ -78,6 +78,7 @@ import {
   channelsOfRamp,
   type WorkingInput,
   type WorkingDerivedCore,
+  type SeedStop,
 } from '../core/workingPipeline';
 import { layoutPositions, swatchesAt, insertAtLargestGap, movePosition, clampCount, PALETTE_MIN, PALETTE_MAX, type PaletteRule, type PaletteSwatch } from '../core/paletteSample';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
@@ -451,7 +452,24 @@ const coerceInput = (v: unknown): WorkingInput | null => {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
   const kind = o.kind;
-  if (kind === 'empty' || kind === 'build' || kind === 'extract' || kind === 'stops') return { kind };
+  if (kind === 'build') {
+    // A live Mix carries its SEEDS (the stops of the gradients being mixed, which a bake's fit
+    // keeps). Dropped here until 2026-09-13, so an undo across a Mix — and now a restored
+    // session — baked with the plain fit and walked the stops. Malformed entries are dropped.
+    const seeds = Array.isArray(o.seeds)
+      ? (o.seeds as unknown[]).flatMap((x): SeedStop[] => {
+          if (!x || typeof x !== 'object') return [];
+          const r = x as Record<string, unknown>;
+          if (typeof r.position !== 'number' || !Number.isFinite(r.position)) return [];
+          const seed: SeedStop = { position: Math.max(0, Math.min(1, r.position)) };
+          if (r.interpolation === 'linear' || r.interpolation === 'step' || r.interpolation === 'smooth' || r.interpolation === 'cubic') seed.interpolation = r.interpolation;
+          if (typeof r.bias === 'number' && Number.isFinite(r.bias)) seed.bias = r.bias;
+          return [seed];
+        })
+      : undefined;
+    return seeds ? { kind, seeds } : { kind };
+  }
+  if (kind === 'empty' || kind === 'extract' || kind === 'stops') return { kind };
   if (kind === 'gradient') {
     const config = coerceGradientConfig(o.config);
     if (!config) return null;

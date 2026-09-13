@@ -106,6 +106,10 @@ export const restoreImageDocument = (snap: JsonValue): void => {
     .then(({ model, thumb }) => {
       if (token !== _restoreToken) return; // a newer scene load superseded this one
       const st = useImageStore.getState();
+      // The next serialize of this thumb hands back the SAME data URL it was restored from,
+      // rather than re-encoding the decoded pixels: a session autosaved on every reload
+      // would otherwise run the image through one more JPEG generation per reload.
+      _srcCache = { thumb, src };
       st.setModel(model, thumb); // clears loading
       st.setPath(path);
       if (exportFmt) st.setExportFmt(exportFmt);

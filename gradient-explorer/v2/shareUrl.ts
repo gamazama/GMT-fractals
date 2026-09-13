@@ -95,6 +95,18 @@ export const shareUrlFor = (config: GradientConfig, name: string): string => {
   return u.toString();
 };
 
+/**
+ * Does this query string carry a share link that OPENS? Asked BEFORE the shell renders (and
+ * so before `takeShareFromLocation` strips it) by the session restore: a share link WINS
+ * over the autosaved session on that load (gradient-explorer/v2/session.ts). Validity, not
+ * mere presence — a truncated or tampered link opens nothing, and then yesterday's session
+ * is the better thing to show than an empty shell.
+ */
+export const shareOpensFrom = (search: string): boolean => {
+  const code = new URLSearchParams(search).get(SHARE_PARAM);
+  return !!code && decodeShare(code) !== null;
+};
+
 /** Read (and strip) a share link from the current location, once, on boot. */
 export const takeShareFromLocation = (): { config: GradientConfig; name: string } | null => {
   const u = new URL(window.location.href);

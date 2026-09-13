@@ -46,7 +46,17 @@ export const MAX_VARIANTS = 12;
 /** Texel count of a stored variant ramp — matches `renderStopsToRamp`'s 256. */
 export const VARIANT_RAMP_TEXELS = 256;
 
-export interface Variant {
+/**
+ * The studio half of a variant, and the whole of a Gradient Explorer session body: feature
+ * slices by id, plus the registered documents minus the shared shelf. The capture / apply
+ * pair is `captureStudioSnapshot` / `applyStudioSnapshot` in `palette/store/variantsStore.ts`.
+ */
+export interface StudioSnapshot {
+  features: Record<string, unknown>;
+  documents: Record<string, JsonValue>;
+}
+
+export interface Variant extends StudioSnapshot {
   id: string;
   name: string;
   createdAt: number;
@@ -178,6 +188,19 @@ export const rampFromInts = (flat: readonly number[] | null | undefined): RGB[] 
 };
 
 /**
+ * The shape gate shared by a variant and a session body: `features` and `documents` are
+ * plain objects and neither carries a `__proto__` / `constructor` / `prototype` own key (a
+ * `JSON.parse` of a hostile payload creates those as OWN properties). Says nothing about
+ * what is inside a feature or a document — each provider validates its own snapshot.
+ */
+export const isWellFormedStudioSnapshot = (v: unknown): v is StudioSnapshot => {
+  if (!isPlainObject(v)) return false;
+  if (!isPlainObject(v.features) || hasUnsafeKey(v.features)) return false;
+  if (!isPlainObject(v.documents) || hasUnsafeKey(v.documents)) return false;
+  return true;
+};
+
+/**
  * The LOAD GATE. localStorage survives every reload, so one malformed entry
  * written by an older build (or hand-edited in devtools) would otherwise brick
  * the Variants strip on every boot from then on. Anything that fails here is
@@ -193,8 +216,7 @@ export const isWellFormedVariant = (v: unknown): v is Variant => {
   if (typeof v.id !== 'string' || v.id.length === 0) return false;
   if (typeof v.name !== 'string' || v.name.length === 0) return false;
   if (typeof v.createdAt !== 'number' || !Number.isFinite(v.createdAt)) return false;
-  if (!isPlainObject(v.features) || hasUnsafeKey(v.features)) return false;
-  if (!isPlainObject(v.documents) || hasUnsafeKey(v.documents)) return false;
+  if (!isWellFormedStudioSnapshot(v)) return false;
   if (v.ramp !== null) {
     if (!Array.isArray(v.ramp)) return false;
     if (!v.ramp.every((n) => typeof n === 'number' && Number.isFinite(n))) return false;

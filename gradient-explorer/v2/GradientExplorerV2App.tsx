@@ -134,7 +134,13 @@ const addMixSeeds = (stops: GradientConfig['stops']): void => {
 };
 
 export const GradientExplorerV2App: React.FC = () => {
-  const [tray, setTray] = useState<TrayFace>(null);
+  // A LIVE input restored from the session (./session, before this first render) reopens the
+  // face that owns it: a live Mix or Image lives only while its face is open, and opening Mix
+  // afresh would run enterMix over the restored blend and throw it away. Otherwise closed.
+  const [tray, setTray] = useState<TrayFace>(() => {
+    const kind = useWorkingStore.getState().input.kind;
+    return kind === 'build' ? 'mix' : kind === 'extract' ? 'image' : null;
+  });
   const phone = useIsPhone();
   // PHONE: a face that takes the whole room (every face but Mix, FULL_FACES) hides the ground
   // under it — nothing to see, nothing to paint (owner, 2026-09-11). `invisible` keeps the

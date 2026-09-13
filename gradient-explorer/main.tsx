@@ -69,9 +69,11 @@ topbar.unregister('adaptive');
 topbar.unregister('fps');
 topbar.register({ id: 'fps', slot: 'right', order: -10, component: FpsCounterDesktopOnly });
 
-// Settings — colour scheme + accent hues (shared across all GMT apps), autosave.
+// Settings — colour scheme + accent hues (shared across all GMT apps).
 // The gear opens the floating Settings panel (SettingsHost mounted in the app).
-registerCoreSettings();
+// No autosave rows: this shell never ran an autosave, and autosave is per app (owner,
+// 2026-09-13) — the default rows would write app-gmt's keys. v2 has its own (./v2/session.ts).
+registerCoreSettings({ autosave: null });
 registerPaletteSettings();
 topbar.register({ id: 'settings', slot: 'right', order: 100, component: SettingsButton });
 

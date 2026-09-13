@@ -32,12 +32,17 @@ export const safeLocalGet = (key: string): string | null => {
     }
 };
 
-/** Write a raw string; silently no-ops if storage is unavailable or quota-exceeded. */
-export const safeLocalSet = (key: string, value: string): void => {
+/** Write a raw string; silently no-ops if storage is unavailable or quota-exceeded.
+ *  Returns whether the write landed — callers that can degrade (a session autosave
+ *  retrying without its embedded image) read it; everyone else ignores it. */
+export const safeLocalSet = (key: string, value: string): boolean => {
     try {
-        if (available()) window.localStorage.setItem(key, value);
+        if (!available()) return false;
+        window.localStorage.setItem(key, value);
+        return true;
     } catch {
         /* quota / disabled */
+        return false;
     }
 };
 

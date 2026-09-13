@@ -60,6 +60,7 @@
 
 import { create } from 'zustand';
 import { useEngineStore } from '../../store/engineStore';
+import { featureRegistry } from '../../engine/FeatureSystem';
 import { serializeDocuments, restoreDocuments } from '../../store/documentRegistry';
 import { lsGet, lsSet } from '../core/storage';
 import { paramEdit } from './paramUndoBracket';
@@ -75,6 +76,7 @@ import {
   roundRamp,
   serializeVariants,
   stripFavients,
+  type StudioSnapshot,
   type Variant,
 } from '../core/variantsCore';
 import type { RGB } from '../core/oklab';
@@ -110,11 +112,11 @@ const loadPersisted = (): Variant[] => {
   }
 };
 
-/** Deep-clone the three palette feature slices out of the engine store. */
-const captureFeatures = (): Record<string, unknown> => {
+/** Deep-clone the named palette feature slices out of the engine store. */
+const captureFeatures = (featureIds: readonly string[]): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   const engine = useEngineStore.getState() as unknown as Record<string, unknown>;
-  for (const id of VARIANT_FEATURES) {
+  for (const id of featureIds) {
     const slice = engine[id];
     if (slice === undefined || slice === null) continue;
     const cloned = deepClone(slice);
@@ -123,10 +125,56 @@ const captureFeatures = (): Record<string, unknown> => {
   return out;
 };
 
+/**
+ * THE STUDIO SNAPSHOT — the feature slices named plus every registered document minus the
+ * shared shelf. Two consumers: a variant (`VARIANT_FEATURES`) and the Gradient Explorer
+ * session (`palette/store/workingSession.ts`, which leaves `paletteFilters` out — the
+ * browse filters are a viewer preference, persisted on their own). One capture and one
+ * apply, so the two cannot drift on cloning or on the favients exclusion.
+ */
+export const captureStudioSnapshot = (featureIds: readonly string[]): StudioSnapshot => ({
+  features: captureFeatures(featureIds),
+  documents: stripFavients(serializeDocuments()),
+});
+
+/**
+ * Write a studio snapshot back: each named feature slice through its own DDFS setter, then
+ * the documents. Opens NO undo bracket — the caller decides: a variant switch and a session
+ * file wrap it in ONE `paramEdit`; a session restored at boot calls it bare, so there is no
+ * entry for a first Ctrl+Z to undo. Clones on the way in (the comment inside says why).
+ * Features not in `featureIds` are ignored even when the snapshot carries them.
+ */
+export const applyStudioSnapshot = (snap: StudioSnapshot, featureIds: readonly string[]): void => {
+  const engine = useEngineStore.getState() as unknown as Record<string, unknown>;
+  for (const featureId of featureIds) {
+    const patch = snap.features[featureId];
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) continue;
+    const setter = engine[featureSetterName(featureId)];
+    if (typeof setter !== 'function') continue;
+    // Clone on the way IN as well: the setter merges the patch object's values into the
+    // slice by reference, so handing it the stored object would let a later slider drag
+    // mutate the snapshot. Defaults UNDER the patch: a snapshot saved before a param
+    // existed (Adjust's Lightness, 2026-09-13) must restore it at its default, not leave
+    // whatever the live slice holds — the setter merges, it does not replace.
+    (setter as (p: unknown) => void)(deepClone({ ...featureDefaults(featureId), ...patch }));
+  }
+  // Stripped again here, not trusted from the capture: a snapshot can come from a file.
+  restoreDocuments(stripFavients(snap.documents));
+};
+
+/** Every declared param default of one feature — the floor a restored snapshot sits on. */
+const featureDefaults = (featureId: string): Record<string, unknown> => {
+  const def = featureRegistry.getAll().find((f) => f.id === featureId);
+  const out: Record<string, unknown> = {};
+  for (const [key, param] of Object.entries(def?.params ?? {})) {
+    if (param.default !== undefined) out[key] = param.default;
+  }
+  return out;
+};
+
 /** Everything a capture reads, in one place, so `capture` and `update` cannot drift. */
 const snapshotBody = (ramp?: RGB[]): Pick<Variant, 'features' | 'documents' | 'ramp'> => ({
-  features: captureFeatures(),
-  documents: stripFavients(serializeDocuments()),
+  ...captureStudioSnapshot(VARIANT_FEATURES),
   ramp: roundRamp(ramp),
 });
 
@@ -156,22 +204,9 @@ export const useVariantsStore = create<VariantsState>((set, get) => ({
     // history provider AND the param slices, end diffs and pushes a single
     // entry. Writing the features and the documents inside the same bracket is
     // what makes a switch one Ctrl+Z instead of five.
-    paramEdit(() => {
-      const engine = useEngineStore.getState() as unknown as Record<string, unknown>;
-      for (const featureId of VARIANT_FEATURES) {
-        const patch = variant.features[featureId];
-        if (!patch || typeof patch !== 'object' || Array.isArray(patch)) continue;
-        const setter = engine[featureSetterName(featureId)];
-        if (typeof setter !== 'function') continue;
-        // Clone on the way IN as well: the setter merges the patch object's
-        // values into the slice by reference, so handing it the stored object
-        // would let a later slider drag mutate the variant.
-        (setter as (p: unknown) => void)(deepClone(patch));
-      }
-      // `documents` was stripped of `favients` at capture, so this can only
-      // reach the stops / generator / image providers.
-      restoreDocuments(deepClone(variant.documents));
-    });
+    // `documents` was stripped of `favients` at capture (and is stripped again inside
+    // applyStudioSnapshot), so this can only reach the stops / generator / image providers.
+    paramEdit(() => applyStudioSnapshot(variant, VARIANT_FEATURES));
 
     set({ activeId: id });
   },
