@@ -23,6 +23,8 @@
  *   [7] and the note itself: a set holding a 60-stop gradient bundles into .ai and .ase
  *       lossily, says "1 gradient reduced to 40 colour stops" in that strip ON HOVER, and
  *       neither the window nor the rows below it move when it does
+ *   [7b] the same gradient ALONE on the hero warns in the same words from the hero's own
+ *       Export window, and a two-stop gradient never warns (2026-09-13)
  *
  * Falsified 2026-09-06 by re-introducing the old hide (`if (!shown) return null` →
  * `if (emptySource) return null`): step [3] goes red with "the hero unmounted on an empty
@@ -351,6 +353,22 @@ async function main() {
       'gmt.favients',
       JSON.stringify([
         { id: 'spiky', name: 'Spiky', createdAt: Date.now(), group: 'noted', config: { stops, blendSpace: 'rgb', colorSpace: 'srgb' } },
+        // [7b]'s negative: two stops reduce to themselves, so nothing is lost and nothing
+        // may warn — and the set above must still count ONE, not every member
+        {
+          id: 'plain',
+          name: 'Plain',
+          createdAt: Date.now() - 1000,
+          group: 'noted',
+          config: {
+            stops: [
+              { id: 'p0', position: 0, color: '#203040', interpolation: 'linear' },
+              { id: 'p1', position: 1, color: '#e0c080', interpolation: 'linear' },
+            ],
+            blendSpace: 'rgb',
+            colorSpace: 'srgb',
+          },
+        },
       ]),
     );
     localStorage.setItem('gmt.favients.groups', JSON.stringify({ noted: 'Noted' }));
@@ -402,6 +420,53 @@ async function main() {
   if (shown.after.win !== shown.before.win) fail(`[7] the window resized on hover (${shown.before.win} → ${shown.after.win})`);
   if (shown.after.rowY !== shown.before.rowY) fail(`[7] the rows below moved on hover (${shown.before.rowY} → ${shown.after.rowY})`);
   console.log('✓ [7] a lossy bundle says so on hover, in the reserved line, and nothing moves');
+
+  // [7b] ONE GRADIENT says it too (owner, 2026-09-13). The hero's own Export window used to
+  // compute the notice for a SET only (`lossy = isSet && bundles ? … : 0`), so the same
+  // 60-stop gradient that warned inside a set went to Illustrator alone simplified and silent.
+  // Pick it off the ground, open the hero's window, and it must say the same words in the same
+  // strip; the two-stop member beside it must say nothing. Falsified 2026-09-13 by restoring
+  // `isSet && bundles ? … : 0`: red on "a 60-stop gradient exports alone to .ai with no
+  // notice". A notice that fired for everything is what the Plain half is for.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  const heroLossy = async (name: string) => {
+    // the set's tiles, by NAME through the wall's own title (the ground is canvas-drawn): try
+    // each tile position until the hero carries the name asked for
+    const wallEl = page.locator('[data-gx-keepselect] canvas').first();
+    await wallEl.waitFor({ state: 'visible', timeout: 10000 });
+    const wb = (await wallEl.boundingBox())!;
+    let got = '';
+    for (let i = 0; i < 6 && got !== name; i++) {
+      await page.mouse.click(wb.x + 30 + i * Math.max(40, wb.width / 6), wb.y + Math.min(30, wb.height / 2));
+      await page.waitForTimeout(500);
+      got = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
+    }
+    if (got !== name) fail(`[7b] could not put "${name}" on the hero from the ground (hero: "${got}")`);
+    await page.mouse.move(5, 5);
+    await page.click('[data-gx-hero] [title^="Export"]');
+    await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail(`[7b] the hero's Export window did not open on "${name}"`));
+    const open = await page.evaluate(() => (document.querySelector('[data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null);
+    if (open !== 'For design apps') {
+      await page.click('[data-gx-section="For design apps"]');
+      await page.waitForTimeout(250);
+    }
+    const keys = await page.evaluate(() => Array.from(document.querySelectorAll('[data-gx-export] [data-gx-lossy]')).map((e) => (e as HTMLElement).dataset.gxFormat ?? ''));
+    await page.hover('[data-gx-export] [data-gx-format="ai"]');
+    await page.waitForTimeout(250);
+    const text = await page.evaluate(() => (document.querySelector('[data-gx-export] [data-gx-note]') as HTMLElement).innerText.trim());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(250);
+    return { keys, text };
+  };
+  const spiky = await heroLossy('Spiky');
+  if (!spiky.keys.includes('ai')) fail(`[7b] a 60-stop gradient exports alone to .ai with no notice (noted: ${spiky.keys.join(', ') || 'none'})`);
+  if (spiky.text !== '1 gradient reduced to 40 colour stops')
+    fail(`[7b] one gradient's note reads "${spiky.text}" — expected the set's own words, "1 gradient reduced to 40 colour stops"`);
+  const plain = await heroLossy('Plain');
+  if (plain.keys.length) fail(`[7b] a two-stop gradient warns that it was reduced (${plain.keys.join(', ')}) — the notice is firing for everything`);
+  if (plain.text) fail(`[7b] a two-stop gradient's .ai row says "${plain.text}" on hover`);
+  console.log('✓ [7b] one gradient warns the way a set does: the 60-stop one on hover, the two-stop one never');
 
   await browser.close();
   if (errors.length) {

@@ -5,7 +5,10 @@
  * (Swap, More like this, Curves ▾, Fit from source, Snapshot actions…) renders through
  * this component instead of a hand-rolled `rounded-full`/`rounded-lg` button string, so
  * the shell has exactly one action-button look. `active` is a toggle's pressed state
- * (a subtler tint, still never a pill).
+ * (a subtler tint, still never a pill). `primary` (2026-09-13, the Adjust face's Apply) is
+ * the one action a group of Acts is FOR: the same box, tinted with the accent the shell uses
+ * for "this one" (a lit toggle, a chosen segment), so it reads first without becoming a
+ * second button shape.
  */
 
 import React from 'react';
@@ -19,9 +22,11 @@ interface Props extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onC
   className?: string;
   /** An icon-only action: a 26 px square, no side padding (the hero's USE buttons). */
   icon?: boolean;
+  /** The action the group is for — accent-tinted. */
+  primary?: boolean;
 }
 
-export const Act: React.FC<Props> = ({ children, onClick, title, active = false, disabled = false, className = '', icon = false, ...rest }) => (
+export const Act: React.FC<Props> = ({ children, onClick, title, active = false, disabled = false, className = '', icon = false, primary = false, ...rest }) => (
   <button
     {...rest}
     type="button"
@@ -33,9 +38,11 @@ export const Act: React.FC<Props> = ({ children, onClick, title, active = false,
       'inline-flex items-center gap-1 h-[26px] rounded-lg text-[13px] whitespace-nowrap',
       icon ? 'w-[26px] justify-center px-0' : 'px-3',
       'border transition-colors disabled:opacity-40 disabled:cursor-default',
-      active
-        ? 'bg-surface-section border-line/40 text-fg'
-        : 'bg-surface-section border-line/20 text-fg-muted hover:text-fg hover:border-line/40',
+      primary
+        ? 'bg-accent-400/15 border-accent-400/40 text-accent-300 hover:bg-accent-400/25 hover:text-accent-200'
+        : active
+          ? 'bg-surface-section border-line/40 text-fg'
+          : 'bg-surface-section border-line/20 text-fg-muted hover:text-fg hover:border-line/40',
       className,
     ].join(' ')}
   >

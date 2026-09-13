@@ -8,11 +8,15 @@
  *   [4] the Share URL (`shareUrlFor`) opens the explorer page and round-trips through
  *       `takeShareFromLocation`, which also strips the param so a refresh does not re-apply
  *       the gradient. (Until 2026-09-07 this tested the "Back to GMT" hand-back URL; the owner dropped it — GMT's My Gradients already has the gradient.)
+ *   [5] "Back to GMT" shows only when the page came from the studio: `cameFromGmtFor` over
+ *       `?from=gmt` and the same-origin referrer at `/`, `/app-gmt`, `/app-gmt.html`; and
+ *       app-gmt's `openGradientExplorer` actually appends the param (2026-09-13).
  *
  * Node only, no browser. `npm run test:gx-share`.
  */
 
-import { encodeShare, decodeShare, shareUrlFor, takeShareFromLocation, SHARE_PARAM } from '../gradient-explorer/v2/shareUrl';
+import { readFileSync } from 'node:fs';
+import { encodeShare, decodeShare, shareUrlFor, takeShareFromLocation, cameFromGmtFor, SHARE_PARAM } from '../gradient-explorer/v2/shareUrl';
 import type { GradientConfig } from '../types';
 
 let failures = 0;
@@ -114,6 +118,33 @@ console.log('\n[4] the Share URL round-trips');
   }
   check(replaced !== null && !String(replaced).includes(SHARE_PARAM + '='), 'the param is stripped (a refresh does not re-apply it)');
   delete (globalThis as any).window;
+}
+
+console.log('\n[5] "Back to GMT" — cameFromGmtFor, and the opener that feeds it');
+{
+  // Until 2026-09-13 this could never pass in production: nothing appended `?from=gmt`, and
+  // the referrer fallback wanted a path ending `app-gmt.html`, which the studio is not served
+  // at (it is `/`, or `/app-gmt` under Cloudflare's pretty URLs). Falsified that day two ways:
+  // restoring `endsWith('app-gmt.html')` reds the `/` and `/app-gmt` referrer checks, and
+  // taking `?from=gmt` back out of `openGradientExplorer` reds the last check.
+  const GX = 'https://app.gmt-fractals.com/gradient-explorer.html';
+  check(cameFromGmtFor(`${GX}?from=gmt`, ''), '?from=gmt with no referrer (window.open noopener may send none)');
+  check(!cameFromGmtFor(GX, ''), 'a bare page with no referrer is not from GMT');
+  check(cameFromGmtFor(GX, 'https://app.gmt-fractals.com/'), 'the studio at the site root (production)');
+  check(cameFromGmtFor(GX, 'https://app.gmt-fractals.com/app-gmt'), 'the studio under a Cloudflare pretty URL');
+  check(cameFromGmtFor('http://localhost:3400/gradient-explorer-next.html', 'http://localhost:3400/app-gmt.html'), 'the studio on a dev server');
+  check(!cameFromGmtFor(GX, 'https://elsewhere.example/app-gmt.html'), 'a cross-origin referrer does not count');
+  check(!cameFromGmtFor(GX, 'https://app.gmt-fractals.com/fluid-toy.html'), 'fluid-toy is not the studio');
+  check(!cameFromGmtFor(GX, 'https://app.gmt-fractals.com/gradient-explorer.html'), 'a reload of the Explorer itself is not the studio');
+  check(!cameFromGmtFor(`${GX}?from=fluid`, ''), 'another ?from value does not count');
+  check(!cameFromGmtFor('not a url', 'also not'), 'garbage is false, never a throw');
+
+  // THE OPENER. The decoder above is only half of it — the page app-gmt actually opens has to
+  // carry the signal. Read as text rather than imported: installFavients pulls the panel
+  // registry and the store, which this node harness has no reason to boot.
+  const src = readFileSync(new URL('../palette/installFavients.ts', import.meta.url), 'utf8');
+  const opened = /export const openGradientExplorer[\s\S]*?window\.open\('([^']+)'/.exec(src)?.[1] ?? '';
+  check(!!opened && cameFromGmtFor(new URL(opened, 'https://app.gmt-fractals.com/').toString(), ''), `app-gmt's opener carries the signal (${opened || 'no window.open found'})`);
 }
 
 console.log(failures === 0 ? '\nPASS — share codec' : `\nFAIL — ${failures} assertion(s)`);

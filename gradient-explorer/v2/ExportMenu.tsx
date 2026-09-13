@@ -19,9 +19,14 @@
  *     stepper and the rule places them.
  *   • What else changes per subject is small and named inline: a set has no Copy (no single
  *     text form), gets a .zip where one gradient gets one file unless the format bundles,
- *     carries the `.ai`/`.idml` lossy notice on the ramp side only (the swatches side
- *     reduces nothing), and the image row is a contact sheet of ramps or a sheet of
- *     labelled swatch chips.
+ *     and the image row is a contact sheet of ramps or a sheet of labelled swatch chips.
+ *   • THE LOSSY NOTICE is the same for one gradient and for a set, ramp side only (the
+ *     swatches side reduces nothing): a format that flattens visible detail says how many
+ *     gradients it reduced, on hover, in the category's NOTE_STRIP. A set warns on the
+ *     formats that bundle it into one file; one gradient warns on every format that reduces
+ *     it. Until 2026-09-13 only a set could warn (`lossy = isSet && bundles ? … : 0`), so a
+ *     single complex gradient went to Illustrator simplified and silent — the old shell's
+ *     Extras panels had said so (grep `aiReductionError`).
  *
  * THE LIST IS AN ACCORDION, ONE SECTION OPEN (owner, 2026-09-09: "users will find the
  * export overwhelming with the long list of options"). Measured before the change: the Ramp
@@ -70,7 +75,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
-import { runExport, runSetExport, runSetImage, setLossyCount, useRecentExports, exportActionLabel } from './exportActions';
+import { runExport, runSetExport, runSetImage, setLossyCount, gradientLossyCount, useRecentExports, exportActionLabel } from './exportActions';
 import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
@@ -422,6 +427,16 @@ export const ExportMenu: React.FC<{
   const image = () => (set ? void runSetImage(set, name, subject, count) : runExport({ kind: 'png', subject }, ramp, name, palette, runOpts));
 
   const formats = formatsFor(subject);
+  // One gradient's lossy count per format, measured once per ramp / subject / budget rather
+  // than once per row per render (the reduction search is not free, and a hover re-renders).
+  const singleLossy = useMemo(() => {
+    const out = new Map<string, number>();
+    if (isSet) return out;
+    // `formatsFor` is a pure function of the subject, called here so the memo keys on the
+    // subject rather than on an array that may be fresh every render
+    for (const f of formatsFor(subject)) out.set(f.key, gradientLossyCount(ramp, name, f.key, subject, settings.budget ?? undefined));
+    return out;
+  }, [isSet, ramp, name, subject, settings.budget]);
   // The sections that have anything in them under THIS subject. Switching to Swatches
   // empties "For fractal + 3D apps" outright, so the open section can vanish under the
   // pointer; the effect below re-homes the accordion rather than leaving it on nothing.
@@ -455,7 +470,7 @@ export const ExportMenu: React.FC<{
     // group gradients, .ase groups swatch lists. Say which on the button, so the download
     // is not a surprise.
     const bundles = isSet && !!(swatches ? f.collectionSwatches : f.collection);
-    const lossy = isSet && bundles ? setLossyCount(set!, f.key, subject, settings.budget ?? undefined) : 0;
+    const lossy = isSet ? (bundles ? setLossyCount(set!, f.key, subject, settings.budget ?? undefined) : 0) : singleLossy.get(f.key) ?? 0;
     return (
       <div
         key={f.key}

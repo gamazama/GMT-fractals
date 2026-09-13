@@ -24,8 +24,17 @@
  * drop (§8b item 4, 2026-09-09: GE v2 takes a dropped `.map` / `.ggr` / collection
  * `.json` as a gradient import). It is offered every dropped file the importer did not
  * take and returns whether it handled them — only if nobody did does the drop report
- * "not an image". One window listener, not two racing ones. `ImageStage` passes none, so
- * its behaviour is unchanged.
+ * "not an image". One window listener, not two racing ones.
+ *
+ * A MIXED DROP does both (2026-09-13, parity checklist K7). The drop used to test only the
+ * FIRST file: an image first returned before `onOtherFiles` ever ran, so the gradient files
+ * after it were silently dropped — and a gradient file first hid an image after it. Now the
+ * first IMAGE anywhere in the drop loads (there is one picture slot, so a second image is
+ * not loaded), and every non-image file goes to `onOtherFiles`. Both can happen because
+ * they land in different places — the picture in the Image face, the gradients on the
+ * shelf — so neither has to win. For `ImageStage`, which passes no `onOtherFiles`, the one
+ * visible change is that an image that is not first in a drop now loads instead of the
+ * drop reporting "not an image".
  *
  * @see plans/ge-v2-design.md §5.4
  */
@@ -43,9 +52,9 @@ export interface UseImageDropOptions {
   onLoaded?: () => void;
   /** Message sink — defaults to the global toast. */
   notify?: (message: string) => void;
-  /** Dropped files that were not an image. Return true if you consumed them (suppresses
-   *  the "not an image" message). */
-  onOtherFiles?: (files: FileList) => boolean;
+  /** Dropped files that were not an image (never empty when called). Return true if you
+   *  consumed them (suppresses the "not an image" message). */
+  onOtherFiles?: (files: File[]) => boolean;
 }
 
 export interface UseImageDropResult {
@@ -110,10 +119,12 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
       e.preventDefault();
       setOver(false);
       window.clearTimeout(dragT);
-      const files = e.dataTransfer?.files;
-      if (fileToImg(files?.[0])) return;
-      if (files?.length && onOtherFiles?.(files)) return;
-      notify('not an image');
+      const files = Array.from(e.dataTransfer?.files ?? []);
+      const image = files.find((f) => f.type.startsWith('image'));
+      const others = files.filter((f) => !f.type.startsWith('image'));
+      const tookImage = fileToImg(image);
+      const tookOthers = others.length > 0 && !!onOtherFiles?.(others);
+      if (!tookImage && !tookOthers) notify('not an image');
     };
     const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;

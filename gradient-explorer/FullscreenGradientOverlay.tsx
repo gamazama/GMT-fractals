@@ -53,6 +53,23 @@
  * (their `title` already carries the word) and every toolbar control is ≥ 36 px tall.
  * Guarded by `npm run smoke:ge-phone` step [8].
  *
+ * THE OVERLAY OWNS THE KEYBOARD while it is open (2026-09-13). It used to own only Escape, so
+ * every other key ALSO reached the listeners of the app underneath: with a stop selected on
+ * the hero and a point selected in Spline, one Delete removed the point AND the stop (measured
+ * in the browser that day — the working gradient lost a stop the user could not see), and a
+ * wall selection under the overlay was one Delete from being removed from the shelf. So a
+ * `keydown` that has finished its trip through the overlay's own elements is stopped at the
+ * DOCUMENT, before the window-level listeners the app underneath uses (the stops editor's
+ * Delete / arrows, the wall selection's Delete, the shell's Esc chain). Three exceptions:
+ *   • a key held with Ctrl / Cmd / Alt passes — undo / redo and the browser's own shortcuts
+ *     are app-wide, not the underneath's;
+ *   • in SPLIT the app is on screen above the preview and is meant to be used, so the overlay
+ *     owns the keyboard only when the last pointer-down landed inside it;
+ *   • focus left on the app underneath (the Wallpaper button that opened this) is dropped on
+ *     open, so a key cannot start its trip down there.
+ * A MODE that wants keys listens on `document` in the CAPTURE phase (Spline's Delete does —
+ * grep `removePoint`); a window listener in a mode would be stopped with everything else.
+ *
  * @see palette/core/rampGeometry.ts (the pure mappings)
  * @see gradient-explorer/fullscreen/modeRegistry.ts (the mode plug-in seam + ownCanvas mount face)
  */
@@ -226,6 +243,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // The generic ownCanvas host — an empty div a mode mounts its own canvas into.
   const ownHostRef = useRef<HTMLDivElement>(null);
   const ownHandleRef = useRef<OwnCanvasHandle | null>(null);
+  /** The overlay's root element — what "inside the overlay" means for keyboard ownership. */
+  const rootRef = useRef<HTMLDivElement>(null);
   // False until the active ownCanvas mode reports its first frame — gates a loading spinner over
   // the (synchronous, blocking) renderer creation / shader compile.
   const [ownReady, setOwnReady] = useState(false);
@@ -273,6 +292,34 @@ export const FullscreenGradientOverlay: React.FC = () => {
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [fs.open]);
+
+  // KEYBOARD OWNERSHIP — see the file header. Bubble phase on `document`: the overlay's own
+  // elements (the split divider's arrows, a field's Enter) have already had the key, and the
+  // app underneath, which listens on `window`, has not.
+  const pointerInsideRef = useRef(false);
+  useEffect(() => {
+    if (!fs.open) return;
+    // the button that opened the overlay keeps focus in the app underneath; let it go
+    const active = document.activeElement as HTMLElement | null;
+    if (active && active !== document.body && !rootRef.current?.contains(active)) active.blur?.();
+    pointerInsideRef.current = false;
+    const onDown = (e: PointerEvent) => {
+      pointerInsideRef.current = !!rootRef.current?.contains(e.target as Node);
+    };
+    document.addEventListener('pointerdown', onDown, true);
+    return () => document.removeEventListener('pointerdown', onDown, true);
+  }, [fs.open]);
+  useEffect(() => {
+    if (!fs.open) return;
+    const split = fs.split;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (split && !pointerInsideRef.current) return;
+      e.stopPropagation();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fs.open, fs.split]);
 
   // PIN THE DOCUMENT while the overlay is open. `position: fixed` does not stop the page
   // underneath from scrolling, and on a coarse-pointer device this page's body IS scrollable
@@ -648,6 +695,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
         ...(fs.split ? { top: `${fs.splitY * 100}%`, left: 0, right: 0, bottom: 0 } : null),
       }}
       data-testid="fullscreen-gradient-overlay"
+      ref={rootRef}
     >
       {/* Live source — resolves the last-modified hero (Stops/Generator live) for BOTH split and
           plain fullscreen (always-live, one code path). Only mounts while the overlay is open. */}

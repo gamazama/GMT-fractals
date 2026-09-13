@@ -13,7 +13,8 @@
  *      the anchor itself first, and similarity mode is ONE ungrouped band.
  *   7. carve: isolate keeps the inside set, cut keeps its complement, and the two
  *      partition the displayed wall.
- *   8. badge / narrower bookkeeping and the Arrange sentence.
+ *   8. badge / narrower bookkeeping, CLEAR_ALL_PATCH against the feature's axis list, and the
+ *      Arrange sentence.
  *
  * Run: npx tsx debug/test-palette-pickermodel.mts
  */
@@ -38,9 +39,11 @@ import {
   ROW_BUCKETS,
   EMPTY_CRITERIA,
   similarityAnchorRamp,
+  CLEAR_ALL_PATCH,
   type FilterCriteria,
   type ArrangeAxes,
 } from '../palette/core/pickerModel';
+import { QUALITY_AXES } from '../palette/features/paletteFilters';
 import { bufferToRamp } from '../palette/core/stopFit';
 import { rampDistance } from '../palette/core/paletteSample';
 import type { GradientConfig } from '../types';
@@ -348,6 +351,24 @@ console.log('[8] badge, narrowers, sentence');
   ok(
     activeFilterCount(crit({ query: 'x', windows: { qL: [0.2, 1] }, activeThemes: ['ocean'], hiddenBundles: ['ui'], keptIds: ['a'] })) === 4,
     'badge: 1 look + themes + sources + carve = 4',
+  );
+
+  // CLEAR ALL clears every look window, not five of six (2026-09-13: `qHue` was missing from
+  // CLEAR_ALL_PATCH, so "clear all" left a narrowed hue window and the Filters badge lit).
+  // Checked against the FEATURE's axis list rather than a list typed here, so an axis added
+  // to `QUALITY_AXES` and forgotten in the patch goes red. Falsified the same day by taking
+  // `qHue` back out of the patch: both checks below go red.
+  const narrowed: Record<string, unknown> = { keptIds: ['a'], activeThemes: ['ocean'], hiddenBundles: ['ui'] };
+  for (const { axis } of QUALITY_AXES) narrowed[axis] = { x: 0.2, y: 0.6 };
+  const missing = QUALITY_AXES.map((q) => q.axis).filter((axis) => {
+    const v = CLEAR_ALL_PATCH[axis] as { x?: number; y?: number } | undefined;
+    return !v || v.x !== 0 || v.y !== 1;
+  });
+  ok(missing.length === 0, `clear all: resets every look window the feature declares (missing: ${missing.join(', ') || 'none'})`);
+  const cleared = { ...narrowed, ...CLEAR_ALL_PATCH };
+  ok(
+    activeFilterCount({ ...EMPTY_CRITERIA, windows: windowsFromSlice(cleared), keptIds: cleared.keptIds as string[] | null, activeThemes: cleared.activeThemes as string[], hiddenBundles: cleared.hiddenBundles as string[] }) === 0,
+    'clear all: the Filters badge reads 0 after the patch',
   );
 
   ok(

@@ -109,20 +109,35 @@ export const takeShareFromLocation = (): { config: GradientConfig; name: string 
   return decodeShare(code);
 };
 
+/** The query value `openGradientExplorer` (palette/installFavients.ts) appends as `?from=`. */
+export const FROM_GMT = 'gmt';
+
 /**
- * True when this page was opened FROM the GMT studio — `?from=gmt` (what
- * `openGradientExplorer` appends) or a same-origin referrer ending in `app-gmt.html`.
- * Read once at module load: the referrer survives a history rewrite, `?from` does not.
+ * Pure: was a page at `href` opened FROM the GMT studio? `?from=gmt` is the signal (what
+ * app-gmt's `openGradientExplorer` appends, 2026-09-13); a same-origin referrer on the
+ * studio's own entry is the fallback, for an Explorer tab opened some other way.
+ *
+ * The studio's entry is `/` in production (app.gmt-fractals.com serves app-gmt at the root)
+ * and `/app-gmt` under Cloudflare's pretty URLs, as well as `/app-gmt.html` on a dev server
+ * — the fallback used to match only the last, so it could never pass in production, and
+ * nothing appended the param either (the parity checklist's swap risk 2). The Explorer's own
+ * pages are never the root, so matching `/` cannot mistake a reload for the studio.
  */
-export const cameFromGmt = ((): boolean => {
-  if (typeof window === 'undefined') return false;
+export const cameFromGmtFor = (href: string, referrer: string): boolean => {
   try {
-    if (new URL(window.location.href).searchParams.get('from') === 'gmt') return true;
-    const r = document.referrer;
-    if (!r) return false;
-    const ru = new URL(r);
-    return ru.origin === window.location.origin && ru.pathname.endsWith('app-gmt.html');
+    const here = new URL(href);
+    if (here.searchParams.get('from') === FROM_GMT) return true;
+    if (!referrer) return false;
+    const ru = new URL(referrer);
+    return ru.origin === here.origin && /^\/(app-gmt(\.html)?)?$/.test(ru.pathname);
   } catch {
     return false;
   }
-})();
+};
+
+/**
+ * True when this page was opened from the GMT studio (`cameFromGmtFor` on this page). Read
+ * once at module load. The `?from` param survives `takeShareFromLocation`'s rewrite (it
+ * deletes only its own param), so a reload keeps the link.
+ */
+export const cameFromGmt = typeof window === 'undefined' ? false : cameFromGmtFor(window.location.href, document.referrer);

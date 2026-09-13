@@ -24,6 +24,20 @@
  *       visible lightness bands. It is the scroll position now, which is always defined
  *       (owner: "just map it by scroll position and not by lightness").
  *   (The old [9]–[10], the Snapshots set, were removed with the feature on 2026-09-08.)
+ *   [10] Esc in the SEARCH BOX (2026-09-13): with the Filters rows and the Adjust face both
+ *       open, Esc in a non-empty search clears the query and stops there — the rows and the
+ *       face stay; Esc again in the now-empty box closes the rows (their capture listener);
+ *       Esc once more closes the face (the shell's chain). Falsified the same day two ways,
+ *       each reverted: dropping the input's `stopPropagation` reds "clearing the search also
+ *       closed the Adjust face (null)"; dropping the Filters listener's search exception reds
+ *       "Esc in a non-empty search did not clear it" (the rows' capture listener swallows the
+ *       key before the box ever sees it, closing the rows instead).
+ *   [11] a MIXED file drop (parity checklist K7, 2026-09-13): an image and a .ggr in ONE drop
+ *       load the image (the Image face opens) AND import the gradient onto the shelf — with
+ *       the image first, which is the order that used to swallow the gradient, and again
+ *       with the gradient first, which used to swallow the image. Falsified the same day by
+ *       restoring the first-file-only test (`if (fileToImg(files?.[0])) return;`): red on
+ *       "an image first in a drop swallowed the gradient file after it".
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
  * [3] "the title does not say Today"; `tileSizeFor` returning the base for every count reds
@@ -283,6 +297,106 @@ async function main() {
   await setRows(1); // back to lightness
   await page.waitForTimeout(300);
   console.log('✓ [9] the pad follows the Arrange state: vividness on Y with the lightness strip; complexity falls back to the default pad, lens still there');
+
+  // [10] Esc in the search box clears it, and only it
+  {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (!(await page.$('[data-gx-hero]'))) {
+      // [8] scrolled the wall 2400 px down, so its first canvas is above the viewport: wheel it
+      // back to the top before aiming at the first tile the way [2] does
+      const wallBox = (await page.locator('[data-gx-keepselect]').boundingBox())!;
+      await page.mouse.move(wallBox.x + wallBox.width / 2, wallBox.y + wallBox.height / 2);
+      await page.mouse.wheel(0, -6000);
+      await page.waitForTimeout(500);
+      const wb = (await page.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
+      await page.mouse.click(wb.x + 16, wb.y + 9);
+      await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[10] setup: no hero after a wall click'));
+      await page.waitForTimeout(600);
+    }
+    const esc = () => page.evaluate(() => ({
+      search: (document.querySelector('[data-gx-search]') as HTMLInputElement | null)?.value ?? null,
+      focused: document.activeElement?.hasAttribute('data-gx-search') ?? false,
+      filters: (document.querySelector('[data-gx-filters-trigger]') as HTMLElement | null)?.className.includes('bg-accent-400/10') ?? false,
+      face: (document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray ?? null,
+    }));
+    await page.click('[data-gx-filters-trigger]');
+    await page.waitForTimeout(300);
+    await page.click('[data-gx-tray-tab="adjust"]');
+    await page.waitForTimeout(400);
+    // FOCUS, not click: a pointerdown on the ground is a click-away for an open face
+    await page.focus('[data-gx-search]');
+    await page.keyboard.type('fire');
+    await page.waitForTimeout(300);
+    let e = await esc();
+    if (e.search !== 'fire' || !e.filters || e.face !== 'adjust') fail(`[10] setup: wanted "fire" typed with the rows and Adjust open (${JSON.stringify(e)})`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    e = await esc();
+    if (e.search !== '') fail(`[10] Esc in a non-empty search did not clear it ("${e.search}")`);
+    if (!e.filters) fail('[10] Esc in a non-empty search closed the Filters rows instead of clearing the query');
+    if (e.face !== 'adjust') fail(`[10] clearing the search also closed the Adjust face (${e.face})`);
+    if (!e.focused) fail('[10] clearing the search took the focus away from the box');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    e = await esc();
+    if (e.filters) fail('[10] Esc in the EMPTY search did not go on to close the Filters rows');
+    if (e.face !== 'adjust') fail(`[10] one Esc closed both the rows and the face (${e.face})`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    e = await esc();
+    if (e.face) fail(`[10] Esc in the empty search no longer reaches the shell's chain — the face stayed (${e.face})`);
+    console.log('✓ [10] Esc clears a non-empty search and stops; an empty box hands Esc on (rows, then the face)');
+  }
+
+  // [11] a mixed drop: the image loads AND the gradient file imports, in either order
+  {
+    const drop = (order: 'image-first' | 'gradient-first', name: string, hex: [number, number, number]) =>
+      page.evaluate(async ({ order, name, hex }) => {
+        const c = document.createElement('canvas');
+        c.width = 64;
+        c.height = 16;
+        const g = c.getContext('2d')!;
+        const grad = g.createLinearGradient(0, 0, 64, 0);
+        grad.addColorStop(0, '#102040');
+        grad.addColorStop(1, '#f0a030');
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 64, 16);
+        const png = await new Promise<Blob>((res) => c.toBlob((b) => res(b!), 'image/png'));
+        const image = new File([png], 'picture.png', { type: 'image/png' });
+        // a one-segment GIMP gradient from a colour no shelf already holds, so the import
+        // cannot be deduped away and the name is unambiguous
+        // (no named helper in here: tsx wraps a named arrow in `__name`, which the page lacks)
+        const end = hex.map((v) => (v / 255).toFixed(6)).join(' ');
+        const ggr = ['GIMP Gradient', `Name: ${name}`, '1', `0.000000 0.500000 1.000000 0.000000 0.000000 0.000000 1.000000 ${end} 1.000000 0 0`, ''].join('\n');
+        const gradient = new File([ggr], `${name}.ggr`, { type: '' });
+        const dt = new DataTransfer();
+        for (const file of order === 'image-first' ? [image, gradient] : [gradient, image]) dt.items.add(file);
+        window.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      }, { order, name, hex });
+    const after = (name: string) => page.evaluate((n) => ({
+      face: (document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray ?? null,
+      imported: ((JSON.parse(localStorage.getItem('gmt.favients') ?? '[]') as { name: string }[]) ?? []).some((f) => f.name === n),
+    }), name);
+    for (const [order, name, hex] of [['image-first', 'mixdrop-a', [17, 201, 83]], ['gradient-first', 'mixdrop-b', [201, 17, 150]]] as const) {
+      if ((await state(page)).hero === false) fail('[11] setup: no hero');
+      if (await page.evaluate(() => !!(document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray)) {
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+      }
+      await drop(order, name, hex as unknown as [number, number, number]);
+      let a = await after(name);
+      for (let i = 0; i < 20 && !(a.imported && a.face === 'image'); i++) {
+        await page.waitForTimeout(250);
+        a = await after(name);
+      }
+      if (!a.imported) fail(`[11] ${order === 'image-first' ? 'an image first in a drop swallowed the gradient file after it' : 'the gradient file in a mixed drop was not imported'} ("${name}" is not on the shelf)`);
+      if (a.face !== 'image') fail(`[11] ${order === 'gradient-first' ? 'a gradient file first in a drop swallowed the image after it' : 'the image in a mixed drop did not load'} (the Image face did not open: ${a.face})`);
+    }
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    console.log('✓ [11] a mixed drop loads the image and imports the gradient, whichever comes first');
+  }
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
   await browser.close();

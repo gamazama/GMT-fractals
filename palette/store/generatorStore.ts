@@ -62,7 +62,7 @@ interface GeneratorSlice {
   aHueRotate: number; aChroma: number; aContrast: number; aReverse: boolean; aRepeats: number; aPhase: number; aMirror: boolean;
   bHueRotate: number; bChroma: number; bContrast: number; bReverse: boolean; bRepeats: number; bPhase: number; bMirror: boolean;
   mixL: number; mixC: number; mixH: number;
-  hueRotate: number; chroma: number; contrast: number;
+  hueRotate: number; chroma: number; contrast: number; lightness: number;
   bands: number; repeats: number; phase: number; mirror: boolean; reverse: boolean;
   noise: number; noiseFreq: number; noiseL: boolean; noiseC: boolean; noiseH: boolean;
   // ColorBox per-channel sweeps (start/end scalars + easing index into EASING_NAMES).
@@ -136,7 +136,7 @@ const sliceToModsB = (s: GeneratorSlice): SlotModifiers => ({ hueRotate: s.bHueR
 const sliceToParams = (s: GeneratorSlice): GeneratorParams => ({
   mixL: s.mixL, mixC: s.mixC, mixH: s.mixH,
   reverse: s.reverse, bands: s.bands, repeats: s.repeats, phase: s.phase, mirror: s.mirror,
-  hueRotate: s.hueRotate, chroma: s.chroma, contrast: s.contrast,
+  hueRotate: s.hueRotate, chroma: s.chroma, contrast: s.contrast, lightness: s.lightness ?? 0,
   noise: s.noise, noiseFreq: s.noiseFreq, noiseL: s.noiseL, noiseC: s.noiseC, noiseH: s.noiseH,
 });
 
@@ -192,6 +192,9 @@ interface GeneratorState {
   bakeMainToCurve: () => void;
   /** Reset the global Modify + noise dials to neutral. */
   resetMainMods: () => void;
+  /** Reset every control GE v2's ADJUST face shows — {@link ADJUST_FACE_DEFAULTS} — and
+   *  nothing else. One undo entry. */
+  resetAdjust: () => void;
   /** ColorBox: approximate a catalog gradient as per-channel sweeps and load it into
    *  the ColorBox params (the interim "fit from a gradient" entry until P2's drop path). */
   fitColorBoxFromCatalog: (idx: number) => void;
@@ -207,8 +210,32 @@ const SLOT_DEFAULTS = (which: 'A' | 'B'): Partial<GeneratorSlice> => {
     [`${p}Reverse`]: false, [`${p}Repeats`]: 1, [`${p}Phase`]: 0, [`${p}Mirror`]: false,
   } as Partial<GeneratorSlice>;
 };
+/** Both slots' modifiers at neutral — the fourteen `aHueRotate` … `bMirror` params. GE v2 has
+ *  no UI for them (owner, 2026-09-13: Mix is streamlined into the destructive flow), so its Mix
+ *  entry puts them here rather than let a value from elsewhere apply unseen — grep
+ *  `SLOT_MOD_DEFAULTS` in gradient-explorer/v2/GradientExplorerV2App.tsx. */
+export const SLOT_MOD_DEFAULTS: Partial<GeneratorSlice> = { ...SLOT_DEFAULTS('A'), ...SLOT_DEFAULTS('B') };
 export const MAIN_DEFAULTS: Partial<GeneratorSlice> = {
-  hueRotate: 0, chroma: 1, contrast: 1, bands: 0, repeats: 1, phase: 0, mirror: false, reverse: false, noise: 0,
+  hueRotate: 0, chroma: 1, contrast: 1, lightness: 0, bands: 0, repeats: 1, phase: 0, mirror: false, reverse: false, noise: 0,
+};
+/**
+ * What GE v2's Adjust face's CANCEL puts back (owner, 2026-09-13 — it was "Reset all" until the
+ * same day's Cancel / Apply rework): every control in its three bins, and nothing outside them.
+ * That is {@link MAIN_DEFAULTS} PLUS the noise sub-dials — Frequency and the three Targets —
+ * which MAIN_DEFAULTS leaves out on purpose: a bake (Apply, or closing the face) resets the
+ * chain to the identity, and at Strength 0 those sub-dials change nothing, so they persist
+ * there. A Cancel that left a visible Frequency slider where it was would not have discarded
+ * the change, so this is its own set rather than `resetMainMods` (which also stays
+ * as it is for app-gmt's Generator dock, grep `GeneratorModifierActions`). The four values it
+ * adds come from the feature's own defaults table, not retyped. It does NOT reset the noise SEED (not
+ * a control), the Mix blend, the slot modifiers, the curves or the stops.
+ */
+export const ADJUST_FACE_DEFAULTS: Partial<GeneratorSlice> = {
+  ...MAIN_DEFAULTS,
+  noiseFreq: GENERATOR_PARAM_DEFAULTS.noiseFreq as number,
+  noiseL: GENERATOR_PARAM_DEFAULTS.noiseL as boolean,
+  noiseC: GENERATOR_PARAM_DEFAULTS.noiseC as boolean,
+  noiseH: GENERATOR_PARAM_DEFAULTS.noiseH as boolean,
 };
 
 const presetRamp = (idx: number): RGB[] => {
@@ -458,6 +485,7 @@ export const useGeneratorStore = create<GeneratorState>((set, get) => ({
       setSlice(MAIN_DEFAULTS);
     }),
   resetMainMods: () => genEdit(() => setSlice(MAIN_DEFAULTS)),
+  resetAdjust: () => genEdit(() => setSlice(ADJUST_FACE_DEFAULTS)),
 
   fitColorBoxFromCatalog: (idx) => get().fitColorBoxFromRamp(presetRamp(idx)),
   fitColorBoxFromRamp: (ramp) =>

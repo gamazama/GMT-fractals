@@ -53,7 +53,7 @@ import { usePaletteEditorStore } from '../../palette/store/paletteEditorStore';
 import { usePickerStore } from '../../palette/store/pickerStore';
 import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
-import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot } from '../../palette/store/generatorStore';
+import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot, SLOT_MOD_DEFAULTS } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store/favientsStore';
 import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary, isGradientFileName } from '../../palette/core/importGradientFiles';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
@@ -99,6 +99,13 @@ const enterMix = (): void => {
   if ((gs.generatorMode ?? 0) !== 0) setGeneratorSlice({ generatorMode: 0 });
   // Fully A to start (owner): the crossfade between the A and B bands is the gesture.
   if (gs.mixL || gs.mixC || gs.mixH) setGeneratorSlice({ mixL: 0, mixC: 0, mixH: 0 });
+  // No slot modifiers in v2 (owner, 2026-09-13: they stay gone — Mix is streamlined into the
+  // destructive flow). The fourteen params still exist for app-gmt's and the old shell's
+  // Generator, and a value left in them would tint both bars and the blend with no control
+  // on screen to show it or take it back. v2 itself never writes one; what can carry one in is
+  // a loaded session file (the whole `paletteGenerator` slice rides it). So entering Mix puts
+  // them at neutral, the same way it already does for the mode and the blend.
+  if (Object.entries(SLOT_MOD_DEFAULTS).some(([k, v]) => (gs as unknown as Record<string, unknown>)[k] !== v)) setGeneratorSlice(SLOT_MOD_DEFAULTS);
   const d = deriveWorkingNow();
   if (d) {
     w.syncRecent();
@@ -349,8 +356,8 @@ export const GradientExplorerV2App: React.FC = () => {
   }, []);
   const { fileToImg } = useImageDrop({
     onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); },
-    onOtherFiles: useCallback((files: FileList) => {
-      const gradients = Array.from(files).filter((f) => isGradientFileName(f.name));
+    onOtherFiles: useCallback((files: File[]) => {
+      const gradients = files.filter((f) => isGradientFileName(f.name));
       if (!gradients.length) return false;
       // Into the set you are looking at, when that set is a group you own; a dated bin and
       // the catalogue are not yours to file into, so those fall back to Kept.

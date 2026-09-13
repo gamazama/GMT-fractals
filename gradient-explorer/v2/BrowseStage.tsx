@@ -370,11 +370,14 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
   }, []);
 
   // Esc closes the rows (capture phase, so the shell's plain keydown does not also dismiss
-  // the candidate).
+  // the candidate). One exception: Esc typed into a NON-EMPTY search box belongs to the box
+  // (it clears the query — see the input's onKeyDown), so it is let through to it.
   useEffect(() => {
     if (!filtersOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      const t = e.target as HTMLInputElement | null;
+      if (t && t.matches?.('[data-gx-search]') && t.value) return;
       e.stopPropagation();
       setFiltersOpen(false);
     };
@@ -728,6 +731,19 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
           <input
             value={m.search}
             onChange={(e) => m.setSearch(e.target.value)}
+            data-gx-search=""
+            /* ESC CLEARS THE QUERY (the old PickerStage did; lost in v2 until 2026-09-13) — and
+               stops there: `stopPropagation` keeps it from the shell's window-level Esc chain
+               (a wall selection → the open tray face → an armed slot), so clearing a search
+               never also closes a face. An EMPTY box does nothing here and Esc goes on to
+               that chain exactly as it does from anywhere else. Focus stays, so typing again
+               needs no click; the old stage blurred, but it also collapsed its search. */
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape' || !m.search) return;
+              e.preventDefault();
+              e.stopPropagation();
+              m.setSearch('');
+            }}
             placeholder={m.isSet ? `Search ${setTitle || 'this set'}` : m.loaded ? `Search ${m.total.toLocaleString()} gradients` : 'Loading gradients…'}
             className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-fg placeholder-fg-faint"
           />
@@ -1047,8 +1063,10 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
             {m.keptIds && (
               <>
                 {' · '}
-                <button onClick={m.clearCarve} className="text-accent-300 underline hover:text-fg">
-                  {m.keptIds.length} kept, undo
+                {/* "clear", not "undo" (owner, 2026-09-13): it drops the whole carve — there is
+                    no per-step carve history to step back through */}
+                <button onClick={m.clearCarve} className="text-accent-300 underline hover:text-fg" title="Show the whole wall again">
+                  {m.keptIds.length} kept, clear
                 </button>
               </>
             )}

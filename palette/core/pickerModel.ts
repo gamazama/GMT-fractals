@@ -359,7 +359,13 @@ export const carveIds = (displayedIds: string[], insideIds: string[], op: 'isola
   return displayedIds.filter((id) => !drop.has(id));
 };
 
-/** The slice patch that clears every DDFS narrower at once (search + carve are separate). */
+/**
+ * The slice patch that clears every DDFS narrower at once (search + carve are separate).
+ * It must name EVERY quality window `windowsFromSlice` reads — `qHue` was missing until
+ * 2026-09-13, so "clear all" left a narrowed hue window in place and the Filters badge lit
+ * (shared with app-gmt's picker overlay). The harness now checks the patch against the
+ * feature's own axis list, so the next axis added there cannot be forgotten here.
+ */
 export const CLEAR_ALL_PATCH: Record<string, unknown> = {
   keptIds: null,
   activeThemes: [],
@@ -369,4 +375,5 @@ export const CLEAR_ALL_PATCH: Record<string, unknown> = {
   qCov: { x: 0, y: 1 },
   qRb: { x: 0, y: 1 },
   qWarm: { x: 0, y: 1 },
+  qHue: { x: 0, y: 1 },
 };

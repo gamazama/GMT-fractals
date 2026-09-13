@@ -793,6 +793,9 @@ function SplineEditor(): React.ReactElement {
   // Delete/Backspace removes the selected point (kept ≥ 2); removePoint re-selects the next one so
   // you can clear a run with repeated presses. Ignored when a form control has focus so it never
   // eats a keystroke aimed at the sliders.
+  // DOCUMENT, CAPTURE PHASE (2026-09-13): the overlay owns the keyboard while it is open and
+  // stops every key at the document before the app underneath hears it (grep "OWNS THE
+  // KEYBOARD" in FullscreenGradientOverlay.tsx). A window listener here would be stopped too.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
@@ -800,8 +803,8 @@ function SplineEditor(): React.ReactElement {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement | null)?.isContentEditable) return;
       if (spline.selected != null) { e.preventDefault(); removePoint(spline.selected); }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
   }, [spline.selected]);
 
   const HANDLE_HIT = 30; // px — generous invisible grab radius for an existing handle

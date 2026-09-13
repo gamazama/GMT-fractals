@@ -105,8 +105,15 @@ export const mountFavientsPanel = (cfg: FavientsMountConfig = {}): void => {
   }
 };
 
-/** The common Favients "studio" header action: open the standalone GMT Gradient Explorer
- *  in a new tab. app-gmt + fluid-toy share this; the Explorer itself leaves it unset. */
+/** app-gmt's Favients "studio" header action: open the standalone GMT Gradient Explorer in a
+ *  new tab. (fluid-toy has its own inline opener in `fluid-toy/registerFeatures.ts` and opens
+ *  the page bare; the Explorer itself leaves the action unset.)
+ *
+ *  `?from=gmt` is how the Explorer knows to offer "Back to GMT" (grep `cameFromGmtFor` in
+ *  `gradient-explorer/v2/shareUrl.ts`; 2026-09-13). The literal is written here rather than
+ *  imported, because `palette/` must never import an app. Only this opener appends it: the
+ *  Explorer's link goes to `app-gmt.html`, which is the wrong place to send a fluid-toy user.
+ *  The old shell ignores the param, so it is harmless there until the entry point swaps. */
 export const openGradientExplorer = (): void => {
-  window.open('gradient-explorer.html', '_blank', 'noopener');
+  window.open('gradient-explorer.html?from=gmt', '_blank', 'noopener');
 };

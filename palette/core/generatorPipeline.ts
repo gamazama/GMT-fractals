@@ -10,8 +10,28 @@
  * in memory project_softology_palette_param:
  *
  *   decompose A,B → per-slot modify → mix per channel → (BASE snapshot) →
- *   curve override → reverse → [per sample: repeats+phase → mirror → posterize →
- *   contrast(L) · chroma×(C) · hue-rotate(h) → noise → gamut] → recombine.
+ *   curve override → reverse → [per sample: scale+phase → mirror → posterize →
+ *   contrast(L) + lightness(L) · chroma×(C) · hue-rotate(h) → noise → gamut] → recombine.
+ *
+ * SCALE (the global `repeats` param, 2026-09-13 — owner: "Repeats → Scale, and it becomes
+ * FREE"). The key stays `repeats`; what changed is that it is a continuous value in
+ * [SCALE_MIN, ∞) instead of an integer count ≥ 1. The sampling rule is the one it always was,
+ * `t = fract(x·scale + phase)` whenever the axis is remapped, so an integer scale renders
+ * BYTE-IDENTICALLY to the old integer repeats (proven by golden digests of the pre-change
+ * pipeline — `debug/test-palette-generator.mts` section "scale"), a fractional scale ends on a
+ * partial tile, and a scale below 1 shows a WINDOW of the gradient (0.5 = its first half,
+ * moved along by Phase). Values ≤ 0 or non-finite still mean 1, as the old `Math.max(1, …)`
+ * made them. The per-slot `SlotModifiers.repeats` is untouched: still an integer count ≥ 1.
+ *
+ * MIRROR is ping-pong over each tile: a tile runs there and back. That is the same picture as
+ * "every alternate tile reversed" at twice the scale — exactly, not approximately:
+ * tri(fract(x)) = alternate-reverse(fract(2x)) — so there is ONE mirror, not two.
+ *
+ * LIGHTNESS (2026-09-13) is an ADDITIVE OkLab L offset applied after Contrast:
+ * `L' = 0.5 + (L − 0.5)·contrast + lightness`. Additive rather than a multiplier because a
+ * multiplier on L is a second contrast control pinned at black (it scales the spread as well
+ * as the level), while Contrast already owns the spread — an offset is the one orthogonal
+ * move left, the L twin of Hue rotate's additive angle. 0 adds exactly nothing.
  *
  * Two deliberate deviations from the prototype for the port:
  *   • core/ stays DOM- and THREE-free (a portable library), so this is a pure
@@ -61,6 +81,12 @@ export const DEFAULT_SLOT_MODS: SlotModifiers = {
   mirror: false,
 };
 
+/** The smallest global Scale the pipeline honours (a tenth of the gradient across the ramp). */
+export const SCALE_MIN = 0.1;
+/** The global Scale as the pipeline reads it: ≤ 0 / non-finite → 1 (the old clamp's answer
+ *  for those), otherwise at least {@link SCALE_MIN}. Integer values ≥ 1 pass through as they are. */
+export const scaleOf = (v: number): number => (Number.isFinite(v) && v > 0 ? Math.max(SCALE_MIN, v) : 1);
+
 /** Global generator parameters (the post-mix modifier chain). */
 export interface GeneratorParams {
   /** Per-channel A↔B mix, 0 = all A, 1 = all B. */
@@ -71,7 +97,8 @@ export interface GeneratorParams {
   reverse: boolean;
   /** Posterize bands; 0 or 1 = off. */
   bands: number;
-  /** Repeat the gradient N times across t. */
+  /** SCALE — how many times the gradient runs across t; continuous, a fraction ends on a
+   *  partial tile and a value below 1 shows a window of it (see the file header). */
   repeats: number;
   /** Phase offset on t, 0..1. */
   phase: number;
@@ -83,6 +110,9 @@ export interface GeneratorParams {
   chroma: number;
   /** Contrast around mid-L. */
   contrast: number;
+  /** Additive OkLab L offset after contrast (0 = none). Optional so a params object written
+   *  before it existed still reads as neutral. */
+  lightness?: number;
   /** Noise amount, 0..1. */
   noise: number;
   /** Noise resample frequency (smaller = coarser grain). */
@@ -105,6 +135,7 @@ export const DEFAULT_GENERATOR_PARAMS: GeneratorParams = {
   hueRotate: 0,
   chroma: 1,
   contrast: 1,
+  lightness: 0,
   noise: 0,
   noiseFreq: 32,
   noiseL: true,
@@ -296,12 +327,13 @@ export const buildGradientRamp = (
   }
 
   const bands = params.bands;
-  const reps = Math.max(1, params.repeats);
+  const reps = scaleOf(params.repeats);
   const pha = params.phase;
   const mir = params.mirror;
   const hueR = (params.hueRotate * Math.PI) / 180;
   const chr = params.chroma;
   const con = params.contrast;
+  const lit = params.lightness ?? 0;
   const nz = params.noise;
   const nf = Math.max(2, Math.round(params.noiseFreq));
 
@@ -327,7 +359,7 @@ export const buildGradientRamp = (
     if (bands > 1) t = (Math.min(bands - 1, Math.floor(t * bands)) + 0.5) / bands; // posterize
     const si = Math.round(clamp01(t) * 255);
 
-    let l = 0.5 + (L[si] - 0.5) * con;
+    let l = 0.5 + (L[si] - 0.5) * con + lit;
     let c = C[si] * chr;
     let h = H[si] + hueR;
     if (nz > 0) {

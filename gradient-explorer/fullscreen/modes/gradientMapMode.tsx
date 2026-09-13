@@ -334,13 +334,20 @@ const GradientMapControls: React.FC = () => {
 // ── Stage layer (the empty state) ────────────────────────────────────────────────────────────
 
 /** Centred hint over the (flat background) canvas when there is nothing to map. DOM, not
- *  canvas, so it can never bake into an exported PNG. */
+ *  canvas, so it can never bake into an exported PNG.
+ *
+ *  WORDING (2026-09-13): it said "Drop an image on Extract first", which names a tab the v2
+ *  shell does not have — its picture lives on the hero's IMAGE slot, and v2 mounts the image
+ *  drop at the shell root, so an image dropped anywhere, this overlay included, loads (the
+ *  overlay repaints on the new thumb — grep `imageThumb` in FullscreenGradientOverlay). The
+ *  old shell only takes a drop while its Extract stage is mounted; it is being retired, so
+ *  the words follow v2. */
 const GradientMapStage: React.FC = () => {
   const thumb = useImageStore((s) => s.thumb);
   if (thumb) return null;
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-center px-6 pointer-events-none">
-      <div className="text-[13px] text-fg-secondary">Drop an image on Extract first</div>
+      <div className="text-[13px] text-fg-secondary">Drop an image here, or add one on the Image tab</div>
       <div className="text-[11px] text-fg-muted">
         Gradient map recolours your image through this gradient.
       </div>
@@ -354,7 +361,7 @@ export const GRADIENT_MAP_MODE: FullscreenMode = {
   id: 'gradientMap',
   label: 'Gradient map',
   kind: 'cpuRaster',
-  hint: 'Your Extract image, recoloured through the gradient · Esc to close',
+  hint: 'Your image, recoloured through the gradient · Esc to close',
   paramFields: [
     { key: 'mapStrength', label: 'Strength', min: 0, max: 1, step: 0.01, default: GEOM_DEFAULTS.mapStrength },
     { key: 'mapInvert', label: 'Invert', min: 0, max: 1, step: 1, default: GEOM_DEFAULTS.mapInvert },

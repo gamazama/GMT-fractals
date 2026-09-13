@@ -9,6 +9,22 @@
  *   • noise determinism: same seed ⇒ identical ramp; different seed ⇒ differs.
  *   • posterize: N bands ⇒ at most N distinct colours.
  *   • seam: the generated ramp fits to GMT stops within the fidelity dial.
+ *   • SCALE (19–22, 2026-09-13 — the global `repeats` went continuous and became "Scale"):
+ *       19 integer scale is BYTE-IDENTICAL to the old integer repeats — golden digests of the
+ *          pre-change pipeline over 1..8 × phase × mirror × reverse × posterize × (plain /
+ *          every other dial / noise) — so no preset, session file or keyframe needs migrating;
+ *       20 a fractional scale is its own picture (2.5 is neither 2 nor 3), ends on a partial
+ *          tile (the last texel is the source's middle), changes CONTINUOUSLY with the value,
+ *          a scale below 1 is a window (0.5 = the first half) and ≤ 0 still means 1;
+ *       21 mirror alternates: each tile runs there and back, which is exactly "alternate
+ *          tiles reversed" at twice the scale — so it is the one mirror;
+ *       22 Lightness is an additive OkLab L offset: 0 is exact, 0.1 moves every texel's
+ *          un-clipped L by 0.1, and both it and a sub-1 scale break the identity.
+ *     Falsified 2026-09-13, each reverted: rounding the value in `scaleOf` reds 20 ("2.5 is
+ *     its own picture", the partial tile, the window); restoring `Math.max(1, …)` reds 20's
+ *     window + identity checks; always wrapping (the prototype's rule) reds 19 at scale 1;
+ *     dropping `+ lit` reds 22; mirroring before the wrap reds 19 for every scale; and an
+ *     "alternate tiles" mirror in place of ping-pong reds all three of 21 (worst 255).
  *
  * Run: npx tsx debug/test-palette-generator.mts
  */
@@ -29,6 +45,8 @@ import { rgbToOklab, type RGB } from '../palette/core/oklab';
 import { PaletteGeneratorFeature } from '../palette/features/paletteGenerator';
 import { EASING_NAMES, type EasingName } from '../palette/core/easings';
 import { fitColorBoxToRamp } from '../palette/core/colorBoxFit';
+import { isIdentityAdjust } from '../palette/core/workingPipeline';
+import { createHash } from 'node:crypto';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -55,6 +73,11 @@ const srcB = decomposeRamp(B);
 const P = (patch: Partial<GeneratorParams> = {}): GeneratorParams => ({ ...DEFAULT_GENERATOR_PARAMS, ...patch });
 const M = (patch: Partial<SlotModifiers> = {}): SlotModifiers => ({ ...DEFAULT_SLOT_MODS, ...patch });
 
+const maxChannelDiffN = (x: RGB[], y: RGB[]) => {
+  let m = 0;
+  for (let i = 0; i < x.length; i++) m = Math.max(m, Math.abs(x[i].r - y[i].r), Math.abs(x[i].g - y[i].g), Math.abs(x[i].b - y[i].b));
+  return m;
+};
 const maxChannelDiff = (x: RGB[], y: RGB[]) => {
   let m = 0;
   for (let i = 0; i < 256; i++) m = Math.max(m, Math.abs(x[i].r - y[i].r), Math.abs(x[i].g - y[i].g), Math.abs(x[i].b - y[i].b));
@@ -259,6 +282,93 @@ console.log('\nColorBox fit:');
     fit.h.start >= 0 && fit.h.start < 360 && fit.h.end >= 0 && fit.h.end < 360 &&
     EASING_NAMES.includes(fit.L.easing) && EASING_NAMES.includes(fit.h.easing);
   ok(valid, 'arbitrary gradient fits to finite, in-range ColorBox params');
+}
+
+// --- Scale / mirror / lightness (2026-09-13) --------------------------------------
+// GOLDEN digests of buildGradientRamp BEFORE the change, one per integer repeats value, over
+// the loop below (recorded from HEAD 7e3547b2 by the same loop). An integer scale must still
+// produce exactly these bytes: that is the whole case for keeping the key with no migration.
+const GOLDEN_INTEGER_REPEATS: Record<number, string> = {
+  1: '55ef63eecb4b93d8', 2: '78479533409db9b7', 3: 'cce254f6180fa11b', 4: '4e0462b943c88541',
+  5: '21979e9035febefc', 6: '8264aee5eaca9773', 7: '15ac421bf545df3a', 8: '936530b18c7d7352',
+};
+
+// 19) integer scale ≡ the old integer repeats, byte for byte
+console.log('\n[19] scale: integers render exactly as repeats did');
+for (let reps = 1; reps <= 8; reps++) {
+  const h = createHash('sha256');
+  for (const phase of [0, 0.25, 0.7])
+    for (const mirror of [false, true])
+      for (const reverse of [false, true])
+        for (const bands of [0, 5])
+          for (const extra of [{}, { hueRotate: 40, chroma: 1.3, contrast: 0.8, mixL: 0.4, mixH: 0.6 }, { noise: 0.5, noiseC: true, noiseH: true }]) {
+            const r = buildGradientRamp(srcA, srcB, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, { ...DEFAULT_GENERATOR_PARAMS, repeats: reps, phase, mirror, reverse, bands, ...extra } as GeneratorParams, null, 7);
+            h.update(JSON.stringify([r.ramp, r.final]));
+          }
+  const got = h.digest('hex').slice(0, 16);
+  ok(got === GOLDEN_INTEGER_REPEATS[reps], `scale ${reps}: identical to the pre-change repeats ${reps} (${got})`);
+}
+
+// 20) fractional scale: its own picture, a partial last tile, continuous, a window below 1
+console.log('\n[20] scale: fractions');
+{
+  const at = (repeats: number, phase = 0) => buildGradientRamp(srcA, srcA, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P({ repeats, phase }), null, 1).ramp;
+  const one = at(1);
+  const s25 = at(2.5);
+  ok(maxChannelDiff(s25, at(2)) > 30 && maxChannelDiff(s25, at(3)) > 30, 'scale 2.5 is its own picture — not rounded to 2 or 3');
+  // x·2.5 at the last texel is 2.5 → fract 0.5: the partial last tile ends at the source's middle
+  const px = (c: RGB) => [c];
+  ok(maxChannelDiffN(px(s25[255]), px(one[128])) < 1e-6, 'scale 2.5 ends on a partial tile: the last texel is the source at t = 0.5');
+  // continuity: nudging the scale moves every texel a little, except the handful at a wrap
+  let jumps = 0;
+  for (const s of [0.6, 1.3, 2.5, 3.7, 7.25]) {
+    const a = at(s);
+    const b = at(s + 0.002);
+    for (let i = 0; i < 256; i++) if (Math.max(Math.abs(a[i].r - b[i].r), Math.abs(a[i].g - b[i].g), Math.abs(a[i].b - b[i].b)) > 12) jumps++;
+  }
+  ok(jumps <= 5 * 8, `a small change in scale is a small change in the ramp (${jumps} texels jumped across five scales — only those at a tile's wrap may)`);
+  const half = at(0.5);
+  let windowOff = 0;
+  for (let i = 0; i < 256; i++) windowOff = Math.max(windowOff, maxChannelDiffN(px(half[i]), px(one[Math.round((i / 255) * 0.5 * 255)])));
+  ok(windowOff < 1e-6, 'scale 0.5 is a window: the first half of the gradient across the whole ramp');
+  ok(maxChannelDiff(at(0), one) === 0 && maxChannelDiff(at(-3), one) === 0, 'scale ≤ 0 still means 1');
+  ok(isIdentityAdjust(P({ repeats: 1 })) && !isIdentityAdjust(P({ repeats: 0.5 })) && !isIdentityAdjust(P({ repeats: 2.5 })), 'identity: scale 1 is, 0.5 and 2.5 are not');
+}
+
+// 21) mirror alternates tiles — the same picture as alternate-reversed tiles at twice the scale
+console.log('\n[21] mirror: each tile there and back');
+{
+  const src = buildGradientRamp(srcA, srcA, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P(), null, 1).ramp;
+  for (const [scale, phase] of [[1, 0], [1.5, 0], [2, 0.3]] as const) {
+    const m = buildGradientRamp(srcA, srcA, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P({ repeats: scale, phase, mirror: true }), null, 1).ramp;
+    let off = 0;
+    for (let i = 0; i < 256; i++) {
+      const x = 2 * ((i / 255) * scale + phase);
+      const k = Math.floor(x);
+      const f = k % 2 === 0 ? x - k : 1 - (x - k);
+      off = Math.max(off, maxChannelDiffN([m[i]], [src[Math.round(f * 255)]]));
+    }
+    // neighbouring texels of a smooth ramp differ by ~1–2 levels; the alternation is what is tested
+    ok(off <= 3, `mirror at scale ${scale}, phase ${phase} ≡ alternate tiles reversed at scale ${2 * scale} (worst ${off.toFixed(2)})`);
+  }
+  const m1 = buildGradientRamp(srcA, srcA, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P({ mirror: true }), null, 1).ramp;
+  ok(maxChannelDiffN([m1[128]], [src[255]]) < 4 && maxChannelDiffN([m1[0]], [m1[255]]) < 1e-6, 'mirror at scale 1: the end colour in the middle, the start colour at both ends');
+}
+
+// 22) lightness: an additive L offset after contrast; 0 is exact
+console.log('\n[22] lightness');
+{
+  const base = buildGradientRamp(srcA, srcB, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P({ contrast: 1.4, mixL: 0.3 }), null, 1);
+  const zero = buildGradientRamp(srcA, srcB, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P({ contrast: 1.4, mixL: 0.3, lightness: 0 }), null, 1);
+  const { lightness: _omit, ...noKey } = P({ contrast: 1.4, mixL: 0.3 });
+  void _omit;
+  const absent = buildGradientRamp(srcA, srcB, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, noKey as GeneratorParams, null, 1);
+  ok(JSON.stringify(zero) === JSON.stringify(base) && JSON.stringify(absent) === JSON.stringify(base), 'lightness 0 (or no key at all) renders exactly as before');
+  const up = buildGradientRamp(srcA, srcB, DEFAULT_SLOT_MODS, DEFAULT_SLOT_MODS, P({ contrast: 1.4, mixL: 0.3, lightness: 0.1 }), null, 1);
+  let worst = 0;
+  for (let i = 0; i < 256; i++) worst = Math.max(worst, Math.abs(up.final.L[i] - base.final.L[i] - 0.1));
+  ok(worst < 1e-12, `lightness 0.1 moves every texel's L by exactly 0.1 after contrast (worst error ${worst.toExponential(1)})`);
+  ok(!isIdentityAdjust(P({ lightness: 0.1 })) && isIdentityAdjust(P({ lightness: 0 })), 'identity: lightness 0 is, 0.1 is not');
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

@@ -21,6 +21,8 @@ export interface InlineToggleItem {
   key: string;
   label: string;
   active: boolean;
+  /** Tooltip — what the toggle does, when the one-word label cannot say it. */
+  title?: string;
 }
 
 interface InlineToggleButtonsProps {
@@ -37,12 +39,15 @@ export const InlineToggleButtons: React.FC<InlineToggleButtonsProps> = ({ items,
       {label && (
         <span className={soft ? 'text-[12px] text-fg-muted' : 'text-[10px] text-fg-dim mr-0.5'}>{label}</span>
       )}
-      <div className={`flex ${soft ? 'gap-1' : 'gap-0.5'}`}>
+      {/* SOFT: the chips wrap too, not only the label before them — in a narrow GE v2 bin the
+          three noise targets are 250 px on their own and ran past the bin (measured 2026-09-13) */}
+      <div className={`flex ${soft ? 'gap-1 flex-wrap' : 'gap-0.5'}`}>
         {items.map((it) => (
           <button
             key={it.key}
             onClick={() => onToggle(it.key)}
             aria-pressed={it.active}
+            title={it.title}
             className={
               soft
                 ? `inline-flex items-center h-[26px] px-2.5 rounded-lg text-[13px] whitespace-nowrap border transition-colors ${

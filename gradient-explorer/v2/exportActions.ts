@@ -23,7 +23,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { getExportFormat, grdStopCount, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
+import { getExportFormat, grdStopCount, aiLossyGradients, stopBudgetOf, AI_LOSSY_DELTA, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { showToast } from '../../engine/store/toastStore';
 import type { RGB } from '../../palette/core/oklab';
@@ -264,6 +264,21 @@ export const runSetImage = async (favients: Favient[], setName: string, subject:
  */
 export const setLossyCount = (favients: Favient[], key: string, subject: ExportSubject = 'ramp', budget?: number): number =>
   subject === 'swatches' ? 0 : collectionQualityWarnings(favients, key, undefined, budget).length;
+
+/**
+ * The same question for ONE gradient: 1 when `key` flattens this ramp visibly, else 0 — so
+ * the window can say it with the set's own words (`lossyNote(1, …)`). Measured exactly the
+ * way `collectionQualityWarnings` measures each member of a set — the format's own stop
+ * budget (or the Settings override) and the same visibility threshold — so a gradient warns
+ * alone if and only if it would warn inside a set. Every format with a budget reduces a
+ * single download (`build` takes the budget), which is why this is not `.ai`/`.idml` only
+ * as the old shell's Extras panels were. Swatches reduce nothing.
+ */
+export const gradientLossyCount = (ramp: RGB[], name: string, key: string, subject: ExportSubject = 'ramp', budget?: number): number => {
+  if (subject === 'swatches' || !ramp.length) return 0;
+  const cap = stopBudgetOf(key, budget);
+  return cap === null ? 0 : aiLossyGradients([{ name, ramp }], AI_LOSSY_DELTA, cap).length;
+};
 
 /**
  * Perform an export of the working gradient and remember it as a recent. `palette` is the

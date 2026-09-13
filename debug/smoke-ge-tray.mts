@@ -29,6 +29,12 @@
  *       the colour picker in it; Esc closes it
  *   [13] and a click on the WALL closes it too, clearing the stop with it — Esc used to be
  *       the only way out (owner, 2026-09-09)
+ *   [14] one click leaves the picker for Mix / Curves / Adjust
+ *   [15] the Adjust face (owner, 2026-09-13): a text Reseed; Cancel discards the three bins in
+ *       one undo step; Apply bakes the adjusted result into the stops, resets the dials and one
+ *       Ctrl+Z restores both; nothing leaves its panel at 1024 / 900 / 800 px
+ *   [16] the WALLPAPER owns the keyboard (2026-09-13): with a stop selected on the hero and a
+ *       point selected in Spline, Delete removes the point and NOT the stop underneath
  *
  * Falsified 2026-09-07 three ways, each reverted (and once more after the Mix redesign the
  * same day: [4]'s second click used the wall's PRE-hero box and hit the hero's ramp — it armed
@@ -145,11 +151,17 @@ async function main() {
   // A leftover Adjust value (as a user who once dragged Phase would have): the bake on
   // leaving Mix must fold it in ONCE and reset it, or it applies again on every pass and
   // the stops walk (measured 2026-09-07: 2 % further right per toggle).
-  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.02 }));
+  // And two leftover SLOT MODIFIERS (2026-09-13): v2 has no control for them, so entering Mix
+  // must put them at neutral rather than let them tint the bars and the blend unseen.
+  // Falsified by dropping the SLOT_MOD_DEFAULTS reset from enterMix: red on "entering Mix left
+  // a slot modifier set (aHueRotate 45)".
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.02, aHueRotate: 45, bMirror: true }));
   await page.click('[data-gx-tray-tab="mix"]');
   await page.waitForTimeout(400);
   s = await state(page);
   if (s.face !== 'mix') fail(`[4] Mix did not open (${s.face})`);
+  const slotMods = await page.evaluate(() => { const g = (window as any).__store.getState().paletteGenerator; return { aHueRotate: g.aHueRotate, bMirror: g.bMirror }; });
+  if (slotMods.aHueRotate !== 0 || slotMods.bMirror !== false) fail(`[4] entering Mix left a slot modifier set (aHueRotate ${slotMods.aHueRotate}, bMirror ${slotMods.bMirror}) — v2 has no control that could show or clear it`);
   if (!s.armedHint) fail('[4] opening Mix did not arm the next pick (no armed hint)');
   if (!s.bandA) fail('[4] the hero ramp has no source half (Mix = your gradient over the result)');
   if (!s.bandB) fail('[4] the Mix face has no bar for the gradient you mix with');
@@ -461,6 +473,202 @@ async function main() {
     if (got !== tab) fail(`[14] one click on ${tab} from the picker landed on ${got} — it should open ${tab}`);
   }
   console.log('✓ [14] one click leaves the picker for Mix / Curves / Adjust — not two');
+
+  /**
+   * [15] THE ADJUST FACE (owner, 2026-09-13): Reseed, Cancel / Apply, and nothing off-panel.
+   *
+   *   • RESEED is a text button, unavailable at Strength 0, and moves the grain when on.
+   *   • CANCEL puts every dial in the three bins back — Frequency and Targets included — in ONE
+   *     undo step, touching neither the working stops nor anything outside the face (the Mix
+   *     blend, a slot modifier).
+   *   • APPLY bakes: the working stops become the ADJUSTED result (the ramp they render is the
+   *     adjusted ramp, not the one before), the picture-changing dials go back to default, the
+   *     face stays open, and ONE Ctrl+Z brings back both the old stops and the dials.
+   *   • Both are unavailable while the dials draw nothing.
+   *   • At 1024 / 900 / 800 px nothing in a bin reaches past the bin, and no bin past the tray
+   *     (the owner: "the whole targets line goes offpanel when window size is narrow"; measured
+   *     before the rework at 800: the "hue" chip at x 716..760 in a bin ending at 759).
+   *
+   * Falsified 2026-09-13, each reverted: Cancel pointed at `resetMainMods` reds "Cancel left
+   * noiseFreq at 64"; Apply's `beginEdit` removed reds "Apply left hueRotate at 30"; the bins
+   * pinned three across (`cols` fixed at 3) reds "a bin is squeezed to … px" — WITHOUT that
+   * width check it stayed green, because the soft chips now wrap inside a squeezed bin, so the
+   * width check is what pins the rows; and pinning three across with the chips' `flex-wrap`
+   * also removed from InlineToggleButtons reds "800 px: 2 things leave their panel — noise:
+   * lightness…" (the owner's bug, reproduced).
+   */
+  const gen = () => page.evaluate(() => ({ ...(window as any).__store.getState().paletteGenerator }));
+  const working = () => page.evaluate(() => {
+    const w = (window as any).__gxWorking?.();
+    return { input: JSON.stringify(w?.input ?? null), stops: JSON.stringify(w?.config?.stops?.map((s: { position: number; color: string }) => [s.position, s.color]) ?? null), ramp: (w?.ramp ?? []) as { r: number; g: number; b: number }[] };
+  });
+  const rampDist = (a: { r: number; g: number; b: number }[], b: { r: number; g: number; b: number }[]) => {
+    let sum = 0;
+    for (let i = 0; i < Math.min(a.length, b.length); i++) sum += Math.abs(a[i].r - b[i].r) + Math.abs(a[i].g - b[i].g) + Math.abs(a[i].b - b[i].b);
+    return sum / (3 * Math.max(1, Math.min(a.length, b.length)));
+  };
+  if ((await state(page)).face !== 'adjust') {
+    await page.click('[data-gx-tray-tab="adjust"]');
+    await page.waitForTimeout(500);
+  }
+  if ((await state(page)).face !== 'adjust') fail(`[15] could not open the Adjust face (${(await state(page)).face})`);
+  const reseedBtn = page.locator('[data-gx-adjust-reseed]');
+  const cancelBtn = page.locator('[data-gx-adjust-cancel]');
+  const applyBtn = page.locator('[data-gx-adjust-apply]');
+  if (!(await reseedBtn.count()) || !(await cancelBtn.count()) || !(await applyBtn.count())) fail('[15] the Adjust face is missing Reseed, Cancel or Apply');
+  if (await page.locator('[data-gx-adjust-reset]').count()) fail('[15] "Reset all" is still on the face — it was replaced by Cancel / Apply');
+  if ((await reseedBtn.innerText()).trim() !== 'Reseed') fail(`[15] Reseed is not a text button ("${(await reseedBtn.innerText()).trim()}")`);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ noise: 0 }));
+  await page.waitForTimeout(200);
+  if (!(await reseedBtn.isDisabled())) fail('[15] Reseed is offered at Noise: Strength 0, where a new seed changes nothing');
+  if (!(await cancelBtn.isDisabled()) || !(await applyBtn.isDisabled())) fail('[15] Cancel / Apply are offered with every dial at its default');
+
+  // one value in every bin — Lightness and a FRACTIONAL scale among them — plus two things
+  // outside the face that neither action may touch
+  const faceSet = { hueRotate: 30, chroma: 1.4, lightness: 0.08, bands: 4, repeats: 2.5, mirror: true, noise: 0.4, noiseFreq: 64, noiseL: false, noiseC: true };
+  await page.evaluate((v) => (window as any).__store.getState().setPaletteGenerator({ ...v, mixL: 0.3, aHueRotate: 45 }), faceSet);
+  await page.waitForTimeout(400);
+  if (await reseedBtn.isDisabled()) fail('[15] Reseed stayed unavailable with Noise: Strength at 0.4');
+  const rampA = JSON.stringify((await working()).ramp.slice(0, 64));
+  await reseedBtn.click();
+  await page.waitForTimeout(400);
+  if (JSON.stringify((await working()).ramp.slice(0, 64)) === rampA) fail('[15] Reseed changed nothing on the gradient with noise on');
+
+  // CANCEL
+  const beforeCancel = await working();
+  if (await cancelBtn.isDisabled()) fail('[15] Cancel is unavailable with every bin changed');
+  await cancelBtn.click();
+  await page.waitForTimeout(400);
+  let g = await gen();
+  const defaults = { hueRotate: 0, chroma: 1, contrast: 1, lightness: 0, bands: 0, repeats: 1, phase: 0, mirror: false, reverse: false, noise: 0, noiseFreq: 32, noiseL: true, noiseC: false, noiseH: false };
+  for (const [k, v] of Object.entries(defaults)) if (g[k] !== v) fail(`[15] Cancel left ${k} at ${g[k]} (default ${v})`);
+  if (g.mixL !== 0.3 || g.aHueRotate !== 45) fail(`[15] Cancel reached outside the face (mixL 0.3 → ${g.mixL}, aHueRotate 45 → ${g.aHueRotate})`);
+  const afterCancel = await working();
+  if (afterCancel.input !== beforeCancel.input) fail('[15] Cancel changed the working input — it discards dials, it does not bake');
+  // the gradient as it is with no dials: what Apply must move AWAY from
+  const baseRamp = afterCancel.ramp;
+  if (!(await applyBtn.isDisabled())) fail('[15] Apply is still offered after Cancel put every dial back');
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(500);
+  g = await gen();
+  for (const [k, v] of Object.entries(faceSet)) if (g[k] !== v) fail(`[15] one Ctrl+Z after Cancel did not bring ${k} back (${g[k]}, wanted ${v}) — Cancel is not one step`);
+
+  // APPLY — the dials are back (from the undo); bake them
+  const beforeApply = await working();
+  const adjustedRamp = beforeApply.ramp;
+  const chipBefore = (await chip()).state;
+  if (rampDist(adjustedRamp, baseRamp) < 8) fail(`[15] setup: the dials barely change the picture (${rampDist(adjustedRamp, baseRamp).toFixed(1)}) — Apply could not be told from doing nothing`);
+  if (await applyBtn.isDisabled()) fail('[15] Apply is unavailable with the dials turned');
+  await applyBtn.click();
+  await page.waitForTimeout(700);
+  const afterApply = await working();
+  g = await gen();
+  for (const k of ['hueRotate', 'chroma', 'contrast', 'lightness', 'bands', 'repeats', 'phase', 'mirror', 'reverse', 'noise'] as const)
+    if (g[k] !== (defaults as Record<string, unknown>)[k]) fail(`[15] Apply left ${k} at ${g[k]} — the dials should start fresh`);
+  // With every dial back at default the picture can only still be the ADJUSTED one if it was
+  // baked into the stops: the working ramp must sit on the adjusted ramp, not on the base.
+  const toAdjusted = rampDist(afterApply.ramp, adjustedRamp);
+  const toBase = rampDist(afterApply.ramp, baseRamp);
+  if (!(toAdjusted < 12 && toAdjusted * 2 < toBase)) fail(`[15] Apply did not bake the adjusted result — mean ${toAdjusted.toFixed(1)} levels from it, ${toBase.toFixed(1)} from the gradient before`);
+  if ((await chip()).state !== 'edited') fail(`[15] Apply did not make a new state (chip: ${(await chip()).state})`);
+  if ((await state(page)).face !== 'adjust') fail(`[15] Apply closed the face (${(await state(page)).face}) — it bakes and keeps going`);
+  if (!(await applyBtn.isDisabled())) fail('[15] Apply is still offered right after applying');
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(600);
+  const undone = await working();
+  g = await gen();
+  if (undone.input !== beforeApply.input || (await chip()).state !== chipBefore) fail(`[15] one Ctrl+Z after Apply did not bring the gradient from before back (chip ${(await chip()).state}, was ${chipBefore})`);
+  for (const [k, v] of Object.entries(faceSet)) if (g[k] !== v) fail(`[15] one Ctrl+Z after Apply did not bring ${k} back (${g[k]}, wanted ${v})`);
+  console.log(`✓ [15] Reseed moves the grain; Cancel discards the three bins in one step; Apply bakes the adjusted result (mean ${toAdjusted.toFixed(1)} levels from it, ${toBase.toFixed(1)} from before) and one Ctrl+Z restores the gradient + dials`);
+
+  // NOTHING OFF-PANEL at narrow desktop widths
+  const offPanel = () => page.evaluate(`(function () {
+    var tray = document.querySelector('[data-gx-tray-root]');
+    var tr = tray.getBoundingClientRect();
+    var out = [];
+    var bins = tray.querySelectorAll('[data-gx-adjust-bin]');
+    var minW = 1e9;
+    for (var b = 0; b < bins.length; b++) {
+      var br = bins[b].getBoundingClientRect();
+      minW = Math.min(minW, br.width);
+      if (br.right > tr.right + 0.5 || br.left < tr.left - 0.5) out.push('bin ' + bins[b].getAttribute('data-gx-adjust-bin') + ' past the tray');
+      var all = bins[b].querySelectorAll('*');
+      for (var j = 0; j < all.length; j++) {
+        var er = all[j].getBoundingClientRect();
+        if (!er.width || !er.height || all[j].closest('[aria-hidden]')) continue;
+        if (er.right > br.right + 0.5 || er.left < br.left - 0.5) out.push(bins[b].getAttribute('data-gx-adjust-bin') + ': "' + String(all[j].innerText || all[j].tagName).slice(0, 16) + '" ' + Math.round(er.left) + '..' + Math.round(er.right) + ' in ' + Math.round(br.left) + '..' + Math.round(br.right));
+      }
+    }
+    return { out: out.slice(0, 4), n: out.length, cols: tray.querySelector('[data-gx-adjust]').getAttribute('data-gx-adjust-cols'), bins: bins.length, minW: Math.round(minW) };
+  })()`) as Promise<{ out: string[]; n: number; cols: string; bins: number; minW: number }>;
+  const cols: string[] = [];
+  for (const width of [1024, 900, 800]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.waitForTimeout(500);
+    const o = await offPanel();
+    if (o.bins !== 3) fail(`[15] ${width} px: ${o.bins} Adjust bins, expected 3`);
+    if (o.n) fail(`[15] ${width} px: ${o.n} things leave their panel — ${o.out.join(' · ')}`);
+    // ROWS, NOT SQUEEZE: a bin is never narrower than the Targets row needs (ADJUST_BIN_MIN
+    // in Tray.tsx is 280 — the row's 250 px plus the bin's padding); the face adds a row instead
+    if (o.minW < 278) fail(`[15] ${width} px: a bin is squeezed to ${o.minW} px (${o.cols} across) — the face should take another row`);
+    cols.push(`${width}:${o.cols}`);
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(400);
+  // leave the tray the way the next step expects it
+  await cancelBtn.click();
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ mixL: 0, aHueRotate: 0 }));
+  await page.waitForTimeout(200);
+  console.log(`✓ [15] nothing in the Adjust face leaves its panel at 1024 / 900 / 800 px (columns ${cols.join(' ')})`);
+
+  /**
+   * [16] THE WALLPAPER OWNS THE KEYBOARD (2026-09-13). The overlay used to own Escape only, so
+   * with a stop selected on the hero (the inspector face open) and a point selected in Spline,
+   * ONE Delete removed the spline point AND the hero's stop — reproduced in the browser that day
+   * (the hero went from 2 knots to 1 behind the overlay). Both listeners are window-level; the
+   * overlay now stops keys at the document once its own elements have had them.
+   * Falsified the same day by dropping that `stopPropagation` in FullscreenGradientOverlay:
+   * red on "Delete in the wallpaper also deleted a stop on the hero underneath (12 → 11)". The
+   * point half is there so a fix that swallowed the key for the MODE too cannot pass.
+   */
+  if ((await state(page)).face) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
+  const heroKnots = () => page.evaluate(() => document.querySelector('[data-gx-hero] [title="Click & drag to add/move knot"]')?.querySelectorAll('[class*="cursor-grab"]').length ?? -1);
+  await page.locator('[data-gx-hero] [class*="cursor-ew-resize"]').first().click();
+  await page.waitForTimeout(500);
+  if ((await state(page)).face !== 'inspector') fail(`[16] setup: a swatch click did not select a stop (${(await state(page)).face})`);
+  const knots0 = await heroKnots();
+  await page.click('[data-gx-hero] [title^="Wallpaper"]');
+  await page.waitForSelector('[data-testid="fullscreen-gradient-overlay"]', { timeout: 5000 }).catch(() => fail('[16] the wallpaper did not open'));
+  await page.locator('[data-testid="fullscreen-gradient-overlay"] [data-gx-fs-modes] button', { hasText: /^Spline/ }).first().click();
+  await page.waitForSelector('[data-testid="fullscreen-gradient-overlay"] .cursor-crosshair', { timeout: 8000 }).catch(() => null);
+  await page.waitForTimeout(500);
+  const splineStage = () => page.evaluate(() => {
+    const el = document.querySelector('[data-testid="fullscreen-gradient-overlay"] .cursor-crosshair') as HTMLElement | null;
+    const r = el?.getBoundingClientRect();
+    // the handles are round divs over the SVG path, one per point
+    return r ? { x: r.x, y: r.y, w: r.width, h: r.height, handles: el!.querySelectorAll(':scope > div.rounded-full').length } : null;
+  });
+  const st0 = await splineStage();
+  if (!st0) fail('[16] Spline mode has no editing stage');
+  // the default curve's second point sits at (0.38, 0.34) of the stage — select it
+  await page.mouse.click(st0!.x + st0!.w * 0.38, st0!.y + st0!.h * 0.34);
+  await page.waitForTimeout(400);
+  const handles0 = (await splineStage())!.handles;
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(500);
+  const handles1 = (await splineStage())!.handles;
+  const knots1 = await heroKnots();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  if (await page.$('[data-testid="fullscreen-gradient-overlay"] .cursor-crosshair')) fail('[16] Escape did not close the wallpaper');
+  if (knots1 !== knots0) fail(`[16] Delete in the wallpaper also deleted a stop on the hero underneath (${knots0} → ${knots1})`);
+  if (!(handles1 < handles0)) fail(`[16] Delete did not reach the Spline mode — its selected point is still there (${handles0} → ${handles1} handles)`);
+  console.log(`✓ [16] Delete in the wallpaper removes the spline point (${handles0} → ${handles1}) and leaves the hero's stops alone (${knots0})`);
 
   await browser.close();
   if (errors.length) {

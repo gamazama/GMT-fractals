@@ -101,10 +101,21 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
     hueRotate: { type: 'float', default: 0, min: -180, max: 180, step: 1, group: 'Modify', label: 'Hue rotate', description: 'Rotate the whole gradient hue (degrees).', dynamicVisible: isMixed },
     chroma: { type: 'float', default: 1, min: 0, max: 2.5, step: 0.01, group: 'Modify', label: 'Chroma ×', description: 'Scale colourfulness (0 = greyscale).', dynamicVisible: isMixed },
     contrast: { type: 'float', default: 1, min: 0.2, max: 2.5, step: 0.01, group: 'Modify', label: 'Contrast', description: 'Contrast lightness around mid.', dynamicVisible: isMixed },
+    // An additive OkLab L offset after Contrast (2026-09-13) — see LIGHTNESS in
+    // palette/core/generatorPipeline.ts for why additive. 0 renders byte-identically.
+    lightness: { type: 'float', default: 0, min: -0.5, max: 0.5, step: 0.01, group: 'Modify', label: 'Lightness', description: 'Make the whole gradient lighter or darker.', dynamicVisible: isMixed },
     bands: { type: 'int', default: 0, min: 0, max: 16, step: 1, group: 'Modify', label: 'Posterize bands', description: 'Quantize into N colour bands (0 = off).', dynamicVisible: isMixed },
-    repeats: { type: 'int', default: 1, min: 1, max: 8, step: 1, group: 'Modify', label: 'Repeats', description: 'Tile the gradient N times.', dynamicVisible: isMixed },
+    // SCALE (2026-09-13, owner: "Repeats → Scale, and it becomes FREE"). The KEY stays
+    // `repeats` — an integer value renders byte-identically to the old integer count, so
+    // presets, session files and keyframes carry over with no migration (proven in
+    // debug/test-palette-generator.mts, section "scale"). Continuous now: a fraction ends on a
+    // partial tile, below 1 shows a window of the gradient. 0.1..16 on a log track, so 1 sits
+    // near the middle and each doubling costs the same drag; at 16 a tile is 16 texels of the
+    // 256-texel ramp, past which it only aliases. The label changed for every host (app-gmt's
+    // Generator dock included) because the semantics did — "Repeats" promised a count.
+    repeats: { type: 'float', default: 1, min: 0.1, max: 16, step: 0.01, scale: 'log', group: 'Modify', label: 'Scale', description: 'How many times the gradient runs across — fractions end part-way through, below 1 shows part of it.', dynamicVisible: isMixed },
     phase: { type: 'float', default: 0, min: 0, max: 1, step: 0.01, group: 'Modify', label: 'Phase', description: 'Offset the gradient along t.', dynamicVisible: isMixed },
-    // mirror/reverse are hidden — shown as one inline toggle pair (ModifyTogglesControl) nested under Phase.
+    // mirror/reverse are hidden — shown as one inline toggle pair (ModifyTogglesControl) nested under Scale.
     mirror: { type: 'boolean', default: false, hidden: true, label: 'Mirror', description: 'Ping-pong the gradient (seamless tile).' },
     reverse: { type: 'boolean', default: false, hidden: true, label: 'Reverse output', description: 'Flip the mixed result.' },
 
@@ -119,8 +130,12 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
   },
 
   customUI: [
-    // Inline mirror/reverse toggles, nested in the Modify group under Phase.
-    { componentId: 'palette-modify-toggles', group: 'Modify', parentId: 'phase' },
+    // Inline mirror/reverse toggles, nested in the Modify group under SCALE — they are tiling
+    // controls (owner, 2026-09-13). The condition is not decoration: a parented customUI with NO
+    // condition is shown only while its parent's value is > 0 (checkParamActive), which under
+    // Phase hid both toggles until Phase moved off 0. `generatorMode === 0` is the Modify
+    // group's own gate, so this is "always, where the group is".
+    { componentId: 'palette-modify-toggles', group: 'Modify', parentId: 'repeats', condition: { param: 'generatorMode', eq: 0 } },
     // Inline lightness/chroma/hue toggles, nested in the Noise group under Frequency.
     { componentId: 'palette-noise-targets', group: 'Noise', parentId: 'noiseFreq' },
     // Modify+Noise actions (Bake → curve / Reset mods / Reseed), grouped under the mods.
@@ -140,7 +155,7 @@ export const GENERATOR_PARAM_DEFAULTS: Record<string, number | boolean> = {
   aHueRotate: 0, aChroma: 1, aContrast: 1, aReverse: false, aRepeats: 1, aPhase: 0, aMirror: false,
   bHueRotate: 0, bChroma: 1, bContrast: 1, bReverse: false, bRepeats: 1, bPhase: 0, bMirror: false,
   mixL: 0, mixC: 0, mixH: 0,
-  hueRotate: 0, chroma: 1, contrast: 1, bands: 0, repeats: 1, phase: 0, mirror: false, reverse: false,
+  hueRotate: 0, chroma: 1, contrast: 1, lightness: 0, bands: 0, repeats: 1, phase: 0, mirror: false, reverse: false,
   noise: 0, noiseFreq: 32, noiseL: true, noiseC: false, noiseH: false,
   cbLStart: 0.2, cbLEnd: 0.92, cbLEasing: 0,
   cbCStart: 0.12, cbCEnd: 0.18, cbCEasing: 0,

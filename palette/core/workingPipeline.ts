@@ -38,6 +38,7 @@ import {
   buildGradientRamp,
   decomposeRamp,
   DEFAULT_SLOT_MODS,
+  scaleOf,
   type Channels,
   type GeneratorParams,
 } from './generatorPipeline';
@@ -60,11 +61,15 @@ export type WorkingInput =
 export const WORKING_INPUT_KINDS = ['empty', 'build', 'extract', 'gradient', 'stops'] as const;
 
 /** Adjust is the identity when every global modifier sits at its default. Noise at 0 makes
- *  its sub-dials irrelevant; bands ≤ 1 and repeats ≤ 1 are "off" by the pipeline's own rule. */
+ *  its sub-dials irrelevant; bands ≤ 1 is "off" by the pipeline's own rule. Scale (`repeats`)
+ *  is the identity at exactly 1 — since it went continuous (2026-09-13) a scale below 1 is a
+ *  window onto the gradient, not "off" — and a value the pipeline reads as 1 (≤ 0, non-finite)
+ *  counts too (`scaleOf`). */
 export const isIdentityAdjust = (p: GeneratorParams): boolean =>
   !p.reverse &&
   (p.bands | 0) <= 1 &&
-  p.repeats <= 1 &&
+  scaleOf(p.repeats) === 1 &&
+  (p.lightness ?? 0) === 0 &&
   p.phase === 0 &&
   !p.mirror &&
   p.hueRotate === 0 &&

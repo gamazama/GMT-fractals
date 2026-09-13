@@ -685,8 +685,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // the context menu does. Built at call time so `checked`/disabled stay fresh.
     const favientsBridge = useSyncExternalStore(subscribeGradientFavientsBridge, getGradientFavientsBridge);
     // In the v2 hero (the inspector is hosted) the menu keeps only its ACTIONS and VIEW
-    // sections (owner, 2026-09-07 evening): favients, clipboard, interpolation, blend and
-    // output all have homes elsewhere there (the shelf, the inspector, the strip, Export).
+    // sections (owner, 2026-09-07 evening): favients, interpolation, blend and output have
+    // homes elsewhere there (the shelf, the inspector, the strip, Export). The CLIPBOARD
+    // section has no home in GX and that is deliberate, not a gap (owner, 2026-09-13): Copy /
+    // Paste gradient is intentionally absent from the Gradient Explorer — the path from GX
+    // to GMT is gradient → library (the shared `gmt.favients` collection) → GMT. app-gmt,
+    // which passes no `inspectorHost`, keeps the section.
     const onlySections = (items: ContextMenuItem[]): ContextMenuItem[] => {
         if (!inspectorHost) return items;
         const keep = new Set(['Actions', 'View']);
