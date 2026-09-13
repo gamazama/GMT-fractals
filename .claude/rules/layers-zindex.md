@@ -39,10 +39,12 @@ npm run smoke:ui-primitives   # clampToViewport only — see the reach note belo
 
 `smoke:ui-primitives` moved here from `ui-and-panels.md` on 2026-07-29: it imports
 `components/ui/viewportClamp.ts`, which this rule scopes and that one only reached
-at 1 file in 129. Know its reach before trusting it — it covers **1 of the 11
+at 1 file in 129. Know its reach before trusting it — it covers **1 of the 12
 modules in `components/ui/`**, the flip-then-clamp helper behind `AnchoredMenu`.
 `Layer`, `Modal`, `FloatingPanel`, `AnchoredMenu` itself, `layerStack`,
-`panelStack`, `layerHost` and `stopNavKeys` have no runtime guard at all — they are
+`panelStack`, `layerHost`, `stopNavKeys` and `Segmented` (the shell's one joined
+switch, added 2026-09-12 — not a floating surface, but it lives in this directory and
+so inherits the no-store rule) have no runtime guard at all — they are
 React hooks and components, so covering them needs mount infrastructure this repo
 does not have yet. `test:zindex` and `check:zindex` cover `zIndex.ts` and the raw
 `z-[N]` ban respectively; everything else in the directory is `tsc` plus a visual
