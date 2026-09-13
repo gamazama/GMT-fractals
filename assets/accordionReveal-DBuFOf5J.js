@@ -1,0 +1,1 @@
+const o=new Set;let e=null;const c=n=>{e={id:n,t:Date.now()},o.forEach(t=>t(n))},r=n=>{if(e&&Date.now()-e.t<2e3&&n(e.id)){const t=e.id;return e=null,t}return null},s=n=>(o.add(n),()=>{o.delete(n)});export{r as c,c as r,s};

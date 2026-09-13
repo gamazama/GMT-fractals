@@ -1,0 +1,2359 @@
+{
+ "v": 1,
+ "pack": "core",
+ "label": "Core pack",
+ "publish": "repo",
+ "note": "Tracked in the GMT repository (public/palette/) and always loaded. The collections below keep their own licences: most are permissive, some are GPL-2.0/GPL-3.0, CC BY 4.0 or CC BY-SA 4.0. The non-commercial and no-licence PyPalettes packages are NOT in this pack.",
+ "count": 2952,
+ "texts": "credits.core.txt",
+ "sources": [
+  {
+   "bundle": "uigradients",
+   "count": 377,
+   "label": "uiGradients",
+   "tag": "MIT",
+   "license": "MIT",
+   "attribution": "Copyright (c) 2017 Indrashish Ghosh",
+   "url": "https://github.com/ghosh/uiGradients"
+  },
+  {
+   "bundle": "colorbrewer",
+   "count": 35,
+   "label": "ColorBrewer",
+   "tag": "Apache-2.0",
+   "license": "Apache-2.0",
+   "attribution": "Copyright (c) 2002 Cynthia Brewer, Mark Harrower, and The Pennsylvania State University",
+   "url": "https://colorbrewer2.org"
+  },
+  {
+   "bundle": "matplotlib",
+   "count": 55,
+   "label": "Matplotlib",
+   "tag": "per family",
+   "license": "Matplotlib License (PSF-style); viridis family CC0; ColorBrewer maps Apache-2.0; gist maps Yorick BSD-style; turbo Apache-2.0",
+   "attribution": "Matplotlib Development Team; viridis family by Nathaniel J. Smith, Stefan van der Walt and Eric Firing",
+   "url": "https://matplotlib.org"
+  },
+  {
+   "bundle": "pypalettes",
+   "count": 2485,
+   "label": "PyPalettes",
+   "tag": "per package",
+   "license": "GPL-3.0 package; each palette keeps its upstream R package's licence (MIT, GPL-2.0, GPL-3.0, CC0, Apache-2.0, CC BY 4.0, CC BY-SA 4.0)",
+   "attribution": "PyPalettes / paletteer, aggregated from many R and Python packages (authors per package in the credits)",
+   "url": "https://github.com/y-sunflower/pypalettes"
+  }
+ ],
+ "collections": [
+  {
+   "key": "colorbrewer:colorbrewer",
+   "label": "ColorBrewer",
+   "count": 35,
+   "credit": "ColorBrewer, Apache-2.0",
+   "authors": [
+    {
+     "name": "Copyright (c) 2002 Cynthia Brewer, Mark Harrower, and The Pennsylvania State University"
+    }
+   ],
+   "licence": {
+    "tag": "Apache-2.0",
+    "name": "Apache-Style Software License for ColorBrewer (Apache License 2.0)",
+    "url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "bundledTexts": [
+     "ColorBrewer",
+     "Apache-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://github.com/axismaps/colorbrewer/blob/master/LICENCE.txt",
+     "label": "LICENCE.txt"
+    },
+    {
+     "href": "https://colorbrewer2.org",
+     "label": "colorbrewer2.org"
+    }
+   ],
+   "note": "This product includes color specifications and designs developed by Cynthia Brewer (http://colorbrewer.org/). No endorsement by Cynthia Brewer or The Pennsylvania State University is implied.",
+   "notice": null
+  },
+  {
+   "key": "matplotlib:matplotlib",
+   "label": "Matplotlib · Matplotlib maps",
+   "count": 34,
+   "credit": "Matplotlib, Matplotlib License",
+   "authors": [
+    {
+     "name": "Copyright (c) 2012- Matplotlib Development Team; All Rights Reserved"
+    }
+   ],
+   "licence": {
+    "tag": "Matplotlib License",
+    "name": "Matplotlib License (PSF-style, BSD-compatible)",
+    "url": "https://matplotlib.org/stable/project/license.html",
+    "bundledTexts": [
+     "Matplotlib"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://matplotlib.org",
+     "label": "source"
+    }
+   ],
+   "note": null,
+   "notice": null
+  },
+  {
+   "key": "matplotlib:colorbrewer",
+   "label": "Matplotlib · ColorBrewer maps",
+   "count": 9,
+   "credit": "Matplotlib/colorbrewer, Apache-2.0",
+   "authors": [
+    {
+     "name": "Cynthia Brewer, Mark Harrower, The Pennsylvania State University"
+    }
+   ],
+   "licence": {
+    "tag": "Apache-2.0",
+    "name": "Apache-Style Software License for ColorBrewer (Apache License 2.0)",
+    "url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "bundledTexts": [
+     "ColorBrewer",
+     "Apache-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://colorbrewer2.org",
+     "label": "source"
+    }
+   ],
+   "note": null,
+   "notice": null
+  },
+  {
+   "key": "matplotlib:gist",
+   "label": "Matplotlib · Yorick gist maps",
+   "count": 5,
+   "credit": "Matplotlib/gist, BSD-style",
+   "authors": [
+    {
+     "name": "David H. Munro; The Regents of the University of California"
+    }
+   ],
+   "licence": {
+    "tag": "BSD-style",
+    "name": "BSD-style licence for gist/yorick colormaps",
+    "url": null,
+    "bundledTexts": [
+     "Yorick"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://github.com/matplotlib/matplotlib/blob/main/LICENSE/LICENSE_YORICK",
+     "label": "source"
+    }
+   ],
+   "note": null,
+   "notice": null
+  },
+  {
+   "key": "matplotlib:viridis",
+   "label": "Matplotlib · viridis family",
+   "count": 5,
+   "credit": "Matplotlib/viridis, CC0",
+   "authors": [
+    {
+     "name": "Nathaniel J. Smith, Stefan van der Walt, Eric Firing (viridis); cividis: Jamie R. Nuñez, Christopher R. Anderton, Ryan S. Renslow"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0 (BIDS/colormap)",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://github.com/BIDS/colormap",
+     "label": "source"
+    }
+   ],
+   "note": null,
+   "notice": null
+  },
+  {
+   "key": "matplotlib:cubehelix",
+   "label": "Matplotlib · cubehelix",
+   "count": 1,
+   "credit": "Matplotlib/cubehelix, public domain",
+   "authors": [
+    {
+     "name": "Dave Green (scheme, public domain, citation requested); Matplotlib Development Team (implementation)"
+    }
+   ],
+   "licence": {
+    "tag": "public domain",
+    "name": "Scheme contributed to the public domain (citation of Green 2011 requested); implementation under the Matplotlib License",
+    "url": null,
+    "bundledTexts": [
+     "Matplotlib"
+    ]
+   },
+   "links": [
+    {
+     "href": "http://www.mrao.cam.ac.uk/~dag/CUBEHELIX/",
+     "label": "source"
+    }
+   ],
+   "note": null,
+   "notice": null
+  },
+  {
+   "key": "matplotlib:turbo",
+   "label": "Matplotlib · turbo",
+   "count": 1,
+   "credit": "Matplotlib/turbo, Apache-2.0",
+   "authors": [
+    {
+     "name": "Copyright 2019 Google LLC (Anton Mikhailov)"
+    }
+   ],
+   "licence": {
+    "tag": "Apache-2.0",
+    "name": "Apache License 2.0",
+    "url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "bundledTexts": [
+     "Apache-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://gist.github.com/mikhailov-work/6a308c20e494d9e0ccc29036b28faa7a",
+     "label": "source"
+    }
+   ],
+   "note": null,
+   "notice": null
+  },
+  {
+   "key": "pypalettes:palettetown",
+   "label": "PyPalettes · palettetown",
+   "count": 389,
+   "credit": "PyPalettes/palettetown, MIT",
+   "authors": [
+    {
+     "name": "Tim Lucas"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=palettetown",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:fishualize",
+   "label": "PyPalettes · fishualize",
+   "count": 175,
+   "credit": "PyPalettes/fishualize, GPL-2.0",
+   "authors": [
+    {
+     "name": "Nina M. D. Schiettekatte"
+    },
+    {
+     "name": "Simon J. Brandl"
+    },
+    {
+     "name": "Jordan M. Casey"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=fishualize",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ggthemes",
+   "label": "PyPalettes · ggthemes",
+   "count": 143,
+   "credit": "PyPalettes/ggthemes, GPL-2.0",
+   "authors": [
+    {
+     "name": "Jeffrey B. Arnold"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ggthemes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:beyonce",
+   "label": "PyPalettes · beyonce",
+   "count": 130,
+   "credit": "PyPalettes/beyonce, MIT",
+   "authors": [
+    {
+     "name": "David Miller"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=beyonce",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:nbapalettes",
+   "label": "PyPalettes · nbapalettes",
+   "count": 128,
+   "credit": "PyPalettes/nbapalettes, MIT",
+   "authors": [
+    {
+     "name": "Murray Josh"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=nbapalettes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:lisa",
+   "label": "PyPalettes · lisa",
+   "count": 123,
+   "credit": "PyPalettes/lisa, MIT",
+   "authors": [
+    {
+     "name": "Tyler Littlefield"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=lisa",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:matplotlib-seaborn",
+   "label": "PyPalettes · matplotlib-seaborn",
+   "count": 117,
+   "credit": "PyPalettes/matplotlib-seaborn, CC0 as listed",
+   "authors": [
+    {
+     "name": "Matplotlib and seaborn developers"
+    }
+   ],
+   "licence": {
+    "tag": "CC0 as listed",
+    "name": "Listed by PyPalettes' LICENSE.note as CC0 / public domain (Matplotlib colormaps); seaborn palettes are BSD-3-Clause upstream",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:pals",
+   "label": "PyPalettes · pals",
+   "count": 82,
+   "credit": "PyPalettes/pals, MIT",
+   "authors": [
+    {
+     "name": "Kevin Wright"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=pals",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:grDevices",
+   "label": "PyPalettes · grDevices",
+   "count": 57,
+   "credit": "PyPalettes/grDevices, GPL-2|3",
+   "authors": [
+    {
+     "name": "R Core Team"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2|3",
+    "name": "GPL-2 | GPL-3 (R base)",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0",
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://www.r-project.org/",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ggprism",
+   "label": "PyPalettes · ggprism",
+   "count": 56,
+   "credit": "PyPalettes/ggprism, GPL-3.0",
+   "authors": [
+    {
+     "name": "Charlotte Dawson"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ggprism",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:MetBrewer",
+   "label": "PyPalettes · MetBrewer",
+   "count": 56,
+   "credit": "PyPalettes/MetBrewer, CC0",
+   "authors": [
+    {
+     "name": "Blake Robert Mills"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=MetBrewer",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:tvthemes",
+   "label": "PyPalettes · tvthemes",
+   "count": 56,
+   "credit": "PyPalettes/tvthemes, GPL-3.0",
+   "authors": [
+    {
+     "name": "Ryo Nakagawara"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=tvthemes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:colRoz",
+   "label": "PyPalettes · colRoz",
+   "count": 53,
+   "credit": "PyPalettes/colRoz, MIT",
+   "authors": [
+    {
+     "name": "Jacinta Dara Kong"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=colRoz",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:khroma",
+   "label": "PyPalettes · khroma",
+   "count": 51,
+   "credit": "PyPalettes/khroma, GPL-3.0",
+   "authors": [
+    {
+     "name": "Nicolas Frerebeau"
+    },
+    {
+     "name": "Brice Lebrun"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=khroma",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ggsci",
+   "label": "PyPalettes · ggsci",
+   "count": 48,
+   "credit": "PyPalettes/ggsci, GPL-3.0",
+   "authors": [
+    {
+     "name": "Nan Xiao"
+    },
+    {
+     "name": "Miaozhu Li"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ggsci",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:palettesForR",
+   "label": "PyPalettes · palettesForR",
+   "count": 41,
+   "credit": "PyPalettes/palettesForR, GPL-2.0",
+   "authors": [
+    {
+     "name": "Francois Rebaudo"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=palettesForR",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:Redmonder",
+   "label": "PyPalettes · Redmonder",
+   "count": 41,
+   "credit": "PyPalettes/Redmonder, Apache-2.0",
+   "authors": [
+    {
+     "name": "Pedro Mac Dowell Innecco"
+    },
+    {
+     "name": "Erich Neuwirth"
+    }
+   ],
+   "licence": {
+    "tag": "Apache-2.0",
+    "name": "Apache License 2.0",
+    "url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "bundledTexts": [
+     "Apache-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=Redmonder",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:MoMAColors",
+   "label": "PyPalettes · MoMAColors",
+   "count": 35,
+   "credit": "PyPalettes/MoMAColors, MIT",
+   "authors": [
+    {
+     "name": "Blake Robert Mills"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=MoMAColors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:trekcolors",
+   "label": "PyPalettes · trekcolors",
+   "count": 35,
+   "credit": "PyPalettes/trekcolors, MIT",
+   "authors": [
+    {
+     "name": "Matthew Leonawicz"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=trekcolors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:rcartocolor",
+   "label": "PyPalettes · rcartocolor",
+   "count": 32,
+   "credit": "PyPalettes/rcartocolor, CC BY 4.0",
+   "authors": [
+    {
+     "name": "Jakub Nowosad (package"
+    },
+    {
+     "name": "MIT); CARTOColors palettes by CARTO"
+    }
+   ],
+   "licence": {
+    "tag": "CC BY 4.0",
+    "name": "CARTOColors palettes: Creative Commons Attribution 4.0 (package code MIT)",
+    "url": "https://creativecommons.org/licenses/by/4.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://github.com/CartoDB/CartoColor",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ButterflyColors",
+   "label": "PyPalettes · ButterflyColors",
+   "count": 29,
+   "credit": "PyPalettes/ButterflyColors, GPL-3.0",
+   "authors": [
+    {
+     "name": "Gabriela Junqueira"
+    },
+    {
+     "name": "Sofia Schirmer"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ButterflyColors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ghibli",
+   "label": "PyPalettes · ghibli",
+   "count": 27,
+   "credit": "PyPalettes/ghibli, MIT",
+   "authors": [
+    {
+     "name": "Ewen Henderson"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ghibli",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:PrettyCols",
+   "label": "PyPalettes · PrettyCols",
+   "count": 26,
+   "credit": "PyPalettes/PrettyCols, CC0",
+   "authors": [
+    {
+     "name": "Nicola Rennie"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=PrettyCols",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:nationalparkcolors",
+   "label": "PyPalettes · nationalparkcolors",
+   "count": 25,
+   "credit": "PyPalettes/nationalparkcolors, CC0",
+   "authors": [
+    {
+     "name": "Katie Jolly"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=nationalparkcolors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:impressionist.colors",
+   "label": "PyPalettes · impressionist.colors",
+   "count": 24,
+   "credit": "PyPalettes/impressionist.colors, GPL-3.0",
+   "authors": [
+    {
+     "name": "Federico Casale"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=impressionist.colors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ltc",
+   "label": "PyPalettes · ltc",
+   "count": 23,
+   "credit": "PyPalettes/ltc, MIT",
+   "authors": [
+    {
+     "name": "Loukas Theodosiou"
+    },
+    {
+     "name": "Kristian Ullrich"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ltc",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:wesanderson",
+   "label": "PyPalettes · wesanderson",
+   "count": 22,
+   "credit": "PyPalettes/wesanderson, MIT",
+   "authors": [
+    {
+     "name": "Karthik Ram"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=wesanderson",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:Manu",
+   "label": "PyPalettes · Manu",
+   "count": 21,
+   "credit": "PyPalettes/Manu, GPL-3.0",
+   "authors": [
+    {
+     "name": "Geoffrey Thomson"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=Manu",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:peRReo",
+   "label": "PyPalettes · peRReo",
+   "count": 21,
+   "credit": "PyPalettes/peRReo, CC0",
+   "authors": [
+    {
+     "name": "Juan B González"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=peRReo",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:rockthemes",
+   "label": "PyPalettes · rockthemes",
+   "count": 21,
+   "credit": "PyPalettes/rockthemes, GPL-3.0",
+   "authors": [
+    {
+     "name": "John MacKintosh"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=rockthemes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:yarrr",
+   "label": "PyPalettes · yarrr",
+   "count": 21,
+   "credit": "PyPalettes/yarrr, GPL-2.0",
+   "authors": [
+    {
+     "name": "Nathaniel Phillips"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=yarrr",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:futurevisions",
+   "label": "PyPalettes · futurevisions",
+   "count": 20,
+   "credit": "PyPalettes/futurevisions, MIT",
+   "authors": [
+    {
+     "name": "Joey Stanley"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=futurevisions",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:NatParksPalettes",
+   "label": "PyPalettes · NatParksPalettes",
+   "count": 20,
+   "credit": "PyPalettes/NatParksPalettes, MIT",
+   "authors": [
+    {
+     "name": "Kevin Blake"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=NatParksPalettes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:MexBrewer",
+   "label": "PyPalettes · MexBrewer",
+   "count": 18,
+   "credit": "PyPalettes/MexBrewer, MIT",
+   "authors": [
+    {
+     "name": "Antonio Páez"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=MexBrewer",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:colorBlindness",
+   "label": "PyPalettes · colorBlindness",
+   "count": 17,
+   "credit": "PyPalettes/colorBlindness, GPL ≥2",
+   "authors": [
+    {
+     "name": "Jianhong Ou"
+    }
+   ],
+   "licence": {
+    "tag": "GPL ≥2",
+    "name": "GPL (>= 2)",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0",
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=colorBlindness",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:dichromat",
+   "label": "PyPalettes · dichromat",
+   "count": 17,
+   "credit": "PyPalettes/dichromat, GPL-2.0",
+   "authors": [
+    {
+     "name": "Thomas Lumley"
+    },
+    {
+     "name": "Ken Knoblauch"
+    },
+    {
+     "name": "Scott Waichler"
+    },
+    {
+     "name": "Achim Zeileis"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=dichromat",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:werpals",
+   "label": "PyPalettes · werpals",
+   "count": 17,
+   "credit": "PyPalettes/werpals, MIT",
+   "authors": [
+    {
+     "name": "Vebash Naidoo"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=werpals",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:harrypotter",
+   "label": "PyPalettes · harrypotter",
+   "count": 16,
+   "credit": "PyPalettes/harrypotter, MIT",
+   "authors": [
+    {
+     "name": "Alejandro Jimenez Rico"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=harrypotter",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:nord",
+   "label": "PyPalettes · nord",
+   "count": 16,
+   "credit": "PyPalettes/nord, MIT",
+   "authors": [
+    {
+     "name": "Arctic Ice Studio"
+    },
+    {
+     "name": "Sven Greb"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=nord",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ochRe",
+   "label": "PyPalettes · ochRe",
+   "count": 16,
+   "credit": "PyPalettes/ochRe, MIT",
+   "authors": [
+    {
+     "name": "Alicia Allan"
+    },
+    {
+     "name": "Di Cook"
+    },
+    {
+     "name": "Ross Gayler"
+    },
+    {
+     "name": "Holly Kirk"
+    },
+    {
+     "name": "Roger Peng"
+    },
+    {
+     "name": "Elle Saber"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ochRe",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:unikn",
+   "label": "PyPalettes · unikn",
+   "count": 16,
+   "credit": "PyPalettes/unikn, CC BY-SA 4.0",
+   "authors": [
+    {
+     "name": "Hansjoerg Neth"
+    },
+    {
+     "name": "Nico Gradwohl"
+    }
+   ],
+   "licence": {
+    "tag": "CC BY-SA 4.0",
+    "name": "Creative Commons Attribution-ShareAlike 4.0",
+    "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=unikn",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ggthemr",
+   "label": "PyPalettes · ggthemr",
+   "count": 15,
+   "credit": "PyPalettes/ggthemr, GPL-3.0",
+   "authors": [
+    {
+     "name": "Ciaran Tobin"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ggthemr",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:IslamicArt",
+   "label": "PyPalettes · IslamicArt",
+   "count": 15,
+   "credit": "PyPalettes/IslamicArt, MIT",
+   "authors": [
+    {
+     "name": "Lambda Moses"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=IslamicArt",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:rtist",
+   "label": "PyPalettes · rtist",
+   "count": 15,
+   "credit": "PyPalettes/rtist, MIT",
+   "authors": [
+    {
+     "name": "Tomas Okal"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=rtist",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:tayloRswift",
+   "label": "PyPalettes · tayloRswift",
+   "count": 15,
+   "credit": "PyPalettes/tayloRswift, MIT",
+   "authors": [
+    {
+     "name": "Alex Stephenson"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=tayloRswift",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:vangogh",
+   "label": "PyPalettes · vangogh",
+   "count": 15,
+   "credit": "PyPalettes/vangogh, MIT",
+   "authors": [
+    {
+     "name": "Cheryl Isabella"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=vangogh",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:soilpalettes",
+   "label": "PyPalettes · soilpalettes",
+   "count": 14,
+   "credit": "PyPalettes/soilpalettes, MIT",
+   "authors": [
+    {
+     "name": "Kaizad F. Patel"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=soilpalettes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:PNWColors",
+   "label": "PyPalettes · PNWColors",
+   "count": 13,
+   "credit": "PyPalettes/PNWColors, CC0",
+   "authors": [
+    {
+     "name": "Jake Lawlor"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=PNWColors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:vapoRwave",
+   "label": "PyPalettes · vapoRwave",
+   "count": 13,
+   "credit": "PyPalettes/vapoRwave, MIT",
+   "authors": [
+    {
+     "name": "Matthew J. Oldach"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=vapoRwave",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:jcolors",
+   "label": "PyPalettes · jcolors",
+   "count": 12,
+   "credit": "PyPalettes/jcolors, GPL-2.0",
+   "authors": [
+    {
+     "name": "Jared Huling"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=jcolors",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:miscpalettes",
+   "label": "PyPalettes · miscpalettes",
+   "count": 12,
+   "credit": "PyPalettes/miscpalettes, MIT",
+   "authors": [
+    {
+     "name": "Emil Hvitfeldt"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=miscpalettes",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:feathers",
+   "label": "PyPalettes · feathers",
+   "count": 10,
+   "credit": "PyPalettes/feathers, MIT",
+   "authors": [
+    {
+     "name": "Shandiya Balasubramaniam"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=feathers",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:oompaBase",
+   "label": "PyPalettes · oompaBase",
+   "count": 7,
+   "credit": "PyPalettes/oompaBase, Apache-2.0",
+   "authors": [
+    {
+     "name": "Kevin R. Coombes"
+    }
+   ],
+   "licence": {
+    "tag": "Apache-2.0",
+    "name": "Apache License 2.0",
+    "url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "bundledTexts": [
+     "Apache-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=oompaBase",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:awtools",
+   "label": "PyPalettes · awtools",
+   "count": 6,
+   "credit": "PyPalettes/awtools, MIT",
+   "authors": [
+    {
+     "name": "Austin Wehrwein"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=awtools",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:dutchmasters",
+   "label": "PyPalettes · dutchmasters",
+   "count": 6,
+   "credit": "PyPalettes/dutchmasters, MIT",
+   "authors": [
+    {
+     "name": "Edwin Thoen"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=dutchmasters",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:suffrager",
+   "label": "PyPalettes · suffrager",
+   "count": 6,
+   "credit": "PyPalettes/suffrager, GPL-3.0",
+   "authors": [
+    {
+     "name": "Diego Alburez-Gutierrez"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=suffrager",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:vapeplot",
+   "label": "PyPalettes · vapeplot",
+   "count": 6,
+   "credit": "PyPalettes/vapeplot, GPL-2.0",
+   "authors": [
+    {
+     "name": "Luke Smith"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=vapeplot",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:basetheme",
+   "label": "PyPalettes · basetheme",
+   "count": 5,
+   "credit": "PyPalettes/basetheme, GPL-2.0",
+   "authors": [
+    {
+     "name": "Karolis Koncevičius"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-2.0",
+    "name": "GPL-2",
+    "url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+    "bundledTexts": [
+     "GPL-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=basetheme",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:RSkittleBrewer",
+   "label": "PyPalettes · RSkittleBrewer",
+   "count": 5,
+   "credit": "PyPalettes/RSkittleBrewer, MIT",
+   "authors": [
+    {
+     "name": "Alyssa Frazee"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=RSkittleBrewer",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:palr",
+   "label": "PyPalettes · palr",
+   "count": 4,
+   "credit": "PyPalettes/palr, GPL-3.0",
+   "authors": [
+    {
+     "name": "Michael D. Sumner"
+    }
+   ],
+   "licence": {
+    "tag": "GPL-3.0",
+    "name": "GPL-3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "bundledTexts": [
+     "GPL-3.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=palr",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:tidyquant",
+   "label": "PyPalettes · tidyquant",
+   "count": 3,
+   "credit": "PyPalettes/tidyquant, MIT",
+   "authors": [
+    {
+     "name": "Matt Dancho"
+    },
+    {
+     "name": "Davis Vaughan"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=tidyquant",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:ggpomological",
+   "label": "PyPalettes · ggpomological",
+   "count": 2,
+   "credit": "PyPalettes/ggpomological, CC0",
+   "authors": [
+    {
+     "name": "Garrick Aden-Buie"
+    }
+   ],
+   "licence": {
+    "tag": "CC0",
+    "name": "CC0 1.0",
+    "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=ggpomological",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:Polychrome",
+   "label": "PyPalettes · Polychrome",
+   "count": 2,
+   "credit": "PyPalettes/Polychrome, Apache-2.0",
+   "authors": [
+    {
+     "name": "Guy Brock"
+    },
+    {
+     "name": "Kevin R. Coombes"
+    }
+   ],
+   "licence": {
+    "tag": "Apache-2.0",
+    "name": "Apache License 2.0",
+    "url": "https://www.apache.org/licenses/LICENSE-2.0",
+    "bundledTexts": [
+     "Apache-2.0"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=Polychrome",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:colorblindr",
+   "label": "PyPalettes · colorblindr",
+   "count": 1,
+   "credit": "PyPalettes/colorblindr, MIT",
+   "authors": [
+    {
+     "name": "Claire D. McWhite"
+    },
+    {
+     "name": "Claus O. Wilke"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://cran.r-project.org/package=colorblindr",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:data-to-viz.com",
+   "label": "PyPalettes · data-to-viz.com",
+   "count": 1,
+   "credit": "PyPalettes/data-to-viz.com, unverified",
+   "authors": [
+    {
+     "name": "data-to-viz.com"
+    }
+   ],
+   "licence": {
+    "tag": "unverified",
+    "name": "Not verified (a website, not a package)",
+    "url": null,
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://data-to-viz.com",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "pypalettes:wanteeed.com",
+   "label": "PyPalettes · wanteeed.com",
+   "count": 1,
+   "credit": "PyPalettes/wanteeed.com, unverified",
+   "authors": [
+    {
+     "name": "wanteeed.com"
+    }
+   ],
+   "licence": {
+    "tag": "unverified",
+    "name": "Not verified (a website, not a package)",
+    "url": null,
+    "bundledTexts": []
+   },
+   "links": [
+    {
+     "href": "https://wanteeed.com",
+     "label": "package"
+    },
+    {
+     "href": "https://github.com/y-sunflower/pypalettes/blob/main/LICENSE.note",
+     "label": "PyPalettes LICENSE.note"
+    }
+   ],
+   "note": "Via PyPalettes (GPL-3.0 as a whole; the upstream licence of each palette is listed here).",
+   "notice": null
+  },
+  {
+   "key": "uigradients:uigradients",
+   "label": "uiGradients",
+   "count": 377,
+   "credit": "uiGradients, MIT",
+   "authors": [
+    {
+     "name": "Copyright (c) 2017 Indrashish Ghosh",
+     "href": "https://github.com/ghosh"
+    }
+   ],
+   "licence": {
+    "tag": "MIT",
+    "name": "MIT",
+    "url": "https://opensource.org/license/mit",
+    "bundledTexts": [
+     "MIT"
+    ]
+   },
+   "links": [
+    {
+     "href": "https://github.com/ghosh/uiGradients/blob/master/LICENSE.md",
+     "label": "LICENSE.md"
+    }
+   ],
+   "note": null,
+   "notice": null
+  }
+ ]
+}
