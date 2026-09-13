@@ -217,6 +217,50 @@ async function main() {
   }
   console.log(`[2d] the count is softly notched, not gated OK (x${(notch.between / notch.near).toFixed(1)} slower at a whole petal)`);
 
+  // [2e] the motion arrows stay inside the r=16 hit disc. That disc is what every case above
+  // grabs (dragHandle aims at the box centre), so a glyph reaching past it moves the grab
+  // point - and the ORBIT arc is one-sided, so it would move it without even growing the box.
+  //
+  // Measured as a RADIUS, by walking each arrow path with getPointAtLength and taking the
+  // farthest point from the handle origin (plus half its stroke). The two obvious cheaper
+  // checks were both tried and are both worthless here: Playwright's `boundingBox()` adds
+  // stroke and reads ~33.3 whatever the arrows do, and the DOM rect - a union of FILL boxes,
+  // so exactly 32x32 while the disc dominates - only grows when a protruding vertex happens
+  // to line up with the x or y axis. Falsified 2026-09-12 by widening the orbit glyph to
+  // r=16.3: the DOM-rect version passed it clean at every conic bearing; this one fails.
+  const GLYPH_MAX_R = 16;
+  for (const geom of ['linear', 'radial', 'conic']) {
+    await setGeom(geom);
+    await page.waitForTimeout(250);
+    const worst = await page.evaluate(() => {
+      let out = { r: 0, name: '', n: 0 };
+      const gs = [...document.querySelectorAll('[data-testid="geometry-handle-layer"] [data-gx-handle]')];
+      for (const g of gs) {
+        for (const p of g.querySelectorAll('path')) {
+          const sw = parseFloat(p.getAttribute('stroke-width') || '0') / 2;
+          const L = p.getTotalLength();
+          for (let i = 0; i <= 200; i++) {
+            const pt = p.getPointAtLength((i / 200) * L);
+            const r = Math.hypot(pt.x, pt.y) + sw;
+            if (r > out.r) out = { r, name: (g as HTMLElement).dataset.gxHandle as string, n: gs.length };
+          }
+        }
+      }
+      out.n = gs.length;
+      return out;
+    });
+    if (!worst.n) fail(`${geom}: no handles on screen to measure`);
+    if (!worst.r) fail(`${geom}: no arrow glyphs found on any handle - the motion hints are missing`);
+    if (worst.r > GLYPH_MAX_R) {
+      fail(`${geom}: ${worst.name}'s motion arrow reaches r=${worst.r.toFixed(2)}, past the `
+        + `r=${GLYPH_MAX_R} hit disc - it moves the handle's grab point`);
+    }
+    console.log(`[2e] ${geom}: ${worst.n} handles, farthest arrow point r=${worst.r.toFixed(2)} OK`);
+  }
+  // No separate "the box does not move when the arrows light up" case: it cannot fail while
+  // the radius check above passes (the hit disc dominates the box, so mounting or unmounting
+  // something inside it moves nothing), and a check that cannot fail is not a check.
+
   // [3] double-click resets the param (unset key = default). Radial's centre was moved in [2];
   // double-clicking its handle clears both of its keys.
   await setGeom('radial');

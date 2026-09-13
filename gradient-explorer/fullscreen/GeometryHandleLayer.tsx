@@ -19,6 +19,14 @@
  *              seam that winds the spokes into a log spiral when orbited.
  * Spline has its own on-screen path editor; Linear/Radial/Conic are the handled set.
  *
+ * ── Motion arrows (2026-09-12) ──────────────────────────────────────────────────────────
+ * Hovering or holding a handle draws little arrows showing which way it travels — one line
+ * ('axis'), a curved arc around its centre ('orbit'), or a four-way compass ('free'). See
+ * {@link MotionHint}; they are hover/hold-only at the owner's word, which also makes them
+ * the drag's running confirmation of the axis you are on. The glyphs stay inside the r=16
+ * hit disc — see the `@invariant` on {@link MotionArrows}, which is what keeps the handle
+ * bounding boxes (and so the smoke's grab points) exactly where they were.
+ *
  * ── Determinism boundary ────────────────────────────────────────────────────────────────
  * Handles write ONLY `fullscreenStore.geomParams` (batched `setFullscreenGeomParams`); the
  * overlay threads that into the render ctx, so the pure mappers (`sampleGeometry`) are
@@ -30,7 +38,9 @@
  *
  * ── Visibility ──────────────────────────────────────────────────────────────────────────
  * Visible on mode activation and on any pointer activity over the stage; gently fades
- * after a few idle seconds (instant when `prefers-reduced-motion`). Never fades mid-drag.
+ * after a few idle seconds (instant when `prefers-reduced-motion`). Never fades mid-drag, and
+ * since 2026-09-12 never while a handle is under the pointer either — a resting pointer stops
+ * producing pointermove, so the layer used to fade out from under the hand.
  * The fade is VISUAL ONLY — handles stay grabbable while fading/faded. `fullscreenStore.handles`
  * (the toolbar "Handles" toggle) force-hides the whole layer. PNG export can never contain
  * handles BY CONSTRUCTION: export reads the canvas back, and this layer is sibling DOM above it.
@@ -352,6 +362,148 @@ const pin = (u: StageUnits, p: { x: number; y: number }, m = 14): { x: number; y
   y: Math.min(u.h - m, Math.max(m, p.y)),
 });
 
+// ── motion arrows — the shape of a handle's freedom, shown while it is hovered or held ────
+
+/**
+ * MotionHint — what a handle's drag actually does, in the handle's OWN local frame (the
+ * `<g>` is already translated onto the handle, so `dx/dy` is a bare direction and `cx/cy`
+ * is the orbit centre RELATIVE to the handle's drawn position).
+ *
+ * Three shapes cover all fifteen handles: 'axis' (travels in/out along one line), 'orbit'
+ * (travels around a centre), 'free' (two-axis). The arc-vs-line distinction is the one that
+ * earns the ink: the radial ring carries Waves (axis) and Count (orbit) as near-identical
+ * marks, and the conic seam carries Rotation, Mirror and Twist the same way — the arrow is
+ * what tells them apart without reading a tooltip.
+ */
+export type MotionHint =
+  | { kind: 'axis'; dx: number; dy: number }
+  | { kind: 'orbit'; cx: number; cy: number }
+  | { kind: 'free' };
+
+const ARROW_FILL = 'rgb(var(--accent-300)/0.95)';
+const ARROW_STROKE = 'rgba(0,0,0,0.5)';
+/** Arrowhead size (length back from the tip, half-width across). Every number below is sized
+ *  so the glyph's farthest point — an arrowhead's OUTER wing, not its tip — lands inside r=16
+ *  once its stroke is counted, at every orientation. See the `@invariant` on MotionArrows. */
+const HEAD_LEN = 5.2;
+const HEAD_HALF = 3.3;
+/** Tip radius for the one-line ('axis') and two-axis ('free') glyphs. */
+const AXIS_TIP = 15;
+const FREE_TIP = 15.2;
+/** Orbit glyph: half-span along the tangent · how far the ends curl back toward the orbit
+ *  centre · how far the arc's apex sits from the handle on the far side. A true-radius arc
+ *  is useless here — at `rHandle`-scale radii a 22 px span bows by ~0.06 px — so the arc is
+ *  drawn at an exaggerated curvature that keeps the TANGENT and the SENSE of the real one.
+ *  `ORB_H` also has to clear the dot glyph: the arc's apex sits at 10.5 with a 3 px casing
+ *  stroke, so its inner edge is 9 — just outside the largest dot (r 7 + 2 px stroke). */
+const ORB_A = 11.2;
+const ORB_S = 4.5;
+const ORB_H = 10.5;
+
+const ARROW_STYLE: React.CSSProperties = { pointerEvents: 'none', transition: 'opacity 120ms ease' };
+
+const f2 = (n: number): string => n.toFixed(2);
+
+/** One filled arrowhead: tip at (x,y), pointing along the unit vector (ux,uy). */
+const headPath = (x: number, y: number, ux: number, uy: number): string => {
+  const px = -uy;
+  const py = ux;
+  const bx = x - ux * HEAD_LEN;
+  const by = y - uy * HEAD_LEN;
+  return `M${f2(x)},${f2(y)} L${f2(bx + px * HEAD_HALF)},${f2(by + py * HEAD_HALF)} L${f2(bx - px * HEAD_HALF)},${f2(by - py * HEAD_HALF)} Z`;
+};
+
+/** Build the glyph for a hint: the (optional) arc shaft and the arrowhead polygons.
+ *  Returns null when the hint degenerates (an orbit handle sitting on its own centre). */
+const motionPaths = (m: MotionHint): { arc: string; heads: string } | null => {
+  if (m.kind === 'free') {
+    const heads = ([[1, 0], [0, 1], [-1, 0], [0, -1]] as const)
+      .map(([ux, uy]) => headPath(ux * FREE_TIP, uy * FREE_TIP, ux, uy))
+      .join(' ');
+    return { arc: '', heads };
+  }
+  if (m.kind === 'axis') {
+    const len = Math.hypot(m.dx, m.dy);
+    if (len < 1e-6) return null;
+    const ux = m.dx / len;
+    const uy = m.dy / len;
+    return {
+      arc: '',
+      heads: `${headPath(ux * AXIS_TIP, uy * AXIS_TIP, ux, uy)} ${headPath(-ux * AXIS_TIP, -uy * AXIS_TIP, -ux, -uy)}`,
+    };
+  }
+  // orbit — n points at the centre, t is the tangent (the direction the handle travels).
+  const len = Math.hypot(m.cx, m.cy);
+  if (len < 1e-3) return null;
+  const nx = m.cx / len;
+  const ny = m.cy / len;
+  const tx = -ny;
+  const ty = nx;
+  const R = (ORB_A * ORB_A + ORB_S * ORB_S) / (2 * ORB_S);
+  // Basis→screen for a vector given in (t, n) components.
+  const sx = (a: number, b: number): number => a * tx + b * nx;
+  const sy = (a: number, b: number): number => a * ty + b * ny;
+  const back = -(ORB_H - ORB_S); // endpoints sit this far along n (i.e. away from the centre)
+  const pPx = sx(ORB_A, back);
+  const pPy = sy(ORB_A, back);
+  const pMx = sx(-ORB_A, back);
+  const pMy = sy(-ORB_A, back);
+  const cxA = sx(0, R - ORB_H); // arc centre
+  const cyA = sy(0, R - ORB_H);
+  // Head directions: the arc's tangent at each end, pointing outward along the travel.
+  const dPx = sx(R - ORB_S, ORB_A) / R;
+  const dPy = sy(R - ORB_S, ORB_A) / R;
+  const dMx = sx(-(R - ORB_S), ORB_A) / R;
+  const dMy = sy(-(R - ORB_S), ORB_A) / R;
+  const aP = Math.atan2(pPy - cyA, pPx - cxA);
+  const aM = Math.atan2(pMy - cyA, pMx - cxA);
+  const sweep = wrapPi(aP - aM) > 0 ? 1 : 0;
+  // Stop the shaft at each arrowhead's BASE, walking back ALONG the circle (not along the
+  // tangent, which would leave the endpoint off it). Otherwise the round cap surfaces as a
+  // pale nub past the head's tip and the shaft+head stop reading as one arrow.
+  const dφ = (sweep ? 1 : -1) * (HEAD_LEN / R);
+  const at = (φ: number): string => `${f2(cxA + Math.cos(φ) * R)},${f2(cyA + Math.sin(φ) * R)}`;
+  return {
+    arc: `M${at(aM + dφ)} A${f2(R)},${f2(R)} 0 0 ${sweep} ${at(aP - dφ)}`,
+    heads: `${headPath(pPx, pPy, dPx, dPy)} ${headPath(pMx, pMy, dMx, dMy)}`,
+  };
+};
+
+/**
+ * The little arrows that say which way a handle moves. Drawn INSIDE the handle's own `<g>`
+ * (so they ride it, including when `pin()` clamps it to the stage edge) and never mounted
+ * or unmounted — only faded — so the element count under the layer is stable.
+ *
+ * @invariant Every arrow glyph stays inside the handle's r=16 invisible hit disc — measured
+ *   as a RADIUS from the handle origin, which is the rotation-invariant quantity; today's
+ *   farthest point is 15.87. The smoke grabs each handle at its box centre, so art poking
+ *   outside would silently move where every drag case starts, and the orbit arc is one-sided
+ *   so it would move the centre even without growing the box.
+ *   — proven by: `npm run smoke:gx-handles`
+ *     ("X's motion arrow reaches r=..., past the r=16 hit disc")
+ *   Falsified 2026-09-12 by widening ORB_A to 13.5 (r=16.78) → red on linear, radial and
+ *   conic. Note what does NOT work, both tried that day: Playwright's `boundingBox()` adds
+ *   stroke and reads ~33.3 whatever the arrows do, and the DOM rect — a union of FILL boxes,
+ *   pinned at 32×32 by the disc — only grows when a protruding vertex happens to line up
+ *   with the x or y axis, so it passed that same break clean at every conic bearing.
+ */
+const MotionArrows: React.FC<{ motion: MotionHint; show: boolean }> = ({ motion, show }) => {
+  const g = motionPaths(motion);
+  if (!g) return null;
+  const opacity = show ? 1 : 0;
+  return (
+    <>
+      {g.arc && (
+        <>
+          <path d={g.arc} fill="none" stroke={ARROW_STROKE} strokeWidth={3} strokeLinecap="round" opacity={opacity} style={ARROW_STYLE} />
+          <path d={g.arc} fill="none" stroke={ARROW_FILL} strokeWidth={1.6} strokeLinecap="round" opacity={opacity} style={ARROW_STYLE} />
+        </>
+      )}
+      <path d={g.heads} fill={ARROW_FILL} stroke={ARROW_STROKE} strokeWidth={1} strokeLinejoin="round" opacity={opacity} style={ARROW_STYLE} />
+    </>
+  );
+};
+
 /** Shared handle chrome: oversized invisible hit-disc + the visible glyph + tooltip.
  *
  *  Each group is stamped `data-gx-handle` with the FIRST key it resets — a stable name for
@@ -366,20 +518,45 @@ const Handle: React.FC<{
   cursor: string;
   drag: ReturnType<typeof useHandleDrag>;
   resetKeys: readonly HandleParamKey[];
+  /** Which way this handle travels — drawn as arrows while it is hovered or held. */
+  motion?: MotionHint;
   children: React.ReactNode;
-}> = ({ x, y, title, cursor, drag, resetKeys, children }) => (
-  <g
-    data-gx-handle={resetKeys[0]}
-    transform={`translate(${x},${y})`}
-    style={{ pointerEvents: 'auto', cursor, touchAction: 'none' }}
-    {...drag}
-    onDoubleClick={() => resetFullscreenGeomParams(resetKeys)}
-  >
-    <title>{`${title} · double-click to reset`}</title>
-    <circle r={16} fill="transparent" />
-    {children}
-  </g>
-);
+}> = ({ x, y, title, cursor, drag, resetKeys, motion, children }) => {
+  const [hover, setHover] = useState(false);
+  // Tracked separately from `hover`: pointer CAPTURE makes the boundary events unreliable
+  // mid-drag (the pointer leaves the 32 px disc within the first few px of travel), and the
+  // arrows are supposed to stay up for the whole drag — the owner's call, and it is also
+  // the only way they are ever seen on touch, where there is no hover at all.
+  const [held, setHeld] = useState(false);
+  return (
+    <g
+      data-gx-handle={resetKeys[0]}
+      transform={`translate(${x},${y})`}
+      style={{ pointerEvents: 'auto', cursor, touchAction: 'none' }}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      onPointerDown={(e) => {
+        setHeld(true);
+        drag.onPointerDown(e);
+      }}
+      onPointerMove={drag.onPointerMove}
+      onPointerUp={(e) => {
+        setHeld(false);
+        drag.onPointerUp(e);
+      }}
+      onPointerCancel={(e) => {
+        setHeld(false);
+        drag.onPointerCancel(e);
+      }}
+      onDoubleClick={() => resetFullscreenGeomParams(resetKeys)}
+    >
+      <title>{`${title} · double-click to reset`}</title>
+      <circle r={16} fill="transparent" />
+      {motion && <MotionArrows motion={motion} show={hover || held} />}
+      {children}
+    </g>
+  );
+};
 
 /** The standard round dot glyph (liquify's handle-dot look). */
 const Dot: React.FC<{ r?: number }> = ({ r = 7 }) => (
@@ -431,10 +608,26 @@ const LinearHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       <line x1={u.cx - dx * L} y1={u.cy - dy * L} x2={u.cx + dx * L} y2={u.cy + dy * L} stroke={GUIDE_FAINT} strokeWidth={1.5} />
       <polyline points={curve} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
       <line x1={biasPos.x} y1={biasPos.y} x2={anglePos.x} y2={anglePos.y} stroke={GUIDE_FAINT} strokeWidth={1} />
-      <Handle x={anglePos.x} y={anglePos.y} title="Angle — drag around the centre to rotate the gradient" cursor="grab" drag={angleDrag} resetKeys={['linearAngle']}>
+      <Handle
+        x={anglePos.x}
+        y={anglePos.y}
+        title="Angle — drag around the centre to rotate the gradient"
+        cursor="grab"
+        drag={angleDrag}
+        resetKeys={['linearAngle']}
+        motion={{ kind: 'orbit', cx: u.cx - anglePos.x, cy: u.cy - anglePos.y }}
+      >
         <Dot r={6} />
       </Handle>
-      <Handle x={biasPos.x} y={biasPos.y} title="Bias — drag across the gradient to ease it into an S" cursor="move" drag={biasDrag} resetKeys={['linearBias']}>
+      <Handle
+        x={biasPos.x}
+        y={biasPos.y}
+        title="Bias — drag across the gradient to ease it into an S"
+        cursor="move"
+        drag={biasDrag}
+        resetKeys={['linearBias']}
+        motion={{ kind: 'axis', dx: tx, dy: ty }}
+      >
         <Dot />
       </Handle>
     </>
@@ -534,10 +727,26 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
         <circle cx={gcx} cy={gcy} r={scaleR} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} />
       )}
       <circle cx={gcx} cy={gcy} r={0.5 * scaleR} fill="none" stroke={GUIDE_FAINT} strokeWidth={1} strokeDasharray="4 5" />
-      <Handle x={scalePos.x} y={scalePos.y} title="Scale — drag in/out to set how far the gradient reaches" cursor="grab" drag={scaleDrag} resetKeys={['radialScale']}>
+      <Handle
+        x={scalePos.x}
+        y={scalePos.y}
+        title="Scale — drag in/out to set how far the gradient reaches"
+        cursor="grab"
+        drag={scaleDrag}
+        resetKeys={['radialScale']}
+        motion={{ kind: 'axis', dx: dir.x, dy: dir.y }}
+      >
         <Diamond />
       </Handle>
-      <Handle x={biasPos.x} y={biasPos.y} title="Bias — drag across the radius to ease the falloff" cursor="move" drag={biasDrag} resetKeys={['radialBias']}>
+      <Handle
+        x={biasPos.x}
+        y={biasPos.y}
+        title="Bias — drag across the radius to ease the falloff"
+        cursor="move"
+        drag={biasDrag}
+        resetKeys={['radialBias']}
+        motion={{ kind: 'axis', dx: dir.x, dy: dir.y }}
+      >
         <Dot r={6} />
       </Handle>
       {/* Waves: a faint dot ON the ring at rest (the same discoverable-hint language as the
@@ -549,15 +758,24 @@ const RadialHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
         cursor="grab"
         drag={wavesDrag}
         resetKeys={['radialSineAmp', 'radialSineFreq']}
+        motion={{ kind: 'axis', dx: Math.cos(crestθ), dy: Math.sin(crestθ) }}
       >
         {wavy ? <Dot r={6} /> : <circle r={4.5} fill="none" stroke={GUIDE_SOFT} strokeWidth={2} />}
       </Handle>
       {wavy && (
-        <Handle x={countPos.x} y={countPos.y} title="Count — orbit the centre to add or remove petals (it eases through whole ones)" cursor="grab" drag={countDrag} resetKeys={['radialSineFreq']}>
+        <Handle
+          x={countPos.x}
+          y={countPos.y}
+          title="Count — orbit the centre to add or remove petals (it eases through whole ones)"
+          cursor="grab"
+          drag={countDrag}
+          resetKeys={['radialSineFreq']}
+          motion={{ kind: 'orbit', cx: gcx - countPos.x, cy: gcy - countPos.y }}
+        >
           <Diamond />
         </Handle>
       )}
-      <Handle x={cpos.x} y={cpos.y} title="Centre — drag to move the gradient's origin" cursor="move" drag={centreDrag} resetKeys={['radialCx', 'radialCy']}>
+      <Handle x={cpos.x} y={cpos.y} title="Centre — drag to move the gradient's origin" cursor="move" drag={centreDrag} resetKeys={['radialCx', 'radialCy']} motion={{ kind: 'free' }}>
         <circle r={12} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
         <Dot />
       </Handle>
@@ -647,12 +865,28 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
       <line x1={cpos.x} y1={cpos.y} x2={rotPos.x} y2={rotPos.y} stroke={GUIDE_FAINT} strokeWidth={1.5} />
       {mirrored && <line x1={cpos.x} y1={cpos.y} x2={mirPos.x} y2={mirPos.y} stroke={GUIDE_FAINT} strokeWidth={1.5} strokeDasharray="3 4" />}
       {twisted && <polyline points={spiralPath} fill="none" stroke={GUIDE_SOFT} strokeWidth={1} />}
-      <Handle x={rotPos.x} y={rotPos.y} title="Rotation — drag around the centre to spin the sweep" cursor="grab" drag={rotDrag} resetKeys={['conicAngle']}>
+      <Handle
+        x={rotPos.x}
+        y={rotPos.y}
+        title="Rotation — drag around the centre to spin the sweep"
+        cursor="grab"
+        drag={rotDrag}
+        resetKeys={['conicAngle']}
+        motion={{ kind: 'orbit', cx: gcx - rotPos.x, cy: gcy - rotPos.y }}
+      >
         <Dot />
       </Handle>
       {/* Mirror tab: a faint ring just past the rotation dot (a discoverable hint) that grows
           into a full handle once pulled off the seam to reflect the sweep (0→1→0). */}
-      <Handle x={mirPos.x} y={mirPos.y} title="Mirror — pull off the rotation handle to reflect the sweep (0→1→0)" cursor="grab" drag={mirrorDrag} resetKeys={['conicMirror', 'conicBiasA', 'conicBiasB']}>
+      <Handle
+        x={mirPos.x}
+        y={mirPos.y}
+        title="Mirror — pull off the rotation handle to reflect the sweep (0→1→0)"
+        cursor="grab"
+        drag={mirrorDrag}
+        resetKeys={['conicMirror', 'conicBiasA', 'conicBiasB']}
+        motion={{ kind: 'orbit', cx: gcx - mirPos.x, cy: gcy - mirPos.y }}
+      >
         <circle r={mirrored ? 6 : 4.5} fill="none" stroke={mirrored ? HANDLE_FILL : GUIDE_SOFT} strokeWidth={mirrored ? 2.5 : 2} />
       </Handle>
       {/* Bias A is reachable whether or not the mirror is open: with the mirror collapsed it
@@ -665,11 +899,20 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
         cursor="move"
         drag={biasADrag}
         resetKeys={['conicBiasA']}
+        motion={{ kind: 'axis', dx: tangA.x, dy: tangA.y }}
       >
         <Dot r={6} />
       </Handle>
       {mirrored && (
-        <Handle x={bPos.x} y={bPos.y} title="Bias (falling half) — drag in/out to ease the return" cursor="move" drag={biasBDrag} resetKeys={['conicBiasB']}>
+        <Handle
+          x={bPos.x}
+          y={bPos.y}
+          title="Bias (falling half) — drag in/out to ease the return"
+          cursor="move"
+          drag={biasBDrag}
+          resetKeys={['conicBiasB']}
+          motion={{ kind: 'axis', dx: tangB.x, dy: tangB.y }}
+        >
           <Dot r={6} />
         </Handle>
       )}
@@ -682,10 +925,11 @@ const ConicHandles: React.FC<{ env: HandleEnv }> = ({ env }) => {
         cursor="grab"
         drag={twistDrag}
         resetKeys={['conicTwist']}
+        motion={{ kind: 'orbit', cx: gcx - twistPos.x, cy: gcy - twistPos.y }}
       >
         {twisted ? <Dot r={6} /> : <circle r={4.5} fill="none" stroke={GUIDE_SOFT} strokeWidth={2} />}
       </Handle>
-      <Handle x={cpos.x} y={cpos.y} title="Centre — drag to move the sweep's origin" cursor="move" drag={centreDrag} resetKeys={['conicCx', 'conicCy']}>
+      <Handle x={cpos.x} y={cpos.y} title="Centre — drag to move the sweep's origin" cursor="move" drag={centreDrag} resetKeys={['conicCx', 'conicCy']} motion={{ kind: 'free' }}>
         <circle r={12} fill="none" stroke={GUIDE_SOFT} strokeWidth={1.5} />
         <Dot />
       </Handle>
@@ -710,6 +954,11 @@ export const GeometryHandleLayer: React.FC = () => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const dragging = useRef(false);
+  // A handle is under the pointer. Holds the fade off the same way `dragging` does, because a
+  // RESTING pointer stops producing pointermove and the layer would otherwise fade out from
+  // under the hand — taking the hovered handle's motion arrows, which only exist on hover,
+  // with it. Set from the <svg>'s bubbled pointerover/out below (one place, not 15 call sites).
+  const hovering = useRef(false);
 
   const Handles = GEOM_HANDLES[fs.geom];
   // Layer active = a handled geometry is selected AND the toolbar toggle is on. Hooks below
@@ -731,7 +980,7 @@ export const GeometryHandleLayer: React.FC = () => {
     const arm = (): void => {
       if (timer.current !== null) window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => {
-        if (dragging.current) arm(); // never fade mid-drag — re-arm and check again
+        if (dragging.current || hovering.current) arm(); // never fade mid-drag or under the pointer
         else {
           awakeRef.current = false;
           setAwake(false);
@@ -825,6 +1074,21 @@ export const GeometryHandleLayer: React.FC = () => {
           height="100%"
           viewBox={`0 0 ${env.u.w} ${env.u.h}`}
           style={{ position: 'absolute', inset: 0, pointerEvents: 'none', touchAction: 'none', overflow: 'hidden' }}
+          // The svg itself is pointer-events:none; these fire because the handle <g>s are not,
+          // and their pointerover/out bubble up here. One listener for the whole layer.
+          onPointerOver={(e) => {
+            if ((e.target as Element).closest?.('[data-gx-handle]')) {
+              hovering.current = true;
+              wake();
+            }
+          }}
+          onPointerOut={(e) => {
+            const to = e.relatedTarget as Element | null;
+            if (!to?.closest?.('[data-gx-handle]')) {
+              hovering.current = false;
+              wake();
+            }
+          }}
         >
           <Handles env={env} />
         </svg>
