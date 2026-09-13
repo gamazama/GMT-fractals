@@ -198,9 +198,9 @@ export const lsqSpanControls = (samples: number[], i: number, j: number): { p1: 
  * @invariant Every stored span is within `eps` of every sample it covers — by construction,
  *   since a span is only accepted when `lsqSpanFit().worst <= eps` and that is the same fit
  *   `fitKeysToSamples` stores. This is strictly stronger than the Douglas-Peucker path, whose
- *   eps bounds a chord. Proven by: `npm run test:palette-channelcurve` section [5] ("optimal
- *   placement holds eps on every channel"). Falsified by raising the accept test to
- *   `eps * 1.5`: that assertion goes red across the corpus.
+ *   eps bounds a chord. Proven by: `npm run test:palette-channelcurve` section [5] ("every
+ *   chosen span holds eps"). Falsified by raising the accept test to `eps * 1.5`: that
+ *   assertion goes red, 1398 breaches across the corpus.
  */
 export const optimalKnotIndices = (samples: number[], eps: number, window = 16): number[] => {
     const n = samples.length;

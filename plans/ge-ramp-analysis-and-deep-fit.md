@@ -376,3 +376,51 @@ wants the same primitives.
 - **Does the scientific-viz angle get pursued at all?** A3 is worth building either way for the wall,
   but `shape` + `uniformity` + `cvdSafe` over 11k is also the entire basis of a "colormap finder"
   aimed at an audience GE has never addressed. That's a positioning decision, not a code one.
+
+---
+
+# Update 2026-09-12 / 13 — Part B measured, and partly built
+
+Appended; the design above is left as written. Several of its predictions were falsified, and the
+ones that matter most are recorded here so the next pass does not re-derive them. Every number was
+measured against the real renderer (`renderStopsToRamp`, `blendSpace: 'oklab'`), mostly over the 25
+built-in presets, whose sources total 209 stops.
+
+## What the measurements said
+
+| lever (Part B's name for it) | predicted | measured |
+|---|---|---|
+| **B2 blend-space search** | "probably the largest single win" | **~4%** (155 → 149 stops). `oklab` already wins 20 of 25 — the argument that polar hue saves stops is right, but the default already *is* the polar space, so the win was banked before the search existed. Per-segment space: 146. |
+| **B3 DP, exact minimal count** | "milliseconds" | the count is right (**197 → 156**, −21% against the shipped greedy at ΔE 0.02); the cost is not — 0.3–3 s per ramp with a bias grid. Offline or Worker only. |
+| **B3 colour off the curve** | "roughly halves max error, hence fewer stops" | **0 stops saved** (155 → 155). Max ΔE did fall (0.020 → 0.016); the slack never adds up to a whole knot. An error-quality pass, not a stop-count lever. |
+| per-texel quantisation floor | not in the plan | −13% on its own, and a correctness fix: the refine loop chased sub-8-bit error in the darks, where one level is ΔE 0.067. A 2-stop black→white re-fit to 6. |
+| per-segment Bézier handles | not in the plan | **−47%** vs the sources — the only large lever, because bias and smooth reparameterise motion *along* a segment's straight line and cannot reduce distance *from* it. **Owner rejected handles in gradient stops (2026-09-12): overwhelming for most people.** |
+| hue-arc / hue-turns flag | — | 0 stops (207 → 207 at ΔE 0.008). |
+
+The general lesson: most of the preset pack's stops are **kinks**, not resolution. Colormap-shaped
+presets (Turbo, Viridis, Plasma) shrink 50–75%; hand-keyed decorative ones (Aurora Strata, Multihue,
+Rainbow Full) do not shrink under any smooth model, because every stop is a real change of direction.
+
+## What shipped
+
+- **`8bdfa814` — the CURVES fit, which is where the handles belong.** The Curves face already has
+  draggable Bézier keys, so the result above transfers with no format change. `rampToBezierTrack`
+  solves its tangents by least squares instead of Catmull-Rom (the auto-tangents were flat on every
+  key of an 8-bit staircase and sagged: black→white baked 0.141 low in lightness), and
+  `optimalKnotIndices` is the DP placement, behind Settings ▸ Gradients ▸ Precise curve fitting
+  (off on phones). Matched at ΔE 0.02: **94.9 keys per gradient → 16.3 → 13.4.**
+- **`942f4073` — the preset pack, 209 → 154 stops.** `debug/bake-gradient-presets.mts` is the B3
+  DP (no step segments, half-step floor, today's stop format) run offline; `data/gradientPresets.ts`
+  is generated from its SOURCES. Guard `npm run test:palette-presets`.
+- **B2 "fit for target", in its smallest form:** the refit exposed that the CSS exporter sampled 33
+  stops evenly. It places them adaptively now, and CSS round-trip error fell across the pack (Turbo
+  33 → 4 levels, Aurora Strata 93 → 13). Step 4 of the sequencing above — "measure the CSS export
+  error" — is therefore partly answered: even sampling was the dominant error, not the blend space.
+
+## Still open
+
+- The **deep-fit menu** (B4/B5) is unbuilt. The bake script is its engine; it needs a Worker, the
+  ranked table, and a decision on whether it may change `blendSpace` (the open question above,
+  though at ~4% it matters much less than assumed).
+- `public/palette/gxglobal.json` still carries the pre-refit preset stops; re-bake with
+  `debug/bake-gx-global.mts` and upload to the CDN together, or dev and the CDN disagree.

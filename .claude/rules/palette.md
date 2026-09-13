@@ -100,7 +100,7 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 
 ```
 npm run smoke:boot           # the registration path, to throw-depth
-npm run test:palette         # 28 chained harnesses over palette/core/** and the Favients store
+npm run test:palette         # the chained harnesses over palette/core/**, the Favients store and the preset pack
 npm run test:palette-favients  # favientsStore: the load/import gate, dedupe, __proto__ labels, undo write-through
 npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
@@ -111,7 +111,8 @@ npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts
 both persisters, `favientsStore.seedPresets` and all four feature registrations.
 Falsified 2026-07-29 with a planted throw in `mountFavientsPanel`.
 
-`test:palette` chains 28 harnesses. `check:rule-guards` resolves the union of all
+`test:palette` chains 31 harnesses as of 2026-09-13 — count the `tsx` links in `package.json`
+rather than trusting this number; it said 28 while the chain was 30. `check:rule-guards` resolves the union of all
 of them (the direct-file composite case was fixed 2026-07-29 — before that it saw only
 member 1, and older notes claiming a `test:palette` citation "only reaches
 stopfit" are stale). Cite the specific link anyway when you mean one, because it

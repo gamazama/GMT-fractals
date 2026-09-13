@@ -164,7 +164,8 @@
     "gen:dcc": "node debug/gen-dcc-templates.mjs",
     "check:dcc": "tsx debug/check-dcc-resample.mts",
     "bake:presets": "tsx debug/bake-gradient-presets.mts",
-    "test:palette-presets": "tsx debug/bake-gradient-presets.mts --check"
+    "test:palette-presets": "tsx debug/bake-gradient-presets.mts --check",
+    "test:palette-channelcurve": "tsx debug/test-palette-channelcurve.mts"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
