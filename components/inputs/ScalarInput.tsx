@@ -16,6 +16,12 @@ import { DraggableNumber } from './primitives';
 import { computePercentage, mappedDomain } from './primitives/FormatUtils';
 import { usePrecisionTrackDrag } from './usePrecisionTrackDrag';
 import { useInputSkin } from './skin';
+import { useNumberDragFeel } from './dragFeel';
+
+/** GX v2's number-well hatch (owner, 2026-09-13): the drag affordance, narrower and quieter
+ *  than the studio's 5 px white hatch below, and drawn in the theme's `--line` ink so it
+ *  survives a light scheme. Only on wells that drag — never on a disabled one. */
+const SOFT_WELL_HATCH = 'repeating-linear-gradient(45deg, transparent 0 2.5px, rgb(var(--line) / 0.035) 2.5px 5px)';
 
 export const ScalarInput: React.FC<ScalarInputProps> = ({
     // Value props
@@ -26,6 +32,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
 
     // Bounds and step
     step = 0.01,
+    sensitivity,
     min,
     max,
     hardMin,
@@ -69,6 +76,14 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
     const fillBarRef = React.useRef<HTMLDivElement>(null);
     const fullTrackFillRef = React.useRef<HTMLDivElement>(null);
     const trackContainerRef = React.useRef<HTMLDivElement>(null);
+    const dragFeel = useNumberDragFeel();
+    /** The number beside a DRAWN track drags relative to it (numberDragRate.ts). The ref is
+     *  attached only where a track renders, so compact / minimal numbers read undefined and
+     *  keep their step rate. */
+    const getTrackPx = React.useCallback(
+        () => trackContainerRef.current?.getBoundingClientRect().width,
+        [],
+    );
 
     // Calculate track percentage
     const hasBounds = min !== undefined && max !== undefined && min !== max;
@@ -158,6 +173,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                     onDragStart={onDragStart}
                     onDragEnd={onDragEnd}
                     step={step}
+                    sensitivity={sensitivity}
                     hardMin={hardMin}
                     hardMax={hardMax}
                     mapping={mapping}
@@ -171,7 +187,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             </div>
         );
     }
-    
+
     if (isCompact) {
         // Compact variant - like VectorAxisCell (no header, inline track)
         return (
@@ -214,6 +230,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                         onDragStart={onDragStart}
                         onDragEnd={onDragEnd}
                         step={step}
+                        sensitivity={sensitivity}
                         hardMin={hardMin}
                         hardMax={hardMax}
                         mapping={mapping}
@@ -259,6 +276,12 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
             return i < 0 ? 0 : Math.min(3, t.length - i - 1);
         })();
         const softFormat = format ?? ((v: number) => v.toFixed(dp));
+        // The number's HIT area is wider than its text (owner, 2026-09-13: "the track under the
+        // number field" in the Image and Adjust faces). Measured before: the well is 60×16 but
+        // only its middle 48 px dragged (the well's padding was dead), and the full-width track
+        // ran on under the well. A transparent ::before carries the pointer over the well's
+        // padding; the layouts below keep the bar BESIDE the number, never under it.
+        const numberHit = `relative before:content-[''] before:absolute before:-inset-x-1.5 before:-inset-y-0.5`;
         const number = (
             <DraggableNumber
                 value={value}
@@ -266,6 +289,11 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 step={step}
+                sensitivity={sensitivity}
+                min={min}
+                max={max}
+                getTrackPx={getTrackPx}
+                dragFeel={dragFeel}
                 hardMin={hardMin}
                 hardMax={hardMax}
                 mapping={mapping}
@@ -275,20 +303,24 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 disabled={disabled}
                 highlight={isActive}
                 onImmediateChange={handleImmediateChange}
+                className={numberHit}
             />
         );
+        // Stacked (not dense): the bar shares its line with the number, so its hit box is that
+        // 16 px line with the 10 px bar centred in it.
+        const barTop = dense ? 2 : 3;
         const bar = showTrack && hasBounds && (
             <div
                 ref={trackContainerRef}
-                className={`relative flex items-center touch-none ${dense ? 'flex-1 min-w-[64px]' : ''} ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
-                style={{ touchAction: 'none', height: 14 }}
+                className={`relative flex items-center touch-none ${dense ? 'flex-1 min-w-[64px]' : 'flex-1 min-w-0'} ${disabled ? 'cursor-not-allowed' : 'cursor-ew-resize'}`}
+                style={{ touchAction: 'none', height: dense ? 14 : 16 }}
                 onPointerDown={track.onPointerDown}
                 onPointerMove={track.onPointerMove}
                 onPointerUp={track.onPointerUp}
                 onPointerCancel={track.onPointerUp}
                 onLostPointerCapture={track.onPointerUp}
             >
-                <div className={`absolute left-0 right-0 rounded-[10px] overflow-hidden bg-line/[0.12] group-hover/soft:bg-line/20 ${isActive ? 'ring-1 ring-accent-400/30' : ''}`} style={{ top: 2, height: 10 }}>
+                <div className={`absolute left-0 right-0 rounded-[10px] overflow-hidden bg-line/[0.12] group-hover/soft:bg-line/20 ${isActive ? 'ring-1 ring-accent-400/30' : ''}`} style={{ top: barTop, height: 10 }}>
                     {trackBackground && <div className="absolute inset-0" style={{ background: trackBackground }} />}
                     <div
                         ref={fullTrackFillRef}
@@ -339,6 +371,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 className={`text-right text-[13px] tabular-nums group/num-area touch-none rounded px-1.5 transition-colors ${
                     dense ? 'w-[56px] shrink-0' : 'ml-auto min-w-[60px]'
                 } ${disabled ? 'bg-line/[0.06]' : isActive ? 'bg-line/[0.16] text-fg font-medium' : 'bg-line/[0.10] hover:bg-line/[0.16]'}`}
+                style={disabled ? undefined : { backgroundImage: SOFT_WELL_HATCH }}
             >
                 {number}
             </div>
@@ -354,16 +387,27 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 </div>
             );
         }
+        // Stacked: the label on its own line, then the bar and the number ON ONE LINE (owner,
+        // 2026-09-13: the slider must not run under the text field, and the field sits in line
+        // with the slider, not superscript on the label). 1 + 18 + 16 + 1 = 36 px, the row
+        // height the two-line layout already had.
+        if (!label) {
+            return (
+                <div className={`group/soft py-px flex ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                    {bar}
+                </div>
+            );
+        }
         return (
-            <div className={`group/soft py-px ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
-                {label && (
-                    <div className="flex items-center h-5 gap-2 min-w-0">
-                        {headerRight}
-                        {labelEl}
-                        {valueEl}
-                    </div>
-                )}
-                {bar}
+            <div className={`group/soft py-px min-w-0 ${disabled ? 'opacity-70 pointer-events-none' : ''} ${className}`} data-help-id={dataHelpId} data-input-skin="soft" onContextMenu={onContextMenu}>
+                <div className="flex items-center h-[18px] gap-2 min-w-0">
+                    {headerRight}
+                    {labelEl}
+                </div>
+                <div className="flex items-center h-4 gap-2.5 min-w-0">
+                    {bar}
+                    {valueEl}
+                </div>
             </div>
         );
     }
@@ -399,6 +443,11 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                             onDragStart={onDragStart}
                             onDragEnd={onDragEnd}
                             step={step}
+                            sensitivity={sensitivity}
+                            min={min}
+                            max={max}
+                            getTrackPx={getTrackPx}
+                            dragFeel={dragFeel}
                             hardMin={hardMin}
                             hardMax={hardMax}
                             mapping={mapping}

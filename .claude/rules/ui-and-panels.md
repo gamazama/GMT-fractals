@@ -74,6 +74,21 @@ Its pipette is `window.EyeDropper` where that exists and a page-scoped pick
 hit-test deliberately does not trust `elementsFromPoint` alone: it honours `pointer-events`,
 and this app's most pickable canvases are `pointer-events-none`.
 
+## A slider's number field is the precision control
+
+Every slider (`ScalarInput`) carries two drags: the track, and the number beside it. The
+number moves a fixed band SLOWER than the track — at least `minSlowdown`×, at most
+`maxSlowdown`× (GMT 2–10×, GE v2 2–2.5× via `NumberDragFeelProvider` in its `main.tsx`), the
+step deciding where inside it, and it snaps to the step the track snaps to. Owner, 2026-09-13.
+Before that the number ran at `step × 0.5`/px whatever the range, so a 1..8 count crossed
+its whole range in 14 px while a 1e-6 log param needed millions. Grep `numberDragRate`.
+
+Two things that are easy to undo from the outside: the rate needs the track's WIDTH, so only
+variants that draw a track pass `getTrackPx` — vector cells and bare numbers keep the step
+rate on purpose (a vector cell handed a range would get ~70× faster). And a new numeric
+control with its own drag code (Knob, DualAxisPad, native range inputs — the inventory in
+`plans/pre-release-ui-pass.md` §2 lists them) does not get this rule at all.
+
 ## Guards
 
 ```
@@ -81,7 +96,18 @@ npm run typecheck
 npm run smoke:boot        # renders the whole panel tree headlessly; fails on pageerrors
 npm run smoke:interact    # DDFS state flow end-to-end (demo feature)
 npm run smoke:ge-pagepick # the picker's pipette with `EyeDropper` deleted, and with it present
+npm run test:number-drag-rate # the number-vs-track band (node, sub-second)
 ```
+
+`test:number-drag-rate` reaches `components/inputs/numberDragRate.ts` only — the band itself.
+Falsified 2026-09-13 three ways, each reverted: dropping the "never faster" clamp (1682 of
+3528 sweep cases red, and the 1..8 count back at 14 px), dropping the "never slower" clamp
+(a 1e-6 log param at 595,238×), and a ceiling that ignores the app's feel (GX at 10×). The
+WIRING — `ScalarInput` handing the track width to `useDragValue`, and the soft skin's stacked
+row keeping the bar BESIDE the number (label on its own 18 px line; bar and number share the
+16 px line below, centres level; the bar never runs under the number) — is unguarded; it was
+measured in the browser that day (a 200 px drag on GX's Repeats: track +6, number +3; Adjust
+face: bar ends x 283, number from x 293, well and bar centred at the same y, row still 36 px).
 
 `smoke:ge-pagepick` is the only guard on `components/gradient/pagePick.ts` and on the picker's
 pipette branch; `BROWSER=firefox` runs the same four steps in real firefox. Like every `ge-*`

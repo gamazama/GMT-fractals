@@ -20,8 +20,14 @@ export interface DraggableNumberProps {
     
     /** Step size for quantization */
     step?: number;
-    /** Base sensitivity multiplier (default: 1) */
+    /** Base sensitivity multiplier on the step rate (default: 1). Beside a track the
+     *  drag-feel band still wins — @see ../numberDragRate.ts */
     sensitivity?: number;
+    /** Width of the slider track this number sits beside, read at pointer-down. Present only
+     *  where a track is drawn; it is what ties the number's rate to the track's. */
+    getTrackPx?: () => number | undefined;
+    /** How much slower than the track the number drags — normally from NumberDragFeelProvider. */
+    dragFeel?: import('./numberDragRate').NumberDragFeel;
     /** Drag axis: 'x' = horizontal (default), 'y' = vertical (drag down to increase). */
     axis?: 'x' | 'y';
     
@@ -52,6 +58,9 @@ export interface DraggableNumberProps {
     /** Called synchronously during drag with the immediate value — use for direct
      *  DOM updates (e.g., fill bar width) that bypass the React render cycle. */
     onImmediateChange?: (v: number) => void;
+    /** Extra classes on the number's own element (the pointer target). A host uses it to widen
+     *  the HIT area past the visible text — ScalarInput's soft skin does. */
+    className?: string;
 }
 
 // ============================================================================

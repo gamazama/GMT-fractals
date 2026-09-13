@@ -57,6 +57,7 @@ export const RawDraggableNumber: React.FC<DraggableNumberProps> = ({
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             step={step}
+            sensitivity={sensitivity}
             min={min}
             max={max}
             hardMin={hardMin}

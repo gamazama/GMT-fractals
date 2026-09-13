@@ -16,8 +16,10 @@
  */
 
 import { useCallback, useRef, useState } from 'react';
-import { ValueMapping } from '../primitives/FormatUtils';
+import { ValueMapping, mappedDomain } from '../primitives/FormatUtils';
 import { beginEdgeFold, edgeFoldDelta, EdgeFoldTracker } from '../screenEdgeFold';
+import { numberDragRate, type NumberDragFeel } from '../numberDragRate';
+import { precisionMultiplier } from '../usePrecisionTrackDrag';
 
 interface UseDragValueOptions {
     value: number;
@@ -36,6 +38,9 @@ interface UseDragValueOptions {
     dragThreshold?: number;
     /** Drag axis: 'x' = horizontal (default), 'y' = vertical (drag down to increase). */
     axis?: 'x' | 'y';
+    /** Width of the track beside this number, read at pointer-down — @see numberDragRate. */
+    getTrackPx?: () => number | undefined;
+    dragFeel?: NumberDragFeel;
 }
 
 interface UseDragValueReturn {
@@ -69,6 +74,8 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         disabled,
         dragThreshold = 2,
         axis = 'x',
+        getTrackPx,
+        dragFeel,
     } = options;
 
     const [isDragging, setIsDragging] = useState(false);
@@ -87,24 +94,32 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
     const lastShift = useRef(false);
     const lastAlt = useRef(false);
     const currentPointerId = useRef<number | null>(null);
+    /** The track's width, read once at pointer-down (a drag never resizes its own panel). */
+    const trackPx = useRef<number | undefined>(undefined);
+
+    /** Display-space span of the soft range, or undefined when unbounded. */
+    const span = (min !== undefined && max !== undefined && min !== max)
+        ? (() => { const { dMin, dMax } = mappedDomain(min, max, mapping); return Math.abs(dMax - dMin); })()
+        : undefined;
 
     /**
      * Per-pixel sensitivity, expressed in DISPLAY space (the drag accumulates onto
-     * mapping.toDisplay(value)). For a mapped (e.g. log) param the raw `step` is the wrong
-     * unit — it's a raw-value quantum, not a display-space rate — so a tiny step (0.0001)
-     * crawled and the value barely moved. When bounds + a mapping are present, derive the
-     * rate from the display SPAN so a plain drag traverses the soft range in ~DRAG_RANGE_PX
-     * pixels (mirrors the track's feel); otherwise keep the raw step*0.5 rate (display == raw).
+     * mapping.toDisplay(value)). Beside a track the number is the PRECISION control: a fixed
+     * band slower than the track, the step deciding where inside it — see numberDragRate.ts.
+     * With no track it keeps the step rate (and a mapped param gets a virtual track, since its
+     * raw step is not a display-space rate — the 7bf6edbd "tiny step crawls" fix).
      */
     const getSensitivity = useCallback((shiftKey: boolean, altKey: boolean): number => {
-        const mult = (shiftKey ? 10 : 1) * (altKey ? 0.1 : 1);
-        if (mapping && min !== undefined && max !== undefined && min !== max) {
-            const DRAG_RANGE_PX = 200;
-            const span = Math.abs(mapping.toDisplay(max) - mapping.toDisplay(min));
-            return (span / DRAG_RANGE_PX) * sensitivity * mult;
-        }
-        return step * 0.5 * sensitivity * mult;
-    }, [step, sensitivity, mapping, min, max]);
+        return numberDragRate({ step, sensitivity, span, trackPx: trackPx.current, mapped: !!mapping, feel: dragFeel })
+            * precisionMultiplier({ shiftKey, altKey });
+    }, [step, sensitivity, span, mapping, dragFeel]);
+
+    /** A number beside a track snaps to the step the track snaps to (display space, like
+     *  usePrecisionTrackDrag's `quantize`). A bare number stays continuous — vector cells
+     *  default to step 0.01 and would coarsen. */
+    const quantize = useCallback((display: number): number =>
+        (trackPx.current !== undefined && step > 0 ? Math.round(display / step) * step : display),
+    [step]);
 
     /**
      * Handle pointer down - start drag
@@ -129,10 +144,12 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         hasMoved.current = false;
         lastShift.current = e.shiftKey;
         lastAlt.current = e.altKey;
+        const w = getTrackPx?.();
+        trackPx.current = w !== undefined && w > 0 ? w : undefined;
 
         setIsDragging(true);
         onDragStart?.();
-    }, [value, mapping, disabled, onDragStart, axis]);
+    }, [value, mapping, disabled, onDragStart, axis, getTrackPx]);
 
     /**
      * Handle pointer move - update value
@@ -180,7 +197,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
         // Calculate new value with current sensitivity (in DISPLAY space). Re-read
         // accumPx — it was just zeroed if a modifier toggled on this move.
         const currentSensitivity = getSensitivity(e.shiftKey, e.altKey);
-        const nextDisplay = dragStartValue.current + (accumPx.current * currentSensitivity);
+        const nextDisplay = quantize(dragStartValue.current + (accumPx.current * currentSensitivity));
 
         // Convert display → internal FIRST, then clamp hard bounds in RAW space. (Clamping the
         // display value broke mapped params: a raw hardMin of 0.0001 applied to a log-display
@@ -193,7 +210,7 @@ export const useDragValue = (options: UseDragValueOptions): UseDragValueReturn =
             immediateValueRef.current = finalValue;
             onChange(finalValue);
         }
-    }, [isDragging, disabled, step, hardMin, hardMax, mapping, onChange, getSensitivity, dragThreshold, axis]);
+    }, [isDragging, disabled, hardMin, hardMax, mapping, onChange, getSensitivity, quantize, dragThreshold, axis]);
 
     /**
      * Handle pointer up - end drag

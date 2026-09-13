@@ -38,6 +38,9 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
     liveValue,
     defaultValue,
     onImmediateChange,
+    getTrackPx,
+    dragFeel,
+    className = '',
 }) => {
     const displayRef = React.useRef<HTMLDivElement>(null);
 
@@ -70,6 +73,8 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         hardMax,
         mapping,
         disabled,
+        getTrackPx,
+        dragFeel,
     });
 
     // Wrap pointer move to also do direct DOM update for instant display
@@ -137,6 +142,7 @@ export const DraggableNumber: React.FC<DraggableNumberProps> = ({
         text-xs font-mono select-none transition-colors touch-none outline-none
         ${disabled ? 'cursor-not-allowed opacity-50 text-fg-faint' : `${axis === 'y' ? 'cursor-ns-resize' : 'cursor-ew-resize'} focus:ring-1 focus:ring-accent-500/50`}
         ${isDragging ? 'bg-accent-500/20 text-accent-300' : (isActive && !disabled ? 'text-accent-400' : (disabled ? '' : 'text-fg-tertiary hover:text-fg'))}
+        ${className}
     `;
 
     if (isEditing) {

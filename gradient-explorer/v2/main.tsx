@@ -31,6 +31,9 @@ import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
 import { decideFirstRun } from './firstRunDecision';
 import { startBootTrace, BootDiag, diagWanted } from './bootTrace';
+import { NumberDragFeelProvider } from '../../components/inputs/dragFeel';
+
+const GX_NUMBER_DRAG = { minSlowdown: 2, maxSlowdown: 2.5 };
 
 // First thing after the imports: a phone that dies mid-boot leaves its last mark behind
 // (`?diag` shows the previous run's trail — see bootTrace.ts).
@@ -93,11 +96,13 @@ if (!rootElement) throw new Error('Could not find root element to mount to');
 const Root: React.FC = () => {
   const [asking, setAsking] = React.useState(askBrightness);
   return (
-    <>
+    // GX's number fields drag 2–2.5× slower than their track (owner, 2026-09-13); GMT keeps the
+    // default 2–10× for its 1e-6 params. @see components/inputs/numberDragRate.ts
+    <NumberDragFeelProvider feel={GX_NUMBER_DRAG}>
       <GradientExplorerV2App />
       {asking && <FirstRunBrightness onDone={() => setAsking(false)} />}
       {diagWanted && <BootDiag />}
-    </>
+    </NumberDragFeelProvider>
   );
 };
 

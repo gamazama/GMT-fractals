@@ -1,5 +1,7 @@
 export { ScalarInput } from './ScalarInput';
 export { InputSkinProvider, useInputSkin, type InputSkin } from './skin';
+export { NumberDragFeelProvider, useNumberDragFeel } from './dragFeel';
+export { numberDragRate, DEFAULT_NUMBER_DRAG_FEEL, type NumberDragFeel } from './numberDragRate';
 export { DraggableNumber } from './primitives/DraggableNumber';
 export {
     formatDisplay,
