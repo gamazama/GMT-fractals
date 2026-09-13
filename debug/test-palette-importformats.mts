@@ -4,7 +4,7 @@
  *   • DETERMINISM: parsing the same text twice yields a byte-identical ramp.
  *   • ROUND-TRIP: exporting a known ramp via exportFormats then re-parsing recovers it
  *     — byte-exact for the dense formats (.map/.gpl/.ggr/.cpt/.json), within a small
- *     tolerance for the lossy ones (.css reduces to 33 stops).
+ *     tolerance for the lossy ones (.css reduces to 33 adaptively placed stops).
  *   • FAIL-SAFE: garbage / empty / truncated input returns null and never throws.
  *
  * Run: npx tsx debug/test-palette-importformats.mts
@@ -63,14 +63,25 @@ for (const { name, ramp } of RAMPS) {
   }
 }
 
-console.log('[2] round-trip: .css recovers within tolerance (33-stop reduction)');
+/**
+ * The .css bound is 8 levels, and it was 24 until 2026-09-13.
+ *
+ * 24 was not derived; it was the value the old Turbo preset happened to produce under EVEN
+ * sampling, so it sat exactly on the line and could not tell a good reduction from a bad one.
+ * The exporter places its 33 stops adaptively now (`reduceStopIndices`, see the css entry in
+ * exportFormats.ts), which measures at most 4 across these six. 8 leaves that twice over and
+ * still reds the regression it exists for: restoring even sampling fails two of the six —
+ * Turbo 33, Spectrum 11 (falsified 2026-09-13).
+ */
+const CSS_BOUND = 8;
+console.log('[2] round-trip: .css recovers within tolerance (33 adaptively placed stops)');
 for (const { name, ramp } of RAMPS) {
   const text = buildOf('css')(ramp) as string;
   const res = parseGradientText(text, 'css');
   ok(!!res, `css: "${name}" parses`);
   if (res) {
     const d = maxDelta(res.ramp, ramp);
-    ok(d <= 24, `css: "${name}" within tolerance (Δ=${d})`);
+    ok(d <= CSS_BOUND, `css: "${name}" within tolerance (Δ=${d}, bound ${CSS_BOUND})`);
   }
 }
 

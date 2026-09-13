@@ -110,8 +110,8 @@ const rdpIdx = (ramp: RGB[], tol: number): number[] => {
 /** Reduce a 256-step ramp to ≤`max` representative stop indices (Douglas-Peucker,
  *  escalating tolerance until the budget is met). Every reduced format calls this, each
  *  with its own budget: .grd (`GRD_MAX` 40), .ai (`AI_MAX` 40, re-exported as
- *  `AI_STOP_LIMIT` and reused by `indesignIdml.ts` for .idml), .svg (`SVG_MAX` 32) and
- *  .ugr (`UGR_MAX_STOPS` 64). Grep `reduceStopIndices` for the current call sites rather
+ *  `AI_STOP_LIMIT` and reused by `indesignIdml.ts` for .idml), .svg (`SVG_MAX` 32), .css
+ *  (`CSS_MAX` 33, since 2026-09-13 — it sampled evenly before) and .ugr (`UGR_MAX_STOPS` 64). Grep `reduceStopIndices` for the current call sites rather
  *  than trusting a list here — this one has already gone stale twice. */
 export const reduceStopIndices = (ramp: RGB[], max: number): number[] => {
   let tol = 1.5;
@@ -203,6 +203,8 @@ const AI_MAX = 40;
 // ~32 stops, and other apps cap similarly. So we reduce smartly (Douglas-Peucker)
 // to a budget that survives import everywhere, rather than dumping a fixed sample.
 const SVG_MAX = 32;
+/** The CSS export's stop budget — the 33 it has always written, now placed adaptively. */
+const CSS_MAX = 33;
 
 const aiNum = (n: number, dp = 6): string => {
   if (!isFinite(n)) n = 0;
@@ -647,9 +649,23 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'css',
     label: 'CSS linear-gradient',
     ext: 'css',
+    /**
+     * ADAPTIVE stops, like every other reduced format here — not 33 evenly spaced samples.
+     *
+     * Even sampling is only good for a gradient whose colour moves at a steady rate, and few do:
+     * a biased or smooth stop concentrates change near one end of its segment, and a fixed grid
+     * of samples straddles exactly the stretch that needed one. Found 2026-09-13 re-fitting the
+     * built-in presets to fewer stops: the fitted ramps were within OKLab ΔE 0.02 of the
+     * originals on screen, yet their CSS came back up to 33 levels off in a channel (Turbo, the
+     * worst), because the new stops carry bias. Measured over all 25 presets, worst channel
+     * delta after a CSS round trip, even → adaptive at the same 33-stop budget: Turbo 33 → 4,
+     * Rainbow Full 61 → 8, Aurora Strata 93 → 13, and no preset worse than its old export.
+     * Five of them were already past the importFormats harness's bound under even sampling;
+     * that harness only samples the first six, so it never saw them.
+     */
     build: (r) =>
       'background: linear-gradient(90deg, ' +
-      Array.from({ length: 33 }, (_, k) => hx2(ri(r[Math.round((k / 32) * 255)])) + ' ' + ((k / 32) * 100).toFixed(1) + '%').join(', ') +
+      reduceStopIndices(r, CSS_MAX).map((i) => hx2(ri(r[i])) + ' ' + ((i / 255) * 100).toFixed(1) + '%').join(', ') +
       ');',
   },
   {
