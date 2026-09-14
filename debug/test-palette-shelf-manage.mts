@@ -10,9 +10,11 @@
  *       imported item is named from its filename and carries `Import · .<fmt>`, and a
  *       failed read counts as skipped rather than aborting the batch
  *   [2] importGradientsInto: WHERE an import lands and what it dedupes against — a group
- *       dedupes within that group (a gradient kept elsewhere can still join it), no group
- *       dedupes across the whole collection (the panel kebab's historical behaviour)
- *   [3] importSummary's wording, and isGradientFileName / GRADIENT_FILE_ACCEPT
+ *       dedupes within that group (a gradient kept elsewhere can still join it); no group lands
+ *       in Kept, deduped within Kept (until ADR-0123, 2026-09-14: the last-used group, deduped
+ *       across the whole collection). The full destination rule is `test-gradient-file.mts` [5].
+ *   [3] importSummary's wording, and isGradientFileName / GRADIENT_FILE_ACCEPT (with .png and
+ *       .zip since ADR-0123)
  *   [4] removeGroup: the group goes, its gradients move to Kept as ONE run, the label is
  *       dropped, lastGroupId cannot be left pointing at it, and the default group, Recent
  *       and an unknown id are no-ops
@@ -183,10 +185,14 @@ console.log('[2] importGradientsInto: destination and dedupe scope');
   const b = importGradientsInto(reads);
   ok(b.imported === 2, `no group: both land (got ${b.imported})`);
   const b2 = importGradientsInto(reads);
-  ok(b2.imported === 0 && b2.skipped === 2, 'no group: dedupe is against the WHOLE collection');
+  // Since ADR-0123 (Decision 4) a file naming no set lands in KEPT, not the last-used group, and is
+  // deduped within Kept like any other destination — which is also where the first copy is here.
+  // The whole destination rule (a named set, a collection, the given group) is
+  // `debug/test-gradient-file.mts` [5].
+  ok(b2.imported === 0 && b2.skipped === 2 && b2.duplicates === 2, 'no group: a second import of the same files is all duplicates');
   ok(
-    useFavientsStore.getState().favients.every((f) => (f.group ?? DEFAULT_GROUP) === DEFAULT_GROUP),
-    'no group: they land in the last-used group, which is Kept here',
+    useFavientsStore.getState().favients.every((f) => (f.group ?? DEFAULT_GROUP) === DEFAULT_GROUP) && b.destination === DEFAULT_GROUP,
+    'no group: they land in Kept, and the outcome names Kept as the destination',
   );
 }
 
@@ -196,11 +202,14 @@ console.log('[3] the reported sentence, and which files are offered');
   ok(importSummary({ imported: 3, skipped: 2 }) === 'Imported 3 gradients \u00b7 2 skipped', 'summary: plural with a skipped tail');
   ok(importSummary({ imported: 0, skipped: 4 }) === 'No gradient could be read from that file', 'summary: nothing readable says so');
   ok(isGradientFileName('x.GGR') && isGradientFileName('a/b/c.map'), 'isGradientFileName: case-insensitive, path-tolerant');
-  ok(!isGradientFileName('photo.png') && !isGradientFileName('noext'), 'isGradientFileName: an image and an extensionless name are not gradients');
-  for (const ext of ['map', 'gpl', 'ggr', 'cpt', 'css', 'json']) {
+  // Since ADR-0123 a .png (the GMT gradient file) and a .zip (a set export) are gradient files too;
+  // the router decides by content, so a photo offered here is reported as an image, not refused by name.
+  ok(isGradientFileName('Sea Glass.png') && isGradientFileName('set.ZIP'), 'isGradientFileName: the GMT PNG and a .zip are gradient files (ADR-0123)');
+  ok(!isGradientFileName('photo.jpg') && !isGradientFileName('noext'), 'isGradientFileName: a jpeg and an extensionless name are not gradients');
+  for (const ext of ['map', 'gpl', 'ggr', 'cpt', 'css', 'json', 'png', 'zip']) {
     if (!GRADIENT_FILE_ACCEPT.includes('.' + ext)) { failures++; console.log(`  \u2717 accept is missing .${ext}`); }
   }
-  ok(GRADIENT_FILE_ACCEPT.split(',').length === 6, `accept lists every parseable extension (${GRADIENT_FILE_ACCEPT})`);
+  ok(GRADIENT_FILE_ACCEPT.split(',').length === new Set(GRADIENT_FILE_ACCEPT.split(',')).size, `accept lists each extension once (${GRADIENT_FILE_ACCEPT})`);
 }
 
 console.log('[4] removeGroup: the container goes, its contents do not');
@@ -306,7 +315,9 @@ console.log('[7] fileFavientsAt + wallSelection: a batch, and a stable snapshot'
   const a = newGroupId();
   const b = newGroupId();
   // three in A, two in B, one in Kept — enough that a bad splice interleaves visibly
-  importGradientsInto([{ name: 'a1.map', text: MAP }, { name: 'a2.css', text: CSS }, { name: 'a3.gpl', text: GPL }], a);
+  // a3 is a .gpl WITHOUT a `Name:` line: since ADR-0123 the name a file carries wins over its
+  // filename, and this section identifies favourites by name.
+  importGradientsInto([{ name: 'a1.map', text: MAP }, { name: 'a2.css', text: CSS }, { name: 'a3.gpl', text: GPL.replace('Name: x\n', '') }], a);
   importGradientsInto([{ name: 'b1.map', text: MAP.replace('255 255 255', '9 9 9') }, { name: 'b2.map', text: MAP.replace('0 255 0', '9 200 9') }], b);
   importGradientsInto([{ name: 'k1.map', text: MAP.replace('255 0 0', '3 3 3') }], DEFAULT_GROUP);
   const inA = st().favients.filter((f) => f.group === a).map((f) => f.id);

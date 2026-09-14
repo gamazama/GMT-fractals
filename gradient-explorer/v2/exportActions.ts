@@ -20,6 +20,17 @@
  * sampled at positions the user laid out, so it is a derivative, not the gradient as published.
  * The filename follows the name, so a .map or a PNG strip (no name field) still carries it.
  *
+ * THE GMT GRADIENT FILE (ADR-0123 Decision 5, 2026-09-14) is the Explorer's SAVE, and it is not a
+ * registry format: `runGradientFile` / `runSetGradientFile` write `palette/core/gradientFile.ts`'s
+ * PNG (or its JSON) carrying the REAL config — either ADR-0122 form, never the ramp — with the
+ * plain name, the catalogue origin and the source beside it, so nothing is baked into the name:
+ * the credit rides `origin` and comes back as the credit. Only the FILENAME carries the credited
+ * name, so a copy whose metadata was stripped (the PNG's pixels still import) keeps the credit
+ * in the one place it has left. A set carries each member's group and the labels of those groups.
+ * A GMT file download IS a recent (`kind: 'gmt'`), since it is one click the hero's flyout can
+ * repeat; the registry formats keep their own kinds. Guard: `npm run smoke:ge-gradientfile` [a0] [a] [e] [f]
+ * (falsified by dropping each stop's bias and interpolation from the written config).
+ *
  * `runSetExport` is the same registry pointed at a SET of gradients rather than one
  * (§8b item 4, the 2026-09-08 migration audit's M1): a collection format bundles the set
  * into one file, everything else becomes a .zip of one file per gradient, and the contact
@@ -32,7 +43,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
-import { getExportFormat, grdStopCount, aiLossyGradients, stopBudgetOf, AI_LOSSY_DELTA, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
+import { getExportFormat, grdStopCount, aiLossyGradients, stopBudgetOf, exportFileName, AI_LOSSY_DELTA, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { showToast } from '../../engine/store/toastStore';
 import type { RGB } from '../../palette/core/oklab';
@@ -48,6 +59,8 @@ import {
 } from '../../palette/core/favientsExport';
 import type { Favient } from '../../palette/store/favientsStore';
 import { exportNameFor, withExportName } from '../../palette/core/catalogOrigin';
+import { buildGradientFile, type GradientFileKind, type BuiltGradientFile } from '../../palette/core/gradientFile';
+import { useFavientsStore } from '../../palette/store/favientsStore';
 import type { GradientConfig } from '../../types';
 
 /**
@@ -66,14 +79,19 @@ export interface ExportRunOpts {
    *  carry the credit (`useWorkingDerived().origin` / `.config`). Absent → the name as given. */
   origin?: unknown;
   config?: GradientConfig | null;
+  /** The working gradient's provenance line ("Browse", "Mix", "Edited" …) — what a GMT file
+   *  carries as `source`, the same string a Recent favourite of it holds. */
+  source?: string;
 }
 
 
 export type ExportAction =
   | { kind: 'copy' | 'download'; key: string; subject?: ExportSubject }
-  | { kind: 'png'; subject?: ExportSubject };
+  | { kind: 'png'; subject?: ExportSubject }
+  /** The GMT gradient file (ADR-0123) — the gradient itself, so it has no subject. */
+  | { kind: 'gmt'; file: GradientFileKind };
 
-const subjectOf = (a: ExportAction): ExportSubject => a.subject ?? 'ramp';
+const subjectOf = (a: ExportAction): ExportSubject => (a.kind === 'gmt' ? 'ramp' : a.subject ?? 'ramp');
 
 const STORAGE_KEY = 'gx.v2.recentExports';
 const MAX_RECENT = 3;
@@ -83,6 +101,7 @@ const isAction = (a: unknown): a is ExportAction => {
   const o = a as { kind?: unknown; key?: unknown; subject?: unknown };
   if (o.subject !== undefined && o.subject !== 'ramp' && o.subject !== 'swatches') return false;
   if (o.kind === 'png') return true;
+  if (o.kind === 'gmt') return (a as { file?: unknown }).file === 'png' || (a as { file?: unknown }).file === 'json';
   if (o.kind !== 'copy' && o.kind !== 'download') return false;
   if (typeof o.key !== 'string') return false;
   const f = getExportFormat(o.key);
@@ -90,8 +109,11 @@ const isAction = (a: unknown): a is ExportAction => {
   // unknown key: dropped on load rather than offered as a click that would do nothing.
   return !!f && (o.subject !== 'swatches' || !!f.swatches);
 };
-const same = (a: ExportAction, b: ExportAction): boolean =>
-  a.kind === b.kind && subjectOf(a) === subjectOf(b) && (a.kind === 'png' || a.key === (b as { key: string }).key);
+const same = (a: ExportAction, b: ExportAction): boolean => {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === 'gmt') return a.file === (b as { file: GradientFileKind }).file;
+  return subjectOf(a) === subjectOf(b) && (a.kind === 'png' || a.key === (b as { key: string }).key);
+};
 
 const load = (): ExportAction[] => {
   try {
@@ -126,6 +148,7 @@ export const useRecentExports = (): ExportAction[] =>
   );
 
 export const exportActionLabel = (a: ExportAction): string => {
+  if (a.kind === 'gmt') return `Download GMT gradient (.${a.file})`;
   const sw = subjectOf(a) === 'swatches';
   if (a.kind === 'png') return sw ? 'Download swatch sheet' : 'Download PNG strip';
   const f = getExportFormat(a.key);
@@ -165,7 +188,7 @@ const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[
 const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number, stem = slugName(name)) => {
   const out = bytesFor(f, ramp, name, palette, budget);
   const blob = f.binary ? new Blob([out as unknown as BlobPart], { type: 'application/octet-stream' }) : new Blob([out as string], { type: 'text/plain' });
-  downloadBlob(blob, `${stem}${palette ? '-swatches' : ''}.${f.ext}`);
+  downloadBlob(blob, exportFileName(f, stem, palette ? 'swatches' : 'ramp'));
   // The .grd stop count is a RAMP fact (it is what the reduction left); a swatch export
   // writes exactly the colours it was handed, so it says how many rather than implying a
   // reduction that did not happen.
@@ -212,6 +235,60 @@ const downloadSwatchSheet = async (palette: RGB[], name: string): Promise<void> 
   showToast('Swatch sheet saved (PNG)');
 };
 
+/** Hand a built GMT gradient file to the browser. */
+const downloadGradientFile = (built: BuiltGradientFile): void => {
+  const blob = built.kind === 'png' ? new Blob([built.bytes as unknown as BlobPart], { type: built.mime }) : new Blob([built.text], { type: built.mime });
+  downloadBlob(blob, built.filename);
+};
+
+/** A filename stem that keeps a credit readable: `gradientFileStem` drops `/` (a path separator),
+ *  which would weld "cpt-city/gacruxa" into one word. */
+const creditTitle = (credited: string): string => credited.replace(/\s*\/\s*/g, '-');
+
+/**
+ * Save the WORKING gradient as the GMT gradient file (ADR-0123): its real config, its plain name,
+ * its catalogue origin (`opts.origin` — the working pipeline's, already null once the output
+ * changed) and its source. The filename carries the credit while the gradient is unmodified,
+ * exactly as a registry download's does.
+ */
+export const runGradientFile = (file: GradientFileKind, plainName: string, opts: ExportRunOpts = {}): boolean => {
+  const config = opts.config;
+  if (!config) {
+    showToast('Pick or build a gradient first');
+    return false;
+  }
+  const credited = exportNameFor(plainName, opts.origin, config);
+  const built = buildGradientFile(
+    [{ name: plainName, config, ...(opts.origin ? { origin: opts.origin } : {}), ...(opts.source ? { source: opts.source } : {}) }],
+    undefined,
+    file,
+    credited === plainName ? plainName : creditTitle(credited),
+  );
+  downloadGradientFile(built);
+  showToast(`Downloaded GMT gradient (.${file})`);
+  return true;
+};
+
+/**
+ * Save a SET as ONE GMT gradient file: every member with its own config, name, origin, source and
+ * group, and the labels of the groups they sit in — so loading it back puts each where it was.
+ * Named after the set. Not a recent (a set is a different subject from the hero's flyout).
+ */
+export const runSetGradientFile = (file: GradientFileKind, favients: Favient[], setName: string): void => {
+  if (!favients.length) {
+    showToast('That set is empty');
+    return;
+  }
+  const labels = useFavientsStore.getState().groupLabels;
+  const groups: Record<string, string> = {};
+  for (const f of favients) {
+    const g = f.group;
+    if (g && Object.prototype.hasOwnProperty.call(labels, g)) groups[g] = labels[g];
+  }
+  downloadGradientFile(buildGradientFile(favients, groups, file, setName));
+  showToast(`Downloaded ${favients.length} gradient${favients.length === 1 ? '' : 's'} as a GMT gradient file (.${file})`);
+};
+
 /**
  * Export a whole SET. `key` is a registry format; `subject` is which face of every member
  * is taken.
@@ -238,6 +315,8 @@ export const runSetExport = (
     return;
   }
   const stem = slugName(setName);
+  // A zip of CSS variables must not land beside a zip of CSS under one name (`fileSuffix`).
+  const zipStem = `${stem}${getExportFormat(key)?.fileSuffix ?? ''}`;
   if (subject !== 'swatches') favients = favients.map(withExportName);
   if (subject === 'swatches') {
     const items = setSwatches(favients, n);
@@ -253,7 +332,7 @@ export const runSetExport = (
       showToast('That format has no swatch form');
       return;
     }
-    downloadBlob(new Blob([zip as unknown as BlobPart], { type: 'application/zip' }), `${stem}-swatches.zip`);
+    downloadBlob(new Blob([zip as unknown as BlobPart], { type: 'application/zip' }), `${zipStem}-swatches.zip`);
     showToast(`Exported ${favients.length} palettes as .zip`);
     return;
   }
@@ -265,7 +344,7 @@ export const runSetExport = (
     return;
   }
   const bytes = buildCollectionZip(favients, key, budget);
-  downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${stem}.zip`);
+  downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${zipStem}.zip`);
   showToast(`Exported ${favients.length} as .zip`);
 };
 
@@ -315,6 +394,10 @@ export const gradientLossyCount = (ramp: RGB[], name: string, key: string, subje
  * count of its own, because the row IS the control and it lives on the hero (L2).
  */
 export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palette: RGB[] = [], opts: ExportRunOpts = {}): void => {
+  if (a.kind === 'gmt') {
+    if (runGradientFile(a.file, plainName, opts)) noteRecentExport(a);
+    return;
+  }
   const swatches = subjectOf(a) === 'swatches';
   const name = swatches ? plainName : exportNameFor(plainName, opts.origin, opts.config);
   const stem = name === plainName ? slugName(name) : creditedFileStem(plainName, name);

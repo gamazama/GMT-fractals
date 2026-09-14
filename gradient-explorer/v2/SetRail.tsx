@@ -96,6 +96,7 @@ import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksConte
 import { showToast } from '../../engine/store/toastStore';
 import { useNativeDragging, useDragPayload } from '../../palette/store/dragVisual';
 import { FavientsCollectionMenu } from '../../palette/components/FavientsCollectionMenu';
+import type { ImportOutcome } from '../../palette/core/importGradientFiles';
 import { Icon } from './ui/Icon';
 import { useIsPhone } from './useIsPhone';
 
@@ -118,11 +119,16 @@ interface Props {
   groundExportCount: number;
   /** Ask for gradient files to import into this group. */
   onImportInto: (group: string) => void;
+  /** The collection menu's "Import gradient file…" finished — the app says what happened and shows
+   *  where it landed (ADR-0123 / ADR-0119), as it does for a drop. */
+  onImported?: (outcome: ImportOutcome) => void;
+  /** The set that import files into (the one on the ground when it is the user's). */
+  importGroup?: () => string | undefined;
 }
 
 const NEW_GROUP_LABEL = 'Group';
 
-export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, onExportGround, groundExportCount, onImportInto }) => {
+export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, onExportGround, groundExportCount, onImportInto, onImported, importGroup }) => {
   const phone = useIsPhone();
   const renameGroup = useFavientsStore((s) => s.renameGroup);
   const removeGroup = useFavientsStore((s) => s.removeGroup);
@@ -467,7 +473,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
         <Icon name="download" size={16} />
       </button>
       {/* the collection menu — what is left of "more": import, save, load, clear */}
-      <FavientsCollectionMenu onFlash={showToast} withExport={false} />
+      <FavientsCollectionMenu onFlash={showToast} withExport={false} onImported={onImported} importGroup={importGroup} />
     </>
   );
 

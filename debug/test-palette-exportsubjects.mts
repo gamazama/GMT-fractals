@@ -34,6 +34,23 @@
  *       `renderStopsToRamp(f.config.stops, …)` → [9] red (the greyscale fallback, first line
  *       "0 0 0"); `rampOf` as `renderGradientToRamp(f.config)` (the config's own Linear
  *       colorSpace) → [9] red (the texels linearised).
+ *   [10] (2026-09-14, ADR-0123 item 2) every builder with a name field writes the name it is
+ *       given — .gpl / .ggr `Name:`, .cpt `# Name:`, the .css and CSS-variables leading comment,
+ *       .grd walked by its declared lengths (UTF-8, cut at 255 bytes on a character boundary),
+ *       and every other named path carrying it — and an unnamed build keeps its old header.
+ *   [11] (same day) no two formats download under one filename (`exportFileName`), checked
+ *       through the real `runExport` / `runSetExport` with their download caught at
+ *       `createElement('a')`; a plain format's filename (`Sea_Glass.json`) is unchanged.
+ *   [7]/[8] also changed that day: CSS joined STOP_BUDGETS, so the "does not reduce, does not
+ *       warn" example moved from css to json and CSS now has to warn and honour the budget.
+ *   FALSIFIED 2026-09-14, one mutation at a time, each restored, every one exit 1: CSS ignoring
+ *     the budget → 1 red · css missing from STOP_BUDGETS → 2 · .gpl ramp build writing
+ *     `gradient` → 2 · .ggr → 2 · .cpt → 2 · .grd name not written → 3 · .grd size computed for
+ *     an 8-byte name → 3 (a RangeError, reported by name) · the unnamed header default changed →
+ *     3 · cssvars without `fileSuffix` → 3 · `runExport` building its filename by hand → 4 ·
+ *     `runSetExport`'s zip without the suffix → 4. The first cut of the budget check asserted a
+ *     noisy ramp writes exactly 33 CSS stops; the reducer reaches its tolerance at 22, so it now
+ *     compares no-override against 33 and 8 against the default.
  *
  * Run: `npm run test:palette-exportsubjects` (also a link of `test:palette`).
  *
@@ -69,6 +86,7 @@ import {
   grdStopCount,
   aiStopCount,
   buildAiSwatchLibrary,
+  exportFileName,
   type ExportFormatDef,
 } from '../palette/core/exportFormats';
 import { buildSwatchZip, buildSwatchCollectionFile, collectionQualityWarnings, buildCollectionZip, type NamedSwatches } from '../palette/core/favientsExport';
@@ -342,7 +360,11 @@ const fussy = [{ name: 'Noisy', config: { stops: NOISY_STOPS, blendSpace: 'rgb',
 ok(collectionQualityWarnings(fussy, 'ase').length === collectionQualityWarnings(fussy, 'ai').length,
   '.ase and .ai reduce at the same budget but do not warn alike');
 ok(collectionQualityWarnings(fussy, 'ase').length > 0, 'a ramp that .ai calls lossy is exported silently as .ase');
-ok(collectionQualityWarnings(fussy, 'css').length === 0, 'a format that does not reduce should not warn');
+// Was 'css' until 2026-09-14. CSS has reduced (to 33 adaptive stops) since 2026-09-13 and joined
+// STOP_BUDGETS on 09-14, so a noisy gradient IS lossy as CSS and must say so; the non-reducing
+// example is now .json, which writes all 256 texels.
+ok(collectionQualityWarnings(fussy, 'json').length === 0, 'a format that does not reduce should not warn');
+ok(collectionQualityWarnings(fussy, 'css').length > 0, 'CSS reduces to 33 stops but did not warn about a gradient it flattens');
 
 // ── [8] THE STOP BUDGET (owner, 2026-09-10; the export window's Settings category) ──────
 // Every reducing format used to decide its budget privately. `stopBudgetOf` is the table
@@ -371,6 +393,14 @@ ok(collectionQualityWarnings(fussy, 'ugr').length > 0,
   '.ugr reduces at 64 and lost detail but reported nothing — this is the assumption the budget closed');
 ok(collectionQualityWarnings(fussy, 'map', undefined, 8).length === 0,
   'a format that does not reduce warned because an override was passed to it');
+// CSS (2026-09-14): it ignored the budget — the override moved every reducing format but this one.
+{
+  const css = getExportFormat('css')!;
+  const stopsIn = (s: string | Uint8Array) => (text(s).match(/%/g) ?? []).length;
+  ok(stopBudgetOf('css') === 33, `CSS's default budget is not the 33 it has always written (${stopBudgetOf('css')})`);
+  ok(text(css.build(NOISY_RAMP, 'W')) === text(css.build(NOISY_RAMP, 'W', 33)), 'CSS with no override is not CSS at its 33-stop default');
+  ok(stopsIn(css.build(NOISY_RAMP, 'W', 8)) <= 8 && stopsIn(css.build(NOISY_RAMP, 'W', 8)) < stopsIn(css.build(NOISY_RAMP, 'W')), `CSS at a budget of 8 wrote ${stopsIn(css.build(NOISY_RAMP, 'W', 8))} stops — the override is not reaching the writer`);
+}
 
 // ── [9] a RAMP gradient exports its texels (ADR-0122, 2026-09-14) ─────────────────────
 // A ramp gradient has no stops; the set exporters read it through `gradientDisplayRamp`.
@@ -385,6 +415,97 @@ section('[9] a ramp gradient exports its texels');
   const map = strFromU8(Object.values(files)[0] ?? new Uint8Array()).split('\n').map((l) => l.trim().split(/\s+/).map(Number));
   const exact = map.length === 256 && map.every((c, i) => c[0] === texels[i * 3] && c[1] === texels[i * 3 + 1] && c[2] === texels[i * 3 + 2]);
   ok(exact, `a ramp gradient's collection export is its texels (the .map's first line reads ${map[0]?.join(' ')}, texel 0 is ${texels[0]} ${texels[1]} ${texels[2]})`);
+}
+
+// ── [10] the builders write the NAME (ADR-0123 item 2, 2026-09-14) ─────────────────────
+section('[10] every builder with a name field writes the name it is given');
+{
+  const NAME = 'Sea Glass é';
+  const fmt = (k: string) => getExportFormat(k)!;
+  ok(text(fmt('gpl').build(RAMP, NAME)).split('\n')[1] === `Name: ${NAME}`, `.gpl's Name line is not the name: ${text(fmt('gpl').build(RAMP, NAME)).split('\n')[1]}`);
+  ok(text(fmt('ggr').build(RAMP, NAME)).split('\n')[1] === `Name: ${NAME}`, `.ggr's Name line is not the name: ${text(fmt('ggr').build(RAMP, NAME)).split('\n')[1]}`);
+  ok(text(fmt('cpt').build(RAMP, NAME)).split('\n')[1] === `# Name: ${NAME}`, `.cpt's name comment is not the name: ${text(fmt('cpt').build(RAMP, NAME)).split('\n')[1]}`);
+  ok(text(fmt('css').build(RAMP, NAME)).startsWith(`/* ${NAME} */\n`), '.css does not open with the name comment');
+  ok(text(fmt('cssvars').build(RAMP, NAME)).startsWith(`/* ${NAME} */\n`), 'CSS variables do not open with the name comment');
+  // Unnamed (the old shell's Extras panels call build(ramp)): byte-for-byte what they always wrote.
+  ok(text(fmt('gpl').build(RAMP)).startsWith('GIMP Palette\nName: gradient\n'), 'an unnamed .gpl changed its header');
+  ok(text(fmt('ggr').build(RAMP)).startsWith('GIMP Gradient\nName: gradient\n'), 'an unnamed .ggr changed its header');
+  ok(text(fmt('cpt').build(RAMP)).startsWith('# COLOR_MODEL = RGB\n# gradient\n'), 'an unnamed .cpt changed its header');
+  ok(text(fmt('css').build(RAMP)).startsWith('background: linear-gradient('), 'an unnamed .css grew a comment');
+
+  /** Walk a .grd v3 by its declared lengths; returns the name, or throws naming the defect. */
+  const readGrd = (b: Uint8Array): { name: string; stops: number } => {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    if (String.fromCharCode(b[0], b[1], b[2], b[3]) !== '8BGR') throw new Error('bad signature');
+    if (dv.getUint16(4) !== 3 || dv.getUint16(6) !== 1) throw new Error('not v3 / one gradient');
+    let p = 8;
+    const len = b[p++];
+    const name = new TextDecoder().decode(b.subarray(p, p + len));
+    p += len;
+    const stops = dv.getUint16(p);
+    p += 2 + stops * 20;
+    const trans = dv.getUint16(p);
+    p += 2 + trans * 10 + 6;
+    if (p !== b.length) throw new Error(`walked to ${p} of ${b.length} bytes`);
+    return { name, stops };
+  };
+  try {
+    const g = readGrd(fmt('grd').build(RAMP, NAME) as Uint8Array);
+    ok(g.name === NAME, `.grd's name is ${JSON.stringify(g.name)}`);
+    ok(readGrd(fmt('grd').build(RAMP) as Uint8Array).name === 'gradient', 'an unnamed .grd is no longer named "gradient"');
+    const long = readGrd(fmt('grd').build(RAMP, 'é'.repeat(200)) as Uint8Array);
+    ok(long.name === 'é'.repeat(127), `a 400-byte name was not cut to 254 bytes at a character boundary (${new TextEncoder().encode(long.name).length} bytes)`);
+  } catch (e) {
+    ok(false, `.grd does not walk by its declared lengths: ${(e as Error).message}`);
+  }
+
+  // Every other path that takes a name carries it (as written, or as its identifier).
+  for (const f of EXPORT_FORMATS) {
+    if (['map', 'hex', 'svg', 'js', 'py', 'csv', 'pdn'].includes(f.key)) continue; // no name field
+    const out = f.build(RAMP, NAME);
+    let hay = typeof out === 'string' ? out : '';
+    if (typeof out !== 'string') {
+      try { hay = Object.values(unzipSync(out)).map((e) => strFromU8(e)).join('\n'); } catch { /* not a zip */ }
+      for (let i = 0; i + 1 < out.length; i += 2) hay += String.fromCharCode((out[i] << 8) | out[i + 1]);
+      hay += new TextDecoder().decode(out);
+    }
+    ok(hay.includes(NAME) || hay.includes('sea-glass') || hay.includes('Sea_Glass_é'), `${f.key}: build(ramp, name) does not carry the name`);
+  }
+}
+
+// ── [11] every format downloads under its own filename (ADR-0123 item 2) ───────────────
+section('[11] every format downloads under its own filename');
+{
+  for (const subject of ['ramp', 'swatches'] as const) {
+    const names = formatsFor(subject).map((f) => exportFileName(f, 'Sea_Glass', subject));
+    const dupes = names.filter((n, i) => names.indexOf(n) !== i);
+    ok(dupes.length === 0, `[11] ${subject}: two formats download as ${dupes.join(', ')}`);
+  }
+  // THE WIRING: the Explorer's own download path, not just the helper. Its downloads are caught
+  // at `document.createElement('a').click()` (utils/SceneFormat.downloadBlob).
+  const caught: string[] = [];
+  (URL as unknown as { createObjectURL: () => string }).createObjectURL = () => 'blob:t';
+  (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
+  (globalThis as unknown as { document: unknown }).document = {
+    createElement: () => { const a = { href: '', download: '', click() { caught.push(a.download); } }; return a; },
+  };
+  const { runExport, runSetExport } = await import('../gradient-explorer/v2/exportActions');
+  const pairs: [string, string][] = [['css', 'cssvars'], ['json', 'tokens'], ['js', 'tw'], ['hex', 'pdn']];
+  for (const [a, b] of pairs) {
+    caught.length = 0;
+    runExport({ kind: 'download', key: a }, RAMP, 'Sea Glass', [], {});
+    runExport({ kind: 'download', key: b }, RAMP, 'Sea Glass', [], {});
+    runExport({ kind: 'download', key: b, subject: 'swatches' }, RAMP, 'Sea Glass', PALETTE, {});
+    ok(caught.length === 3 && new Set(caught).size === 3, `[11] runExport: ${a} and ${b} downloads share a filename (${caught.join(', ')})`);
+    const favs = [{ id: 'f', name: 'One', createdAt: 0, config: { stops: [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 1, color: '#FFFFFF' }], colorSpace: 'srgb', blendSpace: 'oklab' } }] as unknown as Parameters<typeof runSetExport>[1];
+    caught.length = 0;
+    runSetExport(a, favs, 'Set');
+    runSetExport(b, favs, 'Set');
+    ok(caught.length === 2 && caught[0] !== caught[1], `[11] runSetExport: the ${a} and ${b} zips share a filename (${caught.join(', ')})`);
+  }
+  caught.length = 0;
+  runExport({ kind: 'download', key: 'json' }, RAMP, 'Sea Glass', [], {});
+  ok(caught[0] === 'Sea_Glass.json', `[11] a plain format's filename changed (${caught[0]}) — smoke:ge-hero [8] asserts it`);
 }
 
 console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry, one stop budget');

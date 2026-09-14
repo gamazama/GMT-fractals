@@ -12,7 +12,7 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Favient } from '../store/favientsStore';
 import { gradientDisplayRamp } from './gmtGradient';
-import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA, stopBudgetOf } from './exportFormats';
+import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA, stopBudgetOf, exportFileName } from './exportFormats';
 import { layoutPositions, swatchesAt, clampCount, type PaletteRule } from './paletteSample';
 import { canvasToPngBlob } from '../../utils/SceneFormat';
 import type { RGB } from './oklab';
@@ -36,14 +36,16 @@ const sanitize = (name: string): string =>
 /**
  * Build a .zip (Uint8Array) of every favourite exported in `fmtKey`. Files are
  * prefixed with a zero-padded index so collection order is preserved and same-named
- * gradients don't clobber each other.
+ * gradients don't clobber each other. Each member is named through `exportFileName` (2026-09-14),
+ * so it carries the format's `fileSuffix` exactly as a single download does: a .json zip and a
+ * design-tokens zip extracted into one folder no longer write `001_Sea_Glass.json` twice.
  */
 export const buildCollectionZip = (favients: Favient[], fmtKey: string, budget?: number): Uint8Array => {
   const fmt = getExportFormat(fmtKey) ?? EXPORT_FORMATS[0];
   const files: Record<string, Uint8Array> = {};
   favients.forEach((f, i) => {
     const out = fmt.build(rampOf(f), f.name, budget); // string | Uint8Array (binary formats)
-    const fname = `${String(i + 1).padStart(3, '0')}_${sanitize(f.name)}.${fmt.ext}`;
+    const fname = exportFileName(fmt, `${String(i + 1).padStart(3, '0')}_${sanitize(f.name)}`);
     files[fname] = typeof out === 'string' ? strToU8(out) : out;
   });
   return zipSync(files, { level: 6 });
@@ -122,7 +124,7 @@ export const buildSwatchZip = (items: NamedSwatches[], fmtKey: string): Uint8Arr
   const files: Record<string, Uint8Array> = {};
   items.forEach((it, i) => {
     const out = fmt.swatches!(it.colors, it.name);
-    files[`${String(i + 1).padStart(3, '0')}_${sanitize(it.name)}.${fmt.ext}`] = typeof out === 'string' ? strToU8(out) : out;
+    files[exportFileName(fmt, `${String(i + 1).padStart(3, '0')}_${sanitize(it.name)}`, 'swatches')] = typeof out === 'string' ? strToU8(out) : out;
   });
   return zipSync(files, { level: 6 });
 };

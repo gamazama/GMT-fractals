@@ -19,6 +19,15 @@
  *       Falsified 2026-09-14 (each reverted, exit 1): the encoder never writing `r` → 2 red
  *       ("round-trips byte-exact", "with its name"); writing `r` whenever the config has a
  *       ramp → 1 red ("unchanged by a stale ramp"); the decoder ignoring `r` → 2 red.
+ *   [7] (2026-09-14, ADR-0123 item 2) a STEP edge renders the same texels after decode — every
+ *       edge on a sample (i/255), on a half texel ((i - 0.5)/255) and 3e-5 either side of a
+ *       sample, plus the 12-band k/12 corpus gradient; an ordinary gradient's wire is the exact
+ *       4-decimal wire; a link from the 4-decimal encoder still decodes.
+ *       Falsified 2026-09-14 (each restored, exit 1): positions back to plain 4 decimals → 2 red
+ *       (229 of 1,016 edges moved, and the k/12 bands); never writing 4 decimals → 1 red (the
+ *       ordinary link grew `0.47123`); a decoder that refuses the old link's step rows → 4 red.
+ *       Half-texel edges alone do NOT catch the 4-decimal bug — 5e-5 of rounding cannot reach
+ *       half a texel — which is why the on-sample and ±3e-5 edges are in the sweep.
  *
  * Node only, no browser. `npm run test:gx-share`.
  */
@@ -182,6 +191,60 @@ console.log('\n[6] a RAMP gradient rides the link (ADR-0122); a stop gradient\'s
   check(decodeShare(wire({ v: 1, n: 'x', s: [] })) === null, '[6] a link with neither rows nor a ramp decodes to null');
   const both = decodeShare(wire({ v: 1, n: 'x', s: [[0, '#000000'], [1, '#FFFFFF']], r: ramp }));
   check(!!both && both.config.stops.length === 2 && !('ramp' in both.config), '[6] rows AND a ramp is a stop gradient (stops win)');
+}
+
+console.log('\n[7] a step edge lands on the same texel after decode (ADR-0123 item 2); old links still decode');
+{
+  const { renderStopsToRamp } = await import('../utils/colorUtils');
+  const sameTexels = (a: GradientConfig, b: GradientConfig): number => {
+    const ra = renderStopsToRamp(a.stops, a.blendSpace, a.colorSpace);
+    const rb = renderStopsToRamp(b.stops, b.blendSpace, b.colorSpace);
+    return ra.findIndex((c, i) => c.r !== rb[i].r || c.g !== rb[i].g || c.b !== rb[i].b);
+  };
+  const stepAt = (p: number): GradientConfig => ({
+    stops: [
+      { id: 'a', position: 0, color: '#102030', interpolation: 'step' },
+      { id: 'b', position: p, color: '#F0E0D0', interpolation: 'step' },
+      { id: 'c', position: 1, color: '#FFFFFF' },
+    ],
+    blendSpace: 'oklab', colorSpace: 'srgb',
+  });
+  // Every edge ON a sample (i/255), every edge on a HALF texel ((i - 0.5)/255), and just either
+  // side of every sample (±3e-5, inside what 4 decimals rounds away).
+  const bad: string[] = [];
+  for (let i = 1; i < 255; i++) {
+    for (const p of [i / 255, (i - 0.5) / 255, i / 255 + 3e-5, i / 255 - 3e-5]) {
+      const back = decodeShare(encodeShare(stepAt(p), 'e'));
+      const at = back ? sameTexels(stepAt(p), back.config) : 0;
+      if (!back || at !== -1) bad.push(`${p} (texel ${at})`);
+    }
+  }
+  check(bad.length === 0, `[7] every step edge renders the same texels after decode (${bad.length} of ${254 * 4} moved${bad.length ? ': ' + bad.slice(0, 3).join(', ') : ''})`);
+  // The harness corpus's 12-band step gradient: edges at k/12, 4/12 = 85/255 exactly.
+  const bands: GradientConfig = { stops: Array.from({ length: 12 }, (_, k) => ({ id: `s${k}`, position: k / 12, color: k % 2 ? '#F2A0A0' : '#203040', interpolation: 'step' as const })), blendSpace: 'oklab', colorSpace: 'srgb' };
+  const bandsBack = decodeShare(encodeShare(bands, 'bands'));
+  check(!!bandsBack && sameTexels(bands, bandsBack.config) === -1, '[7] the 12-band k/12 step gradient is texel-identical after decode');
+
+  // An ordinary gradient keeps the exact 4-decimal wire every link used before (no longer links).
+  const ordinary: GradientConfig = {
+    stops: [
+      { id: 'a', position: 0, color: '#0B3D4F', bias: 0.3 },
+      { id: 'b', position: 0.18, color: '#2A9D8F', bias: 0.7, interpolation: 'smooth' },
+      { id: 'c', position: 0.4712345, color: '#E9C46A' },
+      { id: 'd', position: 1, color: '#E76F51' },
+    ],
+    blendSpace: 'hsv', colorSpace: 'srgb',
+  };
+  const wireOf = (code: string) => Buffer.from(code, 'base64url').toString('utf8');
+  check(
+    wireOf(encodeShare(ordinary, 'o')) === '{"v":1,"n":"o","s":[[0,"#0B3D4F","linear",0.3],[0.18,"#2A9D8F","smooth",0.7],[0.4712,"#E9C46A"],[1,"#E76F51"]],"b":"hsv","c":"srgb"}',
+    `[7] an ordinary gradient's link is the 4-decimal link (${wireOf(encodeShare(ordinary, 'o'))})`,
+  );
+  // A link written by the 4-decimal encoder (before 2026-09-14) — the k/12 bands at r4 — decodes.
+  const OLD = Buffer.from(JSON.stringify({ v: 1, n: 'Stufe Bänder ä', s: [[0, '#203040', 'step'], [0.3333, '#F2A0A0', 'step'], [0.6667, '#203040', 'step'], [1, '#F2A0A0']], b: 'oklab', c: 'srgb' })).toString('base64url');
+  const old = decodeShare(OLD);
+  check(!!old && old.name === 'Stufe Bänder ä' && old.config.stops.length === 4 && old.config.stops[1].position === 0.3333 && old.config.stops[1].interpolation === 'step' && (old.config.stops[1].bias ?? 0.5) === 0.5,
+    '[7] a link from the 4-decimal encoder still decodes (positions as written, elided defaults restored)');
 }
 
 console.log(failures === 0 ? '\nPASS — share codec' : `\nFAIL — ${failures} assertion(s)`);

@@ -8,8 +8,11 @@
  * owns (locked Decision 1 — never silently clobber the global library on load;
  * merge only ever ADDS, so auto-append honours it without a prompt).
  *
- * serialize → the current collection as a JSON-value (the canonical
- *   FavientsCollection from `exportCollection`).
+ * serialize → the current collection as a JSON-value (what `exportCollection` writes: since
+ *   ADR-0123 the `gmt-gradients` document; scenes saved before 2026-09-14 embed the legacy
+ *   `{version, favients, groupLabels}`, and `readCollectionFavients` / `importCollection` read
+ *   both. A build older than ADR-0123 reads a NEWER scene's favients as empty — the restore is
+ *   additive, so that loses nothing on the shelf, it only adds nothing).
  * restore   → silently auto-append: any scene gradient not already on the shelf
  *   (by content signature) is merged in via `importCollection`, which validates
  *   shapes, mints fresh ids, dedupes, and writes through to localStorage
@@ -32,8 +35,8 @@ import { useFavientsStore, favientSig, readCollectionFavients } from './favients
 
 /** Capture the favients collection as a JSON-value document for the scene. */
 export const serializeFavientsDocument = (): JsonValue =>
-    // exportCollection() is the canonical {version, favients, groupLabels}
-    // serialiser; parse it back to a value so it nests in the scene JSON.
+    // exportCollection() is the canonical collection serialiser (the gmt-gradients
+    // document since ADR-0123); parse it back to a value so it nests in the scene JSON.
     JSON.parse(useFavientsStore.getState().exportCollection()) as JsonValue;
 
 /**

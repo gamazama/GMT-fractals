@@ -23,6 +23,16 @@
  * `onFlash` is the message sink: the panel passes its own inline flash, v2 passes the
  * global toast. Nothing here knows which host it is in.
  *
+ * THE COLLECTION FILE IS THE GMT GRADIENT FILE (ADR-0123, 2026-09-14). Save collection writes it —
+ * a PNG by default (every gradient in the metadata, and a band of pixels each, so a stripped copy
+ * still loads with exact colours), the same payload as .json beside it. Load & merge / Replace
+ * read BYTES and go through the one loader (`readCollectionFiles`), so they take that PNG, its
+ * JSON, the legacy collection JSON and a zip; a Replace takes only a document (a lone gradient
+ * file must never wipe the shelf), a merge takes any gradient file. "Import gradient file…" is the
+ * same loader through `importGradientsInto`; a host that can do more with what it finds — reveal
+ * the set it landed in, open a session file — passes `onImported` and owns the message too, and
+ * `importGroup` names the set the user is looking at when it is theirs.
+ *
  * @see palette/core/importGradientFiles.ts (the import path, shared with the rail)
  * @see palette/core/favientsExport.ts (the collection zip / bundle / contact sheet)
  */
@@ -33,7 +43,15 @@ import { useFavientsStore } from '../store/favientsStore';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFormats';
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
-import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary } from '../core/importGradientFiles';
+import { buildGradientFile, type GradientFileKind } from '../core/gradientFile';
+import {
+  GRADIENT_FILE_ACCEPT,
+  readGradientFiles,
+  readCollectionFiles,
+  importGradientsInto,
+  importSummary,
+  type ImportOutcome,
+} from '../core/importGradientFiles';
 import { paramEdit as favEdit } from '../store/paramUndoBracket';
 import { useDismiss } from '../../hooks/useDismiss';
 
@@ -53,7 +71,7 @@ const menuItemCls =
 
 /**
  * The popover itself. Saves the
- * collection to a re-importable JSON, loads (merge) / replaces it from a file, clears
+ * collection as the GMT gradient file (PNG or JSON), loads (merge) / replaces it from a file, clears
  * it, and exports the gradients as a per-format .zip or a PNG contact sheet. Styled to
  * match the engine's system-menu popovers.
  */
@@ -65,10 +83,17 @@ export const FavientsCollectionMenu: React.FC<{
    *  the way it was. The old shell, app-gmt and fluid-toy have no such icon, so they keep it.
    *  A capability the host declares, not a name it is checked against. */
   withExport?: boolean;
-}> = ({ onFlash, withExport = true }) => {
+  /** "Import gradient file…" finished. A host that passes this owns the message (build it with
+   *  `importSummary`) and whatever else the outcome asks for — revealing where it landed, opening a
+   *  session file. Without it the menu flashes the summary. */
+  onImported?: (outcome: ImportOutcome) => void;
+  /** The set an import files into, asked at import time: the set the user is viewing when it is
+   *  theirs, else undefined (ADR-0123 Decision 4). */
+  importGroup?: () => string | undefined;
+}> = ({ onFlash, withExport = true, onImported, importGroup }) => {
   const favients = useFavientsStore((s) => s.favients);
-  const exportCollection = useFavientsStore((s) => s.exportCollection);
-  const importCollection = useFavientsStore((s) => s.importCollection);
+  const groupLabels = useFavientsStore((s) => s.groupLabels);
+  const importEntries = useFavientsStore((s) => s.importEntries);
   const clear = useFavientsStore((s) => s.clear);
 
   const [open, setOpen] = useState(false);
@@ -115,10 +140,13 @@ export const FavientsCollectionMenu: React.FC<{
   const close = () => setOpen(false);
   const empty = favients.length === 0;
 
-  const saveCollection = () => {
-    const blob = new Blob([exportCollection()], { type: 'application/json' });
-    downloadBlob(blob, 'favients-collection.json');
-    onFlash('Collection saved (.json)');
+  const saveCollection = (kind: GradientFileKind) => {
+    // The GMT gradient file (ADR-0123): the same document `exportCollection` writes, as a PNG
+    // (default) or its JSON. Built from the store's own favourites and labels.
+    const built = buildGradientFile(favients, groupLabels, kind, 'My Gradients');
+    const blob = built.kind === 'png' ? new Blob([built.bytes as unknown as BlobPart], { type: built.mime }) : new Blob([built.text], { type: built.mime });
+    downloadBlob(blob, built.filename);
+    onFlash(`Collection saved (.${kind})`);
     close();
   };
 
@@ -129,14 +157,33 @@ export const FavientsCollectionMenu: React.FC<{
   };
 
   const onFile = async (file: File) => {
-    const text = await file.text();
-    // Bracket the load as one undo entry (merge OR replace) — the provider snapshot
-    // is taken before importCollection mutates the shelf, so Ctrl+Z restores it.
-    let n: number | null = null;
-    favEdit(() => { n = importCollection(text, importMode.current); });
-    if (n == null) onFlash("That file isn't a Favients collection");
-    else onFlash(importMode.current === 'replace' ? `Replaced — ${n} loaded` : n ? `Merged ${n} new` : 'Nothing new to merge');
+    const mode = importMode.current;
+    // BYTES, through the one loader: the GMT gradient PNG, its JSON, the legacy collection, a zip.
+    // Read first (async) so the undo bracket below stays synchronous.
+    const read = readCollectionFiles(await readGradientFiles([file]));
     close();
+    if (read.kind === 'refused') {
+      onFlash(
+        read.reason === 'session'
+          ? 'That is a session file, not a gradient collection'
+          : read.reason === 'scene'
+            ? 'That is a GMT scene, not a gradient collection'
+            : read.reason === 'image'
+              ? 'That image carries no gradient file'
+              : "That file isn't a gradient collection",
+      );
+      return;
+    }
+    // A Replace takes a DOCUMENT only: a single .ggr must never wipe the shelf.
+    if (mode === 'replace' && !read.document) {
+      onFlash("That file isn't a gradient collection — use Load & merge to add it");
+      return;
+    }
+    // Bracket the load as one undo entry (merge OR replace) — the provider snapshot
+    // is taken before importEntries mutates the shelf, so Ctrl+Z restores it.
+    let n = 0;
+    favEdit(() => { n = importEntries(read.entries, read.groups, mode); });
+    onFlash(mode === 'replace' ? `Replaced — ${n} loaded` : n ? `Merged ${n} new` : 'Nothing new to merge');
   };
 
   // Import one or more GRADIENT files (.map/.gpl/.ggr/.cpt/.css/.json — distinct from a
@@ -150,11 +197,13 @@ export const FavientsCollectionMenu: React.FC<{
     // gesture's beginParamTransaction clobbering the engine's single
     // interactionSnapshot mid-import — which would drop the import's undo entry.
     const reads = await readGradientFiles(files);
-    let outcome = { imported: 0, skipped: 0 };
+    const group = importGroup?.();
+    let outcome: ImportOutcome = { imported: 0, skipped: 0 };
     // Bracket the whole batch as ONE undo entry (empty diff → no entry if nothing added).
-    favEdit(() => { outcome = importGradientsInto(reads); });
-    onFlash(importSummary(outcome));
+    favEdit(() => { outcome = importGradientsInto(reads, group); });
     close();
+    if (onImported) onImported(outcome);
+    else onFlash(importSummary(outcome));
   };
 
   const doClear = () => {
@@ -211,8 +260,8 @@ export const FavientsCollectionMenu: React.FC<{
       <input
         ref={fileRef}
         type="file"
-        accept="application/json,.json"
-        aria-label="Load Favients collection"
+        accept=".png,.json,.zip,image/png,application/json"
+        aria-label="Load gradient collection"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -250,9 +299,10 @@ export const FavientsCollectionMenu: React.FC<{
           onClick={(e) => e.stopPropagation()}
         >
           <button className={menuItemCls} onClick={() => gradientFileRef.current?.click()}>Import gradient file…</button>
-          <button className={menuItemCls} onClick={saveCollection}>Save collection (.json)</button>
-          <button className={menuItemCls} onClick={() => pickFile('merge')}>Load &amp; merge…</button>
-          <button className={menuItemCls} onClick={() => pickFile('replace')}>Replace from file…</button>
+          <button className={menuItemCls} onClick={() => saveCollection('png')} data-gx-save-collection="png">Save collection (.png)</button>
+          <button className={menuItemCls} onClick={() => saveCollection('json')} data-gx-save-collection="json">Save collection (.json)</button>
+          <button className={menuItemCls} onClick={() => pickFile('merge')} data-gx-load-collection="merge">Load &amp; merge…</button>
+          <button className={menuItemCls} onClick={() => pickFile('replace')} data-gx-load-collection="replace">Replace from file…</button>
           <button className={`${menuItemCls} hover:!text-danger`} onClick={doClear}>Clear collection</button>
 
           {withExport && (

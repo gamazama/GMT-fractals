@@ -49,14 +49,21 @@ import type { TrayFace } from './Tray';
 import { FullscreenGradientOverlay } from '../FullscreenGradientOverlay';
 import { openFullscreen } from '../../palette/store/fullscreenStore';
 import { useActiveHeroSelection, deselectActiveHero, usePickSerial } from '../../palette/store/heroSelection';
-import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName } from '../../palette/store/workingStore';
+import { useWorkingStore, useWorkingDerived, deriveWorkingNow, autoWorkingName, workingSourceOf } from '../../palette/store/workingStore';
 import { usePaletteEditorStore } from '../../palette/store/paletteEditorStore';
 import { usePickerStore } from '../../palette/store/pickerStore';
 import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot, SLOT_MOD_DEFAULTS } from '../../palette/store/generatorStore';
 import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store/favientsStore';
-import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary, isGradientFileName } from '../../palette/core/importGradientFiles';
+import {
+  GRADIENT_FILE_ACCEPT,
+  readGradientFiles,
+  importGradientsInto,
+  importSummary,
+  isGradientFileName,
+  type ImportOutcome,
+} from '../../palette/core/importGradientFiles';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
 import { getWallSelection, clearWallSelection } from '../../palette/store/wallSelection';
 import { gradientDisplayRamp } from '../../palette/core/gmtGradient';
@@ -70,8 +77,9 @@ import { ExportMenu } from './ExportMenu';
 import { SetRail } from './SetRail';
 import { useShellUiHistory } from './uiHistory';
 import { useGroundSets } from './useGroundSource';
-import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetId } from '../../palette/store/groundSet';
-import { membersOfMany, parseSetId } from '../../palette/core/groundSets';
+import { useGroundSetIds, setGroundSetId, toggleGroundSetId, getGroundSetIds } from '../../palette/store/groundSet';
+import { membersOfMany, parseSetId, groupSetId } from '../../palette/core/groundSets';
+import { loadGxSessionText } from './session';
 import { useGlobalSet } from '../../palette/store/globalSetStore';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
 import { Icon } from './ui/Icon';
@@ -95,6 +103,19 @@ const phoneMenuItems = (): MenuItem[] => [
     : []),
   { id: 'gx-sep', type: 'separator' },
 ];
+
+/**
+ * The set an import files into (ADR-0123 Decision 4): the set on the ground when it is ONE set and
+ * it is the user's own group (Kept included — its key is DEFAULT_GROUP). The catalogue (All), a
+ * dated bin, GX Global and several lit chips are not a place to file into, so they give undefined
+ * and the loader decides (a document's own set, else Kept). Before ADR-0123 those passed Kept.
+ */
+const ownedGroundGroup = (): string | undefined => {
+  const ids = getGroundSetIds();
+  if (ids.length !== 1) return undefined;
+  const { kind, key } = parseSetId(ids[0]);
+  return kind === 'group' ? key : undefined;
+};
 
 export type SourceId = 'browse' | 'build' | 'extract';
 /** Phase C: the source follows the TRAY — the Mix face is the `build` input, the Image face
@@ -367,39 +388,72 @@ export const GradientExplorerV2App: React.FC = () => {
   // arrives (`onLoaded`) — cancel the dialog and nothing changes. Drop / paste anywhere
   // still routes here.
   //
-  // A gradient FILE dropped anywhere lands on the shelf (§8b item 4, M2). It shares the
-  // image drop's single window listener through `onOtherFiles` rather than racing a second
-  // one. A `.json` is ambiguous — it is both a gradient format and the Favients collection
-  // format — so `importGradientsInto` tries it as a gradient and a file that is really a
-  // collection simply reports nothing readable; Load & merge in the panel's kebab is the
-  // collection path and stays where it is.
+  // A gradient FILE dropped anywhere lands on the shelf (§8b item 4, M2), through THE one loader
+  // (ADR-0123 Decision 3), which decides what each file is by its content. Since a GMT gradient
+  // file is a PNG — and the browser calls it `image/png` — the drop hands every gradient-file
+  // name to the loader FIRST (`preRoute`), PNGs included: one carrying our metadata or our band
+  // layout imports as gradients, and a PNG the loader says is just an image goes on to the image
+  // extraction exactly as before, silently. A session file (`.gxsession.json`) opens as a session
+  // through the same apply Settings ▸ Session ▸ Load uses (one undo step of its own); a scene PNG
+  // and a collection are named in the toast. Then the view SHOWS where it landed (ADR-0119) — the
+  // owner's "neither appeared" was an import into Kept while All was on the ground.
   //
   // This is also what un-corners a CLEARED shelf. The rail (and with it the manage panel,
   // Import and Load & merge) used to be gated on `sets.length > 1`, so "Clear collection"
   // — reached from inside that very panel — could make every way back in unreachable
   // (the migration audit §3.8a). Two things fix it: a drop always works, and the rail's
   // chevron is no longer gated on the chips (see the stage below).
+  const finishImport = useCallback((outcome: ImportOutcome, opts: { imagesGoOn?: boolean } = {}) => {
+    const session = outcome.sessions?.[0];
+    const rest: ImportOutcome = {
+      ...outcome,
+      sessions: outcome.sessions?.slice(1),
+      // images that go on to extraction are not a dead end, so they are not reported
+      images: opts.imagesGoOn ? undefined : outcome.images,
+    };
+    const nothingToSay = !rest.imported && !rest.skipped && !rest.sessions?.length && !rest.scenes?.length && !rest.images?.length;
+    // Say what happened — unless the only thing that happened is a session opening (it toasts
+    // itself) or a plain image going on to extraction (which is just a drop doing what it did).
+    if (!nothingToSay || (!session && !opts.imagesGoOn)) showToast(importSummary(rest));
+    if (session) loadGxSessionText(session.text);
+    // REVEAL (ADR-0119): the set it landed in, unless the ground already shows it. A collection
+    // merge (destination null) and a file that landed nowhere show nothing new.
+    if (typeof outcome.destination === 'string') {
+      const id = groupSetId(outcome.destination);
+      if (!getGroundSetIds().includes(id)) setGroundSetId(id);
+    }
+  }, []);
   const importInto = useCallback((files: FileList | File[], group?: string) => {
     void (async () => {
       // Read FIRST (async), then write inside ONE synchronous paramEdit — holding a param
       // transaction open across an await risks another gesture clobbering the snapshot.
       const reads = await readGradientFiles(files);
-      let outcome = { imported: 0, skipped: 0 };
+      let outcome: ImportOutcome = { imported: 0, skipped: 0 };
       paramEdit(() => { outcome = importGradientsInto(reads, group); });
-      showToast(importSummary(outcome));
+      finishImport(outcome);
     })();
-  }, []);
+  }, [finishImport]);
   const { fileToImg } = useImageDrop({
     onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); },
-    onOtherFiles: useCallback((files: File[]) => {
+    preRoute: useCallback(async (files: File[]): Promise<File[]> => {
       const gradients = files.filter((f) => isGradientFileName(f.name));
-      if (!gradients.length) return false;
-      // Into the set you are looking at, when that set is a group you own; a dated bin and
-      // the catalogue are not yours to file into, so those fall back to Kept.
-      const { kind, key } = parseSetId(getGroundSetId());
-      importInto(gradients, kind === 'group' ? key : DEFAULT_GROUP);
-      return true;
-    }, [importInto]),
+      if (!gradients.length) return files;
+      const reads = await readGradientFiles(gradients);
+      let outcome: ImportOutcome = { imported: 0, skipped: 0 };
+      paramEdit(() => { outcome = importGradientsInto(reads, ownedGroundGroup()); });
+      finishImport(outcome, { imagesGoOn: true });
+      // What goes on: the plain images, in drop order — a PNG the loader called an image (its own
+      // bytes) and every image that was never a gradient-file name. Anything else in a drop that
+      // carried gradient files is dropped quietly, as it was before.
+      const byName = new Map((outcome.images ?? []).map((im) => [im.name, im] as const));
+      const onward: File[] = [];
+      for (const f of files) {
+        const im = isGradientFileName(f.name) ? byName.get(f.name) : f.type.startsWith('image') ? { name: f.name, bytes: null } : undefined;
+        if (!im) continue;
+        onward.push(im.bytes ? new File([im.bytes as unknown as BlobPart], f.name, { type: f.type || 'image/png' }) : f);
+      }
+      return onward;
+    }, [finishImport]),
   });
   const imageFileRef = useRef<HTMLInputElement>(null);
   // The rail's "Import into this set…" — the group is held for the picker's onChange.
@@ -554,6 +608,7 @@ export const GradientExplorerV2App: React.FC = () => {
               palette={derived.palette.map((s) => s.color)}
               origin={derived.origin}
               config={derived.config}
+              source={workingSourceOf(derived.input)}
               colorSpace={derived.config?.colorSpace}
               onColorSpace={(id) => {
                 // the profile is part of the stops document: editing it bakes first (as a
@@ -612,6 +667,8 @@ export const GradientExplorerV2App: React.FC = () => {
           onExportGround={() => setExportGround(true)}
           groundExportCount={groundMembers.length}
           onImportInto={askImportInto}
+          onImported={finishImport}
+          importGroup={ownedGroundGroup}
         />
         {/* The GROUND's Export window — the same `ExportMenu`, pointed at what the wall is
             showing instead of at the working gradient (§8b item 4 / the audit's M1; retargeted

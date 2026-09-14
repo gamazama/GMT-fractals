@@ -29,6 +29,7 @@ import {
   restoreSessionOnBoot,
   installSessionAutosave,
   registerSessionFileSettings,
+  applySessionText,
 } from '../../engine/plugins/Session';
 import type { SessionBootAction } from '../../store/sessionEnvelope';
 import { workingSessionAdapter, WORKING_SESSION_STORAGE_KEY } from '../../palette/store/workingSession';
@@ -49,6 +50,13 @@ export const GX_AUTOSAVE_TEXT: AutosaveSettingsText = {
   enabledDescription: 'Keep the working gradient in this browser, so a reload or a crash brings it back.',
   intervalDescription: 'How often to save it, in seconds. Closing or reloading the tab always saves.',
 };
+
+/**
+ * Open a session file's TEXT as the working session — the apply Settings ▸ Session ▸ Load runs
+ * (`applySessionText`: validate, one undo step, a toast either way). The gradient loader hands a
+ * `.gxsession.json` that arrived by a drop or a gradient-file picker here (ADR-0123 Decision 3).
+ */
+export const loadGxSessionText = (text: string): boolean => applySessionText(workingSessionAdapter, text);
 
 let installed: SessionBootAction | null = null;
 

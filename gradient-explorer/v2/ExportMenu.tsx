@@ -58,6 +58,17 @@
  * weight. The image row stays open: it is one row and it is what most people came for, and
  * it takes the same shape as a format row so there is one row anatomy in the window.
  *
+ * THE GMT GRADIENT FILE COMES FIRST (ADR-0123 Decision 5, 2026-09-14). Under the Ramp subject,
+ * above everything else, a band "For GMT" holds the Explorer's own save — "GMT gradient" as .png
+ * (first, the default) and as .json — for one gradient and for a set alike. It writes the
+ * gradient itself (config, name, credit, source; a set's groups), not the 256-step ramp, so it is
+ * the only row here that comes back exactly. Everything below it is an export to OTHER software,
+ * lossy by nature, under a caption that says so ("For other software"), in the same accordion as
+ * before. The band is deliberately not an accordion section (`data-gx-section`): it is always
+ * open, and a section is a thing you choose between. Its rows keep the window's one row anatomy —
+ * label, `EXT_COL`, glyph, `COPY_SLOT` — so the extension column stays one column. Not under
+ * Swatches: the file carries the gradient, not a palette laid out from it.
+ *
  * The doing lives in `exportActions.ts` (`runExport`, `runSetExport`, `runSetImage`),
  * shared with the hero's hover flyout of recent exports, so the two surfaces cannot drift.
  * This file is only the full window. It hangs off the hero BAND, not the card — the card
@@ -76,7 +87,8 @@
 import type { GradientConfig } from '../../types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
-import { runExport, runSetExport, runSetImage, setLossyCount, gradientLossyCount, useRecentExports, exportActionLabel } from './exportActions';
+import { runExport, runSetExport, runSetImage, runSetGradientFile, setLossyCount, gradientLossyCount, useRecentExports, exportActionLabel } from './exportActions';
+import type { GradientFileKind } from '../../palette/core/gradientFile';
 import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
@@ -330,6 +342,8 @@ export const ExportMenu: React.FC<{
    *  export name carries its credit (`exportActions.ts`). Unused for a set — each member's own. */
   origin?: unknown;
   config?: GradientConfig | null;
+  /** The working gradient's provenance line, carried by the GMT gradient file. Unused for a set. */
+  source?: string;
 }> = ({
   ramp,
   name,
@@ -341,6 +355,7 @@ export const ExportMenu: React.FC<{
   palette = [],
   origin,
   config,
+  source,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const phone = useIsPhone();
@@ -392,7 +407,7 @@ export const ExportMenu: React.FC<{
     const stored = safeLocalGet(SECTION_KEY);
     if (stored === '') return null; // a remembered close
     if (stored && (stored === SETTINGS_SECTION || GROUPS.some((g) => g.title === stored))) return stored;
-    const last = recents.find((a) => a.kind !== 'png') as { key: string } | undefined;
+    const last = recents.find((a) => a.kind === 'copy' || a.kind === 'download') as { key: string } | undefined;
     return (last && groupOf(last.key)) || GROUPS[0].title;
   });
   const toggle = (title: string) =>
@@ -425,7 +440,9 @@ export const ExportMenu: React.FC<{
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
   const n = isSet ? count : palette.length;
 
-  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH, origin, config };
+  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH, origin, config, source };
+  const saveFile = (file: GradientFileKind) =>
+    set ? runSetGradientFile(file, set, name) : runExport({ kind: 'gmt', file }, ramp, name, palette, runOpts);
   const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key, subject }, ramp, name, palette, runOpts);
   const download = (f: ExportFormatDef) =>
     set
@@ -617,6 +634,35 @@ export const ExportMenu: React.FC<{
         </div>
       )}
 
+      {/* THE GMT GRADIENT FILE — the Explorer's save, first (ADR-0123). Ramp subject only. */}
+      {!swatches && (
+        <div data-gx-export-gmt>
+          <div className={BAND}>
+            <ZoneLabel className="flex-1">For GMT</ZoneLabel>
+          </div>
+          <div className="pt-1 px-1">
+            {(['png', 'json'] as const).map((file) => (
+              <div key={file} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => saveFile(file)}
+                  data-gx-gmtfile={file}
+                  title={isSet ? `All ${set!.length} in one .${file}` : `Download .${file}`}
+                  className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
+                >
+                  <span className="flex-1 min-w-0 truncate text-[13px] text-fg">GMT gradient</span>
+                  <span className={EXT_COL}>.{file}</span>
+                  <span className="text-fg-dim group-hover:text-fg">
+                    <Icon name="download" size={14} />
+                  </span>
+                </button>
+                <span className={COPY_SLOT} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {again.length > 0 && (
         <div data-gx-export-again>
           <div className={BAND}>
@@ -645,6 +691,12 @@ export const ExportMenu: React.FC<{
         </div>
       )}
 
+      {/* What follows writes for OTHER software, and is lossy by nature — said once, here. */}
+      {!swatches && (
+        <div className="px-2 -mb-2 text-[11px] text-fg-dim" data-gx-export-other>
+          For other software
+        </div>
+      )}
       {sections.map((sec) => (
         <div key={sec.title}>
           <SectionHead title={sec.title} note={String(sec.formats.length)} open={open === sec.title} onClick={() => toggle(sec.title)} />

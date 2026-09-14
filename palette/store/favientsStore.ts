@@ -12,6 +12,11 @@
  * treats a config as opaque. A stop gradient's saved form is unchanged.
  * @see docs/adr/0122-the-ramp-is-the-gradient.md
  *
+ * The collection FILE is the GMT gradients document since ADR-0123 (`exportCollection` writes
+ * it; `importCollection` reads it and the legacy `{version, favients, groupLabels}`), and a
+ * merge keeps Recent at the top and every group one run (`placeMerged`).
+ * @see docs/adr/0123-the-gradient-file-is-a-png.md
+ *
  * Host-agnostic: no engine-store dependency. Apps register their apply targets in
  * the send-target registry; this store only holds the collection + the chosen target id.
  *
@@ -43,7 +48,13 @@ import { coerceOrigin, type CatalogOrigin } from '../core/catalogOrigin';
 import { create } from 'zustand';
 import type { GradientConfig } from '../../types';
 import { ensureStopIds } from '../core/editorConfig';
-import { isRampGradient, isStopGradient, normalizeGradientConfig } from '../../utils/gradientRamp';
+import {
+  decodeGradientDocument,
+  encodeGradientDocument,
+  gradientDocumentText,
+  type GradientDocumentEntry,
+} from '../core/gradientDocument';
+import { isStopGradient, normalizeGradientConfig } from '../../utils/gradientRamp';
 import { lsGet, lsSet, lsRemove, lsGetJson, lsSetJson } from '../core/storage';
 import { clamp } from '../../utils/stopOps';
 
@@ -102,8 +113,15 @@ const LS_LASTGROUP = 'gmt.favients.lastgroup';
  * `stop.color` is a string. A favourite with a malformed stop that slipped
  * through would make `favientSig` throw — and because that signature is computed
  * on every dedupe check and on load, one bad entry persisted to
- * localStorage would brick the shelf across sessions. Filtering here (used by
- * BOTH load and import) keeps malformed stops out of memory and disk entirely.
+ * localStorage would brick the shelf across sessions. Filtering here keeps malformed stops
+ * out of memory and disk entirely.
+ *
+ * This is the LOAD gate. Since ADR-0123 the IMPORT gate (a collection file, a scene's
+ * favients document, a gradient file) is `decodeGradientDocument` in
+ * `palette/core/gradientDocument.ts` — stricter: every config through
+ * `coerceGradientConfig`, so a stop-less favourite is admitted there only when it is a real
+ * ramp gradient. Nothing is lost by refusing one there — the file still holds it — whereas
+ * this gate cannot refuse without deleting.
  */
 const isWellFormedFavient = (f: unknown): f is Favient => {
   if (!f || typeof f !== 'object') return false;
@@ -112,19 +130,11 @@ const isWellFormedFavient = (f: unknown): f is Favient => {
   // A RAMP favourite (ADR-0122) has `stops: []`, which `every` passes — deliberately: the
   // LOAD gate keeps a stop-less entry even when it cannot read its ramp, because dropping it
   // here deletes it from disk on the next save (the failure ADR-0122 Decision 2 chose `[]`
-  // to avoid). The IMPORT gate is stricter — see `hasReadableGradient`.
+  // to avoid). The IMPORT gate is stricter — see above.
   return fav.config.stops.every(
     (s) => !!s && typeof s === 'object' && typeof (s as { color?: unknown }).color === 'string' && Number.isFinite((s as { position?: unknown }).position),
   );
 };
-
-/**
- * The stricter half of the gate, for gradients arriving from OUTSIDE (a collection file, a
- * scene's favients document): a stop-less favourite is admitted only when it is a real ramp
- * gradient. Nothing is lost by refusing one there — the file still holds it — whereas the
- * load gate above cannot refuse without deleting.
- */
-const hasReadableGradient = (f: Favient): boolean => isStopGradient(f.config) || isRampGradient(f.config);
 
 /**
  * One of the two forms on the way IN to the shelf (`normalizeGradientConfig`): a stop
@@ -228,16 +238,30 @@ const uniqueGroupLabel = (label: string, selfId: string, labels: Record<string, 
 
 /**
  * Content signature for dedupe, following the gradient's FORM (ADR-0122 Decision 5):
- *   - a STOP gradient: rounded stop positions + colours + interpolation — exactly the
- *     signature it had before ramps, so no shelf re-dedupes. A stale `ramp` on it is ignored.
+ *   - a STOP gradient: per stop its rounded position, colour, interpolation (absent reads as
+ *     'linear', as the renderer reads it) and bias (absent reads as 0.5, rounded to 1/1000), then
+ *     `@` and the blend space (absent reads as 'oklab'). A stale `ramp` on it is ignored.
  *   - a stop-less config: `ramp:` + its ramp string. The tag cannot collide with a stop
  *     signature (those start with a rounded position, a digit or `-`), and it is what keeps
  *     every ramp favourite from signing as `''` and deduping into one.
+ *
+ * Colour space stays OUT on purpose: the same stops in `linear` and `srgb` DISPLAY identically, so
+ * they are one favourite (ADR-0123 Consequences). Blend, bias and interpolation came IN with
+ * ADR-0123 — before it two gradients differing only in blend (ΔE 0.109) or bias (ΔE 0.135) deduped
+ * into one and a merge silently dropped the second. That deliberately supersedes ADR-0122's pin
+ * that a stop signature stay byte-identical: nothing persists a signature, so the only effect is
+ * that more gradients are distinct from now on — no shelf loses anything.
  *
  * @invariant two different ramp gradients never share a signature, and a ramp gradient never
  *   signs like a stop gradient — proven by: `npm run test:palette-favients` ("[8] two
  *   different ramps do not dedupe into one", "[8] the ramp signature is tagged"). Falsified
  *   2026-09-14, see the harness header.
+ * @invariant gradients that differ only in blend space, in one stop's bias or in one stop's
+ *   interpolation sign differently, and the same stops in another colour space sign the same —
+ *   proven by: `npm run test:gradient-file` ("[6] favientSig distinguishes blend", "… bias",
+ *   "… interpolation", "[6] favientSig ignores colour space"). Falsified 2026-09-14, see the
+ *   harness header.
+ * @see docs/adr/0123-the-gradient-file-is-a-png.md
  */
 export const favientSig = (c: GradientConfig): string => {
   const stops = Array.isArray(c?.stops) ? c.stops : [];
@@ -245,12 +269,17 @@ export const favientSig = (c: GradientConfig): string => {
     const ramp = (c as { ramp?: unknown } | null | undefined)?.ramp;
     return `ramp:${typeof ramp === 'string' ? ramp : ''}`;
   }
-  return stops
+  const body = stops
     // Coerce defensively — favientSig runs on untrusted imported configs (W8
     // scene restore) and on every dedupe check, so it must never throw on a
     // malformed stop. A malformed stop just yields a non-matching signature.
-    .map((s) => `${Math.round((Number(s?.position) || 0) * 1000)}:${String(s?.color).toUpperCase()}:${s?.interpolation ?? 'l'}`)
+    .map((s) => {
+      const bias = s?.bias;
+      const b = typeof bias === 'number' && Number.isFinite(bias) ? Math.round(bias * 1000) : 500;
+      return `${Math.round((Number(s?.position) || 0) * 1000)}:${String(s?.color).toUpperCase()}:${s?.interpolation || 'linear'}:${b}`;
+    })
     .join('|');
+  return `${body}@${String(c?.blendSpace || 'oklab')}`;
 };
 
 let _seq = 0;
@@ -361,46 +390,107 @@ interface FavientsState {
    *  an in-flight local edit with an identical reload. */
   reloadFromStorage: () => void;
   /** Serialize the whole collection (favourites + group labels) to a portable
-   *  JSON string — the backup/share file written by the panel's "Save". */
+   *  JSON string — the GMT gradients document (ADR-0123), the backup/share file written by
+   *  the panel's "Save" and the favients document a scene embeds. */
   exportCollection: () => string;
-  /** Load a collection JSON. 'replace' overwrites the current collection;
-   *  'merge' appends entries whose gradient isn't already present (by content
+  /** Load a collection JSON: the GMT gradients document, or the legacy
+   *  `{version: 1, favients, groupLabels}` it replaced. 'replace' overwrites the current
+   *  collection; 'merge' adds entries whose gradient isn't already present (by content
    *  signature), keeping existing group labels on conflict. Returns how many
    *  favourites were added (merge) or set (replace), or null if the file was
-   *  unreadable / not a collection. */
+   *  unreadable / not a collection (a bare gradient, a session, another version). */
   importCollection: (json: string, mode: 'merge' | 'replace') => number | null;
+  /**
+   * The store half of `importCollection`, for callers that already DECODED the payload (the
+   * gradient-file router, which reads PNGs and zips too). Entries must have passed
+   * `decodeGradientDocument`'s gate. Same modes, same return; see `placeMerged` for where a
+   * merge puts things.
+   */
+  importEntries: (entries: ReadonlyArray<GradientDocumentEntry>, groups: Readonly<Record<string, string>>, mode: 'merge' | 'replace') => number;
 }
 
-/** On-disk shape of an exported collection. */
+/**
+ * The on-disk shape `exportCollection` wrote BEFORE ADR-0123. Still read (by
+ * `decodeGradientDocument`) — old backups and every scene saved until then embed it — and
+ * never written again.
+ * @deprecated written by nothing since 2026-09-14; the writer is `encodeGradientDocument`.
+ */
 export interface FavientsCollection {
   version: 1;
   favients: Favient[];
   groupLabels: Record<string, string>;
 }
 
-const COLLECTION_VERSION = 1 as const;
+/**
+ * Read the valid favourites out of a parsed collection object — the GMT gradients document or
+ * the legacy collection — through the same gate `importCollection` applies
+ * (`decodeGradientDocument`). Lets callers preview what an import WOULD admit — e.g. the scene
+ * restore counting new-vs-duplicate gradients — without mutating anything. Returns [] for any
+ * non-collection / malformed input. The ids are placeholders: an import mints its own.
+ */
+export const readCollectionFavients = (raw: unknown): Favient[] => {
+  const read = decodeGradientDocument(raw);
+  if (read.kind !== 'gradients' || (read.format !== 'document' && read.format !== 'collection')) return [];
+  return read.gradients.map((e, i) => entryToFavient(e, `preview-${i}`));
+};
 
-/** Keep only well-formed favourites that carry a gradient this build can draw (the IMPORT
- *  gate: `isWellFormedFavient` plus `hasReadableGradient`), each in one of the two forms. */
-const validFavients = (arr: unknown): Favient[] =>
-  Array.isArray(arr)
-    ? arr
-        .filter(isWellFormedFavient)
-        .filter(hasReadableGradient)
-        .map((f) => {
-          const config = normalizeGradientConfig(f.config);
-          return config === f.config ? f : { ...f, config };
-        })
-    : [];
+/** A decoded document entry as a favourite (config normalised, origin re-validated). */
+const entryToFavient = (e: GradientDocumentEntry, id: string): Favient => ({
+  id,
+  name: e.name,
+  ...(e.source ? { source: e.source } : {}),
+  ...withOrigin(e.origin),
+  config: cleanConfig(e.config),
+  createdAt: typeof e.createdAt === 'number' ? e.createdAt : Date.now(),
+  group: e.group ?? DEFAULT_GROUP,
+});
 
 /**
- * Read the valid favourites out of a parsed collection object (the same gate
- * `importCollection` applies). Lets callers preview what an import WOULD admit
- * — e.g. the scene-restore prompt counting new-vs-duplicate gradients — without
- * mutating anything. Returns [] for any non-collection / malformed input.
+ * Where a MERGE puts what it adds, so the shelf's two structural rules survive it:
+ *   - Recent is ONE run at index 0 (`collectRecent`'s invariant): the file's Recent entries join
+ *     the END of the existing Recent run (they are older than what you just collected), and any
+ *     stray Recent entry already mid-array is consolidated into that run.
+ *   - a group is ONE contiguous run (`buildBlocks` opens a block on every group change): an
+ *     entry for a group the shelf already has lands just past that group's last member; a group
+ *     the shelf does not have is appended, in the file's order.
+ * Before ADR-0123 a merge appended everything at the end, which split both.
+ *
+ * @invariant after a merge the Recent run is contiguous at index 0 and every group is one run —
+ *   proven by: `npm run test:gradient-file` ("[7] merge keeps Recent one block at the top",
+ *   "[7] merge keeps each group one run"). Falsified 2026-09-14, see the harness header.
  */
-export const readCollectionFavients = (raw: unknown): Favient[] =>
-  validFavients((raw as { favients?: unknown } | null)?.favients);
+const placeMerged = (cur: Favient[], fresh: Favient[]): Favient[] => {
+  const g = (f: Favient): string => f.group ?? DEFAULT_GROUP;
+  const recentCur = cur.filter((f) => isRecentGroup(f.group));
+  const restCur = cur.filter((f) => !isRecentGroup(f.group));
+  const recentFresh = fresh.filter((f) => isRecentGroup(f.group));
+  const byGroup = new Map<string, Favient[]>();
+  for (const f of fresh) {
+    if (isRecentGroup(f.group)) continue;
+    const list = byGroup.get(g(f));
+    if (list) list.push(f);
+    else byGroup.set(g(f), [f]);
+  }
+  const lastOf = new Map<string, number>();
+  restCur.forEach((f, i) => lastOf.set(g(f), i));
+  const out: Favient[] = [...recentCur, ...recentFresh];
+  restCur.forEach((f, i) => {
+    out.push(f);
+    const key = g(f);
+    if (lastOf.get(key) === i && byGroup.has(key)) {
+      out.push(...byGroup.get(key)!);
+      byGroup.delete(key);
+    }
+  });
+  for (const list of byGroup.values()) out.push(...list);
+  return out;
+};
+
+/** Recent first (one run), everything else in its order — a replace's placement. */
+const recentFirst = (favients: Favient[]): Favient[] => [
+  ...favients.filter((f) => isRecentGroup(f.group)),
+  ...favients.filter((f) => !isRecentGroup(f.group)),
+];
 
 export const useFavientsStore = create<FavientsState>((set, get) => ({
   favients: loadFavients(),
@@ -656,40 +746,48 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
 
   exportCollection: () => {
     const { favients, groupLabels } = get();
-    const payload: FavientsCollection = { version: COLLECTION_VERSION, favients, groupLabels };
-    return JSON.stringify(payload, null, 2);
+    return gradientDocumentText(encodeGradientDocument(favients, groupLabels));
   },
 
   importCollection: (json, mode) => {
-    let parsed: Partial<FavientsCollection>;
-    try {
-      parsed = JSON.parse(json) as Partial<FavientsCollection>;
-    } catch {
-      return null;
-    }
-    // A collection file must carry a favients array (even if empty). Reject
-    // anything that doesn't look like one so a stray JSON doesn't wipe the shelf.
-    // Optional-chaining covers null/primitive parses (JSON "null", "5", etc.).
-    if (!Array.isArray(parsed?.favients)) return null;
-    const incoming = validFavients(parsed.favients);
-    const incomingLabels = parsed.groupLabels && typeof parsed.groupLabels === 'object' ? parsed.groupLabels : {};
+    // THE gate for both shapes (and a refusal for everything else — a bare gradient, a session,
+    // another version — so a stray JSON can never wipe the shelf through 'replace').
+    const read = decodeGradientDocument(json);
+    if (read.kind !== 'gradients' || (read.format !== 'document' && read.format !== 'collection')) return null;
+    return get().importEntries(read.gradients, read.groups, mode);
+  },
+
+  importEntries: (entries, incomingLabels, mode) => {
+    const labelsWithRecent = (favients: Favient[], labels: Record<string, string>): Record<string, string> => {
+      const pruned = pruneLabels(favients, labels);
+      return favients.some((f) => isRecentGroup(f.group)) ? { ...pruned, [RECENT_GROUP]: RECENT_LABEL } : pruned;
+    };
 
     if (mode === 'replace') {
       // Fresh ids so re-importing the same file twice can't collide with itself.
-      const favients = incoming.map((f) => ({ ...f, id: newId() }));
-      const groupLabels = pruneLabels(favients, { ...incomingLabels });
+      const favients = recentFirst(entries.map((e) => entryToFavient(e, newId())));
+      const groupLabels = labelsWithRecent(favients, { ...incomingLabels });
       saveFavients(favients);
       saveGroupLabels(groupLabels);
       set({ favients, groupLabels });
       return favients.length;
     }
 
-    // merge: skip favourites already present by content signature; fresh ids for the rest.
+    // merge: skip favourites already present by content signature (in the shelf OR earlier in
+    // the same file); fresh ids for the rest.
     const have = new Set(get().favients.map((f) => favientSig(f.config)));
-    const fresh = incoming.filter((f) => !have.has(favientSig(f.config))).map((f) => ({ ...f, id: newId() }));
-    const favients = [...get().favients, ...fresh];
+    const fresh: Favient[] = [];
+    for (const e of entries) {
+      const fav = entryToFavient(e, newId());
+      const sig = favientSig(fav.config);
+      if (have.has(sig)) continue;
+      have.add(sig);
+      fresh.push(fav);
+    }
+    if (!fresh.length) return 0;
+    const favients = placeMerged(get().favients, fresh);
     // Existing labels win on conflict; imported labels fill in new groups.
-    const groupLabels = pruneLabels(favients, { ...incomingLabels, ...get().groupLabels });
+    const groupLabels = labelsWithRecent(favients, { ...incomingLabels, ...get().groupLabels });
     saveFavients(favients);
     saveGroupLabels(groupLabels);
     set({ favients, groupLabels });

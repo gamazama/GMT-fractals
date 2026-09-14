@@ -36,7 +36,21 @@
  * visible change is that an image that is not first in a drop now loads instead of the
  * drop reporting "not an image".
  *
+ * A PNG MAY BE A GRADIENT FILE (ADR-0123, 2026-09-14). The GMT gradient file is a PNG, and the
+ * browser calls it `image/png` like any photo — so without a word from the host a dropped
+ * gradient file was decoded as a picture and extracted from. `preRoute` is that word: offered
+ * EVERY dropped file before anything else looks at them, it takes what it recognises (GE v2 hands
+ * the gradient files, PNGs included, to the one gradient loader, which decides by content) and
+ * resolves to the files it did NOT take — an ordinary PNG among them, which then goes on to
+ * extraction exactly as before. Absent, nothing changes: `ImageStage`, app-gmt and the old shell
+ * pass none. Paste is not routed (a pasted image is re-encoded by the browser and carries no
+ * metadata).
+ *
+ * Guard: `npm run smoke:ge-gradientfile` [b] / [b2] (a stripped gradient PNG dropped imports; a plain
+ * PNG still reaches extraction) — falsified by not passing `preRoute`.
+ *
  * @see plans/ge-v2-design.md §5.4
+ * @see docs/adr/0123-the-gradient-file-is-a-png.md
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -55,6 +69,9 @@ export interface UseImageDropOptions {
   /** Dropped files that were not an image (never empty when called). Return true if you
    *  consumed them (suppresses the "not an image" message). */
   onOtherFiles?: (files: File[]) => boolean;
+  /** Sees every dropped file FIRST and resolves to the ones it did not take (see the header).
+   *  An empty result means the drop was handled and nothing else is said. */
+  preRoute?: (files: File[]) => Promise<File[]>;
 }
 
 export interface UseImageDropResult {
@@ -65,7 +82,7 @@ export interface UseImageDropResult {
 }
 
 export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult => {
-  const { onLoaded, notify = (m: string) => showToast(m), enabled = true, onOtherFiles } = opts;
+  const { onLoaded, notify = (m: string) => showToast(m), enabled = true, onOtherFiles, preRoute } = opts;
   const setModel = useImageStore((s) => s.setModel);
   const setPath = useImageStore((s) => s.setPath);
   const setLoading = useImageStore((s) => s.setLoading);
@@ -119,12 +136,19 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
       e.preventDefault();
       setOver(false);
       window.clearTimeout(dragT);
-      const files = Array.from(e.dataTransfer?.files ?? []);
-      const image = files.find((f) => f.type.startsWith('image'));
-      const others = files.filter((f) => !f.type.startsWith('image'));
-      const tookImage = fileToImg(image);
-      const tookOthers = others.length > 0 && !!onOtherFiles?.(others);
-      if (!tookImage && !tookOthers) notify('not an image');
+      const dropped = Array.from(e.dataTransfer?.files ?? []);
+      const take = (files: File[]) => {
+        const image = files.find((f) => f.type.startsWith('image'));
+        const others = files.filter((f) => !f.type.startsWith('image'));
+        const tookImage = fileToImg(image);
+        const tookOthers = others.length > 0 && !!onOtherFiles?.(others);
+        if (!tookImage && !tookOthers) notify('not an image');
+      };
+      if (!preRoute) return take(dropped);
+      preRoute(dropped).then(
+        (rest) => { if (rest.length) take(rest); },
+        () => take(dropped),
+      );
     };
     const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -140,7 +164,7 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
       window.removeEventListener('paste', onPaste);
       window.clearTimeout(dragT);
     };
-  }, [fileToImg, notify, enabled, onOtherFiles]);
+  }, [fileToImg, notify, enabled, onOtherFiles, preRoute]);
 
   return { over, fileToImg };
 };

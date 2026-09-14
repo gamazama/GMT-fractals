@@ -26,6 +26,13 @@ export interface ExportFormatDef {
    *  for it ("Hex list (256)" is a ramp fact). Falls back to `label`. */
   swatchLabel?: string;
   ext: string;
+  /**
+   * Added to the download's file stem when this format shares its extension with another, so
+   * the two never land on disk under one name (`Sea_Glass.css` and `Sea_Glass-vars.css`). The
+   * owner exported CSS and CSS variables of one gradient and got two `Sea_Glass.css` (ADR-0123
+   * Context). Build a filename through `exportFileName`, never by hand.
+   */
+  fileSuffix?: string;
   /** Binary formats return a Uint8Array (download only — Copy is disabled). */
   binary?: boolean;
   /** The RAMP subject: the continuous 256-step gradient. `stem` is the gradient's name,
@@ -62,6 +69,42 @@ export type ExportSubject = 'ramp' | 'swatches';
  *  to entries carrying a `swatches` builder — the single place that decision is made. */
 export const formatsFor = (subject: ExportSubject): ExportFormatDef[] =>
   subject === 'ramp' ? EXPORT_FORMATS : EXPORT_FORMATS.filter((f) => !!f.swatches);
+
+/**
+ * The filename one download of `f` saves as: the caller's `stem`, the format's `fileSuffix`,
+ * `-swatches` for the swatches subject, the extension.
+ *
+ * @invariant no two registry formats download under the same filename for the same stem and
+ *   subject — proven by: `npm run test:palette-exportsubjects` ("[11] every format downloads
+ *   under its own filename"). Falsified 2026-09-14, see the harness header.
+ */
+export const exportFileName = (f: ExportFormatDef, stem: string, subject: ExportSubject = 'ramp'): string =>
+  `${stem}${f.fileSuffix ?? ''}${subject === 'swatches' ? '-swatches' : ''}.${f.ext}`;
+
+/**
+ * The name as a one-line header field (.gpl / .ggr `Name:`, .cpt `# Name:`, .grd): control
+ * characters (a newline would start a data line) become spaces; no name → the `gradient` the
+ * exporters always wrote, which the importer reads as "no name".
+ *
+ * @invariant every builder with a name field writes the name it is given (.gpl, .ggr, .cpt as
+ *   `# Name:`, .grd as a Pascal UTF-8 string cut at a character boundary, .css and CSS variables
+ *   as a leading comment, design tokens in `$extensions`), and an unnamed .gpl / .ggr / .cpt /
+ *   .css / .grd writes the header it wrote before 2026-09-14 — proven by:
+ *   `npm run test:palette-exportsubjects` ("[10] …").
+ *   Falsified 2026-09-14, see the harness header.
+ */
+const headerName = (stem?: string): string => (stem ?? '').replace(/\p{Cc}+/gu, ' ').trim() || 'gradient';
+
+/** A name as the text of a one-line CSS comment, or '' for none. A CSS comment cannot escape
+ *  its terminator, so a `*` + `/` inside the name is broken with a space. */
+const cssCommentName = (stem?: string): string =>
+  (stem ?? '').replace(/\p{Cc}+/gu, ' ').replace(/\*\//g, '* /').trim();
+
+/** The leading `/* name *\/` line our CSS exports write (read back by importFormats). */
+const cssNameLine = (stem?: string): string => {
+  const n = cssCommentName(stem);
+  return n ? `/* ${n} */\n` : '';
+};
 
 const ri = (c: RGB): [number, number, number] => [Math.round(c.r), Math.round(c.g), Math.round(c.b)];
 const hx2 = (c: [number, number, number]) => '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -136,11 +179,28 @@ const dccItem = (ramp: RGB[], name: string, budget?: number): DccItem => ({
 /** Number of colour stops the .grd writer will emit for this ramp. */
 export const grdStopCount = (ramp: RGB[], budget?: number): number => grdStops(ramp, budget).length;
 
-const buildGRD = (ramp: RGB[], budget?: number): Uint8Array => {
+/**
+ * The .grd name: a Pascal string (one length byte, then the bytes), so at most 255 bytes. Written
+ * as UTF-8, cut at a character boundary. A v3 file names no encoding; ASCII names read the same
+ * everywhere, and UTF-8 is what current readers (and this suite's own checks) decode.
+ */
+const grdNameBytes = (stem?: string): Uint8Array => {
+  const enc = new TextEncoder();
+  const out: number[] = [];
+  for (const ch of headerName(stem)) {
+    const b = enc.encode(ch);
+    if (out.length + b.length > 255) break;
+    for (const x of b) out.push(x);
+  }
+  return Uint8Array.from(out);
+};
+
+const buildGRD = (ramp: RGB[], budget?: number, stem?: string): Uint8Array => {
   const gc = (i: number) => ri(ramp[i]);
   const idx = grdStops(ramp, budget);
   const NS = idx.length;
-  const size = 8 + 1 + 8 + 2 + NS * 20 + 2 + 2 * 10 + 6;
+  const nm = grdNameBytes(stem);
+  const size = 8 + 1 + nm.length + 2 + NS * 20 + 2 + 2 * 10 + 6;
   const dv = new DataView(new ArrayBuffer(size));
   let p = 0;
   const u8 = (v: number) => {
@@ -158,9 +218,8 @@ const buildGRD = (ramp: RGB[], budget?: number): Uint8Array => {
   '8BGR'.split('').forEach((ch) => u8(ch.charCodeAt(0)));
   u16(3);
   u16(1); // version 3, 1 gradient
-  const nm = 'gradient';
   u8(nm.length);
-  nm.split('').forEach((ch) => u8(ch.charCodeAt(0)));
+  nm.forEach((b) => u8(b));
   u16(NS); // colour stops
   for (const i of idx) {
     const c = gc(i);
@@ -386,6 +445,9 @@ const UGR_MAX_STOPS = 64;
  * nothing to it and it is never offered one.
  */
 export const STOP_BUDGETS: Readonly<Record<string, number>> = Object.freeze({
+  // CSS reduces adaptively since 2026-09-13 but read no budget until 2026-09-14, so an override
+  // moved every reducing format except this one and the lossy notice never spoke for it.
+  css: CSS_MAX,
   grd: GRD_MAX,
   svg: SVG_MAX,
   ai: AI_MAX,
@@ -610,22 +672,31 @@ const buildTailwind = (colors: RGB[], stem = 'gradient'): string =>
     .join('\n') +
   '\n},\n';
 
-/** W3C design tokens (the DTCG draft shape: `$value` + `$type`). */
-const buildTokens = (colors: RGB[], stem = 'gradient'): string => {
+/** The DTCG `$extensions` key this suite writes its own metadata under (reverse-domain, as the
+ *  spec asks). `importFormats` reads `name` back from it. */
+export const TOKENS_EXTENSION_KEY = 'com.gmt-fractals';
+
+/** W3C design tokens (the DTCG draft shape: `$value` + `$type`). The group key is an identifier,
+ *  which has lost the name's case, spaces and accents, so a named export also carries the name as
+ *  written in the group's `$extensions` — the spec's place for tool data; other tools ignore it. */
+const buildTokens = (colors: RGB[], stem?: string): string => {
   const names = stepNames(colors.length);
   const hx = hexList(colors);
-  const body: Record<string, { $value: string; $type: string }> = {};
+  const body: Record<string, unknown> = {};
+  const name = (stem ?? '').trim();
+  if (name) body.$extensions = { [TOKENS_EXTENSION_KEY]: { name } };
   names.forEach((n, i) => {
     body[n] = { $value: hx[i], $type: 'color' };
   });
-  return JSON.stringify({ [identOf(stem)]: body }, null, 2);
+  return JSON.stringify({ [identOf(stem ?? '')]: body }, null, 2);
 };
 
-/** CSS custom properties on `:root`. */
-const buildCssVars = (colors: RGB[], stem = 'gradient'): string => {
-  const id = identOf(stem);
+/** CSS custom properties on `:root`, opening with the `/* name *\/` line (when named) that the
+ *  importer reads back — the identifier alone has lost the name's case, spaces and accents. */
+const buildCssVars = (colors: RGB[], stem?: string): string => {
+  const id = identOf(stem ?? '');
   const hx = hexList(colors);
-  return ':root {\n' + stepNames(colors.length).map((n, i) => `  --${id}-${n}: ${hx[i]};`).join('\n') + '\n}\n';
+  return cssNameLine(stem) + ':root {\n' + stepNames(colors.length).map((n, i) => `  --${id}-${n}: ${hx[i]};`).join('\n') + '\n}\n';
 };
 
 // ---- the suite ----
@@ -662,10 +733,14 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
      * Rainbow Full 61 → 8, Aurora Strata 93 → 13, and no preset worse than its old export.
      * Five of them were already past the importFormats harness's bound under even sampling;
      * that harness only samples the first six, so it never saw them.
+     *
+     * Since 2026-09-14 it honours the stop budget (it read none before) and, given a name, opens
+     * with a `/* name *\/` line that `importFormats` reads back as the gradient's name.
      */
-    build: (r) =>
+    build: (r, stem, budget) =>
+      cssNameLine(stem) +
       'background: linear-gradient(90deg, ' +
-      reduceStopIndices(r, CSS_MAX).map((i) => hx2(ri(r[i])) + ' ' + ((i / 255) * 100).toFixed(1) + '%').join(', ') +
+      reduceStopIndices(r, budget ?? CSS_MAX).map((i) => hx2(ri(r[i])) + ' ' + ((i / 255) * 100).toFixed(1) + '%').join(', ') +
       ');',
   },
   {
@@ -710,10 +785,11 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'gpl',
     label: 'GIMP palette .gpl',
     ext: 'gpl',
-    build: (r) => 'GIMP Palette\nName: gradient\nColumns: 16\n#\n' + seq((i) => ri(r[i]).map((v) => String(v).padStart(3, ' ')).join(' ') + '\tc' + i).join('\n'),
+    build: (r, stem) =>
+      'GIMP Palette\nName: ' + headerName(stem) + '\nColumns: 16\n#\n' + seq((i) => ri(r[i]).map((v) => String(v).padStart(3, ' ')).join(' ') + '\tc' + i).join('\n'),
     swatches: (c, stem) =>
       'GIMP Palette\nName: ' +
-      (stem || 'gradient') +
+      headerName(stem) +
       '\nColumns: ' +
       Math.min(16, c.length) +
       '\n#\n' +
@@ -723,8 +799,8 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'ggr',
     label: 'GIMP gradient .ggr',
     ext: 'ggr',
-    build: (r) => {
-      let s = 'GIMP Gradient\nName: gradient\n255\n';
+    build: (r, stem) => {
+      let s = 'GIMP Gradient\nName: ' + headerName(stem) + '\n255\n';
       for (let k = 0; k < 255; k++) {
         const a = ri(r[k]).map((v) => v / 255);
         const b = ri(r[k + 1]).map((v) => v / 255);
@@ -737,8 +813,10 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'cpt',
     label: 'Color palette table .cpt',
     ext: 'cpt',
-    build: (r) => {
-      let s = '# COLOR_MODEL = RGB\n# gradient\n';
+    // The name rides a `# Name:` comment — .cpt has no name field, and a bare comment is not
+    // one (real files open with notes). Unnamed, the line stays the `# gradient` it always was.
+    build: (r, stem) => {
+      let s = '# COLOR_MODEL = RGB\n' + (stem && headerName(stem) !== 'gradient' ? `# Name: ${headerName(stem)}\n` : '# gradient\n');
       for (let k = 0; k < 255; k++) s += (k / 255).toFixed(5) + ' ' + ri(r[k]).join(' ') + ' ' + ((k + 1) / 255).toFixed(5) + ' ' + ri(r[k + 1]).join(' ') + '\n';
       return s + 'B ' + ri(r[0]).join(' ') + '\nF ' + ri(r[255]).join(' ') + '\nN 128 128 128\n';
     },
@@ -747,13 +825,14 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'pdn',
     label: 'Paint.NET',
     ext: 'txt',
+    fileSuffix: '-paintnet', // the hex list is .txt too
     build: (r) =>
       '; paint.net Palette File\n' +
       Array.from({ length: 96 }, (_, k) => 'FF' + ri(r[Math.round((k / 95) * 255)]).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
     swatches: (c) =>
       '; paint.net Palette File\n' + c.map((x) => 'FF' + ri(x).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
   },
-  { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r, _stem, budget) => buildGRD(r, budget) },
+  { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r, stem, budget) => buildGRD(r, budget, stem) },
   // Cinema 4D and Blender have no gradient file to import, but both run Python from a
   // plain text file with nothing installed — so the "format" is a script that rebuilds the
   // ramp through the host's own API. Distinct `ext`s because they would otherwise both
@@ -817,10 +896,13 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
       buildAseGroups(items.map((it) => ({ name: it.name, colors: reduceStopIndices(it.ramp, ASE_MAX).map((i) => it.ramp[i]) }))),
     collectionSwatches: (items) => buildAseGroups(items),
   },
+  // The three scale formats share .js / .json / .css with the JS array, JSON and CSS
+  // linear-gradient exports, so each downloads under a suffix (`fileSuffix`).
   {
     key: 'tw',
     label: 'Tailwind colors',
     ext: 'js',
+    fileSuffix: '-tailwind',
     build: (r, stem) => buildTailwind(rampToSwatches(r, SCALE_STEPS), stem || 'gradient'),
     swatches: (c, stem) => buildTailwind(c, stem || 'gradient'),
   },
@@ -828,15 +910,17 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     key: 'tokens',
     label: 'Design tokens (W3C)',
     ext: 'json',
-    build: (r, stem) => buildTokens(rampToSwatches(r, SCALE_STEPS), stem || 'gradient'),
-    swatches: (c, stem) => buildTokens(c, stem || 'gradient'),
+    fileSuffix: '-tokens',
+    build: (r, stem) => buildTokens(rampToSwatches(r, SCALE_STEPS), stem),
+    swatches: (c, stem) => buildTokens(c, stem),
   },
   {
     key: 'cssvars',
     label: 'CSS variables',
     ext: 'css',
-    build: (r, stem) => buildCssVars(rampToSwatches(r, SCALE_STEPS), stem || 'gradient'),
-    swatches: (c, stem) => buildCssVars(c, stem || 'gradient'),
+    fileSuffix: '-vars',
+    build: (r, stem) => buildCssVars(rampToSwatches(r, SCALE_STEPS), stem),
+    swatches: (c, stem) => buildCssVars(c, stem),
   },
 ];
 

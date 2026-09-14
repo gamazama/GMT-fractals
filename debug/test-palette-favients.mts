@@ -25,8 +25,9 @@
  *       contiguous-run-at-index-0 invariant it shares with `add()`
  *   [7] updateRecent: the v2 working-session entry refreshed in place — no-op on same
  *       content, keeps id + place, absorbs a Recent duplicate, refuses a non-Recent id
- *   [8] the RAMP form (ADR-0122): a stop gradient's signature is pinned to its pre-ramp
- *       string; a ramp signs `ramp:<ramp>`; two different ramps never dedupe into one; a stop
+ *   [8] the RAMP form (ADR-0122): a stop gradient's signature is pinned (to its pre-ramp
+ *       string until 2026-09-14; since ADR-0123 to the form that carries blend, bias and
+ *       interpolation — see the section); a ramp signs `ramp:<ramp>`; two different ramps never dedupe into one; a stop
  *       favourite reaches disk without a stale ramp; a ramp favourite survives load and
  *       import byte-exact; the LOAD gate keeps a stop-less entry it cannot read while the
  *       IMPORT gate refuses one; and `readFavientDrag` (palette/core/favientDnd.ts) hands a
@@ -59,7 +60,11 @@
  *   G2 the ramp signature untagged (the bare ramp string) → 1 red, "tagged". Only that
  *      assertion sees it: no stop signature can equal a base64 ramp in practice, so the tag is
  *      pinned directly rather than through a collision the harness cannot construct.
- *   G3 the import gate without `hasReadableGradient` → 3 red in the import block.
+ *   G3 the import gate without `hasReadableGradient` → 3 red in the import block. (Since
+ *      2026-09-14 that gate is `palette/core/gradientDocument.ts` `decodeGradientDocument`, which
+ *      `importCollection` and `readCollectionFavients` both call; `hasReadableGradient` is gone.
+ *      Re-falsified that day: making `coerceGradientConfig`'s fallback admit `stops: []` with no
+ *      ramp via the one-stop leniency → the same 3 red.)
  *   G4 the load path normalising stop-less entries too → 1 red, "the LOAD gate keeps a
  *      stop-less favourite it cannot read" (its ramp was stripped — deleted on next save).
  *   G5 `add` without `cleanConfig` → 1 red, "a stop favourite is saved without a stale ramp".
@@ -333,9 +338,14 @@ console.log('\n[8] the RAMP form (ADR-0122): load, import, dedupe, the drag payl
         encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: (i * seed) % 256, g: (i + seed) % 256, b: 255 - i })));
     const rampCfg = (seed: number): GradientConfig => ({ stops: [], ramp: rampOf(seed), colorSpace: 'srgb', blendSpace: 'oklab' });
 
-    // Identity: a stop gradient's signature is EXACTLY what it was (a changed one re-dedupes shelves).
-    check(favientSig(cfg('#112233', '#445566')) === '0:#112233:l|1000:#445566:l', '[8] a stop gradient\'s signature is unchanged');
-    check(favientSig({ ...cfg('#112233', '#445566'), ramp: rampOf(3) }) === '0:#112233:l|1000:#445566:l', '[8] a stale ramp on a stop gradient does not change its signature');
+    // Identity: a stop gradient's signature is PINNED. ADR-0122 pinned it to the pre-ramp string
+    // ('0:#112233:l|1000:#445566:l'); ADR-0123 deliberately superseded that pin for three fields —
+    // blend space, bias and interpolation joined the signature (absent reads as oklab / 0.5 /
+    // linear, as the renderer reads them) so gradients differing only there stop deduping into one.
+    // Nothing persists a signature, so the change only makes more gradients distinct. Colour space
+    // stays out. The ramp form is untouched. `npm run test:gradient-file` [6] pins the behaviour.
+    check(favientSig(cfg('#112233', '#445566')) === '0:#112233:linear:500|1000:#445566:linear:500@oklab', '[8] a stop gradient\'s signature is the ADR-0123 form');
+    check(favientSig({ ...cfg('#112233', '#445566'), ramp: rampOf(3) }) === '0:#112233:linear:500|1000:#445566:linear:500@oklab', '[8] a stale ramp on a stop gradient does not change its signature');
     check(favientSig(rampCfg(3)) === `ramp:${rampOf(3)}`, '[8] the ramp signature is tagged (ramp:<ramp>)');
 
     // Two different ramps must not collide — every stop-less config used to sign as ''.

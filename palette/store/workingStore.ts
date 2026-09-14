@@ -235,7 +235,9 @@ const pickAdjust = (s: GeneratorSlice): Partial<GeneratorSlice> => {
 export const originOfWorking = (input: WorkingInput, bakedFrom: BakedFrom | null): CatalogOrigin | undefined =>
   input.kind === 'gradient' ? input.origin : input.kind === 'stops' && bakedFrom?.input.kind === 'gradient' ? bakedFrom.input.origin : undefined;
 
-const sourceOf = (input: WorkingInput): string =>
+/** The provenance line a working input gives what is kept of it (a Recent favourite's `source`,
+ *  and the GMT gradient file's). */
+export const workingSourceOf = (input: WorkingInput): string =>
   input.kind === 'gradient' ? input.source : input.kind === 'build' ? 'Build' : input.kind === 'extract' ? 'Extract' : input.kind === 'stops' ? 'Edited' : '';
 
 /** The display name when the user has not typed one. */
@@ -419,7 +421,7 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     // A session just opened on a live SOURCE (Image again, a Mix) is new work: a fresh
     // entry, even when its first output matches one already in the bin (owner, 2026-09-07).
     const fresh = !s.sessionId && (s.input.kind === 'extract' || s.input.kind === 'build');
-    const next = collect(d.config, name, sourceOf(s.input), { fresh, origin: originOfWorking(s.input, s.bakedFrom) });
+    const next = collect(d.config, name, workingSourceOf(s.input), { fresh, origin: originOfWorking(s.input, s.bakedFrom) });
     // Transient bookkeeping, outside any undo bracket (the next bracket snapshots it).
     set({ sessionId: next, sessionPinned: next ? s.sessionPinned && next === s.sessionId : false });
   },

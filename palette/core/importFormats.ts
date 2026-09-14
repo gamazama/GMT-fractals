@@ -5,8 +5,13 @@
  *
  * The formats here round-trip the text formats we emit:
  *   .map (Fractint) · .gpl (GIMP palette) · .ggr (GIMP gradient) · .cpt (colour
- *   palette table) · .css (linear-gradient) · .json.
+ *   palette table) · .css (linear-gradient, and CSS variables) · .json (colours, an exact
+ *   `{stops}` gradient, and W3C design tokens).
  * Photoshop .grd is binary (8BGR) — deferred (parse it from bytes in a later pass).
+ *
+ * Since ADR-0123 (2026-09-14) a result also carries the NAME the file holds and, for a JSON that
+ * is a whole gradient, the exact CONFIG — see `ImportResult`. The router that turns results into
+ * favourites is `importGradientFiles.ts`; the PNG / document / zip entrances are not here.
  *
  * CONTRACT for THIS module (`palette/core/` as a whole does NOT hold to it — `rampCanvas.ts`
  * is "DOM-only", and `favientsExport.ts` / `img2grad/decode.ts` / `favientDnd.ts` /
@@ -33,19 +38,91 @@
  *   NOT wrapped, and section [5] feeds each of them exactly ONE nonsense string
  *   (`'### nonsense ###\n!!!\n'`), so their no-throw claim rests on a single sample per
  *   parser rather than on a fuzz sweep.
+ *
+ * @invariant a name our exporters write into .gpl / .ggr / .cpt / .json / .css / CSS variables /
+ *   design tokens comes back as `name`, exactly; a file carrying none, or only the old `gradient`
+ *   placeholder, has no `name`; and a hostile name (newline, 13 numbers, a CSS gradient and
+ *   comment terminator) cannot become colour data — proven by:
+ *   `npx tsx debug/test-palette-importformats.mts` ("[8] … the name survives", "[8] … no name",
+ *   "[8] ggr: a Name line of 13 numbers is not a segment"). Falsified 2026-09-14, see its header.
+ * @invariant a `{stops}` JSON (either ADR-0122 form) whose every stop passes the gate returns
+ *   `config` exact in position, colour, bias, interpolation, blend and colour space, and one the
+ *   gate would thin returns colours with no `config` — proven by:
+ *   `npx tsx debug/test-palette-importformats.mts` ("[9] every stop exact", "[9] blend + colour
+ *   space exact", "[9] a stop the gate would drop → colours evenly spaced, no config").
+ * @invariant CSS variables and design tokens import their colours in order, each within OKLab
+ *   ΔE 0.02 at its even position; and an extension outside `IMPORT_EXTENSIONS` +
+ *   `SNIFF_EXTENSIONS` is refused — proven by: `npx tsx debug/test-palette-importformats.mts`
+ *   ("[10] … within ΔE 0.02", "[11] a GIMP palette named .ai is refused").
  */
 
 import type { RGB } from './oklab';
+import type { GradientConfig } from '../../types';
+import { coerceGradientConfig } from './editorConfig';
+import { gradientDisplayRamp } from './gmtGradient';
 
 export type ImportFormatKey = 'map' | 'gpl' | 'ggr' | 'cpt' | 'css' | 'json';
 
+/**
+ * What a gradient file yields (ADR-0123 item 2, 2026-09-14). `ramp` is always there — the
+ * 256-step display ramp. The two optional fields are what the FILE says beyond its colours:
+ *
+ *   - `name` — the name the file carries, as written: `.gpl` / `.ggr` `Name:`, `.cpt`
+ *     `# Name:`, JSON `name`, a leading one-line CSS comment (`/* Sea Glass é *\/`, which our
+ *     .css and CSS-variables exports write). Absent when the file carries none — or carries
+ *     only `gradient`, the placeholder every exporter wrote before names were written, so an
+ *     old file still takes its filename rather than becoming one more "gradient".
+ *   - `config` — an EXACT gradient, present only when the file IS one: a `{stops:[…]}` object
+ *     (the editor's Copy Gradient JSON, a bare GMT config, either ADR-0122 form) or a bare
+ *     array of positioned stops, and only when every stop passes `coerceGradientConfig`. Use it
+ *     verbatim; `ramp` is then its display ramp. Absent → the caller fits `ramp`.
+ */
 export interface ImportResult {
   ramp: RGB[];
   format: ImportFormatKey;
+  name?: string;
+  config?: GradientConfig;
 }
 
 /** Text extensions we can parse (lower-case, no dot). `.grd` is binary → not here. */
 export const IMPORT_EXTENSIONS: readonly ImportFormatKey[] = ['map', 'gpl', 'ggr', 'cpt', 'css', 'json'];
+
+/**
+ * Extensions whose content is sniffed. No extension at all, or `.txt` (a generic text
+ * container — a palette saved from a text editor). ANY OTHER extension this module does not
+ * parse is refused: an `.ai` forced through the OS dialog's "All files" used to sniff as a
+ * `.cpt` and import garbage.
+ */
+const SNIFF_EXTENSIONS: readonly string[] = ['', 'txt'];
+
+/** The exporters' pre-2026-09-14 name placeholder — never a name a file carries. */
+const PLACEHOLDER_NAME = 'gradient';
+const NAME_MAX = 200;
+
+/** A file-carried name, cleaned (control characters → space, trimmed, capped), or undefined
+ *  when there is none worth keeping (empty, not a string, or the old placeholder). */
+const nameValue = (raw: unknown): string | undefined => {
+  if (typeof raw !== 'string') return undefined;
+  const s = Array.from(raw.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()).slice(0, NAME_MAX).join('').trim();
+  return s && s !== PLACEHOLDER_NAME ? s : undefined;
+};
+
+/** A parser's full answer: the ramp plus whatever else the file says. */
+interface Parsed {
+  ramp: RGB[] | null;
+  name?: string;
+  config?: GradientConfig;
+}
+
+/** The first `re` capture among the first 16 lines — header fields sit at the top. */
+const headerField = (text: string, re: RegExp): string | undefined => {
+  const lines = text.split(/\r?\n/, 16);
+  for (const l of lines) {
+    const m = re.exec(l);
+    if (m) return nameValue(m[1]);
+  }
+  return undefined;
+};
 
 // --- safety bounds (untrusted input) ---
 const MAX_TEXT = 16 * 1024 * 1024; // 16 MB — a gradient file is KB; bigger ⇒ reject.
@@ -156,6 +233,9 @@ const parseTriplets = (text: string): RGB[] | null => {
 export const parseMap = parseTriplets;
 export const parseGpl = parseTriplets;
 
+/** .gpl: the triplets, and GIMP's `Name:` header line. */
+const parseGplFull = (text: string): Parsed => ({ ramp: parseTriplets(text), name: headerField(text, /^\s*Name:\s*(.*)$/) });
+
 // ---- .ggr (GIMP gradient): per-segment endpoints + midpoint ----
 
 interface GgrSeg {
@@ -177,6 +257,10 @@ export const parseGgr = (text: string): RGB[] | null => {
   const segs: GgrSeg[] = [];
   for (const raw of splitLines(text)) {
     if (segs.length >= MAX_ANCHORS) break;
+    // Header lines start with a letter (`GIMP Gradient`, `Name: …`); a segment never does. A
+    // name that happens to hold 13 numbers must not be read as a segment.
+    const f = raw.trimStart().charCodeAt(0);
+    if ((f >= 65 && f <= 90) || (f >= 97 && f <= 122)) continue;
     const n = numsOf(raw);
     if (n.length < 13) continue;
     const c0 = rgb(n[3] * 255, n[4] * 255, n[5] * 255);
@@ -208,6 +292,9 @@ export const parseGgr = (text: string): RGB[] | null => {
   }
   return out;
 };
+
+/** .ggr: the segments, and the `Name:` header line. */
+const parseGgrFull = (text: string): Parsed => ({ ramp: parseGgr(text), name: headerField(text, /^\s*Name:\s*(.*)$/) });
 
 // ---- .cpt (colour palette table, GMT/QGIS) ----
 
@@ -245,6 +332,10 @@ export const parseCpt = (text: string): RGB[] | null => {
   const span = mx - mn;
   return rampFromAnchors(anchors.map((a) => ({ p: span > 1e-12 ? (a.p - mn) / span : 0, c: a.c })));
 };
+
+/** .cpt: the slices, and a `# Name: …` comment (what our exporter writes; a bare comment is
+ *  NOT a name — real .cpt files open with arbitrary notes). */
+const parseCptFull = (text: string): Parsed => ({ ramp: parseCpt(text), name: headerField(text, /^\s*#\s*Name\s*:\s*(.*)$/i) });
 
 // ---- .css (linear-gradient) ----
 
@@ -304,9 +395,48 @@ const cssPositions = (stops: { c: RGB; pct: number | null }[]): Anchor[] => {
   return stops.map((s, k) => ({ p: pos[k] as number, c: s.c }));
 };
 
-export const parseCss = (text: string): RGB[] | null => {
+/**
+ * CSS custom properties (`--sea-glass-50: #0b3d4f;` — our CSS-variables export, and any `:root`
+ * palette): every declaration whose value is a colour, in the order written, evenly spaced.
+ * Before 2026-09-14 this text fell through to the gradient reader, which found no commas and
+ * returned the FIRST colour as a flat ramp. Declarations that are not colours are skipped.
+ */
+const cssVarColors = (text: string): RGB[] => {
+  const cols: RGB[] = [];
+  const re = /--[A-Za-z0-9_-]+[ \t]*:[ \t]*([^;}\r\n]*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) && cols.length < MAX_ANCHORS) {
+    const c = cssColor(m[1]);
+    if (c) cols.push(c);
+  }
+  return cols;
+};
+
+/** A leading one-line `/* … *\/` comment — the name our CSS exports write. A multi-line or
+ *  longer comment is a licence header or notes, not a name. */
+const cssLeadingName = (text: string): string | undefined => {
+  const t = text.trimStart();
+  if (!t.startsWith('/*')) return undefined;
+  const end = t.indexOf('*/');
+  if (end < 0 || end > NAME_MAX + 8) return undefined;
+  const body = t.slice(2, end);
+  return /[\r\n]/.test(body) ? undefined : nameValue(body);
+};
+
+/** .css: a `linear-gradient(…)` (it wins when present), else CSS variables, else the colours
+ *  found in the text; and the leading-comment name. */
+export const parseCss = (input: string): RGB[] | null => {
+  // The leading comment is a name, never colour data: a gradient named "Dusk gradient(2)" or
+  // "#1 pick" must not be read as the gradient or as a stop.
+  const lead = input.trimStart();
+  const close = lead.startsWith('/*') ? lead.indexOf('*/') : -1;
+  const text = close >= 0 ? lead.slice(close + 2) : input;
   let body = text;
   const gi = text.indexOf('gradient(');
+  if (gi < 0) {
+    const vars = cssVarColors(text);
+    if (vars.length) return rampFromAnchors(evenAnchors(vars));
+  }
   if (gi >= 0) {
     const start = text.indexOf('(', gi);
     let depth = 0;
@@ -353,11 +483,86 @@ const jsonColor = (it: unknown): RGB | null => {
 };
 
 /**
- * JSON gradient: an array of colours, or `{ colors: [...] }` / `{ stops: [...] }`.
- * Matches our own `.json` export (`{ name, colors: ["#hex", …] }`) and tolerates
- * common shapes (rgb arrays, stop objects).
+ * The EXACT gradient a JSON object describes, or null. `{stops:[…], colorSpace?, blendSpace?}`
+ * — the editor's Copy Gradient JSON and a bare GMT config, stop form or ramp form (`stops: []`
+ * + `ramp`, ADR-0122) — through the one untrusted-config gate, `coerceGradientConfig`.
+ *
+ * Only when the gate keeps EVERY stop. A list it thins (a stop with no position, an `rgb()`
+ * colour the gate does not take) is not a gradient we can reproduce, so it goes to the colour
+ * reader below, which is what every such file got before — nothing that imported by colour
+ * before 2026-09-14 changes.
  */
-export const parseJson = (text: string): RGB[] | null => {
+const exactJsonConfig = (o: Record<string, unknown>): GradientConfig | null => {
+  const stops = o.stops as unknown[];
+  const config = coerceGradientConfig(o);
+  return config && config.stops.length === stops.length ? config : null;
+};
+
+/** A DTCG token `$value` as a colour: a CSS colour string, or the 2025 object form
+ *  (`{ hex }`, or sRGB `components` on 0..1). */
+const tokenColor = (v: unknown): RGB | null => {
+  if (typeof v === 'string') return parseHex(v) ?? cssColor(v);
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.hex === 'string') return parseHex(o.hex);
+  const c = o.components;
+  if ((o.colorSpace === undefined || o.colorSpace === 'srgb') && Array.isArray(c) && c.length >= 3) return rgb(Number(c[0]) * 255, Number(c[1]) * 255, Number(c[2]) * 255);
+  return null;
+};
+
+/**
+ * W3C design tokens (the DTCG shape our `tokens` export writes: `{ "sea-glass": { "50":
+ * { "$value": "#…", "$type": "color" }, … } }`): every colour token, depth-first, in the order
+ * the object iterates. A `$type` is inherited from its group; a token with no type anywhere
+ * counts when its value reads as a colour. Non-colour tokens are skipped.
+ *
+ * ORDER: JavaScript iterates integer-like keys ("50", "100", … "950", or "1" … "N") in ascending
+ * numeric order whatever order the file wrote them in, and other keys in the order written. Every
+ * scale we or Tailwind-style tools write runs low → high, so that is the written order; a file
+ * that wrote a numeric scale high → low comes back reversed.
+ */
+const tokenColors = (root: Record<string, unknown>): RGB[] => {
+  const out: RGB[] = [];
+  const walk = (node: unknown, type: unknown, depth: number): void => {
+    if (out.length >= MAX_ANCHORS || depth > 32 || !node || typeof node !== 'object' || Array.isArray(node)) return;
+    const o = node as Record<string, unknown>;
+    const t = typeof o.$type === 'string' ? o.$type : type;
+    if ('$value' in o) {
+      if (t === 'color' || t === undefined) {
+        const c = tokenColor(o.$value);
+        if (c) out.push(c);
+      }
+      return;
+    }
+    for (const k of Object.keys(o)) if (k[0] !== '$') walk(o[k], t, depth + 1);
+  };
+  walk(root, undefined, 0);
+  return out;
+};
+
+/** The name our tokens export writes: `$extensions["com.gmt-fractals"].name` on the root or on
+ *  its only group (`exportFormats.TOKENS_EXTENSION_KEY`; not imported, to keep this module free
+ *  of the exporter). */
+const tokensName = (root: Record<string, unknown>): string | undefined => {
+  const fromExt = (g: unknown): string | undefined => {
+    if (!g || typeof g !== 'object' || Array.isArray(g)) return undefined;
+    const ext = (g as Record<string, unknown>).$extensions;
+    const mine = ext && typeof ext === 'object' ? (ext as Record<string, unknown>)['com.gmt-fractals'] : undefined;
+    return mine && typeof mine === 'object' ? nameValue((mine as Record<string, unknown>).name) : undefined;
+  };
+  const groups = Object.keys(root).filter((k) => k[0] !== '$');
+  return fromExt(root) ?? (groups.length === 1 ? fromExt(root[groups[0]]) : undefined);
+};
+
+/**
+ * JSON: in this order —
+ *   1. an exact gradient (`exactJsonConfig`): `{stops:[…]}` or a bare array of positioned stops;
+ *   2. an array of colours, or `{ colors: [...] }` / `{ stops: [...] }` read as colours, evenly
+ *      spaced (our own `.json` export is `{ name, colors: ["#hex", …] }`);
+ *   3. design tokens.
+ * `name` from a top-level string `name`.
+ */
+const parseJsonFull = (text: string): Parsed | null => {
   let obj: unknown;
   try {
     obj = JSON.parse(text);
@@ -365,30 +570,49 @@ export const parseJson = (text: string): RGB[] | null => {
     return null;
   }
   let arr: unknown[] | null = null;
-  if (Array.isArray(obj)) arr = obj;
-  else if (obj && typeof obj === 'object') {
-    const o = obj as Record<string, unknown>;
+  let name: string | undefined;
+  let o: Record<string, unknown> | null = null;
+  if (Array.isArray(obj)) {
+    arr = obj;
+    if (obj.length && obj.every((s) => s && typeof s === 'object' && !Array.isArray(s) && 'position' in s)) {
+      const config = exactJsonConfig({ stops: obj });
+      if (config) return { ramp: gradientDisplayRamp(config), config };
+    }
+  } else if (obj && typeof obj === 'object') {
+    o = obj as Record<string, unknown>;
+    name = nameValue(o.name);
+    if (Array.isArray(o.stops)) {
+      const config = exactJsonConfig(o);
+      if (config) return { ramp: gradientDisplayRamp(config), name, config };
+    }
     arr = Array.isArray(o.colors) ? o.colors : Array.isArray(o.stops) ? o.stops : null;
   }
-  if (!arr || !arr.length) return null;
   const cols: RGB[] = [];
-  for (const it of arr) {
-    if (cols.length >= MAX_ANCHORS) break;
-    const c = jsonColor(it);
-    if (c) cols.push(c);
+  if (arr) {
+    for (const it of arr) {
+      if (cols.length >= MAX_ANCHORS) break;
+      const c = jsonColor(it);
+      if (c) cols.push(c);
+    }
+  } else if (o) {
+    cols.push(...tokenColors(o));
+    name ??= tokensName(o);
   }
-  return cols.length ? rampFromAnchors(evenAnchors(cols)) : null;
+  return cols.length ? { ramp: rampFromAnchors(evenAnchors(cols)), name } : null;
 };
+
+/** JSON as a ramp (see `parseJsonFull` for what is read, and in what order). */
+export const parseJson = (text: string): RGB[] | null => parseJsonFull(text)?.ramp ?? null;
 
 // ---- dispatch ----
 
-const PARSERS: Record<ImportFormatKey, (text: string) => RGB[] | null> = {
-  map: parseMap,
-  gpl: parseGpl,
-  ggr: parseGgr,
-  cpt: parseCpt,
-  css: parseCss,
-  json: parseJson,
+const PARSERS: Record<ImportFormatKey, (text: string) => Parsed | null> = {
+  map: (t) => ({ ramp: parseMap(t) }),
+  gpl: parseGplFull,
+  ggr: parseGgrFull,
+  cpt: parseCptFull,
+  css: (t) => ({ ramp: parseCss(t), name: cssLeadingName(t) }),
+  json: parseJsonFull,
 };
 
 /** Content sniff when the extension is missing or unrecognised. */
@@ -402,24 +626,32 @@ const sniff = (text: string): ImportFormatKey | null => {
   if (/gradient\s*\(/.test(head)) return 'css';
   const t = head.trimStart();
   if (t[0] === '{' || t[0] === '[') return 'json';
+  if (/--[A-Za-z0-9_-]+[ \t]*:/.test(head)) return 'css'; // CSS variables
   if (/^\s*\d+\s+\d+\s+\d+/m.test(head)) return 'map';
   return null;
 };
 
 /**
- * Parse a gradient file's TEXT into a 256-step ramp. `ext` (lower-case, no dot) is
- * the preferred discriminator; when absent/unknown the content is sniffed. Returns
- * `null` for anything we can't read — never throws.
+ * Parse a gradient file's TEXT. `ext` (lower-case, no dot) decides the format when it is one
+ * we parse; with NO extension (or `.txt`) the content is sniffed; any other extension is
+ * refused (`null`) — see `SNIFF_EXTENSIONS`. Returns `null` for anything we can't read — never
+ * throws. See `ImportResult` for `name` and `config`.
  */
 export const parseGradientText = (text: string, ext?: string): ImportResult | null => {
   try {
     if (typeof text !== 'string' || !text.length || text.length > MAX_TEXT) return null;
-    const key = (ext && IMPORT_EXTENSIONS.includes(ext as ImportFormatKey)
-      ? (ext as ImportFormatKey)
-      : sniff(text)) as ImportFormatKey | null;
+    const e = typeof ext === 'string' ? ext.toLowerCase() : '';
+    let key: ImportFormatKey | null;
+    if ((IMPORT_EXTENSIONS as readonly string[]).includes(e)) key = e as ImportFormatKey;
+    else if (SNIFF_EXTENSIONS.includes(e)) key = sniff(text);
+    else return null;
     if (!key) return null;
-    const ramp = PARSERS[key](text);
-    return ramp && ramp.length === 256 ? { ramp, format: key } : null;
+    const p = PARSERS[key](text);
+    if (!p || !p.ramp || p.ramp.length !== 256) return null;
+    const out: ImportResult = { ramp: p.ramp, format: key };
+    if (p.name) out.name = p.name;
+    if (p.config) out.config = p.config;
+    return out;
   } catch {
     return null; // fail safe on any unexpected input
   }

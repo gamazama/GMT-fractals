@@ -17,12 +17,20 @@
  * than an empty shell. Cost: the ramp is base64 inside base64url, ~1.4 KB of URL against the
  * ~100 characters of a two-stop link — under the 2 KB a link can safely be.
  *
- * @invariant encode → decode is the identity on stops (position · colour · interpolation ·
- *   bias), name, blend space and colour space; on a ramp gradient it is the identity on the
- *   ramp string; a stop gradient's wire carries no ramp; and decode of anything else is null —
- *   proven by: `npx tsx debug/test-gx-share.mts` ("round trip keeps every stop field",
- *   "garbage decodes to null", "[6] a ramp gradient round-trips byte-exact", "[6] a stop
- *   gradient's link is unchanged by a stale ramp"). [6] falsified 2026-09-14, see the harness.
+ * @invariant encode → decode is the identity on stops (colour · interpolation · bias to 4
+ *   decimals · position to 4 decimals or finer), name, blend space and colour space; on a ramp
+ *   gradient it is the identity on the ramp string; a stop gradient's wire carries no ramp; and
+ *   decode of anything else is null — proven by: `npx tsx debug/test-gx-share.mts` ("round trip
+ *   keeps every stop field", "garbage decodes to null", "[6] a ramp gradient round-trips
+ *   byte-exact", "[6] a stop gradient's link is unchanged by a stale ramp"). [6] falsified
+ *   2026-09-14, see the harness.
+ * @invariant a decoded stop is on the same side of every ramp sample (`i / 255`) as the stop
+ *   that was encoded, so a step gradient's link renders texel-identical; a position that 4
+ *   decimals already keep on its side is written as 4 decimals (links for ordinary gradients do
+ *   not change); and a link written by the 4-decimal encoder still decodes — proven by:
+ *   `npx tsx debug/test-gx-share.mts` ("[7] every step edge renders the same texels after
+ *   decode", "[7] an ordinary gradient's link is the 4-decimal link", "[7] a link from the
+ *   4-decimal encoder still decodes"). Falsified 2026-09-14, see the harness header.
  */
 
 import type { GradientConfig, GradientStop } from '../../types';
@@ -52,14 +60,52 @@ const b64url = {
   },
 };
 
-const r4 = (x: number): number => Math.round(x * 10000) / 10000;
+const rd = (x: number, d: number): number => Math.round(x * 10 ** d) / 10 ** d;
+const r4 = (x: number): number => rd(x, 4);
+
+/** How many of the 256 ramp samples (`i / 255`) sit AT OR BELOW `p`. `sampleSorted` gives a
+ *  sample exactly at a stop's position to the segment on its LEFT, so this count is which side
+ *  of every sample the stop is on — the thing a step edge cannot survive changing. */
+const samplesAtOrBelow = (p: number): number => {
+  let c = Math.floor(p * 255);
+  if (c < 0) return p >= 0 ? 1 : 0;
+  if (c > 255) return 256;
+  while (c + 1 <= 255 && (c + 1) / 255 <= p) c++;
+  while (c >= 0 && c / 255 > p) c--;
+  return c + 1;
+};
+
+/**
+ * A stop position for the wire: 4 decimals — what every link shared before 2026-09-14 carried,
+ * so an ordinary gradient's link is byte-identical — unless rounding would move the stop across
+ * a ramp sample. Then the fewest decimals (up to 12) that keep it on the same side, else the
+ * exact double.
+ *
+ * Why: a STEP stop's edge is a discontinuity at a sample. The corpus's 12-band step gradient has
+ * an edge at 4/12 = 85/255 exactly; 4 decimals wrote 0.3333, below the sample, and texel 85
+ * changed band on decode (ΔE 0.279, `debug/test-gradient-roundtrip.mts` row D). Measured
+ * 2026-09-14: 1 random position in ~166 needs more than 4 decimals, but 125 of the 256 positions
+ * that sit exactly ON a sample do — the ones snapped and evenly divided stops produce. Bias has no
+ * discontinuity and stays at 4.
+ */
+const wirePosition = (p: number): number => {
+  if (!Number.isFinite(p)) return r4(p);
+  const side = samplesAtOrBelow(p);
+  const q4 = r4(p);
+  if (samplesAtOrBelow(q4) === side) return q4;
+  for (let d = 5; d <= 12; d++) {
+    const q = rd(p, d);
+    if (samplesAtOrBelow(q) === side) return q;
+  }
+  return p;
+};
 
 export const encodeShare = (config: GradientConfig, name: string): string => {
   const wire: Wire = {
     v: 1,
     n: name,
     s: config.stops.map((st) => {
-      const row: (string | number)[] = [r4(st.position), st.color];
+      const row: (string | number)[] = [wirePosition(st.position), st.color];
       const interp = st.interpolation ?? 'linear';
       const bias = st.bias ?? 0.5;
       if (interp !== 'linear' || bias !== 0.5) row.push(interp);
