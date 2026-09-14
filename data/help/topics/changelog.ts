@@ -40,6 +40,15 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
+## 0.9.8.4a — Gradients
+> September 14, 2026
+
+- **Library gradients support up to 256 colours.**
+- **Save your Favients as a PNG.** Carries every gradient with its stops, name and set.
+- **Gradient import/export improvements.**
+
+---
+
 ## 0.9.8.4 — Sliders and gradients
 > September 14, 2026
 

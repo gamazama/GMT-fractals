@@ -10,7 +10,7 @@
  * PLACEHOLDER (2026-09-13): the owner has not chosen GX's numbering. "2.0.0-preview" says
  * "v2, not released yet" and nothing more — replace it before the entry-point swap.
  */
-export const GX_VERSION = '2.0.0-preview';
+export const GX_VERSION = '2.0.0-preview.2';
 
 /** Display name, used by About, Support and the feedback context. */
 export const GX_APP_NAME = 'Gradient Explorer';

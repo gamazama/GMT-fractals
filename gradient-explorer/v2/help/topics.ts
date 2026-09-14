@@ -63,7 +63,7 @@ Gradient Explorer is for finding, making and exporting colour gradients.
 - In your own sets, drag across the wall's background to select several; **Delete** removes them from My Gradients.
 
 ## Your own files
-Drop gradient files anywhere on the page to import them. Drop an image anywhere to make a gradient from it.
+Drop gradient files anywhere on the page to import them — a GMT gradient PNG, a set's .zip, CSS, GIMP, .map and more. They go into the set you are looking at when it is one of yours, and the wall shows where they landed. Drop an image anywhere to make a gradient from it.
 `,
   }),
   topic({
@@ -96,7 +96,7 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
     content: `
 - **♥ Keep** saves the gradient to My Gradients. Press it again to remove it.
 - **Share** copies a link. Opening the link opens that gradient.
-- **Export** copies or downloads the gradient in a file format — CSS, SVG, JSON, Photoshop .grd, GIMP, Adobe swatches, Cinema 4D and Blender scripts, a Fractint .map and more — as a smooth ramp or as its palette of swatches. The export button on the set row exports every gradient in the sets you have on the wall at once (not All).
+- **Export** saves a **GMT gradient** PNG, which opens back exactly — stops, name, set and credit. Below it are formats for other software — CSS, SVG, JSON, Photoshop .grd, GIMP, Adobe swatches, Cinema 4D and Blender scripts, a Fractint .map and more — as a smooth ramp or as its palette of swatches. The export button on the set row exports every gradient in the sets you have on the wall at once (not All).
 - **Wallpaper** fills the screen with the gradient in a pattern — Linear, Radial, Conic, Liquify, Spline, Fractal and more — and saves it as an image.
 `,
   }),
@@ -131,6 +131,18 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
     title: "What's New",
     content: `
 > OWNER REVIEW — first draft.
+
+## 2.0.0-preview.2 — saving, opening and credits
+> September 14, 2026
+
+- **Every catalogue gradient credits where it came from.** Filters ▸ Sources and the wall's collection headers name each source and its licence, and Arrange ▸ Group by can sort the wall by Collection.
+- **An export keeps the credit in its name** while the gradient is unchanged from the catalogue. GX Global is now a source too, and it won't take a catalogue gradient you haven't changed.
+- **Dense gradients stay exact.** Striped and noisy palettes keep their 256 colours instead of approximate stops, Curves shows their real shape, and **Add stops** makes them editable.
+- **Save a GMT gradient PNG** from Export, for one gradient or a whole set, or use Save collection for everything. It opens back exactly, with stops, name, set and credit, and still gives the exact colours if a chat app strips its data.
+- **Drop any gradient file on the page** — a GMT PNG, a set's .zip, CSS, GIMP, .map and more. It keeps its name, and the wall shows the set it landed in. A dropped session file opens as your session.
+- **Export** keeps Again at the top without repeats, and the PNG's size sits under GMT gradient.
+
+---
 
 ## 2.0.0-preview — the new Gradient Explorer
 > September 2026
