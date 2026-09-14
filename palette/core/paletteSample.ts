@@ -25,6 +25,7 @@
 
 import { rgbToOklab, type RGB } from './oklab';
 import type { GradientConfig } from '../../types';
+import { stopsOf } from '../../utils/gradientRamp';
 
 export type PaletteRule = 'stops' | 'even' | 'perceptual';
 
@@ -85,23 +86,26 @@ export const samplePerceptual = (ramp: RGB[], n: number): PaletteSwatch[] => {
   return out;
 };
 
-/** One swatch per stop, at the stop's (sorted) position. Colour is read off the ramp. */
+/** One swatch per stop, at the stop's (sorted) position. Colour is read off the ramp. A RAMP
+ *  gradient (ADR-0122, `stops: []`) has no stops, so it gets no swatches here — callers go
+ *  through `samplePalette`, which sends it to 'even'. */
 export const sampleAtStops = (ramp: RGB[], config: GradientConfig): PaletteSwatch[] => {
   if (!ramp.length) return [];
-  const ts = config.stops
+  const ts = stopsOf(config)
     .map((s) => Math.max(0, Math.min(1, s.position)))
     .sort((a, b) => a - b);
   return ts.map((t) => at(ramp, t));
 };
 
-/** Dispatch on the rule. 'stops' without a config (or with no stops) degrades to 'even'. */
+/** Dispatch on the rule. 'stops' without a config (or with no stops — a ramp gradient) degrades
+ *  to 'even'. */
 export const samplePalette = (
   ramp: RGB[],
   rule: PaletteRule,
   n: number,
   config?: GradientConfig | null,
 ): PaletteSwatch[] => {
-  if (rule === 'stops' && config && config.stops.length >= 2) return sampleAtStops(ramp, config);
+  if (rule === 'stops' && config && stopsOf(config).length >= 2) return sampleAtStops(ramp, config);
   if (rule === 'perceptual') return samplePerceptual(ramp, n);
   return sampleEven(ramp, n);
 };

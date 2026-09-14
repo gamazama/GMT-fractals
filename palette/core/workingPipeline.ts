@@ -19,19 +19,44 @@
  *   • `stops`    — the editable stops document (paletteEditorStore) after a bake.
  * The store resolves each kind to base channels; this module only knows channels.
  *
- * Stops handling (June T5 decision): when the input already carries stops (`gradient` or
- * `stops`) AND the pipeline is the identity (no curves, Adjust at defaults), the config is
- * passed through VERBATIM and the ramp is rendered straight from those stops — so a picked
- * 4-stop favourite stays a 4-stop favourite instead of coming back as dozens of fitted knots.
- * Any real transform fits the output ramp to stops with the detail-scaled budget the
- * Generator uses.
+ * Stops handling (June T5 decision): when the input already carries its own config (`gradient`
+ * or `stops`) AND the pipeline is the identity (no curves, Adjust at defaults), the config is
+ * passed through VERBATIM and the ramp is rendered straight from it — so a picked 4-stop
+ * favourite stays a 4-stop favourite instead of coming back as dozens of fitted knots, and a
+ * RAMP gradient (ADR-0122: `stops: []` + `ramp`) comes back as the same 256 texels.
+ *
+ * OUTPUT FORM under a real transform (ADR-0122 Decision 3). Which of the two config forms the
+ * pipeline hands back is decided by what came IN, not by what came out:
+ *   • the input HAD STOPS (a stop config, or a live Mix whose sources had stops → `seedStops`):
+ *     it keeps a stop layer — `fitRampToStops` at the Detail budget, exactly as before. NOT
+ *     `rampToGradientConfig(…, { cap: Infinity })`: that drops to a ramp the moment the fit runs
+ *     out of budget, and "a gradient that already has stops keeps them" is the owner's rule.
+ *   • it had none (a ramp gradient, Extract, a seedless Mix): an AUTOMATIC fit —
+ *     `rampToGradientConfig` at the Detail budget under `STOP_LAYER_CAP`, so a cheap result
+ *     gets stops and a dense one stays an exact ramp.
+ * Adding stops to a ramp on purpose is not this path: `addStopsToConfig` below.
+ *
+ * The BASE is read through `gradientDisplayRamp`, never `config.stops`: the Curves face fits its
+ * keys from this base, and before ADR-0122 a dense ramp's base was the render of its (failed)
+ * stop fit — 8ZEBBOW2's Curves drew black although its real texels fit to ΔE 0.002.
  *
  * @see docs/adr/0111-working-pipeline-input-slot.md
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
  *
  * @invariant With `curves === null` and `isIdentityAdjust(params)`, `runWorkingPipeline`
  *   returns the `verbatim` config by identity (`===`) and a ramp equal to
- *   `renderStopsToRamp(verbatim…)` — proven by: `npx tsx debug/test-palette-working.mts`
- *   ("passthrough: config is the verbatim object", "passthrough: ramp is the direct render").
+ *   `gradientDisplayRamp(verbatim)`, for BOTH config forms — proven by:
+ *   `npx tsx debug/test-palette-working.mts` ("passthrough: config is the verbatim object",
+ *   "passthrough: ramp is the direct render", "ramp passthrough: config is the verbatim ramp
+ *   object", "ramp passthrough: ramp is the texels").
+ * @invariant Under a real transform the output FORM follows the input: no stops and no seeds in
+ *   → stops only when the fit finishes within min(Detail budget, STOP_LAYER_CAP), else the ramp;
+ *   stops or seeds in → always stops, at most the Detail budget — proven by:
+ *   `npx tsx debug/test-palette-working.mts` ("dense ramp + Adjust → a ramp", "cheap ramp +
+ *   Adjust → stops", "stop input keeps stops past the cap", "stop input keeps stops when the
+ *   budget runs out", "seeded Mix keeps stops past the cap").
+ * @invariant A ramp gradient's base is its texels, so the Curves fit reproduces them — proven by:
+ *   `npx tsx debug/test-palette-working.mts` ("Curves over a ramp zebra reproduces the texels").
  */
 
 import {
@@ -42,8 +67,9 @@ import {
   type Channels,
   type GeneratorParams,
 } from './generatorPipeline';
-import { renderStopsToRamp, rgbToHex } from './gmtGradient';
-import { fitRampToStops } from './stopFit';
+import { gradientDisplayRamp, rgbToHex } from './gmtGradient';
+import { fitRampToStops, rampToGradientConfig } from './stopFit';
+import { encodeRamp } from '../../utils/gradientRamp';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { RGB } from './oklab';
 import type { CatalogOrigin } from './catalogOrigin';
@@ -81,14 +107,14 @@ export const isIdentityAdjust = (p: GeneratorParams): boolean =>
   p.noise === 0;
 
 /**
- * Base channels of a stops config (rendered through the canonical sampler, then decomposed).
- * Always rendered in DISPLAY space ('srgb'): a config's `colorSpace` is a GMT texture hint
- * ('linear' means "the shader wants linear-light bytes"), and decomposing linear bytes as if
- * they were sRGB darkens everything downstream — the palette swatches read darker than the
- * editor strip, which renders display space itself (owner review 2026-09-03).
+ * Base channels of a config of EITHER form: its display ramp (`gradientDisplayRamp` — a stop
+ * gradient's render, a ramp gradient's texels), decomposed. Always DISPLAY space ('srgb'): a
+ * config's `colorSpace` is a GMT texture hint ('linear' means "the shader wants linear-light
+ * bytes"), and decomposing linear bytes as if they were sRGB darkens everything downstream —
+ * the palette swatches read darker than the editor strip, which renders display space itself
+ * (owner review 2026-09-03).
  */
-export const channelsOfConfig = (c: GradientConfig): Channels =>
-  decomposeRamp(renderStopsToRamp(c.stops, c.blendSpace, 'srgb'));
+export const channelsOfConfig = (c: GradientConfig): Channels => decomposeRamp(gradientDisplayRamp(c));
 
 /** Base channels of a bare ramp (an Extract result, an imported file). */
 export const channelsOfRamp = (ramp: RGB[]): Channels => decomposeRamp(ramp);
@@ -99,7 +125,8 @@ export interface WorkingDerivedCore {
   /** Un-clipped post-chain channels (curve baking reads these, not the clipped ramp). */
   final: Channels;
   config: GradientConfig;
-  /** True when the config is the verbatim input (identity pipeline over a stops input). */
+  /** True when the config is the verbatim input (identity pipeline over a `gradient` / `stops`
+   *  input — either config form). */
   passthrough: boolean;
 }
 
@@ -126,11 +153,19 @@ export const stopBudget = (detail: number): { targetDE: number; maxStops: number
  * stop and interpolated between them by the same rules the last fit chose — visibly live,
  * a little coarser than the settled render, and replaced by a real fit on release.
  *
+ * A held RAMP gradient (ADR-0122) has no stops to re-colour: it becomes the live ramp, which is
+ * exact and costs one encode.
+ *
  * Returns `held` ITSELF when no colour moved, so a bracket that opens without a value change
  * costs no re-render.
  */
 const recolourHeldFit = (held: GradientConfig, ramp: RGB[]): GradientConfig => {
     if (ramp.length === 0) return held;
+    if (held.stops.length === 0) {
+        if (ramp.length !== 256) return held;
+        const next = encodeRamp(ramp);
+        return next === held.ramp ? held : { ...held, stops: [], ramp: next };
+    }
     const last = ramp.length - 1;
     let changed = false;
     const stops = held.stops.map((s) => {
@@ -144,8 +179,33 @@ const recolourHeldFit = (held: GradientConfig, ramp: RGB[]): GradientConfig => {
 };
 
 /**
+ * The output config of a real transform, in the form ADR-0122 picks (see the file header).
+ * `hadStops`: the input carried a stop layer — its own stops, or seeds from the gradients a Mix
+ * blends. Exported for the harness.
+ */
+export const fitWorkingOutput = (ramp: RGB[], detail: number, hadStops: boolean, seedStops: SeedStop[] = []): GradientConfig =>
+  hadStops
+    ? fitRampToStops(ramp, { ...stopBudget(detail), seedStops, fitBias: true })
+    : rampToGradientConfig(ramp, { ...stopBudget(detail), seedStops, fitBias: true });
+
+/**
+ * "Add stops" (ADR-0122 Decision 3) — the EXPLICIT, uncapped fit. A config that already has
+ * stops comes back by identity; a ramp gradient is fitted at the Detail budget and always gets
+ * stops: the user asked for them, so `STOP_LAYER_CAP` does not apply. Its `colorSpace` is kept (a
+ * catalogue pick is 'linear', and adding knots must not change what the texture bakes); the fit
+ * reads the DISPLAY ramp, as every palette fit does.
+ */
+export const addStopsToConfig = (config: GradientConfig, detail: number): GradientConfig => {
+  if (config.stops.length > 0) return config;
+  const fitted = fitRampToStops(gradientDisplayRamp(config), { ...stopBudget(detail), fitBias: true });
+  return { ...fitted, colorSpace: config.colorSpace ?? 'srgb' };
+};
+
+/**
  * Run the pipeline. `verbatim` is the input's own config when it has one (`gradient` /
- * `stops` kinds), else null; it is returned untouched when nothing would change it.
+ * `stops` kinds), else null; it is returned untouched when nothing would change it. Whether a
+ * real transform's output keeps stops is read from `verbatim` and `seedStops` — see
+ * `fitWorkingOutput`.
  */
 export const runWorkingPipeline = (
   base: Channels,
@@ -172,7 +232,7 @@ export const runWorkingPipeline = (
   if (passthrough && verbatim) {
     return {
       base,
-      ramp: renderStopsToRamp(verbatim.stops, verbatim.blendSpace, 'srgb'),
+      ramp: gradientDisplayRamp(verbatim),
       final: built.final,
       config: verbatim,
       passthrough: true,
@@ -182,7 +242,9 @@ export const runWorkingPipeline = (
     base,
     ramp: built.ramp,
     final: built.final,
-    config: holdFit ? recolourHeldFit(holdFit, built.ramp) : fitRampToStops(built.ramp, { ...stopBudget(detail), seedStops, fitBias: true }),
+    config: holdFit
+      ? recolourHeldFit(holdFit, built.ramp)
+      : fitWorkingOutput(built.ramp, detail, (!!verbatim && verbatim.stops.length > 0) || seedStops.length > 0, seedStops),
     passthrough: false,
   };
 };

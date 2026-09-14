@@ -340,6 +340,27 @@ console.log('\n[9] a shallow gradient fits as a smooth ramp, not as bands');
   ok(bsteps === 16, `16 real bands still fit as 16 step stops (got ${bsteps})`);
 }
 
+// [10] OVER BUDGET, THE CORNER SUBSAMPLE MUST NOT ALIAS. A period-2 zebra (colour on even
+// texels, black on odd — Softology's 8ZEBBOW2) has a hard edge between every pair of texels, so
+// ~254 corner seeds compete for the budget. The pure even stride landed every pick on the black
+// phase: 126 of 128 stops black. "Add stops" on a ramp gradient (ADR-0122) runs exactly this path.
+// THE SHAPE MATTERS: a perfectly regular zebra does NOT reproduce it — the stride (254 / 126 ≈
+// 2.016) drifts off the black phase halfway and the fit comes out 64/128 black with or without the
+// fix, so the first cut of this section was green under the break. The real map has two colours
+// in a row at texel 85 (a phase SHIFT), which re-locks the drifting stride onto black for the
+// rest of the ramp; this synthetic copies that shift (126/128 black under the break, 63 fixed).
+// Falsified 2026-09-14 by setting ALIAS_DE = 0 in stopFit.ts (the pure even stride): red.
+console.log('\n[10] an over-budget zebra keeps both phases');
+{
+  const zebra: RGB[] = Array.from({ length: 256 }, (_, i) => {
+    const blackPhase = i <= 84 ? i % 2 : (i + 1) % 2;
+    return blackPhase ? { r: 0, g: 0, b: 0 } : { r: 252, g: Math.round((i / 255) * 250), b: 255 - Math.round((i / 255) * 250) };
+  });
+  const zf = fitRampToStops(zebra, { targetDE: 0.012, maxStops: 128, fitBias: true });
+  const black = zf.stops.filter((st) => st.color.toUpperCase() === '#000000').length;
+  ok(black > 0.25 * zf.stops.length && black < 0.75 * zf.stops.length, `an over-budget zebra keeps both phases (${black} of ${zf.stops.length} stops black)`);
+}
+
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
 process.exit(failures === 0 ? 0 : 1);

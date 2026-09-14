@@ -15,7 +15,21 @@
  * Stable import path retained for existing palette consumers:
  *   `renderStopsToRamp` / `renderStopsToBuffer` / `sampleStops` / `sampleSortedStops` /
  *   `hexToRgb` / `rgbToHex`.
+ *
+ * Since ADR-0122 a gradient may be a RAMP (`stops: []` + `ramp`), so code that holds a whole
+ * `GradientConfig` reads it through `renderGradientToRamp` / `gradientDisplayRamp`, never
+ * `renderStopsToRamp(config.stops, …)` — on a ramp gradient that renders the greyscale fallback.
+ * `renderStopsToRamp` stays for code that genuinely holds a stop LIST (the fitter, the editor).
  */
 
-export { renderStopsToRamp, renderStopsToBuffer, sampleStops, sampleSortedStops, hexToRgb, rgbToHex } from '../../utils/colorUtils';
+export {
+  renderStopsToRamp,
+  renderStopsToBuffer,
+  renderGradientToRamp,
+  gradientDisplayRamp,
+  sampleStops,
+  sampleSortedStops,
+  hexToRgb,
+  rgbToHex,
+} from '../../utils/colorUtils';
 export type { RGB } from './oklab';

@@ -33,8 +33,12 @@ export type BlendColorSpace =
     | 'hsv-far';
 
 // The new Rich Object container
+/** MUST stay identical to types/graphics.ts, which carries the two-form contract (ADR-0122):
+ *  a stop gradient, or `stops: []` + a `ramp` string. */
 export interface GradientConfig {
     stops: GradientStop[];
+    /** 256 sRGB texels, base64 of 768 bytes. Present ONLY when `stops` is empty. */
+    ramp?: string;
     colorSpace: ColorSpaceMode;
     blendSpace: BlendColorSpace;
 }

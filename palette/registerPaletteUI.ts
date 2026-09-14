@@ -35,7 +35,7 @@ import { FavientsPanel } from './components/FavientsPanel';
 import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
 import { StopsDockPanel } from './components/StopsDockPanel';
 import { useFavientsStore, captureFavientsHistory, restoreFavientsHistory } from './store/favientsStore';
-import { captureGeneratorHistory, restoreGeneratorHistory } from './store/generatorStore';
+import { captureGeneratorHistory, restoreGeneratorHistory, useGeneratorStore } from './store/generatorStore';
 import { captureEditorConfig, applyEditorConfig } from './store/paletteEditorStore';
 import { serializeFavientsDocument, restoreFavientsDocument } from './store/favientsDocument';
 import { serializeGeneratorDocument, restoreGeneratorDocument } from './store/generatorDocument';
@@ -44,6 +44,8 @@ import { registerHistoryProvider } from '../store/slices/historySlice';
 import { registerDocumentProvider } from '../store/documentRegistry';
 import { setGradientEditorEntrance } from '../components/gradient/gradientEditorEntrance';
 import { setGradientFavientsBridge } from '../components/gradient/gradientFavients';
+import { setGradientStopFitter } from '../components/gradient/gradientStopFitter';
+import { addStopsToConfig } from './core/workingPipeline';
 import { configToName } from './core/facetName';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
 import { PRESETS_GROUP } from './store/favientsStore';
@@ -108,6 +110,13 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
     },
     isFav: (config) => useFavientsStore.getState().isFav(config),
   });
+
+  // The Stops editor's RAMP MODE "Add stops" (ADR-0122) for a host that passes no `onAddStops`
+  // of its own — app-gmt's DDFS gradient param is the one that matters: AutoFeaturePanel wires
+  // only `onChange`, so the editor emits this fit through it inside its own undo bracket. The
+  // explicit, UNCAPPED fit at the generator's Detail budget, keeping the gradient's colorSpace
+  // (a coloring gradient is 'linear' and must bake the same after the knots appear).
+  setGradientStopFitter((config) => addStopsToConfig(config, useGeneratorStore.getState().detail));
 
   // The generator's non-DDFS state (curve Track[], slot selection, fit dials) lives in
   // its own store, so register it as a PARAM-undo history provider — curves + slots now

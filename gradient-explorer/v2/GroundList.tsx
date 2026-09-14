@@ -30,7 +30,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogEntry } from '../../palette/core/presetCatalog';
 import type { GroundItem } from '../../palette/components/usePickerModel';
-import { renderStopsToRamp } from '../../palette/core/gmtGradient';
+import { gradientDisplayRamp } from '../../palette/core/gmtGradient';
 import { useWallSelection, toggleWallSelected, setWallSelection, clearWallSelection } from '../../palette/store/wallSelection';
 import type { RGB } from '../../palette/core/oklab';
 
@@ -202,7 +202,8 @@ export const GroundList: React.FC<GroundListProps> = ({
                         : 'hover:bg-line/[0.06]'
                   }`}
                 >
-                  <RowStrip ramp={renderStopsToRamp(it.config.stops, it.config.blendSpace ?? 'oklab', 'srgb')} />
+                  {/* either form (ADR-0122) — a ramp gradient's stops are [] */}
+                  <RowStrip ramp={gradientDisplayRamp(it.config)} />
                   <div className="min-w-0 flex-1">
                     {renaming === entry.id && it.favId ? (
                       <input

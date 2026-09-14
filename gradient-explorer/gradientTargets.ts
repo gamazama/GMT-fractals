@@ -25,7 +25,7 @@
 
 import { registerSendTarget, getSendTargets } from '../store/sendTargetRegistry';
 import { useEngineStore } from '../store/engineStore';
-import { renderStopsToRamp } from '../palette/core/gmtGradient';
+import { renderGradientToRamp } from '../palette/core/gmtGradient';
 import { openFullscreen } from '../palette/store/fullscreenStore';
 import { usePaletteEditorStore, editorEdit } from '../palette/store/paletteEditorStore';
 import { useGeneratorStore } from '../palette/store/generatorStore';
@@ -46,7 +46,8 @@ export const modeTabRect = (id: string): DOMRect | null =>
 const stepRect = (id: string): DOMRect | null =>
     document.querySelector<HTMLElement>(`[${GX_STEP_ATTR}="${id}"]`)?.getBoundingClientRect() ?? null;
 
-const toRamp = (c: GradientConfig) => renderStopsToRamp(c.stops, c.blendSpace, c.colorSpace);
+/** Either form (ADR-0122), through the config's own colorSpace as it always was. */
+const toRamp = (c: GradientConfig) => renderGradientToRamp(c);
 
 /** Export a gradient as a PNG strip (the bottom "Export" well). */
 const downloadGradientPng = async (config: GradientConfig, name: string): Promise<void> => {

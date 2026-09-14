@@ -40,9 +40,20 @@ export type BlendColorSpace =
     | 'hsv-far';    // retired, renderer-only
 
 // The new Rich Object container
+/**
+ * A gradient is one of exactly two forms (ADR-0122): a STOP gradient (`stops.length > 0`,
+ * no `ramp`) or a RAMP gradient (`stops: []` + `ramp`). Read it through
+ * `renderGradientToRamp` / `generateGradientTextureBuffer` (utils/colorUtils.ts), never by
+ * walking `stops` — a ramp gradient has none. Codec + predicates: utils/gradientRamp.ts.
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
+ */
 export interface GradientConfig {
+    /** The optional authoring layer. `[]` on a ramp gradient. */
     stops: GradientStop[];
+    /** 256 sRGB texels, base64 of 768 bytes. Present ONLY when `stops` is empty; ignored otherwise. */
+    ramp?: string;
     colorSpace: ColorSpaceMode;
+    /** How stops blend. Inert on a ramp gradient (the blend is already baked into its texels). */
     blendSpace: BlendColorSpace;
 }
 

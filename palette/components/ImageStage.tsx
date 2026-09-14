@@ -29,7 +29,7 @@ import { tracePolyline, autoPath, type Img2GradMode } from '../core/img2grad';
 import type { Pt, TracePath } from '../core/img2grad/common';
 import { CanonicalHero } from './CanonicalHero';
 import { HeroSlot } from './HeroSlot';
-import { fitRampToStops } from '../core/stopFit';
+import { rampToGradientConfig } from '../core/stopFit';
 import { clamp01 } from '../../utils/stopOps';
 import { rgbToOklab } from '../core/oklab';
 import { useFlash } from './useFlash';
@@ -144,10 +144,10 @@ export const ImageStage: React.FC<{ chrome?: 'full' | 'bare' | 'face' } & ImageS
   const hoverRef = useRef<{ lab: Lab; from: 'cloud' | 'pane' } | null>(null);
   const maskRef = useRef<{ key: string; canvas: HTMLCanvasElement } | null>(null);
   const derived = useImageDerived();
-  // Image extraction is ramp-only; fit to GMT stops once so it can be favourited as a
-  // GradientConfig (the shelf's interchange representation).
+  // Image extraction is ramp-only; turn it into a GradientConfig once so it can be favourited
+  // (the shelf's interchange representation) — stops when cheap, else the ramp (ADR-0122).
   const favConfig = useMemo(
-    () => (derived ? fitRampToStops(derived.ramp, { targetDE: 0.02, maxStops: 32 }) : null),
+    () => (derived ? rampToGradientConfig(derived.ramp, { targetDE: 0.02, maxStops: 32 }) : null),
     [derived],
   );
 

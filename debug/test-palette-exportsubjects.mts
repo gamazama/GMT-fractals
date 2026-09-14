@@ -28,6 +28,12 @@
  *   [8] the stop budget: per-format defaults, a nonsense override falling back, the
  *       reduction actually MOVING in the bytes a writer produces, and the lossy warning
  *       moving with it (including .ugr, which reduced at 64 and warned about nothing)
+ *   [9] (2026-09-14, ADR-0122) a RAMP gradient (`stops: []` + `ramp`) on the Linear profile
+ *       exports its texels byte-for-byte through `favientsExport`'s set exporter.
+ *       FALSIFIED 2026-09-14, each reverted: `rampOf` back to
+ *       `renderStopsToRamp(f.config.stops, …)` → [9] red (the greyscale fallback, first line
+ *       "0 0 0"); `rampOf` as `renderGradientToRamp(f.config)` (the config's own Linear
+ *       colorSpace) → [9] red (the texels linearised).
  *
  * Run: `npm run test:palette-exportsubjects` (also a link of `test:palette`).
  *
@@ -65,7 +71,9 @@ import {
   buildAiSwatchLibrary,
   type ExportFormatDef,
 } from '../palette/core/exportFormats';
-import { buildSwatchZip, buildSwatchCollectionFile, collectionQualityWarnings, type NamedSwatches } from '../palette/core/favientsExport';
+import { buildSwatchZip, buildSwatchCollectionFile, collectionQualityWarnings, buildCollectionZip, type NamedSwatches } from '../palette/core/favientsExport';
+import { encodeRampBuffer } from '../utils/gradientRamp';
+import { unzipSync, strFromU8 } from 'fflate';
 import type { RGB } from '../palette/core/oklab';
 import { renderStopsToRamp } from '../palette/core/gmtGradient';
 
@@ -363,6 +371,21 @@ ok(collectionQualityWarnings(fussy, 'ugr').length > 0,
   '.ugr reduces at 64 and lost detail but reported nothing — this is the assumption the budget closed');
 ok(collectionQualityWarnings(fussy, 'map', undefined, 8).length === 0,
   'a format that does not reduce warned because an override was passed to it');
+
+// ── [9] a RAMP gradient exports its texels (ADR-0122, 2026-09-14) ─────────────────────
+// A ramp gradient has no stops; the set exporters read it through `gradientDisplayRamp`.
+// On the LINEAR profile on purpose: the catalogue seam forces Linear on every pick, and the
+// exporter used to render through the config's own colorSpace — which, for a ramp, would
+// write its linearised texels instead of the colours it shows.
+section('[9] a ramp gradient exports its texels');
+{
+  const texels = Uint8Array.from({ length: 768 }, (_, i) => (i * 37 + (i % 3) * 91) & 255);
+  const fav = { id: 'r', name: 'Ramp', createdAt: 0, config: { stops: [], ramp: encodeRampBuffer(texels, 3), colorSpace: 'linear', blendSpace: 'oklab' } } as unknown as Parameters<typeof buildCollectionZip>[0][number];
+  const files = unzipSync(buildCollectionZip([fav], 'map'));
+  const map = strFromU8(Object.values(files)[0] ?? new Uint8Array()).split('\n').map((l) => l.trim().split(/\s+/).map(Number));
+  const exact = map.length === 256 && map.every((c, i) => c[0] === texels[i * 3] && c[1] === texels[i * 3 + 1] && c[2] === texels[i * 3 + 2]);
+  ok(exact, `a ramp gradient's collection export is its texels (the .map's first line reads ${map[0]?.join(' ')}, texel 0 is ${texels[0]} ${texels[1]} ${texels[2]})`);
+}
 
 console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry, one stop budget');
 process.exit(failures ? 1 : 0);

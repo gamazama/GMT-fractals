@@ -40,7 +40,7 @@ import { setFavientDrag, beginCustomAvatarDrag, readFavientDrag, FAVIENT_DND_MIM
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
 import { setDragOrigin, markPickLanded } from '../store/dragVisual';
 import { setSimilarityAnchor } from '../store/pickerSimilarity';
-import { renderStopsToRamp } from '../core/gmtGradient';
+import { gradientDisplayRamp } from '../core/gmtGradient';
 import { configToName } from '../core/facetName';
 import { GradientHoverPreview, type GradientHover } from './GradientHoverPreview';
 import { useFlash } from './useFlash';
@@ -174,7 +174,8 @@ const FavientSwatch: React.FC<{
   const ch = list ? Math.max(14, swatchH) : swatchH;
   // Render in DISPLAY sRGB (the stored colorSpace is a bake-for-shader concern; honouring
   // it here — often 'linear' — would look dull). The picker wall renders the same way.
-  const ramp = useMemo(() => renderStopsToRamp(fav.config.stops, fav.config.blendSpace ?? 'oklab', 'srgb'), [fav.config]);
+  // Either form (ADR-0122): a RAMP favourite has `stops: []`, which rendered as greyscale.
+  const ramp = useMemo(() => gradientDisplayRamp(fav.config), [fav.config]);
   // Build the 256×1 source once per ramp — reused by both the inline draw and the
   // hover zoom (rebuilding it per hover was wasted work).
   const rampCanvas = useMemo(() => ramp256Canvas(ramp), [ramp]);

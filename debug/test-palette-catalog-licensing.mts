@@ -24,6 +24,7 @@
  *       (the source's own objects keep their rows), an empty load marks it failed and leaves it
  *       unloaded, unloading removes it, GX Global's info is "GX Global (shared by users)" and
  *       user-made, and a pick from it stamps no export credit.
+ *   [10] the ramp form (ADR-0122) — see THE RAMP FORM below.
  *   [8] GX Global: the client's canonical signature equals the server's
  *       (`backend/supabase/functions/gx-gradients/validate.ts`, imported by path) over a corpus;
  *       every sampled core pick hashes INTO the baked list, and the function's own
@@ -61,6 +62,40 @@
  *   • pickerStore not recording a failed live load           → [9] "an empty live load marks the source failed"
  *   • entryOrigin without the `userMade` check               → [9] "a GX Global pick stamps no export credit"
  *
+ * THE RAMP FORM, 2026-09-14 (ADR-0122: a gradient is stops OR `stops: []` + a 1,024-char `ramp`).
+ * [8] now judges the whole posted config, samples three named core entries that arrive as ramps
+ * beside every 23rd pick, and checks each entry's PRE-ADR 128-stop fit is still listed (old shelves
+ * and old tabs send it). [10] is new:
+ *   [10] (a) a stop gradient's hash equals golden values pinned from HEAD cbb887bd's canonicaliser,
+ *        with or without a stale ramp beside the stops; a ramp's signature is `ramp:` + the string;
+ *        (b) client `canonicalConfigSigOf` ≡ server `canonicaliseConfig` over a corpus of good and
+ *        malformed ramps (1,023 chars, padded, url-safe, non-ASCII, no stops array …), the function
+ *        drops a stale ramp beside stops and stores a posted ramp as a ramp row; (c) export credits
+ *        — a ramp pick keeps its credit unmodified, loses it on one texel, never lends it to another
+ *        ramp, and a stop gradient's origin key is the pinned pre-ramp string; (d) the GX Global
+ *        wire — a stop gradient's POST body is the pre-ramp bytes, a ramp posts `stops: []` + ramp
+ *        and comes back through `parseGlobalSet` as the same ramp, a malformed one is dropped.
+ * FALSIFIED 2026-09-14 (each reverted; red lines quoted, abbreviated):
+ *   • catalogSigs ramp sig without the `ramp:` tag          → [8] "every sampled core pick hashes into the list (127/132)",
+ *                                                            "every sampled RAMP pick …", [10] "tagged ramp string", "the ramp form identically"
+ *   • catalogHashOf back to `canonicalSigOf(config?.stops)`  → [8] the list (127/132), RAMP pick, one-texel edit; [10] tagged ramp string
+ *   • validate.ts canonicaliseConfig never taking the ramp path → [8] RAMP pick refused (5, 0 of 5), one-texel edit; [10] "identically",
+ *                                                            "accepts a posted ramp gradient as a ramp row"
+ *   • validate.ts letting a ramp win over non-empty stops    → [10] "identically", "ignores a stale ramp beside stops"
+ *   • validate.ts ramp alphabet loop accepting any character → STAYS GREEN, by design: the atob + 768-byte wall refuses every
+ *                                                            string the loop lets through (the client's `isRampString` /
+ *                                                            `decodeRampBytes` are the same two walls). Both walls down
+ *                                                            (length check only) → [10] "the ramp form identically".
+ *   • catalogOrigin.originKey without the ramp branch        → [10] "one texel changed drops a ramp's credit", "another ramp does not
+ *                                                            inherit" ("keeps its credit" stays green: every ramp shares `oklab|`)
+ *   • globalSetPostBody always sending the stops form        → [10] "accepts a posted ramp", "round-trips the GX Global wire"
+ *   • globalSetPostBody putting `ramp` on a stop body        → [10] "a stop gradient's POST body is unchanged"
+ *   • canonicalSigOf rounding positions to 1/100             → [8] "identically", the list (14/132), the pre-ADR pick (9/132);
+ *                                                            [10] "byte-identical to the pre-ramp one"
+ *   • debug/palette-catalog-sigs.mts `entryHashes` without the legacy hash, list re-baked with `--sigs-only` → [8] "the pre-ADR-0122
+ *                                                            pick … still in the list (127/132)" (then restored and re-baked; both
+ *                                                            lists compared byte-identical to the pre-falsification files)
+ *
  * Needs the backend repo checked out beside this one (H:/GMT/workspace-gmt/backend) for [8];
  * set GX_SKIP_BACKEND=1 to skip that half LOUDLY on a machine without it.
  *
@@ -90,8 +125,11 @@ const { PALETTE_GROUPS, mergeManifest, paletteGroupsFrom, registerLiveSource } =
 const { PACK_PUBLISH } = await import('../palette/core/catalogPacks');
 const { arrangeRows, buildSearchIndex, filterCatalog, EMPTY_CRITERIA, collectionKeyOf } = await import('../palette/core/pickerModel');
 const { categoryName, exportNameFor, withExportName, entryOrigin, stampOrigin, unmodifiedOrigin, coerceOrigin } = await import('../palette/core/catalogOrigin');
-const { canonicalSigOf, gxSigHash, catalogHashOf, parseCatalogSigs } = await import('../palette/core/catalogSigs');
+const { canonicalSigOf, canonicalConfigSigOf, gxSigHash, catalogHashOf, parseCatalogSigs } = await import('../palette/core/catalogSigs');
+const { originKey } = await import('../palette/core/catalogOrigin');
 const { entryToGradientConfig } = await import('../palette/core/gradientSeam');
+const { isRampGradient, decodeRampBytes, encodeRampBuffer } = await import('../utils/gradientRamp');
+const { entrySigsOf } = await import('./palette-catalog-sigs.mts');
 const { useFavientsStore } = await import('../palette/store/favientsStore');
 const { coerceWorkingSnapshot, originOfWorking } = await import('../palette/store/workingStore');
 type GradientConfig = import('../types').GradientConfig;
@@ -372,29 +410,149 @@ console.log('\n[8] GX Global refuses unedited catalogue gradients');
     ok(same, 'client and server canonicalise identically');
     ok(srv.catalogue().size === sigs.size && [...sigs].every((h) => srv.catalogue().has(h)), "the function's bundled list equals the app's catalog-sigs.json");
 
-    // Real picks from the tracked core pack, through the same seam a wall pick uses.
+    // Real picks from the tracked core pack, through the same seam a wall pick uses. Since
+    // ADR-0122 a pick is a STOP gradient or, for a dense entry, a RAMP gradient; the sample is
+    // every 23rd entry plus three named core entries known to arrive as ramps, so the ramp
+    // path is exercised whatever the stride lands on ("the sample holds ramp picks" says so).
     const ramps = decodeRamps('core', core.count);
-    let inList = 0, refused = 0, sampled = 0, editedPass = 0, tooMany = 0;
-    for (let i = 0; i < core.count; i += 23) {
-      sampled++;
+    const RAMP_NAMED = ['flag', 'prism', 'glasbey'];
+    const sample = new Set<number>();
+    for (let i = 0; i < core.count; i += 23) sample.add(i);
+    for (const n of RAMP_NAMED) { const i = core.entries.findIndex((e: any) => e.name === n); if (i >= 0) sample.add(i); }
+    /** One unit of one colour changed: the first stop's colour, or texel 0's red byte. */
+    const editOne = (config: GradientConfig): GradientConfig => {
+      if (isRampGradient(config)) {
+        const b = Uint8Array.from(decodeRampBytes(config.ramp)!);
+        b[0] = b[0] === 0 ? 1 : 0;
+        return { ...config, ramp: encodeRampBuffer(b, 3) };
+      }
+      return { ...config, stops: config.stops.map((s, k) => (k === 0 ? { ...s, color: s.color === '#000000' ? '#010101' : '#000000' } : s)) };
+    };
+    let inList = 0, refused = 0, editedPass = 0, tooMany = 0, legacyIn = 0;
+    let rampSampled = 0, rampInList = 0, rampRefused = 0, rampEditedClient = 0, rampEditedServer = 0;
+    for (const i of sample) {
       const config = entryToGradientConfig({ id: core.entries[i].id, name: core.entries[i].name, ramp: ramps[i], row: 0 } as CatalogEntry);
+      const isRamp = isRampGradient(config);
       const h = catalogHashOf(config);
       if (h && sigs.has(h)) inList++;
-      const verdict = srv.judgeSubmission(config.stops);
+      const verdict = srv.judgeSubmission(config);
       if (!verdict.ok && verdict.code === 'IN_CATALOGUE' && verdict.status === 409) refused++;
       else if (!verdict.ok && /between 2 and 64/.test(verdict.error)) { tooMany++; refused++; }
-      const edited = config.stops.map((s, k) => (k === 0 ? { ...s, color: s.color === '#000000' ? '#010101' : '#000000' } : s));
+      const edited = editOne(config);
       const ev = srv.judgeSubmission(edited);
       if (ev.ok || /between 2 and 64/.test(ev.error)) editedPass++;
+      // The pre-ADR pick (the 128-stop fit) — what old shelves hold and old tabs send.
+      const legacy = entrySigsOf(ramps[i]).legacy;
+      if (legacy && sigs.has(legacy)) legacyIn++;
+      if (isRamp) {
+        rampSampled++;
+        if (h && sigs.has(h)) rampInList++;
+        if (!verdict.ok && verdict.code === 'IN_CATALOGUE') rampRefused++;
+        const eh = catalogHashOf(edited);
+        if (eh && !sigs.has(eh)) rampEditedClient++;
+        if (ev.ok && ev.ramp === (edited as { ramp?: string }).ramp && ev.stops.length === 0) rampEditedServer++;
+      }
     }
+    const sampled = sample.size;
     ok(inList === sampled, `every sampled core pick hashes into the list (${inList}/${sampled})`);
     ok(refused === sampled, `the function refuses an unedited core pick (409 IN_CATALOGUE) (${refused - tooMany} refused as catalogue, ${tooMany} over the 64-stop limit anyway)`);
     ok(editedPass === sampled, `a one-stop edit of the same pick is accepted (${editedPass}/${sampled})`);
+    ok(rampSampled >= 3, `the sample holds ramp picks (${rampSampled}; the named ${RAMP_NAMED.join(', ')} are core entries too dense for 48 stops — re-pick them if a re-bake changed that)`);
+    ok(rampInList === rampSampled && rampRefused === rampSampled, `every sampled RAMP pick hashes into the list and the function refuses it (409 IN_CATALOGUE) (${rampInList}, ${rampRefused} of ${rampSampled})`);
+    ok(rampEditedClient === rampSampled && rampEditedServer === rampSampled, `a one-texel edit of a ramp pick passes the client check and the function accepts it as a ramp (${rampEditedClient}, ${rampEditedServer} of ${rampSampled})`);
+    ok(legacyIn === sampled, `the pre-ADR-0122 pick (the 128-stop fit) of every sampled entry is still in the list — old shelves and old tabs (${legacyIn}/${sampled})`);
 
     const seeds = JSON.parse(fs.readFileSync(path.join(PAL, 'gxglobal.json'), 'utf8')).items as { config: GradientConfig }[];
     const seedHits = seeds.filter((s) => { const h = catalogHashOf(s.config); return h && sigs.has(h); }).length;
     ok(seedHits === 0, `no GX Global seed gradient is refused as a catalogue gradient (${seedHits} of ${seeds.length})`);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n[10] the ramp form (ADR-0122): signatures, export credits, the GX Global wire');
+{
+  const { globalSetPostBody, parseGlobalSet } = await import('../palette/core/globalSet');
+  // A deterministic ramp that no catalogue entry is.
+  let seed = 0x9e3779b9;
+  const rnd = () => ((seed = Math.imul(seed ^ (seed >>> 15), 2246822519) ^ Math.imul(seed + 0x6d2b79f5, 3266489917)) >>> 0) & 255;
+  const bytes = Uint8Array.from({ length: 768 }, rnd);
+  const RAMP = encodeRampBuffer(bytes, 3);
+  const RAMP2 = encodeRampBuffer(Uint8Array.from(bytes, (v, i) => (i === 400 ? (v + 1) & 255 : v)), 3);
+  const rampCfg: GradientConfig = { stops: [], ramp: RAMP, colorSpace: 'linear', blendSpace: 'oklab' };
+  const twoStops = [{ id: 'a', position: 0, color: '#abc' }, { id: 'b', position: 1, color: '#ddeeff' }];
+  const stopCfg: GradientConfig = { stops: twoStops, colorSpace: 'linear', blendSpace: 'oklab' };
+
+  // (a) a stop gradient's signature is what it was: hashes pinned from the pre-ADR canonicaliser
+  // (HEAD cbb887bd's catalogSigs.ts, run 2026-09-14), with and without a stale ramp beside them.
+  const golden: [unknown[], string][] = [
+    [[{ position: 0, color: '#abc' }, { position: 1, color: '#ddeeff' }], '1c877bf80a780603'],
+    [[{ position: 1, color: '#FFFFFF', interpolation: 'step' }, { position: 0.25, color: '#10a0Ff', bias: 0.3 }, { position: 0, color: '#000' }], 'ee33d7e566ed6ac0'],
+    [[{ position: 0.123456, color: '#aBcDeF', interpolation: 'smooth' }, { position: 0.9999, color: '#012345', interpolation: 'cubic' }], '71cad4581e4b90bf'],
+  ];
+  ok(golden.every(([stops, h]) => catalogHashOf({ stops, colorSpace: 'srgb', blendSpace: 'oklab' } as GradientConfig) === h && catalogHashOf({ stops, ramp: RAMP, colorSpace: 'srgb', blendSpace: 'oklab' } as GradientConfig) === h),
+    "a stop gradient's signature is byte-identical to the pre-ramp one, stale ramp and all");
+  const rs = canonicalConfigSigOf(rampCfg);
+  ok(rs === `ramp:${RAMP}` && catalogHashOf(rampCfg) === gxSigHash(rs!) && catalogHashOf({ ...rampCfg, ramp: RAMP2 }) !== catalogHashOf(rampCfg),
+    "a ramp gradient's signature is the tagged ramp string, and one texel moves it");
+
+  // (b) the client and server mirrors agree on the ramp form, malformed ramps included.
+  const BACKEND = 'H:/GMT/workspace-gmt/backend/supabase/functions/gx-gradients/validate.ts';
+  if (!fs.existsSync(BACKEND)) {
+    if (process.env.GX_SKIP_BACKEND === '1') console.log('  ! SKIPPED: backend not beside this repo — (b) is NOT guarding anything on this run');
+    else ok(false, `the backend's validate.ts is at ${BACKEND}`);
+  } else {
+    const srv = await import(`file:///${BACKEND}`);
+    const rampCorpus: unknown[] = [
+      rampCfg,
+      { stops: [], ramp: RAMP2 },
+      { stops: [], ramp: 'A'.repeat(1024) },
+      { stops: [], ramp: '/'.repeat(1024) },
+      { stops: twoStops, ramp: RAMP },                  // stops win
+      { stops: [], ramp: RAMP.slice(1) },               // 1,023 chars
+      { stops: [], ramp: `${RAMP.slice(0, 1022)}==` },  // padded
+      { stops: [], ramp: `${RAMP.slice(0, 1023)}-` },   // url-safe alphabet
+      { stops: [], ramp: `${RAMP.slice(0, 1023)}é` },
+      { stops: [], ramp: RAMP + 'A' },
+      { stops: [] },                                     // neither
+      { stops: [], ramp: null },
+      { stops: [], ramp: 12 },
+      { ramp: RAMP },                                    // no stops array
+      { stops: 'x', ramp: RAMP },
+      null,
+    ];
+    let same = true;
+    for (const c of rampCorpus) {
+      const s = srv.canonicaliseConfig(c);
+      const k = canonicalConfigSigOf(c);
+      if ('error' in s ? k !== null : k !== s.sig || gxSigHash(k!) !== srv.sigHash(s.sig)) { same = false; console.log('    differs on', JSON.stringify(c)?.slice(0, 90), '→', 'error' in s ? s.error : s.sig.slice(0, 20), k?.slice(0, 20)); }
+    }
+    ok(same, 'client and server canonicalise the ramp form identically (malformed ramps refused by both)');
+    const j = srv.judgeSubmission({ stops: twoStops, ramp: RAMP });
+    ok(j.ok && j.ramp === null && j.stops.length === 2 && j.sig === srv.canonicalise(twoStops).sig, 'the function ignores a stale ramp beside stops: stops row, stops signature, no ramp stored');
+    const jr = srv.judgeSubmission(JSON.parse(globalSetPostBody(rampCfg)).config);
+    ok(jr.ok && jr.ramp === RAMP && jr.stops.length === 0 && jr.sig === `ramp:${RAMP}`, 'the function accepts a posted ramp gradient as a ramp row');
+  }
+
+  // (c) export credits: the key follows the form.
+  ok(originKey(stopCfg) === 'oklab|0:#ABC:linear:,10000:#DDEEFF:linear:' && originKey({ ...stopCfg, ramp: RAMP }) === originKey(stopCfg),
+    "a stop gradient's origin key is unchanged (pinned pre-ramp), stale ramp and all");
+  const ro = stampOrigin('pypalettes:x', 'PyPalettes, CC0', rampCfg);
+  const rtrip = JSON.parse(JSON.stringify({ origin: ro, config: rampCfg }));
+  ok(exportNameFor('Flag', ro, rampCfg) === 'Flag (PyPalettes, CC0)' && !!unmodifiedOrigin(rtrip.origin, rtrip.config), 'a ramp pick keeps its credit while unmodified (and through a JSON round trip)');
+  ok(exportNameFor('Flag', ro, { ...rampCfg, ramp: RAMP2 }) === 'Flag', "one texel changed drops a ramp's credit");
+  const other: GradientConfig = { stops: [], ramp: encodeRampBuffer(Uint8Array.from(bytes, (v) => 255 - v), 3), colorSpace: 'linear', blendSpace: 'oklab' };
+  ok(exportNameFor('Other', ro, other) === 'Other' && exportNameFor('Mine', ro, { ...stopCfg, stops: [] } as GradientConfig) === 'Mine', 'another ramp does not inherit the credit (nor does an empty stop list)');
+
+  // (d) the GX Global wire.
+  ok(globalSetPostBody(stopCfg) === JSON.stringify({ config: { stops: stopCfg.stops, colorSpace: stopCfg.colorSpace, blendSpace: stopCfg.blendSpace } }) && globalSetPostBody({ ...stopCfg, ramp: RAMP }) === globalSetPostBody(stopCfg),
+    "a stop gradient's POST body is unchanged, stale ramp and all");
+  // What the GET serves for a ramp row (index.ts: `{ stops: [], ramp, colorSpace, blendSpace }`).
+  const posted = JSON.parse(globalSetPostBody(rampCfg)).config;
+  const [back] = parseGlobalSet({ version: 1, items: [{ id: '7', config: { stops: [], ramp: posted.ramp, colorSpace: posted.colorSpace, blendSpace: posted.blendSpace } }] });
+  ok(!!back && isRampGradient(back.config) && back.config.ramp === RAMP && back.config.colorSpace === 'linear' && posted.stops.length === 0,
+    `a ramp gradient round-trips the GX Global wire (${back ? `parsed as ${isRampGradient(back.config) ? 'a ramp' : `${back.config.stops.length} stops`}` : 'dropped by parseGlobalSet'})`);
+  const bad = parseGlobalSet({ items: [{ id: '8', config: { stops: [], ramp: RAMP.slice(3) } }] });
+  ok(bad.length === 0, 'a GET item with a malformed ramp is dropped');
 }
 
 console.log(failures ? `\n✗ ${failures} failure(s)` : '\n✓ catalogue licensing: all green');

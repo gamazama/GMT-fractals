@@ -32,7 +32,7 @@
 import React, { useMemo } from 'react';
 import type { GradientConfig } from '../../types';
 import type { RGB } from '../core/oklab';
-import { renderStopsToRamp } from '../core/gmtGradient';
+import { renderGradientToRamp } from '../core/gmtGradient';
 import { configToName } from '../core/facetName';
 import { GradientStrip } from './GradientStrip';
 import { favientSig, useFavientsStore } from '../store/favientsStore';
@@ -116,7 +116,7 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
   const active = isSelected && activeMode === mode && optionsOpen;
 
   const r = useMemo(
-    () => ramp ?? renderStopsToRamp(config.stops, config.blendSpace, config.colorSpace),
+    () => ramp ?? renderGradientToRamp(config), // either form (ADR-0122), its own colorSpace
     [ramp, config],
   );
 

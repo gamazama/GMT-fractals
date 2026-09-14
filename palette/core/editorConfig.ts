@@ -9,8 +9,9 @@
  * The per-stop validation reuses the engine `stopOps.normalizePaste` (the same
  * gate clipboard paste + gradient-file Import already run through) so the hex /
  * bias / interpolation rules can't drift between the two surfaces — this module
- * only adds the config envelope (colorSpace/blendSpace + the ≥2-stops rule) and
- * an id-uniqueness pass (the editor keys knots by id).
+ * only adds the config envelope (colorSpace/blendSpace, the ≥2-stops rule, and the
+ * RAMP form of ADR-0122 — `stops: []` + a well-formed `ramp`) and an id-uniqueness
+ * pass (the editor keys knots by id).
  *
  * @see palette/store/paletteEditorStore.ts (the non-DDFS store that bridges these into undo + scene I/O)
  * @see utils/stopOps.ts (normalizePaste — the shared untrusted-stop validator)
@@ -18,6 +19,7 @@
 
 import type { GradientConfig, GradientStop, ColorSpaceMode, BlendColorSpace, JsonValue } from '../../types';
 import { stopOps } from '../../utils/stopOps';
+import { isRampString, normalizeGradientConfig } from '../../utils/gradientRamp';
 
 const COLOR_SPACES: ColorSpaceMode[] = ['srgb', 'linear', 'aces_inverse'];
 /**
@@ -72,28 +74,47 @@ export const ensureStopIds = (stops: GradientStop[]): GradientStop[] => {
 };
 
 /**
- * Validate + normalise an untrusted snapshot into a GradientConfig, or null when
- * it isn't a usable gradient (< 2 valid stops, not an object, etc). The
- * deserialization gate for the document provider (untrusted scene files) AND the
- * undo provider (our own snapshots, which always pass). Never throws.
+ * Validate + normalise an untrusted snapshot into a GradientConfig of one of the two
+ * forms (ADR-0122), or null when it isn't a usable gradient. The deserialization gate
+ * for the document provider (untrusted scene files), the undo provider (our own
+ * snapshots, which always pass), the share link, the GX Global parser and the working
+ * input. Never throws.
+ *
+ *   - STOP form: ≥ 2 valid stops. Built from scratch, so a stale `ramp` riding along is
+ *     dropped (stops win) and the result is byte-identical to what it was before ramps.
+ *   - RAMP form: `stops` is literally `[]` and `ramp` is a well-formed ramp string. Only
+ *     `[]` marks it — a stop list that normalised to nothing (every stop malformed) is
+ *     garbage, not a ramp gradient, even when a ramp is present.
+ *   - Anything else (< 2 valid stops, `stops: []` with no / a malformed ramp, not an
+ *     object) → null.
+ *
+ * @invariant a ramp config coerces to itself and `stops: []` without a well-formed ramp
+ *   is refused — proven by: `npx tsx debug/test-palette-editorconfig.mts` ("[7] a ramp
+ *   gradient coerces to its own form", "[7] stops: [] without a well-formed ramp → null").
+ *   Falsified 2026-09-14, see the harness header.
  */
 export const coerceGradientConfig = (snap: unknown): GradientConfig | null => {
     if (!snap || typeof snap !== 'object' || Array.isArray(snap)) return null;
     const s = snap as Record<string, unknown>;
+    const colorSpace = COLOR_SPACES.includes(s.colorSpace as ColorSpaceMode) ? (s.colorSpace as ColorSpaceMode) : 'srgb';
+    const blendSpace = BLEND_SPACES.includes(s.blendSpace as BlendColorSpace) ? (s.blendSpace as BlendColorSpace) : 'oklab';
+    if (Array.isArray(s.stops) && s.stops.length === 0) {
+        return isRampString(s.ramp) ? { stops: [], ramp: s.ramp, colorSpace, blendSpace } : null;
+    }
     // normalizePaste handles the {stops}-wrapper-or-array shape, drops malformed
     // entries, clamps position/bias, normalises hex, and validates interpolation.
     const stops = stopOps.normalizePaste(s.stops);
     if (!stops || stops.length < 2) return null;
-    return {
-        stops: ensureStopIds(stops),
-        colorSpace: COLOR_SPACES.includes(s.colorSpace as ColorSpaceMode) ? (s.colorSpace as ColorSpaceMode) : 'srgb',
-        blendSpace: BLEND_SPACES.includes(s.blendSpace as BlendColorSpace) ? (s.blendSpace as BlendColorSpace) : 'oklab',
-    };
+    return { stops: ensureStopIds(stops), colorSpace, blendSpace };
 };
 
-/** Snapshot a config as a plain JSON-value (deep clone — stable against later store mutation). */
+/**
+ * Snapshot a config as a plain JSON-value (deep clone — stable against later store
+ * mutation). A persistence boundary, so a stale `ramp` on a stop gradient is stripped
+ * first (`normalizeGradientConfig`): the saved form of a stop gradient stays what it was.
+ */
 export const serializeEditorConfig = (config: GradientConfig): JsonValue =>
-    JSON.parse(JSON.stringify(config)) as JsonValue;
+    JSON.parse(JSON.stringify(normalizeGradientConfig(config))) as JsonValue;
 
 /**
  * Normalise an AdvancedGradientEditor `onChange` payload into a full GradientConfig.

@@ -31,6 +31,13 @@
  *       the wall): a favourite MOVES rather than copying, a gradient that matches by
  *       CONTENT moves too, a drop onto its own group does nothing, and an unnamed payload
  *       is named the way every other add-path names it
+ *   [11] (2026-09-14, ADR-0122) RAMP gradients through the filing rule: two different ramps
+ *       file as two, a content drop (no favId) of one ramp moves THAT ramp and not the first
+ *       stop-less favourite on the shelf, and an unknown ramp is inserted. Falsified the same
+ *       day by removing `favientSig`'s ramp branch (every ramp signs ''): 3 red, exit 1 —
+ *       insertMany keeps only the first of the two, the content drop moves ramp 2, and ramp 3
+ *       is taken for a move. Ramp 2 is inserted FIRST so a signature that cannot tell ramps
+ *       apart matches the wrong favourite rather than, by luck, the right one.
  *
  * A section pinning `setV2FavientsPanelKey` is gone. It, which guarded a cross-host leak
  * that only existed while GE v2 mounted `FavientsPanel`. v2 retired that panel on
@@ -482,6 +489,33 @@ console.log('[10] stop IDS survive the wire, and the shelf heals old ones');
   const healed = fresh.useFavientsStore.getState().favients.find((f: { id: string }) => f.id === 'old');
   ok(!!healed, 'a legacy entry with id-less stops still loads (it is not thrown away)');
   ok(!!healed && healed.config.stops.every((s: { id?: string }) => !!s.id), 'and its stops come back with ids');
+}
+
+// -- [11] filing a RAMP gradient by content (ADR-0122) ----------------------------------
+console.log('[11] a RAMP gradient files by its own content, never by a neighbour\'s');
+{
+  reset();
+  const st = () => useFavientsStore.getState();
+  const { fileFavientInto, fileFavientAt } = await import('../palette/store/favientFiling');
+  const { encodeRamp } = await import('../utils/gradientRamp');
+  const rampOf = (seed: number): string =>
+    encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: (i * seed) % 256, g: i, b: 255 - i })));
+  const rc = (seed: number) => ({ stops: [], ramp: rampOf(seed), colorSpace: 'srgb' as const, blendSpace: 'oklab' as const });
+  const a = newGroupId();
+  const b = newGroupId();
+  // ramp 2 FIRST: a signature that cannot tell ramps apart finds it before ramp 1.
+  st().insertMany([{ config: rc(2), name: 'two' }, { config: rc(1), name: 'one' }], a, 'A');
+  ok(st().favients.length === 2, '[11] two different ramp favourites file into one group as two');
+
+  fileFavientInto(b, { config: rc(1), name: 'one, from the wall' }); // no favId: by CONTENT
+  const one = st().favients.find((f) => f.name === 'one');
+  const two = st().favients.find((f) => f.name === 'two');
+  ok(st().favients.length === 2 && one?.group === b && two?.group === a,
+    `[11] a content drop of ramp 1 moves ramp 1, not ramp 2 (one → ${one?.group === b ? 'B' : 'A'}, two → ${two?.group === b ? 'B' : 'A'})`);
+
+  fileFavientAt(b, { config: rc(3), name: 'three' }, null);
+  ok(st().favients.length === 3 && st().favients.some((f) => f.name === 'three' && f.group === b),
+    '[11] a ramp that is not on the shelf is inserted, not matched to another ramp');
 }
 
 console.log(failures === 0 ? '\nPASS test-palette-shelf-manage' : `\nFAIL test-palette-shelf-manage (${failures})`);

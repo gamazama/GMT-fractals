@@ -1,5 +1,16 @@
 # ADR-0111: One Working pipeline over an input slot (Gradient Explorer v2)
 
+> **Update 2026-09-14 (ADR-0122, the ramp is the gradient; decision refined, not superseded):**
+> Decision 4's "verbatim" now covers both config forms — a RAMP gradient (`stops: []` + `ramp`)
+> under the identity pipeline comes back by identity exactly as a stop config does. Its "only a
+> real transform fits the output ramp to stops" is narrowed: an input that carried stops (or a
+> Mix with seeds) is still re-fitted to stops at the Detail budget, but an input without stops is
+> an AUTOMATIC fit (`rampToGradientConfig`, `STOP_LAYER_CAP`) and a dense output stays a ramp.
+> Decision 5's fold may therefore put a ramp gradient into the stops document; the explicit
+> conversion is `workingStore.addStopsToWorking`. The pipeline's base is read through
+> `gradientDisplayRamp` (grep `channelsOfConfig`). Guard unchanged:
+> `npx tsx debug/test-palette-working.mts`, sections [5]–[9] added.
+
 - **Status:** Accepted
 - **Date:** 2026-09-03
 - **Relates to:** the June 2026 Gradient Explorer amendment plan (`plans/gradient-explorer-amendments-plan.md`, locked decision 3: detail/smooth = non-destructive bake-to-commit; polish finding T5: pass stops verbatim), `plans/ge-v2-design.md` §2–§3 (the design this ADR implements), ADR-0112 (variants)

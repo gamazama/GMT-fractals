@@ -26,7 +26,7 @@ import { useEngineStore } from '../store/engineStore';
 import { z } from '../components/ui/zIndex';
 import { useActiveHeroSelection, useHeroOptionsOpen, closeHeroOptions } from '../palette/store/heroSelection';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../palette/core/favientDnd';
-import { renderStopsToBuffer } from '../palette/core/gmtGradient';
+import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { getDragOrigin, setDragOrigin, triggerLanding, triggerCancel, markPickLanded, consumePickLanded, clearPickLanded, useNativeDragging, type DragRect } from '../palette/store/dragVisual';
 import { paintRampToCanvas } from '../palette/core/rampCanvas';
 import { deriveIntermediates, type IntermediateAffordance } from './gradientTargets';
@@ -328,15 +328,15 @@ export const GradientDropLayer: React.FC = () => {
     const avatarRamp = useMemo(
         () =>
             sel
-                ? renderStopsToBuffer(
-                      sel.payload.config.stops,
-                      sel.payload.config.blendSpace,
+                ? generateGradientTextureBuffer({
+                      // Either form (ADR-0122) — a ramp pick's stops are [].
+                      ...sel.payload.config,
                       // DISPLAY sRGB — the stored colorSpace is a bake-for-shader concern
                       // (often 'linear', which renders dull/dark). The wall swatches + heroes
                       // all show display sRGB, so the avatar (and the landing, which shares this
                       // ramp) must match, not honour the stored space.
-                      'srgb',
-                  )
+                      colorSpace: 'srgb',
+                  })
                 : null,
         [sel],
     );

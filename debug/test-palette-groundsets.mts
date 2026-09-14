@@ -20,6 +20,15 @@
  *   [7] padAxesFor (`palette/core/padAxes.ts`): the pad's axes follow the Arrange state —
  *       rows on Y and sort on X when they are colour axes, the strip is the third; a
  *       non-colour rows axis falls back to hue × lightness with no lens
+ *   [8] (2026-09-14, ADR-0122) a RAMP favourite's wall entry is its own texels byte for byte
+ *       with no `stops`, a Recent ramp refreshed in place re-renders, and a stop favourite's
+ *       entry is exactly the stop render it was
+ *
+ * FALSIFIED 2026-09-14 for [8] (each reverted, exit 1): `bodyFor` rendering the stop LIST
+ * (the pre-ramp code) reds "entry ramp is its texels" and "a refreshed ramp re-renders"; its
+ * cache key without the signature reds "re-renders"; attaching `stops: []` to a ramp entry reds
+ * "carries no stops"; and `favientSig` without its ramp branch (every ramp keys as '') reds
+ * "re-renders" — the cache key is where a signature collision becomes a stale tile.
  *
  * FALSIFIED 2026-09-08 (each reverted): dropping the `bins` push in `listGroundSets` reds
  * [1] "Today is second"; `favientsToEntries` numbering rows from 1 reds [3] "rows are
@@ -188,6 +197,36 @@ console.log('[7] padAxesFor');
   ok(nn.x === 'hue' && nn.y === 'lightness' && !nn.rowsOnY, 'no rows, sort by name: the default pad, no lens');
   const nh = padAxesFor('none', 'vividness');
   ok(nh.x === 'chroma' && nh.y === 'lightness' && nh.strip === 'hue' && !nh.rowsOnY, 'no rows, sort by vividness: chroma × lightness, no lens');
+}
+
+console.log('[8] a RAMP favourite on the wall (ADR-0122)');
+{
+  const { encodeRamp, decodeRampBytes } = await import('../utils/gradientRamp');
+  const { renderStopsToRamp } = await import('../palette/core/gmtGradient');
+  const rampOf = (seed: number): string =>
+    encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: (i * seed) % 256, g: 255 - i, b: (i * 3 + seed) % 256 })));
+  const rampFav = (id: string, seed: number): Favient =>
+    ({ id, name: `ramp ${seed}`, config: { stops: [], ramp: rampOf(seed), colorSpace: 'linear', blendSpace: 'oklab' }, createdAt: now, group: DEFAULT_GROUP });
+
+  const [e] = favientsToEntries([rampFav('rf', 5)]);
+  const bytes = decodeRampBytes(rampOf(5))!;
+  let exact = e.ramp.length === 256 * 4;
+  for (let i = 0; exact && i < 256; i++) {
+    exact = e.ramp[i * 4] === bytes[i * 3] && e.ramp[i * 4 + 1] === bytes[i * 3 + 1] && e.ramp[i * 4 + 2] === bytes[i * 3 + 2] && e.ramp[i * 4 + 3] === 255;
+  }
+  ok(exact, '[8] a ramp favourite\'s entry ramp is its texels, byte for byte (sRGB display: its linear colorSpace is not applied)');
+  ok(e.stops === undefined, '[8] and the entry carries no stops');
+
+  // A Recent entry refreshed IN PLACE keeps its id and changes its ramp — the body cache must miss.
+  const [e2] = favientsToEntries([rampFav('rf', 9)]);
+  ok(e2.ramp !== e.ramp && e2.ramp[1 * 4] !== e.ramp[1 * 4], '[8] a refreshed ramp re-renders (same id, new texels)');
+
+  // A stop favourite draws exactly as before the ramp reader.
+  const sf = fav('stops', DEFAULT_GROUP, now, '#123456', '#fedcba');
+  const [es] = favientsToEntries([sf]);
+  const want = renderStopsToRamp(sf.config.stops, 'oklab', 'srgb');
+  ok(want.every((c, i) => es.ramp[i * 4] === Math.round(c.r) && es.ramp[i * 4 + 1] === Math.round(c.g) && es.ramp[i * 4 + 2] === Math.round(c.b)) && es.stops === sf.config.stops,
+    '[8] a stop favourite\'s entry is unchanged (the stop render, its stops attached)');
 }
 
 console.log(failures === 0 ? '\nPASS test-palette-groundsets' : `\nFAIL test-palette-groundsets (${failures})`);

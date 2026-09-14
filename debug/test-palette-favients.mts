@@ -25,6 +25,12 @@
  *       contiguous-run-at-index-0 invariant it shares with `add()`
  *   [7] updateRecent: the v2 working-session entry refreshed in place — no-op on same
  *       content, keeps id + place, absorbs a Recent duplicate, refuses a non-Recent id
+ *   [8] the RAMP form (ADR-0122): a stop gradient's signature is pinned to its pre-ramp
+ *       string; a ramp signs `ramp:<ramp>`; two different ramps never dedupe into one; a stop
+ *       favourite reaches disk without a stale ramp; a ramp favourite survives load and
+ *       import byte-exact; the LOAD gate keeps a stop-less entry it cannot read while the
+ *       IMPORT gate refuses one; and `readFavientDrag` (palette/core/favientDnd.ts) hands a
+ *       ramp payload back byte-exact and a stop payload without its stale ramp
  *
  * Run: `npm run test:palette-favients` (also a link of `test:palette`)
  *
@@ -45,6 +51,24 @@
  *   with no non-Recent favourites present `rest` is empty and both orders agree.
  *   The break is only observable once the shelf holds a user group as well — which
  *   is why the mixed cases are here and why deleting them would gut the guard.
+ *
+ * ── FALSIFIED 2026-09-14 (section [8]) — each break made, run red (exit 1), reverted ──
+ *   G1 `favientSig` without its stop-less branch (every ramp signs '') → 3 red: "tagged",
+ *      "isFav does not match a different ramp", "two different ramps do not dedupe into one
+ *      (1 favourites, 1 ramps)".
+ *   G2 the ramp signature untagged (the bare ramp string) → 1 red, "tagged". Only that
+ *      assertion sees it: no stop signature can equal a base64 ramp in practice, so the tag is
+ *      pinned directly rather than through a collision the harness cannot construct.
+ *   G3 the import gate without `hasReadableGradient` → 3 red in the import block.
+ *   G4 the load path normalising stop-less entries too → 1 red, "the LOAD gate keeps a
+ *      stop-less favourite it cannot read" (its ramp was stripped — deleted on next save).
+ *   G5 `add` without `cleanConfig` → 1 red, "a stop favourite is saved without a stale ramp".
+ *   G6 `readFavientDrag` requiring a non-empty stops list → 1 red, "a ramp drag payload".
+ *   G7 `readFavientDrag` without `normalizeGradientConfig` → 1 red, "a stop drag payload
+ *      loses a stale ramp". G8 `loadFavients` without `normalizeLoaded` → 1 red, "a stale
+ *      ramp on a loaded stop favourite is stripped".
+ *   Not claimed: `healStopIds`' early return for a ramp favourite — `ensureStopIds([])`
+ *   already came back equal, so removing it stays green; it is clarity, not a guard.
  */
 
 // ── localStorage shim, BEFORE the store loads ─────────────────────────────
@@ -299,6 +323,75 @@ console.log('\n[7] updateRecent refreshes a session entry in place');
     check(store().updateRecent(id, cfg('#123456'), 'Nope') === false, 'an entry dragged into a user group returns false');
     check(JSON.stringify(store().favients) === kept, 'and is left byte-identical');
     check(store().updateRecent('no-such-id', cfg('#123456'), 'Nope') === false, 'an unknown id returns false');
+}
+
+console.log('\n[8] the RAMP form (ADR-0122): load, import, dedupe, the drag payload');
+{
+    const { encodeRamp } = await import('../utils/gradientRamp');
+    const { readFavientDrag, FAVIENT_DND_MIME } = await import('../palette/core/favientDnd');
+    const rampOf = (seed: number): string =>
+        encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: (i * seed) % 256, g: (i + seed) % 256, b: 255 - i })));
+    const rampCfg = (seed: number): GradientConfig => ({ stops: [], ramp: rampOf(seed), colorSpace: 'srgb', blendSpace: 'oklab' });
+
+    // Identity: a stop gradient's signature is EXACTLY what it was (a changed one re-dedupes shelves).
+    check(favientSig(cfg('#112233', '#445566')) === '0:#112233:l|1000:#445566:l', '[8] a stop gradient\'s signature is unchanged');
+    check(favientSig({ ...cfg('#112233', '#445566'), ramp: rampOf(3) }) === '0:#112233:l|1000:#445566:l', '[8] a stale ramp on a stop gradient does not change its signature');
+    check(favientSig(rampCfg(3)) === `ramp:${rampOf(3)}`, '[8] the ramp signature is tagged (ramp:<ramp>)');
+
+    // Two different ramps must not collide — every stop-less config used to sign as ''.
+    store().clear();
+    store().add(rampCfg(3), 'Ramp three');
+    check(store().isFav(rampCfg(3)) === true, '[8] isFav matches the same ramp');
+    check(store().isFav(rampCfg(5)) === false, '[8] isFav does not match a different ramp');
+    store().collectRecent(rampCfg(5), 'Ramp five');
+    store().collectRecent(rampCfg(7), 'Ramp seven');
+    store().collectRecent(rampCfg(5), 'Ramp five again');
+    const ramps = store().favients.map((f) => (f.config as { ramp?: string }).ramp);
+    check(store().favients.length === 3 && new Set(ramps).size === 3, `[8] two different ramps do not dedupe into one (${store().favients.length} favourites, ${new Set(ramps).size} ramps)`);
+
+    // Persistence: a ramp favourite reaches disk with its ramp, and a stop favourite's saved form is unchanged.
+    store().add({ ...cfg('#010101', '#fefefe'), ramp: rampOf(9) }, 'Stops with a stale ramp');
+    const diskStop = onDisk().find((f: any) => f.name === 'Stops with a stale ramp') as any;
+    check(!!diskStop && JSON.stringify(diskStop.config) === JSON.stringify(cfg('#010101', '#fefefe')), '[8] a stop favourite is saved without a stale ramp (byte-identical to its pre-ramp form)');
+    const diskRamp = onDisk().find((f: any) => f.name === 'Ramp three') as any;
+    check(!!diskRamp && diskRamp.config.ramp === rampOf(3) && Array.isArray(diskRamp.config.stops) && diskRamp.config.stops.length === 0, '[8] a ramp favourite is saved as stops: [] + its ramp');
+
+    // Load: the ramp comes back byte-exact; a stale ramp is stripped; an UNREADABLE stop-less entry is kept.
+    const unreadable = { id: 'unreadable', name: 'From a newer build', config: { stops: [], ramp: 'not-a-ramp-this-build-knows', colorSpace: 'srgb' }, createdAt: 1 };
+    const staleOnDisk = { id: 'stale', name: 'Stale', config: { ...cfg('#202020', '#303030'), ramp: rampOf(11) }, createdAt: 1 };
+    disk.set('gmt.favients', JSON.stringify([...onDisk(), unreadable, staleOnDisk]));
+    store().reloadFromStorage();
+    const loaded = store().favients.find((f) => f.name === 'Ramp three');
+    check(!!loaded && (loaded.config as { ramp?: string }).ramp === rampOf(3) && loaded.config.stops.length === 0, '[8] a ramp favourite survives a load byte-exact');
+    const lu = store().favients.find((f) => f.id === 'unreadable');
+    check(!!lu && (lu.config as { ramp?: string }).ramp === 'not-a-ramp-this-build-knows', '[8] the LOAD gate keeps a stop-less favourite it cannot read, ramp untouched (dropping it would delete it from disk)');
+    const ls = store().favients.find((f) => f.id === 'stale');
+    check(!!ls && !('ramp' in ls.config) && ls.config.stops.length === 2, '[8] a stale ramp on a loaded stop favourite is stripped');
+
+    // Import: ramp favourites are admitted and deduped by ramp; a stop-less one without a readable ramp is refused.
+    store().clear();
+    const coll = {
+        version: 1,
+        favients: [
+            { id: 'r3', name: 'R3', config: rampCfg(3), createdAt: 1 },
+            { id: 'r13', name: 'R13', config: rampCfg(13), createdAt: 1 },
+            { id: 'noramp', name: 'No ramp', config: { stops: [], colorSpace: 'srgb' }, createdAt: 1 },
+            { id: 'badramp', name: 'Bad ramp', config: { stops: [], ramp: rampOf(3).slice(1) }, createdAt: 1 },
+        ],
+        groupLabels: {},
+    };
+    check(readCollectionFavients(coll).length === 2, '[8] import: a stop-less favourite without a readable ramp is refused (2 of 4 admitted)');
+    check(store().importCollection(JSON.stringify(coll), 'merge') === 2, '[8] import: two different ramp favourites are both admitted');
+    check(store().importCollection(JSON.stringify(coll), 'merge') === 0, '[8] import: re-merging the same ramps adds nothing (dedupe by ramp)');
+    check(store().favients.every((f) => (f.config as { ramp?: string }).ramp === rampOf(3) || (f.config as { ramp?: string }).ramp === rampOf(13)), '[8] import: the admitted ramps are byte-exact');
+
+    // The drag payload.
+    const dt = (payload: unknown) => ({ getData: (t: string) => (t === FAVIENT_DND_MIME ? JSON.stringify(payload) : '') });
+    const pr = readFavientDrag(dt({ config: rampCfg(17), name: 'Dragged ramp' }));
+    check(!!pr && (pr.config as { ramp?: string }).ramp === rampOf(17) && pr.config.stops.length === 0, '[8] a ramp drag payload reads back byte-exact');
+    const ps = readFavientDrag(dt({ config: { ...cfg('#000000', '#ffffff'), ramp: rampOf(17) }, name: 'Dragged stops' }));
+    check(!!ps && !('ramp' in ps.config) && ps.config.stops.length === 2, '[8] a stop drag payload loses a stale ramp');
+    check(readFavientDrag(dt({ config: { stops: 'x' }, name: 'n' })) === null && readFavientDrag(dt({ config: rampCfg(1) })) === null, '[8] a drag payload with no stops array, or no name, is still refused');
 }
 
 console.log(failures === 0 ? '\nPASS — the Favients shelf gates what it ingests and persists' : `\nFAIL — ${failures} assertion(s) failed`);

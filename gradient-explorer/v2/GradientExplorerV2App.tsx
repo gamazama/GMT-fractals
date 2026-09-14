@@ -59,7 +59,8 @@ import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store
 import { GRADIENT_FILE_ACCEPT, readGradientFiles, importGradientsInto, importSummary, isGradientFileName } from '../../palette/core/importGradientFiles';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
 import { getWallSelection, clearWallSelection } from '../../palette/store/wallSelection';
-import { renderStopsToRamp } from '../../palette/core/gmtGradient';
+import { gradientDisplayRamp } from '../../palette/core/gmtGradient';
+import { stopsOf } from '../../utils/gradientRamp';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
 import { useImageDrop } from '../../palette/components/useImageDrop';
 import { useImageStore } from '../../palette/store/imageStore';
@@ -133,16 +134,20 @@ const enterMix = (): void => {
     g.sendRampToSlot('A', d.ramp, workingNameNow());
     const aSig = favientSig(d.config);
     const other = useFavientsStore.getState().favients.find((f) => favientSig(f.config) !== aSig);
-    if (other) g.sendRampToSlot('B', renderStopsToRamp(other.config.stops, other.config.blendSpace, other.config.colorSpace), other.name);
+    // Either form (ADR-0122): a RAMP favourite's `stops` is [], and rendering that is grey.
+    if (other) g.sendRampToSlot('B', gradientDisplayRamp(other.config), other.name);
   }
   // The stops your gradient already has seed every bake's fit, so mixing and baking
-  // again does not walk them (grep seedPositions in palette/core/stopFit.ts).
-  w.goLive({ kind: 'build', seeds: d ? d.config.stops.map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias })) : [] });
+  // again does not walk them (grep seedPositions in palette/core/stopFit.ts). A RAMP gradient
+  // has none — no seeds, and the bake is then an automatic fit (grep fitWorkingOutput).
+  w.goLive({ kind: 'build', seeds: d ? stopsOf(d.config).map((s) => ({ position: s.position, interpolation: s.interpolation, bias: s.bias })) : [] });
   armSlot('B');
 };
 
-/** Add the other gradient's stops to the Mix input's seeds (a pick filled a bar). */
-const addMixSeeds = (stops: GradientConfig['stops']): void => {
+/** Add the other gradient's stops to the Mix input's seeds (a pick filled a bar). A RAMP
+ *  gradient (ADR-0122) brings none; passing a whole config, or nothing, is tolerated. */
+const addMixSeeds = (from: GradientConfig['stops'] | GradientConfig | null | undefined): void => {
+  const stops = stopsOf(from);
   const w = useWorkingStore.getState();
   const cur: SeedStop[] = w.input.kind === 'build' ? w.input.seeds ?? [] : [];
   const byTexel = new Map<number, SeedStop>();
@@ -258,7 +263,10 @@ export const GradientExplorerV2App: React.FC = () => {
     // On the Mix tab a pick always lands in a slot — B unless A is armed.
     const slot = getArmedSlot() ?? (trayRef.current === 'mix' ? 'B' : null);
     if (slot) {
-      const ramp = renderStopsToRamp(p.config.stops, p.config.blendSpace, p.config.colorSpace);
+      // Either form (ADR-0122), and the DISPLAY ramp: a RAMP pick's `stops` is [] (rendering that
+      // filled the slot grey), and a slot is a palette-pipeline input, which reads display sRGB —
+      // a catalogue pick's 'linear' profile is a bake-for-shader concern, not the slot's colours.
+      const ramp = gradientDisplayRamp(p.config);
       useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);
       if (candidate.mode !== 'favients') armSlot(null);
       // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to

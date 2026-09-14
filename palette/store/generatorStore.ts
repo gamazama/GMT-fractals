@@ -13,8 +13,8 @@
 import { create } from 'zustand';
 import { useMemo } from 'react';
 import { useEngineStore } from '../../store/engineStore';
-import { renderStopsToRamp } from '../core/gmtGradient';
-import { fitRampToStops } from '../core/stopFit';
+import { renderStopsToRamp, renderGradientToRamp } from '../core/gmtGradient';
+import { rampToGradientConfig } from '../core/stopFit';
 import { usePaletteEditorStore } from './paletteEditorStore';
 import type { RGB } from '../core/oklab';
 import type { GradientConfig } from '../../types';
@@ -175,10 +175,13 @@ interface GeneratorState {
   /** N5: decompose a dropped/sent gradient's 256-RGB ramp into editable L/C/h curves (the
    *  inverse of the editor) at the current detail/smooth, and switch curves ON so they
    *  immediately drive the output. The P2 select/drop path onto the Curves widget. One
-   *  undo entry. */
+   *  undo entry. Hand it the gradient's TRUE ramp — `gradientDisplayRamp(config)`, never a
+   *  render of `config.stops`, which is a greyscale fallback on a RAMP gradient (ADR-0122). */
   fitCurvesFromRamp: (ramp: RGB[]) => void;
   /** Fit editable curves from ANY base channels at the current detail/smooth (the v2
-   *  Working pipeline fits from its own input, which need not be the A/B mix). */
+   *  Working pipeline fits from its own input, which need not be the A/B mix). The v2 Curves
+   *  face passes the Working base, which `channelsOfConfig` reads from the display ramp — so
+   *  a ramp gradient's curves fit its 256 texels, not a stop fit of them. */
   fitFromChannels: (base: Channels) => void;
   resetCurves: () => void;
   /** Reset the Mix channel (L/C/h) blend to defaults (0/0/0 = all source A). One undo entry. */
@@ -671,7 +674,9 @@ export const useGeneratorDerived = (): GeneratorDerived => {
     // maxStops scales with the detail dial. The default cap (32) truncated rich
     // generated gradients (e.g. posterized / many-hue / noisy) so a favourited result
     // lost detail vs the live 256-step preview — let detail buy the fidelity it asks for.
-    return fitRampToStops(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
+    // An AUTOMATIC fit (ADR-0122): stops only when they finish within min(that budget,
+    // STOP_LAYER_CAP); a dense result stays an exact RAMP gradient instead of a truncated fit.
+    return rampToGradientConfig(built.ramp, { targetDE: Math.max(0.004, 0.012 * k), maxStops: Math.round(32 + detail * 12) });
   }, [mode, built.ramp, detail]);
 
   // Stops mode: the RESULT is the hand-authored stops, rendered through the canonical
@@ -680,7 +685,8 @@ export const useGeneratorDerived = (): GeneratorDerived => {
   // above still runs but its ramp/config are superseded here. base/ghost/ghostPoints
   // are mix-only scopes and go unused (the Stops UI has no curve editor).
   const stopsRamp = useMemo(
-    () => (mode === 'stops' ? renderStopsToRamp(stopsConfig.stops, stopsConfig.blendSpace, stopsConfig.colorSpace) : null),
+    // Either form: the shared document may hold a RAMP gradient (ADR-0122), whose `stops` is [].
+    () => (mode === 'stops' ? renderGradientToRamp(stopsConfig) : null),
     [mode, stopsConfig],
   );
 

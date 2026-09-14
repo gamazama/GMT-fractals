@@ -8,6 +8,21 @@
  * without pulling in the engine store. The provider pair registered in
  * registerPaletteUI uses exactly these.
  *
+ * [7] (2026-09-14, ADR-0122) the RAMP form: `stops: []` + a well-formed ramp coerces to
+ *     itself; `stops: []` without one, with a malformed one, or a stop list that normalises
+ *     to nothing beside a ramp → null; a stop gradient drops a stale ramp (stops win) both
+ *     in the gate and in `serializeEditorConfig`, so its saved form is unchanged.
+ *
+ *     FALSIFIED 2026-09-14, each break made, run watched go red (exit 1), reverted:
+ *       R1 the ramp branch removed (the pre-ADR gate) → 3 red: "a ramp gradient coerces to
+ *          its own form", "keeps its colour + blend space", "round-trips through serialize".
+ *       R2 the branch accepting any `ramp` (no `isRampString`) → 3 red: "stops: [] without a
+ *          well-formed ramp → null", "a 1,023-character ramp → null", and [4]'s older
+ *          "garbage / malformed snapshots → null" (its `{ stops: [] }` case).
+ *       R3 the stop branch keeping `ramp: s.ramp` → 1 red, "a stop gradient drops a stale ramp".
+ *       R4 `serializeEditorConfig` without `normalizeGradientConfig` → 1 red, "serialize
+ *          strips a stale ramp from a stop gradient".
+ *
  * Run: npx tsx debug/test-palette-editorconfig.mts
  *      (named test-palette-editorstore.mts until 2026-09-02 — it tests
  *      palette/core/editorConfig, not any store, and the filename said otherwise)
@@ -19,6 +34,7 @@ import {
   serializeEditorConfig,
 } from '../palette/core/editorConfig';
 import type { GradientConfig } from '../types';
+import { encodeRamp, isRampGradient } from '../utils/gradientRamp';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -130,6 +146,31 @@ console.log('paletteEditorStore (editorConfig core):');
     const ids = r.stops.map((s) => s.id);
     ok(new Set(ids).size === ids.length, `stop ids made unique (${ids.join(',')})`);
   }
+}
+
+// 7) The RAMP form (ADR-0122).
+{
+    const ramp = encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: i, g: (i * 7) % 256, b: 255 - i })));
+    const rampCfg: GradientConfig = { stops: [], ramp, colorSpace: 'linear', blendSpace: 'rgb' };
+    const r = coerceGradientConfig(JSON.parse(JSON.stringify(rampCfg)));
+    ok(!!r && isRampGradient(r) && r.ramp === ramp, '[7] a ramp gradient coerces to its own form');
+    ok(!!r && r.colorSpace === 'linear' && r.blendSpace === 'rgb', '[7] and keeps its colour + blend space');
+    const disk = JSON.parse(JSON.stringify(serializeEditorConfig(rampCfg)));
+    ok(eq(coerceGradientConfig(disk), rampCfg), '[7] a ramp gradient round-trips through serialize → JSON → coerce');
+
+    ok(coerceGradientConfig({ stops: [] }) === null && coerceGradientConfig({ stops: [], ramp: 42 }) === null,
+        '[7] stops: [] without a well-formed ramp → null');
+    ok(coerceGradientConfig({ stops: [], ramp: ramp.slice(1) }) === null
+        && coerceGradientConfig({ stops: [], ramp: ramp.slice(0, -1) + '!' }) === null,
+        '[7] a 1,023-character ramp, or one with a non-base64 character → null');
+    ok(coerceGradientConfig({ stops: [{ position: 0, color: 'nope' }, { position: 1 }], ramp }) === null,
+        '[7] a stop list that normalises to nothing is garbage, not a ramp gradient, even beside a ramp');
+
+    const stale = { ...makeDefaultEditorConfig(), ramp };
+    const c = coerceGradientConfig(JSON.parse(JSON.stringify(stale)));
+    ok(!!c && !('ramp' in c) && eq(c, makeDefaultEditorConfig()), '[7] a stop gradient drops a stale ramp (stops win)');
+    const snap = serializeEditorConfig(stale) as Record<string, unknown>;
+    ok(!('ramp' in snap) && eq(snap, makeDefaultEditorConfig()), '[7] serialize strips a stale ramp from a stop gradient');
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

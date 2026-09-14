@@ -51,6 +51,9 @@ interface Props {
   onScrub?: (t: number | null) => void;
   /** A click (no drag) on a swatch: select / create its stop. Without it a click copies the hex. */
   onSelect?: (index: number, t: number) => void;
+  /** The gradient has stops to lay swatches on. False for a RAMP gradient (ADR-0122): the
+   *  Stops layout is then disabled — it would only fall back to Even. Default true. */
+  hasStops?: boolean;
   className?: string;
 }
 
@@ -58,7 +61,7 @@ const DRAG_THRESHOLD = 3;
 /** Minimum spacing kept between neighbouring swatches (in ramp t). */
 const GAP = 0.002;
 
-export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, onScrub, onSelect, onDropColour, className = '' }) => {
+export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, onScrub, onSelect, onDropColour, hasStops = true, className = '' }) => {
   /** Which swatch a dragged colour is over (index), or null. */
   const [dropOver, setDropOver] = useState<number | null>(null);
   const rule = useWorkingStore((s) => s.rule);
@@ -239,7 +242,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
               of separate boxes instead. */}
           <Segmented
             name="palette-rule"
-            options={RULES}
+            options={hasStops ? RULES : RULES.map((o) => (o.id === 'stops' ? { ...o, disabled: true, title: 'This gradient is a 256-colour ramp — it has no stops to lay swatches on' } : o))}
             value={rule}
             onChange={(id) => useWorkingStore.getState().layoutPalette(id)}
             cycle={phone}

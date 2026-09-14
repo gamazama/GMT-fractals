@@ -15,9 +15,12 @@
  *   stops    — the editable stops document, after `beginEdit` baked the pipeline into it.
  *
  * Bake (`beginEdit`): the first stop edit on a live/gradient input FOLDS the current output
- * into stops — output ramp → `fitRampToStops` (verbatim when the pipeline is the identity)
- * → paletteEditorStore — then resets Adjust to defaults and turns the curves off, so the
- * pipeline stays live over the new `stops` input without double-applying. A live source
+ * into the stops document — the pipeline's output config (verbatim when the pipeline is the
+ * identity; either form, ADR-0122 — a dense output folds in as a RAMP gradient, exact) →
+ * paletteEditorStore — then resets Adjust to defaults and turns the curves off, so the
+ * pipeline stays live over the new `stops` input without double-applying. "Add stops"
+ * (`addStopsToWorking`) is the same fold with an explicit, uncapped stop fit of the output
+ * (`addStopsToConfig`), for a working gradient that is a ramp. A live source
  * (build / extract) enters via `goLive`, which remembers the input it replaced in `liveFrom`
  * so `cancelLive` can put it back (the v2 state chip; Phase C.3). `bakedFrom`
  * remembers what was folded so `returnToSource` can undo the fold structurally; Ctrl+Z
@@ -44,6 +47,13 @@
  * gap; `×` removes. See palette/core/paletteSample.ts "Positions as STATE".
  *
  * @see docs/adr/0111-working-pipeline-input-slot.md
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
+ *
+ * @invariant `addStopsToWorking` turns a RAMP working gradient into stops — uncapped, past
+ *   `STOP_LAYER_CAP` when the Detail budget allows — as exactly ONE undo entry that undoes back
+ *   to the ramp input; and a ramp `gradient` input survives the undo snapshot gate — proven by:
+ *   `npx tsx debug/test-palette-working.mts` ("add stops: the document has stops past the cap",
+ *   "add stops: exactly one undo entry", "add stops: undo puts the ramp input back").
  *
  * @assumption A `gradient` input's `config` is never mutated after `use()` (the store clones
  *   it on the way in; consumers read it through `useWorkingDerived`). Nothing enforces this.
@@ -69,11 +79,12 @@ import {
   type GeneratorSlice,
 } from './generatorStore';
 import { usePaletteEditorStore } from './paletteEditorStore';
+import { coerceGradientConfig } from '../core/editorConfig';
 import { useImageDerived, imageDerivedNow } from './imageStore';
 import { paramEdit } from './paramUndoBracket';
-import { coerceGradientConfig } from '../core/editorConfig';
 import {
   runWorkingPipeline,
+  addStopsToConfig,
   channelsOfConfig,
   channelsOfRamp,
   type WorkingInput,
@@ -140,6 +151,11 @@ export interface WorkingState {
   /** Fold the live pipeline into editable stops (no-op when already editing an untouched
    *  stops input). Collects the folded gradient into Recent. */
   beginEdit: () => void;
+  /** "Add stops" (ADR-0122): the working gradient is a RAMP — fit its current output to stops
+   *  at the Detail budget, UNCAPPED, and fold that into the stops document as `beginEdit`
+   *  does. One undo entry. No-op when the output already has stops or there is nothing in hand.
+   *  Also exported bare as `addStopsToWorking` for the UI to wire to a button. */
+  addStops: () => void;
   /** Undo the fold structurally: restore the pre-bake input, dials and curves. */
   returnToSource: () => void;
   /** Put a live source (build / extract) in, remembering what it replaced (`liveFrom`) so
@@ -197,8 +213,11 @@ const update = (id: string, config: GradientConfig, name: string): boolean => {
     return false;
   }
 };
-/** Structural identity of a config (the store must not import favientSig). */
-const configKey = (c: GradientConfig): string => JSON.stringify([c.stops, c.colorSpace ?? '', c.blendSpace ?? '']);
+/** Structural identity of a config (the store must not import favientSig). A RAMP gradient's
+ *  stops are all `[]`, so its texels are part of the key (ADR-0122) — without them every ramp
+ *  gradient compared equal to every other. A stop gradient ignores a stale `ramp`. */
+const configKey = (c: GradientConfig): string =>
+  JSON.stringify([c.stops, c.colorSpace ?? '', c.blendSpace ?? '', c.stops.length ? '' : c.ramp ?? '']);
 
 // --- helpers ----------------------------------------------------------------------
 const cloneConfig = (c: GradientConfig): GradientConfig => JSON.parse(JSON.stringify(c)) as GradientConfig;
@@ -334,21 +353,15 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     if (!d) return;
     // Already editing and nothing applied on top: the handles already edit the document.
     if (s.input.kind === 'stops' && d.passthrough) return;
-    const name = s.name ?? autoWorkingName(s.input, s.bakedFrom);
-    const config = d.passthrough ? cloneConfig(d.config) : d.config;
-    const gen = useGeneratorStore.getState();
-    // Re-folding an already-baked input keeps the ORIGINAL fold memory (return goes all
-    // the way back), so only a first fold records bakedFrom.
-    const baked: BakedFrom =
-      s.input.kind === 'stops' && s.bakedFrom
-        ? s.bakedFrom
-        : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn, curveSpace: gen.curveSpace };
-    paramEdit(() => {
-      usePaletteEditorStore.getState().setConfig(config);
-      setGeneratorSlice({ ...MAIN_DEFAULTS });
-      useGeneratorStore.setState({ tracks: null, curvesOn: false });
-      set({ input: { kind: 'stops' }, bakedFrom: baked, liveFrom: null, name });
-    });
+    foldIntoStops(d.passthrough ? cloneConfig(d.config) : d.config);
+  },
+
+  addStops: () => {
+    const d = deriveWorkingNow();
+    if (!d || d.config.stops.length > 0) return;
+    // The OUTPUT is what gets stops — Adjust and the curves included — so the fold resets them,
+    // exactly as a bake does. Detail is the budget; STOP_LAYER_CAP deliberately does not apply.
+    foldIntoStops(addStopsToConfig(d.config, useGeneratorStore.getState().detail));
   },
 
   goLive: (input) => {
@@ -455,6 +468,31 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
   },
 }));
 
+/**
+ * THE FOLD, shared by `beginEdit` and `addStops`: `config` becomes the stops document, Adjust
+ * resets to defaults and the curves turn off (they are in `config` now), the input switches to
+ * `stops`. One `paramEdit` bracket. Re-folding an already-baked input keeps the ORIGINAL fold
+ * memory (return goes all the way back), so only a first fold records `bakedFrom`.
+ */
+const foldIntoStops = (config: GradientConfig): void => {
+  const s = useWorkingStore.getState();
+  const name = s.name ?? autoWorkingName(s.input, s.bakedFrom);
+  const gen = useGeneratorStore.getState();
+  const baked: BakedFrom =
+    s.input.kind === 'stops' && s.bakedFrom
+      ? s.bakedFrom
+      : { input: s.input, name: s.name, adjust: pickAdjust(readGeneratorSlice()), tracks: gen.tracks, curvesOn: gen.curvesOn, curveSpace: gen.curveSpace };
+  paramEdit(() => {
+    usePaletteEditorStore.getState().setConfig(config);
+    setGeneratorSlice({ ...MAIN_DEFAULTS });
+    useGeneratorStore.setState({ tracks: null, curvesOn: false });
+    useWorkingStore.setState({ input: { kind: 'stops' }, bakedFrom: baked, liveFrom: null, name });
+  });
+};
+
+/** "Add stops" on the working gradient (ADR-0122) — the button the UI wires. See `addStops`. */
+export const addStopsToWorking = (): void => useWorkingStore.getState().addStops();
+
 // --- providers (undo + Save/Load) — registered by palette/installWorking.ts ----------
 type WorkingSnapshot = Pick<WorkingState, 'input' | 'name' | 'bakedFrom' | 'liveFrom' | 'sessionId' | 'sessionPinned'>;
 
@@ -481,6 +519,9 @@ const coerceInput = (v: unknown): WorkingInput | null => {
   }
   if (kind === 'empty' || kind === 'extract' || kind === 'stops') return { kind };
   if (kind === 'gradient') {
+    // Either form (ADR-0122): a ramp pick refused here would make every undo across it, and a
+    // restored session holding it, silently drop the working gradient. (`stops` carries no
+    // config of its own — the document is paletteEditorStore's, gated by the same function.)
     const config = coerceGradientConfig(o.config);
     if (!config) return null;
     const origin = coerceOrigin(o.origin);

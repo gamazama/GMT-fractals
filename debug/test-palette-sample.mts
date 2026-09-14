@@ -88,6 +88,18 @@ console.log('[3] stops');
   ok(samplePalette(coded, 'stops', 6, cfg).length === 3, 'samplePalette stops: one per stop');
   ok(samplePalette(coded, 'stops', 6, null).length === 6, 'samplePalette stops without a config → even');
   ok(samplePalette(coded, 'stops', 6, { ...cfg, stops: [cfg.stops[0]] }).length === 6, 'samplePalette stops with a single stop → even');
+  // A RAMP gradient (ADR-0122) has `stops: []`; a hand-built or foreign config may have no
+  // `stops` at all. Neither may throw, and both are 'even'. Falsified 2026-09-14 by putting
+  // back `config.stops.length` / `config.stops.map`: the stops-less config throws.
+  const rampCfg = { stops: [], ramp: 'A'.repeat(1024), colorSpace: 'srgb', blendSpace: 'oklab' } as GradientConfig;
+  const noStops = { colorSpace: 'srgb', blendSpace: 'oklab' } as unknown as GradientConfig;
+  let threw = false;
+  let even = false;
+  try {
+    even = samplePalette(coded, 'stops', 6, rampCfg).length === 6 && samplePalette(coded, 'stops', 6, noStops).length === 6 &&
+      sampleAtStops(coded, rampCfg).length === 0 && sampleAtStops(coded, noStops).length === 0;
+  } catch { threw = true; }
+  ok(!threw && even, `samplePalette stops on a ramp gradient (or a config with no stops) → even, sampleAtStops → none${threw ? ' (it threw)' : ''}`);
   ok(samplePalette(coded, 'perceptual', 4).length === 4, 'samplePalette perceptual dispatch');
   ok(samplePalette(coded, 'even', 4).length === 4, 'samplePalette even dispatch');
 }

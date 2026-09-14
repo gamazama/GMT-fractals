@@ -96,7 +96,9 @@ import { unmodifiedOrigin, type CatalogOrigin } from '../../palette/core/catalog
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
-import { useWorkingStore, type WorkingDerived } from '../../palette/store/workingStore';
+import { useWorkingStore, addStopsToWorking, type WorkingDerived } from '../../palette/store/workingStore';
+import { sameGradientBody } from '../../components/gradient/rampMode';
+import { isRampGradient, stopsOf } from '../../utils/gradientRamp';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
 import { startPointerGradientDrag, cancelPointerGradientDrag } from '../../palette/core/pointerGradientDrag';
 
@@ -300,9 +302,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     if (input.kind === 'extract') return true;
     if (input.kind === 'gradient') return input.source === 'Image' && derived.passthrough;
     if (input.kind === 'stops' && bakedFrom?.input.kind === 'gradient' && bakedFrom.input.source === 'Image') {
-      const a = bakedFrom.input.config.stops;
-      const b = docConfig.stops;
-      return derived.passthrough && a.length === b.length && a.every((s, i) => s.position === b[i].position && s.color === b[i].color && (s.bias ?? 0.5) === (b[i].bias ?? 0.5) && (s.interpolation ?? 'linear') === (b[i].interpolation ?? 'linear'));
+      // Either form (ADR-0122): an Image extract that would not fit cheaply bakes as a RAMP, and
+      // two ramps both carry `stops: []` — comparing stops alone called every edit of one "untouched".
+      return derived.passthrough && sameGradientBody(bakedFrom.input.config, docConfig);
     }
     return false;
   }, [derived.input, derived.passthrough, bakedFrom, docConfig]);
@@ -373,6 +375,16 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // ── editor wiring ─────────────────────────────────────────────────────────────
   // Only reached with a live source (an empty one shows a plain strip, not the editor).
   const editorValue: GradientConfig = derived.edited ? docConfig : (config ?? shown.config);
+  /** The editor is in RAMP MODE (ADR-0122): no knots, so nothing here may select, insert or
+   *  recolour one — a swatch click copies its hex instead, and a dropped colour is refused. */
+  const editorIsRamp = isRampGradient(editorValue);
+  /** "Add stops" on the ramp. The pipeline OUTPUT is what gets stops (Adjust and curves
+   *  included): a ramp output is fitted uncapped (`addStopsToWorking`); an output that already
+   *  carries stops — a ramp document under a live Adjust — is simply baked, as a stop edit would. */
+  const onAddStops = () => {
+    if (stopsOf(derived.config).length > 0) useWorkingStore.getState().beginEdit();
+    else addStopsToWorking();
+  };
   const ensureEditing = () => {
     if (useWorkingStore.getState().input.kind !== 'stops') useWorkingStore.getState().beginEdit();
   };
@@ -624,7 +636,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                ~65 px the card had to give up to come in under the phase's 220 px ceiling. */
             className={`px-4 flex flex-col relative ${phone ? 'pt-3 pb-1' : 'pt-4 pb-2'}`}
             onDragOver={(e) => {
-              if (emptySource || !isColorDrag(e.dataTransfer)) return;
+              if (emptySource || editorIsRamp || !isColorDrag(e.dataTransfer)) return;
               const rr = dropSpan();
               if (!rr) return;
               e.preventDefault();
@@ -639,7 +651,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             }}
             onDrop={(e) => {
               setDropGhost(null);
-              if (emptySource) return;
+              if (emptySource || editorIsRamp) return;
               const hex = readColorDrag(e.dataTransfer);
               if (!hex) return;
               e.preventDefault();
@@ -681,10 +693,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 palette={derived.palette}
                 scale={Math.max(1, rampW - 16)}
                 onScrub={setScrubT}
-                onSelect={(_, t) => editorRef.current?.selectAt(t)}
+                onSelect={editorIsRamp ? undefined : (_, t) => editorRef.current?.selectAt(t)}
                 // a colour dragged from the picker onto a palette swatch lands on the ramp at
                 // that swatch's position (the editor recolours the nearest knot, or inserts one)
-                onDropColour={(t, hex) => { ensureEditing(); editorRef.current?.dropColourAt(t, hex); }}
+                onDropColour={editorIsRamp ? undefined : (t, hex) => { ensureEditing(); editorRef.current?.dropColourAt(t, hex); }}
+                // the Stops layout needs stops; a ramp gradient has none (ADR-0122)
+                hasStops={stopsOf(derived.config ?? shown.config).length >= 2}
                 /* PHONE: 32 px of swatch and 8 of gap — still a comfortable touch target,
                    8 px cheaper than the card's own row. */
                 className={phone ? 'h-8 mb-1.5' : 'h-9 mb-3'}
@@ -805,6 +819,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       onEditStart={onEditorStart}
                       onEditEnd={editorEditEnd}
                       edit={onEditorEdit}
+                      onAddStops={onAddStops}
                       pickerPalette={paletteHex}
                     />
                   </InputSkinProvider>

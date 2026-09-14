@@ -11,13 +11,23 @@
 
 import { zipSync, strToU8 } from 'fflate';
 import type { Favient } from '../store/favientsStore';
-import { renderStopsToRamp } from './gmtGradient';
+import { gradientDisplayRamp } from './gmtGradient';
 import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA, stopBudgetOf } from './exportFormats';
 import { layoutPositions, swatchesAt, clampCount, type PaletteRule } from './paletteSample';
 import { canvasToPngBlob } from '../../utils/SceneFormat';
 import type { RGB } from './oklab';
 
-const rampOf = (f: Favient): RGB[] => renderStopsToRamp(f.config.stops, f.config.blendSpace, f.config.colorSpace);
+/**
+ * A member's DISPLAY ramp, either form (ADR-0122): a ramp gradient exports its texels exactly.
+ * Always sRGB — an export is the colours as seen, and every format writes sRGB. Before
+ * 2026-09-14 this rendered through the config's own `colorSpace`, so a member saved on the
+ * Linear profile (`gradientSeam.entryToGradientConfig` forces it on a catalogue pick) exported
+ * its LINEARISED values — darker than on screen. A member on sRGB exports exactly as before.
+ * @invariant a ramp gradient's exported ramp is its texels byte-for-byte, on the Linear profile
+ *   too — proven by: `npm run test:palette-exportsubjects` ("a ramp gradient's collection export
+ *   is its texels"). Falsified 2026-09-14 two ways, see the harness header [9].
+ */
+const rampOf = (f: Favient): RGB[] => gradientDisplayRamp(f.config);
 
 /** Filesystem-safe stem from a gradient name (collapses junk to underscores). */
 const sanitize = (name: string): string =>

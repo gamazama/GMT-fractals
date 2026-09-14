@@ -3,11 +3,14 @@
  * gradients shared across every GMT app (same-origin localStorage key
  * `gmt.favients`) and across sessions.
  *
- * Each favourite is stored as a GMT `GradientConfig` (stops = the interchange
- * representation), so a click / drag applies cleanly to any target — a generator
- * slot (via a 256-ramp) or a fractal coloring layer (the config directly). Ramp-only
- * sources (img2grad) get `fitRampToStops`'d into a config at favourite-time by the
- * caller, so this store never has to know about raw ramps.
+ * Each favourite is stored as a GMT `GradientConfig`, so a click / drag applies cleanly
+ * to any target — a generator slot (via a 256-ramp) or a fractal coloring layer (the
+ * config directly). Since ADR-0122 that config is one of TWO forms: a stop gradient, or a
+ * RAMP gradient (`stops: []` + a 1,024-character `ramp`). The store knows the second
+ * form only at its boundaries — the load / import gates, `healStopIds`, `favientSig` (a
+ * ramp signs as `ramp:<ramp>`) and `cleanConfig` on every producer path — and otherwise
+ * treats a config as opaque. A stop gradient's saved form is unchanged.
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
  *
  * Host-agnostic: no engine-store dependency. Apps register their apply targets in
  * the send-target registry; this store only holds the collection + the chosen target id.
@@ -40,6 +43,7 @@ import { coerceOrigin, type CatalogOrigin } from '../core/catalogOrigin';
 import { create } from 'zustand';
 import type { GradientConfig } from '../../types';
 import { ensureStopIds } from '../core/editorConfig';
+import { isRampGradient, isStopGradient, normalizeGradientConfig } from '../../utils/gradientRamp';
 import { lsGet, lsSet, lsRemove, lsGetJson, lsSetJson } from '../core/storage';
 import { clamp } from '../../utils/stopOps';
 
@@ -105,9 +109,33 @@ const isWellFormedFavient = (f: unknown): f is Favient => {
   if (!f || typeof f !== 'object') return false;
   const fav = f as Favient;
   if (typeof fav.id !== 'string' || !fav.config || !Array.isArray(fav.config.stops)) return false;
+  // A RAMP favourite (ADR-0122) has `stops: []`, which `every` passes — deliberately: the
+  // LOAD gate keeps a stop-less entry even when it cannot read its ramp, because dropping it
+  // here deletes it from disk on the next save (the failure ADR-0122 Decision 2 chose `[]`
+  // to avoid). The IMPORT gate is stricter — see `hasReadableGradient`.
   return fav.config.stops.every(
     (s) => !!s && typeof s === 'object' && typeof (s as { color?: unknown }).color === 'string' && Number.isFinite((s as { position?: unknown }).position),
   );
+};
+
+/**
+ * The stricter half of the gate, for gradients arriving from OUTSIDE (a collection file, a
+ * scene's favients document): a stop-less favourite is admitted only when it is a real ramp
+ * gradient. Nothing is lost by refusing one there — the file still holds it — whereas the
+ * load gate above cannot refuse without deleting.
+ */
+const hasReadableGradient = (f: Favient): boolean => isStopGradient(f.config) || isRampGradient(f.config);
+
+/**
+ * One of the two forms on the way IN to the shelf (`normalizeGradientConfig`): a stop
+ * gradient loses a stale `ramp` left by a spread, so its saved form stays byte-identical to
+ * pre-ADR-0122. A stop-less config is left exactly as it is on LOAD (its ramp may be one
+ * this build cannot read — see `isWellFormedFavient`); producer paths normalise fully.
+ */
+const normalizeLoaded = (f: Favient): Favient => {
+  if (!isStopGradient(f.config)) return f;
+  const config = normalizeGradientConfig(f.config);
+  return config === f.config ? f : { ...f, config };
 };
 
 /**
@@ -117,9 +145,11 @@ const isWellFormedFavient = (f: unknown): f is Favient => {
  * checks colour and position but not id, so those entries are already on disk and would
  * stay there forever. An id-less stop is not cosmetic: `stopOps` keys selection, delete and
  * move by id, so one selected stop reads as all of them. Entries whose ids are already fine
- * come back as the same object, so this costs a walk and nothing else.
+ * come back as the same object, so this costs a walk and nothing else. A ramp favourite has
+ * no stops to heal and comes back as the same object.
  */
 const healStopIds = (f: Favient): Favient => {
+  if (f.config.stops.length === 0) return f;
   const stops = ensureStopIds(f.config.stops);
   return stops === f.config.stops || stops.every((s, i) => s === f.config.stops[i])
     ? f
@@ -129,7 +159,7 @@ const healStopIds = (f: Favient): Favient => {
 const loadFavients = (): Favient[] => {
   const arr = lsGetJson<unknown[]>(LS_KEY, []);
   if (!Array.isArray(arr)) return [];
-  return arr.filter(isWellFormedFavient).map(healStopIds);
+  return arr.filter(isWellFormedFavient).map(normalizeLoaded).map(healStopIds);
 };
 
 const saveFavients = (favients: Favient[]): void => lsSetJson(LS_KEY, favients);
@@ -197,19 +227,38 @@ const uniqueGroupLabel = (label: string, selfId: string, labels: Record<string, 
 };
 
 /**
- * Content signature for dedupe: rounded stop positions + colours + interpolation.
- * Two gradients with the same stops are treated as the same favourite.
+ * Content signature for dedupe, following the gradient's FORM (ADR-0122 Decision 5):
+ *   - a STOP gradient: rounded stop positions + colours + interpolation — exactly the
+ *     signature it had before ramps, so no shelf re-dedupes. A stale `ramp` on it is ignored.
+ *   - a stop-less config: `ramp:` + its ramp string. The tag cannot collide with a stop
+ *     signature (those start with a rounded position, a digit or `-`), and it is what keeps
+ *     every ramp favourite from signing as `''` and deduping into one.
+ *
+ * @invariant two different ramp gradients never share a signature, and a ramp gradient never
+ *   signs like a stop gradient — proven by: `npm run test:palette-favients` ("[8] two
+ *   different ramps do not dedupe into one", "[8] the ramp signature is tagged"). Falsified
+ *   2026-09-14, see the harness header.
  */
-export const favientSig = (c: GradientConfig): string =>
-  (Array.isArray(c?.stops) ? c.stops : [])
+export const favientSig = (c: GradientConfig): string => {
+  const stops = Array.isArray(c?.stops) ? c.stops : [];
+  if (stops.length === 0) {
+    const ramp = (c as { ramp?: unknown } | null | undefined)?.ramp;
+    return `ramp:${typeof ramp === 'string' ? ramp : ''}`;
+  }
+  return stops
     // Coerce defensively — favientSig runs on untrusted imported configs (W8
     // scene restore) and on every dedupe check, so it must never throw on a
     // malformed stop. A malformed stop just yields a non-matching signature.
     .map((s) => `${Math.round((Number(s?.position) || 0) * 1000)}:${String(s?.color).toUpperCase()}:${s?.interpolation ?? 'l'}`)
     .join('|');
+};
 
 let _seq = 0;
 const newId = (): string => `fav-${Date.now().toString(36)}-${_seq++}`;
+/** A producer's config, in one of the two forms before it reaches the shelf (a stale `ramp` off a
+ *  stop gradient, a malformed one off a stop-less config). Tolerates a config with no stops array
+ *  — the typed producers never hand one, and this must not be the place that throws. */
+const cleanConfig = (c: GradientConfig): GradientConfig => (Array.isArray(c?.stops) ? normalizeGradientConfig(c) : c);
 /** `{ origin }` for a well-formed origin, `{}` otherwise — so a favourite without one has no
  *  `origin` key at all and stays byte-identical to what was written before 2026-09-13. */
 const withOrigin = (o: unknown): { origin?: CatalogOrigin } => {
@@ -331,9 +380,18 @@ export interface FavientsCollection {
 
 const COLLECTION_VERSION = 1 as const;
 
-/** Keep only well-formed favourites (shared strict guard — see isWellFormedFavient). */
+/** Keep only well-formed favourites that carry a gradient this build can draw (the IMPORT
+ *  gate: `isWellFormedFavient` plus `hasReadableGradient`), each in one of the two forms. */
 const validFavients = (arr: unknown): Favient[] =>
-  Array.isArray(arr) ? arr.filter(isWellFormedFavient) : [];
+  Array.isArray(arr)
+    ? arr
+        .filter(isWellFormedFavient)
+        .filter(hasReadableGradient)
+        .map((f) => {
+          const config = normalizeGradientConfig(f.config);
+          return config === f.config ? f : { ...f, config };
+        })
+    : [];
 
 /**
  * Read the valid favourites out of a parsed collection object (the same gate
@@ -350,7 +408,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   selectedTargetId: loadTarget(),
   lastGroupId: loadLastGroup(),
 
-  add: (config, name, source, origin) => {
+  add: (rawConfig, name, source, origin) => {
+    const config = cleanConfig(rawConfig);
     // Land in the last-used group — but fall back to the default if it has since vanished
     // (group deleted / its only favourites removed) so we never resurrect an orphan group.
     const lg = get().lastGroupId;
@@ -389,7 +448,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
    *     ("the Recent run is one contiguous block at index 0")
    *   Falsified 2026-09-03 by emitting `[...rest, ...run]` instead of `[...run, ...rest]`.
    */
-  collectRecent: (config, name, source, opts) => {
+  collectRecent: (rawConfig, name, source, opts) => {
+    const config = cleanConfig(rawConfig);
     const sig = favientSig(config);
     const cur = get().favients;
 
@@ -424,7 +484,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     return head.id;
   },
 
-  updateRecent: (id, config, name) => {
+  updateRecent: (id, rawConfig, name) => {
+    const config = cleanConfig(rawConfig);
     const cur = get().favients;
     const at = cur.findIndex((f) => f.id === id);
     if (at < 0 || !isRecentGroup(cur[at].group)) return false;
@@ -471,7 +532,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     set({ favients: arr, groupLabels, lastGroupId: group });
   },
 
-  insertFavient: (config, name, source, toIndex, group, origin) => {
+  insertFavient: (rawConfig, name, source, toIndex, group, origin) => {
+    const config = cleanConfig(rawConfig);
     const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: Date.now(), group };
     const arr = [...get().favients];
     arr.splice(clamp(toIndex, 0, arr.length), 0, fav);
@@ -487,10 +549,11 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const now = Date.now();
     const fresh: Favient[] = [];
     for (const it of items) {
-      const sig = favientSig(it.config);
+      const config = cleanConfig(it.config);
+      const sig = favientSig(config);
       if (have.has(sig)) continue;
       have.add(sig);
-      fresh.push({ id: newId(), name: it.name, source: it.source, ...withOrigin(it.origin), config: it.config, createdAt: now, group });
+      fresh.push({ id: newId(), name: it.name, source: it.source, ...withOrigin(it.origin), config, createdAt: now, group });
     }
     if (!fresh.length) return [];
     const at = arr.findIndex((f) => (f.group ?? DEFAULT_GROUP) === group);
@@ -554,7 +617,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
       id: newId(),
       name: e.name,
       source: 'Preset',
-      config: e.config,
+      config: cleanConfig(e.config),
       createdAt: Date.now(),
       group,
     }));

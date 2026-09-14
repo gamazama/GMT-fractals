@@ -109,6 +109,8 @@ const GeneratorStopsControls: React.FC = () => {
       onEditStart={editorEditStart}
       onEditEnd={editorEditEnd}
       edit={editorEdit}
+      // A RAMP document (ADR-0122) — the explicit uncapped fit at the Detail budget; self-brackets.
+      onAddStops={() => usePaletteEditorStore.getState().addStops(useGeneratorStore.getState().detail)}
     />
   );
 };
@@ -229,7 +231,8 @@ export const GeneratorStage: React.FC = () => {
               autoName
               source="Generator"
               mode="generator"
-              trailing={<span className="text-[11px] text-fg-dim">{config.stops.length} stops</span>}
+              // a RAMP gradient (ADR-0122) has no stops to count — say what it is instead
+              trailing={<span className="text-[11px] text-fg-dim">{config.stops.length > 0 ? `${config.stops.length} stops` : '256-colour ramp'}</span>}
             />
           </HeroSlot>
         </div>

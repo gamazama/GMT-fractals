@@ -10,6 +10,7 @@
 import { useFavientsStore } from '../palette/store/favientsStore';
 import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import type { GradientConfig } from '../types';
+import { isRampGradient, isStopGradient } from '../utils/gradientRamp';
 
 const OLD_KEY = 'gmt.savedGradients.v1';
 const FLAG = 'gmt.favients.migratedFromLibrary';
@@ -35,7 +36,10 @@ export const migrateSavedGradientsToFavients = (): void => {
     // prepends, so iterate oldest-first to end up with the same visible order).
     for (let i = arr.length - 1; i >= 0; i--) {
       const cfg = arr[i]?.state;
-      if (cfg && Array.isArray(cfg.stops) && cfg.stops.length && !store.isFav(cfg)) {
+      // Either gradient form (ADR-0122). The legacy library predates ramps and nothing writes
+      // it any more, so a ramp entry cannot really be there — but the gate should not be the
+      // thing that decides that. `add` normalises the config.
+      if ((isStopGradient(cfg) || isRampGradient(cfg)) && !store.isFav(cfg)) {
         store.add(cfg, arr[i].label || 'Saved gradient', 'Library');
       }
     }

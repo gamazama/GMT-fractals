@@ -4,23 +4,35 @@
  * aren't hooked up yet").
  *
  * `?g=<base64url JSON>` carrying `{ v: 1, n: name, b: blendSpace, c: colorSpace, s: [[position,
- * "#hex", interpolation?, bias?], …] }`. Stops only — the palette rule / count is a viewer
- * preference and does not ride the link (§10 open, resolved the simple way). The decoder
- * runs the shared `coerceGradientConfig` gate, so a tampered link yields null, never a
- * throw. Pure: no DOM except in the two `location` helpers at the bottom.
+ * "#hex", interpolation?, bias?], …] }`. The gradient only — the palette rule / count is a
+ * viewer preference and does not ride the link (§10 open, resolved the simple way). The
+ * decoder runs the shared `coerceGradientConfig` gate, so a tampered link yields null, never
+ * a throw. Pure: no DOM except in the two `location` helpers at the bottom.
+ *
+ * A RAMP gradient (ADR-0122) rides the same v1 wire as `s: []` plus `r: <ramp string>`. A
+ * stop gradient's wire is byte-identical to before ramps (no `r`, even when a stale `ramp`
+ * rides the config), so every link already shared still decodes and re-encodes the same. An
+ * older build handed a ramp link reaches its gate with no stops and opens nothing (null) —
+ * which `shareOpensFrom` reads as "not a link", so that tab falls back to its session rather
+ * than an empty shell. Cost: the ramp is base64 inside base64url, ~1.4 KB of URL against the
+ * ~100 characters of a two-stop link — under the 2 KB a link can safely be.
  *
  * @invariant encode → decode is the identity on stops (position · colour · interpolation ·
- *   bias), name, blend space and colour space, and decode of anything else is null —
+ *   bias), name, blend space and colour space; on a ramp gradient it is the identity on the
+ *   ramp string; a stop gradient's wire carries no ramp; and decode of anything else is null —
  *   proven by: `npx tsx debug/test-gx-share.mts` ("round trip keeps every stop field",
- *   "garbage decodes to null").
+ *   "garbage decodes to null", "[6] a ramp gradient round-trips byte-exact", "[6] a stop
+ *   gradient's link is unchanged by a stale ramp"). [6] falsified 2026-09-14, see the harness.
  */
 
 import type { GradientConfig, GradientStop } from '../../types';
 import { coerceGradientConfig } from '../../palette/core/editorConfig';
+import { isRampGradient } from '../../utils/gradientRamp';
 
 export const SHARE_PARAM = 'g';
 
-type Wire = { v: 1; n: string; b?: string; c?: string; s: (string | number)[][] };
+/** `r` — the ramp string of a RAMP gradient, present only when `s` is empty (ADR-0122). */
+type Wire = { v: 1; n: string; b?: string; c?: string; s: (string | number)[][]; r?: string };
 
 const b64url = {
   enc: (s: string): string => {
@@ -57,6 +69,8 @@ export const encodeShare = (config: GradientConfig, name: string): string => {
   };
   if (config.blendSpace) wire.b = config.blendSpace;
   if (config.colorSpace) wire.c = config.colorSpace;
+  // Stops win: `r` only when there are none, so a stop gradient's link never grows.
+  if (isRampGradient(config)) wire.r = config.ramp;
   return b64url.enc(JSON.stringify(wire));
 };
 
@@ -81,7 +95,10 @@ export const decodeShare = (code: string): { config: GradientConfig; name: strin
     if (typeof row[3] === 'number') st.bias = row[3];
     stops.push(st);
   }
-  const config = coerceGradientConfig({ stops, blendSpace: o.b, colorSpace: o.c });
+  // A ramp link: no stop rows and a ramp. The gate validates the ramp string; a row list AND
+  // a ramp is a stop gradient (stops win), so `r` is not even passed then.
+  const ramp = stops.length === 0 ? o.r : undefined;
+  const config = coerceGradientConfig({ stops, blendSpace: o.b, colorSpace: o.c, ...(ramp !== undefined ? { ramp } : {}) });
   if (!config) return null;
   return { config, name: typeof o.n === 'string' && o.n.trim() ? o.n : 'Shared gradient' };
 };

@@ -2,7 +2,12 @@
  * importGradientFiles — the ONE path from a gradient FILE on disk to a favourite on the
  * shelf. `importFormats.ts` turns text into a 256-step ramp; this module is everything
  * around that: which extensions the file picker offers, reading the `File`s, naming each
- * gradient from its filename, fitting the ramp to stops, and the write to the shelf.
+ * gradient from its filename, turning the ramp into a config, and the write to the shelf.
+ *
+ * The config is an AUTOMATIC fit (ADR-0122, `rampToGradientConfig`): a file that fits within
+ * 32 stops at ΔE 0.02 comes in as those stops, exactly as before; a dense one — a 256-entry
+ * `.map` of noise, a zebra — comes in as a RAMP gradient, its texels verbatim. Until then it
+ * was squashed to a truncated 32-stop fit.
  *
  * It exists because the import used to live inside `FavientsPanel`'s kebab menu and
  * nowhere else (the 2026-09-08 migration audit, `plans/ge-v2-old-shell-migration-audit.md`
@@ -30,16 +35,21 @@
  *
  * @invariant `parseGradientImports` never throws on arbitrary file content, and every
  *   item it returns carries a non-empty name — proven by:
- *   `npx tsx debug/test-palette-importfiles.mts`
+ *   `npm run test:palette-shelf` (`debug/test-palette-shelf-manage.mts`; this line named a
+ *   `test-palette-importfiles.mts` that does not exist until 2026-09-14)
  *   ("parse: hostile and malformed input is skipped, never thrown",
  *    "parse: every imported item has a non-empty name").
+ * @invariant A dense 256-entry `.map` imports as a RAMP gradient carrying its texels exactly, and
+ *   a simple one as stops — proven by: `npx tsx debug/test-palette-importformats.mts`
+ *   ("import: a dense .map is a ramp gradient", "import: its texels are the file's",
+ *   "import: a simple .map is stops").
  * @see palette/core/importFormats.ts (the parsers)
  * @see palette/core/exportFormats.ts (the other direction)
  */
 
 import type { GradientConfig } from '../../types';
 import { parseGradientText, IMPORT_EXTENSIONS } from './importFormats';
-import { fitRampToStops } from './stopFit';
+import { rampToGradientConfig } from './stopFit';
 import { useFavientsStore } from '../store/favientsStore';
 
 /** `accept` attribute for a gradient-file picker (the text formats we parse). */
@@ -97,8 +107,9 @@ export const parseGradientImports = (
     }
     try {
       const res = parseGradientText(r.text, extOf(r.name));
-      // parseGradientText guarantees a 256-length ramp, so fitRampToStops won't throw.
-      const config = res && fitRampToStops(res.ramp, { targetDE: 0.02, maxStops: 32 });
+      // parseGradientText guarantees a 256-length ramp, so the fit won't throw. Stops when cheap,
+      // else the ramp itself (ADR-0122) — see the file header.
+      const config = res && rampToGradientConfig(res.ramp, { targetDE: 0.02, maxStops: 32 });
       if (config && res) items.push({ config, name: gradientName(r.name), source: `Import · .${res.format}` });
       else skipped++;
     } catch {

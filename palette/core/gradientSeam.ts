@@ -10,31 +10,32 @@
  *
  * @invariant Coloring writes are forced to colorSpace 'linear' and env writes to
  *   'srgb' whatever the incoming config says; preset stops pass through untouched;
- *   ramp-only entries are fitted with at most SEAM_MAX_STOPS stops and enough to
- *   keep a stop per band edge on a banded palette.
+ *   a ramp-only entry becomes stops only when an automatic fit needs no more than
+ *   STOP_LAYER_CAP (a banded palette then keeps a stop per band edge), and otherwise
+ *   arrives as a RAMP gradient carrying its 256 texels exactly (ADR-0122).
  *   — proven by: npm run test:palette-gradientseam ("layer 1 write forced to
- *   linear", "env write forced to srgb", "64-band ramp fitted to N stops, expected
- *   at least 64"). Falsified 2026-09-02: forcing 'srgb' in applyGradientConfig
- *   reds three assertions across both layers and applyEntryToColoring;
- *   SEAM_MAX_STOPS = 8 reds the band-edge floor (fitted to 8).
+ *   linear", "env write forced to srgb", "16-band ramp fitted to N stops, expected
+ *   at least 16", "64-band ramp arrives as its exact ramp"). Falsified 2026-09-02:
+ *   forcing 'srgb' in applyGradientConfig reds three assertions across both layers and
+ *   applyEntryToColoring; SEAM_MAX_STOPS = 8 reds the band-edge floor (fitted to 8).
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
  */
 
 import type { CatalogEntry } from './presetCatalog';
 import type { GradientConfig } from '../../types';
-import { fitRampToStops, bufferToRamp } from './stopFit';
+import { rampToGradientConfig, bufferToRamp } from './stopFit';
 import { useEngineStore } from '../../store/engineStore';
 
-// maxStops headroom: banded palettes need a stop per band edge, so 32 left them as a
-// smoothed approximation that didn't match the picked swatch. GMT's gradient system has
-// no stop limit (any count bakes into the 256-texel DataTexture), so cap high.
+// The fit's own budget. Above STOP_LAYER_CAP it no longer decides anything — past the cap
+// the entry keeps its ramp — but it stays the ceiling if the cap is ever raised past it.
 const SEAM_MAX_STOPS = 128;
 
 export const entryToGradientConfig = (entry: CatalogEntry): GradientConfig =>
-  // colorSpace 'linear' → generateGradientTextureBuffer converts the sRGB stops to
-  // LINEAR when baking the DataTexture, which is what the fractal shader expects.
+  // colorSpace 'linear' → generateGradientTextureBuffer converts the sRGB stops (or ramp
+  // texels) to LINEAR when baking the DataTexture, which is what the fractal shader expects.
   entry.stops && entry.stops.length
     ? { stops: entry.stops, colorSpace: 'linear', blendSpace: 'oklab' }
-    : { ...fitRampToStops(bufferToRamp(entry.ramp), { targetDE: 0.02, maxStops: SEAM_MAX_STOPS }), colorSpace: 'linear' };
+    : { ...rampToGradientConfig(bufferToRamp(entry.ramp), { targetDE: 0.02, maxStops: SEAM_MAX_STOPS }), colorSpace: 'linear' };
 
 /** Apply a gradient to GMT's coloring feature. Layer 1 = `gradient`, 2 = `gradient2`.
  *  Forced to colorSpace 'linear': the coloring gradient is LINEAR radiance for the

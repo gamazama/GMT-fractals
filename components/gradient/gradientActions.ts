@@ -14,6 +14,15 @@
  * present in every host that mounts the palette suite, absent in a host that registers no
  * bridge. The add dedupes host-side, so it's shown `checked` + disabled once the current
  * gradient is already saved.
+ *
+ * A RAMP gradient (ADR-0122 — `config` is `stops: []` + `ramp`) has no knots to act on. The
+ * builder reads the form off `config` and on a ramp: Invert reverses the TEXELS, the output space
+ * rewrites the ramp config's `colorSpace` (never an empty stop list), "Add stops" leads the
+ * Actions section when the editor can offer it, and every stop-only item — Double, Distribute,
+ * Delete, Bias Handles, the clipboard, the blend modes — is present but disabled, so the menu
+ * says what a ramp cannot do rather than silently doing nothing. The rules are in `rampMode.ts`
+ * (`editorAffordances`); a stop gradient's menu is unchanged item for item.
+ * Guard: `npm run test:gradient-rampmode`.
  */
 
 import type { ContextMenuItem } from '../../types/help';
@@ -21,6 +30,7 @@ import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } fr
 import { BLEND_SPACE_ORDER, BLEND_SPACE_LABEL } from '../../utils/colorUtils';
 import { stopOps } from '../../utils/stopOps';
 import { getGradientFavientsBridge } from './gradientFavients';
+import { editorAffordances, rampOfEditorValue, reverseRampGradient } from './rampMode';
 
 export interface GradientMenuContext {
   /** The current (position-sorted) stops — the editor's knot array. */
@@ -34,6 +44,10 @@ export interface GradientMenuContext {
   isBiasHandlesVisible: boolean;
   /** Commit edited stops / colour-space / blend-space (the editor's emitChange). */
   emit: (knots: GradientStop[], colorSpace?: ColorSpaceMode, blendSpace?: BlendColorSpace) => void;
+  /** Commit a whole config verbatim (the editor's onChange) — how a RAMP gradient's items commit. */
+  setConfig: (config: GradientConfig) => void;
+  /** "Add stops" on a ramp gradient; omitted when the host offers none (it self-brackets). */
+  addStops?: () => void;
   /** Wrap a discrete mutation in one undo entry (the editor's editAction). */
   editAction: (mutate: () => void) => void;
   setSelectedIds: (ids: Set<string>) => void;
@@ -51,11 +65,15 @@ export interface GradientMenuContext {
 export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] => {
   const {
     knots, config, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible,
-    emit, editAction, setSelectedIds, setBiasHandlesVisible, copy, paste,
+    emit, editAction, setSelectedIds, setBiasHandlesVisible, copy, paste, setConfig, addStops,
   } = ctx;
 
   const wrap = (fn: () => void) => () => editAction(fn);
   const ids = Array.from(selectedIds);
+  const ramp = rampOfEditorValue(config);
+  const can = editorAffordances({ isRamp: !!ramp, knotsStale: false, canAddStops: !!addStops });
+  /** Output space: a ramp keeps its texels and changes only the profile. */
+  const setOutput = (cs: ColorSpaceMode) => wrap(() => (ramp ? setConfig({ ...ramp, colorSpace: cs }) : emit(knots, cs)));
 
   const items: ContextMenuItem[] = [];
 
@@ -77,16 +95,18 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
 
   items.push(
     { label: 'Actions', action: () => {}, isHeader: true },
-    { label: 'Invert Gradient', action: wrap(() => emit(stopOps.invert(knots))) },
-    { label: 'Double Knots', action: wrap(() => emit(stopOps.double(knots))) },
+    // A ramp's one way into stop editing (addStops self-brackets — no `wrap`).
+    ...(can.addStops && addStops ? [{ label: 'Add Stops', action: addStops }] : []),
+    { label: 'Invert Gradient', action: wrap(() => (ramp ? setConfig(reverseRampGradient(ramp)) : emit(stopOps.invert(knots)))) },
+    { label: 'Double Knots', disabled: !can.stopActions, action: wrap(() => emit(stopOps.double(knots))) },
     {
       label: 'Distribute Selected',
-      disabled: selectedIds.size < 3,
+      disabled: !can.stopActions || selectedIds.size < 3,
       action: wrap(() => emit(stopOps.distribute(knots, ids))),
     },
     {
       label: 'Delete Selected',
-      disabled: selectedIds.size === 0 || knots.length <= 2,
+      disabled: !can.stopActions || selectedIds.size === 0 || knots.length <= 2,
       danger: true,
       action: wrap(() => { emit(stopOps.delete(knots, ids)); setSelectedIds(new Set<string>()); }),
     },
@@ -108,13 +128,14 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
         })()
       : []),
     { label: 'Clipboard', action: () => {}, isHeader: true },
-    { label: 'Copy Gradient', action: copy },
-    { label: 'Paste Gradient', action: paste },
+    { label: 'Copy Gradient', disabled: !can.clipboard, action: copy },
+    { label: 'Paste Gradient', disabled: !can.clipboard, action: paste },
 
     { label: 'View', action: () => {}, isHeader: true },
     {
       label: 'Bias Handles',
       checked: isBiasHandlesVisible,
+      disabled: !can.stopActions,
       action: () => setBiasHandlesVisible(!isBiasHandlesVisible),
     },
     {
@@ -130,13 +151,15 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
     ...BLEND_SPACE_ORDER.map((sp) => ({
       label: BLEND_SPACE_LABEL[sp],
       checked: blendSpace === sp,
+      // inert on a ramp (ADR-0122): nothing is blended between texels
+      disabled: !can.blendSpace,
       action: wrap(() => emit(knots, undefined, sp)),
     })),
 
     { label: 'Output Mode', action: () => {}, isHeader: true },
-    { label: 'sRGB (Standard)', checked: colorSpace === 'srgb', action: wrap(() => emit(knots, 'srgb')) },
-    { label: 'Linear (Physical)', checked: colorSpace === 'linear', action: wrap(() => emit(knots, 'linear')) },
-    { label: 'Inverse ACES', checked: colorSpace === 'aces_inverse', action: wrap(() => emit(knots, 'aces_inverse')) },
+    { label: 'sRGB (Standard)', checked: colorSpace === 'srgb', action: setOutput('srgb') },
+    { label: 'Linear (Physical)', checked: colorSpace === 'linear', action: setOutput('linear') },
+    { label: 'Inverse ACES', checked: colorSpace === 'aces_inverse', action: setOutput('aces_inverse') },
   );
 
   return items;

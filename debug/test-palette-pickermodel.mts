@@ -46,6 +46,7 @@ import {
 import { QUALITY_AXES } from '../palette/features/paletteFilters';
 import { bufferToRamp } from '../palette/core/stopFit';
 import { rampDistance } from '../palette/core/paletteSample';
+import { encodeRampBuffer } from '../utils/gradientRamp';
 import type { GradientConfig } from '../types';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import type { Facets } from '../palette/core/facets';
@@ -404,6 +405,14 @@ console.log('[8] badge, narrowers, sentence');
     'the output profile does not move the ranking (sRGB · Linear · ACES render one anchor ramp)');
   ok(srgbRamp.some((c) => c.r > 40 || c.g > 40 || c.b > 40),
     'the anchor keeps its display colours (a Linear render would be near-black)');
+
+  // A RAMP anchor (ADR-0122, `stops: []` + `ramp`) compares its own texels, on any profile.
+  // Falsified 2026-09-14 by putting back `renderStopsToRamp(config.stops, …)`: the anchor is
+  // the greyscale fallback and this goes red.
+  const texels = Uint8Array.from({ length: 768 }, (_, i) => (i * 53 + 17) & 255);
+  const rampAnchor = similarityAnchorRamp({ stops: [], ramp: encodeRampBuffer(texels, 3), blendSpace: 'oklab', colorSpace: 'linear' } as GradientConfig);
+  ok(rampAnchor.length === 256 && rampAnchor.every((c, i) => c.r === texels[i * 3] && c.g === texels[i * 3 + 1] && c.b === texels[i * 3 + 2]),
+    'a ramp anchor is its texels, whatever its profile');
 }
 
 console.log(failures === 0 ? '\nOK — pickerModel' : `\n${failures} FAILURE(S)`);

@@ -41,7 +41,7 @@
 
 import type { CatalogEntry } from './presetCatalog';
 import { computeFacets } from './facets';
-import { renderStopsToRamp } from './gmtGradient';
+import { gradientDisplayRamp } from './gmtGradient';
 import type { RGB } from './oklab';
 import { DEFAULT_GROUP, favientSig, isRecentGroup, type Favient } from '../store/favientsStore';
 import { buildBlocks, dayKey } from '../components/favientBlocks';
@@ -195,13 +195,28 @@ type EntryBody = Omit<CatalogEntry, 'row' | 'name'>;
 const bodyCache = new Map<string, EntryBody>();
 const BODY_CACHE_CAP = 4000;
 
+/**
+ * A favourite's wall body. Either gradient form (ADR-0122) renders through the one reader,
+ * `gradientDisplayRamp` — a stop favourite exactly as `renderStopsToRamp` drew it before, a
+ * RAMP favourite as its own 256 texels. A ramp favourite's entry carries NO `stops`: the
+ * catalogue seam (`entryToGradientConfig`) reads a stop-less entry as a ramp, so handing it
+ * `[]` would only invite a caller to walk an empty list. The cache key's signature is
+ * `favientSig`, which tags a ramp (`ramp:…`), so two ramp favourites under one id — a Recent
+ * entry refreshed in place — never share a body.
+ *
+ * @invariant a ramp favourite's entry ramp is its decoded texels byte-for-byte, and an
+ *   in-place change of ramp re-renders — proven by: `npx tsx debug/test-palette-groundsets.mts`
+ *   ("[8] a ramp favourite's entry ramp is its texels", "[8] a refreshed ramp re-renders").
+ *   Falsified 2026-09-14, see the harness header.
+ */
 const bodyFor = (f: Favient): EntryBody => {
   const key = `${f.id}|${favientSig(f.config)}|${f.config.blendSpace ?? ''}`;
   const hit = bodyCache.get(key);
   if (hit) return hit;
   if (bodyCache.size > BODY_CACHE_CAP) bodyCache.clear();
-  const rgb = renderStopsToRamp(f.config.stops, f.config.blendSpace ?? 'oklab', 'srgb');
-  const body: EntryBody = { id: f.id, stops: f.config.stops, facets: computeFacets(rgb), ramp: packRamp(rgb) };
+  const rgb = gradientDisplayRamp(f.config);
+  const stops = f.config.stops.length > 0 ? { stops: f.config.stops } : {};
+  const body: EntryBody = { id: f.id, ...stops, facets: computeFacets(rgb), ramp: packRamp(rgb) };
   bodyCache.set(key, body);
   return body;
 };

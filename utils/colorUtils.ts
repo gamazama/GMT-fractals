@@ -1,6 +1,7 @@
 
 import * as Spectral from 'spectral.js';
 import { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } from '../types';
+import { decodeRampBytes, RAMP_TEXELS } from './gradientRamp';
 
 /** Plain sRGB triple, 0–255 floats (pre-truncation). Structurally identical to palette `RGB`. */
 export type RGB = { r: number; g: number; b: number };
@@ -430,6 +431,21 @@ export const getGradientCssString = (input: GradientStop[] | GradientConfig | un
 
   if (!input) return 'linear-gradient(90deg, #000 0%, #fff 100%)';
 
+  // A RAMP gradient (ADR-0122): one CSS stop per texel. 256 is inside the ~384-stop budget the
+  // note below sets for the Firefox compositor, and it is the only faithful preview — any
+  // subsample aliases a dense ramp (a period-2 zebra sampled at 33 points reads as solid).
+  if (!Array.isArray(input) && Array.isArray(input.stops) && input.stops.length === 0) {
+    const bytes = decodeRampBytes(input.ramp);
+    if (bytes) {
+      const parts: string[] = new Array(RAMP_TEXELS);
+      for (let i = 0; i < RAMP_TEXELS; i++) {
+        const pos = Math.max(0, Math.min(1, Math.pow(i / (RAMP_TEXELS - 1), 1.0 / viewGamma))) * 100;
+        parts[i] = `${rgbToHex(bytes[i * 3], bytes[i * 3 + 1], bytes[i * 3 + 2])} ${pos.toFixed(2)}%`;
+      }
+      return `linear-gradient(90deg, ${parts.join(', ')})`;
+    }
+  }
+
   if (Array.isArray(input)) {
       stops = input;
   } else if (input && Array.isArray((input as GradientConfig).stops)) {
@@ -666,28 +682,69 @@ export const renderStopsToBuffer = (
   return data;
 };
 
+/** The colorSpace output transform applied to one sRGB texel — the same one `sampleSorted`
+ *  applies to a stop sample, so a ramp gradient and its 256-stop equivalent bake identically. */
+const applyColorSpace = (r: number, g: number, b: number, colorSpace: ColorSpaceMode): RGB => {
+  if (colorSpace === 'linear') return { r: sRGBToLinear(r), g: sRGBToLinear(g), b: sRGBToLinear(b) };
+  if (colorSpace === 'aces_inverse') return { r: inverseACES(r), g: inverseACES(g), b: inverseACES(b) };
+  return { r, g, b };
+};
+
+/**
+ * THE gradient reader (ADR-0122). A 256-step ramp (RGB floats, pre-truncation) for either form:
+ * a stop gradient renders its stops; a RAMP gradient (`stops: []` + `ramp`) decodes its texels.
+ * Stops win when both are present. `colorSpace` overrides the config's own — pass `'srgb'` for
+ * a DISPLAY ramp (previews, exports, the palette pipeline), leave it out for what the texture
+ * bakes. A bare legacy `GradientStop[]` is accepted (oklab blend, as the engine always read it).
+ * Anything malformed, or a config with neither stops nor a valid ramp, gets the greyscale ramp
+ * `renderStopsToRamp([])` has always returned.
+ */
+export const renderGradientToRamp = (
+  input: GradientStop[] | GradientConfig | undefined | null,
+  colorSpace?: ColorSpaceMode,
+): RGB[] => {
+  if (Array.isArray(input)) return renderStopsToRamp(input, 'oklab', colorSpace ?? 'srgb');
+  if (!input || !Array.isArray(input.stops)) return renderStopsToRamp([], 'oklab', 'srgb');
+  const cs = colorSpace ?? input.colorSpace ?? 'srgb';
+  if (input.stops.length > 0) return renderStopsToRamp(input.stops, input.blendSpace || 'oklab', cs);
+  const bytes = decodeRampBytes(input.ramp);
+  if (!bytes) return renderStopsToRamp([], 'oklab', 'srgb');
+  const out: RGB[] = new Array(RAMP_TEXELS);
+  for (let i = 0; i < RAMP_TEXELS; i++) out[i] = applyColorSpace(bytes[i * 3], bytes[i * 3 + 1], bytes[i * 3 + 2], cs);
+  return out;
+};
+
+/** A display (sRGB) ramp of either gradient form — what previews, exports and the palette read. */
+export const gradientDisplayRamp = (input: GradientStop[] | GradientConfig | undefined | null): RGB[] =>
+  renderGradientToRamp(input, 'srgb');
+
 /**
  * Generates a Uint8Array representing the gradient 256×1. Polymorphic: accepts a
- * legacy `GradientStop[]` or a `GradientConfig`. Thin wrapper over the canonical
- * `renderStopsToBuffer` so the real GMT renderer and the palette mirror share ONE
- * sampler (they can no longer drift).
+ * legacy `GradientStop[]` or a `GradientConfig` of either form (ADR-0122). Every render path
+ * in every app bakes its gradient texture here, so this is the one seam that has to know about
+ * ramps — a stop gradient goes through the canonical `renderStopsToBuffer`, a ramp gradient
+ * copies its texels (through the colorSpace transform) with no per-texel stop sampling at all.
  */
 export const generateGradientTextureBuffer = (input: GradientStop[] | GradientConfig): Uint8Array => {
-  let stops: GradientStop[];
-  let colorSpace: ColorSpaceMode = 'srgb';
-  let blendSpace: BlendColorSpace = 'oklab';
+  if (Array.isArray(input)) return renderStopsToBuffer(input, 'oklab', 'srgb');
+  if (!input || !Array.isArray(input.stops)) return new Uint8Array(256 * 4); // malformed input → transparent buffer (unchanged)
 
-  if (Array.isArray(input)) {
-    stops = input;
-  } else if (input && Array.isArray(input.stops)) {
-    stops = input.stops;
-    colorSpace = input.colorSpace || 'srgb';
-    blendSpace = input.blendSpace || 'oklab';
-  } else {
-    return new Uint8Array(256 * 4); // malformed input → transparent buffer (unchanged)
+  const colorSpace: ColorSpaceMode = input.colorSpace || 'srgb';
+  if (input.stops.length === 0) {
+    const bytes = decodeRampBytes(input.ramp);
+    if (bytes) {
+      const data = new Uint8Array(RAMP_TEXELS * 4);
+      for (let i = 0; i < RAMP_TEXELS; i++) {
+        const c = applyColorSpace(bytes[i * 3], bytes[i * 3 + 1], bytes[i * 3 + 2], colorSpace);
+        data[i * 4] = c.r; // float→Uint8 truncation, as renderStopsToBuffer
+        data[i * 4 + 1] = c.g;
+        data[i * 4 + 2] = c.b;
+        data[i * 4 + 3] = 255;
+      }
+      return data;
+    }
   }
-
-  return renderStopsToBuffer(stops, blendSpace, colorSpace);
+  return renderStopsToBuffer(input.stops, input.blendSpace || 'oklab', colorSpace);
 };
 
 /**

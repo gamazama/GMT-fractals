@@ -76,7 +76,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { renderStopsToRamp, renderStopsToBuffer } from '../palette/core/gmtGradient';
+import { renderGradientToRamp } from '../palette/core/gmtGradient';
+import { generateGradientTextureBuffer } from '../utils/colorUtils';
 import { DEFAULT_BACKGROUND } from '../palette/core/rampGeometry';
 import {
   closeFullscreen,
@@ -166,7 +167,8 @@ const usePushResolved = (
     ? ''
     : ramp && ramp.length
       ? `${rampSignature(ramp)}:${name}`
-      : config.stops.map((s) => `${s.color}@${s.position}`).join('|') + `:${config.blendSpace}:${config.colorSpace}:${name}`;
+      : // either form (ADR-0122): a ramp gradient's body is its texel string, its stops are []
+        (config.stops.length ? config.stops.map((s) => `${s.color}@${s.position}`).join('|') : `ramp:${config.ramp ?? ''}`) + `:${config.blendSpace}:${config.colorSpace}:${name}`;
   const lastSig = useRef<string | null>(null);
   useEffect(() => {
     if (sig === lastSig.current) return;
@@ -351,7 +353,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
       liveRamp && liveRamp.length
         ? liveRamp
         : sourceConfig
-          ? renderStopsToRamp(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
+          ? renderGradientToRamp(sourceConfig) // either form (ADR-0122), its own colorSpace as before
           : null,
     [liveRamp, sourceConfig],
   );
@@ -362,7 +364,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
       liveRamp && liveRamp.length
         ? rampToLut(liveRamp)
         : sourceConfig
-          ? renderStopsToBuffer(sourceConfig.stops, sourceConfig.blendSpace, sourceConfig.colorSpace)
+          ? generateGradientTextureBuffer(sourceConfig) // either form, its own colorSpace
           : null,
     [liveRamp, sourceConfig],
   );

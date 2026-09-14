@@ -7,15 +7,26 @@
  * dedupe: the client refuses before it asks (`gradient-explorer/v2/contributeToGlobal.ts`),
  * the server refuses regardless (`backend/supabase/functions/gx-gradients/validate.ts`).
  *
- * WHAT A SIGNATURE IS. The server's canonical form, computed from the stops a pick would
- * actually send: `entryToGradientConfig(entry)` — the fit every wall pick, drag and "Keep
- * these N" goes through — then canonicalised exactly as `gx-gradients` canonicalises a POST
- * (positions rounded to 1/1000, hex expanded and upper-cased, interpolation reduced to
- * step / linear, sorted by position), then hashed to 16 hex characters. The bake
- * (`debug/bake-palette-catalog.mts`) writes one sorted hash per survivor of EVERY pack —
- * core, the CDN packs, the optional packs and the unpublished one — to
- * `public/palette/catalog-sigs.json` and the same list to the function's `catalog-sigs.ts`.
- * A hash, not the stops: the list must not be a way to fetch gradients that are not published.
+ * WHAT A SIGNATURE IS. The server's canonical form, computed from what a pick would actually
+ * send: `entryToGradientConfig(entry)` — the seam every wall pick, drag and "Keep these N"
+ * goes through — canonicalised exactly as `gx-gradients` canonicalises a POST, then hashed to
+ * 16 hex characters. The canonical form FOLLOWS THE GRADIENT'S FORM (ADR-0122 Decision 5):
+ *   • a STOP gradient (`stops.length > 0`; a stale `ramp` beside them is ignored, stops win):
+ *     positions rounded to 1/1000, hex expanded and upper-cased, interpolation reduced to
+ *     step / linear, sorted by position, joined — `0:#000000:l|1000:#FFFFFF:l`. Unchanged by
+ *     ADR-0122, byte for byte.
+ *   • a RAMP gradient (`stops: []` + `ramp`): `ramp:` + the ramp string. The string is already
+ *     canonical — 1,024 base64 characters are exactly 768 bytes with no padding bits, so two
+ *     spellings of one ramp cannot exist — and the tag cannot collide with a stop signature,
+ *     which always starts with a digit. No fitter is involved, so a ramp entry's signature
+ *     does not move when the fitter does.
+ * The bake (`debug/bake-palette-catalog.mts`, or `--sigs-only` from the packs already on
+ * disk; the per-entry rule is `debug/palette-catalog-sigs.mts`) writes one sorted hash per
+ * survivor of EVERY pack — core, the CDN packs, the optional packs and the unpublished one —
+ * plus each entry's LEGACY 128-stop fit (what a pick sent before ADR-0122, and what shelves
+ * saved then still hold), to `public/palette/catalog-sigs.json` and the same list to the
+ * function's `catalog-sigs.ts`. A hash, not the stops or the ramp: the list must not be a way
+ * to fetch gradients that are not published.
  *
  * MIRRORED, NOT SHARED. The backend repo must not import the GPL client, and this bundle
  * cannot import the backend, so the canonicaliser exists twice. The harness
@@ -26,6 +37,12 @@
  *   equals its `sigHash` on every config the harness corpus holds — proven by:
  *   `npx tsx debug/test-palette-catalog-licensing.mts` ("client and server canonicalise
  *   identically"). Falsified 2026-09-13 by dropping `.toUpperCase()` here.
+ * @invariant `canonicalConfigSigOf` equals the backend's `canonicaliseConfig(...).sig` (null ⇔
+ *   the server's error) on every config the ramp corpus holds — well-formed ramps, a stop list
+ *   with a stale ramp beside it, a 1,023-char / non-base64 / padded ramp, a ramp with stops
+ *   missing — proven by: `npx tsx debug/test-palette-catalog-licensing.mts` ("client and server
+ *   canonicalise the ramp form identically"). Falsified 2026-09-14, see the harness header.
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
  * @assumption The fit is bit-identical between the bake (node/V8) and the browser. True in
  *   V8 by construction; JavaScriptCore/SpiderMonkey may differ by an ULP in `Math.cbrt` /
  *   `Math.pow`, which rounding to 8-bit hex and 1/1000 positions absorbs almost always, but
@@ -33,6 +50,7 @@
  */
 
 import type { GradientConfig } from '../../types';
+import { isRampString, decodeRampBytes } from '../../utils/gradientRamp';
 
 export interface CanonicalStop {
   position: number;
@@ -85,9 +103,37 @@ export const gxSigHash = (str: string): string => {
   return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
 };
 
+/** The tag a ramp signature starts with. A stop signature starts with a digit, so the two
+ *  forms cannot collide. Mirrors the server's `RAMP_SIG_TAG`. */
+export const RAMP_SIG_TAG = 'ramp:';
+
+/**
+ * The canonical signature of a ramp string, or null when the server would refuse it: exactly
+ * 1,024 base64 characters (`A–Z a–z 0–9 + /`, no padding) that decode to 768 bytes. Mirrors the
+ * server's `canonicaliseRamp` — the same two walls as `utils/gradientRamp.ts`'s `isRampString` +
+ * `decodeRampBytes`, restated here so the mirror is readable beside its twin.
+ */
+export const canonicalRampSigOf = (ramp: unknown): string | null => {
+  if (!isRampString(ramp)) return null;
+  const bytes = decodeRampBytes(ramp);
+  return bytes && bytes.length === 768 ? `${RAMP_SIG_TAG}${ramp}` : null;
+};
+
+/**
+ * The canonical signature of a whole config, by its FORM: a stop gradient signs its stops (a
+ * `ramp` beside them is ignored — stops win); a config whose `stops` is exactly `[]` signs its
+ * ramp; anything else is null. Mirrors the server's `canonicaliseConfig`.
+ */
+export const canonicalConfigSigOf = (config: unknown): string | null => {
+  if (!config || typeof config !== 'object') return null;
+  const c = config as { stops?: unknown; ramp?: unknown };
+  if (!Array.isArray(c.stops)) return null;
+  return c.stops.length > 0 ? canonicalSigOf(c.stops) : canonicalRampSigOf(c.ramp);
+};
+
 /** The hash of a config's canonical signature, or null when it has none. */
 export const catalogHashOf = (config: GradientConfig | null | undefined): string | null => {
-  const sig = canonicalSigOf(config?.stops);
+  const sig = canonicalConfigSigOf(config);
   return sig ? gxSigHash(sig) : null;
 };
 
@@ -113,7 +159,9 @@ export const parseCatalogSigs = (raw: unknown): Set<string> => {
 
 export const packCatalogSigs = (hashes: Iterable<string>): CatalogSigsFile => {
   const sorted = [...new Set(hashes)].sort();
-  return { version: CATALOG_SIGS_VERSION, algo: 'canonical-stops/cyrb64', count: sorted.length, hashes: sorted.join('') };
+  // `algo` is informational (nothing parses it). The version stays 1: the hash of a STOP
+  // gradient is unchanged, so a reader that predates the ramp form still reads the list right.
+  return { version: CATALOG_SIGS_VERSION, algo: 'canonical-stops-or-ramp/cyrb64', count: sorted.length, hashes: sorted.join('') };
 };
 
 let _sigs: Promise<Set<string>> | null = null;

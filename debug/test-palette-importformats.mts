@@ -6,6 +6,11 @@
  *     — byte-exact for the dense formats (.map/.gpl/.ggr/.cpt/.json), within a small
  *     tolerance for the lossy ones (.css reduces to 33 adaptively placed stops).
  *   • FAIL-SAFE: garbage / empty / truncated input returns null and never throws.
+ *   • FORM [7] (ADR-0122, 2026-09-14): `importGradientFiles.parseGradientImports` brings a dense
+ *     256-entry .map in as a RAMP gradient carrying the file's texels, a simple one as stops.
+ *     Falsified 2026-09-14, each reverted: the import back on `fitRampToStops` → 2 red (the
+ *     zebra came in as 32 stops, texels lost); `rampToGradientConfig` with `cap: 0` (everything
+ *     a ramp) → 1 red ("a simple .map is stops").
  *
  * Run: npx tsx debug/test-palette-importformats.mts
  */
@@ -139,6 +144,33 @@ console.log('[6] single-colour input → flat ramp');
 {
   const res = parseGradientText('128 64 200', 'map');
   ok(!!res && ri(res.ramp[0])[0] === 128 && ri(res.ramp[255])[2] === 200, 'one triplet fills the ramp');
+}
+
+console.log('[7] the import\'s config FORM (ADR-0122, palette/core/importGradientFiles.ts)');
+{
+  // importGradientFiles pulls in the favourites store: shim localStorage before it loads.
+  const mem = new Map<string, string>();
+  const shim = {
+    getItem: (k: string) => (mem.has(k) ? mem.get(k)! : null),
+    setItem: (k: string, v: string) => { mem.set(k, String(v)); },
+    removeItem: (k: string) => { mem.delete(k); },
+    clear: () => mem.clear(),
+    key: (i: number) => Array.from(mem.keys())[i] ?? null,
+    get length() { return mem.size; },
+  };
+  (globalThis as any).window ??= { localStorage: shim, addEventListener: () => {} };
+  (globalThis as any).localStorage ??= shim;
+  const { parseGradientImports } = await import('../palette/core/importGradientFiles');
+  const { isRampGradient, decodeRamp } = await import('../utils/gradientRamp');
+  // A 256-entry .map of a period-2 zebra — 8ZEBBOW2's shape. Before ADR-0122 this was squashed
+  // to a truncated 32-stop fit; it must come in as its own texels.
+  const zebra = Array.from({ length: 256 }, (_, i) => (i % 2 ? [255, (i * 3) % 256, 255 - i] : [0, 0, 0]));
+  const dense = parseGradientImports([{ name: 'zebra.map', text: zebra.map((c) => c.join(' ')).join('\n') + '\n' }]).items[0]?.config;
+  ok(!!dense && isRampGradient(dense), `import: a dense .map is a ramp gradient (got ${dense ? dense.stops.length + ' stops' : 'nothing'})`);
+  const texels = dense && isRampGradient(dense) ? decodeRamp(dense.ramp) : null;
+  ok(!!texels && texels.every((c, i) => c.r === zebra[i][0] && c.g === zebra[i][1] && c.b === zebra[i][2]), 'import: its texels are the file\'s');
+  const simple = parseGradientImports([{ name: 'four.map', text: '0 0 0\n255 0 0\n0 255 0\n255 255 255\n' }]).items[0]?.config;
+  ok(!!simple && simple.stops.length >= 2 && simple.stops.length <= 32 && !('ramp' in simple), `import: a simple .map is stops (got ${simple?.stops.length})`);
 }
 
 if (failures) {

@@ -19,8 +19,20 @@
  * AdvancedGradientEditor — only the committed config lives here.
  *
  * One-ramp seam: the editor's value IS the gradient. A BARE inbound ramp (future
- * "send to Stops") is fitted to stops EXACTLY ONCE via `loadRamp`; there is no
+ * "send to Stops") is turned into a config EXACTLY ONCE via `loadRamp`; there is no
  * second ramp→stops path on the render side.
+ *
+ * Either config FORM (ADR-0122). The document may hold a RAMP gradient (`stops: []` +
+ * `ramp`) — the GE v2 hero bakes a dense pipeline output into it as-is, and `loadRamp`
+ * keeps a sample set that will not fit cheaply as one. `addStops` is the explicit
+ * conversion (uncapped, at a Detail budget); `setConfig` normalises so a stale `ramp` never
+ * rides a stop gradient; the restore gate is `coerceGradientConfig`, which accepts both forms.
+ *
+ * WHO READS THIS STORE: the old shell's Generator Stops mode (`GeneratorStage`'s
+ * `GeneratorStopsControls`) and the GE v2 hero once the working input is `stops`
+ * (`WorkingHero`'s `editorValue`). app-gmt's gradient param editor does NOT — it edits the
+ * DDFS param value through `AutoFeaturePanel`. The v2 hero's Add stops is
+ * `workingStore.addStopsToWorking`, not `addStops` here: it must also fold the pipeline.
  *
  * @see palette/core/editorConfig.ts (pure validator/serialiser shared by both providers)
  * @see components/AdvancedGradientEditor.tsx (the engine editor, mounted by EditorStage)
@@ -29,8 +41,10 @@
 import { create } from 'zustand';
 import type { GradientConfig, JsonValue } from '../../types';
 import type { RGB } from '../core/oklab';
-import { fitRampToStops } from '../core/stopFit';
+import { rampToGradientConfig } from '../core/stopFit';
 import { makeDefaultEditorConfig, coerceGradientConfig, serializeEditorConfig } from '../core/editorConfig';
+import { addStopsToConfig } from '../core/workingPipeline';
+import { normalizeGradientConfig } from '../../utils/gradientRamp';
 import { paramEditStart, paramEditEnd, paramEdit } from './paramUndoBracket';
 
 // (d) seam: the editor brackets its mutations into ONE engine PARAM-undo entry
@@ -49,15 +63,26 @@ interface PaletteEditorState {
     setConfig: (config: GradientConfig) => void;
     /** Reset to the default gradient (dock "Reset", fresh scene). */
     reset: () => void;
-    /** One-ramp seam: fit a BARE 256-RGB ramp to stops ONCE (future send-to-Stops). */
+    /** One-ramp seam: a BARE 256-RGB ramp becomes the document ONCE (future send-to-Stops) —
+     *  stops when it fits within `maxStops` (and `STOP_LAYER_CAP`), else a ramp gradient. */
     loadRamp: (ramp: RGB[], maxStops?: number) => void;
+    /** "Add stops" on a RAMP document: fit it at the Detail budget (`detail`, 2..10 — pass the
+     *  generator's), uncapped, always stops. No-op on a stop document. ONE undo entry (it
+     *  self-brackets). */
+    addStops: (detail?: number) => void;
 }
 
-export const usePaletteEditorStore = create<PaletteEditorState>((set) => ({
+export const usePaletteEditorStore = create<PaletteEditorState>((set, get) => ({
     config: makeDefaultEditorConfig(),
-    setConfig: (config) => set({ config }),
+    setConfig: (config) => set({ config: normalizeGradientConfig(config) }),
     reset: () => set({ config: makeDefaultEditorConfig() }),
-    loadRamp: (ramp, maxStops = 24) => set({ config: fitRampToStops(ramp, { maxStops }) }),
+    loadRamp: (ramp, maxStops = 24) => set({ config: rampToGradientConfig(ramp, { maxStops }) }),
+    addStops: (detail = 8) => {
+        const cur = get().config;
+        const next = addStopsToConfig(cur, detail);
+        if (next === cur) return;
+        paramEdit(() => set({ config: next }));
+    },
 }));
 
 // --- Provider pair (history + document share one capture/restore) -----------------

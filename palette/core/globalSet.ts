@@ -35,7 +35,7 @@
  * gradients. A brand-new feature should not repeat that.
  *
  * @assumption the payload is small enough to render on the main thread when the set is
- *   selected. `favientsToEntries` runs `renderStopsToRamp` + `computeFacets` per entry,
+ *   selected. `favientsToEntries` renders a ramp + runs `computeFacets` per entry,
  *   and `groundSets`' body cache clears wholesale past 4,000 entries. Comfortable to a
  *   couple of thousand; unbounded is not. If this set is ever meant to be large, ship it in
  *   `bake-palette-catalog`'s pre-baked ramp+facet format instead of stops.
@@ -47,6 +47,7 @@ import type { GradientConfig } from '../../types';
 import type { Favient } from '../store/favientsStore';
 import { PALETTE_CDN_BASE, PALETTE_LOCAL_BASE } from './catalogLoader';
 import { coerceGradientConfig } from './editorConfig';
+import { isRampGradient } from '../../utils/gradientRamp';
 
 /** The shared endpoint — GET the set, POST one to it. Hardcoded, as every other
  *  function URL in this app is (grep SUBMIT_URL / SHARE_URL). */
@@ -60,7 +61,9 @@ export const GLOBAL_ID_PREFIX = 'gx-global:';
 
 /** The wire shape. Deliberately the stops document, so a curator can hand-write one.
  *  NOTE the stops carry no `id`: an id is a LOCAL handle, and putting one on the wire would
- *  change the server's canonical signature and break dedupe. `parseGlobalSet` mints them. */
+ *  change the server's canonical signature and break dedupe. `parseGlobalSet` mints them.
+ *  Since ADR-0122 a config may instead be a RAMP (`stops: []` + `ramp`, 1,024 base64 chars);
+ *  the GET sends one exactly so, and `coerceGradientConfig` is the gate for both forms. */
 interface WireItem {
   id?: string;
   name?: string;
@@ -161,8 +164,27 @@ export interface SubmitResult {
 }
 
 /**
- * Contribute one gradient to the shared set. No account, no name — the stops and the two
- * colour spaces, nothing else. The server canonicalises and hashes them to decide whether
+ * The POST body for one gradient, by its FORM (ADR-0122). A STOP gradient sends exactly what it
+ * always sent — `{"config":{"stops":…,"colorSpace":…,"blendSpace":…}}`, same keys, same order, no
+ * `ramp` even when a stale one rides the object — so its server signature cannot move. A RAMP
+ * gradient sends `stops: []` plus its `ramp`, which the server validates and signs as a ramp.
+ *
+ * @invariant a stop gradient's body is byte-identical to the pre-ramp body and a ramp gradient's
+ *   body carries `stops: []` + its ramp — proven by: `npx tsx
+ *   debug/test-palette-catalog-licensing.mts` ("a stop gradient's POST body is unchanged, stale
+ *   ramp and all", "a ramp gradient round-trips the GX Global wire"). Falsified 2026-09-14, see
+ *   the harness header.
+ */
+export const globalSetPostBody = (config: GradientConfig): string =>
+  JSON.stringify({
+    config: isRampGradient(config)
+      ? { stops: [], ramp: config.ramp, colorSpace: config.colorSpace, blendSpace: config.blendSpace }
+      : { stops: config.stops, colorSpace: config.colorSpace, blendSpace: config.blendSpace },
+  });
+
+/**
+ * Contribute one gradient to the shared set. No account, no name — the stops (or, for a ramp
+ * gradient, the ramp) and the two colour spaces, nothing else. The server canonicalises and hashes them to decide whether
  * it is already in there, so an identical gradient submitted twice is `added: false` rather
  * than an error, and costs no quota.
  *
@@ -175,7 +197,7 @@ export const submitToGlobalSet = async (config: GradientConfig): Promise<SubmitR
     res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config: { stops: config.stops, colorSpace: config.colorSpace, blendSpace: config.blendSpace } }),
+      body: globalSetPostBody(config),
     });
   } catch {
     throw new GlobalSetError('Could not reach the shared set — check your connection.', 0);

@@ -27,9 +27,16 @@
  *   unchanged — proven by: `npx tsx debug/test-palette-catalog-licensing.mts` ("export
  *   name: unmodified gets the credit", "export name: one stop moved exports as today").
  *   Falsified 2026-09-13 by dropping the key comparison.
+ * @invariant a RAMP gradient's key is its ramp: an unmodified ramp pick keeps its credit, one
+ *   texel changed drops it, and a different ramp never inherits it — proven by:
+ *   `npx tsx debug/test-palette-catalog-licensing.mts` ("a ramp pick keeps its credit while
+ *   unmodified", "one texel changed drops a ramp's credit", "another ramp does not inherit
+ *   the credit"). Falsified 2026-09-14 by removing the ramp branch, see the harness header.
+ * @see docs/adr/0122-the-ramp-is-the-gradient.md
  */
 
 import type { GradientConfig } from '../../types';
+import { isRampGradient } from '../../utils/gradientRamp';
 
 export interface CatalogOrigin {
   /** `<bundle>:<collection>` (or `<bundle>` for an old bundle without collections). */
@@ -40,8 +47,19 @@ export interface CatalogOrigin {
   key: string;
 }
 
-/** Content key: every stop field an edit can change, plus the blend space. */
+/**
+ * Content key, by the gradient's FORM (ADR-0122):
+ *   • a STOP gradient — every stop field an edit can change, plus the blend space. Byte-identical
+ *     to the key before ADR-0122, so origins stamped then still match.
+ *   • a RAMP gradient (`stops: []` + a well-formed `ramp`) — `ramp:` + the ramp string. Every
+ *     texel is in it, so any edit that reaches the texels changes the key; the blend space is
+ *     left out because it is inert on a ramp. Without this branch every ramp gradient would
+ *     share the key of an empty stop list (`oklab|`) and one catalogue ramp's credit would ride
+ *     any other ramp.
+ * The two cannot collide: a stop key contains `|`, which base64 does not.
+ */
 export const originKey = (c: GradientConfig | null | undefined): string => {
+  if (isRampGradient(c)) return `ramp:${c.ramp}`;
   const stops = Array.isArray(c?.stops) ? c!.stops : [];
   const parts = stops.map(
     (s) =>

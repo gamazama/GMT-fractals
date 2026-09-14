@@ -19,6 +19,7 @@ import type { BlendColorSpace, ColorSpaceMode } from '../../types';
 import Dropdown from '../../components/Dropdown';
 import { BLEND_SPACE_ORDER, BLEND_SPACE_LABEL } from '../../utils/colorUtils';
 import { usePaletteEditorStore, editorEdit } from '../store/paletteEditorStore';
+import { isRampGradient } from '../../utils/gradientRamp';
 
 // Names only, no descriptors, in BLEND_SPACE_ORDER — one source shared with the strip
 // row's BlendSpacePicker and the gradient context menu. @see utils/colorUtils.ts
@@ -34,21 +35,27 @@ export const StopsDockPanel: React.FC = () => {
     const config = usePaletteEditorStore((s) => s.config);
     const setConfig = usePaletteEditorStore((s) => s.setConfig);
     const reset = usePaletteEditorStore((s) => s.reset);
+    // A RAMP document (ADR-0122) has no stops: nothing is blended between texels, so the Blend
+    // chooser has nothing to act on and is not offered; the stage editor offers Add stops.
+    const ramp = isRampGradient(config);
 
     return (
         <div className="flex flex-col gap-2 px-3 py-1">
             <p className="text-[11px] leading-relaxed text-fg-dim">
-                Edit the gradient on the stage — click the bar to add a stop, drag to move, drag away to
-                remove. These settings apply to the whole gradient:
+                {ramp
+                    ? 'This gradient is a 256-colour ramp with no stops — use Add stops on the stage to edit it stop by stop. These settings apply to the whole gradient:'
+                    : 'Edit the gradient on the stage — click the bar to add a stop, drag to move, drag away to remove. These settings apply to the whole gradient:'}
             </p>
 
-            <Dropdown
-                label="Blend"
-                value={config.blendSpace}
-                onChange={(v) => setConfig({ ...config, blendSpace: v as BlendColorSpace })}
-                options={BLEND_OPTIONS}
-                fullWidth
-            />
+            {!ramp && (
+                <Dropdown
+                    label="Blend"
+                    value={config.blendSpace}
+                    onChange={(v) => setConfig({ ...config, blendSpace: v as BlendColorSpace })}
+                    options={BLEND_OPTIONS}
+                    fullWidth
+                />
+            )}
             <Dropdown
                 label="Output"
                 value={config.colorSpace}

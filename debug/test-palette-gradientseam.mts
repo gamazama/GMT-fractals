@@ -7,9 +7,10 @@
  *   [1] a preset entry's stops pass through untouched, tagged `linear` +
  *       `oklab` — the fractal shader wants LINEAR radiance and
  *       generateGradientTextureBuffer linearises sRGB stops when baking;
- *   [2] a loaded entry (ramp only) is fitted to stops, tagged `linear`, and
- *       the fit is capped at SEAM_MAX_STOPS = 128 — high enough that a
- *       banded palette keeps a stop per band edge (32 used to smear them);
+ *   [2] a loaded entry (ramp only) is tagged `linear` and takes the FORM its
+ *       density earns (ADR-0122): a fit that needs no more than STOP_LAYER_CAP
+ *       stops becomes stops (a banded palette still keeps a stop per band edge),
+ *       anything denser arrives as a RAMP gradient carrying its texels exactly;
  *   [3] applyGradientConfig FORCES `linear` whatever the config says (a
  *       favourite often stores `srgb`), routes layer 2 to `gradient2`, and
  *       returns false with no coloring feature (the standalone studio);
@@ -32,6 +33,8 @@
  */
 import { entryToGradientConfig, applyGradientConfig, applyEntryToColoring, applyEnvGradient } from '../palette/core/gradientSeam';
 import { useEngineStore } from '../store/engineStore';
+import { STOP_LAYER_CAP } from '../palette/core/stopFit';
+import { gradientDisplayRamp } from '../utils/colorUtils';
 import type { CatalogEntry } from '../palette/core/presetCatalog';
 import type { GradientConfig, GradientStop } from '../types/graphics';
 
@@ -66,14 +69,24 @@ console.log('[1] preset entry: stops pass through, tagged linear + oklab');
     check(cfg.blendSpace === 'oklab', `blendSpace is oklab (got ${cfg.blendSpace})`);
 }
 
-console.log('\n[2] loaded entry: ramp is fitted to stops, linear, capped at 128');
+console.log('\n[2] loaded entry: a cheap fit becomes stops; a dense one arrives as its exact ramp (ADR-0122)');
 {
-    const cfg = entryToGradientConfig(entry({ stops: undefined, ramp: bandedRamp(64) }));
+    const cfg = entryToGradientConfig(entry({ stops: undefined, ramp: bandedRamp(16) }));
     check(cfg.colorSpace === 'linear', `fitted config is linear (got ${cfg.colorSpace})`);
-    check(cfg.stops.length >= 64, `64-band ramp fitted to ${cfg.stops.length} stops, expected at least 64 (one per band edge)`);
-    check(cfg.stops.length <= 128, `fit respects SEAM_MAX_STOPS = 128 (got ${cfg.stops.length})`);
+    check(cfg.stops.length >= 16, `16-band ramp fitted to ${cfg.stops.length} stops, expected at least 16 (one per band edge)`);
+    check(cfg.stops.length <= STOP_LAYER_CAP && cfg.ramp === undefined, `a stop result carries no ramp and stays within STOP_LAYER_CAP (got ${cfg.stops.length})`);
     const empty = entryToGradientConfig(entry({ stops: [], ramp: bandedRamp(4) }));
     check(empty.stops.length > 0, 'an entry with an EMPTY stops array falls back to fitting its ramp');
+
+    // 64 bands need more stops than the cap: the entry keeps its texels instead of a truncation.
+    const dense = bandedRamp(64);
+    const d = entryToGradientConfig(entry({ stops: undefined, ramp: dense }));
+    check(d.stops.length === 0 && typeof d.ramp === 'string', `64-band ramp arrives as its exact ramp (got ${d.stops.length} stops, ramp ${typeof d.ramp})`);
+    check(d.colorSpace === 'linear', `the ramp form is tagged linear too (got ${d.colorSpace})`);
+    const back = gradientDisplayRamp(d);
+    let exact = true;
+    for (let i = 0; i < 256; i++) if (back[i].r !== dense[i * 4] || back[i].g !== dense[i * 4 + 1] || back[i].b !== dense[i * 4 + 2]) exact = false;
+    check(exact, 'the ramp form displays the entry texels byte-for-byte');
 }
 
 console.log('\n[3] applyGradientConfig forces linear, routes layers, no-ops without coloring');

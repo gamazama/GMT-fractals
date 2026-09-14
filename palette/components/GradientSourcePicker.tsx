@@ -20,7 +20,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { buildPresetCatalog, registerCustomRamp, type CatalogEntry } from '../core/presetCatalog';
-import { renderStopsToRamp, renderStopsToBuffer } from '../core/gmtGradient';
+import { renderGradientToRamp } from '../core/gmtGradient';
+import { generateGradientTextureBuffer } from '../../utils/colorUtils';
 import { paintRampToCanvas } from '../core/rampCanvas';
 import { useFavientsStore } from '../store/favientsStore';
 import { Layer } from '../../components/ui';
@@ -87,10 +88,11 @@ export const GradientSourcePicker: React.FC<GradientSourcePickerProps> = ({ titl
       kind: 'favient',
       key: `fav-${f.id}`,
       name: f.name,
-      ramp: renderStopsToBuffer(f.config.stops, f.config.blendSpace, f.config.colorSpace),
+      // Either form (ADR-0122) — a ramp favourite's stops are [], which drew greyscale.
+      ramp: generateGradientTextureBuffer(f.config),
       // Register the favourite's rendered ramp as a custom catalog entry on pick
       // (content-deduped in the catalog), then select that index.
-      pick: () => registerCustomRamp(renderStopsToRamp(f.config.stops, f.config.blendSpace, f.config.colorSpace), f.name),
+      pick: () => registerCustomRamp(renderGradientToRamp(f.config), f.name),
     }));
     return [
       { label: 'Built-in', rows: builtIn },

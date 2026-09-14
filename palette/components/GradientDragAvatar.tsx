@@ -29,7 +29,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNativeDragging, useDragPayload } from '../store/dragVisual';
-import { renderStopsToBuffer } from '../core/gmtGradient';
+import { generateGradientTextureBuffer } from '../../utils/colorUtils';
+import { isRampGradient, isStopGradient } from '../../utils/gradientRamp';
 import { z } from '../../components/ui/zIndex';
 import type { GradientConfig } from '../../types';
 
@@ -60,12 +61,14 @@ export const GradientDragAvatar: React.FC = () => {
   }, [dragging]);
 
   const config = payload?.config as GradientConfig | undefined;
+  // Either form (ADR-0122): a RAMP gradient has `stops: []` and is just as drawable.
+  const drawable = isStopGradient(config) || isRampGradient(config);
   useEffect(() => {
     const cv = canvasRef.current;
-    if (!cv || !config?.stops) return;
+    if (!cv || !config || !drawable) return;
     // DISPLAY sRGB — the stored colorSpace is a bake-for-shader concern (often 'linear',
     // which renders dull). Every swatch in the suite shows sRGB, so the avatar must match.
-    const buf = renderStopsToBuffer(config.stops, config.blendSpace, 'srgb');
+    const buf = generateGradientTextureBuffer({ ...config, colorSpace: 'srgb' });
     const ctx = cv.getContext('2d');
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
@@ -83,7 +86,7 @@ export const GradientDragAvatar: React.FC = () => {
     ctx.drawImage(src, 0, 0, 256, 1, 0, 0, cv.width, cv.height);
   }, [config, at !== null]);
 
-  if (!dragging || !config?.stops || !at) return null;
+  if (!dragging || !drawable || !at) return null;
 
   return createPortal(
     <div

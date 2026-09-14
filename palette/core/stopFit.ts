@@ -34,7 +34,8 @@
 
 import type { GradientStop, GradientConfig } from '../../types';
 import { rgbToOklab, oklabDistance, type RGB } from './oklab';
-import { renderStopsToRamp, sampleSortedStops, rgbToHex } from './gmtGradient';
+import { renderStopsToRamp, renderGradientToRamp, sampleSortedStops, rgbToHex } from './gmtGradient';
+import { encodeRamp } from '../../utils/gradientRamp';
 
 export interface StopFitOptions {
   /** Perceptual stop tolerance (OKLab ΔE). Lower = more stops, higher fidelity. */
@@ -105,6 +106,17 @@ export interface StopFitOptions {
  *   reds only the banded ones. A guard for a threshold needs both walls or it only pins one.
  */
 const QUANTISATION_SLACK = 1.05;
+
+/**
+ * Over budget, a corner pick this close (OKLab ΔE) to the previous pick counts as ALIASED onto
+ * a periodic pattern, and is swapped for the most different seed in its slot (grep
+ * `ALIAS_DE` in fitRampToStops' corner pass).
+ *
+ * @invariant An over-budget period-2 zebra does not fit to a single colour — proven by:
+ *   `npm run test:palette-stopfit` section [10] ("an over-budget zebra keeps both phases").
+ *   Falsified 2026-09-14 by setting ALIAS_DE to 0 (the pure even stride): [10] red.
+ */
+const ALIAS_DE = 0.02;
 
 const DEFAULTS: Required<StopFitOptions> = {
   targetDE: 0.02,
@@ -349,11 +361,40 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
     // rather than letting the earliest ones fill maxStops — otherwise a region dense
     // with edges (heavy posterize / noise) starves every later position of a stop and
     // the gradient truncates spatially. Under budget (the usual case) all are kept.
+    //
+    // …but an even stride ALIASES on a periodic ramp. Softology's 8ZEBBOW2 is black on every
+    // other texel: 254 seeds into 126 slots is a stride of ~2, every pick landed on the black
+    // phase, and the gradient fitted to 126 black stops (2026-09-14). So each pick keeps its
+    // even slot UNLESS it is nearly the colour of the previous pick (`ALIAS_DE`), in which
+    // case it takes the seed in its slot most unlike that previous pick. Guarded, not "always
+    // take the most different": that version fixed the zebras but doubled the error on noisy
+    // ramps (CCA1 0.094 → 0.181 blurred) by chasing outliers. Measured over the 84 catalogue
+    // ramps that reach this branch, at the Add-stops budget (Detail 8): 21 change, 14 better,
+    // 0 worse (8ZEBBOW2 0.486 → 0.068 blurred ΔE, 126 → 63 black stops); Detail 10: 5 / 0;
+    // Detail 0: 12 better, 2 worse by ≤ 0.009.
     const budget = Math.max(0, o.maxStops - stops.length);
-    const chosen =
-      seeds.length > budget
-        ? Array.from({ length: budget }, (_, j) => seeds[Math.floor((j * seeds.length) / budget)])
-        : seeds;
+    let chosen = seeds;
+    if (seeds.length > budget) {
+      chosen = [];
+      let prev = ramp[0];
+      for (let j = 0; j < budget; j++) {
+        const from = Math.floor((j * seeds.length) / budget);
+        const to = Math.max(from + 1, Math.floor(((j + 1) * seeds.length) / budget));
+        let pick = seeds[from];
+        if (oklabDistance(prev, ramp[pick]) < ALIAS_DE) {
+          let farthest = -1;
+          for (let q = from; q < to; q++) {
+            const dq = oklabDistance(prev, ramp[seeds[q]]);
+            if (dq > farthest) {
+              farthest = dq;
+              pick = seeds[q];
+            }
+          }
+        }
+        chosen.push(pick);
+        prev = ramp[pick];
+      }
+    }
     for (const idx of chosen) {
       if (used.has(idx) || stops.length >= o.maxStops) continue;
       if (!stillWrong(idx - 1, idx + 1)) continue;
@@ -436,9 +477,78 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   return { stops, colorSpace: 'srgb', blendSpace: 'oklab' };
 };
 
-/** Convenience: max + mean OKLab ΔE of a fitted config vs the target ramp. */
+/**
+ * The most stops an AUTOMATIC fit may keep (ADR-0122 Decision 3). Past this a gradient is not
+ * something a person authors with knots — it is noise on a strip, and every stop edit, drag and
+ * preview re-samples the list per texel. The owner set it (2026-09-14): "even 50 — at a certain
+ * point, stops are not useful and reduce performance". Measured at the catalogue seam (ΔE 0.02),
+ * 57% of Softology needs more than 48; core 0.9%, cpt-city 1.5%.
+ */
+export const STOP_LAYER_CAP = 48;
+
+/**
+ * Turn 256 samples into a `GradientConfig` of the right FORM (ADR-0122): fit it, keep the stops
+ * if the fit is both CHEAP (within `cap` stops, and within `maxStops`) and FAITHFUL (see below),
+ * otherwise keep the samples as a RAMP gradient (`stops: []` + `ramp`), exact by construction.
+ *
+ * CHEAP is read without reaching into the fitter: it fits with ONE stop of headroom over the
+ * limit, and a result that used the headroom ran out of budget.
+ *
+ * FAITHFUL is measured, not inferred. The first cut assumed a fit that ended under the limit had
+ * met `targetDE` everywhere, and that is false — probably because the refine skips the texels its
+ * own stops sit on (`used`), so an edge texel rendered wrong is never revisited; the cause is
+ * NOT verified, the misses are (measured 2026-09-14 over the catalogue at
+ * the seam, target 0.02: of 8,860 stop-form fits, 8,188 are within target everywhere and 516
+ * miss by more than 0.05 — 355 of those on 1–4 texels at a band edge, invisible on a strip, and
+ * 161 on 5 or more, e.g. cpt-city calbayo-09 at ΔE 0.25 across 10 texels). So the render of the
+ * fit is compared with the samples, and the stops are kept only if at most `FAITHFUL_MISS_TEXELS`
+ * texels miss by more than `max(0.05, 2.5 × targetDE)`. A max-ΔE rule would have sent hundreds
+ * of clean banded palettes to the ramp form over one edge texel.
+ *
+ * `cap` defaults to `STOP_LAYER_CAP`. This is for gradients that have NO stops yet. A gradient that
+ * already HAS stops must not come through here even with `cap: Infinity` — a refit that runs out
+ * of its Detail budget would flip it to a ramp, and a gradient that has stops keeps them. Such
+ * refits, and an explicit "Add stops", call `fitRampToStops` directly (grep `fitWorkingOutput`,
+ * `addStopsToConfig` in workingPipeline).
+ *
+ * Always returns `colorSpace: 'srgb'`: a caller holding a `'linear'` gradient puts its own back
+ * (gradientSeam does).
+ *
+ * @invariant The stop form is chosen exactly when a free fit needs ≤ the limit AND misses no more
+ *   than FAITHFUL_MISS_TEXELS texels, the stops kept are that fit's stops, and the ramp form
+ *   renders the samples byte-for-byte — proven by: npm run test:palette-gradientramp ("form flips
+ *   at the cap", "a cheap fit missing > 4 texels becomes a ramp", "kept stops are the free fit's",
+ *   "zebra becomes a ramp and renders exactly"). Falsified 2026-09-14, see its header.
+ */
+export const rampToGradientConfig = (
+  ramp: RGB[],
+  opts: StopFitOptions & { cap?: number } = {},
+): GradientConfig => {
+  const { cap = STOP_LAYER_CAP, ...fitOpts } = opts;
+  const limit = Math.max(2, Math.min(fitOpts.maxStops ?? DEFAULTS.maxStops, cap));
+  const fitted = fitRampToStops(ramp, { ...fitOpts, maxStops: Number.isFinite(limit) ? limit + 1 : limit });
+  if (fitted.stops.length <= limit && fitMissTexels(fitted, ramp, fitOpts.targetDE ?? DEFAULTS.targetDE) <= FAITHFUL_MISS_TEXELS) return fitted;
+  return { stops: [], ramp: encodeRamp(ramp), colorSpace: 'srgb', blendSpace: 'oklab' };
+};
+
+/** How many texels a stop-form fit may miss and still be kept (see rampToGradientConfig). */
+export const FAITHFUL_MISS_TEXELS = 4;
+
+/** Texels whose rendered fit misses the samples by more than `max(0.05, 2.5 × targetDE)`. */
+const fitMissTexels = (config: GradientConfig, ramp: RGB[], targetDE: number): number => {
+  const bound = Math.max(0.05, 2.5 * targetDE);
+  const rendered = renderStopsToRamp(config.stops, config.blendSpace, 'srgb');
+  let n = 0;
+  for (let i = 0; i < 256; i++) if (oklabDistance(rendered[i], ramp[i]) > bound) n++;
+  return n;
+};
+
+/** Convenience: max + mean OKLab ΔE of a fitted config vs the target ramp. Compared as DISPLAY
+ *  (sRGB) colour whatever the config's `colorSpace` — the target ramp is sRGB, and a seam config
+ *  tagged `linear` used to be measured through the linear transform, which made its numbers
+ *  meaningless (reported 2026-09-14; no caller passed one yet). */
 export const measureFit = (config: GradientConfig, ramp: RGB[]): { maxDE: number; meanDE: number; stops: number } => {
-  const rendered = renderStopsToRamp(config.stops, config.blendSpace, config.colorSpace);
+  const rendered = renderGradientToRamp(config, 'srgb');
   let max = 0;
   let sum = 0;
   for (let i = 0; i < 256; i++) {

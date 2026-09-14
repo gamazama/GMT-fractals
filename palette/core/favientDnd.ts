@@ -7,6 +7,7 @@
 import type { GradientConfig } from '../../types';
 import type { CatalogOrigin } from './catalogOrigin';
 import { beginNativeDrag, setDragPayload } from '../store/dragVisual';
+import { isStopGradient, normalizeGradientConfig } from '../../utils/gradientRamp';
 
 export const FAVIENT_DND_MIME = 'application/x-gmt-favient';
 /** Marker MIME present ONLY on drags that started from an existing Favients swatch.
@@ -98,13 +99,30 @@ export const beginCustomAvatarDrag = (dt: DataTransfer): void => {
   }
 };
 
-/** Read a favourite from a drop event's dataTransfer, or null if none present. */
-export const readFavientDrag = (dt: DataTransfer): FavientDragPayload | null => {
+/**
+ * Read a favourite from a drop event's dataTransfer, or null if none present.
+ *
+ * Accepts either gradient form (ADR-0122): the gate is "a `stops` ARRAY", and a RAMP gradient's
+ * `stops: []` passes it. Do not tighten it to "has stops" — that refuses every ramp gradient —
+ * nor to "is a readable gradient": a drag of a shelf favourite whose ramp this build cannot
+ * read must still reach the trash and the group chips, which act on its `favId`. A STOP
+ * gradient comes back without a stale `ramp` riding it (`normalizeGradientConfig`), so no drop
+ * target persists one. Takes only `getData`, so a node harness can hand it a stub.
+ *
+ * @invariant a ramp gradient survives the drag payload byte-exact, and a stop gradient comes
+ *   back with no `ramp` key — proven by: `npm run test:palette-favients` ("[8] a ramp drag
+ *   payload reads back byte-exact", "[8] a stop drag payload loses a stale ramp").
+ *   Falsified 2026-09-14, see the harness header.
+ */
+export const readFavientDrag = (dt: Pick<DataTransfer, 'getData'>): FavientDragPayload | null => {
   const raw = dt.getData(FAVIENT_DND_MIME);
   if (!raw) return null;
   try {
     const p = JSON.parse(raw);
-    if (p && p.config && Array.isArray(p.config.stops) && typeof p.name === 'string') return p as FavientDragPayload;
+    if (!p || typeof p.name !== 'string' || !p.config || !Array.isArray(p.config.stops)) return null;
+    if (!isStopGradient(p.config)) return p as FavientDragPayload;
+    const config = normalizeGradientConfig(p.config as GradientConfig);
+    return (config === p.config ? p : { ...p, config }) as FavientDragPayload;
   } catch {
     /* malformed */
   }

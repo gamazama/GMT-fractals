@@ -22,7 +22,7 @@
  */
 
 import { computeFacets, type Facets } from './facets';
-import { renderStopsToRamp } from './gmtGradient';
+import { renderGradientToRamp } from './gmtGradient';
 import type { RGB } from './oklab';
 import type { GradientConfig } from '../../types';
 
@@ -76,4 +76,5 @@ export const rampToName = (ramp: RGB[]): string => facetsToName(computeFacets(ra
  * insert) name identically from one place.
  */
 export const configToName = (config: GradientConfig): string =>
-  rampToName(renderStopsToRamp(config.stops, config.blendSpace, config.colorSpace));
+  // Either form (ADR-0122), through the config's own colorSpace as it always was.
+  rampToName(renderGradientToRamp(config));

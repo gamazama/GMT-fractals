@@ -30,7 +30,7 @@ import { GradientStrip } from './GradientStrip';
 import { GeneratorSlotMods } from './GeneratorSlotMods';
 import { buildPresetCatalog } from '../core/presetCatalog';
 import { setFavientDrag, beginCustomAvatarDrag } from '../core/favientDnd';
-import { fitRampToStops } from '../core/stopFit';
+import { rampToGradientConfig } from '../core/stopFit';
 import { favientSig } from '../store/favientsStore';
 import { setDragOrigin } from '../store/dragVisual';
 import { setHeroPick, setHeroDrag, useHeroPick, useActiveHeroMode, useHeroOptionsOpen } from '../store/heroSelection';
@@ -62,7 +62,8 @@ export const SourceRow: React.FC<{
   // The slot's current gradient as a config so it can be picked/dragged like any hero.
   // Derived from the displayed source ramp (covers both catalog presets and ramps loaded
   // via a drop); favientSig keys the pick so the selected ring is stable across renders.
-  const config = useMemo(() => fitRampToStops(ramp, { maxStops: 24 }), [ramp]);
+  // Stops when cheap, else the slot's ramp itself (ADR-0122) — a dense slot drags out exact.
+  const config = useMemo(() => rampToGradientConfig(ramp, { maxStops: 24 }), [ramp]);
   const key = useMemo(() => favientSig(config), [config]);
   const payload = useMemo(() => ({ config, name, source: `Generator · ${which}` }), [config, name, which]);
 

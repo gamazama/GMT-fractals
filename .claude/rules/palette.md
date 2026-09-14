@@ -55,6 +55,15 @@ docs/policy/` returned nothing).
   authored slices + documents (minus `favients`) and restore through the feature
   setters inside one undo bracket, never `loadPreset` (it wipes undo, mutates the
   preset, clobbers project settings, and re-merges the shelf with a toast).
+- `docs/adr/0122-the-ramp-is-the-gradient.md` (2026-09-14, the third) — a `GradientConfig`
+  is a STOP gradient or a RAMP gradient (`stops: []` + `ramp`, 256 texels as base64). Read a
+  whole config through `renderGradientToRamp` / `gradientDisplayRamp`, never
+  `renderStopsToRamp(config.stops, …)` — on a ramp that draws greyscale, and
+  `debug/test-gradient-rampmode.mts` scans the UI trees for exactly that call. Producers go
+  through `rampToGradientConfig` (stops only when ≤ `STOP_LAYER_CAP` AND faithful); a gradient
+  that already has stops keeps them (`fitRampToStops` directly). Signatures and export credits
+  of a ramp are `ramp:`-tagged; a stop gradient's saved form and signatures are unchanged.
+  Plan and status: `plans/gradient-ramp-backbone.md`.
 
 The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 
@@ -130,7 +139,9 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 npm run smoke:boot           # the registration path, to throw-depth
 npm run test:palette         # the chained harnesses over palette/core/**, the Favients store and the preset pack
 npm run test:palette-favients  # favientsStore: the load/import gate, dedupe, __proto__ labels, undo write-through
-npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, the 128-stop cap
+npm run test:palette-gradientseam  # the GMT seam: linear/srgb forcing, layer routing, stops-or-ramp form (ADR-0122)
+npm run test:palette-gradientramp  # the ramp form: codec, texture seam, precedence, the cap + faithfulness rule
+npm run test:gradient-rampmode     # the editor's ramp mode + the UI never rendering config.stops directly
 npm run smoke:gx-handles     # REQUIRED for any palette/store/fullscreenStore.ts change
 npm run test:gx-session      # the GE v2 session: workingSession + the studio snapshot variants share (node, ~5 s)
 npm run test:palette-licensing  # the catalogue packs, category names, export credits and the GX Global catalogue check (node, ~2 s)
@@ -151,7 +162,9 @@ tells the reader which harness covers what:
 
 | file | harness |
 |---|---|
-| `core/stopFit.ts`, `core/gmtGradient.ts` | `debug/test-palette-stopfit.mts` |
+| `core/stopFit.ts`, `core/gmtGradient.ts` | `debug/test-palette-stopfit.mts` (section [10] is the over-budget corner subsample's anti-aliasing guard, `ALIAS_DE` — its zebra needs a phase SHIFT to reproduce the bug, read the section note) |
+| the RAMP form (ADR-0122): `utils/gradientRamp.ts`, `utils/colorUtils.ts` `renderGradientToRamp` / `generateGradientTextureBuffer` / `getGradientCssString`, `core/stopFit.ts` `rampToGradientConfig` + `STOP_LAYER_CAP` + `FAITHFUL_MISS_TEXELS`, `core/gradientSeam.ts` | `debug/test-palette-gradientramp.mts` (`npm run test:palette-gradientramp`) and `debug/test-palette-gradientseam.mts` [2] — both falsified, see headers |
+| the editor's ramp mode and the UI's either-form readers: `components/gradient/rampMode.ts`, `components/gradient/gradientStopFitter.ts` (the Add-stops seam `registerPaletteUI` fills), `components/AdvancedGradientEditor.tsx`, `components/gradient/gradientActions.ts` | `debug/test-gradient-rampmode.mts` (`npm run test:gradient-rampmode`; includes a scan that fails if a UI file passes `.stops` to a stop renderer) |
 | `core/oklab.ts`, `utils/stopOps.ts` | `debug/test-palette-stopops.mts` |
 | `core/channelCurve.ts` | `debug/test-palette-channelcurve.mts` |
 | `core/waveGen.ts` (the Curves editor's FUNCTION TOOL — the five shapes, the span envelope, bias/skew) and `utils/CurveFitting.ts` `spliceSpan` (the span-local commit the Pencil, the smoothing brush and the wave all share) | `debug/test-palette-wavegen.mts` (`npm run test:palette-wavegen`; falsified three ways — the span bound, the amplitude-as-a-fraction scaling and the splice's `kept` filter — plus section [9], added 2026-09-12, which pins that `spliceSpan` never hands back a segment whose Bezier doubles back in time (the loop sparse keys used to draw at the seam), falsified two ways — and two of its own assertions were wrong on the first cut and rewritten: a pointwise periodicity test that a DISCONTINUOUS pulse cannot pass, and two thresholds picked rather than derived. Read its header before tightening one) |

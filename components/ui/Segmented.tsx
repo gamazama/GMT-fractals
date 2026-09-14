@@ -25,6 +25,10 @@
  *
  * Glyph options pass `label` (an SVG) and keep `name` as the word — titles, aria and the
  * cycle button's "tap for X" all read `name`, so a wordless control is still announced.
+ *
+ * DISABLED — an option that has nothing to act on right now (the palette's Stops layout on a
+ * gradient that has no stops, ADR-0122). It stays in the row, dimmed and unclickable, so the
+ * switch keeps its shape; the cycle button steps over it.
  */
 
 import React from 'react';
@@ -42,6 +46,8 @@ export interface SegmentedOption<T extends string | number> {
   repeat?: boolean;
   /** Tooltip for that second click, when it differs. */
   repeatTitle?: string;
+  /** Not choosable right now: shown dimmed, never clicked, skipped by the cycle button. */
+  disabled?: boolean;
 }
 
 export interface SegmentedProps<T extends string | number> {
@@ -80,7 +86,12 @@ export function Segmented<T extends string | number>({
   };
 
   if (cycle) {
-    const next = options[(i + 1) % options.length];
+    // the next ENABLED option; with none, the button stays on the current one
+    let next = here;
+    for (let k = 1; k <= options.length; k++) {
+      const o = options[(i + k) % options.length];
+      if (!o.disabled) { next = o; break; }
+    }
     return (
       <button
         type="button"
@@ -115,9 +126,10 @@ export function Segmented<T extends string | number>({
             data-seg={String(o.id)}
             aria-pressed={on}
             aria-label={o.name}
+            disabled={o.disabled}
             title={on && o.repeat ? o.repeatTitle ?? o.title ?? o.name : o.title ?? o.name}
-            className={`inline-flex items-center justify-center ${pad} h-7 text-[13px] transition-colors ${on ? ON : OFF}`}
-            onClick={() => hit(o, on)}
+            className={`inline-flex items-center justify-center ${pad} h-7 text-[13px] transition-colors ${on ? ON : OFF} ${o.disabled ? 'opacity-40 cursor-default' : ''}`}
+            onClick={() => { if (!o.disabled) hit(o, on); }}
           >
             {o.label ?? o.name}
           </button>

@@ -11,6 +11,14 @@
  *   [5] "Back to GMT" shows only when the page came from the studio: `cameFromGmtFor` over
  *       `?from=gmt` and the same-origin referrer at `/`, `/app-gmt`, `/app-gmt.html`; and
  *       app-gmt's `openGradientExplorer` actually appends the param (2026-09-13).
+ *   [6] (2026-09-14, ADR-0122) a RAMP gradient round-trips byte-exact as `s: []` + `r`, under
+ *       2,000 characters of URL; a stop gradient's code is PINNED to the pre-ramp encoder's
+ *       output (checked against HEAD's shareUrl.ts that day, three configs, byte-identical)
+ *       and a stale ramp does not change it; a malformed ramp / no rows and no ramp → null;
+ *       rows AND a ramp decode as a stop gradient.
+ *       Falsified 2026-09-14 (each reverted, exit 1): the encoder never writing `r` → 2 red
+ *       ("round-trips byte-exact", "with its name"); writing `r` whenever the config has a
+ *       ramp → 1 red ("unchanged by a stale ramp"); the decoder ignoring `r` → 2 red.
  *
  * Node only, no browser. `npm run test:gx-share`.
  */
@@ -145,6 +153,35 @@ console.log('\n[5] "Back to GMT" — cameFromGmtFor, and the opener that feeds i
   const src = readFileSync(new URL('../palette/installFavients.ts', import.meta.url), 'utf8');
   const opened = /export const openGradientExplorer[\s\S]*?window\.open\('([^']+)'/.exec(src)?.[1] ?? '';
   check(!!opened && cameFromGmtFor(new URL(opened, 'https://app.gmt-fractals.com/').toString(), ''), `app-gmt's opener carries the signal (${opened || 'no window.open found'})`);
+}
+
+console.log('\n[6] a RAMP gradient rides the link (ADR-0122); a stop gradient\'s link does not change');
+{
+  const { encodeRamp, isRampGradient } = await import('../utils/gradientRamp');
+  const ramp = encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: i, g: (i * 5) % 256, b: i % 2 ? 0 : 255 })));
+  const rampCfg: GradientConfig = { stops: [], ramp, blendSpace: 'oklab', colorSpace: 'linear' };
+  const code = encodeShare(rampCfg, 'Zebra');
+  const back = decodeShare(code);
+  check(!!back && isRampGradient(back.config) && back.config.ramp === ramp, '[6] a ramp gradient round-trips byte-exact');
+  check(!!back && back.name === 'Zebra' && back.config.colorSpace === 'linear', '[6] with its name and colour space');
+  const url = `https://app.gmt-fractals.com/gradient-explorer.html?${SHARE_PARAM}=${code}`;
+  check(url.length < 2000, `[6] the ramp link stays under 2,000 characters (${url.length})`);
+
+  // Pinned: the pre-ramp encoder's exact output for this gradient (checked against HEAD's
+  // shareUrl.ts on 2026-09-14) — a link already shared must not change a byte.
+  const bw: GradientConfig = {
+    stops: [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 1, color: '#FFFFFF' }],
+    blendSpace: 'oklab', colorSpace: 'srgb',
+  };
+  const PINNED = 'eyJ2IjoxLCJuIjoibiIsInMiOltbMCwiIzAwMDAwMCJdLFsxLCIjRkZGRkZGIl1dLCJiIjoib2tsYWIiLCJjIjoic3JnYiJ9';
+  check(encodeShare(bw, 'n') === PINNED, '[6] a stop gradient\'s link is byte-identical to the pre-ramp encoder');
+  check(encodeShare({ ...bw, ramp }, 'n') === PINNED, '[6] a stop gradient\'s link is unchanged by a stale ramp');
+
+  const wire = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  check(decodeShare(wire({ v: 1, n: 'x', s: [], r: ramp.slice(2) })) === null, '[6] a link with a malformed ramp decodes to null');
+  check(decodeShare(wire({ v: 1, n: 'x', s: [] })) === null, '[6] a link with neither rows nor a ramp decodes to null');
+  const both = decodeShare(wire({ v: 1, n: 'x', s: [[0, '#000000'], [1, '#FFFFFF']], r: ramp }));
+  check(!!both && both.config.stops.length === 2 && !('ramp' in both.config), '[6] rows AND a ramp is a stop gradient (stops win)');
 }
 
 console.log(failures === 0 ? '\nPASS — share codec' : `\nFAIL — ${failures} assertion(s)`);

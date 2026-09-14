@@ -2,8 +2,9 @@
  * gradientCss — a gradient as a CSS `linear-gradient(...)`, for the places that PAINT one
  * rather than render it.
  *
- * The canonical renderer is `renderStopsToRamp` and everything that must be faithful goes
- * through it (the hero's bar samples the stops once per display pixel; the wall draws a
+ * The canonical reader is `renderGradientToRamp` (ADR-0122; it renders stops or decodes a
+ * ramp) and everything that must be faithful goes through it (the hero's bar samples the
+ * gradient once per display pixel; the wall draws a
  * sprite). This is for the other case: chrome that wants a gradient as a background —
  * the export window's subject segments, a set chip filling with the gradient being filed —
  * where a CSS string is the cheapest correct answer and the browser's own interpolation is
@@ -19,7 +20,7 @@
  *
  * @see docs/adr/0119-a-save-is-drawn-where-it-lands.md
  */
-import { renderStopsToRamp } from './gmtGradient';
+import { gradientDisplayRamp } from './gmtGradient';
 import type { RGB } from './oklab';
 import type { GradientConfig } from '../../types';
 
@@ -49,6 +50,8 @@ export const swatchesToCss = (colors: RGB[]): string | undefined => {
         .join(', ')})`;
 };
 
-/** A whole config, rendered through the canonical sampler and then subsampled to CSS. */
+/** A whole config of either form (ADR-0122), read through the one reader in sRGB and then
+ *  subsampled to CSS. A stop gradient renders exactly as before; a ramp gradient reads its
+ *  texels (subsampled like any other — see the header: this only SHOWS a colour). */
 export const configToCss = (config: GradientConfig, steps = 32): string | undefined =>
-    rampToCss(renderStopsToRamp(config.stops, config.blendSpace, 'srgb'), steps);
+    rampToCss(gradientDisplayRamp(config), steps);

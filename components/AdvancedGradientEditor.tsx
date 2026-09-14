@@ -22,6 +22,20 @@
  * a stop in `window.__gxWorking().config.stops`; it is red against the pre-conversion file.
  * The desktop path is guarded by `npm run smoke:ge-hero` and `npm run smoke:ge-tray`, which
  * drive this editor with a real mouse.
+ *
+ * RAMP MODE (ADR-0122, 2026-09-14). When the VALUE is a ramp gradient (`stops: []` + `ramp`) the
+ * editor is a view of 256 texels with one way in: the bar paints the ramp, there are no knots, no
+ * knot-track insertion, no selection marquee, no colour drop, no keyboard nudges, no clipboard,
+ * no blend chooser (it is inert on a ramp), and an "Add stops" button sits where the blend chooser
+ * was (full chrome: the header; strip chrome: the blend · output · menu row) and at the head of
+ * the menu's Actions. A marquee begun on the bar still runs when the host set `marqueeEscape` —
+ * it draws nothing and selects nothing, but GE v2's escape into a whole-gradient drag keeps
+ * working on a ramp. Every rule is a pure function in `components/gradient/rampMode.ts`; this
+ * file adds only the JSX. A stop value renders and behaves exactly as before.
+ * Add stops runs the host's `onAddStops` when given; otherwise the `gradientStopFitter` slot
+ * (filled by `registerPaletteUI`) is emitted through `onChange` inside `editAction`, so
+ * app-gmt's DDFS param gets it as one param-undo step with no host wiring.
+ * Guard: `npm run test:gradient-rampmode` (the rules + a text pin on this file's gates).
  */
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore, useImperativeHandle } from 'react';
@@ -30,7 +44,16 @@ import type { GradientStop, GradientConfig, ColorSpaceMode, BlendColorSpace } fr
 import type { ContextMenuItem } from '../types/help';
 import { isColorDrag, readColorDrag } from './gradient/colorDrag';
 import { BlendSpacePicker, COARSE_POINTER } from './gradient/BlendSpacePicker';
-import { rgbToHex, nudgeChannel, sampleStops, sampleSortedStops, renderStopsToRamp, BLEND_SPACE_ORDER, BLEND_SPACE_LABEL, type RGB } from '../utils/colorUtils';
+import { rgbToHex, nudgeChannel, sampleStops, type RGB } from '../utils/colorUtils';
+import {
+    rampOfEditorValue,
+    editorAffordances,
+    editorEmitConfig,
+    editorBarSource,
+    paintStripPixels,
+    barTexels256,
+} from './gradient/rampMode';
+import { getGradientStopFitter, subscribeGradientStopFitter } from './gradient/gradientStopFitter';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
 const STRIP_PREVIEW_W = 1536;
@@ -187,6 +210,14 @@ interface AdvancedGradientEditorProps {
     marqueeEscape?: number;
     /** Fired when a marquee crosses `marqueeEscape` in either direction, with the pointer. */
     onMarqueeEscape?: (escaped: boolean, e: MouseEvent) => void;
+    /**
+     * RAMP MODE's "Add stops" (ADR-0122): the host's own conversion of the ramp value into a stop
+     * gradient, for a host whose document is not simply `value` (GE v2's hero folds its pipeline;
+     * the old shell's Stops mode fits at the generator's Detail). It must bracket its own undo.
+     * Omitted: the editor uses the `gradientStopFitter` slot and emits the result through
+     * `onChange` inside `edit` — see components/gradient/gradientStopFitter.ts.
+     */
+    onAddStops?: () => void;
 }
 
 /**
@@ -257,7 +288,7 @@ const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelec
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -267,6 +298,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             return { stops: value.stops, colorSpace: value.colorSpace, blendSpace: value.blendSpace || 'oklab' as BlendColorSpace };
         }
     }, [value]);
+    /** The value as a RAMP gradient (ADR-0122), or null for a stop gradient — the mode switch.
+     *  Read through a ref by callbacks that outlive a render (emitChange, the handle, drags). */
+    const rampValue = useMemo(() => rampOfEditorValue(value), [value]);
+    const isRamp = rampValue !== null;
+    const rampValueRef = useRef(rampValue);
+    rampValueRef.current = rampValue;
 
     const [knots, setKnots] = useState<AdvancedGradientKnot[]>([]);
 
@@ -386,7 +423,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // `previewRamp` alone does NOT make them stale: with a live source the knots are the fit of
     // that same ramp and describe it truly once the drag lets go. `previewConfig` is the case
     // where a baked document sits underneath something else — see its own note above.
-    const showBias = !knotsStale && isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
+    // RAMP MODE: what a ramp value may do (nothing knot-shaped) and whether Add stops has a way
+    // to run — the host's `onAddStops`, else the palette host's fitter slot.
+    const stopFitter = useSyncExternalStore(subscribeGradientStopFitter, getGradientStopFitter);
+    const affordances = editorAffordances({ isRamp, knotsStale, canAddStops: !!onAddStops || !!stopFitter });
+    const showBias = affordances.knots && isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
+    // Entering ramp mode drops any selection left from a stop value (an undo, a pick): the
+    // ids point at nothing, and a live selection keeps the host's inspector face open.
+    useEffect(() => {
+        if (isRamp) setSelectedIds((prev) => (prev.size ? new Set<string>() : prev));
+    }, [isRamp]);
     
     const dragPayloadRef = useRef<DragPayload | null>(null);
     /**
@@ -425,9 +471,11 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // The editor's current gradient as a config — handed to the header entrance so the
     // host's Favients button can add it (when the shelf is already open), and reused for
     // the menu's "Send to Favients".
+    // On a ramp it is the ramp value itself — the knot array is empty, and `{ stops: [] }`
+    // alone is a config of neither form (the shelf would refuse it).
     const currentConfig = useMemo<GradientConfig>(
-        () => ({ stops: knots, colorSpace, blendSpace }),
-        [knots, colorSpace, blendSpace],
+        () => rampValue ?? ({ stops: knots, colorSpace, blendSpace }),
+        [rampValue, knots, colorSpace, blendSpace],
     );
 
     /** Blend space under the cursor in BlendSpacePicker — preview only, never emitted. */
@@ -439,7 +487,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // concern — the strip shows the sRGB authoring colours (as the old CSS string
     // did), so it stays a faithful colour preview. Memoised so unrelated re-renders
     // (selection / marquee / expand) don't re-sample 256 texels.
-    const previewStops = previewConfig?.stops ?? knots;
+    // WHAT THE BAR PAINTS — `editorBarSource` (components/gradient/rampMode.ts): the host's
+    // `previewRamp` (strip chrome only), else a RAMP-form gradient on screen (`previewConfig` or
+    // the value) as its texels, else stops (`previewConfig.stops` or the knots, as always). A ramp
+    // config walked as stops painted black here before ADR-0122's ramp mode.
+    // Keyed on `rampValue`, not `value`: it is null for every stop value, so a host handing a
+    // fresh-but-equal stop config each render does not repaint the 1536 px strip.
+    const barSource = useMemo(
+        () => editorBarSource({ previewRamp: chrome === 'strip' ? previewRamp : undefined, previewConfig, value: rampValue ?? knots, knots }),
+        [chrome, previewRamp, previewConfig, rampValue, knots],
+    );
     // Hovering a chip in BlendSpacePicker re-renders THIS strip in that mode. It takes
     // precedence over the host's previewConfig so the hover always wins visually, and it
     // never emits — leaving the row restores the committed mode.
@@ -451,38 +508,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // Named for its one consumer, so it cannot be confused with the `previewRamp` PROP (which
     // is strip chrome's, and is the pipeline's output rather than a render of these stops).
     const fullChromeRamp = useMemo(
-        () => (chrome === 'strip' ? null : renderStopsToRamp(previewStops, previewBlend)),
-        [previewStops, previewBlend, chrome],
+        () => (chrome === 'strip' ? null : barTexels256(barSource, previewBlend)),
+        [barSource, previewBlend, chrome],
     );
     // Strip chrome (the v2 hero, ~1100 px wide): the preview samples the STOPS once per
     // display pixel instead of stretching the 256-texel ramp — a bilinear scale-up softened
     // every step edge into a little gradient, and nearest would band the smooth ones
-    // (owner, 2026-09-07: pixelated only where it is stepped). Full chrome (GMT main) keeps
-    // the 256-texel canvas.
-    const previewWide = useMemo(() => {
-        if (chrome !== 'strip') return null;
-        const out = new Uint8ClampedArray(STRIP_PREVIEW_W * 4);
-        // A RAMP beats stops: it is the pipeline's own output, with no fit in between. Upsampled
-        // NEAREST, and 1536 / 256 is exactly 6, so every texel becomes a clean 6 px run — a step
-        // edge stays hard (which is the whole reason this bar samples per display pixel) and a
-        // smooth ramp bands at 1/256 of a channel, which is nothing.
-        if (previewRamp && previewRamp.length > 1) {
-            const n = previewRamp.length;
-            for (let x = 0; x < STRIP_PREVIEW_W; x++) {
-                const c = previewRamp[Math.min(n - 1, Math.floor((x * n) / STRIP_PREVIEW_W))];
-                out[x * 4] = c.r; out[x * 4 + 1] = c.g; out[x * 4 + 2] = c.b; out[x * 4 + 3] = 255;
-            }
-            return out;
-        }
-        const sorted = [...previewStops].sort((a, b) => a.position - b.position);
-        for (let x = 0; x < STRIP_PREVIEW_W; x++) {
-            // `sampleSortedStops`, NOT `sampleStops`: the latter copies and re-sorts the list
-            // on every call, which threw this loop's one sort away 1536 times a frame.
-            const c = sampleSortedStops(sorted, x / (STRIP_PREVIEW_W - 1), previewBlend, 'srgb');
-            out[x * 4] = c.r; out[x * 4 + 1] = c.g; out[x * 4 + 2] = c.b; out[x * 4 + 3] = 255;
-        }
-        return out;
-    }, [previewStops, previewBlend, chrome, previewRamp]);
+    // (owner, 2026-09-07: pixelated only where it is stepped). A RAMP (the pipeline's own
+    // output, or a ramp gradient) upsamples NEAREST: 1536 / 256 is exactly 6, so every texel is
+    // a clean 6 px run. Full chrome (GMT main) keeps the 256-texel canvas.
+    const previewWide = useMemo(
+        () => (chrome !== 'strip' ? null : paintStripPixels(STRIP_PREVIEW_W, barSource, previewBlend)),
+        [barSource, previewBlend, chrome],
+    );
 
     /** 'strip' chrome only: the ramp's two END colours, for the 8 px gutters either side.
      *  Read out of the strip buffer that is being painted anyway — they used to be
@@ -547,12 +585,35 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             id, position, color, bias, interpolation
         }));
 
-        onChangeRef.current({
-            stops: newStops,
-            colorSpace: newColorSpace || colorSpace,
-            blendSpace: newBlendSpace ?? blendSpace
-        });
+        // `editorEmitConfig`: stops as always — but an emit with NO stops on a ramp value (the
+        // output-space toggle is the one that can run there) keeps the ramp.
+        onChangeRef.current(editorEmitConfig(
+            newStops,
+            newColorSpace || colorSpace,
+            newBlendSpace ?? blendSpace,
+            rampValueRef.current,
+        ));
     }, [colorSpace, blendSpace]);
+
+    /** Commit a whole config verbatim — the menu's ramp items (Invert, output space). */
+    const emitConfig = useCallback((cfg: GradientConfig) => { onChangeRef.current(cfg); }, []);
+
+    /**
+     * RAMP MODE's Add stops. The host's `onAddStops` when given (it brackets its own undo);
+     * otherwise the palette host's fitter, emitted through `onChange` inside `editAction` — one
+     * undo step on whatever history the host brackets (app-gmt: the DDFS param stack). The
+     * fitter keeps the gradient's `colorSpace`; the knots appear when the new value flows back.
+     */
+    const onAddStopsRef = useRef(onAddStops);
+    onAddStopsRef.current = onAddStops;
+    const addStops = useCallback(() => {
+        const host = onAddStopsRef.current;
+        if (host) { host(); return; }
+        const fit = getGradientStopFitter();
+        const ramp = rampValueRef.current;
+        if (!fit || !ramp) return;
+        editAction(() => onChangeRef.current(fit(ramp)));
+    }, [editAction]);
 
     const cycleColorSpace = () => {
         const nextMode = colorSpace === 'srgb' ? 'linear' : colorSpace === 'linear' ? 'aces_inverse' : 'srgb';
@@ -592,6 +653,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
      *  Shared by the imperative handle (the hero's palette row drops through it) and by the
      *  knot track's own onDrop. */
     const dropColourAt = useCallback((t: number, hex: string, tolerance = 0.02) => {
+        // A ramp has no knot to recolour, and one knot inserted into `stops: []` is not a gradient.
+        if (rampValueRef.current) return;
         const pos = Math.max(0, Math.min(1, t));
         const cur = knotsRef.current;
         let best: AdvancedGradientKnot | null = null;
@@ -614,6 +677,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
     useImperativeHandle(ref, () => ({
         selectAt: (t: number, tolerance = 0.015) => {
+            if (rampValueRef.current) return; // a ramp has no knots to select or insert (ADR-0122)
             const pos = Math.max(0, Math.min(1, t));
             const cur = knotsRef.current;
             let best: AdvancedGradientKnot | null = null;
@@ -642,6 +706,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     }, [colorSpace, blendSpace]);
 
     const handlePaste = useCallback(async () => {
+        if (rampValueRef.current) return; // no paste over a ramp (the menu disables it too)
         try {
             const text = await navigator.clipboard.readText();
             const data = JSON.parse(text);
@@ -713,7 +778,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         setBiasHandlesVisible: setIsBiasHandlesVisible,
         copy: handleCopy,
         paste: handlePaste,
-    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost]);
+        setConfig: emitConfig,
+        addStops: affordances.addStops ? addStops : undefined,
+    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost, emitConfig, affordances.addStops, addStops]);
 
     const handlePointerMove = useCallback((e: PointerEvent) => {
         const payload = dragPayloadRef.current;
@@ -738,7 +805,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 marqueeEscapedRef.current = escaped;
                 onMarqueeEscapeRef.current?.(escaped, e);
             }
-            setMarqueeRect(escaped ? null : {
+            // RAMP MODE: the gesture runs only for the host's escape — it draws nothing.
+            setMarqueeRect(escaped || !marqueeDrawsRef.current ? null : {
                 x: Math.min(startX, e.clientX), 
                 y: Math.min(startY, e.clientY), 
                 w: Math.abs(e.clientX - startX), 
@@ -849,6 +917,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     };
     /** True while the current marquee is suspended because it escaped. */
     const marqueeEscapedRef = useRef(false);
+    /** Whether the current marquee draws and selects. False on a ramp (ADR-0122), where a drag
+     *  on the bar exists only so a host's `marqueeEscape` can take it over. */
+    const marqueeDrawsRef = useRef(true);
     // `handlePointerMove` is a `useCallback` memoised on `[emitChange]` and is registered as a
     // window listener for the life of a gesture, so anything it closes over can be several
     // renders old. The host's escape callback closes over the CURRENT gradient — read it
@@ -891,7 +962,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         };
         // What this gesture IS, held until it ends. `bracket_move` moves a whole selection;
         // the two `bracket_scale_*` and `bias` change a value along the axis.
-        const held = type === 'marquee' ? 'crosshair'
+        const held = type === 'marquee' ? (marqueeDrawsRef.current ? 'crosshair' : 'default')
             : type === 'knot' ? 'grabbing'
             : type === 'bracket_move' ? 'move'
             : 'ew-resize';
@@ -910,6 +981,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const handleTrackPointerDown = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
         if ((e.target as HTMLElement).closest('.gradient-interactive-element') || !knotTrackRef.current) return;
+        if (rampValueRef.current) return; // belt to the JSX gate: no knot insertion on a ramp
 
         editStart();
         knotSession.begin();
@@ -952,7 +1024,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // ... (Keyboard handling unchanged) ...
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (selectedIds.size === 0 || (e.target as HTMLElement).tagName === 'INPUT') return;
+            // a ramp has no knots to nudge; an arrow would emit `stops: []` over it
+            if (rampValueRef.current || selectedIds.size === 0 || (e.target as HTMLElement).tagName === 'INPUT') return;
 
             if ((e.key === 'Delete' || e.key === 'Backspace') && knots.length > selectedIds.size) {
                 editAction(() => {
@@ -1062,6 +1135,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             setBiasHandlesVisible: setIsBiasHandlesVisible,
             copy: handleCopy,
             paste: handlePaste,
+            setConfig: emitConfig,
+            addStops: affordances.addStops ? addStops : undefined,
         });
         // the Interpolation section, then whatever the host's own trim leaves
         const interp: ContextMenuItem[] = [];
@@ -1094,6 +1169,20 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         }
     };
 
+    /** RAMP MODE's one control: where the blend chooser was (blend is inert on a ramp). Absent
+     *  when the host offers no way to add stops. `data-gx-add-stops` is a test's handle. */
+    const addStopsButton = affordances.addStops ? (
+        <button
+            type="button"
+            data-gx-add-stops=""
+            className={`gradient-interactive-element shrink-0 whitespace-nowrap rounded border border-accent-400/40 text-accent-300 hover:bg-accent-400/15 hover:text-accent-200 font-semibold transition-colors ${chrome === 'strip' ? 'text-[10px] px-1.5 py-0.5' : 'text-[9px] px-1.5 py-px'}`}
+            onClick={addStops}
+            title="This gradient is a 256-colour ramp with no stops. Add stops fits it with editable stops (one undo step)"
+        >
+            Add stops
+        </button>
+    ) : null;
+
     return (
         <div 
             className={`w-full select-none rounded ${chrome === 'strip' ? '' : 'bg-surface-raised'} ${dragCursor ? '[&_*]:!cursor-[inherit]' : ''}`}
@@ -1105,6 +1194,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 if (e.button !== 0) return;
                 if (!(e.target as HTMLElement).closest('.gradient-interactive-element')) {
                     if (knotTrackRef.current?.contains(e.target as Node)) return; // the track's own handlers
+                    // RAMP MODE: no selection marquee — only the host's escape drag, if it has one.
+                    if (!affordances.selectMarquee && !Number.isFinite(marqueeEscape)) return;
+                    marqueeDrawsRef.current = affordances.selectMarquee;
                     if (!e.shiftKey && !e.ctrlKey) setSelectedIds(new Set<string>());
                     marqueeEscapedRef.current = false;
                     startDrag('marquee', [] as string[], e);
@@ -1123,7 +1215,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
 
                     {/* Blend space — the same picker as the strip row, sized for this
                         header. Not a cycle: six modes make cycling a guessing game. */}
-                    <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} compact />
+                    {isRamp ? addStopsButton : <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} compact />}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1180,7 +1272,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     // a drag here marquees the knots. It wore `pointer` unconditionally in full
                     // chrome and `default` in strip chrome, so the one surface with a real
                     // gesture on it was the one saying nothing happens here.
-                    className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick ? 'cursor-pointer' : 'cursor-crosshair'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
+                    className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick ? 'cursor-pointer' : affordances.selectMarquee ? 'cursor-crosshair' : 'cursor-default'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
                     // The bar hosts drags of its own — the bias handles, and a marquee from the
                     // bar's background — so a finger on it belongs to the editor, not to
                     // whatever scrolls behind it. A mouse ignores `touch-action` entirely.
@@ -1189,7 +1281,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     onClick={onStripClick ? (e) => { if (!(e.target as HTMLElement).closest('.bias-handle')) onStripClick(); } : undefined}
                     onMouseEnter={chrome === 'strip' ? () => setStripHover(true) : undefined}
                     onMouseLeave={chrome === 'strip' ? () => setStripHover(false) : undefined}
-                    title={onStripClick ? stripTitle : 'Double-click to select all'}
+                    title={onStripClick ? stripTitle : isRamp ? undefined : 'Double-click to select all'}
                     data-gx-result-half={onStripClick ? 'bake' : undefined}
                 >
                      {stripHint}
@@ -1235,14 +1327,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     // so the two disagree by up to ~0.7 % of t at the edges (GE v2 §8b item 1).
                     data-gx-knot-track=""
                     data-gx-knots-stale={knotsStale ? '' : undefined}
-                    className={`h-6 w-full bg-line/5 relative ${knotsStale ? 'cursor-default' : 'cursor-copy'} ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
+                    data-gx-ramp-mode={isRamp ? '' : undefined}
+                    className={`h-6 w-full bg-line/5 relative ${affordances.addKnot ? 'cursor-copy' : 'cursor-default'} ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
                     // Every drag that starts here is the track's own (add / move a knot, the
                     // brackets, the marquee) — the browser must not read it as a scroll.
                     style={{ touchAction: 'none' }}
-                    onPointerDown={knotsStale ? undefined : handleTrackPointerDown}
-                    title={knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click & drag to add/move knot'}
+                    onPointerDown={affordances.addKnot ? handleTrackPointerDown : undefined}
+                    title={isRamp ? 'A 256-colour ramp: it has no stops to edit — Add stops to edit it stop by stop' : knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click & drag to add/move knot'}
                     onDragOver={(e) => {
-                        if (!isColorDrag(e.dataTransfer)) return;
+                        // a ramp takes no dropped colour: there is no knot to land it on
+                        if (!affordances.knotEdits || !isColorDrag(e.dataTransfer)) return;
                         // preventDefault is what makes this a legal drop target at all;
                         // stopPropagation keeps the hero's own drop zone (which projects a
                         // drop anywhere on the gradient down onto this track — §8b item 1)
@@ -1261,7 +1355,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     onDrop={(e) => {
                         const hex = readColorDrag(e.dataTransfer);
                         setColourDropAt(null);
-                        if (!hex) return;
+                        if (!hex || !affordances.knotEdits) return;
                         e.preventDefault();
                         e.stopPropagation();
                         const r = e.currentTarget.getBoundingClientRect();
@@ -1277,7 +1371,13 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             data-gx-colour-drop-new
                         />
                     )}
-                    {!knotsStale && knots.map(knot => (
+                    {/* RAMP MODE says what the track is, since it no longer answers a click */}
+                    {isRamp && (
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-fg-faint pointer-events-none select-none whitespace-nowrap overflow-hidden" data-gx-ramp-label="">
+                            256-colour ramp · no stops
+                        </span>
+                    )}
+                    {affordances.knots && knots.map(knot => (
                         <div 
                             key={knot.id} 
                             // `data-gx-knot` is the only handle a test has on a knot: the class
@@ -1392,8 +1492,13 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 const meta = (
                     <div className="flex items-center gap-2 text-[10px] text-fg-dim">
                         {/* on a coarse pointer the picker IS the word "blend" (see BlendSpacePicker) */}
-                        {!COARSE_POINTER && <span>blend</span>}
-                        <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} />
+                        {/* RAMP MODE: blend is inert on a ramp, so its slot holds Add stops */}
+                        {isRamp ? addStopsButton : (
+                            <>
+                                {!COARSE_POINTER && <span>blend</span>}
+                                <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} />
+                            </>
+                        )}
                         {/* the output profile is an EXPORT concern in v2 — it lives in the
                             Export window when the host hosts the inspector (C.15, owner) */}
                         {!inspectorHost && (

@@ -30,6 +30,9 @@
  *       over `gmt.ge.autosave-*` (memoised per key); toggling the Explorer's autosave — directly
  *       or through the Files ▸ Autosave rows `registerAutosaveSettings` puts in the registry —
  *       never changes app-gmt's keys, and app-gmt's being ON never makes the Explorer restore
+ *   [8] (2026-09-14, ADR-0122) a RAMP gradient round-trips through a session: the working input
+ *       and the stops document each come back as the same ramp gradient byte-exact, and a stop
+ *       document riding a stale ramp is captured in its pre-ramp form
  *
  * ── How the store half runs under node ────────────────────────────────────────────────
  * The variants harness's trick (debug/test-palette-variants.mts): register the three palette
@@ -72,6 +75,16 @@
  *       "app-gmt's autosave being ON does not make the Explorer restore".
  *   N5  `applyWorkingSession` without `withNeutralSlotMods` → 2 red, the boot assertion in [4]
  *       (aHueRotate 45, bMirror true, aRepeats 3 came back) and the file assertion in [5].
+ *
+ * ── FALSIFIED 2026-09-14 — section [8], each break reverted ──
+ *   T1  `serializeEditorConfig` dropping every ramp → 2 red (exit 1): the setup "text carries
+ *       both ramp strings" and "the stops document comes back as its ramp gradient".
+ *   T3  `serializeEditorConfig` without `normalizeGradientConfig` → 1 red, "a stop document is
+ *       captured without a stale ramp".
+ *   T2  `coerceGradientConfig` without its ramp branch → 3 red: "a session holding ramp gradients
+ *       passes the gate" and both [8] round trips. (On the first cut this stayed GREEN, because a
+ *       parallel shim, `paletteEditorStore.coerceAnyGradientConfig`, re-admitted the ramp form; the
+ *       shim was folded into `coerceGradientConfig` the same day and T2 re-run.)
  */
 
 import { encodeSession, decodeSession, sessionBootAction } from '../store/sessionEnvelope';
@@ -416,6 +429,31 @@ console.log('\n[7] autosave is PER APP');
   ok(disk.get(GMT_AUTOSAVE_KEYS.enabled) === '1' && !disk.has(GMT_AUTOSAVE_KEYS.intervalSec), 'the rows leave app-gmt’s keys exactly as they were');
   row?.set?.(false);
   ok(disk.get(GMT_AUTOSAVE_KEYS.enabled) === '1', 'switching the Explorer’s row off leaves gmt-autosave-enabled on');
+}
+
+console.log('\n[8] a RAMP gradient round-trips through a session (ADR-0122)');
+{
+  const { encodeRamp, isRampGradient } = await import('../utils/gradientRamp');
+  const ramp = encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: i % 2 ? 0 : 255, g: i, b: 255 - i })));
+  const editorRamp = encodeRamp(Array.from({ length: 256 }, (_, i) => ({ r: 255 - i, g: 40, b: i })));
+  useWorkingStore.getState().use({ stops: [], ramp, colorSpace: 'srgb', blendSpace: 'oklab' }, 'Zebra', 'Browse');
+  usePaletteEditorStore.setState({ config: { stops: [], ramp: editorRamp, colorSpace: 'linear', blendSpace: 'oklab' } });
+  const text = encodeSession(FORMAT, 1, captureWorkingSession({ compact: false }) as unknown as Record<string, unknown>);
+  ok(text.includes(ramp) && text.includes(editorRamp), '(setup) the captured session text carries both ramp strings');
+  setStateB();
+  engine().clearHistory();
+  const r = readSession(workingSessionAdapter, text);
+  ok(r.ok, 'a session holding ramp gradients passes the gate');
+  if (r.ok) applyWorkingSession(r.session, 'boot');
+  const w = useWorkingStore.getState().input;
+  ok(w.kind === 'gradient' && isRampGradient(w.config) && w.config.ramp === ramp, '[8] the working input comes back as the same ramp gradient, byte-exact');
+  const ed = usePaletteEditorStore.getState().config;
+  ok(isRampGradient(ed) && ed.ramp === editorRamp && ed.colorSpace === 'linear', '[8] the stops document comes back as its ramp gradient, byte-exact');
+
+  // A stop document carrying a stale ramp is saved in its pre-ramp form.
+  usePaletteEditorStore.setState({ config: { ...cfg('#00FF00', '#FFFF00'), ramp } });
+  const stale = captureWorkingSession({ compact: false }).documents.stops as Record<string, unknown>;
+  ok(!!stale && !('ramp' in stale) && JSON.stringify(stale) === JSON.stringify(cfg('#00FF00', '#FFFF00')), '[8] a stop document is captured without a stale ramp');
 }
 
 if (failures) {

@@ -421,7 +421,14 @@ export class MaterialController {
              const existingTex = this.mainUniforms[key]?.value;
              if (existingTex instanceof THREE.DataTexture) existingTex.dispose();
              valToAssign = this._makeGradientTexture(value.buffer);
-        } else if (Array.isArray(value) && value.length > 0 && (value[0] as GradientStop).color) {
+        } else if (Array.isArray(value) && value.length > 0 && typeof (value[0] as GradientStop | null)?.color === 'string') {
+            // LEGACY bare `GradientStop[]` only. A `GradientConfig` of either form (ADR-0122 —
+            // a ramp gradient is `{ stops: [], ramp }`) is an object, never an array, and every
+            // live path bakes it through `generateGradientTextureBuffer` into the
+            // `isGradientBuffer` branch above (grep `isGradientBuffer` in
+            // store/createFeatureSlice.ts and syncConfigUniforms below). The string test keeps
+            // any other array — `[null]`, numbers, a Vector3 / Color array — out of this branch
+            // rather than throwing on `value[0].color` or baking it as stops.
             const buffer = generateGradientTextureBuffer(value);
             const existingTex = this.mainUniforms[key]?.value;
             if (existingTex instanceof THREE.DataTexture) existingTex.dispose();

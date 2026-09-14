@@ -36,7 +36,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { GEOM_DEFAULTS } from '../../../palette/core/rampGeometry';
-import { renderStopsToBuffer } from '../../../palette/core/gmtGradient';
+import { generateGradientTextureBuffer } from '../../../utils/colorUtils';
 import { ScalarInput } from '../../../components/inputs/ScalarInput';
 import { useFullscreenState, setFullscreenGeomParam, rampToLut } from '../../../palette/store/fullscreenStore';
 import type { FullscreenMode } from '../modeRegistry';
@@ -704,7 +704,7 @@ function SplineEditor(): React.ReactElement {
       srcRamp && srcRamp.length
         ? rampToLut(srcRamp)
         : srcConfig
-          ? renderStopsToBuffer(srcConfig.stops, srcConfig.blendSpace, srcConfig.colorSpace)
+          ? generateGradientTextureBuffer(srcConfig) // either form (ADR-0122), its own colorSpace
           : null,
     [srcRamp, srcConfig],
   );

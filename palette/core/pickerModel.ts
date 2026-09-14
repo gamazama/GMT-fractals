@@ -36,7 +36,7 @@
 import type { CatalogEntry } from './presetCatalog';
 import { passesFilters, type FilterWindows } from './facets';
 import { similarityProbe, SIM_SAMPLES } from './paletteSample';
-import { renderStopsToRamp } from './gmtGradient';
+import { gradientDisplayRamp } from './gmtGradient';
 import type { RGB } from './oklab';
 import type { GradientConfig } from '../../types';
 
@@ -337,7 +337,8 @@ export const sampleRampBuffer = (buf: Uint8Array, samples = 16, stride = 4): RGB
  *   debug/test-palette-pickermodel.mts ("the output profile does not move the ranking")
  */
 export const similarityAnchorRamp = (config: GradientConfig): RGB[] =>
-  renderStopsToRamp(config.stops, config.blendSpace, 'srgb');
+  // Either form (ADR-0122): a ramp anchor compares its own texels.
+  gradientDisplayRamp(config);
 
 /**
  * Similarity of every catalog entry to one anchor ramp, keyed by entry id (paletteSample's
