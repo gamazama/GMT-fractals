@@ -18,6 +18,12 @@
  *       order, for 1, 12 and 700 gradients (band height 128 / 32 / 16); re-encoded under every
  *       filter type and as RGBA it still reads; a foreign PNG (noise, a smooth 1024-texel ramp
  *       that is not 4-px columns, a small image) is `not-ours`; a scene PNG is `scene`.
+ *  [3b] ONE gradient at a custom size (ADR-0123 Update 2026-09-14): 2048 × 40, 256 × 300, 4096 × 3
+ *       and 512 × 1 written at that size and, stripped, read back as one ramp gradient with EXACT
+ *       colours; a 1000-wide request snaps to 1024; the snap / clamp helpers; no size → 1024 × 128;
+ *       a set ignores the size; `buildGradientFile` passes it; with metadata it is still the exact
+ *       document; a 2048-wide band whose 8-px block differs in its last column, a flat colour 1000
+ *       wide and an empty document's placeholder are not ours; a stripped 1024 × 64 two-set is two.
  *   [4] the router: a legacy collection JSON reads, a session JSON is routed as a session, a
  *       scene PNG as a scene, a foreign PNG as an image, a zip of mixed files imports every entry
  *       in order, names come from the file and the filename fallback is un-slugged, `File`s read
@@ -50,6 +56,14 @@
  *       NOTE the opacity check PASSED under mutation on the first cut: one translucent pixel also
  *       breaks its column's uniformity, so the column check refused it. The fixture now makes a
  *       whole texel column translucent in every row → 1 red.
+ *  [3b] (2026-09-14, seven more, each reverted — `palette/core/gradientPng.ts`): the reader's k
+ *       hard-coded to the old 4 px → 4 ("2048 × 40 … EXACT" reads wrong colours, 256/512 not ours);
+ *       the multiple-of-256 width check dropped → 1 ("a flat colour 1000 wide" — the first fixture,
+ *       a stepped ramp, stayed GREEN because its blocks happened to disagree; only a flat colour
+ *       makes every fractional-offset block "uniform"); the block check stopping at 4 columns → 1
+ *       (the first fixture flipped column 9, which a 4-column check still sees — it now flips the
+ *       block's LAST column); the single-band candidate back to "128 only" → 5; the writer ignoring
+ *       the size → 5; the snap flooring → 2; the empty placeholder back to 1024 wide → 1.
  *   [4] router: no session route → 4; zips refused → 3; the filename fallback not un-slugged → 3.
  *   [5] destination: the caller's group ignored → 1; no one-set rule → 4; no collection merge → 3;
  *       a set minted per file → 1 ("make ONE set"); a multi-file drop's items unshifted → 1
@@ -300,6 +314,60 @@ console.log('[3] the PNG with its metadata stripped, re-encoded, foreign, and a 
   checkBands('700-gradient shelf', shelf, 16);
   console.log(`      (700-gradient write + strip + read: ${Date.now() - t0} ms)`);
   ok(png.bandHeightFor(1) === 128 && png.bandHeightFor(2) === 32 && png.bandHeightFor(512) === 32 && png.bandHeightFor(513) === 16 && png.bandHeightFor(1024) === 16 && png.bandHeightFor(1025) === 8 && png.bandHeightFor(9999) === 8, '[3] bandHeightFor steps 128 / 32 / 16 / 8 at 1, 2, 513, 1025');
+
+  // [3b] ONE gradient at a custom size (ADR-0123 Update 2026-09-14): the width snaps to a multiple
+  // of 256, each texel is k = width / 256 columns, the height is free — and a stripped copy still
+  // reads back exact colours. Expected colours are `expectBytes`, independent of the writer.
+  const sized = (entry: { name: string; config: GradientConfig }, size: { width?: number; height?: number }) => {
+    const bytes = png.writeGradientPng([entry], undefined, size);
+    const stripped = codec.stripPngText(bytes)!;
+    const h = codec.readPngHeader(stripped)!;
+    const r = png.readGradientPng(stripped);
+    const got = r.kind === 'bands' && r.configs.length === 1 ? texelsOf(r.configs[0]) : null;
+    const want = expectBytes(entry.config);
+    return { bytes, stripped, w: h.width, h: h.height, kind: r.kind, count: r.kind === 'bands' ? r.configs.length : 0, exact: !!got && got.every((v, k) => v === want[k]) };
+  };
+  for (const [w, hgt, entry] of [[2048, 40, ENTRIES[2]], [256, 300, ENTRIES[4]], [4096, 3, ENTRIES[5]], [512, 1, ENTRIES[1]]] as const) {
+    const s = sized(entry, { width: w, height: hgt });
+    ok(s.w === w && s.h === hgt, `[3b] one gradient asked ${w} × ${hgt} is written ${s.w} × ${s.h}`);
+    ok(s.kind === 'bands' && s.count === 1 && s.exact, `[3b] ${w} × ${hgt}, metadata stripped, reads back as ONE ramp gradient with EXACT colours (${s.kind}, ${s.count}, exact ${s.exact})`);
+  }
+  const snapped = sized(ENTRIES[1], { width: 1000, height: 40 });
+  ok(snapped.w === 1024 && snapped.h === 40 && snapped.exact, `[3b] a 1000-wide request snaps to 1024 and still reads exactly (${snapped.w} × ${snapped.h})`);
+  ok(png.snapGradientPngWidth(1000) === 1024 && png.snapGradientPngWidth(100) === 256 && png.snapGradientPngWidth(9000) === 4096 && png.snapGradientPngWidth(640) === 768 && png.snapGradientPngWidth(NaN) === 1024,
+    `[3b] snapGradientPngWidth: nearest multiple of 256 in 256…4096, default 1024 (1000→${png.snapGradientPngWidth(1000)}, 100→${png.snapGradientPngWidth(100)}, 9000→${png.snapGradientPngWidth(9000)}, 640→${png.snapGradientPngWidth(640)})`);
+  ok(png.clampGradientPngHeight(0) === 1 && png.clampGradientPngHeight(5000) === 4096 && png.clampGradientPngHeight(40.4) === 40 && png.clampGradientPngHeight(undefined) === 128, '[3b] clampGradientPngHeight: 1…4096, rounded, default 128');
+  const dflt = codec.readPngHeader(png.writeGradientPng([ENTRIES[1]]))!;
+  ok(dflt.width === 1024 && dflt.height === 128, `[3b] no size → the 1024 × 128 default (${dflt.width} × ${dflt.height})`);
+  const setIgnores = codec.readPngHeader(png.writeGradientPng(ENTRIES.slice(0, 3), undefined, { width: 2048, height: 40 }))!;
+  ok(setIgnores.width === 1024 && setIgnores.height === 3 * 32, `[3b] a SET ignores the size and keeps the band layout (${setIgnores.width} × ${setIgnores.height})`);
+  const viaBuild = buildGradientFile([ENTRIES[1]], undefined, 'png', undefined, { width: 512, height: 40 });
+  ok(viaBuild.kind === 'png' && codec.readPngHeader(viaBuild.bytes)!.width === 512 && codec.readPngHeader(viaBuild.bytes)!.height === 40, '[3b] buildGradientFile passes the size to the writer');
+  const meta = png.readGradientPng(snapped.bytes);
+  ok(meta.kind === 'document' && allSame([ENTRIES[1]], meta.gradients).length === 0, '[3b] with its metadata a custom-size PNG still reads as the exact document');
+  // THE k-COLUMN RULE, from the refusing side: a 2048-wide single band with ONE non-uniform 8-px
+  // block (the LAST column of texel 1's block differs — a check that stopped at the old 4-px
+  // column would miss it; rows still identical) is not ours; a width that is not a multiple of 256
+  // is not ours even when every pixel agrees (a FLAT colour: the one fixture a fractional texel
+  // width would otherwise misread, since every block it looks at is "uniform"); an empty
+  // document's placeholder is not claimed.
+  {
+    const dec2 = codec.decodePng(sized(ENTRIES[2], { width: 2048, height: 6 }).stripped)!;
+    const broken = dec2.pixels.slice();
+    for (let y = 0; y < 6; y++) broken[(y * 2048 + 15) * 3] ^= 0x40;
+    ok(png.readGradientPng(codec.encodePng(2048, 6, broken)).kind === 'not-ours', '[3b] a 2048-wide band whose 8-px texel block differs in its last column is not ours');
+    const flat = new Uint8Array(1000 * 20 * 3);
+    for (let p = 0; p < 1000 * 20; p++) { flat[p * 3] = 200; flat[p * 3 + 1] = 100; flat[p * 3 + 2] = 50; }
+    ok(png.readGradientPng(codec.encodePng(1000, 20, flat)).kind === 'not-ours', '[3b] a flat colour 1000 wide (not a multiple of 256) is not ours');
+    const empty = png.writeGradientPng([]);
+    ok(png.readGradientPng(codec.stripPngText(empty)!).kind === 'not-ours', '[3b] an empty document\'s placeholder image is not read as a gradient');
+  }
+  // A 1024-wide height two layouts could produce keeps the fewest-bands rule, and a set still reads.
+  {
+    const two = codec.stripPngText(png.writeGradientPng([ENTRIES[1], ENTRIES[3]]))!; // 1024 × 64
+    const r2 = png.readGradientPng(two);
+    ok(r2.kind === 'bands' && r2.configs.length === 2, `[3b] a stripped two-gradient set (1024 × 64) still reads as two bands, not one 64-px gradient (${r2.kind === 'bands' ? r2.configs.length : r2.kind})`);
+  }
 
   // re-encoded by "another tool": every filter type, and RGBA
   const dec = codec.decodePng(set12)!;

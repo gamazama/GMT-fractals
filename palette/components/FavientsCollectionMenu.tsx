@@ -24,8 +24,9 @@
  * global toast. Nothing here knows which host it is in.
  *
  * THE COLLECTION FILE IS THE GMT GRADIENT FILE (ADR-0123, 2026-09-14). Save collection writes it —
- * a PNG by default (every gradient in the metadata, and a band of pixels each, so a stripped copy
- * still loads with exact colours), the same payload as .json beside it. Load & merge / Replace
+ * a PNG (every gradient in the metadata, and a band of pixels each, so a stripped copy still loads
+ * with exact colours). PNG ONLY since the ADR's Update 2026-09-14: the "Save collection (.json)"
+ * item went; the JSON is still READ, so old backups load. Load & merge / Replace
  * read BYTES and go through the one loader (`readCollectionFiles`), so they take that PNG, its
  * JSON, the legacy collection JSON and a zip; a Replace takes only a document (a lone gradient
  * file must never wipe the shelf), a merge takes any gradient file. "Import gradient file…" is the
@@ -43,7 +44,7 @@ import { useFavientsStore } from '../store/favientsStore';
 import { downloadBlob } from '../../utils/SceneFormat';
 import { EXPORT_FORMATS, getExportFormat, AI_STOP_LIMIT } from '../core/exportFormats';
 import { buildCollectionZip, buildCollectionFile, buildContactSheet, collectionQualityWarnings } from '../core/favientsExport';
-import { buildGradientFile, type GradientFileKind } from '../core/gradientFile';
+import { buildGradientFile } from '../core/gradientFile';
 import {
   GRADIENT_FILE_ACCEPT,
   readGradientFiles,
@@ -71,7 +72,7 @@ const menuItemCls =
 
 /**
  * The popover itself. Saves the
- * collection as the GMT gradient file (PNG or JSON), loads (merge) / replaces it from a file, clears
+ * collection as the GMT gradient file (PNG), loads (merge) / replaces it from a file, clears
  * it, and exports the gradients as a per-format .zip or a PNG contact sheet. Styled to
  * match the engine's system-menu popovers.
  */
@@ -140,13 +141,14 @@ export const FavientsCollectionMenu: React.FC<{
   const close = () => setOpen(false);
   const empty = favients.length === 0;
 
-  const saveCollection = (kind: GradientFileKind) => {
-    // The GMT gradient file (ADR-0123): the same document `exportCollection` writes, as a PNG
-    // (default) or its JSON. Built from the store's own favourites and labels.
-    const built = buildGradientFile(favients, groupLabels, kind, 'My Gradients');
-    const blob = built.kind === 'png' ? new Blob([built.bytes as unknown as BlobPart], { type: built.mime }) : new Blob([built.text], { type: built.mime });
-    downloadBlob(blob, built.filename);
-    onFlash(`Collection saved (.${kind})`);
+  const saveCollection = () => {
+    // The GMT gradient file (ADR-0123): the same document `exportCollection` writes, as a PNG — the
+    // one form offered (Update 2026-09-14; Load & merge / Replace still read the JSON). Built from
+    // the store's own favourites and labels.
+    const built = buildGradientFile(favients, groupLabels, 'png', 'My Gradients');
+    if (built.kind !== 'png') return;
+    downloadBlob(new Blob([built.bytes as unknown as BlobPart], { type: built.mime }), built.filename);
+    onFlash('Collection saved (.png)');
     close();
   };
 
@@ -299,8 +301,7 @@ export const FavientsCollectionMenu: React.FC<{
           onClick={(e) => e.stopPropagation()}
         >
           <button className={menuItemCls} onClick={() => gradientFileRef.current?.click()}>Import gradient file…</button>
-          <button className={menuItemCls} onClick={() => saveCollection('png')} data-gx-save-collection="png">Save collection (.png)</button>
-          <button className={menuItemCls} onClick={() => saveCollection('json')} data-gx-save-collection="json">Save collection (.json)</button>
+          <button className={menuItemCls} onClick={saveCollection} data-gx-save-collection="png">Save collection (.png)</button>
           <button className={menuItemCls} onClick={() => pickFile('merge')} data-gx-load-collection="merge">Load &amp; merge…</button>
           <button className={menuItemCls} onClick={() => pickFile('replace')} data-gx-load-collection="replace">Replace from file…</button>
           <button className={`${menuItemCls} hover:!text-danger`} onClick={doClear}>Clear collection</button>

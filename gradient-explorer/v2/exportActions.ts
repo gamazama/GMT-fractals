@@ -3,13 +3,21 @@
  * the hero's hover flyout; plans/ge-v2-figma/hero-spec.md §7f).
  *
  * One `ExportAction` is a copy or a download of one registry format (`palette/core/
- * exportFormats.ts`), or the PNG strip. `runExport` performs it and toasts; it also notes
- * it as a RECENT, which is what the hero's Export icon shows on hover — the last three
- * things this person exported, one click each. `ExportMenu` (the full floating window)
- * runs the same function, so the two surfaces cannot drift.
+ * exportFormats.ts`), the GMT gradient PNG, or the swatch sheet. `runExport` performs it and
+ * toasts; it also notes it as a RECENT, which is what the hero's Export icon shows on hover and
+ * the Export window shows as Again — the last three things this person exported, one click each.
+ * `ExportMenu` (the full floating window) runs the same function, so the two surfaces cannot drift.
  *
- * Recents persist in localStorage (`gx.v2.recentExports`); an unknown format key (a
- * renamed registry entry) is dropped on load, never shown.
+ * RECENTS HOLD NO REPEATS (owner, 2026-09-14: Again showed "Download .css" twice). Two causes, both
+ * fixed here rather than in either surface: the label named only the EXTENSION, so CSS
+ * linear-gradient and CSS variables (both .css) read as one export twice — `exportActionParts` now
+ * names the FORMAT; and nothing held the stored list to one entry per action — `exportActionId`
+ * (kind + format key + subject) is the identity, `noteRecentExport` replaces by it, and `load`
+ * dedupes by it, newest first, writing the cleaned list back.
+ *
+ * Recents persist in localStorage (`gx.v2.recentExports`); an entry that no longer names a live
+ * action is dropped on load, never shown: an unknown format key (a renamed registry entry), and
+ * since 2026-09-14 the removed kinds — a GMT gradient `.json`, and the ramp's PNG strip.
  *
  * THE EXPORTED NAME is formed here and only here (owner, 2026-09-13): an UNMODIFIED catalogue
  * gradient exports as "Name (cpt-city/gacruxa, CC BY 3.0)" — the name is the one field every
@@ -28,13 +36,17 @@
  * name, so a copy whose metadata was stripped (the PNG's pixels still import) keeps the credit
  * in the one place it has left. A set carries each member's group and the labels of those groups.
  * A GMT file download IS a recent (`kind: 'gmt'`), since it is one click the hero's flyout can
- * repeat; the registry formats keep their own kinds. Guard: `npm run smoke:ge-gradientfile` [a0] [a] [e] [f]
+ * repeat; the registry formats keep their own kinds. Every UI offers the PNG only (ADR-0123
+ * Update 2026-09-14); `runGradientFile(…, 'json')` stays for code and tests. One gradient's PNG
+ * honours the window's size (`opts.pngW` × `opts.pngH`, width snapped to a multiple of 256 by the
+ * writer); a set's keeps the automatic band layout. Guard: `npm run smoke:ge-gradientfile` [a0] [a] [e] [f]
  * (falsified by dropping each stop's bias and interpolation from the written config).
  *
  * `runSetExport` is the same registry pointed at a SET of gradients rather than one
  * (§8b item 4, the 2026-09-08 migration audit's M1): a collection format bundles the set
- * into one file, everything else becomes a .zip of one file per gradient, and the contact
- * sheet is a PNG grid of the whole set. The building is
+ * into one file, everything else becomes a .zip of one file per gradient, and the swatch
+ * sheet is a PNG of every member's palette. (The set's ramp contact sheet left the window on
+ * 2026-09-14 — the set's GMT gradient PNG draws every member too.) The building is
  * `palette/core/favientsExport.ts`, unchanged — what moved is WHAT it is pointed at.
  * Before this it existed only inside the My Gradients kebab and always meant the whole
  * collection; the set is the noun Phase D created. A set export is NOT noted as a recent:
@@ -50,7 +62,6 @@ import type { RGB } from '../../palette/core/oklab';
 import {
   buildCollectionFile,
   buildCollectionZip,
-  buildContactSheet,
   buildSwatchCollectionFile,
   buildSwatchSheet,
   buildSwatchZip,
@@ -60,17 +71,46 @@ import {
 import type { Favient } from '../../palette/store/favientsStore';
 import { exportNameFor, withExportName } from '../../palette/core/catalogOrigin';
 import { buildGradientFile, type GradientFileKind, type BuiltGradientFile } from '../../palette/core/gradientFile';
+import { GRADIENT_PNG_DEFAULT_SIZE, clampGradientPngHeight, snapGradientPngWidth } from '../../palette/core/gradientPng';
 import { useFavientsStore } from '../../palette/store/favientsStore';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import type { GradientConfig } from '../../types';
 
 /**
- * One export. `subject` is WHICH FACE of the gradient it takes (§8b item 5): 'ramp' is the
- * continuous 256-step gradient, 'swatches' is the palette the user composed on the hero.
- * Optional, and absent means 'ramp' — recents written before 2026-09-09 have no subject
- * and must keep meaning what they meant.
+ * THE EXPORT SETTINGS, remembered (`gx.v2.exportSettings`). Here rather than in `ExportMenu` so
+ * the hero's hover flyout repeats an export with the SAME settings the window would use — a GMT
+ * gradient PNG from the flyout at the size the window shows. `budget` is the stop override (null =
+ * each format's own); `pngW` × `pngH` size one gradient's GMT gradient PNG, the width always held
+ * snapped to a multiple of 256 (`snapGradientPngWidth`).
+ *
+ * The strip this size used to belong to defaulted to 1024 × 64 and was saved whole whenever any
+ * setting changed, so that exact pair is read as "never touched" and becomes the GMT PNG's
+ * default, 1024 × 128. Any other stored size is someone's choice and is kept (snapped).
  */
+export const EXPORT_SETTINGS_KEY = 'gx.v2.exportSettings';
+export interface ExportSettings { budget: number | null; pngW: number; pngH: number }
+export const DEFAULT_EXPORT_SETTINGS: ExportSettings = { budget: null, pngW: GRADIENT_PNG_DEFAULT_SIZE.width, pngH: GRADIENT_PNG_DEFAULT_SIZE.height };
+export const readExportSettings = (): ExportSettings => {
+  try {
+    const v = JSON.parse(safeLocalGet(EXPORT_SETTINGS_KEY) ?? 'null') as Partial<ExportSettings> | null;
+    if (!v || typeof v !== 'object') return DEFAULT_EXPORT_SETTINGS;
+    const oldStripDefault = v.pngW === 1024 && v.pngH === 64;
+    return {
+      budget: typeof v.budget === 'number' && Number.isFinite(v.budget) ? Math.max(2, Math.min(256, Math.round(v.budget))) : null,
+      pngW: oldStripDefault ? DEFAULT_EXPORT_SETTINGS.pngW : snapGradientPngWidth(v.pngW),
+      pngH: oldStripDefault ? DEFAULT_EXPORT_SETTINGS.pngH : clampGradientPngHeight(v.pngH),
+    };
+  } catch {
+    return DEFAULT_EXPORT_SETTINGS;
+  }
+};
+export const writeExportSettings = (s: ExportSettings): void => {
+  safeLocalSet(EXPORT_SETTINGS_KEY, JSON.stringify(s));
+};
+
 /** The Settings category's values, carried to whatever does the writing. `budget` is the
- *  stop override (undefined = each format's own); `pngW`/`pngH` size the PNG strip. */
+ *  stop override (undefined = each format's own); `pngW`/`pngH` size one gradient's GMT
+ *  gradient PNG (snapped by the writer; absent → 1024 × 128). */
 export interface ExportRunOpts {
   budget?: number;
   pngW?: number;
@@ -85,11 +125,20 @@ export interface ExportRunOpts {
 }
 
 
+/**
+ * One export. `subject` is WHICH FACE of the gradient it takes (§8b item 5): 'ramp' is the
+ * continuous 256-step gradient, 'swatches' is the palette the user composed on the hero.
+ * Optional on a format, and absent means 'ramp' — recents written before 2026-09-09 have no
+ * subject and must keep meaning what they meant.
+ */
 export type ExportAction =
   | { kind: 'copy' | 'download'; key: string; subject?: ExportSubject }
-  | { kind: 'png'; subject?: ExportSubject }
-  /** The GMT gradient file (ADR-0123) — the gradient itself, so it has no subject. */
-  | { kind: 'gmt'; file: GradientFileKind };
+  /** The swatch sheet — the palette as labelled chips. Swatches only: the ramp's PNG strip it used
+   *  to share this kind with was removed on 2026-09-14 (the GMT gradient PNG replaces it). */
+  | { kind: 'png'; subject: 'swatches' }
+  /** The GMT gradient file (ADR-0123) — the gradient itself, so it has no subject. PNG only in any
+   *  UI; the JSON is `runGradientFile(…, 'json')` for code. */
+  | { kind: 'gmt'; file: 'png' };
 
 const subjectOf = (a: ExportAction): ExportSubject => (a.kind === 'gmt' ? 'ramp' : a.subject ?? 'ramp');
 
@@ -100,8 +149,10 @@ const isAction = (a: unknown): a is ExportAction => {
   if (!a || typeof a !== 'object') return false;
   const o = a as { kind?: unknown; key?: unknown; subject?: unknown };
   if (o.subject !== undefined && o.subject !== 'ramp' && o.subject !== 'swatches') return false;
-  if (o.kind === 'png') return true;
-  if (o.kind === 'gmt') return (a as { file?: unknown }).file === 'png' || (a as { file?: unknown }).file === 'json';
+  // The ramp's PNG strip (a `png` with no subject, or 'ramp') and the GMT gradient .json are no
+  // longer offered: dropped, never shown as a row that does something the window no longer does.
+  if (o.kind === 'png') return o.subject === 'swatches';
+  if (o.kind === 'gmt') return (a as { file?: unknown }).file === 'png';
   if (o.kind !== 'copy' && o.kind !== 'download') return false;
   if (typeof o.key !== 'string') return false;
   const f = getExportFormat(o.key);
@@ -109,16 +160,46 @@ const isAction = (a: unknown): a is ExportAction => {
   // unknown key: dropped on load rather than offered as a click that would do nothing.
   return !!f && (o.subject !== 'swatches' || !!f.swatches);
 };
-const same = (a: ExportAction, b: ExportAction): boolean => {
-  if (a.kind !== b.kind) return false;
-  if (a.kind === 'gmt') return a.file === (b as { file: GradientFileKind }).file;
-  return subjectOf(a) === subjectOf(b) && (a.kind === 'png' || a.key === (b as { key: string }).key);
+
+/**
+ * An action's IDENTITY — what makes two recents the same export: its kind, its format key and its
+ * subject. A Copy and a Download of one format are two actions (two different things land); CSS
+ * linear-gradient and CSS variables are two (two keys, one extension); the same format from the
+ * ramp and from the swatches is two. The recents list holds each identity once.
+ */
+export const exportActionId = (a: ExportAction): string => {
+  if (a.kind === 'gmt') return `gmt:${a.file}`;
+  if (a.kind === 'png') return `png::${subjectOf(a)}`;
+  return `${a.kind}:${a.key}:${subjectOf(a)}`;
+};
+
+/** Newest first, one entry per identity, at most `MAX_RECENT`. */
+const dedupeRecents = (list: ExportAction[]): ExportAction[] => {
+  const seen = new Set<string>();
+  const out: ExportAction[] = [];
+  for (const a of list) {
+    const id = exportActionId(a);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(a);
+  }
+  return out.slice(0, MAX_RECENT);
 };
 
 const load = (): ExportAction[] => {
   try {
-    const v: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
-    return Array.isArray(v) ? v.filter(isAction).slice(0, MAX_RECENT) : [];
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const v: unknown = JSON.parse(raw ?? '[]');
+    const list = Array.isArray(v) ? dedupeRecents(v.filter(isAction)) : [];
+    // Storage holds what is shown: a list that had a removed kind or a repeat is written back clean.
+    if (raw !== null && JSON.stringify(list) !== raw) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+      } catch {
+        /* private mode */
+      }
+    }
+    return list;
   } catch {
     return [];
   }
@@ -128,7 +209,7 @@ let recents: ExportAction[] = load();
 const subscribers = new Set<() => void>();
 
 export const noteRecentExport = (a: ExportAction): void => {
-  recents = [a, ...recents.filter((r) => !same(r, a))].slice(0, MAX_RECENT);
+  recents = dedupeRecents([a, ...recents]);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(recents));
   } catch {
@@ -147,15 +228,46 @@ export const useRecentExports = (): ExportAction[] =>
     () => recents,
   );
 
-export const exportActionLabel = (a: ExportAction): string => {
-  if (a.kind === 'gmt') return `Download GMT gradient (.${a.file})`;
+/** The label with its extension REMOVED, for a surface that shows the extension in a column of its
+ *  own: the registry writes "Adobe swatches .ase" and "Fractint .map" for hosts that show a bare
+ *  list (the old shell's Extras `<select>`, where "Fractint" alone would be worse), so this is a
+ *  display decision rather than a rename in `exportFormats.ts`. Labels that never carried one —
+ *  "CSS variables", "Hex list (256)", "Paint.NET" — pass through. */
+export const labelWithoutExt = (label: string, ext: string): string => {
+  const needle = `.${ext}`.toLowerCase();
+  const i = label.toLowerCase().indexOf(needle);
+  if (i < 0) return label;
+  // Only when it stands on its own: ".ai" inside a hypothetical ".aiff" is not this label's
+  // extension. Written with indexOf rather than a RegExp built from a TEMPLATE LITERAL: the
+  // first cut was, and an escape like the one for whitespace collapses in the template
+  // before the RegExp ever sees it, so the pattern matched nothing and every design-app row
+  // kept saying its extension twice. It read correctly and did nothing.
+  const after = label[i + needle.length];
+  if (after && /[a-z0-9]/i.test(after)) return label;
+  return `${label.slice(0, i).trimEnd()} ${label.slice(i + needle.length).trimStart()}`.trim() || label;
+};
+
+/**
+ * What a recent IS, in words: the verb, the FORMAT's name ("CSS linear-gradient", "CSS variables",
+ * "GMT gradient", "Swatch sheet", with " · swatches" for the swatches face of a format) and the
+ * extension a download writes (null for a Copy). The format's name, never only its extension —
+ * two formats share `.css`, and a row that said "Download .css" twice read as a repeat.
+ */
+export const exportActionParts = (a: ExportAction): { verb: 'Copy' | 'Download'; format: string; ext: string | null } => {
+  if (a.kind === 'gmt') return { verb: 'Download', format: 'GMT gradient', ext: `.${a.file}` };
+  if (a.kind === 'png') return { verb: 'Download', format: 'Swatch sheet', ext: '.png' };
   const sw = subjectOf(a) === 'swatches';
-  if (a.kind === 'png') return sw ? 'Download swatch sheet' : 'Download PNG strip';
   const f = getExportFormat(a.key);
-  if (!f) return a.kind === 'copy' ? 'Copy' : 'Download';
-  const label = (sw && f.swatchLabel) || f.label;
-  const face = sw ? ' swatches' : '';
-  return a.kind === 'copy' ? `Copy ${label}${face}` : `Download .${f.ext}${face}`;
+  const verb = a.kind === 'copy' ? 'Copy' : 'Download';
+  if (!f) return { verb, format: a.key, ext: null };
+  const format = `${labelWithoutExt((sw && f.swatchLabel) || f.label, f.ext)}${sw ? ' · swatches' : ''}`;
+  return { verb, format, ext: a.kind === 'copy' ? null : `.${f.ext}` };
+};
+
+/** One line for a surface with no extension column (the hero's flyout): "Download CSS variables .css". */
+export const exportActionLabel = (a: ExportAction): string => {
+  const p = exportActionParts(a);
+  return `${p.verb} ${p.format}${p.ext ? ` ${p.ext}` : ''}`;
 };
 
 export const slugName = (name: string): string => name.trim().replace(/[^\w-]+/g, '_').slice(0, 48) || 'gradient';
@@ -196,35 +308,8 @@ const downloadFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: 
   else showToast(f.key === 'grd' ? `Downloaded .grd (${grdStopCount(ramp, budget)} stops)` : `Downloaded .${f.ext}`);
 };
 
-const downloadPng = (ramp: RGB[], name: string, w = 1024, h = 64, stem = slugName(name)) => {
-  const o = document.createElement('canvas');
-  o.width = Math.max(1, Math.round(w));
-  o.height = Math.max(1, Math.round(h));
-  const x = o.getContext('2d');
-  const r = document.createElement('canvas');
-  r.width = 256;
-  r.height = 1;
-  const rc = r.getContext('2d');
-  if (!x || !rc) return;
-  const img = rc.createImageData(256, 1);
-  for (let i = 0; i < 256; i++) {
-    img.data[i * 4] = Math.round(ramp[i].r);
-    img.data[i * 4 + 1] = Math.round(ramp[i].g);
-    img.data[i * 4 + 2] = Math.round(ramp[i].b);
-    img.data[i * 4 + 3] = 255;
-  }
-  rc.putImageData(img, 0, 0);
-  x.imageSmoothingEnabled = true;
-  x.drawImage(r, 0, 0, 256, 1, 0, 0, o.width, o.height);
-  o.toBlob((bl) => {
-    if (!bl) return;
-    downloadBlob(bl, `${stem}.png`);
-    showToast('Downloaded .png strip');
-  });
-};
-
-/** The working gradient's palette as a labelled swatch sheet — the swatches subject's
- *  answer to the PNG strip. One entry, the same drawing the set uses. */
+/** The working gradient's palette as a labelled swatch sheet (chips + hex) — the one image of a
+ *  PALETTE the window makes. One entry, the same drawing the set uses. */
 const downloadSwatchSheet = async (palette: RGB[], name: string): Promise<void> => {
   const blob = await buildSwatchSheet([{ name, colors: palette }], name);
   if (!blob) {
@@ -249,7 +334,8 @@ const creditTitle = (credited: string): string => credited.replace(/\s*\/\s*/g, 
  * Save the WORKING gradient as the GMT gradient file (ADR-0123): its real config, its plain name,
  * its catalogue origin (`opts.origin` — the working pipeline's, already null once the output
  * changed) and its source. The filename carries the credit while the gradient is unmodified,
- * exactly as a registry download's does.
+ * exactly as a registry download's does. The PNG is `opts.pngW` × `opts.pngH` (width snapped to a
+ * multiple of 256 by the writer; either absent → the 1024 × 128 default).
  */
 export const runGradientFile = (file: GradientFileKind, plainName: string, opts: ExportRunOpts = {}): boolean => {
   const config = opts.config;
@@ -263,6 +349,7 @@ export const runGradientFile = (file: GradientFileKind, plainName: string, opts:
     undefined,
     file,
     credited === plainName ? plainName : creditTitle(credited),
+    { width: opts.pngW, height: opts.pngH },
   );
   downloadGradientFile(built);
   showToast(`Downloaded GMT gradient (.${file})`);
@@ -348,20 +435,21 @@ export const runSetExport = (
   showToast(`Exported ${favients.length} as .zip`);
 };
 
-/** The set's image: a contact sheet of the ramps (OD2), or a sheet of the palettes. */
-export const runSetImage = async (favients: Favient[], setName: string, subject: ExportSubject = 'ramp', n = 7): Promise<void> => {
+/** The set's SWATCH SHEET: every member's palette (`n` swatches each) as labelled chips. The set's
+ *  ramp contact sheet left the Export window on 2026-09-14 — the set's GMT gradient PNG draws every
+ *  member (`favientsExport.buildContactSheet` stays for the collection menu's own export block). */
+export const runSetSwatchSheet = async (favients: Favient[], setName: string, n = 7): Promise<void> => {
   if (!favients.length) {
     showToast('That set is empty');
     return;
   }
-  const blob =
-    subject === 'swatches' ? await buildSwatchSheet(setSwatches(favients, n), setName) : await buildContactSheet(favients.map(withExportName), setName);
+  const blob = await buildSwatchSheet(setSwatches(favients, n), setName);
   if (!blob) {
     showToast('Could not draw the sheet');
     return;
   }
-  downloadBlob(blob, `${slugName(setName)}-${subject === 'swatches' ? 'swatches' : 'contact-sheet'}.png`);
-  showToast(subject === 'swatches' ? 'Swatch sheet saved (PNG)' : 'Contact sheet saved (PNG)');
+  downloadBlob(blob, `${slugName(setName)}-swatches.png`);
+  showToast('Swatch sheet saved (PNG)');
 };
 
 /**
@@ -406,8 +494,7 @@ export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palet
     return;
   }
   if (a.kind === 'png') {
-    if (swatches) void downloadSwatchSheet(palette, name);
-    else downloadPng(ramp, name, opts.pngW, opts.pngH, stem);
+    void downloadSwatchSheet(palette, name);
   } else {
     const f = getExportFormat(a.key);
     if (!f) return;

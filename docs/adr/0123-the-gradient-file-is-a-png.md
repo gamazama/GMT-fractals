@@ -1,5 +1,31 @@
 # ADR-0123: The GMT gradient file is a PNG that carries its own data, and one loader reads every gradient file
 
+> **Update 2026-09-14 (owner review of the shipped UI; decision unchanged — the PNG is still the
+> file and one loader still reads every gradient file):**
+> - **PNG only in the UI.** The Export window's For GMT band offers ONE row, "GMT gradient" `.png`,
+>   for a gradient and for a set; the `.json` row and the collection menu's "Save collection
+>   (.json)" are gone. Decision 2's "JSON … offered beside PNG" no longer holds for any UI. The
+>   JSON is still READ everywhere (old backups, the harnesses) and `buildGradientFile(…, 'json')` /
+>   `runGradientFile(…, 'json')` still write it for code and tests. A stored recent export of the
+>   removed kind is dropped on load.
+> - **One gradient's size is the user's.** The single-gradient PNG is `pngW` × `pngH` from the
+>   Export window (default 1024 × 128, Decision 2's layout). The WIDTH snaps to the nearest multiple
+>   of 256 within 256…4096 (`gradientPng.ts` `snapGradientPngWidth`; 1000 → 1024), so each texel is
+>   a whole k = width / 256 pixel columns and a metadata-stripped copy still reads back EXACT
+>   colours; the HEIGHT is free, 1…4096. A set keeps Decision 2's automatic 1024-wide bands. The
+>   reader generalises to match: any width that is a multiple of 256 with each k-column block
+>   uniform is ONE gradient of any height (all rows identical); only 1024 wide are set band heights
+>   tried, after the single band (fewest bands first, as before). The metadata path is unchanged.
+>   Guard: `npm run test:gradient-file` [3b].
+> - **The "As an image" section is removed.** Its PNG strip (1024 × 64) and the set's contact sheet
+>   are superseded by the GMT gradient PNG, which draws the ramp AND reads back; the strip's size
+>   fields moved under the GMT gradient row. The SWATCH SHEET (labelled chips + hex) is a different
+>   product and nothing else makes an image of a palette, so it stays — one row at the bottom of the
+>   Swatches subject, with no section header.
+> - Also in the window: Again moved to the top (under the subject switch, above For GMT), and the
+>   recents hold each action once — identity kind + format key + subject, each row naming its
+>   format (`exportActions.ts` `exportActionId` / `exportActionParts`).
+
 - **Status:** Accepted
 - **Date:** 2026-09-14
 - **Relates to:** ADR-0122 (the two gradient forms this file carries); ADR-0119 (a save is drawn

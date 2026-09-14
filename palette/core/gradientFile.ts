@@ -1,6 +1,7 @@
 /**
  * gradientFile — the Explorer's SAVE (ADR-0123 Decision 5): one call that turns gradients into the
- * GMT gradient file a person downloads, as a PNG (the default) or the same payload as JSON. Pure;
+ * GMT gradient file a person downloads, as a PNG (the one form a UI offers) or the same payload as
+ * JSON (code, tests, backups). Pure;
  * the download itself is the caller's (the UI's `downloadBlob`).
  *
  * The filename keeps the REAL name — spaces, case and non-ASCII survive — and loses only what a
@@ -13,7 +14,7 @@
  */
 
 import { encodeGradientDocument, gradientDocumentText, type GradientDocumentInput } from './gradientDocument';
-import { writeGradientPng } from './gradientPng';
+import { writeGradientPng, type GradientPngSize } from './gradientPng';
 
 export const GRADIENT_JSON_SUFFIX = '.gmt-gradients.json';
 
@@ -50,15 +51,20 @@ const defaultTitle = (entries: ReadonlyArray<GradientDocumentInput>, groups?: Re
 /**
  * Build the GMT gradient file for `entries` (a `Favient` is one). `groups` labels the sets they
  * name — pass the shelf's `groupLabels`, or just the one set's. `title` overrides the filename's
- * stem (a set export passes the set's label).
+ * stem (a set export passes the set's label). `size` sizes a ONE-gradient PNG (width snapped to a
+ * multiple of 256, see `gradientPng.ts`); a set and the JSON ignore it.
+ *
+ * Every UI offers the PNG only (ADR-0123 Update 2026-09-14). `'json'` stays for code, tests and
+ * backups — the loader still reads it.
  */
 export const buildGradientFile = (
   entries: ReadonlyArray<GradientDocumentInput>,
   groups: Readonly<Record<string, string>> | undefined,
   kind: GradientFileKind,
   title?: string,
+  size?: GradientPngSize,
 ): BuiltGradientFile => {
   const stem = gradientFileStem(title ?? defaultTitle(entries, groups));
-  if (kind === 'png') return { kind, bytes: writeGradientPng(entries, groups), filename: `${stem}.png`, mime: 'image/png' };
+  if (kind === 'png') return { kind, bytes: writeGradientPng(entries, groups, size), filename: `${stem}.png`, mime: 'image/png' };
   return { kind, text: gradientDocumentText(encodeGradientDocument(entries, groups)), filename: `${stem}${GRADIENT_JSON_SUFFIX}`, mime: 'application/json' };
 };

@@ -19,7 +19,8 @@
  *     stepper and the rule places them.
  *   • What else changes per subject is small and named inline: a set has no Copy (no single
  *     text form), gets a .zip where one gradient gets one file unless the format bundles,
- *     and the image row is a contact sheet of ramps or a sheet of labelled swatch chips.
+ *     and gets no size fields on its GMT gradient PNG (a set keeps the automatic band layout).
+ *     The Swatches subject ends in one row, the swatch sheet (labelled chips + hex).
  *   • THE LOSSY NOTICE is the same for one gradient and for a set, ramp side only (the
  *     swatches side reduces nothing): a format that flattens visible detail says how many
  *     gradients it reduced, on hover, in the category's NOTE_STRIP. A set warns on the
@@ -37,7 +38,10 @@
  *
  *   1. AGAIN — the last few exports, at the top, one click each. The app already recorded
  *      them (`exportActions.ts`, shown on the Export icon's hover flyout); they were simply
- *      not in the WINDOW, which is where someone who has done this before is looking.
+ *      not in the WINDOW, which is where someone who has done this before is looking. Since
+ *      2026-09-14 it sits directly under the subject switch, above For GMT (owner: it had
+ *      drifted below the GMT band), each row names its FORMAT with the extension in the column,
+ *      and the list holds each action once (`exportActionId`) — it had shown ".css" twice.
  *   2. The four group headers already say what each group is FOR, so they became the choice:
  *      closed by default, one open at a time, and the one that opens is the one holding your
  *      last export. Twenty visible rows become two to eight.
@@ -55,21 +59,27 @@
  *
  * The output profile is a section like the others with its value on the header — a setting
  * almost nobody touches, previously sitting between the formats and the image row at full
- * weight. The image row stays open: it is one row and it is what most people came for, and
- * it takes the same shape as a format row so there is one row anatomy in the window.
+ * weight.
  *
- * THE GMT GRADIENT FILE COMES FIRST (ADR-0123 Decision 5, 2026-09-14). Under the Ramp subject,
- * above everything else, a band "For GMT" holds the Explorer's own save — "GMT gradient" as .png
- * (first, the default) and as .json — for one gradient and for a set alike. It writes the
- * gradient itself (config, name, credit, source; a set's groups), not the 256-step ramp, so it is
- * the only row here that comes back exactly. Everything below it is an export to OTHER software,
- * lossy by nature, under a caption that says so ("For other software"), in the same accordion as
- * before. The band is deliberately not an accordion section (`data-gx-section`): it is always
- * open, and a section is a thing you choose between. Its rows keep the window's one row anatomy —
- * label, `EXT_COL`, glyph, `COPY_SLOT` — so the extension column stays one column. Not under
- * Swatches: the file carries the gradient, not a palette laid out from it.
+ * THE ORDER, top to bottom (2026-09-14): title · the Ramp | Swatches switch (and, under Swatches,
+ * its one line or the set's stepper) · Again · For GMT (Ramp only) · "For other software" and the
+ * format accordion · Settings · the swatch sheet (Swatches only).
  *
- * The doing lives in `exportActions.ts` (`runExport`, `runSetExport`, `runSetImage`),
+ * THE GMT GRADIENT FILE (ADR-0123 Decision 5 and its Update 2026-09-14). Under the Ramp subject a
+ * band "For GMT" holds the Explorer's own save — ONE row, "GMT gradient" .png, for one gradient and
+ * for a set alike (the .json row went; the loader still reads JSON). It writes the gradient itself
+ * (config, name, credit, source; a set's groups), not the 256-step ramp, so it is the only row
+ * here that comes back exactly. For ONE gradient the PNG's size sits under the row (`SizeField`,
+ * `pngW` × `pngH`): the width snaps to a multiple of 256 so a metadata-stripped copy still reads
+ * back exact colours, the height is free. The "As an image" section that held those fields is
+ * gone — its PNG strip and the set's contact sheet are superseded by this file. Everything below
+ * the band is an export to OTHER software, lossy by nature, under a caption that says so. The band
+ * is deliberately not an accordion section (`data-gx-section`): it is always open, and a section
+ * is a thing you choose between. Its row keeps the window's one row anatomy — label, `EXT_COL`,
+ * glyph, `COPY_SLOT`. Not under Swatches: the file carries the gradient, not a palette laid out
+ * from it.
+ *
+ * The doing lives in `exportActions.ts` (`runExport`, `runSetExport`, `runSetSwatchSheet`),
  * shared with the hero's hover flyout of recent exports, so the two surfaces cannot drift.
  * This file is only the full window. It hangs off the hero BAND, not the card — the card
  * clips its children (2026-09-07).
@@ -79,7 +89,7 @@
  * at 390; where it came from does not change the answer, so the branch is here rather than
  * two `phone ?` strings at the call sites. `fixed` inside `env(safe-area-inset-*)`, its own
  * scroll, and the rows that carried fixed pairs — the subject segments, the swatch stepper,
- * the PNG W × H — wrap. The × stays where it was, at the top right.
+ * the GMT PNG's W × H — wrap. The × stays where it was, at the top right.
  *
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
@@ -87,8 +97,22 @@
 import type { GradientConfig } from '../../types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
-import { runExport, runSetExport, runSetImage, runSetGradientFile, setLossyCount, gradientLossyCount, useRecentExports, exportActionLabel } from './exportActions';
-import type { GradientFileKind } from '../../palette/core/gradientFile';
+import {
+  runExport,
+  runSetExport,
+  runSetSwatchSheet,
+  runSetGradientFile,
+  setLossyCount,
+  gradientLossyCount,
+  useRecentExports,
+  exportActionId,
+  exportActionParts,
+  labelWithoutExt,
+  readExportSettings,
+  writeExportSettings,
+  type ExportSettings,
+} from './exportActions';
+import { GRADIENT_PNG_MAX_SINGLE_HEIGHT, GRADIENT_PNG_MAX_WIDTH, GRADIENT_PNG_MIN_WIDTH, clampGradientPngHeight, snapGradientPngWidth } from '../../palette/core/gradientPng';
 import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
@@ -123,26 +147,46 @@ const PROFILES: { id: 'srgb' | 'linear' | 'aces_inverse'; label: string; title: 
  *  same affordance, so it stops competing with the formats for attention. */
 const SETTINGS_SECTION = 'Settings';
 
-/** The Settings category's values, remembered like the open category is. Stops is the
- *  override for every format that reduces (empty = each format's own budget); the two PNG
- *  numbers size the strip. */
-const SETTINGS_KEY = 'gx.v2.exportSettings';
-interface ExportSettings { budget: number | null; pngW: number; pngH: number }
-const DEFAULT_SETTINGS: ExportSettings = { budget: null, pngW: 1024, pngH: 64 };
-const readSettings = (): ExportSettings => {
-  try {
-    const v = JSON.parse(safeLocalGet(SETTINGS_KEY) ?? 'null') as Partial<ExportSettings> | null;
-    if (!v || typeof v !== 'object') return DEFAULT_SETTINGS;
-    const num = (x: unknown, min: number, max: number, fallback: number) =>
-      typeof x === 'number' && Number.isFinite(x) ? Math.max(min, Math.min(max, Math.round(x))) : fallback;
-    return {
-      budget: typeof v.budget === 'number' && Number.isFinite(v.budget) ? Math.max(2, Math.min(256, Math.round(v.budget))) : null,
-      pngW: num(v.pngW, 1, 8192, DEFAULT_SETTINGS.pngW),
-      pngH: num(v.pngH, 1, 8192, DEFAULT_SETTINGS.pngH),
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+/** The Settings category's values and the GMT PNG's size are remembered in `exportActions.ts`
+ *  (`readExportSettings`), so the hero's flyout repeats an export with the same ones. */
+
+/**
+ * THE GMT GRADIENT PNG'S SIZE FIELD (owner, 2026-09-14). A DRAFT while typing and a COMMIT on blur
+ * or Enter, because the value is SNAPPED: a width is a multiple of 256, and a field that snapped on
+ * every keystroke would turn the "5" of "512" into 256 before the "12" arrived. The committed value
+ * is what the field shows once it lets go, so a 1000 typed reads back as 1024 — the size you get is
+ * the size you see. A click on the download row blurs the field first, so it exports what was typed.
+ */
+const SizeField: React.FC<{ value: number; commit: (raw: number) => void; ariaLabel: string; title: string; data: string }> = ({
+  value,
+  commit,
+  ariaLabel,
+  title,
+  data,
+}) => {
+  const [draft, setDraft] = useState<string | null>(null);
+  const done = () => {
+    if (draft === null) return;
+    const n = Number(draft.trim());
+    setDraft(null);
+    if (draft.trim() !== '' && Number.isFinite(n)) commit(n);
+  };
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      value={draft ?? value}
+      title={title}
+      aria-label={ariaLabel}
+      data-gx-png-size-field={data}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={done}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      className="w-16 h-7 px-1.5 rounded-lg border border-line/20 bg-transparent text-[13px] font-mono text-fg text-right outline-none focus:border-accent-400"
+    />
+  );
 };
 
 /** A small number field. Blank is allowed and MEANS something on the stop budget (each
@@ -259,13 +303,14 @@ const SubjectSegment: React.FC<{
 /** THE CATEGORY BAND (owner, 2026-09-09: "a lighter strip behind the category names").
  *  A resting tint one step up from the floating surface, so the window reads as bands of
  *  formats under labelled strips rather than one column of similar-weight rows. Every
- *  category name in the window wears it — the accordion heads, Again, As an image — or the
+ *  category name in the window wears it — the accordion heads, Again, For GMT — or the
  *  ones that are not accordion heads would read as a different kind of thing. */
 const BAND = 'w-full flex items-center gap-2 h-7 px-2 rounded-lg bg-line/[0.06]';
 
 /** THE EXTENSION COLUMN (owner, 2026-09-09: "there's a little column for the extension, we
  *  should make that a thing"). A fixed width on EVERY row of the window — formats, Again,
- *  the image — so the extensions start at one x and the download glyphs after them do too.
+ *  GMT gradient, the swatch sheet — so the extensions start at one x and the download glyphs
+ *  after them do too.
  *  Reserved even when a row has nothing to put in it, because a column that collapses on
  *  some rows is a hint, not a column. Sized for the longest the registry writes (`.idml`,
  *  `.json`) with room to spare; it truncates rather than pushing the glyph out of line. */
@@ -287,25 +332,6 @@ const NOTE_STRIP = 'h-4 px-1 text-[11px] leading-4 text-fg-muted truncate';
  *  used to read "2 of 12 use more than 40 colour stops, so they export simplified. Most apps
  *  cap stops similarly"). The count is what you need; the lecture is not. */
 const lossyNote = (n: number, stops: number): string => `${n} gradient${n === 1 ? '' : 's'} reduced to ${stops} colour stops`;
-
-/** The label with its extension REMOVED, because the column carries it now: the registry
- *  writes "Adobe swatches .ase" and "Fractint .map" for hosts that show a bare list (the old
- *  shell's Extras `<select>`, where "Fractint" alone would be worse), so this is a display
- *  decision local to this window rather than a rename in `exportFormats.ts`. Labels that
- *  never carried one — "CSS variables", "Hex list (256)", "Paint.NET" — pass through. */
-const labelWithoutExt = (label: string, ext: string): string => {
-  const needle = `.${ext}`.toLowerCase();
-  const i = label.toLowerCase().indexOf(needle);
-  if (i < 0) return label;
-  // Only when it stands on its own: ".ai" inside a hypothetical ".aiff" is not this label's
-  // extension. Written with indexOf rather than a RegExp built from a TEMPLATE LITERAL: the
-  // first cut was, and an escape like the one for whitespace collapses in the template
-  // before the RegExp ever sees it, so the pattern matched nothing and every design-app row
-  // kept saying its extension twice. It read correctly and did nothing.
-  const after = label[i + needle.length];
-  if (after && /[a-z0-9]/i.test(after)) return label;
-  return `${label.slice(0, i).trimEnd()} ${label.slice(i + needle.length).trimStart()}`.trim() || label;
-};
 
 /** An accordion header: what the section is for, how much is in it, and a chevron. */
 const SectionHead: React.FC<{ title: string; note?: string; open: boolean; onClick: () => void }> = ({ title, note, open, onClick }) => (
@@ -419,10 +445,10 @@ export const ExportMenu: React.FC<{
   /** What the open category's note strip is showing, or null. One at a time, because one
    *  category is open at a time and one row is hovered at a time. */
   const [notice, setNotice] = useState<string | null>(null);
-  const [settings, setSettings] = useState<ExportSettings>(readSettings);
+  const [settings, setSettings] = useState<ExportSettings>(readExportSettings);
   const saveSettings = (next: ExportSettings) => {
     setSettings(next);
-    safeLocalSet(SETTINGS_KEY, JSON.stringify(next));
+    writeExportSettings(next);
   };
 
   const swatches = subject === 'swatches';
@@ -441,14 +467,15 @@ export const ExportMenu: React.FC<{
   const n = isSet ? count : palette.length;
 
   const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH, origin, config, source };
-  const saveFile = (file: GradientFileKind) =>
-    set ? runSetGradientFile(file, set, name) : runExport({ kind: 'gmt', file }, ramp, name, palette, runOpts);
+  // The GMT gradient file is PNG only in the UI (ADR-0123 Update 2026-09-14); the loader still reads
+  // the JSON, and `runGradientFile(…, 'json')` still writes it for code and tests.
+  const saveFile = () => (set ? runSetGradientFile('png', set, name) : runExport({ kind: 'gmt', file: 'png' }, ramp, name, palette, runOpts));
   const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key, subject }, ramp, name, palette, runOpts);
   const download = (f: ExportFormatDef) =>
     set
       ? runSetExport(f.key, set, name, subject, count, settings.budget ?? undefined)
       : runExport({ kind: 'download', key: f.key, subject }, ramp, name, palette, runOpts);
-  const image = () => (set ? void runSetImage(set, name, subject, count) : runExport({ kind: 'png', subject }, ramp, name, palette, runOpts));
+  const swatchSheet = () => (set ? void runSetSwatchSheet(set, name, count) : runExport({ kind: 'png', subject: 'swatches' }, ramp, name, palette, runOpts));
 
   const formats = formatsFor(subject);
   // One gradient's lossy count per format, measured once per ramp / subject / budget rather
@@ -634,59 +661,91 @@ export const ExportMenu: React.FC<{
         </div>
       )}
 
-      {/* THE GMT GRADIENT FILE — the Explorer's save, first (ADR-0123). Ramp subject only. */}
-      {!swatches && (
-        <div data-gx-export-gmt>
-          <div className={BAND}>
-            <ZoneLabel className="flex-1">For GMT</ZoneLabel>
-          </div>
-          <div className="pt-1 px-1">
-            {(['png', 'json'] as const).map((file) => (
-              <div key={file} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => saveFile(file)}
-                  data-gx-gmtfile={file}
-                  title={isSet ? `All ${set!.length} in one .${file}` : `Download .${file}`}
-                  className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
-                >
-                  <span className="flex-1 min-w-0 truncate text-[13px] text-fg">GMT gradient</span>
-                  <span className={EXT_COL}>.{file}</span>
-                  <span className="text-fg-dim group-hover:text-fg">
-                    <Icon name="download" size={14} />
-                  </span>
-                </button>
-                <span className={COPY_SLOT} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* AGAIN, AT THE TOP (owner, 2026-09-14) — under the subject switch and its one line, above
+          everything else, because it is the shortest path for someone who has done this before.
+          One row per action (`exportActionId`; the recents hold no repeats), each naming its
+          FORMAT with the extension in the column, so CSS linear-gradient and CSS variables never
+          read as one .css twice. The glyph says Copy or Download. */}
       {again.length > 0 && (
         <div data-gx-export-again>
           <div className={BAND}>
             <ZoneLabel className="flex-1">Again</ZoneLabel>
           </div>
           <div className="pt-1 px-1">
-          {again.map((a) => (
-            <div key={exportActionLabel(a)} className="flex items-center gap-1">
+          {again.map((a) => {
+            const p = exportActionParts(a);
+            return (
+              <div key={exportActionId(a)} className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => runExport(a, ramp, name, palette, runOpts)}
+                  data-gx-again={exportActionId(a)}
+                  title={`${p.verb} ${p.format}`}
+                  className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
+                >
+                  <span className="flex-1 min-w-0 truncate">{p.format}</span>
+                  {/* A Copy writes no file, so its column is empty — but held open, so the row
+                      lines up with every other one. */}
+                  <span className={EXT_COL}>{p.ext ?? ''}</span>
+                  <span className="text-fg-dim group-hover:text-fg">
+                    {a.kind === 'copy' ? <CopyGlyph size={14} /> : <Icon name="download" size={14} />}
+                  </span>
+                </button>
+                <span className={COPY_SLOT} />
+              </div>
+            );
+          })}
+          </div>
+        </div>
+      )}
+
+      {/* THE GMT GRADIENT FILE — the Explorer's save (ADR-0123). Ramp subject only. ONE row, the
+          PNG (owner, 2026-09-14: the .json row went; the loader still reads JSON). For one
+          gradient its SIZE sits under it — the fields the removed "As an image" strip had — and
+          the export honours them: the width snaps to a multiple of 256 so a stripped copy still
+          reads back exact colours; the height is free. A set keeps the automatic band layout. */}
+      {!swatches && (
+        <div data-gx-export-gmt>
+          <div className={BAND}>
+            <ZoneLabel className="flex-1">For GMT</ZoneLabel>
+          </div>
+          <div className="pt-1 px-1">
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => runExport(a, ramp, name, palette, runOpts)}
-                className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
+                onClick={saveFile}
+                data-gx-gmtfile="png"
+                title={isSet ? `All ${set!.length} in one .png` : `Download .png — ${settings.pngW} × ${settings.pngH}`}
+                className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
               >
-                <span className="flex-1 min-w-0 truncate">{exportActionLabel(a)}</span>
-                {/* Nothing to say — an Again row already names its own format — but both
-                    columns are held open so the row lines up with every other one. */}
-                <span className={EXT_COL} />
+                <span className="flex-1 min-w-0 truncate text-[13px] text-fg">GMT gradient</span>
+                <span className={EXT_COL}>.png</span>
                 <span className="text-fg-dim group-hover:text-fg">
-                  {a.kind === 'copy' ? <CopyGlyph size={14} /> : <Icon name="download" size={14} />}
+                  <Icon name="download" size={14} />
                 </span>
               </button>
               <span className={COPY_SLOT} />
             </div>
-          ))}
+            {!isSet && (
+              <div className={`flex items-center gap-1.5 px-1 pt-1.5 ${phone ? 'flex-wrap' : ''}`} data-gx-png-size>
+                <SizeField
+                  value={settings.pngW}
+                  commit={(w) => saveSettings({ ...settings, pngW: snapGradientPngWidth(w) })}
+                  ariaLabel="PNG width"
+                  title={`Width in pixels — a multiple of 256 (${GRADIENT_PNG_MIN_WIDTH}–${GRADIENT_PNG_MAX_WIDTH}), so every colour is whole pixel columns`}
+                  data="w"
+                />
+                <span className="text-[13px] text-fg-dim">×</span>
+                <SizeField
+                  value={settings.pngH}
+                  commit={(h) => saveSettings({ ...settings, pngH: clampGradientPngHeight(h) })}
+                  ariaLabel="PNG height"
+                  title={`Height in pixels (1–${GRADIENT_PNG_MAX_SINGLE_HEIGHT})`}
+                  data="h"
+                />
+                <span className="flex-1 text-[11px] leading-snug text-fg-muted">Width snaps to 256s. For a full-size image use Wallpaper.</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -757,62 +816,31 @@ export const ExportMenu: React.FC<{
           </div>
         )}
       </div>
-      {/* The image stays OPEN: one row, and the thing most people came for. */}
-      <div>
-        <div className={BAND}>
-          <ZoneLabel className="flex-1">As an image</ZoneLabel>
-        </div>
-        <div className="pt-1 px-1">
+      {/* THE SWATCH SHEET — Swatches subject only, one row, no header of its own (owner,
+          2026-09-14). The "As an image" section it sat in is gone: its PNG strip and the set's
+          contact sheet are superseded by the GMT gradient PNG, which draws the ramp and reads
+          back. The swatch sheet is a different product — labelled chips with hex — and nothing
+          else makes an image of a palette, so it stays. */}
+      {swatches && (
+        <div className="px-1">
           <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={image}
-            data-gx-image
-            title="Download a PNG"
-            className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
-          >
-            <span className="flex-1 min-w-0 truncate text-[13px] text-fg">
-              {swatches ? 'Swatch sheet' : isSet ? 'Contact sheet' : 'PNG strip (1024 × 64)'}
-            </span>
-            <span className={EXT_COL}>.png</span>
-            <span className="text-fg-dim group-hover:text-fg">
-              <Icon name="download" size={14} />
-            </span>
-          </button>
-          <span className={COPY_SLOT} />
+            <button
+              type="button"
+              onClick={swatchSheet}
+              data-gx-image
+              title={isSet ? 'Every palette as labelled chips, one row per gradient' : 'The palette as labelled chips, hex included'}
+              className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
+            >
+              <span className="flex-1 min-w-0 truncate text-[13px] text-fg">Swatch sheet</span>
+              <span className={EXT_COL}>.png</span>
+              <span className="text-fg-dim group-hover:text-fg">
+                <Icon name="download" size={14} />
+              </span>
+            </button>
+            <span className={COPY_SLOT} />
           </div>
-          {/* THE STRIP'S SIZE, editable (owner, 2026-09-10: "the 1024 x 64 comment turn into
-              two textfields"). It was a parenthesis in the row's label stating a number
-              nobody could change. Only the strip has one — a contact sheet lays itself out
-              from the set's count, a swatch sheet from the palette's. */}
-          {!swatches && !isSet ? (
-            <div className={`flex items-center gap-1.5 px-1 pt-1.5 ${phone ? 'flex-wrap' : ''}`} data-gx-png-size>
-              <NumField
-                value={settings.pngW}
-                onChange={(pngW) => saveSettings({ ...settings, pngW: pngW ?? DEFAULT_SETTINGS.pngW })}
-                ariaLabel="PNG width"
-                title="Width in pixels"
-              />
-              <span className="text-[13px] text-fg-dim">×</span>
-              <NumField
-                value={settings.pngH}
-                onChange={(pngH) => saveSettings({ ...settings, pngH: pngH ?? DEFAULT_SETTINGS.pngH })}
-                ariaLabel="PNG height"
-                title="Height in pixels"
-              />
-              <span className="flex-1 text-[11px] leading-snug text-fg-muted">For a full-size image use Wallpaper.</span>
-            </div>
-          ) : (
-            <div className="text-[11px] leading-snug text-fg-muted px-1 pt-1">
-              {swatches
-                ? isSet
-                  ? 'Every palette as labelled chips, one row per gradient.'
-                  : 'The palette as labelled chips, hex included.'
-                : 'A grid of the whole set, names included.'}
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </Floating>
   );
 };

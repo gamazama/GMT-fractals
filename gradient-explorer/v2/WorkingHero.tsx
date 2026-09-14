@@ -96,7 +96,7 @@ import { unmodifiedOrigin, type CatalogOrigin } from '../../palette/core/catalog
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
-import { useWorkingStore, addStopsToWorking, type WorkingDerived } from '../../palette/store/workingStore';
+import { useWorkingStore, addStopsToWorking, workingSourceOf, type WorkingDerived } from '../../palette/store/workingStore';
 import { sameGradientBody } from '../../components/gradient/rampMode';
 import { isRampGradient, stopsOf } from '../../utils/gradientRamp';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
@@ -133,7 +133,7 @@ import { Icon } from './ui/Icon';
 import { InputSkinProvider } from '../../components/inputs';
 import { Floating } from './ui/Floating';
 import { useIsPhone } from './useIsPhone';
-import { runExport, useRecentExports, exportActionLabel } from './exportActions';
+import { runExport, useRecentExports, exportActionLabel, exportActionId, readExportSettings } from './exportActions';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { SourceId } from './GradientExplorerV2App';
@@ -595,7 +595,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               <Act icon onClick={onShare} title="Share — copy a link that opens this gradient">
                 <Icon name="share" size={15} />
               </Act>
-              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} palette={paletteRgb} origin={derived.origin} config={derived.config} />
+              <ExportButton open={exportOpen} onOpen={onExport} ramp={shown.ramp} name={derived.name} palette={paletteRgb} origin={derived.origin} config={derived.config} source={workingSourceOf(derived.input)} />
               {/* Wallpaper is the door OUT of the shell — "a whole other world inside the
                   app" (Phase W) — so alone among the use icons it carries a surface of its
                   own: a brushed sheen, quiet enough to sit in the header row and bright
@@ -883,11 +883,13 @@ const HalfHint: React.FC<{ className?: string; children: React.ReactNode }> = ({
 /**
  * The Export icon. A click opens the full window (`ExportMenu`, all formats). HOVER shows
  * the last three exports as one-click rows (owner, 2026-09-07: "a small on-hover dropdown
- * with their most recent export types"); nothing shows until there is a recent. The
+ * with their most recent export types"); nothing shows until there is a recent. The rows are
+ * the window's Again, from the same deduped source (`exportActionId`), each naming its format
+ * ("Download CSS variables .css"). The
  * flyout is `fixed`, measured off the button, because everything inside the card is
  * clipped by it.
  */
-const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string; palette: RGB[]; origin: CatalogOrigin | null; config: GradientConfig | null }> = ({ open, onOpen, ramp, name, palette, origin, config }) => {
+const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; name: string; palette: RGB[]; origin: CatalogOrigin | null; config: GradientConfig | null; source?: string }> = ({ open, onOpen, ramp, name, palette, origin, config, source }) => {
   const recents = useRecentExports();
   const [hover, setHover] = useState(false);
   const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
@@ -918,11 +920,14 @@ const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; n
         <Floating className="fixed z-40 p-1 flex flex-col min-w-[180px]" style={{ top: pos.top, right: pos.right }} data-gx-export-recent>
           {recents.map((a) => (
             <button
-              key={exportActionLabel(a)}
+              key={exportActionId(a)}
               type="button"
               className="text-left text-[13px] text-fg px-2 py-1 rounded-lg hover:bg-line/10 whitespace-nowrap"
               onClick={() => {
-                runExport(a, ramp, name, palette, { origin, config });
+                // The window's remembered settings too (stop budget, the GMT PNG's size), so a
+                // repeat from here writes what the same row in the window would.
+                const s = readExportSettings();
+                runExport(a, ramp, name, palette, { origin, config, source, budget: s.budget ?? undefined, pngW: s.pngW, pngH: s.pngH });
                 setHover(false);
               }}
             >

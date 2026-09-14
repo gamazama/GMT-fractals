@@ -51,7 +51,8 @@
  * Step [5] falsified 2026-09-09 two ways, each reverted: pinning `formatsFor('ramp')` in
  * ExportMenu whatever the subject is (red with "the Swatches subject offers the same
  * formats as Ramp (20 vs 20) — the subject is decorative"), and dropping the subject from
- * the image row's wording (red with "should be the swatch sheet (png-strip)"). The first
+ * the image row's wording (red with "should be the swatch sheet (png-strip)"; since 2026-09-14 the
+ * Ramp subject has no image row at all and the step asserts that instead). The first
  * cut of [5] keyed the format list off each Download button's TITLE and reported a false
  * red: .css is the extension of two formats now (the linear-gradient and the variable set),
  * so it read cssvars as css. It keys off the registry key instead.
@@ -174,7 +175,9 @@ async function main() {
           return { h: cs.height, nowrap: cs.whiteSpace === 'nowrap', clipped: cs.overflow === 'hidden', text: (e as HTMLElement).innerText.trim() };
         }),
         again: Array.from(w.querySelectorAll('[data-gx-export-again] button')).map((b) => (b as HTMLElement).innerText.trim()),
-        image: w.innerText.includes('Swatch sheet') ? 'swatch-sheet' : w.innerText.includes('PNG strip') ? 'png-strip' : 'other',
+        // The Ramp subject has NO image row since 2026-09-14 (the GMT gradient PNG replaced the
+        // strip); the Swatches subject keeps one, the swatch sheet.
+        image: w.innerText.includes('Swatch sheet') ? 'swatch-sheet' : /PNG strip|Contact sheet|As an image/.test(w.innerText) ? 'png-strip' : 'none',
       };
     });
   /** Open every format section in turn and collect what each holds. */
@@ -251,7 +254,7 @@ async function main() {
   if (ramp.subjects.join(',') !== 'ramp,swatches') fail(`[5] the subject control is not Ramp + Swatches (${ramp.subjects.join(',')})`);
   if (ramp.on !== 'ramp') fail(`[5] the window should open on the Ramp subject (${ramp.on})`);
   if (!ramp.formats.length) fail('[5] the Ramp subject offered no formats at all');
-  if (ramp.image !== 'png-strip') fail(`[5] the Ramp subject's image row should be the PNG strip (${ramp.image})`);
+  if (ramp.image !== 'none') fail(`[5] the Ramp subject should have no image row — the GMT gradient PNG replaced the strip (${ramp.image})`);
   // The whole point of the accordion: the twenty formats are NOT all on screen at once.
   const openNow = await readWindow();
   if (openNow!.visible.length >= ramp.formats.length)

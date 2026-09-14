@@ -58,6 +58,13 @@ named `Sea_Glass.css`.
   `test:palette`, falsified five ways. Its probe found one more gap, fixed: a bare `{stops}` config
   the gate would thin imported as "exact" minus the stop; now it falls to the colour reader
   (`everyStopKept`, test-gradient-file [8]).
+- 2026-09-14, owner review: PNG only in the UI (the Export .json row and "Save collection (.json)"
+  removed; JSON still read); Again at the top of the Export window with no repeats (identity kind +
+  key + subject, rows name the format); the "As an image" section removed (PNG strip and contact
+  sheet superseded; the swatch sheet kept as one row under Swatches); one gradient's GMT PNG takes
+  the window's W × H, width snapped to multiples of 256 (256…4096), height 1…4096, default
+  1024 × 128, and the stripped reader accepts it. ADR-0123 Update block; guards `test:gradient-file`
+  [3b] (falsified seven ways) and `smoke:ge-gradientfile` [g1]–[g4].
 
 ## Still open
 

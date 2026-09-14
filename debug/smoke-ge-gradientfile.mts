@@ -5,9 +5,11 @@
  * (`npm run test:gradient-file`); this is the browser half — the menu rows, the downloads, the
  * real `<input type=file>`, the window drop, the session hand-off and the reveal.
  *
- *   [a0] an UNMODIFIED catalogue pick exported as Export ▸ For GMT ▸ GMT gradient (.json) carries
- *        its plain name, its catalogue origin (the credit rides `origin`, not the name) and a
- *        filename with the credit; the For GMT band sits above every registry section.
+ *   [a0] an UNMODIFIED catalogue pick exported as Export ▸ For GMT ▸ GMT gradient (.png) carries
+ *        in its metadata its plain name, its catalogue origin (the credit rides `origin`, not the
+ *        name) and a filename with the credit; the For GMT band sits above every registry section
+ *        and holds ONE row, the PNG (the .json row went 2026-09-14; until then this step read the
+ *        .json download).
  *   [a]  the same pick KEPT and edited to a Step stop and a moved bias, exported as
  *        GMT gradient (.png): the PNG decodes (node) to the working config exactly, with the hero's
  *        name; loaded back through the collection menu's "Import gradient file…" picker while the
@@ -23,7 +25,16 @@
  *        the working session — the other gradient picked since is replaced by the saved one — and
  *        one Undo puts the other back (the Settings Load undo behaviour).
  *   [e]  Save collection (.png) decodes (node) to every favourite; Clear, then Replace from file…
- *        with that PNG restores the shelf's count and names.
+ *        with that PNG restores the shelf's count and names; the menu offers no "(.json)" save.
+ *   [g1] (2026-09-14) recents stored by an older build — a GMT .json, the ramp's PNG strip, a
+ *        repeat — are dropped on load: Again shows one row, no pageerror, storage written back.
+ *   [g2] the window's order: subject switch → Again → For GMT (one .png row); no image section.
+ *   [g3] the GMT PNG's size: 1000 typed shows 1024 on blur; 512 × 40 (the height committed by
+ *        clicking the row straight from the field) downloads a 512 × 40 PNG whose stripped copy
+ *        reads back with exact colours; the size is remembered.
+ *   [g4] NO REPEATS: CSS linear-gradient twice and CSS variables once → Again is exactly CSS
+ *        variables · CSS linear-gradient · GMT gradient, once each, extensions .css .css .png, the
+ *        stored list has no repeat, and the hero's hover flyout reads the same three, once each.
  *   [f]  on a Pixel 5, Export ▸ GMT gradient (.png) is on screen, and tapping it downloads a PNG that
  *        decodes to the hero's gradient.
  *
@@ -39,6 +50,15 @@
  *   - (b) the shell's `preRoute` not passed to `useImageDrop` (so a PNG goes straight to image
  *     extraction, as before ADR-0123) → red "[b] the stripped PNG did not import (added 0 …)".
  *
+ * [g1]–[g4] FALSIFIED 2026-09-14 against `gradient-explorer/v2/exportActions.ts`, each reverted:
+ *   - `dedupeRecents` returning the list undeduped → red "[g1] stale recents should leave ONE row
+ *     … Again shows download:css:ramp | download:css:ramp";
+ *   - `exportActionParts` naming only the extension → red "[g4] Again rows should name their
+ *     format — got .css | .css | GMT gradient";
+ *   - `runGradientFile` not passing the size → red "[g3] the GMT PNG at 512 × 40 downloaded as
+ *     1024 × 128";
+ *   - `isAction` admitting any `gmt` recent → red "[g1] … Again shows gmt:json | download:css:ramp".
+ *
  * Wants `npm run dev` on port 3400. No bare-URL module imports, so an edited store module does not
  * put it in the dual-instance state.
  *
@@ -48,7 +68,7 @@ import fs from 'fs';
 import { chromium, devices, type Page, type BrowserContext } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 import { readGradientPng, displayRampBytes } from '../palette/core/gradientPng';
-import { stripPngText, encodePng, readPngText } from '../utils/pngCodec';
+import { stripPngText, encodePng, readPngText, readPngHeader } from '../utils/pngCodec';
 import type { GradientConfig } from '../types';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
@@ -194,20 +214,21 @@ async function main() {
     };
   });
   if (!order.bandFirst) fail('[a0] the For GMT band is not above the registry sections');
-  if (order.rows.join(',') !== 'png,json') fail(`[a0] the GMT rows are ${order.rows.join(',')}, expected png then json`);
+  if (order.rows.join(',') !== 'png') fail(`[a0] the GMT rows are ${order.rows.join(',')}, expected the PNG alone (no .json row since 2026-09-14)`);
   if (!order.other) fail('[a0] nothing labels the registry formats as exports to other software');
-  const j = await download(page, () => page.click('[data-gx-export] [data-gx-gmtfile="json"]'));
-  const doc0 = JSON.parse(Buffer.from(j.bytes).toString('utf8'));
-  if (doc0.format !== 'gmt-gradients' || doc0.gradients?.length !== 1) fail(`[a0] the .json is not a one-gradient GMT document (${j.name})`);
-  if (doc0.gradients[0].name !== w0.name) fail(`[a0] the file names the gradient "${doc0.gradients[0].name}", the hero says "${w0.name}"`);
-  const credit = doc0.gradients[0].origin?.credit as string | undefined;
+  const j = await download(page, () => page.click('[data-gx-export] [data-gx-gmtfile="png"]'));
+  const read0 = readGradientPng(j.bytes);
+  if (read0.kind !== 'document' || read0.gradients.length !== 1) fail(`[a0] the .png is not a one-gradient GMT document (${j.name}, ${read0.kind})`);
+  const doc0 = read0.kind === 'document' ? read0.gradients[0] : null;
+  if (doc0!.name !== w0.name) fail(`[a0] the file names the gradient "${doc0!.name}", the hero says "${w0.name}"`);
+  const credit = (doc0!.origin as { credit?: string } | undefined)?.credit;
   if (!credit) fail('[a0] an unmodified catalogue pick saved without its origin — the credit would not survive');
-  if (!j.name.endsWith('.gmt-gradients.json')) fail(`[a0] the JSON download is named "${j.name}"`);
+  if (!j.name.endsWith('.png')) fail(`[a0] the PNG download is named "${j.name}"`);
   if (!j.name.includes(credit!.split('/')[0].split(' ')[0].replace(/[()]/g, ''))) fail(`[a0] the filename "${j.name}" lost the credit ("${credit}")`);
-  if (sig(doc0.gradients[0].config) !== sig(w0.config)) fail('[a0] the .json config is not the working config');
+  if (sig(doc0!.config) !== sig(w0.config)) fail('[a0] the .png config is not the working config');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
-  console.log(`✓ [a0] For GMT sits first (png, json); "${j.name}" carries "${w0.name}" plain with origin "${credit}"`);
+  console.log(`✓ [a0] For GMT sits first with ONE row (png); "${j.name}" carries "${w0.name}" plain with origin "${credit}"`);
 
   // [a] keep it, give it a Step stop and a moved bias, export the PNG, pick it back in on All
   await pickTile(page); // the second click keeps (bakes) it
@@ -341,6 +362,116 @@ async function main() {
   if (after.length !== before.length) fail(`[e] Replace from the PNG restored ${after.length} of ${before.length} (toasts: ${await toasts(page)})`);
   if (names(after) !== names(before)) fail('[e] Replace restored the count but not the same gradients in the same sets');
   console.log(`✓ [e] ${saved.name} (${before.length} gradients) → Clear → Replace from file restored all ${after.length}, sets included`);
+  const pngItem = await kebab(page, 'Save collection (.png)'); // opens the menu
+  if (!(await pngItem.count())) fail('[e] the collection menu has no "Save collection (.png)"');
+  const jsonItems = await page.locator('button', { hasText: 'Save collection (.json)' }).count();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  if (jsonItems) fail('[e] the collection menu still offers "Save collection (.json)" — PNG only since 2026-09-14');
+
+  // [g1] STALE RECENTS: the removed kinds (a GMT .json, the ramp's PNG strip) and a repeat, seeded
+  // as an older build stored them, are dropped on load — one row, no pageerror — and the storage is
+  // written back clean.
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'gx.v2.recentExports',
+      JSON.stringify([{ kind: 'gmt', file: 'json' }, { kind: 'png' }, { kind: 'download', key: 'css' }, { kind: 'download', key: 'css' }, { kind: 'png', subject: 'ramp' }]),
+    ),
+  );
+  await page.reload({ waitUntil: 'networkidle' });
+  await settle(page);
+  await page.click('[data-gx-set="all"]').catch(() => undefined);
+  await page.waitForTimeout(400);
+  await pickTile(page);
+  const wg = (await working(page))!;
+  await openExport(page);
+  const againState = () =>
+    page.evaluate(() => {
+      const w = document.querySelector('[data-gx-export]')!;
+      const again = w.querySelector('[data-gx-export-again]');
+      const gmt = w.querySelector('[data-gx-export-gmt]');
+      const sw = w.querySelector('[data-gx-export-subject]');
+      const rows = Array.from(w.querySelectorAll('[data-gx-again]')) as HTMLElement[];
+      // (no named helper functions in here: tsx's keepNames wraps them in `__name`, which the page lacks)
+      return {
+        ids: rows.map((r) => r.dataset.gxAgain ?? ''),
+        labels: rows.map((r) => (r.querySelector('span')?.textContent ?? '').trim()),
+        exts: rows.map((r) => (r.querySelector('.w-10')?.textContent ?? '').trim()),
+        againAboveGmt: !!again && !!gmt && !!(again.compareDocumentPosition(gmt) & Node.DOCUMENT_POSITION_FOLLOWING),
+        switchAboveAgain: !!sw && !!again && !!(sw.compareDocumentPosition(again) & Node.DOCUMENT_POSITION_FOLLOWING),
+        gmtRows: Array.from(w.querySelectorAll('[data-gx-gmtfile]')).map((e) => (e as HTMLElement).dataset.gxGmtfile),
+        imageSection: /As an image|PNG strip|Contact sheet/.test((w as HTMLElement).innerText),
+        stored: JSON.parse(localStorage.getItem('gx.v2.recentExports') ?? '[]') as { kind: string; key?: string; file?: string; subject?: string }[],
+      };
+    });
+  const g1 = await againState();
+  if (g1.ids.join('|') !== 'download:css:ramp') fail(`[g1] stale recents should leave ONE row (download:css:ramp), Again shows ${g1.ids.join(' | ') || 'nothing'}`);
+  if (g1.stored.length !== 1) fail(`[g1] the stored recents were not written back clean (${JSON.stringify(g1.stored)})`);
+  if (errors.length) fail(`[g1] pageerror: ${errors.join(' | ')}`);
+  console.log('✓ [g1] a stored GMT .json, PNG strip and a repeat are dropped on load: Again shows one row, storage rewritten');
+
+  // [g2] THE ORDER: the subject switch, then Again, then For GMT with ONE row; no image section.
+  if (!g1.switchAboveAgain || !g1.againAboveGmt) fail(`[g2] the order is wrong (switch above Again ${g1.switchAboveAgain}, Again above For GMT ${g1.againAboveGmt})`);
+  if (g1.gmtRows.join(',') !== 'png') fail(`[g2] For GMT rows: ${g1.gmtRows.join(',')}`);
+  if (g1.imageSection) fail('[g2] the "As an image" section (PNG strip / contact sheet) is still in the Ramp window');
+  console.log('✓ [g2] switch → Again → For GMT (one .png row), and no image section');
+
+  // [g3] THE SIZE: 1000 typed snaps to 1024 on blur; 512 × 40 (the height committed by clicking the
+  // row without leaving the field) downloads a 512 × 40 PNG whose stripped copy reads back exact.
+  const wField = page.locator('[data-gx-export] [data-gx-png-size-field="w"]');
+  const hField = page.locator('[data-gx-export] [data-gx-png-size-field="h"]');
+  if (!(await wField.count()) || !(await hField.count())) fail('[g3] no size fields under the GMT gradient row');
+  await wField.fill('1000');
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(150);
+  if ((await wField.inputValue()) !== '1024') fail(`[g3] a 1000 width shows ${await wField.inputValue()} after blur, expected the snapped 1024`);
+  await wField.fill('512');
+  await page.keyboard.press('Tab');
+  await hField.fill('40');
+  const sized = await download(page, () => page.click('[data-gx-export] [data-gx-gmtfile="png"]'));
+  const sh = readPngHeader(sized.bytes)!;
+  if (sh.width !== 512 || sh.height !== 40) fail(`[g3] the GMT PNG at 512 × 40 downloaded as ${sh.width} × ${sh.height}`);
+  const sread = readGradientPng(stripPngText(sized.bytes)!);
+  if (sread.kind !== 'bands' || sread.configs.length !== 1) fail(`[g3] the stripped 512 × 40 PNG does not read as one gradient (${sread.kind})`);
+  const sa = displayRampBytes(sread.kind === 'bands' ? sread.configs[0] : wg.config);
+  const se = displayRampBytes(wg.config);
+  let sworst = 0;
+  for (let i = 0; i < se.length; i++) sworst = Math.max(sworst, Math.abs(sa[i] - se[i]));
+  if (sworst !== 0) fail(`[g3] the stripped 512 × 40 copy's colours differ by up to ${sworst} levels`);
+  const settingsStored = await page.evaluate(() => JSON.parse(localStorage.getItem('gx.v2.exportSettings') ?? '{}'));
+  if (settingsStored.pngW !== 512 || settingsStored.pngH !== 40) fail(`[g3] the size was not remembered (${JSON.stringify(settingsStored)})`);
+  console.log(`✓ [g3] 1000 → 1024 on blur; 512 × 40 → ${sized.name} is 512 × 40 and its stripped copy reads back exact`);
+
+  // [g4] NO REPEATS: CSS linear-gradient twice and CSS variables once → Again holds each export ONCE,
+  // each row naming its FORMAT (both are .css).
+  if (!(await page.$('[data-gx-export] [data-gx-download="css"]'))) await page.click('[data-gx-export] [data-gx-section="For the web"]');
+  await page.waitForSelector('[data-gx-export] [data-gx-download="css"]', { timeout: 3000 }).catch(() => fail('[g4] the For the web section would not open'));
+  await download(page, () => page.click('[data-gx-export] [data-gx-download="css"]'));
+  await download(page, () => page.click('[data-gx-export] [data-gx-download="css"]'));
+  await download(page, () => page.click('[data-gx-export] [data-gx-download="cssvars"]'));
+  await page.waitForTimeout(200);
+  const g4 = await againState();
+  const dupes = g4.ids.filter((id, i) => g4.ids.indexOf(id) !== i);
+  if (dupes.length) fail(`[g4] Again repeats ${dupes.join(', ')} (rows: ${g4.labels.join(' | ')})`);
+  if (g4.ids.join('|') !== 'download:cssvars:ramp|download:css:ramp|gmt:png') fail(`[g4] Again should be cssvars, css, gmt newest first — got ${g4.ids.join(' | ')}`);
+  if (g4.labels.join('|') !== 'CSS variables|CSS linear-gradient|GMT gradient') fail(`[g4] Again rows should name their format — got ${g4.labels.join(' | ')}`);
+  if (g4.exts.join('|') !== '.css|.css|.png') fail(`[g4] Again's extension column reads ${g4.exts.join(' | ')}`);
+  const storedIds = g4.stored.map((a) => `${a.kind}:${a.key ?? a.file}:${a.subject ?? ''}`);
+  if (new Set(storedIds).size !== storedIds.length) fail(`[g4] the stored recents hold a repeat (${storedIds.join(' | ')})`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  // the hero's hover flyout shares the source
+  await page.mouse.move(5, 5);
+  await page.locator('[data-gx-hero] [title^="Export"]').first().hover();
+  await page.waitForSelector('[data-gx-export-recent]', { timeout: 3000 }).catch(() => fail('[g4] the Export hover flyout did not open'));
+  const fly = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[data-gx-export-recent] button')).map((b) => (b as HTMLElement).innerText.trim()).filter((t) => !/^All formats/.test(t)),
+  );
+  if (new Set(fly).size !== fly.length || fly.join('|') !== 'Download CSS variables .css|Download CSS linear-gradient .css|Download GMT gradient .png')
+    fail(`[g4] the hover flyout reads ${fly.join(' | ')}`);
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(300);
+  console.log(`✓ [g4] css ×2 + cssvars → Again: ${g4.labels.join(' · ')} (once each); the flyout: ${fly.join(' · ')}`);
 
   if (errors.length) fail(`pageerror: ${errors.join(' | ')}`);
   await ctx.close();
