@@ -70,9 +70,11 @@ catalogue seam, and the Curves face — fitting from the render of that fit — 
 
 ## Still open
 
-- **Backend deploy BEFORE the client ships** (repo `workspace-gmt/backend`, uncommitted): apply
-  `supabase/migrations/0006_gx_gradients_ramp.sql`, then `supabase functions deploy gx-gradients
-  --no-verify-jwt`, then commit. Until then GX Global refuses ramp uploads (stop uploads unchanged).
+- ~~Backend deploy before the client ships~~ — DONE 2026-09-14: migration 0006 pushed and
+  `gx-gradients` deployed by the owner; checked live (GET 200; short ramp, bad-alphabet ramp,
+  empty stops with no ramp, one stop → 400); committed in the backend repo as `b88c45b`. One
+  check sent stops + a stale ramp expecting a refusal — it is VALID (stops win), and added a
+  black→white stop row, id 5, to the public set. Owner to decide whether to delete it.
 - The 1–4 edge-texel misses the faithfulness rule tolerates. Likely cause, not verified: the refine
   skips texels its own stops sit on (`used`), so a stop texel rendered wrong is never revisited.
   A fitter improvement, not a ramp issue.
