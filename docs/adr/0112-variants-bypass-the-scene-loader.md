@@ -4,6 +4,33 @@
 - **Date:** 2026-09-03
 - **Relates to:** ADR-0111 (the Working pipeline), the document-provider registry (`store/documentRegistry.ts`, June P0d), `plans/ge-v2-design.md` §5.6
 
+> **Update 2026-09-16 (status after the session restore, ADR-0121; decision unchanged for the part
+> that is live):** the Variants FEATURE has no UI. The owner removed Snapshots on 2026-09-08
+> (Phase D: tray states are baked after every action, and the gradient is already in Recent and
+> Kept), and the old shell never mounted Variants. The code has split in two.
+> - **Live.** `captureStudioSnapshot` / `applyStudioSnapshot` in `palette/store/variantsStore.ts`
+>   were lifted out of the variant capture and restore for the Explorer session (ADR-0121 Decision
+>   3) and are imported by `palette/store/workingSession.ts`, together with `deepClone`,
+>   `stripFavients`, `isWellFormedStudioSnapshot` and the `StudioSnapshot` type from
+>   `palette/core/variantsCore.ts` (and `featureSetterName`, which `applyStudioSnapshot` calls).
+>   This ADR's decision governs them as written — never `loadPreset`, never `resetParamHistory`,
+>   clone on capture and on apply, `favients` stripped both ways (still by name; there is still no
+>   exclusion seam), one `paramEdit` around an apply the user can undo — with ADR-0121's one
+>   exception: the boot restore applies bare, so a first Ctrl+Z has nothing to take away. A session
+>   leaves `paletteFilters` out; `VARIANT_FEATURES` keeps it in. Because the session imports
+>   `variantsStore`, loading it also constructs `useVariantsStore`, whose initial state reads
+>   `gmt.ge.variants`. Guard for the live half: `npm run test:gx-session`.
+> - **No product user.** `useVariantsStore` (capture / restore / update / rename / remove /
+>   duplicate) and `getVariants`; the variant-only helpers in `variantsCore.ts` (`parseVariants`,
+>   `serializeVariants`, `capVariants`, `nextVariantName`, `newVariantId`, `roundRamp`,
+>   `rampFromInts`, `isWellFormedVariant`, `VARIANT_FEATURES`, `MAX_VARIANTS`,
+>   `VARIANTS_STORAGE_KEY`); and `palette/core/rampTween.ts` (`tweenRamp`). Their only importers are
+>   `debug/test-palette-variants.mts` (which covers both halves) and `debug/test-palette-tween.mts`,
+>   both links of `npm run test:palette`; both green on 2026-09-16.
+> - **Open.** Whether to delete the unused half is the owner's call and has not been made
+>   (`plans/ge-v2-parity-checklist.md`, "Still open from (c)"; `plans/ge-v2-old-shell-migration-audit.md`
+>   S14). A deletion has to keep everything listed under Live.
+
 ## Context
 
 The v2 design replaces the animation timeline with **Variants**: global named snapshots
