@@ -21,7 +21,10 @@
  * an old v1 file has no credits file and shows no link. The names are the category names the
  * wall uses (`categoryName`), so About and Filters ▸ Sources say the same thing.
  *
- * OWNER REVIEW (2026-09-13): the credit line and links are drafts.
+ * OWNER REVIEW (2026-09-13): the credit line is approved ("About credit line OK", plans/
+ * ge-v2-parity-checklist.md, "Owner review of the end-of-session status"). The links — each
+ * source's link, the GitHub link, and the credits links added later that day — have no
+ * recorded review and are still drafts.
  */
 
 import React from 'react';
