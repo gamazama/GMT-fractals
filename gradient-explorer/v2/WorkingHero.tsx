@@ -443,7 +443,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     derived.input.kind === 'extract'
       ? 'image · drop one on the slot'
       : derived.input.kind === 'build'
-        ? 'Mix · pick B from the wall or the shelf'
+        ? 'Mix · pick B from the wall'
         : 'no source · pick a gradient below';
 
   return (

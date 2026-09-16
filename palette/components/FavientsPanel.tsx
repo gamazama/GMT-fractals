@@ -753,7 +753,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
         )}
         <button
           onClick={toggleSearch}
-          title="Filter favourites by name, source, or group"
+          title="Filter My Gradients by name, source, or group"
           className={`shrink-0 flex items-center justify-center w-6 h-6 rounded transition-colors ${
             searchOpen ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg hover:bg-line/10'
           }`}
@@ -824,7 +824,7 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
           </div>
         ) : filterActive && filtered.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center px-4">
-            <div className="text-[11px] text-fg-dim">No favourites match “{search.trim()}”.</div>
+            <div className="text-[11px] text-fg-dim">No gradients match “{search.trim()}”.</div>
           </div>
         ) : (
           <>
