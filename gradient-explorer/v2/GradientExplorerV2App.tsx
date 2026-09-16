@@ -55,6 +55,7 @@ import { usePickerStore } from '../../palette/store/pickerStore';
 import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot, SLOT_MOD_DEFAULTS } from '../../palette/store/generatorStore';
+import { DEFAULT_CURVE_SPACE } from '../../palette/core/curveSpaces';
 import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store/favientsStore';
 import {
   GRADIENT_FILE_ACCEPT,
@@ -123,6 +124,25 @@ export type SourceId = 'browse' | 'build' | 'extract';
 const sourceOf = (face: TrayFace): SourceId => (face === 'mix' ? 'build' : face === 'image' ? 'extract' : 'browse');
 
 const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors';
+
+/**
+ * Leaving the Curves face puts the AXES back on the default (plan §10, 2026-09-12, "Not
+ * sticky" — owner: "GX rebuilds on every transform"; "the Curves face already bakes and resets
+ * on leave, and the space resets with it"). Before 2026-09-16 only the tracks reset, so a face
+ * closed in HSV reopened in HSV on the next gradient. Only when no tracks are left: tracks that
+ * survive the leave (a live Mix keeps its curves across a face switch) are keyed by their
+ * space, and a space that disagrees with them is read as no curves at all. Outside any undo
+ * bracket on purpose — undoing the bake restores the space inside the generator snapshot.
+ *
+ * @invariant closing the Curves face in HSV leaves the axes on OkLCh, and the next gradient opens
+ *   Curves there — proven by: npm run smoke:ge-wave ("[10] closing the Curves face resets the
+ *   axes, and the next gradient opens Curves in OkLCh"). Falsified 2026-09-16 by dropping the
+ *   call in `openTray`: [10] red alone. The chip-cancel call is unguarded.
+ */
+const resetBareCurveSpace = (): void => {
+  const g = useGeneratorStore.getState();
+  if (!g.tracks && g.curveSpace !== DEFAULT_CURVE_SPACE) useGeneratorStore.setState({ curveSpace: DEFAULT_CURVE_SPACE });
+};
 
 const workingNameNow = (): string => {
   const s = useWorkingStore.getState();
@@ -346,6 +366,7 @@ export const GradientExplorerV2App: React.FC = () => {
         useGeneratorStore.setState({ tracks: null, curvesOn: false });
       } else if (d && !d.passthrough && w.input.kind !== 'build' && w.input.kind !== 'extract') w.beginEdit();
     }
+    if (cur === 'curves' && face !== cur) resetBareCurveSpace();
     if (from !== to) {
       if ((from === 'build' || from === 'extract') && w.input.kind === from) {
         const d = deriveWorkingNow();
@@ -371,6 +392,7 @@ export const GradientExplorerV2App: React.FC = () => {
   // (so not openTray, which would commit it). Bake = openTray(null): leaving commits.
   const cancelFace = useCallback(() => {
     useWorkingStore.getState().cancelFace();
+    if (trayRef.current === 'curves') resetBareCurveSpace();
     armSlot(null);
     deselectActiveHero();
     setTray(null);
@@ -470,9 +492,14 @@ export const GradientExplorerV2App: React.FC = () => {
 
   // Esc order (Phase C, L6): a wall selection → the open tray face (the inspector closes by
   // clearing the stop selection, which the hero does when the face leaves) → an armed slot.
+  // Ahead of all three: anything NEARER that already consumed the key. A menu, a modal and an
+  // armed Curves wave take Escape through the shortcut registry (`useDismiss`), which marks it
+  // `defaultPrevented`; `installShortcuts()` runs at boot in main.tsx, so its window listener
+  // is ahead of this one on the same list. Before 2026-09-16 this acted anyway, so arm → drag →
+  // Esc closed the Curves face — and closing it BAKES the wave Esc was meant to discard.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
       // A wall selection is the nearest thing to a popover: it is a held state you can be
       // stuck in, and it must let go before Esc starts closing faces.
       if (getWallSelection().size) { clearWallSelection(); return; }

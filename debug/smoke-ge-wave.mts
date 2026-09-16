@@ -28,19 +28,28 @@
  *   [6] switch the axes to HSV (the gradient barely moves and keeps its saturation — bug 2), wave
  *       the HUE channel tall enough to carry it below zero (nothing turns black or grey —
  *       bug 3), ✕ discards exactly.
+ *  [10] then close the face: the axes are back on OkLCh, and a new gradient opens Curves there
+ *       (plan §10, "Not sticky" — the space resets with the face).
+ *   [7] arm → drag → Esc with NO click in the head first, focus wherever arming left it: the
+ *       pre-arm ramp exactly, no undo entry carrying the wave, the face still open. [7b] with
+ *       the preset dropdown open, one Esc closes the dropdown and the wave stays armed; the next
+ *       discards it.
+ *   [8] arm → two drags → CLOSE THE FACE (it bakes): one undo entry, and one Ctrl+Z lands on the
+ *       pre-arm ramp exactly — not on the unbaked preview.
+ *   [9] the four squares' drags in [1] each moved their square with the pointer, within 2 px.
  *
- * KNOWN BUGS, found by this smoke on 2026-09-16 and reported every run; they gate only under
- * `WAVE_STRICT=1`. When one prints "NO LONGER REPRODUCES", make it a `check`.
- *   [K1] Esc straight after arm → drag CLOSES THE FACE AND BAKES the wave. Arming unmounts the
- *        toolbar button that held focus (focus falls to <body>) and a handle drag takes none
- *        (WaveOverlay preventDefaults pointerdown), so the editor's keydown listener never sees
- *        the key; the shell's window Esc closes the tray, and leaving Curves bakes.
- *   [K2] Closing the face while armed: one entry, but Ctrl+Z lands on the UNBAKED PREVIEW, not
- *        the pre-arm curves. The face-leave bake's `paramEdit` calls `beginParamTransaction`
- *        again inside the wave's open bracket, which OVERWRITES the arm-time snapshot
- *        (paramUndoBracket counts depth but forwards every start to the engine).
- *   [K3] The span / feather squares trail the pointer (77.5 px for a 96 px drag here): the drag
- *        converts pixels through the canvas WIDTH, while the t axis spans only the fitted plot.
+ * [7] [8] [9] were KNOWN BUGS this smoke found on 2026-09-16 (K1–K3), reported without gating
+ * until they were fixed the same day; they gate now. What each was:
+ *   K1  Esc after arm → drag CLOSED THE FACE AND BAKED the wave. Arming unmounts the toolbar
+ *       button that held focus (focus falls to <body>) and a handle drag takes none, so the
+ *       editor's own keydown listener never heard the key and the shell's window Esc closed the
+ *       tray. Fix: the armed tool takes Escape through the shortcut registry (`useDismiss` in
+ *       ChannelGraphEditor) and the shell stands down for a consumed Escape.
+ *   K2  Closing the face while armed was one entry whose Ctrl+Z landed on the UNBAKED PREVIEW:
+ *       the face-leave bake's `paramEdit` re-snapshotted inside the wave's open bracket. Fix:
+ *       `paramEditStart` keeps an open snapshot (palette/store/paramUndoBracket.ts).
+ *   K3  The squares trailed the pointer, 77.5 px for a 96 px drag: the drag divided by the
+ *       canvas WIDTH while t spans only the plot. Fix: WaveOverlay reads X through `tToX`.
  *
  * FALSIFIED 2026-09-16, each against a deliberately broken build and restored byte-for-byte:
  *   · `Square` moved inside WaveOverlay's render (bug 1) → [1] red on all four squares, and ONLY
@@ -55,39 +64,42 @@
  *   · `wrapHue` removed from the HSV `toOklch` (bug 3) → [6] red: "black texels 0 → 35".
  *   · the `/ 100` on HSV S and V dropped (bug 2) → [6] red: the switch moved the gradient 111/255.
  *   · `closeWave` not writing the snapshot back → [4] red (Δ 155) and [6]'s ✕ red.
+ *   · `paramEditStart` re-snapshotting inside an open transaction (its `interactionSnapshot`
+ *     test dropped — K2 back) → [8] red ALONE: the undo lands on the unbaked preview (L 68 keys
+ *     against 3, Δ 169.7).
+ *   · WaveOverlay's X read through the canvas width instead of `tToX` (K3 back) → [9] red alone:
+ *     "a 77.5/96 px" on all four squares.
+ *   · `resetBareCurveSpace()` dropped from the shell's `openTray` → [10] red alone ("space hsv",
+ *     keys H/S/V on reopen); [7]–[9] stayed green, running in HSV.
+ *   · the armed editor's `useDismiss` removed (K1 back) → [4] and [7] red, the face closed and
+ *     BAKED (Δ 159.9 / 164.9), and later steps cascade.
+ *   · the shell's `e.defaultPrevented` test dropped (K1's other half) → [4] and [7] red as above,
+ *     AND [7b] red: Esc on the open preset dropdown also closed the face and baked (Δ 236.6).
  *
  * WHAT THIS DOES NOT PROVE: the phone layout or touch; that keyframe diamonds are hidden while
  * armed (canvas pixels); the t-axis fit on arm from a zoomed-in view; presets, strength, shape
  * and mode glyphs; where the pill sits. And [5] holds because the overlay's svg covers the plot:
  * removing the editor's own `waveArmed` guards in `handleDoubleClick` / `handleMouseDownWrapped`
- * stayed GREEN — it proves the behaviour, not which layer provides it.
+ * stayed GREEN — it proves the behaviour, not which layer provides it. Nor that a cancelled
+ * wave leaves NO entry after a dwell: the shell's 400 ms Recent sync writes the My Gradients
+ * shelf inside the wave's open bracket, so arm → wait → ✕ or Esc pushes a shelf-only entry
+ * (measured 2026-09-16, on the ✕ path these fixes never touched). [4] presses Esc before the
+ * sync can fire; [7] and [7b] tolerate exactly that entry and nothing more ([7b] always dwells).
  *
  * Wants `npm run dev` on 3400. The HMR socket is mocked (smoke-gmt-gradientdrop's pattern) and a
  * reload mid-run is itself a red. Store reads go through `__wm`, never a bare module URL.
- * ~20 s. Run: `npm run smoke:ge-wave` (`WAVE_STRICT=1` to gate on the known bugs).
+ * ~25 s. Run: `npm run smoke:ge-wave`.
  */
 import { chromium, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
-const STRICT = !!process.env.WAVE_STRICT;
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail = ''): boolean => {
   if (!ok) failures++;
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  — ${detail}` : ''}`);
   return ok;
-};
-let knownOpen = 0;
-/** A KNOWN production bug: reported every run, gating only under WAVE_STRICT=1. */
-const known = (name: string, ok: boolean, detail = ''): void => {
-  if (ok) {
-    console.log(`✓ ${name}  — KNOWN BUG NO LONGER REPRODUCES: promote this to a gating check`);
-    return;
-  }
-  knownOpen++;
-  if (STRICT) failures++;
-  console.log(`✗ KNOWN BUG ${name}${detail ? `  — ${detail}` : ''}`);
 };
 const hard = (msg: string): never => { throw new Error(msg); };
 
@@ -143,8 +155,10 @@ const HELPERS = `(() => {
     var d = window.__gxWorking ? window.__gxWorking() : null;
     var ramp = d && d.ramp ? d.ramp.map(function (c) { return [c.r, c.g, c.b]; }) : null;
     var root = document.querySelector('[data-gx-tray-root]');
+    var stack = eng.useEngineStore.getState().paramUndoStack;
     return {
-      undo: eng.useEngineStore.getState().paramUndoStack.length,
+      undo: stack.length,
+      top: stack.length ? Object.keys(stack[stack.length - 1].diff).sort().join(',') : '',
       space: g.curveSpace, keys: keys, curvesOn: g.curvesOn,
       ramp: ramp ? JSON.stringify(ramp) : null,
       face: root && root.dataset.gxTray ? root.dataset.gxTray : null,
@@ -216,7 +230,7 @@ const HELPERS = `(() => {
 })()`;
 
 type Pt = { x: number; y: number };
-type WaveState = { undo: number; space: string; keys: Record<string, number>; curvesOn: boolean; ramp: string | null; face: string | null; armed: boolean; tools: number; active: string | null };
+type WaveState = { undo: number; top: string; space: string; keys: Record<string, number>; curvesOn: boolean; ramp: string | null; face: string | null; armed: boolean; tools: number; active: string | null };
 type HandleId = 'a' | 'b' | 'fa' | 'fb' | 'lam' | 'pa' | 'bs' | 'dc';
 type Handles = Record<HandleId, Pt | null> & { svg: { x: number; y: number; w: number; h: number }; curve: Pt[]; hits: Record<HandleId, boolean> };
 
@@ -379,7 +393,7 @@ async function main() {
   ];
   let liveProbe: { ramps: string[]; heroes: string[]; before: { ramp: string; hero: string } } | null = null;
   const done = new Map<string, (string | null)[]>();
-  /** How far each square travelled against the pointer — reported under [K3]. */
+  /** How far each square travelled against the pointer — asserted in [9]. */
   const follow: { id: HandleId; moved: number; dx: number }[] = [];
   for (const c of cases) {
     // The bias zone carries TWO values on one drag: run it once, read both fields off it.
@@ -529,23 +543,69 @@ async function main() {
   const hsv2 = await ws(page);
   check('[6] ✕ discards the HSV wave exactly', !hsv2.armed && hsv2.ramp === hh.ramp && hsv2.undo === hh.undo, `worst Δ ${worstDelta(rampOf(hsv2), rampOf(hh)).toFixed(4)}, undo ${hh.undo} → ${hsv2.undo}`);
 
-  // ── KNOWN BUGS (reported, gating only under WAVE_STRICT=1) ─────────────────────────────────
-  // [K1] Esc straight after arming and dragging — no click in the head first. Arming unmounts
-  //      the toolbar button that had focus, and no handle drag takes focus, so the key goes to
-  //      the shell's window listener instead of the tool.
+  // ── [10] leaving the face puts the axes back (plan §10, "Not sticky") ──────────────────────
+  // Still in HSV from [6]. Close the face by its tab, as a user does, then open Curves on a new
+  // gradient: OkLCh, with the channel keys that say so.
+  await page.click('[data-gx-tray-tab="curves"]');
+  await page.waitForTimeout(400);
+  const sp1 = await ws(page);
+  await fresh();
+  await openCurves();
+  const sp2 = await ws(page);
+  check('[10] closing the Curves face resets the axes, and the next gradient opens Curves in OkLCh',
+    sp1.face === null && sp1.space === 'oklab' && sp2.space === 'oklab' && !!sp2.keys.L && !sp2.keys.H,
+    `on close: face ${sp1.face}, space ${sp1.space}; reopened: space ${sp2.space}, keys ${JSON.stringify(sp2.keys)}`);
+
+  // ── [7] Esc straight after arming and dragging — no click in the head first ────────────────
+  // Arming unmounts the toolbar button that had focus, and no handle drag takes focus, so this
+  // is the Esc a user actually presses. It used to reach the shell's window listener, which
+  // closed the face — and closing the face bakes (K1).
   await fresh();
   await openCurves();
   const q0 = await ws(page);
   await arm();
   const hq = await handles(page);
   if (hq.pa) await drag(page, hq.pa, 0, -Y, 8, async () => null);
+  const qd = await ws(page);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   const q1 = await ws(page);
-  known('[K1] arm → drag → Esc discards (focus where arming leaves it)', !q1.armed && q1.face === 'curves' && q1.ramp === q0.ramp && q1.undo === q0.undo,
-    `face ${q0.face} → ${q1.face}, undo depth ${q0.undo} → ${q1.undo}, curves ${JSON.stringify(q0.keys)} → ${JSON.stringify(q1.keys)}, worst Δ ${worstDelta(rampOf(q1), rampOf(q0)).toFixed(1)} — the face closed and BAKED the wave`);
+  // Undo: no entry, or the Recent shelf's alone if the 400 ms sync landed first (see [7b]).
+  const qEntry = q1.undo === q0.undo ? 'none' : q1.undo === q0.undo + 1 ? q1.top : `${q1.undo - q0.undo} entries`;
+  check('[7] arm → drag → Esc discards (focus where arming leaves it)',
+    qd.ramp !== q0.ramp && !q1.armed && q1.face === 'curves' && q1.ramp === q0.ramp && (qEntry === 'none' || qEntry === '__ext__favients'),
+    `drag changed the ramp ${qd.ramp !== q0.ramp}; focus on ${qd.active}; face ${q0.face} → ${q1.face}, armed ${q1.armed}, undo depth ${q0.undo} → ${q1.undo} (new entry: ${qEntry}), curves ${JSON.stringify(q0.keys)} → ${JSON.stringify(q1.keys)}, worst Δ ${worstDelta(rampOf(q1), rampOf(q0)).toFixed(1)}`);
 
-  // [K2] commit by CLOSING the face (it bakes) — one Ctrl+Z should land on the pre-arm ramp.
+  // [7b] the armed tool is a surface in Esc's innermost-first order, not a key grab: with its own
+  // preset dropdown open, Esc closes the dropdown and nothing else.
+  await openCurves(); // a red [7] may have closed the face; this step should still report
+  await arm();
+  const hq2 = await handles(page);
+  if (hq2.pa) await drag(page, hq2.pa, 0, -Y, 8, async () => null);
+  const r0 = await ws(page);
+  await page.click('[data-gx-wave="presets"]');
+  await page.waitForSelector('[data-gx-wave="presets"][aria-expanded="true"]', { timeout: 3000 }).catch(() => hard('the preset dropdown did not open'));
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const r1 = await ws(page);
+  const menuAfter = await page.$('[data-gx-wave="presets"][aria-expanded="true"]');
+  check('[7b] with the preset dropdown open, Esc closes the dropdown and the wave stays armed',
+    !menuAfter && r1.armed && r1.face === 'curves' && r1.ramp === r0.ramp,
+    `dropdown still open ${!!menuAfter}, armed ${r1.armed}, face ${r1.face}, ramp unchanged ${r1.ramp === r0.ramp}`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const r2 = await ws(page);
+  // The undo half is looser than [7]'s on purpose. This step dwells past the shell's 400 ms
+  // Recent sync (`syncRecent`), which writes the My Gradients shelf INSIDE the wave's open
+  // bracket, so the discard can leave an entry whose diff is the shelf alone — a separate
+  // defect (plan §10: "a cancelled wave leaves no entry at all"), reported 2026-09-16, not
+  // fixed here. What must never be in it is the wave: the curves, the stops, the working input.
+  const entry = r2.undo === q0.undo ? 'none' : r2.undo === q0.undo + 1 ? r2.top : `${r2.undo - q0.undo} entries`;
+  check('[7b] …and the next Esc discards the wave exactly (no entry carries the wave)',
+    !r2.armed && r2.face === 'curves' && r2.ramp === q0.ramp && (entry === 'none' || entry === '__ext__favients'),
+    `armed ${r2.armed}, face ${r2.face}, worst Δ ${worstDelta(rampOf(r2), rampOf(q0)).toFixed(1)}, undo ${q0.undo} → ${r2.undo}, new entry: ${entry}`);
+
+  // ── [8] commit by CLOSING the face (it bakes) — one Ctrl+Z lands on the pre-arm ramp ──────────
   await fresh();
   await openCurves();
   const z0 = await ws(page);
@@ -560,13 +620,14 @@ async function main() {
   await page.keyboard.press('Control+z');
   await page.waitForTimeout(500);
   const z2 = await ws(page);
-  known('[K2] arm → drags → close the face (bakes) → one Ctrl+Z restores the pre-arm ramp', z1.undo === z0.undo + 1 && z2.ramp === z0.ramp,
-    `undo depth ${z0.undo} → ${z1.undo} → ${z2.undo}; the undo lands on ${z2.ramp === zp.ramp ? 'the UNBAKED PREVIEW (the wave is still there)' : 'neither the pre-arm ramp nor the preview'}: curves ${JSON.stringify(z2.keys)}, pre-arm ${JSON.stringify(z0.keys)}, worst Δ against pre-arm ${worstDelta(rampOf(z2), rampOf(z0)).toFixed(1)}`);
+  check('[8] arm → drags → close the face (bakes) → one entry, and one Ctrl+Z restores the pre-arm ramp',
+    zp.ramp !== z0.ramp && z1.face === null && z1.undo === z0.undo + 1 && z2.ramp === z0.ramp,
+    `drags changed the ramp ${zp.ramp !== z0.ramp}; face after close ${z1.face}; undo depth ${z0.undo} → ${z1.undo} → ${z2.undo}; the undo lands on ${z2.ramp === z0.ramp ? 'the pre-arm ramp' : z2.ramp === zp.ramp ? 'the UNBAKED PREVIEW (the wave is still there)' : 'neither the pre-arm ramp nor the preview'}: curves ${JSON.stringify(z2.keys)}, pre-arm ${JSON.stringify(z0.keys)}, worst Δ against pre-arm ${worstDelta(rampOf(z2), rampOf(z0)).toFixed(1)}`);
 
-  // [K3] a span / feather square stays under the pointer that drags it. Measured in [1].
-  known('[K3] span and feather squares keep up with the pointer',
+  // ── [9] a span / feather square stays under the pointer that drags it. Measured in [1]. ─────
+  check('[9] span and feather squares keep up with the pointer (within 2 px over a 96 px drag)',
     follow.length === 4 && follow.every((f) => Math.abs(f.moved - f.dx) <= 2),
-    follow.map((f) => `${f.id} ${f.moved.toFixed(1)}/${f.dx} px`).join(', ') + ' — the drag divides by the canvas width, not the plotted t span');
+    follow.map((f) => `${f.id} ${f.moved.toFixed(1)}/${f.dx} px`).join(', '));
 
   check('no pageerror', pageErrors.length === 0, pageErrors.join(' | '));
   check('the page did not reload mid-run (HMR blocked)', navigations === bootNavigations, `${navigations - bootNavigations} reload(s)`);
@@ -576,7 +637,7 @@ async function main() {
     console.error(`\n${failures} wave check(s) failed (${secs} s)`);
     process.exit(1);
   }
-  console.log(`\nPASS — every wave handle drags with a real mouse, previews live, and undoes as one step (${secs} s)${knownOpen ? `; ${knownOpen} known bug(s) still open` : ''}`);
+  console.log(`\nPASS — every wave handle drags with a real mouse, previews live, and undoes as one step (${secs} s)`);
 }
 
 main().catch((e) => { console.error('SMOKE FAILED:', e.message ?? e); process.exit(1); });

@@ -46,6 +46,7 @@ import type { Channels } from '../core/generatorPipeline';
 import { CURVE_FRAMES, reTangentBezier } from '../core/channelCurve';
 import { useGraphInteraction } from '../../hooks/useGraphInteraction';
 import { useGraphTools } from '../../hooks/useGraphTools';
+import { useDismiss } from '../../hooks/useDismiss';
 import { usePencilTool, PENCIL_CURSOR } from '../../hooks/usePencilTool';
 import { balancedToolColumnMaxHeight } from '../../utils/toolColumn';
 import { GraphSelectionBBox } from '../../components/graph/GraphSelectionBBox';
@@ -960,11 +961,11 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     const onKey = (e: KeyboardEvent) => {
       if (!interactive) return;
       if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
-      // While the wave is armed the keyboard belongs to it: Enter bakes, Esc discards, and
-      // Delete must NOT reach the selection (there is none, and the tool owns the canvas).
+      // While the wave is armed the keyboard belongs to it: Enter bakes, and Delete must NOT
+      // reach the selection (there is none, and the tool owns the canvas). Esc is NOT here —
+      // see the `useDismiss` below, which owns it wherever focus is.
       if (waveArmed) {
         if (e.key === 'Enter') { e.preventDefault(); commitWave(); }
-        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWave(); }
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -974,7 +975,30 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
     };
     el.addEventListener('keydown', onKey);
     return () => el.removeEventListener('keydown', onKey);
-  }, [deleteSelected, interactive, waveArmed, commitWave, closeWave]);
+  }, [deleteSelected, interactive, waveArmed, commitWave]);
+
+  /**
+   * ESC DISCARDS AN ARMED WAVE WHEREVER FOCUS IS (2026-09-16). It used to live in the keydown
+   * listener above, which only hears keys while focus is inside the editor — and arming
+   * unmounts the toolbar button that had focus (focus falls to <body>) while a handle drag
+   * takes none. So the usual sequence, arm → drag → Esc, reached the GE v2 shell's window
+   * listener instead, which closed the face, and closing the face BAKES: Esc committed the
+   * very wave it exists to throw away.
+   *
+   * The armed tool is a dismissable surface, so it takes Escape the way every menu and modal
+   * does: a scope on the shortcut registry, topmost first. That also orders it against the
+   * surfaces inside it — with the preset dropdown open, Esc closes the dropdown and the wave
+   * stays armed; the next Esc discards. The registry consumes the key (preventDefault), and the
+   * shell's listener stands down for a consumed Escape (grep `defaultPrevented` in
+   * gradient-explorer/v2/GradientExplorerV2App.tsx), so one Esc is one act and the face stays.
+   *
+   * @invariant arm → drag → Esc with focus where arming leaves it restores the pre-arm ramp,
+   *   pushes no undo entry carrying the wave and leaves the Curves face open — proven by:
+   *   npm run smoke:ge-wave ("[7] arm → drag → Esc discards (focus where arming leaves it)").
+   *   Falsified 2026-09-16 both ways: this call removed, and the shell's `defaultPrevented`
+   *   test removed — each reds [7] (the face closed and baked); the second also reds [7b].
+   */
+  useDismiss(focusRef, { onClose: closeWave, enabled: waveArmed, outside: false });
 
   // Result strip under the graph.
   useEffect(() => {
