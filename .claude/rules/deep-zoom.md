@@ -58,7 +58,8 @@ npm run smoke:deep-zoom-la        # LA construction vs direct perturbed iteratio
 npm run smoke:deep-zoom-nucleus   # detectPeriod / newtonNucleus against published
                                   # nuclei, and the zoom gate that engages them
 npm run smoke:gx-fractal-glitch   # browser (needs the dev server on :3400); boots
-                                  # gradient-explorer.html, reaches all 12 files here,
+                                  # gradient-explorer.html (the v2 shell since 2026-09-16;
+                                  # it only hosts the Wallpaper overlay), reaches all 12 files here,
                                   # and is the only guard asserting ADR-0065/0066
                                   # glitch-freedom end-to-end
 ```

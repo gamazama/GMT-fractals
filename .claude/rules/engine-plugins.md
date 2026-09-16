@@ -44,9 +44,11 @@ over `data-tut` attributes).
 - **Slot registries key by id GLOBALLY, not per slot.** `topbar` and `hud` both
   ride `store/createListRegistry.ts`, which is one `Map<id, item>` — registering
   the same id against a *different* slot silently replaces the first entry rather
-  than adding a second. That is why `gradient-explorer/main.tsx` must
-  `topbar.unregister('fps')` before re-registering its own, and why
-  `menu.register()` namespaces its topbar anchor as `` `menu:${def.id}` ``.
+  than adding a second. That is why `engine-gmt/topbar.tsx` registers its own
+  left-slot `fps` only after `installTopBar({ hideDefaults: true })` has skipped the
+  default right-slot one (moving an item that is already registered means
+  `topbar.unregister(id)` first — the retired first Explorer shell did exactly that),
+  and why `menu.register()` namespaces its topbar anchor as `` `menu:${def.id}` ``.
 - Cross-cutting infrastructure here (factories, registries, shared primitives)
   MUST carry top-of-file JSDoc covering purpose, integration seams and known
   pitfalls. Don't make callers rediscover the contract from three sibling files.
@@ -93,7 +95,7 @@ favourites merge are wrong for it (ADR-0112, ADR-0121). Two things keep the scop
 are easy to undo: Session takes its store as a REQUIRED option (no default to fall back on),
 and the Files ▸ Autosave rows bind whatever store the app hands `registerCoreSettings({ autosave })`
 — an app that calls it bare gets app-gmt's rows, so an app with no autosave passes
-`{ autosave: null }` (fluid-toy and the old Explorer shell do, since 2026-09-13; fractal-toy
+`{ autosave: null }` (fluid-toy does, since 2026-09-13; fractal-toy
 registers no core settings at all). Session's node guard is
 `test:gx-session` [4]–[7]; its wiring guard is `smoke:ge-session` (see `sibling-apps.md`).
 

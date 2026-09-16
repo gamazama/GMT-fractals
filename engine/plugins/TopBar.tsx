@@ -49,8 +49,9 @@ export interface TopBarItem {
 // availability matches module-load order. Backed by the shared id-keyed
 // `createListRegistry` primitive — ONE `Map<id, item>` across every slot, so an
 // id reused against a different slot replaces the earlier entry instead of
-// adding a second one. To move an existing item, `unregister(id)` first (see
-// gradient-explorer/main.tsx re-slotting 'fps').
+// adding a second one. To move an existing item, `unregister(id)` first. (Or skip the
+// default: `engine-gmt/topbar.tsx` registers its own left-slot 'fps' after
+// `installTopBar({ hideDefaults: true })`.)
 const _registry = createListRegistry<TopBarItem>();
 
 export const topbar = {
