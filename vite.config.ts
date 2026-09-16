@@ -12,6 +12,17 @@ const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'ut
 export default defineConfig({
   plugins: [
     react(),
+    // Every page opts out of Dark Reader, including the copy Firefox for iOS runs as its
+    // "Website Dark Mode". These are colour tools with their own dark UI, and Dark Reader
+    // rewrites CSS colours but not canvas pixels. So a gradient's swatches came out darker
+    // than the ramp bar they sample (light colours worst: a #b8b8b8 swatch showed dark
+    // grey beside a light-grey bar end painted from the same bytes; owner, 2026-09-16,
+    // iPhone Firefox). `color-scheme: dark` in each page's own <style> does not stop it.
+    // Injected here rather than per-page so a new HTML entry cannot miss it.
+    {
+      name: 'gmt-darkreader-lock',
+      transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'darkreader-lock' }, injectTo: 'head-prepend' }],
+    },
     VitePWA({
       // 'prompt' is effectively vestigial: the workbox skipWaiting/clientsClaim
       // below make every new SW take over immediately + SILENTLY — the chosen
