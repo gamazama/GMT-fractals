@@ -29,10 +29,10 @@ export const FavientsToggleButton: React.FC<{ desktopOnly?: boolean; className?:
     <TopBarToggle
       active={shown}
       onClick={toggleFavientsPanel}
-      title="Toggle the Favients shelf (saved gradients)"
+      title="Show or hide My Gradients (saved gradients)"
       desktopOnly={desktopOnly}
       icon={<FavientsIcon className="text-sm leading-none" />}
-      label="Favients"
+      label="My Gradients"
       activeClassName={`${FAVIENTS_ACCENT.text} bg-line/10`}
       inactiveClassName="text-fg-muted hover:text-fg hover:bg-line/10"
       className={className}

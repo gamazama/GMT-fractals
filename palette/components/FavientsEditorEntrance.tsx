@@ -36,7 +36,7 @@ export const FavientsEditorEntrance: React.FC<{ config: GradientConfig; featureI
       if (target) useFavientsStore.getState().setSelectedTarget(target.id);
     }
     if (panelShown) {
-      // Shelf already on screen — add via the SAME bridge the menu's "Send to Favients"
+      // Shelf already on screen — add via the SAME bridge the menu's "Save to My Gradients"
       // uses, so dedup + auto-name + provenance stay defined in one place (registerPaletteUI).
       getGradientFavientsBridge()?.add(config);
     } else {
@@ -49,7 +49,7 @@ export const FavientsEditorEntrance: React.FC<{ config: GradientConfig; featureI
     <button
       className={`gradient-interactive-element flex items-center px-1.5 py-0.5 rounded border border-line/10 ${FAVIENTS_ACCENT.border} hover:bg-line/10 text-[11px] leading-none transition-colors active:scale-95`}
       onClick={handleClick}
-      title={panelShown ? 'Add this gradient to Favients' : 'Favients — saved gradients & presets'}
+      title={panelShown ? 'Add this gradient to My Gradients' : 'My Gradients — saved gradients & presets'}
     >
       <FavientsIcon />
     </button>

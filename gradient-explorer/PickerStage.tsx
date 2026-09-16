@@ -120,8 +120,8 @@ export const PickerStage: React.FC<{ hideFavientsLink?: boolean }> = ({ hideFavi
                 and the full-width search in MobilePickerControls are the canonical paths, so
                 these would be duplicate affordances stacked a few hundred px apart. */}
             {!hideFavientsLink && (
-              <button onClick={openFavientsPanel} title="Open the Favients shelf" className={`hidden md:inline-flex ${FAVIENTS_ACCENT.link}`}>
-                <FavientsIcon /> Favients
+              <button onClick={openFavientsPanel} title="Open My Gradients" className={`hidden md:inline-flex ${FAVIENTS_ACCENT.link}`}>
+                <FavientsIcon /> My Gradients
               </button>
             )}
             {/* Free-text search over name · theme · source — a collapsed icon that

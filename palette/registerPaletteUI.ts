@@ -98,7 +98,7 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
     render: (ctx) => React.createElement(FavientsEditorEntrance, { config: ctx.config, featureId: ctx.featureId, paramKey: ctx.paramKey }),
   });
 
-  // The Stops editor's menus ("Send to Favients") AND its header Favients button add the
+  // The Stops editor's menus ("Save to My Gradients") AND its header Favients button add the
   // current gradient to the shelf through this seam (engine-core can't import palette).
   // Dedupe + auto-name happen here, exactly like the drag-to-shelf add paths: a repeat add
   // is a no-op, and an unnamed gradient gets a perceptual label via configToName. Every

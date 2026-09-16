@@ -23,6 +23,7 @@ import { HudHost } from '../engine/plugins/Hud';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
+import { panelLabel } from '../engine/PanelManifest';
 import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
@@ -186,7 +187,7 @@ export const FluidToyApp: React.FC = () => {
             <DropZones />
 
             {floatingPanels.map((p) => (
-                <DraggableWindow key={p.id} id={p.id} title={p.id}>
+                <DraggableWindow key={p.id} id={p.id} title={panelLabel(p.id)}>
                     {/* PanelRouter expects whole-state for its evalShowIf
                         predicates and legacy passthrough. We grab a current
                         snapshot via getState() instead of subscribing —

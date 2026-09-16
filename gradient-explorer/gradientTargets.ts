@@ -25,6 +25,7 @@
 
 import { registerSendTarget, getSendTargets } from '../store/sendTargetRegistry';
 import { useEngineStore } from '../store/engineStore';
+import { panelLabel } from '../engine/PanelManifest';
 import { renderGradientToRamp } from '../palette/core/gmtGradient';
 import { openFullscreen } from '../palette/store/fullscreenStore';
 import { usePaletteEditorStore, editorEdit } from '../palette/store/paletteEditorStore';
@@ -162,7 +163,8 @@ const tabStep = (id: string): RevealStep => ({
     getRect: () => modeTabRect(id),
     isActive: () => isPanelShown(id),
     activate: () => revealPanel(id),
-    label: id,
+    // A getter: REVEAL_STEPS is built at import, before the manifest that carries `label`.
+    get label() { return panelLabel(id); },
     collapsedSide: () => collapsedDockSide(id),
     navigate: () => navigateToPanel(id),
 });
@@ -225,7 +227,7 @@ export const registerGradientTargets = (): void => {
     // from `revealPath` (a drag can navigate to / reveal the shelf, then the panel handles it).
     registerSendTarget<FavientDragPayload>({
         id: 'favients',
-        label: 'Favients',
+        label: 'My Gradients',
         group: 'mode',
         revealPath: ['tab:Favients'],
         getRect: () => rectOf('favients'),

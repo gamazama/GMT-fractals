@@ -96,7 +96,7 @@ export const GradientSourcePicker: React.FC<GradientSourcePickerProps> = ({ titl
     }));
     return [
       { label: 'Built-in', rows: builtIn },
-      { label: 'Favients', rows: favRows },
+      { label: 'My Gradients', rows: favRows },
       { label: 'Sent / custom', rows: custom },
     ];
   }, [catalog, favients]);

@@ -25,6 +25,7 @@ import { HudHost } from '../engine/plugins/Hud';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
+import { panelLabel } from '../engine/PanelManifest';
 import { PanelRouter } from '../components/PanelRouter';
 import { z } from '../components/ui';
 import { PanelId, PanelState } from '../types';
@@ -258,7 +259,7 @@ export const AppGmt: React.FC = () => {
                         {/* The Palettes overlay sits at Z.takeover (under floating panels),
                             so Favients no longer needs a special elevation to stay draggable
                             over it — every floating panel does, via the click-to-front stack. */}
-                        <DraggableWindow id={p.id} title={p.id}>
+                        <DraggableWindow id={p.id} title={panelLabel(p.id)}>
                             <PanelRouter
                                 activeTab={p.id as PanelId}
                                 state={useEngineStore.getState()}

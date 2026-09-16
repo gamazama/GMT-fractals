@@ -22,6 +22,7 @@ import { FractalEvents } from './engine/FractalEvents';
 import { Dock } from './components/layout/Dock';
 import { DropZones } from './components/layout/DropZones';
 import DraggableWindow from './components/DraggableWindow';
+import { panelLabel } from './engine/PanelManifest';
 import { PanelRouter } from './components/PanelRouter';
 import { PanelId, PanelState } from './types';
 import { StoreCallbacksProvider } from './components/contexts/StoreCallbacksContext';
@@ -85,7 +86,7 @@ const App: React.FC = () => {
       <DropZones />
 
       {floatingPanels.map(p => (
-          <DraggableWindow key={p.id} id={p.id} title={p.id}>
+          <DraggableWindow key={p.id} id={p.id} title={panelLabel(p.id)}>
               <PanelRouter activeTab={p.id as PanelId} state={state} actions={state} onSwitchTab={(t) => state.togglePanel(t, true)} />
           </DraggableWindow>
       ))}

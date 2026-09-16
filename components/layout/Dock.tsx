@@ -7,7 +7,7 @@ import { BenchProfiler } from '../../engine-gmt/utils/BenchProfiler';
 import { PanelId, DockZone, PanelState } from '../../types';
 import { DragHandleIcon, UndockIcon, ChevronLeft, ChevronRight } from '../Icons';
 import { collectHelpIds } from '../../utils/helpUtils';
-import { getPanelDefinition, evalShowIf } from '../../engine/PanelManifest';
+import { getPanelDefinition, evalShowIf, panelLabel } from '../../engine/PanelManifest';
 import { accent, surface, text, border, tabActive, tabInactive, collapsedIconActive, collapsedIconInactive, dragHandleActive, dragHandleInactive } from '../../data/theme';
 import { useTutorAnchor } from '../../engine/plugins/Tutorial';
 
@@ -151,9 +151,9 @@ export const Dock: React.FC<DockProps> = ({ side }) => {
                              data-gx-mode-tab={p.id}
                              onClick={() => togglePanel(p.id, true)}
                              className={`w-6 h-6 flex items-center justify-center rounded cursor-pointer ${p.id === activeTabId ? collapsedIconActive : collapsedIconInactive}`}
-                             title={p.id}
+                             title={panelLabel(p.id)}
                          >
-                             <span className="text-[10px] font-bold">{p.id.charAt(0)}</span>
+                             <span className="text-[10px] font-bold">{panelLabel(p.id).charAt(0)}</span>
                          </div>
                      ))}
                  </div>
@@ -297,7 +297,7 @@ const DockTab: React.FC<DockTabProps> = ({
                     </div>
                 </div>
             )}
-            <span className="truncate max-w-[140px]">{p.id}</span>
+            <span className="truncate max-w-[140px]">{panelLabel(p.id)}</span>
         </button>
     );
 };

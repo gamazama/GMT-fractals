@@ -83,9 +83,9 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
   if (favients) {
     const saved = favients.isFav(config);
     items.push(
-      { label: 'Favients', action: () => {}, isHeader: true },
+      { label: 'My Gradients', action: () => {}, isHeader: true },
       {
-        label: saved ? 'Saved to Favients' : 'Send to Favients',
+        label: saved ? 'Saved to My Gradients' : 'Save to My Gradients',
         checked: saved,
         disabled: saved,
         action: () => favients.add(config),

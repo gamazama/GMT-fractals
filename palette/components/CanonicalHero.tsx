@@ -168,8 +168,8 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
               star glyph inline on desktop. */}
           <button
             onClick={toggleSave}
-            title={savedId ? 'Remove from Favients' : 'Save to Favients'}
-            aria-label={savedId ? 'Remove from Favients' : 'Save to Favients'}
+            title={savedId ? 'Remove from My Gradients' : 'Save to My Gradients'}
+            aria-label={savedId ? 'Remove from My Gradients' : 'Save to My Gradients'}
             aria-pressed={!!savedId}
             className={`flex items-center gap-1 leading-none rounded-sm transition-colors ${
               inRail ? 'text-[12px] px-2.5 py-2' : 'text-[11px] px-1.5 py-1'

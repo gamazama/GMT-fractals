@@ -264,7 +264,10 @@ export interface PanelDefinition {
      *  label shown in the dock (unless `label` overrides). */
     id: string;
 
-    /** Override for the tab label. Defaults to `id`. */
+    /** The name users see for this panel — the dock tab, the collapsed-dock icon and a
+     *  floating window's title bar. Defaults to `id`. Lets a panel be renamed on screen
+     *  without renaming the id, which persisted window state and `togglePanel` callers
+     *  key on. Resolve it with `panelLabel(id)`, never by reading `id` for display. */
     label?: string;
 
     /** Dock placement. */
@@ -344,6 +347,12 @@ export const getPanelManifest = (): PanelManifest => _manifest;
  *  registered manifest. */
 export const getPanelDefinition = (id: string): PanelDefinition | undefined =>
     _byId.get(id);
+
+/** The on-screen name of a panel: its manifest `label`, else its id (also the answer for
+ *  a panel that isn't in the manifest). Every place that SHOWS a panel's name goes through
+ *  this — grep `panelLabel(` for the dock tab, the collapsed icon and the hosts' floating
+ *  window titles. */
+export const panelLabel = (id: string): string => _byId.get(id)?.label ?? id;
 
 // ─── Visibility evaluation ────────────────────────────────────────────
 

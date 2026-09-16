@@ -31,6 +31,7 @@ import { SettingsHost } from '../components/SettingsAccess';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
+import { panelLabel } from '../engine/PanelManifest';
 import { PanelRouter } from '../components/PanelRouter';
 import { AutoFeaturePanel } from '../components/AutoFeaturePanel';
 import { TimelineHost } from '../components/TimelineHost';
@@ -176,7 +177,7 @@ const MobileModeTabs: React.FC = () => {
       ))}
       <button onClick={() => togglePanel('Favients' as PanelId, true)} className={tabClass(favShown)}>
         <FavientsIcon className="text-sm leading-none" />
-        Favients
+        My Gradients
       </button>
     </div>
   );
@@ -321,7 +322,7 @@ const GradientExplorerApp: React.FC = () => {
         <DropZones />
 
         {floatingPanels.map((p) => (
-          <DraggableWindow key={p.id} id={p.id} title={p.id}>
+          <DraggableWindow key={p.id} id={p.id} title={panelLabel(p.id)}>
             <PanelRouter
               activeTab={p.id as PanelId}
               state={state}

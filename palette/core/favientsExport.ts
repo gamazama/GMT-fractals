@@ -222,7 +222,7 @@ const paintRamp = (ctx: CanvasRenderingContext2D, ramp: RGB[], x: number, y: num
  * Build a PNG contact sheet: a grid of every favourite's gradient with its name
  * beneath. Returns null in non-DOM contexts or for an empty collection.
  */
-export const buildContactSheet = async (favients: Favient[], title = 'Favients'): Promise<Blob | null> => {
+export const buildContactSheet = async (favients: Favient[], title = 'My Gradients'): Promise<Blob | null> => {
   if (typeof document === 'undefined' || !favients.length) return null;
 
   const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(favients.length))));

@@ -56,7 +56,10 @@ export const favientsPanelEntry = (opts: {
   dock: 'left' | 'right' | 'float';
   order?: number;
 }): PanelDefinition => ({
+  // The id stays `Favients` — persisted window state and every `togglePanel('Favients')`
+  // key on it. Users see the v2 name (plans/ge-v2-design.md §1).
   id: 'Favients',
+  label: 'My Gradients',
   dock: opts.dock,
   order: opts.order ?? 90,
   component: 'panel-favients',

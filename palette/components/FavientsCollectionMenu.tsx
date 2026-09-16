@@ -153,7 +153,7 @@ export const FavientsCollectionMenu: React.FC<{
   };
 
   const pickFile = (mode: 'merge' | 'replace') => {
-    if (mode === 'replace' && !empty && !window.confirm('Replace the current Favients collection with the loaded file?')) return;
+    if (mode === 'replace' && !empty && !window.confirm('Replace everything in My Gradients with the loaded file?')) return;
     importMode.current = mode;
     fileRef.current?.click();
   };
@@ -212,7 +212,7 @@ export const FavientsCollectionMenu: React.FC<{
     if (empty) return;
     // Clear is undoable now (the history provider snapshots the shelf), so the
     // confirm no longer warns "cannot be undone" — keep it only as a guard rail.
-    if (window.confirm(`Clear all ${favients.length} favourite${favients.length === 1 ? '' : 's'}? You can undo this.`)) {
+    if (window.confirm(`Clear all ${favients.length} gradient${favients.length === 1 ? '' : 's'} from My Gradients? You can undo this.`)) {
       favEdit(() => clear());
       onFlash('Collection cleared');
     }
@@ -237,11 +237,11 @@ export const FavientsCollectionMenu: React.FC<{
     if (isCollection) {
       const file = buildCollectionFile(favients, zipFmt)!;
       const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
-      downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `favients.${file.ext}`);
+      downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `My Gradients.${file.ext}`);
       onFlash(`Exported ${favients.length} → .${file.ext}`);
     } else {
       const bytes = buildCollectionZip(favients, zipFmt);
-      downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), 'favients.zip');
+      downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), 'My Gradients.zip');
       onFlash(`Exported ${favients.length} as .zip`);
     }
     close();
@@ -251,7 +251,7 @@ export const FavientsCollectionMenu: React.FC<{
     if (empty) { onFlash('Nothing to export'); return; }
     const blob = await buildContactSheet(favients);
     if (blob) {
-      downloadBlob(blob, 'favients-contact-sheet.png');
+      downloadBlob(blob, 'My Gradients contact sheet.png');
       onFlash('Contact sheet saved (PNG)');
     }
     close();
@@ -314,7 +314,7 @@ export const FavientsCollectionMenu: React.FC<{
             <select
               value={zipFmt}
               onChange={(e) => setZipFmt(e.target.value)}
-              title={isCollection ? 'Bundles every favourite into one file' : 'Per-gradient file format for the .zip'}
+              title={isCollection ? 'Bundles every gradient into one file' : 'Per-gradient file format for the .zip'}
               className="flex-1 min-w-0 bg-surface-sunken border border-line/10 rounded text-[11px] text-fg-secondary px-1 py-0.5 outline-none focus:border-accent-500"
             >
               {EXPORT_FORMATS.map((f) => (

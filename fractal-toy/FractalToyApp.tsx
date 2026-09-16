@@ -18,6 +18,7 @@ import { useEngineStore } from '../store/engineStore';
 import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
+import { panelLabel } from '../engine/PanelManifest';
 import { z } from '../components/ui';
 import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
@@ -68,7 +69,7 @@ export const FractalToyApp: React.FC = () => {
                 <DropZones />
 
                 {floatingPanels.map((p) => (
-                    <DraggableWindow key={p.id} id={p.id} title={p.id}>
+                    <DraggableWindow key={p.id} id={p.id} title={panelLabel(p.id)}>
                         <PanelRouter
                             activeTab={p.id as PanelId}
                             state={state}

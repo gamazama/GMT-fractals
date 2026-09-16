@@ -28,10 +28,10 @@ const PalettePickerModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       <span className="text-sm font-medium text-fg-secondary">Gradient Library</span>
       <button
         onClick={openFavientsPanel}
-        title="Open the Favients shelf"
+        title="Open My Gradients"
         className={`text-[12px] ${FAVIENTS_ACCENT.link}`}
       >
-        <FavientsIcon /> Favients
+        <FavientsIcon /> My Gradients
       </button>
       <button
         onClick={onClose}

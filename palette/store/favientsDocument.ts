@@ -62,6 +62,6 @@ export const restoreFavientsDocument = (snap: JsonValue): void => {
 
     const n = useFavientsStore.getState().importCollection(JSON.stringify(snap), 'merge');
     if (n) {
-        showToast(`Added ${n} gradient${n === 1 ? '' : 's'} from this scene to your Favients`, 'info');
+        showToast(`Added ${n} gradient${n === 1 ? '' : 's'} from this scene to My Gradients`, 'info');
     }
 };
