@@ -107,8 +107,14 @@ design §5.8 formats (`.ase`, Tailwind, tokens) exist · pre-release-ui-pass §1
 - 2026-09-16 — `a2df1f3d` (pushed): every page carries `darkreader-lock`, so Firefox's website
   dark mode stops darkening CSS swatches against the canvas ramp. Found testing on an iPhone.
 - 2026-09-16, unattended run — 25 commits on `main` from `e9fb88b0` to `34706e77`, **not pushed**;
-  branch `gx-entry-swap` prepared, not merged. Final check-suite results are recorded in the
-  session's closing message.
+  branch `gx-entry-swap` prepared, not merged. Closing check on a quiet tree at `34706e77`, all
+  green: typecheck, check:text-bytes, check:rule-guards, orphans, build; test: palette-working,
+  palette-favients, palette-shelf, gx-session, gradient-file, gradient-roundtrip,
+  palette-exportsubjects, palette-licensing, scene-file-claims, gx-share, palette-wavegen,
+  palette-curvespaces, gradient-rampmode; smoke: boot, ge-next, ge-hero, ge-tray, ge-ground,
+  ge-wave, ge-phone, ge-session, ge-gradientfile, ge-uiundo, ge-livedrag, gmt-gradientdrop,
+  chrome. (`smoke:ge-tray` goes red at random while other agents' edits hot-reload the page;
+  it is green on a quiet tree, including the [14] the swap agent reported.)
 
 ## 6. ADR text queued for the owner (ADR writes need approval)
 
