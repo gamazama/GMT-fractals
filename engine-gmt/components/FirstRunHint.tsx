@@ -3,6 +3,12 @@
  * visitors (H1). Points newcomers at the help menu + the formula picker so
  * the create→share loop is discoverable without a blocking modal. Dismissal
  * persists in localStorage, so returning users never see it again.
+ *
+ * @bug PRODUCTION: at 1400×900 the banner sits over app-gmt's top bar, so a first-time visitor
+ *   cannot click High-res render, Expand Light Studio, Shadow Settings or the light-gizmo button
+ *   until they dismiss it. Found by `smoke:chrome` on 2026-09-16 (which pre-dismisses the banner
+ *   so it can reach those controls). It also uses a raw `z-[800]` rather than a `<Layer tier>`
+ *   (ADR-0082) — where it should sit is a design call, not fixed here.
  */
 import React, { useState } from 'react';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
