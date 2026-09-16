@@ -11,6 +11,11 @@
  * undoable: nothing local changes, so there is nothing for Ctrl+Z to put back. Your own copy
  * stays exactly where it was.
  *
+ * The confirm ends on a one-line terms statement, in the wording of
+ * plans/palette-catalogue-licensing.md §5 "GX Global" (the gap) and §6 action 6 (the fix):
+ * the endpoint takes no name, source or licence, so the sharer is the only one who can vouch
+ * for the right to share.
+ *
  * NO UNEDITED CATALOGUE GRADIENTS (owner, 2026-09-13: "GX Global has no names, and shouldn't
  * accept duplicates from the repo"). Before asking, the gradient's canonical signature is
  * checked against the catalogue's (`palette/core/catalogSigs.ts` — every pack, loaded or not,
@@ -32,7 +37,8 @@ import { PALETTE_LOCAL_BASE } from '../../palette/core/catalogLoader';
 /** The confirm text. One string, so the two entry points cannot promise different things. */
 export const CONTRIBUTE_CONFIRM =
     'Add this gradient to GX global?' + String.fromCharCode(10, 10) +
-    'Everyone using the app will see it, and it cannot be taken back. Your own copy stays where it is.';
+    'Everyone using the app will see it, and it cannot be taken back. Your own copy stays where it is.' + String.fromCharCode(10, 10) +
+    'You confirm you have the right to share this.';
 
 /** The refusal. Says what to do instead, because the gradient is not wrong, just not new. */
 export const CATALOGUE_REFUSAL_TOAST =
