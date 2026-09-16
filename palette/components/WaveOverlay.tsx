@@ -230,7 +230,20 @@ export const WaveOverlay: React.FC<Props> = ({
       d.moved = true;
       onDragStart?.();
     }
-    const dx = dxp / Math.max(1, width);
+    /**
+     * X moves along the PLOT'S t AXIS, not across the canvas (2026-09-16). This divided by
+     * the canvas width, but t spans only the plot inside it — the canvas less the value
+     * gutter and the end pad — so every handle placed at a t trailed its pointer: a 96 px drag
+     * moved a span square 77.5 px on a 1280 px desk. `tToX` is the mapping every handle here
+     * is DRAWN through, so a drag read through it puts the handle back under the pointer.
+     * Phase reads it too, so the crest keeps pace with the pointer (until it hops a period).
+     * The caliper does not: its drag is a multiplicative rate, not a position — see 'lam'.
+     *
+     * @invariant a span or feather square travels with the pointer 1:1 along t — proven by:
+     *   npm run smoke:ge-wave ("[9] span and feather squares keep up with the pointer (within
+     *   2 px over a 96 px drag)"). Falsified 2026-09-16 with the canvas width back: [9] red alone.
+     */
+    const dt = dxp / Math.max(1, tToX(1) - tToX(0));
     const dy = dyp / Math.max(1, height);
     const o = d.s;
     const len = Math.max(1e-4, o.span[1] - o.span[0]);
@@ -242,22 +255,22 @@ export const WaveOverlay: React.FC<Props> = ({
         pill = `offset ${next.offset.toFixed(2)}`;
         break;
       case 'a':
-        next.span = [clamp(o.span[0] + dx, 0, o.span[1] - 0.01), o.span[1]];
+        next.span = [clamp(o.span[0] + dt, 0, o.span[1] - 0.01), o.span[1]];
         pill = `span ${next.span[0].toFixed(2)}–${next.span[1].toFixed(2)}`;
         break;
       case 'b':
-        next.span = [o.span[0], clamp(o.span[1] + dx, o.span[0] + 0.01, 1)];
+        next.span = [o.span[0], clamp(o.span[1] + dt, o.span[0] + 0.01, 1)];
         pill = `span ${next.span[0].toFixed(2)}–${next.span[1].toFixed(2)}`;
         break;
       case 'fa': {
         // Inward grows the feather; outward shrinks it to zero and then PUSHES the span
         // end (owner) — so a finger never has to find the square behind this one.
-        const want = o.feather[0] + dx / len;
+        const want = o.feather[0] + dt / len;
         if (want >= 0) {
           next.feather = [Math.min(FEATHER_MAX, want), o.feather[1]];
         } else {
           next.feather = [0, o.feather[1]];
-          next.span = [clamp(o.span[0] + o.feather[0] * len + dx, 0, o.span[1] - 0.01), o.span[1]];
+          next.span = [clamp(o.span[0] + o.feather[0] * len + dt, 0, o.span[1] - 0.01), o.span[1]];
         }
         pill = next.feather[0] > 0 || next.span[0] === o.span[0]
           ? `feather ${Math.round(next.feather[0] * 100)}%`
@@ -265,12 +278,12 @@ export const WaveOverlay: React.FC<Props> = ({
         break;
       }
       case 'fb': {
-        const want = o.feather[1] - dx / len;
+        const want = o.feather[1] - dt / len;
         if (want >= 0) {
           next.feather = [o.feather[0], Math.min(FEATHER_MAX, want)];
         } else {
           next.feather = [o.feather[0], 0];
-          next.span = [o.span[0], clamp(o.span[1] - o.feather[1] * len + dx, o.span[0] + 0.01, 1)];
+          next.span = [o.span[0], clamp(o.span[1] - o.feather[1] * len + dt, o.span[0] + 0.01, 1)];
         }
         pill = next.feather[1] > 0 || next.span[1] === o.span[1]
           ? `feather ${Math.round(next.feather[1] * 100)}%`
@@ -279,12 +292,13 @@ export const WaveOverlay: React.FC<Props> = ({
       }
       case 'lam':
         // Multiplicative, so the caliper stretches like a spring rather than crawling
-        // when it is short and bolting when it is long.
-        next.wavelength = clamp(o.wavelength * Math.pow(2, dx * 4), 0.004, 2);
+        // when it is short and bolting when it is long. A RATE, not a position — nothing
+        // here tracks the pointer — so it keeps the per-canvas-width feel it was tuned at.
+        next.wavelength = clamp(o.wavelength * Math.pow(2, (dxp / Math.max(1, width)) * 4), 0.004, 2);
         pill = `λ ${next.wavelength.toFixed(3)}   ${(len / next.wavelength).toFixed(1)} cyc`;
         break;
       case 'pa':
-        next.phase = o.phase - dx / Math.max(1e-4, o.wavelength);
+        next.phase = o.phase - dt / Math.max(1e-4, o.wavelength);
         next.amplitude = clamp(o.amplitude - dy, 0, 1);
         pill = `phase ${(((next.phase % 1) + 1) % 1).toFixed(2)}   amp ${next.amplitude.toFixed(2)}`;
         break;
@@ -299,7 +313,7 @@ export const WaveOverlay: React.FC<Props> = ({
     }
     onPill(pill);
     onChange(next);
-  }, [width, height, onChange, onPill, onDragStart]);
+  }, [width, height, tToX, onChange, onPill, onDragStart]);
 
   const endDrag = useCallback(() => {
     if (!drag.current) return;
