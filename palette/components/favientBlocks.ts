@@ -3,7 +3,11 @@
  * split into DATED BINS (Phase D.1, owner 2026-09-07: "for my gradients — dated bins by
  * default"). Pure (no React, no store state) so `test:palette-favients` can import it.
  */
-import { DEFAULT_GROUP, isRecentGroup, type Favient } from '../store/favientsStore';
+import { DEFAULT_GROUP, dayKey, isRecentGroup, type Favient } from '../store/favientsStore';
+
+/** The local calendar day of a timestamp, as a sortable key. It lives in the store since
+ *  2026-09-16, because a merge places Recent entries by it; re-exported for the view's callers. */
+export { dayKey };
 
 export interface Block {
   group: string;
@@ -15,11 +19,6 @@ export interface Block {
   favs: Favient[];
 }
 
-/** The local calendar day of a timestamp, as a sortable key. */
-export const dayKey = (t: number): string => {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 /** Today · Yesterday · "3 Sep" · "3 Sep 2025" (another year). */
 export const dayLabel = (t: number, now = Date.now()): string => {
   const k = dayKey(t);

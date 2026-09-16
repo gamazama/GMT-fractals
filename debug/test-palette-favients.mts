@@ -32,6 +32,11 @@
  *       import byte-exact; the LOAD gate keeps a stop-less entry it cannot read while the
  *       IMPORT gate refuses one; and `readFavientDrag` (palette/core/favientDnd.ts) hands a
  *       ramp payload back byte-exact and a stop payload without its stale ramp
+ *   [9] an import never draws a Recent day twice: a merge places the file's Recent entries by
+ *       day (`byDayNewestFirst` in `placeMerged` — within a day the shelf's own first, then the
+ *       file's in file order), a file of the run's last day or older still joins the end, and a
+ *       replace from a file whose Recent run is out of day order draws each day once. Read
+ *       through `listGroundSets`, so the assertion is on the rail's bin chips themselves.
  *
  * Run: `npm run test:palette-favients` (also a link of `test:palette`)
  *
@@ -74,6 +79,15 @@
  *      ramp on a loaded stop favourite is stripped".
  *   Not claimed: `healStopIds`' early return for a ramp favourite — `ensureStopIds([])`
  *   already came back equal, so removing it stays green; it is clarity, not a guard.
+ *
+ * ── FALSIFIED 2026-09-16 (section [9]) — each break made, run red (exit 1), reverted ──
+ *   D1 `placeMerged` appending the file's Recent entries again (`[...recentCur, ...recentFresh]`)
+ *      → 3 red: "does not draw a day twice" (bins Today·1, Yesterday·1, Today·1, 13 Sept·1,
+ *      Today·1 — the reported shelf), "Today holds 3", "within a day …". The "same day or older
+ *      still joins the end" assertion stays GREEN under it by design: that is the case the old
+ *      rule already got right, pinned so the fix cannot change it.
+ *   D2 `recentFirst` without `byDayNewestFirst` → 1 red, "a replace from a file whose Recent run
+ *      is out of day order".
  */
 
 // ── localStorage shim, BEFORE the store loads ─────────────────────────────
@@ -402,6 +416,48 @@ console.log('\n[8] the RAMP form (ADR-0122): load, import, dedupe, the drag payl
     const ps = readFavientDrag(dt({ config: { ...cfg('#000000', '#ffffff'), ramp: rampOf(17) }, name: 'Dragged stops' }));
     check(!!ps && !('ramp' in ps.config) && ps.config.stops.length === 2, '[8] a stop drag payload loses a stale ramp');
     check(readFavientDrag(dt({ config: { stops: 'x' }, name: 'n' })) === null && readFavientDrag(dt({ config: rampCfg(1) })) === null, '[8] a drag payload with no stops array, or no name, is still refused');
+}
+
+console.log('\n[9] an import never draws a day twice (a Recent bin is a view over createdAt)');
+{
+    const { listGroundSets } = await import('../palette/core/groundSets');
+    const { encodeGradientDocument } = await import('../palette/core/gradientDocument');
+    const DAY = 86_400_000;
+    // Noon today, so "a second earlier" can never cross midnight whenever the harness runs.
+    const noon = new Date();
+    noon.setHours(12, 0, 0, 0);
+    const T = noon.getTime();
+    const bins = () => listGroundSets({ favients: store().favients, groupLabels: store().groupLabels, catalogTotal: 0, now: T }).filter((s) => s.kind === 'bin');
+    const binIds = () => bins().map((b) => b.id);
+    const oneBinPerDay = () => binIds().length === new Set(binIds()).size;
+    const recent = (name: string, createdAt: number, ...colors: string[]) => ({ id: name, name, config: cfg(...colors), createdAt, group: RECENT_GROUP });
+    const names = () => store().favients.map((f) => f.name).join();
+
+    // The observed shelf: an entry of today, one of yesterday — and a file bringing another of today.
+    store().replaceAll([recent('t1', T - 1000, '#111111', '#222222'), recent('y1', T - DAY, '#333333', '#444444')]);
+    const file = encodeGradientDocument([
+        recent('file today', T - 500, '#555555', '#666666'),
+        recent('file older', T - 3 * DAY, '#777777', '#888888'),
+        recent('file today 2', T - 200, '#999999', '#aaaaaa'),
+    ], { [RECENT_GROUP]: RECENT_LABEL });
+    check(store().importCollection(JSON.stringify(file), 'merge') === 3, '[9] fixture: the merge admits the file\'s three Recent entries');
+    check(oneBinPerDay(), `[9] a merge bringing a newer day than the run's last does not draw a day twice (bins ${bins().map((b) => `${b.label}·${b.count}`).join(', ')})`);
+    check(bins().map((b) => b.count).join() === '3,1,1', `[9] … Today holds 3, then Yesterday, then the older day (${bins().map((b) => b.count).join()})`);
+    check(names() === 't1,file today,file today 2,y1,file older', `[9] within a day the shelf's own entries stay first and the file's follow in file order (${names()})`);
+    // Unchanged where the old rule already held: a file whose Recent entries are all of the run's last day or older joins the end.
+    store().replaceAll([recent('t1', T - 1000, '#111111', '#222222')]);
+    store().importCollection(JSON.stringify(encodeGradientDocument([recent('same day', T - 100, '#bbbbbb', '#cccccc'), recent('older', T - DAY, '#dddddd', '#eeeeee')], {})), 'merge');
+    check(names() === 't1,same day,older', `[9] a file of the same day or older still joins the end of the run (${names()})`);
+
+    // A replace from a file whose Recent run is itself out of day order (written from a shelf an old merge split).
+    const split = encodeGradientDocument([
+        recent('a today', T - 1000, '#010101', '#020202'),
+        recent('b yesterday', T - DAY, '#030303', '#040404'),
+        recent('c today', T - 500, '#050505', '#060606'),
+        { name: 'kept', config: cfg('#070707', '#080808'), createdAt: T },
+    ], { [RECENT_GROUP]: RECENT_LABEL });
+    store().importCollection(JSON.stringify(split), 'replace');
+    check(oneBinPerDay() && names() === 'a today,c today,b yesterday,kept', `[9] a replace from a file whose Recent run is out of day order draws each day once (${names()})`);
 }
 
 console.log(failures === 0 ? '\nPASS — the Favients shelf gates what it ingests and persists' : `\nFAIL — ${failures} assertion(s) failed`);

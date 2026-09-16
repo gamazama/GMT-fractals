@@ -27,9 +27,13 @@
  * blocks with the same divider — which is why every insert here lands inside the
  * target group's existing run rather than at a convenient array end.
  *
- * All groups are user-made EXCEPT `RECENT_GROUP`, which the app fills for the user:
- * `collectRecent` is called when a gradient becomes the working gradient, is
- * exported / shared / sent to wallpaper, or is starred — never on a mere wall click.
+ * All groups are user-made EXCEPT `RECENT_GROUP`, which the app fills for the user. Only
+ * the Gradient Explorer writes it, through its working session (`workingStore.syncRecent`,
+ * via `installWorking`): whatever becomes the working gradient — a wall or shelf pick
+ * included, since a pick makes it the working gradient — is collected once it has stayed
+ * Working for the shell's 400 ms debounce, and `updateRecent` then refreshes that entry in
+ * place as it is edited. The ♥, Mix, Share and Wallpaper flush that write first; Export
+ * does not. The ♥ itself files a separate copy with `add()`, never into Recent.
  * It is deduped by `favientSig`, capped at `RECENT_CAP`, and it owns the front of
  * the array (index 0). Organising is optional: named groups sit beside Recent and
  * the user drags out of Recent into them. A gradient the user has already filed in
@@ -97,6 +101,15 @@ export const PRESETS_GROUP = 'g-presets';
 
 /** True for the auto-managed Recent group. Undefined / '' is the default group, not Recent. */
 export const isRecentGroup = (id?: string): boolean => id === RECENT_GROUP;
+
+/** The local calendar day of a timestamp, as a sortable key (`YYYY-MM-DD`) — what a Recent BIN
+ *  is: `buildBlocks` splits the Recent run at every change of it, and an import places Recent
+ *  entries by it (`byDayNewestFirst`). Defined here, beside the placement, and re-exported by
+ *  `palette/components/favientBlocks.ts`, so the view and the placement cannot disagree on a day. */
+export const dayKey = (t: number): string => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const LS_KEY = 'gmt.favients';
 const LS_TARGET = 'gmt.favients.target';
@@ -447,10 +460,30 @@ const entryToFavient = (e: GradientDocumentEntry, id: string): Favient => ({
 });
 
 /**
- * Where a MERGE puts what it adds, so the shelf's two structural rules survive it:
+ * The Recent run ordered newest DAY first — a stable sort by `dayKey`, so the entries of one day
+ * keep their order (on a merge: the shelf's own first, then the file's, in file order).
+ *
+ * WHY: a Recent bin is not stored, it is a view — `buildBlocks` opens a new bin at every change
+ * of day along the run — so the run must never come back to a day it has left. A collect and a
+ * promote keep that by construction (they land at the head with `createdAt` now); an import
+ * cannot, because it brings entries with their OWN dates. Until 2026-09-16 a merge appended the
+ * file's Recent entries to the end of the run ("they are older than what you just collected"),
+ * and a file entry newer than the run's last day — another device's today, or any entry with no
+ * date, which the gate stamps now — drew that day twice: Today · 1, Yesterday · 1, Today · 1, as
+ * two rail chips with one `bin:<day>` id.
+ */
+const byDayNewestFirst = (run: Favient[]): Favient[] =>
+  run
+    .map((f, i) => ({ f, i, day: dayKey(f.createdAt) }))
+    .sort((a, b) => (a.day === b.day ? a.i - b.i : a.day < b.day ? 1 : -1))
+    .map((x) => x.f);
+
+/**
+ * Where a MERGE puts what it adds, so the shelf's structural rules survive it:
  *   - Recent is ONE run at index 0 (`collectRecent`'s invariant): the file's Recent entries join
- *     the END of the existing Recent run (they are older than what you just collected), and any
- *     stray Recent entry already mid-array is consolidated into that run.
+ *     the existing Recent run, and any stray Recent entry already mid-array is consolidated into
+ *     that run. Within it they are placed by DAY (`byDayNewestFirst`): an entry of a day the run
+ *     already shows joins the END of that day, in file order; one of a newer day goes above it.
  *   - a group is ONE contiguous run (`buildBlocks` opens a block on every group change): an
  *     entry for a group the shelf already has lands just past that group's last member; a group
  *     the shelf does not have is appended, in the file's order.
@@ -459,6 +492,10 @@ const entryToFavient = (e: GradientDocumentEntry, id: string): Favient => ({
  * @invariant after a merge the Recent run is contiguous at index 0 and every group is one run —
  *   proven by: `npm run test:gradient-file` ("[7] merge keeps Recent one block at the top",
  *   "[7] merge keeps each group one run"). Falsified 2026-09-14, see the harness header.
+ * @invariant after a merge or a replace, every day of the Recent run is ONE bin — the rail never
+ *   shows a day twice — proven by: `npm run test:palette-favients` ("[9] a merge bringing a newer
+ *   day …", "[9] a replace from a file whose Recent run is out of day order …"). Falsified
+ *   2026-09-16, see that harness's header.
  */
 const placeMerged = (cur: Favient[], fresh: Favient[]): Favient[] => {
   const g = (f: Favient): string => f.group ?? DEFAULT_GROUP;
@@ -474,7 +511,7 @@ const placeMerged = (cur: Favient[], fresh: Favient[]): Favient[] => {
   }
   const lastOf = new Map<string, number>();
   restCur.forEach((f, i) => lastOf.set(g(f), i));
-  const out: Favient[] = [...recentCur, ...recentFresh];
+  const out: Favient[] = byDayNewestFirst([...recentCur, ...recentFresh]);
   restCur.forEach((f, i) => {
     out.push(f);
     const key = g(f);
@@ -487,9 +524,11 @@ const placeMerged = (cur: Favient[], fresh: Favient[]): Favient[] => {
   return out;
 };
 
-/** Recent first (one run), everything else in its order — a replace's placement. */
+/** Recent first (one run, newest day first — a file written from a shelf a pre-2026-09-16 merge
+ *  split would otherwise bring the split with it), everything else in its order — a replace's
+ *  placement. */
 const recentFirst = (favients: Favient[]): Favient[] => [
-  ...favients.filter((f) => isRecentGroup(f.group)),
+  ...byDayNewestFirst(favients.filter((f) => isRecentGroup(f.group))),
   ...favients.filter((f) => !isRecentGroup(f.group)),
 ];
 
