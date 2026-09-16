@@ -22,7 +22,9 @@
  *
  * NAMES: the file's own name wins. The FILENAME is only a fallback, un-slugged (`_` → space,
  * trimmed, extension dropped — `.gmt-gradients.json` / `.gxsession.json` as one extension), and
- * numbered when one file yields several nameless gradients.
+ * numbered when one file yields several nameless gradients. A member of a SET .zip drops its
+ * `NNN_` index and keeps its underscores unless the zip was written by the old slugging rule
+ * (`zipMemberFallbackNames`).
  *
  * WHERE AN IMPORT LANDS (ADR-0123 Decision 4), per file, in `importGradientsInto`:
  *   1. a document naming MORE THAN ONE set (Kept and Recent count as sets) is a COLLECTION: it
@@ -66,6 +68,15 @@
  *   test:gradient-file` ("[9] a PNG carrying a scene key stays the scene loader's, …", "[9] a bare
  *   {stops} JSON the router would import stays the scene loader's", "[9] a .gmf is never looked at,
  *   whatever it holds"). Falsified 2026-09-16 three ways, see the harness header.
+ * @invariant a SET .zip's nameless members (`.map`) come back as the gradients' names — the `NNN_`
+ *   index dropped, underscores kept when the zip holds a name the old slugging could not write, `_`
+ *   read as a space when it could — and a zip whose indices are not its positions names each entry
+ *   as a lone file — proven by: `npm run test:gradient-file` ("[4b] a set .zip imports its .map
+ *   members as the names exactly, underscores kept", "[4b] an old slugged set .zip imports without
+ *   its index, un-slugged", "[4b] a zip whose indices are not its positions keeps them, as a lone
+ *   file would") and `npm run test:gradient-roundtrip` ("B set ramp .map (map) / … [NAME
+ *   filename]", through the real `runSetExport`). Falsified 2026-09-16 three ways, see the
+ *   test-gradient-file header.
  * @see palette/installGradientFileClaim.ts (the scene entrance's claim)
  * @see palette/core/gradientDocument.ts (the payload and its gate)
  * @see palette/core/gradientPng.ts (the PNG)
@@ -103,16 +114,54 @@ const extOf = (name: string): string => {
 
 const DOUBLE_EXTENSIONS = /\.(gmt-gradients|gxsession)$/i;
 
+/** The last path component of a filename or zip entry. */
+const baseOf = (name: string): string => name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1);
+
+/** A filename's stem: directory and extension dropped (`.gmt-gradients.json` / `.gxsession.json` as one). */
+const stemOf = (name: string): string => {
+  const file = baseOf(name);
+  const dot = file.lastIndexOf('.');
+  return (dot > 0 ? file.slice(0, dot) : file).replace(DOUBLE_EXTENSIONS, '');
+};
+
 /**
  * The fallback name from a filename: directory and extension dropped, `_` read as a space (our own
  * older downloads were slugged), trimmed. `imported` when nothing is left.
  */
-export const gradientNameFromFile = (name: string): string => {
-  const cut = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
-  const file = cut >= 0 ? name.slice(cut + 1) : name;
-  const dot = file.lastIndexOf('.');
-  const stem = (dot > 0 ? file.slice(0, dot) : file).replace(DOUBLE_EXTENSIONS, '');
-  return stem.replace(/_/g, ' ').trim() || 'imported';
+export const gradientNameFromFile = (name: string): string => stemOf(name).replace(/_/g, ' ').trim() || 'imported';
+
+/** A set .zip member's index prefix, as `favientsExport.zipMemberName` writes it. */
+const MEMBER_INDEX = /^(\d{3,})_(.+)$/;
+/** Everything the pre-2026-09-16 member rule (`[^\w.-]+` → `_`, ends trimmed of `_`) could leave
+ *  after the index. A name outside it was not slugged. */
+const OLD_SLUG = /^[A-Za-z0-9.-](?:[\w.-]*[A-Za-z0-9.-])?$/;
+
+/**
+ * The fallback name of every entry of a .zip, in entry order — what a gradient in an entry is
+ * called when the entry's content carries no name of its own (a `.map`, a `.gpl` from before
+ * names were written).
+ *
+ * A SET .ZIP (`favientsExport.buildCollectionZip` / `buildSwatchZip`) is recognised by its names:
+ * every entry is `NNN_<stem>.<ext>`, NNN being its 1-based position. Its index is dropped, and
+ *   - since 2026-09-16 the stem IS the name (only filesystem-illegal characters removed, see
+ *     `gradientFile.gradientFileStem`), so it is taken as it is — underscores included;
+ *   - before, the stem was slugged ("Sea Glass é" → `001_Sea_Glass.map`), so `_` reads as a space.
+ * The zip says which: when ANY stem holds a character the old rule could not write (a space, a
+ * non-ASCII letter, a leading or trailing `_`), none of them was slugged. When every stem could be
+ * old, `_` reads as a space — so a new set whose every name is spaceless ASCII with an underscore
+ * in it ("snake_case") comes back spaced; the filename alone cannot tell those apart.
+ *
+ * Any other zip — a hand-made one, a set with a file added — names each entry as a lone file does
+ * (`gradientNameFromFile`), index and all.
+ */
+export const zipMemberFallbackNames = (entryNames: ReadonlyArray<string>): string[] => {
+  const rests = entryNames.map((n, i) => {
+    const m = MEMBER_INDEX.exec(baseOf(n));
+    return m && Number(m[1]) === i + 1 ? m[2] : null;
+  });
+  if (!rests.length || rests.some((r) => r === null)) return entryNames.map(gradientNameFromFile);
+  const slugged = rests.every((r) => OLD_SLUG.test(stemOf(r!)));
+  return rests.map((r) => (slugged ? gradientNameFromFile(r!) : stemOf(r!).trim() || 'imported'));
 };
 
 /** A file already read. `text` is its UTF-8 text ('' for a binary file); `bytes`, when present,
@@ -197,15 +246,14 @@ const utf8 = new TextDecoder();
 const isZip = (b: Uint8Array): boolean =>
   b.length >= 4 && b[0] === 0x50 && b[1] === 0x4b && ((b[2] === 3 && b[3] === 4) || (b[2] === 5 && b[3] === 6));
 
-/** Name the nameless: the filename, numbered when the file yields several. */
-const nameAll = <T extends { name: string }>(items: T[], fileName: string): T[] => {
-  const base = gradientNameFromFile(fileName);
+/** Name the nameless: `base` (the file's fallback name), numbered when the file yields several. */
+const nameAll = <T extends { name: string }>(items: T[], base: string): T[] => {
   const nameless = items.filter((i) => !i.name.trim()).length;
   let n = 0;
   return items.map((i) => (i.name.trim() ? i : { ...i, name: nameless > 1 ? `${base} ${++n}` : base }));
 };
 
-const fromEntries = (entries: GradientDocumentEntry[], fileName: string, fallbackSource: string): ParsedGradientImport[] =>
+const fromEntries = (entries: GradientDocumentEntry[], base: string, fallbackSource: string): ParsedGradientImport[] =>
   nameAll(
     entries.map((e) => ({
       config: e.config,
@@ -215,7 +263,7 @@ const fromEntries = (entries: GradientDocumentEntry[], fileName: string, fallbac
       ...(e.origin ? { origin: e.origin } : {}),
       ...(typeof e.createdAt === 'number' ? { createdAt: e.createdAt } : {}),
     })),
-    fileName,
+    base,
   );
 
 /** A text parser result as a config: its own `config` verbatim when it is a real gradient, else
@@ -227,7 +275,7 @@ const configOf = (res: ImportResult): GradientConfig => {
   return rampToGradientConfig(res.ramp, { targetDE: 0.02, maxStops: 32 });
 };
 
-const routeText = (name: string, text: string): RoutedGradientFile => {
+const routeText = (name: string, text: string, base: string): RoutedGradientFile => {
   const head = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   const lead = head.trimStart()[0];
   if (lead === '{' || lead === '[') {
@@ -239,7 +287,7 @@ const routeText = (name: string, text: string): RoutedGradientFile => {
         return {
           kind: 'gradients',
           name,
-          items: fromEntries(read.gradients, name, `Import · .${document ? 'json' : extOf(name) || 'json'}`),
+          items: fromEntries(read.gradients, base, `Import · .${document ? 'json' : extOf(name) || 'json'}`),
           groups: read.groups,
           document,
           skipped: read.skipped,
@@ -257,14 +305,18 @@ const routeText = (name: string, text: string): RoutedGradientFile => {
     name: typeof own === 'string' && own.trim() ? own : '',
     source: `Import · .${res.format}`,
   };
-  return { kind: 'gradients', name, items: nameAll([item], name), groups: {}, document: false, skipped: 0 };
+  return { kind: 'gradients', name, items: nameAll([item], base), groups: {}, document: false, skipped: 0 };
 };
 
 /**
  * Route ONE file by its content. A zip yields one routed file per entry; everything else yields
  * one. Pure; never throws.
  */
-export const routeGradientFile = (read: ReadGradientFile, depth = 0): RoutedGradientFile[] => {
+export const routeGradientFile = (read: ReadGradientFile, depth = 0): RoutedGradientFile[] => route(read, depth, gradientNameFromFile(read.name));
+
+/** `routeGradientFile` with the fallback name decided by the caller — a zip entry's is the zip's
+ *  (`zipMemberFallbackNames`), not its own filename's. */
+const route = (read: ReadGradientFile, depth: number, base: string): RoutedGradientFile[] => {
   const name = read.name;
   try {
     const bytes = read.bytes;
@@ -273,11 +325,11 @@ export const routeGradientFile = (read: ReadGradientFile, depth = 0): RoutedGrad
       const png = readGradientPng(bytes);
       if (png.kind === 'document') {
         const document = png.format === 'document' || png.format === 'collection';
-        return [{ kind: 'gradients', name, items: fromEntries(png.gradients, name, 'Import · .png'), groups: png.groups, document, skipped: png.skipped }];
+        return [{ kind: 'gradients', name, items: fromEntries(png.gradients, base, 'Import · .png'), groups: png.groups, document, skipped: png.skipped }];
       }
       if (png.kind === 'bands') {
         const items = png.configs.map((config) => ({ config, name: '', source: 'Import · .png' }));
-        return [{ kind: 'gradients', name, items: nameAll(items, name), groups: {}, document: false, skipped: 0 }];
+        return [{ kind: 'gradients', name, items: nameAll(items, base), groups: {}, document: false, skipped: 0 }];
       }
       if (png.kind === 'scene') return [{ kind: 'scene', name }];
       return [{ kind: 'image', name, bytes }];
@@ -294,16 +346,18 @@ export const routeGradientFile = (read: ReadGradientFile, depth = 0): RoutedGrad
         },
       });
       const out: RoutedGradientFile[] = [];
-      for (const entryName of Object.keys(entries)) {
+      const entryNames = Object.keys(entries);
+      const bases = zipMemberFallbackNames(entryNames);
+      entryNames.forEach((entryName, i) => {
         const b = entries[entryName];
         const binary = isPng(b) || isZip(b);
-        out.push(...routeGradientFile({ name: entryName, text: binary ? '' : utf8.decode(b), bytes: b }, depth + 1));
-      }
+        out.push(...route({ name: entryName, text: binary ? '' : utf8.decode(b), bytes: b }, depth + 1, bases[i]));
+      });
       return out.length ? out : [{ kind: 'unreadable', name }];
     }
     const text = bytes ? utf8.decode(bytes) : read.text;
     if (typeof text !== 'string' || !text.length) return [{ kind: 'unreadable', name }];
-    return [routeText(name, text)];
+    return [routeText(name, text, base)];
   } catch {
     return [{ kind: 'unreadable', name }];
   }

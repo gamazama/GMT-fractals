@@ -44,7 +44,11 @@
  *       (`Sea Glass.json`, `Stufe Bänder 12.map` — only filesystem-illegal characters go) and a
  *       long credited name gives way to its credit; falsified that day by restoring the old
  *       `_`-collapsing `slugName` (red on both filenames) and by cutting the credited stem at 120
- *       without letting the name give way (red on the credit).
+ *       without letting the name give way (red on the credit). Also that day: a SET .zip's members
+ *       through the real `runSetExport` are `NNN_` + each member's single-download stem (a long
+ *       credited one keeps its credit whole) — falsified by `runSetExport` not passing the member
+ *       stems (red: the credit's `/` welded) and by `favientsExport.zipMemberName` slugging again
+ *       (red). The member rule itself is test:gradient-file [4b].
  *   [7]/[8] also changed that day: CSS joined STOP_BUDGETS, so the "does not reduce, does not
  *       warn" example moved from css to json and CSS now has to warn and honour the budget.
  *   FALSIFIED 2026-09-14, one mutation at a time, each restored, every one exit 1: CSS ignoring
@@ -519,6 +523,21 @@ section('[11] every format downloads under its own filename');
   const longName = 'A very long gradient name '.repeat(8).trim();
   const stem = creditedFileStem(longName, `${longName} (cpt-city/jjg, CC BY 3.0)`);
   ok(Array.from(stem).length <= 120 && stem.endsWith(' (cpt-city-jjg, CC BY 3.0)'), `[11] a long credited name keeps its credit whole within 120 code points (${JSON.stringify(stem)}, ${Array.from(stem).length})`);
+
+  // A SET .zip's members are named as those single downloads are (2026-09-16): `NNN_` + the stem one
+  // download of that member would get — the name as it is, a long credited one keeping its credit
+  // whole — through the real `runSetExport`, the zip's bytes caught at `URL.createObjectURL`.
+  let lastBlob: Blob | null = null;
+  (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = (b: Blob) => { lastBlob = b; return 'blob:t'; };
+  const { originKey } = await import('../palette/core/catalogOrigin');
+  const twoStops = { stops: [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 1, color: '#FFFFFF' }], colorSpace: 'srgb', blendSpace: 'oklab' };
+  const setFavs = [
+    { id: 'p', name: 'Stufe Bänder_2 é', createdAt: 0, config: twoStops },
+    { id: 'c', name: longName, createdAt: 1, config: twoStops, origin: { ref: 'cpt-city/jjg', credit: 'cpt-city/jjg, CC BY 3.0', key: originKey(twoStops as never) } },
+  ] as unknown as Parameters<typeof runSetExport>[1];
+  runSetExport('map', setFavs, 'Set');
+  const members = lastBlob ? Object.keys(unzipSync(new Uint8Array(await (lastBlob as Blob).arrayBuffer()))) : [];
+  ok(JSON.stringify(members) === JSON.stringify(['001_Stufe Bänder_2 é.map', `002_${stem}.map`]), `[11] runSetExport's .zip members are NNN_ + each member's single-download stem, credit kept whole (${JSON.stringify(members)})`);
 }
 
 console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry, one stop budget');

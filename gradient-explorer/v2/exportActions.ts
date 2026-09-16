@@ -301,6 +301,12 @@ export const creditedFileStem = (plainName: string, credited: string): string =>
   return `${name.slice(0, Math.max(12, MAX_FILE_STEM - credLen - 1)).join('').trimEnd()} ${credit}`;
 };
 
+/** The file stem of a download of `plainName` that exports as `name` (`exportNameFor`): the name
+ *  as it is, or — when `name` carries a credit — the credited stem. One gradient's download and its
+ *  member of a set .zip (`favientsExport.zipMemberName`) are both named by this. */
+export const downloadStem = (plainName: string, name: string): string =>
+  name === plainName ? slugName(name) : creditedFileStem(plainName, name);
+
 /** The bytes for one format and one subject. `palette` non-null selects the SWATCHES
  *  subject; the caller has already checked the format has a swatches builder. */
 const bytesFor = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number): string | Uint8Array =>
@@ -432,7 +438,6 @@ export const runSetExport = (
   const stem = slugName(setName);
   // A zip of CSS variables must not land beside a zip of CSS under one name (`fileSuffix`).
   const zipStem = `${stem}${getExportFormat(key)?.fileSuffix ?? ''}`;
-  if (subject !== 'swatches') favients = favients.map(withExportName);
   if (subject === 'swatches') {
     const items = setSwatches(favients, n);
     const one = buildSwatchCollectionFile(items, key);
@@ -451,6 +456,10 @@ export const runSetExport = (
     showToast(`Exported ${favients.length} palettes as .zip`);
     return;
   }
+  // Each .zip member is filed under the stem a single download of it would have (`downloadStem`),
+  // taken from the plain name: a credited member keeps its credit whole.
+  const memberStems = favients.map((f) => downloadStem(f.name, exportNameFor(f.name, f.origin, f.config)));
+  favients = favients.map(withExportName);
   const file = buildCollectionFile(favients, key, budget);
   if (file) {
     const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
@@ -458,7 +467,7 @@ export const runSetExport = (
     showToast(`Exported ${favients.length} → .${file.ext}`);
     return;
   }
-  const bytes = buildCollectionZip(favients, key, budget);
+  const bytes = buildCollectionZip(favients, key, budget, memberStems);
   downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${zipStem}.zip`);
   showToast(`Exported ${favients.length} as .zip`);
 };
@@ -519,7 +528,7 @@ export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palet
   }
   const swatches = subjectOf(a) === 'swatches';
   const name = swatches ? plainName : exportNameFor(plainName, opts.origin, opts.config);
-  const stem = name === plainName ? slugName(name) : creditedFileStem(plainName, name);
+  const stem = downloadStem(plainName, name);
   if (swatches && !palette.length) {
     showToast('No swatches to export');
     return undefined;

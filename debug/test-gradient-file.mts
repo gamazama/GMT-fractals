@@ -28,6 +28,14 @@
  *       scene PNG as a scene, a foreign PNG as an image, a zip of mixed files imports every entry
  *       in order, names come from the file and the filename fallback is un-slugged, `File`s read
  *       as bytes.
+ *  [4b] (2026-09-16) a SET .zip's member names: `favientsExport.buildCollectionZip` and
+ *       `buildSwatchZip` name each member `NNN_` + the name as it is (`gradientFileStem`: spaces,
+ *       non-ASCII and underscores kept, no path separator); the router names a nameless `.map`
+ *       member back EXACTLY (index dropped, underscores kept); a zip written before that day
+ *       (`001_Sea_Glass.map`) imports without its index, un-slugged; a new zip whose every name
+ *       the old rule could have written reads as old (the documented limit); a zip whose indices
+ *       are not its positions names entries as lone files; every member fits 255 UTF-8 bytes (CJK,
+ *       emoji, a four-digit index, the longest suffix) and a cut one imports as the name's start.
  *   [5] the destination rule against the real store: the given group; a one-set document into
  *       its named set (created, then found again by label, case-insensitive, once per call); a
  *       plain file into Kept; Recent is not a destination; a multi-set document merges (never
@@ -74,6 +82,15 @@
  *       block's LAST column); the single-band candidate back to "128 only" → 5; the writer ignoring
  *       the size → 5; the snap flooring → 2; the empty placeholder back to 1024 wide → 1.
  *   [4] router: no session route → 4; zips refused → 3; the filename fallback not un-slugged → 3.
+ *  [4b] (2026-09-16, seven breaks by a script, each restored with its sha1 checked): the router
+ *       always un-slugging a set zip → 1 ("… underscores kept"); keeping the index (every entry
+ *       named as a lone file) → 4 here and 6 in test:gradient-roundtrip B .map [NAME filename];
+ *       ignoring whether an index is the entry's POSITION → 1 ("a zip whose indices are not its
+ *       positions …"); `zipMemberName` slugging again → 6 here, 6 in the roundtrip, 1 in
+ *       test:palette-exportsubjects [11]; no byte cap → 1 ("fits 255 UTF-8 bytes", 387 / 488);
+ *       `gradientFileStem` treating `/` as legal → 6 (incl. "no member name holds a path
+ *       separator"); `runSetExport` not passing the member stems → 1 in exportsubjects [11] and 1
+ *       in the roundtrip (the credit's `/` welded: "cpt-citytest").
  *   [5] destination: the caller's group ignored → 1; no one-set rule → 4; no collection merge → 3;
  *       a set minted per file → 1 ("make ONE set"); a multi-file drop's items unshifted → 1
  *       ("keeps its order"); Recent accepted as a destination → 2.
@@ -489,6 +506,53 @@ console.log('[4] the one loader: route by content');
   let threw = false;
   try { router.parseGradientImports(hostileBytes.map((b, i) => ({ name: `h${i}.bin`, text: '', bytes: b }))); } catch { threw = true; }
   ok(!threw, '[4] a truncated PNG, a broken zip and an empty file never throw');
+}
+
+// ═══ [4b] a set .zip's member names (2026-09-16) ═════════════════════════════
+console.log('[4b] a set .zip: members named as the gradients are, and named back');
+{
+  const { buildCollectionZip, buildSwatchZip, zipMemberName, MAX_ZIP_MEMBER_BYTES } = await import('../palette/core/favientsExport');
+  const { getExportFormat } = await import('../palette/core/exportFormats');
+  const { unzipSync } = await import('fflate');
+  const MAP = '0 0 0\n255 0 0\n0 255 0\n255 255 255\n';
+  const favs = (names: string[]) => names.map((name, i) => ({ id: `z${i}`, name, createdAt: i, config: JSON.parse(J(CORPUS[1].config)) })) as any[];
+  const namesOf = async (zip: Uint8Array, zipName = 'Set.zip') => router.parseGradientImports(await router.readGradientFiles([new File([zip], zipName)])).items.map((i) => i.name);
+  const utf8Len = (s: string) => new TextEncoder().encode(s).length;
+
+  // THE EXPORT: `NNN_` + the name as it is — spaces, case, non-ASCII and underscores kept, only
+  // `\ / : * ? " < > |` removed, so no name can make a folder.
+  const NAMES = ['Sea Glass é', 'snake_case_name', ' Zebra/Phase: ß? ', '_leading underscore', 'AC\\DC <live>|"1"*', '../../up'];
+  const KEPT = ['Sea Glass é', 'snake_case_name', 'ZebraPhase ß', '_leading underscore', 'ACDC live1', '....up'];
+  const members = Object.keys(unzipSync(buildCollectionZip(favs(NAMES), 'map')));
+  ok(J(members) === J(KEPT.map((n, i) => `00${i + 1}_${n}.map`)), `[4b] buildCollectionZip names each member NNN_<the name as it is>.map (${J(members)})`);
+  ok(members.every((m) => !/[\\/]/.test(m)), '[4b] no member name holds a path separator, whatever the gradient is called');
+  const swatchMembers = Object.keys(unzipSync(buildSwatchZip(NAMES.map((name) => ({ name, colors: [{ r: 1, g: 2, b: 3 }] })), 'gpl')!));
+  ok(J(swatchMembers) === J(KEPT.map((n, i) => `00${i + 1}_${n}-swatches.gpl`)), `[4b] buildSwatchZip names its members by the same rule (${J(swatchMembers)})`);
+
+  // THE IMPORT: a set .zip's `.map` members (no name field) come back as the names, exactly —
+  // the index dropped and the underscores KEPT, because this zip holds names the old rule could
+  // not have written.
+  ok(J(await namesOf(buildCollectionZip(favs(NAMES), 'map'))) === J(KEPT), `[4b] a set .zip imports its .map members as the names exactly, underscores kept (${J(await namesOf(buildCollectionZip(favs(NAMES), 'map')))})`);
+  // A zip written BEFORE 2026-09-16 (`[^\w.-]+` → `_`, 48 characters): the index dropped, `_` read as
+  // a space — better than the "001 Sea Glass" it imported as until then.
+  const OLD = zipSync({ '001_Sea_Glass.map': strToU8(MAP), '002_Stufe_B_nder.map': strToU8(MAP), '003_snake_case.map': strToU8(MAP) });
+  ok(J(await namesOf(OLD)) === J(['Sea Glass', 'Stufe B nder', 'snake case']), `[4b] an old slugged set .zip imports without its index, un-slugged (${J(await namesOf(OLD))})`);
+  // The documented limit: a new zip whose EVERY name the old rule could also have written cannot be
+  // told from an old one by its filenames, so it reads as old.
+  ok(J(await namesOf(buildCollectionZip(favs(['snake_case', 'Plain']), 'map'))) === J(['snake case', 'Plain']), '[4b] a set .zip of names the old rule could have written reads as old (zipMemberFallbackNames says so)');
+  // Not a set .zip — an index out of position, or a member without one — names each entry as a lone file does.
+  const HAND = zipSync({ '002_a_b.map': strToU8(MAP), '001_c.map': strToU8(MAP) });
+  ok(J(await namesOf(HAND)) === J(['002 a b', '001 c']), `[4b] a zip whose indices are not its positions keeps them, as a lone file would (${J(await namesOf(HAND))})`);
+
+  // SIZE: a member extracts on ext4 / APFS / NTFS — at most MAX_ZIP_MEMBER_BYTES UTF-8 bytes — even for
+  // a 120-code-point stem of 3- and 4-byte characters, a four-digit index and the longest suffix.
+  const pdn = getExportFormat('pdn')!;
+  const long = [zipMemberName(pdn, 1234, '名'.repeat(150), 'swatches'), zipMemberName(getExportFormat('map')!, 0, '🎨'.repeat(150)), zipMemberName(getExportFormat('map')!, 0, 'a'.repeat(150))];
+  ok(long.every((m) => utf8Len(m) <= MAX_ZIP_MEMBER_BYTES), `[4b] every member name fits ${MAX_ZIP_MEMBER_BYTES} UTF-8 bytes (${long.map(utf8Len).join(', ')})`);
+  ok(long[0].startsWith('1235_名') && long[0].endsWith('-paintnet-swatches.txt') && long[1].startsWith('001_🎨') && !/\uD83C$/.test(long[1].slice(0, -4)), '[4b] a cut member keeps its index and suffix, and never splits a character');
+  ok(long[2] === `001_${'a'.repeat(120)}.map`, `[4b] an ASCII stem is cut at 120 code points, the single-download rule (${long[2].length})`);
+  const emojiBack = await namesOf(buildCollectionZip(favs(['🎨'.repeat(150), 'x y']), 'map'));
+  ok(emojiBack[0].length > 0 && '🎨'.repeat(150).startsWith(emojiBack[0]) && emojiBack[1] === 'x y', `[4b] a cut name imports as the start of the name (${Array.from(emojiBack[0]).length} code points)`);
 }
 
 // ═══ [5] where it lands ═════════════════════════════════════════════════════

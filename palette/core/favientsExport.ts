@@ -12,7 +12,8 @@
 import { zipSync, strToU8 } from 'fflate';
 import type { Favient } from '../store/favientsStore';
 import { gradientDisplayRamp } from './gmtGradient';
-import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA, stopBudgetOf, exportFileName } from './exportFormats';
+import { getExportFormat, EXPORT_FORMATS, aiLossyGradients, AI_LOSSY_DELTA, stopBudgetOf, exportFileName, type ExportFormatDef, type ExportSubject } from './exportFormats';
+import { gradientFileStem } from './gradientFile';
 import { layoutPositions, swatchesAt, clampCount, type PaletteRule } from './paletteSample';
 import { canvasToPngBlob } from '../../utils/SceneFormat';
 import type { RGB } from './oklab';
@@ -29,24 +30,67 @@ import type { RGB } from './oklab';
  */
 const rampOf = (f: Favient): RGB[] => gradientDisplayRamp(f.config);
 
-/** Filesystem-safe stem from a gradient name (collapses junk to underscores). */
-const sanitize = (name: string): string =>
-  (name || 'gradient').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48) || 'gradient';
+/**
+ * The longest member name a set .zip writes, in UTF-8 bytes. 255 is the per-name limit of ext4 and
+ * APFS, and NTFS counts UTF-16 units, which never outnumber UTF-8 bytes — so a member extracts
+ * everywhere. A 120-code-point stem of CJK or emoji would pass it (3–4 bytes each), so the stem
+ * gives way from the end.
+ */
+export const MAX_ZIP_MEMBER_BYTES = 255;
+
+const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
 
 /**
- * Build a .zip (Uint8Array) of every favourite exported in `fmtKey`. Files are
- * prefixed with a zero-padded index so collection order is preserved and same-named
- * gradients don't clobber each other. Each member is named through `exportFileName` (2026-09-14),
- * so it carries the format's `fileSuffix` exactly as a single download does: a .json zip and a
- * design-tokens zip extracted into one folder no longer write `001_Sea_Glass.json` twice.
+ * The name of member `index` (0-based) of a set .zip: `NNN_<stem><fileSuffix>[-swatches].<ext>`.
+ *
+ * The zero-padded 1-based index keeps the set's order and stops same-named gradients clobbering
+ * each other; the router (`importGradientFiles.zipMemberFallbackNames`) recognises it and drops it
+ * again. The stem is a single download's rule (`gradientFileStem`, as `exportActions.slugName`):
+ * the name AS IT IS, spaces, case and non-ASCII kept, only `\ / : * ? " < > |` and control
+ * characters removed — so a name can never make a folder — at most `MAX_FILE_STEM` code points,
+ * and then cut further from the end while the whole name passes `MAX_ZIP_MEMBER_BYTES`. Before
+ * 2026-09-16 it was `[^\w.-]+` → `_`, 48 characters ("Sea Glass é" → `001_Sea_Glass.map`), which
+ * the router still reads.
+ *
+ * `stem` is the name to file it under; the caller may pass one already built (a credited stem,
+ * `exportActions.creditedFileStem`) — it goes through the same rule again, which leaves a legal
+ * stem unchanged.
+ *
+ * @invariant a member is `NNN_` + the name as it is (`gradientFileStem`), never holds a path
+ *   separator and never passes `MAX_ZIP_MEMBER_BYTES`, in both set zips — proven by: `npm run
+ *   test:gradient-file` ("[4b] buildCollectionZip names each member NNN_<the name as it is>.map",
+ *   "[4b] no member name holds a path separator, whatever the gradient is called", "[4b]
+ *   buildSwatchZip names its members by the same rule", "[4b] every member name fits 255 UTF-8
+ *   bytes"). Falsified 2026-09-16 (the old slugging back, the byte cap gone, `/` legal in
+ *   `gradientFileStem`), see the harness header.
  */
-export const buildCollectionZip = (favients: Favient[], fmtKey: string, budget?: number): Uint8Array => {
+export const zipMemberName = (fmt: ExportFormatDef, index: number, stem: string, subject: ExportSubject = 'ramp'): string => {
+  const prefix = `${String(index + 1).padStart(3, '0')}_`;
+  let chars = Array.from(gradientFileStem(stem, 'gradient'));
+  let out = exportFileName(fmt, prefix + chars.join(''), subject);
+  while (utf8Bytes(out) > MAX_ZIP_MEMBER_BYTES && chars.length > 1) {
+    chars = chars.slice(0, -1);
+    out = exportFileName(fmt, prefix + chars.join('').trimEnd(), subject);
+  }
+  return out;
+};
+
+/**
+ * Build a .zip (Uint8Array) of every favourite exported in `fmtKey`, one member per gradient named
+ * by `zipMemberName`. Each member carries the format's `fileSuffix` exactly as a single download
+ * does (2026-09-14): a .json zip and a design-tokens zip extracted into one folder do not write
+ * `001_Sea Glass.json` twice.
+ *
+ * `stems[i]`, when given, is the filename stem of member i in place of its name — the Explorer
+ * passes a credited member's `creditedFileStem`, so the credit reads as it does on a single
+ * download. The name written INSIDE each file is always `favients[i].name`.
+ */
+export const buildCollectionZip = (favients: Favient[], fmtKey: string, budget?: number, stems?: ReadonlyArray<string>): Uint8Array => {
   const fmt = getExportFormat(fmtKey) ?? EXPORT_FORMATS[0];
   const files: Record<string, Uint8Array> = {};
   favients.forEach((f, i) => {
     const out = fmt.build(rampOf(f), f.name, budget); // string | Uint8Array (binary formats)
-    const fname = exportFileName(fmt, `${String(i + 1).padStart(3, '0')}_${sanitize(f.name)}`);
-    files[fname] = typeof out === 'string' ? strToU8(out) : out;
+    files[zipMemberName(fmt, i, stems?.[i] ?? f.name)] = typeof out === 'string' ? strToU8(out) : out;
   });
   return zipSync(files, { level: 6 });
 };
@@ -124,7 +168,7 @@ export const buildSwatchZip = (items: NamedSwatches[], fmtKey: string): Uint8Arr
   const files: Record<string, Uint8Array> = {};
   items.forEach((it, i) => {
     const out = fmt.swatches!(it.colors, it.name);
-    files[exportFileName(fmt, `${String(i + 1).padStart(3, '0')}_${sanitize(it.name)}`, 'swatches')] = typeof out === 'string' ? strToU8(out) : out;
+    files[zipMemberName(fmt, i, it.name, 'swatches')] = typeof out === 'string' ? strToU8(out) : out;
   });
   return zipSync(files, { level: 6 });
 };

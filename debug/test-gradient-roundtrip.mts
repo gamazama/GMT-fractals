@@ -48,7 +48,9 @@
  *   NAME         exact where the file carries a name (GMT file, .json, .gpl, .ggr, .cpt, css /
  *                cssvars comment, tokens; .grd: the name's bytes are in the file, which has no
  *                importer); otherwise the un-slugged filename stem (`unslugStem`, written out here
- *                rather than imported, so a router that stops un-slugging goes red).
+ *                rather than imported, so a router that stops un-slugging goes red) — except a
+ *                member of a SET .zip, whose filename is `NNN_<name>` since 2026-09-16 and must
+ *                come back as the name exactly (a credit's `/` as `-`, as on a single download).
  *   SETS         count and order for the GMT set file (and its stripped PNG) and every set .zip.
  * A new EXPORT_FORMATS entry with no class is itself a violation.
  *
@@ -85,6 +87,10 @@
  *   5. `importFormats` `parseGplFull` ignoring the `Name:` line → 24 red: "A ramp .gpl / {1..6}
  *      [NAME file]", "A swatches .gpl / {1..6}", "B set ramp .gpl / {1..6}", "B set swatches .gpl /
  *      {1..6}" (e.g. `name "Sea Glass" ≠ "Sea Glass é"` — the slugged filename's stem).
+ *   6. (2026-09-16, the set .zip's member names) `favientsExport.zipMemberName` slugging again → 6
+ *      red: "B set ramp .map (map) / {1..6} [NAME filename]" (e.g. `"Stufe B nder" ≠ "Stufe Bänder
+ *      ä"`); the router keeping the `NNN_` index → the same 6 (`"001 Noir Blanc é"`); `runSetExport`
+ *      not passing the member stems → 1, item 6 (`"… (cpt-citytest, CC BY 3.0)"`).
  */
 
 // ── window / document / URL shims, BEFORE any store module loads ────────────────────────────
@@ -605,7 +611,12 @@ const setFavs = () =>
         // Graded in position i against CORPUS[i]: a reordered zip reads as wrong colours.
         const txt = gradeCell(`${cell} (SETS order)`, klass, it, i, back.config, `${subject}:${f.key}`, subject === 'swatches' ? paletteOf(it.config) : undefined);
         // A ramp set export credits an unmodified catalogue member in its name (`withExportName`).
-        const want = nameInFile ? (subject === 'ramp' ? withExportName(favs[i] as any).name : it.name) : unslugStem(members[i] ?? '');
+        const credited = subject === 'ramp' ? withExportName(favs[i] as any).name : it.name;
+        // No name in the file: the member's filename carries it AS IT IS since 2026-09-16 — the
+        // `NNN_` index dropped, spaces and non-ASCII kept, the credit's `/` as `-` exactly as a
+        // single download names it. Written out, not derived from `members[i]`, so a zip that goes
+        // back to slugging (or a router that keeps the index) is red.
+        const want = nameInFile ? credited : credited.replace(/\s*\/\s*/g, '-');
         const nOk = check(`${cell} [NAME ${nameInFile ? 'file' : 'filename'}]`, back.name === want, `name ${JSON.stringify(back.name)} ≠ ${JSON.stringify(want)}`);
         return nOk ? txt : txt.replace(/^✓/, '✗');
       });
