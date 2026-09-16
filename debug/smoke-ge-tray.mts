@@ -35,6 +35,9 @@
  *       Ctrl+Z restores both; nothing leaves its panel at 1024 / 900 / 800 px
  *   [16] the WALLPAPER owns the keyboard (2026-09-13): with a stop selected on the hero and a
  *       point selected in Spline, Delete removes the point and NOT the stop underneath
+ *   [17] a stop selection belongs to its gradient (2026-09-16): undoing the stop's own edits
+ *       keeps it selected, the undo that brings another gradient back drops it; [17b] undoing an
+ *       inserted, selected stop closes the inspector
  *
  * Falsified 2026-09-07 three ways, each reverted (and once more after the Mix redesign the
  * same day: [4]'s second click used the wall's PRE-hero box and hit the hero's ramp — it armed
@@ -669,6 +672,103 @@ async function main() {
   if (knots1 !== knots0) fail(`[16] Delete in the wallpaper also deleted a stop on the hero underneath (${knots0} → ${knots1})`);
   if (!(handles1 < handles0)) fail(`[16] Delete did not reach the Spline mode — its selected point is still there (${handles0} → ${handles1} handles)`);
   console.log(`✓ [16] Delete in the wallpaper removes the spline point (${handles0} → ${handles1}) and leaves the hero's stops alone (${knots0})`);
+
+  /**
+   * [17] A STOP SELECTION BELONGS TO ITS GRADIENT (§8b item 9's "Noticed, not fixed", built
+   * 2026-09-16). Every fitted gradient numbers its stops `s0…sN`, so after a swap the selected
+   * id usually still exists — on the OTHER gradient — and the inspector stayed open over it.
+   * Reproduced that day: pick a gradient, select its last stop, nudge it with an arrow, then
+   * Ctrl+Z one step at a time. Every undo that stays on the picked gradient (the nudge, the fold
+   * into stops) must KEEP the stop and the inspector; the undo that brings the previous gradient
+   * back must drop both. [17b]: a click on the knot track inserts a stop and selects it, and the
+   * undo that removes it must close the face instead of leaving it over an empty inspector.
+   *
+   * Falsified 2026-09-16, each reverted, in `AdvancedGradientEditor`'s prop-sync effect:
+   * dropping the clear in the different-gradient branch → red "undo 3 brought … back but left
+   * the stop inspector open over it"; treating EVERY incoming value as a different gradient
+   * (`lineageRef.current.has(key)` → `false`) → red, but first at [14] ("could not get back to
+   * the inspector before trying mix"), so [17] never ran — the same sequence in a scratch probe
+   * dropped the stop at undo 1, which is what [17]'s keep half asserts; dropping the prune of
+   * ids the value no longer has → red "[17b] the undo removed the inserted stop but the
+   * inspector stayed open".
+   */
+  for (let i = 0; i < 3 && (await state(page)).face; i++) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
+  const heroName = () => page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
+  const nameBefore17 = await heroName();
+  // Aim at wall tiles that hit-test to the wall itself (not the hero, not a header), top down.
+  const wallAims = await page.evaluate(() => {
+    const wallEl = document.querySelector('[data-gx-keepselect]')!;
+    const r = wallEl.getBoundingClientRect();
+    const out: { x: number; y: number }[] = [];
+    for (let y = r.y + 14; y < Math.min(r.bottom, window.innerHeight) - 8 && out.length < 8; y += 29) {
+      const x = r.x + 24 + 44 * (3 + out.length);
+      const el = document.elementFromPoint(x, y);
+      if (el && el.tagName === 'CANVAS' && !el.closest('[data-gx-hero]') && wallEl.contains(el)) out.push({ x, y });
+    }
+    return out;
+  });
+  let nameB = nameBefore17;
+  for (const a of wallAims) {
+    await page.mouse.click(a.x, a.y);
+    await page.waitForTimeout(900);
+    nameB = await heroName();
+    if (nameB !== nameBefore17) break;
+  }
+  if (nameB === nameBefore17) fail(`[17] setup: no wall click picked a different gradient (still "${nameB}")`);
+  const lastSwatch = page.locator('[data-gx-hero] [class*="cursor-ew-resize"]');
+  await lastSwatch.nth((await lastSwatch.count()) - 1).click();
+  await page.waitForTimeout(600);
+  if ((await state(page)).face !== 'inspector') fail(`[17] setup: the last swatch did not select a stop (${(await state(page)).face})`);
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(500);
+  if ((await state(page)).face !== 'inspector') fail('[17] setup: nudging the selected stop closed the inspector');
+  let kept17 = 0;
+  let swappedTo = '';
+  for (let i = 1; i <= 5 && !swappedTo; i++) {
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(700);
+    const s17 = await state(page);
+    const now = await heroName();
+    if (now === nameB) {
+      if (s17.face !== 'inspector' || !s17.picker) fail(`[17] undo ${i} stayed on "${nameB}" but dropped the stop (face ${s17.face}, picker ${s17.picker})`);
+      kept17++;
+    } else {
+      if (s17.face || s17.picker) fail(`[17] undo ${i} brought "${now}" back but left the stop inspector open over it (face ${s17.face})`);
+      swappedTo = now;
+    }
+  }
+  if (!swappedTo) fail(`[17] setup: five undos never left "${nameB}"`);
+  if (!kept17) fail('[17] setup: no undo stayed on the picked gradient, so nothing showed the selection surviving its own edits');
+  console.log(`✓ [17] ${kept17} undo(s) of the stop's own edits keep it selected; the undo back to "${swappedTo}" drops it and closes the inspector`);
+
+  // [17b] an undone INSERT: aim at the middle of the widest gap between two stops.
+  const gap = await page.evaluate(() => {
+    const stops = (((window as any).__gxWorking?.()?.config?.stops ?? []) as { position: number }[]).map((s) => s.position).sort((a, b) => a - b);
+    const track = document.querySelector('[data-gx-hero] [data-gx-knot-track]') as HTMLElement | null;
+    if (stops.length < 2 || !track) return null;
+    let best = 0;
+    for (let i = 1; i < stops.length; i++) if (stops[i] - stops[i - 1] > stops[best + 1] - stops[best]) best = i - 1;
+    const t = (stops[best] + stops[best + 1]) / 2;
+    const r = track.getBoundingClientRect();
+    return { x: r.x + t * r.width, y: r.y + r.height / 2, n: stops.length, px: (stops[best + 1] - stops[best]) * r.width };
+  });
+  // a knot's grab area is 16 px wide, centred on it: the aim must clear both neighbours'
+  if (!gap || gap.px < 24) fail(`[17b] setup: no gap between stops wide enough to insert into (${JSON.stringify(gap)})`);
+  const stopCount = () => page.evaluate(() => ((window as any).__gxWorking?.()?.config?.stops ?? []).length as number);
+  await page.mouse.click(gap!.x, gap!.y);
+  await page.waitForTimeout(600);
+  if ((await stopCount()) !== gap!.n + 1 || (await state(page)).face !== 'inspector') fail(`[17b] setup: a track click did not insert and select a stop (${gap!.n} → ${await stopCount()}, face ${(await state(page)).face})`);
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(700);
+  const s17b = await state(page);
+  if ((await stopCount()) !== gap!.n) fail(`[17b] setup: one Ctrl+Z did not remove the inserted stop (${await stopCount()} stops, wanted ${gap!.n})`);
+  if (s17b.face || s17b.picker) fail(`[17b] the undo removed the inserted stop but the inspector stayed open (face ${s17b.face})`);
+  console.log('✓ [17b] undoing an inserted, selected stop closes the inspector rather than leaving it empty');
 
   await browser.close();
   if (errors.length) {

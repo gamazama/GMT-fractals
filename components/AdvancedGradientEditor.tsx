@@ -266,6 +266,22 @@ const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boole
         k.id === b[i].id && k.position === b[i].position && k.color === b[i].color && k.bias === b[i].bias && k.interpolation === b[i].interpolation
     );
 
+/** A knot list as one number (FNV-1a over every field `knotsEqual` compares, masked to 30
+ *  bits so it stays a small integer). Only ever compared with other keys from this file. */
+const knotsKey = (ks: readonly AdvancedGradientKnot[]): number => {
+    let h = 0x811c9dc5;
+    for (const k of ks) {
+        const s = `${k.id}|${k.position}|${k.color}|${k.bias}|${k.interpolation};`;
+        for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+    }
+    return h & 0x3fffffff;
+};
+
+/** How many knot lists one gradient's lineage remembers (see `lineageRef`). A drag emits one
+ *  per pointer move, so this bounds a long session on one gradient; the list the gradient
+ *  ARRIVED as is never the one dropped. */
+const LINEAGE_CAP = 4096;
+
 const BiasIcon = () => (
     <svg width="12" height="12" viewBox="0 0 10 10" className="fill-gray-700 hover:fill-white drop-shadow-md stroke-white stroke-[0.5] pointer-events-none">
         <path d="M 5 0 L 10 5 L 5 10 L 0 5 Z" />
@@ -323,6 +339,36 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // sync normally.
     const justEmittedRef = useRef(false);
 
+    /**
+     * WHICH GRADIENT A SELECTION BELONGS TO (GE v2 plan §8b item 9, "Noticed, not fixed";
+     * built 2026-09-16). The ids are no help: every fitted gradient numbers its stops `s0…sN`,
+     * so after a swap the selected id usually still exists — on a DIFFERENT gradient — and the
+     * v2 hero kept its inspector open over it (reproduced: pick A, pick B, select a stop,
+     * Ctrl+Z back to A).
+     *
+     * So the editor remembers the knot lists of the gradient on screen (`knotsKey`): the one it
+     * arrived as, every list it emitted, and every value that flowed back. An incoming value in
+     * that set is this gradient again — an echo, or an undo / redo of an edit made here — and
+     * the selection stays, minus any id the value no longer has (an undone insert). A value
+     * outside it is a gradient this editor never showed since the last one arrived: the set
+     * starts over from it and the selection is cleared. Nothing else clears it here, so a knot
+     * drag and the editor's own emits never do.
+     *
+     * Guard: `npm run smoke:ge-tray` step [17].
+     */
+    const lineageRef = useRef<Set<number>>(new Set());
+    const noteLineage = useCallback((key: number) => {
+        const seen = lineageRef.current;
+        if (seen.has(key)) return;
+        if (seen.size >= LINEAGE_CAP) {
+            const it = seen.values();
+            it.next(); // the arrival stays
+            const next = it.next();
+            if (!next.done) seen.delete(next.value);
+        }
+        seen.add(key);
+    }, []);
+
     const { openContextMenu, handleInteractionStart, handleInteractionEnd } = useStoreCallbacks();
 
     // Interface (d) resolution: prefer the injected host callbacks; default to the
@@ -357,22 +403,34 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const knotSession = useInteractionGesture(STOP_DRAG_SOURCE);
 
     useEffect(() => {
+        const incoming: AdvancedGradientKnot[] = stops.map(stop => ({
+            id: stop.id,
+            position: stop.position,
+            color: stop.color,
+            bias: stop.bias ?? 0.5,
+            interpolation: (stop.interpolation as InterpolationMode) ?? 'linear'
+        })).sort((a, b) => a.position - b.position);
+        const key = knotsKey(incoming);
         if (justEmittedRef.current) {
             justEmittedRef.current = false;
+            // the echo of an emit, as the host stored it — the same gradient (see lineageRef)
+            noteLineage(key);
             return;
         }
-        setKnots(prev => {
-            const incoming = stops.map(stop => ({
-                id: stop.id,
-                position: stop.position,
-                color: stop.color,
-                bias: stop.bias ?? 0.5,
-                interpolation: (stop.interpolation as InterpolationMode) ?? 'linear'
-            })).sort((a, b) => a.position - b.position);
-            if (knotsEqual(prev, incoming)) return prev;
-            return incoming;
-        });
-    }, [stops]);
+        if (lineageRef.current.has(key)) {
+            // this gradient again: keep the selection, minus ids the value no longer has
+            setSelectedIds((prev) => {
+                if (!prev.size) return prev;
+                const live = new Set(incoming.filter((k) => prev.has(k.id)).map((k) => k.id));
+                return live.size === prev.size ? prev : live;
+            });
+        } else {
+            // a different gradient: a selection made on the last one means nothing here
+            lineageRef.current = new Set([key]);
+            setSelectedIds((prev) => (prev.size ? new Set<string>() : prev));
+        }
+        setKnots(prev => (knotsEqual(prev, incoming) ? prev : incoming));
+    }, [stops, noteLineage]);
 
     const knotsRef = useRef(knots);
     useEffect(() => { knotsRef.current = knots; }, [knots]);
@@ -579,6 +637,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         // the redundant sync that fires when the parent's onChange
         // re-flows the value back to us. See justEmittedRef comment.
         justEmittedRef.current = true;
+        noteLineage(knotsKey(sorted));
         setKnots(sorted);
 
         const newStops = sorted.map(({ id, position, color, bias, interpolation }) => ({
@@ -593,7 +652,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             newBlendSpace ?? blendSpace,
             rampValueRef.current,
         ));
-    }, [colorSpace, blendSpace]);
+    }, [colorSpace, blendSpace, noteLineage]);
 
     /** Commit a whole config verbatim — the menu's ramp items (Invert, output space). */
     const emitConfig = useCallback((cfg: GradientConfig) => { onChangeRef.current(cfg); }, []);
