@@ -28,9 +28,9 @@
  * conversion (uncapped, at a Detail budget); `setConfig` normalises so a stale `ramp` never
  * rides a stop gradient; the restore gate is `coerceGradientConfig`, which accepts both forms.
  *
- * WHO READS THIS STORE: the old shell's Generator Stops mode (`GeneratorStage`'s
- * `GeneratorStopsControls`) and the GE v2 hero once the working input is `stops`
- * (`WorkingHero`'s `editorValue`). app-gmt's gradient param editor does NOT — it edits the
+ * WHO READS THIS STORE: the GE v2 hero once the working input is `stops` (`WorkingHero`'s
+ * `editorValue`), and `StopsDockPanel` when a host turns the standalone Stops mode on.
+ * (The first Explorer shell's Generator Stops mode read it too, until 2026-09-16.) app-gmt's gradient param editor does NOT — it edits the
  * DDFS param value through `AutoFeaturePanel`. The v2 hero's Add stops is
  * `workingStore.addStopsToWorking`, not `addStops` here: it must also fold the pipeline.
  *

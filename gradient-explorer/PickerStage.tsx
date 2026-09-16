@@ -9,9 +9,9 @@
  * (`gradient-explorer/v2/BrowseStage.tsx`). This file is the chrome and nothing else; a
  * second copy of the filtering logic would be the bug, not the feature.
  *
- * Hosts: `gradient-explorer/GradientExplorerApp.tsx` (the old shell) and
- * `app-gmt/PalettePickerOverlay.tsx` (`hideFavientsLink` — that host puts the Favients link
- * in its own modal header).
+ * Host: `app-gmt/PalettePickerOverlay.tsx` (`hideFavientsLink` — that host puts the Favients link
+ * in its own modal header). The first Explorer shell mounted it too, until the entry-point swap
+ * of 2026-09-16; the v2 shell's wall is `gradient-explorer/v2/BrowseStage.tsx`.
  *
  * @see plans/ge-v2-design.md §5.2
  */

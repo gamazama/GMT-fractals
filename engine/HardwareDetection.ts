@@ -27,8 +27,6 @@ import { DEFAULT_HARD_CAP, MOBILE_HARD_CAP } from '../data/constants';
  *     - `engine-gmt/renderer/GmtRendererCanvas.tsx`
  *     - `engine-gmt/components/FormulaPicker/FormulaPicker.tsx` (x2)
  *     - `palette/store/favientsPanelPersist.ts` `isMobileBoot`
- *   `gradient-explorer`'s `MOBILE_BREAKPOINT` is deliberately NOT one of
- *   these — it is a width-only layout-fit threshold, not device detection.
  */
 export function isMobileViewport(): boolean {
     return typeof window !== 'undefined' && (

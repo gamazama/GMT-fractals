@@ -6,13 +6,12 @@
  * to mirror later changes back to storage.
  *
  * The storage key is per-host (`opts.storageKey`), so no two apps read each other's
- * docking state through same-origin `localStorage`. THREE hosts, three keys — grep
+ * docking state through same-origin `localStorage`. TWO hosts, two keys — grep
  * `mountFavientsPanel(`:
  *   • app-gmt        — no `storageKey`, so the default `gmt.favients.panel`; floats.
  *   • fluid-toy      — `fluid-toy.favients.panel`; floats.
- *   • Gradient Explorer — `gmt.gradientExplorer.favients.panel`; docks LEFT
- *     (`favientsPanelEntry({ dock: 'left', order: 0 })` + `location: 'left'` in
- *     `gradient-explorer/setup.ts`).
+ * (The first Explorer shell docked it LEFT under `gmt.gradientExplorer.favients.panel` until
+ * the entry-point swap of 2026-09-16.)
  *
  * The only place a `'right'` default is chosen is the mobile first-run branch in
  * `restoreFavientsPanel` below (a floating shelf on a phone is easily lost, and the left

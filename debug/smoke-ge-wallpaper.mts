@@ -10,7 +10,8 @@
  * hero with the wallpaper open changed nothing on screen. That is what [2] pins.
  *
  * This is the ONLY guard that reaches `gradient-explorer/v2/registerFeatures.ts`'s live-source
- * registration and the overlay's resolver split (`RegisteredLiveSource` / `HeroLiveSource`).
+ * registration and the overlay's `RegisteredLiveSource`. (Its `HeroLiveSource` twin, the first
+ * shell's resolver, went with that shell at the entry-point swap, 2026-09-16.)
  *
  * Run (needs `npm run dev` — a FRESH server):
  *   npx tsx debug/smoke-ge-wallpaper.mts

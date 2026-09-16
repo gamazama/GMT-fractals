@@ -3,10 +3,11 @@
  *
  * A target is a named destination ("Generator · Slot A", "Stops · edit", a host
  * coloring layer) that knows how to `apply` a payload. This module is the generic
- * registry + selector; `components/DropTargetLayer.tsx` is the drag/drop affordance
- * over it (an app reaches a destination by dragging onto its on-screen anchor). The
- * `targetsForPayload` selector is also the basis for any click "send to" affordance an
- * app cares to build — but none ships today.
+ * registry + selector. Hosts register targets (`app-gmt/registerFeatures.ts`,
+ * `fluid-toy/registerFeatures.ts`) and the Favients panel and editor entrance read them
+ * (`getSendTargets`). `components/DropTargetLayer.tsx`, the drag/drop affordance over it,
+ * went with the first Explorer shell on 2026-09-16, so `targetsForPayload` has no
+ * production caller today — only `debug/test-engine-dnd-kernels.mts`.
  *
  * It generalizes the gradient-specific list `palette/core/favientTargets.ts` once
  * owned (`apply(config, name)`) into a payload-generic registry. P2 FOLDED those
@@ -23,10 +24,6 @@
  * @assumption Host-agnostic: imports nothing app-specific. Hosts register INTO it.
  * @assumption Idempotent by id (re-registering replaces) — mirrors
  *   `registerHistoryProvider`.
- * @assumption `DropTargetLayer` derives its visible set from `targetsForPayload`, so
- *   the node harness covers the consumer's contents + self-filtering by construction.
- *
- * @see components/DropTargetLayer.tsx (the drag/drop affordance over this registry)
  * @see palette/core/favientTargets.ts (host-capability flags; its target list folded here in P2)
  */
 

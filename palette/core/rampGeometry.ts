@@ -14,7 +14,7 @@
  *    `ctx.putImageData`.
  *
  *    `palette/core/` is NOT uniformly DOM-free and never has been, so do not read this
- *    header as a directory-wide guarantee. `rampCanvas.ts` declares itself "DOM-only";
+ *    header as a directory-wide guarantee.
  *    `favientsExport.ts`, `img2grad/decode.ts` and `favientDnd.ts` call
  *    `document.createElement`; `storage.ts` is a localStorage wrapper; `catalogLoader.ts`
  *    calls `fetch`. Grep the directory for `document.createElement` before assuming a

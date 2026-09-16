@@ -12,7 +12,8 @@
  * child inline exactly where it sits, so nothing changes off the mobile rail. Only one
  * stage is mounted at a time, so only the active mode's hero ever fills the rail.
  *
- * @see gradient-explorer/GradientExplorerApp.tsx (mounts the mobile rail + provider)
+ * The first Explorer shell's mobile layout was the only `HeroPortalProvider` host; it was retired
+ * at the entry-point swap (2026-09-16), so every mount now takes the inline default.
  */
 
 import React, { createContext, useContext } from 'react';

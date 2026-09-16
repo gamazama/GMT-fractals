@@ -26,7 +26,7 @@
  * so a picked Picker gradient never lights the Generator hero, and it survives the
  * Picker's desktop↔mobile remount.
  *
- * @see palette/store/heroSelection.ts · gradient-explorer/GradientDropLayer.tsx (the dock)
+ * @see palette/store/heroSelection.ts
  */
 
 import React, { useMemo } from 'react';

@@ -7,11 +7,10 @@
  * previewed `config` is a snapshot handed in at open time — the overlay is display-only
  * and never writes it back.
  *
- * There is exactly ONE production open path: the `'fullscreen'` send-target registered in
- * `gradient-explorer/gradientTargets.ts` calls `openFullscreen(p.config, p.name)`. Both the
- * click path and the drag path resolve through that registry, so the dock has a single
- * source of truth. The result heroes deliberately carry NO Fullscreen button — grep
- * `CanonicalHero` ("this hero carries no Apply / Send-to / Fullscreen buttons").
+ * There is exactly ONE production open path: the v2 shell's Wallpaper button calls
+ * `openFullscreen(config, name)` with the working gradient (grep `openFullscreen` in
+ * `gradient-explorer/v2/GradientExplorerV2App.tsx`). Until the entry-point swap (2026-09-16)
+ * it was the first shell's `'fullscreen'` send-target, which went with that shell.
  *
  * Held as a module-level `useSyncExternalStore` holder (not a DDFS slice) because BOTH
  * React surfaces and non-React imperative consumers read it: an `ownCanvas` mode's
@@ -228,7 +227,7 @@ export const subscribeFullscreen = (l: () => void): (() => void) => subscribe(l)
  *
  * It exists because the two shells keep their working gradient in different places and the
  * overlay must not know which host it is in (CLAUDE.md: seams, never a branch on the app). The
- * old shell's is the last-modified hero (`heroSelection` + the Generator's derivation); the v2
+ * first shell's was the last-modified hero (`heroSelection` + the Generator's derivation); the v2
  * shell's is the Working pipeline (`workingStore`, ADR-0111). Before this seam the overlay only
  * knew the first pair, so in v2 the split preview followed the WALL PICK if there was one and
  * otherwise froze on the open-time snapshot — it never followed the hero being edited.
@@ -259,7 +258,8 @@ export type LiveGradientSourceHook = () => {
 let liveSourceHook: LiveGradientSourceHook | null = null;
 
 /** Register the host's live-gradient hook (see {@link LiveGradientSourceHook}). Pass `null` to
- *  clear it and fall back to the overlay's built-in hero/Generator resolution. */
+ *  clear it: the overlay then draws the open-time snapshot (its built-in hero/Generator
+ *  resolver went with the first shell at the entry-point swap, 2026-09-16). */
 export const setFullscreenLiveSource = (hook: LiveGradientSourceHook | null): void => {
   liveSourceHook = hook;
 };
