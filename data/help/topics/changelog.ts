@@ -28,6 +28,9 @@ import { HelpSection } from '../../../types/help';
  * headings, `- ` bullets, `**bold**`, `> ` muted asides, `` `code` `` spans, and
  * `---` rules.
  */
+// DRAFT COPY (branch gx-entry-swap, 2026-09-16): the top "Unreleased" entry was written for
+// the owner to rewrite. Before release give it a version and a date and bump package.json.
+//
 // Not exported: app-gmt/HelpExtras.tsx intentionally hardcodes this literal so
 // the lazy changelog content never gets pulled into the main bundle.
 const CHANGELOG_TOPIC_ID = 'changelog.whats-new';
@@ -39,6 +42,14 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         title: 'Version History',
         content: `
 Every GMT release, newest first.
+
+## Unreleased — The new Gradient Explorer
+> September 2026
+
+- **The Gradient Explorer button in My Gradients opens the new Explorer**, the one that was in preview, with a Back to GMT link. The old Explorer is retired.
+- **Share links made in the preview keep working.**
+
+---
 
 ## 0.9.8.4a — Gradients
 > September 14, 2026
@@ -60,7 +71,7 @@ Every GMT release, newest first.
 - **Gradient stops drag with a finger** on phones and tablets, and the blend mode opens as a list there.
 - **The Help window fits on a phone screen.**
 
-**Gradient Explorer v2 is coming along** — it works on phones, and adds a wave tool to Curves. Not yet linked from GMT.
+**Gradient Explorer v2 is coming along** — it works on phones, and adds a wave tool to Curves.
 
 ---
 
@@ -82,7 +93,7 @@ The rest of the codebase audit landing as real fixes — including one that chan
 - **A saved camera renamed to nothing cancels** instead of storing a blank name.
 - **Less of the audio path competes with the renderer for the graphics card.** The interface was repainting sixty times a second with audio running; it is twenty now, and the spectrum display no longer draws on the GPU at all. This is an improvement, not a cure — audio still costs frame rate, and the rest needs proper profiling.
 
-**New: Gradient Explorer v2, in preview** — [app.gmt-fractals.com/gradient-explorer-next.html](https://app.gmt-fractals.com/gradient-explorer-next.html). A ground-up rebuild — one gradient seen as both palette and stop editor, a browsable wall with "More like this" ranked by how the colours actually look, working faces to Mix · pull from an Image · reshape with Curves · Adjust, a new colour wheel with harmony handles, and a Wallpaper mode whose live frames now render on the graphics card (about 130ms down to under 2ms at 1440p). It is **not linked to GMT yet** and the old Gradient Explorer is untouched.
+**New: Gradient Explorer v2, in preview** — [app.gmt-fractals.com/gradient-explorer-next.html](https://app.gmt-fractals.com/gradient-explorer-next.html). A ground-up rebuild — one gradient seen as both palette and stop editor, a browsable wall with "More like this" ranked by how the colours actually look, working faces to Mix · pull from an Image · reshape with Curves · Adjust, a new colour wheel with harmony handles, and a Wallpaper mode whose live frames now render on the graphics card (about 130ms down to under 2ms at 1440p). It has since replaced the old Gradient Explorer, and this link still opens it.
 
 ---
 

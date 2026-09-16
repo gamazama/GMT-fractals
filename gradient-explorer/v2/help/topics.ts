@@ -16,6 +16,9 @@
  * THE CHANGELOG: newest entry first, under a `## <GX_VERSION> — <title>` heading with a
  * `> <date>` line, and bump ../version.ts in the same change — that is what relights the
  * What's New dot.
+ *
+ * DRAFT COPY (branch gx-entry-swap, 2026-09-16): the top "Unreleased" entry is for the owner to
+ * rewrite. GX_VERSION was deliberately not bumped; give the entry the version you choose.
  */
 
 import type { HelpSection } from '../../../types/help';
@@ -130,6 +133,14 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
     category: "What's New",
     title: "What's New",
     content: `
+## Unreleased — out of preview
+> September 2026
+
+- **This is the Gradient Explorer now.** The page GMT and Fluid Toy open shows it, and coming from GMT's My Gradients gives you a Back to GMT link. The old Explorer is gone.
+- **Links shared from the preview still open.** New share links use the main address.
+
+---
+
 ## 2.0.0-preview.2 — saving, opening and credits
 > September 14, 2026
 
@@ -145,7 +156,7 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
 ## 2.0.0-preview — the new Gradient Explorer
 > September 2026
 
-A rebuilt Gradient Explorer, in preview beside the old one.
+A rebuilt Gradient Explorer.
 
 - **One gradient on top, the wall below.** The gradient you are working on is always at the top, as a palette and as a bar with stops you can drag. Everything else happens around it.
 - **Sets on one wall.** The whole catalogue, gradients shared by other people (GX global), the presets, each day you worked and your own groups are chips over one wall — switch any of them on or off.
