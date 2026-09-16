@@ -39,6 +39,7 @@
     "smoke:bc-drag": "tsx debug/smoke-bc-drag.mts",
     "smoke:binder-registry": "tsx debug/smoke-binder-registry.mts",
     "smoke:boot": "tsx debug/smoke-boot.mts",
+    "smoke:chrome": "tsx debug/smoke-chrome.mts",
     "smoke:ge-next": "cross-env ENGINE_URL=http://localhost:3400/gradient-explorer-next.html tsx debug/smoke-boot.mts",
     "smoke:ge-hero": "tsx debug/smoke-ge-hero.mts",
     "prof:ge-drag": "tsx debug/prof-ge-drag.mts",
