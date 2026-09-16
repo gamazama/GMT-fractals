@@ -20,6 +20,23 @@
  *      (`fitChannelsToTracks`) over a ramp zebra's base reproduces the texels — the 8ZEBBOW2
  *      bug drew black — and `addStopsToWorking` is one undo entry that undoes to the ramp.
  *
+ * Recent through the REAL shelf, added 2026-09-16 (the seam wired to favientsStore as
+ * gradient-explorer/v2/registerFeatures.ts wires it; each `syncRecent` = the 400 ms debounce):
+ *  10. a gradient picked back out of a dated bin — pick → sync → edit → sync, and pick → fold →
+ *      sync → stop edit → sync — leaves the entry it came from alone and opens a new one.
+ *  11. a ♥ inside the debounce (WorkingHero's write: sync, then `add()`) flashes Kept, the set it
+ *      filed into, not the bin the flushed sync grew (gradient-explorer/v2/setSaveFlash.ts).
+ *
+ * ── FALSIFIED 2026-09-16 (sections [10]–[11]) — each break made, run red (exit 1), reverted ──
+ *   R1  `syncRecent`'s pin back to `s.sessionPinned && next === s.sessionId` (the first sync
+ *       drops it) → 4 red, all [10]: both "the entry … is left as it was" assertions, "the edit
+ *       opened a new entry (2 entries)", "a second edit …". [9] stays green — it sets the pin by
+ *       hand and never runs the first sync, which is why [10] exists.
+ *   R2  `stillThePick` reading only a `gradient` input (not a fold's `bakedFrom`) → 1 red, [10]
+ *       "pick from a bin → fold → sync → stop edit → sync".
+ *   R3  `setSaveFlash.ts` `countsNow` counting the bins again → 1 red, [11] "the flash names
+ *       Kept" (got `bin:<today>`).
+ *
  * ── FALSIFIED 2026-09-14 — each break made, the run watched go red (exit 1), reverted ──
  *   W1  `channelsOfConfig` reading `c.stops` (the pre-ADR base: grey on a ramp gradient) → 5 red:
  *       [5] "base of a ramp gradient is its texels", [6] "dense ramp + Adjust → a ramp" and its
@@ -326,6 +343,79 @@ console.log('[9] Curves + Add stops against the real stores');
   useWorkingStore.getState().syncRecent();
   ok(collected.length === nCollected + 1, 'configKey tells two ramps apart (a changed ramp output leaves its pinned bin entry alone)');
   engine().setPaletteGenerator({ hueRotate: 0 });
+}
+
+// ══ Recent through the REAL shelf (sections [10]–[11]) ══════════════════════════════════
+// The fake collector above answers every collect with a new id and every update with true, so
+// it cannot tell a promote from a new entry. From here the seam is wired to the real store,
+// exactly as gradient-explorer/v2/registerFeatures.ts wires it, and each sync call stands for
+// the shell's 400 ms debounce firing (GradientExplorerV2App, grep `syncRecent`).
+{
+  const { useFavientsStore, favientSig, DEFAULT_GROUP, RECENT_GROUP } = await import('../palette/store/favientsStore');
+  const { setRecentCollector, setRecentUpdater } = await import('../palette/store/workingStore');
+  const { groupSetId } = await import('../palette/core/groundSets');
+  const { flashSaveWhereItLanded, setSaveFlashNow } = await import('../gradient-explorer/v2/setSaveFlash');
+  setRecentCollector((c, n, s, o) => useFavientsStore.getState().collectRecent(c, n, s, o));
+  setRecentUpdater((id, c, n) => useFavientsStore.getState().updateRecent(id, c, n));
+  const fav = () => useFavientsStore.getState();
+  const w = () => useWorkingStore.getState();
+  const two = (a: string, b: string): GradientConfig => ({ stops: [{ id: 'a', position: 0, color: a }, { id: 'b', position: 1, color: b }], colorSpace: 'srgb', blendSpace: 'oklab' });
+  const A = two('#ff0000', '#0000ff');
+  const B = two('#00ff00', '#000000');
+  const sigA = favientSig(A);
+  useGeneratorStore.setState({ tracks: null, curvesOn: false });
+  engine().setPaletteGenerator({ hueRotate: 0 });
+
+  console.log('[10] a gradient picked back out of a dated bin: its first change opens a NEW entry');
+  {
+    fav().clear();
+    w().use(A, 'A', 'Browse'); w().syncRecent();
+    w().use(B, 'B', 'Browse'); w().syncRecent();
+    const idA = fav().favients.find((f) => f.name === 'A')?.id;
+    ok(!!idA && fav().favients.length === 2, 'fixture: two picks make two Recent entries');
+    const entryA = () => fav().favients.find((f) => f.id === idA);
+
+    // The real order: the pick, the debounced sync, THEN the edit. (A harness that sets the pinned
+    // state by hand skips the first sync, which is exactly where the pin used to fall.)
+    w().use(A, 'A', 'My Gradients', { fromRecent: true });
+    w().syncRecent();
+    ok(w().sessionId === idA, 'the bin pick is collected onto the entry it came from (same id)');
+    engine().setPaletteGenerator({ hueRotate: 40 });
+    w().syncRecent();
+    ok(!!entryA() && favientSig(entryA()!.config) === sigA, 'pick from a bin → sync → edit → sync: the entry it was picked from is left as it was');
+    ok(fav().favients.length === 3 && !!w().sessionId && w().sessionId !== idA, `… and the edit opened a new entry (${fav().favients.length} entries)`);
+    engine().setPaletteGenerator({ hueRotate: 80 });
+    w().syncRecent();
+    ok(fav().favients.length === 3 && favientSig(entryA()!.config) === sigA, 'a second edit refreshes the new entry in place; still three, the original untouched');
+    engine().setPaletteGenerator({ hueRotate: 0 });
+
+    // The same through a FOLD inside the debounce (a knot clicked without moving), then a stop edit.
+    fav().clear();
+    w().use(A, 'A', 'Browse'); w().syncRecent();
+    const idA2 = fav().favients[0].id;
+    w().use(B, 'B', 'Browse'); w().syncRecent();
+    w().use(A, 'A', 'My Gradients', { fromRecent: true });
+    w().beginEdit();
+    ok(w().input.kind === 'stops', 'fixture: beginEdit folded the pick into the stops document');
+    w().syncRecent();
+    usePaletteEditorStore.getState().setConfig(two('#ff0000', '#00ff88'));
+    w().syncRecent();
+    const orig = fav().favients.find((f) => f.id === idA2);
+    ok(!!orig && favientSig(orig.config) === sigA && fav().favients.length === 3, 'pick from a bin → fold → sync → stop edit → sync: the bin entry is left alone and a new one opens');
+  }
+
+  console.log('[11] a ♥ inside the debounce flashes the set it filed into, not today\'s bin');
+  {
+    fav().clear();
+    const C = two('#abcdef', '#123456');
+    w().use(C, 'C', 'Browse');
+    // WorkingHero's toggleStar write, verbatim in shape: flush the Recent sync, then file with add().
+    flashSaveWhereItLanded(C, () => { w().syncRecent(); fav().add(C, 'C', 'Browse'); }, { slow: true });
+    const grewBin = fav().favients.some((f) => f.group === RECENT_GROUP);
+    const kept = fav().favients.some((f) => (f.group ?? DEFAULT_GROUP) === DEFAULT_GROUP);
+    ok(grewBin && kept, 'fixture: the ♥\'s write grew today\'s bin (the flushed sync) AND Kept (the save)');
+    ok(setSaveFlashNow()?.setId === groupSetId(DEFAULT_GROUP), `the flash names Kept, where add() filed it (got ${setSaveFlashNow()?.setId})`);
+  }
 }
 
 if (failures) {

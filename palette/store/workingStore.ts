@@ -32,10 +32,18 @@
  * `RecentCollector` + `RecentUpdater` (palette/installWorking.ts). `syncRecent` — called by
  * the shell, debounced, whenever the derived output or the name changes — refreshes the
  * session's entry (`sessionId`) in place, or opens one when there is none. A new session
- * (sessionId → null) starts on `use`, `setInput` and `returnToSource`; `beginEdit` keeps
- * it (an edit is the same gradient, changed). A session picked up FROM the bin
- * (`use(..., { fromRecent: true })`) is pinned: its first change opens a new entry rather
- * than rewriting the one it came from.
+ * (sessionId → null) starts on `use`, `setInput`, `goLive`, `cancelLive` and
+ * `returnToSource`; `beginEdit` keeps it (an edit is the same gradient, changed). A session
+ * picked up FROM the bin (`use(..., { fromRecent: true })`) is pinned: its first change opens a
+ * new entry rather than rewriting the one it came from.
+ *
+ * @invariant a gradient picked from a bin keeps its pin through the debounced sync that follows
+ *   the pick, so its first change — an Adjust dial, or a stop edit after a fold — opens a NEW
+ *   Recent entry and leaves the entry it was picked from as it was — proven by: `npx tsx
+ *   debug/test-palette-working.mts` ("pick from a bin → sync → edit → sync: the entry it was
+ *   picked from is left as it was", "pick from a bin → fold → sync → stop edit → sync: the bin
+ *   entry is left alone and a new one opens"). Falsified 2026-09-16 twice: the old
+ *   `next === s.sessionId` rule (4 red), and `stillThePick` ignoring the fold (1 red, the second).
  *
  * Undo + Save/Load: `captureWorkingHistory` / `serializeWorkingDocument` (registered by
  * installWorking) snapshot `{ input, name, bakedFrom }`; the palette-row prefs (positions /
@@ -170,8 +178,8 @@ export interface WorkingState {
    *  their dials and curves, so the ramp is the source again. */
   cancelFace: () => void;
   /** Write the current output to the session's Recent entry, opening one if needed. The
-   *  shell calls this (debounced) on every derived change; star / export / wallpaper call
-   *  it directly so the bin is current before they read it. */
+   *  shell calls this (debounced) on every derived change; the ♥, Mix, Share and Wallpaper
+   *  call it directly so the bin is current before they read it (Export does not). */
   syncRecent: () => void;
   /** @deprecated alias of syncRecent, kept for the S4 call sites. */
   collectCurrent: () => void;
@@ -219,6 +227,12 @@ const update = (id: string, config: GradientConfig, name: string): boolean => {
  *  gradient compared equal to every other. A stop gradient ignores a stale `ramp`. */
 const configKey = (c: GradientConfig): string =>
   JSON.stringify([c.stops, c.colorSpace ?? '', c.blendSpace ?? '', c.stops.length ? '' : c.ramp ?? '']);
+/** Is `output` still exactly the gradient the session picked — the `gradient` input, or the one
+ *  a fold that has not changed it yet remembers (`bakedFrom`)? `syncRecent`'s pin rule. */
+const stillThePick = (s: Pick<WorkingState, 'input' | 'bakedFrom'>, output: GradientConfig): boolean => {
+  const picked = s.input.kind === 'gradient' ? s.input.config : s.input.kind === 'stops' && s.bakedFrom?.input.kind === 'gradient' ? s.bakedFrom.input.config : null;
+  return !!picked && configKey(output) === configKey(picked);
+};
 
 // --- helpers ----------------------------------------------------------------------
 const cloneConfig = (c: GradientConfig): GradientConfig => JSON.parse(JSON.stringify(c)) as GradientConfig;
@@ -423,8 +437,16 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     // entry, even when its first output matches one already in the bin (owner, 2026-09-07).
     const fresh = !s.sessionId && (s.input.kind === 'extract' || s.input.kind === 'build');
     const next = collect(d.config, name, workingSourceOf(s.input), { fresh, origin: originOfWorking(s.input, s.bakedFrom) });
+    // The pin HOLDS while the entry the session writes to is still the one it was picked from.
+    // Later syncs know that by the collect deduping back onto the session's own entry (a fold
+    // that changed nothing). The FIRST sync has no entry to compare with — its collect is what
+    // promotes the bin entry the pick came from and hands back that entry's id — so it asks
+    // whether the output is still the pick. Before 2026-09-16 it compared against the null id
+    // instead, the pin fell on every first sync, and the next edit rewrote the entry the
+    // gradient was picked from (the 400 ms debounce makes that sync the normal case).
+    const keepPin = s.sessionPinned && (s.sessionId ? next === s.sessionId : stillThePick(s, d.config));
     // Transient bookkeeping, outside any undo bracket (the next bracket snapshots it).
-    set({ sessionId: next, sessionPinned: next ? s.sessionPinned && next === s.sessionId : false });
+    set({ sessionId: next, sessionPinned: next ? keepPin : false });
   },
   collectCurrent: () => get().syncRecent(),
 

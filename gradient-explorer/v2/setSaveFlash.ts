@@ -79,11 +79,20 @@ const subscribe = (l: () => void): (() => void) => {
 export const useSetSaveFlash = (): SetSaveFlash | null =>
     useSyncExternalStore(subscribe, () => current, () => null);
 
-/** id → count for every set the rail would draw right now (the catalogue aside). */
+/** The same, outside React (a node harness reads it: `debug/test-palette-working.mts` [11]). */
+export const setSaveFlashNow = (): SetSaveFlash | null => current;
+
+/**
+ * id → count for every set a gradient can be FILED into right now: the rail's sets minus the
+ * catalogue and minus Recent's dated bins. Nothing files into Recent — `add()` refuses it and a
+ * bin chip takes no drop — so a bin that grows during a filing write is the Recent sync the write
+ * flushed first, never the save.
+ */
 const countsNow = (): Map<string, number> => {
     const st = useFavientsStore.getState();
     const out = new Map<string, number>();
     for (const d of listGroundSets({ favients: st.favients, groupLabels: st.groupLabels, catalogTotal: 0 })) {
+        if (d.kind === 'bin') continue;
         out.set(d.id, d.count);
     }
     return out;
@@ -92,12 +101,22 @@ const countsNow = (): Map<string, number> => {
 /**
  * Run a write that FILES a gradient, then flash whichever chip took it.
  *
- * The ♥ does not name a set — it adds to Recent, which the rail renders as a dated bin whose
- * id depends on the day and on how the blocks fell. Reconstructing that id here would be a
- * second implementation of `listGroundSets`'s binning, and the kind of copy that is correct
- * until the day the binning changes. So it is OBSERVED instead: snapshot the counts, do the
- * write, and flash the set that grew. Nothing grew (a ♥ that removed, a no-op) means nothing
- * to announce, which is also right.
+ * The ♥ does not name a set — `add()` files it into the last group used, else Kept, and which
+ * group that is, and what the rail calls its chip, is the store's and `listGroundSets`'s
+ * business. Reconstructing the id here would be a second copy of both, correct until the day
+ * either changes. So it is OBSERVED instead: snapshot the counts, do the write, and flash the
+ * set that grew. Nothing grew (a ♥ that removed, a no-op) means nothing to announce, which is
+ * also right.
+ *
+ * The bins are left out of the observation (`countsNow`) because the ♥'s write starts by
+ * flushing the Recent sync (`syncRecent`), and a ♥ inside the shell's 400 ms debounce — a pick
+ * and a quick ♥ — makes that sync collect a new entry into today's bin. With bins counted, the
+ * bin came first in rail order and the flash named "Today" instead of the set the gradient went
+ * into (found 2026-09-16).
+ *
+ * @invariant a ♥ inside the Recent debounce flashes the set `add()` filed into, not today's bin —
+ *   proven by: `npx tsx debug/test-palette-working.mts` ("[11] … the flash names Kept, where add()
+ *   filed it"). Falsified 2026-09-16 by counting the bins again: red, the flash named `bin:<today>`.
  */
 export const flashSaveWhereItLanded = (
     config: GradientConfig,
