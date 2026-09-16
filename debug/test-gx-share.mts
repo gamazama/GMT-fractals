@@ -8,6 +8,12 @@
  *   [4] the Share URL (`shareUrlFor`) opens the explorer page and round-trips through
  *       `takeShareFromLocation`, which also strips the param so a refresh does not re-apply
  *       the gradient. (Until 2026-09-07 this tested the "Back to GMT" hand-back URL; the owner dropped it — GMT's My Gradients already has the gradient.)
+ *       Since the entry-point swap (2026-09-16) also: a link made on the ALIAS page
+ *       (`gradient-explorer-next`, with or without `.html`, any directory) is written on the
+ *       canonical `gradient-explorer` page, and the alias HTML is the canonical HTML byte for
+ *       byte below its leading comment, so an old `?g=` link opens the same app. Falsified
+ *       2026-09-16, each reverted, exit 1: dropping the pathname rewrite in `shareUrlFor` → 2 red
+ *       (the alias, the pretty URL); one changed `<title>` in the alias → 1 red (byte for byte).
  *   [5] "Back to GMT" shows only when the page came from the studio: `cameFromGmtFor` over
  *       `?from=gmt` and the same-origin referrer at `/`, `/app-gmt`, `/app-gmt.html`; and
  *       app-gmt's `openGradientExplorer` actually appends the param (2026-09-13).
@@ -108,11 +114,33 @@ console.log('\n[4] the Share URL round-trips');
   };
   let replaced: string | null = null;
   (globalThis as any).window = {
-    location: { href: 'http://localhost:3400/gradient-explorer-next.html?zoom=2' },
+    location: { href: 'http://localhost:3400/gradient-explorer.html?zoom=2' },
     history: { replaceState: (_a: unknown, _b: unknown, url: string) => { replaced = url; } },
   };
   const url = shareUrlFor(cfg, 'Dusk over water');
-  check(url.includes('/gradient-explorer-next.html?'), `the link opens the explorer (${url.slice(0, 60)})`);
+  check(url.startsWith('http://localhost:3400/gradient-explorer.html?g='), `the link opens the explorer, carrying only ?g= (${url.slice(0, 60)})`);
+
+  // The ALIAS (entry-point swap, 2026-09-16): the preview address still serves the app, and a
+  // link made there is written on the canonical page, with or without `.html`, in the same
+  // directory (the /dev preview deploy). Anything else is left alone.
+  const linkFrom = (href: string): string => {
+    (globalThis as any).window.location.href = href;
+    return shareUrlFor(cfg, 'Dusk over water').split('?')[0];
+  };
+  check(linkFrom('http://localhost:3400/gradient-explorer-next.html?zoom=2') === 'http://localhost:3400/gradient-explorer.html', '[4] a link made on the alias names the canonical page');
+  check(linkFrom('https://app.gmt-fractals.com/dev/gradient-explorer-next') === 'https://app.gmt-fractals.com/dev/gradient-explorer', '[4] …under a pretty URL, in the same directory');
+  check(linkFrom('https://app.gmt-fractals.com/gradient-explorer') === 'https://app.gmt-fractals.com/gradient-explorer', '[4] the canonical pretty URL is left alone');
+  check(linkFrom('https://example.com/my-gradient-explorer-next.html') === 'https://example.com/my-gradient-explorer-next.html', '[4] only the alias page itself is rewritten');
+  (globalThis as any).window.location.href = url;
+
+  // …and the alias PAGE is the canonical page: same markup, same module, so an old link opens
+  // exactly what a new one does. Only the alias's leading comment may differ.
+  const page = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const canonical = page('gradient-explorer.html');
+  const alias = page('gradient-explorer-next.html').replace(/<!-- ALIAS[\s\S]*?-->\n/, '');
+  check(canonical.includes('src="/gradient-explorer/v2/main.tsx"'), '[4] gradient-explorer.html loads the v2 shell');
+  check(alias === canonical, '[4] gradient-explorer-next.html is gradient-explorer.html, byte for byte below its alias comment');
+
   const code = new URL(url).searchParams.get(SHARE_PARAM) ?? '';
   check(code.length > 0 && /^[A-Za-z0-9_-]+$/.test(code), 'it carries a base64url ?g= code');
 

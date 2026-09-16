@@ -154,8 +154,10 @@ export default defineConfig({
         demo: path.resolve(__dirname, 'demo.html'),
         'fractal-toy': path.resolve(__dirname, 'fractal-toy.html'),
         'fluid-toy': path.resolve(__dirname, 'fluid-toy.html'),
+        // The Gradient Explorer (the v2 shell since the entry-point swap, 2026-09-16).
         'gradient-explorer': path.resolve(__dirname, 'gradient-explorer.html'),
-        // v2 shell, built beside the old one until parity (plans/ge-v2-design.md §7).
+        // ALIAS of the page above, same markup and module: the address the v2 shell had while
+        // it was in preview, kept so the share links (?g=…) made there keep opening.
         'gradient-explorer-next': path.resolve(__dirname, 'gradient-explorer-next.html'),
         'app-gmt': path.resolve(__dirname, 'app-gmt.html'),
         'mesh-export': path.resolve(__dirname, 'mesh-export.html'),

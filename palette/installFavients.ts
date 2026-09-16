@@ -116,7 +116,7 @@ export const mountFavientsPanel = (cfg: FavientsMountConfig = {}): void => {
  *  `gradient-explorer/v2/shareUrl.ts`; 2026-09-13). The literal is written here rather than
  *  imported, because `palette/` must never import an app. Only this opener appends it: the
  *  Explorer's link goes to `app-gmt.html`, which is the wrong place to send a fluid-toy user.
- *  The old shell ignores the param, so it is harmless there until the entry point swaps. */
+ *  `gradient-explorer.html` is the v2 shell since the entry-point swap (2026-09-16). */
 export const openGradientExplorer = (): void => {
   window.open('gradient-explorer.html?from=gmt', '_blank', 'noopener');
 };

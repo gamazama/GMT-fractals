@@ -149,9 +149,21 @@ export const decodeShare = (code: string): { config: GradientConfig; name: strin
   return { config, name: typeof o.n === 'string' && o.n.trim() ? o.n : 'Shared gradient' };
 };
 
-/** The full link for the current page. */
+/**
+ * The preview address the v2 shell had until the entry-point swap (2026-09-16) — the last path
+ * segment, with or without `.html` (Cloudflare serves both). That page is now an ALIAS of
+ * `gradient-explorer.html`, kept so links shared from it keep opening.
+ */
+const ALIAS_PAGE = /\/gradient-explorer-next(\.html)?$/;
+
+/**
+ * The full link for the current page — always written on the CANONICAL page: opened through
+ * the alias, the link names `gradient-explorer.html` (or `gradient-explorer` under a pretty
+ * URL) in the same directory, so the alias never gains new links.
+ */
 export const shareUrlFor = (config: GradientConfig, name: string): string => {
   const u = new URL(window.location.href);
+  u.pathname = u.pathname.replace(ALIAS_PAGE, '/gradient-explorer$1');
   u.search = '';
   u.hash = '';
   u.searchParams.set(SHARE_PARAM, encodeShare(config, name));
