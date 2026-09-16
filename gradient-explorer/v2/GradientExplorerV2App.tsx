@@ -334,10 +334,13 @@ export const GradientExplorerV2App: React.FC = () => {
   }, [candidate?.key, candidate?.mode, pickSerial]);
 
   // My Gradients follows the work (owner S3 review): every change to the derived output or
-  // the name lands in the session's Recent entry, debounced past a drag.
+  // the name lands in the session's Recent entry, debounced past a drag. A debounce is not a
+  // bracket, though: a gesture held still past 400 ms (a Curves wave from arm to ✓ / ✕, a slider
+  // or knot held) is still OPEN when it fires, so the write waits for it to close
+  // (`syncRecentOutsideUndo`) — a Recent write never becomes part of a gesture's undo entry.
   useEffect(() => {
     if (derived.empty) return;
-    const t = window.setTimeout(() => useWorkingStore.getState().syncRecent(), 400);
+    const t = window.setTimeout(() => useWorkingStore.getState().syncRecentOutsideUndo(), 400);
     return () => window.clearTimeout(t);
   }, [derived.config, derived.name, derived.empty]);
 
@@ -531,7 +534,7 @@ export const GradientExplorerV2App: React.FC = () => {
   }, []);
   const share = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
-    useWorkingStore.getState().syncRecent();
+    useWorkingStore.getState().syncRecentOutsideUndo();
     const url = shareUrlFor(derived.config, derived.name);
     navigator.clipboard?.writeText(url).then(
       () => showToast('Link copied — it opens this gradient'),
@@ -557,7 +560,7 @@ export const GradientExplorerV2App: React.FC = () => {
   }, []);
   const wallpaper = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
-    useWorkingStore.getState().syncRecent();
+    useWorkingStore.getState().syncRecentOutsideUndo();
     openFullscreen(derived.config, derived.name);
   };
 

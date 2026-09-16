@@ -29,10 +29,11 @@
  * Recent = ONE BIN ENTRY PER WORKING SESSION (owner, 2026-09-03 S3 review: the bin "should
  * be updating the gradient whenever the user modifies it, and know when to create a new
  * gradient"). The store does NOT import the favourites store; a host registers a
- * `RecentCollector` + `RecentUpdater` (palette/installWorking.ts). `syncRecent` — called by
- * the shell, debounced, whenever the derived output or the name changes — refreshes the
- * session's entry (`sessionId`) in place, or opens one when there is none. A new session
- * (sessionId → null) starts on `use`, `setInput`, `goLive`, `cancelLive` and
+ * `RecentCollector` + `RecentUpdater` (palette/installWorking.ts). `syncRecent` refreshes the
+ * session's entry (`sessionId`) in place, or opens one when there is none; the shell calls it,
+ * debounced, whenever the derived output or the name changes — through `syncRecentOutsideUndo`,
+ * which holds the write until no param undo bracket is open (the second invariant below). A new
+ * session (sessionId → null) starts on `use`, `setInput`, `goLive`, `cancelLive` and
  * `returnToSource`; `beginEdit` keeps it (an edit is the same gradient, changed). A session
  * picked up FROM the bin (`use(..., { fromRecent: true })`) is pinned: its first change opens a
  * new entry rather than rewriting the one it came from.
@@ -44,6 +45,18 @@
  *   picked from is left as it was", "pick from a bin → fold → sync → stop edit → sync: the bin
  *   entry is left alone and a new one opens"). Falsified 2026-09-16 twice: the old
  *   `next === s.sessionId` rule (4 red), and `stillThePick` ignoring the fold (1 red, the second).
+ *
+ * @invariant a Recent sync through `syncRecentOutsideUndo` never lands inside an open param
+ *   transaction: a gesture that diffs to nothing leaves NO undo entry however long it was held,
+ *   one that changes something carries neither the shelf nor the session id, and the held sync
+ *   still writes once the bracket closes — on both routes into a transaction (`paramEditStart`,
+ *   and the DDFS sliders' `handleInteractionStart('param')`) — proven by: `npx tsx
+ *   debug/test-palette-working.mts` [12] ("palette route: a cancelled gesture held past the
+ *   debounce leaves NO undo entry", "DDFS route: the kept change is one entry carrying neither the
+ *   shelf nor the session") and `npm run smoke:ge-wave` ("[7c] arm → drag → dwell → ✕ restores
+ *   the pre-arm ramp and leaves NO undo entry", and [7] / [7b] on Esc). Falsified 2026-09-16 three
+ *   ways (S1–S3 in the harness header); S1, the debounce calling `syncRecent` directly, also turns
+ *   the smoke's three red.
  *
  * Undo + Save/Load: `captureWorkingHistory` / `serializeWorkingDocument` (registered by
  * installWorking) snapshot `{ input, name, bakedFrom }`; the palette-row prefs (positions /
@@ -70,7 +83,7 @@
 
 import { create } from 'zustand';
 import { useMemo, useRef, useSyncExternalStore } from 'react';
-import { isParamDragging, subscribeParamDragging } from './paramUndoBracket';
+import { isParamDragging, subscribeParamDragging, outsideParamTransaction } from './paramUndoBracket';
 import { useEngineStore } from '../../store/engineStore';
 import {
   useGeneratorStore,
@@ -177,10 +190,16 @@ export interface WorkingState {
    *  back to what it replaced (cancelLive); Curves / Adjust over a fixed input just reset
    *  their dials and curves, so the ramp is the source again. */
   cancelFace: () => void;
-  /** Write the current output to the session's Recent entry, opening one if needed. The
-   *  shell calls this (debounced) on every derived change; the ♥, Mix, Share and Wallpaper
-   *  call it directly so the bin is current before they read it (Export does not). */
+  /** Write the current output to the session's Recent entry, opening one if needed, NOW —
+   *  inside whatever undo bracket is open. For a caller that reads or files against the shelf
+   *  straight after: the ♥ (inside its own bracket, before `add()`) and entering Mix (slot B is
+   *  read from the head of the shelf). Everything else goes through `syncRecentOutsideUndo`. */
   syncRecent: () => void;
+  /** `syncRecent`, but never inside an open param transaction: now when none is open, else as
+   *  soon as it closes (`outsideParamTransaction`). The shell's 400 ms debounce, Share and
+   *  Wallpaper. Before 2026-09-16 the debounce called `syncRecent` and fired inside any gesture
+   *  held past it — a cancelled Curves wave left an undo entry holding only My Gradients. */
+  syncRecentOutsideUndo: () => void;
   /** @deprecated alias of syncRecent, kept for the S4 call sites. */
   collectCurrent: () => void;
   /** Re-lay by a rule (Even / Perceptual / Stops); Even / Perceptual after Stops use HAND_COUNT. */
@@ -235,6 +254,9 @@ const stillThePick = (s: Pick<WorkingState, 'input' | 'bakedFrom'>, output: Grad
 };
 
 // --- helpers ----------------------------------------------------------------------
+/** One function identity for the deferred sync, so `outsideParamTransaction` runs it once however
+ *  many debounces fired while the same bracket was open. */
+const syncRecentNow = (): void => useWorkingStore.getState().syncRecent();
 const cloneConfig = (c: GradientConfig): GradientConfig => JSON.parse(JSON.stringify(c)) as GradientConfig;
 const ADJUST_KEYS = Object.keys(MAIN_DEFAULTS) as (keyof GeneratorSlice)[];
 const pickAdjust = (s: GeneratorSlice): Partial<GeneratorSlice> => {
@@ -445,9 +467,11 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     // instead, the pin fell on every first sync, and the next edit rewrote the entry the
     // gradient was picked from (the 400 ms debounce makes that sync the normal case).
     const keepPin = s.sessionPinned && (s.sessionId ? next === s.sessionId : stillThePick(s, d.config));
-    // Transient bookkeeping, outside any undo bracket (the next bracket snapshots it).
+    // Transient bookkeeping: through `syncRecentOutsideUndo` this lands outside any undo bracket
+    // (the next bracket snapshots it). A direct call inside a bracket is part of that entry.
     set({ sessionId: next, sessionPinned: next ? keepPin : false });
   },
+  syncRecentOutsideUndo: () => outsideParamTransaction(syncRecentNow),
   collectCurrent: () => get().syncRecent(),
 
   layoutPalette: (rule) => {

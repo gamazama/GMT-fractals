@@ -26,6 +26,27 @@
  *      sync → stop edit → sync — leaves the entry it came from alone and opens a new one.
  *  11. a ♥ inside the debounce (WorkingHero's write: sync, then `add()`) flashes Kept, the set it
  *      filed into, not the bin the flushed sync grew (gradient-explorer/v2/setSaveFlash.ts).
+ *  12. the debounce firing INSIDE an open undo bracket (`syncRecentOutsideUndo`, the shell's
+ *      timer): with the `favients` history provider registered as registerPaletteUI registers
+ *      it, (a) the wave's shape on the palette route — open, change, sync ×2, put back, close — is
+ *      no entry, and the held sync writes after the close; (b) an Adjust-slider gesture on the
+ *      DDFS route (`handleInteractionStart('param')`) that keeps its change is one entry carrying
+ *      neither the shelf nor the session id, and its undo leaves the shelf alone; (c) a bracket
+ *      re-opened in the same task keeps the sync waiting; (d) the control — a direct `syncRecent`
+ *      inside a bracket IS captured, so (a) can see a capture (and the ♥ relies on it).
+ *
+ * ── FALSIFIED 2026-09-16 (section [12]) — each break made, run red (exit 1), reverted ──
+ *   S1  `syncRecentOutsideUndo` calling `syncRecent` directly (the debounce before the fix) → 8
+ *       red: all of (a), (b) and (c), e.g. "a cancelled gesture … leaves NO undo entry (got 1,
+ *       diff __ext__favients,__ext__working)". The browser half went red too: smoke:ge-wave [7],
+ *       [7b], [7c]. (b) moved its dial to 80, not 40, after the first cut stayed green on "carrying
+ *       neither the shelf nor the session" under S1 — (a) had left the entry at 40 already, so the
+ *       update wrote nothing.
+ *   S2  `paramUndoBracket.isParamTransactionOpen` reading the drag depth instead of the engine's
+ *       snapshot → 3 red, all (b): the DDFS route never touches the depth, so its sync landed inside
+ *       ("diff __ext__favients,paletteGenerator") and the undo rewound the shelf.
+ *   S3  `drainAfterClose` without its re-check → 2 red, both (c): the sync ran inside the re-opened
+ *       bracket ("1 entries, 1 undo").
  *
  * ── FALSIFIED 2026-09-16 (sections [10]–[11]) — each break made, run red (exit 1), reverted ──
  *   R1  `syncRecent`'s pin back to `s.sessionPinned && next === s.sessionId` (the first sync
@@ -415,6 +436,84 @@ console.log('[9] Curves + Add stops against the real stores');
     const kept = fav().favients.some((f) => (f.group ?? DEFAULT_GROUP) === DEFAULT_GROUP);
     ok(grewBin && kept, 'fixture: the ♥\'s write grew today\'s bin (the flushed sync) AND Kept (the save)');
     ok(setSaveFlashNow()?.setId === groupSetId(DEFAULT_GROUP), `the flash names Kept, where add() filed it (got ${setSaveFlashNow()?.setId})`);
+  }
+
+  console.log('[12] a Recent sync held past the debounce never lands inside an open undo bracket');
+  {
+    // The shelf rides undo exactly as registerPaletteUI registers it — without this provider no
+    // bracket could capture a Recent write, and every assertion below would pass for nothing.
+    const { captureFavientsHistory, restoreFavientsHistory } = await import('../palette/store/favientsStore');
+    const { paramEditStart, paramEditEnd } = await import('../palette/store/paramUndoBracket');
+    registerHistoryProvider('favients', { capture: captureFavientsHistory, restore: restoreFavientsHistory });
+    // The deferred write drains in a microtask after the close; a macrotask is past all of them.
+    const settle = () => new Promise<void>((r) => setTimeout(r, 0));
+    const depth = (): number => engine().paramUndoStack.length;
+    const topDiff = (): string => {
+      const st = engine().paramUndoStack as { diff: Record<string, unknown> }[];
+      return st.length ? Object.keys(st[st.length - 1].diff).sort().join(',') : '';
+    };
+    const hue = (v: number) => engine().setPaletteGenerator({ hueRotate: v });
+    const readHue = (): number => engine().paletteGenerator?.hueRotate;
+
+    // (a) THE WAVE'S SHAPE, on the palette route (`paramEditStart`): arm → the preview changes the
+    // output → the 400 ms debounce fires (twice) → cancel puts it back → close. A fresh session
+    // (`use`, no sync yet), so a captured write would change BOTH the shelf and the session id.
+    fav().clear();
+    w().use(A, 'A', 'Browse');
+    const d0 = depth();
+    paramEditStart();
+    hue(40);
+    w().syncRecentOutsideUndo();
+    w().syncRecentOutsideUndo();
+    ok(fav().favients.length === 0 && w().sessionId === null, 'palette route: while the bracket is open the sync writes nothing');
+    hue(0);
+    paramEditEnd();
+    ok(depth() === d0, `palette route: a cancelled gesture held past the debounce leaves NO undo entry (got ${depth() - d0}${depth() > d0 ? `, diff ${topDiff()}` : ''})`);
+    await settle();
+    ok(fav().favients.length === 1 && w().sessionId === fav().favients[0].id && favientSig(fav().favients[0].config) === sigA,
+      `… and the held sync writes once the bracket closes: one entry, the gradient as the gesture left it (${fav().favients.length} entries)`);
+
+    // (b) THE DDFS ROUTE (`handleInteractionStart('param')` — every Adjust slider), which never
+    // touches the palette's drag depth. A gesture that KEEPS its change: one entry, and it must
+    // carry the dial alone.
+    const d1 = depth();
+    engine().handleInteractionStart('param');
+    hue(80); // not (a)'s 40: a shelf (a) had wrongly left at 40 must still see a real write here
+    w().syncRecentOutsideUndo();
+    ok(favientSig(fav().favients[0].config) === sigA, 'DDFS route: while the slider bracket is open the sync writes nothing');
+    engine().handleInteractionEnd();
+    ok(depth() === d1 + 1 && !/__ext__(favients|working)/.test(topDiff()), `DDFS route: the kept change is one entry carrying neither the shelf nor the session (diff ${topDiff()})`);
+    await settle();
+    ok(fav().favients.length === 1 && favientSig(fav().favients[0].config) !== sigA, 'DDFS route: the held sync refreshes the session entry after the release');
+    const shelf = JSON.stringify(fav().favients);
+    engine().undoParam();
+    ok(JSON.stringify(fav().favients) === shelf && readHue() === 0, 'undoing that gesture puts the dial back and leaves My Gradients alone');
+
+    // (c) A bracket opened again IN THE SAME TASK (a fold, then a drag start) keeps it waiting.
+    fav().clear();
+    w().use(B, 'B', 'Browse');
+    const d2 = depth();
+    paramEditStart();
+    w().syncRecentOutsideUndo();
+    paramEditEnd();
+    paramEditStart();
+    await settle();
+    ok(fav().favients.length === 0, 'a bracket re-opened before the drain keeps the sync waiting');
+    paramEditEnd();
+    await settle();
+    ok(fav().favients.length === 1 && depth() === d2, `… it writes when that one closes, and neither bracket has an entry (${fav().favients.length} entries, ${depth() - d2} undo)`);
+
+    // (d) CONTROL: a direct `syncRecent` inside a bracket IS captured — so (a) could have seen a
+    // capture, and this is what the ♥ keeps on purpose (its sync, then `add()`, in one bracket).
+    fav().clear();
+    w().use(A, 'A', 'Browse');
+    const d3 = depth();
+    paramEditStart();
+    hue(40);
+    w().syncRecent();
+    hue(0);
+    paramEditEnd();
+    ok(depth() === d3 + 1 && /__ext__favients/.test(topDiff()), `control: a direct syncRecent inside a bracket is captured (diff ${topDiff()})`);
   }
 }
 

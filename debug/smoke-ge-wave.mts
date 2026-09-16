@@ -30,10 +30,12 @@
  *       bug 3), ✕ discards exactly.
  *  [10] then close the face: the axes are back on OkLCh, and a new gradient opens Curves there
  *       (plan §10, "Not sticky" — the space resets with the face).
- *   [7] arm → drag → Esc with NO click in the head first, focus wherever arming left it: the
- *       pre-arm ramp exactly, no undo entry carrying the wave, the face still open. [7b] with
+ *   [7] arm → drag → DWELL 700 ms → Esc with NO click in the head first, focus wherever arming
+ *       left it: the pre-arm ramp exactly, NO undo entry at all, the face still open. [7b] with
  *       the preset dropdown open, one Esc closes the dropdown and the wave stays armed; the next
- *       discards it.
+ *       discards it, again with no entry. [7c] arm → drag → dwell → ✕: the same, on the ✕ path.
+ *       The dwell is the point: it lets the shell's 400 ms Recent sync fire while the wave's
+ *       bracket is open, and that sync must wait for the close (`syncRecentOutsideUndo`).
  *   [8] arm → two drags → CLOSE THE FACE (it bakes): one undo entry, and one Ctrl+Z lands on the
  *       pre-arm ramp exactly — not on the unbaked preview.
  *   [9] the four squares' drags in [1] each moved their square with the pointer, within 2 px.
@@ -75,16 +77,19 @@
  *     BAKED (Δ 159.9 / 164.9), and later steps cascade.
  *   · the shell's `e.defaultPrevented` test dropped (K1's other half) → [4] and [7] red as above,
  *     AND [7b] red: Esc on the open preset dropdown also closed the face and baked (Δ 236.6).
+ *   · `workingStore.syncRecentOutsideUndo` calling `syncRecent` directly (the Recent sync inside
+ *     the open bracket, as the shell's debounce did before 2026-09-16) → [7], [7b] and [7c] red
+ *     ALONE, each "new entry: __ext__favients" — a discarded wave leaving an entry that holds only
+ *     My Gradients. The same three were red against the unfixed build.
  *
  * WHAT THIS DOES NOT PROVE: the phone layout or touch; that keyframe diamonds are hidden while
  * armed (canvas pixels); the t-axis fit on arm from a zoomed-in view; presets, strength, shape
  * and mode glyphs; where the pill sits. And [5] holds because the overlay's svg covers the plot:
  * removing the editor's own `waveArmed` guards in `handleDoubleClick` / `handleMouseDownWrapped`
- * stayed GREEN — it proves the behaviour, not which layer provides it. Nor that a cancelled
- * wave leaves NO entry after a dwell: the shell's 400 ms Recent sync writes the My Gradients
- * shelf inside the wave's open bracket, so arm → wait → ✕ or Esc pushes a shelf-only entry
- * (measured 2026-09-16, on the ✕ path these fixes never touched). [4] presses Esc before the
- * sync can fire; [7] and [7b] tolerate exactly that entry and nothing more ([7b] always dwells).
+ * stayed GREEN — it proves the behaviour, not which layer provides it. Nor does [7]–[7c] show
+ * the held Recent sync is WRITTEN after the close, or cover the DDFS route (an Adjust slider held
+ * still): both are `debug/test-palette-working.mts` [12]. [4] presses Esc before the sync can
+ * fire, so it is not a witness for the dwell.
  *
  * Wants `npm run dev` on 3400. The HMR socket is mocked (smoke-gmt-gradientdrop's pattern) and a
  * reload mid-run is itself a red. Store reads go through `__wm`, never a bare module URL.
@@ -567,18 +572,22 @@ async function main() {
   const hq = await handles(page);
   if (hq.pa) await drag(page, hq.pa, 0, -Y, 8, async () => null);
   const qd = await ws(page);
+  // DWELL past the shell's 400 ms Recent sync (`syncRecentOutsideUndo`), so it fires while the
+  // wave's bracket is open. Before 2026-09-16 that sync wrote the My Gradients shelf INSIDE the
+  // bracket and the discard left an entry whose diff was the shelf alone.
+  await page.waitForTimeout(700);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
   const q1 = await ws(page);
-  // Undo: no entry, or the Recent shelf's alone if the 400 ms sync landed first (see [7b]).
   const qEntry = q1.undo === q0.undo ? 'none' : q1.undo === q0.undo + 1 ? q1.top : `${q1.undo - q0.undo} entries`;
-  check('[7] arm → drag → Esc discards (focus where arming leaves it)',
-    qd.ramp !== q0.ramp && !q1.armed && q1.face === 'curves' && q1.ramp === q0.ramp && (qEntry === 'none' || qEntry === '__ext__favients'),
+  check('[7] arm → drag → dwell → Esc discards (focus where arming leaves it) and leaves NO undo entry',
+    qd.ramp !== q0.ramp && !q1.armed && q1.face === 'curves' && q1.ramp === q0.ramp && qEntry === 'none',
     `drag changed the ramp ${qd.ramp !== q0.ramp}; focus on ${qd.active}; face ${q0.face} → ${q1.face}, armed ${q1.armed}, undo depth ${q0.undo} → ${q1.undo} (new entry: ${qEntry}), curves ${JSON.stringify(q0.keys)} → ${JSON.stringify(q1.keys)}, worst Δ ${worstDelta(rampOf(q1), rampOf(q0)).toFixed(1)}`);
 
   // [7b] the armed tool is a surface in Esc's innermost-first order, not a key grab: with its own
   // preset dropdown open, Esc closes the dropdown and nothing else.
   await openCurves(); // a red [7] may have closed the face; this step should still report
+  const p0 = await ws(page); // its own baseline, so a red [7] does not count twice here
   await arm();
   const hq2 = await handles(page);
   if (hq2.pa) await drag(page, hq2.pa, 0, -Y, 8, async () => null);
@@ -595,15 +604,29 @@ async function main() {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
   const r2 = await ws(page);
-  // The undo half is looser than [7]'s on purpose. This step dwells past the shell's 400 ms
-  // Recent sync (`syncRecent`), which writes the My Gradients shelf INSIDE the wave's open
-  // bracket, so the discard can leave an entry whose diff is the shelf alone — a separate
-  // defect (plan §10: "a cancelled wave leaves no entry at all"), reported 2026-09-16, not
-  // fixed here. What must never be in it is the wave: the curves, the stops, the working input.
-  const entry = r2.undo === q0.undo ? 'none' : r2.undo === q0.undo + 1 ? r2.top : `${r2.undo - q0.undo} entries`;
-  check('[7b] …and the next Esc discards the wave exactly (no entry carries the wave)',
-    !r2.armed && r2.face === 'curves' && r2.ramp === q0.ramp && (entry === 'none' || entry === '__ext__favients'),
-    `armed ${r2.armed}, face ${r2.face}, worst Δ ${worstDelta(rampOf(r2), rampOf(q0)).toFixed(1)}, undo ${q0.undo} → ${r2.undo}, new entry: ${entry}`);
+  // This step always dwells past the Recent sync (the dropdown round trip), so it is the second
+  // witness that the sync waits for the bracket to close: plan §10, "a cancelled wave leaves no
+  // entry at all" — not even one whose diff is the My Gradients shelf alone.
+  const entry = r2.undo === p0.undo ? 'none' : r2.undo === p0.undo + 1 ? r2.top : `${r2.undo - p0.undo} entries`;
+  check('[7b] …and the next Esc discards the wave exactly, leaving NO undo entry',
+    !r2.armed && r2.face === 'curves' && r2.ramp === p0.ramp && entry === 'none',
+    `armed ${r2.armed}, face ${r2.face}, worst Δ ${worstDelta(rampOf(r2), rampOf(p0)).toFixed(1)}, undo ${p0.undo} → ${r2.undo}, new entry: ${entry}`);
+
+  // [7c] the ✕ path, the one the defect was first measured on: arm → drag → dwell → ✕.
+  await openCurves();
+  const u0 = await ws(page);
+  await arm();
+  const hu = await handles(page);
+  if (hu.pa) await drag(page, hu.pa, 0, -Y, 8, async () => null);
+  const ud = await ws(page);
+  await page.waitForTimeout(700);
+  await page.click('[data-gx-wave="cancel"]');
+  await page.waitForTimeout(400);
+  const u1 = await ws(page);
+  const uEntry = u1.undo === u0.undo ? 'none' : u1.undo === u0.undo + 1 ? u1.top : `${u1.undo - u0.undo} entries`;
+  check('[7c] arm → drag → dwell → ✕ restores the pre-arm ramp and leaves NO undo entry',
+    ud.ramp !== u0.ramp && !u1.armed && u1.face === 'curves' && u1.ramp === u0.ramp && uEntry === 'none',
+    `drag changed the ramp ${ud.ramp !== u0.ramp}; armed ${u1.armed}, face ${u1.face}, worst Δ ${worstDelta(rampOf(u1), rampOf(u0)).toFixed(1)}, undo ${u0.undo} → ${u1.undo}, new entry: ${uEntry}`);
 
   // ── [8] commit by CLOSING the face (it bakes) — one Ctrl+Z lands on the pre-arm ramp ──────────
   await fresh();

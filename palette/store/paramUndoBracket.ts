@@ -84,3 +84,54 @@ export const paramEdit = (fn: () => void): void => {
   fn();
   paramEditEnd();
 };
+
+/**
+ * Is an engine param transaction open RIGHT NOW — would a write to any history provider's state
+ * land in its entry? The engine's own snapshot is the test, not `dragDepth`: both routes into a
+ * transaction set it (this module's `paramEditStart`, and the DDFS sliders'
+ * `handleInteractionStart('param')`, which never touch `dragDepth`), and a nest whose first end
+ * already closed the transaction leaves `dragDepth` > 0 with nothing left to capture a write.
+ */
+export const isParamTransactionOpen = (): boolean => !!eng().interactionSnapshot;
+
+/**
+ * RUN A WRITE OUTSIDE UNDO (2026-09-16). `fn` runs now when no param transaction is open;
+ * otherwise it waits for the open one to close and runs then — never inside it.
+ *
+ * For bookkeeping that rides a history provider's store but is not the user's edit: the Explorer's
+ * Recent sync (`workingStore.syncRecentOutsideUndo`). Its 400 ms debounce used to fire inside any
+ * gesture held longer than that — the Curves wave from arm to ✓ / ✕, a slider or knot held still —
+ * and the My Gradients shelf write became part of that gesture's entry: a cancelled wave left an
+ * entry whose diff was the shelf alone.
+ *
+ * How it waits: a subscription on the engine store that fires when `interactionSnapshot` goes
+ * null. `endParamTransaction` nulls it in the same `set` that pushes the entry, so the entry is
+ * already built; the queue drains in a microtask after that, and re-checks — a transaction opened
+ * again in the same task (a fold, then a drag start) keeps it waiting for THAT one to close. A
+ * function queued twice while one transaction is open runs once (a Set, by identity).
+ *
+ * Not for a write a caller must see at once: the ♥ syncs Recent synchronously inside its own
+ * bracket, then files with `add()`, which reads the shelf that sync wrote.
+ *
+ * Guarded through its one caller: `debug/test-palette-working.mts` [12] — the snapshot test (not
+ * the drag depth) and the drain's re-check are S2 and S3 in that harness's falsification record.
+ */
+const afterClose = new Set<() => void>();
+let stopWaiting: (() => void) | null = null;
+const drainAfterClose = (): void => {
+  if (isParamTransactionOpen() || !afterClose.size) return;
+  stopWaiting?.();
+  stopWaiting = null;
+  const fns = [...afterClose];
+  afterClose.clear();
+  for (const fn of fns) fn();
+};
+export const outsideParamTransaction = (fn: () => void): void => {
+  if (!isParamTransactionOpen()) { fn(); return; }
+  afterClose.add(fn);
+  if (!stopWaiting) {
+    stopWaiting = useEngineStore.subscribe((s) => {
+      if (!(s as unknown as { interactionSnapshot?: unknown }).interactionSnapshot) queueMicrotask(drainAfterClose);
+    });
+  }
+};
