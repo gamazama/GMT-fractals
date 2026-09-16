@@ -66,11 +66,30 @@ named `Sea_Glass.css`.
   1024 × 128, and the stripped reader accepts it. ADR-0123 Update block; guards `test:gradient-file`
   [3b] (falsified seven ways) and `smoke:ge-gradientfile` [g1]–[g4].
 
+- 2026-09-16: app-gmt's SCENE entrances take gradient files. A gradient file dropped on the scene
+  drop zone, or picked in File ▸ Load Scene (GMT's partial-load row), imports into My Gradients
+  the way the shelf's own "Import gradient file…" does (no group: a one-set document into that
+  set, else Kept), one undo step, the import sentence as a toast, and the shelf revealed. How: a
+  generic engine seam, `engine/plugins/SceneFileClaims.ts` (a registered claim is offered the
+  files before the scene loader and hands back the rest), consulted by `SceneFileDropZone`,
+  SceneIO's stock Load row and `engine-gmt/utils/loadFilter.ts`; the claim is
+  `palette/installGradientFileClaim.ts`, installed by `app-gmt/main.tsx`. What it takes is
+  `importGradientFiles.takeFromSceneLoader`, narrower than the router because a scene must never
+  be taken and the scene loader reads ANY JSON as a preset: a gradient PNG (metadata or bands)
+  unless it carries a scene key, a .zip / .map .gpl .ggr .cpt .css with a gradient in it, and JSON
+  only as a gradients document or the legacy collection. A drop of a gradient and a scene does
+  both. Guards: `test:gradient-file` [9] (falsified three ways), `test:scene-file-claims`
+  (four), `smoke:gmt-gradientdrop` (synthetic drop + the real Load Scene chooser; four).
+
 ## Still open
 
 - Registry downloads (not the GMT file) still name files with `slugName`, which collapses spaces
   and non-ASCII — a format with no name field of its own comes back as e.g. "Stufe B nder".
   `smoke:ge-hero` [8] pins today's credited filename, so changing it is a deliberate step.
-- A gradient PNG dropped on app-gmt's SCENE loader toasts "Couldn't read a scene" (File ▸ Load
-  Scene only warns in the console). Routing it to the Favients import there is not built.
+- app-gmt's scene entrances, what they still do NOT take (2026-09-16, by the rule above): a bare
+  `{stops}` / `{name, colors}` / design-token / GX Global JSON and a `.gxsession.json` still go to
+  the scene loader, which reads any JSON as a preset and so tries to load them as a scene — that
+  was already true before; telling such a file from a scene JSON needs a decision. The pre-boot
+  LoadingScreen "Load From File…" does not consult the claims. The drop overlay still reads
+  "Drop to load scene".
 - Wording to confirm with the owner: "For GMT", "For other software", "GMT gradient".

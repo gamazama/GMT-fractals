@@ -25,6 +25,7 @@ import { useSyncExternalStore } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { loadSceneFile } from '../../engine/plugins/SceneIO';
+import { claimSceneFiles } from '../../engine/plugins/SceneFileClaims';
 import { applyPartialPreset } from './applyPartialPreset';
 import { flushCameraToStore } from '../store/cameraSlice';
 import type { Preset } from '../types/fractal';
@@ -299,6 +300,9 @@ export function loadSceneWithFilter(useFilter: boolean): void {
         const file = input.files?.[0];
         input.remove();
         if (!file) return;
+        // A registered claim may take the file first and says what happened itself
+        // (engine/plugins/SceneFileClaims.ts) — the offer the window drop makes too.
+        if (!(await claimSceneFiles([file])).length) return;
         let filePreset: Preset | null;
         try {
             filePreset = (await loadSceneFile(file)) as Preset | null;

@@ -43,6 +43,7 @@ import ReactDOM from 'react-dom/client';
 import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
+import { installGradientFileClaim } from '../palette/installGradientFileClaim';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
 import { AppGmt } from './AppGmt';
 import { registerUI } from '../engine/features/ui';
@@ -678,6 +679,11 @@ applyPanelManifest([
 // Float the Favients shelf at its remembered (or default middle-left) spot, open by
 // default, persist later open/move/resize, and restore the picker filter prefs.
 mountFavientsPanel();
+
+// A gradient file (the Gradient Explorer's PNG, a set .zip, .ggr …) dropped on the scene drop zone
+// or picked in File ▸ Load Scene imports into My Gradients instead of failing as a scene. Scenes are
+// never taken — see palette/installGradientFileClaim.ts.
+installGradientFileClaim();
 
 // Boot is now driven by LoadingScreen → useAppStartup.bootEngine, which
 // fires after the LoadingScreen's progress reaches 100% (gives

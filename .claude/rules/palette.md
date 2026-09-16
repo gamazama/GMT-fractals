@@ -147,6 +147,7 @@ npm run test:gx-session      # the GE v2 session: workingSession + the studio sn
 npm run test:palette-licensing  # the catalogue packs, category names, export credits and the GX Global catalogue check (node, ~2 s)
 npm run test:gradient-file   # the GMT gradient file (ADR-0123): document, PNG + stripped PNG, the one loader, where an import lands (node, ~3 s)
 npm run smoke:ge-gradientfile  # the same file WIRED (browser, dev server on 3400): Export ▸ For GMT, Save collection, the picker, the window drop, a session file, the reveal
+npm run smoke:gmt-gradientdrop  # app-gmt's SCENE entrances (browser, dev server on 3400): a gradient file dropped / picked in Load Scene lands in My Gradients, a scene still loads
 ```
 
 `smoke:boot` is the most useful citation for the store/feature layer: it boots

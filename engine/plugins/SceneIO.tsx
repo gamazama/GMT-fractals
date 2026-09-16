@@ -35,6 +35,7 @@ import { menu } from './Menu';
 import { shortcuts } from './Shortcuts';
 import { showToast } from '../store/toastStore';
 import { useAutosaveSettings } from '../store/autosaveStore';
+import { claimSceneFiles } from './SceneFileClaims';
 
 // ── Install ─────────────────────────────────────────────────────────────
 
@@ -454,6 +455,10 @@ const LoadSceneMenuItem: React.FC<{ close: () => void }> = ({ close }) => {
     const loadScene = useEngineStore((s) => s.loadScene);
 
     const handleFile = async (file: File) => {
+        // An app's registered claim may take the file first, and then says
+        // what happened itself (engine/plugins/SceneFileClaims.ts) — the
+        // same offer the window drop makes.
+        if (!(await claimSceneFiles([file])).length) return;
         const preset = await loadSceneFile(file);
         if (!preset) {
             console.warn('[SceneIO] Could not parse scene from', file.name);

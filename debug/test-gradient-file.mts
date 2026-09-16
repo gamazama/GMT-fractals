@@ -37,6 +37,15 @@
  *   [7] the store: `exportCollection` writes the document; a merge keeps Recent ONE block at index
  *       0 and every group one run; `importCollection` ensures unique stop ids; the legacy
  *       collection still imports.
+ *   [9] (2026-09-16) the SCENE entrance's decision, `takeFromSceneLoader` — what app-gmt's scene
+ *       drop and File ▸ Load Scene hand to this loader instead: a GX gradient PNG, its stripped
+ *       copy, a gradients document / legacy collection JSON (behind a BOM too), a .zip of gradient
+ *       files and a .map are taken; a scene PNG, a gmt-0.8.5 scene PNG, a PNG carrying a scene key
+ *       beside gradient metadata, a foreign PNG, a bare `{stops}` JSON, a `{name, colors}` JSON, a
+ *       scene JSON with a `colors` list, a session, a `.gmf` or a nameless file holding a document,
+ *       a gradient-less zip or .css are not; hostile bytes never throw. Every "not taken" case the
+ *       ROUTER alone would import is checked to be one first, so it cannot pass vacuously. The
+ *       engine seam it rides is `npm run test:scene-file-claims`; the wiring, `smoke:gmt-gradientdrop`.
  *
  * FALSIFIED 2026-09-14 — 32 breaks, each made in the source by a script, the run red (exit 1),
  * the file restored byte for byte, green again. The number is how many assertions went red.
@@ -74,6 +83,12 @@
  *       legacy shape → 1; `coerceGradientConfig` without `ensureStopIds` → 1 ("unique id").
  * Also for `debug/test-palette-favients.mts` G3 (see its header): the one-stop leniency admitting
  * `stops: []` with no ramp → 3 red there.
+ *   [9] (2026-09-16, `palette/core/importGradientFiles.ts` `takeFromSceneLoader`, each reverted): the
+ *       scene-key check removed → 1 ("a PNG carrying a scene key stays the scene loader's …"); the
+ *       JSON rule removed (any JSON the router imports is taken) → 4 (the {stops}, {name, colors},
+ *       scene-JSON and BOM cases); the name check removed → 2 (".gmf", "no extension"). A fourth
+ *       break — dropping an explicit BOM strip before the JSON sniff — stayed GREEN: `trimStart`
+ *       already drops U+FEFF, so the strip was dead code and was removed, not guarded.
  */
 
 // ── localStorage shim, BEFORE any store loads ─────────────────────────────
@@ -607,6 +622,69 @@ console.log('\n[8] a thinned bare config falls to the colour reader');
   const ramp = cfg ? gradientDisplayRamp(cfg) : [];
   const greenish = ramp.some((c) => c.g > 200 && c.r < 60 && c.b < 60);
   ok(res.items.length === 1 && !!cfg && cfg.stops.length !== 2 && greenish, `[8] the rgb() stop's green survives as colour (${cfg?.stops.length ?? 0} stops, green ${greenish})`);
+}
+
+// ═══ [9] a file offered to a SCENE loader ═══════════════════════════════════
+// app-gmt's scene drop and File ▸ Load Scene offer every file to the registered claims first
+// (`engine/plugins/SceneFileClaims.ts`); the palette's claim takes what `takeFromSceneLoader` says.
+// Every "stays" case below is one the ROUTER alone would import — checked first, so a case cannot
+// pass merely because the fixture is not a gradient at all.
+console.log('\n[9] the scene loader\'s entrance: gradient files are taken, a scene never is');
+{
+  const take = router.takeFromSceneLoader;
+  const enc = new TextEncoder();
+  const bin = (name: string, bytes: Uint8Array) => ({ name, text: '', bytes });
+  const txt = (name: string, text: string) => ({ name, text, bytes: enc.encode(text) });
+  const routerImports = (r: { name: string; text: string; bytes?: Uint8Array }) => router.parseGradientImports([r]).items.length > 0;
+
+  const gmtPng = png.writeGradientPng([ENTRIES[1]]);
+  const stripped = codec.stripPngText(gmtPng)!;
+  const docJson = J(doc.encodeGradientDocument([ENTRIES[1]]));
+  const scenePng = codec.encodePng(64, 36, new Uint8Array(64 * 36 * 3).fill(40), { text: [{ keyword: 'SceneData', text: '{"formula":"Mandelbulb"}' }] });
+  const legacyScenePng = codec.encodePng(8, 8, new Uint8Array(8 * 8 * 3), { text: [{ keyword: 'FractalData', text: '{}' }] });
+  // Hand-made (no writer does this): a scene key AND gradient metadata AND the band pixels.
+  const decoded = codec.decodePng(gmtPng)!;
+  const both = codec.encodePng(decoded.width, decoded.height, decoded.pixels, { text: [
+    { keyword: 'SceneData', text: '{"formula":"Mandelbulb"}' },
+    { keyword: png.GRADIENT_PNG_KEYWORD, text: codec.readPngText(gmtPng, png.GRADIENT_PNG_KEYWORD)!, compress: true },
+  ] });
+  const noise = new Uint8Array(32 * 32 * 3);
+  for (let i = 0; i < noise.length; i++) noise[i] = (i * 7919) % 251;
+  const photo = codec.encodePng(32, 32, noise);
+  const editorCopy = J({ stops: CORPUS[1].config.stops.map(({ id: _i, ...s }) => s), colorSpace: 'srgb', blendSpace: 'hsv' });
+  const colourList = J({ name: 'Sea Glass', colors: ['#0B3D4F', '#2A9D8F', '#E9C46A'] });
+  const sceneJson = J({ formula: 'Mandelbulb', name: 'My scene', colors: ['#102030', '#405060'], features: { coloring: { gradient: { stops: CORPUS[0].config.stops } } } });
+  const sessionJson = encodeSession('gmt-gx-session', 1, { documents: { working: {} } });
+  const MAP = '0 0 0\n255 0 0\n0 255 0\n255 255 255\n';
+
+  ok(take(bin('Sea Glass.png', gmtPng)), '[9] a GX gradient PNG (its gmt-gradients metadata) is taken');
+  ok(take(bin('Sea Glass copy.png', stripped)), '[9] its metadata-stripped copy (the band layout) is taken');
+  ok(!take(bin('scene.png', scenePng)), '[9] a GMT scene PNG is never taken');
+  ok(!take(bin('old.png', legacyScenePng)), '[9] a gmt-0.8.5 FractalData scene PNG is never taken');
+  ok(routerImports(bin('both.png', both)) && !take(bin('both.png', both)), '[9] a PNG carrying a scene key stays the scene loader\'s, even beside gradient metadata the router would import');
+  ok(!take(bin('photo.png', photo)), '[9] a foreign PNG is not taken (the scene loader keeps its message)');
+
+  ok(take(txt('Sea Glass.gmt-gradients.json', docJson)), '[9] a GMT gradients document JSON is taken');
+  ok(take(txt('collection.json', J({ version: 1, favients: ENTRIES.map((e, i) => ({ id: `f${i}`, ...e })), groupLabels: GROUPS }))), '[9] the legacy collection JSON is taken');
+  ok(take(txt('bom.gmt-gradients.json', '\uFEFF' + docJson)), '[9] a document behind a BOM is taken');
+  ok(routerImports(txt('copy.json', editorCopy)) && !take(txt('copy.json', editorCopy)), '[9] a bare {stops} JSON the router would import stays the scene loader\'s');
+  ok(routerImports(txt('export.json', colourList)) && !take(txt('export.json', colourList)), '[9] a {name, colors} JSON the router would import stays the scene loader\'s');
+  ok(routerImports(txt('scene.json', sceneJson)) && !take(txt('scene.json', sceneJson)), '[9] a scene JSON the router would read colours from stays the scene loader\'s');
+  ok(routerImports(txt('bom-copy.json', '\uFEFF' + editorCopy)) && !take(txt('bom-copy.json', '\uFEFF' + editorCopy)), '[9] a bare {stops} JSON behind a BOM stays the scene loader\'s');
+  ok(!take(txt('w.gxsession.json', sessionJson)), '[9] a session JSON is not taken');
+  ok(routerImports(txt('scene.gmf', docJson)) && !take(txt('scene.gmf', docJson)), '[9] a .gmf is never looked at, whatever it holds');
+  ok(routerImports(txt('noextension', docJson)) && !take(txt('noextension', docJson)), '[9] a file with no extension is never looked at');
+
+  ok(take(bin('set.zip', zipSync({ 'a.map': strToU8(MAP), 'b.png': gmtPng }))), '[9] a .zip of gradient files is taken');
+  ok(!take(bin('junk.zip', zipSync({ 'readme.txt': strToU8('hello') }))), '[9] a .zip with no gradient in it is not taken');
+  ok(take(txt('Sea_Glass.map', MAP)), '[9] a .map is taken');
+  ok(!take(txt('style.css', 'body { color: red; }')), '[9] a .css with no gradient in it is not taken');
+  let threw = false;
+  try {
+    for (const b of [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 0, 0]), new Uint8Array([0x50, 0x4b, 3, 4, 1, 2, 3]), new Uint8Array(0)]) take(bin('h.png', b));
+    take(null);
+  } catch { threw = true; }
+  ok(!threw && !take(null), '[9] a truncated PNG, a broken zip, an empty file and null never throw, and are not taken');
 }
 
 console.log(failures === 0 ? '\nPASS test-gradient-file' : `\nFAIL test-gradient-file (${failures})`);

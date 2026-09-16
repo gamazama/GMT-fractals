@@ -16,6 +16,10 @@
  *          returns verbatim when it has one, else `rampToGradientConfig` (ADR-0122: stops when
  *          cheap and faithful, else the ramp); the `name` the file carries when it carries one.
  *
+ * A SCENE entrance (app-gmt's scene drop, File ▸ Load Scene) asks `takeFromSceneLoader` first, a
+ * narrower rule than the router's — a scene must never be taken, and the scene loader reads any
+ * JSON as a preset (2026-09-16).
+ *
  * NAMES: the file's own name wins. The FILENAME is only a fallback, un-slugged (`_` → space,
  * trimmed, extension dropped — `.gmt-gradients.json` / `.gxsession.json` as one extension), and
  * numbered when one file yields several nameless gradients.
@@ -56,6 +60,13 @@
  *   order", "[5] a group the user owns wins", "[5] no group: a one-set document lands in a NEW
  *   set", "[5] a document naming several sets merges as a collection", "[5] no group, no set
  *   named: Kept"). Falsified 2026-09-14, see the harness header.
+ * @invariant `takeFromSceneLoader` (the SCENE entrance — app-gmt's scene drop and File ▸ Load Scene)
+ *   never takes a PNG carrying a scene key, a JSON that is not a gradients document, a `.gmf` or a
+ *   nameless file, even where the router alone would import it — proven by: `npm run
+ *   test:gradient-file` ("[9] a PNG carrying a scene key stays the scene loader's, …", "[9] a bare
+ *   {stops} JSON the router would import stays the scene loader's", "[9] a .gmf is never looked at,
+ *   whatever it holds"). Falsified 2026-09-16 three ways, see the harness header.
+ * @see palette/installGradientFileClaim.ts (the scene entrance's claim)
  * @see palette/core/gradientDocument.ts (the payload and its gate)
  * @see palette/core/gradientPng.ts (the PNG)
  * @see palette/core/importFormats.ts (the text parsers)
@@ -67,10 +78,10 @@ import { unzipSync } from 'fflate';
 import { parseGradientText, IMPORT_EXTENSIONS, type ImportResult } from './importFormats';
 import { rampToGradientConfig } from './stopFit';
 import { decodeGradientDocument, type GradientDocumentEntry } from './gradientDocument';
-import { readGradientPng } from './gradientPng';
+import { readGradientPng, SCENE_PNG_KEYWORDS } from './gradientPng';
 import type { CatalogOrigin } from './catalogOrigin';
 import { KEPT_LABEL } from './groundSets';
-import { isPng } from '../../utils/pngCodec';
+import { isPng, listPngTextKeywords } from '../../utils/pngCodec';
 import { isStopGradient, isRampGradient } from '../../utils/gradientRamp';
 import { DEFAULT_GROUP, RECENT_GROUP, isRecentGroup, newGroupId, useFavientsStore } from '../store/favientsStore';
 
@@ -352,6 +363,41 @@ export const readCollectionFiles = (reads: ReadonlyArray<ReadGradientFile | null
   if (parsed.scenes.length) return { kind: 'refused', reason: 'scene' };
   if (parsed.images.length) return { kind: 'refused', reason: 'image' };
   return { kind: 'refused', reason: 'unreadable' };
+};
+
+/**
+ * Should a file offered to a SCENE loader come to this loader instead? The decision behind app-gmt's
+ * scene drop and File ▸ Load Scene (`palette/installGradientFileClaim.ts`, through
+ * `engine/plugins/SceneFileClaims.ts`). It must never take a scene, so it is narrower than the
+ * router:
+ *   - only a gradient-file NAME (`isGradientFileName`) is looked at — a `.gmf`, or a file with no
+ *     extension, stays the scene loader's whatever it holds;
+ *   - a PNG carrying a scene key (`SCENE_PNG_KEYWORDS`) stays the scene loader's, even when it also
+ *     carries `gmt-gradients` metadata;
+ *   - JSON text is taken only as a GMT gradients document or the legacy collection (the router's
+ *     `document`). The scene loader reads ANY JSON as a preset, so a bare `{stops}`, a colour list,
+ *     design tokens, a GX Global wire or a session — shapes a scene file could resemble — are left
+ *     where they were;
+ *   - anything else is taken when the router finds at least one gradient in it: a gradient PNG
+ *     (by its metadata or its band layout), a .zip, .map .gpl .ggr .cpt .css.
+ * Pure; never throws.
+ */
+export const takeFromSceneLoader = (read: ReadGradientFile | null): boolean => {
+  try {
+    if (!read || !isGradientFileName(read.name)) return false;
+    const bytes = read.bytes;
+    const binary = !!bytes && (isPng(bytes) || isZip(bytes));
+    if (bytes && isPng(bytes) && listPngTextKeywords(bytes).some((k) => SCENE_PNG_KEYWORDS.includes(k))) return false;
+    let json = false;
+    if (!binary) {
+      const text = bytes ? utf8.decode(bytes) : read.text;
+      const lead = text.trimStart()[0]; // trimStart drops a BOM too (U+FEFF is whitespace to JS)
+      json = lead === '{' || lead === '[';
+    }
+    return routeGradientFile(read).some((f) => f.kind === 'gradients' && f.items.length > 0 && (!json || f.document));
+  } catch {
+    return false;
+  }
 };
 
 /** Read every file as bytes (and text, for a text file). A file that will not read, or is larger

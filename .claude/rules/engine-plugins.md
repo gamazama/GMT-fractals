@@ -97,6 +97,17 @@ and the Files ▸ Autosave rows bind whatever store the app hands `registerCoreS
 registers no core settings at all). Session's node guard is
 `test:gx-session` [4]–[7]; its wiring guard is `smoke:ge-session` (see `sibling-apps.md`).
 
+## A file offered to the scene loader can be claimed first (2026-09-16)
+
+`engine/plugins/SceneFileClaims.ts`: an app registers a claim (`registerSceneFileClaim`), and every
+scene entrance — `SceneFileDropZone`, SceneIO's stock Load row, and any app row replacing it (GMT's
+`engine-gmt/utils/loadFilter.ts`) — offers its files through `claimSceneFiles` before reading them
+as a scene; a claim resolves to the files it did NOT take. A new scene entrance must call it too, or
+it silently skips every claim (grep `claimSceneFiles(`). The scene loader reads ANY JSON as a
+preset, so a claim must decide by an unambiguous content marker. The seam's node guard is
+`test:scene-file-claims`; the only claim today is the palette's, wired and guarded in a browser by
+`smoke:gmt-gradientdrop` (see `palette.md`).
+
 ## Scope app-specific behaviour properly
 
 No feature flag for "the GMT case". Scope it via a registered handler,
@@ -117,4 +128,5 @@ npm run smoke:ge-phone           # the host-button menu path only: steps [2b] + 
 npm run smoke:hud-hint
 npm run smoke:pause-controls
 npm run test:gx-session          # engine/plugins/Session.ts boot restore + autosave loop; per-app autosave stores + rows
+npm run test:scene-file-claims   # engine/plugins/SceneFileClaims.ts only: claim order, removal-only, a throwing claim (node, sub-second)
 ```

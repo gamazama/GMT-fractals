@@ -17,10 +17,19 @@
  * unclaimed, non-scene file gets a "here's what's supported" nudge rather
  * than a silent no-op (which reads as "the drop broke"). A drag-depth
  * counter keeps the overlay from flickering as the cursor crosses children.
+ *
+ * CLAIMS FIRST (2026-09-16). Before anything above, every dropped file is
+ * offered to the app's registered claims (`engine/plugins/SceneFileClaims.ts`):
+ * a claim takes the files that are its own by content, says what happened
+ * itself, and hands back the rest, which then go through exactly the path
+ * above — the first remaining file as a scene, or the nudge. A drop every
+ * file of which was claimed says nothing more here. An app that registers
+ * no claim gets the drop's own `files[0]`, as before.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { loadSceneFile } from '../plugins/SceneIO';
+import { claimSceneFiles } from '../plugins/SceneFileClaims';
 import { showToast } from '../store/toastStore';
 import { Layer } from '../../components/ui';
 
@@ -61,8 +70,13 @@ export const SceneFileDropZone: React.FC = () => {
             // so we never double-handle or falsely warn over those targets.
             if (e.defaultPrevented) return;
             e.preventDefault();
-            const file = e.dataTransfer?.files?.[0];
-            if (!file) return;
+            // Read the list NOW: the browser empties the transfer once this
+            // handler returns, and the claims are awaited.
+            const dropped = Array.from(e.dataTransfer?.files ?? []);
+            if (!dropped.length) return;
+            const rest = await claimSceneFiles(dropped);
+            const file = rest[0];
+            if (!file) return; // every file was claimed; the claim said so
             if (!SCENE_EXT.test(file.name)) {
                 // Not a scene file. Nudge toward what IS supported — a silent
                 // no-op reads as "the drop broke". Images get a tailored hint
