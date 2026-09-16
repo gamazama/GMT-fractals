@@ -15,47 +15,54 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
 
 ## 1. Release work (no owner decision needed)
 
-- [ ] **Entry-point swap.** `gradient-explorer.html` still loads the old shell; GMT
-  (`openGradientExplorer` in `palette/installFavients.ts`), fluid-toy and the landing page open it.
-  Steps: move v2's `<head>` + script onto `gradient-explorer.html`; drop "(next)" from the title
-  and the `next` badge in `GradientExplorerV2App.tsx`; repoint old-page smokes
-  (`smoke-gx-geom-handles`, `smoke-gx-liquify-render`, `smoke-mobile-layout` → `smoke:ge-phone`,
-  the `smoke-gx-fractal*` family, `smoke-gx-nucleus-render`, seven `repro-gx-*.mts`); fix
-  citations in `.claude/rules/` (deep-zoom, engine-plugins, mobile-layout, sibling-apps),
-  `docs/modules/gradient-explorer/app.md`, `engine/plugins/TopBar.tsx`,
-  `engine/components/AppErrorBoundary.tsx`, `knip.json`; delete the old shell but KEEP
-  `PickerStage.tsx`, `fractalHandoff.ts`, `FullscreenGradientOverlay.tsx`, `fullscreen/**`
-  (app-gmt uses them; migration audit §5.1 lists the 18 files knip orphans); GMT changelog line
-  "not linked to GMT yet" (`data/help/topics/changelog.ts`); What's New for GX and GMT;
-  `npm run context:map`; `check:rule-guards`; owner's final walk. Depends on decision 2.1.
-- [ ] **Label sweep** "Favients" → "My Gradients" on the hosts that still show it:
-  `app-gmt/PalettePickerOverlay.tsx`, `components/gradient/gradientActions.ts`,
-  `palette/components/CanonicalHero.tsx`, `palette/components/GradientSourcePicker.tsx`,
-  the toast in `palette/store/favientsDocument.ts`, `buildContactSheet`'s default title.
-- [ ] **`/polish` pass** on the v2 shell (never run).
-- [ ] **Recent auto-collect ADR** — ADR-0114 still says "Still owed".
-- [ ] **ADR-0112 (Variants) update block** — `workingSession.ts` now uses
-  `captureStudioSnapshot`/`applyStudioSnapshot`, so it can't all be deleted.
-- [x] **What's New showed "> OWNER REVIEW — first draft."** and stale counts — fixed `e9fb88b0`.
-- [ ] Credit the Spectrum seed (CARTOColors Prism, CC BY 4.0) and Turbo (Apache-2.0) — licensing §6 action 6.
-- [ ] One-line terms statement in `CONTRIBUTE_CONFIRM` (`contributeToGlobal.ts`) — licensing §6 action 6.
-- [ ] `public/palette/gxglobal.json` fallback still carries pre-refit preset stops.
-- [ ] Download filenames lose spaces / non-ASCII (`slugName` in `exportActions.ts`) — `gradient-file-format.md` "Still open".
-- [ ] A GX gradient PNG dropped on app-gmt's scene drop zone says "Couldn't read a scene" instead of importing.
-- [ ] A selected stop can survive a gradient swap (`AdvancedGradientEditor.tsx`, `justEmittedRef` effect) — §8b item 9.
-- [ ] Export row Copy toasts instead of ticking — §10 2026-09-09 second pass.
-- [ ] Kept heart uses `text-warn`, wants its own gold — §10 Phase B closed.
-- [ ] Dead `FavientsPanel layout="strip"` branch (~115 lines).
-- [ ] Stale JSDoc on `setLossyCount` (`.ugr` exemption closed 2026-09-10).
-- [ ] `gradient-explorer-next.html` has no meta description.
-- [ ] Guards: `smoke:chrome` (click every top-bar button + menu item; pre-release-ui-pass §3) and a browser guard for the Curves wave tool (§10 2026-09-12 "Still missing").
-- [ ] Library "Steps" palettes arrive smooth — needs a bake with a discrete flag and a CDN re-upload (trays-spec §13a). Upload is owner-run.
+- [~] **Entry-point swap — PREPARED on branch `gx-entry-swap`, not merged** (worktree
+  `.claude/worktrees/agent-a0cf40a624c1fd8bf`, based on `39f2e74b`). Six commits:
+  `gradient-explorer.html` loads v2; `gradient-explorer-next.html` is a byte-identical alias
+  (guard `test:gx-share` [4]) so old `?g=` links keep working, new links are written on the
+  canonical page; "(next)" and the badge gone; smokes repointed (`smoke:mobile-layout` KEPT —
+  `ge-phone` doesn't cover `isDeviceMobile` or the 768 px listener); citations fixed; old shell
+  deleted (21 files, 3,232 lines, `orphans` clean; `PickerStage`, `fractalHandoff`,
+  `FullscreenGradientOverlay`, `fullscreen/**` kept); draft What's New copy for GX and GMT under
+  "Unreleased"; `context:map`. Merging into today's main conflicts only in `package.json`
+  scripts. Owed before merge: owner review + final walk, `GX_VERSION`, the landing-page link
+  (separate repo), the ADR text in §6, and a `context:map` re-run after the merge.
+- [x] **Label sweep** "Favients" → "My Gradients" — `4ccd2674` (+ `panelLabel(id)` seam in
+  `engine/PanelManifest.ts` for dock tabs / floating titles) and `39f2e74b`.
+- [ ] **`/polish` pass** on the v2 shell — not run: its output is UX judgement for the owner's eyes.
+- [x] **Recent auto-collect ADR** — ADR-0124 (`76f36007`), owner-approved.
+- [x] **ADR-0112 (Variants) update block** — `b37c095f`.
+- [x] **What's New showed "> OWNER REVIEW — first draft."** and stale counts — `e9fb88b0`
+  (10,509 on a computer, 2,952 on a phone).
+- [ ] Credit the preset seeds — **needs the owner** (licensing §6 action 6 frames it as "credit or
+  re-derive"). Found 2026-09-16: six of the 20 seeds are exact CARTOColors palettes (CC BY 4.0):
+  Spectrum = Prism, Warm Sunset = SunsetDark, Cool Forest = Emrld, Pastel Dreams = TealRose,
+  Spring Floral = Temps, Earth Tones = Fall. Turbo is © 2019 Google LLC (Apache-2.0); the
+  non-seed "Rainbow Divergent" is ColorBrewer Spectral (Apache-2.0). Draft: a "Built-in presets"
+  credit line in `AboutGx.tsx` + source/licence beside each entry in the bake script's `SOURCES`.
+- [x] Terms line in `CONTRIBUTE_CONFIRM` — `12a40d43` ("You confirm you have the right to share this.", the plan's §5 wording).
+- [x] `public/palette/gxglobal.json` fallback refitted — `edf5319e` (the CDN has no copy; nothing to upload).
+- [x] Download filenames keep spaces / non-ASCII — `38534e11`; set .zip members too, and import restores the names — `a2773563`.
+- [x] A GX gradient file dropped on GMT (or picked in Load Scene) imports into My Gradients — `f53e61e3` (generic `engine/plugins/SceneFileClaims.ts`). Still open: bare `{stops}` / colour-list / token / GX Global JSON and `.gxsession.json` still reach the scene loader; the loading screen's "Load From File…" and the "Drop to load scene" overlay text are unchanged.
+- [x] A selected stop surviving a gradient swap — `d35ec179`.
+- [x] Export row Copy ticks instead of toasting — `38534e11`.
+- [ ] Kept heart gold — skipped: the plan says the gold token is "still owed"; no colour named.
+- [x] Dead `FavientsPanel layout="strip"` — `4a679cc0`.
+- [x] Stale `setLossyCount` JSDoc — `38534e11`.
+- [x] Meta description on `gradient-explorer-next.html` — `1b116cb4` (copy for the owner's eye).
+- [x] `smoke:chrome` — `717efba9` (182 presses, 7 passes, falsified on the Settings hook bug).
+- [x] Browser guard for the Curves wave tool — `smoke:ge-wave`, `0f9cc34e`.
+- [ ] Library "Steps" palettes arrive smooth — needs a bake with a discrete flag and a CDN re-upload (owner-run). Not started.
+
+### Bugs found and fixed along the way (2026-09-16)
+- Recent: a gradient re-picked from an earlier day overwrote its original entry; a quick ♥ flashed Today — `9721cdda`. A merge import showed one day twice on the rail — `ac9f429c`.
+- Curves wave tool (found by `smoke:ge-wave`): Esc baked instead of discarding on a desk; undo after closing the face landed on the unbaked preview (nested `beginParamTransaction` overwrote the snapshot); span/feather/phase handles lagged the pointer (77.5 px per 96); the axes stayed in HSV after leaving the face — `dc71bd28`, `fa3e31ed`, `2ed960c5`.
+- A Recent sync inside an open undo bracket put a My-Gradients-only entry into a cancelled wave (and any gesture held past 400 ms) — `34706e77`.
+- Found, not fixed: the first-run "New here?" banner covers app-gmt's top bar at 1400×900 (`@bug PRODUCTION` in `FirstRunHint.tsx`, `e9f0074f`); the light-gizmo button (`engine-gmt/topbar/CenterHUD.tsx`) and the Support menu's photo button have no label.
 
 ## 2. Decisions owed by the owner
 
-1. **Keep `gradient-explorer-next.html` as an alias after the swap?** Every share link so far,
-   `GX_GLOBAL_SOURCE.url` (`palette/store/globalSetStore.ts`) and GMT's changelog point at it.
-   Recommendation: yes — a copy of the entry costs nothing and breaks no link.
+1. **Merge the swap?** Review `git log main..gx-entry-swap`, walk it, then merge (resolve `package.json`).
+   The alias for `gradient-explorer-next.html` is built in, as recommended.
 2. **Liquify** — ship with `wip: true` banner, hide, or finish.
 3. **Group-by shape** — in this release or after? Never placed in a release queue.
 4. **Parity rows without a decision:** theme chips (B3), new gradient from nothing (M10), export
@@ -63,15 +70,16 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
    morph (N2), Mix past 0..1 (M5); M11, B13, B7 unrecorded.
 5. **Name** — competitors §7 wants it settled before a standalone launch.
 6. **Version** — `GX_VERSION = '2.0.0-preview.2'`; `version.ts` says replace before the swap.
-7. **Licensing** — Softology families with unverified terms in the default pack (kuler 130,
-   colorschemer 48, coolors 31); CC BY-SA share-alike on edits/exports (cpt-city 80, unikn 16);
-   GPLv2-only sets and possible GFDL (Nevit Dilmen 886); legal review of §7's 12 questions or ship
-   on the recorded good-faith position; close §7 q11 (git history) which memory says was decided.
+7. **Licensing** — the preset-seed credits above; Softology families with unverified terms in the
+   default pack (kuler 130, colorschemer 48, coolors 31); CC BY-SA share-alike on edits/exports
+   (cpt-city 80, unikn 16); GPLv2-only sets and possible GFDL (Nevit Dilmen 886); legal review of
+   §7's 12 questions or ship on the recorded good-faith position; close §7 q11 (git history).
 8. **Smaller calls:** set × swatches export always uses Even; export remembering the last format;
-   closing Curves with a wave armed bakes it while Esc discards; export wording sign-off
-   ("For GMT", "For other software", "GMT gradient").
+   export wording sign-off ("For GMT", "For other software", "GMT gradient"); a Recent entry
+   resumed the next day keeps updating the entry filed under the earlier day; the meta
+   description copy; where the first-run banner should sit.
 9. **Owner-run actions:** delete test row id 5 (`#000000`→`#FFFFFF`) from the live GX Global set;
-   CDN upload for any re-baked pack.
+   CDN upload for any re-baked pack; push `main` (not pushed — see §5).
 
 ## 3. Consciously deferred (not gaps)
 
@@ -90,9 +98,32 @@ Parity checklist rows S3, S4, E8b, O5 and its bug list are done (0eb1f47a, 15f2c
 licensing plan's "nothing uploaded" — credits files and packs are on the CDN (checked 2026-09-16) ·
 June amendments W1, W3, W5–W8, W10, T8 all shipped in v2 · `slider-skin.md` "nothing implemented"
 — built in `ScalarInput`'s soft branch · `gx-geometry-handles-v2.md` "in flight" — landed ·
-design §5.8 formats (`.ase`, Tailwind, tokens) exist · pre-release-ui-pass §1–2 done.
+design §5.8 formats (`.ase`, Tailwind, tokens) exist · pre-release-ui-pass §1–2 done ·
+`ge-ramp-analysis-and-deep-fit.md` "Still open: gxglobal.json" — done `edf5319e` ·
+`gradient-file-format.md` "Still open: download names" — done `38534e11` / `a2773563`.
 
 ## 5. Session log
 
 - 2026-09-16 — `a2df1f3d` (pushed): every page carries `darkreader-lock`, so Firefox's website
   dark mode stops darkening CSS swatches against the canvas ramp. Found testing on an iPhone.
+- 2026-09-16, unattended run — 25 commits on `main` from `e9fb88b0` to `34706e77`, **not pushed**;
+  branch `gx-entry-swap` prepared, not merged. Final check-suite results are recorded in the
+  session's closing message.
+
+## 6. ADR text queued for the owner (ADR writes need approval)
+
+- **ADR-0124 update** — the bin pin now survives the first sync; merge/replace order Recent by day
+  (`byDayNewestFirst`); Consequences' "bin pin" and "one day twice" fixed 2026-09-16 (guards
+  test-palette-working [10]–[12], test-palette-favients [9]); Decision 7 narrowed: the debounce,
+  Share and Wallpaper use `syncRecentOutsideUndo` and never sync inside an open param
+  transaction; only the ♥ and entering Mix sync directly.
+- **ADR-0119 §2 update** — the ♥ does not "add to Recent": `add()` files into the last group used,
+  else Kept; bins are left out of the flash because the ♥ flushes the Recent sync first.
+- **ADR-0123 update** — GMT's scene drop zone and both Load Scene rows now route gradient files
+  through `takeFromSceneLoader` via `engine/plugins/SceneFileClaims.ts` (`f53e61e3`); list the
+  JSON cases still reaching the scene loader.
+- **If `gx-entry-swap` merges:** ADR-0014 update (`GradientExplorerApp.tsx` deleted;
+  `v2/GradientExplorerV2App.tsx` takes its place in the five-host claim, grep `storeCallbacks`);
+  ADR-0121 update (old shell `gradient-explorer/main.tsx` deleted); new ADR "The preview address is
+  a permanent alias" (`-next.html` identical to the canonical page, guard `test:gx-share` [4], new
+  links on the canonical page, retire only when share-link traffic is gone).
