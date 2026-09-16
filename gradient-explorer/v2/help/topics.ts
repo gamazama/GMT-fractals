@@ -130,8 +130,6 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
     category: "What's New",
     title: "What's New",
     content: `
-> OWNER REVIEW — first draft.
-
 ## 2.0.0-preview.2 — saving, opening and credits
 > September 14, 2026
 
@@ -151,7 +149,7 @@ A rebuilt Gradient Explorer, in preview beside the old one.
 
 - **One gradient on top, the wall below.** The gradient you are working on is always at the top, as a palette and as a bar with stops you can drag. Everything else happens around it.
 - **Sets on one wall.** The whole catalogue, gradients shared by other people (GX global), the presets, each day you worked and your own groups are chips over one wall — switch any of them on or off.
-- **11,131 gradients** from six collections on a computer. A phone starts with 3,076 so it stays fast; Filters ▸ Sources loads the rest.
+- **10,509 gradients** on a computer. A phone starts with 2,952 so it stays fast; Filters ▸ Sources loads the rest.
 - **Four faces:** Mix with another gradient, make one from an Image, reshape it with Curves, or Adjust it.
 - **More like this** sorts the wall by how alike the colours actually look.
 - **Share links, Export** to file formats from CSS to Photoshop and Blender, and **Wallpaper** to fill the screen with it.
