@@ -33,7 +33,7 @@
 import { chromium } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 function fail(msg: string): never { console.error(`✗ ${msg}`); process.exit(1); }
 
 const NAVY = [

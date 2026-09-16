@@ -71,7 +71,7 @@ import { readGradientPng, displayRampBytes } from '../palette/core/gradientPng';
 import { stripPngText, encodePng, readPngText, readPngHeader } from '../utils/pngCodec';
 import type { GradientConfig } from '../types';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const RECENT = 'g-recent';
 
 const fail = (msg: string): never => {

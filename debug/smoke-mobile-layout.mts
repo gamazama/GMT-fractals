@@ -9,6 +9,13 @@
  * gradient-explorer.html in a Pixel 5 context and a desktop context and
  * asserts what the store and the MobileViewportShell actually do.
  *
+ * That page is the v2 Gradient Explorer since the entry-point swap
+ * (2026-09-16). The plans had this smoke retiring for `smoke:ge-phone` then,
+ * but ge-phone asserts the v2 LAYOUT on a phone, not the store's boot seed or
+ * the resize listener across 768 px — and v2 mounts the same store and
+ * MobileViewportShell, so every step below passed unchanged on it that day.
+ * It stays, pointed at the new shell.
+ *
  *   [1] Pixel 5 portrait: `isDeviceMobile` true, `isPortrait` true, the
  *       shell is `position: sticky` (the mobile branch) and fills the
  *       viewport height.

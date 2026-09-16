@@ -36,7 +36,7 @@
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 function fail(msg: string): never { console.error(`✗ ${msg}`); process.exit(1); }
 
 /** Dither is ±1 LSB; a step must clear it to count as "rising". */

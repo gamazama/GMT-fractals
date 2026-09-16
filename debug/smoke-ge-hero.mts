@@ -69,7 +69,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { chromium, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 
 const fail = (msg: string): never => {
   console.log(`✗ ${msg}`);

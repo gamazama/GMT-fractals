@@ -20,13 +20,18 @@
  */
 import { chromium } from 'playwright';
 import { signature, diff } from './helpers/canvas-signature.mts';
+import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 function fail(msg: string): never { console.error(`✗ ${msg}`); process.exit(1); }
 
 async function main() {
   const browser = await chromium.launch();
-  const page = await (await browser.newContext({ viewport: { width: 900, height: 740 } })).newPage();
+  const ctx = await browser.newContext({ viewport: { width: 900, height: 740 } });
+  // The page is the v2 shell since the entry-point swap (2026-09-16): a fresh profile would get
+  // its first-run brightness dialogue over the wall, so declare a returning visitor.
+  await seedGeSmokeState(ctx);
+  const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console.error: ${m.text()}`); });

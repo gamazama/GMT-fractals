@@ -1,7 +1,7 @@
 /**
  * Smoke: the v2 shell on a PHONE (Phase F, 2026-09-10).
  *
- * Boots gradient-explorer-next.html in a Pixel 5 context (390×844, touch, coarse pointer)
+ * Boots gradient-explorer.html in a Pixel 5 context (390×844, touch, coarse pointer)
  * and asserts the phone layout as the owner confirmed it — three sheets' worth of re-flow
  * with no tab bar — then boots a desktop context and asserts the phone branch did NOT leak.
  *
@@ -142,7 +142,7 @@
 import { chromium, devices, type Page, type BrowserContext } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const PHONE = { width: 390, height: 844 };
 
 const fail = (msg: string): never => {

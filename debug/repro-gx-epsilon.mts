@@ -2,7 +2,7 @@
  *  Stats-only (no render wait) — fast. */
 import { chromium } from 'playwright';
 
-const URL = 'http://localhost:3400/gradient-explorer.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const COORDS: { name: string; center: [number, number]; centerLow: [number, number]; zoom: number; iterMul: number; colorMapping: number }[] = [
   { name: 'escaping-sq', center: [-0.8647752352263411, 0.2422927873189491], centerLow: [0, 0], zoom: 6.869923567136315e-8, iterMul: 3.25, colorMapping: 0 },
   { name: 'seahorse', center: [-0.743643887037151, 0.13182590420533], centerLow: [0, 0], zoom: 1e-9, iterMul: 1, colorMapping: 0 },

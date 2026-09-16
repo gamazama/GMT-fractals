@@ -21,7 +21,7 @@
 import { chromium } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const W = Number(process.argv[2] || 390);
 const H = Number(process.argv[3] || 844);
 // Default under debug/scratch/ (gitignored). It used to be a bare 'picker', which dropped two

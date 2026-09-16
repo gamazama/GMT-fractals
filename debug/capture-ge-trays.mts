@@ -15,7 +15,7 @@
 import { chromium, type Page } from 'playwright';
 import { mkdirSync } from 'node:fs';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const OUT = 'plans/ge-v2-figma';
 
 const shot = async (page: Page, name: string, height = 560) => {
