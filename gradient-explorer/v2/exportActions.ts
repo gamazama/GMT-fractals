@@ -4,7 +4,7 @@
  *
  * One `ExportAction` is a copy or a download of one registry format (`palette/core/
  * exportFormats.ts`), the GMT gradient PNG, or the swatch sheet. `runExport` performs it and
- * toasts; it also notes it as a RECENT, which is what the hero's Export icon shows on hover and
+ * toasts (except a Copy whose surface ticks its own row, `confirmsCopy`); it also notes it as a RECENT, which is what the hero's Export icon shows on hover and
  * the Export window shows as Again — the last three things this person exported, one click each.
  * `ExportMenu` (the full floating window) runs the same function, so the two surfaces cannot drift.
  *
@@ -70,7 +70,7 @@ import {
 } from '../../palette/core/favientsExport';
 import type { Favient } from '../../palette/store/favientsStore';
 import { exportNameFor, withExportName } from '../../palette/core/catalogOrigin';
-import { buildGradientFile, type GradientFileKind, type BuiltGradientFile } from '../../palette/core/gradientFile';
+import { buildGradientFile, gradientFileStem, MAX_FILE_STEM, type GradientFileKind, type BuiltGradientFile } from '../../palette/core/gradientFile';
 import { GRADIENT_PNG_DEFAULT_SIZE, clampGradientPngHeight, snapGradientPngWidth } from '../../palette/core/gradientPng';
 import { useFavientsStore } from '../../palette/store/favientsStore';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
@@ -122,6 +122,11 @@ export interface ExportRunOpts {
   /** The working gradient's provenance line ("Browse", "Mix", "Edited" …) — what a GMT file
    *  carries as `source`, the same string a Recent favourite of it holds. */
   source?: string;
+  /** The surface confirms a COPY on the row that did it — the colour picker's tick, for a
+   *  second (plans/ge-v2-unified-shell-plan.md §10, 2026-09-09 second pass) — so the "Copied"
+   *  toast is not shown as well. The Export window sets it; the hero's flyout, which closes on
+   *  the click, does not. */
+  confirmsCopy?: boolean;
 }
 
 
@@ -270,18 +275,30 @@ export const exportActionLabel = (a: ExportAction): string => {
   return `${p.verb} ${p.format}${p.ext ? ` ${p.ext}` : ''}`;
 };
 
-export const slugName = (name: string): string => name.trim().replace(/[^\w-]+/g, '_').slice(0, 48) || 'gradient';
+/**
+ * The file stem of a download: the name AS IT IS — spaces, case and non-ASCII kept, only what a
+ * filesystem refuses removed (`\ / : * ? " < > |` and control characters), at most
+ * `MAX_FILE_STEM` code points. The GMT gradient file's rule (`gradientFileStem`), so every
+ * download in the Explorer names its file one way (plans/gradient-file-format.md "Still open",
+ * done 2026-09-16). It used to collapse everything outside `[A-Za-z0-9_-]` to `_`, so a format
+ * with no name field of its own came back through the importer, which names such a file after
+ * its filename, as "Stufe B nder". The export name is historical; nothing here slugs any more.
+ */
+export const slugName = (name: string): string => gradientFileStem(name, 'gradient');
 
 /**
- * The file stem of a download whose name CARRIES A CREDIT: the credit is kept whole and the
- * name gives way, because a 48-character slug would otherwise cut exactly the part that matters
- * ("A_long_gradient_name_cpt-city_jjg_ccolo_ev"). Only for a credited name — every other
- * download keeps `slugName`, so nothing that is not a catalogue gradient changes filename.
+ * The file stem of a download whose name CARRIES A CREDIT: "Name (cpt-city-gacruxa, CC BY 3.0)" —
+ * the credit's `/` becomes `-` as it does for the GMT file (`creditTitle`). The credit is kept
+ * whole and the name gives way when the two pass `MAX_FILE_STEM`, because a cut would otherwise
+ * take exactly the part that matters.
  */
 export const creditedFileStem = (plainName: string, credited: string): string => {
-  const credit = credited.trim().slice(plainName.trim().length).replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
-  if (!credit) return slugName(credited);
-  return `${slugName(plainName).slice(0, Math.max(12, 48 - credit.length - 1))}_${credit}`;
+  const whole = slugName(creditTitle(credited));
+  const credit = gradientFileStem(creditTitle(credited.trim().slice(plainName.trim().length)), '');
+  const name = Array.from(slugName(plainName));
+  const credLen = Array.from(credit).length;
+  if (!credit || name.length + 1 + credLen <= MAX_FILE_STEM) return whole;
+  return `${name.slice(0, Math.max(12, MAX_FILE_STEM - credLen - 1)).join('').trimEnd()} ${credit}`;
 };
 
 /** The bytes for one format and one subject. `palette` non-null selects the SWATCHES
@@ -289,11 +306,22 @@ export const creditedFileStem = (plainName: string, credited: string): string =>
 const bytesFor = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number): string | Uint8Array =>
   palette ? f.swatches!(palette, name) : f.build(ramp, name, budget);
 
-const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number) => {
+/** Put one format on the clipboard. Resolves true once it is there, so a surface can confirm on
+ *  its own row (`ExportRunOpts.confirmsCopy`); the "Copied" toast is for a surface that cannot.
+ *  A failure always toasts. No clipboard at all resolves false and says nothing, as before. */
+const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number, toast = true): Promise<boolean> => {
   const out = bytesFor(f, ramp, name, palette, budget);
-  navigator.clipboard?.writeText(out as string).then(
-    () => showToast(`Copied ${(palette && f.swatchLabel) || f.label}`),
-    () => showToast('Copy failed'),
+  const writing = navigator.clipboard?.writeText(out as string);
+  if (!writing) return Promise.resolve(false);
+  return writing.then(
+    () => {
+      if (toast) showToast(`Copied ${(palette && f.swatchLabel) || f.label}`);
+      return true;
+    },
+    () => {
+      showToast('Copy failed');
+      return false;
+    },
   );
 };
 
@@ -453,10 +481,11 @@ export const runSetSwatchSheet = async (favients: Favient[], setName: string, n 
 };
 
 /**
- * How many of a set lose visible detail in `key`, or 0. `.ai`/`.idml` only — see
- * `collectionQualityWarnings`, whose `.ugr` exemption is an `@assumption` there. The
- * SWATCHES subject reduces nothing (the palette is already the colour list the format
- * wants), so it never warns.
+ * How many of a set lose visible detail in `key`, or 0. Every format that reduces — each key
+ * in `STOP_BUDGETS`, `.ugr` included since 2026-09-10 — is measured by
+ * `collectionQualityWarnings` at its own stop budget, or at `budget` when the Settings category
+ * overrides it; a format with no budget reduces nothing and never warns. The SWATCHES subject
+ * reduces nothing either (the palette is already the colour list the format wants).
  */
 export const setLossyCount = (favients: Favient[], key: string, subject: ExportSubject = 'ramp', budget?: number): number =>
   subject === 'swatches' ? 0 : collectionQualityWarnings(favients, key, undefined, budget).length;
@@ -480,27 +509,31 @@ export const gradientLossyCount = (ramp: RGB[], name: string, key: string, subje
  * Perform an export of the working gradient and remember it as a recent. `palette` is the
  * swatch row as composed on the hero — the SWATCHES subject exports exactly that, with no
  * count of its own, because the row IS the control and it lives on the hero (L2).
+ * A COPY returns the clipboard write (true once the text is there); anything else returns
+ * nothing.
  */
-export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palette: RGB[] = [], opts: ExportRunOpts = {}): void => {
+export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palette: RGB[] = [], opts: ExportRunOpts = {}): Promise<boolean> | undefined => {
   if (a.kind === 'gmt') {
     if (runGradientFile(a.file, plainName, opts)) noteRecentExport(a);
-    return;
+    return undefined;
   }
   const swatches = subjectOf(a) === 'swatches';
   const name = swatches ? plainName : exportNameFor(plainName, opts.origin, opts.config);
   const stem = name === plainName ? slugName(name) : creditedFileStem(plainName, name);
   if (swatches && !palette.length) {
     showToast('No swatches to export');
-    return;
+    return undefined;
   }
+  let copied: Promise<boolean> | undefined;
   if (a.kind === 'png') {
     void downloadSwatchSheet(palette, name);
   } else {
     const f = getExportFormat(a.key);
-    if (!f) return;
-    if (swatches && !f.swatches) return;
-    if (a.kind === 'copy') copyFormat(f, ramp, name, swatches ? palette : null, opts.budget);
+    if (!f) return undefined;
+    if (swatches && !f.swatches) return undefined;
+    if (a.kind === 'copy') copied = copyFormat(f, ramp, name, swatches ? palette : null, opts.budget, !opts.confirmsCopy);
     else downloadFormat(f, ramp, name, swatches ? palette : null, opts.budget, stem);
   }
   noteRecentExport(a);
+  return copied;
 };

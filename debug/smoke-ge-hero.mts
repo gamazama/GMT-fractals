@@ -20,14 +20,19 @@
  *       · each open category ends in a RESERVED note strip: one fixed line that cannot wrap
  *       and clips what does not fit, so the hover note it carries can never shift the rows
  *       above it or the categories below
+ *   [5c] a Copy in the window ticks its own row for a second (the colour picker's ✓), puts the
+ *       text on the clipboard and shows no toast as well (2026-09-16)
  *   [7] and the note itself: a set holding a 60-stop gradient bundles into .ai and .ase
  *       lossily, says "1 gradient reduced to 40 colour stops" in that strip ON HOVER, and
  *       neither the window nor the rows below it move when it does
  *   [7b] the same gradient ALONE on the hero warns in the same words from the hero's own
  *       Export window, and a two-stop gradient never warns (2026-09-13)
  *   [8] EXPORT NAMES CARRY THE SOURCE ONLY WHILE UNMODIFIED (owner, 2026-09-13): a wall pick
- *       downloaded as .json is named "<name> (<credit>)" inside the file and in the filename;
- *       one Adjust dial later it is named exactly as before; the dial back and the credit is
+ *       downloaded as .json is named "<name> (<credit>)" inside the file and in the filename
+ *       (the filename keeps the name as it is, spaces and all, since 2026-09-16 — only the
+ *       credit's `/` becomes `-`; falsified that day by restoring the old `_`-collapsing
+ *       `slugName`: red "the filename "snowstorm_PyPalettes-nord_MIT_.json" is not the credited
+ *       name as it is"); one Adjust dial later it is named exactly as before; the dial back and the credit is
  *       back (a key comparison, not a sticky flag). Then a SET of three — an unedited
  *       catalogue favourite, the same one edited, a favourite with no origin (what every
  *       favourite saved before today is) — downloads as a .zip in which only the first is
@@ -90,7 +95,8 @@ const heroState = async (page: Page) => {
 
 async function main() {
   const browser = await chromium.launch();
-  const ctx = await browser.newContext();
+  // clipboard: [5c] reads back what the window's Copy wrote
+  const ctx = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   await seedGeSmokeState(ctx);
   const page = await ctx.newPage();
   const errors: string[] = [];
@@ -296,6 +302,35 @@ async function main() {
   await page.waitForTimeout(200);
   if (await page.$('[data-gx-export]')) fail('[5] Escape did not close the Export window');
   console.log('✓ [5] one export window, two subjects, one accordion section open at a time');
+
+  // [5c] A COPY CONFIRMS ON ITS OWN ROW (2026-09-16; plan §10, the 2026-09-09 second pass: "the
+  // colour picker's own copy button flips to a tick for a second"). The CSS row's Copy glyph
+  // becomes ✓, the clipboard holds the CSS, no "Copied" toast shows as well, and a second later
+  // the glyph is back. Falsified 2026-09-16, each reverted: `confirmCopy` never setting
+  // `copiedId` → red "did not flip to a tick"; the window not passing `confirmsCopy` → red "toasted
+  // as well as ticking"; the reset timer removed → red "still a tick".
+  await page.click('[title^="Export"]');
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[5c] the Export window did not open'));
+  if (!(await page.$('[data-gx-export] [data-gx-copy="css"]'))) await page.click('[data-gx-export] [data-gx-section="For the web"]');
+  await page.click('[data-gx-export] [data-gx-copy="css"]');
+  await page.waitForTimeout(250);
+  const copyRow = () =>
+    page.evaluate(() => {
+      const b = document.querySelector('[data-gx-export] [data-gx-copy="css"]') as HTMLElement;
+      return { text: b.innerText.trim(), glyph: !!b.querySelector('svg'), ticked: document.querySelectorAll('[data-gx-export] [data-gx-copied]').length, css: b.hasAttribute('data-gx-copied'), toast: /Copied /.test(document.body.innerText) };
+    });
+  const ticked = await copyRow();
+  const clip = await page.evaluate(() => navigator.clipboard.readText()).catch((e) => `unreadable: ${e}`);
+  if (!/linear-gradient/.test(clip)) fail(`[5c] the clipboard does not hold the CSS (${clip.slice(0, 60)})`);
+  if (ticked.text !== '✓' || !ticked.css || ticked.glyph) fail(`[5c] the CSS row's Copy did not flip to a tick (text "${ticked.text}", glyph ${ticked.glyph})`);
+  if (ticked.ticked !== 1) fail(`[5c] ${ticked.ticked} rows show a tick — only the one that copied should`);
+  if (ticked.toast) fail('[5c] a Copy from the window toasted as well as ticking');
+  await page.waitForTimeout(1100);
+  const settled = await copyRow();
+  if (settled.text || !settled.glyph || settled.ticked) fail(`[5c] a second after the copy the row is still a tick ("${settled.text}")`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  console.log('✓ [5c] a Copy in the window ticks its own row for a second, with the text on the clipboard and no toast');
 
   // [6] AGAIN, and the memory behind it. The last few exports belong at the top of the
   // window, and the section that opens is the one holding the last one — the window's only
@@ -535,15 +570,17 @@ async function main() {
     await page.waitForTimeout(250);
     return { inside, file: dl.suggestedFilename() };
   };
-  const creditSlug = credit.replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '');
+  // The filename is the name AS IT IS (2026-09-16, plans/gradient-file-format.md "Still open"):
+  // spaces and punctuation kept, only the credit's `/` turned into `-` — the GMT file's rule.
+  const creditInFile = credit.replace(/\s*\/\s*/g, '-');
   let ex = await exportJson();
   if (ex.inside !== `${picked.name} (${credit})`) fail(`[8] the unedited pick exported as "${ex.inside}", without its credit (wanted "${picked.name} (${credit})")`);
-  if (!ex.file.includes(creditSlug)) fail(`[8] the filename "${ex.file}" lost the credit ("${creditSlug}")`);
+  if (ex.file !== `${picked.name} (${creditInFile}).json`) fail(`[8] the filename "${ex.file}" is not the credited name as it is ("${picked.name} (${creditInFile}).json")`);
   await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ reverse: true }));
   await page.waitForTimeout(600);
   ex = await exportJson();
   if (ex.inside !== picked.name) fail(`[8] one Adjust dial later the export still carries the credit ("${ex.inside}")`);
-  if (ex.file.includes(creditSlug)) fail(`[8] one Adjust dial later the filename still carries the credit ("${ex.file}")`);
+  if (ex.file !== `${picked.name}.json`) fail(`[8] one Adjust dial later the filename is "${ex.file}", not the plain name ("${picked.name}.json")`);
   await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ reverse: false }));
   await page.waitForTimeout(600);
   ex = await exportJson();

@@ -40,7 +40,11 @@
  *       and every other named path carrying it — and an unnamed build keeps its old header.
  *   [11] (same day) no two formats download under one filename (`exportFileName`), checked
  *       through the real `runExport` / `runSetExport` with their download caught at
- *       `createElement('a')`; a plain format's filename (`Sea_Glass.json`) is unchanged.
+ *       `createElement('a')`. Since 2026-09-16 a download is named with the name as it is
+ *       (`Sea Glass.json`, `Stufe Bänder 12.map` — only filesystem-illegal characters go) and a
+ *       long credited name gives way to its credit; falsified that day by restoring the old
+ *       `_`-collapsing `slugName` (red on both filenames) and by cutting the credited stem at 120
+ *       without letting the name give way (red on the credit).
  *   [7]/[8] also changed that day: CSS joined STOP_BUDGETS, so the "does not reduce, does not
  *       warn" example moved from css to json and CSS now has to warn and honour the budget.
  *   FALSIFIED 2026-09-14, one mutation at a time, each restored, every one exit 1: CSS ignoring
@@ -503,9 +507,18 @@ section('[11] every format downloads under its own filename');
     runSetExport(b, favs, 'Set');
     ok(caught.length === 2 && caught[0] !== caught[1], `[11] runSetExport: the ${a} and ${b} zips share a filename (${caught.join(', ')})`);
   }
+  // A download is named with the name AS IT IS (2026-09-16): spaces and non-ASCII kept, only what a
+  // filesystem refuses removed — the GMT file's rule — and a credit kept whole when the name is cut.
   caught.length = 0;
   runExport({ kind: 'download', key: 'json' }, RAMP, 'Sea Glass', [], {});
-  ok(caught[0] === 'Sea_Glass.json', `[11] a plain format's filename changed (${caught[0]}) — smoke:ge-hero [8] asserts it`);
+  runExport({ kind: 'download', key: 'map' }, RAMP, ' Stufe Bänder: 1/2? ', [], {});
+  ok(caught[0] === 'Sea Glass.json', `[11] a plain format's filename is not the name as it is (${caught[0]}) — smoke:ge-hero [8] asserts it`);
+  ok(caught[1] === 'Stufe Bänder 12.map', `[11] a name with non-ASCII and filesystem-illegal characters downloads as ${JSON.stringify(caught[1])}, wanted "Stufe Bänder 12.map"`);
+  const { slugName, creditedFileStem } = await import('../gradient-explorer/v2/exportActions');
+  ok(slugName(' :/ ') === 'gradient', `[11] a name with nothing legal left falls back to "gradient" (${JSON.stringify(slugName(' :/ '))})`);
+  const longName = 'A very long gradient name '.repeat(8).trim();
+  const stem = creditedFileStem(longName, `${longName} (cpt-city/jjg, CC BY 3.0)`);
+  ok(Array.from(stem).length <= 120 && stem.endsWith(' (cpt-city-jjg, CC BY 3.0)'), `[11] a long credited name keeps its credit whole within 120 code points (${JSON.stringify(stem)}, ${Array.from(stem).length})`);
 }
 
 console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry, one stop budget');

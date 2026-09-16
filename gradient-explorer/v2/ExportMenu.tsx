@@ -55,7 +55,8 @@
  *      wider than its neighbour and drag its extension out of line with theirs. The
  *      extension lives in that column and nowhere else: the registry's labels carry it
  *      ("Adobe swatches .ase") for hosts that show a bare list, and `labelWithoutExt` takes
- *      it back out here.
+ *      it back out here. A Copy confirms where it was clicked, as the picker's own copy
+ *      button does: the glyph is a ✓ for a second, with no toast (2026-09-16, `copiedId`).
  *
  * The output profile is a section like the others with its value on the header — a setting
  * almost nobody touches, previously sitting between the formats and the image row at full
@@ -466,11 +467,34 @@ export const ExportMenu: React.FC<{
   // For one gradient the row on the hero is the palette, verbatim. For a set the stepper is.
   const n = isSet ? count : palette.length;
 
-  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH, origin, config, source };
+  /**
+   * A COPY CONFIRMS ON ITS OWN ROW (§10, 2026-09-09 second pass: "the colour picker's own copy
+   * button flips to a tick for a second"). The glyph of the row that copied becomes the picker's
+   * ✓ for the picker's second (`useClipboardCopy(1000)` there). Keyed by the ROW that was
+   * clicked (`format:` / `again:` + `exportActionId`), not the action alone: the copy also
+   * lands in Again, and a row appearing there already ticked would confirm a click nobody made
+   * on it. The "Copied" toast is not shown as well (`confirmsCopy`); a failure still toasts.
+   */
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current !== null) clearTimeout(copiedTimer.current); }, []);
+  const confirmCopy = (done: Promise<boolean> | undefined, id: string) => {
+    void done?.then((ok) => {
+      if (!ok) return;
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      setCopiedId(id);
+      copiedTimer.current = setTimeout(() => { setCopiedId(null); copiedTimer.current = null; }, 1000);
+    });
+  };
+
+  const runOpts = { budget: settings.budget ?? undefined, pngW: settings.pngW, pngH: settings.pngH, origin, config, source, confirmsCopy: true };
   // The GMT gradient file is PNG only in the UI (ADR-0123 Update 2026-09-14); the loader still reads
   // the JSON, and `runGradientFile(…, 'json')` still writes it for code and tests.
   const saveFile = () => (set ? runSetGradientFile('png', set, name) : runExport({ kind: 'gmt', file: 'png' }, ramp, name, palette, runOpts));
-  const copy = (f: ExportFormatDef) => runExport({ kind: 'copy', key: f.key, subject }, ramp, name, palette, runOpts);
+  const copy = (f: ExportFormatDef) => {
+    const a = { kind: 'copy', key: f.key, subject } as const;
+    confirmCopy(runExport(a, ramp, name, palette, runOpts), `format:${exportActionId(a)}`);
+  };
   const download = (f: ExportFormatDef) =>
     set
       ? runSetExport(f.key, set, name, subject, count, settings.budget ?? undefined)
@@ -566,11 +590,12 @@ export const ExportMenu: React.FC<{
               type="button"
               onClick={() => copy(f)}
               data-gx-copy={f.key}
+              data-gx-copied={copiedId === `format:${exportActionId({ kind: 'copy', key: f.key, subject })}` ? '' : undefined}
               title={`Copy ${(swatches && f.swatchLabel) || f.label} to the clipboard`}
               aria-label={`Copy ${(swatches && f.swatchLabel) || f.label}`}
-              className={COPY_SLOT + ' grid place-items-center rounded-lg text-fg-muted hover:text-fg hover:bg-line/10 transition-colors'}
+              className={COPY_SLOT + ' grid place-items-center rounded-lg text-[12px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors'}
             >
-              <CopyGlyph size={14} />
+              {copiedId === `format:${exportActionId({ kind: 'copy', key: f.key, subject })}` ? '✓' : <CopyGlyph size={14} />}
             </button>
           ) : (
             <span className={COPY_SLOT} />
@@ -678,8 +703,9 @@ export const ExportMenu: React.FC<{
               <div key={exportActionId(a)} className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => runExport(a, ramp, name, palette, runOpts)}
+                  onClick={() => confirmCopy(runExport(a, ramp, name, palette, runOpts), `again:${exportActionId(a)}`)}
                   data-gx-again={exportActionId(a)}
+                  data-gx-copied={copiedId === `again:${exportActionId(a)}` ? '' : undefined}
                   title={`${p.verb} ${p.format}`}
                   className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left text-[13px] text-fg hover:bg-line/10 transition-colors group"
                 >
@@ -688,7 +714,7 @@ export const ExportMenu: React.FC<{
                       lines up with every other one. */}
                   <span className={EXT_COL}>{p.ext ?? ''}</span>
                   <span className="text-fg-dim group-hover:text-fg">
-                    {a.kind === 'copy' ? <CopyGlyph size={14} /> : <Icon name="download" size={14} />}
+                    {a.kind !== 'copy' ? <Icon name="download" size={14} /> : copiedId === `again:${exportActionId(a)}` ? '✓' : <CopyGlyph size={14} />}
                   </span>
                 </button>
                 <span className={COPY_SLOT} />

@@ -5,9 +5,10 @@
  * the download itself is the caller's (the UI's `downloadBlob`).
  *
  * The filename keeps the REAL name — spaces, case and non-ASCII survive — and loses only what a
- * filesystem refuses (`\ / : * ? " < > |` and control characters). That is the opposite of
- * `exportActions.slugName`, whose `_`-collapsing was half of "no import keeps the name" (ADR-0123
- * Context). The name also rides inside the file, so the filename is only ever a fallback.
+ * filesystem refuses (`\ / : * ? " < > |` and control characters). `exportActions.slugName` used
+ * to collapse everything else to `_`, which was half of "no import keeps the name" (ADR-0123
+ * Context); since 2026-09-16 it is this same rule, so every GX download names its file one way.
+ * The name also rides inside the file, so the filename is only ever a fallback.
  *
  * @see palette/core/gradientPng.ts (the PNG)
  * @see palette/core/gradientDocument.ts (the payload)
@@ -26,13 +27,15 @@ export type BuiltGradientFile =
 
 // eslint-disable-next-line no-control-regex
 const ILLEGAL = /[\\/:*?"<>|\x00-\x1f\x7f]/g;
-const MAX_STEM = 120;
+/** The longest stem, in code points, a download is named with. */
+export const MAX_FILE_STEM = 120;
 
-/** A filename stem that keeps the name: illegal characters removed, trimmed, never empty. */
-export const gradientFileStem = (name: string): string => {
+/** A filename stem that keeps the name: illegal characters removed, trimmed, never empty
+ *  (`fallback` when nothing legal is left — "gradients" for this file, which may hold many). */
+export const gradientFileStem = (name: string, fallback = 'gradients'): string => {
   const stem = String(name ?? '').replace(ILLEGAL, '').trim();
   // Slice by code point so a cut never leaves half a surrogate pair.
-  return Array.from(stem).slice(0, MAX_STEM).join('').trim() || 'gradients';
+  return Array.from(stem).slice(0, MAX_FILE_STEM).join('').trim() || fallback;
 };
 
 /** The name a file is saved under when the caller gives none: the gradient's own name for one,
