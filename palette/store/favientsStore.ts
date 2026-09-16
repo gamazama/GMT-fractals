@@ -35,6 +35,7 @@
  * the user drags out of Recent into them. A gradient the user has already filed in
  * a named group is never re-collected, and a user `add()` never lands in Recent.
  * Its divider is not renamable (FavientsPanel renders a static label for it).
+ * @see docs/adr/0124-recent-follows-the-working-gradient.md
  *
  * ── The collection is SHARED ACROSS HOSTS ─────────────────────────────────────
  * `gmt.favients` is one same-origin key read and written by app-gmt, fluid-toy and

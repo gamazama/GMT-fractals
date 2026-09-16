@@ -48,6 +48,7 @@
  *
  * @see docs/adr/0111-working-pipeline-input-slot.md
  * @see docs/adr/0122-the-ramp-is-the-gradient.md
+ * @see docs/adr/0124-recent-follows-the-working-gradient.md
  *
  * @invariant `addStopsToWorking` turns a RAMP working gradient into stops — uncapped, past
  *   `STOP_LAYER_CAP` when the Detail budget allows — as exactly ONE undo entry that undoes back

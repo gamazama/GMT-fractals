@@ -4,6 +4,14 @@
 - **Date:** 2026-09-10
 - **Relates to:** `gradient-explorer/v2/**` (grep `TUCK_PX`, `TOOLBAR_LEFT`, `data-gx-tools`, `WEIGHT` in `ui/Icon.tsx`), `plans/ge-v2-unified-shell-plan.md` (§1 principles, §4 phases, §8 principles log)
 
+> **Update 2026-09-16 (the owed Recent ADR is written; decision unchanged):** the Consequences line
+> "Still owed: Recent auto-collect" is paid by
+> [ADR-0124](0124-recent-follows-the-working-gradient.md) — Recent collects the working gradient,
+> one entry per working session refreshed in place, shown in dated bins. With it, every ADR Phase G
+> listed (pipeline input slot, Recent, variants, the shell) exists. ADR-0124 also records two places
+> where the code and the recorded decision disagree (the bin pin, a merge showing one day twice);
+> nothing in this ADR's rules changes.
+
 ## Context
 
 The v2 shell was built across Phases A–E and W over 2026-09-03 to 09-10, each phase in its
