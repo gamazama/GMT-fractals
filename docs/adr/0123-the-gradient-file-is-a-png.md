@@ -1,5 +1,22 @@
 # ADR-0123: The GMT gradient file is a PNG that carries its own data, and one loader reads every gradient file
 
+> **Update 2026-09-16 (GMT's own entrances join the loader; decision unchanged):** Decision 3 said
+> every gradient-file entrance goes through the one loader, but app-gmt's scene drop zone and both
+> Load Scene rows did not — a gradient PNG dropped on GMT answered "Couldn't read a scene". They
+> route through it now. `engine/plugins/SceneFileClaims.ts` is a generic seam (an app registers a
+> handler that sees dropped or picked files before the scene loader and takes its own, no gradient
+> wording in `engine/**`), called from `SceneFileDropZone`, `engine/plugins/SceneIO.tsx` and GMT's
+> own row in `engine-gmt/utils/loadFilter.ts`. What to take is `takeFromSceneLoader` (grep it in
+> `palette/core/importGradientFiles.ts`), registered by `palette/installGradientFileClaim.ts` from
+> `app-gmt/main.tsx`. It is deliberately strict, because the scene loader reads any JSON as a
+> scene: a PNG only with gradient metadata or the gradient pixel layout and never with a scene key;
+> JSON only as a gradients document or the old collection format; never a `.gmf` or an
+> extensionless file. **Still outside it:** a bare `{stops}`, a colour list, a design-token file,
+> GX Global JSON and `.gxsession.json` still reach the scene loader, and the drop overlay still
+> says "Drop to load scene". Guards: `npm run test:scene-file-claims`, `npm run test:gradient-file`
+> [9], `npm run smoke:gmt-gradientdrop` (14 steps; the drops are synthetic events, so they prove
+> the handlers, not an OS drag — step [7] uses the real picker). Each falsified.
+
 > **Update 2026-09-14 (owner review of the shipped UI; decision unchanged — the PNG is still the
 > file and one loader still reads every gradient file):**
 > - **PNG only in the UI.** The Export window's For GMT band offers ONE row, "GMT gradient" `.png`,

@@ -42,6 +42,15 @@ and has time to be noticed at the other end of the screen.
 
 ### 2. The ♥'s target is OBSERVED, not computed
 
+> **Update 2026-09-16 (what the ♥ writes; decision unchanged — the target is still observed):**
+> the sentence below says the ♥ "adds to Recent". It does not: `add()` files the gradient into the
+> last group used, else Kept (ADR-0124 is the record of what writes Recent). The two got tangled
+> because the ♥ flushes the pending Recent sync before it writes, so a ♥ within 400 ms of a change
+> saw today's bin grow and flashed "Today" instead of the set it had saved to. Day bins are left
+> out of the count now (`gradient-explorer/v2/setSaveFlash.ts`), so the flash names the group that
+> took the gradient. Guard: `npx tsx debug/test-palette-working.mts` [11], falsified by counting
+> bins again.
+
 The ♥ does not name a set — it adds to Recent, which the rail renders as bins whose ids depend
 on the day and on how the blocks fell. Reconstructing that id at the call site would be a second
 implementation of `listGroundSets`'s binning: correct until the day the binning changes.

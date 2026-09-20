@@ -1,5 +1,30 @@
 # ADR-0124: Recent collects the working gradient, one entry per session, shown by day
 
+> **Update 2026-09-16 (three faults in the build this ADR described are fixed; decision unchanged):**
+> - **Decision 4's pin now holds.** The bullet read "as built, the pin does not survive the first
+>   sync" — it compared the collected id with the session id, which is still null then, so the pin
+>   always dropped and the first edit rewrote the entry the gradient was picked from. It now holds
+>   while the output is still the picked gradient, including after a fold that changed nothing, so
+>   the first change opens a new entry and leaves the original as it was
+>   (`palette/store/workingStore.ts`, grep `sessionPinned`).
+> - **Decision 8's placement is by day.** A merge put a file's Recent entries at the END of the
+>   run, and the rail starts a new chip at every change of date, so one day could appear twice
+>   (Today · 1, Yesterday · 1, Today · 1). A merge and a replace now order Recent newest day
+>   first, keeping order within a day (`palette/store/favientsStore.ts`, grep `byDayNewestFirst`;
+>   `dayKey` moved into that store and `palette/components/favientBlocks.ts` re-exports it).
+> - **Decision 7 narrowed.** The 400 ms debounce, Share and Wallpaper call `syncRecentOutsideUndo`,
+>   which never syncs inside an open param transaction — it waits for the close
+>   (`outsideParamTransaction` in `palette/store/paramUndoBracket.ts`). Before that, a gesture held
+>   past 400 ms carried the shelf write into its own undo entry, so cancelling a Curves wave left
+>   one entry that changed only My Gradients — against this ADR's "adding to Recent never creates
+>   an undo step". Only the ♥ (inside its own bracket, before `add()`) and entering Mix still sync
+>   directly.
+> - **Guards added:** `npx tsx debug/test-palette-working.mts` [10] (pick from a bin, sync, edit,
+>   sync), [11] (the ♥'s flash target), [12] (both bracket routes and a reopening bracket);
+>   `npm run test:palette-favients` [9] (the rail's chips after a merge and a replace);
+>   `npm run smoke:ge-wave` [7]/[7b]/[7c] (a cancelled wave leaves nothing to undo). Each was
+>   falsified against the unfixed code.
+
 - **Status:** Accepted
 - **Date:** 2026-09-16
 - **Relates to:** ADR-0111 (the Working pipeline's input slot — a session lives on it); ADR-0114
