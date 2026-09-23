@@ -52,6 +52,11 @@
  * collection; the set is the noun Phase D created. A set export is NOT noted as a recent:
  * the hero's flyout offers one-click repeats of the WORKING gradient, and a set is a
  * different subject.
+ *
+ * THE TEXT PREVIEW (parity row O4, owner-approved 2026-09-23) reads from here too: `exportText`
+ * is what one gradient's Copy writes and its Download saves, `setExportText` is the one file a
+ * set bundles into. The Export window shows those strings on hover; it builds nothing of its own,
+ * which is the whole guarantee that the preview is what lands.
  */
 
 import { useSyncExternalStore } from 'react';
@@ -312,16 +317,59 @@ export const downloadStem = (plainName: string, name: string): string =>
 const bytesFor = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number): string | Uint8Array =>
   palette ? f.swatches!(palette, name) : f.build(ramp, name, budget);
 
+/** One registry export of the working gradient, resolved: the format, the name it writes (credited
+ *  while the gradient is an unmodified catalogue pick, ramp subject only), the download's stem, and
+ *  the palette when the subject is Swatches. Null when there is nothing to build — an unknown key,
+ *  a format with no swatches form under Swatches, or Swatches with no palette. */
+interface ResolvedFormatExport {
+  f: ExportFormatDef;
+  name: string;
+  stem: string;
+  palette: RGB[] | null;
+}
+const resolveFormatExport = (a: ExportAction, plainName: string, palette: RGB[], opts: ExportRunOpts): ResolvedFormatExport | null => {
+  if (a.kind !== 'copy' && a.kind !== 'download') return null;
+  const swatches = subjectOf(a) === 'swatches';
+  if (swatches && !palette.length) return null;
+  const f = getExportFormat(a.key);
+  if (!f || (swatches && !f.swatches)) return null;
+  const name = swatches ? plainName : exportNameFor(plainName, opts.origin, opts.config);
+  return { f, name, stem: downloadStem(plainName, name), palette: swatches ? palette : null };
+};
+
+/**
+ * THE TEXT an export of the working gradient writes — what its Copy puts on the clipboard and
+ * what its Download saves — or null when it writes bytes (a `binary` format, the GMT gradient
+ * PNG, the swatch sheet) or has nothing to build. The Export window's hover PREVIEW shows exactly
+ * this (parity row O4, owner-approved 2026-09-23), and `runExport`'s Copy writes exactly this, so
+ * the preview cannot show one thing while the clipboard gets another: same resolution (name,
+ * credit, subject), same builder, same `opts.budget`. A Copy and a Download of one format
+ * resolve alike, so either action previews the same text.
+ *
+ * @invariant a format row's preview in the Export window is the text its Copy puts on the
+ *   clipboard, byte for byte — with the credited name of a catalogue pick, and under a stop-budget
+ *   override — proven by: `npm run smoke:ge-hero` ("[5d] the css (ramp) preview differs from what
+ *   Copy put on the clipboard" and "[7c] under a 2-stop budget the CSS preview … is not what Copy
+ *   wrote"). Falsified 2026-09-23 by building the preview without `opts.origin` (red at [5d]) and
+ *   without `opts.budget` (red at [7c]); see the smoke's header.
+ */
+export const exportText = (a: ExportAction, ramp: RGB[], plainName: string, palette: RGB[] = [], opts: ExportRunOpts = {}): string | null => {
+  const r = resolveFormatExport(a, plainName, palette, opts);
+  if (!r || r.f.binary) return null;
+  const out = bytesFor(r.f, ramp, r.name, r.palette, opts.budget);
+  return typeof out === 'string' ? out : null;
+};
+
 /** Put one format on the clipboard. Resolves true once it is there, so a surface can confirm on
  *  its own row (`ExportRunOpts.confirmsCopy`); the "Copied" toast is for a surface that cannot.
- *  A failure always toasts. No clipboard at all resolves false and says nothing, as before. */
-const copyFormat = (f: ExportFormatDef, ramp: RGB[], name: string, palette: RGB[] | null, budget?: number, toast = true): Promise<boolean> => {
-  const out = bytesFor(f, ramp, name, palette, budget);
-  const writing = navigator.clipboard?.writeText(out as string);
+ *  A failure always toasts. No clipboard at all resolves false and says nothing, as before.
+ *  `text` is `exportText`'s — the one string the window's preview also shows. */
+const copyText = (text: string, label: string, toast = true): Promise<boolean> => {
+  const writing = navigator.clipboard?.writeText(text);
   if (!writing) return Promise.resolve(false);
   return writing.then(
     () => {
-      if (toast) showToast(`Copied ${(palette && f.swatchLabel) || f.label}`);
+      if (toast) showToast(`Copied ${label}`);
       return true;
     },
     () => {
@@ -411,6 +459,39 @@ export const runSetGradientFile = (file: GradientFileKind, favients: Favient[], 
 };
 
 /**
+ * The ONE FILE a set becomes in a format that bundles, or null when the format does not bundle
+ * (the set then goes out as a .zip). Ramp: a `collection` format (.ai/.idml/.ugr/.c4d.py/
+ * .blender.py) over every member under its export name (credited while unmodified). Swatches:
+ * a `collectionSwatches` format (.ase) over each member's `n`-swatch palette.
+ */
+const setBundle = (
+  key: string,
+  favients: Favient[],
+  subject: ExportSubject,
+  n: number,
+  budget?: number,
+): { data: string | Uint8Array; ext: string } | null => {
+  // asked of the format first, so a format that zips does not sample every member for nothing
+  const f = getExportFormat(key);
+  if (subject === 'swatches') return f?.collectionSwatches ? buildSwatchCollectionFile(setSwatches(favients, n), key) : null;
+  return f?.collection ? buildCollectionFile(favients.map(withExportName), key, budget) : null;
+};
+
+/**
+ * The TEXT a set export writes — the bundled file of a text format that bundles (.ugr, .ai, the
+ * two DCC scripts) — or null for a .zip or a binary bundle. The set counterpart of `exportText`,
+ * and the same function `runSetExport` downloads through (`setBundle`), so the window's preview
+ * of a set is the file that lands.
+ */
+export const setExportText = (key: string, favients: Favient[], subject: ExportSubject = 'ramp', n = 7, budget?: number): string | null => {
+  if (!favients.length) return null;
+  const f = getExportFormat(key);
+  if (!f || f.binary) return null;
+  const one = setBundle(key, favients, subject, n, budget);
+  return one && typeof one.data === 'string' ? one.data : null;
+};
+
+/**
  * Export a whole SET. `key` is a registry format; `subject` is which face of every member
  * is taken.
  *
@@ -438,16 +519,16 @@ export const runSetExport = (
   const stem = slugName(setName);
   // A zip of CSS variables must not land beside a zip of CSS under one name (`fileSuffix`).
   const zipStem = `${stem}${getExportFormat(key)?.fileSuffix ?? ''}`;
+  // A format that BUNDLES writes one file — the same one `setExportText` previews.
+  const one = setBundle(key, favients, subject, n, budget);
+  if (one) {
+    const data = typeof one.data === 'string' ? one.data : (one.data as unknown as BlobPart);
+    downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `${stem}.${one.ext}`);
+    showToast(subject === 'swatches' ? `Exported ${favients.length} palettes → .${one.ext}` : `Exported ${favients.length} → .${one.ext}`);
+    return;
+  }
   if (subject === 'swatches') {
-    const items = setSwatches(favients, n);
-    const one = buildSwatchCollectionFile(items, key);
-    if (one) {
-      const data = typeof one.data === 'string' ? one.data : (one.data as unknown as BlobPart);
-      downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `${stem}.${one.ext}`);
-      showToast(`Exported ${favients.length} palettes → .${one.ext}`);
-      return;
-    }
-    const zip = buildSwatchZip(items, key);
+    const zip = buildSwatchZip(setSwatches(favients, n), key);
     if (!zip) {
       showToast('That format has no swatch form');
       return;
@@ -459,15 +540,7 @@ export const runSetExport = (
   // Each .zip member is filed under the stem a single download of it would have (`downloadStem`),
   // taken from the plain name: a credited member keeps its credit whole.
   const memberStems = favients.map((f) => downloadStem(f.name, exportNameFor(f.name, f.origin, f.config)));
-  favients = favients.map(withExportName);
-  const file = buildCollectionFile(favients, key, budget);
-  if (file) {
-    const data = typeof file.data === 'string' ? file.data : (file.data as unknown as BlobPart);
-    downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `${stem}.${file.ext}`);
-    showToast(`Exported ${favients.length} → .${file.ext}`);
-    return;
-  }
-  const bytes = buildCollectionZip(favients, key, budget, memberStems);
+  const bytes = buildCollectionZip(favients.map(withExportName), key, budget, memberStems);
   downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${zipStem}.zip`);
   showToast(`Exported ${favients.length} as .zip`);
 };
@@ -526,22 +599,23 @@ export const runExport = (a: ExportAction, ramp: RGB[], plainName: string, palet
     if (runGradientFile(a.file, plainName, opts)) noteRecentExport(a);
     return undefined;
   }
-  const swatches = subjectOf(a) === 'swatches';
-  const name = swatches ? plainName : exportNameFor(plainName, opts.origin, opts.config);
-  const stem = downloadStem(plainName, name);
-  if (swatches && !palette.length) {
+  if (subjectOf(a) === 'swatches' && !palette.length) {
     showToast('No swatches to export');
     return undefined;
   }
   let copied: Promise<boolean> | undefined;
   if (a.kind === 'png') {
-    void downloadSwatchSheet(palette, name);
+    // the swatch sheet: Swatches only, and a swatch palette is never credited (see the header)
+    void downloadSwatchSheet(palette, plainName);
   } else {
-    const f = getExportFormat(a.key);
-    if (!f) return undefined;
-    if (swatches && !f.swatches) return undefined;
-    if (a.kind === 'copy') copied = copyFormat(f, ramp, name, swatches ? palette : null, opts.budget, !opts.confirmsCopy);
-    else downloadFormat(f, ramp, name, swatches ? palette : null, opts.budget, stem);
+    const r = resolveFormatExport(a, plainName, palette, opts);
+    if (!r) return undefined;
+    if (a.kind === 'copy') {
+      // The preview's own function (`exportText`), so the window cannot show one text and copy another.
+      const text = exportText(a, ramp, plainName, palette, opts);
+      if (text === null) return undefined;
+      copied = copyText(text, (r.palette && r.f.swatchLabel) || r.f.label, !opts.confirmsCopy);
+    } else downloadFormat(r.f, ramp, r.name, r.palette, opts.budget, r.stem);
   }
   noteRecentExport(a);
   return copied;

@@ -22,11 +22,23 @@
  *       above it or the categories below
  *   [5c] a Copy in the window ticks its own row for a second (the colour picker's ✓), puts the
  *       text on the clipboard and shows no toast as well (2026-09-16)
+ *   [5d] THE TEXT PREVIEW (parity row O4, 2026-09-23): hovering a text format's row shows, in a
+ *       panel BESIDE the window (never inside it, never over it, inside the screen), the text its
+ *       Copy then puts on the clipboard, byte for byte — nine ramp formats from CSS to .ggr (the
+ *       longest, ~26k) and .c4d.py, the Swatches JSON, and an Again row; the pick is a credited
+ *       catalogue gradient, so the name option is in play; hovering the row's Copy icon keeps the
+ *       same preview; .grd / .ase / .idml, the GMT gradient PNG and the swatch sheet show none (and
+ *       clear one already up); the window does not move; Escape takes the preview with the window
  *   [7] and the note itself: a set holding a 60-stop gradient bundles into .ai and .ase
  *       lossily, says "1 gradient reduced to 40 colour stops" in that strip ON HOVER, and
- *       neither the window nor the rows below it move when it does
+ *       neither the window nor the rows below it move when it does · and the SET's preview: its
+ *       .ai row previews the very .ai that downloads; its .gpl (a .zip) and .ase (binary) rows
+ *       preview nothing
  *   [7b] the same gradient ALONE on the hero warns in the same words from the hero's own
  *       Export window, and a two-stop gradient never warns (2026-09-13)
+ *   [7c] under a 2-stop budget in Settings, the 60-stop gradient's CSS preview holds two stops
+ *       and is what Copy writes — the budget half of [5d], which [5d]'s three-colour pick cannot
+ *       show (2026-09-23)
  *   [8] EXPORT NAMES CARRY THE SOURCE ONLY WHILE UNMODIFIED (owner, 2026-09-13): a wall pick
  *       downloaded as .json is named "<name> (<credit>)" inside the file and in the filename
  *       (the filename keeps the name as it is, spaces and all, since 2026-09-16 — only the
@@ -48,6 +60,18 @@
  * dropped from `runSetExport` (red "[8] the set's unedited catalogue member is not credited");
  * `contributeToGlobal` without the catalogue check (red "[9] an unedited catalogue gradient
  * reached the confirm").
+ *
+ * [5d], [7] (the set's preview) and [7c] falsified 2026-09-23, each reverted: the preview built
+ * with `{ ...runOpts, origin: undefined }` in ExportMenu (red "[5d] the css (ramp) preview differs
+ * from what Copy put on the clipboard: 81 vs 104 chars"); built with `budget: undefined` (red "[7c]
+ * under a 2-stop budget the CSS preview (22 stops) is not what Copy wrote (2 stops)" — and GREEN
+ * at [5d], which is why [7c] exists: the first cut seeded the budget in [5d], where the pick is
+ * three near-collinear colours every budget leaves alone); a binary row no longer clearing the
+ * preview (red "[5d] the binary grd row shows a preview ("format:copy:gpl:ramp")"). Windows'
+ * clipboard reads a written LF back as CRLF; the comparisons undo only that. While other work
+ * edits the tree, Vite reloads the page under this smoke and any step can go red on a vanished
+ * window (measured 2026-09-23: [5c] and [5d] each did, then passed on a re-run); [5d]'s section
+ * search names a reload when it saw one (`navs`). Re-run a red like that before reading it.
  *
  * Falsified 2026-09-06 by re-introducing the old hide (`if (!shown) return null` →
  * `if (emptySource) return null`): step [3] goes red with "the hero unmounted on an empty
@@ -101,6 +125,11 @@ async function main() {
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  // A reload this smoke did not ask for is Vite reloading the page because something ELSE was
+  // edited (other work in the tree); it wipes the hero and the window mid-step. Counted so a red
+  // that follows one can say so instead of reading as a product failure.
+  let navs = 0;
+  page.on('framenavigated', (f) => { if (f === page.mainFrame()) navs++; });
 
   console.log(`→ GET ${URL}`);
   await page.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
@@ -332,6 +361,132 @@ async function main() {
   await page.waitForTimeout(200);
   console.log('✓ [5c] a Copy in the window ticks its own row for a second, with the text on the clipboard and no toast');
 
+  // [5d] THE TEXT PREVIEW (parity row O4, owner-approved 2026-09-23). Hovering a text format's
+  // row shows, BESIDE the window, the exact text its Copy puts on the clipboard; a binary row, the
+  // GMT gradient PNG and the swatch sheet show none; nothing in the window moves. The options must
+  // MATTER, or a preview built from the defaults matches a clipboard built from the defaults and
+  // proves nothing: here the pick is an unmodified catalogue gradient, so its name carries the
+  // credit. The STOP BUDGET is proven in [7c], not here: this pick (snowstorm) is three
+  // near-collinear colours that every budget leaves alone — the first cut of this step seeded a
+  // budget and stayed green with the preview built without it (measured 2026-09-23).
+  await page.evaluate(() => localStorage.removeItem('gx.v2.exportSettings'));
+  const pick5d = await page.evaluate(() => {
+    const w = (window as any).__gxWorking?.();
+    return { credit: (w?.input?.origin?.credit as string | undefined) ?? null, name: (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '' };
+  });
+  await page.mouse.move(5, 5);
+  await page.click('[title^="Export"]');
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[5d] the Export window did not open'));
+  /** Open whichever section holds `key` (a header toggles, so only a shut one is clicked). */
+  const navs5d = navs;
+  const openFor = async (key: string) => {
+    if (await page.$(`[data-gx-export] [data-gx-format="${key}"]`)) return;
+    const titles = await page.evaluate(() => Array.from(document.querySelectorAll('[data-gx-export] [data-gx-section]')).map((h) => (h as HTMLElement).dataset.gxSection ?? ''));
+    for (const t of titles) {
+      if (t === 'Settings') continue;
+      const open = await page.evaluate(() => (document.querySelector('[data-gx-export] [data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null);
+      if (open !== t) { await page.click(`[data-gx-export] [data-gx-section="${t}"]`); await page.waitForTimeout(150); }
+      if (await page.$(`[data-gx-export] [data-gx-format="${key}"]`)) return;
+    }
+    fail(`[5d] no section holds "${key}"${navs !== navs5d ? ' — the page RELOADED during this step (an edit elsewhere in the tree): re-run' : ''}`);
+  };
+  const previewOf = () =>
+    page.evaluate(() => {
+      const p = document.querySelector('[data-gx-export-preview]') as HTMLElement | null;
+      const w = document.querySelector('[data-gx-export]') as HTMLElement;
+      const wr = w.getBoundingClientRect();
+      const win = { x: Math.round(wr.x), y: Math.round(wr.y), r: Math.round(wr.right), h: Math.round(wr.height), vw: innerWidth, vh: innerHeight };
+      if (!p) return { win, pv: null };
+      const r = p.getBoundingClientRect();
+      return {
+        win,
+        pv: {
+          id: p.dataset.gxExportPreview ?? '',
+          text: (p.querySelector('[data-gx-preview-text]') as HTMLElement).textContent ?? '',
+          cut: !!p.querySelector('[data-gx-preview-more]'),
+          x: Math.round(r.x), y: Math.round(r.y), r: Math.round(r.right), b: Math.round(r.bottom),
+          inWindow: w.contains(p),
+        },
+      };
+    });
+  /** Hover a row, read the preview, then Copy from the same row and read the clipboard. */
+  const hoverAndCopy = async (key: string, subject: 'ramp' | 'swatches') => {
+    await openFor(key);
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(300); // the grace on leaving, so this hover OPENS a preview rather than switching one
+    const before = await previewOf();
+    await page.hover(`[data-gx-export] [data-gx-download="${key}"]`);
+    await page.waitForTimeout(350);
+    const { win, pv } = await previewOf();
+    if (!pv) return fail(`[5d] hovering the ${key} row (${subject}) shows no preview`);
+    if (pv.id !== `format:copy:${key}:${subject}`) fail(`[5d] hovering ${key} (${subject}) shows the preview of "${pv.id}"`);
+    if (pv.inWindow) fail('[5d] the preview is inside the window — it must be beside it, or it moves the rows');
+    if (!(pv.r <= win.x || pv.x >= win.r)) fail(`[5d] the preview (x ${pv.x}–${pv.r}) overlaps the window (x ${win.x}–${win.r})`);
+    if (pv.x < 0 || pv.y < 0 || pv.r > win.vw + 1 || pv.b > win.vh + 1) fail(`[5d] the ${key} preview runs off the screen (x ${pv.x}–${pv.r}, bottom ${pv.b} in ${win.vw}×${win.vh})`);
+    if (before.win.h !== win.h || before.win.y !== win.y) fail(`[5d] the window moved or resized when the preview opened (${before.win.y}/${before.win.h} → ${win.y}/${win.h})`);
+    // the Copy icon belongs to the row: hovering it keeps the same preview up
+    await page.hover(`[data-gx-export] [data-gx-copy="${key}"]`);
+    await page.waitForTimeout(150);
+    const onCopy = (await previewOf()).pv;
+    if (onCopy?.id !== pv.id) fail(`[5d] hovering ${key}'s Copy icon changed or dropped the preview (${onCopy?.id ?? 'none'})`);
+    await page.click(`[data-gx-export] [data-gx-copy="${key}"]`);
+    await page.waitForTimeout(250);
+    // The OS clipboard owns line endings: on Windows a written LF reads back as CRLF (measured:
+    // CSS came back 105 chars for 104 written). Only that is undone.
+    const clip = (await page.evaluate(() => navigator.clipboard.readText()).catch((e) => `unreadable: ${e}`)).replace(/\r\n/g, '\n');
+    if (pv.text !== clip) {
+      let i = 0;
+      while (i < pv.text.length && pv.text[i] === clip[i]) i++;
+      fail(`[5d] the ${key} (${subject}) preview differs from what Copy put on the clipboard: ${pv.text.length} vs ${clip.length} chars, first difference at ${i} ("${pv.text.slice(i, i + 24)}" vs "${clip.slice(i, i + 24)}")`);
+    }
+    if (pv.cut) fail(`[5d] the ${key} preview was cut — no single gradient is over the cap`);
+    return pv.text;
+  };
+  const rampTexts: Record<string, string> = {};
+  for (const k of ['css', 'cssvars', 'tokens', 'json', 'gpl', 'ai', 'ggr', 'cpt', 'c4d']) rampTexts[k] = await hoverAndCopy(k, 'ramp');
+  // …and the options are IN it, so the equality above is not two defaults agreeing
+  if (!pick5d.credit) fail(`[5d] the wall pick carries no catalogue credit — the credited-name check would be vacuous`);
+  if (!rampTexts.css.startsWith(`/* ${pick5d.name} (${pick5d.credit}) */`))
+    fail(`[5d] the CSS preview does not open with the credited name (${rampTexts.css.split('\n')[0]})`);
+  if (rampTexts.ggr.length < 20000) fail(`[5d] the .ggr preview is ${rampTexts.ggr.length} chars — the whole file is ~26k`);
+  // NO TEXT, NO PREVIEW: the binary formats, and hovering one CLEARS a preview already up
+  for (const k of ['grd', 'ase', 'idml']) {
+    await openFor(k);
+    // a text row in the same section first, so there IS a preview for the binary row to clear
+    await page.hover(`[data-gx-export] [data-gx-download="gpl"]`);
+    await page.waitForTimeout(300);
+    if ((await previewOf()).pv?.id !== 'format:copy:gpl:ramp') fail('[5d] hovering .gpl (beside the binary rows) shows no preview');
+    await page.hover(`[data-gx-export] [data-gx-download="${k}"]`);
+    await page.waitForTimeout(350);
+    const { pv } = await previewOf();
+    if (pv) fail(`[5d] the binary ${k} row shows a preview ("${pv.id}")`);
+  }
+  await page.hover('[data-gx-export] [data-gx-gmtfile="png"]');
+  await page.waitForTimeout(350);
+  if ((await previewOf()).pv) fail('[5d] the GMT gradient PNG row shows a preview');
+  // the Swatches face previews its own text — the palette, not the ramp
+  await page.click('[data-gx-export] [data-gx-subject="swatches"]');
+  await page.waitForTimeout(250);
+  const swJson = await hoverAndCopy('json', 'swatches');
+  if (swJson === rampTexts.json) fail('[5d] the Swatches JSON preview is the Ramp JSON');
+  await page.hover('[data-gx-export] [data-gx-image]');
+  await page.waitForTimeout(350);
+  if ((await previewOf()).pv) fail('[5d] the swatch sheet row shows a preview');
+  // AGAIN previews what its one click does: the newest recent is the swatches JSON copy above
+  const againId = 'copy:json:swatches';
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(300);
+  await page.hover(`[data-gx-export] [data-gx-again="${againId}"]`);
+  await page.waitForTimeout(350);
+  const again5d = (await previewOf()).pv;
+  if (!again5d || again5d.id !== `again:${againId}`) fail(`[5d] hovering the Again row "${againId}" shows ${again5d ? `"${again5d.id}"` : 'no preview'}`);
+  if (again5d!.text !== swJson) fail('[5d] the Again row previews a different text from the Copy it repeats');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  if (await page.$('[data-gx-export-preview]')) fail('[5d] the preview outlived its window');
+  await page.evaluate(() => localStorage.removeItem('gx.v2.exportSettings'));
+  console.log(`✓ [5d] hovering a text row shows beside the window exactly what Copy writes (${Object.keys(rampTexts).length} ramp formats + swatches JSON + Again, credited name); binary rows show none; nothing moves`);
+
   // [6] AGAIN, and the memory behind it. The last few exports belong at the top of the
   // window, and the section that opens is the one holding the last one — the window's only
   // memory, and the reason the accordion does not cost a returning user a click. Seeded
@@ -477,7 +632,32 @@ async function main() {
   // The whole point of reserving the line: showing it moves NOTHING.
   if (shown.after.win !== shown.before.win) fail(`[7] the window resized on hover (${shown.before.win} → ${shown.after.win})`);
   if (shown.after.rowY !== shown.before.rowY) fail(`[7] the rows below moved on hover (${shown.before.rowY} → ${shown.after.rowY})`);
-  console.log('✓ [7] a lossy bundle says so on hover, in the reserved line, and nothing moves');
+  // [7] ALSO, THE SET'S PREVIEW (parity row O4, 2026-09-23): a format that BUNDLES a set into
+  // one text file previews that file — `setExportText`, the function the download writes through
+  // — so the preview of the set's .ai is the .ai that lands, byte for byte. A format that zips the
+  // set has no text to show (a .zip is bytes), and neither does a binary bundle (.ase).
+  const setPv = await page.evaluate(() => {
+    const p = document.querySelector('[data-gx-export-preview]') as HTMLElement | null;
+    const w = (document.querySelector('[data-gx-export]') as HTMLElement).getBoundingClientRect();
+    if (!p) return null;
+    const r = p.getBoundingClientRect();
+    return { id: p.dataset.gxExportPreview ?? '', text: (p.querySelector('[data-gx-preview-text]') as HTMLElement).textContent ?? '', beside: r.right <= w.left || r.left >= w.right };
+  });
+  if (!setPv || setPv.id !== 'format:ai') fail(`[7] hovering the set's .ai row shows ${setPv ? `the preview of "${setPv.id}"` : 'no preview'}`);
+  if (!setPv!.beside) fail("[7] the set's preview overlaps its window");
+  const [aiDl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('[data-gx-export] [data-gx-download="ai"]')]);
+  const aiFile = fs.readFileSync((await aiDl.path())!, 'utf8');
+  if (aiFile !== setPv!.text) fail(`[7] the set's .ai preview (${setPv!.text.length} chars) is not the .ai that downloaded (${aiFile.length} chars)`);
+  if (!/Spiky/.test(aiFile) || !/Plain/.test(aiFile)) fail('[7] the set .ai does not hold both members — the preview proved nothing');
+  for (const k of ['gpl', 'ase']) {
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(300);
+    await page.hover(`[data-gx-export] [data-gx-download="${k}"]`);
+    await page.waitForTimeout(350);
+    const id = await page.evaluate(() => (document.querySelector('[data-gx-export-preview]') as HTMLElement | null)?.dataset.gxExportPreview ?? null);
+    if (id) fail(`[7] the set's ${k} row (a ${k === 'ase' ? 'binary bundle' : '.zip'}) shows a preview ("${id}")`);
+  }
+  console.log("✓ [7] a lossy bundle says so on hover, in the reserved line, and nothing moves; the set's .ai previews the file that downloads, a .zip row previews nothing");
 
   // [7b] ONE GRADIENT says it too (owner, 2026-09-13). The hero's own Export window used to
   // compute the notice for a SET only (`lossy = isSet && bundles ? … : 0`), so the same
@@ -488,7 +668,7 @@ async function main() {
   // notice". A notice that fired for everything is what the Plain half is for.
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
-  const heroLossy = async (name: string) => {
+  const putOnHero = async (name: string, step: string) => {
     // the set's tiles, by NAME through the wall's own title (the ground is canvas-drawn): try
     // each tile position until the hero carries the name asked for
     const wallEl = page.locator('[data-gx-keepselect] canvas').first();
@@ -500,7 +680,10 @@ async function main() {
       await page.waitForTimeout(500);
       got = await page.evaluate(() => (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? '');
     }
-    if (got !== name) fail(`[7b] could not put "${name}" on the hero from the ground (hero: "${got}")`);
+    if (got !== name) fail(`[${step}] could not put "${name}" on the hero from the ground (hero: "${got}")`);
+  };
+  const heroLossy = async (name: string) => {
+    await putOnHero(name, '7b');
     await page.mouse.move(5, 5);
     await page.click('[data-gx-hero] [title^="Export"]');
     await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail(`[7b] the hero's Export window did not open on "${name}"`));
@@ -525,6 +708,36 @@ async function main() {
   if (plain.keys.length) fail(`[7b] a two-stop gradient warns that it was reduced (${plain.keys.join(', ')}) — the notice is firing for everything`);
   if (plain.text) fail(`[7b] a two-stop gradient's .ai row says "${plain.text}" on hover`);
   console.log('✓ [7b] one gradient warns the way a set does: the 60-stop one on hover, the two-stop one never');
+
+  // [7c] THE PREVIEW CARRIES THE SETTINGS (parity row O4, 2026-09-23). [5d]'s pick is three
+  // near-collinear colours, which every stop budget leaves exactly as it is (measured: its CSS is
+  // two stops with or without one), so the budget half of "the preview is built from the options
+  // the Copy uses" is proven here, on the 60-stop gradient: with a 2-stop budget in Settings the
+  // CSS row's preview holds exactly two stops, and it is still byte for byte what Copy writes.
+  // Built without the budget it holds 22 (measured 2026-09-23, the falsification below).
+  await page.evaluate(() => localStorage.setItem('gx.v2.exportSettings', JSON.stringify({ budget: 2, pngW: 1024, pngH: 128 })));
+  await putOnHero('Spiky', '7c');
+  await page.mouse.move(5, 5);
+  await page.click('[data-gx-hero] [title^="Export"]');
+  await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[7c] the hero\'s Export window did not open on "Spiky"'));
+  if (!(await page.$('[data-gx-export] [data-gx-format="css"]'))) {
+    await page.click('[data-gx-export] [data-gx-section="For the web"]');
+    await page.waitForTimeout(200);
+  }
+  await page.hover('[data-gx-export] [data-gx-download="css"]');
+  await page.waitForTimeout(350);
+  const spikyPv = await page.evaluate(() => (document.querySelector('[data-gx-export-preview] [data-gx-preview-text]') as HTMLElement | null)?.textContent ?? null);
+  if (spikyPv === null) fail('[7c] hovering the CSS row of "Spiky" shows no preview');
+  await page.click('[data-gx-export] [data-gx-copy="css"]');
+  await page.waitForTimeout(250);
+  const spikyClip = (await page.evaluate(() => navigator.clipboard.readText()).catch((e) => `unreadable: ${e}`)).replace(/\r\n/g, '\n');
+  const spikyStops = (spikyPv!.match(/#[0-9a-f]{6}/gi) ?? []).length;
+  if (spikyPv !== spikyClip) fail(`[7c] under a 2-stop budget the CSS preview (${spikyStops} stops) is not what Copy wrote (${(spikyClip.match(/#[0-9a-f]{6}/gi) ?? []).length} stops) — the preview is built from other options`);
+  if (spikyStops !== 2) fail(`[7c] the 60-stop gradient's CSS preview has ${spikyStops} stops under a 2-stop budget — Settings did not reach it`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => localStorage.removeItem('gx.v2.exportSettings'));
+  console.log('✓ [7c] under a 2-stop budget a 60-stop gradient previews two stops of CSS, exactly what Copy writes');
 
   // [8] EXPORT NAMES. Fresh shelf and ground; the wall's first tile is a catalogue entry from a
   // v2 pack, so the pick stamps an origin (read back through the shell's own debug handle).

@@ -13,6 +13,14 @@
  *       (Share · Export · Wallpaper) is inside the screen, not clipped off the right.
  *   [4] each tray face — Adjust, Curves, Mix — opens INSIDE the viewport on both axes.
  *   [5] the Export window is a sheet inside the viewport.
+ *   [5b] the Export TEXT PREVIEW on a phone (parity row O4, added 2026-09-23): the open category's
+ *       note line says "Hold a format to see its text"; a CDP touch HELD 800 ms on the CSS row shows
+ *       its text in a panel along the bottom of the screen, held open with a ×, and downloads
+ *       nothing; the next TAP, on that row's Copy, copies (the hold's swallowed click did not eat
+ *       it) exactly the previewed text; the × closes the panel and leaves the sheet. Falsified
+ *       2026-09-23 by never swallowing the hold's click (`onClickCapture` in ExportMenu): red
+ *       "[5b] holding the CSS row DOWNLOADED it (Snapchat.css)" — Chromium does raise a click
+ *       after a long touch, so the swallow is load-bearing, not a belt-and-braces.
  *   [6] the wall's tool cluster sits in the bottom half of the wall, carries NO carving tool
  *       (owner, 2026-09-11: Box / Lasso / Paint are not for a phone) and, at 1:1, exactly
  *       the zoom-in button (− and Fit appear only once zoomed).
@@ -270,7 +278,8 @@ async function main() {
   const errors: string[] = [];
 
   // ── phone ──────────────────────────────────────────────────────────────────────────
-  const ctx = await browser.newContext({ ...devices['Pixel 5'], viewport: PHONE });
+  // clipboard: [5b] reads back what a tap on Copy wrote
+  const ctx = await browser.newContext({ ...devices['Pixel 5'], viewport: PHONE, permissions: ['clipboard-read', 'clipboard-write'] });
   await seedGeSmokeState(ctx);
   const page = await boot(ctx, errors);
   const W = PHONE.width, H = PHONE.height;
@@ -401,6 +410,56 @@ async function main() {
   b = await boxes(page);
   if (!inside(b.exportWin, W, H)) fail(`[5] the Export sheet runs out of the viewport: ${fmt(b.exportWin)}`);
   console.log(`✓ [5] the Export sheet: ${fmt(b.exportWin)}`);
+
+  // [5b] THE TEXT PREVIEW ON A PHONE (parity row O4, 2026-09-23). No hover, so a HOLD on a text
+  // row shows its text in a panel along the bottom of the sheet — and must not also download.
+  // The open category's reserved note line says so. The next TAP is a normal tap (the hold's
+  // swallowed click must not eat it): Copy on the same row puts exactly the previewed text on the
+  // clipboard, and the panel's × closes the panel alone, not the sheet.
+  if (!(await page.$('[data-gx-export] [data-gx-format="css"]'))) {
+    await page.locator('[data-gx-export] [data-gx-section="For the web"]').tap();
+    await page.waitForTimeout(250);
+  }
+  const hint5b = (await page.evaluate(`(function () { var n = document.querySelector('[data-gx-export] [data-gx-note]'); return n ? n.innerText.trim() : ''; })()`)) as string;
+  if (!/^Hold a format/.test(hint5b)) fail(`[5b] the open category's note line does not say how to see a format's text ("${hint5b}")`);
+  const cssRow = await page.locator('[data-gx-export] [data-gx-download="css"]').boundingBox();
+  if (!cssRow) fail('[5b] no CSS row on the sheet');
+  const held: string[] = [];
+  const onDl = (d: { suggestedFilename(): string }) => held.push(d.suggestedFilename());
+  page.on('download', onDl);
+  const cdp5b = await ctx.newCDPSession(page);
+  const at = { x: cssRow!.x + cssRow!.width / 3, y: cssRow!.y + cssRow!.height / 2, radiusX: 4, radiusY: 4, force: 1, id: 1 };
+  await cdp5b.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at] });
+  await page.waitForTimeout(800);
+  await cdp5b.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp5b.detach();
+  await page.waitForTimeout(700);
+  page.off('download', onDl);
+  if (held.length) fail(`[5b] holding the CSS row DOWNLOADED it (${held[0]}) — a hold only shows the text`);
+  type Pv = { id: string; pinned: boolean; text: string; x: number; y: number; r: number; b: number; close: boolean } | null;
+  const readPv = () =>
+    page.evaluate(`(function () {
+      var p = document.querySelector('[data-gx-export-preview]'); if (!p) return null;
+      var r = p.getBoundingClientRect();
+      return { id: p.getAttribute('data-gx-export-preview'), pinned: p.hasAttribute('data-gx-preview-pinned'), text: p.querySelector('[data-gx-preview-text]').textContent,
+        x: Math.round(r.x), y: Math.round(r.y), r: Math.round(r.right), b: Math.round(r.bottom), close: !!p.querySelector('[data-gx-preview-close]') };
+    })()`) as Promise<Pv>;
+  const pv5b = await readPv();
+  if (!pv5b) fail('[5b] holding the CSS row showed no preview');
+  if (pv5b!.id !== 'format:copy:css:ramp' || !pv5b!.pinned) fail(`[5b] the hold showed "${pv5b!.id}" (pinned ${pv5b!.pinned}), not the CSS row's text held open`);
+  if (pv5b!.x < 0 || pv5b!.y < 0 || pv5b!.r > W + 1 || pv5b!.b > H + 1) fail(`[5b] the preview runs out of the viewport: x ${pv5b!.x}–${pv5b!.r}, y ${pv5b!.y}–${pv5b!.b}`);
+  if (pv5b!.b < H - 2 || pv5b!.x > 1 || pv5b!.r < W - 1) fail(`[5b] the preview is not along the bottom of the screen (x ${pv5b!.x}–${pv5b!.r}, bottom ${pv5b!.b})`);
+  if (!pv5b!.close) fail('[5b] a held preview has no ×');
+  await page.locator('[data-gx-export] [data-gx-copy="css"]').tap();
+  await page.waitForTimeout(300);
+  // Windows' clipboard reads a written LF back as CRLF; only that is undone
+  const clip5b = ((await page.evaluate(`navigator.clipboard.readText()`)) as string).replace(/\r\n/g, '\n');
+  if (clip5b !== pv5b!.text) fail(`[5b] the next tap's Copy wrote ${clip5b.length} chars, the held preview shows ${pv5b!.text.length} — the tap was swallowed or the texts differ`);
+  await page.locator('[data-gx-preview-close]').tap();
+  await page.waitForTimeout(250);
+  if (await readPv()) fail('[5b] the × did not close the preview');
+  if (!(await page.$('[data-gx-export]'))) fail('[5b] closing the preview closed the Export sheet too');
+  console.log(`✓ [5b] a hold shows the CSS along the bottom (y ${pv5b!.y}–${pv5b!.b}) without downloading; the next tap copies exactly that; × closes the preview alone`);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 

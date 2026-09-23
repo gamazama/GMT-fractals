@@ -58,6 +58,12 @@
  *      it back out here. A Copy confirms where it was clicked, as the picker's own copy
  *      button does: the glyph is a ✓ for a second, with no toast (2026-09-16, `copiedId`).
  *
+ * THE TEXT PREVIEW (parity row O4, owner-approved 2026-09-23). Hover a row that writes text and
+ * the text appears in a panel BESIDE the window — the exact string its Copy puts on the clipboard,
+ * from `exportActions.exportText` (a set's bundle from `setExportText`), never built here. Nothing
+ * is added to the row; binary rows show nothing. A phone holds the row instead (a bottom panel).
+ * The whole design, and why a hold, is the comment above `previewProps`.
+ *
  * The output profile is a section like the others with its value on the header — a setting
  * almost nobody touches, previously sitting between the formats and the image row at full
  * weight.
@@ -97,7 +103,7 @@
 
 import type { GradientConfig } from '../../types';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { formatsFor, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
+import { formatsFor, getExportFormat, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
 import {
   runExport,
   runSetExport,
@@ -111,8 +117,12 @@ import {
   labelWithoutExt,
   readExportSettings,
   writeExportSettings,
+  exportText,
+  setExportText,
+  type ExportAction,
   type ExportSettings,
 } from './exportActions';
+import { Layer } from '../../components/ui/Layer';
 import { GRADIENT_PNG_MAX_SINGLE_HEIGHT, GRADIENT_PNG_MAX_WIDTH, GRADIENT_PNG_MIN_WIDTH, clampGradientPngHeight, snapGradientPngWidth } from '../../palette/core/gradientPng';
 import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
 import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
@@ -349,6 +359,49 @@ const SectionHead: React.FC<{ title: string; note?: string; open: boolean; onCli
   </button>
 );
 
+/**
+ * WHAT A PREVIEW IS OF. `one`: an export of the working gradient (a format row or an Again row),
+ * built by `exportText` from the same action and options its Copy / Download use. `set`: the one
+ * file a set bundles into, built by `setExportText`. `id` names the ROW that asked (`format:` /
+ * `again:` + the action's id), so the smoke can tell which row the panel belongs to.
+ */
+type PreviewReq =
+  | { kind: 'one'; id: string; action: ExportAction; label: string; ext: string }
+  | { kind: 'set'; id: string; key: string; label: string; ext: string };
+
+/** The preview's display cap. Measured 2026-09-23 over the registry for ONE gradient: the longest
+ *  text is .ggr, ~26,300 characters on 259 lines, so no single-gradient preview is ever cut — the
+ *  cap is for SETS (200 gradients as .ai is 1.6 M characters). Cut at a line, never mid-line
+ *  unless the first line alone is over the cap. */
+const PREVIEW_MAX_LINES = 400;
+const PREVIEW_MAX_CHARS = 40_000;
+const previewSlice = (text: string): { shown: string; more: string | null } => {
+  const lines = text.split('\n');
+  if (text.length <= PREVIEW_MAX_CHARS && lines.length <= PREVIEW_MAX_LINES) return { shown: text, more: null };
+  let k = 0;
+  let chars = 0;
+  while (k < lines.length && k < PREVIEW_MAX_LINES && chars + lines[k].length + (k ? 1 : 0) <= PREVIEW_MAX_CHARS) {
+    chars += lines[k].length + (k ? 1 : 0);
+    k++;
+  }
+  if (k === 0) return { shown: text.slice(0, PREVIEW_MAX_CHARS), more: `${(text.length - PREVIEW_MAX_CHARS).toLocaleString('en')} more characters` };
+  const rest = lines.length - k;
+  return { shown: lines.slice(0, k).join('\n'), more: `${rest.toLocaleString('en')} more line${rest === 1 ? '' : 's'}` };
+};
+
+/** Hover intent: a preview OPENS after this (so a pointer crossing the list does not flash one
+ *  beside the window) and, once one is up, moving to another row switches at once. It CLOSES
+ *  this long after the pointer leaves, which is what lets the pointer cross the window's padding
+ *  into the panel to scroll it. */
+const PREVIEW_OPEN_MS = 120;
+const PREVIEW_CLOSE_MS = 220;
+/** A touch held this long on a row shows its text instead of downloading (no hover on a phone). */
+const LONG_PRESS_MS = 450;
+/** The panel beside the window: at most this wide, at least `PREVIEW_MIN_W` or it goes below. */
+const PREVIEW_MAX_W = 440;
+const PREVIEW_MIN_W = 240;
+const PREVIEW_GAP = 8;
+
 export const ExportMenu: React.FC<{
   ramp: RGB[];
   name: string;
@@ -408,10 +461,24 @@ export const ExportMenu: React.FC<{
   // two subjects agree on what "a palette" means for this person until they say otherwise.
   const [count, setCount] = useState(() => clampCount(palette.length || 7));
 
+  // THE TEXT PREVIEW's state (see `previewProps` below for the whole story). Declared up here
+  // because the window's Escape and click-away listeners consult it: the panel is portalled, so
+  // a press inside it is OUTSIDE `ref` and would otherwise close the window it belongs to.
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [preview, setPreview] = useState<{ req: PreviewReq; pinned: boolean; beside: React.CSSProperties | null } | null>(null);
+  const previewNow = useRef(preview);
+  previewNow.current = preview;
+
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // a preview held open by a long press closes first; the window on the next Escape
+      if (previewNow.current?.pinned) setPreview(null);
+      else onClose();
+    };
     const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      const t = e.target as Node;
+      if (ref.current && !ref.current.contains(t) && !previewRef.current?.contains(t)) onClose();
     };
     window.addEventListener('keydown', onKey);
     window.setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
@@ -501,6 +568,196 @@ export const ExportMenu: React.FC<{
       : runExport({ kind: 'download', key: f.key, subject }, ramp, name, palette, runOpts);
   const swatchSheet = () => (set ? void runSetSwatchSheet(set, name, count) : runExport({ kind: 'png', subject: 'swatches' }, ramp, name, palette, runOpts));
 
+  /*
+   * THE TEXT PREVIEW (parity row O4, owner-approved 2026-09-23). The first shell showed a text
+   * format's output before you took it (its Extras panels' `showPreview`); this window copied and
+   * downloaded blind. The row stays ONE ACTION — nothing is added to it — and the text appears
+   * where there was nothing: BESIDE the window on a desktop, on whichever side has room, level
+   * with its top. Hover a row (its Copy included) and, after `PREVIEW_OPEN_MS`, the panel shows
+   * the text; move to another text row and it switches at once; a binary row, the GMT gradient
+   * PNG and the swatch sheet have no text and clear it. `PREVIEW_CLOSE_MS` of grace on leaving
+   * lets the pointer cross into the panel to scroll or select in it.
+   *
+   * THE TEXT IS NOT BUILT HERE. It is `exportText` — the function `runExport`'s Copy writes to
+   * the clipboard — called with the same action and the same `runOpts`, so the stop-budget
+   * override and the catalogue credit in the name are in the preview because they are in the
+   * copy. A set's is `setExportText`, the one file `runSetExport` downloads for a format that
+   * bundles (.ugr, .ai, the two DCC scripts); a set in any other format is a .zip, and a .zip
+   * has no text. Guard: `npm run smoke:ge-hero` [5d], `npm run smoke:ge-phone` [5b].
+   *
+   * A PHONE HAS NO HOVER, so a row HELD for `LONG_PRESS_MS` shows its text instead of
+   * downloading (the release's click is swallowed), in a panel along the bottom of the sheet
+   * with a × — the least intrusive choice: no control is added to any row, and a hold is the
+   * gesture a phone already uses for "tell me about this" (Android raises `contextmenu` for it,
+   * which is taken as the same thing). The open category's reserved note line, empty on a phone
+   * because nothing hovers there, says so once. Any touch screen gets the hold; only a phone
+   * gets the bottom panel.
+   */
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; x: number; y: number; touch: boolean; fired: boolean }>({
+    timer: null,
+    x: 0,
+    y: 0,
+    touch: false,
+    fired: false,
+  });
+  const clearPreviewTimers = () => {
+    if (openTimer.current !== null) clearTimeout(openTimer.current);
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    if (press.current.timer !== null) clearTimeout(press.current.timer);
+    openTimer.current = closeTimer.current = press.current.timer = null;
+  };
+  useEffect(() => clearPreviewTimers, []);
+  /** Where the panel goes on a desktop: beside the window, on the side with more room, its top
+   *  level with the window's. Null → the bottom panel (a phone, or no side wide enough). */
+  const besideWindow = (): React.CSSProperties | null => {
+    const el = ref.current;
+    if (phone || !el) return null;
+    const r = el.getBoundingClientRect();
+    const leftRoom = r.left - PREVIEW_GAP - 8;
+    const rightRoom = window.innerWidth - r.right - PREVIEW_GAP - 8;
+    const onLeft = leftRoom >= rightRoom;
+    const width = Math.min(PREVIEW_MAX_W, onLeft ? leftRoom : rightRoom);
+    if (width < PREVIEW_MIN_W) return null;
+    const top = Math.max(8, Math.round(r.top));
+    return { top, left: Math.round(onLeft ? r.left - PREVIEW_GAP - width : r.right + PREVIEW_GAP), width, maxHeight: Math.max(160, window.innerHeight - top - 8) };
+  };
+  const showPreview = (req: PreviewReq, pinned: boolean) => {
+    clearPreviewTimers();
+    setPreview({ req, pinned, beside: besideWindow() });
+  };
+  const hoverPreview = (req: PreviewReq | null) => {
+    const cur = previewNow.current;
+    if (cur?.pinned) return; // a held preview stays until its × (or Escape)
+    if (!req) {
+      clearPreviewTimers();
+      if (cur) setPreview(null);
+      return;
+    }
+    if (cur) {
+      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+      if (cur.req.id !== req.id) showPreview(req, false);
+      return;
+    }
+    if (openTimer.current !== null) clearTimeout(openTimer.current);
+    openTimer.current = setTimeout(() => showPreview(req, false), PREVIEW_OPEN_MS);
+  };
+  const leavePreview = () => {
+    if (openTimer.current !== null) clearTimeout(openTimer.current);
+    openTimer.current = null;
+    if (!previewNow.current || previewNow.current.pinned) return;
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      if (!previewNow.current?.pinned) setPreview(null);
+    }, PREVIEW_CLOSE_MS);
+  };
+  const keepPreview = () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+  const closePreview = () => {
+    clearPreviewTimers();
+    press.current.fired = false;
+    setPreview(null);
+  };
+  const cancelPress = () => {
+    if (press.current.timer !== null) clearTimeout(press.current.timer);
+    press.current.timer = null;
+  };
+  /**
+   * A row's preview wiring: hover (a mouse or a pen — a touch has no hover and its enter/leave
+   * would flash the panel on every tap), keyboard focus (`:focus-visible` only, so a click does
+   * not open one), and the long press. `req` null is a row with no text: hovering it clears.
+   */
+  const previewProps = (req: PreviewReq | null) => ({
+    onPointerEnter: (e: React.PointerEvent) => {
+      if (e.pointerType !== 'touch') hoverPreview(req);
+    },
+    onPointerLeave: (e: React.PointerEvent) => {
+      if (e.pointerType !== 'touch') leavePreview();
+    },
+    onFocus: (e: React.FocusEvent) => {
+      if (!(e.target as HTMLElement).matches?.(':focus-visible') || previewNow.current?.pinned) return;
+      if (req) showPreview(req, false);
+      else if (previewNow.current) closePreview();
+    },
+    onBlur: leavePreview,
+    onPointerDown: (e: React.PointerEvent) => {
+      press.current.fired = false;
+      press.current.touch = e.pointerType !== 'mouse';
+      cancelPress();
+      if (!req || e.pointerType === 'mouse') return;
+      press.current.x = e.clientX;
+      press.current.y = e.clientY;
+      press.current.timer = setTimeout(() => {
+        press.current.timer = null;
+        press.current.fired = true;
+        showPreview(req, true);
+      }, LONG_PRESS_MS);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      // a finger that moves is scrolling the sheet, not holding a row
+      if (press.current.timer !== null && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 10) cancelPress();
+    },
+    onPointerUp: cancelPress,
+    onPointerCancel: cancelPress,
+    onContextMenu: (e: React.MouseEvent) => {
+      // Android raises `contextmenu` for a long press: the same gesture, so the same answer —
+      // and never the browser's own menu over a row. A mouse's right click is left alone.
+      if (!req || !press.current.touch) return;
+      e.preventDefault();
+      if (!press.current.fired) {
+        cancelPress();
+        press.current.fired = true;
+        showPreview(req, true);
+      }
+    },
+    onClickCapture: (e: React.MouseEvent) => {
+      // the release of a hold that showed the text is not also a download or a copy
+      if (!press.current.fired) return;
+      press.current.fired = false;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+    // a hold must not select the label or raise iOS's callout
+    style: phone ? ({ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties) : undefined,
+  });
+  /** A format row's preview, or null when the row writes no text. */
+  const formatPreview = (f: ExportFormatDef): PreviewReq | null => {
+    if (f.binary) return null;
+    const label = labelWithoutExt((swatches && f.swatchLabel) || f.label, f.ext);
+    if (isSet) return f.collection && !swatches ? { kind: 'set', id: `format:${f.key}`, key: f.key, label, ext: `.${f.ext}` } : null;
+    const action: ExportAction = { kind: 'copy', key: f.key, subject };
+    return { kind: 'one', id: `format:${exportActionId(action)}`, action, label, ext: `.${f.ext}` };
+  };
+  /** An Again row's preview: its own action, so it previews what that one click will do. */
+  const againPreview = (a: ExportAction): PreviewReq | null => {
+    if (a.kind !== 'copy' && a.kind !== 'download') return null;
+    const f = getExportFormat(a.key);
+    if (!f || f.binary) return null;
+    return { kind: 'one', id: `again:${exportActionId(a)}`, action: a, label: exportActionParts(a).format, ext: `.${f.ext}` };
+  };
+  // The text, from the functions that write it. A set's bundle is cached per format for as long
+  // as what it depends on holds still: sixty gradients as .ai is a quarter of a second, and a
+  // pointer going up and down the list must not pay it each time.
+  const setTextCache = useMemo(() => new Map<string, string | null>(), [set, subject, count, settings.budget]);
+  const previewText = useMemo(() => {
+    if (!preview) return null;
+    const r = preview.req;
+    if (r.kind === 'set') {
+      if (!set) return null;
+      if (!setTextCache.has(r.key)) setTextCache.set(r.key, setExportText(r.key, set, subject, count, settings.budget ?? undefined));
+      return setTextCache.get(r.key) ?? null;
+    }
+    return exportText(r.action, ramp, name, palette, runOpts);
+    // `runOpts` is rebuilt every render; these are what it is made of
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preview?.req, set, setTextCache, subject, count, settings.budget, ramp, name, palette, origin, config]);
+  const previewShown = useMemo(() => (previewText === null ? null : previewSlice(previewText)), [previewText]);
+
   const formats = formatsFor(subject);
   // One gradient's lossy count per format, measured once per ramp / subject / budget rather
   // than once per row per render (the reduction search is not free, and a hover re-renders).
@@ -533,6 +790,7 @@ export const ExportMenu: React.FC<{
   // first happens to be the one this would re-open.
   useEffect(() => {
     setNotice(null);
+    setPreview(null);
   }, [open, subject]);
   useEffect(() => {
     if (open === null || open === SETTINGS_SECTION) return;
@@ -546,13 +804,21 @@ export const ExportMenu: React.FC<{
     // is not a surprise.
     const bundles = isSet && !!(swatches ? f.collectionSwatches : f.collection);
     const lossy = isSet ? (bundles ? setLossyCount(set!, f.key, subject, settings.budget ?? undefined) : 0) : singleLossy.get(f.key) ?? 0;
+    const pv = previewProps(formatPreview(f));
     return (
       <div
         key={f.key}
         data-gx-format={f.key}
         data-gx-lossy={lossy > 0 ? lossy : undefined}
-        onPointerEnter={() => setNotice(lossy > 0 ? lossyNote(lossy, stopBudgetOf(f.key, settings.budget ?? undefined) ?? AI_STOP_LIMIT) : null)}
-        onPointerLeave={() => setNotice(null)}
+        {...pv}
+        onPointerEnter={(e) => {
+          setNotice(lossy > 0 ? lossyNote(lossy, stopBudgetOf(f.key, settings.budget ?? undefined) ?? AI_STOP_LIMIT) : null);
+          pv.onPointerEnter(e);
+        }}
+        onPointerLeave={(e) => {
+          setNotice(null);
+          pv.onPointerLeave(e);
+        }}
       >
         <div className="flex items-center gap-1">
           {/* THE ROW IS THE DOWNLOAD. It carries the glyph and the extension it will write, so
@@ -700,7 +966,7 @@ export const ExportMenu: React.FC<{
           {again.map((a) => {
             const p = exportActionParts(a);
             return (
-              <div key={exportActionId(a)} className="flex items-center gap-1">
+              <div key={exportActionId(a)} className="flex items-center gap-1" {...previewProps(againPreview(a))}>
                 <button
                   type="button"
                   onClick={() => confirmCopy(runExport(a, ramp, name, palette, runOpts), `again:${exportActionId(a)}`)}
@@ -736,7 +1002,8 @@ export const ExportMenu: React.FC<{
             <ZoneLabel className="flex-1">For GMT</ZoneLabel>
           </div>
           <div className="pt-1 px-1">
-            <div className="flex items-center gap-1">
+            {/* a PNG: no text to preview, so hovering it clears one */}
+            <div className="flex items-center gap-1" {...previewProps(null)}>
               <button
                 type="button"
                 onClick={saveFile}
@@ -789,7 +1056,8 @@ export const ExportMenu: React.FC<{
             <div className="pt-1 px-1">
               {sec.formats.map(row)}
               <div className={NOTE_STRIP} data-gx-note>
-                {notice}
+                {/* on a phone nothing hovers, so the line is free to say how the text is seen */}
+                {notice ?? (phone && sec.formats.some((f) => formatPreview(f)) ? 'Hold a format to see its text' : null)}
               </div>
             </div>
           )}
@@ -849,7 +1117,7 @@ export const ExportMenu: React.FC<{
           else makes an image of a palette, so it stays. */}
       {swatches && (
         <div className="px-1">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" {...previewProps(null)}>
             <button
               type="button"
               onClick={swatchSheet}
@@ -866,6 +1134,51 @@ export const ExportMenu: React.FC<{
             <span className={COPY_SLOT} />
           </div>
         </div>
+      )}
+      {/* THE TEXT PREVIEW — a portal (`<Layer tier="tooltip">`, ADR-0082), so it is no child of
+          this scrolling window and nothing in the window moves when it appears. Beside the
+          window on a desktop; along the bottom of the sheet on a phone. */}
+      {preview && previewShown && (
+        <Layer
+          tier="tooltip"
+          ref={previewRef}
+          data-gx-export-preview={preview.req.id}
+          data-gx-preview-pinned={preview.pinned ? '' : undefined}
+          style={preview.beside ? { top: preview.beside.top, left: preview.beside.left, width: preview.beside.width } : { left: 0, right: 0, bottom: 0 }}
+          onPointerEnter={keepPreview}
+          onPointerLeave={(e) => {
+            if (e.pointerType !== 'touch') leavePreview();
+          }}
+        >
+          <Floating
+            className={`flex flex-col overflow-hidden ${preview.beside ? '' : 'rounded-b-none border-x-0 border-b-0'}`}
+            style={preview.beside ? { maxHeight: preview.beside.maxHeight } : { maxHeight: '50vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="flex items-center gap-2 h-8 pl-3 pr-1.5 shrink-0 border-b border-line/10">
+              <span className="flex-1 min-w-0 truncate text-[11px] text-fg-muted">{preview.req.label}</span>
+              <span className="shrink-0 text-[11px] text-fg-dim">{preview.req.ext}</span>
+              {(preview.pinned || !preview.beside) && (
+                <button
+                  type="button"
+                  onClick={closePreview}
+                  data-gx-preview-close
+                  title="Close (Esc)"
+                  aria-label="Close the preview"
+                  className="w-7 h-7 grid place-items-center rounded-lg text-fg-muted hover:text-fg hover:bg-line/10"
+                >
+                  <Icon name="close" size={14} />
+                </button>
+              )}
+            </div>
+            {/* exactly the text, nothing around it: the smoke reads `textContent` against the clipboard */}
+            <pre data-gx-preview-text className="flex-1 min-h-0 overflow-auto m-0 px-3 py-2 font-mono text-[11px] leading-[1.45] text-fg whitespace-pre">{previewShown.shown}</pre>
+            {previewShown.more && (
+              <div data-gx-preview-more className="shrink-0 h-6 px-3 leading-6 text-[11px] text-fg-dim border-t border-line/10 truncate">
+                … {previewShown.more}
+              </div>
+            )}
+          </Floating>
+        </Layer>
       )}
     </Floating>
   );
