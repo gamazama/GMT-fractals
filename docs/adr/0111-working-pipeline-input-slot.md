@@ -1,5 +1,18 @@
 # ADR-0111: One Working pipeline over an input slot (Gradient Explorer v2)
 
+> **Update 2026-09-24 (the edited flag rides undo; decision unchanged):** the 2026-09-23 block's
+> "Known gap" is closed. The generator's undo snapshot now carries `tracksEdited`, so undo and redo
+> put curves back with the edited flag they had, and leaving Curves after an undo bakes them. The
+> engine's `HistoryProvider` (`store/slices/historySlice.ts`) gained an optional `changeOf`: the
+> part of a snapshot that decides whether a step is RECORDED, while undo/redo still restore the
+> whole snapshot. The generator uses it (`generatorChangeOf`, one shared registration
+> `generatorHistoryProvider`) so the flag never records a step on its own — a cancelled wave
+> writes the curves back unchanged but sets the flag, and must still leave nothing to undo.
+> Providers that don't declare `changeOf` behave as before. Commit `095cdfef`. Guards:
+> `npx tsx debug/test-palette-working.mts` [15], `npm run smoke:ge-tray` [18d]. Still not carrying
+> the flag: a scene or session load (`restoreGeneratorDocument`) and `returnToSource` /
+> `cancelLive`.
+
 > **Update 2026-09-23 (a pick starts fresh, and an untouched face changes nothing; decision
 > extended, not superseded):**
 > - **`use` always starts fresh.** A pick (wall, shelf, GX Global, a share link, the hand-off
