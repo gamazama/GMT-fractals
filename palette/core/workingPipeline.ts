@@ -128,6 +128,10 @@ export interface WorkingDerivedCore {
   /** True when the config is the verbatim input (identity pipeline over a `gradient` / `stops`
    *  input — either config form). */
   passthrough: boolean;
+  /** True when the only thing live is an UNTOUCHED Curves fit over an input with its own config:
+   *  `config` is that config (by identity), `ramp` is still the curves' own drawing. See
+   *  `runWorkingPipeline`'s `curvesUntouched`. Never true together with `passthrough`. */
+  restated: boolean;
 }
 
 /** The stop budget the Generator uses: `detail` (2..10) buys fidelity. */
@@ -206,6 +210,29 @@ export const addStopsToConfig = (config: GradientConfig, detail: number): Gradie
  * `stops` kinds), else null; it is returned untouched when nothing would change it. Whether a
  * real transform's output keeps stops is read from `verbatim` and `seedStops` — see
  * `fitWorkingOutput`.
+ *
+ * AN UNTOUCHED CURVES FIT IS THE SOURCE RESTATED (`curvesUntouched`, the generator store's
+ * `!tracksEdited`). Opening the Curves face fits keys to the gradient; until one is edited,
+ * leaving the face drops the fit and bakes nothing (the shell's `openTray`). But the fit is
+ * lossy, and re-fitting its drawing back into stops gives a PARAPHRASE of the gradient's stops,
+ * not the stops — measured 2026-09-23 on the catalogue's `thamesville-00`: two of five knots one
+ * level off and a bias 0.5 → 0.35. Handing that paraphrase out as `config` made every consumer
+ * treat an untouched visit as a new gradient: the hero's stops editor swapped knot lists on the
+ * way in and out of the face, so a stop selected with Curves open was dropped the moment the face
+ * went (`smoke:ge-tray` [14], red once a catalogue change put a picked preview under the wall
+ * click before it — over an edited stops document the hero never shows the output's knots, so
+ * it had passed); `beginEdit` baked the paraphrase; Recent rewrote its copy of the gradient.
+ * So with Adjust at identity and the fit untouched, `config` is `verbatim` itself and `restated`
+ * says so; `ramp` stays the curves' drawing (the bar and the swatches show the face live, the
+ * split and the bake / cancel halves are unchanged).
+ *
+ * @invariant With `isIdentityAdjust(params)`, live curves and `curvesUntouched`, the config is
+ *   `verbatim` by identity and `restated` is set; the same curves EDITED (or with Adjust off
+ *   identity) give a fitted config instead — proven by: `npx tsx debug/test-palette-working.mts`
+ *   ("restated: an untouched fit hands back the input's own config", "restated: an edited fit is
+ *   a fitted config"). The wiring (the store passes `!tracksEdited`, `beginEdit` folds a clone)
+ *   is the same harness's store half ("restated: beginEdit folds the gradient's own stops") and,
+ *   in the browser, `npm run smoke:ge-tray` [14] ("could not get back to the inspector").
  */
 export const runWorkingPipeline = (
   base: Channels,
@@ -218,8 +245,13 @@ export const runWorkingPipeline = (
   /** A previous fit to REUSE instead of fitting (a slider is mid-drag — see useWorkingDerived).
    *  Its stops are re-coloured from the live ramp, never handed back verbatim: the positions
    *  are what we are deferring, the colours are what makes the bar move. See `recolourHeldFit`. */
-  holdFit?: GradientConfig | null): WorkingDerivedCore => {
-  const passthrough = !!verbatim && !curves && isIdentityAdjust(params);
+  holdFit?: GradientConfig | null,
+  /** The curves are a fit nobody has edited yet (see above): with Adjust at identity the output
+   *  config is `verbatim`, not a re-fit of their drawing. */
+  curvesUntouched = false): WorkingDerivedCore => {
+  const identity = isIdentityAdjust(params);
+  const passthrough = !!verbatim && !curves && identity;
+  const restated = !!verbatim && !!curves && curvesUntouched && identity;
   const built = buildGradientRamp(
     base,
     base,
@@ -236,8 +268,10 @@ export const runWorkingPipeline = (
       final: built.final,
       config: verbatim,
       passthrough: true,
+      restated: false,
     };
   }
+  if (restated && verbatim) return { base, ramp: built.ramp, final: built.final, config: verbatim, passthrough: false, restated: true };
   return {
     base,
     ramp: built.ramp,
@@ -246,5 +280,6 @@ export const runWorkingPipeline = (
       ? recolourHeldFit(holdFit, built.ramp)
       : fitWorkingOutput(built.ramp, detail, (!!verbatim && verbatim.stops.length > 0) || seedStops.length > 0, seedStops),
     passthrough: false,
+    restated: false,
   };
 };

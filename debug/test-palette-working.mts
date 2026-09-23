@@ -43,6 +43,25 @@
  *      OkLCh curves of the NEW gradient in the same one entry. `bakes` (leaving Mix / Image): the
  *      chain and curves reset, Frequency and Targets stay.
  *
+ * An untouched Curves fit is the source restated, added 2026-09-23 (smoke:ge-tray [14] went red
+ * on it — the hero dropped a stop selected in the Curves face when the face closed):
+ *  14. with Adjust at identity and the fit untouched, `runWorkingPipeline` hands back the input's
+ *      own config (not a re-fit of the curves' drawing, which for the fixture is a paraphrase);
+ *      edited curves or a moved dial still fit; through the stores, `deriveWorkingNow`, Recent and
+ *      `beginEdit` all see the gradient's own stops, the fold is a copy and one undo entry.
+ *
+ * ── FALSIFIED 2026-09-23 (section [14]) — each break made, run red (exit 1), reverted ──
+ *   R1  `restated` forced false in `runWorkingPipeline` (the code before the fix) → 4 red: the
+ *       pure "hands back the input's own config", the store flag, Recent ("#B2D3D0" bias 0.35 in
+ *       the write) and "beginEdit folds the gradient's own stops".
+ *   R2  `restated` without `curvesUntouched` → 3 red: "an edited fit is a fitted config", "edited
+ *       curves give the fit of what they draw" and the fixture line.
+ *   R3  `restated` without the Adjust identity → 1 red, "not with an Adjust dial moved".
+ *   R4  `deriveWorkingNow` passing `false` for the flag → 3 red: the store flag, Recent, beginEdit.
+ *   R5  `beginEdit` folding `d.config` itself on a restated output → 1 red, "… as a copy".
+ *   (`useWorkingDerived` passing `false` is invisible here — no React in node — and reds
+ *   smoke:ge-tray [14].)
+ *
  * ── FALSIFIED 2026-09-23 (section [13]) — each break made, run red (exit 1), reverted ──
  *   U1  the reset back under `if (opts?.bakes)` (the code before the fix) → 6 red: every dial left,
  *       the HSV curves left, not passthrough, and the three `fitCurves` checks.
@@ -601,6 +620,77 @@ console.log('[13] a use starts fresh: dials and curves go, and one Ctrl+Z brings
   ok(gen().noiseFreq === 64 && gen().noiseL === false && gen().noiseC === true, 'bakes: noise Frequency and Targets stay, as after every bake');
   engine().undoParam();
   engine().setPaletteGenerator({ ...ADJUST_FACE_DEFAULTS });
+  useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
+}
+
+// ══ [14] an untouched Curves fit is the source restated (2026-09-23) ══════════════════════
+// Opening the Curves face fits keys to the gradient. The output config was a re-fit of their
+// drawing, which for most gradients is a PARAPHRASE of the stops, not the stops — so an untouched
+// visit swapped the hero editor's knot list (a stop selected in the face was dropped on leaving:
+// smoke:ge-tray [14]), `beginEdit` baked the paraphrase, and Recent rewrote its copy.
+console.log('[14] an untouched Curves fit hands back the gradient itself');
+{
+  const { deriveWorkingNow } = await import('../palette/store/workingStore');
+  // The catalogue's thamesville-00 as a wall pick hands it over (a fitted pick: ids in fit order,
+  // two step segments, 'linear' texture profile). Its untouched re-fit moves two knots by a level
+  // and one bias 0.5 → 0.35 at Detail 8 / Smooth 0 — the app's defaults (asserted below).
+  const T: GradientConfig = {
+    stops: [
+      { id: 's0', position: 0, color: '#B1D3D3', bias: 0.5, interpolation: 'step' },
+      { id: 's2', position: 0.4411764705882353, color: '#B2D3D1', bias: 0.5, interpolation: 'linear' },
+      { id: 's4', position: 0.4980392156862745, color: '#D2D3AB', bias: 0.5, interpolation: 'linear' },
+      { id: 's3', position: 0.5549019607843137, color: '#F3D385', bias: 0.5, interpolation: 'step' },
+      { id: 's1', position: 1, color: '#F3D385', bias: 0.5, interpolation: 'linear' },
+    ],
+    colorSpace: 'linear',
+    blendSpace: 'oklab',
+  };
+  // everything the editor's knot identity compares (`knotsKey` in AdvancedGradientEditor)
+  const knotKey = (c: GradientConfig | null | undefined) =>
+    JSON.stringify([...(c?.stops ?? [])].sort((a, b) => a.position - b.position).map((s) => [s.id, s.position, s.color, s.bias ?? 0.5, s.interpolation ?? 'linear']));
+  useGeneratorStore.setState({ detail: 8, smooth: 0 });
+  const base = channelsOfConfig(T);
+  const curves = sampleCurves(fitChannelsToTracks(base, 8, 0, DEFAULT_CURVE_SPACE), true, DEFAULT_CURVE_SPACE);
+  const refit = runWorkingPipeline(base, P, curves, 1, 8, T, [], null, false);
+  ok(knotKey(refit.config) !== knotKey(T), 'fixture: this gradient\'s untouched re-fit is a paraphrase of its stops (else nothing below can fail)');
+
+  // pure
+  const r = runWorkingPipeline(base, P, curves, 1, 8, T, [], null, true);
+  ok(r.config === T && r.restated && !r.passthrough, `restated: an untouched fit hands back the input's own config (same object ${r.config === T}, restated ${r.restated}, passthrough ${r.passthrough})`);
+  ok(maxDiff(r.ramp, refit.ramp) === 0, 'restated: the ramp is still the curves\' own drawing (the face stays live on the bar)');
+  ok(refit.config !== T && !refit.restated, 'restated: an edited fit is a fitted config');
+  const dial = runWorkingPipeline(base, { ...P, hueRotate: 30 }, curves, 1, 8, T, [], null, true);
+  ok(dial.config !== T && !dial.restated, 'restated: not with an Adjust dial moved (the output is a real transform)');
+  ok(!runWorkingPipeline(base, P, null, 1, 8, T, [], null, true).restated, 'restated: never together with passthrough (no curves)');
+  ok(!runWorkingPipeline(channelsOfRamp(WAVE8), P, curves, 1, 8, null, [], null, true).restated, 'restated: never without an input config of its own (a live source)');
+
+  // the store: the Curves face open on a pick (`fitCurves`), untouched
+  const w = () => useWorkingStore.getState();
+  w().use(T, 'thamesville-00', 'Browse', { fitCurves: true });
+  const input = w().input;
+  const d = deriveWorkingNow()!;
+  ok(!!useGeneratorStore.getState().tracks && !useGeneratorStore.getState().tracksEdited, 'fixture: the Curves fit is live and untouched');
+  ok(input.kind === 'gradient' && d.restated && d.config === input.config, 'restated: the store passes the untouched flag (deriveWorkingNow hands back the input config)');
+  // what the shell's debounced sync writes into Recent (a local seam: [10] wired the real shelf)
+  const { setRecentCollector, setRecentUpdater } = await import('../palette/store/workingStore');
+  const written: GradientConfig[] = [];
+  setRecentCollector((c) => { written.push(c); return 'r14'; });
+  setRecentUpdater((_id, c) => { written.push(c); return true; });
+  w().syncRecent();
+  ok(written.length === 1 && knotKey(written[0]) === knotKey(T), `restated: Recent keeps the gradient's own stops (${written.length} write(s))`);
+  const d0 = engine().paramUndoStack.length;
+  w().beginEdit();
+  const doc = usePaletteEditorStore.getState().config;
+  ok(w().input.kind === 'stops' && knotKey(doc) === knotKey(T) && doc.colorSpace === 'linear', `restated: beginEdit folds the gradient's own stops (${JSON.stringify(doc.stops.map((s) => [s.color, s.bias]))})`);
+  ok(input.kind === 'gradient' && doc !== input.config && doc.stops !== input.config.stops, 'restated: … as a copy, never the input\'s own object');
+  ok(engine().paramUndoStack.length === d0 + 1 && useGeneratorStore.getState().tracks === null, 'restated: the fold is one entry and the fit goes with it');
+  engine().undoParam();
+  ok(w().input === input || (w().input.kind === 'gradient' && knotKey((w().input as { config: GradientConfig }).config) === knotKey(T)), 'restated: one Ctrl+Z puts the gradient back');
+
+  // EDITED curves still bake what they draw
+  useGeneratorStore.setState({ tracksEdited: true });
+  const e = deriveWorkingNow()!;
+  ok(!e.restated && knotKey(e.config) === knotKey(refit.config), 'restated: edited curves give the fit of what they draw');
   useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
 }
 

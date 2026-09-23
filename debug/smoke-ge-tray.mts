@@ -29,7 +29,9 @@
  *       the colour picker in it; Esc closes it
  *   [13] and a click on the WALL closes it too, clearing the stop with it — Esc used to be
  *       the only way out (owner, 2026-09-09)
- *   [14] one click leaves the picker for Mix / Curves / Adjust
+ *   [14] one click leaves the picker for Mix / Curves / Adjust — on a PINNED gradient whose
+ *       untouched Curves re-fit paraphrases its stops, so the stop a swatch selects with Curves
+ *       open must survive leaving the face (2026-09-23, see the step)
  *   [15] the Adjust face (owner, 2026-09-13): a text Reseed; Cancel discards the three bins in
  *       one undo step; Apply bakes the adjusted result into the stops, resets the dials and one
  *       Ctrl+Z restores both; nothing leaves its panel at 1024 / 900 / 800 px
@@ -479,17 +481,90 @@ async function main() {
    *
    * Mix / Curves / Adjust only. IMAGE is not a bug when it does not switch: with no image
    * loaded that tab opens the file dialog first and the tray stays where it was, by design.
+   *
+   * THE GRADIENT IS PINNED (2026-09-23). [13]'s wall click lands wherever the catalogue's layout
+   * puts the wall's bottom edge — a tile (a PICK) or not — so [14] used to run on an arbitrary
+   * state: on 2026-09-16 the gradient in play was `03290_jm__ao__ao-b` (the name [17] reported
+   * that day), a Jim Mossman archive gradient the served cpt-city pack no longer has; on
+   * 2026-09-23 the click picked `thamesville-00` as a preview. On that one this step went red at
+   * "could not get back to the inspector before trying mix": the swatch click made with Curves
+   * open selected a knot of the fit's RE-FIT (a paraphrase: two knots a level off, one bias
+   * 0.5 → 0.35), opening the inspector left Curves untouched, the hero's editor got the real
+   * stops back, and its lineage rule (AdvancedGradientEditor, grep `lineageRef`) read that as
+   * another gradient and dropped the stop. Fixed where the paraphrase came from:
+   * `runWorkingPipeline`'s `curvesUntouched`. So the round now runs on a PREVIEW of that gradient
+   * (a `use`, what a wall pick calls), checks the live fit still re-fits to a paraphrase (else the
+   * Curves round proves nothing), and asserts the swatch click out of Curves leaves the gradient
+   * a preview, exactly as it was.
+   *
+   * Falsified 2026-09-23, each reverted: `restated` forced false in `runWorkingPipeline` (the code
+   * before the fix) → red "could not get back to the inspector before trying mix (the swatch click
+   * from an untouched Curves face)"; `useWorkingDerived` alone passing `false` for the flag → the
+   * same red (the node harness cannot see that hook); the setup check handed the re-fit as the
+   * gradient's own stops → red "the re-fit is knot-for-knot the gradient". Before the pin, the
+   * unfixed code on the catalogue's tile gave the same red — that is how it was found — and with
+   * [13]'s click swapped for Escape (no pick: [12]'s edited stops document stays) the unfixed code
+   * PASSED [14], because over a stops document the editor's value never changes in Curves.
    */
+  // Store reads through the module instance the page booted (`__wm`, smoke-ge-wave's helper): a
+  // bare import of an HMR-stamped file is a second, empty store. [14] and [18] use it.
+  const WM = `window.__wm = window.__wm || function (p) {
+    var hit = performance.getEntriesByType('resource').map(function (e) { return e.name; })
+      .filter(function (n) { try { return new URL(n).pathname === p; } catch (e) { return false; } });
+    return import(hit.length ? hit[hit.length - 1] : p);
+  }; true`;
+  const PIN14 = {
+    stops: [
+      { id: 's0', position: 0, color: '#B1D3D3', bias: 0.5, interpolation: 'step' },
+      { id: 's2', position: 0.4411764705882353, color: '#B2D3D1', bias: 0.5, interpolation: 'linear' },
+      { id: 's4', position: 0.4980392156862745, color: '#D2D3AB', bias: 0.5, interpolation: 'linear' },
+      { id: 's3', position: 0.5549019607843137, color: '#F3D385', bias: 0.5, interpolation: 'step' },
+      { id: 's1', position: 1, color: '#F3D385', bias: 0.5, interpolation: 'linear' },
+    ],
+    colorSpace: 'linear',
+    blendSpace: 'oklab',
+  };
+  await page.evaluate(WM);
+  await page.evaluate(`(async function () {
+    var ws = await window.__wm('/palette/store/workingStore.ts');
+    ws.useWorkingStore.getState().use(${JSON.stringify(PIN14)}, '01939_gacruxa__thamesville__thamesville-00', 'Browse');
+  })()`);
+  await page.waitForTimeout(500);
+  const input14 = () => page.evaluate(() => JSON.stringify((window as any).__gxWorking?.()?.input ?? null));
+  const pinned14 = await input14();
+  if ((await chip()).state !== 'preview' || !pinned14.includes('#B2D3D1')) fail(`[14] setup: the pinned gradient is not the working preview (chip ${(await chip()).state})`);
+  let prev14: string | null = null;
   for (const tab of ['adjust', 'curves', 'mix'] as const) {
     await page.locator('[data-gx-hero] button[title*="click to edit its stop"]').first().click();
     await page.waitForTimeout(600);
-    if ((await state(page)).face !== 'inspector') fail(`[14] could not get back to the inspector before trying ${tab}`);
+    if ((await state(page)).face !== 'inspector') fail(`[14] could not get back to the inspector before trying ${tab}${prev14 === 'curves' ? ' (the swatch click from an untouched Curves face)' : ''}`);
+    if (prev14 === 'curves') {
+      // leaving an untouched fit bakes nothing, and neither does the selection that left it
+      if ((await chip()).state !== 'preview' || (await input14()) !== pinned14) fail(`[14] the swatch click out of an untouched Curves face changed the gradient (chip ${(await chip()).state})`);
+    }
     await page.click(`[data-gx-tray-tab="${tab}"]`);
     await page.waitForTimeout(600);
     const got = (await state(page)).face;
     if (got !== tab) fail(`[14] one click on ${tab} from the picker landed on ${got} — it should open ${tab}`);
+    if (tab === 'curves') {
+      // The precondition: the live fit, re-fitted as if it were edited, must NOT give back the
+      // gradient's own knots — else the output never differed and this round proves nothing.
+      const paraphrase = await page.evaluate(`(async function () {
+        var ws = await window.__wm('/palette/store/workingStore.ts');
+        var gs = await window.__wm('/palette/store/generatorStore.ts');
+        var wp = await window.__wm('/palette/core/workingPipeline.ts');
+        var g = gs.useGeneratorStore.getState();
+        var c = ws.useWorkingStore.getState().input.config;
+        if (!c || !g.tracks || g.tracksEdited) return 'no untouched fit (tracks ' + !!g.tracks + ', edited ' + g.tracksEdited + ')';
+        var refit = wp.runWorkingPipeline(wp.channelsOfConfig(c), gs.readAdjustParamsNow(), gs.readSampledCurvesNow(), g.noiseSeed, g.detail, c, [], null, false).config;
+        function k(x) { return JSON.stringify(x.stops.slice().sort(function (a, b) { return a.position - b.position; }).map(function (s) { return [s.id, s.position, s.color, s.bias == null ? 0.5 : s.bias, s.interpolation || 'linear']; })); }
+        return k(refit) !== k(c) ? true : 'the re-fit is knot-for-knot the gradient';
+      })()`);
+      if (paraphrase !== true) fail(`[14] setup: the pinned gradient does not exercise the Curves round — ${paraphrase}`);
+    }
+    prev14 = tab;
   }
-  console.log('✓ [14] one click leaves the picker for Mix / Curves / Adjust — not two');
+  console.log('✓ [14] one click leaves the picker for Mix / Curves / Adjust — not two; a stop picked in an untouched Curves face survives leaving it');
 
   /**
    * [15] THE ADJUST FACE (owner, 2026-09-13): Reseed, Cancel / Apply, and nothing off-panel.
@@ -702,7 +777,9 @@ async function main() {
    * the stop inspector open over it"; treating EVERY incoming value as a different gradient
    * (`lineageRef.current.has(key)` → `false`) → red, but first at [14] ("could not get back to
    * the inspector before trying mix"), so [17] never ran — the same sequence in a scratch probe
-   * dropped the stop at undo 1, which is what [17]'s keep half asserts; dropping the prune of
+   * dropped the stop at undo 1, which is what [17]'s keep half asserts (re-run 2026-09-23, after
+   * the untouched-Curves fix stopped the hero's value changing in [14]: [14] passes and [17] reds
+   * itself, "undo 1 stayed on … but dropped the stop"); dropping the prune of
    * ids the value no longer has → red "[17b] the undo removed the inserted stop but the
    * inspector stayed open".
    */
@@ -798,11 +875,6 @@ async function main() {
    * The picks, tabs, chip and undo are real input; the dials are set through the store, as [7] and
    * [15] set them.
    */
-  const WM = `window.__wm = window.__wm || function (p) {
-    var hit = performance.getEntriesByType('resource').map(function (e) { return e.name; })
-      .filter(function (n) { try { return new URL(n).pathname === p; } catch (e) { return false; } });
-    return import(hit.length ? hit[hit.length - 1] : p);
-  }; true`;
   await page.evaluate(WM);
   type Probe = { passthrough: boolean | null; input: string; kind: string; space: string; tracks: boolean; keys: string; curvesOn: boolean; edited: boolean; ramp: { r: number; g: number; b: number }[]; target: { r: number; g: number; b: number }[] | null };
   // Store reads through the module instance the page booted (`__wm`, smoke-ge-wave's helper): a

@@ -364,7 +364,7 @@ export const deriveWorkingNow = (): WorkingDerivedCore | null => {
   const { base, verbatim } = resolveBaseNow(input);
   if (!base) return null;
   const g = useGeneratorStore.getState();
-  return runWorkingPipeline(base, readAdjustParamsNow(), readSampledCurvesNow(), g.noiseSeed, g.detail, verbatim, input.kind === 'build' ? input.seeds : undefined);
+  return runWorkingPipeline(base, readAdjustParamsNow(), readSampledCurvesNow(), g.noiseSeed, g.detail, verbatim, input.kind === 'build' ? input.seeds : undefined, null, !g.tracksEdited);
 };
 
 // --- prefs ------------------------------------------------------------------------
@@ -438,7 +438,9 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     if (!d) return;
     // Already editing and nothing applied on top: the handles already edit the document.
     if (s.input.kind === 'stops' && d.passthrough) return;
-    foldIntoStops(d.passthrough ? cloneConfig(d.config) : d.config);
+    // `restated`: only an untouched Curves fit is live, so the output IS the input's own config
+    // (not a re-fit of the curves) — fold a copy of it, as for passthrough.
+    foldIntoStops(d.passthrough || d.restated ? cloneConfig(d.config) : d.config);
   },
 
   addStops: () => {
@@ -725,6 +727,8 @@ export const useWorkingDerived = (): WorkingDerived => {
   const curves = useSampledCurves();
   const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
   const detail = useGeneratorStore((s) => s.detail);
+  // an untouched fit hands back the input's own config (see `runWorkingPipeline`)
+  const curvesUntouched = !useGeneratorStore((s) => s.tracksEdited);
   const slotA = useGeneratorStore((s) => s.slotA);
   const slotB = useGeneratorStore((s) => s.slotB);
   const genMode = useEngineStore((s) => (s as any).paletteGenerator?.generatorMode) as number | undefined;
@@ -765,8 +769,8 @@ export const useWorkingDerived = (): WorkingDerived => {
   const dragging = bracketDrag || engineDrag;
   const lastFit = useRef<GradientConfig | null>(null);
   const core = useMemo(
-    () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim, input.kind === 'build' ? input.seeds : undefined, dragging ? lastFit.current : null) : null),
-    [resolved, params, curves, noiseSeed, detail, input, dragging],
+    () => (resolved.base ? runWorkingPipeline(resolved.base, params, curves, noiseSeed, detail, resolved.verbatim, input.kind === 'build' ? input.seeds : undefined, dragging ? lastFit.current : null, curvesUntouched) : null),
+    [resolved, params, curves, noiseSeed, detail, input, dragging, curvesUntouched],
   );
   if (core && !dragging) lastFit.current = core.config;
   const palette = useMemo(() => (core ? swatchesAt(core.ramp, positions) : []), [core, positions]);

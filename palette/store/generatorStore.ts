@@ -150,7 +150,9 @@ interface GeneratorState {
   curveSpace: CurveSpace;
   /** The tracks have been EDITED since they were fitted (a drag, the pencil, the brush, a
    *  key added). An untouched fit is the source restated, so leaving the Curves face with
-   *  it must not bake — it just clears (v2, C.4 follow-up 2026-09-07 evening). */
+   *  it must not bake — it just clears (v2, C.4 follow-up 2026-09-07 evening) — and while it
+   *  is live the working output config is the input's own, not a re-fit (2026-09-23, grep
+   *  `curvesUntouched` in palette/core/workingPipeline.ts). */
   tracksEdited: boolean;
   detail: number;
   smooth: number;
