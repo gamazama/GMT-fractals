@@ -247,8 +247,11 @@ export interface EngineActions extends FeatureSetters, FeatureCustomActions {
 
     // Unsaved-work tracking (H4). isSceneDirty: current state differs from the
     // saved baseline (lastSavedHash). markSceneSaved: set the baseline to now.
+    // markSceneUnsaved: report dirty until the next save or load, whatever the
+    // content — for a scene restored from a copy that had unsaved changes.
     isSceneDirty: () => boolean;
     markSceneSaved: () => void;
+    markSceneUnsaved: () => void;
 
     setDpr: (v: number) => void; 
     setAALevel: (v: number) => void;

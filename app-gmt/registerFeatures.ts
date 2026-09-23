@@ -47,9 +47,10 @@ componentRegistry.register('sky-library', SkyLibrary);
 // Favients (the cross-app gradient-favourites shelf) apply targets for app-gmt: a
 // favourite click/drop lands on a fractal COLORING layer via the gradient seam. These are
 // HOST-group send targets in the shared registry (the panel's "Destination" dropdown lists
-// the host group); the apply payload carries the favourite's GradientConfig.
+// the host group); the apply payload carries the favourite's GradientConfig. Every apply
+// reports to `noteGradientApplied` — what the Explorer button sends (./explorerTrip).
 import { setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
-import { openGradientExplorer } from '../palette/installFavients';
+import { noteGradientApplied, openExplorerFromGmt } from './explorerTrip';
 import { registerSendTarget } from '../store/sendTargetRegistry';
 import type { FavientDragPayload } from '../palette/core/favientDnd';
 import { applyGradientConfig, applyEnvGradient } from '../palette/core/gradientSeam';
@@ -68,19 +69,19 @@ const revealGradientSection = (panel: string, section?: string): void => {
 
 registerSendTarget<FavientDragPayload>({
   id: 'coloring-1', label: 'Coloring · Layer 1', group: 'host',
-  apply: (p) => applyGradientConfig(p.config, 1),
+  apply: (p) => { noteGradientApplied('coloring-1', p); applyGradientConfig(p.config, 1); },
   editsParam: { featureId: 'coloring', paramKey: 'gradient' },
   reveal: () => revealGradientSection('Gradient', 'layer1'),
 });
 registerSendTarget<FavientDragPayload>({
   id: 'coloring-2', label: 'Coloring · Layer 2', group: 'host',
-  apply: (p) => applyGradientConfig(p.config, 2),
+  apply: (p) => { noteGradientApplied('coloring-2', p); applyGradientConfig(p.config, 2); },
   editsParam: { featureId: 'coloring', paramKey: 'gradient2' },
   reveal: () => revealGradientSection('Gradient', 'layer2'),
 });
 registerSendTarget<FavientDragPayload>({
   id: 'env-gradient', label: 'Environment · Sky', group: 'host',
-  apply: (p) => applyEnvGradient(p.config),
+  apply: (p) => { noteGradientApplied('env-gradient', p); applyEnvGradient(p.config); },
   editsParam: { featureId: 'materials', paramKey: 'envGradientStops' },
   reveal: () => revealGradientSection('Shader'),
 });
@@ -91,8 +92,9 @@ setFavientBrowseAction(() => {
   s.setOpen(!s.open);
 });
 
-// Favients header studio button → open the standalone GMT Gradient Explorer app (new tab).
-setFavientStudioAction(openGradientExplorer);
+// Favients header studio button → open the standalone GMT Gradient Explorer app (new tab),
+// carrying the gradient and stashing the scene for the way back (./explorerTrip).
+setFavientStudioAction(openExplorerFromGmt);
 
 // One-time import of the legacy saved-gradient library into Favients (no data loss).
 import { migrateSavedGradientsToFavients } from './favientsMigration';

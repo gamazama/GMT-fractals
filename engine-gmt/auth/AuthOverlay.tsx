@@ -13,7 +13,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { getSupabase } from '../supabase';
 import { useAuthStore } from './authStore';
-import { stashSceneForOAuth } from './oauthSceneStash';
+import { stashLiveScene } from '../utils/stashLiveScene';
 import { Modal, Z, stopNavKeys } from '../../components/ui';
 import { ErrorNote } from '../../components/ErrorNote';
 import { GhostButton } from '../../components/GhostButton';
@@ -138,8 +138,8 @@ export const AuthOverlay: React.FC<Props> = ({ open, onClose }) => {
         setError(null);
         try {
             // OAuth redirects away and reloads the SPA — stash the scene so
-            // the boot path can restore it on return.
-            stashSceneForOAuth();
+            // the boot path can restore it on return (engine-gmt/utils/sceneStash.ts).
+            stashLiveScene('oauth');
             const { error } = await getSupabase().auth.signInWithOAuth({
                 provider: 'google',
                 options: { redirectTo: `${window.location.origin}${window.location.pathname}` },

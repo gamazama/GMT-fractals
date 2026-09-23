@@ -104,7 +104,7 @@ import { registry as gmtRegistry } from '../engine-gmt/engine/FractalRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { getSharedSceneById } from '../engine-gmt/gallery/sharedScene';
 import { showToast } from '../engine/store/toastStore';
-import { consumeStashedScene } from '../engine-gmt/auth/oauthSceneStash';
+import { takeSceneStash, takeGxTripStash, GX_RETURN_QUERY } from '../engine-gmt/utils/sceneStash';
 import type { Preset } from '../types';
 
 import {
@@ -594,7 +594,9 @@ shortcuts.register({
 });
 
 // Resolve the store's boot preset from (in priority order) a #s= share hash, a
-// ?s=<id> backend share link, an OAuth-round-trip stash, or the default formula.
+// ?s=<id> backend share link, the Gradient Explorer trip's stash (`?from=gx` only), an
+// OAuth-round-trip stash, or the default formula. `keepUnsaved`: the scene is a restored
+// copy that had unsaved changes, so the caller marks it unsaved after the load.
 // Mirrors GMT's useAppStartup — populates every DDFS slice so
 // getShaderConfigFromState builds a complete BOOT config.
 //
@@ -605,12 +607,24 @@ shortcuts.register({
 // drops its env map — needing a manual PT toggle + sky-visibility bump to activate.
 // #s= is synchronous so it always wins that race; ?s= is a network fetch, so the
 // caller AWAITS this and defers the React mount until the store is hydrated.
-async function resolveBootPreset(): Promise<any> {
+interface BootChoice { preset: any; keepUnsaved?: boolean }
+
+/** A stashed GMF -> its preset, registering the embedded formula the way a share link does. */
+const presetFromGmf = (gmf: string): any => {
+    const { def, preset } = loadGMFScene(gmf);
+    if (def && !gmtRegistry.get(def.id)) {
+        gmtRegistry.register(def);
+        FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
+    }
+    return preset;
+};
+
+async function resolveBootPreset(): Promise<BootChoice> {
     const hash = typeof window !== 'undefined' ? window.location.hash : '';
     if (hash.startsWith('#s=')) {
         try {
             const p = parseShareString(hash.slice(3));
-            if (p) { console.info('[app-gmt] Loaded scene from share URL'); return p; }
+            if (p) { console.info('[app-gmt] Loaded scene from share URL'); return { preset: p }; }
         } catch (err) {
             console.error('[app-gmt] Share URL parse failed:', err);
         }
@@ -633,7 +647,7 @@ async function resolveBootPreset(): Promise<any> {
                     gmtRegistry.register(def);
                     FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
                 }
-                return preset;
+                return { preset };
             }
             showToast('That share link is invalid or has been removed.', 'warning', 5000);
         } catch (err) {
@@ -642,29 +656,57 @@ async function resolveBootPreset(): Promise<any> {
         }
     }
 
+    // ?from=gx — the Gradient Explorer's "Back to GMT", when it could not close its own tab
+    // and land the user back in the GMT tab they came from (gradient-explorer/v2/fromGmt.ts).
+    // The Explorer button stashed the scene (app-gmt/explorerTrip.ts); restore it ONLY with
+    // this flag, so a reload or a crash never brings a trip's copy back — those stay on the
+    // opt-in autosave. The flag is stripped so a refresh does not ask for the stash again.
+    // A copy that had unsaved changes comes back UNSAVED (keepUnsaved), so the leave-page
+    // prompt still guards it; the sign-in restore below keeps its old behaviour (counts as saved).
+    const trip = takeGxTripStash(window.location.search);
+    if (trip !== undefined) {
+        const cleaned = new URL(window.location.href);
+        cleaned.searchParams.delete(GX_RETURN_QUERY.param);
+        window.history.replaceState({}, '', cleaned.toString());
+        if (trip) {
+            try {
+                const preset = presetFromGmf(trip.gmf);
+                console.info('[app-gmt] Restored the scene stashed for the Gradient Explorer trip');
+                return { preset, keepUnsaved: trip.dirty };
+            } catch (err) {
+                console.error('[app-gmt] Failed to restore the Gradient Explorer trip stash:', err);
+            }
+        }
+        // Deferred until the engine has booted: a toast's timer starts when it is shown, and this
+        // runs before React mounts, so an 8 s toast would expire behind a slow loading screen.
+        const toastWhenBooted = (): void => {
+            if (getProxy().isBooted) showToast('Could not bring your scene back from the Gradient Explorer. If your first GMT tab is still open, the scene is there.', 'warning', 8000);
+            else window.setTimeout(toastWhenBooted, 250);
+        };
+        toastWhenBooted();
+    }
+
     // OAuth round-trips reload the page and lose the in-progress scene.
     // signInWithGoogle stashes it just before redirecting; restore it here.
-    // consumeStashedScene self-expires + clears, so a normal reload won't
+    // takeSceneStash self-expires + clears, so a normal reload won't
     // resurrect a stale scene.
-    const stashedGmf = consumeStashedScene();
-    if (stashedGmf) {
+    const oauth = takeSceneStash('oauth');
+    if (oauth) {
         try {
-            const { def, preset } = loadGMFScene(stashedGmf);
-            if (def && !gmtRegistry.get(def.id)) {
-                gmtRegistry.register(def);
-                FractalEvents.emit(FRACTAL_EVENTS.REGISTER_FORMULA, { id: def.id, shader: def.shader });
-            }
+            const preset = presetFromGmf(oauth.gmf);
             console.info('[app-gmt] Restored scene stashed before OAuth redirect');
-            return preset;
+            return { preset };
         } catch (err) {
             console.error('[app-gmt] Failed to restore OAuth scene stash:', err);
         }
     }
 
     const mandelbulbDef = registry.get('Mandelbulb');
-    return mandelbulbDef?.defaultPreset
-        ? JSON.parse(JSON.stringify(mandelbulbDef.defaultPreset))
-        : null;
+    return {
+        preset: mandelbulbDef?.defaultPreset
+            ? JSON.parse(JSON.stringify(mandelbulbDef.defaultPreset))
+            : null,
+    };
 }
 
 applyPanelManifest([
@@ -742,7 +784,7 @@ if (!rootElement) throw new Error('Could not find root element to mount to');
 // resolveBootPreset). For everything except ?s= this resolves synchronously, so
 // the mount is not delayed; a shared-link open pays a brief pre-loader blank in
 // exchange for a correct first compile instead of a raster/no-sky boot.
-void resolveBootPreset().then((bootPreset) => {
+void resolveBootPreset().then(({ preset: bootPreset, keepUnsaved }) => {
     // A throw here happens BEFORE React mounts, so the root AppErrorBoundary
     // cannot catch it (see its @assumption). Catch it ourselves and hand it in
     // as initialError so the same fallback page shows instead of a blank one.
@@ -752,6 +794,9 @@ void resolveBootPreset().then((bootPreset) => {
             // loadScene fires CAMERA_TELEPORT — installGmtCameraSlice's listener stashes
             // it on proxy.pendingTeleport for GmtRendererTickDriver to replay at boot.
             useEngineStore.getState().loadScene({ preset: bootPreset });
+            // After the load: pre-boot, loadScene runs loadPreset synchronously, and
+            // loadPreset is what clears the flag (grep markSceneUnsaved in store/engineStore.ts).
+            if (keepUnsaved) useEngineStore.getState().markSceneUnsaved();
         } catch (err) {
             console.error('[app-gmt] Boot preset failed to load (pre-mount):', err);
             bootError = err;

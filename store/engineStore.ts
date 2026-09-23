@@ -36,6 +36,10 @@ const engine = getProxy();
 // app is never reported dirty).
 const CAMERA_DIRTY_KEYS = ['cameraRot', 'sceneOffset', 'targetDistance'];
 let _dirtyBaseline: string | null = null;
+// Set by markSceneUnsaved: the scene reports dirty whatever its content, until the next
+// markSceneSaved or loadPreset. For a scene restored from a copy that had unsaved changes —
+// its load would otherwise make it the saved baseline and drop the leave-page prompt.
+let _forcedDirty = false;
 const _contentHashNoCamera = (s: { getPreset: (o?: { includeScene?: boolean }) => unknown }): string => {
     const clone = { ...(s.getPreset({ includeScene: true }) as Record<string, unknown>) };
     delete clone.version; delete clone.name;
@@ -252,13 +256,21 @@ const storeFactory: StateCreator<
     // name}. lastSavedHash is the baseline set on load / export / explicit
     // save; a differing current hash means there are unsaved edits.
     isSceneDirty: () => {
+        if (_forcedDirty) return true;
         if (_dirtyBaseline === null) return false; // no baseline yet (booting) — don't nag
         return _contentHashNoCamera(get()) !== _dirtyBaseline;
     },
 
     // Mark the current (camera-excluded) state as the saved baseline so an
     // explicit Save Scene / Load clears the dirty flag.
-    markSceneSaved: () => { _dirtyBaseline = _contentHashNoCamera(get()); },
+    markSceneSaved: () => { _forcedDirty = false; _dirtyBaseline = _contentHashNoCamera(get()); },
+
+    // Report dirty until the next save or load. Call it AFTER the load that restored
+    // the scene: loadPreset clears it synchronously at its start, and a boot-time
+    // loadScene runs loadPreset synchronously (app-gmt/main.tsx, the `?from=gx` restore).
+    // A coarse flag rather than a carried baseline: undoing every edit afterwards still
+    // reads as unsaved — the safe direction for a leave-page prompt.
+    markSceneUnsaved: () => { _forcedDirty = true; },
 
     setAnimations: (v) => {
         const currentArr = get().animations;
@@ -285,6 +297,8 @@ const storeFactory: StateCreator<
         // and SceneFormat always hands us a fresh deserialized object.
         p = applyMigrations(p) as Preset;
 
+        // A loaded scene starts from its own baseline (set below, after the load settles).
+        _forcedDirty = false;
         get().resetParamHistory();
         set({ formula: p.formula });
         FractalEvents.emit(FRACTAL_EVENTS.CONFIG, { formula: p.formula });

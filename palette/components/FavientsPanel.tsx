@@ -530,7 +530,9 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
       flash('No apply target available here');
       return;
     }
-    activeTarget.apply({ config: fav.config, name: fav.name, source: fav.source });
+    // `favId` says WHICH favourite landed: app-gmt remembers it so the Explorer button can open
+    // the Gradient Explorer on this favourite, shown selected (app-gmt/explorerTrip.ts).
+    activeTarget.apply({ config: fav.config, name: fav.name, source: fav.source, favId: fav.id });
     // Surface WHERE it landed: activate the destination's panel tab + open its section.
     activeTarget.reveal?.();
     flash(`${fav.name} → ${activeTarget.label}`);
