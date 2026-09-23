@@ -181,7 +181,7 @@ featureRegistry.register((await import('../palette/features/paletteFilters')).Pa
 const { registerDocumentProvider } = await import('../store/documentRegistry');
 const { registerHistoryProvider } = await import('../store/slices/historySlice');
 const { captureEditorConfig, applyEditorConfig, usePaletteEditorStore } = await import('../palette/store/paletteEditorStore');
-const { captureGeneratorHistory, restoreGeneratorHistory, useGeneratorStore } = await import('../palette/store/generatorStore');
+const { generatorHistoryProvider, useGeneratorStore } = await import('../palette/store/generatorStore');
 const { serializeGeneratorDocument, restoreGeneratorDocument } = await import('../palette/store/generatorDocument');
 const { installWorking } = await import('../palette/installWorking');
 
@@ -192,7 +192,7 @@ registerDocumentProvider('favients', {
 });
 registerHistoryProvider('paletteEditor', { capture: captureEditorConfig, restore: applyEditorConfig });
 registerDocumentProvider('stops', { serialize: captureEditorConfig, restore: applyEditorConfig });
-registerHistoryProvider('paletteGenerator', { capture: captureGeneratorHistory, restore: restoreGeneratorHistory });
+registerHistoryProvider('paletteGenerator', generatorHistoryProvider);
 registerDocumentProvider('generator', { serialize: serializeGeneratorDocument, restore: restoreGeneratorDocument });
 let imageDoc: JsonValue = { src: null };
 registerDocumentProvider('image', { serialize: () => imageDoc, restore: (s) => { imageDoc = s; } });

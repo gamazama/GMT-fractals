@@ -45,7 +45,9 @@
  *       still open with Apply / Cancel off, one Ctrl+Z restores the gradient AND its dials; (e) the
  *       same after "return to source" put a dial back live with the face closed; (c) Curves open
  *       in HSV, a pick → the face stays, refitted to the NEW gradient in OkLCh, one Ctrl+Z restores
- *       the old gradient's HSV curves
+ *       the old gradient's HSV curves; (d) 2026-09-24: curves EDITED by a real double-click, a pick,
+ *       Ctrl+Z → the edits come back AS EDITED, Ctrl+Y → the pick's untouched fit, Ctrl+Z, and closing
+ *       the face BAKES them (`tracksEdited` rides the undo capture — see the step for its falsification)
  *
  * [18] falsified 2026-09-23 in `palette/store/workingStore.ts` `use`, each reverted: the reset
  * back under `if (opts?.bakes)` (the code before the fix) → [18a] red ("kept Adjust dials …
@@ -876,7 +878,7 @@ async function main() {
    * [15] set them.
    */
   await page.evaluate(WM);
-  type Probe = { passthrough: boolean | null; input: string; kind: string; space: string; tracks: boolean; keys: string; curvesOn: boolean; edited: boolean; ramp: { r: number; g: number; b: number }[]; target: { r: number; g: number; b: number }[] | null };
+  type Probe = { passthrough: boolean | null; restated: boolean | null; curves: string; input: string; kind: string; space: string; tracks: boolean; keys: string; curvesOn: boolean; edited: boolean; ramp: { r: number; g: number; b: number }[]; target: { r: number; g: number; b: number }[] | null };
   // Store reads through the module instance the page booted (`__wm`, smoke-ge-wave's helper): a
   // bare import of an HMR-stamped file is a second, empty store.
   const probe = () => page.evaluate(`(async function () {
@@ -887,7 +889,7 @@ async function main() {
     var g = gs.useGeneratorStore.getState();
     var input = ws.useWorkingStore.getState().input;
     return {
-      passthrough: d ? d.passthrough : null, input: JSON.stringify(input), kind: input.kind,
+      passthrough: d ? d.passthrough : null, restated: d ? d.restated : null, curves: JSON.stringify(g.tracks), input: JSON.stringify(input), kind: input.kind,
       space: g.curveSpace, tracks: !!g.tracks, keys: Object.keys(g.tracks || {}).sort().join(','), curvesOn: g.curvesOn, edited: g.tracksEdited,
       ramp: d ? d.ramp.map(function (c) { return { r: c.r, g: c.g, b: c.b }; }) : [],
       target: input.kind === 'gradient' ? cu.gradientDisplayRamp(input.config).map(function (c) { return { r: c.r, g: c.g, b: c.b }; }) : null
@@ -1036,6 +1038,75 @@ async function main() {
   await page.waitForTimeout(400);
   await page.setViewportSize({ width: 1280, height: 800 });
   console.log(`✓ [18c] Curves open, pick: refitted to the new gradient in OkLCh (mean ${toNewC.toFixed(1)} levels from it, ${toOldC.toFixed(1)} from the old output), the face open; one Ctrl+Z restores the old curves`);
+
+  /**
+   * [18d] UNDO BRINGS EDITED CURVES BACK AS EDITED (2026-09-24). `tracksEdited` was not in the
+   * generator's undo capture: edit the curves, pick another gradient (its `use` refits and clears
+   * the flag), Ctrl+Z — the edits came back reading as an UNTOUCHED fit, so closing the face
+   * cleared them instead of baking them (and the output was the input's own stops, so the edits
+   * did not even reach it). All real input: a double-click on the plot adds a key (the edit), a
+   * wall click picks, Ctrl+Z / Ctrl+Y, the Curves tab closes the face. Falsified 2026-09-24 with
+   * `tracksEdited` dropped from `captureGeneratorHistory` (the code before the fix): red "came back
+   * reading as untouched (edited false, restated true)"; and with that check and the second Ctrl+Z's
+   * switched off, the bake check reds on its own — "did not bake the edits (chip preview, worst 28.8
+   * levels from the edit, 2.9 from the gradient without it)": the bug, seen from the user's side.
+   */
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  await page.waitForTimeout(500);
+  await page.click('[data-gx-tray-tab="curves"]');
+  await page.waitForSelector('[data-gx-tool="wave"]', { timeout: 8000 }).catch(() => fail('[18d] setup: the Curves face has no graph tools'));
+  await page.waitForTimeout(400);
+  const plainD = await probe();
+  if (!plainD.tracks || plainD.edited) fail(`[18d] setup: the Curves face did not open on an untouched fit (tracks ${plainD.tracks}, edited ${plainD.edited})`);
+  const worst = (a: { r: number; g: number; b: number }[], b: { r: number; g: number; b: number }[]) => {
+    let m = 0;
+    for (let i = 0; i < Math.min(a.length, b.length); i++) m = Math.max(m, Math.abs(a[i].r - b[i].r), Math.abs(a[i].g - b[i].g), Math.abs(a[i].b - b[i].b));
+    return a.length && a.length === b.length ? m : Infinity;
+  };
+  // THE EDIT: a double-click on the plot adds a key on the active channel where it lands. Top of
+  // the plot first; if the curve happens to pass there, undo it and try the bottom.
+  const plotD = await page.evaluate(() => {
+    const col = document.querySelector('[data-gx-tool="wave"]')?.parentElement?.parentElement;
+    const r = col?.getBoundingClientRect();
+    return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+  });
+  if (!plotD) fail('[18d] setup: could not find the Curves plot');
+  let editedD: Probe | null = null;
+  for (const y of [plotD!.y + 45, plotD!.y + plotD!.h - 30]) {
+    await page.mouse.dblclick(plotD!.x + plotD!.w * 0.72, y);
+    await page.waitForTimeout(400);
+    const p = await probe();
+    if (p.edited && worst(p.ramp, plainD.ramp) >= 20) { editedD = p; break; }
+    await page.mouse.move(640, 20);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+  }
+  if (!editedD) fail('[18d] setup: a double-click on the plot did not edit the curves visibly');
+  const d = editedD!;
+  const pickedD = await pickAnother('(d)');
+  if ((await faceNow()) !== 'curves' || pickedD.edited || !pickedD.tracks) fail(`[18d] setup: the pick did not refit the open Curves face untouched (face ${await faceNow()}, edited ${pickedD.edited})`);
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(600);
+  const undoneD = await probe();
+  if (undoneD.input !== d.input || undoneD.curves !== d.curves) fail('[18d] one Ctrl+Z after the pick did not bring the gradient back with its edited curves');
+  if (!undoneD.edited || undoneD.restated) fail(`[18d] the edited curves came back reading as untouched (edited ${undoneD.edited}, restated ${undoneD.restated}) — closing the face would discard them`);
+  await page.keyboard.press('Control+y');
+  await page.waitForTimeout(600);
+  const redoneD = await probe();
+  if (redoneD.input !== pickedD.input || redoneD.curves !== pickedD.curves || redoneD.edited) fail(`[18d] Ctrl+Y did not bring the pick back with its fresh, untouched fit (same pick ${redoneD.input === pickedD.input}, same fit ${redoneD.curves === pickedD.curves}, edited ${redoneD.edited})`);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(600);
+  if (!(await probe()).edited) fail('[18d] the second Ctrl+Z brought the edits back reading as untouched');
+  // Close the face by its tab: edited curves BAKE (the chip says so, the ramp keeps the edit).
+  await page.click('[data-gx-tray-tab="curves"]');
+  await page.waitForTimeout(600);
+  const closedD = await probe();
+  const toEditD = worst(closedD.ramp, d.ramp);
+  const toPlainD = worst(closedD.ramp, plainD.ramp);
+  if ((await chip()).state !== 'edited' || !(toEditD * 2 < toPlainD)) fail(`[18d] closing the face after the undo did not bake the edits (chip ${(await chip()).state}, worst ${toEditD.toFixed(1)} levels from the edit, ${toPlainD.toFixed(1)} from the gradient without it)`);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  console.log(`✓ [18d] edit the curves, pick, Ctrl+Z: the edits come back AS EDITED, Ctrl+Y brings the pick's untouched fit, and closing the face bakes them (worst ${toEditD.toFixed(1)} levels from the edit, ${toPlainD.toFixed(1)} from without it)`);
 
   await browser.close();
   if (errors.length) {

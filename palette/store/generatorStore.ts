@@ -152,7 +152,8 @@ interface GeneratorState {
    *  key added). An untouched fit is the source restated, so leaving the Curves face with
    *  it must not bake — it just clears (v2, C.4 follow-up 2026-09-07 evening) — and while it
    *  is live the working output config is the input's own, not a re-fit (2026-09-23, grep
-   *  `curvesUntouched` in palette/core/workingPipeline.ts). */
+   *  `curvesUntouched` in palette/core/workingPipeline.ts). It rides the undo capture WITH the
+   *  tracks, but never makes an entry on its own (2026-09-24, grep `generatorChangeOf`). */
   tracksEdited: boolean;
   detail: number;
   smooth: number;
@@ -514,14 +515,46 @@ export const useColorBoxParams = (): ColorBoxParams => {
  * is captured by the engine snapshot already). Registered in registerPaletteUI so the
  * param undo stack restores curves + slot selection + curve-fit dials. Tracks are plain
  * JSON (Keyframe[] objects) so the snapshot's structuredClone-via-JSON is lossless.
+ *
+ * `tracksEdited` RIDES WITH THE TRACKS (2026-09-24). It was left out of the capture — not by a
+ * decision anyone wrote down — so an undo that brought back EDITED curves (edit, pick another
+ * gradient, Ctrl+Z) left the flag the pick had reset: the curves read as an untouched fit,
+ * leaving the Curves face cleared them instead of baking them, and the output was the input's
+ * own config (`curvesUntouched` in palette/core/workingPipeline.ts) so the edits did not even
+ * show in it. Redo had the mirror fault: a fresh fit brought back reading as edited.
+ *
+ * But the flag must not MAKE an entry: a cancelled Curves wave writes the tracks back unchanged
+ * and flips the flag on the way (`setTracks` sets it), and an entry holding that flip alone is
+ * exactly what smoke:ge-wave [7] / [7b] / [7c] forbid. So the provider declares
+ * {@link generatorChangeOf} — the capture minus the flag — as what decides whether a bracket
+ * changed anything, and every entry that is pushed still stores and restores the flag.
+ *
+ * @invariant an undo or redo that puts curves back puts back the `tracksEdited` they had, and
+ *   a bracket whose only change is that flag pushes no entry — proven by: `npx tsx
+ *   debug/test-palette-working.mts` [15] ("edit → pick → Ctrl+Z: the edited curves come back AS
+ *   EDITED", "… → Ctrl+Y: B's fresh fit comes back untouched", "a gesture that writes the curves
+ *   back unchanged leaves NO undo entry") and `npm run smoke:ge-tray` [18d] ("the edited curves
+ *   came back reading as untouched", "closing the face after the undo did not bake the edits").
+ *   Falsified 2026-09-24: the flag dropped from the capture → 9 red in [15] and [18d] red; the
+ *   provider registered without `changeOf`, `changeOf` returning the whole capture, and the
+ *   history slice comparing raw captures → each 1 red, [15]'s no-entry check.
  */
 export const captureGeneratorHistory = () => {
   const s = useGeneratorStore.getState();
-  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, curveSpace: s.curveSpace, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed };
+  return { slotA: s.slotA, slotB: s.slotB, tracks: s.tracks, curvesOn: s.curvesOn, curveSpace: s.curveSpace, tracksEdited: s.tracksEdited, detail: s.detail, smooth: s.smooth, noiseSeed: s.noiseSeed };
 };
 export const restoreGeneratorHistory = (snap: unknown): void => {
   useGeneratorStore.setState({ ...(snap as Partial<ReturnType<typeof captureGeneratorHistory>>) });
 };
+/** The generator capture minus `tracksEdited` — the provider's `changeOf` (see the history
+ *  slice's `HistoryProvider`): the flag is restored with an entry, never the reason for one. */
+export const generatorChangeOf = (snap: unknown): unknown => {
+  if (!snap || typeof snap !== 'object') return snap;
+  const { tracksEdited: _flag, ...rest } = snap as Record<string, unknown>;
+  return rest;
+};
+/** The one registration (registerPaletteUI, and the node harnesses that mirror it). */
+export const generatorHistoryProvider = { capture: captureGeneratorHistory, restore: restoreGeneratorHistory, changeOf: generatorChangeOf };
 
 /**
  * Resolve a slot to its 256-RGB ramp + display name — the CATALOG-INDEPENDENT

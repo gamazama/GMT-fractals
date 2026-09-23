@@ -55,6 +55,22 @@ export type UndoScope = 'param' | 'camera';
 export interface HistoryProvider {
     capture: () => unknown;
     restore: (snapshot: unknown) => void;
+    /**
+     * OPTIONAL: the part of a capture that decides whether a bracket CHANGED anything. Absent,
+     * it is the whole capture. For state that must come back WITH an entry but must never make
+     * one on its own: a bracket that differs only outside this view pushes nothing (exactly as
+     * if that state were not captured), while an entry that IS pushed stores the whole capture,
+     * so undo and redo restore it. Must be a pure function of a capture (it is handed both the
+     * stored clone and a live capture).
+     *
+     * First user: the palette generator's `tracksEdited` flag (grep `generatorChangeOf` in
+     * palette/store/generatorStore.ts), which rides back with the curves it describes, while a
+     * gesture that writes the curves back unchanged (a cancelled Curves wave) stays no entry.
+     * Guarded through that user: `npx tsx debug/test-palette-working.mts` [15] ("a gesture that
+     * writes the curves back unchanged leaves NO undo entry") goes red when the diff below
+     * compares raw captures instead (falsified 2026-09-24).
+     */
+    changeOf?: (snapshot: unknown) => unknown;
 }
 const EXT_PREFIX = '__ext__';
 const _historyProviders = new Map<string, HistoryProvider>();
@@ -157,6 +173,14 @@ const readSnapshotKey = (k: string, current: EngineStoreState): unknown =>
         ? _historyProviders.get(k.slice(EXT_PREFIX.length))?.capture()
         : (current as any)[k];
 
+/** What the end-of-transaction diff compares for a key: an ext key whose provider declares
+ *  `changeOf` is compared through it; everything else as it is. */
+const changeView = (k: string, v: unknown): unknown => {
+    if (!k.startsWith(EXT_PREFIX) || v === undefined) return v;
+    const p = _historyProviders.get(k.slice(EXT_PREFIX.length));
+    return p?.changeOf ? p.changeOf(v) : v;
+};
+
 const captureStateForKeys = (keys: string[], current: EngineStoreState): Partial<EngineStoreState> => {
     const snap: Partial<EngineStoreState> = {};
     for (const k of keys) {
@@ -244,7 +268,9 @@ export const createHistorySlice: StateCreator<
             // fields — reading `current[k]` for them would be undefined and make the key
             // compare unequal on EVERY bracket (a spurious undo entry for no-op gestures).
             const curr = readSnapshotKey(k, current);
-            if (JSON.stringify(prev) !== JSON.stringify(curr)) {
+            // `changeView`: a provider's `changeOf` can leave part of its capture out of this
+            // test (it still rides in `prev`, so undo restores it).
+            if (JSON.stringify(changeView(k, prev)) !== JSON.stringify(changeView(k, curr))) {
                 (diff as any)[k] = prev;
                 hasChanges = true;
             }

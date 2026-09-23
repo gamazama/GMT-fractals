@@ -50,6 +50,22 @@
  *      edited curves or a moved dial still fit; through the stores, `deriveWorkingNow`, Recent and
  *      `beginEdit` all see the gradient's own stops, the fold is a copy and one undo entry.
  *
+ * `tracksEdited` rides back with the curves, added 2026-09-24 (it was not in the undo capture):
+ *  15. through the real stores, with the provider registered as registerPaletteUI registers it:
+ *      (a) edit → Ctrl+Z gives the fit back untouched, Ctrl+Y the edits as edited; (b) THE GAP —
+ *      edit → pick (the face open) → Ctrl+Z: the edits come back AS EDITED, the output is their
+ *      fit (not `restated`), the shell's leave rule takes the bake branch and `beginEdit` folds the
+ *      edits; (c) redo brings the pick's fresh fit back UNTOUCHED with the flag set just before it;
+ *      (d) the wave's shape (preview, write back, close) flips the flag and leaves NO entry.
+ *
+ * ── FALSIFIED 2026-09-24 (section [15]) — each break made, run red (exit 1), reverted ──
+ *   T1  `tracksEdited` dropped from `captureGeneratorHistory` (the code before the fix) → 9 red:
+ *       every flag / `restated` / bake check in (a)–(c) except the two whose stale value happens to
+ *       be the right one. (d) stays green — it is T2–T4's.
+ *   T2  the provider registered without `changeOf` → 1 red, (d) "(got 1)".
+ *   T3  `generatorChangeOf` returning the whole capture → 1 red, (d).
+ *   T4  historySlice's end-of-transaction diff comparing raw captures (no `changeView`) → 1 red, (d).
+ *
  * ── FALSIFIED 2026-09-23 (section [14]) — each break made, run red (exit 1), reverted ──
  *   R1  `restated` forced false in `runWorkingPipeline` (the code before the fix) → 4 red: the
  *       pure "hands back the input's own config", the store flag, Recent ("#B2D3D0" bias 0.35 in
@@ -342,10 +358,10 @@ featureRegistry.register((await import('../palette/features/paletteImage')).Pale
 featureRegistry.register((await import('../palette/features/paletteFilters')).PaletteFiltersFeature);
 const { registerHistoryProvider } = await import('../store/slices/historySlice');
 const { captureEditorConfig, applyEditorConfig, usePaletteEditorStore } = await import('../palette/store/paletteEditorStore');
-const { captureGeneratorHistory, restoreGeneratorHistory, useGeneratorStore, fitChannelsToTracks, sampleCurves } = await import('../palette/store/generatorStore');
+const { generatorHistoryProvider, useGeneratorStore, fitChannelsToTracks, sampleCurves } = await import('../palette/store/generatorStore');
 const { DEFAULT_CURVE_SPACE } = await import('../palette/core/curveSpaces');
 registerHistoryProvider('paletteEditor', { capture: captureEditorConfig, restore: applyEditorConfig });
-registerHistoryProvider('paletteGenerator', { capture: captureGeneratorHistory, restore: restoreGeneratorHistory });
+registerHistoryProvider('paletteGenerator', generatorHistoryProvider); // exactly as registerPaletteUI registers it
 const { installWorking } = await import('../palette/installWorking');
 const collected: GradientConfig[] = [];
 const updates: GradientConfig[] = [];
@@ -691,6 +707,94 @@ console.log('[14] an untouched Curves fit hands back the gradient itself');
   useGeneratorStore.setState({ tracksEdited: true });
   const e = deriveWorkingNow()!;
   ok(!e.restated && knotKey(e.config) === knotKey(refit.config), 'restated: edited curves give the fit of what they draw');
+  useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
+}
+
+// ══ [15] `tracksEdited` rides back with the curves it describes (2026-09-24) ══════════════
+// It was not in the generator's undo capture: edit the curves, pick another gradient (its `use`
+// resets the flag in the same bracket that resets the curves), Ctrl+Z — the EDITED curves came
+// back reading as UNTOUCHED, so leaving the Curves face cleared them instead of baking, and the
+// output was the input's own config ([14]'s `restated`), not the edits. The flag rides in the
+// capture now; the provider's `changeOf` keeps it from ever making an entry on its own (a
+// cancelled wave writes the curves back unchanged and flips it on the way).
+console.log('[15] undo / redo put the curves back WITH the edited flag they had');
+{
+  const { deriveWorkingNow } = await import('../palette/store/workingStore');
+  const { genEditStart, genEditEnd } = await import('../palette/store/generatorStore');
+  const w = () => useWorkingStore.getState();
+  const g = () => useGeneratorStore.getState();
+  const depth = (): number => engine().paramUndoStack.length;
+  const tracksKey = (): string => JSON.stringify(g().tracks);
+  const knotKey = (c: GradientConfig | null | undefined) =>
+    JSON.stringify([...(c?.stops ?? [])].sort((a, b) => a.position - b.position).map((s) => [s.position, s.color.toUpperCase(), s.bias ?? 0.5, s.interpolation ?? 'linear']));
+  const two = (a: string, b: string): GradientConfig => ({ stops: [{ id: 'a', position: 0, color: a }, { id: 'b', position: 1, color: b }], colorSpace: 'srgb', blendSpace: 'oklab' });
+  const A = two('#1B2A6B', '#F2B134');
+  const B = two('#E4572E', '#17BEBB');
+  useGeneratorStore.setState({ detail: 8, smooth: 0 });
+
+  // The Curves face open on A: the untouched fit it makes on entry.
+  w().use(A, 'A', 'Browse', { fitCurves: true });
+  const fitA = tracksKey();
+  ok(!!g().tracks && !g().tracksEdited, 'fixture: the Curves face opens on A with an untouched fit');
+  /** An edit as the editor makes one: `setTracks` (which sets the flag) inside a drag bracket. */
+  const darkerOf = (t: NonNullable<ReturnType<typeof g>['tracks']>) => ({ ...t, L: { ...t.L, keyframes: t.L.keyframes.map((k) => ({ ...k, value: k.value * 0.6 })) } });
+  const edit = (): void => { genEditStart(); g().setTracks(darkerOf(g().tracks!)); genEditEnd(); };
+  const dE0 = depth();
+  edit();
+  const editedKey = tracksKey();
+  const dEdit = deriveWorkingNow()!;
+  ok(depth() === dE0 + 1 && g().tracksEdited, `fixture: the edit is one entry and marks the curves edited (${depth() - dE0} entries, edited ${g().tracksEdited})`);
+  ok(!dEdit.restated && knotKey(dEdit.config) !== knotKey(A), 'fixture: the edited curves draw a gradient that is not A (else nothing below can fail)');
+
+  // (a) the edit alone: Ctrl+Z gives the fit back UNTOUCHED (before, the flag stayed set, so the
+  // untouched fit read as edited and leaving the face baked a lossy re-fit of it); Ctrl+Y the edits.
+  engine().undoParam();
+  ok(tracksKey() === fitA && g().tracksEdited === false, `edit → Ctrl+Z: the untouched fit comes back untouched (tracksEdited ${g().tracksEdited})`);
+  engine().redoParam();
+  ok(tracksKey() === editedKey && g().tracksEdited === true, `edit → Ctrl+Z → Ctrl+Y: the edits come back as edited (tracksEdited ${g().tracksEdited})`);
+
+  // (b) THE BUG: pick another gradient with the face open (its `use` refits, untouched), Ctrl+Z.
+  const dP0 = depth();
+  w().use(B, 'B', 'Browse', { fitCurves: true });
+  const fitB = tracksKey();
+  ok(depth() === dP0 + 1 && !!g().tracks && !g().tracksEdited && fitB !== editedKey, 'fixture: the pick is one entry and refits the curves to B, untouched');
+  engine().undoParam();
+  ok(w().input.kind === 'gradient' && knotKey((w().input as { config: GradientConfig }).config) === knotKey(A) && tracksKey() === editedKey, 'edit → pick → Ctrl+Z: A is back with the edited curves');
+  ok(g().tracksEdited === true, `edit → pick → Ctrl+Z: the edited curves come back AS EDITED (tracksEdited ${g().tracksEdited})`);
+  const dBack = deriveWorkingNow()!;
+  ok(!dBack.restated && knotKey(dBack.config) === knotKey(dEdit.config), `edit → pick → Ctrl+Z: the output is the edits again, not A's own stops (restated ${dBack.restated})`);
+  // Leaving the face: the shell (GradientExplorerV2App `openTray`) CLEARS an untouched fit and
+  // BAKES anything else through `beginEdit`. It must be the bake, and the bake must be the edits.
+  ok(!(g().tracks && !g().tracksEdited), 'edit → pick → Ctrl+Z: leaving the Curves face takes the bake branch (the shell clears only an untouched fit)');
+  w().beginEdit();
+  const doc = usePaletteEditorStore.getState().config;
+  ok(w().input.kind === 'stops' && knotKey(doc) === knotKey(dEdit.config), `edit → pick → Ctrl+Z → leave: the bake folds the EDITS into the stops, not A as it was (${doc.stops.length} stops)`);
+  engine().undoParam(); // the bake
+  ok(tracksKey() === editedKey && g().tracksEdited, 'undoing that bake: the edited curves, as edited');
+
+  // (c) REDO, the mirror: the pick's fresh fit comes back untouched and B shows as itself. The flag
+  // is set just before the Ctrl+Y (an edit on B, undone, then the pick undone), so a redo that
+  // left it alone could not pass by accident.
+  w().use(B, 'B', 'Browse', { fitCurves: true });
+  edit();
+  engine().undoParam();
+  ok(tracksKey() === fitB && g().tracksEdited === false, `pick → edit → Ctrl+Z: B's fit comes back untouched (tracksEdited ${g().tracksEdited})`);
+  engine().undoParam();
+  ok(tracksKey() === editedKey && g().tracksEdited === true, '… → Ctrl+Z: A with its edits, as edited');
+  engine().redoParam();
+  ok(tracksKey() === fitB && g().tracksEdited === false, `… → Ctrl+Y: B's fresh fit comes back untouched (tracksEdited ${g().tracksEdited})`);
+  const dRedo = deriveWorkingNow()!;
+  ok(dRedo.restated && knotKey(dRedo.config) === knotKey(B), `… → Ctrl+Y: the output is B's own stops, not a re-fit of its curves (restated ${dRedo.restated})`);
+
+  // (d) The flag never makes an entry on its own: the wave's shape — open, preview a change, write
+  // the curves back, close. The curves are what they were; `setTracks` flipped the flag anyway.
+  const dW0 = depth();
+  genEditStart();
+  g().setTracks(darkerOf(g().tracks!));
+  g().setTracks(JSON.parse(fitB));
+  genEditEnd();
+  ok(tracksKey() === fitB && depth() === dW0, `a gesture that writes the curves back unchanged leaves NO undo entry (got ${depth() - dW0})`);
+
   useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
 }
 

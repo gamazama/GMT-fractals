@@ -35,7 +35,7 @@ import { FavientsPanel } from './components/FavientsPanel';
 import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
 import { StopsDockPanel } from './components/StopsDockPanel';
 import { useFavientsStore, captureFavientsHistory, restoreFavientsHistory } from './store/favientsStore';
-import { captureGeneratorHistory, restoreGeneratorHistory, useGeneratorStore } from './store/generatorStore';
+import { generatorHistoryProvider, useGeneratorStore } from './store/generatorStore';
 import { captureEditorConfig, applyEditorConfig } from './store/paletteEditorStore';
 import { serializeFavientsDocument, restoreFavientsDocument } from './store/favientsDocument';
 import { serializeGeneratorDocument, restoreGeneratorDocument } from './store/generatorDocument';
@@ -136,8 +136,9 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
 
   // The generator's non-DDFS state (curve Track[], slot selection, fit dials) lives in
   // its own store, so register it as a PARAM-undo history provider — curves + slots now
-  // ride Ctrl+Z alongside the DDFS dials. Idempotent (Map keyed by id).
-  registerHistoryProvider('paletteGenerator', { capture: captureGeneratorHistory, restore: restoreGeneratorHistory });
+  // ride Ctrl+Z alongside the DDFS dials. Idempotent (Map keyed by id). The provider carries a
+  // `changeOf` so `tracksEdited` rides back with the curves without ever making an entry alone.
+  registerHistoryProvider('paletteGenerator', generatorHistoryProvider);
 
   // The favients shelf is a plain zustand store + localStorage (no engine-store
   // mirror), so register it as a PARAM-undo history provider too — favourite
