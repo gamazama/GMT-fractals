@@ -643,6 +643,13 @@ async function main() {
   if (!coreCredits) fail('[11] About links no credits file for the core pack');
   const creditsBody = await dpage.evaluate(async (u) => { const r = await fetch(u); return r.ok ? (await r.text()).slice(0, 400) : `HTTP ${r.status}`; }, coreCredits!);
   if (!/^Core pack — credits and licences/.test(creditsBody)) fail(`[11] the core credits link does not open the credits file (${creditsBody.slice(0, 60)})`);
+  // The two lines the release's licensing posture rests on (owner, 2026-09-23): the built-in
+  // presets' sources, and the takedown path. Neither is a catalogue bundle, so the attribution
+  // list above never shows them.
+  const presetsLine = (await dpage.locator('[data-gx-about-presets]').textContent().catch(() => null)) ?? '';
+  if (!/CARTOColors[\s\S]*ColorBrewer[\s\S]*Turbo/.test(presetsLine)) fail(`[11] About does not credit the built-in presets' sources (${presetsLine.slice(0, 60)})`);
+  const takedownLine = (await dpage.locator('[data-gx-about-takedown]').textContent().catch(() => null)) ?? '';
+  if (!/removed/.test(takedownLine)) fail('[11] About has no line saying how to ask for a gradient to be credited differently or removed');
   // What's New: opens GX's changelog and clears the dot
   await helpRow("What's New").click();
   const wnOk = await dpage.waitForFunction(`document.body.innerText.indexOf('the new Gradient Explorer') >= 0`, null, { timeout: 8000 }).then(() => true).catch(() => false);

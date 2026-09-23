@@ -651,3 +651,23 @@ list is unchanged, so the function deploy steps above stand as written.
 **Still open for the owner:** the Cloudflare purge after upload; the git-history question; the
 Softology `kuler` / `colorschemer` / `coolors` families and the CC BY-SA sets; `.ggr` / `.gpl`
 names.
+
+---
+
+## Owner decision, 2026-09-23 — the release posture
+
+GX 2.0.0 is a casual open-source release: on gmt-fractals.com, not marketed. The owner chose the
+minimum defensible posture over a legal review:
+
+- **Kept as live:** per-source credits (About, the `credits.<pack>.*` files, the category names);
+  the non-commercial pack off by default; the no-redistribute sets never shipped.
+- **Added:** a credit line in GX's About for the built-in presets (CARTOColors CC BY 4.0 — six
+  of the twenty seeds are exact CARTOColors palettes; ColorBrewer Apache-2.0 — "Rainbow
+  Divergent" is Spectral; Google's Turbo Apache-2.0), and a takedown line (credit differently or
+  remove on request, via Send Feedback or a GitHub issue). Guarded in `smoke:ge-phone` [11].
+- **Closed without action:** the Softology families with unverified terms (kuler 130,
+  colorschemer 48, coolors 31) and the possibly-GFDL Nevit Dilmen set stay, covered by the
+  takedown path; CC BY-SA share-alike falls on whoever redistributes an edited copy and the
+  credits state the licence; GPLv2-only sets ship as separately licensed data beside GPL-3.0 code;
+  §7's twelve questions are not taken to a lawyer; §7 q11 (old blobs in git history) — no rewrite.
+- **Revisit if** the Explorer gets real traffic, a rights holder writes in, or it is ever sold.

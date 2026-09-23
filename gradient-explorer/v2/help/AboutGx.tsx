@@ -97,6 +97,23 @@ export const AboutGxBody: React.FC<{ onWhatsNew?: () => void }> = ({ onWhatsNew 
             ))}
           </p>
         )}
+        {/* The built-in presets are not a catalogue bundle, so the list above never credits them.
+            Six of the twenty seeds are CARTOColors palettes, Turbo is Google's and "Rainbow
+            Divergent" is ColorBrewer Spectral (found 2026-09-16, plans/gx-first-release-gaps.md). */}
+        <p className="text-[9px] text-fg-dim mt-1.5" data-gx-about-presets="">
+          The built-in presets use colours from{' '}
+          <a href="https://carto.com/carto-colors/" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">CARTOColors</a>{' '}
+          (CC BY 4.0),{' '}
+          <a href="https://colorbrewer2.org/" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">ColorBrewer</a>{' '}
+          (Apache-2.0) and Google's Turbo (Apache-2.0).
+        </p>
+        {/* The takedown path (owner, 2026-09-23: the minimum for a casual open-source release —
+            credit everything, and remove on request rather than audit every source up front). */}
+        <p className="text-[9px] text-fg-dim mt-1.5" data-gx-about-takedown="">
+          If a gradient here is yours and you would like it credited differently or removed, tell us
+          with Send Feedback, or{' '}
+          <a href="https://github.com/gamazama/GMT-fractals/issues" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">open an issue on GitHub</a>.
+        </p>
       </div>
 
       <div className="flex flex-col gap-1 pt-2 border-t border-line/10">
