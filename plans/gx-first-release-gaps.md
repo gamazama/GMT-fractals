@@ -15,7 +15,7 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
 
 ## 1. Release work (no owner decision needed)
 
-- [~] **Entry-point swap — PREPARED on branch `gx-entry-swap`, not merged** (worktree
+- [x] **Entry-point swap — MERGED 2026-09-23 (`79b88b16`)** after the owner's walk; ADR-0125 (the alias) + updates to ADR-0014 / ADR-0121 (`f79865d0`). Originally prepared on branch `gx-entry-swap` (worktree
   `.claude/worktrees/agent-a0cf40a624c1fd8bf`, based on `39f2e74b`). Six commits:
   `gradient-explorer.html` loads v2; `gradient-explorer-next.html` is a byte-identical alias
   (guard `test:gx-share` [4]) so old `?g=` links keep working, new links are written on the
@@ -61,16 +61,16 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
 
 ## 2. Decisions owed by the owner
 
-1. **Merge the swap?** Review `git log main..gx-entry-swap`, walk it, then merge (resolve `package.json`).
+1. ~~Merge the swap?~~ **Done 2026-09-23** — walked by the owner (GMT and Fluid Toy openers, old links), merged `79b88b16`.
    The alias for `gradient-explorer-next.html` is built in, as recommended.
-2. **Liquify** — ship with `wip: true` banner, hide, or finish.
-3. **Group-by shape** — in this release or after? Never placed in a release queue.
+2. ~~Liquify~~ **Owner 2026-09-23: ships as is**, `wip: true` banner and all.
+3. ~~Group-by shape~~ **After this release** (recommended 2026-09-23, not objected to): new work, never in a release queue.
 4. **Parity rows without a decision:** theme chips (B3), new gradient from nothing (M10), export
    text preview (O4), drop overlay / "reading image…" (M8), "N stops" readout (E10b), landing
    morph (N2), Mix past 0..1 (M5); M11, B13, B7 unrecorded.
-5. **Name** — competitors §7 wants it settled before a standalone launch.
-6. **Version** — `GX_VERSION = '2.0.0-preview.2'`; `version.ts` says replace before the swap.
-7. **Licensing** — the preset-seed credits above; Softology families with unverified terms in the
+5. ~~Name~~ **Owner 2026-09-23: keep "Gradient Explorer"** — a casual open-source release on gmt-fractals.com, not marketed; revisit only if it gets traction.
+6. ~~Version~~ **Owner 2026-09-23: 2.0.0**, a number to start versioning on, not marketed — `d56a341f`.
+7. **Licensing — owner 2026-09-23: the minimum for a casual open-source release.** Keep what is live (per-source credits, NC pack off by default, no-redistribute sets unshipped); ADD a preset credit line and a takedown/contact line in About; no legal review; share-alike and GPLv2-only data need no action beyond the credits already stating the licence. The original open items were: Softology families with unverified terms in the
    default pack (kuler 130, colorschemer 48, coolors 31); CC BY-SA share-alike on edits/exports
    (cpt-city 80, unikn 16); GPLv2-only sets and possible GFDL (Nevit Dilmen 886); legal review of
    §7's 12 questions or ship on the recorded good-faith position; close §7 q11 (git history).
