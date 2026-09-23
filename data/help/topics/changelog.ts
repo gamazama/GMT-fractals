@@ -46,12 +46,11 @@ Every GMT release, newest first.
 ## Unreleased — The new Gradient Explorer
 > September 2026
 
-- **The Gradient Explorer button in My Gradients opens the new Explorer**, the one that was in preview. It starts on your gradient, and **Back to GMT** returns you to your scene as you left it. The old Explorer is retired.
-- **Share links made in the preview keep working.**
-- **Reduce Stops** in the gradient editor's menu: pick how much, see it on the bar, apply.
-- **Drop a gradient file on GMT** — a Gradient Explorer PNG, a set's .zip, .map, .gpl and more — to add it to My Gradients.
-- **Favients are now called My Gradients** everywhere. Your collection is unchanged.
-- **Fixed:** in Firefox with its dark mode on, gradient swatches no longer look darker than the gradient.
+- **The Explorer button opens the new Gradient Explorer.**
+- **Reduce Stops** in the gradient editor's menu.
+- **Drop a gradient file on GMT** (Explorer PNG, set .zip, .map, .gpl and more) to add it to My Gradients.
+- **Favients are now called My Gradients**; your collection is unchanged.
+- **Fixed:** Firefox's dark mode no longer darkens gradient swatches.
 
 ---
 

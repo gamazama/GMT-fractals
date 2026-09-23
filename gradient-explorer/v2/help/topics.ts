@@ -139,15 +139,10 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
 
 - **This is the Gradient Explorer now.** The page GMT and Fluid Toy open shows it, and coming from GMT's My Gradients gives you a Back to GMT link. The old Explorer is gone.
 - **Links shared from the preview still open.** New share links use the main address.
-- **Coming from GMT, the Explorer starts on your gradient** — the one you last picked in My Gradients, or the one on your fractal. **Back to GMT** takes you back to your GMT tab as you left it.
-- **Reduce stops** in the gradient's ☰ menu: Light, Medium, Strong or Maximum, previewed on the bar before you apply it. The bar now says how many stops a gradient has.
-- **Start a new gradient** from the empty page or the ☰ menu.
-- **Export shows a text format before you take it** — hover a row, or hold it on a phone.
-- **Downloads keep the gradient's real name**, spaces and accents included, and so do the files inside a set's .zip.
-- **Picking a gradient starts Adjust and Curves fresh**, and one undo brings back what you had.
-- **Dropping a file** shows what a drop will do, and a picture says it is being read.
-- **Fixed:** Esc now throws away a Curves wave instead of keeping it, and its handles follow the pointer. Opening Curves without changing anything no longer changes the gradient. Recent no longer shows a day twice or overwrites an older entry.
-- **Sharing to GX Global** asks you to confirm you have the right to share it, and About credits where the built-in presets come from.
+- **GMT and the Gradient Explorer remember each other's gradient** when you move between them.
+- **Gradient ☰ menu → Reduce stops.**
+- **Gradient ☰ menu → New Gradient.**
+- **Export text preview**, and other small UX improvements.
 
 ---
 
