@@ -60,6 +60,22 @@
  *       pickerStore ignoring a live toggle (red "[12b] ticking GX Global did not add its 2
  *       gradients"); the failed state not recorded (red "[12c] an unreachable GX Global is not
  *       disabled").
+ *   [13] NEW GRADIENT (parity row M10, owner 2026-09-23), each in a FRESH context so the empty
+ *       state is real: [13a] the nothing-picked line offers "start a new one"; a real click makes
+ *       the hero hold "New gradient", black → white on two stops, linear / oklab (the hero's own
+ *       Reset Default), as a picked-style `gradient` input; one Ctrl+Z goes back to nothing and the
+ *       line returns, Ctrl+Y brings it back; a click on its track adds a stop at once; the edited
+ *       gradient is in Recent. [13b] after a wall pick, the hero's ☰ LEADS with "New Gradient",
+ *       which replaces the pick, and one Ctrl+Z gives the pick back. [13c] with the Mix face open,
+ *       New closes the face, and one Ctrl+Z brings back the live mix AND its face. [13d] on a
+ *       Pixel 5 the line's action is on screen, a tap makes the gradient, the ☰ carries the item
+ *       inside the screen, and nothing overflows.
+ *       FALSIFIED 2026-09-23, each reverted: the shell not passing `onNewGradient` to BrowseStage
+ *       reds "[13a] the nothing-picked line offers no new gradient"; a second undo bracket after the
+ *       `use` (a `setName`) reds "[13a] one Ctrl+Z after New did not return to the empty state";
+ *       WorkingHero not passing `menuLead` reds "[13b] the hero ☰ menu has no "New Gradient""; the
+ *       tray close taken out of `flushSync` reds "[13c] one Ctrl+Z brought the mix back without its
+ *       face" alone. (A `beginEdit` after the `use` reds [13a] too, at the input-kind check.)
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
  * [3] "the title does not say Today"; `tileSizeFor` returning the base for every count reds
@@ -68,7 +84,7 @@
  *
  * Run: `npm run smoke:ge-ground` (needs `npm run dev` on :3400, or ENGINE_URL).
  */
-import { chromium, type Page } from 'playwright';
+import { chromium, devices, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
@@ -538,6 +554,140 @@ async function main() {
     if (!/—/.test(dead.text)) fail(`[12c] the unreachable row does not say "—" (${dead.text})`);
     await dpage.close();
     console.log('✓ [12c] GX Global unreachable: the row stays, unticked, disabled, "—"');
+  }
+
+  // [13] NEW GRADIENT (parity row M10, 2026-09-23) — in fresh contexts, so the empty state is real
+  {
+    const MENU = '[data-gx-hero] button[title^="Stops menu"]';
+    const NEW_SIG = JSON.stringify([[0, '#000000'], [1000, '#FFFFFF']]);
+    type Cfg = { stops?: { position: number; color: string }[]; colorSpace?: string; blendSpace?: string } | null;
+    const sigOf = (c: Cfg) => JSON.stringify(c?.stops?.map((s) => [Math.round(s.position * 1000), String(s.color).toUpperCase()]) ?? null);
+    const full = (p: Page) =>
+      p.evaluate(() => {
+        const w = (window as unknown as { __gxWorking?: () => { input?: { kind?: string }; config?: unknown } }).__gxWorking?.();
+        return {
+          kind: (w?.input?.kind ?? null) as string | null,
+          config: (w?.config ?? null) as { stops?: { position: number; color: string }[]; colorSpace?: string; blendSpace?: string } | null,
+          name: (document.querySelector('[data-gx-hero] input') as HTMLInputElement | null)?.value ?? null,
+          tray: (document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray || null,
+          knots: document.querySelectorAll('[data-gx-hero] [data-gx-knot]').length,
+          overflow: document.documentElement.scrollWidth - window.innerWidth,
+        };
+      });
+    // Ctrl+Z must reach the app's shortcut, not a focused field's own text undo
+    const undoKey = async (p: Page, key = 'Control+z') => {
+      await p.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+      await p.keyboard.press(key);
+      await p.waitForTimeout(600);
+    };
+    const isNew = (n: Awaited<ReturnType<typeof full>>) =>
+      sigOf(n.config) === NEW_SIG && n.config?.colorSpace === 'linear' && n.config?.blendSpace === 'oklab' && n.name === 'New gradient';
+
+    const nctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    await seedGeSmokeState(nctx);
+    const np = await nctx.newPage();
+    np.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+    await np.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+    await np.waitForTimeout(1500);
+
+    // [13a] from the empty state: an editable STOP gradient, one Ctrl+Z back to nothing, into Recent
+    if (await np.$('[data-gx-hero]')) fail('[13a] setup: a fresh page already has a hero');
+    const hint = await np.evaluate(() => (document.querySelector('[data-gx-map-hint]') as HTMLElement | null)?.innerText.replace(/\s+/g, ' ') ?? '');
+    if (!/start a new one/.test(hint) || !(await np.$('[data-gx-new-gradient]'))) fail(`[13a] the nothing-picked line offers no new gradient ("${hint}")`);
+    await np.click('[data-gx-new-gradient]');
+    await np.waitForSelector('[data-gx-hero] [data-gx-knot-track]', { timeout: 8000 }).catch(() => fail('[13a] "start a new one" made no hero'));
+    await np.waitForTimeout(300);
+    let n = await full(np);
+    if (n.kind !== 'gradient') fail(`[13a] the new gradient is not a picked-style gradient input (${n.kind})`);
+    if (!isNew(n)) fail(`[13a] the new gradient is ${sigOf(n.config)} ${n.config?.colorSpace}/${n.config?.blendSpace} "${n.name}" — expected Reset Default's black → white, linear / oklab, "New gradient"`);
+    if (n.knots !== 2) fail(`[13a] the new gradient shows ${n.knots} knots, expected 2`);
+    await undoKey(np);
+    n = await full(np);
+    if (n.kind !== 'empty') fail(`[13a] one Ctrl+Z after New did not return to the empty state (${n.kind})`);
+    if (!(await np.$('[data-gx-new-gradient]'))) fail('[13a] after the undo the nothing-picked line is not back');
+    await undoKey(np, 'Control+y');
+    n = await full(np);
+    if (!isNew(n)) fail(`[13a] Ctrl+Y did not bring the new gradient back (${sigOf(n.config)})`);
+    const track = (await np.locator('[data-gx-hero] [data-gx-knot-track]').first().boundingBox())!;
+    await np.mouse.click(track.x + track.width * 0.5, track.y + track.height / 2);
+    await np.waitForTimeout(500);
+    n = await full(np);
+    if (n.kind !== 'stops' || (n.config?.stops?.length ?? 0) !== 3) fail(`[13a] a click on the new gradient's track did not add a stop (${n.kind}, ${n.config?.stops?.length} stops)`);
+    await np.keyboard.press('Escape');
+    await np.mouse.move(640, 40);
+    await np.waitForTimeout(1000);
+    const recent = await np.evaluate(() =>
+      (JSON.parse(localStorage.getItem('gmt.favients') ?? '[]') as { name: string; group?: string; config: { stops: unknown[] } }[])
+        .filter((f) => f.group === 'g-recent' && f.name === 'New gradient')
+        .map((f) => f.config.stops.length),
+    );
+    if (!recent.includes(3)) fail(`[13a] the edited new gradient is not in Recent (New gradient entries: ${JSON.stringify(recent)})`);
+    console.log('✓ [13a] "start a new one" → black → white "New gradient" (2 stops, linear / oklab); Ctrl+Z → nothing, Ctrl+Y → back; a track click adds a stop; it is in Recent');
+
+    // [13b] from the hero's ☰ after a pick: it LEADS the menu, replaces the gradient, one Ctrl+Z restores
+    const wallBox = (await np.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
+    await np.mouse.click(wallBox.x + 16 + 33 * 3, wallBox.y + 9);
+    await np.mouse.move(640, 40);
+    await np.waitForTimeout(700);
+    const picked = await full(np);
+    if (picked.kind !== 'gradient' || sigOf(picked.config) === NEW_SIG) fail(`[13b] setup: the wall pick did not become the working gradient (${picked.kind})`);
+    await np.click(MENU);
+    const item = np.locator('button:has-text("New Gradient")');
+    await item.waitFor({ state: 'visible', timeout: 4000 }).catch(() => fail('[13b] the hero ☰ menu has no "New Gradient"'));
+    if (!(await item.evaluate((el) => el.previousElementSibling === null))) fail('[13b] "New Gradient" does not lead the ☰ menu');
+    await item.click();
+    await np.waitForTimeout(500);
+    n = await full(np);
+    if (!isNew(n)) fail(`[13b] ☰ ▸ New Gradient did not replace "${picked.name}" with the new gradient (${sigOf(n.config)} "${n.name}")`);
+    await undoKey(np);
+    n = await full(np);
+    if (sigOf(n.config) !== sigOf(picked.config) || n.name !== picked.name) fail(`[13b] one Ctrl+Z after ☰ ▸ New Gradient did not give back "${picked.name}" (got "${n.name}" ${sigOf(n.config)})`);
+    console.log(`✓ [13b] ☰ ▸ New Gradient (first in the menu) replaced "${picked.name}"; one Ctrl+Z gave it back`);
+
+    // [13c] with the Mix face open: New closes it, and the same Ctrl+Z puts the face AND the mix back
+    await np.click('[data-gx-tray-tab="mix"]');
+    await np.waitForTimeout(700);
+    n = await full(np);
+    if (n.tray !== 'mix' || n.kind !== 'build') fail(`[13c] setup: Mix did not open (${n.tray}, ${n.kind})`);
+    await np.click(MENU);
+    await item.waitFor({ state: 'visible', timeout: 4000 }).catch(() => fail('[13c] the ☰ menu in Mix has no "New Gradient"'));
+    await item.click();
+    await np.waitForTimeout(600);
+    n = await full(np);
+    if (!isNew(n)) fail(`[13c] ☰ ▸ New Gradient in Mix did not make the new gradient (${n.kind} ${sigOf(n.config)})`);
+    if (n.tray !== null) fail(`[13c] New Gradient left the ${n.tray} face open over a fixed gradient`);
+    await undoKey(np);
+    n = await full(np);
+    if (n.kind !== 'build') fail(`[13c] one Ctrl+Z did not bring the live Mix back (${n.kind})`);
+    if (n.tray !== 'mix') fail(`[13c] one Ctrl+Z brought the mix back without its face (tray ${n.tray})`);
+    await np.keyboard.press('Escape');
+    await np.waitForTimeout(300);
+    console.log('✓ [13c] in Mix: New Gradient closes the face; one Ctrl+Z puts the live mix AND its face back');
+    await nctx.close();
+
+    // [13d] a phone: the line offers it on screen, a tap makes it, the ☰ carries it, nothing overflows
+    const pctx = await browser.newContext({ ...devices['Pixel 5'] });
+    await seedGeSmokeState(pctx);
+    const pp = await pctx.newPage();
+    pp.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+    await pp.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+    await pp.waitForTimeout(1500);
+    const vw = pp.viewportSize()!.width;
+    const nb = await pp.locator('[data-gx-new-gradient]').boundingBox();
+    if (!nb || nb.x < 0 || nb.x + nb.width > vw) fail(`[13d] "start a new one" is not on the phone screen (${JSON.stringify(nb)})`);
+    await pp.locator('[data-gx-new-gradient]').tap();
+    await pp.waitForSelector('[data-gx-hero] [data-gx-knot-track]', { timeout: 8000 }).catch(() => fail('[13d] a tap on "start a new one" made no hero'));
+    await pp.waitForTimeout(400);
+    n = await full(pp);
+    if (!isNew(n)) fail(`[13d] the phone's new gradient is ${sigOf(n.config)} "${n.name}"`);
+    if (n.overflow > 0) fail(`[13d] the page overflows the phone by ${n.overflow}px with the new gradient up`);
+    await pp.tap(MENU);
+    const pItem = pp.locator('button:has-text("New Gradient")');
+    await pItem.waitFor({ state: 'visible', timeout: 4000 }).catch(() => fail('[13d] the phone ☰ has no "New Gradient"'));
+    const ib = (await pItem.boundingBox())!;
+    if (ib.x < 0 || ib.x + ib.width > vw + 1) fail(`[13d] "New Gradient" is off the phone screen (${JSON.stringify(ib)})`);
+    await pctx.close();
+    console.log('✓ [13d] Pixel 5: "start a new one" on screen, a tap makes the new gradient, the ☰ leads with New Gradient, no overflow');
   }
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);

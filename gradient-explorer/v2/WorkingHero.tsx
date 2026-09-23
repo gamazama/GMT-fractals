@@ -136,6 +136,7 @@ import { useIsPhone } from './useIsPhone';
 import { runExport, useRecentExports, exportActionLabel, exportActionId, readExportSettings } from './exportActions';
 import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
+import type { ContextMenuItem } from '../../types/help';
 import type { SourceId } from './GradientExplorerV2App';
 
 /** The gradient panel's corner radius (px) — `rounded-[20px]` on the panel below. */
@@ -188,12 +189,15 @@ interface Props {
   onRevealGround: () => void;
   onExport: () => void;
   onWallpaper: () => void;
+  /** Start a new gradient from nothing (parity row M10) — the ☰ menu's lead item. The shell
+   *  owns what it does (the same call as the nothing-picked line's "start a new one"). */
+  onNewGradient?: () => void;
   exportOpen: boolean;
   /** Export's popover, anchored inside the use cluster. */
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, exportOpen, exportMenu, folded }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, onNewGradient, exportOpen, exportMenu, folded }) => {
   const phone = useIsPhone();
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
@@ -326,6 +330,13 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   const paletteHex = useMemo(() => derived.palette.map((s) => hexOf(s.color)), [derived.palette]);
   /** The swatch row as colours — what an export's SWATCHES subject takes (§8b item 5). */
   const paletteRgb = useMemo(() => derived.palette.map((s) => s.color), [derived.palette]);
+  /** The ☰ menu's LEAD (the editor's `menuLead` seam): New Gradient acts on the document, not on
+   *  a stop, so it sits above the editor's own sections — in the ☰ and the bar's right-click
+   *  alike, never on a knot's menu. Title Case, as the rest of that menu is. */
+  const menuLead = useMemo<ContextMenuItem[] | undefined>(
+    () => (onNewGradient ? [{ label: 'New Gradient', action: onNewGradient }] : undefined),
+    [onNewGradient],
+  );
 
   // L9 — before the first pick there is no hero at all; that state is unchanged.
   if (!shown) return null;
@@ -820,6 +831,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       onEditEnd={editorEditEnd}
                       edit={onEditorEdit}
                       onAddStops={onAddStops}
+                      menuLead={menuLead}
                       pickerPalette={paletteHex}
                     />
                   </InputSkinProvider>

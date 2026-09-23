@@ -53,7 +53,7 @@
  * @see docs/adr/0123-the-gradient-file-is-a-png.md
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useImageStore, useImageMode } from '../store/imageStore';
 import { decodeAndIngest, autoPath } from '../core/img2grad';
 import { showToast } from '../../engine/store/toastStore';
@@ -88,6 +88,22 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
   const setLoading = useImageStore((s) => s.setLoading);
   const mode = useImageMode();
   const [over, setOver] = useState(false);
+  /**
+   * The "file still over the window" timer: each dragover re-arms it, and 130 ms without one means
+   * the drag left (or was cancelled). It lives in a REF, not in the listener effect, because that
+   * effect re-subscribes whenever a host hands in a fresh callback — GE v2's root instance does on
+   * every render (its `onLoaded` is inline) — and the first dragover's `setOver(true)` IS a render.
+   * Held in the effect, the cleanup of that re-subscribe cancelled the timer, so a file that
+   * crossed the window with a single dragover left `over` up until the next drag (found
+   * 2026-09-23 when GE v2 started drawing it: the drop hint stuck). Only an unmount cancels it now.
+   *
+   * @invariant a file drag that stops sending dragover lets `over` go within the timeout however
+   *   often the host re-renders, and a drop lets it go at once — proven by: `npm run
+   *   smoke:ge-gradientfile` ("[h1] the drop hint stayed up after the file left", "[h1] … after the
+   *   drop"). Falsified 2026-09-23 by clearing the timer in the listener effect's cleanup again.
+   */
+  const dragT = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(dragT.current), []);
 
   const loadImage = useCallback(
     (src: string) => {
@@ -121,21 +137,20 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
 
   useEffect(() => {
     if (!enabled) return;
-    let dragT: number | undefined;
     const isWellDrag = (e: DragEvent): boolean =>
       !e.dataTransfer || !Array.from(e.dataTransfer.types).includes('Files');
     const onDragOver = (e: DragEvent) => {
       if (isWellDrag(e)) return;
       e.preventDefault();
       setOver(true);
-      window.clearTimeout(dragT);
-      dragT = window.setTimeout(() => setOver(false), 130);
+      window.clearTimeout(dragT.current);
+      dragT.current = window.setTimeout(() => setOver(false), 130);
     };
     const onDrop = (e: DragEvent) => {
       if (isWellDrag(e)) return;
       e.preventDefault();
       setOver(false);
-      window.clearTimeout(dragT);
+      window.clearTimeout(dragT.current);
       const dropped = Array.from(e.dataTransfer?.files ?? []);
       const take = (files: File[]) => {
         const image = files.find((f) => f.type.startsWith('image'));
@@ -162,7 +177,6 @@ export const useImageDrop = (opts: UseImageDropOptions = {}): UseImageDropResult
       window.removeEventListener('dragover', onDragOver);
       window.removeEventListener('drop', onDrop);
       window.removeEventListener('paste', onPaste);
-      window.clearTimeout(dragT);
     };
   }, [fileToImg, notify, enabled, onOtherFiles, preRoute]);
 

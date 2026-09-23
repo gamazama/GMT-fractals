@@ -37,6 +37,23 @@
  *        stored list has no repeat, and the hero's hover flyout reads the same three, once each.
  *   [f]  on a Pixel 5, Export ▸ GMT gradient (.png) is on screen, and tapping it downloads a PNG that
  *        decodes to the hero's gradient.
+ *   [h1] (2026-09-23, parity row M8) THE DROP HINT: a file dragged over the page (a DataTransfer of
+ *        Files) raises "Drop to load · Gradient files are imported · an image makes a gradient" on the
+ *        osDrop tier (z 1500); a dragleave lets it go, and a DROP lets it go at once, inside the
+ *        130 ms dragover timeout. [h2] a wall tile dragged by the wall's OWN dragstart (the favient
+ *        MIME, no Files) never raises it. [h3] READING: a plain PNG dropped with its decode held
+ *        (`slowDecode` stubs the Image `src` setter) — the hero's image slot says "reading image…",
+ *        first as the slim empty slot, then, on a second drop, over the picture already there, and
+ *        stops once each image is in. [h4] on a Pixel 5, an image CHOSEN through the hero's door
+ *        with the decode held: the door says "reading image…" with no sideways overflow; and a file
+ *        dragged over the phone page raises the hint inside the screen.
+ *        FALSIFIED 2026-09-23, each reverted: the shell not drawing the hint reds "[h1] a file
+ *        dragged over the page raised no drop hint"; `useImageDrop` clearing its drag timer in the
+ *        listener effect's cleanup (as it did until that day — GE v2's root instance re-subscribes
+ *        on every render) reds "[h1] the drop hint stayed up after the file left"; `isWellDrag`
+ *        ignoring 'Files' reds "[h2] an internal tile drag raised the file drop hint"; the slot
+ *        ignoring `loading` reds [h3]; the words over the picture alone removed reds [h3]'s second
+ *        drop; the door's alone reds "[h4] the phone door did not say it was reading …".
  *
  * FALSIFIED 2026-09-14 against a broken build, each reverted:
  *   - (a) `exportActions.runGradientFile` writing each stop WITHOUT its bias and interpolation →
@@ -166,6 +183,45 @@ const dropOnWall = async (page: Page, files: { name: string; type: string; bytes
   );
   await page.waitForTimeout(1200);
 };
+
+/**
+ * Hold every `data:image` decode for `ms` (0 = off). The image slot's "reading image…" is only on
+ * screen while a decode runs, and a real decode of a small PNG is over in a frame — so [h3] / [h4]
+ * slow it down. Patches the `src` setter once per page; a later call only changes the delay. A
+ * STRING, so tsx's name-keeping wrappers (which the page lacks) never touch it.
+ */
+const slowDecode = (page: Page, ms: number) =>
+  page.evaluate(`(() => {
+    window.__slowImg = ${ms};
+    if (window.__slowPatched) return;
+    window.__slowPatched = true;
+    const desc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+    Object.defineProperty(HTMLImageElement.prototype, 'src', {
+      configurable: true,
+      get() { return desc.get.call(this); },
+      set(v) {
+        const d = window.__slowImg;
+        if (d && String(v).startsWith('data:image')) setTimeout(() => desc.set.call(this, v), d);
+        else desc.set.call(this, v);
+      },
+    });
+  })()`);
+
+/** The drop hint's words, or null when it is not up. */
+const dropHint = (page: Page) =>
+  page.evaluate(() => (document.querySelector('[data-gx-drop-hint]') as HTMLElement | null)?.innerText.replace(/\s+/g, ' ').trim() ?? null);
+
+/** One OS-file drag event on the wall, as the browser delivers it (a DataTransfer carrying Files). */
+const fileDrag = (page: Page, type: 'dragenter' | 'dragover' | 'dragleave' | 'drop') =>
+  page.evaluate((t) => {
+    const w = window as unknown as { __fileDt?: DataTransfer };
+    if (!w.__fileDt) {
+      w.__fileDt = new DataTransfer();
+      w.__fileDt.items.add(new File(['not a gradient'], 'notes.xyz', { type: '' }));
+    }
+    const target = document.querySelector('[data-gx-keepselect] canvas') ?? document.body;
+    target.dispatchEvent(new DragEvent(t, { dataTransfer: w.__fileDt, bubbles: true, cancelable: true }));
+  }, type);
 
 async function openSessionSettings(page: Page): Promise<void> {
   const gear = page.locator('header button[title="Settings"]').first();
@@ -473,6 +529,89 @@ async function main() {
   await page.waitForTimeout(300);
   console.log(`✓ [g4] css ×2 + cssvars → Again: ${g4.labels.join(' · ')} (once each); the flyout: ${fly.join(' · ')}`);
 
+  // [h1] THE DROP HINT (parity row M8, 2026-09-23): a FILE over the page raises it with words that
+  // are true here, on the osDrop tier; a dragleave lets it go, and so does the drop itself
+  if (await dropHint(page)) fail('[h1] setup: a drop hint is up with nothing being dragged');
+  await fileDrag(page, 'dragenter');
+  await fileDrag(page, 'dragover');
+  await page.waitForTimeout(80);
+  const hint = await dropHint(page);
+  if (!hint) fail('[h1] a file dragged over the page raised no drop hint');
+  if (!/Drop to load/.test(hint!) || !/Gradient files are imported/.test(hint!) || !/an image makes a gradient/.test(hint!)) fail(`[h1] the drop hint does not say what a drop does here ("${hint}")`);
+  const z = await page.evaluate(() => getComputedStyle(document.querySelector('[data-gx-drop-hint]')!).zIndex);
+  if (z !== '1500') fail(`[h1] the drop hint is not on the osDrop tier (z ${z})`);
+  await fileDrag(page, 'dragleave');
+  await page.waitForTimeout(400);
+  if (await dropHint(page)) fail('[h1] the drop hint stayed up after the file left');
+  await fileDrag(page, 'dragover');
+  await page.waitForTimeout(40);
+  if (!(await dropHint(page))) fail('[h1] the drop hint did not come back for a second drag');
+  await fileDrag(page, 'drop');
+  await page.waitForTimeout(40); // well inside the 130 ms dragover timeout: the DROP must hide it
+  if (await dropHint(page)) fail('[h1] the drop hint stayed up after the drop');
+  console.log(`✓ [h1] a file over the page raises "${hint}" (z 1500); leaving and dropping both take it down`);
+
+  // [h2] an INTERNAL drag — a wall tile, started by the wall's own dragstart — never raises it
+  const internal = await page.evaluate(async () => {
+    const canvas = document.querySelector('[data-gx-keepselect] canvas') as HTMLCanvasElement;
+    const r = canvas.getBoundingClientRect();
+    const at = { clientX: r.left + 24, clientY: r.top + 14 };
+    const dt = new DataTransfer();
+    canvas.dispatchEvent(new DragEvent('dragstart', { dataTransfer: dt, bubbles: true, cancelable: true, ...at }));
+    const types = Array.from(dt.types);
+    let seen = false;
+    for (let i = 0; i < 6; i++) {
+      canvas.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt, bubbles: true, cancelable: true, ...at }));
+      canvas.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true, ...at }));
+      await new Promise((res) => setTimeout(res, 50));
+      if (document.querySelector('[data-gx-drop-hint]')) seen = true;
+    }
+    canvas.dispatchEvent(new DragEvent('dragend', { dataTransfer: dt, bubbles: true, ...at }));
+    return { types, seen };
+  });
+  if (!internal.types.includes('application/x-gmt-favient')) fail(`[h2] setup: the tile drag did not start (types: ${internal.types.join(', ') || 'none'})`);
+  if (internal.seen) fail('[h2] an internal tile drag raised the file drop hint');
+  console.log(`✓ [h2] a wall tile dragged (${internal.types.length} types, no Files) raises no drop hint`);
+
+  // [h3] READING: a plain PNG dropped while its decode is held — the hero's image slot says
+  // "reading image…" until the picture is in. TWICE, so both shapes are read whatever state the
+  // steps above left: the first drop meets the slot as it is (the slim empty slot here — the
+  // session file at [d] carried no image), the second always meets a PICTURE, with the words over it.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  await slowDecode(page, 2500);
+  const readShapes: string[] = [];
+  for (let round = 0; round < 2; round++) {
+    const W3 = 48, H3 = 24;
+    const px3 = new Uint8Array(W3 * H3 * 3);
+    for (let y = 0; y < H3; y++) for (let x = 0; x < W3; x++) { const o = (y * W3 + x) * 3; px3[o] = 200 - round * 150; px3[o + 1] = x * 5; px3[o + 2] = y * 10; }
+    const dropStart = Date.now();
+    await dropOnWall(page, [{ name: `slow photo ${round}.png`, type: 'image/png', bytes: encodePng(W3, H3, px3) }]);
+    await page.waitForSelector('[data-gx-hero] [data-gx-image-slot] [data-gx-image-reading]', { timeout: 4000 }).catch(async () => {
+      const seen = await page.evaluate(() => ({
+        slots: Array.from(document.querySelectorAll('[data-gx-image-slot]')).map((e) => (e as HTMLElement).dataset.gxImageSlot),
+        labels: Array.from(document.querySelectorAll('[data-gx-image-reading]')).map((e) => (e as HTMLElement).innerText),
+        kind: (window as any).__gxWorking?.().input.kind,
+      }));
+      fail(`[h3] the image slot did not say it was reading the dropped image (${JSON.stringify(seen)})`);
+    });
+    const reading = await page.evaluate(() => {
+      const el = document.querySelector('[data-gx-hero] [data-gx-image-slot] [data-gx-image-reading]') as HTMLElement;
+      return { words: el.innerText.replace(/\s+/g, ' ').trim(), shape: (el.closest('[data-gx-image-slot]') as HTMLElement).dataset.gxImageSlot ?? '' };
+    });
+    if (reading.words !== 'reading image…') fail(`[h3] the slot says "${reading.words}"`);
+    readShapes.push(reading.shape);
+    await page.waitForFunction(() => !document.querySelector('[data-gx-image-reading]') && (window as any).__gxWorking?.().input.kind === 'extract', undefined, { timeout: 10000 })
+      .catch(() => fail('[h3] "reading image…" did not give way to the new image'));
+    const took = Date.now() - dropStart;
+    if (took < 2000) fail(`[h3] the held decode finished in ${took} ms — the stub did not hold it, so the step proved nothing`);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(500);
+  }
+  if (readShapes[1] !== 'live' && readShapes[1] !== 'dim') fail(`[h3] the second drop did not meet a picture in the slot (${readShapes.join(' → ')})`);
+  await slowDecode(page, 0);
+  console.log(`✓ [h3] two held decodes: the slot said "reading image…" as ${readShapes.join(', then over the picture as ')} until each image arrived`);
+
   if (errors.length) fail(`pageerror: ${errors.join(' | ')}`);
   await ctx.close();
 
@@ -490,6 +629,44 @@ async function main() {
   if (pr.kind !== 'document' || sig(pr.gradients[0].config) !== sig(wp.config)) fail('[f] the phone download is not the hero gradient as a GMT file');
   if (errors.length) fail(`pageerror: ${errors.join(' | ')}`);
   console.log(`✓ [f] on a Pixel 5, Export ▸ GMT gradient (.png) is on screen and downloads ${pp.name}`);
+
+  // [h4] a PHONE: an image CHOSEN through the hero's door while its decode is held — the door says
+  // "reading image…" in the header row without pushing the page sideways; and a file dragged over
+  // the page (a tablet can) raises the same hint, inside the screen
+  await phone.keyboard.press('Escape').catch(() => undefined);
+  await phone.waitForTimeout(300);
+  await slowDecode(phone, 2500);
+  const door = phone.locator('[data-gx-hero] [data-gx-image-slot^="door"]').first();
+  if (!(await door.count())) fail('[h4] setup: the phone hero has no image door');
+  const [chooser] = await Promise.all([phone.waitForEvent('filechooser', { timeout: 5000 }), door.tap()]);
+  const Wp = 40, Hp = 20;
+  const pxp = new Uint8Array(Wp * Hp * 3);
+  for (let i = 0; i < pxp.length; i += 3) { pxp[i] = 30; pxp[i + 1] = 140; pxp[i + 2] = (i / 3) % 255; }
+  await chooser.setFiles({ name: 'phone photo.png', mimeType: 'image/png', buffer: Buffer.from(encodePng(Wp, Hp, pxp)) });
+  await phone.waitForSelector('[data-gx-hero] [data-gx-image-slot^="door"] [data-gx-image-reading]', { timeout: 4000 }).catch(() => fail('[h4] the phone door did not say it was reading the chosen image'));
+  const doorState = await phone.evaluate(() => ({
+    words: (document.querySelector('[data-gx-image-slot^="door"] [data-gx-image-reading]') as HTMLElement).innerText.trim(),
+    overflow: document.documentElement.scrollWidth - window.innerWidth,
+  }));
+  if (doorState.words !== 'reading image…') fail(`[h4] the door says "${doorState.words}"`);
+  if (doorState.overflow > 0) fail(`[h4] the reading door pushed the phone page ${doorState.overflow}px sideways`);
+  await phone.waitForFunction(() => !document.querySelector('[data-gx-image-reading]') && (window as any).__gxWorking?.().input.kind === 'extract', undefined, { timeout: 10000 })
+    .catch(() => fail('[h4] "reading image…" did not give way to the chosen image on the phone'));
+  await slowDecode(phone, 0);
+  await fileDrag(phone, 'dragover');
+  await phone.waitForTimeout(80);
+  const phint = await phone.evaluate(() => {
+    const el = document.querySelector('[data-gx-drop-hint] > div') as HTMLElement | null;
+    const r = el?.getBoundingClientRect();
+    return r ? { left: r.left, right: r.right, vw: window.innerWidth } : null;
+  });
+  if (!phint) fail('[h4] a file dragged over the phone page raised no drop hint');
+  if (phint!.left < 0 || phint!.right > phint!.vw) fail(`[h4] the phone drop hint is off the screen (${JSON.stringify(phint)})`);
+  await fileDrag(phone, 'dragleave');
+  await phone.waitForTimeout(400);
+  if (await dropHint(phone)) fail('[h4] the phone drop hint stayed up after the file left');
+  if (errors.length) fail(`pageerror: ${errors.join(' | ')}`);
+  console.log('✓ [h4] Pixel 5: the door read "reading image…" for a chosen image with no sideways push; the drop hint fits the screen');
   await pctx.close();
 
   await b.close();

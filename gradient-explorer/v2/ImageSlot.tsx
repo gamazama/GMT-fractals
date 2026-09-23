@@ -38,6 +38,20 @@
  * about the slot never moving on a card wide enough to hold it; the model, the thumbnail
  * and the path all live in `imageStore`, so nothing is lost by the pane going away.
  *
+ * READING (parity row M8, 2026-09-23). Between a file arriving (drop, paste, the file dialog,
+ * Replace) and its picture being ready, `imageStore.loading` is true — and the slot is where
+ * the picture is about to appear, so it says "reading image…" there, in every shape: the slim
+ * slot and the phone's door carry the words in place of the photo glyph (the door widens into
+ * a pill for the moment, since 26 px holds no words); a picture already in the slot keeps
+ * showing and the words sit over it until the new one replaces it. The old shell's ImageStage
+ * said the same thing under its drop box; v2 had dropped it. `data-gx-image-reading` is the
+ * smoke's handle. Before the first pick there is no hero and so no slot — BrowseStage's
+ * nothing-picked line says it there instead (that line is unguarded).
+ * Guard: `npm run smoke:ge-gradientfile` [h3] (the slim slot, then over a picture, each with the
+ * decode held by a stub) and [h4] (the phone's door, for a file chosen through it). Falsified
+ * 2026-09-23 three ways: the slot ignoring `loading` reds [h3]; the picture's words alone
+ * removed reds [h3]'s second drop; the door's alone reds [h4].
+ *
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
@@ -87,6 +101,7 @@ const DOOR = 26;
 export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = false, bigH, compact = false, width, onClick, cloudHost, toolsHost, handles = false }) => {
   const model = useImageStore((s) => s.model);
   const thumb = useImageStore((s) => s.thumb);
+  const reading = useImageStore((s) => s.loading);
   const ring = active ? 'outline outline-2 outline-accent-400 outline-offset-2' : '';
   // The door's picture. `thumb` is a canvas the store already keeps; one `toDataURL` per
   // image (memoised on the canvas identity) is cheaper than mounting a second stage, and a
@@ -102,14 +117,15 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = fals
         type="button"
         onClick={onClick}
         title={model ? 'The image this gradient comes from — tap for the Image face' : 'Drop an image anywhere, or tap to choose one'}
-        aria-label={model ? 'Open the Image face' : 'Choose an image'}
+        aria-label={reading ? 'reading image…' : model ? 'Open the Image face' : 'Choose an image'}
         data-gx-image-slot={model ? 'door' : 'door-empty'}
-        style={{ width: DOOR, height: DOOR, backgroundImage: thumbUrl ? `url(${thumbUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        // READING: the door is a pill for the moment, its words in place of the glyph / thumbnail
+        style={reading ? { height: DOOR } : { width: DOOR, height: DOOR, backgroundImage: thumbUrl ? `url(${thumbUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center' }}
         className={`shrink-0 rounded-lg flex items-center justify-center overflow-hidden border transition-colors ${
-          model ? 'border-line/25' : 'border-dashed border-line/40 text-fg-muted hover:border-accent-400 hover:text-accent-300'
+          reading ? 'px-2 border-dashed border-accent-400/60 text-accent-300 text-[11px] whitespace-nowrap' : model ? 'border-line/25' : 'border-dashed border-line/40 text-fg-muted hover:border-accent-400 hover:text-accent-300'
         } ${ring}`}
       >
-        {!model && <Icon name="photo" size={15} />}
+        {reading ? <span data-gx-image-reading="" aria-live="polite">reading image…</span> : !model && <Icon name="photo" size={15} />}
       </button>
     );
   }
@@ -120,9 +136,15 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = fals
         type="button"
         onClick={onClick}
         title="Drop an image anywhere, or click to choose one"
-        className={`w-[45px] h-[84px] rounded-lg flex items-center justify-center border border-dashed border-line/40 text-fg-muted hover:border-accent-400 hover:text-accent-300 transition-colors ${ring}`}
+        data-gx-image-slot="empty"
+        className={`w-[45px] h-[84px] rounded-lg flex items-center justify-center border border-dashed transition-colors ${reading ? 'border-accent-400/60 text-accent-300' : 'border-line/40 text-fg-muted hover:border-accent-400 hover:text-accent-300'} ${ring}`}
       >
-        <Icon name="photo" size={18} />
+        {/* two short lines fit the 45 px slot at 10 px: "reading" / "image…" */}
+        {reading ? (
+          <span data-gx-image-reading="" aria-live="polite" className="text-[10px] leading-tight text-center">reading image…</span>
+        ) : (
+          <Icon name="photo" size={18} />
+        )}
       </button>
     );
   }
@@ -155,6 +177,13 @@ export const ImageSlot: React.FC<Props> = ({ active, dim = false, instant = fals
     >
       <ImageStage chrome="face" cloudHost={cloudHost} toolsHost={toolsHost} handles={handles} />
       {!handles && <button type="button" className="absolute inset-0" onClick={onClick} aria-label="Open the Image face" />}
+      {/* READING a replacement: the old picture stays until the new one is ready; the words sit
+          over it. Last in the box, so it paints above the pane and the button without a z. */}
+      {reading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface-viewport/70 pointer-events-none">
+          <span data-gx-image-reading="" aria-live="polite" className="text-[11px] text-accent-300 text-center leading-tight px-1">reading image…</span>
+        </div>
+      )}
     </div>
   );
 };

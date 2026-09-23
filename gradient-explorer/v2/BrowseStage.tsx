@@ -89,6 +89,7 @@ import { padAxesFor, WINDOW_KEY } from '../../palette/core/padAxes';
 import { mapSpan } from '../../palette/core/lensBand';
 import { MapScrollbar } from './ui/MapScrollbar';
 import { useWorkingDerived, deriveWorkingNow, useWorkingStore } from '../../palette/store/workingStore';
+import { useImageStore } from '../../palette/store/imageStore';
 import { contributeToGlobal } from './contributeToGlobal';
 import { QUALITY_AXES } from '../../palette/features/paletteFilters';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
@@ -184,9 +185,11 @@ interface Props {
    *  that toggles it lives HERE, with the wall's tools, so the band leaves no remnant. */
   heroFolded?: boolean;
   onFoldHero?: (folded: boolean) => void;
+  /** Start a new gradient from nothing (parity row M10) — offered on the nothing-picked line. */
+  onNewGradient?: () => void;
 }
 
-export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero }) => {
+export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, onNewGradient }) => {
   const phone = useIsPhone();
   // PHONE: the pad is drawn at a measured pixel width, not the desktop's fixed 360 — the
   // bar needs 422 for the fixed one and has 390, which is what put the Filters button
@@ -240,6 +243,9 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
   const pad = useMemo(() => padAxesFor(m.axes.rowsAxis, m.axes.sortAxis), [m.axes.rowsAxis, m.axes.sortAxis]);
   // Nothing picked yet — the hero is absent (L8) and the bar says what to do (see below).
   const nothingPicked = useWorkingDerived().empty;
+  // An image dropped / pasted before the first pick is being read: with no hero there is no
+  // image slot to say so (ImageSlot's READING), so the nothing-picked line says it instead.
+  const imageReading = useImageStore((st) => st.loading);
 
   const win = (k: string): [number, number] => {
     const o = m.sliceState?.[k] as { x?: number; y?: number } | undefined;
@@ -643,11 +649,38 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero })
               not exist until the first pick (owner, 2026-09-09: "this can replace the 'click
               a gradient to preview it..' which is wrong anyway"). */}
           {nothingPicked && (
-            <div className="text-[12px] text-fg-muted text-center leading-none" data-gx-map-hint="">
+            // PHONE: the line wraps to two there, so it gets a line height; one line on a desk.
+            <div className={`text-[12px] text-fg-muted text-center ${phone ? 'leading-snug' : 'leading-none'}`} data-gx-map-hint="">
               {/* "click it again to keep and edit it" is gone (owner, 2026-09-09): it taught
                   the SECOND gesture before the first had been made, and the second one is
                   discovered by doing it. The pad beside this line says what IT is for. */}
-              Click a gradient to start · or pick a colour range
+              {/* NEW GRADIENT (parity row M10, owner 2026-09-23): the one way to start without a
+                  pick — named, not described; the hero's ☰ menu carries it once a hero exists.
+                  While an image dropped before the first pick is read, the line says so. */}
+              {imageReading ? (
+                <span className="text-accent-300" data-gx-image-reading="" aria-live="polite">reading image…</span>
+              ) : (
+                <>
+                  Click a gradient to start · or pick a colour range
+                  {onNewGradient && (
+                    <>
+                      {' · '}
+                      {/* one unit, so a wrap never strands the "or" from what it offers */}
+                      <span className="whitespace-nowrap">
+                        {'or '}
+                        <button
+                          type="button"
+                          className="text-fg-secondary hover:text-accent-300 underline decoration-dotted underline-offset-2 transition-colors"
+                          onClick={onNewGradient}
+                          data-gx-new-gradient=""
+                        >
+                          start a new one
+                        </button>
+                      </span>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           )}
           {/* the pad, with the wall's scrollbar standing beside it: the lens on the pad and

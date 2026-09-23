@@ -33,6 +33,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
 import { useGlobalContextMenu } from '../../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../../components/GlobalContextMenu';
@@ -72,6 +73,8 @@ import { stopsOf } from '../../utils/gradientRamp';
 import { useArmedSlot, armSlot, getArmedSlot } from '../../palette/store/armedTarget';
 import { useImageDrop } from '../../palette/components/useImageDrop';
 import { useImageStore } from '../../palette/store/imageStore';
+import { DropScrim } from '../../components/ui/DropScrim';
+import { stopOps } from '../../utils/stopOps';
 import { GradientDragAvatar } from '../../palette/components/GradientDragAvatar';
 import { WorkingHero } from './WorkingHero';
 import { ExportMenu } from './ExportMenu';
@@ -144,6 +147,20 @@ const resetBareCurveSpace = (): void => {
   const g = useGeneratorStore.getState();
   if (!g.tracks && g.curveSpace !== DEFAULT_CURVE_SPACE) useGeneratorStore.setState({ curveSpace: DEFAULT_CURVE_SPACE });
 };
+
+/**
+ * NEW GRADIENT — start from nothing (parity row M10; the migration audit's OD3, owner
+ * 2026-09-23: "bring back the capability, not the mode" — the one start that needs neither a
+ * pick nor an image).
+ *
+ * The gradient is not invented here. It is the one the hero's own ☰ ▸ View ▸ Reset Default
+ * writes (grep `Reset Default` in components/gradient/gradientActions.ts): `stopOps.default()`,
+ * black to white on two stops, with the same two spaces — which are also what a catalogue pick
+ * carries (grep `entryToGradientConfig`), so a new gradient exports, shares and reaches GMT
+ * exactly as a picked one does. A STOP gradient: the first gesture on the ramp edits it.
+ */
+const NEW_GRADIENT_NAME = 'New gradient';
+const newGradientConfig = (): GradientConfig => ({ stops: stopOps.default(), colorSpace: 'linear', blendSpace: 'oklab' });
 
 const workingNameNow = (): string => {
   const s = useWorkingStore.getState();
@@ -407,6 +424,37 @@ export const GradientExplorerV2App: React.FC = () => {
     setTray(null);
   }, []);
   const bakeFace = useCallback(() => openTray(null), [openTray]);
+
+  /**
+   * NEW GRADIENT (see `newGradientConfig`) — from the nothing-picked line (BrowseStage) and the
+   * hero's ☰ menu. It is a `use`, like a pick: a new Recent session, Adjust and Curves started
+   * fresh, and ONE undo step back to what was there (or to nothing — the hero then keeps the
+   * last gradient on show, L8). An open face goes the way a pick takes it: Curves stays and fits
+   * the new gradient, Adjust stays at rest; a live SOURCE face (Mix, Image) and the stop inspector
+   * close, because they belonged to the gradient being replaced — a Mix face over a fixed input
+   * would be lying. The close is COMMITTED inside the bracket (`flushSync`, as the ♥ does —
+   * @see ./uiHistory) so that one undo puts the face back with the gradient. A folded hero
+   * unfolds: you asked to see a new gradient.
+   *
+   * @invariant New is ONE undo step: one Ctrl+Z gives back nothing (from the empty state), the
+   *   gradient that was there (from the ☰), or a live Mix WITH its face — proven by: `npm run
+   *   smoke:ge-ground` ("[13a] one Ctrl+Z after New did not return to the empty state", "[13b] one
+   *   Ctrl+Z after ☰ ▸ New Gradient did not give back …", "[13c] one Ctrl+Z brought the mix back
+   *   without its face"). Falsified 2026-09-23: a second bracket after the `use` (a `setName`) reds
+   *   [13a]; the tray close outside `flushSync` reds [13c] alone.
+   */
+  const startNewGradient = useCallback(() => {
+    const cur = trayRef.current;
+    paramEdit(() => {
+      flushSync(() => {
+        setFolded(false);
+        if (cur === 'mix' || cur === 'image' || cur === 'inspector') setTray(null);
+      });
+      useWorkingStore.getState().use(newGradientConfig(), NEW_GRADIENT_NAME, 'New', { fitCurves: cur === 'curves' });
+    });
+    armSlot(null);
+    deselectActiveHero();
+  }, []);
   // Folding closes any open face first (a face hangs from the tabs, and the tabs go away with
   // the body); `openTray(null)` so leaving the face commits exactly as a tab close would.
   const fold = useCallback((next: boolean) => { if (next && trayRef.current !== null) openTray(null); setFolded(next); }, [openTray]);
@@ -464,7 +512,11 @@ export const GradientExplorerV2App: React.FC = () => {
       finishImport(outcome);
     })();
   }, [finishImport]);
-  const { fileToImg } = useImageDrop({
+  // `over`: an OS FILE is being dragged over the page — the drop hint below (M8). The hook only
+  // raises it for a drag carrying 'Files', so the shell's own drags (a tile or the hero onto a
+  // set chip, a colour onto the ramp — custom MIME types, grep FAVIENT_DND_MIME / COLOR_DND_MIME)
+  // never show it.
+  const { fileToImg, over: fileOver } = useImageDrop({
     onLoaded: () => { if (trayRef.current !== 'image') openTray('image'); },
     preRoute: useCallback(async (files: File[]): Promise<File[]> => {
       const gradients = files.filter((f) => isGradientFileName(f.name));
@@ -636,6 +688,7 @@ export const GradientExplorerV2App: React.FC = () => {
         onRevealGround={revealGround}
         onExport={exportOpenToggle}
         onWallpaper={wallpaper}
+        onNewGradient={startNewGradient}
         exportOpen={exportOpen}
         exportMenu={
           exportOpen && derived.ramp ? (
@@ -735,7 +788,7 @@ export const GradientExplorerV2App: React.FC = () => {
           </div>
         )}
         <div className="flex-1 min-h-0 flex flex-col relative">
-          <BrowseStage heroFolded={folded} onFoldHero={fold} />
+          <BrowseStage heroFolded={folded} onFoldHero={fold} onNewGradient={startNewGradient} />
         </div>
       </div>
 
@@ -777,6 +830,13 @@ export const GradientExplorerV2App: React.FC = () => {
           drag in the suite — without an avatar a v2 drag was invisible (owner, 2026-09-09:
           it augments the drags where you expect it, above all hero → shelf). */}
       <GradientDragAvatar />
+      {/* THE DROP HINT (parity row M8, 2026-09-23): while a FILE is over the page, say what a
+          drop does here — the two things the help's "Your own files" promises, and nothing
+          else. The same scrim app-gmt shows for a scene file (`DropScrim`, the `osDrop` tier);
+          pointer-events-none, so the drop still lands on the window listener above. Gone the
+          moment the file drops or the drag leaves (`useImageDrop`'s 130 ms dragover timeout).
+          Guard: `npm run smoke:ge-gradientfile` [h1] / [h2]. */}
+      {fileOver && <DropScrim title="Drop to load" detail="Gradient files are imported · an image makes a gradient" data-gx-drop-hint="" />}
       <SettingsHost />
       {/* the Help browser (Getting Started / Keyboard Shortcuts, and the context menu's
           Help) and the Support modal — the Help menu's surfaces outside the menu itself */}

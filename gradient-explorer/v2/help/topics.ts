@@ -42,6 +42,7 @@ Gradient Explorer is for finding, making and exporting colour gradients.
 ## Start here
 - **Click a gradient on the wall.** It becomes the gradient you are working on — a preview.
 - **Click it again, or drag one of its stops,** to start editing it.
+- **Or start a new one** — the link above the colour map, or New Gradient in the gradient's ☰ menu — to begin from plain black to white.
 - **Press ♥** to keep it in My Gradients. **Share** copies a link that opens it; **Export** gives you a file; **Wallpaper** fills the screen with it.
 
 > Everything you work on is added to Recent in My Gradients by itself, so a gradient you lost track of is under Today.
