@@ -4,9 +4,10 @@
  * palette/core/explorerHandoff.ts, engine-gmt/utils/sceneStash.ts). Real clicks throughout: the
  * favourite swatch, the Destination select, the Explorer button, Back to GMT.
  *
- *   [1a] A FRESH BOOT, default Destination (layer 1): the Explorer opens on gradient 1 — which on
- *       a fresh Mandelbulb is ONE white stop, and arrives as that solid colour (the shared gate
- *       refuses a one-stop config; before the fix this sent nothing at all)
+ *   [1a] A FRESH BOOT, default Destination (layer 1): gradient 1 on a fresh Mandelbulb is ONE
+ *       white stop — one flat colour, nothing to explore — so NOTHING is sent and the Explorer
+ *       opens as it would on its own (owner, 2026-09-24; it used to arrive as solid white).
+ *       If the default scene ever ships a real gradient 1, the step expects that instead.
  *   [1] NO FAVOURITE APPLIED: with the Destination on Coloring · Layer 2, the Explorer button
  *       opens a GX tab whose working gradient is layer 2's gradient (the Destination's, not
  *       gradient 1), used "From GMT", nothing shown selected; the one-shot key is gone
@@ -32,7 +33,9 @@
  *
  * FALSIFIED 2026-09-23 against the dev server, thirteen breaks, one at a time, each reverted — every
  * one red at the step it names:
- *   · a one-stop gradient not padded (explorerTrip `gradientAt`) → [1a] (GX got nothing: "empty").
+ *   · (superseded 2026-09-24, when the owner reversed the rule) a one-stop gradient not padded →
+ *     [1a]. Now a flat gradient sends NOTHING; falsified that day by letting `gradientAt` return
+ *     a flat config → [1a] red (GX opened "From GMT" on solid white).
  *     Found by the first falsification pass: the break meant for [1] went red with an EMPTY GX
  *     rather than the wrong gradient, because a fresh Mandelbulb's gradient 1 is one white stop.
  *   · the Destination ignored (always the first host target) → [1].
@@ -161,7 +164,7 @@ async function main(): Promise<void> {
     throw new Error('My Gradients panel not open');
   }
 
-  // ── [1a] a fresh boot, default Destination: gradient 1, even when it is ONE stop ──────────
+  // ── [1a] a fresh boot, default Destination: a flat gradient 1 sends nothing ─────────────
   const s0 = await gmtState(gmt);
   const g1Raw = (await gmt.evaluate(`JSON.stringify(window.__store.getState().coloring.gradient)`)) as string;
   const gx0 = await pressExplorer(ctx, gmt);
@@ -169,10 +172,12 @@ async function main(): Promise<void> {
   await gxReady(gx0);
   const x0 = await gxState(gx0);
   const g1Stops = (JSON.parse(g1Raw).stops ?? JSON.parse(g1Raw)) as { color: string }[];
-  const solid = g1Stops.length === 1 ? `0:${g1Stops[0].color.toUpperCase()}:` : null;
-  check('[1a] default Destination: the GX working gradient is gradient 1 (a single stop arrives as that solid colour)',
-    x0.kind === 'gradient' && x0.source === 'From GMT' && (solid ? !!x0.sig?.startsWith(solid) && x0.sig.includes(`1000:${g1Stops[0].color.toUpperCase()}:`) : x0.sig === s0.g1),
-    `${g1Stops.length} stop(s) in GMT; GX ${x0.kind} / ${x0.source} / ${x0.sig?.slice(0, 50)}`);
+  const flat = g1Stops.length > 0 && new Set(g1Stops.map((st) => String(st.color).toUpperCase())).size < 2;
+  check(flat
+    ? '[1a] default Destination: a flat gradient 1 sends nothing — the Explorer opens as it would on its own'
+    : '[1a] default Destination: the GX working gradient is gradient 1',
+    flat ? x0.source !== 'From GMT' : (x0.kind === 'gradient' && x0.source === 'From GMT' && x0.sig === s0.g1),
+    `${g1Stops.length} stop(s) in GMT, flat=${flat}; GX ${x0.kind} / ${x0.source} / ${x0.sig?.slice(0, 50)}`);
   await gx0.goto('about:blank');
   await gx0.close();
 
