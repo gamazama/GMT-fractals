@@ -1,5 +1,28 @@
 # ADR-0111: One Working pipeline over an input slot (Gradient Explorer v2)
 
+> **Update 2026-09-23 (a pick starts fresh, and an untouched face changes nothing; decision
+> extended, not superseded):**
+> - **`use` always starts fresh.** A pick (wall, shelf, GX Global, a share link, the hand-off
+>   from GMT, New Gradient) discards pending Adjust dials (`ADJUST_FACE_DEFAULTS`, including the
+>   noise settings — what Cancel resets) and the curves, inside `use`'s one `paramEdit` bracket,
+>   so one Ctrl+Z brings back the previous gradient WITH its dials. Pending dials are thrown away,
+>   never baked into the gradient being replaced (owner, 2026-09-23). `bakes` now resets only
+>   `MAIN_DEFAULTS` (leaving Mix or Image); `fitCurves` refits when the Curves face is open, and the
+>   face stays open. Session restore does not go through `use` (`applyStudioSnapshot`), so a
+>   restored session keeps its dials. Commit `5af86e75`.
+> - **An untouched Curves fit leaves the gradient as it is.** While the Curves face was open and
+>   untouched, the pipeline re-fitted the curves' output into new stops, and that re-fit is lossy
+>   (0 of 5 catalogue gradients measured came back identical), so a stop selected with Curves open
+>   vanished on leaving it, a knot edit saved the re-fit, and opening Curves rewrote the Recent
+>   copy. `runWorkingPipeline` takes `curvesUntouched`: with the fit untouched and Adjust at its
+>   defaults, the output config IS the input's config (the bar still draws the curves). Commit
+>   `215722bd`.
+> - **Known gap:** `tracksEdited` is not in the undo snapshot, so an undo that brings back edited
+>   curves reads them as untouched, and leaving Curves then drops those edits.
+> - Guards: `npx tsx debug/test-palette-working.mts` [13] (use) and [14] (untouched Curves);
+>   `npm run smoke:ge-tray` [14] (pinned to a gradient whose live fit really re-fits) and [18]
+>   (picks with Adjust / Curves open). Each falsified.
+
 > **Update 2026-09-14 (ADR-0122, the ramp is the gradient; decision refined, not superseded):**
 > Decision 4's "verbatim" now covers both config forms — a RAMP gradient (`stops: []` + `ramp`)
 > under the identity pipeline comes back by identity exactly as a stop config does. Its "only a
