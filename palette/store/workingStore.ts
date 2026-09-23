@@ -77,6 +77,18 @@
  *   `npx tsx debug/test-palette-working.mts` ("add stops: the document has stops past the cap",
  *   "add stops: exactly one undo entry", "add stops: undo puts the ramp input back").
  *
+ * @invariant a `use` that is not a bake (a wall / shelf / GX Global pick, a share link, a
+ *   gradient from GMT) starts fresh in ONE undo entry: every control the Adjust face's Cancel
+ *   resets is at its default (noise Frequency and Targets included), no curves are left — or,
+ *   with `fitCurves`, fresh untouched curves of the NEW gradient — the axes are OkLCh, and one
+ *   Ctrl+Z brings back the previous gradient with its dials and curves — proven by: `npx tsx
+ *   debug/test-palette-working.mts` [13] ("use: every Adjust control is back at its default…",
+ *   "use → one Ctrl+Z: … with its dials", "fitCurves: still exactly one undo entry") and `npm run
+ *   smoke:ge-tray` [18a] / [18e] / [18c] (real picks). Falsified 2026-09-23: U1–U6 in the
+ *   harness header, and in the browser the pre-fix `bakes`-only reset reds each of [18a], [18e]
+ *   and [18c], `MAIN_DEFAULTS` for a pick reds [18a], `fitCurves` ignored or run as a second
+ *   bracket reds [18c].
+ *
  * @assumption A `gradient` input's `config` is never mutated after `use()` (the store clones
  *   it on the way in; consumers read it through `useWorkingDerived`). Nothing enforces this.
  */
@@ -95,7 +107,9 @@ import {
   readSampledCurvesNow,
   readGeneratorSlice,
   setGeneratorSlice,
+  fitChannelsToTracks,
   MAIN_DEFAULTS,
+  ADJUST_FACE_DEFAULTS,
   slotSnapshot,
   generatorModeOf,
   type GeneratorSlice,
@@ -163,12 +177,40 @@ export interface WorkingState {
 
   /** Replace the input. One undo entry. Clears any fold memory. */
   setInput: (input: WorkingInput) => void;
-  /** "Use": a fixed gradient becomes the input (cloned). One undo entry; a new session. */
-  /** `bakes`: the config already CARRIES the current Adjust dials and curves (a live Mix /
-   *  Image committed on leaving it) — reset them, as beginEdit does, or they apply AGAIN on
-   *  the next pass. Measured 2026-09-07: a leftover Phase of 0.02 shifted every stop 2 %
-   *  further right on each Mix toggle. */
-  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean; bakes?: boolean; origin?: CatalogOrigin }) => void;
+  /**
+   * "Use": a fixed gradient becomes the input (cloned). One undo entry; a new session.
+   *
+   * EVERY USE STARTS FRESH (owner, 2026-09-23): the Adjust dials and the curves reset inside the
+   * same bracket, so the new gradient is what the hero shows and ONE Ctrl+Z brings back the
+   * previous gradient together with its dials and curves. Before that the reset ran only under
+   * `bakes`, so a wall pick kept whatever was live — a moved dial applied to the new pick with
+   * Apply still offered (it would have baked the old dial into it), a Phase put back by "return
+   * to source" rode on unseen, and a pick with the Curves face open showed the OLD gradient's
+   * curves. The rule is the one Cancel / Apply are built on: every application bakes a new state
+   * and starts fresh (plans/ge-v2-unified-shell-plan.md §4 C.3; Curves "not sticky").
+   *
+   * WHICH reset depends on what the config is:
+   *   • default — a DISCARD, like the Adjust face's Cancel: `ADJUST_FACE_DEFAULTS`, all three
+   *     bins, noise Frequency and Targets included. A pick throws pending dials away; it never
+   *     bakes them into the gradient it replaces.
+   *   • `bakes` — a BAKE: the config already CARRIES the dials and curves (a live Mix / Image
+   *     committed on leaving it), so reset them as `beginEdit` does (`MAIN_DEFAULTS`: Frequency and
+   *     Targets stay, as after every other bake), or they apply AGAIN on the next pass. Measured
+   *     2026-09-07: a leftover Phase of 0.02 shifted every stop 2 % further right on each Mix toggle.
+   * Either way the curves go (and `tracksEdited` with them) and the axes go back to
+   * `DEFAULT_CURVE_SPACE` — no tracks are left, and the space is not sticky.
+   *
+   * `fitCurves`: the Curves face is OPEN — instead of leaving no curves, fit fresh ones to the new
+   * gradient (what the face does when it mounts, `fitFromChannels`), in OkLCh, untouched. Inside
+   * this bracket rather than as a second `fitFromChannels` call, because two brackets are two
+   * undo entries (a nested start does not merge them — see `paramUndoBracket`).
+   *
+   * Callers: the shell's wall / shelf / GX Global pick, a share link at boot, and a gradient GMT
+   * hands over (gradient-explorer/v2/fromGmt.ts — a shelf favourite goes through the pick) (all
+   * default); the shell's leave-Mix / leave-Image commit (`bakes`). A session restore does NOT come through
+   * here — it applies its documents directly (`applyStudioSnapshot`), dials and curves included.
+   */
+  use: (config: GradientConfig, name: string, source: string, opts?: { fromRecent?: boolean; bakes?: boolean; fitCurves?: boolean; origin?: CatalogOrigin }) => void;
   setName: (name: string | null) => void;
   /** Fold the live pipeline into editable stops (no-op when already editing an untouched
    *  stops input). Collects the folded gradient into Recent. */
@@ -377,10 +419,14 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     const origin = coerceOrigin(opts?.origin) ?? undefined;
     paramEdit(() => {
       set({ input: origin ? { kind: 'gradient', config: c, name, source, origin } : { kind: 'gradient', config: c, name, source }, name: null, bakedFrom: null, liveFrom: null, sessionId: null, sessionPinned: !!opts?.fromRecent });
-      if (opts?.bakes) {
-        setGeneratorSlice({ ...MAIN_DEFAULTS });
-        useGeneratorStore.setState({ tracks: null, curvesOn: false });
-      }
+      // Start fresh (see the JSDoc): a bake resets what it folded in, a pick discards like Cancel.
+      setGeneratorSlice({ ...(opts?.bakes ? MAIN_DEFAULTS : ADJUST_FACE_DEFAULTS) });
+      const g = useGeneratorStore.getState();
+      useGeneratorStore.setState(
+        opts?.fitCurves
+          ? { tracks: fitChannelsToTracks(channelsOfConfig(c), g.detail, g.smooth, DEFAULT_CURVE_SPACE), curvesOn: true, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE }
+          : { tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE },
+      );
     });
   },
 

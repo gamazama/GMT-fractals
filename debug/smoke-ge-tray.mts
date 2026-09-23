@@ -38,6 +38,20 @@
  *   [17] a stop selection belongs to its gradient (2026-09-16): undoing the stop's own edits
  *       keeps it selected, the undo that brings another gradient back drops it; [17b] undoing an
  *       inserted, selected stop closes the inspector
+ *   [18] a pick starts fresh (owner, 2026-09-23): (a) Adjust open with a value in every bin, a
+ *       wall pick → every control at its default, the pick shown as it is (passthrough), the face
+ *       still open with Apply / Cancel off, one Ctrl+Z restores the gradient AND its dials; (e) the
+ *       same after "return to source" put a dial back live with the face closed; (c) Curves open
+ *       in HSV, a pick → the face stays, refitted to the NEW gradient in OkLCh, one Ctrl+Z restores
+ *       the old gradient's HSV curves
+ *
+ * [18] falsified 2026-09-23 in `palette/store/workingStore.ts` `use`, each reverted: the reset
+ * back under `if (opts?.bakes)` (the code before the fix) → [18a] red ("kept Adjust dials …
+ * hueRotate 30 … noiseFreq 64"); with (a) cut from a scratch copy → [18e] red ("hueRotate 20,
+ * phase 0.05"); with (a) and (e) cut → [18c] red ("not in OkLCh (space hsv, keys H,S,V)").
+ * `MAIN_DEFAULTS` for a pick → [18a] red on noiseFreq / Targets alone. `fitCurves` ignored → [18c]
+ * red ("not refitted"). The refit as a second `fitFromChannels` bracket → [18c] red on the Ctrl+Z
+ * (it undid the fit, not the pick).
  *
  * Falsified 2026-09-07 three ways, each reverted (and once more after the Mix redesign the
  * same day: [4]'s second click used the wall's PRE-hero box and hit the hero's ramp — it armed
@@ -769,6 +783,187 @@ async function main() {
   if ((await stopCount()) !== gap!.n) fail(`[17b] setup: one Ctrl+Z did not remove the inserted stop (${await stopCount()} stops, wanted ${gap!.n})`);
   if (s17b.face || s17b.picker) fail(`[17b] the undo removed the inserted stop but the inspector stayed open (face ${s17b.face})`);
   console.log('✓ [17b] undoing an inserted, selected stop closes the inspector rather than leaving it empty');
+
+  /**
+   * [18] A PICK STARTS FRESH (owner, 2026-09-23). A wall pick is `use`, which reset the dials and
+   * the curves only for the leave-Mix / leave-Image bake — so a pick kept whatever was live:
+   *   (a) Adjust open, dials moved, pick → the old dials applied to the new gradient and Apply was
+   *       still offered (it would have baked them into it);
+   *   (e) a bake undone by "return to source" (dials live, face closed), pick → the Phase rode on
+   *       with no control on screen to show it;
+   *   (c) Curves open, pick → the output stayed the OLD gradient's curves: the pick did nothing.
+   * Now every Adjust control is back at its default (Frequency and Targets too), the output is the
+   * new gradient verbatim, Apply and Cancel are off, an open face STAYS open (Curves refitted to
+   * the new pick, in OkLCh), and one Ctrl+Z brings back the previous gradient with its dials.
+   * The picks, tabs, chip and undo are real input; the dials are set through the store, as [7] and
+   * [15] set them.
+   */
+  const WM = `window.__wm = window.__wm || function (p) {
+    var hit = performance.getEntriesByType('resource').map(function (e) { return e.name; })
+      .filter(function (n) { try { return new URL(n).pathname === p; } catch (e) { return false; } });
+    return import(hit.length ? hit[hit.length - 1] : p);
+  }; true`;
+  await page.evaluate(WM);
+  type Probe = { passthrough: boolean | null; input: string; kind: string; space: string; tracks: boolean; keys: string; curvesOn: boolean; edited: boolean; ramp: { r: number; g: number; b: number }[]; target: { r: number; g: number; b: number }[] | null };
+  // Store reads through the module instance the page booted (`__wm`, smoke-ge-wave's helper): a
+  // bare import of an HMR-stamped file is a second, empty store.
+  const probe = () => page.evaluate(`(async function () {
+    var ws = await window.__wm('/palette/store/workingStore.ts');
+    var gs = await window.__wm('/palette/store/generatorStore.ts');
+    var cu = await window.__wm('/utils/colorUtils.ts');
+    var d = ws.deriveWorkingNow();
+    var g = gs.useGeneratorStore.getState();
+    var input = ws.useWorkingStore.getState().input;
+    return {
+      passthrough: d ? d.passthrough : null, input: JSON.stringify(input), kind: input.kind,
+      space: g.curveSpace, tracks: !!g.tracks, keys: Object.keys(g.tracks || {}).sort().join(','), curvesOn: g.curvesOn, edited: g.tracksEdited,
+      ramp: d ? d.ramp.map(function (c) { return { r: c.r, g: c.g, b: c.b }; }) : [],
+      target: input.kind === 'gradient' ? cu.gradientDisplayRamp(input.config).map(function (c) { return { r: c.r, g: c.g, b: c.b }; }) : null
+    };
+  })()`) as Promise<Probe>;
+  const DIALS18 = { hueRotate: 30, phase: 0.05, bands: 4, noise: 0.3, noiseFreq: 64, noiseL: false, noiseC: true };
+  const offDefaults = async () => {
+    const gg = await gen();
+    return Object.entries(defaults).filter(([k, v]) => gg[k] !== v).map(([k, v]) => `${k} ${gg[k]} (default ${v})`);
+  };
+  const lostDials = async (want: Record<string, unknown>) => {
+    const gg = await gen();
+    return Object.entries(want).filter(([k, v]) => gg[k] !== v).map(([k, v]) => `${k} ${gg[k]} (was ${v})`);
+  };
+  // Wall tiles a click can reach — hit-testing to a wall canvas, so never the hero or an open tray
+  // floating over the wall — each used once: a second click on the tile you just picked KEEPS it.
+  const usedAims = new Set<string>();
+  const wallAims18 = () => page.evaluate(() => {
+    const wallEl = document.querySelector('[data-gx-keepselect]')!;
+    const r = wallEl.getBoundingClientRect();
+    const out: { x: number; y: number }[] = [];
+    for (let y = r.y + 14; y < Math.min(r.bottom, window.innerHeight) - 8; y += 29) {
+      for (const col of [6, 9, 12, 15]) {
+        const x = r.x + 24 + 44 * col;
+        if (x > r.right - 12) continue;
+        const el = document.elementFromPoint(x, y);
+        if (el && el.tagName === 'CANVAS' && !el.closest('[data-gx-hero]') && wallEl.contains(el)) out.push({ x, y });
+      }
+    }
+    return out;
+  });
+  /** Pick a gradient the hero is not showing — a real click. A tile that turns out to BE the
+   *  working gradient keeps it (the second-click rule); that is undone and the next tile tried. */
+  const pickAnother = async (label: string): Promise<Probe> => {
+    const was = await probe();
+    for (const a of await wallAims18()) {
+      const key = `${Math.round(a.x)},${Math.round(a.y)}`;
+      if (usedAims.has(key)) continue;
+      usedAims.add(key);
+      await page.mouse.click(a.x, a.y);
+      await page.waitForTimeout(700);
+      const now = await probe();
+      if (now.kind === 'gradient' && now.input !== was.input) return now;
+      if (now.input !== was.input) {
+        // kept rather than picked: put it back and try another tile
+        await page.mouse.move(640, 20);
+        await page.keyboard.press('Control+z');
+        await page.waitForTimeout(500);
+      }
+    }
+    return fail(`[18] ${label}: setup — no wall tile clear of the tray picked a different gradient`);
+  };
+  const faceNow = async () => (await state(page)).face;
+  for (let i = 0; i < 3 && (await faceNow()); i++) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
+  // A taller window, so a tall face (Curves) still leaves wall tiles below it to pick from.
+  await page.setViewportSize({ width: 1280, height: 1100 });
+  await page.waitForTimeout(500);
+  await pickAnother('start'); // a plain preview to start every case from
+
+  // (a) Adjust open, dials moved, pick
+  await page.click('[data-gx-tray-tab="adjust"]');
+  await page.waitForTimeout(400);
+  if ((await faceNow()) !== 'adjust') fail(`[18a] setup: the Adjust face did not open (${await faceNow()})`);
+  await page.evaluate((v) => (window as any).__store.getState().setPaletteGenerator(v), DIALS18);
+  await page.waitForTimeout(400);
+  if (await applyBtn.isDisabled()) fail('[18a] setup: Apply is off with every bin moved');
+  const beforeA = await probe();
+  const pickedA = await pickAnother('(a)');
+  const offA = await offDefaults();
+  if (offA.length) fail(`[18a] the pick kept Adjust dials the new gradient never had: ${offA.join(', ')}`);
+  if (pickedA.passthrough !== true) fail(`[18a] the new pick is not shown as it is (passthrough ${pickedA.passthrough}) — something still applies to it`);
+  if ((await faceNow()) !== 'adjust') fail(`[18a] the pick closed the Adjust face (${await faceNow()}) — it stays open for the new gradient`);
+  if (!(await applyBtn.isDisabled()) || !(await cancelBtn.isDisabled())) fail(`[18a] Apply / Cancel are still offered after the pick (Apply off ${await applyBtn.isDisabled()}, Cancel off ${await cancelBtn.isDisabled()}) — Apply would bake the old dials into the new pick`);
+  if ((await chip()).state !== 'preview') fail(`[18a] the pick is not a plain preview (chip ${(await chip()).state})`);
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(600);
+  const undoneA = await probe();
+  if (undoneA.input !== beforeA.input) fail('[18a] one Ctrl+Z after the pick did not bring the previous gradient back');
+  const lostA = await lostDials(DIALS18);
+  if (lostA.length) fail(`[18a] one Ctrl+Z brought the gradient back without its dials: ${lostA.join(', ')}`);
+  await cancelBtn.click(); // put the dials back for the next case
+  await page.waitForTimeout(300);
+  console.log('✓ [18a] Adjust open, dials moved, pick: every control at rest, the pick shown as it is, the face open with Apply / Cancel off; one Ctrl+Z restores the gradient + its dials');
+
+  // (e) a bake undone by "return to source" leaves the dials live with the face CLOSED; pick
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.05, hueRotate: 20 }));
+  await page.waitForTimeout(300);
+  await page.click('[data-gx-tray-tab="adjust"]'); // close = bake
+  await page.waitForTimeout(400);
+  if ((await chip()).state !== 'edited') fail(`[18e] setup: closing Adjust did not bake (chip ${(await chip()).state})`);
+  await page.click('[data-gx-hero] [data-gx-state="edited"]'); // return to source
+  await page.waitForTimeout(400);
+  if ((await chip()).state !== 'preview' || (await phaseNow()) !== 0.05 || (await faceNow())) fail(`[18e] setup: return to source did not put the dial back live with the face closed (chip ${(await chip()).state}, phase ${await phaseNow()}, face ${await faceNow()})`);
+  const beforeE = await probe();
+  const pickedE = await pickAnother('(e)');
+  const offE = await offDefaults();
+  if (offE.length) fail(`[18e] the pick carried a leftover dial with no control showing it: ${offE.join(', ')}`);
+  if (pickedE.passthrough !== true) fail(`[18e] the new pick is not shown as it is (passthrough ${pickedE.passthrough})`);
+  await page.click('[data-gx-tray-tab="adjust"]');
+  await page.waitForTimeout(400);
+  if (!(await applyBtn.isDisabled()) || !(await cancelBtn.isDisabled())) fail('[18e] Apply / Cancel are offered on the fresh pick');
+  await page.click('[data-gx-tray-tab="adjust"]'); // untouched: closing bakes nothing
+  await page.waitForTimeout(400);
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(600);
+  const undoneE = await probe();
+  if (undoneE.input !== beforeE.input) fail('[18e] one Ctrl+Z after the pick did not bring the previous gradient back');
+  const lostE = await lostDials({ phase: 0.05, hueRotate: 20 });
+  if (lostE.length) fail(`[18e] one Ctrl+Z brought the gradient back without its dials: ${lostE.join(', ')}`);
+  await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0, hueRotate: 0 }));
+  await page.waitForTimeout(300);
+  console.log('✓ [18e] return to source, then a pick: no leftover Phase; one Ctrl+Z restores the gradient + its dials');
+
+  // (c) Curves open (axes switched to HSV), pick → refitted to the NEW gradient, in OkLCh
+  await page.click('[data-gx-tray-tab="curves"]');
+  await page.waitForTimeout(500);
+  if ((await faceNow()) !== 'curves' || !(await probe()).tracks) fail(`[18c] setup: the Curves face did not open with a fit (face ${await faceNow()})`);
+  await page.evaluate(`(async function () {
+    var ws = await window.__wm('/palette/store/workingStore.ts');
+    var gs = await window.__wm('/palette/store/generatorStore.ts');
+    gs.useGeneratorStore.getState().setCurveSpace('hsv', ws.deriveWorkingNow().base);
+  })()`);
+  await page.waitForTimeout(400);
+  const beforeC = await probe();
+  if (beforeC.space !== 'hsv') fail(`[18c] setup: the axes did not switch to HSV (${beforeC.space})`);
+  const pickedC = await pickAnother('(c)');
+  if ((await faceNow()) !== 'curves') fail(`[18c] the pick closed the Curves face (${await faceNow()})`);
+  if (!pickedC.tracks || !pickedC.curvesOn || pickedC.edited) fail(`[18c] the Curves face was not refitted to the pick (tracks ${pickedC.tracks}, on ${pickedC.curvesOn}, edited ${pickedC.edited})`);
+  if (pickedC.space !== 'oklab' || pickedC.keys !== 'C,L,h') fail(`[18c] the refit is not in OkLCh (space ${pickedC.space}, keys ${pickedC.keys})`);
+  const toNewC = rampDist(pickedC.ramp, pickedC.target ?? []);
+  const toOldC = rampDist(pickedC.ramp, beforeC.ramp);
+  if (!(toNewC < 3 && toOldC > 4 * toNewC + 8)) fail(`[18c] the output is not the NEW gradient — mean ${toNewC.toFixed(1)} levels from it, ${toOldC.toFixed(1)} from the old output`);
+  const offC = await offDefaults();
+  if (offC.length) fail(`[18c] the pick kept Adjust dials: ${offC.join(', ')}`);
+  await page.mouse.move(640, 20);
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(600);
+  const undoneC = await probe();
+  if (undoneC.input !== beforeC.input || undoneC.space !== 'hsv' || !undoneC.tracks) fail(`[18c] one Ctrl+Z did not bring the previous gradient back with its HSV curves (space ${undoneC.space}, tracks ${undoneC.tracks})`);
+  await page.click('[data-gx-tray-tab="curves"]'); // untouched fit: closing clears it
+  await page.waitForTimeout(400);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  console.log(`✓ [18c] Curves open, pick: refitted to the new gradient in OkLCh (mean ${toNewC.toFixed(1)} levels from it, ${toOldC.toFixed(1)} from the old output), the face open; one Ctrl+Z restores the old curves`);
 
   await browser.close();
   if (errors.length) {

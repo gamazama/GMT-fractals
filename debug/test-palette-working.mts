@@ -35,6 +35,27 @@
  *      re-opened in the same task keeps the sync waiting; (d) the control — a direct `syncRecent`
  *      inside a bracket IS captured, so (a) can see a capture (and the ♥ relies on it).
  *
+ * A use starts fresh, added 2026-09-23 (owner: a pick throws pending dials away like Cancel):
+ *  13. `use` from a state with a value in every Adjust bin and edited HSV curves: every
+ *      `ADJUST_FACE_DEFAULTS` control back (Frequency and Targets too), no curves, the axes on
+ *      OkLCh, the output the new gradient verbatim, ONE entry — and one undo brings back the old
+ *      gradient, its dials and its HSV curves. `fitCurves` (the Curves face open): fresh untouched
+ *      OkLCh curves of the NEW gradient in the same one entry. `bakes` (leaving Mix / Image): the
+ *      chain and curves reset, Frequency and Targets stay.
+ *
+ * ── FALSIFIED 2026-09-23 (section [13]) — each break made, run red (exit 1), reverted ──
+ *   U1  the reset back under `if (opts?.bakes)` (the code before the fix) → 6 red: every dial left,
+ *       the HSV curves left, not passthrough, and the three `fitCurves` checks.
+ *   U2  `MAIN_DEFAULTS` for a pick too → 2 red: "left noiseFreq=64, noiseL=false, noiseC=true" (use
+ *       and fitCurves).
+ *   U3  `fitCurves` ignored → 1 red, "fresh, untouched curves in OkLCh". (Its output check stays
+ *       green: with no curves the output IS the new gradient — the curves check is the guard.)
+ *   U4  the space not reset → 1 red, "the axes back on OkLCh (space hsv…)".
+ *   U5  `ADJUST_FACE_DEFAULTS` for a bake too → 1 red, "bakes: noise Frequency and Targets stay".
+ *   U6  the refit as its own `fitFromChannels` call after the bracket → 3 red: "still exactly one
+ *       undo entry (got 2)", the Ctrl+Z after it, and a cascade into the bake check (that one undo
+ *       left the stack a step off).
+ *
  * ── FALSIFIED 2026-09-16 (section [12]) — each break made, run red (exit 1), reverted ──
  *   S1  `syncRecentOutsideUndo` calling `syncRecent` directly (the debounce before the fix) → 8
  *       red: all of (a), (b) and (c), e.g. "a cancelled gesture … leaves NO undo entry (got 1,
@@ -515,6 +536,72 @@ console.log('[9] Curves + Add stops against the real stores');
     paramEditEnd();
     ok(depth() === d3 + 1 && /__ext__favients/.test(topDiff()), `control: a direct syncRecent inside a bracket is captured (diff ${topDiff()})`);
   }
+}
+
+// ══ [13] a use starts fresh (owner, 2026-09-23) ══════════════════════════════════════════
+// A wall pick is `use`. It kept whatever was live: a moved dial applied to the new pick (Apply
+// still offered, to bake it in), a Phase that "return to source" had put back rode on unseen, and
+// with the Curves face open the output stayed the OLD gradient's curves. Now `use` discards the
+// dials (everything the Adjust face's Cancel resets) and the curves inside its own bracket.
+console.log('[13] a use starts fresh: dials and curves go, and one Ctrl+Z brings them back');
+{
+  const { ADJUST_FACE_DEFAULTS } = await import('../palette/store/generatorStore');
+  const { deriveWorkingNow } = await import('../palette/store/workingStore');
+  const w = () => useWorkingStore.getState();
+  const g = () => useGeneratorStore.getState();
+  const gen = () => engine().paletteGenerator as Record<string, unknown>;
+  const depth = (): number => engine().paramUndoStack.length;
+  const two = (a: string, b: string): GradientConfig => ({ stops: [{ id: 'a', position: 0, color: a }, { id: 'b', position: 1, color: b }], colorSpace: 'srgb', blendSpace: 'oklab' });
+  const A = two('#1B2A6B', '#F2B134');
+  const B = two('#E4572E', '#17BEBB');
+  const stopsKey = (c: GradientConfig | null | undefined) => JSON.stringify(c?.stops.map((s) => [s.position, s.color.toUpperCase()]) ?? null);
+  // What a user can leave live: a value in every Adjust bin (Frequency and Targets among them),
+  // and EDITED curves drawn in HSV.
+  const DIALS = { hueRotate: 30, phase: 0.05, bands: 4, noise: 0.3, noiseFreq: 64, noiseL: false, noiseC: true };
+  const offDefault = () => Object.entries(ADJUST_FACE_DEFAULTS).filter(([k, v]) => gen()[k] !== v).map(([k]) => `${k}=${String(gen()[k])}`);
+  const missing = () => Object.entries(DIALS).filter(([k, v]) => gen()[k] !== v).map(([k]) => `${k}=${String(gen()[k])}`);
+  w().use(A, 'A', 'Browse');
+  engine().setPaletteGenerator(DIALS);
+  useGeneratorStore.setState({ curveSpace: 'hsv', tracks: fitChannelsToTracks(channelsOfConfig(A), D, 0, 'hsv'), curvesOn: true, tracksEdited: true });
+  const tracksA = JSON.stringify(g().tracks);
+  const rampA = deriveWorkingNow()!.ramp;
+
+  // the pick
+  const d0 = depth();
+  w().use(B, 'B', 'Browse');
+  ok(offDefault().length === 0, `use: every Adjust control is back at its default, Frequency and Targets included (left ${offDefault().join(', ') || 'none'})`);
+  ok(g().tracks === null && !g().curvesOn && !g().tracksEdited && g().curveSpace === DEFAULT_CURVE_SPACE, `use: no curves left and the axes back on OkLCh (space ${g().curveSpace}, curvesOn ${g().curvesOn})`);
+  const dB = deriveWorkingNow();
+  ok(!!dB && dB.passthrough && stopsKey(dB.config) === stopsKey(B), 'use: the output is the new gradient, verbatim (passthrough)');
+  ok(depth() === d0 + 1, `use: exactly one undo entry (got ${depth() - d0})`);
+  engine().undoParam();
+  const back = w().input;
+  ok(back.kind === 'gradient' && back.name === 'A' && stopsKey(back.config) === stopsKey(A), 'use → one Ctrl+Z: the previous gradient is back');
+  ok(missing().length === 0, `use → one Ctrl+Z: … with its dials (wrong: ${missing().join(', ') || 'none'})`);
+  ok(JSON.stringify(g().tracks) === tracksA && g().curvesOn && g().curveSpace === 'hsv', `use → one Ctrl+Z: … and its curves, in the space they were drawn in (space ${g().curveSpace})`);
+
+  // the pick with the Curves face open: refitted to the NEW gradient, in the same one entry
+  const d1 = depth();
+  w().use(B, 'B', 'Browse', { fitCurves: true });
+  ok(depth() === d1 + 1, `fitCurves: still exactly one undo entry (got ${depth() - d1})`);
+  ok(!!g().tracks && g().curvesOn && !g().tracksEdited && g().curveSpace === DEFAULT_CURVE_SPACE, `fitCurves: fresh, untouched curves in OkLCh (space ${g().curveSpace}, edited ${g().tracksEdited})`);
+  ok(offDefault().length === 0, `fitCurves: the dials start fresh too (left ${offDefault().join(', ') || 'none'})`);
+  const dF = deriveWorkingNow()!;
+  const toNew = maxDE(dF.ramp, dB!.ramp);
+  const toOld = maxDE(dF.ramp, rampA);
+  console.log(`  fitCurves: max ΔE ${toNew.toFixed(4)} from the new pick, ${toOld.toFixed(4)} from the old gradient's output`);
+  ok(toNew < 0.03 && toOld > 0.2, `fitCurves: the output is the NEW gradient, not the old curves (max ΔE ${toNew.toFixed(4)} to it, ${toOld.toFixed(4)} to the old)`);
+  engine().undoParam();
+  ok(w().input.kind === 'gradient' && JSON.stringify(g().tracks) === tracksA && g().curveSpace === 'hsv' && missing().length === 0, 'fitCurves → one Ctrl+Z: the previous gradient, its dials and its HSV curves');
+
+  // a BAKE (leaving a live Mix / Image) resets what it folded in, and leaves Frequency and Targets
+  // where they are, as every other bake does (MAIN_DEFAULTS)
+  w().use(B, 'B', 'Mix', { bakes: true });
+  ok(gen().hueRotate === 0 && gen().phase === 0 && gen().bands === 0 && gen().noise === 0 && g().tracks === null, 'bakes: the chain and the curves reset');
+  ok(gen().noiseFreq === 64 && gen().noiseL === false && gen().noiseC === true, 'bakes: noise Frequency and Targets stay, as after every bake');
+  engine().undoParam();
+  engine().setPaletteGenerator({ ...ADJUST_FACE_DEFAULTS });
+  useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
 }
 
 if (failures) {

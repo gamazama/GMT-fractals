@@ -326,7 +326,12 @@ export const GradientExplorerV2App: React.FC = () => {
     }
     if (w.input.kind === 'stops' && w.bakedFrom?.input.kind === 'gradient' && favientSig(w.bakedFrom.input.config) === sig) return;
     const fromRecent = candidate.mode === 'favients';
-    w.use(p.config, p.name, p.source ?? (fromRecent ? 'My Gradients' : 'Browse'), { fromRecent, origin: p.origin });
+    // A NEW gradient starts fresh (owner, 2026-09-23): `use` throws away pending Adjust dials and
+    // curves — like Cancel, never baked into the gradient it replaces — in its own undo step, so
+    // one Ctrl+Z brings back the previous gradient WITH its dials. An open Adjust face stays open
+    // on the new pick with every dial at rest (Apply / Cancel off); an open Curves face stays too,
+    // refitted to the new pick in OkLCh (`fitCurves` — the face itself only fits when it mounts).
+    w.use(p.config, p.name, p.source ?? (fromRecent ? 'My Gradients' : 'Browse'), { fromRecent, origin: p.origin, fitCurves: trayRef.current === 'curves' });
     // A pick while the Image face is open replaces the image as the source: the face closes
     // (owner, 2026-09-07). `use` already replaced the input, so no bake, just the tray.
     if (trayRef.current === 'image') setTray(null);
