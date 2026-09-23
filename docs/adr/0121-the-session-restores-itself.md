@@ -1,5 +1,10 @@
 # ADR-0121: The working session restores itself, and travels in a file from Settings
 
+> **Update 2026-09-23 (the old shell is gone; decision unchanged):** Consequences' last bullet
+> says the old shell (`gradient-explorer/main.tsx`) keeps its SceneIO menu and inert Autosave rows
+> "until it is removed". It was removed when `gradient-explorer.html` became the v2 shell (merge
+> `79b88b16`), so the v2 session is now the only session any Gradient Explorer page has.
+
 - **Status:** Accepted
 - **Date:** 2026-09-13
 - **Relates to:** ADR-0112 (variants bypass the scene loader — the same reasoning, reused);

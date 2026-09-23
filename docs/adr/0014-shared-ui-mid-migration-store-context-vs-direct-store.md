@@ -4,6 +4,13 @@
 **Status:** Accepted
 **Scope:** `components/` shared UI primitives, `components/contexts/StoreCallbacksContext.tsx`
 
+> **Update 2026-09-23 (entry-point swap; decision unchanged):** the 2026-07-28 block below names
+> `gradient-explorer/GradientExplorerApp.tsx` as the fifth host. That file was deleted when the
+> Gradient Explorer's first shell was retired (merge `79b88b16`). Its place is taken by
+> `gradient-explorer/v2/GradientExplorerV2App.tsx` (grep `storeCallbacks`), which memoises its
+> callbacks with `useMemo` and passes `openContextMenu` through unchanged, so "all five hosts
+> memoise" still holds and the incremental-migration decision stands.
+
 > **Update 2026-07-28 (migration progressed; decision unchanged):** The status
 > snapshot in *Decision* is stale. `useStoreCallbacks()` is now consumed by
 > `components/Slider.tsx:163,206`, `components/AutoFeaturePanel.tsx:116`,
