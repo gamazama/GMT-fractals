@@ -13,8 +13,8 @@
  * is a whole gradient, the exact CONFIG — see `ImportResult`. The router that turns results into
  * favourites is `importGradientFiles.ts`; the PNG / document / zip entrances are not here.
  *
- * CONTRACT for THIS module (`palette/core/` as a whole does NOT hold to it — `rampCanvas.ts`
- * is "DOM-only", and `favientsExport.ts` / `img2grad/decode.ts` / `favientDnd.ts` /
+ * CONTRACT for THIS module (`palette/core/` as a whole does NOT hold to it —
+ * `favientsExport.ts` / `img2grad/decode.ts` / `favientDnd.ts` /
  * `storage.ts` / `catalogLoader.ts` reach for `document` / `localStorage` / `fetch`):
  *   - PURE + deterministic: input text → ramp, no DOM, no `File`, no Date/random.
  *     The `File` read happens in the UI layer; these functions only see a string.

@@ -2,9 +2,10 @@
  * dragFlight — pure, DOM-free reducer for window-level "is a drag in flight, and
  * what MIME types does it carry?" tracking (P0e interface (b)).
  *
- * A self-contained, harness-testable state machine. `hooks/useDragInFlight.ts`
- * wires it to real window drag events; `debug/test-engine-dnd-kernels.mts` drives
- * it directly.
+ * A self-contained, harness-testable state machine. `debug/test-engine-dnd-kernels.mts`
+ * drives it directly. NO production caller since the entry-point swap (2026-09-16):
+ * `hooks/useDragInFlight.ts`, which wired it to window drag events, went with the first
+ * Explorer shell, and knip cannot see that because the harness is a knip entry.
  *
  * The model mirrors FavientsPanel's existing `depth.current` tracker: enter ++ /
  * leave --, captured/reset at the 0↔1 boundary, hard-reset on drop/dragend. Only

@@ -98,7 +98,10 @@ export const GX_GLOBAL_SOURCE: LiveSource = {
     tag: 'shared by users',
     license: 'Contributed anonymously by people using the Gradient Explorer; no licence is recorded',
     attribution: 'Gradients shared by the Gradient Explorer community',
-    url: 'https://app.gmt-fractals.com/gradient-explorer-next.html',
+    // The canonical page since the entry-point swap (2026-09-16). Only a link (Filters ▸
+    // Sources, About): a build that still carries the old `gradient-explorer-next.html`
+    // address reaches the same app through the alias.
+    url: 'https://app.gmt-fractals.com/gradient-explorer.html',
     userMade: true,
   },
   load: async (): Promise<CatalogEntry[]> => {

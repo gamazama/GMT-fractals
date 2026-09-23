@@ -70,7 +70,7 @@ import { seedGeSmokeState } from './geSmokeBoot.mts';
 import { encodeShare } from '../gradient-explorer/v2/shareUrl';
 import { encodeSession } from '../store/sessionEnvelope';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const KEY = 'gmt.ge.session';
 const GX_ENABLED = 'gmt.ge.autosave-enabled';
 const GMT_ENABLED = 'gmt-autosave-enabled';

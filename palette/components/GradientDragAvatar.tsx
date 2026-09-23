@@ -16,8 +16,8 @@
  * `gradient-explorer/GradientDropLayer.tsx` springs the whole box out of the grabbed
  * swatch's rect on a rAF loop, and comes wrapped in 440 lines of reveal-path, landing and
  * cancel machinery that v2 scrapped (the audit's S1). This is the chip alone: a fixed-size
- * ramp at the cursor, no morph, no spring, no landing. The old one stays where it is for
- * the old shell — this is not a fork of it, it is the part v2 needs.
+ * ramp at the cursor, no morph, no spring, no landing. It was not a fork of the old one, it
+ * was the part v2 needs; the old one went with its shell at the entry-point swap (2026-09-16).
  *
  * It reads `useDragPayload()` (set by `setFavientDrag`, the one call every gradient drag
  * makes) rather than the hero SELECTION, so that dragging never doubles as a pick, and so

@@ -1,58 +1,58 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-09-12T08:15:50.917Z",
+  "generated_at": "2026-09-23T18:40:15.221Z",
   "repo_root": "H:/GMT/workspace-gmt/stable",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3634,
-    "bytes": 87251218,
-    "tokens": 12782726,
-    "loadable_tokens": 12654361,
-    "context_worthy_tokens": 5433468,
-    "source_of_truth_tokens": 4427021,
+    "files": 3689,
+    "bytes": 89240415,
+    "tokens": 13371848,
+    "loadable_tokens": 13243362,
+    "context_worthy_tokens": 5866585,
+    "source_of_truth_tokens": 4785117,
     "orientation_tokens": 28132,
-    "architecture_tokens": 978315,
-    "reachable_union_files": 1095,
-    "reachable_union_tokens": 3312013,
-    "dead_context_files": 23,
-    "dead_context_tokens": 71538
+    "architecture_tokens": 1053336,
+    "reachable_union_files": 1111,
+    "reachable_union_tokens": 3443452,
+    "dead_context_files": 24,
+    "dead_context_tokens": 72374
   },
   "by_app_reachable": {
     "app-gmt": {
       "entry": "app-gmt/main.tsx",
-      "files": 845,
-      "tokens": 2628732
+      "files": 871,
+      "tokens": 2756779
     },
     "fluid-toy": {
       "entry": "fluid-toy/main.tsx",
-      "files": 562,
-      "tokens": 1450100
+      "files": 587,
+      "tokens": 1576395
     },
     "fractal-toy": {
       "entry": "fractal-toy/main.tsx",
-      "files": 344,
-      "tokens": 924294
+      "files": 353,
+      "tokens": 953758
     },
     "mesh-export": {
       "entry": "mesh-export/main.tsx",
-      "files": 419,
-      "tokens": 1283947
+      "files": 441,
+      "tokens": 1395381
     },
     "gradient-explorer": {
-      "entry": "gradient-explorer/main.tsx",
-      "files": 535,
-      "tokens": 1483951
+      "entry": "gradient-explorer/v2/main.tsx",
+      "files": 532,
+      "tokens": 1598162
     },
     "gradient-explorer-next": {
       "entry": "gradient-explorer/v2/main.tsx",
-      "files": 435,
-      "tokens": 1268187
+      "files": 532,
+      "tokens": 1598162
     },
     "demo": {
       "entry": "index.tsx",
-      "files": 367,
-      "tokens": 990370
+      "files": 376,
+      "tokens": 1020246
     }
   },
   "dead_context": [
@@ -90,6 +90,11 @@
       "path": "engine-gmt/features/fragmentarium_import/v4/emit/parameters.ts",
       "tokens": 1613,
       "tier": "engine-gmt"
+    },
+    {
+      "path": "store/dragFlight.ts",
+      "tokens": 836,
+      "tier": "gmt-app"
     },
     {
       "path": "engine/ConfigDefaults.ts",
@@ -174,43 +179,43 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 840796,
-      "files": 246
+      "tokens": 949549,
+      "files": 253
     },
     "app-gmt": {
-      "tokens": 53732,
+      "tokens": 54161,
       "files": 22
     },
     "gmt-app": {
-      "tokens": 663476,
-      "files": 245
+      "tokens": 687821,
+      "files": 251
     },
     "tooling": {
-      "tokens": 5078156,
-      "files": 515
+      "tokens": 5386774,
+      "files": 543
     },
     "demo": {
       "tokens": 8972,
       "files": 8
     },
     "docs": {
-      "tokens": 1735871,
-      "files": 504
+      "tokens": 1746669,
+      "files": 511
     },
     "engine-gmt": {
-      "tokens": 2948910,
-      "files": 1055
+      "tokens": 2954368,
+      "files": 1056
     },
     "engine-core": {
-      "tokens": 437471,
-      "files": 165
+      "tokens": 447072,
+      "files": 168
     },
     "fluid-toy": {
-      "tokens": 158331,
+      "tokens": 158401,
       "files": 76
     },
     "fractal-toy": {
-      "tokens": 17443,
+      "tokens": 17463,
       "files": 14
     },
     "mesh-export": {
@@ -218,26 +223,26 @@
       "files": 23
     },
     "public": {
-      "tokens": 744206,
-      "files": 761
+      "tokens": 865236,
+      "files": 764
     }
   },
   "by_context_class": {
     "source": {
-      "tokens": 3418696,
-      "files": 1140
+      "tokens": 3544626,
+      "files": 1155
     },
     "architecture": {
-      "tokens": 978315,
-      "files": 265
+      "tokens": 1053336,
+      "files": 280
     },
     "data": {
-      "tokens": 6025743,
-      "files": 921
+      "tokens": 6181627,
+      "files": 925
     },
     "config": {
-      "tokens": 10383,
-      "files": 12
+      "tokens": 21735,
+      "files": 14
     },
     "orient": {
       "tokens": 28132,
@@ -248,37 +253,37 @@
       "files": 620
     },
     "source-tooling": {
-      "tokens": 997942,
-      "files": 311
+      "tokens": 1218756,
+      "files": 330
     },
     "reference-legacy": {
       "tokens": 1195150,
       "files": 349
     },
     "generated": {
-      "tokens": 128365,
+      "tokens": 128486,
       "files": 1
     }
   },
   "by_load_policy": {
     "on-demand": {
-      "tokens": 4427021,
-      "files": 1463
+      "tokens": 4785117,
+      "files": 1499
     },
     "read-for-area": {
-      "tokens": 978315,
-      "files": 265
+      "tokens": 1053336,
+      "files": 280
     },
     "skip": {
-      "tokens": 4487757,
-      "files": 308
+      "tokens": 4643641,
+      "files": 312
     },
     "read-first": {
       "tokens": 28132,
       "files": 15
     },
     "never": {
-      "tokens": 128365,
+      "tokens": 128486,
       "files": 621
     },
     "reference-only": {
@@ -288,22 +293,22 @@
   },
   "tier_policy_matrix": {
     "root": {
-      "on-demand": 606427,
-      "read-for-area": 83461,
+      "on-demand": 703786,
+      "read-for-area": 94734,
       "skip": 10812,
       "read-first": 11731
     },
     "app-gmt": {
-      "on-demand": 52058,
+      "on-demand": 52487,
       "read-first": 1674
     },
     "gmt-app": {
-      "on-demand": 663476
+      "on-demand": 687821
     },
     "tooling": {
-      "on-demand": 998003,
-      "skip": 3500036,
-      "read-for-area": 577172,
+      "on-demand": 1218817,
+      "skip": 3534890,
+      "read-for-area": 630122,
       "read-first": 2945
     },
     "demo": {
@@ -311,34 +316,34 @@
       "read-first": 1542
     },
     "docs": {
-      "read-for-area": 312743,
+      "read-for-area": 323541,
       "read-first": 3732,
       "reference-only": 1195150,
       "skip": 224246
     },
     "engine-gmt": {
-      "on-demand": 1397398,
+      "on-demand": 1402856,
       "read-for-area": 2792,
       "reference-only": 1537986,
       "skip": 8457,
       "read-first": 2277
     },
     "engine-core": {
-      "on-demand": 437471
+      "on-demand": 447072
     },
     "fluid-toy": {
       "read-for-area": 2147,
-      "on-demand": 151953,
+      "on-demand": 152023,
       "read-first": 4231
     },
     "fractal-toy": {
-      "on-demand": 17443
+      "on-demand": 17463
     },
     "mesh-export": {
       "on-demand": 95362
     },
     "public": {
-      "skip": 744206
+      "skip": 865236
     }
   },
   "heavy_files": [
@@ -356,8 +361,14 @@
     },
     {
       "path": "HANDOFF.md",
-      "tokens": 56840,
+      "tokens": 61082,
       "tier": "root",
+      "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "plans/ge-v2-unified-shell-plan.md",
+      "tokens": 59802,
+      "tier": "tooling",
       "loadPolicy": "read-for-area"
     },
     {
@@ -371,12 +382,6 @@
       "tokens": 49951,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/ge-v2-unified-shell-plan.md",
-      "tokens": 46718,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "plans/overnight-audit/PROPOSALS.md",
@@ -409,15 +414,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "fluid-toy/fluid/FluidEngine.ts",
-      "tokens": 29769,
-      "tier": "fluid-toy",
+      "path": "components/AdvancedGradientEditor.tsx",
+      "tokens": 30146,
+      "tier": "gmt-app",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "components/AdvancedGradientEditor.tsx",
-      "tokens": 29320,
-      "tier": "gmt-app",
+      "path": "fluid-toy/fluid/FluidEngine.ts",
+      "tokens": 29769,
+      "tier": "fluid-toy",
       "loadPolicy": "on-demand"
     },
     {
@@ -433,15 +438,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine-gmt/components/FormulaPicker/FormulaPicker.tsx",
-      "tokens": 24211,
-      "tier": "engine-gmt",
+      "path": "components/EmbeddedColorPicker.tsx",
+      "tokens": 24233,
+      "tier": "gmt-app",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "components/EmbeddedColorPicker.tsx",
-      "tokens": 23924,
-      "tier": "gmt-app",
+      "path": "engine-gmt/components/FormulaPicker/FormulaPicker.tsx",
+      "tokens": 24211,
+      "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
     {
@@ -454,6 +459,18 @@
       "path": "engine-gmt/navigation/Navigation.tsx",
       "tokens": 23388,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/components/ChannelGraphEditor.tsx",
+      "tokens": 21034,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/v2/BrowseStage.tsx",
+      "tokens": 20660,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -473,12 +490,6 @@
       "tokens": 20319,
       "tier": "docs",
       "loadPolicy": "read-for-area"
-    },
-    {
-      "path": "gradient-explorer/v2/BrowseStage.tsx",
-      "tokens": 20143,
-      "tier": "root",
-      "loadPolicy": "on-demand"
     },
     {
       "path": "mesh-export/gpu/gpu-pipeline.ts",
@@ -511,8 +522,20 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "debug/test-gradient-file.mts",
+      "tokens": 18636,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-gradient-roundtrip.mts",
+      "tokens": 17629,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "gradient-explorer/v2/WorkingHero.tsx",
-      "tokens": 16474,
+      "tokens": 16798,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -525,6 +548,12 @@
     {
       "path": "plans/ge-v2-mock-b.html",
       "tokens": 16144,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/smoke-ge-tray.mts",
+      "tokens": 15879,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -553,15 +582,21 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "gradient-explorer/FullscreenGradientOverlay.tsx",
+      "tokens": 15302,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine-gmt/shaders/chunks/pathtracer.ts",
       "tokens": 15229,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/components/FavientsPanel.tsx",
-      "tokens": 14721,
-      "tier": "root",
+      "path": "debug/test-palette-catalog-licensing.mts",
+      "tokens": 14805,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -571,14 +606,26 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/FullscreenGradientOverlay.tsx",
-      "tokens": 14613,
+      "path": "gradient-explorer/fullscreen/GeometryHandleLayer.tsx",
+      "tokens": 14382,
       "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/smoke-chrome.mts",
+      "tokens": 14295,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
       "path": "debug/test-frag-integration.mts",
       "tokens": 14216,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/smoke-ge-phone.mts",
+      "tokens": 14145,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -592,6 +639,18 @@
       "path": "plans/ge-v2-mock-c.html",
       "tokens": 13935,
       "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/store/favientsStore.ts",
+      "tokens": 13890,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/v2/ExportMenu.tsx",
+      "tokens": 13873,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -613,8 +672,20 @@
       "loadPolicy": "read-for-area"
     },
     {
-      "path": "palette/components/ChannelGraphEditor.tsx",
-      "tokens": 13656,
+      "path": "utils/colorUtils.ts",
+      "tokens": 13684,
+      "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/smoke-ge-hero.mts",
+      "tokens": 13675,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/v2/GradientExplorerV2App.tsx",
+      "tokens": 13666,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -625,15 +696,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/fullscreen/modes/splineMode.tsx",
-      "tokens": 13624,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "engine-gmt/utils/formulaBrief.ts",
       "tokens": 13577,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/fullscreen/modes/splineMode.tsx",
+      "tokens": 13448,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -649,21 +720,33 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "hooks/useGraphInteraction.ts",
+      "tokens": 13304,
+      "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine/fractal/FractalColorRenderer.ts",
       "tokens": 13104,
       "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "hooks/useGraphInteraction.ts",
-      "tokens": 13034,
-      "tier": "gmt-app",
-      "loadPolicy": "on-demand"
+      "path": "plans/palette-catalogue-licensing.md",
+      "tokens": 13083,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
     },
     {
       "path": "plans/mb3d/decompiler/decompile.mjs",
       "tokens": 13000,
       "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/components/FavientsPanel.tsx",
+      "tokens": 12889,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -679,6 +762,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "palette/store/generatorStore.ts",
+      "tokens": 12675,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine/FeatureSystem.ts",
       "tokens": 12665,
       "tier": "engine-core",
@@ -691,9 +780,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "utils/colorUtils.ts",
-      "tokens": 12534,
-      "tier": "gmt-app",
+      "path": "debug/smoke-ge-wave.mts",
+      "tokens": 12416,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -703,14 +792,20 @@
       "loadPolicy": "read-for-area"
     },
     {
+      "path": "palette/core/exportFormats.ts",
+      "tokens": 12070,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "palette/core/indesignIdmlTemplate.ts",
       "tokens": 11740,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/v2/ExportMenu.tsx",
-      "tokens": 11657,
+      "path": "palette/store/workingStore.ts",
+      "tokens": 11615,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -745,15 +840,21 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/fullscreen/GeometryHandleLayer.tsx",
-      "tokens": 11305,
-      "tier": "root",
+      "path": "utils/CurveFitting.ts",
+      "tokens": 11274,
+      "tier": "gmt-app",
       "loadPolicy": "on-demand"
     },
     {
       "path": "palette/components/ImageStage.tsx",
-      "tokens": 11146,
+      "tokens": 11161,
       "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/smoke-ge-ground.mts",
+      "tokens": 10931,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -764,7 +865,7 @@
     },
     {
       "path": "app-gmt/main.tsx",
-      "tokens": 10695,
+      "tokens": 10804,
       "tier": "app-gmt",
       "loadPolicy": "on-demand"
     },
@@ -775,15 +876,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/v2/GradientExplorerV2App.tsx",
-      "tokens": 10596,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "engine-gmt/features/drawing/DrawingOverlay.tsx",
       "tokens": 10536,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/v2/Tray.tsx",
+      "tokens": 10448,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -791,12 +892,6 @@
       "tokens": 10440,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
-    },
-    {
-      "path": "palette/store/generatorStore.ts",
-      "tokens": 10358,
-      "tier": "root",
-      "loadPolicy": "on-demand"
     },
     {
       "path": "engine-gmt/features/lighting/components/LightControls.tsx",
@@ -811,21 +906,45 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/core/exportFormats.ts",
-      "tokens": 10341,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "mesh-export/components/PreviewCanvas.tsx",
       "tokens": 10314,
       "tier": "mesh-export",
       "loadPolicy": "on-demand"
     },
     {
+      "path": "debug/smoke-ge-gradientfile.mts",
+      "tokens": 10101,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-palette-favients.mts",
+      "tokens": 10095,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-palette-exportsubjects.mts",
+      "tokens": 10002,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-palette-shelf-manage.mts",
+      "tokens": 9925,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "store/animation/sequenceSlice.ts",
       "tokens": 9912,
       "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "engine-gmt/engine/MaterialController.ts",
+      "tokens": 9878,
+      "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
     {
@@ -847,9 +966,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine-gmt/engine/MaterialController.ts",
-      "tokens": 9685,
-      "tier": "engine-gmt",
+      "path": "debug/test-palette-working.mts",
+      "tokens": 9639,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -865,15 +984,21 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/store/favientsStore.ts",
-      "tokens": 9530,
-      "tier": "root",
+      "path": "debug/bake-palette-catalog.mts",
+      "tokens": 9573,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
       "path": "plans/overnight-audit/salvage/g02-partial-cycle6.diff",
       "tokens": 9437,
       "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/core/stopFit.ts",
+      "tokens": 9392,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -895,15 +1020,21 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/smoke-ge-tray.mts",
-      "tokens": 9257,
+      "path": "engine-gmt/features/lighting/index.ts",
+      "tokens": 9247,
+      "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-gx-session.mts",
+      "tokens": 9188,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine-gmt/features/lighting/index.ts",
-      "tokens": 9247,
-      "tier": "engine-gmt",
+      "path": "debug/test-palette-wavegen.mts",
+      "tokens": 9185,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -911,6 +1042,12 @@
       "tokens": 9009,
       "tier": "docs",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "palette/core/importGradientFiles.ts",
+      "tokens": 8962,
+      "tier": "root",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "engine-gmt/engine/ShaderBuilder.ts",
@@ -922,6 +1059,12 @@
       "path": "engine-gmt/features/fragmentarium_import/parsers/dec-preprocessor.ts",
       "tokens": 8895,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "engine/plugins/Menu.tsx",
+      "tokens": 8891,
+      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -937,8 +1080,8 @@
       "loadPolicy": "read-for-area"
     },
     {
-      "path": "palette/store/workingStore.ts",
-      "tokens": 8585,
+      "path": "gradient-explorer/v2/exportActions.ts",
+      "tokens": 8593,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -955,9 +1098,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine/plugins/Menu.tsx",
-      "tokens": 8343,
-      "tier": "engine-core",
+      "path": "palette/core/importFormats.ts",
+      "tokens": 8469,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/v2/SetRail.tsx",
+      "tokens": 8372,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -985,9 +1134,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/v2/SetRail.tsx",
+      "path": "app-gmt/AppGmt.tsx",
       "tokens": 8223,
-      "tier": "root",
+      "tier": "app-gmt",
       "loadPolicy": "on-demand"
     },
     {
@@ -995,12 +1144,6 @@
       "tokens": 8220,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
-    },
-    {
-      "path": "app-gmt/AppGmt.tsx",
-      "tokens": 8203,
-      "tier": "app-gmt",
-      "loadPolicy": "on-demand"
     },
     {
       "path": "engine-gmt/topbar.tsx",
@@ -1034,14 +1177,8 @@
     },
     {
       "path": "palette/core/rampGeometry.ts",
-      "tokens": 8023,
+      "tokens": 8010,
       "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "debug/smoke-ge-hero.mts",
-      "tokens": 7965,
-      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -1069,9 +1206,21 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": ".claude/rules/palette.md",
+      "tokens": 7789,
+      "tier": "root",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "components/timeline/TimelineToolbar.tsx",
       "tokens": 7778,
       "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/components/usePickerModel.ts",
+      "tokens": 7764,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -1093,8 +1242,8 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/test-palette-shelf-manage.mts",
-      "tokens": 7710,
+      "path": "debug/palette-packs.mts",
+      "tokens": 7695,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1121,6 +1270,12 @@
       "tokens": 7590,
       "tier": "docs",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "components/inputs/ScalarInput.tsx",
+      "tokens": 7564,
+      "tier": "gmt-app",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "plans/overnight-audit/TRIAGE-2026-08-02.md",
@@ -1171,8 +1326,8 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/components/usePickerModel.ts",
-      "tokens": 7339,
+      "path": "palette/components/WaveOverlay.tsx",
+      "tokens": 7328,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -1181,6 +1336,12 @@
       "tokens": 7318,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "components/HelpBrowser.tsx",
+      "tokens": 7278,
+      "tier": "gmt-app",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "plans/p2-drag-interaction-scope.md",
@@ -1201,21 +1362,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "components/HelpBrowser.tsx",
-      "tokens": 7105,
-      "tier": "gmt-app",
+      "path": "engine/PanelManifest.ts",
+      "tokens": 7113,
+      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
       "path": "fluid-toy/features/palette.ts",
       "tokens": 7093,
       "tier": "fluid-toy",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "gradient-explorer/GradientDropLayer.tsx",
-      "tokens": 7078,
-      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -1231,6 +1386,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "engine/plugins/Help.tsx",
+      "tokens": 7050,
+      "tier": "engine-core",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine-gmt/auth/AccountPanel.tsx",
       "tokens": 7015,
       "tier": "engine-gmt",
@@ -1240,6 +1401,12 @@
       "path": "engine-gmt/formulas/MandelTerrain.ts",
       "tokens": 7001,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "engine/plugins/SceneIO.tsx",
+      "tokens": 6999,
+      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -1261,33 +1428,21 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine/PanelManifest.ts",
-      "tokens": 6913,
-      "tier": "engine-core",
+      "path": "debug/smoke-ge-session.mts",
+      "tokens": 6925,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine/plugins/SceneIO.tsx",
-      "tokens": 6906,
-      "tier": "engine-core",
+      "path": "debug/test-palette-pickermodel.mts",
+      "tokens": 6887,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
       "path": "app-gmt/LoadingScreen.tsx",
       "tokens": 6846,
       "tier": "app-gmt",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "components/inputs/ScalarInput.tsx",
-      "tokens": 6823,
-      "tier": "gmt-app",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "engine/plugins/Help.tsx",
-      "tokens": 6810,
-      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -1303,12 +1458,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/v2/Tray.tsx",
-      "tokens": 6625,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "debug/test-palette-variants.mts",
       "tokens": 6592,
       "tier": "tooling",
@@ -1321,9 +1470,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/core/stopFit.ts",
+      "path": "utils/GraphRenderer.ts",
       "tokens": 6555,
-      "tier": "root",
+      "tier": "gmt-app",
       "loadPolicy": "on-demand"
     },
     {
@@ -1331,12 +1480,6 @@
       "tokens": 6530,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
-    },
-    {
-      "path": "gradient-explorer/GradientExplorerApp.tsx",
-      "tokens": 6463,
-      "tier": "root",
-      "loadPolicy": "on-demand"
     },
     {
       "path": "utils/timelineUtils.ts",
@@ -1363,6 +1506,24 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/ge-ramp-analysis-and-deep-fit.md",
+      "tokens": 6370,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "debug/test-palette-stopfit.mts",
+      "tokens": 6364,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/bake-gradient-presets.mts",
+      "tokens": 6320,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine-gmt/navigation/HudOverlay.tsx",
       "tokens": 6318,
       "tier": "engine-gmt",
@@ -1375,12 +1536,6 @@
       "loadPolicy": "read-for-area"
     },
     {
-      "path": "utils/GraphRenderer.ts",
-      "tokens": 6302,
-      "tier": "gmt-app",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "mesh-export/algorithms/sparse-grid.ts",
       "tokens": 6299,
       "tier": "mesh-export",
@@ -1391,12 +1546,6 @@
       "tokens": 6262,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
-    },
-    {
-      "path": "debug/test-palette-pickermodel.mts",
-      "tokens": 6246,
-      "tier": "tooling",
-      "loadPolicy": "on-demand"
     },
     {
       "path": "engine-gmt/hooks/useInteractionManager.ts",
@@ -1448,13 +1597,7 @@
     },
     {
       "path": "debug/smoke-ge-livedrag.mts",
-      "tokens": 6110,
-      "tier": "tooling",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "debug/test-palette-favients.mts",
-      "tokens": 6107,
+      "tokens": 6109,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1473,6 +1616,12 @@
     {
       "path": "debug/native-config-sweep.mts",
       "tokens": 6085,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-palette-generator.mts",
+      "tokens": 6083,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1525,15 +1674,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/test-palette-exportsubjects.mts",
-      "tokens": 5895,
-      "tier": "tooling",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "debug/smoke-ge-phone.mts",
-      "tokens": 5863,
-      "tier": "tooling",
+      "path": "engine-gmt/features/fragmentarium_import/workshop/param-builder.ts",
+      "tokens": 5869,
+      "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
     {
@@ -1543,10 +1686,28 @@
       "loadPolicy": "read-for-area"
     },
     {
+      "path": "debug/test-palette-importformats.mts",
+      "tokens": 5819,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "plans/mb3d/converter-design.md",
       "tokens": 5818,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "fluid-toy/main.tsx",
+      "tokens": 5772,
+      "tier": "fluid-toy",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-palette-channelcurve.mts",
+      "tokens": 5760,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "engine/store/createStateLibrarySlice.ts",
@@ -1567,12 +1728,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "fluid-toy/main.tsx",
-      "tokens": 5721,
-      "tier": "fluid-toy",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "engine-gmt/features/rotation_gizmo/RotationGizmoOverlay.tsx",
       "tokens": 5713,
       "tier": "engine-gmt",
@@ -1585,15 +1740,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/test-palette-stopfit.mts",
-      "tokens": 5643,
-      "tier": "tooling",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "engine-gmt/features/fragmentarium_import/workshop/param-builder.ts",
-      "tokens": 5624,
-      "tier": "engine-gmt",
+      "path": "data/help/topics/changelog.ts",
+      "tokens": 5659,
+      "tier": "gmt-app",
       "loadPolicy": "on-demand"
     },
     {
@@ -1604,7 +1753,7 @@
     },
     {
       "path": "engine-gmt/features/quality.ts",
-      "tokens": 5594,
+      "tokens": 5595,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
@@ -1618,6 +1767,18 @@
       "path": "engine-gmt/engine/weave/nativeResolver.ts",
       "tokens": 5565,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "utils/GraphRendererBuilder.ts",
+      "tokens": 5564,
+      "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/core/pickerModel.ts",
+      "tokens": 5545,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -1657,8 +1818,8 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/smoke-ge-ground.mts",
-      "tokens": 5482,
+      "path": "debug/test-gx-share.mts",
+      "tokens": 5454,
       "tier": "tooling",
       "loadPolicy": "on-demand"
     },
@@ -1678,6 +1839,12 @@
       "path": "debug/check-rule-guards.mjs",
       "tokens": 5434,
       "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/fullscreen/modes/gradientMapMode.tsx",
+      "tokens": 5424,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -1723,12 +1890,6 @@
       "loadPolicy": "read-for-area"
     },
     {
-      "path": "gradient-explorer/fullscreen/modes/gradientMapMode.tsx",
-      "tokens": 5275,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "engine-gmt/components/timeline/RenderPopup/fbxScene.ts",
       "tokens": 5256,
       "tier": "engine-gmt",
@@ -1765,6 +1926,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/ge-v2-research/competitors.md",
+      "tokens": 5225,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "docs/policy/ddfs-string-contract.md",
       "tokens": 5206,
       "tier": "docs",
@@ -1793,6 +1960,12 @@
       "tokens": 5142,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "palette/core/generatorPipeline.ts",
+      "tokens": 5123,
+      "tier": "root",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "store/slices/historySlice.ts",
@@ -1825,9 +1998,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "data/help/topics/changelog.ts",
-      "tokens": 5087,
-      "tier": "gmt-app",
+      "path": "debug/smoke-gx-geom-handles.mts",
+      "tokens": 5090,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -1845,6 +2018,18 @@
     {
       "path": "plans/bucket-render-port-handoff.md",
       "tokens": 5028,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "palette/components/FavientsCollectionMenu.tsx",
+      "tokens": 5007,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "plans/ge-v2-parity-checklist.md",
+      "tokens": 5007,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
     },
@@ -1867,22 +2052,10 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/components/GeneratorStage.tsx",
-      "tokens": 4970,
+      "path": ".claude/rules/sibling-apps.md",
+      "tokens": 4990,
       "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "palette/core/pickerModel.ts",
-      "tokens": 4967,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "utils/GraphRendererBuilder.ts",
-      "tokens": 4958,
-      "tier": "gmt-app",
-      "loadPolicy": "on-demand"
+      "loadPolicy": "read-for-area"
     },
     {
       "path": "mesh-export/algorithms/dc-core.ts",
@@ -1909,6 +2082,30 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "package.json",
+      "tokens": 4895,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "package.json",
+      "tokens": 4895,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "package.json",
+      "tokens": 4895,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/core/catalogLoader.ts",
+      "tokens": 4882,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "data/help/topics/timeline.ts",
       "tokens": 4870,
       "tier": "gmt-app",
@@ -1927,6 +2124,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "palette/components/WaveToolHead.tsx",
+      "tokens": 4831,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "debug/test-palette-blendspaces.mts",
       "tokens": 4818,
       "tier": "tooling",
@@ -1939,15 +2142,15 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/core/importFormats.ts",
-      "tokens": 4804,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "engine-gmt/topbar/ViewportQuality.tsx",
       "tokens": 4803,
       "tier": "engine-gmt",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/test-gradient-rampmode.mts",
+      "tokens": 4776,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -1975,12 +2178,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "utils/CurveFitting.ts",
-      "tokens": 4727,
-      "tier": "gmt-app",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "components/PerformanceMonitor.tsx",
       "tokens": 4726,
       "tier": "gmt-app",
@@ -1994,7 +2191,7 @@
     },
     {
       "path": "app-gmt/renderDialogExtras.tsx",
-      "tokens": 4711,
+      "tokens": 4715,
       "tier": "app-gmt",
       "loadPolicy": "on-demand"
     },
@@ -2018,7 +2215,7 @@
     },
     {
       "path": "palette/store/fullscreenStore.ts",
-      "tokens": 4694,
+      "tokens": 4693,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
@@ -2038,6 +2235,12 @@
       "path": "components/PanelRouter.tsx",
       "tokens": 4643,
       "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/core/curveSpaces.ts",
+      "tokens": 4635,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -2077,6 +2280,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "palette/core/favientsExport.ts",
+      "tokens": 4607,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "engine-gmt/engine/weave/convert.ts",
       "tokens": 4601,
       "tier": "engine-gmt",
@@ -2099,6 +2308,12 @@
       "tokens": 4567,
       "tier": "tooling",
       "loadPolicy": "read-for-area"
+    },
+    {
+      "path": "debug/smoke-gmt-gradientdrop.mts",
+      "tokens": 4543,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
     },
     {
       "path": "plans/c4d-redshift-osl/mandelbulb.osl",
@@ -2138,7 +2353,7 @@
     },
     {
       "path": "components/layout/Dock.tsx",
-      "tokens": 4471,
+      "tokens": 4485,
       "tier": "gmt-app",
       "loadPolicy": "on-demand"
     },
@@ -2161,9 +2376,9 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "palette/core/generatorPipeline.ts",
-      "tokens": 4430,
-      "tier": "root",
+      "path": "engine/plugins/Session.ts",
+      "tokens": 4412,
+      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -2185,6 +2400,12 @@
       "loadPolicy": "read-for-area"
     },
     {
+      "path": "debug/smoke-gx-spline.mts",
+      "tokens": 4379,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
       "path": "components/inputs/VectorInput.tsx",
       "tokens": 4367,
       "tier": "gmt-app",
@@ -2197,22 +2418,16 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "gradient-explorer/gradientTargets.ts",
-      "tokens": 4335,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
       "path": "gradient-explorer/fullscreen/modeRegistry.ts",
       "tokens": 4285,
       "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
-      "path": "package.json",
-      "tokens": 4278,
-      "tier": "root",
-      "loadPolicy": "on-demand"
+      "path": "docs/adr/0124-recent-follows-the-working-gradient.md",
+      "tokens": 4276,
+      "tier": "docs",
+      "loadPolicy": "read-for-area"
     },
     {
       "path": "components/timeline/AudioStrip.tsx",
@@ -2221,9 +2436,21 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "debug/smoke-gx-geom-handles.mts",
-      "tokens": 4240,
-      "tier": "tooling",
+      "path": "palette/core/gradientPng.ts",
+      "tokens": 4260,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "gradient-explorer/PickerStage.tsx",
+      "tokens": 4248,
+      "tier": "root",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "engine-gmt/utils/loadFilter.ts",
+      "tokens": 4233,
+      "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
     {
@@ -2236,18 +2463,6 @@
       "path": "debug/out/encode_bin.py",
       "tokens": 4226,
       "tier": "tooling",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "gradient-explorer/PickerStage.tsx",
-      "tokens": 4225,
-      "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "palette/components/FavientsCollectionMenu.tsx",
-      "tokens": 4225,
-      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -2293,8 +2508,14 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "engine-gmt/utils/loadFilter.ts",
-      "tokens": 4144,
+      "path": "debug/test-palette-groundsets.mts",
+      "tokens": 4154,
+      "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "engine-gmt/feedback/FeedbackPanel.tsx",
+      "tokens": 4153,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
     },
@@ -2308,6 +2529,18 @@
       "path": "components/ColorWheel.tsx",
       "tokens": 4127,
       "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "utils/pngCodec.ts",
+      "tokens": 4127,
+      "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "palette/core/gradientDocument.ts",
+      "tokens": 4122,
+      "tier": "root",
       "loadPolicy": "on-demand"
     },
     {
@@ -2329,12 +2562,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": ".claude/rules/sibling-apps.md",
-      "tokens": 4060,
-      "tier": "root",
-      "loadPolicy": "read-for-area"
-    },
-    {
       "path": "mesh-export/algorithms/mesh-writers.ts",
       "tokens": 4043,
       "tier": "mesh-export",
@@ -2345,6 +2572,12 @@
       "tokens": 4031,
       "tier": "engine-gmt",
       "loadPolicy": "on-demand"
+    },
+    {
+      "path": "plans/pre-release-ui-pass.md",
+      "tokens": 4026,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
     },
     {
       "path": "engine-gmt/formulas/Appell.ts",
@@ -2460,10 +2693,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 5431,
-      "lines": 92,
-      "tokens": 1386,
-      "structuralTokens": 1540,
+      "bytes": 5629,
+      "lines": 93,
+      "tokens": 1437,
+      "structuralTokens": 1562,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -2475,10 +2708,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 3567,
-      "lines": 72,
-      "tokens": 911,
-      "structuralTokens": 1130,
+      "bytes": 8193,
+      "lines": 134,
+      "tokens": 2092,
+      "structuralTokens": 2560,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -2580,10 +2813,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 2012,
-      "lines": 49,
-      "tokens": 514,
-      "structuralTokens": 641,
+      "bytes": 2170,
+      "lines": 51,
+      "tokens": 554,
+      "structuralTokens": 688,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -2610,10 +2843,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 4152,
-      "lines": 75,
-      "tokens": 1062,
-      "structuralTokens": 1181,
+      "bytes": 4035,
+      "lines": 73,
+      "tokens": 1032,
+      "structuralTokens": 1146,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -2655,12 +2888,12 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 14303,
-      "lines": 175,
-      "tokens": 3645,
-      "structuralTokens": 4438,
+      "bytes": 30578,
+      "lines": 255,
+      "tokens": 7789,
+      "structuralTokens": 9391,
       "cpt": 3.9,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -2700,10 +2933,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 15961,
+      "bytes": 19614,
       "lines": 110,
-      "tokens": 4060,
-      "structuralTokens": 4927,
+      "tokens": 4990,
+      "structuralTokens": 5999,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -2715,10 +2948,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 3045,
-      "lines": 61,
-      "tokens": 778,
-      "structuralTokens": 938,
+      "bytes": 3144,
+      "lines": 62,
+      "tokens": 804,
+      "structuralTokens": 960,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -2730,10 +2963,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 7369,
-      "lines": 126,
-      "tokens": 1883,
-      "structuralTokens": 2218,
+      "bytes": 10087,
+      "lines": 161,
+      "tokens": 2572,
+      "structuralTokens": 2993,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -2820,10 +3053,10 @@
       "loadPolicy": "on-demand",
       "ext": ".gitignore",
       "reason": "config",
-      "bytes": 3675,
-      "lines": 110,
-      "tokens": 1141,
-      "structuralTokens": 1118,
+      "bytes": 4769,
+      "lines": 126,
+      "tokens": 1480,
+      "structuralTokens": 1466,
       "cpt": 3.2,
       "heavy": false,
       "reachableFrom": []
@@ -2897,10 +3130,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 27940,
-      "lines": 500,
-      "tokens": 8203,
-      "structuralTokens": 6877,
+      "bytes": 28007,
+      "lines": 501,
+      "tokens": 8223,
+      "structuralTokens": 6901,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -2931,10 +3164,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 1790,
-      "lines": 45,
-      "tokens": 525,
-      "structuralTokens": 545,
+      "bytes": 2113,
+      "lines": 49,
+      "tokens": 619,
+      "structuralTokens": 630,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -2966,10 +3199,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 6430,
-      "lines": 134,
-      "tokens": 1869,
-      "structuralTokens": 2022,
+      "bytes": 7119,
+      "lines": 137,
+      "tokens": 2071,
+      "structuralTokens": 2197,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -3017,10 +3250,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 36495,
-      "lines": 763,
-      "tokens": 10695,
-      "structuralTokens": 11197,
+      "bytes": 36870,
+      "lines": 769,
+      "tokens": 10804,
+      "structuralTokens": 11308,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -3069,10 +3302,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 4069,
+      "bytes": 4067,
       "lines": 87,
       "tokens": 1190,
-      "structuralTokens": 1214,
+      "structuralTokens": 1216,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -3136,10 +3369,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 16117,
+      "bytes": 16130,
       "lines": 300,
-      "tokens": 4711,
-      "structuralTokens": 4352,
+      "tokens": 4715,
+      "structuralTokens": 4359,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -3255,10 +3488,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 6866,
-      "lines": 163,
-      "tokens": 2019,
-      "structuralTokens": 2045,
+      "bytes": 6932,
+      "lines": 164,
+      "tokens": 2039,
+      "structuralTokens": 2068,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -3312,7 +3545,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3334,7 +3566,6 @@
         "fluid-toy",
         "fractal-toy",
         "mesh-export",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3362,10 +3593,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 99914,
-      "lines": 1711,
-      "tokens": 29320,
-      "structuralTokens": 26375,
+      "bytes": 102746,
+      "lines": 1754,
+      "tokens": 30146,
+      "structuralTokens": 27734,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -3505,7 +3736,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3526,7 +3756,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3547,7 +3776,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3568,7 +3796,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3598,7 +3825,7 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 7679,
+      "bytes": 7681,
       "lines": 160,
       "tokens": 2258,
       "structuralTokens": 2015,
@@ -3700,40 +3927,6 @@
       ]
     },
     {
-      "path": "components/DropTarget.tsx",
-      "tier": "gmt-app",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 5594,
-      "lines": 120,
-      "tokens": 1641,
-      "structuralTokens": 1499,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "components/DropTargetLayer.tsx",
-      "tier": "gmt-app",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 12093,
-      "lines": 237,
-      "tokens": 3543,
-      "structuralTokens": 3188,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
       "path": "components/DynamicList.tsx",
       "tier": "gmt-app",
       "contextClass": "source",
@@ -3749,7 +3942,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3760,10 +3952,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 82208,
-      "lines": 1439,
-      "tokens": 23924,
-      "structuralTokens": 24250,
+      "bytes": 83269,
+      "lines": 1478,
+      "tokens": 24233,
+      "structuralTokens": 24876,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -3792,7 +3984,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3812,7 +4003,8 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -3832,7 +4024,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -3925,6 +4116,28 @@
       ]
     },
     {
+      "path": "components/gradient/BlendSpacePicker.tsx",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 7859,
+      "lines": 149,
+      "tokens": 2304,
+      "structuralTokens": 2142,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
+      ]
+    },
+    {
       "path": "components/gradient/colorDrag.ts",
       "tier": "gmt-app",
       "contextClass": "source",
@@ -3975,10 +4188,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 6753,
-      "lines": 143,
-      "tokens": 1982,
-      "structuralTokens": 2122,
+      "bytes": 8475,
+      "lines": 166,
+      "tokens": 2485,
+      "structuralTokens": 2710,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -3997,16 +4210,17 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 3372,
-      "lines": 78,
-      "tokens": 992,
-      "structuralTokens": 963,
+      "bytes": 3897,
+      "lines": 83,
+      "tokens": 1145,
+      "structuralTokens": 1083,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
+        "mesh-export",
         "gradient-explorer",
         "gradient-explorer-next",
         "demo"
@@ -4046,6 +4260,29 @@
       "lines": 46,
       "tokens": 735,
       "structuralTokens": 728,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
+      ]
+    },
+    {
+      "path": "components/gradient/gradientStopFitter.ts",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 2424,
+      "lines": 42,
+      "tokens": 710,
+      "structuralTokens": 731,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -4103,16 +4340,38 @@
       ]
     },
     {
+      "path": "components/gradient/rampMode.ts",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 9201,
+      "lines": 180,
+      "tokens": 2700,
+      "structuralTokens": 2983,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
+      ]
+    },
+    {
       "path": "components/graph/GraphCanvas.tsx",
       "tier": "gmt-app",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 8506,
-      "lines": 184,
-      "tokens": 2499,
-      "structuralTokens": 2319,
+      "bytes": 8698,
+      "lines": 187,
+      "tokens": 2555,
+      "structuralTokens": 2371,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -4165,7 +4424,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -4176,9 +4434,9 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 7875,
+      "bytes": 7877,
       "lines": 200,
-      "tokens": 2315,
+      "tokens": 2316,
       "structuralTokens": 2152,
       "cpt": 3.4,
       "heavy": false,
@@ -4186,7 +4444,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -4207,7 +4464,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -4218,16 +4474,17 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 24162,
-      "lines": 527,
-      "tokens": 7105,
-      "structuralTokens": 6414,
+      "bytes": 24756,
+      "lines": 535,
+      "tokens": 7278,
+      "structuralTokens": 6602,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -4355,6 +4612,29 @@
       ]
     },
     {
+      "path": "components/inputs/dragFeel.tsx",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 1275,
+      "lines": 23,
+      "tokens": 372,
+      "structuralTokens": 394,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
+      ]
+    },
+    {
       "path": "components/inputs/GlslEditor.tsx",
       "tier": "gmt-app",
       "contextClass": "source",
@@ -4401,10 +4681,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 9526,
-      "lines": 233,
-      "tokens": 2796,
-      "structuralTokens": 2604,
+      "bytes": 10574,
+      "lines": 250,
+      "tokens": 3103,
+      "structuralTokens": 2911,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -4447,10 +4727,33 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 613,
-      "lines": 21,
-      "tokens": 181,
-      "structuralTokens": 174,
+      "bytes": 785,
+      "lines": 23,
+      "tokens": 231,
+      "structuralTokens": 227,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
+      ]
+    },
+    {
+      "path": "components/inputs/numberDragRate.ts",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 3579,
+      "lines": 69,
+      "tokens": 1047,
+      "structuralTokens": 1041,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -4470,10 +4773,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 5477,
-      "lines": 175,
-      "tokens": 1611,
-      "structuralTokens": 1414,
+      "bytes": 5592,
+      "lines": 181,
+      "tokens": 1645,
+      "structuralTokens": 1441,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -4539,10 +4842,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 23213,
-      "lines": 484,
-      "tokens": 6823,
-      "structuralTokens": 5942,
+      "bytes": 25735,
+      "lines": 534,
+      "tokens": 7564,
+      "structuralTokens": 6767,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -4608,10 +4911,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 7555,
-      "lines": 222,
-      "tokens": 2220,
-      "structuralTokens": 2712,
+      "bytes": 8614,
+      "lines": 238,
+      "tokens": 2529,
+      "structuralTokens": 3063,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -4733,17 +5036,16 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 15223,
+      "bytes": 15271,
       "lines": 303,
-      "tokens": 4471,
-      "structuralTokens": 4039,
+      "tokens": 4485,
+      "structuralTokens": 4058,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -4764,7 +5066,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -4889,7 +5190,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5053,7 +5353,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5074,7 +5373,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5127,10 +5425,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 13076,
-      "lines": 277,
-      "tokens": 3842,
-      "structuralTokens": 3757,
+      "bytes": 13533,
+      "lines": 284,
+      "tokens": 3976,
+      "structuralTokens": 3875,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -5147,10 +5445,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 10036,
-      "lines": 318,
-      "tokens": 2951,
-      "structuralTokens": 2683,
+      "bytes": 9964,
+      "lines": 324,
+      "tokens": 2929,
+      "structuralTokens": 2749,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -5296,7 +5594,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5317,7 +5614,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5338,7 +5634,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5359,7 +5654,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5399,7 +5693,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5443,7 +5736,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5464,7 +5756,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5485,7 +5776,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5506,7 +5796,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5527,7 +5816,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5548,7 +5836,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5569,7 +5856,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -5609,8 +5895,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
-        "fluid-toy",
-        "gradient-explorer"
+        "fluid-toy"
       ]
     },
     {
@@ -5666,10 +5951,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 813,
-      "lines": 15,
-      "tokens": 240,
-      "structuralTokens": 262,
+      "bytes": 924,
+      "lines": 17,
+      "tokens": 272,
+      "structuralTokens": 299,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -5785,6 +6070,29 @@
       "lines": 17,
       "tokens": 270,
       "structuralTokens": 299,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
+      ]
+    },
+    {
+      "path": "components/ui/Segmented.tsx",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 6123,
+      "lines": 142,
+      "tokens": 1797,
+      "structuralTokens": 1840,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -6121,10 +6429,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 6804,
-      "lines": 147,
-      "tokens": 2002,
-      "structuralTokens": 2312,
+      "bytes": 7713,
+      "lines": 101,
+      "tokens": 2266,
+      "structuralTokens": 3134,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -6142,10 +6450,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2224,
-      "lines": 53,
-      "tokens": 653,
-      "structuralTokens": 635,
+      "bytes": 3399,
+      "lines": 75,
+      "tokens": 997,
+      "structuralTokens": 964,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -6208,10 +6516,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 17469,
-      "lines": 222,
-      "tokens": 5087,
-      "structuralTokens": 4871,
+      "bytes": 19426,
+      "lines": 260,
+      "tokens": 5659,
+      "structuralTokens": 5429,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -6644,6 +6952,21 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/bake-gradient-presets.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 21536,
+      "lines": 359,
+      "tokens": 6320,
+      "structuralTokens": 7978,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/bake-gx-global.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
@@ -6665,12 +6988,12 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 8888,
-      "lines": 198,
-      "tokens": 2605,
-      "structuralTokens": 3095,
+      "bytes": 32620,
+      "lines": 560,
+      "tokens": 9573,
+      "structuralTokens": 11724,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -6920,10 +7243,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 3062,
+      "bytes": 3057,
       "lines": 76,
-      "tokens": 898,
-      "structuralTokens": 1030,
+      "tokens": 896,
+      "structuralTokens": 1028,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -8099,6 +8422,51 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/palette-catalog-sigs.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 3884,
+      "lines": 73,
+      "tokens": 1139,
+      "structuralTokens": 1247,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/palette-packs.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 26205,
+      "lines": 338,
+      "tokens": 7695,
+      "structuralTokens": 9736,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/palette-upload-manifest.json",
+      "tier": "tooling",
+      "contextClass": "data",
+      "loadPolicy": "skip",
+      "ext": ".json",
+      "reason": "data:.json",
+      "bytes": 3818,
+      "lines": 140,
+      "tokens": 1317,
+      "structuralTokens": 1177,
+      "cpt": 2.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/probe-autoroute-est7.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
@@ -8720,10 +9088,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 8934,
+      "bytes": 8929,
       "lines": 191,
-      "tokens": 2619,
-      "structuralTokens": 2989,
+      "tokens": 2617,
+      "structuralTokens": 2987,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -8810,10 +9178,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 2867,
+      "bytes": 2893,
       "lines": 44,
-      "tokens": 843,
-      "structuralTokens": 1070,
+      "tokens": 850,
+      "structuralTokens": 1080,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -8945,10 +9313,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 4893,
+      "bytes": 4993,
       "lines": 105,
-      "tokens": 1438,
-      "structuralTokens": 1659,
+      "tokens": 1467,
+      "structuralTokens": 1657,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9191,6 +9559,21 @@
       "structuralTokens": 1374,
       "cpt": 3.4,
       "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/smoke-chrome.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 49817,
+      "lines": 899,
+      "tokens": 14295,
+      "structuralTokens": 16287,
+      "cpt": 3.4,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -9440,10 +9823,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 5909,
+      "bytes": 5904,
       "lines": 111,
-      "tokens": 1731,
-      "structuralTokens": 1947,
+      "tokens": 1730,
+      "structuralTokens": 1945,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9455,12 +9838,27 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 5485,
+      "bytes": 5580,
       "lines": 100,
-      "tokens": 1604,
-      "structuralTokens": 1851,
+      "tokens": 1632,
+      "structuralTokens": 1849,
       "cpt": 3.4,
       "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/smoke-ge-gradientfile.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 34506,
+      "lines": 505,
+      "tokens": 10101,
+      "structuralTokens": 12164,
+      "cpt": 3.4,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -9470,10 +9868,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 18715,
-      "lines": 295,
-      "tokens": 5482,
-      "structuralTokens": 6382,
+      "bytes": 37289,
+      "lines": 551,
+      "tokens": 10931,
+      "structuralTokens": 12791,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -9485,10 +9883,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 27173,
-      "lines": 418,
-      "tokens": 7965,
-      "structuralTokens": 9036,
+      "bytes": 46641,
+      "lines": 676,
+      "tokens": 13675,
+      "structuralTokens": 15648,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -9500,10 +9898,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 20914,
+      "bytes": 20909,
       "lines": 366,
-      "tokens": 6110,
-      "structuralTokens": 6532,
+      "tokens": 6109,
+      "structuralTokens": 6530,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -9515,10 +9913,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 7734,
+      "bytes": 7729,
       "lines": 142,
-      "tokens": 2269,
-      "structuralTokens": 2534,
+      "tokens": 2267,
+      "structuralTokens": 2532,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9530,10 +9928,25 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 20282,
-      "lines": 304,
-      "tokens": 5863,
-      "structuralTokens": 7242,
+      "bytes": 48589,
+      "lines": 625,
+      "tokens": 14145,
+      "structuralTokens": 16949,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/smoke-ge-session.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 23973,
+      "lines": 368,
+      "tokens": 6925,
+      "structuralTokens": 8074,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -9545,10 +9958,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 6976,
+      "bytes": 6971,
       "lines": 125,
-      "tokens": 2036,
-      "structuralTokens": 2261,
+      "tokens": 2035,
+      "structuralTokens": 2259,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9560,12 +9973,27 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 31624,
-      "lines": 477,
-      "tokens": 9257,
-      "structuralTokens": 10649,
+      "bytes": 54239,
+      "lines": 785,
+      "tokens": 15879,
+      "structuralTokens": 18308,
       "cpt": 3.4,
       "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/smoke-ge-uiundo.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 8730,
+      "lines": 146,
+      "tokens": 2545,
+      "structuralTokens": 2748,
+      "cpt": 3.4,
+      "heavy": false,
       "reachableFrom": []
     },
     {
@@ -9575,10 +10003,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 7384,
-      "lines": 145,
-      "tokens": 2160,
-      "structuralTokens": 2478,
+      "bytes": 8364,
+      "lines": 155,
+      "tokens": 2446,
+      "structuralTokens": 2709,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9590,12 +10018,42 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 7985,
+      "bytes": 8118,
       "lines": 138,
-      "tokens": 2335,
-      "structuralTokens": 2664,
+      "tokens": 2375,
+      "structuralTokens": 2662,
       "cpt": 3.4,
       "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/smoke-ge-wave.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 42841,
+      "lines": 666,
+      "tokens": 12416,
+      "structuralTokens": 14748,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/smoke-gmt-gradientdrop.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 16056,
+      "lines": 242,
+      "tokens": 4543,
+      "structuralTokens": 5504,
+      "cpt": 3.4,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -9665,10 +10123,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 6843,
+      "bytes": 6838,
       "lines": 135,
-      "tokens": 2005,
-      "structuralTokens": 2232,
+      "tokens": 2003,
+      "structuralTokens": 2230,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9680,10 +10138,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 14479,
-      "lines": 252,
-      "tokens": 4240,
-      "structuralTokens": 4783,
+      "bytes": 17371,
+      "lines": 301,
+      "tokens": 5090,
+      "structuralTokens": 5657,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -9695,10 +10153,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 10755,
-      "lines": 188,
-      "tokens": 3128,
-      "structuralTokens": 3408,
+      "bytes": 11045,
+      "lines": 193,
+      "tokens": 3213,
+      "structuralTokens": 3491,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9725,12 +10183,12 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 13240,
-      "lines": 212,
-      "tokens": 3874,
-      "structuralTokens": 4341,
+      "bytes": 14966,
+      "lines": 234,
+      "tokens": 4379,
+      "structuralTokens": 4804,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -9740,10 +10198,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 4589,
-      "lines": 92,
-      "tokens": 1344,
-      "structuralTokens": 1487,
+      "bytes": 6035,
+      "lines": 110,
+      "tokens": 1766,
+      "structuralTokens": 1941,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -9800,10 +10258,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 6945,
-      "lines": 119,
-      "tokens": 2004,
-      "structuralTokens": 2317,
+      "bytes": 7370,
+      "lines": 126,
+      "tokens": 2128,
+      "structuralTokens": 2429,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -10409,6 +10867,51 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/test-gradient-file.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 64588,
+      "lines": 755,
+      "tokens": 18636,
+      "structuralTokens": 24202,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/test-gradient-rampmode.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 16347,
+      "lines": 233,
+      "tokens": 4776,
+      "structuralTokens": 5853,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/test-gradient-roundtrip.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 62332,
+      "lines": 899,
+      "tokens": 17629,
+      "structuralTokens": 22770,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/test-graph-renderer-cache.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
@@ -10439,18 +10942,33 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/test-gx-session.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 31639,
+      "lines": 463,
+      "tokens": 9188,
+      "structuralTokens": 11079,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/test-gx-share.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 6016,
-      "lines": 120,
-      "tokens": 1764,
-      "structuralTokens": 2172,
+      "bytes": 18607,
+      "lines": 279,
+      "tokens": 5454,
+      "structuralTokens": 6711,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -10619,6 +11137,21 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/test-number-drag-rate.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 6022,
+      "lines": 96,
+      "tokens": 1754,
+      "structuralTokens": 2190,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/test-palette-blendspaces.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
@@ -10634,18 +11167,33 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/test-palette-catalog-licensing.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 52084,
+      "lines": 559,
+      "tokens": 14805,
+      "structuralTokens": 18645,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/test-palette-channelcurve.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 8749,
-      "lines": 159,
-      "tokens": 2555,
-      "structuralTokens": 3338,
+      "bytes": 19668,
+      "lines": 328,
+      "tokens": 5760,
+      "structuralTokens": 7034,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -10659,6 +11207,21 @@
       "lines": 90,
       "tokens": 1292,
       "structuralTokens": 1528,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/test-palette-curvespaces.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 8823,
+      "lines": 174,
+      "tokens": 2585,
+      "structuralTokens": 3462,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -10685,10 +11248,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 6346,
-      "lines": 136,
-      "tokens": 1851,
-      "structuralTokens": 2164,
+      "bytes": 9416,
+      "lines": 177,
+      "tokens": 2747,
+      "structuralTokens": 3198,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -10700,10 +11263,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 20743,
-      "lines": 368,
-      "tokens": 5895,
-      "structuralTokens": 7119,
+      "bytes": 34906,
+      "lines": 544,
+      "tokens": 10002,
+      "structuralTokens": 12290,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -10745,10 +11308,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 21045,
-      "lines": 305,
-      "tokens": 6107,
-      "structuralTokens": 7234,
+      "bytes": 34673,
+      "lines": 464,
+      "tokens": 10095,
+      "structuralTokens": 11858,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -10760,10 +11323,25 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 13020,
-      "lines": 265,
-      "tokens": 3792,
-      "structuralTokens": 4891,
+      "bytes": 20848,
+      "lines": 375,
+      "tokens": 6083,
+      "structuralTokens": 7696,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/test-palette-gradientramp.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 12562,
+      "lines": 207,
+      "tokens": 3655,
+      "structuralTokens": 4406,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -10775,10 +11353,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 7141,
-      "lines": 113,
-      "tokens": 2065,
-      "structuralTokens": 2437,
+      "bytes": 8201,
+      "lines": 126,
+      "tokens": 2378,
+      "structuralTokens": 2797,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -10790,12 +11368,12 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 11582,
-      "lines": 194,
-      "tokens": 3381,
-      "structuralTokens": 4543,
+      "bytes": 14216,
+      "lines": 233,
+      "tokens": 4154,
+      "structuralTokens": 5523,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -10835,12 +11413,12 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 5205,
-      "lines": 137,
-      "tokens": 1525,
-      "structuralTokens": 1977,
+      "bytes": 19950,
+      "lines": 332,
+      "tokens": 5819,
+      "structuralTokens": 7444,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -10880,10 +11458,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 21294,
-      "lines": 389,
-      "tokens": 6246,
-      "structuralTokens": 8544,
+      "bytes": 23475,
+      "lines": 419,
+      "tokens": 6887,
+      "structuralTokens": 9300,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -10910,10 +11488,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 6886,
-      "lines": 139,
-      "tokens": 2017,
-      "structuralTokens": 2661,
+      "bytes": 7829,
+      "lines": 151,
+      "tokens": 2293,
+      "structuralTokens": 2979,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -10940,10 +11518,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 26505,
-      "lines": 432,
-      "tokens": 7710,
-      "structuralTokens": 9513,
+      "bytes": 34043,
+      "lines": 533,
+      "tokens": 9925,
+      "structuralTokens": 12031,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -10955,10 +11533,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 19248,
-      "lines": 336,
-      "tokens": 5643,
-      "structuralTokens": 7027,
+      "bytes": 21711,
+      "lines": 366,
+      "tokens": 6364,
+      "structuralTokens": 7817,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": []
@@ -11039,18 +11617,33 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/test-palette-wavegen.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 31305,
+      "lines": 527,
+      "tokens": 9185,
+      "structuralTokens": 11712,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/test-palette-working.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
       "loadPolicy": "on-demand",
       "ext": ".mts",
       "reason": "tooling-script",
-      "bytes": 5007,
-      "lines": 107,
-      "tokens": 1469,
-      "structuralTokens": 1829,
+      "bytes": 33253,
+      "lines": 524,
+      "tokens": 9639,
+      "structuralTokens": 11251,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -11109,6 +11702,21 @@
       "lines": 52,
       "tokens": 829,
       "structuralTokens": 1054,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "debug/test-scene-file-claims.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 5558,
+      "lines": 105,
+      "tokens": 1629,
+      "structuralTokens": 2056,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -13069,10 +13677,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 5647,
-      "lines": 78,
-      "tokens": 1440,
-      "structuralTokens": 1578,
+      "bytes": 6553,
+      "lines": 89,
+      "tokens": 1672,
+      "structuralTokens": 1850,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -13084,10 +13692,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 3888,
-      "lines": 63,
-      "tokens": 994,
-      "structuralTokens": 1129,
+      "bytes": 6291,
+      "lines": 90,
+      "tokens": 1609,
+      "structuralTokens": 1891,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -13114,10 +13722,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 6813,
-      "lines": 117,
-      "tokens": 1741,
-      "structuralTokens": 1895,
+      "bytes": 7399,
+      "lines": 125,
+      "tokens": 1891,
+      "structuralTokens": 2065,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -13189,12 +13797,87 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 5351,
-      "lines": 89,
-      "tokens": 1364,
-      "structuralTokens": 1446,
+      "bytes": 6069,
+      "lines": 98,
+      "tokens": 1545,
+      "structuralTokens": 1651,
       "cpt": 3.9,
       "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0120-the-interface-rides-the-undo-entry.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 7512,
+      "lines": 122,
+      "tokens": 1913,
+      "structuralTokens": 2062,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0121-the-session-restores-itself.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 6513,
+      "lines": 87,
+      "tokens": 1664,
+      "structuralTokens": 1912,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0122-the-ramp-is-the-gradient.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 6542,
+      "lines": 91,
+      "tokens": 1670,
+      "structuralTokens": 1834,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0123-the-gradient-file-is-a-png.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 9881,
+      "lines": 143,
+      "tokens": 2513,
+      "structuralTokens": 2842,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0124-recent-follows-the-working-gradient.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 16793,
+      "lines": 219,
+      "tokens": 4276,
+      "structuralTokens": 4834,
+      "cpt": 3.9,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -18679,10 +19362,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "architecture-docs",
-      "bytes": 14742,
-      "lines": 214,
-      "tokens": 3753,
-      "structuralTokens": 4796,
+      "bytes": 3603,
+      "lines": 67,
+      "tokens": 920,
+      "structuralTokens": 1206,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -18863,6 +19546,36 @@
       "lines": 110,
       "tokens": 1634,
       "structuralTokens": 1622,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/releases/0.9.8.4.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 1274,
+      "lines": 22,
+      "tokens": 324,
+      "structuralTokens": 351,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/releases/0.9.8.4a.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 361,
+      "lines": 8,
+      "tokens": 93,
+      "structuralTokens": 124,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -19073,7 +19786,8 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -19160,7 +19874,8 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -19170,10 +19885,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 1623,
-      "lines": 40,
-      "tokens": 476,
-      "structuralTokens": 469,
+      "bytes": 2089,
+      "lines": 46,
+      "tokens": 612,
+      "structuralTokens": 601,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -20086,6 +20801,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20159,6 +20875,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20181,6 +20898,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20203,6 +20921,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20293,6 +21012,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20315,6 +21035,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20372,6 +21093,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20450,10 +21172,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 32968,
-      "lines": 701,
-      "tokens": 9685,
-      "structuralTokens": 8881,
+      "bytes": 33632,
+      "lines": 708,
+      "tokens": 9878,
+      "structuralTokens": 9057,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -20479,6 +21201,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20640,6 +21363,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -20992,6 +21716,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21014,6 +21739,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21036,6 +21762,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21058,6 +21785,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21132,6 +21860,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21154,6 +21883,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21176,6 +21906,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21232,6 +21963,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21254,6 +21986,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -21276,6 +22009,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32134,10 +32868,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 19228,
-      "lines": 358,
-      "tokens": 5624,
-      "structuralTokens": 6034,
+      "bytes": 20066,
+      "lines": 368,
+      "tokens": 5869,
+      "structuralTokens": 6272,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -32324,6 +33058,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32346,6 +33081,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32368,6 +33104,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32476,6 +33213,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32567,6 +33305,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32589,6 +33328,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32611,6 +33351,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32621,9 +33362,9 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 19089,
+      "bytes": 19090,
       "lines": 318,
-      "tokens": 5594,
+      "tokens": 5595,
       "structuralTokens": 5291,
       "cpt": 3.4,
       "heavy": true,
@@ -32633,6 +33374,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32743,6 +33485,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32765,6 +33508,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32822,6 +33566,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -32850,16 +33595,17 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 6100,
-      "lines": 178,
-      "tokens": 1793,
-      "structuralTokens": 1749,
+      "bytes": 10823,
+      "lines": 267,
+      "tokens": 3157,
+      "structuralTokens": 3165,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -32869,16 +33615,37 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 9763,
-      "lines": 196,
-      "tokens": 2869,
-      "structuralTokens": 2309,
+      "bytes": 14136,
+      "lines": 276,
+      "tokens": 4153,
+      "structuralTokens": 3449,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "engine-gmt/feedback/feedbackScreenshot.ts",
+      "tier": "engine-gmt",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 5023,
+      "lines": 102,
+      "tokens": 1468,
+      "structuralTokens": 1509,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -32888,16 +33655,17 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 700,
-      "lines": 18,
-      "tokens": 206,
-      "structuralTokens": 212,
+      "bytes": 1194,
+      "lines": 23,
+      "tokens": 350,
+      "structuralTokens": 365,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -32907,16 +33675,17 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 3631,
-      "lines": 80,
-      "tokens": 1010,
-      "structuralTokens": 1108,
+      "bytes": 4527,
+      "lines": 94,
+      "tokens": 1272,
+      "structuralTokens": 1370,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -33538,10 +34307,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 7255,
-      "lines": 134,
-      "tokens": 2134,
-      "structuralTokens": 2384,
+      "bytes": 7506,
+      "lines": 137,
+      "tokens": 2207,
+      "structuralTokens": 2461,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -34491,6 +35260,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -34513,6 +35283,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -34553,6 +35324,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -34575,6 +35347,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -34669,6 +35442,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -34797,6 +35571,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -34902,7 +35677,8 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -34912,16 +35688,17 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 1130,
-      "lines": 26,
-      "tokens": 332,
-      "structuralTokens": 328,
+      "bytes": 1549,
+      "lines": 31,
+      "tokens": 454,
+      "structuralTokens": 458,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -35096,6 +35873,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35118,6 +35896,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35140,6 +35919,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35162,6 +35942,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35184,6 +35965,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35194,10 +35976,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 3083,
-      "lines": 79,
-      "tokens": 905,
-      "structuralTokens": 885,
+      "bytes": 3343,
+      "lines": 83,
+      "tokens": 982,
+      "structuralTokens": 967,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -35206,6 +35988,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35228,6 +36011,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35250,6 +36034,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35272,6 +36057,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35294,6 +36080,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35314,7 +36101,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -35335,7 +36121,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -35390,7 +36175,8 @@
         "app-gmt",
         "fluid-toy",
         "mesh-export",
-        "gradient-explorer"
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -35429,6 +36215,7 @@
         "fractal-toy",
         "mesh-export",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -35439,10 +36226,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 14479,
-      "lines": 346,
-      "tokens": 4144,
-      "structuralTokens": 4183,
+      "bytes": 14784,
+      "lines": 350,
+      "tokens": 4233,
+      "structuralTokens": 4271,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -36003,7 +36790,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36023,7 +36809,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36061,7 +36846,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36122,7 +36906,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36188,7 +36971,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36209,7 +36991,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36230,7 +37011,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36377,10 +37157,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 7261,
+      "bytes": 7264,
       "lines": 175,
-      "tokens": 2130,
-      "structuralTokens": 2031,
+      "tokens": 2131,
+      "structuralTokens": 2033,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -36495,7 +37275,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36515,7 +37294,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36535,7 +37313,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36555,7 +37332,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -36566,10 +37342,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 5382,
-      "lines": 111,
-      "tokens": 1578,
-      "structuralTokens": 1517,
+      "bytes": 6304,
+      "lines": 125,
+      "tokens": 1848,
+      "structuralTokens": 1761,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -36772,7 +37548,7 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 38752,
+      "bytes": 38753,
       "lines": 756,
       "tokens": 11375,
       "structuralTokens": 9287,
@@ -36999,7 +37775,7 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 10033,
+      "bytes": 10034,
       "lines": 165,
       "tokens": 2941,
       "structuralTokens": 2788,
@@ -37210,7 +37986,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -37921,10 +38696,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 4896,
-      "lines": 110,
-      "tokens": 1435,
-      "structuralTokens": 1393,
+      "bytes": 4742,
+      "lines": 108,
+      "tokens": 1390,
+      "structuralTokens": 1347,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -38084,10 +38859,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 23823,
-      "lines": 501,
-      "tokens": 6913,
-      "structuralTokens": 6418,
+      "bytes": 24506,
+      "lines": 510,
+      "tokens": 7113,
+      "structuralTokens": 6611,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -38145,16 +38920,17 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 23808,
-      "lines": 565,
-      "tokens": 6810,
-      "structuralTokens": 7184,
+      "bytes": 24630,
+      "lines": 575,
+      "tokens": 7050,
+      "structuralTokens": 7425,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -38175,6 +38951,7 @@
         "app-gmt",
         "fluid-toy",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -38185,10 +38962,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 29076,
-      "lines": 642,
-      "tokens": 8343,
-      "structuralTokens": 8395,
+      "bytes": 30953,
+      "lines": 680,
+      "tokens": 8891,
+      "structuralTokens": 8969,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -38196,6 +38973,7 @@
         "fluid-toy",
         "fractal-toy",
         "gradient-explorer",
+        "gradient-explorer-next",
         "demo"
       ]
     },
@@ -38233,7 +39011,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -38328,7 +39105,26 @@
       "heavy": false,
       "reachableFrom": [
         "fluid-toy",
-        "gradient-explorer",
+        "demo"
+      ]
+    },
+    {
+      "path": "engine/plugins/SceneFileClaims.ts",
+      "tier": "engine-core",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 4664,
+      "lines": 79,
+      "tokens": 1365,
+      "structuralTokens": 1293,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
         "demo"
       ]
     },
@@ -38339,18 +39135,35 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 24074,
-      "lines": 516,
-      "tokens": 6906,
-      "structuralTokens": 7011,
+      "bytes": 24390,
+      "lines": 521,
+      "tokens": 6999,
+      "structuralTokens": 7097,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
+      ]
+    },
+    {
+      "path": "engine/plugins/Session.ts",
+      "tier": "engine-core",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 15516,
+      "lines": 331,
+      "tokens": 4412,
+      "structuralTokens": 4671,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -38383,10 +39196,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 5576,
-      "lines": 137,
-      "tokens": 1615,
-      "structuralTokens": 1677,
+      "bytes": 5657,
+      "lines": 138,
+      "tokens": 1639,
+      "structuralTokens": 1705,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -38889,6 +39702,25 @@
       ]
     },
     {
+      "path": "engine/plugins/WhatsNew.tsx",
+      "tier": "engine-core",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 3992,
+      "lines": 93,
+      "tokens": 1171,
+      "structuralTokens": 1258,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
       "path": "engine/RenderPipeline.ts",
       "tier": "engine-core",
       "contextClass": "source",
@@ -39004,10 +39836,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 1889,
-      "lines": 46,
-      "tokens": 555,
-      "structuralTokens": 585,
+      "bytes": 6476,
+      "lines": 135,
+      "tokens": 1877,
+      "structuralTokens": 1896,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -39117,7 +39949,6 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -40161,10 +40992,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 12831,
-      "lines": 256,
-      "tokens": 3762,
-      "structuralTokens": 3479,
+      "bytes": 12898,
+      "lines": 257,
+      "tokens": 3781,
+      "structuralTokens": 3503,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -40195,10 +41026,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 19537,
-      "lines": 394,
-      "tokens": 5721,
-      "structuralTokens": 5907,
+      "bytes": 19712,
+      "lines": 396,
+      "tokens": 5772,
+      "structuralTokens": 5961,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -40667,10 +41498,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 5090,
-      "lines": 114,
-      "tokens": 1495,
-      "structuralTokens": 1404,
+      "bytes": 5157,
+      "lines": 115,
+      "tokens": 1515,
+      "structuralTokens": 1428,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -40871,10 +41702,10 @@
       "loadPolicy": "on-demand",
       "ext": ".html",
       "reason": "app-source",
-      "bytes": 2467,
-      "lines": 38,
-      "tokens": 747,
-      "structuralTokens": 758,
+      "bytes": 3068,
+      "lines": 43,
+      "tokens": 928,
+      "structuralTokens": 929,
       "cpt": 3.3,
       "heavy": false,
       "reachableFrom": []
@@ -40886,10 +41717,10 @@
       "loadPolicy": "on-demand",
       "ext": ".html",
       "reason": "app-source",
-      "bytes": 1987,
-      "lines": 34,
-      "tokens": 602,
-      "structuralTokens": 641,
+      "bytes": 2685,
+      "lines": 39,
+      "tokens": 813,
+      "structuralTokens": 820,
       "cpt": 3.3,
       "heavy": false,
       "reachableFrom": []
@@ -41009,10 +41840,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 39256,
-      "lines": 836,
-      "tokens": 11305,
-      "structuralTokens": 12493,
+      "bytes": 49905,
+      "lines": 1100,
+      "tokens": 14382,
+      "structuralTokens": 16032,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -41117,10 +41948,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 18775,
-      "lines": 366,
-      "tokens": 5275,
-      "structuralTokens": 5647,
+      "bytes": 19287,
+      "lines": 373,
+      "tokens": 5424,
+      "structuralTokens": 5783,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -41243,10 +42074,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 47141,
-      "lines": 899,
-      "tokens": 13624,
-      "structuralTokens": 14659,
+      "bytes": 46543,
+      "lines": 902,
+      "tokens": 13448,
+      "structuralTokens": 14743,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -41261,100 +42092,15 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 50068,
-      "lines": 886,
-      "tokens": 14613,
-      "structuralTokens": 14396,
+      "bytes": 52425,
+      "lines": 922,
+      "tokens": 15302,
+      "structuralTokens": 15052,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
         "gradient-explorer",
         "gradient-explorer-next"
-      ]
-    },
-    {
-      "path": "gradient-explorer/GradientDropLayer.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 24174,
-      "lines": 442,
-      "tokens": 7078,
-      "structuralTokens": 6467,
-      "cpt": 3.4,
-      "heavy": true,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/GradientExplorerApp.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 22030,
-      "lines": 440,
-      "tokens": 6463,
-      "structuralTokens": 6271,
-      "cpt": 3.4,
-      "heavy": true,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/GradientLandingLayer.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 6396,
-      "lines": 143,
-      "tokens": 1875,
-      "structuralTokens": 1854,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/gradientTargets.ts",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".ts",
-      "reason": "app-source",
-      "bytes": 14856,
-      "lines": 288,
-      "tokens": 4335,
-      "structuralTokens": 4659,
-      "cpt": 3.4,
-      "heavy": true,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/main.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 4441,
-      "lines": 96,
-      "tokens": 1303,
-      "structuralTokens": 1384,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
       ]
     },
     {
@@ -41364,66 +42110,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 14432,
+      "bytes": 14511,
       "lines": 281,
-      "tokens": 4225,
-      "structuralTokens": 4113,
+      "tokens": 4248,
+      "structuralTokens": 4140,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
-        "app-gmt",
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/registerFeatures.ts",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".ts",
-      "reason": "app-source",
-      "bytes": 2187,
-      "lines": 36,
-      "tokens": 637,
-      "structuralTokens": 625,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/setup.ts",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".ts",
-      "reason": "app-source",
-      "bytes": 2776,
-      "lines": 50,
-      "tokens": 813,
-      "structuralTokens": 840,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "gradient-explorer/TopBarButtons.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 2931,
-      "lines": 54,
-      "tokens": 859,
-      "structuralTokens": 857,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
+        "app-gmt"
       ]
     },
     {
@@ -41433,13 +42127,14 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5076,
-      "lines": 121,
-      "tokens": 1489,
-      "structuralTokens": 1703,
+      "bytes": 9498,
+      "lines": 198,
+      "tokens": 2785,
+      "structuralTokens": 3036,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41450,13 +42145,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 68934,
-      "lines": 1134,
-      "tokens": 20143,
-      "structuralTokens": 20430,
+      "bytes": 70702,
+      "lines": 1160,
+      "tokens": 20660,
+      "structuralTokens": 20904,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41467,13 +42163,14 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2219,
-      "lines": 42,
-      "tokens": 651,
-      "structuralTokens": 645,
+      "bytes": 4129,
+      "lines": 76,
+      "tokens": 1211,
+      "structuralTokens": 1214,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41484,13 +42181,14 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 12707,
-      "lines": 290,
-      "tokens": 3729,
-      "structuralTokens": 4312,
+      "bytes": 29325,
+      "lines": 548,
+      "tokens": 8593,
+      "structuralTokens": 9334,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41501,13 +42199,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 39748,
-      "lines": 746,
-      "tokens": 11657,
-      "structuralTokens": 11786,
+      "bytes": 47336,
+      "lines": 874,
+      "tokens": 13873,
+      "structuralTokens": 13990,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41518,13 +42217,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 6896,
-      "lines": 120,
-      "tokens": 2012,
-      "structuralTokens": 2075,
+      "bytes": 6567,
+      "lines": 110,
+      "tokens": 1914,
+      "structuralTokens": 1982,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41542,6 +42242,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41559,6 +42260,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41569,13 +42271,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 36171,
-      "lines": 619,
-      "tokens": 10596,
-      "structuralTokens": 10908,
+      "bytes": 46664,
+      "lines": 783,
+      "tokens": 13666,
+      "structuralTokens": 14007,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41586,13 +42289,86 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 11436,
-      "lines": 245,
-      "tokens": 3357,
-      "structuralTokens": 3422,
+      "bytes": 11477,
+      "lines": 246,
+      "tokens": 3368,
+      "structuralTokens": 3427,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/help/AboutGx.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 5765,
+      "lines": 110,
+      "tokens": 1689,
+      "structuralTokens": 1927,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/help/ids.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 459,
+      "lines": 13,
+      "tokens": 135,
+      "structuralTokens": 153,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/help/installGxHelp.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 6182,
+      "lines": 129,
+      "tokens": 1806,
+      "structuralTokens": 1972,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/help/topics.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 10092,
+      "lines": 180,
+      "tokens": 2942,
+      "structuralTokens": 2972,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41610,6 +42386,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41620,13 +42397,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 4869,
-      "lines": 108,
-      "tokens": 1427,
-      "structuralTokens": 1509,
+      "bytes": 7250,
+      "lines": 140,
+      "tokens": 2121,
+      "structuralTokens": 2217,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41637,13 +42415,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 11705,
-      "lines": 265,
-      "tokens": 3438,
-      "structuralTokens": 3643,
+      "bytes": 11538,
+      "lines": 254,
+      "tokens": 3388,
+      "structuralTokens": 3587,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41654,13 +42433,32 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 4744,
-      "lines": 74,
-      "tokens": 1385,
-      "structuralTokens": 1404,
+      "bytes": 5300,
+      "lines": 79,
+      "tokens": 1547,
+      "structuralTokens": 1575,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/session.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 4797,
+      "lines": 92,
+      "tokens": 1402,
+      "structuralTokens": 1438,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41671,13 +42469,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 28129,
-      "lines": 502,
-      "tokens": 8223,
-      "structuralTokens": 8109,
+      "bytes": 28640,
+      "lines": 508,
+      "tokens": 8372,
+      "structuralTokens": 8273,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41688,13 +42487,14 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5173,
-      "lines": 117,
-      "tokens": 1512,
-      "structuralTokens": 1528,
+      "bytes": 6359,
+      "lines": 136,
+      "tokens": 1855,
+      "structuralTokens": 1877,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41705,13 +42505,32 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5108,
-      "lines": 128,
-      "tokens": 1498,
-      "structuralTokens": 1720,
+      "bytes": 11268,
+      "lines": 230,
+      "tokens": 3303,
+      "structuralTokens": 3613,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/ShellMenu.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 7756,
+      "lines": 165,
+      "tokens": 2275,
+      "structuralTokens": 2373,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41729,6 +42548,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41739,13 +42559,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 22624,
-      "lines": 384,
-      "tokens": 6625,
-      "structuralTokens": 6862,
+      "bytes": 35710,
+      "lines": 585,
+      "tokens": 10448,
+      "structuralTokens": 10589,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41756,13 +42577,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 1856,
-      "lines": 46,
-      "tokens": 544,
-      "structuralTokens": 585,
+      "bytes": 2348,
+      "lines": 53,
+      "tokens": 688,
+      "structuralTokens": 726,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41780,6 +42602,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41797,6 +42620,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41814,6 +42638,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41831,6 +42656,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41848,6 +42674,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41865,6 +42692,25 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/uiHistory.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 3760,
+      "lines": 70,
+      "tokens": 1102,
+      "structuralTokens": 1072,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41875,13 +42721,14 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5496,
+      "bytes": 5535,
       "lines": 95,
-      "tokens": 1609,
-      "structuralTokens": 1726,
+      "tokens": 1620,
+      "structuralTokens": 1738,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41899,6 +42746,25 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "gradient-explorer/v2/version.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 874,
+      "lines": 16,
+      "tokens": 255,
+      "structuralTokens": 280,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41909,13 +42775,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 56425,
-      "lines": 923,
-      "tokens": 16474,
-      "structuralTokens": 15491,
+      "bytes": 57535,
+      "lines": 945,
+      "tokens": 16798,
+      "structuralTokens": 16028,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -41926,10 +42793,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 223633,
-      "lines": 1174,
-      "tokens": 56840,
-      "structuralTokens": 68044,
+      "bytes": 240316,
+      "lines": 1201,
+      "tokens": 61082,
+      "structuralTokens": 72845,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -42014,7 +42881,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -42025,10 +42891,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 1386,
-      "lines": 26,
-      "tokens": 407,
-      "structuralTokens": 397,
+      "bytes": 1463,
+      "lines": 27,
+      "tokens": 430,
+      "structuralTokens": 420,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -42037,23 +42903,6 @@
         "mesh-export",
         "gradient-explorer",
         "gradient-explorer-next"
-      ]
-    },
-    {
-      "path": "hooks/useDragInFlight.ts",
-      "tier": "gmt-app",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".ts",
-      "reason": "app-source",
-      "bytes": 4355,
-      "lines": 83,
-      "tokens": 1274,
-      "structuralTokens": 1221,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
       ]
     },
     {
@@ -42082,9 +42931,9 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 44335,
+      "bytes": 45254,
       "lines": 919,
-      "tokens": 13034,
+      "tokens": 13304,
       "structuralTokens": 10690,
       "cpt": 3.4,
       "heavy": true,
@@ -42173,10 +43022,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 11719,
-      "lines": 235,
-      "tokens": 3438,
-      "structuralTokens": 3763,
+      "bytes": 12562,
+      "lines": 250,
+      "tokens": 3685,
+      "structuralTokens": 3963,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -42229,7 +43078,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -42318,10 +43166,10 @@
       "loadPolicy": "on-demand",
       "ext": ".json",
       "reason": "config",
-      "bytes": 1344,
-      "lines": 54,
-      "tokens": 464,
-      "structuralTokens": 512,
+      "bytes": 1309,
+      "lines": 53,
+      "tokens": 452,
+      "structuralTokens": 500,
       "cpt": 2.9,
       "heavy": false,
       "reachableFrom": []
@@ -42597,7 +43445,7 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 9190,
+      "bytes": 9191,
       "lines": 235,
       "tokens": 2700,
       "structuralTokens": 2588,
@@ -42767,10 +43615,10 @@
       "loadPolicy": "never",
       "ext": ".json",
       "reason": "generated:artifact",
-      "bytes": 372257,
-      "lines": 10302,
-      "tokens": 128365,
-      "structuralTokens": 137598,
+      "bytes": 372608,
+      "lines": 10309,
+      "tokens": 128486,
+      "structuralTokens": 137729,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -42782,10 +43630,44 @@
       "loadPolicy": "on-demand",
       "ext": ".json",
       "reason": "config",
-      "bytes": 12406,
-      "lines": 203,
-      "tokens": 4278,
-      "structuralTokens": 4704,
+      "bytes": 14194,
+      "lines": 222,
+      "tokens": 4895,
+      "structuralTokens": 5285,
+      "cpt": 2.9,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt"
+      ]
+    },
+    {
+      "path": "package.json",
+      "tier": "root",
+      "contextClass": "config",
+      "loadPolicy": "on-demand",
+      "ext": ".json",
+      "reason": "config",
+      "bytes": 14194,
+      "lines": 222,
+      "tokens": 4895,
+      "structuralTokens": 5285,
+      "cpt": 2.9,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt"
+      ]
+    },
+    {
+      "path": "package.json",
+      "tier": "root",
+      "contextClass": "config",
+      "loadPolicy": "on-demand",
+      "ext": ".json",
+      "reason": "config",
+      "bytes": 14194,
+      "lines": 222,
+      "tokens": 4895,
+      "structuralTokens": 5285,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": [
@@ -42799,10 +43681,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 12677,
+      "bytes": 12647,
       "lines": 246,
-      "tokens": 3710,
-      "structuralTokens": 3660,
+      "tokens": 3701,
+      "structuralTokens": 3651,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -42818,10 +43700,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 46541,
-      "lines": 965,
-      "tokens": 13656,
-      "structuralTokens": 14024,
+      "bytes": 71713,
+      "lines": 1411,
+      "tokens": 21034,
+      "structuralTokens": 21127,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -42839,10 +43721,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 6560,
-      "lines": 136,
-      "tokens": 1928,
-      "structuralTokens": 2181,
+      "bytes": 7819,
+      "lines": 156,
+      "tokens": 2297,
+      "structuralTokens": 2523,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -42854,67 +43736,16 @@
       ]
     },
     {
-      "path": "palette/components/ColorBoxControls.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 7113,
-      "lines": 140,
-      "tokens": 2085,
-      "structuralTokens": 2416,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "palette/components/EasingPicker.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 4429,
-      "lines": 106,
-      "tokens": 1300,
-      "structuralTokens": 1323,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "palette/components/easingThumb.ts",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".ts",
-      "reason": "app-source",
-      "bytes": 3632,
-      "lines": 94,
-      "tokens": 1063,
-      "structuralTokens": 1183,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
       "path": "palette/components/favientBlocks.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2461,
-      "lines": 52,
-      "tokens": 720,
-      "structuralTokens": 824,
+      "bytes": 2422,
+      "lines": 51,
+      "tokens": 709,
+      "structuralTokens": 780,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -42932,10 +43763,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 14412,
-      "lines": 295,
-      "tokens": 4225,
-      "structuralTokens": 4440,
+      "bytes": 17086,
+      "lines": 346,
+      "tokens": 5007,
+      "structuralTokens": 5297,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -42953,10 +43784,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 3165,
+      "bytes": 3177,
       "lines": 59,
-      "tokens": 927,
-      "structuralTokens": 933,
+      "tokens": 930,
+      "structuralTokens": 939,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -42995,10 +43826,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 50193,
-      "lines": 1086,
-      "tokens": 14721,
-      "structuralTokens": 15415,
+      "bytes": 43954,
+      "lines": 952,
+      "tokens": 12889,
+      "structuralTokens": 13625,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -43016,15 +43847,14 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 2022,
+      "bytes": 2050,
       "lines": 43,
-      "tokens": 593,
-      "structuralTokens": 599,
+      "tokens": 601,
+      "structuralTokens": 608,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
-        "fluid-toy",
-        "gradient-explorer"
+        "fluid-toy"
       ]
     },
     {
@@ -43070,87 +43900,20 @@
       ]
     },
     {
-      "path": "palette/components/GeneratorSlotMods.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 3941,
-      "lines": 83,
-      "tokens": 1158,
-      "structuralTokens": 1287,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "palette/components/GeneratorSourceRow.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 7509,
-      "lines": 129,
-      "tokens": 2198,
-      "structuralTokens": 2278,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "palette/components/GeneratorStage.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 16953,
-      "lines": 312,
-      "tokens": 4970,
-      "structuralTokens": 4961,
-      "cpt": 3.4,
-      "heavy": true,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
-      "path": "palette/components/GenParamSlider.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 1844,
-      "lines": 48,
-      "tokens": 542,
-      "structuralTokens": 564,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
       "path": "palette/components/GradientDragAvatar.tsx",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 5280,
-      "lines": 115,
-      "tokens": 1548,
-      "structuralTokens": 1644,
+      "bytes": 5673,
+      "lines": 118,
+      "tokens": 1664,
+      "structuralTokens": 1741,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -43173,23 +43936,6 @@
         "mesh-export",
         "gradient-explorer",
         "gradient-explorer-next"
-      ]
-    },
-    {
-      "path": "palette/components/GradientSourcePicker.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 8904,
-      "lines": 190,
-      "tokens": 2609,
-      "structuralTokens": 2884,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
       ]
     },
     {
@@ -43218,10 +43964,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 2779,
-      "lines": 50,
-      "tokens": 814,
-      "structuralTokens": 776,
+      "bytes": 2879,
+      "lines": 51,
+      "tokens": 844,
+      "structuralTokens": 802,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43244,6 +43990,7 @@
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -43275,10 +44022,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 38002,
+      "bytes": 38054,
       "lines": 775,
-      "tokens": 11146,
-      "structuralTokens": 12638,
+      "tokens": 11161,
+      "structuralTokens": 12651,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -43293,10 +44040,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 2920,
-      "lines": 68,
-      "tokens": 857,
-      "structuralTokens": 846,
+      "bytes": 3262,
+      "lines": 73,
+      "tokens": 956,
+      "structuralTokens": 935,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43308,33 +44055,16 @@
       ]
     },
     {
-      "path": "palette/components/MixBlend.tsx",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".tsx",
-      "reason": "app-source",
-      "bytes": 5804,
-      "lines": 105,
-      "tokens": 1697,
-      "structuralTokens": 1852,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
       "path": "palette/components/ModifyTogglesControl.tsx",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 1108,
-      "lines": 29,
-      "tokens": 326,
-      "structuralTokens": 334,
+      "bytes": 1895,
+      "lines": 38,
+      "tokens": 556,
+      "structuralTokens": 561,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43373,10 +44103,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 7353,
-      "lines": 151,
-      "tokens": 2157,
-      "structuralTokens": 2390,
+      "bytes": 9809,
+      "lines": 186,
+      "tokens": 2874,
+      "structuralTokens": 3148,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43453,10 +44183,10 @@
       "loadPolicy": "on-demand",
       "ext": ".tsx",
       "reason": "app-source",
-      "bytes": 3239,
-      "lines": 71,
-      "tokens": 950,
-      "structuralTokens": 902,
+      "bytes": 3711,
+      "lines": 78,
+      "tokens": 1088,
+      "structuralTokens": 1038,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43495,10 +44225,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5892,
-      "lines": 137,
-      "tokens": 1728,
-      "structuralTokens": 1813,
+      "bytes": 8479,
+      "lines": 172,
+      "tokens": 2485,
+      "structuralTokens": 2516,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43513,14 +44243,56 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 25040,
-      "lines": 519,
-      "tokens": 7339,
-      "structuralTokens": 7778,
+      "bytes": 26487,
+      "lines": 536,
+      "tokens": 7764,
+      "structuralTokens": 8243,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
         "app-gmt",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/components/WaveOverlay.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 25117,
+      "lines": 456,
+      "tokens": 7328,
+      "structuralTokens": 7935,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/components/WaveToolHead.tsx",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".tsx",
+      "reason": "app-source",
+      "bytes": 16491,
+      "lines": 335,
+      "tokens": 4831,
+      "structuralTokens": 5092,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
         "gradient-explorer",
         "gradient-explorer-next"
       ]
@@ -43532,10 +44304,31 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 8823,
-      "lines": 188,
-      "tokens": 2584,
-      "structuralTokens": 2880,
+      "bytes": 16668,
+      "lines": 317,
+      "tokens": 4882,
+      "structuralTokens": 5318,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/core/catalogOrigin.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 7726,
+      "lines": 136,
+      "tokens": 2264,
+      "structuralTokens": 2460,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43547,16 +44340,55 @@
       ]
     },
     {
+      "path": "palette/core/catalogPacks.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 2425,
+      "lines": 49,
+      "tokens": 711,
+      "structuralTokens": 743,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/core/catalogSigs.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 10005,
+      "lines": 190,
+      "tokens": 2929,
+      "structuralTokens": 3277,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
       "path": "palette/core/channelCurve.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 7085,
-      "lines": 166,
-      "tokens": 2075,
-      "structuralTokens": 2206,
+      "bytes": 8766,
+      "lines": 190,
+      "tokens": 2565,
+      "structuralTokens": 2719,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43580,6 +44412,27 @@
       "structuralTokens": 1245,
       "cpt": 3.4,
       "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/core/curveSpaces.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 15907,
+      "lines": 311,
+      "tokens": 4635,
+      "structuralTokens": 5324,
+      "cpt": 3.4,
+      "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
@@ -43682,10 +44535,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5067,
-      "lines": 96,
-      "tokens": 1485,
-      "structuralTokens": 1539,
+      "bytes": 7238,
+      "lines": 129,
+      "tokens": 2120,
+      "structuralTokens": 2188,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43703,10 +44556,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 35265,
-      "lines": 827,
-      "tokens": 10341,
-      "structuralTokens": 12596,
+      "bytes": 41173,
+      "lines": 927,
+      "tokens": 12070,
+      "structuralTokens": 14423,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -43724,10 +44577,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 3701,
-      "lines": 79,
-      "tokens": 1083,
-      "structuralTokens": 1165,
+      "bytes": 3746,
+      "lines": 80,
+      "tokens": 1096,
+      "structuralTokens": 1176,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43766,10 +44619,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5481,
-      "lines": 107,
-      "tokens": 1608,
-      "structuralTokens": 1607,
+      "bytes": 7045,
+      "lines": 130,
+      "tokens": 2065,
+      "structuralTokens": 2083,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43787,12 +44640,12 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 11832,
-      "lines": 264,
-      "tokens": 3469,
-      "structuralTokens": 4049,
+      "bytes": 15727,
+      "lines": 320,
+      "tokens": 4607,
+      "structuralTokens": 5095,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
@@ -43829,10 +44682,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 15145,
-      "lines": 423,
-      "tokens": 4430,
-      "structuralTokens": 5047,
+      "bytes": 17537,
+      "lines": 455,
+      "tokens": 5123,
+      "structuralTokens": 5755,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -43850,13 +44703,17 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 8497,
-      "lines": 184,
-      "tokens": 2492,
-      "structuralTokens": 2575,
+      "bytes": 10915,
+      "lines": 218,
+      "tokens": 3198,
+      "structuralTokens": 3215,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -43867,10 +44724,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 1093,
-      "lines": 21,
-      "tokens": 321,
-      "structuralTokens": 333,
+      "bytes": 1554,
+      "lines": 35,
+      "tokens": 456,
+      "structuralTokens": 464,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43888,13 +44745,56 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2729,
-      "lines": 54,
-      "tokens": 800,
-      "structuralTokens": 871,
+      "bytes": 2938,
+      "lines": 57,
+      "tokens": 860,
+      "structuralTokens": 920,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/core/gradientDocument.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 14038,
+      "lines": 289,
+      "tokens": 4122,
+      "structuralTokens": 4559,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/core/gradientFile.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 3888,
+      "lines": 73,
+      "tokens": 1140,
+      "structuralTokens": 1232,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -43917,16 +44817,37 @@
       ]
     },
     {
+      "path": "palette/core/gradientPng.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 14542,
+      "lines": 283,
+      "tokens": 4260,
+      "structuralTokens": 4412,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
       "path": "palette/core/gradientSeam.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 4312,
-      "lines": 70,
-      "tokens": 1263,
-      "structuralTokens": 1264,
+      "bytes": 4475,
+      "lines": 71,
+      "tokens": 1310,
+      "structuralTokens": 1315,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -43943,14 +44864,16 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 12119,
-      "lines": 237,
-      "tokens": 3553,
-      "structuralTokens": 4115,
+      "bytes": 13341,
+      "lines": 252,
+      "tokens": 3910,
+      "structuralTokens": 4416,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
+        "fluid-toy",
+        "mesh-export",
         "gradient-explorer",
         "gradient-explorer-next"
       ]
@@ -44172,10 +45095,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 16370,
-      "lines": 426,
-      "tokens": 4804,
-      "structuralTokens": 6048,
+      "bytes": 28910,
+      "lines": 658,
+      "tokens": 8469,
+      "structuralTokens": 10181,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44193,12 +45116,12 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 6592,
-      "lines": 153,
-      "tokens": 1929,
-      "structuralTokens": 2026,
+      "bytes": 30602,
+      "lines": 587,
+      "tokens": 8962,
+      "structuralTokens": 9618,
       "cpt": 3.4,
-      "heavy": false,
+      "heavy": true,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
@@ -44263,6 +45186,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44301,6 +45225,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44311,10 +45236,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 11833,
-      "lines": 257,
-      "tokens": 3425,
-      "structuralTokens": 3999,
+      "bytes": 12075,
+      "lines": 261,
+      "tokens": 3495,
+      "structuralTokens": 4079,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44332,10 +45257,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 16956,
-      "lines": 372,
-      "tokens": 4967,
-      "structuralTokens": 5920,
+      "bytes": 18929,
+      "lines": 402,
+      "tokens": 5545,
+      "structuralTokens": 6569,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44358,6 +45283,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44368,10 +45294,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 6467,
-      "lines": 145,
-      "tokens": 1896,
-      "structuralTokens": 2142,
+      "bytes": 6679,
+      "lines": 148,
+      "tokens": 1958,
+      "structuralTokens": 2213,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44383,33 +45309,16 @@
       ]
     },
     {
-      "path": "palette/core/rampCanvas.ts",
-      "tier": "root",
-      "contextClass": "source",
-      "loadPolicy": "on-demand",
-      "ext": ".ts",
-      "reason": "app-source",
-      "bytes": 1027,
-      "lines": 21,
-      "tokens": 300,
-      "structuralTokens": 322,
-      "cpt": 3.4,
-      "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
-    },
-    {
       "path": "palette/core/rampGeometry.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 27762,
+      "bytes": 27718,
       "lines": 528,
-      "tokens": 8023,
-      "structuralTokens": 8337,
+      "tokens": 8010,
+      "structuralTokens": 8321,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44461,10 +45370,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 22399,
-      "lines": 411,
-      "tokens": 6555,
-      "structuralTokens": 6870,
+      "bytes": 32081,
+      "lines": 570,
+      "tokens": 9392,
+      "structuralTokens": 9694,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44482,10 +45391,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 1027,
-      "lines": 25,
-      "tokens": 302,
-      "structuralTokens": 314,
+      "bytes": 1036,
+      "lines": 27,
+      "tokens": 305,
+      "structuralTokens": 317,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44503,13 +45412,16 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 11130,
-      "lines": 241,
-      "tokens": 3234,
-      "structuralTokens": 3490,
+      "bytes": 12134,
+      "lines": 263,
+      "tokens": 3528,
+      "structuralTokens": 3789,
       "cpt": 3.4,
       "heavy": false,
-      "reachableFrom": []
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
     },
     {
       "path": "palette/core/wallLayout.ts",
@@ -44531,19 +45443,65 @@
       ]
     },
     {
+      "path": "palette/core/waveGen.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 11775,
+      "lines": 244,
+      "tokens": 3450,
+      "structuralTokens": 3636,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "palette/core/wavePresets.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 6714,
+      "lines": 102,
+      "tokens": 1900,
+      "structuralTokens": 2132,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
       "path": "palette/core/workingPipeline.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 8299,
-      "lines": 180,
-      "tokens": 2426,
-      "structuralTokens": 2406,
+      "bytes": 12878,
+      "lines": 250,
+      "tokens": 3760,
+      "structuralTokens": 3721,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44575,10 +45533,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 7412,
-      "lines": 152,
-      "tokens": 2159,
-      "structuralTokens": 2263,
+      "bytes": 7787,
+      "lines": 155,
+      "tokens": 2269,
+      "structuralTokens": 2377,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44596,10 +45554,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 10103,
-      "lines": 148,
-      "tokens": 2955,
-      "structuralTokens": 3323,
+      "bytes": 11751,
+      "lines": 163,
+      "tokens": 3436,
+      "structuralTokens": 3826,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44638,17 +45596,51 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5712,
-      "lines": 112,
-      "tokens": 1672,
-      "structuralTokens": 1741,
+      "bytes": 6606,
+      "lines": 123,
+      "tokens": 1935,
+      "structuralTokens": 2014,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
-        "mesh-export",
-        "gradient-explorer"
+        "mesh-export"
+      ]
+    },
+    {
+      "path": "palette/installGradientFileClaim.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 3639,
+      "lines": 71,
+      "tokens": 1066,
+      "structuralTokens": 1106,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt"
+      ]
+    },
+    {
+      "path": "palette/installPaletteSettings.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 1912,
+      "lines": 50,
+      "tokens": 560,
+      "structuralTokens": 551,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -44665,6 +45657,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44675,10 +45668,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 11785,
-      "lines": 175,
-      "tokens": 3453,
-      "structuralTokens": 3482,
+      "bytes": 12862,
+      "lines": 189,
+      "tokens": 3768,
+      "structuralTokens": 3800,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44703,6 +45696,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44728,16 +45722,37 @@
       ]
     },
     {
+      "path": "palette/store/curveFitPref.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 3205,
+      "lines": 72,
+      "tokens": 939,
+      "structuralTokens": 985,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
       "path": "palette/store/dragVisual.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 10168,
-      "lines": 231,
-      "tokens": 2977,
-      "structuralTokens": 3110,
+      "bytes": 10345,
+      "lines": 230,
+      "tokens": 3029,
+      "structuralTokens": 3093,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44755,10 +45770,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 6804,
+      "bytes": 6824,
       "lines": 125,
-      "tokens": 1993,
-      "structuralTokens": 2165,
+      "tokens": 1999,
+      "structuralTokens": 2173,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44776,10 +45791,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 3566,
-      "lines": 64,
-      "tokens": 1045,
-      "structuralTokens": 1031,
+      "bytes": 3924,
+      "lines": 67,
+      "tokens": 1149,
+      "structuralTokens": 1132,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44797,10 +45812,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 10451,
-      "lines": 227,
-      "tokens": 3066,
-      "structuralTokens": 3234,
+      "bytes": 10607,
+      "lines": 226,
+      "tokens": 3113,
+      "structuralTokens": 3204,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44818,10 +45833,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 32646,
-      "lines": 652,
-      "tokens": 9530,
-      "structuralTokens": 10200,
+      "bytes": 47555,
+      "lines": 886,
+      "tokens": 13890,
+      "structuralTokens": 14627,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44839,10 +45854,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 16203,
+      "bytes": 16199,
       "lines": 312,
-      "tokens": 4694,
-      "structuralTokens": 4819,
+      "tokens": 4693,
+      "structuralTokens": 4821,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44857,10 +45872,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5079,
-      "lines": 110,
-      "tokens": 1488,
-      "structuralTokens": 1577,
+      "bytes": 5971,
+      "lines": 124,
+      "tokens": 1750,
+      "structuralTokens": 1836,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -44878,10 +45893,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 35307,
-      "lines": 640,
-      "tokens": 10358,
-      "structuralTokens": 11230,
+      "bytes": 43223,
+      "lines": 759,
+      "tokens": 12675,
+      "structuralTokens": 13425,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -44899,13 +45914,17 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2691,
-      "lines": 64,
-      "tokens": 790,
-      "structuralTokens": 827,
+      "bytes": 5376,
+      "lines": 120,
+      "tokens": 1575,
+      "structuralTokens": 1646,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44923,6 +45942,7 @@
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -44973,10 +45993,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5419,
-      "lines": 118,
-      "tokens": 1583,
-      "structuralTokens": 1637,
+      "bytes": 5723,
+      "lines": 122,
+      "tokens": 1673,
+      "structuralTokens": 1711,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -45015,10 +46035,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 4345,
-      "lines": 78,
-      "tokens": 1270,
-      "structuralTokens": 1292,
+      "bytes": 6060,
+      "lines": 103,
+      "tokens": 1772,
+      "structuralTokens": 1800,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -45057,10 +46077,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2769,
-      "lines": 49,
-      "tokens": 814,
-      "structuralTokens": 879,
+      "bytes": 7635,
+      "lines": 137,
+      "tokens": 2232,
+      "structuralTokens": 2257,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -45118,10 +46138,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 5380,
-      "lines": 135,
-      "tokens": 1580,
-      "structuralTokens": 1749,
+      "bytes": 8376,
+      "lines": 192,
+      "tokens": 2461,
+      "structuralTokens": 2715,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -45139,13 +46159,16 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 9940,
-      "lines": 223,
-      "tokens": 2886,
-      "structuralTokens": 2991,
+      "bytes": 12060,
+      "lines": 258,
+      "tokens": 3506,
+      "structuralTokens": 3635,
       "cpt": 3.4,
       "heavy": false,
-      "reachableFrom": []
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
     },
     {
       "path": "palette/store/wallSelection.ts",
@@ -45188,19 +46211,38 @@
       ]
     },
     {
+      "path": "palette/store/workingSession.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 7045,
+      "lines": 121,
+      "tokens": 2058,
+      "structuralTokens": 2098,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
       "path": "palette/store/workingStore.ts",
       "tier": "root",
       "contextClass": "source",
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 29247,
-      "lines": 614,
-      "tokens": 8585,
-      "structuralTokens": 9442,
+      "bytes": 39622,
+      "lines": 748,
+      "tokens": 11615,
+      "structuralTokens": 12519,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
+        "gradient-explorer",
         "gradient-explorer-next"
       ]
     },
@@ -45391,10 +46433,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1545618,
-      "lines": 61265,
-      "tokens": 532972,
-      "structuralTokens": 510413,
+      "bytes": 1643020,
+      "lines": 62669,
+      "tokens": 566559,
+      "structuralTokens": 521809,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -45406,10 +46448,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 11325,
-      "lines": 163,
-      "tokens": 2899,
-      "structuralTokens": 4438,
+      "bytes": 11556,
+      "lines": 164,
+      "tokens": 2958,
+      "structuralTokens": 4483,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -45541,10 +46583,10 @@
       "loadPolicy": "on-demand",
       "ext": ".mjs",
       "reason": "tooling-script",
-      "bytes": 5872,
-      "lines": 149,
-      "tokens": 1723,
-      "structuralTokens": 2143,
+      "bytes": 5928,
+      "lines": 150,
+      "tokens": 1740,
+      "structuralTokens": 2159,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []
@@ -45586,10 +46628,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 44170,
-      "lines": 1043,
-      "tokens": 15223,
-      "structuralTokens": 15358,
+      "bytes": 44024,
+      "lines": 1038,
+      "tokens": 15173,
+      "structuralTokens": 15309,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -45725,6 +46767,21 @@
       "lines": 537,
       "tokens": 13711,
       "structuralTokens": 17162,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/ge-ramp-analysis-and-deep-fit.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 25117,
+      "lines": 426,
+      "tokens": 6370,
+      "structuralTokens": 7515,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -46225,6 +47282,36 @@
       "reachableFrom": []
     },
     {
+      "path": "plans/ge-v2-parity-checklist.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 19696,
+      "lines": 258,
+      "tokens": 5007,
+      "structuralTokens": 6414,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/ge-v2-research/competitors.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 20515,
+      "lines": 276,
+      "tokens": 5225,
+      "structuralTokens": 6399,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "plans/ge-v2-research/gradient-browsers.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -46246,10 +47333,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 183940,
-      "lines": 2208,
-      "tokens": 46718,
-      "structuralTokens": 52278,
+      "bytes": 235313,
+      "lines": 2858,
+      "tokens": 59802,
+      "structuralTokens": 65337,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -46300,6 +47387,36 @@
       "reachableFrom": []
     },
     {
+      "path": "plans/gradient-file-format.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 7319,
+      "lines": 95,
+      "tokens": 1867,
+      "structuralTokens": 2139,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/gradient-ramp-backbone.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 5370,
+      "lines": 80,
+      "tokens": 1368,
+      "structuralTokens": 1659,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
       "path": "plans/graph-editor-unification.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -46310,6 +47427,21 @@
       "lines": 196,
       "tokens": 3289,
       "structuralTokens": 3970,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/gx-first-release-gaps.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 11301,
+      "lines": 135,
+      "tokens": 2861,
+      "structuralTokens": 3629,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -48145,6 +49277,21 @@
       "reachableFrom": []
     },
     {
+      "path": "plans/palette-catalogue-licensing.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 51218,
+      "lines": 653,
+      "tokens": 13083,
+      "structuralTokens": 16498,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "plans/palette-studio-port-plan.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -48187,6 +49334,21 @@
       "structuralTokens": 1102,
       "cpt": 3.9,
       "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/pre-release-ui-pass.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 15839,
+      "lines": 260,
+      "tokens": 4026,
+      "structuralTokens": 4838,
+      "cpt": 3.9,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -51610,13 +52772,28 @@
       "reachableFrom": []
     },
     {
+      "path": "public/palette/catalog-sigs.json",
+      "tier": "public",
+      "contextClass": "data",
+      "loadPolicy": "skip",
+      "ext": ".json",
+      "reason": "public-asset",
+      "bytes": 212528,
+      "lines": 1,
+      "tokens": 73286,
+      "structuralTokens": 53151,
+      "cpt": 2.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "public/palette/core.bin.gz",
       "tier": "public",
       "contextClass": "asset",
       "loadPolicy": "never",
       "ext": ".gz",
       "reason": "asset:.gz",
-      "bytes": 429780,
+      "bytes": 413547,
       "lines": 0,
       "tokens": 0,
       "structuralTokens": 0,
@@ -51631,12 +52808,42 @@
       "loadPolicy": "never",
       "ext": ".gz",
       "reason": "asset:.gz",
-      "bytes": 77006,
+      "bytes": 80669,
       "lines": 0,
       "tokens": 0,
       "structuralTokens": 0,
       "cpt": 0,
       "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "public/palette/credits.core.json",
+      "tier": "public",
+      "contextClass": "data",
+      "loadPolicy": "skip",
+      "ext": ".json",
+      "reason": "public-asset",
+      "bytes": 56919,
+      "lines": 2359,
+      "tokens": 19600,
+      "structuralTokens": 20533,
+      "cpt": 2.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "public/palette/credits.core.txt",
+      "tier": "public",
+      "contextClass": "data",
+      "loadPolicy": "skip",
+      "ext": ".txt",
+      "reason": "public-asset",
+      "bytes": 108714,
+      "lines": 1952,
+      "tokens": 27815,
+      "structuralTokens": 31443,
+      "cpt": 3.9,
+      "heavy": true,
       "reachableFrom": []
     },
     {
@@ -51646,10 +52853,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "public-asset",
-      "bytes": 10331,
+      "bytes": 11285,
       "lines": 1,
-      "tokens": 3563,
-      "structuralTokens": 6038,
+      "tokens": 3892,
+      "structuralTokens": 6213,
       "cpt": 2.9,
       "heavy": false,
       "reachableFrom": []
@@ -60068,10 +61275,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 4986,
-      "lines": 129,
-      "tokens": 1464,
-      "structuralTokens": 1469,
+      "bytes": 4713,
+      "lines": 116,
+      "tokens": 1382,
+      "structuralTokens": 1379,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -60198,15 +61405,13 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2687,
-      "lines": 58,
-      "tokens": 787,
-      "structuralTokens": 768,
+      "bytes": 2853,
+      "lines": 59,
+      "tokens": 836,
+      "structuralTokens": 812,
       "cpt": 3.4,
       "heavy": false,
-      "reachableFrom": [
-        "gradient-explorer"
-      ]
+      "reachableFrom": []
     },
     {
       "path": "store/engineStore.ts",
@@ -60238,10 +61443,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 2182,
-      "lines": 60,
-      "tokens": 640,
-      "structuralTokens": 642,
+      "bytes": 2418,
+      "lines": 65,
+      "tokens": 709,
+      "structuralTokens": 694,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -60261,16 +61466,34 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 7954,
-      "lines": 144,
-      "tokens": 2295,
-      "structuralTokens": 2310,
+      "bytes": 7799,
+      "lines": 141,
+      "tokens": 2249,
+      "structuralTokens": 2277,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
         "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
+      ]
+    },
+    {
+      "path": "store/sessionEnvelope.ts",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 4622,
+      "lines": 93,
+      "tokens": 1356,
+      "structuralTokens": 1416,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
         "gradient-explorer",
         "gradient-explorer-next"
       ]
@@ -60311,8 +61534,10 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy",
+        "fractal-toy",
         "gradient-explorer",
-        "gradient-explorer-next"
+        "gradient-explorer-next",
+        "demo"
       ]
     },
     {
@@ -60591,10 +61816,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 3867,
-      "lines": 86,
-      "tokens": 1134,
-      "structuralTokens": 1089,
+      "bytes": 4572,
+      "lines": 97,
+      "tokens": 1341,
+      "structuralTokens": 1317,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -60761,7 +61986,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -60795,10 +62019,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 43072,
-      "lines": 932,
-      "tokens": 12534,
-      "structuralTokens": 14443,
+      "bytes": 47000,
+      "lines": 992,
+      "tokens": 13684,
+      "structuralTokens": 15761,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -60841,10 +62065,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 16085,
-      "lines": 421,
-      "tokens": 4727,
-      "structuralTokens": 4878,
+      "bytes": 38446,
+      "lines": 790,
+      "tokens": 11274,
+      "structuralTokens": 11267,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -60897,7 +62121,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -60918,7 +62141,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -60939,7 +62161,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -60960,7 +62181,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -60980,6 +62200,29 @@
       "reachableFrom": [
         "app-gmt",
         "fluid-toy"
+      ]
+    },
+    {
+      "path": "utils/gradientRamp.ts",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 7840,
+      "lines": 168,
+      "tokens": 2297,
+      "structuralTokens": 2517,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "fractal-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next",
+        "demo"
       ]
     },
     {
@@ -61012,10 +62255,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 21449,
-      "lines": 478,
-      "tokens": 6302,
-      "structuralTokens": 6171,
+      "bytes": 22316,
+      "lines": 487,
+      "tokens": 6555,
+      "structuralTokens": 6410,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -61035,10 +62278,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 16879,
-      "lines": 393,
-      "tokens": 4958,
-      "structuralTokens": 4810,
+      "bytes": 18957,
+      "lines": 422,
+      "tokens": 5564,
+      "structuralTokens": 5346,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -61114,7 +62357,6 @@
         "app-gmt",
         "fluid-toy",
         "fractal-toy",
-        "gradient-explorer",
         "demo"
       ]
     },
@@ -61224,6 +62466,27 @@
         "gradient-explorer",
         "gradient-explorer-next",
         "demo"
+      ]
+    },
+    {
+      "path": "utils/pngCodec.ts",
+      "tier": "gmt-app",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 14223,
+      "lines": 361,
+      "tokens": 4127,
+      "structuralTokens": 4893,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": [
+        "app-gmt",
+        "fluid-toy",
+        "mesh-export",
+        "gradient-explorer",
+        "gradient-explorer-next"
       ]
     },
     {
@@ -61482,10 +62745,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "config",
-      "bytes": 7809,
-      "lines": 170,
-      "tokens": 2267,
-      "structuralTokens": 2160,
+      "bytes": 9917,
+      "lines": 196,
+      "tokens": 2885,
+      "structuralTokens": 2695,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": []

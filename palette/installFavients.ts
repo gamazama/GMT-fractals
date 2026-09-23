@@ -14,14 +14,15 @@
  * Lives in `palette/` (imports only palette + engine, never an app) so all three hosts
  * (app-gmt, fluid-toy, the Gradient Explorer) share it.
  *
- * CROSS-APP CONTRACT — `mountFavientsPanel()` is the single entry point all three use, and
+ * CROSS-APP CONTRACT — `mountFavientsPanel()` is the single entry point its hosts use, and
  * the `storageKey` argument is what keeps them from inheriting each other's dock state
  * through same-origin `localStorage`. Grep `mountFavientsPanel(`:
  *   • app-gmt  — `mountFavientsPanel()`, no args ⇒ the default `gmt.favients.panel`.
  *   • fluid-toy — `{ storageKey: 'fluid-toy.favients.panel', paletteFilters: false }`.
- *   • Gradient Explorer — `{ storageKey: 'gmt.gradientExplorer.favients.panel',
- *     location: 'left', order: 0 }`.
- * Adding a fourth host without its own `storageKey` silently gives it app-gmt's saved
+ * The v2 Gradient Explorer does NOT call it (it mounts no Favients panel; it restores the
+ * picker filters itself in `gradient-explorer/v2/main.tsx`). The first Explorer shell was the
+ * third caller, with `gmt.gradientExplorer.favients.panel`, until the swap of 2026-09-16.
+ * Adding another host without its own `storageKey` silently gives it app-gmt's saved
  * window state. The favourite COLLECTION is deliberately NOT split — `favientsStore` keys
  * it `gmt.favients`, shared across every app on the origin.
  *
@@ -116,7 +117,7 @@ export const mountFavientsPanel = (cfg: FavientsMountConfig = {}): void => {
  *  `gradient-explorer/v2/shareUrl.ts`; 2026-09-13). The literal is written here rather than
  *  imported, because `palette/` must never import an app. Only this opener appends it: the
  *  Explorer's link goes to `app-gmt.html`, which is the wrong place to send a fluid-toy user.
- *  The old shell ignores the param, so it is harmless there until the entry point swaps. */
+ *  `gradient-explorer.html` is the v2 shell since the entry-point swap (2026-09-16). */
 export const openGradientExplorer = (): void => {
   window.open('gradient-explorer.html?from=gmt', '_blank', 'noopener');
 };

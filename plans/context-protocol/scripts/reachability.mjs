@@ -24,8 +24,9 @@ export const APP_ENTRYPOINTS = {
   'fluid-toy': ['fluid-toy/main.tsx'],
   'fractal-toy': ['fractal-toy/main.tsx'],
   'mesh-export': ['mesh-export/main.tsx'],
-  'gradient-explorer': ['gradient-explorer/main.tsx'],
-  // v2 shell, built beside the old one until parity (plans/ge-v2-design.md §7).
+  // The v2 shell since the entry-point swap (2026-09-16); gradient-explorer-next.html is an
+  // alias page loading the same module.
+  'gradient-explorer': ['gradient-explorer/v2/main.tsx'],
   'gradient-explorer-next': ['gradient-explorer/v2/main.tsx'],
   'demo': ['index.tsx'],
 };

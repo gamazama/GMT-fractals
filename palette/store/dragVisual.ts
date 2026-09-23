@@ -1,11 +1,10 @@
 /**
  * dragVisual — the SOURCE rect of the gradient currently being dragged, captured at dragstart
- * so the cursor-following avatar (GradientDropLayer's DragAvatar) can MORPH out of the grabbed
- * swatch / hero rather than popping in at the cursor. Transient (module-level, no React / no
+ * so a cursor-following avatar can MORPH out of the grabbed swatch / hero rather than popping in
+ * at the cursor (the first Explorer shell's DragAvatar did; it was retired on 2026-09-16). Transient (module-level, no React / no
  * persist), like pickerSearch: set on dragstart, read by the avatar on mount, cleared on
  * drag-end.
  *
- * @see gradient-explorer/GradientDropLayer.tsx (the old shell's avatar + reveal machinery)
  * @see palette/components/GradientDragAvatar.tsx (the small standalone avatar GE v2 mounts)
  */
 

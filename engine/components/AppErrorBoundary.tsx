@@ -1,7 +1,7 @@
 /**
  * AppErrorBoundary — the one root-level React error boundary. Mount it as the
  * outermost element of every app entry (`app-gmt/main.tsx`, `fluid-toy/main.tsx`,
- * `fractal-toy/main.tsx`, `gradient-explorer/main.tsx`, `mesh-export/main.tsx`) so a render-time throw
+ * `fractal-toy/main.tsx`, `gradient-explorer/v2/main.tsx`, `mesh-export/main.tsx`) so a render-time throw
  * anywhere in the tree — plugin-mounted panels included — degrades to a visible
  * page with the error message and a Reload button, instead of React unmounting
  * the whole root (white screen, no diagnostic, unsaved work gone — the failure

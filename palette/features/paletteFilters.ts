@@ -103,7 +103,7 @@ const padParams = Object.fromEntries(
 // Section groups (used by the mobile Picker controls to render three collapsible
 // sections). No `groupConfigs` on the feature, so the desktop dock panel still
 // renders flat — these tags only take effect when an AutoFeaturePanel passes a
-// matching `groupFilter` (see GradientExplorerApp's MobilePickerControls).
+// matching `groupFilter` (the first Explorer shell's MobilePickerControls did, until 2026-09-16).
 const G_ARRANGE = 'arrange';
 const G_SOURCES = 'sources';
 

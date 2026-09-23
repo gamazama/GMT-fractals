@@ -5,10 +5,10 @@
  * otherwise) and reflects `useFavientsPanelShown` (true only when actually on screen),
  * so a docked-but-collapsed shelf reads as "hidden" and the button reveals it.
  *
- * TWO hosts mount it, not three — grep for `FavientsToggleButton` to see them:
- * `fluid-toy/main.tsx` (topbar registry, floated shelf) and
- * `gradient-explorer/TopBarButtons.tsx` (`desktopOnly`, dock-collapse variant). It
- * replaced their per-app copies. **app-gmt has no topbar toggle at all** — its copy
+ * ONE host mounts it — grep for `FavientsToggleButton`: `fluid-toy/main.tsx` (topbar
+ * registry, floated shelf). The first Explorer shell's `TopBarButtons.tsx` (dock-collapse
+ * variant) was the other, until the entry-point swap of 2026-09-16. It replaced their
+ * per-app copies. **app-gmt has no topbar toggle at all** — its copy
  * was deleted, not migrated, and the shelf is reached from the Palette Picker overlay
  * (grep `openFavientsPanel` in `app-gmt/PalettePickerOverlay.tsx`) and the System menu.
  * `desktopOnly` hides the button below the mobile breakpoint — the Explorer wants that

@@ -33,8 +33,6 @@ Decisions: ADRs 0038-0039.
   on the old threshold until the first resize event. Verified by mutation —
   set the threshold to 2000, boot at 1400x900, and `isDeviceMobile` is still
   `false`.
-  (`gradient-explorer`'s `MOBILE_BREAKPOINT` is deliberately not one of these:
-  width-only layout-fit threshold, not device detection. Leave it.)
 - **Asymmetric gating is load-bearing (ADR-0038).** `LandscapeGate`,
   `MobileScrollIntro` and `MobileViewportShell` consume raw `isDeviceMobile`;
   joysticks / mobile menu / hidden chrome consume preference-aware `isMobile`.
@@ -59,7 +57,7 @@ the 768px threshold and watching both stay green. Use them as generic
 no-regression cover only:
 
 ```
-npm run smoke:mobile-layout   # gradient-explorer.html in a Pixel 5 context and a desktop one:
+npm run smoke:mobile-layout   # gradient-explorer.html (the v2 shell since 2026-09-16) in a Pixel 5 context and a desktop one:
                               # boot seed of isDeviceMobile/isPortrait, the sticky-vs-fixed shell
                               # branch, and the resize listener across 768px / orientation
 npm run smoke:ge-floor        # the v2 Gradient Explorer in a Pixel 5 context on the PHONE FLOOR: roundRect deleted,

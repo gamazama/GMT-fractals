@@ -6,7 +6,7 @@
  *
  * THREE hosts call it today (grep `registerPaletteUI(` outside this file):
  *   • `app-gmt/registerFeatures.ts` — defaults, so the standalone Stops tab is ON.
- *   • `gradient-explorer/registerFeatures.ts` — `{ standaloneStopsMode: false }`.
+ *   • `gradient-explorer/v2/registerFeatures.ts` — `{ standaloneStopsMode: false }`.
  *   • `fluid-toy/registerFeatures.ts` — defaults. fluid-toy DOES mount the palette
  *     suite (shelf, editor entrance, favients bridge); what it opts out of is narrower
  *     — the picker-filter prefs, via `mountFavientsPanel({ paletteFilters: false })`.

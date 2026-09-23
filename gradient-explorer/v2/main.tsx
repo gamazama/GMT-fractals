@@ -1,5 +1,6 @@
 /**
- * GMT Gradient Explorer v2 — entry point (gradient-explorer-next.html).
+ * GMT Gradient Explorer v2 — entry point (gradient-explorer.html, and its alias
+ * gradient-explorer-next.html — the preview address, kept for links shared from it).
  *
  * The streamlined shell (plans/ge-v2-design.md §6b): no Dock, no TopBarHost, no Hud /
  * SceneIO / timeline. What is installed is exactly what the pieces the shell
@@ -8,8 +9,8 @@
  * whose registered Help menu the shell opens from its own top-bar buttons rather than a
  * TopBarHost. Toasts need only their host component.
  *
- * Built beside the old shell (gradient-explorer/main.tsx) until parity; the old entry
- * page is untouched.
+ * Built beside the first shell until parity, then swapped onto its page on 2026-09-16; the
+ * first shell is retired.
  */
 
 // Side-effect: features + stores registered BEFORE the store is constructed.

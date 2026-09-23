@@ -6,7 +6,8 @@
  * FIRST mousemove we see while a drag is still believed live means it actually ended → call
  * `onEnd`. Attached ONLY while `active`, so idle moves are free.
  *
- * Shared by `useDragInFlight` (the drop-wells kernel) and the Favients panel's own tracker.
+ * Used by the Favients panel's own tracker. (`useDragInFlight`, the first Explorer shell's
+ * drop-wells kernel, shared it until that shell was retired on 2026-09-16.)
  *
  * @param active whether a drag is currently believed to be in flight
  * @param onEnd  called when a mousemove leaks through (the drag has ended)

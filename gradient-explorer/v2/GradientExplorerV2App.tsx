@@ -587,9 +587,6 @@ export const GradientExplorerV2App: React.FC = () => {
         <a href="app-gmt.html" className="flex items-center gap-2 mr-auto min-w-0 no-underline" title="GMT">
           <GmtWordmark className={`w-auto shrink-0 opacity-80 ${phone ? 'h-3' : 'h-3.5'}`} />
           <span className={`font-semibold text-fg truncate ${phone ? 'text-[13px]' : 'text-[15px]'}`}>Gradient Explorer</span>
-          {/* the build badge is for whoever is testing the two shells side by side; a phone
-              has no room to spend on it */}
-          <span className="max-md:hidden text-[11px] text-fg-dim border border-line/20 rounded px-1">next</span>
         </a>
         {/* 40 px hit boxes on a phone (`max-md:`): 32 is comfortable for a pointer and
             under the ~44 px a fingertip wants. The GLYPH stays 24 either way. */}

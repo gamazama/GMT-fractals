@@ -26,8 +26,8 @@
  *     as a fluid-toy scene in the PNG — the coordinate carrier, which used to live on the
  *     toolbar's button.
  *
- * Opened via `openFullscreen(config, name)` — the receive path of the "Fullscreen" send-target
- * registered in `gradient-explorer/gradientTargets.ts` (a bottom-row well in the P2-A dock).
+ * Opened via `openFullscreen(config, name)` — the v2 shell's Wallpaper button (grep
+ * `openFullscreen` in `gradient-explorer/v2/GradientExplorerV2App.tsx`).
  *
  * All view state (mode / geomParams / open / split / dither) is transient + shell-scoped in
  * `fullscreenStore` (not DDFS, not persisted). The geometry mappings are pure; this component owns
@@ -35,9 +35,10 @@
  *
  * PHONE (2026-09-11). This overlay is portalled to `document.body`, i.e. OUTSIDE the app's
  * `MobileViewportShell` — nothing above it supplies safe-area padding or a `touch-action`, and
- * the host page (`gradient-explorer-next.html`) scopes its `html, body { overflow: hidden }` to
- * `(hover: hover) and (pointer: fine)`, so on a phone the body is still scrollable under this
- * fixed layer. That is the owner's "fullscreen controls are problematic because the page is
+ * on that day the host page scoped its `html, body { overflow: hidden }` to
+ * `(hover: hover) and (pointer: fine)`, so on a phone the body was still scrollable under this
+ * fixed layer (the page has locked it on every pointer since; the answers below do not rely on
+ * that). That is the owner's "fullscreen controls are problematic because the page is
  * scrolling with them". Three answers, all here:
  *   • the root declares `touchAction: 'none'` + `overscrollBehavior: 'none'` — a touch the
  *     overlay does not consume now goes nowhere instead of scrolling the document beneath it
@@ -94,8 +95,6 @@ import {
   type FullscreenState,
   type LiveGradientSourceHook,
 } from '../palette/store/fullscreenStore';
-import { useActiveHeroSelection } from '../palette/store/heroSelection';
-import { useGeneratorDerived } from '../palette/store/generatorStore';
 import { useImageStore } from '../palette/store/imageStore';
 import { showToast } from '../engine/store/toastStore';
 import type { GradientConfig } from '../types';
@@ -179,24 +178,6 @@ const usePushResolved = (
   useEffect(() => () => { lastSig.current = null; onResolve(null); }, [onResolve]);
 };
 
-/** The OLD shell's live source: the last-modified hero. For the editable surfaces (Stops /
- *  Generator) it reads the live store so edits reflect without re-selecting the hero; otherwise
- *  it follows the active hero's selected payload, and reports null (→ the open-time snapshot)
- *  when nothing is selected. The (heavy) Generator derivation runs while the overlay is up —
- *  acceptable there since that shell's fullscreen has no edit UI, and it is why the v2 shell
- *  registers its own hook instead of paying for a pipeline it never reads. */
-const HeroLiveSource: React.FC<{ onResolve: ResolveFn }> = ({ onResolve }) => {
-  const hero = useActiveHeroSelection();
-  // Generator covers Stops too now (its Stops sub-mode resolves to the stops gradient via
-  // useGeneratorDerived().config), so there's no separate 'stops' hero mode to special-case.
-  const generatorConfig = useGeneratorDerived().config;
-  let config: GradientConfig | null = hero?.payload.config ?? null;
-  let name = hero?.payload.name ?? 'Gradient';
-  if (hero?.mode === 'generator') { config = generatorConfig; name = hero.payload.name || 'Generator'; }
-  usePushResolved(config, name, onResolve);
-  return null;
-};
-
 /** The host-registered live source (`setFullscreenLiveSource`) — the v2 shell's Working
  *  pipeline, and whatever a future host registers. Resolved at module level, never
  *  conditionally inside a component, so the hook the host supplied is called unconditionally
@@ -211,9 +192,10 @@ const RegisteredLiveSource: React.FC<{ onResolve: ResolveFn; hook: LiveGradientS
 };
 
 /** Resolves the gradient the wallpaper follows and reports it upward. Mounted whenever the
- *  overlay is open (split AND plain fullscreen share this one live path). WHICH resolver runs
- *  is decided by whether the host registered a hook — a value that is set at boot and does not
- *  change, so the two are distinct component types with their own stable hook order.
+ *  overlay is open (split AND plain fullscreen share this one live path). The source is the
+ *  host's hook, registered at boot; a host that registers none gets the open-time snapshot and
+ *  nothing live. (Until the entry-point swap, 2026-09-16, such a host got `HeroLiveSource`, the
+ *  first shell's hero + Generator resolver; it was that shell's only user and went with it.)
  *
  *  NOT A BUG, though it looked like one on 2026-09-12: `smoke:ge-wallpaper` and
  *  `smoke:gx-spline` [5] both reported that the split preview had stopped following an edit,
@@ -225,9 +207,7 @@ const RegisteredLiveSource: React.FC<{ onResolve: ResolveFn; hook: LiveGradientS
  *  evidence of a pre-existing fault here. Restart the server first. */
 const SplitLiveSource: React.FC<{ onResolve: ResolveFn }> = ({ onResolve }) => {
   const hook = getFullscreenLiveSource();
-  return hook
-    ? <RegisteredLiveSource onResolve={onResolve} hook={hook} />
-    : <HeroLiveSource onResolve={onResolve} />;
+  return hook ? <RegisteredLiveSource onResolve={onResolve} hook={hook} /> : null;
 };
 
 export const FullscreenGradientOverlay: React.FC = () => {
@@ -267,18 +247,15 @@ export const FullscreenGradientOverlay: React.FC = () => {
   const activeMode = getFullscreenMode(fs.geom);
   const isOwnCanvas = activeMode?.kind === 'ownCanvas';
 
-  // The colour SOURCE: the fullscreen preview ALWAYS live-follows the last-modified hero (the same
+  // The colour SOURCE: the fullscreen preview ALWAYS live-follows the host's live source (the same
   // resolution split uses — one code path), falling back to the open-time snapshot when nothing live
   // resolves. Resolved by the <SplitLiveSource> child below (mounted whenever the overlay is open),
-  // which reads the live Stops/Generator stores so edits reflect immediately. All modes read colour
+  // which calls the host's hook so edits reflect immediately. All modes read colour
   // from this resolved source — never the store directly. Fullscreen hides the app UI so there's no
   // edit path while open ⇒ live ≡ pinned in practice (no toggle; user-ratified 2026-06-10).
   const [liveSplit, setLiveSplit] = useState<LiveSource | null>(null);
   const sourceConfig = liveSplit ? liveSplit.config : fs.config;
   const sourceName = liveSplit ? liveSplit.name : fs.name;
-
-  // The "Fullscreen" target is registered in `gradientTargets.ts` at boot (not inline here), so
-  // the dock has a single source of truth. `openFullscreen` is the receive path that target calls.
 
   // Esc dismissal — a direct capture-phase listener so it works regardless of whether the host
   // installed the shortcut registry (the Explorer shell may not have).

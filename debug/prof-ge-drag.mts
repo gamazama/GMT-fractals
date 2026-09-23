@@ -23,7 +23,7 @@
 import { chromium, firefox, type Page, type CDPSession } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
-const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer-next.html';
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
 const WHICH = (process.argv[2] || 'adjust') as 'adjust' | 'curves';
 
 interface ProfNode {
