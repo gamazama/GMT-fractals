@@ -17,6 +17,9 @@ export interface ContextMenuItem {
     checked?: boolean;
     isHeader?: boolean;
     disabled?: boolean;
+    /** Tooltip — most useful on a DISABLED item, to say why it is (the Stops menu's Reduce
+     *  Stops… on a ramp or a two-stop gradient). */
+    title?: string;
     keepOpen?: boolean;
     children?: ContextMenuItem[]; // Nested items
     

@@ -3,6 +3,8 @@ export type { ModalProps } from './Modal';
 export { FloatingPanel } from './FloatingPanel';
 export type { FloatingPanelProps } from './FloatingPanel';
 export { Segmented } from './Segmented';
+export { Act } from './Act';
+export { Floating } from './Floating';
 export type { SegmentedOption, SegmentedProps } from './Segmented';
 export { AnchoredMenu } from './AnchoredMenu';
 export type { AnchoredMenuProps } from './AnchoredMenu';

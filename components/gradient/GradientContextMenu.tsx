@@ -59,6 +59,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
                         key={i}
                         onClick={() => { onClose(); requestAnimationFrame(() => opt.action?.()); }}
                         disabled={opt.disabled}
+                        title={opt.title}
                         className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between group transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                             opt.danger
                                 ? 'text-danger hover:bg-danger/15 hover:text-danger'

@@ -45,6 +45,8 @@ import { registerDocumentProvider } from '../store/documentRegistry';
 import { setGradientEditorEntrance } from '../components/gradient/gradientEditorEntrance';
 import { setGradientFavientsBridge } from '../components/gradient/gradientFavients';
 import { setGradientStopFitter } from '../components/gradient/gradientStopFitter';
+import { setGradientStopReducer } from '../components/gradient/gradientStopReducer';
+import { REDUCE_STEPS, reduceStopsSteps } from './core/reduceStops';
 import { addStopsToConfig } from './core/workingPipeline';
 import { configToName } from './core/facetName';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
@@ -117,6 +119,20 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   // explicit, UNCAPPED fit at the generator's Detail budget, keeping the gradient's colorSpace
   // (a coloring gradient is 'linear' and must bake the same after the knots appear).
   setGradientStopFitter((config) => addStopsToConfig(config, useGeneratorStore.getState().detail));
+
+  // The Stops editor's "Reduce Stops…" popup: the named steps and the lazy ladder behind them
+  // (palette/core/reduceStops.ts). The editor gates ramps and two-stop gradients before it
+  // calls, so a null ladder is only a defensive empty iterator here.
+  setGradientStopReducer({
+    steps: REDUCE_STEPS.map(({ id, name }) => ({ id, name })),
+    reduce: (config) => {
+      const it = reduceStopsSteps(config);
+      if (!it) return [][Symbol.iterator]();
+      return (function* () {
+        for (const o of it) yield { id: o.step.id, config: o.config };
+      })();
+    },
+  });
 
   // The generator's non-DDFS state (curve Track[], slot selection, fit dials) lives in
   // its own store, so register it as a PARAM-undo history provider — curves + slots now

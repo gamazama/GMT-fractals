@@ -36,6 +36,21 @@
  * (filled by `registerPaletteUI`) is emitted through `onChange` inside `editAction`, so
  * app-gmt's DDFS param gets it as one param-undo step with no host wiring.
  * Guard: `npm run test:gradient-rampmode` (the rules + a text pin on this file's gates).
+ *
+ * REDUCE STOPS… (2026-09-23). With a reducer in the `gradientStopReducer` slot (every host that
+ * mounts the palette suite), the menu offers "Reduce Stops…" and this editor opens
+ * `ReduceStopsPopup` where the menu was. The results are pulled from the reducer ONE PER
+ * MACROTASK (`reducePull`), so a long gradient never blocks a frame for the whole ladder. While
+ * an amount is hovered or chosen, the bar paints its stops (`editorBarSource`'s `stopsPreview`,
+ * which outranks every host preview) and the knot track shows ITS knots, inert; the real knots,
+ * the bias handles and every knot gesture stand down (`previewing` counts as stale). Apply is
+ * `editAction(() => emitChange(...))` — the same one undo step Invert is, on whatever history the
+ * host brackets; Cancel / Escape / the ☰ commit nothing. Offered only while the knots ARE what
+ * the bar shows (`reduceBlocked`), and closed if the value stops being a reducible stop gradient.
+ * No host wiring: app-gmt gets it through the same menu. Strip chrome also shows the quiet
+ * "N stops" count beside the blend chooser (`data-gx-stop-count`), where a ramp shows Add stops.
+ * Guard: `npx tsx debug/smoke-ge-reduce.mts` (→ `npm run smoke:ge-reduce`; the popup, a real mouse
+ * and a phone) and `npx tsx debug/test-palette-reducestops.mts` [5] (the menu item's gating).
  */
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore, useImperativeHandle } from 'react';
@@ -54,6 +69,8 @@ import {
     barTexels256,
 } from './gradient/rampMode';
 import { getGradientStopFitter, subscribeGradientStopFitter } from './gradient/gradientStopFitter';
+import { getGradientStopReducer, subscribeGradientStopReducer, type GradientReduceResult } from './gradient/gradientStopReducer';
+import { ReduceStopsPopup } from './gradient/ReduceStopsPopup';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
 const STRIP_PREVIEW_W = 1536;
@@ -218,6 +235,14 @@ interface AdvancedGradientEditorProps {
      * `onChange` inside `edit` — see components/gradient/gradientStopFitter.ts.
      */
     onAddStops?: () => void;
+    /**
+     * Host items that LEAD the menu — above the editor's own sections, in the ☰ dropdown and the
+     * bar's right-click alike (the two mirror each other), and outside the section trim a hosted
+     * inspector applies. For an action on the whole DOCUMENT that the host owns: GE v2's hero puts
+     * New Gradient here (2026-09-23). A knot's own right-click menu does not carry them. Omitted:
+     * the menu is exactly the editor's.
+     */
+    menuLead?: ContextMenuItem[];
 }
 
 /**
@@ -304,7 +329,7 @@ const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelec
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops, menuLead }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -484,7 +509,18 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // RAMP MODE: what a ramp value may do (nothing knot-shaped) and whether Add stops has a way
     // to run — the host's `onAddStops`, else the palette host's fitter slot.
     const stopFitter = useSyncExternalStore(subscribeGradientStopFitter, getGradientStopFitter);
-    const affordances = editorAffordances({ isRamp, knotsStale, canAddStops: !!onAddStops || !!stopFitter });
+    /**
+     * REDUCE STOPS (see the file header). `reduceAt` is the open popup's anchor; `reduceResults`
+     * fills in one step per macrotask; `reducePreview` is what the popup wants on the bar right
+     * now. While previewing, the knots describe the gradient UNDER the candidate, not the bar —
+     * exactly the `knotsStale` rule — so every knot affordance stands down with it.
+     */
+    const stopReducer = useSyncExternalStore(subscribeGradientStopReducer, getGradientStopReducer);
+    const [reduceAt, setReduceAt] = useState<{ x: number; y: number } | null>(null);
+    const [reduceResults, setReduceResults] = useState<Record<string, GradientConfig>>({});
+    const [reducePreview, setReducePreview] = useState<GradientConfig | null>(null);
+    const previewing = !!reducePreview;
+    const affordances = editorAffordances({ isRamp, knotsStale: knotsStale || previewing, canAddStops: !!onAddStops || !!stopFitter });
     const showBias = affordances.knots && isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
     // Entering ramp mode drops any selection left from a stop value (an undo, a pick): the
     // ids point at nothing, and a live selection keeps the host's inspector face open.
@@ -552,13 +588,13 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // Keyed on `rampValue`, not `value`: it is null for every stop value, so a host handing a
     // fresh-but-equal stop config each render does not repaint the 1536 px strip.
     const barSource = useMemo(
-        () => editorBarSource({ previewRamp: chrome === 'strip' ? previewRamp : undefined, previewConfig, value: rampValue ?? knots, knots }),
-        [chrome, previewRamp, previewConfig, rampValue, knots],
+        () => editorBarSource({ stopsPreview: reducePreview?.stops, previewRamp: chrome === 'strip' ? previewRamp : undefined, previewConfig, value: rampValue ?? knots, knots }),
+        [chrome, previewRamp, previewConfig, rampValue, knots, reducePreview],
     );
     // Hovering a chip in BlendSpacePicker re-renders THIS strip in that mode. It takes
     // precedence over the host's previewConfig so the hover always wins visually, and it
     // never emits — leaving the row restores the committed mode.
-    const previewBlend = hoverBlend ?? previewConfig?.blendSpace ?? blendSpace;
+    const previewBlend = reducePreview?.blendSpace ?? hoverBlend ?? previewConfig?.blendSpace ?? blendSpace;
     // 'strip' chrome paints from `previewWide` below and never reads a texel of this, so it
     // is not computed there: 256 oklab samples per keystroke of an Adjust dial, thrown away
     // (measured 2026-09-11). The two END colours the gutters want come from `previewWide`
@@ -673,6 +709,56 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         if (!fit || !ramp) return;
         editAction(() => onChangeRef.current(fit(ramp)));
     }, [editAction]);
+
+    /** Where the last menu opened (☰ or right-click): the Reduce popup opens in its place. */
+    const menuAnchorRef = useRef<{ x: number; y: number } | null>(null);
+    /** Why Reduce cannot run now, beyond what the menu sees for itself (a ramp, two stops). */
+    const reduceBlocked = knotsStale ? 'These stops describe the gradient underneath. Bake the change to reduce them' : undefined;
+    const canReduceNow = !!stopReducer && !isRamp && !knotsStale && knots.length > 2;
+    const reduceOpen = reduceAt !== null;
+    const openReduce = useCallback(() => {
+        const r = containerRef.current?.getBoundingClientRect();
+        const menuAt = menuAnchorRef.current ?? (r ? { x: r.left, y: r.bottom } : { x: 16, y: 16 });
+        // Never OVER the bar it previews: full chrome's ☰ sits above the strip (app-gmt), and a
+        // right-click lands on it, so the popup opens under the knot track, where the menu was
+        // only in x. GE v2's ☰ is already below the track and keeps its place.
+        const track = knotTrackRef.current?.getBoundingClientRect();
+        const at = track ? { x: menuAt.x, y: Math.max(menuAt.y, track.bottom + 6) } : menuAt;
+        // a selected knot would keep the host's inspector open over knots the preview hides
+        setSelectedIds(new Set<string>());
+        setReduceAt({ ...at });
+    }, []);
+    const closeReduce = useCallback(() => { setReduceAt(null); setReducePreview(null); }, []);
+    // The value stopped being something to reduce while the popup was open (an undo to a ramp,
+    // a face opened over the stops): the popup goes, and its preview with it.
+    useEffect(() => { if (reduceOpen && !canReduceNow) closeReduce(); }, [reduceOpen, canReduceNow, closeReduce]);
+    // Pull the ladder ONE STEP PER MACROTASK while the popup is open, and start over whenever
+    // the gradient under it changes (an undo, a pick). A superseded run is cancelled.
+    useEffect(() => {
+        // same object when already empty: with the popup closed this runs on every knot edit and
+        // must not cost the editor a render each time
+        setReduceResults((prev) => (Object.keys(prev).length ? {} : prev));
+        if (!reduceOpen || !stopReducer || !canReduceNow) return;
+        const it: Iterator<GradientReduceResult> = stopReducer.reduce({ stops: knots, colorSpace, blendSpace });
+        let alive = true;
+        let timer = 0;
+        const pull = () => {
+            if (!alive) return;
+            const r = it.next();
+            if (r.done) return;
+            setReduceResults((prev) => ({ ...prev, [r.value.id]: r.value.config }));
+            timer = window.setTimeout(pull, 0);
+        };
+        timer = window.setTimeout(pull, 0);
+        return () => { alive = false; window.clearTimeout(timer); };
+    }, [reduceOpen, stopReducer, canReduceNow, knots, colorSpace, blendSpace]);
+    /** Apply: ONE undo step, through the same bracket as every menu action. */
+    const applyReduce = useCallback((cfg: GradientConfig) => {
+        setReduceAt(null);
+        setReducePreview(null);
+        setSelectedIds(new Set<string>());
+        editAction(() => emitChange(cfg.stops, cfg.colorSpace, cfg.blendSpace));
+    }, [editAction, emitChange]);
 
     const cycleColorSpace = () => {
         const nextMode = colorSpace === 'srgb' ? 'linear' : colorSpace === 'linear' ? 'aces_inverse' : 'srgb';
@@ -839,7 +925,14 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         paste: handlePaste,
         setConfig: emitConfig,
         addStops: affordances.addStops ? addStops : undefined,
-    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost, emitConfig, affordances.addStops, addStops]);
+        reduceStops: stopReducer ? openReduce : undefined,
+        reduceStopsBlocked: reduceBlocked,
+    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost, emitConfig, affordances.addStops, addStops, stopReducer, openReduce, reduceBlocked]);
+    /** The ☰ dropdown and the bar's right-click: the host's `menuLead` above the shared list. */
+    const menuWithLead = useCallback(
+        (): ContextMenuItem[] => (menuLead?.length ? [...menuLead, ...buildMenuItems()] : buildMenuItems()),
+        [menuLead, buildMenuItems],
+    );
 
     const handlePointerMove = useCallback((e: PointerEvent) => {
         const payload = dragPayloadRef.current;
@@ -1168,8 +1261,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const openTrackContextMenu = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        menuAnchorRef.current = { x: e.clientX, y: e.clientY };
         // Same shared list the header dropdown renders — see buildMenuItems.
-        openContextMenu(e.clientX, e.clientY, buildMenuItems(), [helpId || 'ui.gradient_editor']);
+        openContextMenu(e.clientX, e.clientY, menuWithLead(), [helpId || 'ui.gradient_editor']);
     };
 
     /** Right-click ON a knot: its own menu. The v2 hero trims the strip's menu to Actions and
@@ -1179,6 +1273,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const openKnotContextMenu = (e: React.MouseEvent, knotId: string) => {
         e.preventDefault();
         e.stopPropagation();
+        menuAnchorRef.current = { x: e.clientX, y: e.clientY };
         // a right-click on an unselected knot selects it first, so the menu acts on what you clicked
         if (!selectedIds.has(knotId)) setSelectedIds(new Set([knotId]));
         const full = buildGradientMenu({
@@ -1196,6 +1291,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             paste: handlePaste,
             setConfig: emitConfig,
             addStops: affordances.addStops ? addStops : undefined,
+            reduceStops: stopReducer ? openReduce : undefined,
+            reduceStopsBlocked: reduceBlocked,
         });
         // the Interpolation section, then whatever the host's own trim leaves
         const interp: ContextMenuItem[] = [];
@@ -1215,7 +1312,11 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const handlePresetsClick = (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
+        // the ☰ is also the Reduce popup's trigger: with it open, a click closes it and commits
+        // nothing (owner: close by choosing, by Escape, or by the trigger)
+        if (reduceAt) { closeReduce(); return; }
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        menuAnchorRef.current = { x: rect.left, y: rect.bottom + 5 };
         setPresetMenu({ x: rect.left, y: rect.bottom + 5 });
     };
     
@@ -1308,7 +1409,18 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     x={presetMenu.x}
                     y={presetMenu.y}
                     onClose={() => setPresetMenu(null)}
-                    options={buildMenuItems()}
+                    options={menuWithLead()}
+                />
+            )}
+            {reduceAt && stopReducer && (
+                <ReduceStopsPopup
+                    anchor={reduceAt}
+                    steps={stopReducer.steps}
+                    results={reduceResults}
+                    from={knots.length}
+                    onPreview={setReducePreview}
+                    onApply={applyReduce}
+                    onCancel={closeReduce}
                 />
             )}
 
@@ -1491,6 +1603,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             )}
                         </div>
                     ))}
+                    {/* REDUCE STOPS preview: the candidate's knots, inert — the real ones stand
+                        down while it is on the bar (`previewing`). `data-gx-knot-preview` is a
+                        test's handle, apart from `data-gx-knot` so a count of either is honest. */}
+                    {reducePreview && reducePreview.stops.map((s) => (
+                        <div
+                            key={`reduce-${s.id}`}
+                            data-gx-knot-preview=""
+                            className="absolute top-0 w-4 h-5 -ml-2 flex flex-col items-center pointer-events-none"
+                            style={{ left: `${s.position * 100}%` }}
+                        >
+                            <KnotIcon color={s.color} isSelected={false} interpolation={s.interpolation as InterpolationMode | undefined} />
+                        </div>
+                    ))}
 
                     {selectionRange && (
                         <>
@@ -1554,6 +1679,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         {/* RAMP MODE: blend is inert on a ramp, so its slot holds Add stops */}
                         {isRamp ? addStopsButton : (
                             <>
+                                {/* THE STOP COUNT, where a ramp says it has none (owner's parity
+                                    row E10b). Quiet on purpose — the ramp label's ink. Hidden (not
+                                    removed, so the row never shifts) while the bar shows something
+                                    other than these stops. */}
+                                <span
+                                    className={`text-fg-faint tabular-nums whitespace-nowrap ${knotsStale ? 'invisible' : ''}`}
+                                    data-gx-stop-count=""
+                                >
+                                    {knots.length} {knots.length === 1 ? 'stop' : 'stops'}
+                                </span>
                                 {!COARSE_POINTER && <span>blend</span>}
                                 <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} />
                             </>

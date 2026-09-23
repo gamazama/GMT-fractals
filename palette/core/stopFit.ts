@@ -30,9 +30,16 @@
  *      13.3 → 7.4 stops (linear), 14.6 → 8.6 (smooth), at a LOWER worst error; plain
  *      bias-0.5 gradients unchanged (5.0 → 5.1). Trials are evaluated on the segment's
  *      own texels only (`sampleSortedStops`), not a full re-render, so a fit stays a few ms.
+ *
+ * THE BLEND SPACE IS AN OPTION (2026-09-23, for "Reduce stops…" — palette/core/reduceStops.ts).
+ * Every render and trial the refine makes goes through `o.blendSpace`, and the result carries
+ * it; the default is 'oklab' (OkLCh-polar), so every caller that passes none is unchanged. The
+ * detectors (plateaus, corners) read the TARGET ramp only and do not care. A reduce fits a
+ * gradient in its OWN space, so an RGB-blended gradient stays RGB-blended — refitting it in
+ * OkLCh would have changed its identity, not just its stop count.
  */
 
-import type { GradientStop, GradientConfig } from '../../types';
+import type { GradientStop, GradientConfig, BlendColorSpace } from '../../types';
 import { rgbToOklab, oklabDistance, type RGB } from './oklab';
 import { renderStopsToRamp, renderGradientToRamp, sampleSortedStops, rgbToHex } from './gmtGradient';
 import { encodeRamp } from '../../utils/gradientRamp';
@@ -72,6 +79,9 @@ export interface StopFitOptions {
    *  which the GMT seam (legacy palette import) does not want — bands must stay crisp. The
    *  v2 working pipeline opts in. */
   fitBias?: boolean;
+  /** The space the fit's stops are rendered in while it measures them, and the result's
+   *  `blendSpace`. Default 'oklab' (see the file header). */
+  blendSpace?: BlendColorSpace;
 }
 
 /**
@@ -123,6 +133,7 @@ const DEFAULTS: Required<StopFitOptions> = {
   maxStops: 32,
   seedStops: [],
   fitBias: false,
+  blendSpace: 'oklab',
   seedCorners: true,
   seedPlateaus: true,
   plateauMin: 4,
@@ -253,7 +264,7 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   }
   let currentErr: number[] | null = null;
   const rescore = () => {
-    currentErr = renderStopsToRamp([...stops].sort((a, b) => a.position - b.position), 'oklab', 'srgb').map((c, i) => oklabDistance(c, ramp[i]));
+    currentErr = renderStopsToRamp([...stops].sort((a, b) => a.position - b.position), o.blendSpace, 'srgb').map((c, i) => oklabDistance(c, ramp[i]));
   };
   if (o.seedStops.length) rescore();
   const stillWrong = (from: number, to: number): boolean => {
@@ -419,7 +430,7 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
       // `st` is sorted by the caller on every pass of the refine loop below, so sample it
       // PRE-SORTED: `sampleStops` would copy and re-sort it once per texel, up to 512
       // iterations deep (measured 2026-09-11 — the fit is the expensive half of a derive).
-      const d = oklabDistance(sampleSortedStops(st, i / 255, 'oklab', 'srgb'), ramp[i]);
+      const d = oklabDistance(sampleSortedStops(st, i / 255, o.blendSpace, 'srgb'), ramp[i]);
       if (d > max) {
         max = d;
         at = i;
@@ -430,7 +441,7 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   let guard = 0;
   while (guard++ < 512) {
     stops.sort((a, b) => a.position - b.position);
-    const rendered = renderStopsToRamp(stops, 'oklab', 'srgb');
+    const rendered = renderStopsToRamp(stops, o.blendSpace, 'srgb');
     // the worst segment (by its worst texel). A step segment counts too: the corner
     // detector marks any steep run as step pairs, and a steep-but-continuous run is
     // better served by a biased linear / smooth segment — the trials below say which.
@@ -474,7 +485,7 @@ export const fitRampToStops = (ramp: RGB[], opts: StopFitOptions = {}): Gradient
   }
   stops.sort((a, b) => a.position - b.position);
 
-  return { stops, colorSpace: 'srgb', blendSpace: 'oklab' };
+  return { stops, colorSpace: 'srgb', blendSpace: o.blendSpace };
 };
 
 /**

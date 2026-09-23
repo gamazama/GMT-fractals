@@ -23,6 +23,13 @@
  * says what a ramp cannot do rather than silently doing nothing. The rules are in `rampMode.ts`
  * (`editorAffordances`); a stop gradient's menu is unchanged item for item.
  * Guard: `npm run test:gradient-rampmode`.
+ *
+ * REDUCE STOPS… (2026-09-23) sits under Double Knots, its opposite, whenever the editor has a
+ * reducer to run (the `gradientStopReducer` seam — `reduceStops` is omitted otherwise, and the
+ * item with it). It OPENS the editor's popup rather than acting, so it is not wrapped in an undo
+ * bracket; the popup's Apply is. It is present but disabled, with a `title` saying why, on a ramp
+ * (no stops — Add Stops is the way in), on two stops (none to spare), and whenever the editor
+ * says so (`reduceStopsBlocked`: the bar is showing something other than these stops).
  */
 
 import type { ContextMenuItem } from '../../types/help';
@@ -48,6 +55,10 @@ export interface GradientMenuContext {
   setConfig: (config: GradientConfig) => void;
   /** "Add stops" on a ramp gradient; omitted when the host offers none (it self-brackets). */
   addStops?: () => void;
+  /** Open the editor's Reduce stops popup; omitted when no reducer is registered. */
+  reduceStops?: () => void;
+  /** Why Reduce Stops… cannot run right now, when the editor knows a reason the menu cannot see. */
+  reduceStopsBlocked?: string;
   /** Wrap a discrete mutation in one undo entry (the editor's editAction). */
   editAction: (mutate: () => void) => void;
   setSelectedIds: (ids: Set<string>) => void;
@@ -66,6 +77,7 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
   const {
     knots, config, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible,
     emit, editAction, setSelectedIds, setBiasHandlesVisible, copy, paste, setConfig, addStops,
+    reduceStops, reduceStopsBlocked,
   } = ctx;
 
   const wrap = (fn: () => void) => () => editAction(fn);
@@ -99,6 +111,14 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
     ...(can.addStops && addStops ? [{ label: 'Add Stops', action: addStops }] : []),
     { label: 'Invert Gradient', action: wrap(() => (ramp ? setConfig(reverseRampGradient(ramp)) : emit(stopOps.invert(knots)))) },
     { label: 'Double Knots', disabled: !can.stopActions, action: wrap(() => emit(stopOps.double(knots))) },
+    ...(reduceStops ? [(() => {
+      const why = ramp
+        ? 'A 256-colour ramp has no stops to reduce. Add Stops gives it some'
+        : knots.length <= 2
+          ? 'Two stops are the fewest a gradient can have'
+          : reduceStopsBlocked;
+      return { label: 'Reduce Stops…', disabled: !!why, title: why, action: reduceStops };
+    })()] : []),
     {
       label: 'Distribute Selected',
       disabled: !can.stopActions || selectedIds.size < 3,

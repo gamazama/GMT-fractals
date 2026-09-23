@@ -105,16 +105,21 @@ export type BarSource = { kind: 'ramp'; texels: RGB[] } | { kind: 'stops'; stops
 
 /**
  * Pick the bar's source, in the editor's order of precedence:
+ *   0. `stopsPreview` — stops the editor itself is PREVIEWING and has not committed (the Reduce
+ *      stops popup's hovered / chosen amount, 2026-09-23). It outranks the host's previews: the
+ *      user is looking at a candidate for THIS gradient and nothing else may paint over it;
  *   1. the host's `previewRamp` (strip chrome only — pass undefined for full chrome);
  *   2. a RAMP-form gradient on screen — `previewConfig` when given, else the value — as texels;
  *   3. stops: `previewConfig.stops` when given, else the editor's knots (what it always did).
  */
 export const editorBarSource = (o: {
+  stopsPreview?: GradientStop[] | null;
   previewRamp?: RGB[] | null;
   previewConfig?: GradientConfig;
   value: EditorValue;
   knots: GradientStop[];
 }): BarSource => {
+  if (o.stopsPreview && o.stopsPreview.length > 0) return { kind: 'stops', stops: o.stopsPreview };
   if (o.previewRamp && o.previewRamp.length > 1) return { kind: 'ramp', texels: o.previewRamp };
   const shown = o.previewConfig ?? (Array.isArray(o.value) ? null : o.value);
   if (shown && isRampGradient(shown)) return { kind: 'ramp', texels: gradientDisplayRamp(shown) };

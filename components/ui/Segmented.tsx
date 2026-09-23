@@ -29,6 +29,12 @@
  * DISABLED — an option that has nothing to act on right now (the palette's Stops layout on a
  * gradient that has no stops, ADR-0122). It stays in the row, dimmed and unclickable, so the
  * switch keeps its shape; the cycle button steps over it.
+ *
+ * PREVIEW — `onPreview(id)` while a MOUSE is over an option, `onPreview(null)` when it leaves the
+ * row (2026-09-23, the Stops editor's Reduce stops popup: "preview on hover, choose on click" —
+ * the owner's rule for choosers). Mouse only: a finger fires pointerenter on its way to the tap,
+ * so a touch would preview and choose in one gesture; on a phone the CHOICE is the preview. A
+ * disabled option previews nothing. Absent, nothing changes for any existing switch.
  */
 
 import React from 'react';
@@ -56,6 +62,8 @@ export interface SegmentedProps<T extends string | number> {
   onChange: (id: T) => void;
   /** Clicking (or cycling onto) an option marked `repeat`. */
   onRepeat?: (id: T) => void;
+  /** A mouse is over this option (`null`: it left the row). Row layout only. */
+  onPreview?: (id: T | null) => void;
   /** ONE button that advances instead of a row — the phone layout. */
   cycle?: boolean;
   /** Segment padding. Words want `px-2`; a glyph wants a squarer box. */
@@ -69,7 +77,7 @@ const ON = 'bg-accent-400/15 text-accent-300';
 const OFF = 'text-fg-muted hover:text-fg';
 
 export function Segmented<T extends string | number>({
-  options, value, onChange, onRepeat, cycle = false, pad = 'px-2', name, className = '',
+  options, value, onChange, onRepeat, onPreview, cycle = false, pad = 'px-2', name, className = '',
 }: SegmentedProps<T>): React.ReactElement | null {
   if (options.length === 0) return null;
   const i = Math.max(0, options.findIndex((o) => o.id === value));
@@ -116,6 +124,7 @@ export function Segmented<T extends string | number>({
       aria-label={name}
       data-seg-group={name}
       className={`shrink-0 inline-flex border border-line/20 rounded-lg overflow-hidden ${className}`}
+      onPointerLeave={onPreview ? (e) => { if (e.pointerType === 'mouse') onPreview(null); } : undefined}
     >
       {options.map((o) => {
         const on = o.id === value;
@@ -130,6 +139,7 @@ export function Segmented<T extends string | number>({
             title={on && o.repeat ? o.repeatTitle ?? o.title ?? o.name : o.title ?? o.name}
             className={`inline-flex items-center justify-center ${pad} h-7 text-[13px] transition-colors ${on ? ON : OFF} ${o.disabled ? 'opacity-40 cursor-default' : ''}`}
             onClick={() => { if (!o.disabled) hit(o, on); }}
+            onPointerEnter={onPreview ? (e) => { if (e.pointerType === 'mouse') onPreview(o.disabled ? null : o.id); } : undefined}
           >
             {o.label ?? o.name}
           </button>

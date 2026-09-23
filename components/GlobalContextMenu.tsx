@@ -147,6 +147,7 @@ const GlobalContextMenu: React.FC<GlobalContextMenuProps> = ({ x, y, items, targ
                         }}
                         onMouseEnter={(e) => handleMouseEnterItem(item, e)}
                         disabled={item.disabled}
+                        title={item.title}
                         className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between transition-colors group relative ${
                             item.disabled
                             ? 'text-fg-faint cursor-not-allowed opacity-50'
