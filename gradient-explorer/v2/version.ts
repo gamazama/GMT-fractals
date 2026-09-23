@@ -7,10 +7,11 @@
  * GX user (grep `gx.whatsNew.seenVersion`) — bump it together with a new entry at the top of
  * the changelog topic in ./help/topics.ts.
  *
- * PLACEHOLDER (2026-09-13): the owner has not chosen GX's numbering. "2.0.0-preview" says
- * "v2, not released yet" and nothing more — replace it before the entry-point swap.
+ * Numbering (owner, 2026-09-23): 2.0.0 is the first release out of preview — a number to start
+ * versioning on, not something marketed. Patch and minor bumps from here follow ordinary
+ * semver sense; the What's New entry is what users read, not the number.
  */
-export const GX_VERSION = '2.0.0-preview.2';
+export const GX_VERSION = '2.0.0';
 
 /** Display name, used by About, Support and the feedback context. */
 export const GX_APP_NAME = 'Gradient Explorer';

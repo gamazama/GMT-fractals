@@ -17,8 +17,8 @@
  * `> <date>` line, and bump ../version.ts in the same change — that is what relights the
  * What's New dot.
  *
- * DRAFT COPY (branch gx-entry-swap, 2026-09-16): the top "Unreleased" entry is for the owner to
- * rewrite. GX_VERSION was deliberately not bumped; give the entry the version you choose.
+ * DRAFT COPY (branch gx-entry-swap, 2026-09-16): the top entry's wording is still for the owner
+ * to rewrite; its version, 2.0.0, was chosen by the owner on 2026-09-23.
  */
 
 import type { HelpSection } from '../../../types/help';
@@ -133,7 +133,7 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
     category: "What's New",
     title: "What's New",
     content: `
-## Unreleased — out of preview
+## 2.0.0 — out of preview
 > September 2026
 
 - **This is the Gradient Explorer now.** The page GMT and Fluid Toy open shows it, and coming from GMT's My Gradients gives you a Back to GMT link. The old Explorer is gone.
