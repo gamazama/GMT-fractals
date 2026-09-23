@@ -90,7 +90,7 @@ import { mapSpan } from '../../palette/core/lensBand';
 import { MapScrollbar } from './ui/MapScrollbar';
 import { useWorkingDerived, deriveWorkingNow, useWorkingStore } from '../../palette/store/workingStore';
 import { useImageStore } from '../../palette/store/imageStore';
-import { contributeToGlobal } from './contributeToGlobal';
+import { contributeToGlobal, importedSourceOfWorking } from './contributeToGlobal';
 import { QUALITY_AXES } from '../../palette/features/paletteFilters';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { Dropdown } from '../../components/Dropdown';
@@ -235,7 +235,8 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   const shareToGlobal = useCallback(() => {
     const cfg = deriveWorkingNow()?.config;
     if (!cfg) { showToast('Pick or build a gradient first — then share it here'); return; }
-    contributeToGlobal(cfg);
+    // Imported (or edited from an import) → the confirm carries the rights line.
+    contributeToGlobal(cfg, { imported: importedSourceOfWorking(useWorkingStore.getState()) !== null });
   }, []);
   // The pad follows the Arrange state (owner, 2026-09-08): rows on its Y, sort on its X when
   // they are colour axes, the third on the strip — so the pad is the wall's map for any

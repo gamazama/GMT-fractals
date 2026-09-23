@@ -11,10 +11,10 @@
  * undoable: nothing local changes, so there is nothing for Ctrl+Z to put back. Your own copy
  * stays exactly where it was.
  *
- * The confirm ends on a one-line terms statement, in the wording of
- * plans/palette-catalogue-licensing.md §5 "GX Global" (the gap) and §6 action 6 (the fix):
- * the endpoint takes no name, source or licence, so the sharer is the only one who can vouch
- * for the right to share.
+ * For an IMPORTED gradient the confirm ends on a one-line terms statement, in the wording of
+ * plans/palette-catalogue-licensing.md §5 "GX Global" (the gap) and §6 action 6 (the fix): the
+ * endpoint takes no name, source or licence, so the sharer is the only one who can vouch for a
+ * file's contents. Anything else goes without it (owner, 2026-09-24) — see `CONTRIBUTE_TERMS`.
  *
  * NO UNEDITED CATALOGUE GRADIENTS (owner, 2026-09-13: "GX Global has no names, and shouldn't
  * accept duplicates from the repo"). Before asking, the gradient's canonical signature is
@@ -37,8 +37,35 @@ import { PALETTE_LOCAL_BASE } from '../../palette/core/catalogLoader';
 /** The confirm text. One string, so the two entry points cannot promise different things. */
 export const CONTRIBUTE_CONFIRM =
     'Add this gradient to GX global?' + String.fromCharCode(10, 10) +
-    'Everyone using the app will see it, and it cannot be taken back. Your own copy stays where it is.' + String.fromCharCode(10, 10) +
-    'You confirm you have the right to share this.';
+    'Everyone using the app will see it, and it cannot be taken back. Your own copy stays where it is.';
+
+/**
+ * The rights line — asked ONLY for a gradient that came in from a file (owner, 2026-09-24: "not
+ * necessary, we already test against the corpus and reformat the stops. Only if imported."). A
+ * catalogue gradient is refused unless edited (below), and GX Global stores its own normalised
+ * stops, so what is left to vouch for is material from outside the app: an import. Recognised by
+ * the provenance the importer writes (`Import · .<ext>`, palette/core/importGradientFiles.ts),
+ * which rides the drag payload and the working input — and the working input's `bakedFrom`, so an
+ * edited import still asks.
+ */
+export const CONTRIBUTE_TERMS = 'You confirm you have the right to share this.';
+
+/** True for the importer's provenance line (`Import · .png`, `Import · .ggr`, …). */
+export const isImportedSource = (source: string | null | undefined): boolean =>
+    typeof source === 'string' && /^Import\b/.test(source);
+
+type SourcedInput = { kind: string; source?: string };
+/** The working gradient's import provenance, if it has one: the input's own source, or — once it
+ *  has been edited — the source of the input it was baked from. Null for anything else. */
+export const importedSourceOfWorking = (w: { input: SourcedInput; bakedFrom: { input: SourcedInput } | null }): string | null => {
+    if (w.input.kind === 'gradient' && isImportedSource(w.input.source)) return w.input.source!;
+    const from = w.bakedFrom?.input;
+    return from && from.kind === 'gradient' && isImportedSource(from.source) ? from.source! : null;
+};
+
+/** The confirm for one gradient: the rights line only when it was imported. */
+export const contributeConfirmText = (imported: boolean): string =>
+    imported ? CONTRIBUTE_CONFIRM + String.fromCharCode(10, 10) + CONTRIBUTE_TERMS : CONTRIBUTE_CONFIRM;
 
 /** The refusal. Says what to do instead, because the gradient is not wrong, just not new. */
 export const CATALOGUE_REFUSAL_TOAST =
@@ -57,13 +84,13 @@ export const isCatalogueGradient = async (config: GradientConfig): Promise<boole
  * Check, ask, then contribute. Returns at once; the outcome arrives as a toast.
  * A declined confirm is a no-op and says nothing.
  */
-export const contributeToGlobal = (config: GradientConfig): void => {
+export const contributeToGlobal = (config: GradientConfig, opts?: { imported?: boolean }): void => {
     void isCatalogueGradient(config).then((fromCatalogue) => {
         if (fromCatalogue) {
             showToast(CATALOGUE_REFUSAL_TOAST);
             return;
         }
-        if (!window.confirm(CONTRIBUTE_CONFIRM)) return;
+        if (!window.confirm(contributeConfirmText(!!opts?.imported))) return;
         showToast('Adding it to GX global…');
         void submitToGlobalSet(config).then(
             (r) => {

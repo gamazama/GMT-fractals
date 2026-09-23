@@ -871,6 +871,29 @@ async function main() {
   await page.waitForTimeout(1200);
   if (dialogs.length !== 1) fail(`[9] an EDITED gradient did not reach the confirm (${dialogs.length} dialogs) — the check refuses everything`);
   if (posts.length) fail('[9] a dismissed confirm still POSTed');
+  // The rights line is asked ONLY for an imported gradient (owner, 2026-09-24): an edited
+  // catalogue pick goes without it, a gradient carrying the importer's `Import · .<ext>`
+  // provenance gets it. Falsified 2026-09-24 by passing `imported: true` always → red on the
+  // first check, and by dropping the flag in BrowseStage → red on the second.
+  if (/right to share/i.test(dialogs[0] ?? '')) fail('[9] the confirm asked for the rights line on a gradient that was not imported');
+  // Import the working store at the EXACT url the app loaded it from: after any edit the dev
+  // server serves it as `workingStore.ts?t=…`, and a bare-url import would be a second,
+  // disconnected instance (measured 2026-09-24: the pick landed in the copy while its dial
+  // reset hit the real engine store, so the edited gradient reverted and was refused).
+  await page.evaluate(`(async () => {
+    const url = performance.getEntriesByType('resource').map((e) => e.name)
+      .find((n) => /\\/palette\\/store\\/workingStore\\.ts(\\?|$)/.test(n)) || '/palette/store/workingStore.ts';
+    const ws = await import(url);
+    ws.useWorkingStore.getState().use({ stops: [
+      { id: 'a', position: 0, color: '#123456', bias: 0.5, interpolation: 'linear' },
+      { id: 'b', position: 1, color: '#FEDCBA', bias: 0.5, interpolation: 'linear' },
+    ], colorSpace: 'srgb', blendSpace: 'oklab' }, 'from a file', 'Import · .ggr');
+  })()`);
+  await page.waitForTimeout(600);
+  await page.click('[data-gx-share-global]');
+  await page.waitForTimeout(1200);
+  if (dialogs.length !== 2 || !/right to share/i.test(dialogs[1] ?? '')) fail(`[9] an IMPORTED gradient's confirm did not ask for the rights line (${dialogs.length} dialogs; toasts: ${(await toasts()) || 'none'})`);
+  if (posts.length) fail('[9] a dismissed confirm still POSTed');
   await page.unroute('**/functions/v1/gx-gradients');
   console.log('✓ [9] GX global refuses the unedited pick with a toast and no request; the same gradient edited is offered');
 

@@ -84,7 +84,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_GROUP, newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
 import { fileFavientInto } from '../../palette/store/favientFiling';
-import { contributeToGlobal } from './contributeToGlobal';
+import { contributeToGlobal, isImportedSource } from './contributeToGlobal';
 import { flashSetSave, useSetSaveFlash, SAVE_MS, SAVE_SLOW_MS } from './setSaveFlash';
 import { configToCss } from '../../palette/core/gradientCss';
 import type { GradientConfig } from '../../types';
@@ -196,7 +196,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     // starts on the frame the pointer released, not after the store has re-rendered the rail.
     const flash = () => { const css = configToCss(p.config); if (css && s) flashSetSave(s.id, css); };
     if (s?.kind === 'global') {
-      contributeToGlobal(p.config);
+      contributeToGlobal(p.config, { imported: isImportedSource(p.source) });
       return;
     }
     flash();

@@ -97,6 +97,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, addStopsToWorking, workingSourceOf, type WorkingDerived } from '../../palette/store/workingStore';
+import { importedSourceOfWorking } from './contributeToGlobal';
 import { sameGradientBody } from '../../components/gradient/rampMode';
 import { isRampGradient, stopsOf } from '../../utils/gradientRamp';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
@@ -528,7 +529,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             onDragStart={(e) => {
               if (emptySource || !shown) return;
               if ((e.target as HTMLElement | null)?.closest('input')) return;
-              const payload = { config: shown.config, name: derived.name };
+              // An imported gradient keeps its provenance on the way out, so a drop on GX Global
+              // asks for the rights line and a drop on a set files it as the import it is.
+              const importedSource = importedSourceOfWorking(useWorkingStore.getState());
+              const payload = { config: shown.config, name: derived.name, ...(importedSource ? { source: importedSource } : {}) };
               setFavientDrag(e.dataTransfer, payload);
               beginCustomAvatarDrag(e.dataTransfer); // register the drag + suppress the native image
               setDragOrigin(e.currentTarget.getBoundingClientRect()); // the avatar morphs out of the header
