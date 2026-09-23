@@ -83,6 +83,7 @@ import { membersOfMany, parseSetId, groupSetId } from '../../palette/core/ground
 import { loadGxSessionText } from './session';
 import { useGlobalSet } from '../../palette/store/globalSetStore';
 import { shareUrlFor, takeShareFromLocation, cameFromGmt } from './shareUrl';
+import { applyGradientFromGmt, goBackToGmt, onBackToGmtClick, BACK_TO_GMT_HREF } from './fromGmt';
 import { Icon } from './ui/Icon';
 import { ShellMenuButton, FeedbackWindow } from './ShellMenu';
 import { HelpOverlay } from '../../engine/plugins/Help';
@@ -100,7 +101,7 @@ import { GearIcon, HelpIcon, MenuIcon } from '../../components/Icons';
 const phoneMenuItems = (): MenuItem[] => [
   { id: 'gx-settings', type: 'button', label: 'Settings', icon: <GearIcon />, onSelect: openSettings },
   ...(cameFromGmt
-    ? [{ id: 'gx-back-to-gmt', type: 'button', label: 'Back to GMT', title: 'Back to the GMT studio', onSelect: () => { window.location.href = 'app-gmt.html'; } } as MenuItem]
+    ? [{ id: 'gx-back-to-gmt', type: 'button', label: 'Back to GMT', title: 'Back to the GMT studio', onSelect: () => { void goBackToGmt(); } } as MenuItem]
     : []),
   { id: 'gx-sep', type: 'separator' },
 ];
@@ -532,10 +533,12 @@ export const GradientExplorerV2App: React.FC = () => {
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
-  // A share link opens straight into Working (once, on boot; the param is stripped).
+  // A share link opens straight into Working (once, on boot; the param is stripped). Failing
+  // that, a gradient GMT's Explorer button handed over does the same (./fromGmt, 2026-09-23).
   useEffect(() => {
     const shared = takeShareFromLocation();
     if (shared) useWorkingStore.getState().use(shared.config, shared.name, 'Shared link');
+    else applyGradientFromGmt();
   }, []);
   const share = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
@@ -589,7 +592,7 @@ export const GradientExplorerV2App: React.FC = () => {
         {/* `min-w-0` + a truncating title: on a phone the brand is the one elastic thing in
             this row, and without it the wordmark pushed undo / redo / settings off the
             right edge (measured 390 px, Phase F). */}
-        <a href="app-gmt.html" className="flex items-center gap-2 mr-auto min-w-0 no-underline" title="GMT">
+        <a href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} className="flex items-center gap-2 mr-auto min-w-0 no-underline" title="GMT">
           <GmtWordmark className={`w-auto shrink-0 opacity-80 ${phone ? 'h-3' : 'h-3.5'}`} />
           <span className={`font-semibold text-fg truncate ${phone ? 'text-[13px]' : 'text-[15px]'}`}>Gradient Explorer</span>
         </a>
@@ -597,11 +600,13 @@ export const GradientExplorerV2App: React.FC = () => {
             under the ~44 px a fingertip wants. The GLYPH stays 24 either way. */}
         <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={phone ? 18 : 20} /></button>
         <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={phone ? 18 : 20} /></button>
-        {/* Back to GMT is a plain link (owner, 2026-09-07): the working gradient is already
-            in GMT's My Gradients panel through the shared `gmt.favients` Recent group, so
-            the link carries nothing. Only shown when this page was opened from the studio. */}
+        {/* Back to GMT carries no gradient (owner, 2026-09-07): the working gradient is already
+            in GMT's My Gradients panel through the shared `gmt.favients` Recent group. Only
+            shown when this page was opened from the studio. Opened by GMT's Explorer button,
+            it closes this tab to land back in the GMT tab, or restores GMT's stashed scene
+            here when it cannot (owner, 2026-09-23; ./fromGmt). The brand link does the same. */}
         {cameFromGmt && !phone && (
-          <a className={`${tb} flex items-center no-underline`} href="app-gmt.html" title="Back to the GMT studio">
+          <a className={`${tb} flex items-center no-underline`} href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} title="Back to the GMT studio">
             Back to GMT
           </a>
         )}

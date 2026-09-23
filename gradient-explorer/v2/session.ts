@@ -12,7 +12,9 @@
  *     them on. main.tsx hands the SAME store to `registerCoreSettings({ autosave })`, so the
  *     Files ▸ Autosave rows read and write these keys and not app-gmt's `gmt-autosave-*`;
  *   • a share link that opens pre-empts the restore (`shareOpensFrom`) — it is the gradient the
- *     user asked for on this load, and the autosave (if on) then keeps it as the session;
+ *     user asked for on this load, and the autosave (if on) then keeps it as the session; a
+ *     gradient handed over by GMT's Explorer button (`gmtIncomingWaiting`, ./fromGmt) pre-empts
+ *     the same way (2026-09-23);
  *   • the file is `<working name>.gxsession.json` — `.json` so any picker and editor accepts it,
  *     the inner `.gxsession` so it is not mistaken for a gradient or a Favients collection
  *     (both of which are also `.json` in this app).
@@ -35,6 +37,7 @@ import type { SessionBootAction } from '../../store/sessionEnvelope';
 import { workingSessionAdapter, WORKING_SESSION_STORAGE_KEY } from '../../palette/store/workingSession';
 import { useWorkingStore, autoWorkingName } from '../../palette/store/workingStore';
 import { shareOpensFrom } from './shareUrl';
+import { gmtIncomingWaiting } from './fromGmt';
 import { slugName } from './exportActions';
 
 export const GX_SESSION_SUFFIX = '.gxsession.json';
@@ -68,7 +71,8 @@ export const installGxSession = (): SessionBootAction => {
   installed = restoreSessionOnBoot(workingSessionAdapter, {
     storageKey,
     settings,
-    preempted: typeof location !== 'undefined' && shareOpensFrom(location.search),
+    // A gradient handed over by GMT's Explorer button pre-empts exactly as a share link does.
+    preempted: typeof location !== 'undefined' && (shareOpensFrom(location.search) || gmtIncomingWaiting()),
   });
   installSessionAutosave(workingSessionAdapter, { storageKey, settings });
   registerSessionFileSettings(workingSessionAdapter, {

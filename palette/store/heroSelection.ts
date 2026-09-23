@@ -118,6 +118,10 @@ const activeSelection = (): HeroSelection | null => (active !== null ? picks[act
 export const useHeroPick = (mode: HeroMode): HeroSelection | null =>
   useSyncExternalStore(subscribe, () => picks[mode] ?? null, () => picks[mode] ?? null);
 
+/** The active pick read OUTSIDE React — for a caller with no component (the browser smokes read
+ *  it to check what a surface shows selected — debug/smoke-gmt-gx-handoff.mts, 2026-09-23). */
+export const getActiveHeroSelection = (): HeroSelection | null => activeSelection();
+
 /** The pick the dock acts on (the active surface's pick). */
 export const useActiveHeroSelection = (): HeroSelection | null =>
   useSyncExternalStore(subscribe, activeSelection, activeSelection);
