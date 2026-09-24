@@ -284,6 +284,14 @@ export interface AdvancedGradientEditorHandle {
     /** A colour was DROPPED at `t`: recolour the knot within `tolerance`, or insert one there.
      *  One bracketed edit either way; the touched knot ends up selected. */
     dropColourAt: (t: number, hex: string, tolerance?: number) => void;
+    /** The selected knot ids as of the last render (the v2 hero puts them on its undo entries —
+     *  gradient-explorer/v2/uiHistory.ts `useStopSelectionHistory`). */
+    getSelection: () => string[];
+    /** Select exactly `ids` — the ones the CURRENT value has (a ramp has none); returns how many
+     *  that was. For an undo that brings a selection back: call it after the editor has taken the
+     *  restored value (from the host's effect, which runs after this component's), because a value
+     *  from another lineage clears the selection when it arrives (grep `lineageRef`). */
+    restoreSelection: (ids: readonly string[]) => number;
 }
 
 const knotsEqual = (a: AdvancedGradientKnot[], b: AdvancedGradientKnot[]): boolean =>
@@ -461,6 +469,11 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     useEffect(() => { knotsRef.current = knots; }, [knots]);
 
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    // Read by the handle (`getSelection` / `restoreSelection`), which outlives a render.
+    const selectedIdsRef = useRef(selectedIds);
+    selectedIdsRef.current = selectedIds;
+    const stopsRef = useRef(stops);
+    stopsRef.current = stops;
     const [isExpandedState, setIsExpanded] = useState(true);
     // Strip chrome has no toggle: the inspector is always reachable.
     const isExpanded = chrome === 'strip' ? true : isExpandedState;
@@ -716,6 +729,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const reduceBlocked = knotsStale ? 'These stops describe the gradient underneath. Bake the change to reduce them' : undefined;
     const canReduceNow = !!stopReducer && !isRamp && !knotsStale && knots.length > 2;
     const reduceOpen = reduceAt !== null;
+    const reduceOpenRef = useRef(reduceOpen);
+    reduceOpenRef.current = reduceOpen;
     const openReduce = useCallback(() => {
         const r = containerRef.current?.getBoundingClientRect();
         const menuAt = menuAnchorRef.current ?? (r ? { x: r.left, y: r.bottom } : { x: 16, y: 16 });
@@ -839,6 +854,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         },
         clearSelection: () => setSelectedIds(new Set()),
         dropColourAt,
+        getSelection: () => Array.from(selectedIdsRef.current),
+        restoreSelection: (ids: readonly string[]) => {
+            // A ramp has no knots; an open Reduce popup cleared the selection on purpose (a selected
+            // knot keeps the host's inspector open over knots its preview hides — `openReduce`).
+            if (rampValueRef.current || reduceOpenRef.current) { setSelectedIds((prev) => (prev.size ? new Set<string>() : prev)); return 0; }
+            const have = new Set(stopsRef.current.map((s) => s.id));
+            const keep = ids.filter((id) => have.has(id));
+            setSelectedIds(new Set(keep));
+            return keep.length;
+        },
     }), [blendSpace, editAction, emitChange, dropColourAt]);
 
     const handleCopy = useCallback(() => {

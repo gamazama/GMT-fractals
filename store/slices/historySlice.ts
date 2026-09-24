@@ -71,6 +71,25 @@ export interface HistoryProvider {
      * compares raw captures instead (falsified 2026-09-24).
      */
     changeOf?: (snapshot: unknown) => unknown;
+    /**
+     * OPTIONAL: this provider is CONTEXT, not content — the state an entry was made IN (which
+     * panel was open, what was selected), not what the gesture changed. Two rules follow, and
+     * they are the whole of it:
+     *   • it never MAKES an entry: a bracket that changes only context state pushes nothing, so
+     *     moving the furniture on its own stays off the stack (navigation is not an edit);
+     *   • it rides EVERY entry that is pushed, changed or not: undo restores it as it was when
+     *     the gesture BEGAN, and redo as it was when the entry was undone. Undo returns you to
+     *     where you were; redo to where you were when you pressed undo.
+     * Context keys are applied AFTER the content keys of the same entry (they are appended to
+     * the diff), so a context restore can read the restored content.
+     *
+     * First user: the Gradient Explorer v2 shell's interface (grep `useShellUiHistory` in
+     * gradient-explorer/v2/uiHistory.ts, ADR-0120). Guard: `npm run smoke:ge-uiundo` — its two
+     * providers registered without `context` red [3] and [6]–[13] (falsified 2026-09-24, F1 in its
+     * header). No node harness reaches this branch: `debug/test-palette-working.mts` registers no
+     * context provider.
+     */
+    context?: boolean;
 }
 const EXT_PREFIX = '__ext__';
 const _historyProviders = new Map<string, HistoryProvider>();
@@ -181,6 +200,10 @@ const changeView = (k: string, v: unknown): unknown => {
     return p?.changeOf ? p.changeOf(v) : v;
 };
 
+/** Is this snapshot key a CONTEXT provider's (see `HistoryProvider.context`)? */
+const isContextKey = (k: string): boolean =>
+    k.startsWith(EXT_PREFIX) && !!_historyProviders.get(k.slice(EXT_PREFIX.length))?.context;
+
 const captureStateForKeys = (keys: string[], current: EngineStoreState): Partial<EngineStoreState> => {
     const snap: Partial<EngineStoreState> = {};
     for (const k of keys) {
@@ -263,6 +286,9 @@ export const createHistorySlice: StateCreator<
         const diff: Partial<EngineStoreState> = {};
         let hasChanges = false;
         for (const k of Object.keys(interactionSnapshot)) {
+            // Context never decides whether a bracket changed anything (see
+            // `HistoryProvider.context`); it is added below, once an entry is being pushed.
+            if (isContextKey(k)) continue;
             const prev = (interactionSnapshot as any)[k];
             // readSnapshotKey handles `__ext__*` provider keys, which are NOT engine-store
             // fields — reading `current[k]` for them would be undefined and make the key
@@ -279,6 +305,11 @@ export const createHistorySlice: StateCreator<
         if (!hasChanges) {
             set({ interactionSnapshot: null });
             return;
+        }
+        // Context rides every entry, as it was when the bracket opened — appended last, so an
+        // undo restores it after the content it describes.
+        for (const k of Object.keys(interactionSnapshot)) {
+            if (isContextKey(k)) (diff as any)[k] = (interactionSnapshot as any)[k];
         }
 
         const tx: Transaction = { scope: 'param', diff, timestamp: Date.now() };

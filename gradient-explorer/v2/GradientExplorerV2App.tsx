@@ -33,7 +33,6 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useEngineStore } from '../../store/engineStore';
 import { useGlobalContextMenu } from '../../hooks/useGlobalContextMenu';
 import GlobalContextMenu from '../../components/GlobalContextMenu';
@@ -66,7 +65,7 @@ import {
   isGradientFileName,
   type ImportOutcome,
 } from '../../palette/core/importGradientFiles';
-import { paramEdit } from '../../palette/store/paramUndoBracket';
+import { paramEdit, paramGroup } from '../../palette/store/paramUndoBracket';
 import { getWallSelection, clearWallSelection } from '../../palette/store/wallSelection';
 import { gradientDisplayRamp } from '../../palette/core/gmtGradient';
 import { stopsOf } from '../../utils/gradientRamp';
@@ -135,8 +134,10 @@ const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg
  * on leave, and the space resets with it"). Before 2026-09-16 only the tracks reset, so a face
  * closed in HSV reopened in HSV on the next gradient. Only when no tracks are left: tracks that
  * survive the leave (a live Mix keeps its curves across a face switch) are keyed by their
- * space, and a space that disagrees with them is read as no curves at all. Outside any undo
- * bracket on purpose — undoing the bake restores the space inside the generator snapshot.
+ * space, and a space that disagrees with them is read as no curves at all. It never needs an
+ * entry of its own: a leave that bakes (or drops an untouched fit for a source switch) runs it
+ * inside the tab switch's group, whose generator snapshot restores the space with the curves; a
+ * PEEK runs it outside any bracket with the fit it drops (grep `peek` in `openTray`).
  *
  * @invariant closing the Curves face in HSV leaves the axes on OkLCh, and the next gradient opens
  *   Curves there — proven by: npm run smoke:ge-wave ("[10] closing the Curves face resets the
@@ -263,11 +264,12 @@ export const GradientExplorerV2App: React.FC = () => {
     [groundSetIds, sets],
   );
   const armed = useArmedSlot();
-  // The surfaces ride the undo stack (owner, 2026-09-12) — @see ./uiHistory. This is what
-  // makes it safe for a gesture to CLOSE something to show you a result: `revealGround` below.
+  // The surfaces ride every undo entry as CONTEXT (owner, 2026-09-12 and 2026-09-24) — @see
+  // ./uiHistory. This is what makes it safe for a gesture to CLOSE something to show you a
+  // result (`revealGround` below), and what puts back the face that belongs with an undone edit.
   useShellUiHistory(
-    { tray, folded, exportOpen, exportGround },
-    (s) => { setTray(s.tray); setFolded(s.folded); setExportOpen(s.exportOpen); setExportGround(s.exportGround); },
+    { tray, folded, exportOpen, exportGround, armed },
+    (s) => { setTray(s.tray); setFolded(s.folded); setExportOpen(s.exportOpen); setExportGround(s.exportGround); armSlot(s.armed ?? null); },
   );
   /**
    * A FACE EDITS A DOCUMENT, so it may not be open when there is none.
@@ -326,12 +328,17 @@ export const GradientExplorerV2App: React.FC = () => {
       // filled the slot grey), and a slot is a palette-pipeline input, which reads display sRGB —
       // a catalogue pick's 'linear' profile is a bake-for-shader concern, not the slot's colours.
       const ramp = gradientDisplayRamp(p.config);
-      useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);
+      // ONE entry (2026-09-24): the slot, a re-entry into Mix and the seeds the pick adds, so one
+      // Ctrl+Z gives back the other bar AND the seeds — which were written outside any bracket
+      // before — with the slot armed again as it was (the armed slot is interface context).
+      paramGroup(() => {
+        useGeneratorStore.getState().sendRampToSlot(slot, ramp, p.name);
+        // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to
+        // browse for this pick) so the hero shows the new blend immediately.
+        if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().goLive({ kind: 'build' });
+        addMixSeeds(p.config.stops);
+      });
       if (candidate.mode !== 'favients') armSlot(null);
-      // Working goes live over Mix again (it may have been fixed by leaving the Mix tab to
-      // browse for this pick) so the hero shows the new blend immediately.
-      if (useWorkingStore.getState().input.kind !== 'build') useWorkingStore.getState().goLive({ kind: 'build' });
-      addMixSeeds(p.config.stops);
       deselectActiveHero();
       setTray('mix');
       return;
@@ -372,44 +379,83 @@ export const GradientExplorerV2App: React.FC = () => {
   // live Mix / Image commits it with `use`; entering Mix runs enterMix (arms B); entering
   // Image puts the extract input live. Leaving Mix disarms — the wall is B's picker only
   // while the Mix face is open.
+  //
+  // ONE CLICK, ONE UNDO ENTRY, AND THE FACE IS SET LAST (2026-09-24, owner: "UI goes along with
+  // undo"). Everything a switch does to the DATA runs inside one `paramGroup`, before `setTray`:
+  // the interface rides every entry as CONTEXT (./uiHistory) captured when the group opens, so
+  // one Ctrl+Z puts back the whole click — the face you were in with the gradient you had in it —
+  // and redo the face you went to. Before this a switch could leave four entries (a bake, a Mix
+  // commit, enterMix's three brackets, a Curves fit), and undoing only the last put a Mix face over
+  // a fixed gradient or a Curves face with no curves.
+  //
+  // Opening CURVES fits here, inside the group, rather than when the face mounts: a fit made after
+  // the face opened was an entry whose context was "Curves open", so its undo left the face
+  // saying "Nothing to fit yet" over a gradient. The face's own mount fit stays as the fallback.
+  //
+  // A PEEK stays navigation: leaving an UNTOUCHED Curves fit for a face that edits nothing (no
+  // face, Adjust) drops the fit OUTSIDE any bracket, as it always did — so looking into Curves and
+  // out again adds nothing to the stack beyond the fit itself.
+  //
+  // Guard: `npm run smoke:ge-uiundo` [7] (entering Mix is one step), [8] (leaving Mix), [9] (Mix →
+  // Curves), [10] (opening Curves; a peek adds no entry), [11] (leaving Adjust), [13] (Image);
+  // F3 / F4 / F7 in its header break the group, the fit and the peek one at a time.
   const openTray = useCallback((next: TrayFace) => {
     const cur = trayRef.current;
     const face: TrayFace = cur === next ? null : next;
     const from = sourceOf(cur);
     const to = sourceOf(face);
-    const w = useWorkingStore.getState();
-    // ONE rule for every face (C.3, owner: "the default will be to bake after switching from
-    // any mode"): leaving Curves or Adjust with something applied folds it into the stops
-    // (beginEdit — the chip then offers "return to source" as the cancel). Untouched dials
-    // fold nothing. First, so a face left for Mix hands Mix the baked gradient, not live
-    // curves that would apply again over the blend.
-    if ((cur === 'curves' || cur === 'adjust') && face !== cur) {
-      const d = deriveWorkingNow();
-      const gen = useGeneratorStore.getState();
-      if (cur === 'curves' && gen.tracks && !gen.tracksEdited) {
-        // an UNTOUCHED fit (Curves opened, looked at, closed) is the source restated: no
-        // bake — the fit just goes, and the gradient stays what it was
-        useGeneratorStore.setState({ tracks: null, curvesOn: false });
-      } else if (d && !d.passthrough && w.input.kind !== 'build' && w.input.kind !== 'extract') w.beginEdit();
-    }
-    if (cur === 'curves' && face !== cur) resetBareCurveSpace();
-    if (from !== to) {
-      if ((from === 'build' || from === 'extract') && w.input.kind === from) {
+    const leaving = cur !== face;
+    const gen0 = useGeneratorStore.getState();
+    const untouchedCurves = cur === 'curves' && leaving && !!gen0.tracks && !gen0.tracksEdited;
+    // an UNTOUCHED fit (Curves opened, looked at, closed) is the source restated: no bake —
+    // the fit just goes, and the gradient stays what it was
+    const dropUntouchedFit = (): void => {
+      useGeneratorStore.setState({ tracks: null, curvesOn: false });
+      resetBareCurveSpace();
+    };
+    const peek = untouchedCurves && from === to;
+    if (peek) dropUntouchedFit();
+    paramGroup(() => {
+      const w = useWorkingStore.getState();
+      // ONE rule for every face (C.3, owner: "the default will be to bake after switching from
+      // any mode"): leaving Curves or Adjust with something applied folds it into the stops
+      // (beginEdit — the chip then offers "return to source" as the cancel). Untouched dials
+      // fold nothing. First, so a face left for Mix hands Mix the baked gradient, not live
+      // curves that would apply again over the blend.
+      if ((cur === 'curves' || cur === 'adjust') && leaving) {
         const d = deriveWorkingNow();
-        // An UNTOUCHED mix (all three blends still at 0) is your gradient unchanged: it keeps
-        // its own name. Otherwise the result is "yours × the other" — measured 2026-09-07:
-        // without this, toggling Mix on and off grew the name by "× Greyscale" every time.
-        const gs = readGeneratorSlice();
-        const untouched = from === 'build' && !gs.mixL && !gs.mixC && !gs.mixH;
-        const name = untouched ? slotSnapshot(useGeneratorStore.getState().slotA).name : workingNameNow();
-        // `bakes`: the result carries Adjust + curves, so they reset with it (see `use`).
-        if (d) w.use(d.config, name, from === 'build' ? 'Mix' : 'Image', { bakes: true });
+        if (untouchedCurves) {
+          if (!peek) dropUntouchedFit(); // a source switch follows: the drop is part of the click
+        } else if (d && !d.passthrough && w.input.kind !== 'build' && w.input.kind !== 'extract') w.beginEdit();
       }
-      if (to === 'build') enterMix();
-      else if (to === 'extract') w.goLive({ kind: 'extract' });
-      if (to !== 'build') armSlot(null);
-      deselectActiveHero();
-    }
+      if (cur === 'curves' && leaving) resetBareCurveSpace();
+      if (from !== to) {
+        if ((from === 'build' || from === 'extract') && w.input.kind === from) {
+          const d = deriveWorkingNow();
+          // An UNTOUCHED mix (all three blends still at 0) is your gradient unchanged: it keeps
+          // its own name. Otherwise the result is "yours × the other" — measured 2026-09-07:
+          // without this, toggling Mix on and off grew the name by "× Greyscale" every time.
+          const gs = readGeneratorSlice();
+          const untouched = from === 'build' && !gs.mixL && !gs.mixC && !gs.mixH;
+          const name = untouched ? slotSnapshot(useGeneratorStore.getState().slotA).name : workingNameNow();
+          // `bakes`: the result carries Adjust + curves, so they reset with it (see `use`).
+          if (d) w.use(d.config, name, from === 'build' ? 'Mix' : 'Image', { bakes: true });
+        }
+        if (to === 'build') enterMix();
+        else if (to === 'extract') w.goLive({ kind: 'extract' });
+        if (to !== 'build') armSlot(null);
+        deselectActiveHero();
+      }
+      // Curves opens on curves: fit the gradient the face will show (after any bake above), or
+      // turn on curves that are already there — the two things the face's mount would do.
+      if (face === 'curves' && leaving) {
+        const g = useGeneratorStore.getState();
+        if (!g.tracks) {
+          const base = deriveWorkingNow()?.base;
+          if (base) g.fitFromChannels(base);
+        } else if (!g.curvesOn) g.setCurvesOn(true);
+      }
+    });
     setTray(face);
   }, []);
 
@@ -432,24 +478,24 @@ export const GradientExplorerV2App: React.FC = () => {
    * last gradient on show, L8). An open face goes the way a pick takes it: Curves stays and fits
    * the new gradient, Adjust stays at rest; a live SOURCE face (Mix, Image) and the stop inspector
    * close, because they belonged to the gradient being replaced — a Mix face over a fixed input
-   * would be lying. The close is COMMITTED inside the bracket (`flushSync`, as the ♥ does —
-   * @see ./uiHistory) so that one undo puts the face back with the gradient. A folded hero
-   * unfolds: you asked to see a new gradient.
+   * would be lying. The face (and the inspector's stop) comes back with one undo because the
+   * interface rides every entry as CONTEXT, captured when the bracket opens (@see ./uiHistory) —
+   * until 2026-09-24 the close had to be committed inside the bracket with `flushSync` for the
+   * entry to see it. A folded hero unfolds: you asked to see a new gradient.
    *
    * @invariant New is ONE undo step: one Ctrl+Z gives back nothing (from the empty state), the
    *   gradient that was there (from the ☰), or a live Mix WITH its face — proven by: `npm run
    *   smoke:ge-ground` ("[13a] one Ctrl+Z after New did not return to the empty state", "[13b] one
    *   Ctrl+Z after ☰ ▸ New Gradient did not give back …", "[13c] one Ctrl+Z brought the mix back
    *   without its face"). Falsified 2026-09-23: a second bracket after the `use` (a `setName`) reds
-   *   [13a]; the tray close outside `flushSync` reds [13c] alone.
+   *   [13a]. The face half, re-falsified 2026-09-24 under context: the shell's provider registered
+   *   without `context: true` reds [13c] alone.
    */
   const startNewGradient = useCallback(() => {
     const cur = trayRef.current;
     paramEdit(() => {
-      flushSync(() => {
-        setFolded(false);
-        if (cur === 'mix' || cur === 'image' || cur === 'inspector') setTray(null);
-      });
+      setFolded(false);
+      if (cur === 'mix' || cur === 'image' || cur === 'inspector') setTray(null);
       useWorkingStore.getState().use(newGradientConfig(), NEW_GRADIENT_NAME, 'New', { fitCurves: cur === 'curves' });
     });
     armSlot(null);
@@ -609,9 +655,10 @@ export const GradientExplorerV2App: React.FC = () => {
    * Clear the ground so the SET RAIL is visible — called by a gesture whose result is drawn
    * there and nowhere else (the ♥'s save flash). Closing a surface to show a result is only
    * honest if the surface comes back, which is what `useShellUiHistory` above buys: the caller
-   * runs this INSIDE its undo bracket, so one Ctrl+Z puts the face and the window back with the
-   * save it announced. Returns nothing — a caller that needs to know simply looks at the state
-   * it is about to change.
+   * runs this INSIDE its undo bracket, whose entry carries the interface as it was when the
+   * bracket opened, so one Ctrl+Z puts the face and the window back with the save it announced.
+   * Called outside a bracket, the surfaces would close with no entry to bring them back. Returns
+   * nothing — a caller that needs to know simply looks at the state it is about to change.
    */
   const revealGround = useCallback(() => {
     setTray(null);

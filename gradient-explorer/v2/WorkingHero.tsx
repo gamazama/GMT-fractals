@@ -94,7 +94,6 @@
 
 import { unmodifiedOrigin, type CatalogOrigin } from '../../palette/core/catalogOrigin';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, addStopsToWorking, workingSourceOf, type WorkingDerived } from '../../palette/store/workingStore';
 import { importedSourceOfWorking } from './contributeToGlobal';
@@ -128,6 +127,7 @@ import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
 import { Tray, TRAY_TABS, type TrayFace } from './Tray';
+import { useStopSelectionHistory } from './uiHistory';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
 import { Icon } from './ui/Icon';
@@ -276,6 +276,36 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   useEffect(() => {
     if (tray !== 'inspector' && selectionCount.current > 0) editorRef.current?.clearSelection();
   }, [tray]);
+  /**
+   * THE INSPECTED STOP RIDES THE UNDO ENTRY WITH ITS FACE (2026-09-24). The inspector face is only
+   * a portal host for the editor's selection, so the shell restoring `tray: 'inspector'` without
+   * the stop put back an EMPTY panel — measured: ♥ or New Gradient with a stop inspected, Ctrl+Z,
+   * the face open with nothing in it. The selection is CONTEXT too (@see ./uiHistory): captured
+   * with the face when a gesture begins, restored with it.
+   *
+   * WHEN it is applied is the point. The restore runs inside `undo`, in the same batch as the
+   * value it belongs to; the editor handles a value from another lineage by CLEARING its
+   * selection when that value arrives (its own effect). So the ids wait in `selRestore` and are
+   * applied from this component's effect, which React runs after the editor's for the same
+   * commit. If none of them is on the restored gradient, the face goes rather than stay empty.
+   *
+   * Guard: `npm run smoke:ge-uiundo` [6] (the ♥), [12] (a deleted stop comes back inspected), [14]
+   * (an open Reduce popup keeps the selection it cleared — `restoreSelection` declines); this
+   * effect returning early reds all three (F2 in that smoke's header).
+   */
+  const [selRestore, setSelRestore] = useState<{ ids: string[] } | null>(null);
+  useStopSelectionHistory(
+    () => (trayRef.current === 'inspector' ? editorRef.current?.getSelection() ?? [] : []),
+    (ids) => setSelRestore({ ids }),
+  );
+  useEffect(() => {
+    if (!selRestore) return;
+    setSelRestore(null);
+    // Another face came back: the effect above clears whatever is selected.
+    if (tray !== 'inspector') return;
+    if (!(editorRef.current?.restoreSelection(selRestore.ids) ?? 0)) onTray(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selRestore]);
   const [scrubT, setScrubT] = useState<number | null>(null);
 
   // L8 — the hero never unmounts once it exists. An empty source (the Image tab with no
@@ -353,13 +383,13 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
    * the chip is the ONLY thing that names the set that took it, and a flash behind a tray face
    * or an Export window is no announcement (the open item raised 2026-09-11). Closing a
    * surface out from under the user is acceptable here and nowhere else, because it is inside
-   * the bracket: one Ctrl+Z un-files the gradient and puts the face back exactly as it was.
+   * the bracket: one Ctrl+Z un-files the gradient and puts the face back exactly as it was —
+   * the stop inspector included, with its stop (the selection is context too, ./uiHistory).
    *
-   * `flushSync` is load-bearing, not defensive. The bracket DIFFS the interface state when it
-   * closes, and `paramEdit` closes synchronously — so a plain `setState` inside it is still
-   * pending when the diff runs, the before and after both read "the face is open", and the
-   * entry carries the save without the surfaces. Measured: the ♥ undid the save and left the
-   * tray shut. Committing the close inside the bracket is what puts it on the entry.
+   * No `flushSync` any more (2026-09-24). It was load-bearing while the interface rode an entry
+   * only when it CHANGED inside the bracket: the diff ran before a plain setState committed, so
+   * the close was invisible to it. Since the interface became CONTEXT — captured when the bracket
+   * opens and carried by every entry — the order inside the bracket does not matter.
    */
   const toggleStar = () => {
     const st = useFavientsStore.getState();
@@ -371,7 +401,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     // says so: it fills with the gradient and the fill collapses away, slower and with a
     // bloom because nothing else points at where this one went (owner, 2026-09-11).
     paramEdit(() => {
-      flushSync(onRevealGround);
+      onRevealGround();
       flashSaveWhereItLanded(
         shown.config,
         () => {

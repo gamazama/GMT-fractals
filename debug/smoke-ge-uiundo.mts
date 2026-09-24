@@ -7,7 +7,12 @@
  * the flash on the chip is the only thing naming the set that took it — and that is only
  * honest because one Ctrl+Z puts the surface back.
  *
- * Four steps, and the pairing is the point: each half of the undo is asserted separately, so a
+ * Owner, 2026-09-24: "I just want to ensure that UI goes along with undo." Since that day the
+ * interface is CONTEXT on every entry (gradient-explorer/v2/uiHistory.ts, historySlice's
+ * `HistoryProvider.context`): the face, the inspected stop and the armed Mix slot an entry was
+ * made in come back with its undo, and redo gives back the ones you left.
+ *
+ * The pairing is the point: every step asserts the data AND the interface, undo AND redo, so a
  * build that restores the DATA and forgets the FURNITURE cannot pass.
  *
  *   [1] a tray face is open and the rail is behind it
@@ -15,22 +20,52 @@
  *   [3] Ctrl+Z puts the gradient back AND reopens the SAME face
  *   [4] redo files it again and closes the face again — the entry is symmetric
  *   [5] undoing back PAST the document closes the face instead of stranding you in it
+ *   ── 2026-09-24, one step per row of that day's audit that came back contradicting its data:
+ *   [6] the ♥ over the STOP INSPECTOR: undo gives the inspector back WITH its stop (it came back
+ *       empty — the face is only a portal host for the editor's selection)
+ *   [7] entering Mix is ONE entry: undo closes the face and disarms, and the next undo reaches
+ *       the pick before it (three entries before; undoing the last left an armed Mix face over a
+ *       fixed gradient)
+ *   [8] leaving Mix (a bake): undo gives the live Mix WITH its face, armed, "live from Mix" (it
+ *       gave a live Mix under a closed tray, the chip reading "live from Image")
+ *   [9] Mix → Curves in one click is one entry: undo gives the live Mix with its face (it gave a
+ *       Mix face over the baked, fixed gradient)
+ *   [10] closing an untouched Curves adds no entry (a peek is navigation); opening Curves: undo
+ *       closes the face AND drops the fit (it left the face saying "Nothing to fit yet")
+ *   [11] closing Adjust with a dial (a bake): undo gives the Adjust face with its dial (it left
+ *       the dial live with no face)
+ *   [12] deleting the inspected stop: undo gives the stop back INSPECTED
+ *   [13] the Image face: undo of a pick over it gives the live image with its face; undo of the
+ *       image load closes the face (it left an Image face over a fixed gradient)
+ *   [14] an undo under the Reduce popup does not reopen the inspector over its preview
  *
- * FALSIFIED 2026-09-12, three ways, each against a deliberately broken build:
- *   · `flushSync(onRevealGround)` → `onRevealGround()` in WorkingHero: [3] RED, "the face did
- *     not come back (null)". This is the real defect the guard was written for and the one a
- *     screenshot would not have caught — React had not committed the close when `paramEdit`
- *     diffed, so the entry carried the save alone. The save still undid, which is exactly why
- *     [3] asserts BOTH halves.
- *   · `useShellUiHistory(...)` commented out in GradientExplorerV2App: [3] RED the same way —
- *     with no provider there is no interface state on any entry.
- *   · `flushSync(onRevealGround)` deleted entirely: [2] RED, "the face is still open after the
- *     ♥" — the flash plays behind the tray, which is the state the owner reported.
- *   · the "no document ⇒ no face" invariant disabled in GradientExplorerV2App: [5] RED, "undo
- *     left a face open with nothing under it (curves)", with [1]–[4] all still green — which
- *     is the shape of the bug it guards. Falsified 2026-09-12 after the owner hit it.
+ * FALSIFIED 2026-09-12 (steps [1]–[5], against the pre-context build):
+ *   · `flushSync(onRevealGround)` → `onRevealGround()` in WorkingHero: [3] RED — React had not
+ *     committed the close when `paramEdit` diffed, so the entry carried the save alone. Moot
+ *     since 2026-09-24: context is captured when the bracket OPENS, so the ♥ no longer needs
+ *     `flushSync` and no longer has it.
+ *   · `useShellUiHistory(...)` commented out in GradientExplorerV2App: [3] RED.
+ *   · `flushSync(onRevealGround)` deleted entirely: [2] RED, "the face is still open after the ♥".
+ *   · the "no document ⇒ no face" invariant disabled in GradientExplorerV2App: [5] RED alone,
+ *     "undo left a face open with nothing under it (curves)".
  *
- * Wants `npm run dev` on 3400. Run: `npm run smoke:ge-uiundo`.
+ * FALSIFIED 2026-09-24, each reverted, with a copy of this file that logs a red and carries on
+ * (so every step a break reaches is listed, not just the first):
+ *   F1 both providers in uiHistory.ts registered with `context: false` (the old "rides when it
+ *      changed" semantics): [3], [6], [7], [8], [9], [10], [11], [12], [13] RED — every row the
+ *      audit found, each in its measured shape ("the chip reads "live from Image · cancel"",
+ *      "left the curves face open saying "Nothing to fit yet"", "gave face null with Phase 0.05").
+ *   F2 WorkingHero's `selRestore` effect returning early: [6] "the inspector came back EMPTY",
+ *      [12] "not inspected", [14] (an empty inspector face over the popup).
+ *   F3 the shell's `openTray` body run without `paramGroup`: [7] "the second undo did not reach
+ *      the pick before Mix", [9] "gave face mix over input gradient".
+ *   F4 the Curves fit left to the face's mount (the `openTray` fit disabled): [9], [10] "left the
+ *      curves face open saying "Nothing to fit yet"".
+ *   F5 the armed slot left out of the shell's restore: [7] "armed true", [8] "no longer armed".
+ *   F6 `restoreSelection` ignoring an open Reduce popup: [14] alone.
+ *   F7 the peek's fit dropped inside the group (`peek` forced false): [10] "added an undo entry".
+ *
+ * Wants `npm run dev` on 3400 (`ENGINE_URL` points it elsewhere). Run: `npm run smoke:ge-uiundo`.
  */
 import { chromium, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
@@ -66,6 +101,31 @@ const grew = (a: Record<string, number>, b: Record<string, number>): { id: strin
 };
 /** A set with no members is not drawn at all, so an ABSENT chip means zero, not unknown. */
 const countOf = (counts: Record<string, number>, id: string): number => counts[id] ?? 0;
+
+/** A 64×8 PNG, red → blue: an image for the Image face ([13]). */
+const pngBytes = async (): Promise<Buffer> => {
+    const { deflateSync } = await import('zlib');
+    const w = 64, h = 8;
+    const raw = Buffer.alloc((w * 3 + 1) * h);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const o = y * (w * 3 + 1) + 1 + x * 3;
+            raw[o] = Math.round(255 * (1 - x / (w - 1)));
+            raw[o + 1] = Math.round(200 * Math.sin((Math.PI * x) / (w - 1)));
+            raw[o + 2] = Math.round(255 * (x / (w - 1)));
+        }
+    }
+    const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+    const crc = (b: Buffer) => { let c = 0xffffffff; for (const x of b) c = table[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+    const chunk = (t: string, d: Buffer) => {
+        const len = Buffer.alloc(4); len.writeUInt32BE(d.length);
+        const td = Buffer.concat([Buffer.from(t), d]);
+        const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+        return Buffer.concat([len, td, c]);
+    };
+    const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+};
 
 async function main() {
     const browser = await chromium.launch();
@@ -138,8 +198,257 @@ async function main() {
     if (stranded.tray) fail(`[5] undo left a face open with nothing under it (${stranded.face}) — the stuck state`);
     console.log('✓ [5] undoing back past the document closed the face instead of stranding it');
 
+    // ── 2026-09-24: THE INTERFACE IS CONTEXT ON EVERY ENTRY (owner: "UI goes along with undo").
+    // Each step below is a row of that day's audit that came back contradicting its data; each
+    // asserts the undo AND the redo, the data AND the interface.
+    await page.evaluate(`(async () => {
+      const url = performance.getEntriesByType('resource').map((e) => e.name)
+        .find((n) => /\\/palette\\/store\\/generatorStore\\.ts(\\?|$)/.test(n)) || '/palette/store/generatorStore.ts';
+      window.__uiundoGen = (await import(url)).useGeneratorStore;
+    })()`);
+    const ui = () => page.evaluate(`(() => {
+      const root = document.querySelector('[data-gx-tray-root]');
+      const chip = document.querySelector('[data-gx-hero] [data-gx-state]');
+      const w = window.__gxWorking ? window.__gxWorking() : null;
+      const g = window.__uiundoGen ? window.__uiundoGen.getState() : null;
+      const pg = window.__store.getState().paletteGenerator || {};
+      return {
+        face: root && root.dataset.gxTray ? root.dataset.gxTray : null,
+        chip: chip ? chip.dataset.gxState : null,
+        chipText: chip ? chip.innerText.replace(/\\s+/g, ' ').trim() : '',
+        kind: w && w.input ? w.input.kind : null,
+        stops: w && w.config ? w.config.stops.length : 0,
+        name: (document.querySelector('[data-gx-hero] input[title="Name"]') || {}).value || '',
+        armed: /Pick a gradient to (mix with|replace)/.test(document.body.innerText),
+        picker: !!(root && root.querySelector('[data-gx-picker-skin]')),
+        nothingToFit: !!(root && /Nothing to fit yet/.test(root.innerText)),
+        tracks: g ? !!g.tracks : null,
+        phase: pg.phase,
+        reduce: !!document.querySelector('[data-gx-reduce]'),
+      };
+    })()`) as Promise<{ face: string | null; chip: string | null; chipText: string; kind: string | null; stops: number; name: string; armed: boolean; picker: boolean; nothingToFit: boolean; tracks: boolean | null; phase: number; reduce: boolean }>;
+    const settle = (ms = 700) => page.waitForTimeout(ms);
+    const undo = async () => { await page.keyboard.press('Control+z'); await settle(); };
+    const redo = async () => { await page.keyboard.press('Control+y'); await settle(); };
+    const tab = async (face: string) => { await page.click(`[data-gx-tray-tab="${face}"]`); await settle(600); };
+    /** A dial through the route the Adjust / Mix sliders take (the DDFS bracket). */
+    const dial = async (patch: Record<string, number>) => {
+        await page.evaluate(`(() => { const s = window.__store.getState(); s.handleInteractionStart('param'); s.setPaletteGenerator(${JSON.stringify(patch)}); s.handleInteractionEnd(); })()`);
+        await settle(400);
+    };
+    /** Pick a wall tile that changes the working gradient (aims that hit-test to the wall itself). */
+    const pickNew = async (label: string) => {
+        const before = (await ui()).name;
+        const aims = (await page.evaluate(`(() => {
+          const wallEl = document.querySelector('[data-gx-keepselect]');
+          const r = wallEl.getBoundingClientRect();
+          const out = [];
+          for (let y = r.y + 14; y < Math.min(r.bottom, window.innerHeight) - 8 && out.length < 16; y += 29) {
+            for (let k = 0; k < 4; k++) {
+              const x = r.x + 24 + 44 * (3 + k * 4);
+              const el = document.elementFromPoint(x, y);
+              if (el && el.tagName === 'CANVAS' && !el.closest('[data-gx-hero]') && !el.closest('[data-gx-tray-root]') && wallEl.contains(el)) out.push({ x, y });
+            }
+          }
+          return out;
+        })()`)) as { x: number; y: number }[];
+        for (const a of aims.slice(3)) {
+            await page.mouse.click(a.x, a.y);
+            await settle(900);
+            await page.mouse.move(640, 20);
+            if ((await ui()).name !== before) return;
+        }
+        fail(`${label} setup: no wall click picked a different gradient (still "${before}")`);
+    };
+    const swatch = page.locator('[data-gx-hero] [class*="cursor-ew-resize"]');
+    const inspectStop = async (label: string, nth = 1) => {
+        await swatch.nth(nth).click();
+        await settle(500);
+        await page.mouse.move(640, 20);
+        const st = await ui();
+        if (st.face !== 'inspector' || !st.picker) fail(`${label} setup: a swatch click did not inspect a stop (face ${st.face}, picker ${st.picker})`);
+    };
+    let s = await ui();
+
+    // [6] the ♥ with a STOP INSPECTED. The inspector face is only a portal host for the editor's
+    // selection, so the pre-context build brought the face back EMPTY (measured: face
+    // "inspector", no picker in it). The selection is context too (WorkingHero `selRestore`).
+    await pickNew('[6]');
+    await inspectStop('[6]');
+    const heart6 = page.locator('[data-gx-hero] button[title^="Keep"]').first();
+    if (!(await heart6.count())) fail('[6] setup: the picked gradient is already kept — no ♥ to file it with');
+    const counts6 = (await shellState(page)).counts;
+    await heart6.click();
+    await settle(500);
+    s = await ui();
+    if (s.face) fail(`[6] the ♥ left the inspector open (${s.face})`);
+    if (!grew(counts6, (await shellState(page)).counts)) fail('[6] the ♥ filed nothing');
+    await undo();
+    s = await ui();
+    if (s.face !== 'inspector') fail(`[6] one undo did not bring the inspector back (${s.face})`);
+    if (!s.picker) fail('[6] the inspector came back EMPTY — the face without the stop it was inspecting');
+    await redo();
+    s = await ui();
+    if (s.face || s.picker) fail(`[6] redo left the inspector open (${s.face}, picker ${s.picker})`);
+    console.log('✓ [6] ♥ over a stop inspector: one undo — the inspector came back with its stop; redo closed it');
+
+    // [7] ENTERING MIX IS ONE ENTRY. The tab ran three brackets of its own (two slots and the
+    // live input), and undoing only the last left a Mix face, armed, over a fixed gradient; the
+    // two undos after it changed nothing you could see. Now one Ctrl+Z is the whole click and the
+    // next reaches the gesture before it (the pick).
+    await pickNew('[7]');
+    const name7 = (await ui()).name;
+    await tab('mix');
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build' || !s.armed) fail(`[7] setup: Mix did not open live and armed (${s.face}, ${s.kind}, armed ${s.armed})`);
+    await undo();
+    s = await ui();
+    if (s.face || s.kind !== 'gradient' || s.armed) fail(`[7] one undo after entering Mix left face ${s.face}, input ${s.kind}, armed ${s.armed} — wanted no face, the gradient, nothing armed`);
+    await undo();
+    s = await ui();
+    if (s.name === name7) fail(`[7] the second undo did not reach the pick before Mix (still "${name7}") — entering Mix is more than one entry`);
+    await redo();
+    await redo();
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build' || !s.armed || s.chip !== 'live') fail(`[7] redo did not bring the live Mix back with its face, armed (${s.face}, ${s.kind}, armed ${s.armed}, chip ${s.chip})`);
+    console.log('✓ [7] entering Mix is one undo step: no face, nothing armed, then the pick before it; redo reopens it live and armed');
+
+    // [8] LEAVING MIX (it bakes, with `use`). The bake was an entry and the face closed outside
+    // it: undo put the live Mix back under a closed tray, its chip reading "live from Image".
+    await dial({ mixL: 0.5, mixC: 0.5, mixH: 0.5 });
+    await tab('mix');
+    s = await ui();
+    if (s.face || s.kind !== 'gradient') fail(`[8] setup: leaving Mix did not bake (${s.face}, ${s.kind})`);
+    await undo();
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build') fail(`[8] one undo after leaving Mix gave face ${s.face} over input ${s.kind} — the live Mix without its face`);
+    if (!/live from Mix/.test(s.chipText)) fail(`[8] the chip reads "${s.chipText}" over a live Mix`);
+    if (!s.armed) fail('[8] the Mix face came back but the other bar is no longer armed');
+    await redo();
+    s = await ui();
+    if (s.face || s.kind !== 'gradient' || s.armed) fail(`[8] redo did not close Mix on its baked result (${s.face}, ${s.kind}, armed ${s.armed})`);
+    console.log('✓ [8] leaving Mix: one undo — the Mix face with the live Mix, armed, "live from Mix"; redo closed it again');
+
+    // [9] MIX → CURVES in one click bakes the Mix AND fits the curves. Two entries before, the
+    // second (the fit) made with the Mix face still open: its undo left a Mix face over the
+    // baked, fixed gradient. One entry now.
+    await tab('mix');
+    await dial({ mixL: 0.4, mixC: 0.4, mixH: 0.4 });
+    await tab('curves');
+    s = await ui();
+    if (s.face !== 'curves' || !s.tracks || s.nothingToFit) fail(`[9] setup: Curves did not open on curves (${s.face}, tracks ${s.tracks})`);
+    await undo();
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build') fail(`[9] one undo after Mix → Curves gave face ${s.face} over input ${s.kind} — wanted the live Mix with its face`);
+    await redo();
+    s = await ui();
+    if (s.face !== 'curves' || !s.tracks || s.nothingToFit) fail(`[9] redo did not bring Curves back with its curves (${s.face}, tracks ${s.tracks}, "Nothing to fit" ${s.nothingToFit})`);
+    console.log('✓ [9] Mix → Curves is one step: undo gives the live Mix with its face, redo Curves with its curves');
+
+    // [10] OPENING CURVES. The fit ran when the face MOUNTED, so its entry was made with the face
+    // open, and its undo left the face saying "Nothing to fit yet" over a gradient. It is fitted
+    // inside the tab's click now, before the face opens.
+    // Closing an untouched Curves is a PEEK: navigation, so it adds no entry (the fit it drops
+    // goes outside any bracket — grep `peek` in the shell's `openTray`).
+    const stackLen = () => page.evaluate(`window.__store.getState().paramUndoStack.length`) as Promise<number>;
+    const before10 = await stackLen();
+    await page.keyboard.press('Escape');
+    await settle();
+    if ((await stackLen()) !== before10) fail(`[10] closing an untouched Curves face added an undo entry (${before10} → ${await stackLen()}) — a peek is navigation`);
+    await tab('curves');
+    s = await ui();
+    if (s.face !== 'curves' || !s.tracks) fail(`[10] setup: Curves did not open fitted (${s.face}, tracks ${s.tracks})`);
+    await undo();
+    s = await ui();
+    if (s.face) fail(`[10] one undo after opening Curves left the ${s.face} face open${s.nothingToFit ? ' saying "Nothing to fit yet"' : ''}`);
+    if (s.tracks) fail('[10] the undo closed Curves but left its fit behind');
+    await redo();
+    s = await ui();
+    if (s.face !== 'curves' || !s.tracks || s.nothingToFit) fail(`[10] redo did not reopen Curves on its fit (${s.face}, tracks ${s.tracks})`);
+    console.log('✓ [10] closing an untouched Curves adds no entry; opening Curves: undo closes the face and drops the fit together, redo reopens it fitted');
+
+    // [11] CLOSING ADJUST WITH A DIAL (it bakes). The bake was the entry, the close outside it:
+    // undo left the dial live with no face to show it or take it back.
+    await page.keyboard.press('Escape');
+    await settle();
+    await tab('adjust');
+    await dial({ phase: 0.05 });
+    await tab('adjust');
+    s = await ui();
+    if (s.face || s.chip !== 'edited' || s.phase !== 0) fail(`[11] setup: closing Adjust did not bake (${s.face}, chip ${s.chip}, phase ${s.phase})`);
+    await undo();
+    s = await ui();
+    if (s.face !== 'adjust' || Math.abs(s.phase - 0.05) > 1e-9) fail(`[11] one undo after closing Adjust gave face ${s.face} with Phase ${s.phase} — wanted the Adjust face with its dial`);
+    await redo();
+    s = await ui();
+    if (s.face || s.chip !== 'edited' || s.phase !== 0) fail(`[11] redo did not bake and close again (${s.face}, chip ${s.chip}, phase ${s.phase})`);
+    console.log('✓ [11] closing Adjust with a dial: undo gives the Adjust face and its dial, redo the bake with the face closed');
+
+    // [12] DELETING THE INSPECTED STOP. The delete clears the selection, which closes the face;
+    // undo gave the stop back unselected. Where you were is the stop, inspected.
+    await inspectStop('[12]', 2);
+    const stops12 = (await ui()).stops;
+    await page.keyboard.press('Delete');
+    await settle();
+    s = await ui();
+    if (s.stops !== stops12 - 1 || s.face) fail(`[12] setup: Delete did not remove the inspected stop (${stops12} → ${s.stops}, face ${s.face})`);
+    await undo();
+    s = await ui();
+    if (s.stops !== stops12) fail(`[12] the undo did not put the stop back (${s.stops}, wanted ${stops12})`);
+    if (s.face !== 'inspector' || !s.picker) fail(`[12] the stop came back but not inspected (face ${s.face}, picker ${s.picker})`);
+    await redo();
+    s = await ui();
+    if (s.stops !== stops12 - 1 || s.face) fail(`[12] redo did not delete it and close the inspector again (${s.stops}, face ${s.face})`);
+    console.log('✓ [12] deleting an inspected stop: undo gives the stop back inspected, redo deletes it again');
+
+    // [13] THE IMAGE FACE. Loading an image went live and opened the face in two moves, and a pick
+    // over the face committed the pick and closed the face in two: undo left an Image face over a
+    // fixed gradient, or a live image under a closed tray.
+    await page.setInputFiles('input[type=file][accept="image/*"]', { name: 'uiundo.png', mimeType: 'image/png', buffer: await pngBytes() });
+    await settle(1500);
+    s = await ui();
+    if (s.face !== 'image' || s.kind !== 'extract') fail(`[13] setup: the image did not open the Image face live (${s.face}, ${s.kind})`);
+    await pickNew('[13]');
+    s = await ui();
+    if (s.face || s.kind !== 'gradient') fail(`[13] setup: a pick over the Image face did not replace it (${s.face}, ${s.kind})`);
+    await undo();
+    s = await ui();
+    if (s.face !== 'image' || s.kind !== 'extract' || s.chip !== 'live') fail(`[13] one undo after the pick gave face ${s.face} over input ${s.kind} — wanted the live image with its face`);
+    await undo();
+    s = await ui();
+    if (s.face || s.kind === 'extract') fail(`[13] undoing the image load left face ${s.face} over input ${s.kind}`);
+    await redo();
+    s = await ui();
+    if (s.face !== 'image' || s.kind !== 'extract') fail(`[13] redo did not bring the image back with its face (${s.face}, ${s.kind})`);
+    console.log('✓ [13] the Image face: undo of a pick over it gives the live image with its face, undo of the load closes it, redo reopens it');
+
+    // [14] an undo under the REDUCE popup does not reopen the inspector over its preview. The popup
+    // clears the selection on purpose (a selected knot keeps the inspector open over knots the
+    // preview hides), so a restored selection stands down while it is open.
+    await page.keyboard.press('Escape');
+    await settle();
+    await pickNew('[14]');
+    await inspectStop('[14]', 1);
+    await page.keyboard.press('ArrowLeft');
+    await settle(500);
+    await page.keyboard.press('Escape');
+    await settle();
+    await page.click('[data-gx-hero] button[title^="Stops menu"]');
+    await settle(400);
+    await page.locator('button:has-text("Reduce Stops…")').first().click();
+    await page.waitForSelector('[data-gx-reduce]:not([data-gx-reduce-pending])', { timeout: 5000 }).catch(() => fail('[14] setup: the Reduce popup did not open'));
+    await settle(300);
+    if (!(await ui()).reduce) fail('[14] setup: the Reduce popup did not open');
+    await undo();
+    s = await ui();
+    if (s.face === 'inspector' || s.picker) fail(`[14] the undo reopened the stop inspector over the Reduce preview (face ${s.face})`);
+    if (!s.reduce) fail('[14] the undo closed the Reduce popup — it recomputes over the restored stops by design');
+    await page.keyboard.press('Escape');
+    await settle();
+    console.log('✓ [14] an undo under the Reduce popup keeps the popup and does not reopen the inspector over it');
+
     if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
-    console.log('\nPASS — a gesture that moves the furniture carries the furniture on its undo entry');
+    console.log('\nPASS — every undo entry carries the interface it was made in');
     await browser.close();
 }
 

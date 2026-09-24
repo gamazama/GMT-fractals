@@ -7,49 +7,80 @@
  * the owner wanted is to CLOSE what covers it, which is only acceptable if the thing you closed
  * comes back: so the surfaces a gesture disturbs ride that gesture's undo entry.
  *
- * WHAT RIDES, AND WHAT DOES NOT. This is a history PROVIDER
- * (@see store/slices/historySlice.ts `registerHistoryProvider`), so it is captured when some
- * OTHER gesture opens a param transaction and restored when that entry is undone. It never
- * pushes an entry of its own — opening a face or folding the hero on its own is navigation and
- * stays off the stack (owner's call: "transaction only is fine"; the wider reading turns Ctrl+Z
- * into a back button). What it means in practice is that a gesture which both edits something
- * and moves the furniture is undone as one act, furniture included.
+ * Owner, 2026-09-24: "I just want to ensure that UI goes along with undo." The interface after an
+ * undo or a redo must be the one that belongs with the gradient on show.
+ *
+ * THE INTERFACE IS CONTEXT (2026-09-24). Both providers here are CONTEXT providers
+ * (@see store/slices/historySlice.ts `HistoryProvider.context`): the interface an entry was made
+ * IN rides EVERY entry, changed or not — undo puts it back as it was when the gesture began, redo
+ * as it was when you pressed undo — and it never makes an entry of its own. Opening a face or
+ * folding the hero is still navigation and still stays off the stack (owner's call: "transaction
+ * only is fine"; the wider reading turns Ctrl+Z into a back button).
+ *
+ * Before 2026-09-24 the interface was ordinary CONTENT: it rode an entry only when it CHANGED
+ * inside that entry's bracket, which made every caller that moved a surface commit the move
+ * synchronously inside its bracket (`flushSync`, ADR-0120 §3) — and most of the shell's gestures
+ * move the surface OUTSIDE their data bracket (the tab switch bakes the face, THEN closes it).
+ * Measured that day, a dozen ways the interface came back contradicting the data: undo a closed
+ * Adjust and its dial was live again with no face; undo leaving Mix and a live Mix sat under a
+ * closed tray, its chip reading "live from Image"; undo the ♥ or New Gradient over a stop
+ * inspector and the inspector came back EMPTY; undo opening Curves and the face said "Nothing to
+ * fit yet" over a gradient. Context closes that whole class at once, because the interface an
+ * entry restores is the one captured in the same instant as the data it restores.
+ *
+ * WHAT RIDES: which face is open, whether the hero is folded, the two Export windows, the armed
+ * Mix slot (`useShellUiHistory`); and the SELECTED STOPS while the stop inspector is the open
+ * face (`useStopSelectionHistory`, the hero's — the inspector face is only a portal host for the
+ * selection, so a face restored without it is an empty panel).
  *
  * SCOPED TO GE v2 (owner: app-gmt "is not built in a way that UI undo would make sense"). The
- * provider is registered by the shell on mount and unregistered on unmount, so no other host
- * carries the key — `registerHistoryProvider` is global, the registration is not.
+ * providers are registered by the shell and the hero on mount and unregistered on unmount, so no
+ * other host carries the keys — `registerHistoryProvider` is global, the registration is not.
  *
  * WHY A PORT RATHER THAN A STORE. The shell holds this state in `useState`, which a provider
  * cannot read. Moving it into a zustand store for undo's sake would be a refactor in service of
  * the mechanism rather than the feature, so instead the shell hands this module a fresh
  * capture/restore pair on every render through `useShellUiHistory`, and the provider calls
  * through it. The pair is read through a ref, so a re-render cannot leave a stale closure
- * behind and the provider registration never churns.
+ * behind and the provider registration never churns. A context capture reads the last COMMITTED
+ * render, which is exactly "as it was when the gesture began": a gesture's own pending setState
+ * is not yet in it.
  *
  * @see docs/adr/0120-the-interface-rides-the-undo-entry.md
- * @invariant a gesture that closes a surface inside its own bracket has that surface on its
- *   undo entry — proven by: npm run smoke:ge-uiundo ("[3] one undo put back BOTH"). Falsified
- *   three ways on 2026-09-12; the guard's header names them. The subtle half is that the close
- *   must be COMMITTED inside the bracket (flushSync), since the bracket diffs synchronously.
+ * @invariant every undo entry pushed while the shell is mounted carries the interface as it was
+ *   when its gesture began, so one Ctrl+Z puts back the face (and the stop it was inspecting) that
+ *   belongs with the data it restores — proven by: npm run smoke:ge-uiundo ("[3] one undo put back
+ *   BOTH", "[6] ♥ over a stop inspector: one undo — the inspector came back with its stop", "[8]
+ *   leaving Mix: one undo — the Mix face with the live Mix", "[11] closing Adjust with a dial: undo
+ *   gives the Adjust face and its dial"). Falsified 2026-09-24: both providers registered with
+ *   `context: false` → [3] and [6]–[13] red; the hero's selection restore skipped → [6], [12] red
+ *   (F1 / F2 in the guard's header).
  */
 
 import { useEffect, useRef } from 'react';
 import { registerHistoryProvider, unregisterHistoryProvider } from '../../store/slices/historySlice';
 import type { TrayFace } from './Tray';
 
-/** The surfaces worth restoring: which face is open, whether the hero is folded, and the two
- *  Export windows. Anything a user would notice moving under them when an edit is undone. */
+/** The surfaces worth restoring: which face is open, whether the hero is folded, the two
+ *  Export windows, and which Mix slot the next pick fills. Anything a user would notice moving
+ *  under them when an edit is undone. */
 export interface ShellUiState {
   tray: TrayFace;
   folded: boolean;
   exportOpen: boolean;
   exportGround: boolean;
+  /** The ARMED Mix slot (palette/store/armedTarget) — the wall is B's picker only while the Mix
+   *  face is open, so an undo that closes Mix must disarm, and one that reopens it re-arm.
+   *  Absent in a snapshot from before 2026-09-24: read as unarmed. */
+  armed?: 'A' | 'B' | null;
 }
 
 const KEY = 'gx-v2-ui';
+const SEL_KEY = 'gx-v2-sel';
 
 /**
- * Put the shell's interface state on the param undo stack for as long as the shell is mounted.
+ * Put the shell's interface state on the param undo stack, as CONTEXT, for as long as the shell
+ * is mounted.
  *
  * @param state   the current surfaces — read on every `beginParamTransaction`.
  * @param restore applies a captured snapshot. Called from `undo`/`redo`, i.e. outside React's
@@ -64,7 +95,31 @@ export const useShellUiHistory = (state: ShellUiState, restore: (s: ShellUiState
       restore: (snap) => {
         if (snap && typeof snap === 'object') live.current.restore(snap as ShellUiState);
       },
+      context: true,
     });
     return () => unregisterHistoryProvider(KEY);
+  }, []);
+};
+
+/**
+ * The stops the INSPECTOR face is showing, on the same entries as the face (context too). The
+ * hero registers it, since the selection lives in its editor.
+ *
+ * @param read    the selected stop ids — only while the inspector is the open face, else [] (any
+ *                other face clears the selection, so there is nothing to put back with it).
+ * @param restore hands the ids back. Called from `undo`/`redo` in the same batch as the shell's
+ *                restore, so it must only set state: the hero applies it after the editor has
+ *                taken the restored value (see `WorkingHero`, grep `selRestore`).
+ */
+export const useStopSelectionHistory = (read: () => string[], restore: (ids: string[]) => void): void => {
+  const live = useRef({ read, restore });
+  live.current = { read, restore };
+  useEffect(() => {
+    registerHistoryProvider(SEL_KEY, {
+      capture: () => live.current.read(),
+      restore: (snap) => live.current.restore(Array.isArray(snap) ? snap.filter((x): x is string => typeof x === 'string') : []),
+      context: true,
+    });
+    return () => unregisterHistoryProvider(SEL_KEY);
   }, []);
 };

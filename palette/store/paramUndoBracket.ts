@@ -59,7 +59,8 @@ export const subscribeParamDragging = (l: () => void): (() => void) => { dragLis
  * test is the engine's own open snapshot, not `dragDepth`, so a start whose end never came
  * (an unmount mid-press) cannot wedge undo shut — the next end still pushes and closes. A
  * gesture that starts with nothing open — every single-level slider, knot, or discrete edit —
- * takes exactly the path it took before.
+ * takes exactly the path it took before. The one exception is inside a `paramGroup` (below): a
+ * synchronous group holds inner ends until it returns.
  *
  * Not covered: engine-level callers (`handleInteractionStart` in the DDFS sliders) still call
  * `beginParamTransaction` directly and still overwrite an open palette bracket.
@@ -76,13 +77,52 @@ export const paramEditStart = (): void => {
   if (e.interactionSnapshot) return; // nested: keep the outermost "before" (see above)
   e.beginParamTransaction?.();
 };
-/** Close the bracket — diff against the snapshot, push one entry if anything changed. */
-export const paramEditEnd = (): void => { eng().endParamTransaction?.(); dragDepth = Math.max(0, dragDepth - 1); if (dragDepth === 0) notifyDrag(); };
+/** How many `paramGroup`s are running right now (see below). Only ever > 0 synchronously. */
+let groupDepth = 0;
+/** Close the bracket — diff against the snapshot, push one entry if anything changed. Inside a
+ *  `paramGroup` it only unwinds the depth: the group's own end is the one that pushes. */
+export const paramEditEnd = (): void => {
+  if (groupDepth === 0) eng().endParamTransaction?.();
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) notifyDrag();
+};
 /** Discrete one-shot: bracket a synchronous mutation as a single undo entry. */
 export const paramEdit = (fn: () => void): void => {
   paramEditStart();
   fn();
   paramEditEnd();
+};
+
+/**
+ * ONE GESTURE THAT CALLS SEVERAL SELF-BRACKETING ACTIONS, AS ONE UNDO ENTRY (2026-09-24).
+ *
+ * `paramEdit` nests only at the START (a nested start keeps the outermost snapshot, above); the
+ * first END inside a nest still pushes and closes. That is right for a drag, whose end may never
+ * come, and wrong for a click that runs three self-bracketing store actions in a row: the Explorer
+ * shell's tab switch (bake the face you leave, commit a live source, enter Mix — which is itself
+ * three brackets — and fit the curves of the face you open) used to leave up to four entries, and
+ * undoing only the last of them put back the interface of a half-finished click (a Mix face over
+ * a fixed gradient, a Curves face with no curves). A group holds every inner end until `fn`
+ * returns, so the click is one entry and its undo is the whole click.
+ *
+ * Safe against a wedged stack for the reason the nested-start rule gives: `fn` is SYNCHRONOUS and
+ * the group's own end runs in `finally`, so nothing a group opens can outlive it. Engine-level
+ * callers (`handleInteractionEnd` in the DDFS sliders) still end the transaction directly — do not
+ * start a drag inside a group.
+ *
+ * Guarded through its caller, the shell's tab switch: `npm run smoke:ge-uiundo` ("[7] entering Mix
+ * is one undo step", "[9] Mix → Curves is one step") — falsified 2026-09-24 by running that body
+ * without the group: both red (F3 in that smoke's header).
+ */
+export const paramGroup = (fn: () => void): void => {
+  paramEditStart();
+  groupDepth++;
+  try {
+    fn();
+  } finally {
+    groupDepth--;
+    paramEditEnd();
+  }
 };
 
 /**

@@ -435,6 +435,12 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
   // own toggle — could arrive with `curvesOn` false, and with no button here the face
   // would show a plot that changes nothing and no way to say so. Entering the face means
   // editing the curves, so entering turns them on.
+  //
+  // Since 2026-09-24 the shell's tab switch does both of these FIRST, inside the click's undo
+  // entry (grep `Curves opens on curves` in GradientExplorerV2App's `openTray`): done here, after
+  // the face mounted, they were an entry made with the face already open, and its undo left the
+  // face saying "Nothing to fit yet". This stays as the fallback for a face that mounts some other
+  // way; on the tab route it finds the curves already there and does nothing.
   useEffect(() => {
     if (!tracks && base) g.fitFromChannels(base);
     else if (tracks && !curvesOn) g.setCurvesOn(true);
