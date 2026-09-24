@@ -424,3 +424,69 @@ Rainbow Full) do not shrink under any smooth model, because every stop is a real
   though at ~4% it matters much less than assumed).
 - `public/palette/gxglobal.json` still carries the pre-refit preset stops; re-bake with
   `debug/bake-gx-global.mts` and upload to the CDN together, or dev and the CDN disagree.
+
+---
+
+# Update 2026-09-24 — Reduce stops: a count axis and the blend-mode search (ADR-0128)
+
+Appended; nothing above is edited. The owner asked for Reduce stops (ADR-0127) to be "more granular"
+and to "model against different blending modes to find the most suitable one" (on by default).
+Measured first, over 346 gradients: picks (the seam's ΔE 0.02 fit) from core / cpt-city /
+Softology / ElvenSword / non-commercial, Detail-8 bakes of core / cpt-city / Softology, and the
+23 multi-stop presets. The research scripts copied `eliminate` / `refit` out of `reduceStops.ts`
+with the space as a parameter; they lived in a session scratchpad and are gone — the harness
+`debug/test-palette-reducestops.mts` (`--calibrate` prints the search-on table too) is the
+reproducible half.
+
+## The B2 number above was the presets' number
+
+The "~4%" in the 2026-09-12/13 table was measured on the 25 presets, which were authored in OkLCh,
+so of course `oklab` won 20 of 25. On catalogue picks the search is the second-largest lever this
+document found:
+
+| amount (ΔE) | own space → best of six | other space wins |
+|---|---|---|
+| Light 0.02 | 11.9 → 10.2 stops (−15%; core picks −29%) | 194 / 346 (RGB 168) |
+| Medium 0.04 | 9.1 → 8.1 (−10%) | 143 / 346 (RGB 100) |
+| Strong 0.08 | 6.8 → 6.3 (−8%) | 110 / 346 (RGB 51, Spectral 38) |
+| Maximum 0.15 | 5.0 → 4.7 (−5%) | 67 / 346 (Spectral 33, HSV 17) |
+
+Why RGB: the catalogue's sources were authored as RGB ramps and the pick seam re-describes every one
+in OkLCh, so a reduce in RGB partly undoes the seam's approximation. (That also means the seam
+itself could fit in RGB for those sources — a change to every pick's blend mode, so an owner call,
+not done.) Presets: −1 to −9%, consistent with the old number.
+
+Subsets of the search, share of the six-space saving: RGB alone 86% · + Oklab 88% · + Oklab + CIE
+LCh 90% · + HSV 96% · + Spectral 100%. Spectral costs about twice the other five together.
+
+## Granularity
+
+- The four names gave **3.0 distinct results per gradient**; a count axis offers ~13 (median 5
+  stops removed by Maximum; 53 on Softology bakes).
+- The **tolerance-free greedy path from the input** matched the dense ladder with refits at the
+  named tolerances to within **+0.03 stops**, per-count error ×1.00, in 9–79 ms. The refits only
+  matter for other spaces, where the input's stops describe something else.
+- Median worst ΔE by share of stops kept (own space): 90% 0.009 · 70% 0.023 · 50% 0.046 · 40% 0.087
+  · 30% 0.144 · 20% 0.204.
+- **The path is not monotone**: 8.6% of counts were further off than the count below (median
+  +0.026, p90 +0.11). A quick "count below + one stop at the worst texel" barely helped; what
+  works is a THOROUGH insert that also tries a stop on the list's own rendered curve and, when the
+  worst segment is a half-texel band edge, the widest segment. Worst rise over the harness corpus
+  afterwards: 0.0000.
+
+## The search recipe, and the one-mode rule
+
+- Other spaces: `fitRampToStops` at ΔE 0.012 / 0.03 / 0.07, then the path from each. As good as an
+  eleven-tolerance ladder (−11.0% vs −10.8% of stops summed over the four amounts). Median time,
+  all six, 315 ms; without Spectral 161 ms; RGB only 35 ms (Node, loaded machine).
+- Best mode PER COUNT switched mode ~5 times along a gradient's axis. ONE other mode per gradient,
+  used only where under 0.8 × the own error, kept 9.8 of the 11.3% and switches ~1.3 times.
+
+## What was built (ADR-0128)
+
+`reduceStopsPlan` (lazy plans: own path → own refits → each space), the axis repair, the popup's
+slider + quick picks + "Try other blend modes" (remembered, `gmt.gradient.reduceSearchBlend`), the
+readout naming another mode, Spectral skipped on phones. As built, search on vs off at Light /
+Medium / Strong / Maximum: core picks −28 / −16 / −8 / −1%, cpt-city picks −14 / −9 / −7 / −5%,
+Softology bakes −12 / −13 / −5 / 0%. First plan: median 22 ms (76 ms on 60-stop bakes); whole
+search median ~0.4 s (1.1 s on 60-stop bakes, worst 2.5 s); longest single slice 129 ms.

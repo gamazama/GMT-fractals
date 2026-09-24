@@ -1,5 +1,14 @@
 # ADR-0127: Reduce stops is a set of named tolerances, previewed on the gradient and applied as one step
 
+> **Update 2026-09-24 (superseded in part by ADR-0128):** the popup is now a stop-count slider
+> over every count down to 2, with the four names kept as quick picks (same tolerances), and a
+> "Try other blend modes" search, on by default, that may apply a version in another blend mode
+> (named in the readout; not Spectral on a phone). That replaces "Named amounts, not numbers",
+> restates "never worse than the one before" for the axis, and limits "The gradient keeps its own
+> blend mode" to the search being off. `reduceStopsSteps` / `reduceStopsLadder` and
+> `GradientReduceResult` are gone — grep `reduceStopsPlan` and `GradientReducePlan`. Placement,
+> preview-then-one-step, the refusals and the tolerances below stand.
+
 - **Status:** Accepted
 - **Date:** 2026-09-24
 - **Relates to:** ADR-0122 (a gradient is stops or a 256-colour ramp — Reduce is for stops);

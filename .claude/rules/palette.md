@@ -64,6 +64,13 @@ docs/policy/` returned nothing).
   that already has stops keeps them (`fitRampToStops` directly). Signatures and export credits
   of a ramp are `ramp:`-tagged; a stop gradient's saved form and signatures are unchanged.
   Plan and status: `plans/gradient-ramp-backbone.md`.
+- `docs/adr/0127-reduce-stops-is-a-set-of-named-tolerances.md` and
+  `docs/adr/0128-reduce-stops-is-a-stop-count-axis.md` (2026-09-23/24) — "Reduce stops…" is a
+  stop-count slider over a lazy PLAN (`core/reduceStops.ts` `reduceStopsPlan`), the four named
+  tolerances are quick picks on it, and "Try other blend modes" (on by default; no Spectral on a
+  phone) may apply a version in another blend mode, named in the readout. More stops never look
+  worse than fewer (the axis repair). The editor reads it through
+  `components/gradient/gradientStopReducer.ts`, filled in `registerPaletteUI.ts`.
 
 The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 
@@ -148,6 +155,8 @@ npm run test:gx-session      # the GE v2 session: workingSession + the studio sn
 npm run test:palette-licensing  # the catalogue packs, category names, export credits and the GX Global catalogue check (node, ~2 s)
 npm run test:gradient-file   # the GMT gradient file (ADR-0123): document, PNG + stripped PNG, the one loader, where an import lands (node, ~3 s)
 npm run smoke:ge-gradientfile  # the same file WIRED (browser, dev server on 3400): Export ▸ For GMT, Save collection, the picker, the window drop, a session file, the reveal
+npm run test:palette-reducestops  # Reduce stops (ADR-0127/0128): every count, the tolerances, the axis, the search (node, ~2 min)
+npm run smoke:ge-reduce      # the same WIRED (browser, dev server on 3400): the slider by a real mouse, the search, Apply / Ctrl+Z, a phone without Spectral
 npm run smoke:gmt-gradientdrop  # app-gmt's SCENE entrances (browser, dev server on 3400): a gradient file dropped / picked in Load Scene lands in My Gradients, a scene still loads
 ```
 
@@ -166,6 +175,7 @@ tells the reader which harness covers what:
 
 | file | harness |
 |---|---|
+| `core/reduceStops.ts` (Reduce stops: the plan at every count, the named tolerances, the axis repair, the blend-mode search — ADR-0127 / ADR-0128), `components/gradient/gradientStopReducer.ts`, `components/gradient/ReduceStopsPopup.tsx` and the editor's `reducePull` | `debug/test-palette-reducestops.mts` (`npm run test:palette-reducestops`; node, ~2 min, not in the `test:palette` chain; falsified per claim 2026-09-24, see its header — the extra packs it samples are CDN downloads, skipped when absent). Wired: `debug/smoke-ge-reduce.mts` (`npm run smoke:ge-reduce`; browser, dev server on 3400) |
 | `core/stopFit.ts`, `core/gmtGradient.ts` | `debug/test-palette-stopfit.mts` (section [10] is the over-budget corner subsample's anti-aliasing guard, `ALIAS_DE` — its zebra needs a phase SHIFT to reproduce the bug, read the section note) |
 | the RAMP form (ADR-0122): `utils/gradientRamp.ts`, `utils/colorUtils.ts` `renderGradientToRamp` / `generateGradientTextureBuffer` / `getGradientCssString`, `core/stopFit.ts` `rampToGradientConfig` + `STOP_LAYER_CAP` + `FAITHFUL_MISS_TEXELS`, `core/gradientSeam.ts` | `debug/test-palette-gradientramp.mts` (`npm run test:palette-gradientramp`) and `debug/test-palette-gradientseam.mts` [2] — both falsified, see headers |
 | the editor's ramp mode and the UI's either-form readers: `components/gradient/rampMode.ts`, `components/gradient/gradientStopFitter.ts` (the Add-stops seam `registerPaletteUI` fills), `components/AdvancedGradientEditor.tsx`, `components/gradient/gradientActions.ts` | `debug/test-gradient-rampmode.mts` (`npm run test:gradient-rampmode`; includes a scan that fails if a UI file passes `.stops` to a stop renderer) |
