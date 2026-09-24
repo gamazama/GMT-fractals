@@ -467,6 +467,9 @@ export const CenterHUD: React.FC<{ isMobileMode: boolean, vibrate: (ms: number |
                     }}
                     onContextMenu={(e) => handleContextMenu(e, ['ui.viewport'])}
                     ref={gizmoAnchor}
+                    title="Light gizmos"
+                    aria-label="Light gizmos"
+                    aria-pressed={!!state.showLightGizmo}
                     className={`p-2 rounded-full border transition-all duration-300 ${state.showLightGizmo ? 'bg-accent-500/20 border-accent-500 text-accent-300 shadow-[0_0_10px_rgb(var(--accent-glow)/0.2)]' : 'bg-transparent border-transparent text-fg-faint hover:text-fg-tertiary hover:bg-line/5'}`}
                 >
                     <GizmoIcon />

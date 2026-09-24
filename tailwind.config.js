@@ -33,8 +33,12 @@ export default {
     extend: {
       // ─── Semantic color tokens (runtime color-scheme system) ───────────
       // Each token resolves to a CSS variable holding space-separated RGB
-      // channels (e.g. `--accent-400: 34 211 238`), defined per-scheme in
-      // index.css `:root` / `[data-theme="…"]`. The `<alpha-value>` shim keeps
+      // channels (e.g. `--accent-400: 34 211 238`). The live values are generated
+      // by engine/store/colorSchemeStore.ts from the theme axes (its dark/light
+      // tables) and set inline on <html>; index.css `:root` holds only the Dark
+      // first-paint fallback. (Corrected 2026-09-24: this said "defined per-scheme
+      // in index.css `:root` / `[data-theme]`" — there are no per-scheme blocks.)
+      // The `<alpha-value>` shim keeps
       // Tailwind's `/opacity` modifier working (`bg-accent/50`, `border-line/10`).
       // Added via `extend`, so the default palette stays intact and unmigrated
       // call sites keep working during the incremental migration.
@@ -100,6 +104,19 @@ export default {
         // v2 shell "armed" meaning colour (gradient-explorer/v2/ui/StateChip.tsx) — see
         // the --gx-armed definition in index.css for why this isn't `secondary`.
         'gx-armed': 'rgb(var(--gx-armed) / <alpha-value>)',
+        // Inks that invert with the scheme but are not status colours — the Help menu's
+        // Support pink and the kept ♥'s gold. These vars are FULL colours (a pigment mixed
+        // with `--fg` in index.css `:root`), not channel triples, so there is no
+        // `/opacity` modifier on them. `text-kept` must beat `text-accent-300`, which Act's
+        // `active` state also puts on the ♥: measured 2026-09-24 in the built CSS, the colour
+        // utilities come out in class-name order (`text-[…]` < `text-accent` <
+        // `text-accent-300` < `text-kept` < `text-support` < `text-warn`), so it does — an
+        // arbitrary `text-[color:var(--kept)]` would have lost.
+        support: {
+          DEFAULT: 'var(--support)',
+          strong: 'var(--support-strong)',
+        },
+        kept: 'var(--kept)',
       },
     },
   },

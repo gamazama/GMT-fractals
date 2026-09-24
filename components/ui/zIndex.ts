@@ -88,7 +88,7 @@ const BASE_TIERS = {
 
     // ── SHELL domain — local order, value meaningful only inside its trap ───
     shellRedock:          { base: 1000, span: 0, domain: 'shell' }, // panel-redock drop zones (DropZones, itself fixed)
-    shellToast:           { base: 900,  span: 0, domain: 'shell' }, // ToastHost (default home), FirstRunHint @800
+    shellToast:           { base: 900,  span: 0, domain: 'shell' }, // ToastHost (default home), FirstRunHint (both via <Layer tier="shellToast">)
     shellTopbar:          { base: 500,  span: 0, domain: 'shell' }, // TopBar header (itself a sub-trap)
     shellLoading:         { base: 100,  span: 0, domain: 'shell' }, // LoadingScreen, MobileControls
     shellDock:            { base: 40,   span: 0, domain: 'shell' }, // Dock root + grips

@@ -13,7 +13,9 @@
  *   • FEEDBACK — the shared Send Feedback item, with `configureFeedback` declaring GX's two
  *     attachment options in place of GMT's .gmf scene — the gradient being worked on (JSON
  *     with a link that opens it) or a screenshot (a JPEG data URL in JSON) — one or none,
- *     and GX's name + version in the report's context.
+ *     and GX's name + version in the report's context. The gradient is `available` only once
+ *     there is one (the form opens on Nothing before the first pick), and `signIn: false`
+ *     keeps "or sign in" out of the form — GX has no account UI.
  *   • WHAT'S NEW — `createWhatsNew` with GX's own topic, version (../version.ts) and seen
  *     key. The key is NOT GMT's `gmt.whatsNew.seenVersion`: the two apps share an origin,
  *     and with one key each app's "seen" write would be "unseen" to the other, so opening
@@ -96,6 +98,9 @@ export const installGxHelp = (): void => {
         label: 'Gradient',
         hint: 'The gradient you are working on, with a link that opens it.',
         capture: captureWorkingGradient,
+        // Before the first pick there is no gradient to send (the capture returns null), so the
+        // form shows it disabled and opens on Nothing rather than promising an attachment.
+        available: () => !!deriveWorkingNow()?.config,
       },
       {
         id: 'screenshot',
@@ -106,6 +111,8 @@ export const installGxHelp = (): void => {
       },
     ],
     context: () => ({ app: GX_APP_NAME, app_version: GX_VERSION }),
+    // GX has no account UI, so the form does not say "or sign in".
+    signIn: false,
   });
 
   installHelp({

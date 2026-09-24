@@ -747,7 +747,10 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
         {studio && (
           <button
             onClick={() => studio()}
-            title="Open GMT Gradient Explorer (new tab)"
+            // The app's name everywhere else, and since ADR-0126 the button takes the gradient
+            // with it (C23, 2026-09-24; smoke:gmt-gx-handoff selects this name).
+            title="Open in Gradient Explorer"
+            aria-label="Open in Gradient Explorer"
             className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
           >
             <StudioIcon />

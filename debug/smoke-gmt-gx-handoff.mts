@@ -142,7 +142,7 @@ const favSwatch = (page: Page, name: string) =>
   page.locator(`[data-slot][title^="${name}"] button, [data-slot] canvas[aria-label="${name}"]`).first();
 
 const pressExplorer = async (ctx: BrowserContext, page: Page): Promise<Page> => {
-  const btn = page.locator('button[title="Open GMT Gradient Explorer (new tab)"]').first();
+  const btn = page.locator('button[title="Open in Gradient Explorer"]').first();
   const [gx] = await Promise.all([ctx.waitForEvent('page', { timeout: 15000 }), btn.click()]);
   return gx;
 };

@@ -17,6 +17,14 @@ interface HelpBrowserProps {
 // Help opens with no active topic (see activeCategory fallback below).
 const CATEGORY_ORDER = ['Getting Started', "What's New", 'General', 'Formulas', 'Parameters', 'UI', 'Timeline', 'Graph', 'Animation', 'Lighting', 'Rendering', 'Coloring', 'Audio', 'Effects', 'Export'];
 
+/**
+ * Below this window width the topic sidebar becomes a scrolling ROW of topic chips above the
+ * reading pane (C12, 2026-09-24). Measured on the window, not the viewport — it is resizable
+ * — like EmbeddedColorPicker's layouts. At 30 % of a 344 px phone window the sidebar was 98 px
+ * and cut every Gradient Explorer title to "Welcom…", "The wall an…".
+ */
+const NARROW_PX = 480;
+
 const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNavigate }) => {
     // HelpBrowser is React.lazy-loaded, so by the time this component runs the
     // user has explicitly requested help. The hook resolves to the full topic
@@ -34,6 +42,21 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
     // Lock to prevent IntersectionObserver from overriding clicked selection during scroll animation
     const isScrollingRef = useRef(false);
     const scrollTimeoutRef = useRef<number | null>(null);
+
+    // Container-responsive: the chip row under NARROW_PX of window width. Starts from the width
+    // the window opens at (below), so a phone does not flash the sidebar first.
+    const rootRef = useRef<HTMLDivElement>(null);
+    const chipRowRef = useRef<HTMLDivElement>(null);
+    const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && Math.min(700, window.innerWidth - 16) < NARROW_PX);
+    useEffect(() => {
+        // The window's body, not our root: the root's own width depends on the layout (the
+        // wide one's -m-3 below), and a width that moves with the answer would flip-flop.
+        const el = rootRef.current?.parentElement;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+        const ro = new ResizeObserver((entries) => setNarrow(entries[0].contentRect.width < NARROW_PX));
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
 
     // Helper to trace lineage for Accordion logic with Cycle Protection
     const getAncestors = (id: string): string[] => {
@@ -84,6 +107,40 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
         });
         return cats;
     }, [searchTerm, HELP_TOPICS]);
+
+    // The narrow layout's chips: the sidebar's own order flattened — category by category, each
+    // root followed by its children (the tree renderTopicTree draws, with nothing collapsed).
+    const chipTopics = useMemo(() => {
+        const out: HelpSection[] = [];
+        for (const topics of Object.values(categories)) {
+            const ids = new Set(topics.map((t) => t.id));
+            const kids = new Map<string, HelpSection[]>();
+            topics.forEach((t) => {
+                if (t.parentId && ids.has(t.parentId)) kids.set(t.parentId, [...(kids.get(t.parentId) ?? []), t]);
+            });
+            const seen = new Set<string>(); // cycle protection, as the sidebar has
+            const walk = (t: HelpSection) => {
+                if (seen.has(t.id)) return;
+                seen.add(t.id);
+                out.push(t);
+                (kids.get(t.id) ?? []).forEach(walk);
+            };
+            topics.filter((t) => !t.parentId || !ids.has(t.parentId)).forEach(walk);
+        }
+        return out;
+    }, [categories]);
+
+    // Keep the active topic's chip in view as the reading pane scrolls through the topics.
+    useEffect(() => {
+        if (!narrow || !activeTopicId) return;
+        const row = chipRowRef.current;
+        const chip = row?.querySelector<HTMLElement>(`[data-help-chip="${CSS.escape(activeTopicId)}"]`);
+        if (!row || !chip) return;
+        const r = row.getBoundingClientRect();
+        const c = chip.getBoundingClientRect();
+        if (c.left < r.left) row.scrollLeft += c.left - r.left - 8;
+        else if (c.right > r.right) row.scrollLeft += c.right - r.right + 8;
+    }, [narrow, activeTopicId, chipTopics]);
 
     // Flattened list logic - Optimized to only return topics for the Current Category (or Search)
     const visibleTopics = useMemo(() => {
@@ -452,25 +509,58 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
     const winW = Math.min(700, vw - 16);
     const winH = Math.min(600, vh - 16);
 
+    const searchInput = (
+        <input
+            type="text"
+            placeholder="Search..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full bg-surface-sunken border border-line/20 rounded px-2 py-1 text-xs text-fg outline-none focus:border-accent-500 transition-colors"
+        />
+    );
+
     return (
+        // "Help" in every app (owner, 2026-09-24 — it was "Library", which in the Gradient
+        // Explorer is the catalogue's word). Escape closes it: it holds nothing to lose (C10).
         <DraggableWindow
-            title="Library"
+            title="Help"
             onClose={onClose}
+            dismissOnEscape
             initialPos={{ x: Math.min(100, Math.max(8, vw - winW - 8)), y: Math.min(100, Math.max(8, vh - winH - 8)) }}
             initialSize={{ width: winW, height: winH }}
             zIndex={z('tool')}
         >
-            <div className="flex h-full -m-3">
-                {/* Sidebar */}
+            {/* `-m-3` cancels a `p-3` the window's body no longer has (DraggableWindow's
+                bodyClassName), so it pushes 12 px of every edge under the clip. The narrow layout
+                drops it — it cut a phone's first topic chip in half. The wide one keeps it for now:
+                without it the sidebar is 24 px narrower and "Welcome to Gradient Explorer"
+                truncates at the default 700 px, so that fix wants the sidebar's width with it. */}
+            <div ref={rootRef} className={`flex h-full ${narrow ? 'flex-col' : '-m-3'}`}>
+                {narrow ? (
+                /* Narrow: the search, then every topic as a chip in one scrolling row */
+                <div className="shrink-0 bg-surface-section border-b border-line/10" data-help-topics="chips">
+                    <div className="p-2 pb-1">{searchInput}</div>
+                    <div ref={chipRowRef} className="flex gap-1 overflow-x-auto custom-scroll px-2 pb-2">
+                        {chipTopics.map((t) => (
+                            <button
+                                key={t.id}
+                                type="button"
+                                data-help-chip={t.id}
+                                onClick={() => handleSidebarNavigate(t.id)}
+                                className={`shrink-0 whitespace-nowrap px-2 py-1 rounded text-xs border transition-colors ${
+                                    activeTopicId === t.id ? 'bg-accent-900/50 text-accent-300 border-accent-500/60' : 'text-fg-muted border-line/15 hover:text-fg hover:bg-line/5'
+                                }`}
+                            >
+                                {t.title}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                ) : (
+                /* Sidebar */
                 <div className="w-[30%] bg-surface-section border-r border-line/10 flex flex-col shrink-0">
                     <div className="p-2 border-b border-line/10">
-                        <input 
-                            type="text" 
-                            placeholder="Search..." 
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full bg-surface-sunken border border-line/20 rounded px-2 py-1 text-xs text-fg outline-none focus:border-accent-500 transition-colors"
-                        />
+                        {searchInput}
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scroll p-2">
                         {Object.entries(categories).map(([cat, topics]) => (
@@ -483,11 +573,12 @@ const HelpBrowser: React.FC<HelpBrowserProps> = ({ activeTopicId, onClose, onNav
                         ))}
                     </div>
                 </div>
+                )}
 
                 {/* Content - SCROLLABLE AREA */}
                 <div
                     ref={contentRef}
-                    className="flex-1 bg-surface-sunken/50 overflow-y-auto custom-scroll p-6"
+                    className={`flex-1 bg-surface-sunken/50 overflow-y-auto custom-scroll ${narrow ? 'min-h-0 p-4' : 'p-6'}`}
                 >
                     {!searchTerm && (
                         <div className="mb-6 pb-2 border-b border-line/10">

@@ -133,9 +133,11 @@ const APPS: AppSpec[] = [
  * is where these belong once another smoke needs them).
  */
 const CHROME_SEED: Record<string, string> = {
-    // engine-gmt/components/FirstRunHint.tsx — the "New here?" banner is fixed top-centre above
-    // the top bar (z 800 over the bar's 500) and, at 1400×900, covers app-gmt's High-res render,
-    // Expand Light Studio, Shadow Settings and light-gizmo buttons until it is dismissed.
+    // engine-gmt/components/FirstRunHint.tsx — the "New here?" pill a first visit sees. Until
+    // 2026-09-24 it sat ON the top bar and at 1400×900 covered High-res render, Expand Light
+    // Studio, Shadow Settings and the light-gizmo button, which is why this seed began. It now
+    // sits 8 px under the bar and covers no control (measured that day); a returning visitor
+    // has dismissed it, so the seed stays.
     'gmt-firstrun-dismissed': '1',
 };
 

@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { submitFeedback, FeedbackError, FeedbackCategory, getFeedbackAttachments, type FeedbackFile } from './FeedbackClient';
+import {
+    submitFeedback, FeedbackError, FeedbackCategory, getFeedbackAttachments, isFeedbackAttachmentAvailable, feedbackOffersSignIn,
+    type FeedbackFile,
+} from './FeedbackClient';
 import { useAuthStore } from '../auth/authStore';
 import { useEngineStore } from '../../store/engineStore';
 import { stopNavKeys } from '../../components/ui';
@@ -12,11 +15,25 @@ const CATEGORIES: { value: FeedbackCategory; label: string; hint: string }[] = [
 ];
 
 /**
+ * The accent as TEXT on this form's accent fills (Send, Close, the chosen option): the scheme's
+ * accent mixed 60/40 with the scheme's own ink (`--fg`), so it darkens on a light interface and
+ * lightens on a dark one — the idiom of index.css's `--support`. `text-accent` alone read 2.88:1
+ * on Light Grey; this reads >= 4.5:1 on the 20-30 % fills in Dark, Grey, Light Grey and Light,
+ * computed at accent hues 30, 190 (the default) and 270 (2026-09-24). Inline, not a class, so it
+ * follows every theme change with nothing registered anywhere.
+ */
+const ACCENT_INK: React.CSSProperties = { color: 'color-mix(in srgb, rgb(var(--accent-400)) 60%, rgb(var(--fg)))' };
+
+/**
  * Feedback form, rendered as a dockable panel ('panel-feedback' in the
  * manifest). Window chrome (title, close, drag) is supplied by DraggableWindow
  * when floating, or the dock when docked — this component is just the form.
  * It remounts each time the panel opens (the floating panel unmounts on close),
  * so component state starts fresh without an explicit reset.
+ *
+ * Inks are the scheme's (`ACCENT_INK`), never a fixed Tailwind colour: Send, Close and the
+ * chosen options were `text-cyan-200`, drawn for a dark shell, which read 1.4:1 on Light Grey
+ * and 1.0:1 on Light (C13, 2026-09-24).
  */
 export const FeedbackPanel: React.FC = () => {
     const profile = useAuthStore((s) => s.profile);
@@ -25,7 +42,6 @@ export const FeedbackPanel: React.FC = () => {
     const [category, setCategory]         = useState<FeedbackCategory>('bug');
     const [message, setMessage]           = useState('');
     const [contactEmail, setContactEmail] = useState('');
-    const [includeScene, setIncludeScene] = useState(true);
 
     const [submitting, setSubmitting]     = useState(false);
     const [error, setError]               = useState<string | null>(null);
@@ -36,9 +52,18 @@ export const FeedbackPanel: React.FC = () => {
     // declared its own. ONE option is the checkbox (GMT's form, unchanged); SEVERAL are a
     // one-of choice with None, still sending one file; none hides the row.
     const [options] = useState(getFeedbackAttachments);
+    // What can be attached is read ONCE, as the form opens (it remounts on every open): an
+    // option with nothing to attach right now (GX's Gradient before any pick) is shown
+    // disabled and is never the default, so the form does not promise a file it will not send.
+    const [available] = useState(() => new Set(options.filter(isFeedbackAttachmentAvailable)));
     const attachment = options.length === 1 ? options[0] : null;
     const multi = options.length > 1;
-    const [choice, setChoice]             = useState<string | null>(multi ? (options[0].id ?? null) : null);
+    const [includeScene, setIncludeScene] = useState(() => !attachment || available.has(attachment));
+    // The default is the first AVAILABLE option that builds at send. A `captureOnSelect` one (a
+    // screenshot) is never the default: it is built when chosen, so defaulting to it would show
+    // a choice with nothing behind it. None such → Nothing.
+    const [choice, setChoice]             = useState<string | null>(() =>
+        multi ? (options.find((o) => available.has(o) && !o.captureOnSelect)?.id ?? null) : null);
     // A captureOnSelect option's file, built when chosen — the thumbnail is what is sent.
     const [prepared, setPrepared]         = useState<{ id: string; file: FeedbackFile | null } | null>(null);
     const [preparing, setPreparing]       = useState(false);
@@ -111,7 +136,8 @@ export const FeedbackPanel: React.FC = () => {
                     <div className="flex justify-end">
                         <button
                             onClick={close}
-                            className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 text-cyan-200 hover:bg-accent-500/30 transition-colors"
+                            className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 hover:bg-accent-500/30 transition-colors"
+                            style={ACCENT_INK}
                         >
                             Close
                         </button>
@@ -119,9 +145,11 @@ export const FeedbackPanel: React.FC = () => {
                 </>
             ) : (
                 <>
+                    {/* "or sign in" only where there is one (configureFeedback's `signIn`) */}
                     <p className="text-[10px] text-fg-muted leading-relaxed mb-4">
-                        Bug reports, feature ideas, or questions — all welcome. Anonymous is fine,
-                        but if you want a reply, include an email or sign in.
+                        {feedbackOffersSignIn()
+                            ? 'Bug reports, feature ideas, or questions — all welcome. Anonymous is fine, but if you want a reply, include an email or sign in.'
+                            : 'Bug reports, feature ideas, or questions — all welcome. Anonymous is fine; to get a reply, include an email.'}
                     </p>
 
                     {/* Category */}
@@ -136,9 +164,10 @@ export const FeedbackPanel: React.FC = () => {
                                 disabled={submitting}
                                 className={`px-2 py-1.5 text-[11px] font-bold rounded transition-colors ${
                                     category === c.value
-                                        ? 'bg-accent-500/25 text-cyan-200 border border-accent-400/40'
+                                        ? 'bg-accent-500/25 border border-accent-400/40'
                                         : 'bg-line/5 text-fg-muted border border-transparent hover:bg-line/10'
                                 }`}
+                                style={category === c.value ? ACCENT_INK : undefined}
                             >
                                 {c.label}
                             </button>
@@ -187,12 +216,12 @@ export const FeedbackPanel: React.FC = () => {
 
                     {/* The app's attachment (GMT: include scene) */}
                     {attachment && (
-                    <label className="flex items-start gap-2 mb-4 cursor-pointer group">
+                    <label className={`flex items-start gap-2 mb-4 group ${available.has(attachment) ? 'cursor-pointer' : 'opacity-40 cursor-default'}`}>
                         <input
                             type="checkbox"
                             checked={includeScene}
                             onChange={(e) => setIncludeScene(e.target.checked)}
-                            disabled={submitting}
+                            disabled={submitting || !available.has(attachment)}
                             className="mt-0.5 accent-cyan-400"
                         />
                         <div className="flex-1">
@@ -213,19 +242,23 @@ export const FeedbackPanel: React.FC = () => {
                             Attach
                         </label>
                         <div className="grid gap-1 mb-1" style={{ gridTemplateColumns: `repeat(${options.length + 1}, minmax(0, 1fr))` }}>
-                            {[{ id: null as string | null, label: 'Nothing' }, ...options.map((o) => ({ id: o.id ?? null, label: o.label }))].map((o) => (
+                            {[
+                                { id: null as string | null, label: 'Nothing', can: true },
+                                ...options.map((o) => ({ id: o.id ?? null, label: o.label, can: available.has(o) })),
+                            ].map((o) => (
                                 <button
                                     key={o.id ?? 'none'}
                                     type="button"
                                     onClick={() => choose(o.id)}
-                                    disabled={submitting}
+                                    disabled={submitting || !o.can}
                                     aria-pressed={choice === o.id}
                                     data-feedback-attachment={o.id ?? 'none'}
-                                    className={`px-2 py-1.5 text-[11px] font-bold rounded transition-colors ${
+                                    className={`px-2 py-1.5 text-[11px] font-bold rounded transition-colors disabled:opacity-40 disabled:cursor-default ${
                                         choice === o.id
-                                            ? 'bg-accent-500/25 text-cyan-200 border border-accent-400/40'
-                                            : 'bg-line/5 text-fg-muted border border-transparent hover:bg-line/10'
+                                            ? 'bg-accent-500/25 border border-accent-400/40'
+                                            : 'bg-line/5 text-fg-muted border border-transparent enabled:hover:bg-line/10'
                                     }`}
+                                    style={choice === o.id ? ACCENT_INK : undefined}
                                 >
                                     {o.label}
                                 </button>
@@ -264,7 +297,8 @@ export const FeedbackPanel: React.FC = () => {
                         <button
                             onClick={trySubmit}
                             disabled={submitting || preparing || !message.trim()}
-                            className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 text-cyan-200 hover:bg-accent-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-xs font-bold rounded bg-accent-500/20 hover:bg-accent-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={ACCENT_INK}
                         >
                             {submitting ? 'Sending…' : 'Send'}
                         </button>

@@ -83,6 +83,27 @@
      gradient-explorer/v2/ui/StateChip.tsx is the only consumer today. */
   --gx-armed: 167 139 250;
 
+  /* Inks that are not status colours but must still invert with the scheme (2026-09-24).
+     Each is ONE pigment mixed with the scheme's own ink, `--fg` — white in the dark regime,
+     near-black in the light one — so it lightens on a dark interface and darkens on a light
+     one at exactly the brightness where all other text inverts (colorSchemeStore `isLightAt`).
+     `--fg` is set inline on <html> by the store and this `:root` rule reads it there, so these
+     follow every theme change with no entry in the store's tables — the `.gx-metal` idiom
+     below. They are FULL colours, not channel triples, so no `/opacity` modifier. Spend them
+     through tailwind.config.js's `support` / `support-strong` / `kept` colours (`text-support`,
+     `text-kept`) — an arbitrary `text-[color:var(--kept)]` sorts before `text-accent-300` in
+     the built CSS and loses to Act's `active` ink on the ♥.
+       --support / --support-strong — the Help menu's Support row and its box. A fixed
+         `text-pink-300` there read 1.04:1 on Light Grey (C13). Dark regime #F6A4CC / #F8BFDB
+         (≈ the pink-300 / pink-200 they replace), light regime #7F2D55 / #5E2441: ≥ 4.9:1 on
+         the menu and the box in Dark, Grey, Light Grey and Light.
+       --kept — the ♥ of a kept gradient (owner call 8a: PROPOSED, worn by nothing yet). Dark
+         regime #CEA84D, light regime #876005: ≥ 3.2:1 on the hero's name row, on an Act's fill
+         and on the lit Act's accent wash, in the same four presets. */
+  --support: color-mix(in srgb, rgb(236 72 153) 50%, rgb(var(--fg)));
+  --support-strong: color-mix(in srgb, rgb(236 72 153) 35%, rgb(var(--fg)));
+  --kept: color-mix(in srgb, rgb(185 130 0) 70%, rgb(var(--fg)));
+
   /* Global plain-CSS surfaces */
   --app-bg: 0 0 0;
   --scrollbar-track: 0 0 0;
@@ -331,4 +352,20 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
     100% { opacity: 0; }
   }
   .animate-set-save-bloom { animation: set-save-bloom var(--save-ms, 780ms) ease-out forwards; }
+}
+
+/* A SAVE UNDER REDUCED MOTION (J15, 2026-09-24). Still drawn where it lands (ADR-0119): the
+   fill holds, then fades over the same time, without collapsing to its centre line, and the
+   ♥'s white bloom is dropped. Only the keyframe NAME is swapped, so the duration, easing and
+   `forwards` of `.animate-set-save` stay (setSaveFlash.ts times the announcement off the same
+   `--save-ms`). Plain CSS outside `@layer`, so it is always emitted and, coming last, wins the
+   equal-specificity tie with the utility above. */
+@keyframes set-save-fade {
+  0%   { opacity: 1; }
+  55%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-set-save { animation-name: set-save-fade; }
+  .animate-set-save-bloom { animation: none; opacity: 0; }
 }

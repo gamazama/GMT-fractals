@@ -20,6 +20,10 @@ export interface CoreSettingsOptions {
     /** Which app's autosave the Files ▸ Autosave rows read and write. Default: app-gmt's
      *  (`useAutosaveSettings`, keys `gmt-autosave-*`). `null` registers no autosave rows. */
     autosave?: ({ store: AutosaveSettingsStore } & AutosaveSettingsText) | null;
+    /** Interface ▸ Colour ▸ Secondary accent's description — WHAT wears the second accent is
+     *  the app's to say (app-gmt: audio, modulation, Path Tracer; GX: Wallpaper's controls),
+     *  so engine-core names no app's features. Default: "Hue of the second interface accent." */
+    secondaryAccentDescription?: string;
 }
 
 export const registerCoreSettings = (opts: CoreSettingsOptions = {}): void => {
@@ -102,7 +106,7 @@ export const registerCoreSettings = (opts: CoreSettingsOptions = {}): void => {
         tab: 'Interface',
         section: 'Colour',
         label: 'Secondary accent',
-        description: 'Hue of the secondary accent (audio, modulation, Path Tracer).',
+        description: opts.secondaryAccentDescription ?? 'Hue of the second interface accent.',
         control: { kind: 'custom', render: () => createElement(SecondaryHueControl) },
         order: 6,
     });

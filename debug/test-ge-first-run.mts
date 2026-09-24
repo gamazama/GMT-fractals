@@ -13,6 +13,8 @@
  *   [2] a browser that has already been asked is not asked again
  *   [3] an app-gmt user keeps their brightness — not asked, not overridden
  *   [4] ...for ANY stored value, including ones a sloppy test would treat as absent
+ *   [5] a trip from GMT's Explorer button is not asked, and marks nothing — so the first
+ *       visit that is not a trip still asks (owner, 2026-09-24)
  *
  * [4] exists because "has this person chosen" must be a NULL test, not a truthiness one:
  * the only thing that means "never chosen" is the key being absent. It pins the empty
@@ -29,28 +31,47 @@
  *   [2] dropping the `seeded` guard                          ✗ "a returning browser is not asked again"
  *   [3+4] `chosenBrightness !== null` → `chosenBrightness`    ✗ "an empty stored value still counts"
  *
+ * [5] is about a DEFAULT GMT user, who has never chosen a brightness (GMT writes
+ * `gmt.brightness` only when it is changed): rule [1] alone would ask them over the gradient
+ * they brought, and the preset it applies is shared, so GMT would boot in the Explorer's look.
+ * Falsified 2026-09-24, each independently:
+ *   [5] dropping `if (fromGmt) return 'quiet'`               ✗ "a GMT trip is not asked"
+ *   [5] `marksSeeded` without its `&& !fromGmt`               ✗ "...and marks nothing, so the first standalone visit still asks"
+ *
  * Run: `npx tsx debug/test-ge-first-run.mts`
  */
-import { decideFirstRun } from '../gradient-explorer/v2/firstRunDecision';
+import { decideFirstRun, marksSeeded } from '../gradient-explorer/v2/firstRunDecision';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
   if (!cond) { failures++; console.error('  ✗ ' + msg); } else { console.log('  ✓ ' + msg); }
 };
 
+// Every case in [1]–[4] is a standalone visit; [5] is the trip.
+const visit = (seeded: boolean, chosenBrightness: string | null) => ({ seeded, chosenBrightness, fromGmt: false });
+
 console.log('[1] a genuinely new browser is asked');
-ok(decideFirstRun({ seeded: false, chosenBrightness: null }) === 'ask', 'a new browser is asked');
+ok(decideFirstRun(visit(false, null)) === 'ask', 'a new browser is asked');
+ok(marksSeeded(visit(false, null)), '...and marked, so it is asked once');
 
 console.log('[2] a browser that has already been asked is not asked again');
-ok(decideFirstRun({ seeded: true, chosenBrightness: null }) === 'quiet', 'a returning browser is not asked again');
-ok(decideFirstRun({ seeded: true, chosenBrightness: '81' }) === 'quiet', '...whatever it chose');
+ok(decideFirstRun(visit(true, null)) === 'quiet', 'a returning browser is not asked again');
+ok(decideFirstRun(visit(true, '12')) === 'quiet', '...whatever it chose');
+ok(!marksSeeded(visit(true, null)), '...and not marked again');
 
 console.log('[3] an app-gmt user keeps their brightness');
-ok(decideFirstRun({ seeded: false, chosenBrightness: '42' }) === 'quiet', 'an app-gmt user keeps their brightness');
+ok(decideFirstRun(visit(false, '42')) === 'quiet', 'an app-gmt user keeps their brightness');
 
 console.log('[4] ...for any stored value, including ones a sloppy test would treat as absent');
-ok(decideFirstRun({ seeded: false, chosenBrightness: '0' }) === 'quiet', 'a full-Dark user is not asked or reset');
-ok(decideFirstRun({ seeded: false, chosenBrightness: '' }) === 'quiet', 'an empty stored value still counts');
+ok(decideFirstRun(visit(false, '0')) === 'quiet', 'a full-Dark user is not asked or reset');
+ok(decideFirstRun(visit(false, '')) === 'quiet', 'an empty stored value still counts');
+
+console.log('[5] a trip from GMT is not asked, and marks nothing');
+const trip = { seeded: false, chosenBrightness: null, fromGmt: true };
+ok(decideFirstRun(trip) === 'quiet', 'a GMT trip is not asked');
+ok(!marksSeeded(trip), '...and marks nothing, so the first standalone visit still asks');
+ok(decideFirstRun({ ...trip, fromGmt: false }) === 'ask', '...which it then does');
+ok(decideFirstRun({ ...trip, chosenBrightness: '42' }) === 'quiet', 'a GMT trip with a chosen brightness is quiet too');
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

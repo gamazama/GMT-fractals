@@ -6,6 +6,7 @@
  * read. v2 used to answer that silently — the first boot applied the Light Grey preset and
  * wrote a flag — which is a guess made on the user's behalf, invisibly, at the moment they
  * are least able to connect the interface's look to a setting they have never seen.
+ * (The opening preset has been Grey since 2026-09-24, owner.)
  *
  * So it asks instead, once, and shows the answer changing as it is chosen: the controls are
  * live (they ARE Settings' own, not copies — `ThemePresetPicker`, `BrightnessControl` and
@@ -18,15 +19,16 @@
  * dialogue exists to settle.
  *
  * Three rules it follows, all of them about NOT asking:
- *  1. It opens on Light Grey already applied, so dismissing it — Escape, Start, anything —
- *     leaves exactly the theme the silent seed used to produce. Doing nothing is not a
- *     worse outcome than before.
+ *  1. It opens on Grey already applied (owner, 2026-09-24 — Light Grey until then), so
+ *     dismissing it — Escape, Start, anything — leaves the default. Doing nothing is not a
+ *     worse outcome than answering.
  *  2. It never asks a user who already has a brightness. The theme axes are SHARED across
- *     the GMT apps (`gmt.brightness`, engine/store/colorSchemeStore.ts), so someone
- *     arriving from app-gmt has already chosen; v2 keeps that choice and stays quiet. This
- *     also fixes the silent seed's real bug — it OVERRODE such a user's brightness on the
- *     first v2 boot, which is the one case where the guess was not merely invisible but
- *     wrong.
+ *     the GMT apps (`gmt.brightness`, engine/store/colorSchemeStore.ts), so someone who
+ *     chose one in app-gmt keeps that choice and v2 stays quiet. This also fixes the silent
+ *     seed's real bug — it OVERRODE such a user's brightness on the first v2 boot, which is
+ *     the one case where the guess was not merely invisible but wrong. A TRIP from GMT's
+ *     Explorer button is not asked either, chosen or not, and is not counted as the visit
+ *     that asked (firstRunDecision.ts).
  *  3. It asks once per browser, and the flag is written before the card renders, so a
  *     refresh mid-decision does not ask again.
  *

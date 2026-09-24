@@ -21,7 +21,7 @@
  */
 
 import React, { Suspense, useState, useSyncExternalStore } from 'react';
-import { Layer } from '../../components/ui';
+import { Modal } from '../../components/ui';
 import { useEngineStore } from '../../store/engineStore';
 import { menu, MenuItem } from './Menu';
 import { shortcuts } from './Shortcuts';
@@ -81,13 +81,16 @@ const renderBody = (body: React.ReactNode | React.FC): React.ReactNode => {
     return body;
 };
 
+// Every ink here inverts with the scheme. `pink` was a fixed `text-pink-300`, chosen for a dark
+// shell, and read 1.04:1 on Light Grey (the Support box's title) — it is now `text-support`, a
+// pink mixed with the scheme's own ink (`--support` in index.css, exposed in tailwind.config.js).
 const ACCENT_TEXT: Record<'pink' | 'cyan' | 'purple', string> = {
-    pink: 'text-pink-300',
+    pink: 'text-support',
     cyan: 'text-accent-300',
     purple: 'text-secondary',
 };
 const ACCENT_HOVER: Record<'pink' | 'cyan' | 'purple', string> = {
-    pink: 'hover:bg-pink-500/10 text-pink-300/80 group-hover:text-pink-200',
+    pink: 'hover:bg-pink-500/10 text-support group-hover:text-support-strong',
     cyan: 'hover:bg-accent-500/10 text-accent-300/80 group-hover:text-accent-300',
     purple: 'hover:bg-secondary/10 text-secondary/80 group-hover:text-secondary',
 };
@@ -139,8 +142,10 @@ const SupportItem: React.FC<SupportItemProps> = ({ label, modalTitle, intro, bod
             {hoverReveal && (
                 // Own click target — the revealed photo opens the modal too.
                 // The photo img sets pointer-events-none, so the click lands
-                // on this button.
-                <button type="button" onClick={openModal} className="block w-full px-2 pt-1 cursor-pointer">
+                // on this button. A second POINTER target for the row below, not
+                // a control of its own: out of the tab order and hidden from
+                // assistive tech, or it is a nameless stop that repeats the row.
+                <button type="button" onClick={openModal} tabIndex={-1} aria-hidden="true" className="block w-full px-2 pt-1 cursor-pointer">
                     {renderBody(hoverReveal)}
                 </button>
             )}
@@ -168,19 +173,24 @@ const SupportModalHost: React.FC = () => {
     // elementFromPoint over the panel header returned the panel, not the backdrop).
     // check:zindex cannot catch this class: its threshold is z >= 100, so a raw z
     // that is too LOW is exactly its blind spot. Per ADR-0082, use the tier table.
+    //
+    // Then a hand-rolled `<Layer tier="modal">` with its own backdrop click, which Escape
+    // did not close (C10, 2026-09-24) — now the master `Modal` (the same `modal` tier):
+    // Escape through the scope-aware registry, and the backdrop closes it because the box
+    // holds nothing that a stray click could lose.
     return (
-        <Layer tier="modal" className="inset-0 flex items-center justify-center bg-black/60" onClick={close}>
-            <div className="bg-surface-sunken border border-line/10 rounded-lg p-5 w-80 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <Modal onClose={close} dismissOnBackdrop backdropClassName="bg-black/60" labelledBy="help-support-title">
+            <div className="bg-surface-sunken border border-line/10 rounded-lg p-5 w-80 shadow-2xl">
                 <div className="flex items-center justify-between mb-3">
-                    <div className={`text-xs font-bold ${ACCENT_TEXT[m.accent]}`}>{m.modalTitle}</div>
-                    <button onClick={close} className="text-fg-dim hover:text-fg transition-colors text-sm leading-none">&times;</button>
+                    <div id="help-support-title" className={`text-xs font-bold ${ACCENT_TEXT[m.accent]}`}>{m.modalTitle}</div>
+                    <button onClick={close} aria-label="Close" title="Close" className="text-fg-dim hover:text-fg transition-colors text-sm leading-none">&times;</button>
                 </div>
                 {m.intro && (
                     <p className="text-[10px] text-fg-muted leading-relaxed mb-4">{m.intro}</p>
                 )}
                 {renderBody(m.body)}
             </div>
-        </Layer>
+        </Modal>
     );
 };
 
@@ -271,7 +281,8 @@ export interface InstallHelpOptions {
     gettingStartedTopicId?: string | null;
     /** If true, skip the "Show Hints" toggle AND the global `H` shortcut — for an app that
      *  renders nothing gated on `store.showHints` (e.g. every panel passes `hints="tooltip"`),
-     *  where both would flip a state nobody sees. HUD hints (`help.registerHudHint`) stay
+     *  where both would flip a state nobody sees. The "?" button's name drops "& tips" with
+     *  them ("Help" rather than "Help & tips"). HUD hints (`help.registerHudHint`) stay
      *  gated on the flag, so such an app should not register any. */
     hideHints?: boolean;
     /** Visibility predicate for the "Keyboard Shortcuts" item, re-evaluated each render —
@@ -335,7 +346,8 @@ export const installHelp = (options: InstallHelpOptions = {}) => {
         slot: options.slot || 'right',
         order: options.order ?? 40,
         icon: QuestionIcon,
-        title: 'Help & tips',
+        // No tips to promise without the hints (smoke:help-menu selects the GMT name).
+        title: options.hideHints ? 'Help' : 'Help & tips',
         align: 'end',
         width: 'w-60',
     });

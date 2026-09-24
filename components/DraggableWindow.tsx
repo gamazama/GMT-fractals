@@ -30,6 +30,10 @@ export interface DraggableWindowProps {
     onSizeChange?: (size: { width: number; height: number }) => void;
     onClose?: () => void;
     disableClose?: boolean;
+    /** Escape closes the window (through `onClose`, via FloatingPanel's `useDismiss` — the
+     *  scope-aware registry, topmost surface first). Default false: only for a window that
+     *  holds nothing Escape could lose (the Help browser), never a form. */
+    dismissOnEscape?: boolean;
     zIndex?: number;
 
     initialPos?: { x: number; y: number };
@@ -40,7 +44,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
     id, title, children,
     position, onPositionChange,
     size, onSizeChange,
-    onClose, disableClose, zIndex,
+    onClose, disableClose, dismissOnEscape = false, zIndex,
     initialPos, initialSize,
 }) => {
     // Granular selectors — `useEngineStore()` no-selector subscribes to all
@@ -109,6 +113,7 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
             title={displayTitle}
             onClose={showClose ? handleClose : undefined}
             showClose={showClose}
+            dismissOnEscape={dismissOnEscape && showClose}
             headerLeft={
                 isManaged && id ? (
                     // The handle bypasses FloatingPanel's header-drag onBegin (via

@@ -10,9 +10,10 @@
  * knows nothing about what any claim takes — grep `registerSceneFileClaim(` for who registers.
  *
  * SEAMS.
- *   - `registerSceneFileClaim({ id, take })` — idempotent by id (re-registering replaces in place,
- *     keeping its turn); returns an unregister thunk. Registration is never frozen: any time
- *     before the drop is fine.
+ *   - `registerSceneFileClaim({ id, take, hint? })` — idempotent by id (re-registering replaces in
+ *     place, keeping its turn); returns an unregister thunk. Registration is never frozen: any
+ *     time before the drop is fine. `hint` is the claim's few words on the drop scrim
+ *     (`sceneFileClaimHints`), so the scrim says what a drop does without engine-core naming it.
  *   - `take(files)` is offered the files still unhandled, in drop order, and RESOLVES TO THE FILES
  *     IT DID NOT TAKE. It owns every message and side effect for what it took. The same contract
  *     as `useImageDrop`'s `preRoute` (palette/components/useImageDrop.ts), one level down.
@@ -51,6 +52,10 @@ export interface SceneFileClaim {
     id: string;
     /** Offered the unhandled files in drop order; resolves to the ones it did NOT take. */
     take: (files: File[]) => Promise<File[]>;
+    /** What a drop does with the files this claim takes, in a few words, for the drop scrim's
+     *  detail line beside the scene formats (e.g. "gradient files go to My Gradients"). Without
+     *  one the scrim promises nothing for the claim — it still takes its files. */
+    hint?: string;
 }
 
 const registry = createListRegistry<SceneFileClaim>();
@@ -59,6 +64,11 @@ const registry = createListRegistry<SceneFileClaim>();
 export const registerSceneFileClaim = (claim: SceneFileClaim): (() => void) => registry.register(claim);
 
 export const unregisterSceneFileClaim = (id: string): void => registry.unregister(id);
+
+/** Every registered claim's `hint`, in registration order — what the drop scrim says a drop
+ *  will do besides load a scene. Empty when no claim gave one. */
+export const sceneFileClaimHints = (): string[] =>
+    registry.getAll().map((c) => c.hint).filter((h): h is string => !!h);
 
 /**
  * Offer files to every registered claim, in registration order. Resolves to the files no claim

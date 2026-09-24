@@ -46,6 +46,9 @@ export const GRADIENT_FILE_CLAIM_ID = 'palette.gradient-files';
 export const installGradientFileClaim = (): void => {
   registerSceneFileClaim({
     id: GRADIENT_FILE_CLAIM_ID,
+    // The host's drop scrim says so beside its scene formats (it read "Drop to load scene"
+    // while this claim took gradient files — C20, 2026-09-24).
+    hint: 'gradient files go to My Gradients',
     take: async (files) => {
       const named = files.filter((f) => isGradientFileName(f.name));
       if (!named.length) return files;

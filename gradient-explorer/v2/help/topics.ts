@@ -42,7 +42,7 @@ Gradient Explorer is for finding, making and exporting colour gradients.
 ## Start here
 - **Click a gradient on the wall.** It becomes the gradient you are working on — a preview.
 - **Click it again, or drag one of its stops,** to start editing it.
-- **Or start a new one** — the link above the colour map, or New Gradient in the gradient's ☰ menu — to begin from plain black to white.
+- **Or start a new one** — the **start a new one** link above the colour range, or New Gradient in the gradient's ☰ menu — to begin from plain black to white.
 - **Press ♥** to keep it in My Gradients. **Share** copies a link that opens it; **Export** gives you a file; **Wallpaper** fills the screen with it.
 
 > Everything you work on is added to Recent in My Gradients by itself, so a gradient you lost track of is under Today.
@@ -63,7 +63,7 @@ Gradient Explorer is for finding, making and exporting colour gradients.
 - **Search** by name, and open **Filters** for look, sources and how the wall is arranged.
 - **More like this** (Similar on a phone), next to the name of the gradient you are working on, sorts the wall by how alike the colours look. Right-click any gradient on the wall for the same.
 - On a computer, the tools down the wall's left edge zoom, and on All they narrow the wall to what you draw round — a box, a lasso or a brush.
-- Once the wall is narrowed to 400 or fewer, **Keep these** files them as a new group.
+- Once the wall is narrowed to 400 or fewer, **Group these** files them as a new group.
 - In your own sets, drag across the wall's background to select several; **Delete** removes them from My Gradients.
 
 ## Your own files
@@ -85,11 +85,11 @@ The tabs under the gradient open one face at a time, over the wall:
 - **Mix** blends your gradient with another. Pick the other one from the wall or My Gradients, then set how much Lightness, Chroma and Hue come from each.
 - **Image** makes a gradient from a picture — choose one, or drop or paste it anywhere.
 - **Curves** shapes the lightness, chroma and hue curves of the gradient.
-- **Adjust** changes hue, chroma and contrast, and lightness, and adds posterize, scale (with mirrored tiles), phase and noise. Apply keeps the result and starts the dials fresh; Cancel throws the change away.
+- **Adjust** changes hue, chroma, lightness and contrast, and adds posterize, scale (with mirrored tiles), phase and noise. Apply keeps the result and starts the dials fresh; Cancel throws the change away.
 
-Leaving a face keeps what it did. The chip next to the name takes you back to how the gradient was before.
+Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip next to the name takes you back to how the gradient was before.
 
-> Undo and redo cover faces opening and closing too, so undo gets you back to where you were.
+> Undo also brings back the face you were in when you made the change.
 `,
   }),
   topic({
@@ -112,7 +112,7 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
 ## Everywhere
 - \`Ctrl+Z\` — undo
 - \`Ctrl+Y\` or \`Ctrl+Shift+Z\` — redo
-- \`Esc\` — clear the wall's selection, then close the open face, then cancel picking a gradient to mix with
+- \`Esc\` — clear the wall's selection, then cancel the open face, then cancel picking a gradient to mix with
 
 ## Stops (with a stop selected)
 - \`Delete\` or \`Backspace\` — remove the selected stops
@@ -139,15 +139,15 @@ Leaving a face keeps what it did. The chip next to the name takes you back to ho
 
 - **This is the Gradient Explorer now.** The page GMT and Fluid Toy open shows it, and coming from GMT's My Gradients gives you a Back to GMT link. The old Explorer is gone.
 - **Links shared from the preview still open.** New share links use the main address.
-- **GMT and the Gradient Explorer remember each other's gradient** when you move between them.
-- **Gradient ☰ menu → Reduce stops.**
+- **The Explorer opens on the gradient you had in GMT**, and Back to GMT returns you to your scene.
+- **Gradient ☰ menu → Reduce Stops…**
 - **Gradient ☰ menu → New Gradient.**
 - **Export text preview**, and other small UX improvements.
 
 ---
 
 ## 2.0.0-preview.2 — saving, opening and credits
-> September 14, 2026
+> September 2026
 
 - **Every catalogue gradient credits where it came from.** Filters ▸ Sources and the wall's collection headers name each source and its licence, and Arrange ▸ Group by can sort the wall by Collection.
 - **An export keeps the credit in its name** while the gradient is unchanged from the catalogue. GX Global is now a source too, and it won't take a catalogue gradient you haven't changed.

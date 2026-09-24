@@ -5,7 +5,7 @@ import { registerCoreSettings } from '../store/coreSettings';
 import { registerGmtSettings } from '../engine-gmt/installGmtSettings';
 
 // Register prefs once, at module load — before the panel can open.
-registerCoreSettings();
+registerCoreSettings({ secondaryAccentDescription: 'Hue of the secondary accent (audio, modulation, Path Tracer).' });
 registerGmtSettings();
 
 /** Mounted once in AppGmt; renders the Settings modal while it's open. */

@@ -50,15 +50,18 @@ export const AboutGxBody: React.FC<{ onWhatsNew?: () => void }> = ({ onWhatsNew 
 
   return (
     <div className="text-[10px] text-fg-muted leading-relaxed space-y-2" data-gx-about="">
-      <div className="flex items-center justify-between">
-        <p className="text-[9px] text-fg-dim font-mono" title="The Gradient Explorer's version, and the GMT engine build it runs on">
+      {/* The version wraps before "What's New →" does: in the 240 px menu it pushed the link
+          onto two lines (C14). Wrapped, not truncated — the build number is what a bug report
+          needs, and truncation cut exactly that. */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 text-[9px] text-fg-dim font-mono" title="The Gradient Explorer's version, and the GMT engine build it runs on">
           {GX_APP_NAME} {GX_VERSION} · build {ENGINE_BUILD}
         </p>
         {onWhatsNew && (
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onWhatsNew(); }}
-            className="text-[9px] text-accent-400 hover:underline hover:text-accent-300 transition-colors"
+            className="shrink-0 whitespace-nowrap text-[9px] text-accent-400 hover:underline hover:text-accent-300 transition-colors"
           >
             What's New →
           </button>
@@ -80,8 +83,10 @@ export const AboutGxBody: React.FC<{ onWhatsNew?: () => void }> = ({ onWhatsNew 
               <li key={id} className="text-[9px] leading-snug" data-gx-about-attribution={id}>
                 <a href={b.url} target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">{categoryName(b.label, b.tag)}</a>
                 {counts[id] ? <span className="text-fg-dim"> · {counts[id].toLocaleString()}</span> : null}
-                <div className="text-fg-dim">{b.attribution}</div>
-                <div className="text-fg-faint">Licence: {b.license}</div>
+                {/* The credit a licence requires to be SHOWN, so it must be legible: `fg-dim` /
+                    `fg-faint` at 9 px read 2.5:1 / 1.3:1 on Light Grey (C14). */}
+                <div className="text-[10px] text-fg-muted">{b.attribution}</div>
+                <div className="text-[10px] text-fg-muted">Licence: {b.license}</div>
               </li>
             ))}
           </ul>
@@ -100,7 +105,7 @@ export const AboutGxBody: React.FC<{ onWhatsNew?: () => void }> = ({ onWhatsNew 
         {/* The built-in presets are not a catalogue bundle, so the list above never credits them.
             Six of the twenty seeds are CARTOColors palettes, Turbo is Google's and "Rainbow
             Divergent" is ColorBrewer Spectral (found 2026-09-16, plans/gx-first-release-gaps.md). */}
-        <p className="text-[9px] text-fg-dim mt-1.5" data-gx-about-presets="">
+        <p className="text-[10px] text-fg-muted mt-1.5" data-gx-about-presets="">
           The built-in presets use colours from{' '}
           <a href="https://carto.com/carto-colors/" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">CARTOColors</a>{' '}
           (CC BY 4.0),{' '}

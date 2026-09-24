@@ -37,7 +37,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
-const SKIP_DIRS = new Set(['node_modules', '.git', 'public', 'docs', 'plans', 'debug', 'dist', 'build', '.vite', 'coverage', 'doc-audit-state']);
+// `.claude` (2026-09-24): `.claude/worktrees/*` are OTHER checkouts of this repo (agent
+// worktrees), each a full copy of an older tree — walking them reported that tree's
+// long-migrated literals as 13 violations here and turned the check red for nothing in this one.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.claude', 'public', 'docs', 'plans', 'debug', 'dist', 'build', '.vite', 'coverage', 'doc-audit-state']);
 
 // Files that legitimately carry a raw z ≥ 100 today. Two kinds:
 //  (a) shell-local: an in-flow value meaningful only inside its own fixed/blur
@@ -60,7 +63,8 @@ const ALLOWLIST = new Set([
     'engine/components/ToastHost.tsx',
     'engine/components/StateLibraryToast.tsx',
     'engine/plugins/TopBar.tsx',
-    'engine-gmt/components/FirstRunHint.tsx',
+    // (engine-gmt/components/FirstRunHint.tsx left 2026-09-24: its raw z-[800] became
+    // <Layer tier="shellToast">.)
     // A DIAGNOSTIC that must outrank the scale. The \?diag boot trace exists to be readable
     // when the app is broken — including when a surface it does not know about is covering the
     // screen — so it sits above every tier on purpose, and routing it through z('tier') would

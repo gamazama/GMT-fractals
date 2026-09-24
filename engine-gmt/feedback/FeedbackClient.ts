@@ -67,6 +67,10 @@ export interface FeedbackAttachment {
     /** Build it when the user CHOOSES this option (multi-option forms), not at send — for a
      *  capture of the moment (a screenshot) and so its `preview` can be shown first. */
     captureOnSelect?: boolean;
+    /** Is there anything to attach right now? Read when the form opens (it remounts on
+     *  each open). An unavailable option renders disabled and is never the form's default,
+     *  so the form does not promise a file it will not send. Absent = always available. */
+    available?: () => boolean;
 }
 
 export interface FeedbackConfig {
@@ -76,6 +80,9 @@ export interface FeedbackConfig {
     attachments?: FeedbackAttachment[];
     /** Extra `app_context` fields (after the built-in version/url/formula), e.g. which app. */
     context?: () => Record<string, unknown>;
+    /** Does this app offer a sign-in? The form's intro tells an anonymous user they can sign
+     *  in for a reply only when it does. Default true (GMT, which installs the auth widget). */
+    signIn?: boolean;
 }
 
 /** GMT's attachment — what every app sent before the seam existed. */
@@ -88,7 +95,7 @@ const GMT_SCENE_ATTACHMENT: FeedbackAttachment = {
     },
 };
 
-let _config: { attachments: FeedbackAttachment[]; context?: FeedbackConfig['context'] } = { attachments: [GMT_SCENE_ATTACHMENT] };
+let _config: { attachments: FeedbackAttachment[]; context?: FeedbackConfig['context']; signIn: boolean } = { attachments: [GMT_SCENE_ATTACHMENT], signIn: true };
 
 /**
  * Declare this app's attachment / context. Call once at boot; apps that never call it
@@ -100,11 +107,18 @@ export const configureFeedback = (config: FeedbackConfig): void => {
     _config = {
         attachments: config.attachments ?? (single ? [single] : []),
         context: config.context,
+        signIn: config.signIn ?? true,
     };
 };
 
 /** The options the form should offer — one (a checkbox), several (a choice), or none. */
 export const getFeedbackAttachments = (): FeedbackAttachment[] => _config.attachments;
+
+/** Can this option be attached right now (`available`, absent = yes)? */
+export const isFeedbackAttachmentAvailable = (o: FeedbackAttachment): boolean => o.available?.() ?? true;
+
+/** Does this app offer a sign-in (`configureFeedback({ signIn })`, default true)? */
+export const feedbackOffersSignIn = (): boolean => _config.signIn;
 
 export interface FeedbackResult {
     ok: true;

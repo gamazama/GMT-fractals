@@ -17,8 +17,9 @@ import {
   type CurveFitPref,
 } from './store/curveFitPref';
 
+// Names only (the option list is not the place to explain Auto — the description says it).
 const CURVE_FIT_OPTIONS = [
-  { value: 'auto', label: 'Auto (off on phones)' },
+  { value: 'auto', label: 'Auto' },
   { value: 'on', label: 'Always' },
   { value: 'off', label: 'Off' },
 ] as const;
@@ -34,11 +35,10 @@ export const registerPaletteSettings = (): void => {
     tab: 'Interface',
     section: 'Gradients',
     label: 'Precise curve fitting',
-    description:
-      'Place curve keyframes by asking whether one curve can cover a span, instead of measuring against a straight line. ' +
-      'Fewer keyframes for the same accuracy — 58% fewer on the palette library at equal tolerance — and it holds that ' +
-      'tolerance on the curve it stores rather than on a straight line. Costs about 1 ms per fit instead of 0.1. ' +
-      'Off on phones by default, where the Curves face re-fits twice per slider frame.',
+    // The numbers are the measured ones (58% fewer keyframes on the palette library at equal
+    // tolerance; ~1 ms per fit vs 0.1). Auto is off on phones because the Curves face re-fits
+    // twice per slider frame there.
+    description: 'Curves places 58% fewer keyframes for the same accuracy, at about 1 ms per fit instead of 0.1. Auto turns it off on phones.',
     control: { kind: 'enum', options: CURVE_FIT_OPTIONS },
     get: () => getCurveFitPref(),
     set: (v) => setCurveFitPref((v as CurveFitPref) ?? 'auto'),

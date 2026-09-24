@@ -37,7 +37,8 @@ import { loadGlobalSetOnce } from '../../palette/store/globalSetStore';
 import { installGxSession, gxAutosaveSettings, GX_AUTOSAVE_TEXT } from './session';
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
-import { decideFirstRun } from './firstRunDecision';
+import { decideFirstRun, marksSeeded } from './firstRunDecision';
+import { openedByGmtButton } from './fromGmt';
 import { startBootTrace, BootDiag, diagWanted } from './bootTrace';
 import { NumberDragFeelProvider } from '../../components/inputs/dragFeel';
 
@@ -53,7 +54,10 @@ installShortcuts();
 // the shell renders its own undo control against the store.
 installUndo({ hideTopBarButtons: true });
 // Files ▸ Autosave governs THIS app's autosave (its own keys, ./session), never app-gmt's.
-registerCoreSettings({ autosave: { store: gxAutosaveSettings, ...GX_AUTOSAVE_TEXT } });
+registerCoreSettings({
+  autosave: { store: gxAutosaveSettings, ...GX_AUTOSAVE_TEXT },
+  secondaryAccentDescription: "Hue of the second accent (Wallpaper's controls).",
+});
 registerPaletteSettings();
 
 // The Help menu — GX's own topics, About, What's New, Support and Send Feedback, all through
@@ -68,11 +72,12 @@ installGxHelp();
 applyPanelManifest([feedbackPanelEntry()]);
 
 /**
- * Light grey by default (owner, 2026-09-06), the switch kept: Settings ▸ Colour still offers
- * every preset + the axes. The theme axes are SHARED across the GMT apps (gmt.brightness …,
- * engine/store/colorSchemeStore.ts), so this runs ONCE per browser and never again.
+ * Grey by default (owner, 2026-09-24; Light Grey from 2026-09-06 until then), the switch
+ * kept: Settings ▸ Colour still offers every preset + the axes. The theme axes are SHARED
+ * across the GMT apps (gmt.brightness …, engine/store/colorSchemeStore.ts), so this runs ONCE
+ * per browser and never again. GMT's own default (`DEFAULT_BRIGHTNESS`, Dark) is untouched.
  *
- * Until 2026-09-09 this applied Light Grey silently. It now applies the same preset and
+ * Until 2026-09-09 this applied Light Grey silently. It now applies the opening preset and
  * ASKS (§8b item 3, `FirstRunBrightness`) — brightness is the one default that cannot be
  * right for everyone, because how bright the chrome is decides how the colours inside it
  * read. Returns whether to ask.
@@ -81,18 +86,25 @@ applyPanelManifest([feedbackPanelEntry()]);
  * gate: the silent seed applied Light Grey whenever the SEED key was unset, which on a
  * user's first v2 boot OVERRODE a brightness they had already chosen in app-gmt. Someone
  * who has chosen keeps their choice and is not asked; only a genuinely new user is.
+ *
+ * A trip from GMT (`openedByGmtButton`) is neither asked nor marked — see firstRunDecision.ts.
  */
 const THEME_SEED_KEY = 'gmt.ge.themeSeeded';
 const BRIGHTNESS_KEY = 'gmt.brightness';
+/** The preset a first visit opens on, and what dismissing the dialogue leaves (owner, 2026-09-24). */
+const OPENING_PRESET_ID = 'grey';
 
 const decideFirstRunBrightness = (): boolean => {
-  const seeded = !!safeLocalGet(THEME_SEED_KEY);
-  const verdict = decideFirstRun({ seeded, chosenBrightness: safeLocalGet(BRIGHTNESS_KEY) });
+  const input = {
+    seeded: !!safeLocalGet(THEME_SEED_KEY),
+    chosenBrightness: safeLocalGet(BRIGHTNESS_KEY),
+    fromGmt: openedByGmtButton,
+  };
   // Written BEFORE the card can render, so a refresh mid-decision does not ask again.
-  if (!seeded) safeLocalSet(THEME_SEED_KEY, '1');
-  if (verdict === 'quiet') return false;
-  const lightGrey = THEME_PRESETS.find((p) => p.id === 'light-grey');
-  if (lightGrey) useColorScheme.getState().applyPreset(lightGrey);
+  if (marksSeeded(input)) safeLocalSet(THEME_SEED_KEY, '1');
+  if (decideFirstRun(input) === 'quiet') return false;
+  const opening = THEME_PRESETS.find((p) => p.id === OPENING_PRESET_ID);
+  if (opening) useColorScheme.getState().applyPreset(opening);
   return true;
 };
 

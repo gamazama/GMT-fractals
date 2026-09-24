@@ -8,7 +8,7 @@
  * the server refuses regardless (`backend/supabase/functions/gx-gradients/validate.ts`).
  *
  * WHAT A SIGNATURE IS. The server's canonical form, computed from what a pick would actually
- * send: `entryToGradientConfig(entry)` — the seam every wall pick, drag and "Keep these N"
+ * send: `entryToGradientConfig(entry)` — the seam every wall pick, drag and "Group these N"
  * goes through — canonicalised exactly as `gx-gradients` canonicalises a POST, then hashed to
  * 16 hex characters. The canonical form FOLLOWS THE GRADIENT'S FORM (ADR-0122 Decision 5):
  *   • a STOP gradient (`stops.length > 0`; a stale `ramp` beside them is ignored, stops win):

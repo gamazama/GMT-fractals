@@ -24,12 +24,13 @@
  * itself, and hands back the rest, which then go through exactly the path
  * above — the first remaining file as a scene, or the nudge. A drop every
  * file of which was claimed says nothing more here. An app that registers
- * no claim gets the drop's own `files[0]`, as before.
+ * no claim gets the drop's own `files[0]`, as before. The scrim's detail line
+ * joins each claim's `hint` after the scene formats (C20, 2026-09-24).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { loadSceneFile } from '../plugins/SceneIO';
-import { claimSceneFiles } from '../plugins/SceneFileClaims';
+import { claimSceneFiles, sceneFileClaimHints } from '../plugins/SceneFileClaims';
 import { showToast } from '../store/toastStore';
 import { DropScrim } from '../../components/ui/DropScrim';
 
@@ -114,5 +115,8 @@ export const SceneFileDropZone: React.FC = () => {
     }, []);
 
     if (!active) return null;
-    return <DropScrim title="Drop to load scene" detail=".png snapshot · .gmf · .json" />;
+    // The title names no one kind ("Drop to load", C20 2026-09-24): with a claim registered, a
+    // drop is not only a scene. The detail adds each claim's own few words after the scene
+    // formats — read at render, so a claim registered after mount is still named.
+    return <DropScrim title="Drop to load" detail={['.png snapshot · .gmf · .json', ...sceneFileClaimHints()].join(' · ')} />;
 };
