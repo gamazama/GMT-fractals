@@ -46,7 +46,8 @@ import { setGradientEditorEntrance } from '../components/gradient/gradientEditor
 import { setGradientFavientsBridge } from '../components/gradient/gradientFavients';
 import { setGradientStopFitter } from '../components/gradient/gradientStopFitter';
 import { setGradientStopReducer } from '../components/gradient/gradientStopReducer';
-import { REDUCE_STEPS, reduceStopsSteps } from './core/reduceStops';
+import { REDUCE_STEPS, REDUCE_SEARCH_SPACES, reduceStopsPlan } from './core/reduceStops';
+import { useEngineStore } from '../store/engineStore';
 import { addStopsToConfig } from './core/workingPipeline';
 import { configToName } from './core/facetName';
 import { GRADIENT_PRESETS } from '../data/gradientPresets';
@@ -120,16 +121,27 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   // (a coloring gradient is 'linear' and must bake the same after the knots appear).
   setGradientStopFitter((config) => addStopsToConfig(config, useGeneratorStore.getState().detail));
 
-  // The Stops editor's "Reduce Stops…" popup: the named steps and the lazy ladder behind them
-  // (palette/core/reduceStops.ts). The editor gates ramps and two-stop gradients before it
-  // calls, so a null ladder is only a defensive empty iterator here.
+  // The Stops editor's "Reduce Stops…" popup: the named quick picks and the lazy plan behind its
+  // stop-count slider (palette/core/reduceStops.ts, ADR-0128). The editor gates ramps and
+  // two-stop gradients before it calls, so a null plan is only a defensive empty iterator here.
+  // A phone searches every blend mode but Spectral (owner, 2026-09-24): Spectral carried the last
+  // 4% of the saving at about twice the time of the other five together. `isDeviceMobile` is the
+  // flag `useIsPhone` reads, read per call so a rotate or a window drag is seen.
   setGradientStopReducer({
     steps: REDUCE_STEPS.map(({ id, name }) => ({ id, name })),
-    reduce: (config) => {
-      const it = reduceStopsSteps(config);
+    reduce: (config, { searchBlend }) => {
+      const phone = useEngineStore.getState().isDeviceMobile;
+      const it = reduceStopsPlan(config, { searchBlend, spaces: phone ? REDUCE_SEARCH_SPACES.filter((s) => s !== 'spectral') : REDUCE_SEARCH_SPACES });
       if (!it) return [][Symbol.iterator]();
       return (function* () {
-        for (const o of it) yield { id: o.step.id, config: o.config };
+        for (const p of it) {
+          yield p && {
+            from: p.from,
+            byCount: p.byCount.map((v) => v?.config),
+            steps: Object.fromEntries(p.steps.map((s) => [s.step.id, s.stops])),
+            pending: p.pending,
+          };
+        }
       })();
     },
   });

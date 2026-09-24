@@ -37,11 +37,12 @@
  * app-gmt's DDFS param gets it as one param-undo step with no host wiring.
  * Guard: `npm run test:gradient-rampmode` (the rules + a text pin on this file's gates).
  *
- * REDUCE STOPS… (2026-09-23). With a reducer in the `gradientStopReducer` slot (every host that
- * mounts the palette suite), the menu offers "Reduce Stops…" and this editor opens
- * `ReduceStopsPopup` where the menu was. The results are pulled from the reducer ONE PER
- * MACROTASK (`reducePull`), so a long gradient never blocks a frame for the whole ladder. While
- * an amount is hovered or chosen, the bar paints its stops (`editorBarSource`'s `stopsPreview`,
+ * REDUCE STOPS… (2026-09-23; a stop-count axis since 2026-09-24, ADR-0128). With a reducer in the
+ * `gradientStopReducer` slot (every host that mounts the palette suite), the menu offers "Reduce
+ * Stops…" and this editor opens `ReduceStopsPopup` where the menu was. The reducer's PLANS are
+ * pulled ONE `next()` PER MACROTASK (`reducePull`), so a long gradient and the blend-mode search
+ * never block a frame; "Try other blend modes" is remembered here (`REDUCE_SEARCH_KEY`, on unless
+ * turned off) and a change restarts the pull. While a count is hovered or chosen, the bar paints its stops (`editorBarSource`'s `stopsPreview`,
  * which outranks every host preview) and the knot track shows ITS knots, inert; the real knots,
  * the bias handles and every knot gesture stand down (`previewing` counts as stale). Apply is
  * `editAction(() => emitChange(...))` — the same one undo step Invert is, on whatever history the
@@ -69,7 +70,8 @@ import {
     barTexels256,
 } from './gradient/rampMode';
 import { getGradientStopFitter, subscribeGradientStopFitter } from './gradient/gradientStopFitter';
-import { getGradientStopReducer, subscribeGradientStopReducer, type GradientReduceResult } from './gradient/gradientStopReducer';
+import { getGradientStopReducer, subscribeGradientStopReducer, type GradientReducePlan } from './gradient/gradientStopReducer';
+import { safeLocalGet, safeLocalSet } from '../store/safeLocalStorage';
 import { ReduceStopsPopup } from './gradient/ReduceStopsPopup';
 
 /** Strip-chrome preview width in px — sampled per pixel, wider than any hero (see previewWide). */
@@ -100,6 +102,8 @@ import { buildGradientMenu } from './gradient/gradientActions';
 // uses — inlined so this engine-core editor doesn't import engine-gmt's
 // app-level token table (the type is the open `InteractionSource = string`).
 const STOP_DRAG_SOURCE = 'slider';
+/** Reduce stops' "Try other blend modes" — on unless it was turned off ('0'), per browser. */
+const REDUCE_SEARCH_KEY = 'gmt.gradient.reduceSearchBlend';
 
 type InterpolationMode = 'linear' | 'step' | 'smooth' | 'cubic';
 
@@ -523,14 +527,16 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // to run — the host's `onAddStops`, else the palette host's fitter slot.
     const stopFitter = useSyncExternalStore(subscribeGradientStopFitter, getGradientStopFitter);
     /**
-     * REDUCE STOPS (see the file header). `reduceAt` is the open popup's anchor; `reduceResults`
-     * fills in one step per macrotask; `reducePreview` is what the popup wants on the bar right
+     * REDUCE STOPS (see the file header). `reduceAt` is the open popup's anchor; `reducePlan`
+     * is the reducer's latest plan (null until the first); `reducePreview` is what the popup wants on the bar right
      * now. While previewing, the knots describe the gradient UNDER the candidate, not the bar —
      * exactly the `knotsStale` rule — so every knot affordance stands down with it.
      */
     const stopReducer = useSyncExternalStore(subscribeGradientStopReducer, getGradientStopReducer);
     const [reduceAt, setReduceAt] = useState<{ x: number; y: number } | null>(null);
-    const [reduceResults, setReduceResults] = useState<Record<string, GradientConfig>>({});
+    const [reducePlan, setReducePlan] = useState<GradientReducePlan | null>(null);
+    const [reduceSearch, setReduceSearchState] = useState(() => safeLocalGet(REDUCE_SEARCH_KEY) !== '0');
+    const setReduceSearch = useCallback((on: boolean) => { setReduceSearchState(on); safeLocalSet(REDUCE_SEARCH_KEY, on ? '1' : '0'); }, []);
     const [reducePreview, setReducePreview] = useState<GradientConfig | null>(null);
     const previewing = !!reducePreview;
     const affordances = editorAffordances({ isRamp, knotsStale: knotsStale || previewing, canAddStops: !!onAddStops || !!stopFitter });
@@ -747,26 +753,36 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // The value stopped being something to reduce while the popup was open (an undo to a ramp,
     // a face opened over the stops): the popup goes, and its preview with it.
     useEffect(() => { if (reduceOpen && !canReduceNow) closeReduce(); }, [reduceOpen, canReduceNow, closeReduce]);
-    // Pull the ladder ONE STEP PER MACROTASK while the popup is open, and start over whenever
-    // the gradient under it changes (an undo, a pick). A superseded run is cancelled.
+    // Pull the plan ONE `next()` PER MACROTASK while the popup is open, and start over whenever the
+    // gradient under it changes (an undo, a pick) or the search is switched. A superseded run is
+    // cancelled. A new GRADIENT drops the old plan at once (it describes something else); a
+    // switched SEARCH keeps showing the old one until the new one's first plan lands, so the bar
+    // does not blink back to the gradient for a frame.
+    const reduceSubject = useRef<unknown[]>([]);
     useEffect(() => {
-        // same object when already empty: with the popup closed this runs on every knot edit and
-        // must not cost the editor a render each time
-        setReduceResults((prev) => (Object.keys(prev).length ? {} : prev));
+        const subject = [reduceOpen, stopReducer, knots, colorSpace, blendSpace];
+        const sameGradient = subject.every((v, i) => v === reduceSubject.current[i]);
+        reduceSubject.current = subject;
+        // same object when already null: with the popup closed this runs on every knot edit and
+        // must not cost the editor a render each time. A kept plan is marked PENDING at once, so
+        // the popup never looks finished while it is being replaced (the counts on screen are the
+        // old search's until the new first plan lands).
+        if (!sameGradient) setReducePlan((prev) => (prev ? null : prev));
+        else setReducePlan((prev) => (prev && !prev.pending ? { ...prev, pending: true } : prev));
         if (!reduceOpen || !stopReducer || !canReduceNow) return;
-        const it: Iterator<GradientReduceResult> = stopReducer.reduce({ stops: knots, colorSpace, blendSpace });
+        const it: Iterator<GradientReducePlan | null> = stopReducer.reduce({ stops: knots, colorSpace, blendSpace }, { searchBlend: reduceSearch });
         let alive = true;
         let timer = 0;
         const pull = () => {
             if (!alive) return;
             const r = it.next();
             if (r.done) return;
-            setReduceResults((prev) => ({ ...prev, [r.value.id]: r.value.config }));
+            if (r.value) setReducePlan(r.value);
             timer = window.setTimeout(pull, 0);
         };
         timer = window.setTimeout(pull, 0);
         return () => { alive = false; window.clearTimeout(timer); };
-    }, [reduceOpen, stopReducer, canReduceNow, knots, colorSpace, blendSpace]);
+    }, [reduceOpen, stopReducer, canReduceNow, knots, colorSpace, blendSpace, reduceSearch]);
     /** Apply: ONE undo step, through the same bracket as every menu action. */
     const applyReduce = useCallback((cfg: GradientConfig) => {
         setReduceAt(null);
@@ -1444,7 +1460,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 <ReduceStopsPopup
                     anchor={reduceAt}
                     steps={stopReducer.steps}
-                    results={reduceResults}
+                    plan={reducePlan}
+                    blendSpace={blendSpace}
+                    searchBlend={reduceSearch}
+                    onSearchBlend={setReduceSearch}
                     from={knots.length}
                     onPreview={setReducePreview}
                     onApply={applyReduce}
