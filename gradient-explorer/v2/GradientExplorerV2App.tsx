@@ -93,7 +93,7 @@ import { ShellMenuButton, FeedbackWindow } from './ShellMenu';
 import { HelpOverlay } from '../../engine/plugins/Help';
 import type { MenuItem } from '../../engine/plugins/Menu';
 import { openSettings } from '../../store/settingsPanelState';
-import { GearIcon, HelpIcon, MenuIcon } from '../../components/Icons';
+import { GearIcon, MenuIcon } from '../../components/Icons';
 import { modKeyLabel } from '../../engine/plugins/Shortcuts';
 
 /**
@@ -111,9 +111,9 @@ const phoneMenuItems = (): MenuItem[] => [
         type: 'button',
         label: 'Back to GMT',
         title: 'Back to the GMT studio',
-        // An EMPTY icon slot, the rows' 12 px glyph width, so the label lines up with the rows
-        // around it (C22). The glyph itself waits for the owner's drawing (ASK-7).
-        icon: <span aria-hidden className="inline-block w-3 h-3 shrink-0" />,
+        // The set's `back` at the rows' 12 px glyph width, so the label lines up with the rows
+        // around it (C22; the owner's pick, 2026-09-24 — ASK-7).
+        icon: <Icon name="back" size={12} />,
         onSelect: () => { void goBackToGmt(); },
       } as MenuItem]
     : []),
@@ -822,9 +822,9 @@ export const GradientExplorerV2App: React.FC = () => {
         ) : (
           <>
             {/* DESK (C04): the bar's own 32 px box for both, like Undo / Redo beside them — they
-                were 24 px `icon-btn`s from the old set. The gear is the v2 set's drawing; the
-                `?` keeps its glyph until the owner approves one for the set (ASK-7). */}
-            <ShellMenuButton menuId="help" icon={<HelpIcon />} className={`${tb} w-8 px-0 flex items-center justify-center`} />
+                were 24 px `icon-btn`s from the old set. Both glyphs are the v2 set's drawings at
+                the bar's 20 px (the `?` is the owner's pick, 2026-09-24 — ASK-7). */}
+            <ShellMenuButton menuId="help" icon={<Icon name="help" size={20} />} className={`${tb} w-8 px-0 flex items-center justify-center`} />
             <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Settings" aria-label="Settings" onClick={openSettings}>
               <Icon name="settings" size={20} />
             </button>

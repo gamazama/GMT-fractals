@@ -11,7 +11,7 @@
  * that size. The fractal scene-embedding that used to belong to that button came with it (see
  * `exportAtSize` in the overlay), which is why a Fractal export is also a coordinate carrier.
  *
- * The Dither checkbox here drives the SAME `fullscreenStore.dither` as the toolbar's ▦ Dither
+ * The Dither checkbox here drives the SAME `fullscreenStore.dither` as the toolbar's Dither
  * button — one piece of state, never a parallel copy — and it is shown on a PHONE only, where
  * the toolbar's cluster is hidden (owner, 2026-09-24: Dither once on a desk, the toolbar toggle,
  * which changes what you see). It is a checkbox rather than a button so a
@@ -53,6 +53,7 @@ import {
 } from './exportSize';
 import type { FullscreenModeKind } from './modeRegistry';
 import { Segmented } from '../../components/ui/Segmented';
+import { Icon } from '../v2/ui/Icon';
 import { COARSE_POINTER } from '../../components/gradient/BlendSpacePicker';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 
@@ -212,15 +213,17 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
       <Segmented<ExportOrientation>
         name="Orientation"
         options={[
-          { id: 'landscape', name: 'Landscape', label: '▭ Landscape', title: 'Landscape — wide' },
-          { id: 'portrait', name: 'Portrait', label: '▯ Portrait', title: 'Portrait — tall' },
+          // The v2 set's phone-with-home-bar frames (the owner's picks, 2026-09-24), at 14 px
+          // beside the word — the size the owner judged them at.
+          { id: 'landscape', name: 'Landscape', label: <span className="inline-flex items-center gap-1.5"><Icon name="landscape" size={14} />Landscape</span>, title: 'Landscape — wide' },
+          { id: 'portrait', name: 'Portrait', label: <span className="inline-flex items-center gap-1.5"><Icon name="portrait" size={14} />Portrait</span>, title: 'Portrait — tall' },
         ]}
         value={orientation}
         onChange={setOrientation}
         cycle={phone}
       />
 
-      {/* PHONE ONLY — a desk has the toolbar's ▦ Dither (see the header). */}
+      {/* PHONE ONLY — a desk has the toolbar's Dither button (see the header). */}
       {phone && (
         <label
           className="flex items-center gap-1.5 text-[12px] text-fg-muted select-none cursor-pointer"

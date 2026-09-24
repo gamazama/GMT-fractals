@@ -838,41 +838,45 @@ export const FullscreenGradientOverlay: React.FC = () => {
             }}
             title="Split — the app above, this below"
             aria-pressed={fs.split}
-            className={`${phone ? 'hidden ' : ''}px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
+            className={`${phone ? 'hidden ' : ''}inline-flex items-center gap-1.5 px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
               fs.split
                 ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                 : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
             }`}
           >
-            ⇅ Split
+            <Icon name="split" />
+            Split
           </button>
           {hasGeometryHandles(fs.geom) && (
             <button
               onClick={() => setFullscreenHandles(!fs.handles)}
               title="Handles — reshape on the image"
               aria-pressed={fs.handles}
-              className={`px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
                 fs.handles
                   ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                   : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
               }`}
             >
               {/* Glyph-only on a phone — the `title` above already carries the word, and the
-                  row has to fit Export PNG and ✕ unabbreviated. */}
-              {phone ? '◉' : '◉ Handles'}
+                  row has to fit Export PNG and ✕ unabbreviated. The glyphs are the v2 set's
+                  (the owner's picks, 2026-09-24), at the size of the ✕ in this same row. */}
+              <Icon name="handles" />
+              {!phone && 'Handles'}
             </button>
           )}
           <button
             onClick={() => setFullscreenDither(!fs.dither)}
             title="Dither — smooths banding"
             aria-pressed={fs.dither}
-            className={`px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
               fs.dither
                 ? 'border-accent-500/40 bg-accent-500/20 text-accent-300'
                 : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
             }`}
           >
-            {phone ? '▦' : '▦ Dither'}
+            <Icon name="dither" />
+            {!phone && 'Dither'}
           </button>
           {activeMode?.id === 'fractal' && (
             <button

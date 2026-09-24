@@ -17,6 +17,18 @@
  * in (see commit b1361884). box and lasso are DASHED as drawn: they are the wall's carve
  * tools and a dashed outline is what a marquee means.
  *
+ * DRAFTED FOR THE OWNER (2026-09-24 polish pass) — help, back, split, handles, dither, landscape,
+ * portrait. The owner's sheets hold none of these, so they were drawn here, rasterised at 16 px
+ * and magnified beside their real neighbours, and the owner picked one per need from that sheet.
+ * Where they could, they reuse the owner's geometry: `back`'s head IS `undo`'s refit head on a
+ * straight shaft, and `split`'s frame is `box`'s refit rounded square (radius 1.74), drawn solid.
+ * `dither`'s dots sit on pixel centres at 16 px, 3 apart — 1.5 of ink, 1.5 of air — so they stay
+ * dots instead of greying into a patch; its first column is solid so the glyph has enough ink to
+ * read beside the toolbar's text. `landscape` / `portrait` carry a phone's home bar (a BAR, not a
+ * dot: a 1.5 dot rasterised to a smudge), and their corner is 1.2 because at 1.74 the upright
+ * frame read as a digit 0 beside the word Portrait. They replace the Wallpaper toolbar's ⇅ ◉ ▦,
+ * the Export panel's ▭ ▯, the desk top bar's old-set `?` and the phone menu's empty Back slot.
+ *
  * WEIGHT. The set is one weight, 1.5 (V6). Two glyphs' worth of exception, `WEIGHT` below:
  * a glyph whose parts share the box needs air or it fills in at 16 px — the gear's teeth
  * fuse into a disc and the two dashed outlines clog into solid ones. Checked by rasterising
@@ -54,7 +66,14 @@ export type IconName =
   | 'share'
   | 'download'
   | 'photo'
-  | 'fullscreen';
+  | 'fullscreen'
+  | 'help'
+  | 'back'
+  | 'split'
+  | 'handles'
+  | 'dither'
+  | 'landscape'
+  | 'portrait';
 
 /**
  * The hero's USE glyphs — the owner's pick in Figma (GE v2 Hero, 2026-09-07): Material
@@ -112,6 +131,41 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.React
     </>
   ),
   trash: <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.2a1 1 0 0 0 1 .8h3.8a1 1 0 0 0 1-.8l.6-8.2M6.8 7v4M9.2 7v4" />,
+  // The owner's 2026-09-24 picks (see the header). A bare `?`: hook, stem, and a dot drawn the
+  // way `list` draws its dots. It sits at 20 px beside undo / redo / settings in the top bar.
+  help: <path d="M4.9 5.3A3.1 3.1 0 1 1 9.99 7.67Q8 9.34 8 10.6M8 13.4h.01" />,
+  // `undo`'s own head (2.9 × 2.9) on a straight shaft — the phone menu's Back to GMT.
+  back: <path d="M13.8 8H2.2M2.2 8l2.9-2.9M2.2 8l2.9 2.9" />,
+  // Wallpaper: the app above, the preview below.
+  split: (
+    <>
+      <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.74" />
+      <path d="M2.2 8h11.6" />
+    </>
+  ),
+  // Two rings on a tether — the on-image handles' own language (GeometryHandleLayer).
+  handles: (
+    <>
+      <circle cx="4.4" cy="11.6" r="2.2" />
+      <circle cx="11.6" cy="4.4" r="2.2" />
+      <path d="M5.96 10.04l4.08-4.08" />
+    </>
+  ),
+  // A solid band breaking into dots — banding smoothed out.
+  dither: <path d="M3.5 3.5v9M6.5 3.5h.01M6.5 6.5h.01M6.5 9.5h.01M6.5 12.5h.01M9.5 3.5h.01M9.5 9.5h.01M12.5 6.5h.01" />,
+  // A phone on its side / upright: the frame plus its home bar.
+  landscape: (
+    <>
+      <rect x="2.2" y="3.8" width="11.6" height="8.4" rx="1.2" />
+      <path d="M11 6.9v2.2" />
+    </>
+  ),
+  portrait: (
+    <>
+      <rect x="3.8" y="2.2" width="8.4" height="11.6" rx="1.2" />
+      <path d="M6.9 11h2.2" />
+    </>
+  ),
 };
 
 /**
