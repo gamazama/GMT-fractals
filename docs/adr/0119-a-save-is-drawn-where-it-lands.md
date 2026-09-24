@@ -1,5 +1,11 @@
 # ADR-0119: A save is drawn where it lands, and a shared set has to invite you
 
+> **Update 2026-09-24 (the shared set is drawn too; decision unchanged):** a save to GX global ended in a
+> toast only — the one set that skipped §1. It cannot flash at drop time, because a confirm and a server
+> round trip come first, so its chip plays the slow flash when the server accepts (grep `flashSetSave` in
+> `gradient-explorer/v2/contributeToGlobal.ts`). Its button now reads "Add your gradient", matching the
+> confirm and the toast.
+
 - **Status:** Accepted
 - **Date:** 2026-09-11
 - **Relates to:** ADR-0114 (the shell's visual language); `gradient-explorer/v2/setSaveFlash.ts`,

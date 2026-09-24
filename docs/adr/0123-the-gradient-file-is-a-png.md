@@ -1,5 +1,12 @@
 # ADR-0123: The GMT gradient file is a PNG that carries its own data, and one loader reads every gradient file
 
+> **Update 2026-09-24 (set exports; decision unchanged):** a set of one exports its member's own file
+> under the name a single download gets, not a `.zip` of one; a set's swatches follow the hero's current
+> layout rule (Even / Perceptual / Stops, named in the stepper's title) instead of always Even. The
+> Explorer's Export window no longer offers an output profile: every format writes sRGB, the row read
+> "Linear" for every catalogue pick, and a click on it baked the gradient; the GMT gradient file still
+> carries the config's `colorSpace`. Guard: `test-palette-exportsubjects` [12].
+
 > **Update 2026-09-16 (GMT's own entrances join the loader; decision unchanged):** Decision 3 said
 > every gradient-file entrance goes through the one loader, but app-gmt's scene drop zone and both
 > Load Scene rows did not — a gradient PNG dropped on GMT answered "Couldn't read a scene". They

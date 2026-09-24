@@ -1,5 +1,15 @@
 # ADR-0115: The Gradient Explorer v2 shell on a phone
 
+> **Update 2026-09-24 (the polish pass; decision unchanged):** three things measured and fixed. The
+> Settings sheet was not full-screen — `FloatingPanel` clamped it to (8,8) and capped it at 90vh, so it ran
+> 8 px off the right edge; it now uses `FloatingPanel`'s `sheet` (inset 0, no clamp, no height cap), like
+> Export's sheet. The hero's tab row wrapped at 360 and 375 px once "N stops" joined it; tighter tab and
+> row padding keeps it one line and the hero at 215 px from 360 to 412. And §4's rule for Filters on a
+> phone (a measured cap so the wall keeps room) now holds on the desktop too, where a 1366×657 window had
+> left a 38 px wall; beyond the cap, opening Filters folds the hero (only a fold Filters made is undone on
+> close), and when the wall is shorter than the tool column the carve tools collapse first — the fold and
+> zoom stay. Guard: `smoke:ge-ground` [15].
+
 - **Status:** Accepted
 - **Date:** 2026-09-10
 - **Relates to:** ADR-0114 (the shell's visual language — this answers the open question its

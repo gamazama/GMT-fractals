@@ -1,5 +1,14 @@
 # ADR-0082: Engine-level layer/stacking system — domain-tagged tier table, `<Layer>` portal primitive, generalized `layerStack`, ratchet lint
 
+> **Update 2026-09-24 (two raw z-indexes retired; decision unchanged):** `engine/components/ToastHost`
+> no longer carries a raw `z-[900]` — it renders through `<Layer tier>`, defaulting to `shellToast` (the
+> same 900, so an app that passes nothing stacks as before), fits its text (`w-max max-w-[90vw]`) and
+> enters with `fade-in-up` at 150 ms. An app with a full-screen takeover that raises its own toasts opts
+> into `tier="toast"` (3200, portalled); the Gradient Explorer does, because its Wallpaper overlay
+> (`overlay`, 2000) hid every export toast. `engine-gmt/components/FirstRunHint` renders through
+> `<Layer tier="shellToast">` instead of a raw `z-[800]` and has left `debug/check-zindex.mjs`'s
+> allowlist; the check now also skips `.claude/` (worktree copies of the repo read as violations).
+
 **Date:** 2026-06-23
 **Status:** Accepted
 **Scope:** `components/ui/zIndex.ts`, `components/ui/layerStack.ts` (new), `components/ui/layerHost.ts` (new), `components/ui/Layer.tsx` (new), `components/ui/panelStack.ts`, `components/ui/{Modal,AnchoredMenu,FloatingPanel}.tsx`, `components/Popover.tsx`, the migrated surfaces (CompilingIndicator, LandscapeGate, SceneFileDropZone, DiagnosticsOverlay, RenderContextLostOverlay, tutorial Overlay/Highlight, GradientSourcePicker, EasingPicker, DemoExplainer, the gradient-editor avatars/previews, the topbar/menu tokens), `debug/test-zindex.mts` + `debug/check-zindex.mjs` (new)

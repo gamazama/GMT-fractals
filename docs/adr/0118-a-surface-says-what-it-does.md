@@ -1,5 +1,11 @@
 # ADR-0118: A surface says what it does — the Explorer's cursors, its stale knots, and the room its toolbar takes
 
+> **Update 2026-09-24 (§3's floor is margin, not room for labels; decision unchanged):** `minGutter`
+> raised the same `labelW` the row labels read, so on a set the floor put a stray "(N)" count in the wall's
+> margin. `PickerWall` now draws row labels from the gutter the host ASKED for, before the floor; the
+> margin itself is unchanged. `GroundList` takes `minGutter` too, so the list view keeps its rows clear of
+> the tool column the same way the wall does.
+
 - **Status:** Accepted
 - **Date:** 2026-09-11
 - **Relates to:** ADR-0114 (the shell's visual language), ADR-0117 (the drag hold this

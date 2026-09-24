@@ -1,5 +1,17 @@
 # ADR-0120: The interface rides the undo entry (Gradient Explorer v2 only)
 
+> **Update 2026-09-24, later (Esc on a face cancels; Filters rides; decision unchanged):** two changes
+> from the polish pass, both owner calls. (1) **Esc on a tray face is that face's Cancel** — Adjust
+> `resetAdjust`; Mix, Image and an edited Curves `cancelFace` (grep `escapeFace` in
+> `GradientExplorerV2App.tsx`) — and a face left untouched goes out as a peek with no entry. Leaving by a
+> tab, a pick, the fold or the ♥ still bakes, as before. Because the interface is context, one Ctrl+Z after
+> an Esc-cancel gives back the face with what it held. Guards: `smoke:ge-uiundo` [16], `smoke:ge-tray` [5].
+> (2) **What rides grows by one provider:** opening Filters now folds the hero (and closing it unfolds only
+> a fold Filters made), so whether the ground's Filters rows are open and whether the current fold is
+> Filters' own ride every entry as context too (`useFiltersHistory` in `gradient-explorer/v2/uiHistory.ts`,
+> registered by `BrowseStage`). The shell's `folded` stays the truth for the fold; the Filters restore sets
+> only the rows and the ownership and is never read as a gesture. Guards: `smoke:ge-ground` [15e] / [15f].
+
 > **Update 2026-09-24 (the interface is context; decision unchanged, mechanism replaced):** §1–§3
 > had the interface ride an entry only when it CHANGED inside the gesture's bracket — hence §3's
 > `flushSync`. Audited against every undoable gesture in the Explorer (owner: "ensure that UI goes

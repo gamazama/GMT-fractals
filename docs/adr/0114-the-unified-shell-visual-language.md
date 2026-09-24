@@ -1,5 +1,13 @@
 # ADR-0114: The Gradient Explorer v2 shell and its visual language
 
+> **Update 2026-09-24 (the polish pass; decision unchanged):** `components/ui/Act`'s `active` state now
+> wears the lit-toggle accent (the wash `primary` borrows, without its hover) — before, an open Export
+> button looked merely hovered — so sites no longer paint their own "on" colour over it. The kept ♥ wears
+> its own `--kept` gold (`text-kept`), which sorts after the accent and wins on the glyph. Rule 3's one
+> icon set was applied to the fold and the search clear (`Icon` chevrons and close, not text glyphs); the
+> glyphs the set still lacks (the wave tool's Multiply, Help, a back arrow, the Wallpaper toolbar's) are
+> being drafted for the owner.
+
 - **Status:** Accepted
 - **Date:** 2026-09-10
 - **Relates to:** `gradient-explorer/v2/**` (grep `TUCK_PX`, `TOOLBAR_LEFT`, `data-gx-tools`, `WEIGHT` in `ui/Icon.tsx`), `plans/ge-v2-unified-shell-plan.md` (§1 principles, §4 phases, §8 principles log)

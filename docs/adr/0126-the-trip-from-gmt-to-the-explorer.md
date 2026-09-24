@@ -1,5 +1,13 @@
 # ADR-0126: The trip from GMT to the Gradient Explorer carries a gradient there and nothing back
 
+> **Update 2026-09-24 (first run on a trip; decision unchanged):** a page opened by GMT's Explorer
+> button neither shows the first-run brightness dialogue nor applies a preset, and does not mark
+> `gmt.ge.themeSeeded` (`decideFirstRun({ fromGmt })` → quiet; `marksSeeded` false), so the Explorer looks
+> like the GMT the user just left and their first standalone visit still asks. Before, a GMT user who had
+> never chosen a theme got the dialogue on arrival, and GMT booted Light Grey afterwards. Guard:
+> `npx tsx debug/test-ge-first-run.mts` [5]. Only the GMT wordmark links back now; the Explorer's own name
+> is plain text.
+
 - **Status:** Accepted
 - **Date:** 2026-09-24
 - **Relates to:** ADR-0121 (the Explorer's own session, which the arrival pre-empts the way a share
