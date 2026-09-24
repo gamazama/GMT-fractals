@@ -1,5 +1,22 @@
 # ADR-0120: The interface rides the undo entry (Gradient Explorer v2 only)
 
+> **Update 2026-09-24 (the interface is context; decision unchanged, mechanism replaced):** §1–§3
+> had the interface ride an entry only when it CHANGED inside the gesture's bracket — hence §3's
+> `flushSync`. Audited against every undoable gesture in the Explorer (owner: "ensure that UI goes
+> along with undo"), most gestures move a surface OUTSIDE their data bracket, so eight of them
+> undid into an interface that contradicted the restored gradient (the rows are listed in
+> `debug/smoke-ge-uiundo.mts`'s header). The shell's interface providers are now CONTEXT
+> (`HistoryProvider.context` in `store/slices/historySlice.ts`, used by
+> `gradient-explorer/v2/uiHistory.ts`): they never make an entry of their own, and ride every
+> entry that is pushed. Undo restores the interface as it was when the gesture began; redo, as it
+> was when undo was pressed. `flushSync` is gone from the ♥ and New Gradient. The inspected stop
+> (the editor's `getSelection` / `restoreSelection`, standing down while the Reduce popup is open)
+> and the armed Mix slot are context too, and a tab switch is one entry (`paramGroup` in
+> `palette/store/paramUndoBracket.ts`, the Curves fit made inside the click). A peek into Curves
+> closed untouched still adds no data step. The Consequences line about a slider drag restoring
+> its face is now literally true. Commit `134df14b`. Guard: `npm run smoke:ge-uiundo` [6]–[14],
+> falsified seven ways; with `context` off, [3] and [6]–[13] go red.
+
 - **Status:** Accepted
 - **Date:** 2026-09-12
 - **Relates to:** ADR-0119 (a save is drawn where it lands — the flash this unblocks);
