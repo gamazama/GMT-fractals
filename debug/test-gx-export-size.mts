@@ -7,7 +7,8 @@
  *      and that garbage inputs still yield a usable size.
  *   3. resolveExportSize: preset → PNG size → render size, the supersample gate by mode
  *      kind, and the render-budget degrade at 4K.
- *   4. filenames.
+ *   4. filenames: the stem is `gradientFileStem` (the Explorer's one download rule, since
+ *      2026-09-24 — it was a lowercase slug of this file's own), then `-mode-WxH.png`.
  *   5. readPngSize: a hand-built IHDR, plus rejection of non-PNG bytes.
  *
  * Falsification (2026-09-03, each reverted): dropping the pixel-budget term from
@@ -32,7 +33,6 @@ import {
   orientSize,
   readPngSize,
   resolveExportSize,
-  slugifyName,
   type ExportOrientation,
 } from '../gradient-explorer/fullscreen/exportSize';
 
@@ -199,14 +199,19 @@ console.log('[3] resolveExportSize');
 
 console.log('[4] filenames');
 {
-  ok(slugifyName('  Sunset  Fade ') === 'sunset-fade', 'slug trims + dashes');
-  ok(slugifyName('Ocean/Deep #2') === 'ocean-deep-2', 'slug drops punctuation');
-  ok(slugifyName('') === 'gradient', 'empty name falls back');
-  ok(slugifyName('!!!') === 'gradient', 'all-punctuation name falls back');
+  // The stem is the Explorer's one download rule (`gradientFileStem`): the name as it is, only
+  // what a filesystem refuses removed. It used to be a lowercase `[a-z0-9]` slug of its own.
+  const name = (n: string) => exportFileName(n, 'linear', 1920, 1080);
   ok(
-    exportFileName('Sunset Fade', 'linear', 1920, 1080) === 'sunset-fade-linear-1920x1080.png',
-    'filename carries mode + size',
+    name('Sunset Fade') === 'Sunset Fade-linear-1920x1080.png',
+    `filename keeps the name as it is and carries mode + size (${name('Sunset Fade')})`,
   );
+  ok(name('  Sunset Fade ') === 'Sunset Fade-linear-1920x1080.png', `the stem is trimmed (${name('  Sunset Fade ')})`);
+  ok(name('Ocean/Deep: #2?') === 'OceanDeep #2-linear-1920x1080.png', `only what a filesystem refuses is removed (${name('Ocean/Deep: #2?')})`);
+  ok(name('Stufe Bänder') === 'Stufe Bänder-linear-1920x1080.png', `non-ASCII survives (${name('Stufe Bänder')})`);
+  ok(name('夕焼け') === '夕焼け-linear-1920x1080.png', `an all-CJK name is not replaced by "gradient" (${name('夕焼け')})`);
+  ok(name('') === 'gradient-linear-1920x1080.png', `an empty name falls back to "gradient" (${name('')})`);
+  ok(name('///') === 'gradient-linear-1920x1080.png', `a name with nothing legal left falls back (${name('///')})`);
   ok(
     exportFileName('x', 'gradientMap', 1600.4, 900.6) === 'x-gradientMap-1600x901.png',
     'filename rounds fractional sizes',

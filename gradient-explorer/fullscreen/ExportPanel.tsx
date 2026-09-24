@@ -12,18 +12,28 @@
  * `exportAtSize` in the overlay), which is why a Fractal export is also a coordinate carrier.
  *
  * The Dither checkbox here drives the SAME `fullscreenStore.dither` as the toolbar's ▦ Dither
- * button — one piece of state shown twice, never a parallel copy. It is a checkbox rather than
- * a button so a `getByRole('button', …)` in an existing smoke cannot become ambiguous.
+ * button — one piece of state, never a parallel copy — and it is shown on a PHONE only, where
+ * the toolbar's cluster is hidden (owner, 2026-09-24: Dither once on a desk, the toolbar toggle,
+ * which changes what you see). It is a checkbox rather than a button so a
+ * `getByRole('button', …)` in an existing smoke cannot become ambiguous.
+ *
+ * IT REMEMBERS (owner, 2026-09-24): the size preset, the orientation, the custom W × H and ×2
+ * are kept in `gx.v2.wallpaperExport` (`readWallpaperExport`), beside the Export window's own
+ * `gx.v2.exportSettings`, and written only when the person changes one. With nothing stored, a
+ * phone (the overlay's `phone`, or a coarse pointer) starts on Phone, portrait — the wallpaper
+ * a phone is for — and a desk on 1080p, landscape, as before.
  *
  * PHONE (2026-09-11). At 390 px the bar wrapped to five or six rows and took ~200 px off the
  * stage — so with `phone` it is COLLAPSIBLE and starts COLLAPSED (owner: "fullscreen mode needs
  * the export section collapsed"). Collapsed is ONE row: a chevron toggle carrying the chosen
  * size ("▸ Export · 1170×2532") plus the primary Export PNG button, which stays reachable
  * without expanding anything — one tap to export at the remembered size. Expanded, the same
- * controls appear in the same order, capped at 45 % of the viewport with their own `pan-y`
- * scroller so the stage can never disappear behind them. DESKTOP IS UNTOUCHED: `phone` false
- * takes the original single-`div` branch with the original class list and the original children,
- * so `data-testid="fullscreen-export-panel"` still names the same shape a desktop smoke sees.
+ * controls appear in the same order (the size and the orientation switches as one cycling
+ * button each, the `Segmented` phone rule — 2026-09-24), capped at 45 % of the viewport with
+ * their own `pan-y` scroller so the stage can never disappear behind them. The DESKTOP keeps
+ * the original single-`div` branch with the original class list and the same controls in the
+ * same order, so `data-testid="fullscreen-export-panel"` still names the same shape a desktop
+ * smoke sees.
  * Guarded by `npm run smoke:ge-phone` step [8] (the collapsed bar is ≤ 48 px).
  *
  * @see gradient-explorer/fullscreen/exportSize.ts (every number in this panel comes from there)
@@ -42,6 +52,40 @@ import {
   type ExportSizePlan,
 } from './exportSize';
 import type { FullscreenModeKind } from './modeRegistry';
+import { Segmented } from '../../components/ui/Segmented';
+import { COARSE_POINTER } from '../../components/gradient/BlendSpacePicker';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
+
+/** What the panel remembers between opens (see the header). */
+interface WallpaperExportChoice {
+  preset: ExportPresetId;
+  orientation: ExportOrientation;
+  customWidth: number;
+  customHeight: number;
+  supersample: boolean;
+}
+const WALLPAPER_EXPORT_KEY = 'gx.v2.wallpaperExport';
+
+/** The remembered choice, or the default for this device when nothing (or garbage) is stored. */
+const readWallpaperExport = (phone: boolean): WallpaperExportChoice => {
+  const d: WallpaperExportChoice = phone
+    ? { preset: 'phone', orientation: 'portrait', customWidth: 2560, customHeight: 1440, supersample: false }
+    : { preset: 'hd', orientation: 'landscape', customWidth: 2560, customHeight: 1440, supersample: false };
+  try {
+    const v = JSON.parse(safeLocalGet(WALLPAPER_EXPORT_KEY) ?? 'null') as Partial<WallpaperExportChoice> | null;
+    if (!v || typeof v !== 'object') return d;
+    const num = (x: unknown, fallback: number) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.round(x) : fallback);
+    return {
+      preset: EXPORT_PRESETS.some((p) => p.id === v.preset) ? (v.preset as ExportPresetId) : d.preset,
+      orientation: v.orientation === 'portrait' || v.orientation === 'landscape' ? v.orientation : d.orientation,
+      customWidth: num(v.customWidth, d.customWidth),
+      customHeight: num(v.customHeight, d.customHeight),
+      supersample: typeof v.supersample === 'boolean' ? v.supersample : d.supersample,
+    };
+  } catch {
+    return d;
+  }
+};
 
 export interface ExportPanelProps {
   /** The active mode's render kind — gates the supersample toggle. */
@@ -57,19 +101,12 @@ export interface ExportPanelProps {
   /** True while an export is in flight — a 4K CPU field takes a visible moment. */
   busy: boolean;
   /**
-   * Phone layout: the panel becomes collapsible and starts collapsed. Left undefined (or false)
-   * the component renders EXACTLY the desktop DOM it always has — same root div, same classes,
-   * same children, always expanded, no toggle.
+   * Phone layout: the panel becomes collapsible and starts collapsed, and its two switches
+   * cycle. Left undefined (or false) the component renders the desktop bar — same root div,
+   * same classes, always expanded, no toggle.
    */
   phone?: boolean;
 }
-
-const chip = (active: boolean): string =>
-  `px-2.5 py-1 text-[12px] transition-colors ${
-    active
-      ? 'bg-accent-500/25 text-accent-300 font-medium'
-      : 'text-fg-muted hover:text-fg-secondary hover:bg-line/[0.05]'
-  }`;
 
 export const ExportPanel: React.FC<ExportPanelProps> = ({
   kind,
@@ -81,11 +118,23 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   busy,
   phone = false,
 }) => {
-  const [preset, setPreset] = useState<ExportPresetId>('hd');
-  const [orientation, setOrientation] = useState<ExportOrientation>('landscape');
-  const [customWidth, setCustomWidth] = useState(2560);
-  const [customHeight, setCustomHeight] = useState(1440);
-  const [supersample, setSupersample] = useState(false);
+  // Read once per mount: the overlay mounts this panel each time Wallpaper opens.
+  const [initial] = useState(() => readWallpaperExport(phone || COARSE_POINTER));
+  const [preset, setPresetState] = useState<ExportPresetId>(initial.preset);
+  const [orientation, setOrientationState] = useState<ExportOrientation>(initial.orientation);
+  const [customWidth, setCustomWidthState] = useState(initial.customWidth);
+  const [customHeight, setCustomHeightState] = useState(initial.customHeight);
+  const [supersample, setSupersampleState] = useState(initial.supersample);
+  // Written from the change handlers, never from an effect: an effect would store the device's
+  // DEFAULT on first open, and a phone default must stay a default until someone chooses.
+  const remember = (patch: Partial<WallpaperExportChoice>): void => {
+    safeLocalSet(WALLPAPER_EXPORT_KEY, JSON.stringify({ preset, orientation, customWidth, customHeight, supersample, ...patch }));
+  };
+  const setPreset = (v: ExportPresetId) => { setPresetState(v); remember({ preset: v }); };
+  const setOrientation = (v: ExportOrientation) => { setOrientationState(v); remember({ orientation: v }); };
+  const setCustomWidth = (v: number) => { setCustomWidthState(v); remember({ customWidth: v }); };
+  const setCustomHeight = (v: number) => { setCustomHeightState(v); remember({ customHeight: v }); };
+  const setSupersample = (v: boolean) => { setSupersampleState(v); remember({ supersample: v }); };
   // Collapsed by default. Only the phone branch reads it, so seeding it `true` cannot change
   // the desktop panel — and a phone that expands, rotates to a tablet width and comes back
   // finds it as it left it rather than re-collapsing under them.
@@ -99,9 +148,11 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
   // Picking a preset also adopts its natural orientation, so "Phone" lands portrait and "4K"
   // lands landscape without a second click; the toggle still overrides afterwards.
   const choosePreset = (id: ExportPresetId): void => {
-    setPreset(id);
     const p = getExportPreset(id);
-    if (p?.size) setOrientation(naturalOrientation(p.size));
+    const o = p?.size ? naturalOrientation(p.size) : orientation;
+    setPresetState(id);
+    setOrientationState(o);
+    remember({ preset: id, orientation: o });
   };
 
   const note = !canRenderAtSize
@@ -120,18 +171,19 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     <>
       <div className="text-[11px] font-medium text-fg-tertiary tracking-wide uppercase mr-1">Export</div>
 
-      <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
-        {EXPORT_PRESETS.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => choosePreset(p.id)}
-            className={chip(preset === p.id)}
-            title={p.size ? `${p.size.width} × ${p.size.height}` : 'Type your own size'}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {/* The size presets and the orientation are the app's ONE joined switch
+          (`components/ui/Segmented`, 2026-09-24): on a phone each is one button that cycles. */}
+      <Segmented<ExportPresetId>
+        name="Size"
+        options={EXPORT_PRESETS.map((p) => ({
+          id: p.id,
+          name: p.label,
+          title: p.size ? `${p.label} — ${p.size.width} × ${p.size.height}` : `${p.label} — type your own size`,
+        }))}
+        value={preset}
+        onChange={choosePreset}
+        cycle={phone}
+      />
 
       {preset === 'custom' && (
         <div className="flex items-center gap-1.5 text-[12px] text-fg-muted">
@@ -157,32 +209,33 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
         </div>
       )}
 
-      <div className="flex items-center rounded-md border border-line/10 overflow-hidden divide-x divide-line/10">
-        <button onClick={() => setOrientation('landscape')} className={chip(orientation === 'landscape')} title="Wide">
-          ▭ Landscape
-        </button>
-        <button onClick={() => setOrientation('portrait')} className={chip(orientation === 'portrait')} title="Tall">
-          ▯ Portrait
-        </button>
-      </div>
+      <Segmented<ExportOrientation>
+        name="Orientation"
+        options={[
+          { id: 'landscape', name: 'Landscape', label: '▭ Landscape', title: 'Landscape — wide' },
+          { id: 'portrait', name: 'Portrait', label: '▯ Portrait', title: 'Portrait — tall' },
+        ]}
+        value={orientation}
+        onChange={setOrientation}
+        cycle={phone}
+      />
 
-      <label
-        className="flex items-center gap-1.5 text-[12px] text-fg-muted select-none cursor-pointer"
-        title="Blue-noise dither — smooths 8-bit banding; bakes into the PNG (same setting as the toolbar toggle)"
-      >
-        <input type="checkbox" checked={dither} onChange={(e) => onDitherChange(e.target.checked)} />
-        Dither
-      </label>
+      {/* PHONE ONLY — a desk has the toolbar's ▦ Dither (see the header). */}
+      {phone && (
+        <label
+          className="flex items-center gap-1.5 text-[12px] text-fg-muted select-none cursor-pointer"
+          title="Dither — smooths banding"
+        >
+          <input type="checkbox" checked={dither} onChange={(e) => onDitherChange(e.target.checked)} />
+          Dither
+        </label>
+      )}
 
       <label
         className={`flex items-center gap-1.5 text-[12px] select-none ${
           plan.supersampleAvailable ? 'text-fg-muted cursor-pointer' : 'text-fg-dim cursor-not-allowed'
         }`}
-        title={
-          plan.supersampleAvailable
-            ? 'Render at twice the size and downsample — smoother edges on the CPU geometry modes'
-            : `${modeLabel} renders straight to the requested size; supersampling only applies to the CPU geometry modes`
-        }
+        title={plan.supersampleAvailable ? 'Supersample ×2 — smoother edges' : `Supersample ×2 — not for ${modeLabel}`}
       >
         <input
           type="checkbox"
@@ -206,7 +259,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({
     </>
   );
 
-  // DESKTOP — the original bar, unchanged: same root, same classes, same children, no toggle.
+  // DESKTOP — the original bar: same root, same classes, the same controls in order, no toggle.
   if (!phone) {
     return (
       <div

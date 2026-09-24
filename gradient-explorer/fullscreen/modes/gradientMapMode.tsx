@@ -69,6 +69,9 @@ import {
   useFullscreenState,
 } from '../../../palette/store/fullscreenStore';
 import type { FullscreenMode, FullscreenModeContext } from '../modeRegistry';
+import { Segmented } from '../../../components/ui/Segmented';
+import { COARSE_POINTER } from '../../../components/gradient/BlendSpacePicker';
+import { useMobileLayout } from '../../../hooks/useMobileLayout';
 
 /** The decoded source pixels, cached against the thumb canvas that produced them. `getImageData`
  *  on a ~1920² canvas is a few milliseconds and the export path can ask for the same pixels
@@ -277,29 +280,25 @@ const GradientMapControls: React.FC = () => {
   const strength = fs.geomParams.mapStrength ?? GEOM_DEFAULTS.mapStrength;
   const invert = (fs.geomParams.mapInvert ?? GEOM_DEFAULTS.mapInvert) >= 0.5;
   const channelIx = Math.round(fs.geomParams.mapChannel ?? GEOM_DEFAULTS.mapChannel);
-  const hasImage = useImageStore((s) => s.thumb) !== null;
+  const { isDeviceMobile: phone } = useMobileLayout();
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       {/* WHICH channel drives the lookup. A segmented row rather than a dropdown: the whole
-          point is that the seven read as one set you sweep through, and each is one click. */}
-      <div className="flex items-center rounded-md border border-line/10 overflow-hidden">
-        {MAP_CHANNELS.map((c, i) => (
-          <button
-            key={c.id}
-            onClick={() => setFullscreenGeomParam('mapChannel', i)}
-            title={`Map the image's ${c.label.toLowerCase()} through the gradient`}
-            aria-pressed={i === channelIx}
-            className={`px-2 py-1 text-[12px] transition-colors ${
-              i === channelIx
-                ? 'bg-secondary/20 text-secondary'
-                : 'text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
-            }`}
-          >
-            {c.label}
-          </button>
-        ))}
-      </div>
+          point is that the seven read as one set you sweep through, and each is one click.
+          The app's ONE joined switch (`components/ui/Segmented`, 2026-09-24), so on a phone it
+          is one button that cycles instead of seven chips across the screen. It keeps the
+          VIOLET of Wallpaper's secondary accent (the lit channel and Invert are this mode's own
+          controls, by design), painted over the switch's accent through its `className` seam:
+          on the lit option in a row, on the one button when it cycles. */}
+      <Segmented<number>
+        name="Channel"
+        options={MAP_CHANNELS.map((c, i) => ({ id: i, name: c.label, title: `Map the image's ${c.label.toLowerCase()} through the gradient` }))}
+        value={channelIx}
+        onChange={(i) => setFullscreenGeomParam('mapChannel', i)}
+        cycle={phone}
+        className={phone ? '!bg-secondary/20 !text-secondary' : '[&>[aria-pressed=true]]:bg-secondary/20 [&>[aria-pressed=true]]:text-secondary'}
+      />
       <div className="w-32">
         <ScalarInput
           value={strength}
@@ -324,9 +323,8 @@ const GradientMapControls: React.FC = () => {
       >
         {invert ? '◐ Inverted' : '◑ Invert'}
       </button>
-      {!hasImage && (
-        <span className="text-[11px] text-fg-dim">no image loaded</span>
-      )}
+      {/* No "no image loaded" here (2026-09-24): the stage already says it, in the middle of
+          the screen, with what to do about it. */}
     </div>
   );
 };
@@ -341,13 +339,16 @@ const GradientMapControls: React.FC = () => {
  *  drop at the shell root, so an image dropped anywhere, this overlay included, loads (the
  *  overlay repaints on the new thumb — grep `imageThumb` in FullscreenGradientOverlay). The
  *  old shell only takes a drop while its Extract stage is mounted; it is being retired, so
- *  the words follow v2. */
+ *  the words follow v2. A coarse pointer (a phone, a tablet) has no file to drag, so it is
+ *  told only the way it has (2026-09-24). */
 const GradientMapStage: React.FC = () => {
   const thumb = useImageStore((s) => s.thumb);
   if (thumb) return null;
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-center px-6 pointer-events-none">
-      <div className="text-[13px] text-fg-secondary">Drop an image here, or add one on the Image tab</div>
+      <div className="text-[13px] text-fg-secondary">
+        {COARSE_POINTER ? 'Add an image on the Image tab' : 'Drop an image here, or add one on the Image tab'}
+      </div>
       <div className="text-[11px] text-fg-muted">
         Gradient map recolours your image through this gradient.
       </div>

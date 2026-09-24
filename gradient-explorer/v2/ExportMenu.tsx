@@ -16,14 +16,18 @@
  *     two "how many" cases. For the working gradient the swatch row IS the control and it
  *     lives on the hero (L2), so this window exports it exactly as laid out and offers no
  *     count. A set has no composed row — it is other people's gradients — so it gets one
- *     stepper and the rule places them.
+ *     stepper and the hero's current layout rule places them (Even / Perceptual / Stops,
+ *     named in the stepper's title; 2026-09-24 — it was always Even).
  *   • What else changes per subject is small and named inline: a set has no Copy (no single
- *     text form), gets a .zip where one gradient gets one file unless the format bundles,
+ *     text form), gets a .zip where one gradient gets one file unless the format bundles
+ *     (a set of ONE gets its member's own file, 2026-09-24),
  *     and gets no size fields on its GMT gradient PNG (a set keeps the automatic band layout).
  *     The Swatches subject ends in one row, the swatch sheet (labelled chips + hex).
  *   • THE LOSSY NOTICE is the same for one gradient and for a set, ramp side only (the
  *     swatches side reduces nothing): a format that flattens visible detail says how many
- *     gradients it reduced, on hover, in the category's NOTE_STRIP. A set warns on the
+ *     gradients it reduced (one gradient: just "Reduced to N colour stops"), on hover, in the
+ *     category's NOTE_STRIP, and in the text preview's header line, which keyboard focus and a
+ *     phone's hold open where no hover reaches. A set warns on the
  *     formats that bundle it into one file; one gradient warns on every format that reduces
  *     it. Until 2026-09-13 only a set could warn (`lossy = isSet && bundles ? … : 0`), so a
  *     single complex gradient went to Illustrator simplified and silent — the old shell's
@@ -64,13 +68,25 @@
  * is added to the row; binary rows show nothing. A phone holds the row instead (a bottom panel).
  * The whole design, and why a hold, is the comment above `previewProps`.
  *
- * The output profile is a section like the others with its value on the header — a setting
- * almost nobody touches, previously sitting between the formats and the image row at full
- * weight.
+ * SETTINGS is a section like the others with its value on the header ("N stops"): the stop
+ * budget, a setting almost nobody touches. It held the output colour profile too until
+ * 2026-09-24 (owner: removed — it changed no file here and a click on it baked the gradient).
+ * It is Ramp only: nothing in it acts on swatches.
+ *
+ * WHAT IT REMEMBERS: the open section (`SECTION_KEY`), the subject (`SUBJECT_KEY`, 2026-09-24),
+ * the stop budget and the GMT PNG's size (`exportActions.readExportSettings`), and the last
+ * exports (Again). A SET's swatches follow the hero's layout rule (`rule`), and a set of ONE
+ * downloads its member's own file rather than a .zip of one.
+ *
+ * LEAVING IT: Escape and a press outside go through the master `useDismiss`, so Escape is taken
+ * through the shortcut registry and the shell's Esc chain leaves the tray face under the window
+ * alone; the window's own opener toggles it rather than counting as outside. See the comment
+ * above the two `useDismiss` calls.
  *
  * THE ORDER, top to bottom (2026-09-14): title · the Ramp | Swatches switch (and, under Swatches,
  * its one line or the set's stepper) · Again · For GMT (Ramp only) · "For other software" and the
- * format accordion · Settings · the swatch sheet (Swatches only).
+ * format accordion (Web · Design apps · Fractal + 3D apps · Code + data — no "For" on each, owner
+ * 2026-09-24) · Settings (Ramp only) · the swatch sheet (Swatches only).
  *
  * THE GMT GRADIENT FILE (ADR-0123 Decision 5 and its Update 2026-09-14). Under the Ramp subject a
  * band "For GMT" holds the Explorer's own save — ONE row, "GMT gradient" .png, for one gradient and
@@ -102,7 +118,7 @@
  */
 
 import type { GradientConfig } from '../../types';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { formatsFor, getExportFormat, type ExportFormatDef, type ExportSubject } from '../../palette/core/exportFormats';
 import {
   runExport,
@@ -119,13 +135,16 @@ import {
   writeExportSettings,
   exportText,
   setExportText,
+  setIsLoneFile,
   type ExportAction,
   type ExportSettings,
 } from './exportActions';
 import { Layer } from '../../components/ui/Layer';
+import { useDismiss } from '../../hooks/useDismiss';
 import { GRADIENT_PNG_MAX_SINGLE_HEIGHT, GRADIENT_PNG_MAX_WIDTH, GRADIENT_PNG_MIN_WIDTH, clampGradientPngHeight, snapGradientPngWidth } from '../../palette/core/gradientPng';
 import { AI_STOP_LIMIT, stopBudgetOf } from '../../palette/core/exportFormats';
-import { PALETTE_MAX, PALETTE_MIN, clampCount } from '../../palette/core/paletteSample';
+import { PALETTE_MAX, PALETTE_MIN, clampCount, type PaletteRule } from '../../palette/core/paletteSample';
+import { useWorkingStore } from '../../palette/store/workingStore';
 import type { Favient } from '../../palette/store/favientsStore';
 import type { RGB } from '../../palette/core/oklab';
 import { rampToCss, swatchesToCss } from '../../palette/core/gradientCss';
@@ -140,22 +159,22 @@ import { ZoneLabel } from './ui/ZoneLabel';
 // V6 without the icon set growing a near-duplicate of a drawing that already exists.
 import { CopyGlyph } from '../../components/gradient/pickerIcons';
 
-const GROUPS: { title: string; keys: string[] }[] = [
-  { title: 'For the web', keys: ['css', 'cssvars', 'svg', 'tw', 'tokens', 'hex', 'json', 'js'] },
-  { title: 'For design apps', keys: ['ase', 'grd', 'ai', 'idml', 'gpl', 'pdn'] },
-  { title: 'For fractal + 3D apps', keys: ['map', 'ggr', 'cpt', 'ugr', 'c4d', 'blender'] },
-  { title: 'For code + data', keys: ['csv', 'py'] },
+/** The four format groups. Their heads are what each is FOR, without the word (owner,
+ *  2026-09-24: five "For"s in a column read as one; the caption "For other software" above them
+ *  already says it). `was` is the title a group had before, so a remembered open section
+ *  (`SECTION_KEY`) written under the old name still opens. */
+const GROUPS: { title: string; was: string; keys: string[] }[] = [
+  { title: 'Web', was: 'For the web', keys: ['css', 'cssvars', 'svg', 'tw', 'tokens', 'hex', 'json', 'js'] },
+  { title: 'Design apps', was: 'For design apps', keys: ['ase', 'grd', 'ai', 'idml', 'gpl', 'pdn'] },
+  { title: 'Fractal + 3D apps', was: 'For fractal + 3D apps', keys: ['map', 'ggr', 'cpt', 'ugr', 'c4d', 'blender'] },
+  { title: 'Code + data', was: 'For code + data', keys: ['csv', 'py'] },
 ];
 
-/** The output colour profiles, in the order the strip used to cycle them. */
-const PROFILES: { id: 'srgb' | 'linear' | 'aces_inverse'; label: string; title: string }[] = [
-  { id: 'srgb', label: 'sRGB', title: 'Standard display colours' },
-  { id: 'linear', label: 'Linear', title: 'Linear light — for render engines and compositing' },
-  { id: 'aces_inverse', label: 'ACES', title: 'ACES inverse — for an ACES-managed pipeline' },
-];
-
-/** The section the output profile occupies in the accordion — not a format group, but the
- *  same affordance, so it stops competing with the formats for attention. */
+/** The Settings section of the accordion — not a format group, but the same affordance, so it
+ *  does not compete with the formats for attention. It holds the stop budget. The output colour
+ *  profile it also held went on 2026-09-24 (owner): every format here writes sRGB whatever it
+ *  said, it read "Linear" for every catalogue pick (the GMT seam's stamp, not a choice), and a
+ *  click on it baked the gradient. */
 const SETTINGS_SECTION = 'Settings';
 
 /** The Settings category's values and the GMT PNG's size are remembered in `exportActions.ts`
@@ -235,32 +254,26 @@ const NumField: React.FC<{
  *  should remember, this is one area where a user is likely to only require a few paths").
  *  A person who exports .ase every time should not reopen that category every time. The
  *  empty string is a REMEMBERED CLOSE, not "nothing stored" — someone who shut every
- *  category meant it, and gets it back that way. An unknown title (a renamed group) falls
- *  through to the last-export rule below rather than opening on nothing. */
+ *  category meant it, and gets it back that way. A group's old title (`was`) opens it under
+ *  its new one; any other unknown title falls through to the last-export rule below rather
+ *  than opening on nothing. */
 const SECTION_KEY = 'gx.v2.exportSection';
+
+/** WHICH SUBJECT the window opens on, remembered beside the section (owner, 2026-09-24): someone
+ *  who only ever exports swatches should not switch to them every time. Anything but
+ *  `'swatches'` reads as the Ramp, so a fresh profile opens where it always did. */
+const SUBJECT_KEY = 'gx.v2.exportSubject';
+
+/** The palette rules by name, for the set's swatch stepper — the hero's words (`PaletteRow`). */
+const RULE_NAME: Record<PaletteRule, string> = { even: 'Even', perceptual: 'Perceptual', stops: 'Stops' };
+
+/** ASK-4: when fewer than this many pixels are left below where the host put the window, a host
+ *  that passes `liftTo` gets it lifted to that line instead (the set's window under its button
+ *  would otherwise open short, with most of its rows behind a scroll). */
+const LIFT_ROOM = 480;
 
 /** Which group holds a format key, or null. */
 const groupOf = (key: string): string | null => GROUPS.find((g) => g.keys.includes(key))?.title ?? null;
-
-/** A segment of the subject / profile controls. Accent means "this one" (V3). */
-const Segment: React.FC<{ on: boolean; title: string; onClick: () => void; children: React.ReactNode; data?: string }> = ({
-  on,
-  title,
-  onClick,
-  children,
-  data,
-}) => (
-  <button
-    type="button"
-    className={`px-2.5 h-7 text-[13px] ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg'}`}
-    title={title}
-    onClick={onClick}
-    data-gx-subject={data}
-    data-on={on ? '' : undefined}
-  >
-    {children}
-  </button>
-);
 
 /**
  * THE SUBJECT SEGMENTS, each showing the thing it exports (owner, 2026-09-11: "Ramp |
@@ -327,6 +340,13 @@ const BAND = 'w-full flex items-center gap-2 h-7 px-2 rounded-lg bg-line/[0.06]'
  *  `.json`) with room to spare; it truncates rather than pushing the glyph out of line. */
 const EXT_COL = 'w-10 shrink-0 text-[11px] text-fg-dim truncate';
 
+/** What the extension column SHOWS: the last segment. The two DCC scripts land on disk as
+ *  `.c4d.py` and `.blender.py` (distinct, so they cannot overwrite each other), which the
+ *  column cut to ".blende…"; what they ARE is a .py, and the row's label already names the
+ *  host. Display only — the downloaded file keeps its full name. Takes `ext` with or without
+ *  its leading dot. */
+const extShown = (ext: string): string => `.${ext.split('.').pop()}`;
+
 /** The Copy slot, held open on every row of the window whether or not it holds a button —
  *  the same reason `EXT_COL` is. A row that drops it is 28 px wider, and everything to its
  *  left, the extension column included, shifts with it. */
@@ -341,8 +361,11 @@ const NOTE_STRIP = 'h-4 px-1 text-[11px] leading-4 text-fg-muted truncate';
 
 /** What a lossy bundle costs, in as few words as it takes (owner, 2026-09-10 — the line
  *  used to read "2 of 12 use more than 40 colour stops, so they export simplified. Most apps
- *  cap stops similarly"). The count is what you need; the lecture is not. */
-const lossyNote = (n: number, stops: number): string => `${n} gradient${n === 1 ? '' : 's'} reduced to ${stops} colour stops`;
+ *  cap stops similarly"). The count is what you need; the lecture is not — and for ONE
+ *  gradient there is no count to give ("1 gradient reduced…" said nothing), so it is just what
+ *  happens to it (2026-09-24). */
+const lossyNote = (isSet: boolean, n: number, stops: number): string =>
+  isSet ? `${n} gradient${n === 1 ? '' : 's'} reduced to ${stops} colour stops` : `Reduced to ${stops} colour stops`;
 
 /** An accordion header: what the section is for, how much is in it, and a chevron. */
 const SectionHead: React.FC<{ title: string; note?: string; open: boolean; onClick: () => void }> = ({ title, note, open, onClick }) => (
@@ -366,8 +389,8 @@ const SectionHead: React.FC<{ title: string; note?: string; open: boolean; onCli
  * `again:` + the action's id), so the smoke can tell which row the panel belongs to.
  */
 type PreviewReq =
-  | { kind: 'one'; id: string; action: ExportAction; label: string; ext: string }
-  | { kind: 'set'; id: string; key: string; label: string; ext: string };
+  | { kind: 'one'; id: string; action: ExportAction; label: string; ext: string; note?: string | null }
+  | { kind: 'set'; id: string; key: string; label: string; ext: string; note?: string | null };
 
 /** The preview's display cap. Measured 2026-09-23 over the registry for ONE gradient: the longest
  *  text is .ggr, ~26,300 characters on 259 lines, so no single-gradient preview is ever cut — the
@@ -407,10 +430,26 @@ export const ExportMenu: React.FC<{
   name: string;
   onClose: () => void;
   positionClass?: string;
-  /** The gradient's output colour profile and its setter (C.15: an export concern, so it
-   *  lives here rather than on the strip). */
+  /**
+   * A viewport y to LIFT the window's top to when fewer than `LIFT_ROOM` px are left below
+   * where `positionClass` put it (ASK-4, owner 2026-09-24: the set's window opens under its own
+   * button, and at the hero window's line when the room below the rail is short). A desk only;
+   * never lower than where the host put it. Absent → the window stays where it was put.
+   */
+  liftTo?: number;
+  /**
+   * @deprecated 2026-09-24 — the Output profile row is gone (owner); nothing reads these. They
+   * stay optional only so the host still compiles until it stops passing them.
+   */
   colorSpace?: 'srgb' | 'linear' | 'aces_inverse';
+  /** @deprecated 2026-09-24 — see `colorSpace`. */
   onColorSpace?: (id: 'srgb' | 'linear' | 'aces_inverse') => void;
+  /**
+   * How a SET lays out each member's swatches: the hero's current rule (Even / Perceptual /
+   * Stops, owner 2026-09-24 — it was always Even). Absent → read live from the working store,
+   * which is where the hero keeps it. Unused for one gradient (its row is already laid out).
+   */
+  rule?: PaletteRule;
   /** Export a SET instead of the working gradient (the set rail's chip menu). `ramp` and
    *  `name` are then unused for the output; `name` still titles the window. */
   set?: Favient[];
@@ -429,34 +468,55 @@ export const ExportMenu: React.FC<{
   name,
   onClose,
   positionClass = 'absolute right-4 top-12 z-40',
-  colorSpace,
-  onColorSpace,
+  liftTo,
   set,
   palette = [],
   origin,
   config,
   source,
+  rule: ruleProp,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const phone = useIsPhone();
   const isSet = !!set;
+  const storeRule = useWorkingStore((s) => s.rule);
+  const rule = ruleProp ?? storeRule;
   // The window's ceiling is MEASURED, not a fraction of the viewport. Both call sites
   // position it absolutely inside a container the page has already pushed down (the hero's
   // hangs at top-[56px], the set's at top-10 of the GROUND, which starts below the hero), so
   // a flat `max-h-[70vh]` is a ceiling on the wrong number: measured 2026-09-09 with the set
   // window at y=345 in a 930 px viewport, 70vh let it run 66 px past the bottom edge with no
-  // way to reach the last rows. Height only — the top never moves, so this cannot feed back.
+  // way to reach the last rows.
+  // THE LIFT (ASK-4): with `liftTo` and less than `LIFT_ROOM` below where the host put it, the
+  // window is drawn `lift` px higher (a transform, so the host's layout is untouched). The top
+  // the host gave is recovered by taking the DRAWN lift back off — read from the element
+  // (`data-gx-lift`), never from the last value computed: under StrictMode the effect runs twice
+  // before the first lift is painted, and subtracting a lift that is not on screen yet applied
+  // it twice (measured 2026-09-24: the set's window at top −137 instead of 104 at 1280×720).
   const [maxH, setMaxH] = useState<number>(() => (typeof window === 'undefined' ? 600 : Math.round(window.innerHeight * 0.7)));
-  useEffect(() => {
+  const [lift, setLift] = useState(0);
+  const liftNow = useRef({ liftTo });
+  liftNow.current.liftTo = liftTo;
+  // Before paint, so a lifted window never shows a frame where the host put it.
+  useLayoutEffect(() => {
     const measure = () => {
-      const top = ref.current?.getBoundingClientRect().top ?? 0;
-      setMaxH(Math.max(200, Math.round(window.innerHeight - top - 16)));
+      const el = ref.current;
+      const drawn = Number(el?.dataset.gxLift ?? 0) || 0;
+      const placed = (el?.getBoundingClientRect().top ?? 0) - drawn;
+      const to = liftNow.current.liftTo;
+      const l = !phone && to !== undefined && to < placed && window.innerHeight - placed - 16 < LIFT_ROOM ? Math.round(to - placed) : 0;
+      setLift(l);
+      setMaxH(Math.max(200, Math.round(window.innerHeight - (placed + l) - 16)));
     };
     measure();
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
-  }, []);
-  const [subject, setSubject] = useState<ExportSubject>('ramp');
+  }, [phone]);
+  const [subject, setSubjectState] = useState<ExportSubject>(() => (safeLocalGet(SUBJECT_KEY) === 'swatches' ? 'swatches' : 'ramp'));
+  const setSubject = (next: ExportSubject) => {
+    setSubjectState(next);
+    safeLocalSet(SUBJECT_KEY, next);
+  };
   // A set's swatch count starts at the hero's own palette size when there is one, so the
   // two subjects agree on what "a palette" means for this person until they say otherwise.
   const [count, setCount] = useState(() => clampCount(palette.length || 7));
@@ -469,24 +529,67 @@ export const ExportMenu: React.FC<{
   const previewNow = useRef(preview);
   previewNow.current = preview;
 
+  /*
+   * LEAVING (the Esc order, 2026-09-24). Escape and the click-away go through the master
+   * `useDismiss` (hooks/useDismiss.ts), not a private `keydown`. Its Escape rides the shortcut
+   * registry, which marks the key `defaultPrevented` — and that is what the shell's Esc chain
+   * (grep `Esc order (Phase C` in GradientExplorerV2App) stands down for. Before this the
+   * window's own listener sat BEHIND the shell's on `window`, and was torn down and re-added
+   * mid-dispatch because its effect keyed on the host's inline `onClose`: one Esc with Export
+   * open over a tray face closed (and baked) the FACE and left the window up. `useDismiss`
+   * holds `onClose` in a ref, so it subscribes once.
+   *
+   * Two calls, because the two ways out differ by one thing: Escape takes a preview held open
+   * by a long press first (the window on the next Escape), a press outside closes the window
+   * outright, as it always did. The OPENER is not "outside": a press on this window's own
+   * button would close it and the click after it would open it again, reset — so the lit
+   * button could never shut it. Each window names its own opener (the hero's Export button,
+   * or the rail's export-the-ground button), so the other one still closes it.
+   *
+   * THE DRAFT IS KEPT. The GMT PNG's `SizeField` commits on blur, and the click-away used to
+   * close the window before any blur reached it, so a typed width was silently dropped. Both
+   * ways out blur whatever has focus in the window first (`flushDraft`).
+   *
+   * FOCUS. The window takes focus when it opens and, when it is left with Escape or its ×,
+   * hands it back to whatever had it (the button that opened it). A press outside leaves focus
+   * to the press.
+   */
+  // Read while RENDERING, before this window exists to take focus: an effect would read it a
+  // second time under StrictMode's re-run, by when the window itself holds it.
+  const [opener] = useState<HTMLElement | null>(() => {
+    const a = typeof document === 'undefined' ? null : document.activeElement;
+    return a instanceof HTMLElement && a !== document.body ? a : null;
+  });
+  const restoreFocus = useRef(false);
+  const flushDraft = () => {
+    const a = document.activeElement;
+    if (a instanceof HTMLElement && ref.current?.contains(a)) a.blur();
+  };
+  const closeWindow = (restore: boolean) => {
+    flushDraft();
+    restoreFocus.current = restore;
+    onClose();
+  };
+  useDismiss([ref, previewRef], {
+    onClose: () => closeWindow(false),
+    escape: false,
+    capture: true,
+    ignore: isSet ? '[data-gx-export-ground]' : '[data-gx-export-opener]',
+  });
+  useDismiss(ref, {
+    // a preview held open by a long press closes first; the window on the next Escape
+    onClose: () => (previewNow.current?.pinned ? setPreview(null) : closeWindow(true)),
+    outside: false,
+  });
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      // a preview held open by a long press closes first; the window on the next Escape
-      if (previewNow.current?.pinned) setPreview(null);
-      else onClose();
-    };
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (ref.current && !ref.current.contains(t) && !previewRef.current?.contains(t)) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    window.setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
+    ref.current?.focus({ preventScroll: true });
     return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onDown, true);
+      // Runs once the window's nodes are gone, so focus that was inside it is on <body> by now;
+      // anything else means the person has already put it somewhere, and it stays there.
+      const now = document.activeElement;
+      if (restoreFocus.current && opener?.isConnected && (!now || now === document.body)) opener.focus({ preventScroll: true });
     };
-  }, [onClose]);
+  }, [opener]);
 
   // AGAIN — the last few exports. A SET export is deliberately never recorded as a recent
   // (`exportActions.ts`), so these are the working gradient's and the block only belongs in
@@ -501,6 +604,8 @@ export const ExportMenu: React.FC<{
     const stored = safeLocalGet(SECTION_KEY);
     if (stored === '') return null; // a remembered close
     if (stored && (stored === SETTINGS_SECTION || GROUPS.some((g) => g.title === stored))) return stored;
+    const renamed = stored ? GROUPS.find((g) => g.was === stored) : undefined;
+    if (renamed) return renamed.title;
     const last = recents.find((a) => a.kind === 'copy' || a.kind === 'download') as { key: string } | undefined;
     return (last && groupOf(last.key)) || GROUPS[0].title;
   });
@@ -564,9 +669,9 @@ export const ExportMenu: React.FC<{
   };
   const download = (f: ExportFormatDef) =>
     set
-      ? runSetExport(f.key, set, name, subject, count, settings.budget ?? undefined)
+      ? runSetExport(f.key, set, name, subject, count, settings.budget ?? undefined, rule)
       : runExport({ kind: 'download', key: f.key, subject }, ramp, name, palette, runOpts);
-  const swatchSheet = () => (set ? void runSetSwatchSheet(set, name, count) : runExport({ kind: 'png', subject: 'swatches' }, ramp, name, palette, runOpts));
+  const swatchSheet = () => (set ? void runSetSwatchSheet(set, name, count, rule) : runExport({ kind: 'png', subject: 'swatches' }, ramp, name, palette, runOpts));
 
   /*
    * THE TEXT PREVIEW (parity row O4, owner-approved 2026-09-23). The first shell showed a text
@@ -725,31 +830,34 @@ export const ExportMenu: React.FC<{
     // a hold must not select the label or raise iOS's callout
     style: phone ? ({ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' } as React.CSSProperties) : undefined,
   });
-  /** A format row's preview, or null when the row writes no text. */
-  const formatPreview = (f: ExportFormatDef): PreviewReq | null => {
+  /** A format row's preview, or null when the row writes no text. `note` is the row's lossy
+   *  note, carried into the panel's header line: the note strip only fills on HOVER, so keyboard
+   *  focus and a phone's hold — which open this panel — would otherwise never say it. */
+  const formatPreview = (f: ExportFormatDef, note: string | null = null): PreviewReq | null => {
     if (f.binary) return null;
     const label = labelWithoutExt((swatches && f.swatchLabel) || f.label, f.ext);
-    if (isSet) return f.collection && !swatches ? { kind: 'set', id: `format:${f.key}`, key: f.key, label, ext: `.${f.ext}` } : null;
+    // a set previews the ONE file it lands as: a bundle, or a set of one's own member file
+    if (isSet) return (f.collection && !swatches) || setIsLoneFile(f.key, set!, subject) ? { kind: 'set', id: `format:${f.key}`, key: f.key, label, ext: extShown(f.ext), note } : null;
     const action: ExportAction = { kind: 'copy', key: f.key, subject };
-    return { kind: 'one', id: `format:${exportActionId(action)}`, action, label, ext: `.${f.ext}` };
+    return { kind: 'one', id: `format:${exportActionId(action)}`, action, label, ext: extShown(f.ext), note };
   };
   /** An Again row's preview: its own action, so it previews what that one click will do. */
   const againPreview = (a: ExportAction): PreviewReq | null => {
     if (a.kind !== 'copy' && a.kind !== 'download') return null;
     const f = getExportFormat(a.key);
     if (!f || f.binary) return null;
-    return { kind: 'one', id: `again:${exportActionId(a)}`, action: a, label: exportActionParts(a).format, ext: `.${f.ext}` };
+    return { kind: 'one', id: `again:${exportActionId(a)}`, action: a, label: exportActionParts(a).format, ext: extShown(f.ext) };
   };
   // The text, from the functions that write it. A set's bundle is cached per format for as long
   // as what it depends on holds still: sixty gradients as .ai is a quarter of a second, and a
   // pointer going up and down the list must not pay it each time.
-  const setTextCache = useMemo(() => new Map<string, string | null>(), [set, subject, count, settings.budget]);
+  const setTextCache = useMemo(() => new Map<string, string | null>(), [set, subject, count, settings.budget, rule]);
   const previewText = useMemo(() => {
     if (!preview) return null;
     const r = preview.req;
     if (r.kind === 'set') {
       if (!set) return null;
-      if (!setTextCache.has(r.key)) setTextCache.set(r.key, setExportText(r.key, set, subject, count, settings.budget ?? undefined));
+      if (!setTextCache.has(r.key)) setTextCache.set(r.key, setExportText(r.key, set, subject, count, settings.budget ?? undefined, rule));
       return setTextCache.get(r.key) ?? null;
     }
     return exportText(r.action, ramp, name, palette, runOpts);
@@ -770,7 +878,7 @@ export const ExportMenu: React.FC<{
     return out;
   }, [isSet, ramp, name, subject, settings.budget]);
   // The sections that have anything in them under THIS subject. Switching to Swatches
-  // empties "For fractal + 3D apps" outright, so the open section can vanish under the
+  // empties "Fractal + 3D apps" outright, so the open section can vanish under the
   // pointer; the effect below re-homes the accordion rather than leaving it on nothing.
   const sections = useMemo(() => {
     const known = new Set(GROUPS.flatMap((g) => g.keys));
@@ -783,7 +891,7 @@ export const ExportMenu: React.FC<{
     return out;
   }, [formats]);
   // Re-home the accordion only when the OPEN SECTION HAS GONE (switching to Swatches empties
-  // "For fractal + 3D apps" outright, so it can vanish under the pointer). `open === null` is
+  // "Fractal + 3D apps" outright, so it can vanish under the pointer). `open === null` is
   // a deliberate close and must be left alone: without that guard, clicking the open header
   // closed it and this immediately re-opened the FIRST section, so a section could never be
   // shut. Measured 2026-09-09 — and neither smoke caught it, because the section they close
@@ -793,18 +901,22 @@ export const ExportMenu: React.FC<{
     setPreview(null);
   }, [open, subject]);
   useEffect(() => {
-    if (open === null || open === SETTINGS_SECTION) return;
+    // Settings is not in `sections`, and it has gone only under Swatches, which hides it
+    if (open === null || (open === SETTINGS_SECTION && !swatches)) return;
     if (!sections.some((x) => x.title === open)) setOpen(sections[0]?.title ?? null);
-  }, [sections, open]);
+  }, [sections, open, swatches]);
 
   const row = (f: ExportFormatDef) => {
     // A set in a format that BUNDLES is one file; in any other format it is one file per
-    // gradient inside a .zip. Which formats bundle depends on the subject: .ai/.idml/.ugr
+    // gradient inside a .zip — except a set of ONE, which is that member's own file (owner,
+    // 2026-09-24: not a .zip of one). Which formats bundle depends on the subject: .ai/.idml/.ugr
     // group gradients, .ase groups swatch lists. Say which on the button, so the download
     // is not a surprise.
     const bundles = isSet && !!(swatches ? f.collectionSwatches : f.collection);
-    const lossy = isSet ? (bundles ? setLossyCount(set!, f.key, subject, settings.budget ?? undefined) : 0) : singleLossy.get(f.key) ?? 0;
-    const pv = previewProps(formatPreview(f));
+    const lone = isSet && setIsLoneFile(f.key, set!, subject);
+    const lossy = isSet ? (bundles || lone ? setLossyCount(set!, f.key, subject, settings.budget ?? undefined) : 0) : singleLossy.get(f.key) ?? 0;
+    const note = lossy > 0 ? lossyNote(isSet, lossy, stopBudgetOf(f.key, settings.budget ?? undefined) ?? AI_STOP_LIMIT) : null;
+    const pv = previewProps(formatPreview(f, note));
     return (
       <div
         key={f.key}
@@ -812,7 +924,7 @@ export const ExportMenu: React.FC<{
         data-gx-lossy={lossy > 0 ? lossy : undefined}
         {...pv}
         onPointerEnter={(e) => {
-          setNotice(lossy > 0 ? lossyNote(lossy, stopBudgetOf(f.key, settings.budget ?? undefined) ?? AI_STOP_LIMIT) : null);
+          setNotice(note);
           pv.onPointerEnter(e);
         }}
         onPointerLeave={(e) => {
@@ -832,7 +944,9 @@ export const ExportMenu: React.FC<{
               isSet
                 ? bundles
                   ? `All ${set!.length} in one .${f.ext}`
-                  : `${set!.length} files in a .zip`
+                  : lone
+                    ? `Download .${f.ext}${swatches && rule !== 'stops' ? ` — ${count} swatches` : ''}`
+                    : `${set!.length} files in a .zip`
                 : `Download .${f.ext}${swatches ? ` — ${n} swatches` : ''}`
             }
             className="flex-1 min-w-0 flex items-center gap-2 h-7 px-1 rounded-lg text-left hover:bg-line/10 transition-colors group"
@@ -841,8 +955,9 @@ export const ExportMenu: React.FC<{
               {labelWithoutExt((swatches && f.swatchLabel) || f.label, f.ext)}
             </span>
             {/* For a set the column says what LANDS, which is not always this format's own
-                extension: a format that bundles writes one file, everything else a .zip. */}
-            <span className={EXT_COL}>{isSet && !bundles ? '.zip' : `.${f.ext}`}</span>
+                extension: a format that bundles writes one file, a set of one its member's
+                file, everything else a .zip. */}
+            <span className={EXT_COL}>{isSet && !bundles && !lone ? '.zip' : extShown(f.ext)}</span>
             <span className="text-fg-dim group-hover:text-fg">
               <Icon name="download" size={14} />
             </span>
@@ -887,15 +1002,29 @@ export const ExportMenu: React.FC<{
          `fixed` inside the safe area, its own scroll, the × already at the top right. The
          one thing kept from the desktop window is `[&>*]:shrink-0`, which is what stops a
          scrolling flex column squashing its children instead of scrolling (see below). */
-      className={`${phone ? 'fixed left-0 right-0 z-40 rounded-none border-x-0' : `${positionClass} w-[360px]`} overflow-y-auto p-4 flex flex-col gap-3 [&>*]:shrink-0`}
-      style={phone ? { top: 'env(safe-area-inset-top)', bottom: 'env(safe-area-inset-bottom)' } : { maxHeight: maxH }}
+      className={`${phone ? 'fixed left-0 right-0 z-40 rounded-none border-x-0' : `${positionClass} w-[360px]`} overflow-y-auto p-4 flex flex-col gap-3 [&>*]:shrink-0 outline-none`}
+      style={phone ? { top: 'env(safe-area-inset-top)', bottom: 'env(safe-area-inset-bottom)' } : { maxHeight: maxH, ...(lift ? { transform: `translateY(${lift}px)` } : null) }}
       data-gx-export
+      data-gx-lift={phone ? 0 : lift}
+      role="dialog"
+      aria-label="Export"
+      tabIndex={-1}
     >
       <div className="flex items-center">
         <b className="text-[13px] text-fg">
           Export “{name}”{isSet && <span className="font-normal text-fg-muted"> · {set!.length} gradient{set!.length === 1 ? '' : 's'}</span>}
         </b>
-        <button className="ml-auto text-fg-muted hover:text-fg" onClick={onClose} title="Close (Esc)">
+        {/* The hit box is the sheet's only way out on a phone (no Esc there), so it is a finger's
+            size there; on a desk it is the window's `COPY_SLOT` square. Negative margins pull
+            each box back over the padding and the gap around it, so the header line keeps its
+            height and nothing under it moves. */}
+        <button
+          type="button"
+          className={`ml-auto grid place-items-center rounded-lg text-fg-muted hover:text-fg ${phone ? 'w-10 h-10 -my-2.5 -mr-2' : 'w-7 h-7 -my-1 -mr-1.5'}`}
+          onClick={() => closeWindow(true)}
+          title="Close (Esc)"
+          aria-label="Close"
+        >
           <Icon name="close" />
         </button>
       </div>
@@ -921,7 +1050,18 @@ export const ExportMenu: React.FC<{
       {swatches && isSet && (
         <div className={`flex items-center gap-2 ${phone ? 'flex-wrap' : ''}`}>
           <ZoneLabel className="flex-1">Swatches per gradient</ZoneLabel>
-          <div className="inline-flex items-center border border-line/20 rounded-lg overflow-hidden" data-gx-swatch-count>
+          {/* The hero's layout rule places them (owner, 2026-09-24), and the title names it:
+              the set has no switch of its own, so this is where the rule is said. */}
+          <div
+            className="inline-flex items-center border border-line/20 rounded-lg overflow-hidden"
+            data-gx-swatch-count
+            data-gx-swatch-rule={rule}
+            title={
+              rule === 'stops'
+                ? `One per stop, Stops — ${count}, Even, where a gradient has none`
+                : `${count} per gradient, ${RULE_NAME[rule]}`
+            }
+          >
             <button
               type="button"
               className="px-2 h-7 text-[13px] text-fg-muted hover:text-fg disabled:opacity-40"
@@ -978,7 +1118,7 @@ export const ExportMenu: React.FC<{
                   <span className="flex-1 min-w-0 truncate">{p.format}</span>
                   {/* A Copy writes no file, so its column is empty — but held open, so the row
                       lines up with every other one. */}
-                  <span className={EXT_COL}>{p.ext ?? ''}</span>
+                  <span className={EXT_COL}>{p.ext ? extShown(p.ext) : ''}</span>
                   <span className="text-fg-dim group-hover:text-fg">
                     {a.kind !== 'copy' ? <Icon name="download" size={14} /> : copiedId === `again:${exportActionId(a)}` ? '✓' : <CopyGlyph size={14} />}
                   </span>
@@ -1065,31 +1205,22 @@ export const ExportMenu: React.FC<{
       ))}
 
       {/* SETTINGS (owner, 2026-09-10: "we can merge the stop budget into output profile and
-          name it 'settings'"). What the profile category was, plus the number every reducing
-          format used to decide privately. The profile belongs to the working DOCUMENT, so it
-          is gradient-only; the stop budget matters more on a SET, which is where the lossy
-          note lives — so the category itself shows for both and its contents do not. */}
+          name it 'settings'"): the number every reducing format used to decide privately, which
+          matters most on a SET, where the lossy note lives. The output profile it was merged
+          with went on 2026-09-24 (owner; see `SETTINGS_SECTION`), so the header says "N stops"
+          or nothing.
+          RAMP ONLY (2026-09-24): under Swatches the budget does nothing — the swatches side
+          reduces nothing — and a control that controls nothing does not belong in the window. */}
+      {!swatches && (
       <div>
         <SectionHead
           title={SETTINGS_SECTION}
-          note={settings.budget ? `${settings.budget} stops` : PROFILES.find((p) => p.id === colorSpace)?.label}
+          note={settings.budget ? `${settings.budget} stops` : undefined}
           open={open === SETTINGS_SECTION}
           onClick={() => toggle(SETTINGS_SECTION)}
         />
         {open === SETTINGS_SECTION && (
           <div className="pt-1 px-1 flex flex-col gap-2" data-gx-settings>
-            {!isSet && colorSpace && onColorSpace && (
-              <div className="flex items-center gap-2">
-                <ZoneLabel className="flex-1">Output profile</ZoneLabel>
-                <div className="inline-flex border border-line/20 rounded-lg overflow-hidden" data-gx-output-profile>
-                  {PROFILES.map((p) => (
-                    <Segment key={p.id} on={colorSpace === p.id} title={p.title} onClick={() => onColorSpace(p.id)}>
-                      {p.label}
-                    </Segment>
-                  ))}
-                </div>
-              </div>
-            )}
             <div className="flex items-center gap-2">
               <ZoneLabel className="flex-1">Colour stops</ZoneLabel>
               <NumField
@@ -1110,6 +1241,7 @@ export const ExportMenu: React.FC<{
           </div>
         )}
       </div>
+      )}
       {/* THE SWATCH SHEET — Swatches subject only, one row, no header of its own (owner,
           2026-09-14). The "As an image" section it sat in is gone: its PNG strip and the set's
           contact sheet are superseded by the GMT gradient PNG, which draws the ramp and reads
@@ -1155,7 +1287,10 @@ export const ExportMenu: React.FC<{
             style={preview.beside ? { maxHeight: preview.beside.maxHeight } : { maxHeight: '50vh', paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <div className="flex items-center gap-2 h-8 pl-3 pr-1.5 shrink-0 border-b border-line/10">
-              <span className="flex-1 min-w-0 truncate text-[11px] text-fg-muted">{preview.req.label}</span>
+              <span className="flex-1 min-w-0 truncate text-[11px] text-fg-muted">
+                {preview.req.label}
+                {preview.req.note && <span data-gx-preview-note> · {preview.req.note}</span>}
+              </span>
               <span className="shrink-0 text-[11px] text-fg-dim">{preview.req.ext}</span>
               {(preview.pinned || !preview.beside) && (
                 <button

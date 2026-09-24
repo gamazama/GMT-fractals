@@ -12,8 +12,9 @@
  *    ResizeObserver, and a `fullscreenStore` subscription that pushes the live knobs
  *    (phase/repeats/mapping/iterMul/deepZoom/dither) to the renderer. Returns an `OwnCanvasHandle`
  *    so the overlay can forward colour-source changes, the dither toggle, and PNG export.
- *  • `Controls` — the toolbar block (Mapping / Repeats / Iterations / Phase / Cycle / Copy-coords /
- *    Reset-view), reading the store + calling the store setters. Reset/Copy reach the live renderer
+ *  • `Controls` — the toolbar block (Mapping / Repeats / Iterations / Phase / Normalise / Cycle /
+ *    Copy-coords, with `?diag` only / Reset-view), reading the store + calling the store setters.
+ *    Reset/Copy reach the live renderer
  *    through a single module-scoped handle (there is exactly one overlay + one fractal instance).
  *
  * Behaviour is identical to the pre-seam inline implementation — this is a lift, not a rewrite.
@@ -63,6 +64,7 @@ import {
   useFractalState,
 } from './fractal/fractalStore';
 import type { FullscreenMode, OwnCanvasHost, OwnCanvasHandle } from '../modeRegistry';
+import { diagWanted } from '../../v2/bootTrace';
 // Type-only — the engine (perturbation + LA + shaders) is a heavy chunk, lazy-loaded via
 // dynamic import() when the mode mounts so it stays out of the main bundle.
 import type { FractalColorRenderer } from '../../../engine/fractal';
@@ -615,16 +617,21 @@ const FractalControls: React.FC = () => {
           />
         </div>
       )}
+      {/* NORMALISE (owner, 2026-09-24). This was "Norm v1 / Norm v2", the colour-norm A/B's
+          version names. The A/B is not settled — depth-normalized colour still ships OFF — and
+          this toggle is the only way to reach it (and the Fit to view / Lit controls behind it),
+          so it stays, named as the thing it does with an on / off state, like "Lit" beside it. */}
       <button
         onClick={() => setFractalColorNormV2(!fr.colorNormV2)}
-        title="Depth-normalized colour — every mode keeps a sane Density (~1) at any zoom. Off = the original look."
+        title="Normalise — colour density holds at any zoom; off is the original look"
+        aria-pressed={fr.colorNormV2}
         className={`px-2.5 py-1 text-[12px] rounded-md border transition-colors ${
           fr.colorNormV2
             ? 'border-secondary/40 bg-secondary/20 text-secondary'
             : 'border-line/10 text-fg-tertiary hover:text-fg hover:bg-line/[0.06]'
         }`}
       >
-        {fr.colorNormV2 ? '✦ Norm v2' : '○ Norm v1'}
+        {fr.colorNormV2 ? '✦ Normalise' : '○ Normalise'}
       </button>
       {/* Slope-lighting composite layer — modulates any mode's colour by the escape-gradient
           normal. Off by default; controls appear when enabled. */}
@@ -710,6 +717,9 @@ const FractalControls: React.FC = () => {
         {fr.animate ? '❚❚ Cycling' : '▶ Cycle'}
       </button>
       )}
+      {/* A bug-report aid, not a control (owner, 2026-09-24): only with `?diag` in the URL, the
+          Explorer's one diagnostics switch (`v2/bootTrace.ts` `diagWanted`). */}
+      {diagWanted && (
       <button
         onClick={copyCoords}
         title="Copy the exact view coordinates (for reporting a render artifact)"
@@ -721,6 +731,7 @@ const FractalControls: React.FC = () => {
       >
         {coordsCopied ? '✓ Copied' : '⧉ Copy coords'}
       </button>
+      )}
       <button
         onClick={() => activeControl?.resetView()}
         title="Reset pan / zoom to the full set"

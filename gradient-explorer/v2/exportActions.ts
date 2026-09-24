@@ -44,8 +44,9 @@
  *
  * `runSetExport` is the same registry pointed at a SET of gradients rather than one
  * (§8b item 4, the 2026-09-08 migration audit's M1): a collection format bundles the set
- * into one file, everything else becomes a .zip of one file per gradient, and the swatch
- * sheet is a PNG of every member's palette. (The set's ramp contact sheet left the window on
+ * into one file, everything else becomes a .zip of one file per gradient (a set of ONE writes
+ * that member's own file instead, 2026-09-24), and the swatch sheet is a PNG of every member's
+ * palette, laid out by the hero's current rule. (The set's ramp contact sheet left the window on
  * 2026-09-14 — the set's GMT gradient PNG draws every member too.) The building is
  * `palette/core/favientsExport.ts`, unchanged — what moved is WHAT it is pointed at.
  * Before this it existed only inside the My Gradients kebab and always meant the whole
@@ -71,8 +72,11 @@ import {
   buildSwatchSheet,
   buildSwatchZip,
   collectionQualityWarnings,
+  paletteOf,
+  rampOf,
   setSwatches,
 } from '../../palette/core/favientsExport';
+import type { PaletteRule } from '../../palette/core/paletteSample';
 import type { Favient } from '../../palette/store/favientsStore';
 import { exportNameFor, withExportName } from '../../palette/core/catalogOrigin';
 import { buildGradientFile, gradientFileStem, MAX_FILE_STEM, type GradientFileKind, type BuiltGradientFile } from '../../palette/core/gradientFile';
@@ -399,7 +403,7 @@ const downloadSwatchSheet = async (palette: RGB[], name: string): Promise<void> 
     return;
   }
   downloadBlob(blob, `${slugName(name)}-swatches.png`);
-  showToast('Swatch sheet saved (PNG)');
+  showToast('Downloaded swatch sheet (.png)');
 };
 
 /** Hand a built GMT gradient file to the browser. */
@@ -462,7 +466,7 @@ export const runSetGradientFile = (file: GradientFileKind, favients: Favient[], 
  * The ONE FILE a set becomes in a format that bundles, or null when the format does not bundle
  * (the set then goes out as a .zip). Ramp: a `collection` format (.ai/.idml/.ugr/.c4d.py/
  * .blender.py) over every member under its export name (credited while unmodified). Swatches:
- * a `collectionSwatches` format (.ase) over each member's `n`-swatch palette.
+ * a `collectionSwatches` format (.ase) over each member's `n`-swatch palette, laid out by `rule`.
  */
 const setBundle = (
   key: string,
@@ -470,11 +474,44 @@ const setBundle = (
   subject: ExportSubject,
   n: number,
   budget?: number,
+  rule: PaletteRule = 'even',
 ): { data: string | Uint8Array; ext: string } | null => {
   // asked of the format first, so a format that zips does not sample every member for nothing
   const f = getExportFormat(key);
-  if (subject === 'swatches') return f?.collectionSwatches ? buildSwatchCollectionFile(setSwatches(favients, n), key) : null;
+  if (subject === 'swatches') return f?.collectionSwatches ? buildSwatchCollectionFile(setSwatches(favients, n, rule), key) : null;
   return f?.collection ? buildCollectionFile(favients.map(withExportName), key, budget) : null;
+};
+
+/** True when a set export in `key` lands as its one member's own file rather than a .zip
+ *  (`loneMember`) — so the window's extension column and title can say what lands. */
+export const setIsLoneFile = (key: string, favients: Favient[], subject: ExportSubject = 'ramp'): boolean => {
+  if (favients.length !== 1) return false;
+  const f = getExportFormat(key);
+  return !!f && !(subject === 'swatches' ? f.collectionSwatches || !f.swatches : f.collection);
+};
+
+/**
+ * A SET OF ONE writes that member's own file (owner, 2026-09-24): a .zip holding one file is a
+ * step between the person and the file for nothing. It is the file a download of that gradient
+ * would write — the name it exports as (credited while unmodified, ramp only) and the stem a
+ * single download takes — except that its swatches are laid out by the set's count and rule, as
+ * its .zip member's would have been. Null for anything but one member, for a format that bundles
+ * (that is one file already, named after the set), and for a format with no form under `subject`.
+ * `runSetExport` downloads through it and `setExportText` previews through it.
+ */
+const loneMember = (
+  key: string,
+  favients: Favient[],
+  subject: ExportSubject,
+  n: number,
+  rule: PaletteRule = 'even',
+): { f: ExportFormatDef; ramp: RGB[]; name: string; stem: string; palette: RGB[] | null } | null => {
+  if (!setIsLoneFile(key, favients, subject)) return null;
+  const f = getExportFormat(key)!;
+  const m = favients[0];
+  if (subject === 'swatches') return { f, ramp: [], name: m.name, stem: slugName(m.name), palette: paletteOf(m, n, rule) };
+  const name = exportNameFor(m.name, m.origin, m.config);
+  return { f, ramp: rampOf(m), name, stem: downloadStem(m.name, name), palette: null };
 };
 
 /**
@@ -483,12 +520,24 @@ const setBundle = (
  * and the same function `runSetExport` downloads through (`setBundle`), so the window's preview
  * of a set is the file that lands.
  */
-export const setExportText = (key: string, favients: Favient[], subject: ExportSubject = 'ramp', n = 7, budget?: number): string | null => {
+export const setExportText = (
+  key: string,
+  favients: Favient[],
+  subject: ExportSubject = 'ramp',
+  n = 7,
+  budget?: number,
+  rule: PaletteRule = 'even',
+): string | null => {
   if (!favients.length) return null;
   const f = getExportFormat(key);
   if (!f || f.binary) return null;
-  const one = setBundle(key, favients, subject, n, budget);
-  return one && typeof one.data === 'string' ? one.data : null;
+  const one = setBundle(key, favients, subject, n, budget, rule);
+  if (one) return typeof one.data === 'string' ? one.data : null;
+  // a set of one is that member's own file (`loneMember`), which does have a text form
+  const lone = loneMember(key, favients, subject, n, rule);
+  if (!lone) return null;
+  const out = bytesFor(lone.f, lone.ramp, lone.name, lone.palette, budget);
+  return typeof out === 'string' ? out : null;
 };
 
 /**
@@ -497,10 +546,14 @@ export const setExportText = (key: string, favients: Favient[], subject: ExportS
  *
  *   ramp     — a collection format (.ai/.idml/.ugr/.ase) bundles every gradient into one
  *              file, anything else becomes a .zip of one file per gradient.
- *   swatches — each member's palette, `n` swatches placed by `rule` (there is no composed
- *              swatch row for a gradient nobody laid out by hand, so the caller says how
- *              many). .ase bundles, because grouping is part of that format; everything
- *              else zips.
+ *   swatches — each member's palette, `n` swatches placed by `rule`: the hero's current layout
+ *              rule, Even / Perceptual / Stops (owner, 2026-09-24 — it was always Even). There
+ *              is no composed swatch row for a gradient nobody laid out by hand, so the caller
+ *              says how many; Stops on a member with fewer than two stops lays out Even
+ *              (`paletteSample.samplePalette`). .ase bundles, because grouping is part of that
+ *              format; everything else zips.
+ *
+ * A set of ONE writes that member's own file, not a .zip of one (`loneMember`).
  *
  * No copy variant either way — a set has no single text form to put on the clipboard.
  */
@@ -511,6 +564,7 @@ export const runSetExport = (
   subject: ExportSubject = 'ramp',
   n = 7,
   budget?: number,
+  rule: PaletteRule = 'even',
 ): void => {
   if (!favients.length) {
     showToast('That set is empty');
@@ -519,22 +573,29 @@ export const runSetExport = (
   const stem = slugName(setName);
   // A zip of CSS variables must not land beside a zip of CSS under one name (`fileSuffix`).
   const zipStem = `${stem}${getExportFormat(key)?.fileSuffix ?? ''}`;
+  const count = `${favients.length} ${subject === 'swatches' ? 'palette' : 'gradient'}${favients.length === 1 ? '' : 's'}`;
   // A format that BUNDLES writes one file — the same one `setExportText` previews.
-  const one = setBundle(key, favients, subject, n, budget);
+  const one = setBundle(key, favients, subject, n, budget, rule);
   if (one) {
     const data = typeof one.data === 'string' ? one.data : (one.data as unknown as BlobPart);
     downloadBlob(new Blob([data], { type: 'application/octet-stream' }), `${stem}.${one.ext}`);
-    showToast(subject === 'swatches' ? `Exported ${favients.length} palettes → .${one.ext}` : `Exported ${favients.length} → .${one.ext}`);
+    showToast(`Downloaded ${count} as .${one.ext}`);
+    return;
+  }
+  // A set of one: that member's own file, through the one-gradient download (and its toast).
+  const lone = loneMember(key, favients, subject, n, rule);
+  if (lone) {
+    downloadFormat(lone.f, lone.ramp, lone.name, lone.palette, budget, lone.stem);
     return;
   }
   if (subject === 'swatches') {
-    const zip = buildSwatchZip(setSwatches(favients, n), key);
+    const zip = buildSwatchZip(setSwatches(favients, n, rule), key);
     if (!zip) {
       showToast('That format has no swatch form');
       return;
     }
     downloadBlob(new Blob([zip as unknown as BlobPart], { type: 'application/zip' }), `${zipStem}-swatches.zip`);
-    showToast(`Exported ${favients.length} palettes as .zip`);
+    showToast(`Downloaded ${count} as .zip`);
     return;
   }
   // Each .zip member is filed under the stem a single download of it would have (`downloadStem`),
@@ -542,24 +603,25 @@ export const runSetExport = (
   const memberStems = favients.map((f) => downloadStem(f.name, exportNameFor(f.name, f.origin, f.config)));
   const bytes = buildCollectionZip(favients.map(withExportName), key, budget, memberStems);
   downloadBlob(new Blob([bytes as unknown as BlobPart], { type: 'application/zip' }), `${zipStem}.zip`);
-  showToast(`Exported ${favients.length} as .zip`);
+  showToast(`Downloaded ${count} as .zip`);
 };
 
-/** The set's SWATCH SHEET: every member's palette (`n` swatches each) as labelled chips. The set's
- *  ramp contact sheet left the Export window on 2026-09-14 — the set's GMT gradient PNG draws every
- *  member (`favientsExport.buildContactSheet` stays for the collection menu's own export block). */
-export const runSetSwatchSheet = async (favients: Favient[], setName: string, n = 7): Promise<void> => {
+/** The set's SWATCH SHEET: every member's palette (`n` swatches each, laid out by `rule`) as
+ *  labelled chips. The set's ramp contact sheet left the Export window on 2026-09-14 — the set's
+ *  GMT gradient PNG draws every member (`favientsExport.buildContactSheet` stays for the
+ *  collection menu's own export block). */
+export const runSetSwatchSheet = async (favients: Favient[], setName: string, n = 7, rule: PaletteRule = 'even'): Promise<void> => {
   if (!favients.length) {
     showToast('That set is empty');
     return;
   }
-  const blob = await buildSwatchSheet(setSwatches(favients, n), setName);
+  const blob = await buildSwatchSheet(setSwatches(favients, n, rule), setName);
   if (!blob) {
     showToast('Could not draw the sheet');
     return;
   }
   downloadBlob(blob, `${slugName(setName)}-swatches.png`);
-  showToast('Swatch sheet saved (PNG)');
+  showToast('Downloaded swatch sheet (.png)');
 };
 
 /**

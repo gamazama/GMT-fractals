@@ -40,6 +40,7 @@
  */
 
 import type { FullscreenModeKind } from './modeRegistry';
+import { gradientFileStem } from '../../palette/core/gradientFile';
 
 // ── budgets ─────────────────────────────────────────────────────────────────────────────
 
@@ -201,26 +202,22 @@ export const resolveExportSize = (req: ExportSizeRequest): ExportSizePlan => {
 
 // ── naming ──────────────────────────────────────────────────────────────────────────────
 
-/** Filename stem from a gradient's display name: lowercase, spaces → dashes, nothing exotic
- *  left that a filesystem could object to. Falls back to `gradient` for an empty name. */
-export const slugifyName = (name: string): string => {
-  const slug = (name || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug || 'gradient';
-};
-
 /** `{stem}-{mode}-{w}x{h}.png` — the size is in the name because a mode may render SMALLER
  *  than asked (see `readPngSize`: the caller names the file from the real pixels, not the
- *  request), and a folder of wallpapers is unusable without the size on the file. */
+ *  request), and a folder of wallpapers is unusable without the size on the file.
+ *
+ *  The stem is the Explorer's ONE download rule (`gradientFileStem`, as `exportActions.slugName`
+ *  and the GMT gradient file): the name as it is — spaces, case and non-ASCII kept — with only
+ *  what a filesystem refuses removed, `gradient` when nothing is left. Until 2026-09-24 this file
+ *  kept its own slug (lowercase, everything outside `[a-z0-9]` to `-`), so the same gradient
+ *  downloaded as "Snowstorm.svg" from Export and "snowstorm-linear-1920x1080.png" from here, and
+ *  a non-ASCII name was mangled or, all CJK, became plain `gradient`. */
 export const exportFileName = (
   name: string,
   modeId: string,
   width: number,
   height: number,
-): string => `${slugifyName(name)}-${modeId}-${Math.round(width)}x${Math.round(height)}.png`;
+): string => `${gradientFileStem(name, 'gradient')}-${modeId}-${Math.round(width)}x${Math.round(height)}.png`;
 
 // ── PNG introspection ───────────────────────────────────────────────────────────────────
 
@@ -230,7 +227,7 @@ export const exportFileName = (
  * Why the export path needs this: a mode's `renderAt` may legitimately produce FEWER pixels
  * than asked (the Fractal renderer caps its own buffer at 1600 px on the long edge). Rather
  * than trusting the request, the caller reads the size back off the finished PNG, so the
- * filename and the "Exported W×H" toast always describe the file that actually landed.
+ * filename and the "Downloaded W×H" toast always describe the file that actually landed.
  *
  * Returns null when the bytes are not a PNG (or the header is truncated).
  */

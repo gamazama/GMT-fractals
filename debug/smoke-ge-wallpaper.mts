@@ -13,6 +13,13 @@
  * registration and the overlay's `RegisteredLiveSource`. (Its `HeroLiveSource` twin, the first
  * shell's resolver, went with that shell at the entry-point swap, 2026-09-16.)
  *
+ * [4] (2026-09-24, the polish pass's EW-06): in SPLIT, Escape follows the overlay's own keyboard
+ * rule — a press in the app above and then Esc leaves the preview up (the key is the app's), a
+ * press in the preview and then Esc closes it. Real mouse presses on control-free points.
+ * Falsified that day by restoring the unconditional close in the overlay's Esc listener (grep
+ * `split && !pointerInsideRef.current` in FullscreenGradientOverlay.tsx): red "a press in the app
+ * (header…) then Esc closed the preview"; green again with it back.
+ *
  * Run (needs `npm run dev` — a FRESH server):
  *   npx tsx debug/smoke-ge-wallpaper.mts
  *
@@ -146,6 +153,58 @@ async function main() {
   });
   if (!stillPainted) fail('an empty working input blanked the wallpaper instead of leaving the last gradient up');
   console.log('[3] an empty input leaves the wallpaper painted (falls back, never blanks) ✓');
+
+  // [4] ESC IN SPLIT FOLLOWS THE POINTER (2026-09-24, EW-06). With Split on, the app above is
+  // meant to be used, and every other key already went to it after a pointer-down there — but
+  // Escape closed the preview from anywhere, so the app's own Esc (a tray face, an armed slot, a
+  // wall selection) closed the preview docked on purpose instead. Now: a press in the APP then
+  // Esc leaves the overlay open; a press in the PREVIEW then Esc closes it. Both halves, so a
+  // fix that simply stopped Esc closing the overlay cannot pass. Real mouse presses on points
+  // that hold no control (found with elementFromPoint), so the press itself changes nothing.
+  const OVERLAY = '[data-testid="fullscreen-gradient-overlay"]';
+  await page.locator(`${OVERLAY} button[title^="Split"]`).click();
+  await page.waitForTimeout(500);
+  const blankPoint = (where: 'app' | 'preview') =>
+    page.evaluate((w) => {
+      const ov = document.querySelector('[data-testid="fullscreen-gradient-overlay"]') as HTMLElement | null;
+      if (!ov) return null;
+      const r = ov.getBoundingClientRect();
+      const CONTROL = 'button, a, input, select, textarea, label, canvas, svg, [role], [tabindex], [draggable="true"], [contenteditable]';
+      // the app: everything above the docked preview; the preview: its toolbar band
+      const y0 = w === 'app' ? 8 : r.top + 16;
+      const y1 = w === 'app' ? r.top - 24 : r.top + 64;
+      for (let y = y0; y < y1; y += 12) {
+        for (let x = 24; x < innerWidth - 24; x += 24) {
+          const el = document.elementFromPoint(x, y);
+          if (!el || el.closest(CONTROL)) continue;
+          if (w === 'app' ? ov.contains(el) : !ov.contains(el)) continue;
+          return { x, y, what: `${el.tagName.toLowerCase()}${el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : ''}` };
+        }
+      }
+      return null;
+    }, where);
+  const splitOn = () =>
+    page.evaluate(async () => {
+      const fs = await import('/palette/store/fullscreenStore.ts');
+      return !!(fs as any).getFullscreenState?.().split;
+    }).catch(() => null);
+  const inApp = await blankPoint('app');
+  if (!inApp) fail('[4] setup: no control-free point in the app above the split preview to press on');
+  await page.mouse.click(inApp!.x, inApp!.y);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  if (!(await page.locator(OVERLAY).count())) {
+    fail(`[4] with Split on, a press in the app (${inApp!.what} at ${inApp!.x},${inApp!.y}) then Esc closed the preview — Esc must be the app's there, as every other key is`);
+  }
+  const inPreview = await blankPoint('preview');
+  if (!inPreview) fail('[4] setup: no control-free point in the split preview\'s toolbar to press on');
+  await page.mouse.click(inPreview!.x, inPreview!.y);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  if (await page.locator(OVERLAY).count()) {
+    fail(`[4] with Split on, a press in the preview (${inPreview!.what}) then Esc left it open (split ${await splitOn()}) — Esc must still close it from there`);
+  }
+  console.log(`[4] in Split, Esc after a press in the app (${inApp!.what}) leaves the preview up; after a press in the preview (${inPreview!.what}) it closes ✓`);
 
   if (errors.length) fail(`page errors:\n  ${errors.join('\n  ')}`);
   console.log('\n✓ ALL PASS — the v2 wallpaper follows the working gradient');

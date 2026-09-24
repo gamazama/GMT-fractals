@@ -65,9 +65,10 @@
  *   • a key held with Ctrl / Cmd / Alt passes — undo / redo and the browser's own shortcuts
  *     are app-wide, not the underneath's;
  *   • in SPLIT the app is on screen above the preview and is meant to be used, so the overlay
- *     owns the keyboard only when the last pointer-down landed inside it;
+ *     owns the keyboard only when the last pointer-down landed inside it — Escape included
+ *     since 2026-09-24 (it used to close the preview from anywhere, eating the app's own Esc);
  *   • focus left on the app underneath (the Wallpaper button that opened this) is dropped on
- *     open, so a key cannot start its trip down there.
+ *     open, so a key cannot start its trip down there, and handed back on close.
  * A MODE that wants keys listens on `document` in the CAPTURE phase (Spline's Delete does —
  * grep `removePoint`); a window listener in a mode would be stopped with everything else.
  *
@@ -107,6 +108,9 @@ import type { FullscreenModeContext, OwnCanvasHandle } from './fullscreen/modeRe
 import './fullscreen/modes'; // registers the builtin modes at import time
 import { ExportPanel } from './fullscreen/ExportPanel';
 import { exportFileName, type ExportSizePlan } from './fullscreen/exportSize';
+import { gradientFileStem } from '../palette/core/gradientFile';
+import { COARSE_POINTER } from '../components/gradient/BlendSpacePicker';
+import { Icon } from './v2/ui/Icon';
 import { pngSizeOf, renderModeToBlob } from './fullscreen/exportRender';
 import { canvasToPngBlob, downloadBlob, embedScenePng } from '../utils/SceneFormat';
 import { getActiveFractalCoords } from './fullscreen/modes/fractalMode';
@@ -257,36 +261,53 @@ export const FullscreenGradientOverlay: React.FC = () => {
   const sourceConfig = liveSplit ? liveSplit.config : fs.config;
   const sourceName = liveSplit ? liveSplit.name : fs.name;
 
+  /** Was the last pointer-down inside the overlay? Set by the ownership effect below; read by
+   *  Escape and by every other key in SPLIT, where the app above is meant to be used. */
+  const pointerInsideRef = useRef(false);
+
   // Esc dismissal — a direct capture-phase listener so it works regardless of whether the host
-  // installed the shortcut registry (the Explorer shell may not have).
+  // installed the shortcut registry (the Explorer shell may not have). In SPLIT it follows the
+  // same ownership rule as every other key (2026-09-24): it closes the preview only when the
+  // last pointer-down landed in it. Otherwise it is the app's Esc — closing a tray face,
+  // dropping an armed slot, clearing a wall selection — and used to close the preview the
+  // person had docked on purpose instead. The ✕ closes it from anywhere.
+  // Guard: `npm run smoke:ge-wallpaper` [4].
   useEffect(() => {
     if (!fs.open) return;
+    const split = fs.split;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        closeFullscreen();
-      }
+      if (e.key !== 'Escape') return;
+      if (split && !pointerInsideRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeFullscreen();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [fs.open]);
+  }, [fs.open, fs.split]);
 
   // KEYBOARD OWNERSHIP — see the file header. Bubble phase on `document`: the overlay's own
   // elements (the split divider's arrows, a field's Enter) have already had the key, and the
   // app underneath, which listens on `window`, has not.
-  const pointerInsideRef = useRef(false);
   useEffect(() => {
     if (!fs.open) return;
-    // the button that opened the overlay keeps focus in the app underneath; let it go
+    // the button that opened the overlay keeps focus in the app underneath; let it go — and
+    // give it back on close, so the keyboard picks up where it was (2026-09-24). Not if focus
+    // has been put somewhere since (the app, in split): only from <body>, where it falls when
+    // the overlay's own nodes go.
     const active = document.activeElement as HTMLElement | null;
-    if (active && active !== document.body && !rootRef.current?.contains(active)) active.blur?.();
+    const opener = active && active !== document.body && !rootRef.current?.contains(active) ? active : null;
+    opener?.blur?.();
     pointerInsideRef.current = false;
     const onDown = (e: PointerEvent) => {
       pointerInsideRef.current = !!rootRef.current?.contains(e.target as Node);
     };
     document.addEventListener('pointerdown', onDown, true);
-    return () => document.removeEventListener('pointerdown', onDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onDown, true);
+      const now = document.activeElement;
+      if (opener?.isConnected && (!now || now === document.body)) opener.focus({ preventScroll: true });
+    };
   }, [fs.open]);
   useEffect(() => {
     if (!fs.open) return;
@@ -561,7 +582,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
       const coords = getActiveFractalCoords();
       if (coords) blob = await embedScenePng(blob, buildFluidToyScene(coords, sourceConfig, sourceName));
     }
-    const stem = (sourceName || 'gradient').trim().replace(/\s+/g, '-').toLowerCase() || 'gradient';
+    // the Explorer's one naming rule, as `exportFileName` for the at-size path
+    const stem = gradientFileStem(sourceName, 'gradient');
     // Split exports the live preview pane (the app DOM above can't be rasterised); the `-split`
     // suffix marks it as captured in the live-follow split layout.
     downloadBlob(blob, `${stem}-${fs.split ? 'split' : fs.geom}.png`);
@@ -625,7 +647,8 @@ export const FullscreenGradientOverlay: React.FC = () => {
         real.width !== plan.width || real.height !== plan.height
           ? ` (${mode.label} caps its own render)`
           : '';
-      showToast(`Exported ${real.width}×${real.height}${short}`, short ? 'warning' : 'success', short ? 4000 : 2600);
+      // "Downloaded", as every download in the Explorer says it (owner, 2026-09-24; it said "Exported")
+      showToast(`Downloaded ${real.width}×${real.height}${short}`, short ? 'warning' : 'success', short ? 4000 : 2600);
     } catch (e) {
       console.error('[fullscreen export] at-size export failed:', e);
       showToast('Export failed', 'error', 4000);
@@ -642,10 +665,16 @@ export const FullscreenGradientOverlay: React.FC = () => {
   // an ownCanvas mode only if it implements the optional `renderAt` face. Read through the ref
   // during render — `ownReady` re-renders once the mode has mounted, so this settles correctly.
   const canRenderAtSize = !isOwnCanvas || !!ownHandleRef.current?.renderAt;
-  // The bottom-right stage hint — split / per-mode / generic display-only.
+  // The bottom-right stage hint — split, or the mode's own, or NOTHING (2026-09-24): the old
+  // fallback, "Esc to close · display-only preview", was false where it showed (Spline is edited
+  // on the stage, and every mode exports). A pointer with no Esc key under it (a phone, a
+  // tablet) loses the "Esc to close" part of any mode's hint here, in one place, so no mode —
+  // Liquify, which ships `wip`, included — has to know.
   const hint = fs.split
     ? 'Live — follows the gradient you last edited · drag the divider to resize'
-    : activeMode?.hint ?? 'Esc to close · display-only preview';
+    : COARSE_POINTER
+      ? (activeMode?.hint ?? '').split(' · ').filter((part) => !/^esc to close$/i.test(part.trim())).join(' · ')
+      : activeMode?.hint ?? '';
   // App fraction (0..1) the divider sits at, as a percentage for ARIA + drag math.
   const appPct = Math.round(fs.splitY * 100);
   // PHONE: every toolbar control gets a ≥36 px tap target. 36 rather than the 44 the platform
@@ -731,9 +760,12 @@ export const FullscreenGradientOverlay: React.FC = () => {
           // PHONE: the modes take their own line, so the name row ends here and `ml-auto` puts
           // the ✕ at its right edge. DESKTOP: pinned to the toolbar's top-right corner, out of
           // the wrap — see the row's own comment.
-          className={`${phone ? 'ml-auto px-3 min-h-[36px] text-[16px]' : 'absolute right-3 top-2 px-2.5 py-1 text-[14px] hover:text-fg hover:bg-line/[0.06]'} leading-none rounded-md border border-line/10 text-fg-tertiary transition-colors`}
+          // The glyph is the app's one close (`v2/ui/Icon`, ADR-0114) at its own size, the
+          // Export window's; the padding gives back what the wider glyph box takes, so the
+          // button stays about the size it was (38×36 on a phone, was 39×36).
+          className={`${phone ? 'ml-auto px-2.5 min-h-[36px]' : 'absolute right-3 top-2 px-2 py-1 hover:text-fg hover:bg-line/[0.06]'} inline-flex items-center justify-center leading-none rounded-md border border-line/10 text-fg-tertiary transition-colors`}
         >
-          ✕
+          <Icon name="close" />
         </button>
 
         {/* Seven mode chips are ~500 px of non-wrapping run. On a 390 px screen that used to
@@ -752,6 +784,9 @@ export const FullscreenGradientOverlay: React.FC = () => {
             <button
               key={m.id}
               onClick={() => setFullscreenGeom(m.id)}
+              // the lit chip was only a colour; say it to the accessibility tree too
+              aria-pressed={fs.geom === m.id}
+              title={m.label}
               className={`shrink-0 whitespace-nowrap px-3 ${phone ? 'py-2 min-h-[36px]' : 'py-1.5'} text-[12px] transition-colors ${
                 fs.geom === m.id
                   ? 'bg-accent-500/25 text-accent-300 font-medium'
@@ -801,7 +836,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
               if (fs.split && liveSplit) setFullscreenConfig(liveSplit.config, liveSplit.name);
               setFullscreenSplit(!fs.split);
             }}
-            title="Split: keep the app on top, dock this preview on the bottom — it live-follows the gradient you last edited"
+            title="Split — the app above, this below"
             aria-pressed={fs.split}
             className={`${phone ? 'hidden ' : ''}px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
               fs.split
@@ -814,7 +849,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
           {hasGeometryHandles(fs.geom) && (
             <button
               onClick={() => setFullscreenHandles(!fs.handles)}
-              title="On-screen shape handles — drag them on the image to reshape the gradient (they fade when idle and never export)"
+              title="Handles — reshape on the image"
               aria-pressed={fs.handles}
               className={`px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
                 fs.handles
@@ -829,7 +864,7 @@ export const FullscreenGradientOverlay: React.FC = () => {
           )}
           <button
             onClick={() => setFullscreenDither(!fs.dither)}
-            title="Blue-noise dither — smooths 8-bit banding on the ramp (bakes into the PNG)"
+            title="Dither — smooths banding"
             aria-pressed={fs.dither}
             className={`px-2.5 ${tapY} text-[12px] rounded-md border transition-colors ${
               fs.dither
@@ -894,9 +929,11 @@ export const FullscreenGradientOverlay: React.FC = () => {
             <div className="text-[12px] text-fg-tertiary">Rendering {activeMode!.label}…</div>
           </div>
         ) : null}
-        <div className="absolute bottom-2 right-3 text-[10px] text-fg-dim/80 pointer-events-none">
-          {hint}
-        </div>
+        {hint && (
+          <div className="absolute bottom-2 right-3 text-[10px] text-fg-dim/80 pointer-events-none">
+            {hint}
+          </div>
+        )}
       </div>
 
       {/* Bottom bar — export at a chosen size. Additive: the toolbar's Export PNG above still

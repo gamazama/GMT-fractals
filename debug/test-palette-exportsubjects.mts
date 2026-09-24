@@ -49,6 +49,14 @@
  *       credited one keeps its credit whole) — falsified by `runSetExport` not passing the member
  *       stems (red: the credit's `/` welded) and by `favientsExport.zipMemberName` slugging again
  *       (red). The member rule itself is test:gradient-file [4b].
+ *   [12] (2026-09-24, owner decisions 6a and 6f) a SET's swatches are laid out by the rule the
+ *       window passes — the hero's current one — through the real `runSetExport` (.zip members)
+ *       and with no rule still Even; a set of ONE downloads its member's own file (`Lop.css`,
+ *       `Lop-swatches.gpl`, the rule applied) and previews exactly that; a bundling format stays
+ *       the set's file; Stops on a ramp gradient lays out Even. [11]'s .zip-name check moved to a
+ *       two-member set, since a set of one no longer makes a .zip. Falsified that day, each
+ *       restored: `runSetExport` skipping its set-of-one branch → 3 red ("downloads My set.zip");
+ *       the swatch .zip built without the rule → 1 red.
  *   [7]/[8] also changed that day: CSS joined STOP_BUDGETS, so the "does not reduce, does not
  *       warn" example moved from css to json and CSS now has to warn and honour the budget.
  *   FALSIFIED 2026-09-14, one mutation at a time, each restored, every one exit 1: CSS ignoring
@@ -505,11 +513,16 @@ section('[11] every format downloads under its own filename');
     runExport({ kind: 'download', key: b }, RAMP, 'Sea Glass', [], {});
     runExport({ kind: 'download', key: b, subject: 'swatches' }, RAMP, 'Sea Glass', PALETTE, {});
     ok(caught.length === 3 && new Set(caught).size === 3, `[11] runExport: ${a} and ${b} downloads share a filename (${caught.join(', ')})`);
-    const favs = [{ id: 'f', name: 'One', createdAt: 0, config: { stops: [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 1, color: '#FFFFFF' }], colorSpace: 'srgb', blendSpace: 'oklab' } }] as unknown as Parameters<typeof runSetExport>[1];
+    // TWO members: a set of one writes its member's own file since 2026-09-24 ([12]), and the
+    // point here is the .zip's name
+    const favs = [
+      { id: 'f', name: 'One', createdAt: 0, config: { stops: [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 1, color: '#FFFFFF' }], colorSpace: 'srgb', blendSpace: 'oklab' } },
+      { id: 'g', name: 'Two', createdAt: 1, config: { stops: [{ id: 'a', position: 0, color: '#FFFFFF' }, { id: 'b', position: 1, color: '#000000' }], colorSpace: 'srgb', blendSpace: 'oklab' } },
+    ] as unknown as Parameters<typeof runSetExport>[1];
     caught.length = 0;
     runSetExport(a, favs, 'Set');
     runSetExport(b, favs, 'Set');
-    ok(caught.length === 2 && caught[0] !== caught[1], `[11] runSetExport: the ${a} and ${b} zips share a filename (${caught.join(', ')})`);
+    ok(caught.length === 2 && caught[0] !== caught[1] && caught.every((n) => n.endsWith('.zip')), `[11] runSetExport: the ${a} and ${b} zips share a filename (${caught.join(', ')})`);
   }
   // A download is named with the name AS IT IS (2026-09-16): spaces and non-ASCII kept, only what a
   // filesystem refuses removed — the GMT file's rule — and a credit kept whole when the name is cut.
@@ -538,6 +551,60 @@ section('[11] every format downloads under its own filename');
   runSetExport('map', setFavs, 'Set');
   const members = lastBlob ? Object.keys(unzipSync(new Uint8Array(await (lastBlob as Blob).arrayBuffer()))) : [];
   ok(JSON.stringify(members) === JSON.stringify(['001_Stufe Bänder_2 é.map', `002_${stem}.map`]), `[11] runSetExport's .zip members are NNN_ + each member's single-download stem, credit kept whole (${JSON.stringify(members)})`);
+}
+
+// ── [12] a set's swatches follow the hero's rule; a set of one is its member's file ─────
+// (owner, 2026-09-24.) Through the real `runSetExport` / `setExportText`, the download caught at
+// `createElement('a')` and its bytes at `URL.createObjectURL`, as in [11].
+section("[12] a set's swatches follow the hero's rule; a set of one downloads its member's own file");
+{
+  const caught: string[] = [];
+  let lastBlob: Blob | null = null;
+  (URL as unknown as { createObjectURL: (b: Blob) => string }).createObjectURL = (b: Blob) => { lastBlob = b; return 'blob:t'; };
+  (URL as unknown as { revokeObjectURL: () => void }).revokeObjectURL = () => {};
+  (globalThis as unknown as { document: unknown }).document = {
+    createElement: () => { const a = { href: '', download: '', click() { caught.push(a.download); } }; return a; },
+  };
+  const { runSetExport, setExportText, setIsLoneFile } = await import('../gradient-explorer/v2/exportActions');
+  const { paletteOf } = await import('../palette/core/favientsExport');
+  const blobText = async () => (lastBlob ? await (lastBlob as Blob).text() : '');
+  // Uneven on purpose: black to white in the first tenth, then white to red. Even and Perceptual
+  // place five swatches differently on it, so a rule that is not passed through shows.
+  const lopsided = { stops: [{ id: 'a', position: 0, color: '#000000' }, { id: 'b', position: 0.1, color: '#FFFFFF' }, { id: 'c', position: 1, color: '#FF0000' }], colorSpace: 'srgb', blendSpace: 'oklab' };
+  const one = [{ id: 'o', name: 'Lop', createdAt: 0, config: lopsided }] as unknown as Parameters<typeof runSetExport>[1];
+  const gpl = getExportFormat('gpl')!;
+  const even = text(gpl.swatches!(paletteOf(one[0], 5, 'even'), 'Lop'));
+  const perceptual = text(gpl.swatches!(paletteOf(one[0], 5, 'perceptual'), 'Lop'));
+  ok(even !== perceptual, '[12] setup: Even and Perceptual lay the lopsided gradient out the same — the rule checks below prove nothing');
+
+  // A SET OF ONE: the member's own file, named as a single download of it is — never a .zip of one.
+  caught.length = 0;
+  runSetExport('css', one, 'My set');
+  ok(caught[0] === 'Lop.css', `[12] a set of one in .css downloads ${JSON.stringify(caught[0])}, wanted its member's own "Lop.css"`);
+  ok(setIsLoneFile('css', one) && !setIsLoneFile('css', [...one, ...one]), '[12] setIsLoneFile: one member → its own file, two → a .zip');
+  ok(!setIsLoneFile('ai', one), '[12] a format that BUNDLES (.ai) stays the set\'s one file, named after the set');
+  caught.length = 0;
+  runSetExport('gpl', one, 'My set', 'swatches', 5, undefined, 'perceptual');
+  ok(caught[0] === 'Lop-swatches.gpl', `[12] a set of one's swatches download ${JSON.stringify(caught[0])}, wanted "Lop-swatches.gpl"`);
+  ok((await blobText()) === perceptual, "[12] a set of one's swatch download is not the member laid out by the set's rule (Perceptual)");
+  ok(setExportText('gpl', one, 'swatches', 5, undefined, 'perceptual') === perceptual, "[12] a set of one's PREVIEW is not the file it downloads");
+
+  // THE RULE on a real set: each .zip member is that member laid out by the rule passed in.
+  const two = [...one, { id: 'p', name: 'Lop 2', createdAt: 1, config: lopsided }] as unknown as Parameters<typeof runSetExport>[1];
+  runSetExport('gpl', two, 'My set', 'swatches', 5, undefined, 'perceptual');
+  const members = lastBlob ? unzipSync(new Uint8Array(await (lastBlob as Blob).arrayBuffer())) : {};
+  const firstMember = strFromU8(Object.values(members)[0] ?? new Uint8Array());
+  ok(firstMember === perceptual, "[12] a set's swatch .zip ignores the rule it was given (its first member is not the Perceptual layout)");
+  runSetExport('gpl', two, 'My set', 'swatches', 5);
+  const byDefault = lastBlob ? strFromU8(Object.values(unzipSync(new Uint8Array(await (lastBlob as Blob).arrayBuffer())))[0] ?? new Uint8Array()) : '';
+  ok(byDefault === even, "[12] with no rule a set's swatches are no longer Even (the default every older caller relies on)");
+
+  // STOPS on a member with no stops (a ramp gradient, ADR-0122) lays out Even, not nothing.
+  const texels = Uint8Array.from({ length: 768 }, (_, i) => (i * 29 + (i % 3) * 71) & 255);
+  const rampFav = { id: 'r', name: 'Ramp', createdAt: 0, config: { stops: [], ramp: encodeRampBuffer(texels, 3), colorSpace: 'srgb', blendSpace: 'oklab' } } as unknown as Parameters<typeof paletteOf>[0];
+  const asStops = paletteOf(rampFav, 6, 'stops');
+  const asEven = paletteOf(rampFav, 6, 'even');
+  ok(asStops.length === 6 && JSON.stringify(asStops) === JSON.stringify(asEven), `[12] Stops on a gradient with no stops is not Even (${asStops.length} swatches)`);
 }
 
 console.log(failures ? `\nFAIL — ${failures} assertion${failures === 1 ? '' : 's'}` : '\nPASS — two subjects, one registry, one stop budget');

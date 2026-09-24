@@ -21,6 +21,12 @@ import { buildC4dScript, buildBlenderScript, DCC_MAX_STOPS, type DccItem } from 
 
 export interface ExportFormatDef {
   key: string;
+  /** The format's NAME, followed by the extension it lands as ("Adobe swatches .ase",
+   *  "Cinema 4D script .c4d.py") for the hosts that show a bare list (GMT's Favients menu, the
+   *  Extras dropdowns). Names only — no descriptors such as "(binary)": a binary format already
+   *  shows it by offering no Copy. A surface with its own extension column strips the extension
+   *  back out with `exportActions.labelWithoutExt`, which matches `.${ext}` exactly — so the
+   *  extension here must be written as `ext` is, or it shows twice. */
   label: string;
   /** What to call this format under the SWATCHES subject, when the ramp wording is wrong
    *  for it ("Hex list (256)" is a ramp fact). Falls back to `label`. */
@@ -832,7 +838,7 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
     swatches: (c) =>
       '; paint.net Palette File\n' + c.map((x) => 'FF' + ri(x).map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()).join('\n'),
   },
-  { key: 'grd', label: 'Photoshop .grd (binary)', ext: 'grd', binary: true, build: (r, stem, budget) => buildGRD(r, budget, stem) },
+  { key: 'grd', label: 'Photoshop .grd', ext: 'grd', binary: true, build: (r, stem, budget) => buildGRD(r, budget, stem) },
   // Cinema 4D and Blender have no gradient file to import, but both run Python from a
   // plain text file with nothing installed — so the "format" is a script that rebuilds the
   // ramp through the host's own API. Distinct `ext`s because they would otherwise both
@@ -843,14 +849,14 @@ export const EXPORT_FORMATS: ExportFormatDef[] = [
   // once — which is the whole reason to run a script rather than click through an importer.
   {
     key: 'c4d',
-    label: 'Cinema 4D script (.py)',
+    label: 'Cinema 4D script .c4d.py',
     ext: 'c4d.py',
     build: (r, stem, budget) => buildC4dScript([dccItem(r, stem || 'Gradient', budget)]),
     collection: (items, budget) => buildC4dScript(items.map((it) => dccItem(it.ramp, it.name, budget))),
   },
   {
     key: 'blender',
-    label: 'Blender script (.py)',
+    label: 'Blender script .blender.py',
     ext: 'blender.py',
     build: (r, stem, budget) => buildBlenderScript([dccItem(r, stem || 'Gradient', budget)]),
     collection: (items, budget) => buildBlenderScript(items.map((it) => dccItem(it.ramp, it.name, budget))),

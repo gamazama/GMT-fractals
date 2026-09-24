@@ -27,8 +27,10 @@ import type { RGB } from './oklab';
  * @invariant a ramp gradient's exported ramp is its texels byte-for-byte, on the Linear profile
  *   too — proven by: `npm run test:palette-exportsubjects` ("a ramp gradient's collection export
  *   is its texels"). Falsified 2026-09-14 two ways, see the harness header [9].
+ * Exported (2026-09-24) for the Explorer's set of ONE, which writes its member's own file
+ * (`exportActions.loneMember`) and must take the ramp the .zip member would have.
  */
-const rampOf = (f: Favient): RGB[] => gradientDisplayRamp(f.config);
+export const rampOf = (f: Favient): RGB[] => gradientDisplayRamp(f.config);
 
 /**
  * The longest member name a set .zip writes, in UTF-8 bytes. 255 is the per-name limit of ext4 and
@@ -142,7 +144,8 @@ export const collectionQualityWarnings = (
 // is the whole difference between the two subjects at this level.
 
 /** One member's palette: `n` swatches placed by `rule` (the hero's rules, applied to a
- *  gradient nobody has laid out by hand). */
+ *  gradient nobody has laid out by hand). Stops on a member with fewer than two stops — a ramp
+ *  gradient (ADR-0122) — lays out Even: `samplePalette`'s own fallback. */
 export const paletteOf = (f: Favient, n: number, rule: PaletteRule = 'even'): RGB[] => {
   const ramp = rampOf(f);
   return swatchesAt(ramp, layoutPositions(rule, clampCount(n), ramp, f.config)).map((s) => s.color);
