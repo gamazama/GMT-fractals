@@ -4,11 +4,12 @@
  * hairline border, no fill. Every clickable thing in the v2 shell that DOES something
  * (Swap, More like this, Curves ▾, Fit from source, Snapshot actions…) renders through
  * this component instead of a hand-rolled `rounded-full`/`rounded-lg` button string, so
- * the shell has exactly one action-button look. `active` is a toggle's pressed state
- * (a subtler tint, still never a pill). `primary` (2026-09-13, the Adjust face's Apply) is
- * the one action a group of Acts is FOR: the same box, tinted with the accent the shell uses
- * for "this one" (a lit toggle, a chosen segment), so it reads first without becoming a
- * second button shape.
+ * the shell has exactly one action-button look. `active` is a toggle's pressed state: it
+ * wears the lit-toggle accent (owner, 2026-09-24 — until then a subtler grey tint that sites
+ * had to top up with their own `text-accent-300`), still never a pill. `primary` (2026-09-13,
+ * the Adjust face's Apply) is the one action a group of Acts is FOR: the same box, tinted with
+ * that same accent the shell uses for "this one" (a lit toggle, a chosen segment), so it reads
+ * first without becoming a second button shape; it alone brightens on hover.
  *
  * PROMOTED to `components/ui/` on 2026-09-23 from `gradient-explorer/v2/ui/Act.tsx` (which now
  * re-exports this, so every Explorer import is unchanged): the shared Stops editor's "Reduce
@@ -46,7 +47,8 @@ export const Act: React.FC<Props> = ({ children, onClick, title, active = false,
       primary
         ? 'bg-accent-400/15 border-accent-400/40 text-accent-300 hover:bg-accent-400/25 hover:text-accent-200'
         : active
-          ? 'bg-surface-section border-line/40 text-fg'
+          // the lit toggle's wash — InlineToggleButtons' soft ON, the one `primary` borrows
+          ? 'bg-accent-400/15 border-accent-400/40 text-accent-300'
           : 'bg-surface-section border-line/20 text-fg-muted hover:text-fg hover:border-line/40',
       className,
     ].join(' ')}

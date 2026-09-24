@@ -24,7 +24,7 @@
  * (`editorAffordances`); a stop gradient's menu is unchanged item for item.
  * Guard: `npm run test:gradient-rampmode`.
  *
- * REDUCE STOPS… (2026-09-23) sits under Double Knots, its opposite, whenever the editor has a
+ * REDUCE STOPS… (2026-09-23) sits under Double Stops, its opposite, whenever the editor has a
  * reducer to run (the `gradientStopReducer` seam — `reduceStops` is omitted otherwise, and the
  * item with it). It OPENS the editor's popup rather than acting, so it is not wrapped in an undo
  * bracket; the popup's Apply is. It is present but disabled, with a `title` saying why, on a ramp
@@ -110,7 +110,7 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
     // A ramp's one way into stop editing (addStops self-brackets — no `wrap`).
     ...(can.addStops && addStops ? [{ label: 'Add Stops', action: addStops }] : []),
     { label: 'Invert Gradient', action: wrap(() => (ramp ? setConfig(reverseRampGradient(ramp)) : emit(stopOps.invert(knots)))) },
-    { label: 'Double Knots', disabled: !can.stopActions, action: wrap(() => emit(stopOps.double(knots))) },
+    { label: 'Double Stops', disabled: !can.stopActions, action: wrap(() => emit(stopOps.double(knots))) },
     ...(reduceStops ? [(() => {
       const why = ramp
         ? 'A 256-colour ramp has no stops to reduce. Add Stops gives it some'

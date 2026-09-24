@@ -18,7 +18,9 @@ import { safeLocalGet, safeLocalKeys, safeLocalRemove } from '../store/safeLocal
  * Data-driven (no per-pref code here): renders a control per {@link SettingDescriptor}
  * registered in the settingsRegistry, organised into top-level TABS (`tab`, default
  * 'Interface') then sub-sections (`section`). The Files tab also hosts the raw
- * localStorage inspector. Each subsystem owns its pref's get/set.
+ * localStorage inspector (`storage`, default on; a host with no use for raw keys — the
+ * Gradient Explorer, owner 2026-09-24 — passes `storage={false}`, and Files then shows only
+ * what is registered on it). Each subsystem owns its pref's get/set.
  *
  * @assumption Engine-core (components/) — consumes the registry + safeLocal* guard +
  *   the FloatingPanel primitive; no app/domain imports. Apps register prefs + mount this.
@@ -26,6 +28,8 @@ import { safeLocalGet, safeLocalKeys, safeLocalRemove } from '../store/safeLocal
 interface Props {
     open: boolean;
     onClose: () => void;
+    /** Files ▸ Storage, the raw localStorage inspector. Default true. */
+    storage?: boolean;
 }
 
 /** Preferred tab order; tabs not listed here are appended in registration order. */
@@ -109,7 +113,7 @@ const SettingRow: React.FC<{ d: SettingDescriptor; onChanged: () => void }> = ({
     );
 };
 
-export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
+export const SettingsPanel: React.FC<Props> = ({ open, onClose, storage = true }) => {
     const settings = useRegisteredSettings();
     const [tick, bump] = useReducer((n: number) => n + 1, 0);
     const [activeTab, setActiveTab] = useState<string | null>(null);
@@ -142,14 +146,14 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
     }, [settings, tick]);
 
     // Tab list: preferred order first, then any extras. 'Files' always present
-    // because it hosts the storage inspector.
+    // while it hosts the storage inspector.
     const tabs = useMemo(() => {
         const present = new Set(byTab.keys());
-        present.add('Files');
+        if (storage) present.add('Files');
         const ordered = TAB_ORDER.filter((t) => present.has(t));
         for (const t of present) if (!ordered.includes(t)) ordered.push(t);
         return ordered;
-    }, [byTab]);
+    }, [byTab, storage]);
 
     const current = activeTab && tabs.includes(activeTab) ? activeTab : tabs[0];
 
@@ -162,7 +166,9 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
     // PHONE (2026-09-11): the window is the whole screen — nothing to drag or resize, and
     // a 440×560 box placed at (200, 64) ran off a 390 px screen on both axes (owner: "the
     // settings panel needs phone compat"). The engine's device flag, not a width: a coarse
-    // pointer above 768 px wants this too.
+    // pointer above 768 px wants this too. FloatingPanel's `sheet` (2026-09-24, L4): a
+    // viewport-sized box at (0,0) used to be clamped to (8,8) — 8 px off the right edge —
+    // and capped at 90vh.
     //
     // ABOVE the `!open` early return, and it must stay there: this is a HOOK, so calling it
     // only on the open render makes React see hook #9 appear out of nowhere and throw
@@ -179,15 +185,13 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
 
     const currentSections = byTab.get(current);
 
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 440;
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 560;
-
     return (
         <FloatingPanel
             z={Z.modal}
-            initialPosition={phone ? { x: 0, y: 0 } : initialPos}
-            initialSize={phone ? { width: vw, height: vh } : { width: 440, height: 560 }}
+            initialPosition={initialPos}
+            initialSize={{ width: 440, height: 560 }}
             minSize={{ width: 340, height: 280 }}
+            sheet={phone}
             draggable={!phone}
             resizable={!phone}
             dismissOnEscape
@@ -225,7 +229,7 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
                     </section>
                 ))}
 
-                {current === 'Files' && (
+                {storage && current === 'Files' && (
                     <section className="py-2">
                         <div className="text-[10px] uppercase tracking-wider text-fg-dim font-bold mb-1">Storage</div>
                         <div className="text-[10px] text-fg-dim mb-2 leading-snug">
@@ -273,7 +277,7 @@ export const SettingsPanel: React.FC<Props> = ({ open, onClose }) => {
                     </section>
                 )}
 
-                {!currentSections && current !== 'Files' && (
+                {!currentSections && !(storage && current === 'Files') && (
                     <div className="text-[11px] text-fg-dim py-6 text-center">No preferences in this tab.</div>
                 )}
             </div>

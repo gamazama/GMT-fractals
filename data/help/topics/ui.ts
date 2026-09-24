@@ -111,7 +111,7 @@ Click the **Presets** button (top-right) to load predefined gradients, or Copy/P
 Right-click the track to:
 - **Distribute**: Evenly space selected knots.
 - **Invert**: Flip the gradient.
-- **Double Knots**: Increase resolution.
+- **Double Stops**: Increase resolution.
 - **Bias Handles**: Toggle visibility of bias diamond handles.
 - **Reset Default**: Restore the gradient to its default state.
 - **Delete Selected**: Remove all currently selected knots.

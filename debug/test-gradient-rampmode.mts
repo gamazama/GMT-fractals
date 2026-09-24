@@ -163,7 +163,7 @@ const item = (items: ContextMenuItem[], label: string) => items.find((i) => i.la
   item(items, 'sRGB (Standard)')!.action();
   const out = calls.setConfig[2];
   check(calls.emit === 0 && out?.ramp === zebraCfg.ramp && out.colorSpace === 'srgb' && out.stops.length === 0, 'ramp: the output space keeps the ramp');
-  const off = ['Double Knots', 'Distribute Selected', 'Delete Selected', 'Copy Gradient', 'Paste Gradient', 'Bias Handles', 'OkLab', 'RGB'];
+  const off = ['Double Stops', 'Distribute Selected', 'Delete Selected', 'Copy Gradient', 'Paste Gradient', 'Bias Handles', 'OkLab', 'RGB'];
   const blendLabels = items.slice(items.findIndex((i) => i.isHeader && i.label === 'Blend Mode') + 1, items.findIndex((i) => i.isHeader && i.label === 'Output Mode'));
   check(off.filter((l) => item(items, l)).every((l) => item(items, l)!.disabled) && blendLabels.length > 0 && blendLabels.every((i) => i.disabled),
     'ramp: stop-only items disabled (double, distribute, delete, clipboard, bias handles, every blend mode)');
@@ -173,7 +173,7 @@ const item = (items: ContextMenuItem[], label: string) => items.find((i) => i.la
 {
   const { items, calls } = menuFor(stopCfg, stops, ['a', 'b', 'c'], () => {});
   check(!item(items, 'Add Stops'), 'stops: no Add Stops item even when one is passed');
-  const enabled = ['Invert Gradient', 'Double Knots', 'Distribute Selected', 'Delete Selected', 'Copy Gradient', 'Paste Gradient', 'Bias Handles', 'Reset Default', 'sRGB (Standard)'];
+  const enabled = ['Invert Gradient', 'Double Stops', 'Distribute Selected', 'Delete Selected', 'Copy Gradient', 'Paste Gradient', 'Bias Handles', 'Reset Default', 'sRGB (Standard)'];
   check(enabled.every((l) => item(items, l) && !item(items, l)!.disabled), 'stop menu unchanged: every action enabled with 3 of 4 selected');
   const blend = items.slice(items.findIndex((i) => i.isHeader && i.label === 'Blend Mode') + 1, items.findIndex((i) => i.isHeader && i.label === 'Output Mode'));
   check(blend.every((i) => !i.disabled), 'stop menu unchanged: blend modes enabled');

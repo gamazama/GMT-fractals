@@ -120,7 +120,7 @@ async function pickAndEdit(page: Page, x = 400, y = 260): Promise<{ kind: string
   await page.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('no hero after a wall click'));
   await page.waitForTimeout(700);
   const before = await working(page);
-  const track = page.locator('[data-gx-hero] [title="Click & drag to add/move knot"]').first();
+  const track = page.locator('[data-gx-hero] [data-gx-knot-track]:not([data-gx-ramp-mode]):not([data-gx-knots-stale])').first();
   const tb = await track.boundingBox();
   if (!tb) fail('no knot track on the hero');
   // A spot away from the ends, where an existing knot is unlikely: the insert path.

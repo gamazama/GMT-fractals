@@ -317,7 +317,7 @@ export const WaveToolHead: React.FC<Props> = ({
       <Sep on={!phone} />
       <Strength value={strength} onChange={onStrength} onPill={onPill} />
       <div className="shrink-0 flex items-center gap-1 pl-2 border-l border-line/10 ml-auto">
-        <Btn onClick={onCommit} title="Bake the wave into the curve (Enter)" tag="commit">
+        <Btn onClick={onCommit} title="Apply the wave to the curve (Enter)" tag="commit">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M5 13l4 4L19 7" />
           </svg>

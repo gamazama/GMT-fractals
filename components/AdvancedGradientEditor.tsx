@@ -926,13 +926,15 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // Paste gradient is intentionally absent from the Gradient Explorer — the path from GX
     // to GMT is gradient → library (the shared `gmt.favients` collection) → GMT. app-gmt,
     // which passes no `inspectorHost`, keeps the section.
+    // View ▸ Reset Default goes too (owner, 2026-09-24): the hero's New Gradient (the host's
+    // `menuLead`) already starts from the same black → white. GMT keeps the item.
     const onlySections = (items: ContextMenuItem[]): ContextMenuItem[] => {
         if (!inspectorHost) return items;
         const keep = new Set(['Actions', 'View']);
         let on = false;
         return items.filter((it) => {
             if (it.isHeader) { on = keep.has(it.label ?? ''); return on; }
-            return on;
+            return on && it.label !== 'Reset Default';
         });
     };
     const buildMenuItems = useCallback(() => onlySections(buildGradientMenu({
@@ -1209,7 +1211,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     emitChange(stopOps.delete(knots, Array.from(selectedIds)));
                     setSelectedIds(new Set<string>());
                 });
-            } else if (e.key.startsWith('Arrow')) {
+            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                // Left / Right only: the bar is horizontal, and Up / Down used to nudge right.
                 e.preventDefault();
                 const dir = e.key === 'ArrowLeft' ? -1 : 1;
                 const step = e.shiftKey ? 0.05 : 0.01;
@@ -1529,7 +1532,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     // brackets, the marquee) — the browser must not read it as a scroll.
                     style={{ touchAction: 'none' }}
                     onPointerDown={affordances.addKnot ? handleTrackPointerDown : undefined}
-                    title={isRamp ? 'A 256-colour ramp: it has no stops to edit — Add stops to edit it stop by stop' : knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click & drag to add/move knot'}
+                    title={isRamp ? 'A 256-colour ramp: it has no stops to edit — Add stops to edit it stop by stop' : knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click and drag to add or move a stop'}
                     onDragOver={(e) => {
                         // a ramp takes no dropped colour: there is no knot to land it on
                         if (!affordances.knotEdits || !isColorDrag(e.dataTransfer)) return;
@@ -1586,8 +1589,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                 e.stopPropagation();
                                 const isRightClick = e.button === 2;
 
-                                // Ctrl+drag: duplicate the knot
-                                if (e.ctrlKey && !isRightClick) {
+                                // Ctrl+drag (⌘ on a Mac, where Ctrl+click is a right-click): duplicate the knot
+                                if ((e.ctrlKey || e.metaKey) && !isRightClick) {
                                     editStart();
                                     const dupeId = `${Date.now()}_dup`;
                                     const dupe: AdvancedGradientKnot = { ...knot, id: dupeId };
@@ -1650,8 +1653,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                 style={{ left: `calc(${selectionRange.min * 100}% - 8px)`, width: `calc(${(selectionRange.max - selectionRange.min) * 100}% + 16px)`, bottom: '-6px', touchAction: 'none' }}
                                 onPointerDown={(e) => {
                                     if (e.button !== 0) return;
-                                    // Ctrl+drag: duplicate selected knots then drag copies
-                                    if (e.ctrlKey) {
+                                    // Ctrl+drag (⌘ on a Mac): duplicate selected knots then drag copies
+                                    if (e.ctrlKey || e.metaKey) {
                                         e.stopPropagation();
                                         editStart();
                                         const dupeMap = new Map<string, string>();
@@ -1698,9 +1701,15 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             </div>
 
             {isExpanded && chrome === 'strip' && (() => {
+                // A phone's hero row (v2, the inspector hosted): tabs + "N stops · blend · ☰" must
+                // hold ONE line at 360 px, so the row sheds padding and gap there (L1), and the ☰
+                // grows to a finger's 28 px by height alone — the row is already that tall (L9; the
+                // blend chooser does the same inside BlendSpacePicker).
+                const tight = COARSE_POINTER && !!inspectorHost;
                 const meta = (
-                    <div className="flex items-center gap-2 text-[10px] text-fg-dim">
-                        {/* on a coarse pointer the picker IS the word "blend" (see BlendSpacePicker) */}
+                    <div className={`flex items-center ${tight ? 'gap-1.5' : 'gap-2'} text-[10px] text-fg-dim`}>
+                        {/* "blend" is the picker's own quiet word (`showNoun`); on a coarse pointer
+                            the picker IS the word (see BlendSpacePicker) */}
                         {/* RAMP MODE: blend is inert on a ramp, so its slot holds Add stops */}
                         {isRamp ? addStopsButton : (
                             <>
@@ -1714,8 +1723,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                                 >
                                     {knots.length} {knots.length === 1 ? 'stop' : 'stops'}
                                 </span>
-                                {!COARSE_POINTER && <span>blend</span>}
-                                <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} />
+                                <BlendSpacePicker value={blendSpace} onSelect={selectBlendSpace} onPreview={setHoverBlend} showNoun />
                             </>
                         )}
                         {/* the output profile is an EXPORT concern in v2 — it lives in the
@@ -1729,9 +1737,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                             </>
                         )}
                         <button
-                            className="flex items-center px-1.5 py-0.5 rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors"
+                            className={`flex items-center px-1.5 py-0.5 ${tight ? 'min-h-7' : ''} rounded border border-line/10 hover:border-line/25 hover:bg-line/10 text-fg-dim hover:text-fg font-medium transition-colors`}
                             onClick={handlePresetsClick}
-                            title={inspectorHost ? 'Stops menu — invert, double, distribute, delete · bias handles, reset' : 'Stops menu — copy, paste, reverse, distribute, interpolation…'}
+                            // the name only: smokes select the prefix `title^="Stops menu"`
+                            title="Stops menu"
                         >
                             <MenuIcon />
                         </button>
@@ -1818,7 +1827,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     // inspector (picker + stop column) is portalled into the tray face.
                     return (
                         <>
-                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5 px-2 gradient-interactive-element">
+                            <div className={`flex flex-wrap items-center gap-1.5 mt-1.5 ${tight ? 'px-1' : 'px-2'} gradient-interactive-element`}>
                                 {stripAside}
                                 {/* blend · output · menu sit at the row's right (owner, C.15) */}
                                 <div className="ml-auto flex items-center">{meta}</div>

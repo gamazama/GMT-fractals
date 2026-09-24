@@ -24,7 +24,8 @@ export const SettingsButton: React.FC = () => (
     </button>
 );
 
-export const SettingsHost: React.FC = () => {
+/** `storage={false}` hides Settings ▸ Files ▸ Storage (see SettingsPanel). */
+export const SettingsHost: React.FC<{ storage?: boolean }> = ({ storage }) => {
     const open = useSettingsOpen();
-    return <SettingsPanel open={open} onClose={closeSettings} />;
+    return <SettingsPanel open={open} onClose={closeSettings} storage={storage} />;
 };

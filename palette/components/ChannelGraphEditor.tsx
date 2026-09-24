@@ -1170,13 +1170,13 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
           onClick={() => { setBrushMode((b) => !b); setPencilMode(false); }}
           active={brushMode}
           icon={<BrushIcon active={brushMode} />}
-          tooltip="Smoothing brush — drag over a stretch to bake, smooth and simplify the active channel there"
+          tooltip="Smoothing brush — drag over a stretch to resample, smooth and simplify the active channel there"
           tag="smooth-brush"
         />
       )}
       {interactive && <ToolButton onPointerDown={tools.handleSimplifyDown} active={tools.isSimplifying} icon={<MagicIcon active={tools.isSimplifying} />} tooltip="Simplify (drag L/R)" />}
-      {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Bake / resample (drag)" />}
-      {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left) — bakes the selected keys and their neighbours first" tag="smooth" />}
+      {interactive && <ToolButton onPointerDown={tools.handleBakeDown} active={tools.isBaking} icon={<BakeIcon active={tools.isBaking} />} tooltip="Resample (drag)" />}
+      {interactive && <ToolButton onPointerDown={tools.handleSmoothDown} active={tools.isSmoothing} icon={<WaveIcon active={tools.isSmoothing} />} tooltip="Smooth (right) / bounce (left) — resamples the selected keys and their neighbours first" tag="smooth" />}
       {/* The FUNCTION TOOL. Its icon is the Sine glyph the tool itself traces (SHAPE_PATHS),
           not a hand-drawn one — so it cannot say something the tool does not do. */}
       {interactive && (
@@ -1188,7 +1188,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
               <path d={SHAPE_PATHS.Sine} fill="none" stroke="currentColor" strokeWidth={1.6} />
             </svg>
           }
-          tooltip="Function — add a sine / saw / pulse / noise wave to this channel, then bake it"
+          tooltip="Function — add a sine / saw / pulse / noise wave to this channel, then apply it"
           tag="wave"
         />
       )}
@@ -1377,7 +1377,7 @@ export const ChannelGraphEditor: React.FC<ChannelGraphEditorProps> = ({
                   ? `Smooth ${tools.smoothingRadius.toFixed(1)}`
                   : `Bounce ${Math.abs(tools.smoothingRadius).toFixed(1)}`
                 : tools.isBaking
-                  ? `Bake every ${tools.bakeStep}`
+                  ? `Resample every ${tools.bakeStep}`
                   : `Simplify ${(tools.simplifyStrength * 100) | 0}%`}
             </div>
           )}

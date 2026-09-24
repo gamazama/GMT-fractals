@@ -232,7 +232,7 @@ const ModeGlyph: React.FC<{ mode: PickerMode }> = ({ mode }) => {
 };
 
 const MODE_TITLE: Record<PickerMode, string> = {
-    stop: 'Stop — this knot\u2019s position, bias and interpolation',
+    stop: 'Stop — its position, bias and interpolation',
     spectrum: 'Spectrum — saturation and brightness for one hue',
     wheel: 'Wheel — hue and saturation on a disc',
     harmony: 'Harmony — related colours, and this gradient\u2019s own',

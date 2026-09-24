@@ -15,7 +15,7 @@
  *   [4] stopFit's `blendSpace`: omitted is byte-identical to 'oklab'; a gradient that is exactly
  *       three stops in rgb / hsv / spectral fits, in that space, to ≤ 4 stops within 0.02 there
  *       and says so — with and without the bias trials
- *   [5] the menu: present under Double Knots with a reducer, absent without; disabled with a
+ *   [5] the menu: present under Double Stops with a reducer, absent without; disabled with a
  *       title on a ramp, on two stops and when the editor blocks it; its action OPENS (no undo
  *       bracket); a stop menu keeps every other item
  *   [6] the steps are DIFFERENT gradients on real picks: mean stop count strictly falls
@@ -272,7 +272,7 @@ const item = (items: ContextMenuItem[], label: string) => items.find((i) => i.la
   const cfg = bumpy('oklab');
   const { items, calls } = menuFor(cfg, cfg.stops);
   const at = items.findIndex((i) => i.label === 'Reduce Stops…');
-  check(at > 0 && items[at - 1].label === 'Double Knots', 'Reduce Stops… sits under Double Knots');
+  check(at > 0 && items[at - 1].label === 'Double Stops', 'Reduce Stops… sits under Double Stops');
   const it = items[at];
   check(!!it && !it.disabled && !it.title, 'enabled, no title, on a 16-stop gradient');
   it?.action?.();

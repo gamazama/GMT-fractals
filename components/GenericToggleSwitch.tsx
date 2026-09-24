@@ -3,9 +3,18 @@
  *
  * This is the rendering core shared by both the main-app ToggleSwitch
  * (which adds fractalStore integration) and the mesh-export page.
+ *
+ * INPUT SKIN (2026-09-24, HT-09). Under `soft` (Gradient Explorer v2's tray,
+ * @see components/inputs/skin.tsx) a plain BOOLEAN renders as one chip in
+ * `InlineToggleButtons`' soft look — the label is the chip, the accent tint
+ * means on — instead of the dock's label bar with an "ON"/"OFF" cell, which
+ * read as the old dialect inside the new one. Option switches, and a boolean
+ * carrying an LFO button, keep the dock look. With no skin (app-gmt, the
+ * mesh-export page) every branch renders exactly as before.
  */
 
 import React from 'react';
+import { useInputSkin } from './inputs/skin';
 
 export interface GenericToggleOption<T> {
     label: string;
@@ -72,6 +81,34 @@ export function GenericToggleSwitch<T extends string | number | boolean>({
     };
 
     const toggleColor = getToggleColor(color);
+    const soft = useInputSkin() === 'soft';
+
+    // --- SOFT SKIN: a boolean is one chip (see the header) ---
+    if (soft && !options && typeof value === 'boolean' && !onLfoToggle) {
+        return (
+            <div
+                className={`mb-px ${disabled ? 'opacity-50 pointer-events-none' : ''}`}
+                data-help-id={rest['data-help-id']}
+                onContextMenu={onContextMenu}
+            >
+                <button
+                    type="button"
+                    onClick={handleBooleanClick}
+                    disabled={disabled}
+                    aria-pressed={value}
+                    className={`inline-flex items-center gap-1.5 h-[26px] px-2.5 rounded-lg text-[13px] whitespace-nowrap border transition-colors ${
+                        value
+                            ? 'bg-accent-400/15 border-accent-400/40 text-accent-300'
+                            : 'bg-surface-section border-line/20 text-fg-muted hover:text-fg hover:border-line/40'
+                    }`}
+                >
+                    {icon}
+                    {label ?? (value ? 'On' : 'Off')}
+                    {labelSuffix}
+                </button>
+            </div>
+        );
+    }
 
     // --- DENSE (SPREADSHEET) VARIANT ---
     if (variant === 'dense' && !options && typeof value === 'boolean') {

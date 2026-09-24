@@ -59,13 +59,20 @@ export const BlendSpacePicker: React.FC<{
      *  The Curves editor passes the subset that is three drawable axes — see
      *  `palette/core/curveSpaces.ts` CURVE_SPACE_ORDER. */
     order?: readonly BlendColorSpace[];
-    /** The trigger's tooltip and the coarse-pointer button's word. Defaults to "blend". */
+    /** The coarse-pointer button's word, and the default tooltip's. Defaults to "blend". */
     noun?: string;
-}> = ({ value, onSelect, onPreview, compact, order = BLEND_SPACE_ORDER, noun = 'blend' }) => {
+    /** The trigger's tooltip. Defaults to "<Noun> space"; the coarse-pointer button adds the
+     *  current mode after it. */
+    title?: string;
+    /** Say the noun quietly before the chip, the way the hero's row reads "blend OkLCh". Only on
+     *  a fine pointer: on a coarse one the button already reads the noun. */
+    showNoun?: boolean;
+}> = ({ value, onSelect, onPreview, compact, order = BLEND_SPACE_ORDER, noun = 'blend', title, showNoun }) => {
     const [open, setOpen] = useState(false);
     const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
     const spaces = order.includes(value) ? order : [...order, value];
     const size = compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5';
+    const tip = title ?? `${noun.charAt(0).toUpperCase()}${noun.slice(1)} space`;
 
     if (COARSE_POINTER) {
         return (
@@ -73,12 +80,14 @@ export const BlendSpacePicker: React.FC<{
                 <button
                     type="button"
                     aria-expanded={!!menuAt}
-                    className={`${size} py-0.5 rounded-sm font-semibold whitespace-nowrap transition-colors ${menuAt ? 'text-fg bg-line/15' : 'text-fg-muted'}`}
+                    // a finger's 28 px by height alone (L9, 2026-09-24); `compact` stays small, for
+                    // a strip that has no room to grow (the phone's Curves track strip)
+                    className={`${size} py-0.5 ${compact ? '' : 'min-h-7'} rounded-sm font-semibold whitespace-nowrap transition-colors ${menuAt ? 'text-fg bg-line/15' : 'text-fg-muted'}`}
                     onClick={(e) => {
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                         setMenuAt(menuAt ? null : { x: r.left, y: r.bottom + 5 });
                     }}
-                    title={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} space — ${BLEND_SPACE_LABEL[value]}`}
+                    title={`${tip} — ${BLEND_SPACE_LABEL[value]}`}
                 >
                     {noun} ▾
                 </button>
@@ -109,6 +118,9 @@ export const BlendSpacePicker: React.FC<{
             className="flex items-center gap-0.5 gradient-interactive-element"
             onMouseLeave={() => onPreview(null)}
         >
+            {/* the quiet noun; its 6 px margin + the row's 2 px gap = the 8 px the hero's row had
+                between its own "blend" span and this picker */}
+            {showNoun && <span className="mr-1.5 text-[10px] text-fg-dim">{noun}</span>}
             {/* The options open to the LEFT and the trigger stays put. Opening must never
                 move a different control under the cursor: the first build expanded in
                 place, so the chip the pointer was already over became a mode chip and the
@@ -140,7 +152,7 @@ export const BlendSpacePicker: React.FC<{
                     open ? 'text-fg bg-line/15' : 'text-fg-muted hover:text-fg hover:bg-line/10'
                 }`}
                 onClick={() => (open ? close() : setOpen(true))}
-                title={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} space`}
+                title={tip}
             >
                 {BLEND_SPACE_LABEL[value]}
             </button>

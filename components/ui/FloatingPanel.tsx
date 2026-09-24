@@ -20,6 +20,12 @@ import { getLayerHost } from './layerHost';
  * Drag/resize use pointer events with capture, so they track outside the
  * element and work for touch. Dragging only applies in coordinate mode (a
  * `position`/`initialPosition` was given) — there's nothing to move otherwise.
+ *
+ * A third shape, `sheet` (2026-09-24, L4): the panel IS the viewport — `inset: 0`, so it
+ * follows a resize or a rotation by itself. It sets aside every coordinate-mode rule that
+ * would fight that: the 8 px on-screen clamp (which moved a (0,0) viewport-sized box to
+ * (8,8) and pushed its right edge 8 px off a phone), the `90vh` cap, drag and resize.
+ * The caller's `position`/`size`/`initial*` are ignored while it is set.
  */
 type Coords = { x: number; y: number };
 type Dimensions = { width: number; height: number };
@@ -57,6 +63,9 @@ export interface FloatingPanelProps {
     /** Show a bottom-right resize grip. Requires `size`/`initialSize`. Default false. */
     resizable?: boolean;
     minSize?: Dimensions;
+    /** Fill the viewport (a phone's full-screen sheet): no clamp, no height cap, no drag
+     *  or resize; position and size props are ignored. Default false. */
+    sheet?: boolean;
 
     /** Auto-close on pointer-down outside the panel. Default false. */
     dismissOnOutside?: boolean;
@@ -123,6 +132,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     draggable = false,
     resizable = false,
     minSize = DEFAULT_MIN,
+    sheet = false,
     dismissOnOutside = false,
     dismissOnEscape = false,
     onClose,
@@ -135,11 +145,13 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
 }) => {
     const panelRef = useRef<HTMLDivElement>(null);
 
-    // Uncontrolled fallbacks. `position`/`size` (when passed) always win.
+    // Uncontrolled fallbacks. `position`/`size` (when passed) always win — except in a
+    // `sheet`, which has neither: with no coordinates the clamp, the click-to-front stack,
+    // drag and the resize grip all stand down by the same gates they already had.
     const [internalPos, setInternalPos] = useState<Coords | undefined>(initialPosition);
     const [internalSize, setInternalSize] = useState<Dimensions | undefined>(initialSize);
-    const effectivePos = position ?? internalPos;
-    const effectiveSize = size ?? internalSize;
+    const effectivePos = sheet ? undefined : position ?? internalPos;
+    const effectiveSize = sheet ? undefined : size ?? internalSize;
 
     // Click-to-front stacking. A panel joins the stack when it's a coordinate-mode
     // window (has a position) sitting at the default panel tier — so anchored
@@ -258,7 +270,7 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
                 zIndex: effectiveZ,
                 ...(effectivePos ? { left: effectivePos.x, top: effectivePos.y } : null),
                 ...(effectiveSize ? { width: effectiveSize.width, height: effectiveSize.height } : null),
-                maxHeight: '90vh',
+                ...(sheet ? { inset: 0 } : { maxHeight: '90vh' }),
             }}
         >
             {showHeader && (
