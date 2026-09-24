@@ -74,7 +74,8 @@ approval prompt — memory `feedback_adr_writes_need_owner`).
 ## Undo calls for the owner (from the 2026-09-24 undo/interface audit, `134df14b`)
 
 The interface now rides every undo entry (ADR-0120, 2026-09-24 block). Six things the audit left
-for the owner rather than guessing:
+for the owner rather than guessing. **Settled 2026-09-24: the owner walked them and accepts all
+six as they behave today ("sensible enough in practice") — do not reopen them in the pass:**
 1. Undo now reopens a face you closed AFTER the edit (edit a stop, Esc, Ctrl+Z → the inspector
    opens on that stop). ADR-0120 predicts it — confirm it feels right.
 2. A peek into Curves closed untouched leaves one undo step that shows nothing (already true
