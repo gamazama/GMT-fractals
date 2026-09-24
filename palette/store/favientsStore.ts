@@ -32,8 +32,10 @@
  * via `installWorking`): whatever becomes the working gradient — a wall or shelf pick
  * included, since a pick makes it the working gradient — is collected once it has stayed
  * Working for the shell's 400 ms debounce, and `updateRecent` then refreshes that entry in
- * place as it is edited. The ♥, Mix, Share and Wallpaper flush that write first; Export
- * does not. The ♥ itself files a separate copy with `add()`, never into Recent.
+ * place as it is edited — while it is TODAY's: an entry filed on an earlier local day is that
+ * day's record and is never rewritten, so a session resumed on a later day files its change as a
+ * new entry under today (owner, 2026-09-24). The ♥, Mix, Share and Wallpaper flush that write
+ * first; Export does not. The ♥ itself files a separate copy with `add()`, never into Recent.
  * It is deduped by `favientSig`, capped at `RECENT_CAP`, and it owns the front of
  * the array (index 0). Organising is optional: named groups sit beside Recent and
  * the user drags out of Recent into them. A gradient the user has already filed in
@@ -109,6 +111,14 @@ export const isRecentGroup = (id?: string): boolean => id === RECENT_GROUP;
 export const dayKey = (t: number): string => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** The shelf's clock: every `createdAt` this store stamps, and the "today" `updateRecent` measures
+ *  an entry's day against. A seam so a harness can move today without faking `Date` globally;
+ *  `null` puts the real clock back. The view (`favientBlocks.dayLabel`) takes its own `now`. */
+let clock: () => number = () => Date.now();
+export const setFavientsClock = (now: (() => number) | null): void => {
+  clock = now ?? (() => Date.now());
 };
 
 const LS_KEY = 'gmt.favients';
@@ -342,14 +352,23 @@ interface FavientsState {
    *  matching entry is promoted to the head, which is right for a re-pick. */
   collectRecent: (config: GradientConfig, name: string, source?: string, opts?: { fresh?: boolean; origin?: CatalogOrigin }) => string | null;
   /**
-   * Refresh a Recent entry IN PLACE — the v2 working session (owner, 2026-09-03: the bin
-   * "should be updating the gradient whenever the user modifies it"). Returns false when
-   * `id` is no longer a Recent entry (removed, or dragged into a user group — that IS
-   * keeping it, so it is left alone), which tells the caller to start a new one. Same
-   * content and name → true with no write. Any OTHER Recent entry already holding the new
-   * content is dropped, so the run stays one-per-gradient.
+   * Refresh the v2 working session's Recent entry (owner, 2026-09-03: the bin "should be
+   * updating the gradient whenever the user modifies it"). Returns the id of the entry that
+   * holds the gradient now, which the caller writes to from then on:
+   *   • `id` itself — refreshed IN PLACE; or unchanged content and name, with no write.
+   *   • a NEW id — `id` was filed on an earlier local day. A day's bin is that day's record
+   *     (owner, 2026-09-24: "a gradient you resume on a later day files a NEW entry under Today,
+   *     instead of updating the entry filed under the earlier day"), so the change is filed as a
+   *     fresh entry at the head of the run, dated now, carrying the old entry's source and credit
+   *     as an in-place refresh would; the earlier entry is left exactly as it was.
+   *   • null — `id` is no longer a Recent entry (removed, or dragged into a user group — that IS
+   *     keeping it, so it is left alone), or the day's new entry was refused because the gradient
+   *     is already filed in a group of yours (`collectRecent`'s rule). The caller collects.
+   * Any OTHER Recent entry of today already holding the new content is dropped, so a day stays
+   * one-entry-per-gradient; an earlier day's entry is never dropped, so an edit — or an undo —
+   * that brings back what an earlier day filed leaves that day's record alone.
    */
-  updateRecent: (id: string, config: GradientConfig, name: string) => boolean;
+  updateRecent: (id: string, config: GradientConfig, name: string) => string | null;
   remove: (id: string) => void;
   /** Content-presence query (used by the gradient-file import to skip duplicates). */
   isFav: (config: GradientConfig) => boolean;
@@ -361,7 +380,7 @@ interface FavientsState {
   /** Insert a NEW favourite (from an external drag) at flat index `toIndex` in `group`. */
   insertFavient: (config: GradientConfig, name: string, source: string | undefined, toIndex: number, group: string, origin?: CatalogOrigin) => string;
   /**
-   * File MANY gradients into a group in one write (GE v2 Phase D: "Keep these N" saves a
+   * File MANY gradients into a group in one write (GE v2 Phase D: "Group these N" saves a
    * narrowed wall as a group). They join the START of the group's run in the given order,
    * or the tail of the shelf when the group is new; `label` names a new group (made unique
    * against the others, as `renameGroup` does) and is ignored for one that already has
@@ -455,7 +474,7 @@ const entryToFavient = (e: GradientDocumentEntry, id: string): Favient => ({
   ...(e.source ? { source: e.source } : {}),
   ...withOrigin(e.origin),
   config: cleanConfig(e.config),
-  createdAt: typeof e.createdAt === 'number' ? e.createdAt : Date.now(),
+  createdAt: typeof e.createdAt === 'number' ? e.createdAt : clock(),
   group: e.group ?? DEFAULT_GROUP,
 });
 
@@ -551,7 +570,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     // user dragged a favourite into the Recent run (moveFavient writes lastGroupId), and
     // Recent is auto-managed churn — a save parked there would silently fall off the cap.
     const group = present && !isRecentGroup(lg) ? lg : DEFAULT_GROUP;
-    const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: Date.now(), group };
+    const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: clock(), group };
     const favients = [...get().favients];
     // Insert at the START of the target group's contiguous run so the new favourite
     // JOINS that group. Prepending to index 0 would split a mid-list group into two
@@ -596,8 +615,8 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     const at = opts?.fresh ? -1 : recent.findIndex((f) => favientSig(f.config) === sig);
     const head: Favient =
       at >= 0
-        ? { ...recent[at], ...(recent[at].origin ? {} : withOrigin(opts?.origin)), createdAt: Date.now() }
-        : { id: newId(), name, source, ...withOrigin(opts?.origin), config, createdAt: Date.now(), group: RECENT_GROUP };
+        ? { ...recent[at], ...(recent[at].origin ? {} : withOrigin(opts?.origin)), createdAt: clock() }
+        : { id: newId(), name, source, ...withOrigin(opts?.origin), config, createdAt: clock(), group: RECENT_GROUP };
     const tail = at >= 0 ? recent.filter((_, i) => i !== at) : recent;
 
     // Newest first, oldest off the tail.
@@ -614,19 +633,33 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
     return head.id;
   },
 
+  /**
+   * @invariant an entry filed on an earlier local day is never rewritten or dropped by the
+   *   working session's sync: the first change files a NEW entry under today and the session
+   *   writes to that one from then on; an edit, a rename or an undo that goes back across the
+   *   split leaves both entries in place — proven by: `npx tsx debug/test-palette-working.mts`
+   *   [16] ("resume on day D+1 → edit → sync: … day D's entry is exactly as it was", "… the
+   *   earlier day's entry is still there, exactly as it was"). Falsified 2026-09-24 three ways, see
+   *   that harness's header (D1–D3).
+   */
   updateRecent: (id, rawConfig, name) => {
     const config = cleanConfig(rawConfig);
     const cur = get().favients;
     const at = cur.findIndex((f) => f.id === id);
-    if (at < 0 || !isRecentGroup(cur[at].group)) return false;
+    if (at < 0 || !isRecentGroup(cur[at].group)) return null;
     const sig = favientSig(config);
-    if (favientSig(cur[at].config) === sig && cur[at].name === name) return true;
+    if (favientSig(cur[at].config) === sig && cur[at].name === name) return id;
+    // `YYYY-MM-DD` keys compare as dates. A day AFTER today (the clock went back) is not earlier.
+    const today = dayKey(clock());
+    const earlier = (f: Favient): boolean => dayKey(f.createdAt) < today;
+    // Filed on an earlier day: that day keeps it as it was, and the change opens today's entry.
+    if (earlier(cur[at])) return get().collectRecent(config, name, cur[at].source, { fresh: true, origin: cur[at].origin });
     const favients = cur
-      .filter((f) => f.id === id || !(isRecentGroup(f.group) && favientSig(f.config) === sig))
+      .filter((f) => f.id === id || !(isRecentGroup(f.group) && favientSig(f.config) === sig && !earlier(f)))
       .map((f) => (f.id === id ? { ...f, config, name } : f));
     saveFavients(favients);
     set({ favients });
-    return true;
+    return id;
   },
 
   remove: (id) => {
@@ -664,7 +697,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
 
   insertFavient: (rawConfig, name, source, toIndex, group, origin) => {
     const config = cleanConfig(rawConfig);
-    const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: Date.now(), group };
+    const fav: Favient = { id: newId(), name, source, ...withOrigin(origin), config, createdAt: clock(), group };
     const arr = [...get().favients];
     arr.splice(clamp(toIndex, 0, arr.length), 0, fav);
     saveFavients(arr);
@@ -676,7 +709,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
   insertMany: (items, group, label) => {
     const arr = [...get().favients];
     const have = new Set(arr.filter((f) => (f.group ?? DEFAULT_GROUP) === group).map((f) => favientSig(f.config)));
-    const now = Date.now();
+    const now = clock();
     const fresh: Favient[] = [];
     for (const it of items) {
       const config = cleanConfig(it.config);
@@ -748,7 +781,7 @@ export const useFavientsStore = create<FavientsState>((set, get) => ({
       name: e.name,
       source: 'Preset',
       config: cleanConfig(e.config),
-      createdAt: Date.now(),
+      createdAt: clock(),
       group,
     }));
     const favients = [...get().favients, ...favs];

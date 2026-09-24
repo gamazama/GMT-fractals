@@ -36,7 +36,11 @@
  * session (sessionId → null) starts on `use`, `setInput`, `goLive`, `cancelLive` and
  * `returnToSource`; `beginEdit` keeps it (an edit is the same gradient, changed). A session
  * picked up FROM the bin (`use(..., { fromRecent: true })`) is pinned: its first change opens a
- * new entry rather than rewriting the one it came from.
+ * new entry rather than rewriting the one it came from. A session that runs into a later day (a
+ * restored session, a tab left open past midnight) writes to its entry only while that entry is
+ * today's: the updater answers with the id that holds the gradient now, and when the entry was
+ * filed on an earlier day that is a NEW entry under today, which the session follows (owner,
+ * 2026-09-24; the rule and its guard sit on `favientsStore.updateRecent`).
  *
  * @invariant a gradient picked from a bin keeps its pin through the debounced sync that follows
  *   the pick, so its first change — an Adjust dial, or a stop edit after a fold — opens a NEW
@@ -153,7 +157,10 @@ export interface BakedFrom {
 }
 
 export type RecentCollector = (config: GradientConfig, name: string, source: string, opts?: { fresh?: boolean; origin?: CatalogOrigin }) => string | null;
-export type RecentUpdater = (id: string, config: GradientConfig, name: string) => boolean;
+/** Write the session's gradient to its entry `id`; returns the id that holds it now — `id`, or a
+ *  new entry under today when `id` was filed on an earlier day — or null when nothing does (the
+ *  entry is gone), and the sync collects. `favientsStore.updateRecent` is the one implementation. */
+export type RecentUpdater = (id: string, config: GradientConfig, name: string) => string | null;
 
 export interface WorkingState {
   input: WorkingInput;
@@ -164,7 +171,8 @@ export interface WorkingState {
    *  CANCELLED — the state chip ("live from Mix") is the cancel (Phase C.3, owner: "the hero
    *  needs a bake/cancel mechanism"). Cleared by the bake (`use`) and by cancelLive. */
   liveFrom: BakedFrom | null;
-  /** The My Gradients (Recent) entry this working session writes to; null = none yet. */
+  /** The My Gradients (Recent) entry this working session writes to; null = none yet. Moves to a
+   *  new entry when the one it names was filed on an earlier day (see `syncRecent`). */
   sessionId: string | null;
   /** The session started from a bin pick: its first change opens a NEW entry. */
   sessionPinned: boolean;
@@ -276,11 +284,11 @@ const collect = (config: GradientConfig, name: string, source: string, opts?: { 
     return null; /* a collector failure must never break an edit */
   }
 };
-const update = (id: string, config: GradientConfig, name: string): boolean => {
+const update = (id: string, config: GradientConfig, name: string): string | null => {
   try {
-    return _update?.(id, config, name) ?? false;
+    return _update?.(id, config, name) ?? null;
   } catch {
-    return false;
+    return null;
   }
 };
 /** Structural identity of a config (the store must not import favientSig). A RAMP gradient's
@@ -502,7 +510,15 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     // from what was picked, it becomes a new entry (the one it came from stays as it was).
     if (id && s.sessionPinned && s.input.kind === 'gradient' && configKey(d.config) !== configKey(s.input.config)) id = null;
     if (id && s.sessionPinned && s.input.kind !== 'gradient') id = null;
-    if (id && update(id, d.config, name)) return;
+    // The entry that holds the gradient now: the session's own, refreshed in place — or, when
+    // that one was filed on an earlier day, a new entry under today (owner, 2026-09-24: a day's
+    // entry is never rewritten), which the session writes to from here on. The pin guarded the
+    // entry the pick came from, so it has nothing left to guard once the session moves off it.
+    const held = id ? update(id, d.config, name) : null;
+    if (held) {
+      if (held !== id) set({ sessionId: held, sessionPinned: false });
+      return;
+    }
     // A session just opened on a live SOURCE (Image again, a Mix) is new work: a fresh
     // entry, even when its first output matches one already in the bin (owner, 2026-09-07).
     const fresh = !s.sessionId && (s.input.kind === 'extract' || s.input.kind === 'build');

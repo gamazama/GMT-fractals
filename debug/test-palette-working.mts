@@ -58,6 +58,27 @@
  *      edits; (c) redo brings the pick's fresh fit back UNTOUCHED with the flag set just before it;
  *      (d) the wave's shape (preview, write back, close) flips the flag and leaves NO entry.
  *
+ * A session resumed on a later day files a NEW entry under that day, added 2026-09-24 (owner: "a
+ * gradient you resume on a later day files a NEW entry under Today, instead of updating the entry
+ * filed under the earlier day"). Through the real shelf, "today" moved with `setFavientsClock`:
+ *  16. (a) the tab left open past midnight: a sync with nothing changed writes nothing; the first
+ *      edit opens a D+1 entry at the head and the session follows it; day D's entry stays exactly
+ *      as it was — also through a second edit, and an edit back to what day D filed (the
+ *      one-per-gradient drop spares an earlier day); (b) Ctrl+Z / Ctrl+Y of a dial across the split
+ *      (the entry holds no session): the D+1 entry follows, nothing is deleted; (c) the same for a
+ *      rename, whose entry DOES hold the session: back on day D's entry, no write; (d) the re-pick
+ *      (9721cdda) across the boundary: the pick promotes the entry to D+1 as filed, and its first
+ *      change opens a new one.
+ *
+ * ── FALSIFIED 2026-09-24 (section [16]) — each break made, run red (exit 1), reverted ──
+ *   D1  `updateRecent` without its earlier-day branch — "always update the session's entry", the
+ *       code before the fix → 11 red: every assertion of (a)–(c) past the fixtures.
+ *   D2  the one-per-gradient drop without `!earlier(f)` → 3 red: "an edit back to what day D
+ *       filed", and the Ctrl+Z / Ctrl+Y of (b) (the undone D+1 entry absorbed day D's).
+ *   D3  `syncRecent` not following the id the updater hands back → 8 red: the session stays on day
+ *       D's entry, so every later sync splits again ("3 entries").
+ *   (d) stays green under all three — it is the pin's path, which [10] and R1–R2 below guard.
+ *
  * ── FALSIFIED 2026-09-24 (section [15]) — each break made, run red (exit 1), reverted ──
  *   T1  `tracksEdited` dropped from `captureGeneratorHistory` (the code before the fix) → 9 red:
  *       every flag / `restated` / bake check in (a)–(c) except the two whose stale value happens to
@@ -367,7 +388,7 @@ const collected: GradientConfig[] = [];
 const updates: GradientConfig[] = [];
 installWorking({
   collectRecent: (c) => { collected.push(c); return 'recent-' + collected.length; },
-  updateRecent: (_id, c) => { updates.push(c); return true; },
+  updateRecent: (id, c) => { updates.push(c); return id; },
 });
 const { useEngineStore } = await import('../store/engineStore');
 const { useWorkingStore, addStopsToWorking, coerceWorkingSnapshot } = await import('../palette/store/workingStore');
@@ -691,7 +712,7 @@ console.log('[14] an untouched Curves fit hands back the gradient itself');
   const { setRecentCollector, setRecentUpdater } = await import('../palette/store/workingStore');
   const written: GradientConfig[] = [];
   setRecentCollector((c) => { written.push(c); return 'r14'; });
-  setRecentUpdater((_id, c) => { written.push(c); return true; });
+  setRecentUpdater((id, c) => { written.push(c); return id; });
   w().syncRecent();
   ok(written.length === 1 && knotKey(written[0]) === knotKey(T), `restated: Recent keeps the gradient's own stops (${written.length} write(s))`);
   const d0 = engine().paramUndoStack.length;
@@ -796,6 +817,127 @@ console.log('[15] undo / redo put the curves back WITH the edited flag they had'
   ok(tracksKey() === fitB && depth() === dW0, `a gesture that writes the curves back unchanged leaves NO undo entry (got ${depth() - dW0})`);
 
   useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
+}
+
+// ══ [16] a session resumed on a later day files a NEW entry under that day (owner, 2026-09-24) ══
+// A session carries its Recent id across midnight — a tab left open, and a boot restore keeps the
+// id too (test-gx-session) — and every sync used to rewrite that entry, so day D's bin quietly
+// turned into D+1's work. Now an entry of an earlier day is never rewritten: the change files a new
+// entry under today and the session writes to that one. "Today" is the shelf's clock
+// (`setFavientsClock`), moved here instead of faking Date. The seam goes back to the real shelf
+// ([14] swapped a local one in); the `favients` undo provider is still registered from [12].
+console.log('[16] a session resumed on a later day files a NEW entry under that day');
+{
+  const { useFavientsStore, favientSig, dayKey, setFavientsClock, RECENT_GROUP } = await import('../palette/store/favientsStore');
+  const { setRecentCollector, setRecentUpdater } = await import('../palette/store/workingStore');
+  const { paramEditStart, paramEditEnd } = await import('../palette/store/paramUndoBracket');
+  setRecentCollector((c, n, s, o) => useFavientsStore.getState().collectRecent(c, n, s, o));
+  setRecentUpdater((id, c, n) => useFavientsStore.getState().updateRecent(id, c, n));
+  const fav = () => useFavientsStore.getState();
+  const w = () => useWorkingStore.getState();
+  const hue = (v: number) => engine().setPaletteGenerator({ hueRotate: v });
+  const two = (a: string, b: string): GradientConfig => ({ stops: [{ id: 'a', position: 0, color: a }, { id: 'b', position: 1, color: b }], colorSpace: 'srgb', blendSpace: 'oklab' });
+  const A = two('#ff0000', '#0000ff');
+  const B = two('#00ff00', '#000000');
+  // Local times, since a bin is a LOCAL day (`dayKey`): ten to midnight on D, ten past on D+1.
+  const AT_D = new Date(2026, 8, 20, 23, 50).getTime();
+  const AT_D1 = new Date(2026, 8, 21, 0, 10).getTime();
+  const D = dayKey(AT_D);
+  const D1 = dayKey(AT_D1);
+  let now = AT_D;
+  setFavientsClock(() => now);
+  const entry = (id: string | null) => fav().favients.find((f) => f.id === id);
+  const snap = (id: string | null): string => JSON.stringify(entry(id) ?? null);
+  const recent = () => fav().favients.filter((f) => f.group === RECENT_GROUP);
+  const onDay = (day: string) => recent().filter((f) => dayKey(f.createdAt) === day);
+  const sigOf = (id: string | null): string => favientSig(entry(id)!.config);
+  useGeneratorStore.setState({ tracks: null, curvesOn: false, tracksEdited: false, curveSpace: DEFAULT_CURVE_SPACE });
+  hue(0);
+
+  // (a) THE TAB LEFT OPEN PAST MIDNIGHT (a restored session is the same state: its id, a new day).
+  fav().clear();
+  w().use(A, 'A', 'Browse'); w().syncRecent();
+  hue(40); w().syncRecent();
+  const idD = w().sessionId;
+  ok(D !== D1 && recent().length === 1 && onDay(D).length === 1 && recent()[0].id === idD, 'fixture: day D — one entry, refreshed in place by the edit');
+  const entryD = snap(idD);
+  now = AT_D1;
+  w().syncRecent();
+  ok(snap(idD) === entryD && recent().length === 1 && w().sessionId === idD, 'resume on day D+1 → sync, nothing changed: nothing is written, and the session still names day D\'s entry');
+  hue(80); w().syncRecent();
+  ok(snap(idD) === entryD, 'resume on day D+1 → edit → sync: day D\'s entry is exactly as it was');
+  const idD1 = w().sessionId;
+  ok(!!idD1 && idD1 !== idD && onDay(D1).length === 1 && onDay(D1)[0].id === idD1 && recent()[0].id === idD1 && recent().length === 2,
+    `… and a NEW entry under day D+1 holds the edit, at the head of the run, with the session writing to it (${recent().length} entries, D+1: ${onDay(D1).length})`);
+  ok(!!entry(idD1) && sigOf(idD1) !== sigOf(idD) && entry(idD1)!.source === entry(idD)!.source, '… holding the edited gradient, with the session\'s source carried over');
+  hue(120); w().syncRecent();
+  ok(recent().length === 2 && w().sessionId === idD1 && snap(idD) === entryD, 'a second edit refreshes the D+1 entry in place: still two, day D untouched');
+  // Back to exactly what day D filed, by hand (Adjust's Cancel does the same): the D+1 entry takes
+  // it, and the one-per-gradient rule must not drop day D's record for holding the same gradient.
+  hue(40); w().syncRecent();
+  ok(snap(idD) === entryD && recent().length === 2 && sigOf(idD1) === sigOf(idD),
+    `an edit back to what day D filed: the earlier day's entry is still there, exactly as it was (${recent().length} entries)`);
+
+  // (b) AN UNDO ACROSS THE SPLIT that carries only the dial (a slider's entry never holds the
+  // session): the session stays on the D+1 entry, which follows the undo; day D is untouched.
+  now = AT_D;
+  fav().clear();
+  hue(0);
+  w().use(B, 'B', 'Browse'); w().syncRecent();
+  const idB = w().sessionId;
+  const entryB = snap(idB);
+  now = AT_D1;
+  paramEditStart(); hue(40); paramEditEnd();
+  w().syncRecent();
+  const idB1 = w().sessionId;
+  ok(!!idB1 && idB1 !== idB && snap(idB) === entryB && recent().length === 2, 'fixture: a dial gesture on D+1 split off a new entry');
+  engine().undoParam();
+  w().syncRecent();
+  ok(snap(idB) === entryB && recent().length === 2 && w().sessionId === idB1 && sigOf(idB1) === sigOf(idB),
+    `Ctrl+Z of the dial: day D's entry untouched, the D+1 entry follows the undo, nothing deleted (${recent().length} entries)`);
+  engine().redoParam();
+  w().syncRecent();
+  ok(snap(idB) === entryB && recent().length === 2 && w().sessionId === idB1 && sigOf(idB1) !== sigOf(idB), 'Ctrl+Y: the D+1 entry takes the dial again; day D untouched');
+
+  // (c) AN UNDO ACROSS THE SPLIT that carries the session (a rename is a working-store entry): the
+  // session goes back to day D's entry, which matches again, so nothing is written.
+  now = AT_D;
+  fav().clear();
+  hue(0);
+  w().use(A, 'A', 'Browse'); w().syncRecent();
+  const idA = w().sessionId;
+  const entryA = snap(idA);
+  now = AT_D1;
+  w().setName('A, renamed');
+  w().syncRecent();
+  const idA1 = w().sessionId;
+  ok(!!idA1 && idA1 !== idA && snap(idA) === entryA && entry(idA1)?.name === 'A, renamed' && onDay(D1).length === 1,
+    'a rename alone on D+1 files a new entry too: the earlier day keeps its name');
+  const entryA1 = snap(idA1);
+  engine().undoParam();
+  w().syncRecent();
+  ok(w().sessionId === idA && snap(idA) === entryA && snap(idA1) === entryA1, `Ctrl+Z of the rename: the session is back on day D's entry, and both entries are as they were (session ${w().sessionId === idA ? 'D' : w().sessionId})`);
+  engine().redoParam();
+  w().syncRecent();
+  ok(w().sessionId === idA1 && snap(idA) === entryA && snap(idA1) === entryA1 && recent().length === 2, 'Ctrl+Y: back on the D+1 entry, nothing written');
+
+  // (d) THE RE-PICK (9721cdda) across the boundary: a gradient picked out of day D's bin on D+1.
+  // The pick itself is a collect, which PROMOTES the entry to today (content as filed — the pin
+  // path, unchanged); its first change then opens a new entry and leaves it alone.
+  now = AT_D;
+  fav().clear();
+  w().use(A, 'A', 'Browse'); w().syncRecent();
+  const idP = w().sessionId;
+  w().use(B, 'B', 'Browse'); w().syncRecent();
+  now = AT_D1;
+  w().use(A, 'A', 'My Gradients', { fromRecent: true });
+  w().syncRecent();
+  ok(w().sessionId === idP && dayKey(entry(idP)!.createdAt) === D1 && sigOf(idP) === favientSig(A), 'a pick from day D\'s bin on D+1 is collected onto its own entry, promoted to D+1 with its gradient as filed');
+  hue(40); w().syncRecent();
+  ok(sigOf(idP) === favientSig(A) && recent().length === 3 && w().sessionId !== idP, `… and its first change opens a new entry, the picked one left as it was (${recent().length} entries)`);
+
+  setFavientsClock(null);
+  hue(0);
 }
 
 if (failures) {

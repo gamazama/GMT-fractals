@@ -24,7 +24,9 @@
  *       cap, the "already filed by the user" no-op, the restored label, and the
  *       contiguous-run-at-index-0 invariant it shares with `add()`
  *   [7] updateRecent: the v2 working-session entry refreshed in place — no-op on same
- *       content, keeps id + place, absorbs a Recent duplicate, refuses a non-Recent id
+ *       content, keeps id + place, absorbs a Recent duplicate, refuses a non-Recent id (it
+ *       returns the id that holds the gradient, null when none does; a session crossing into a
+ *       later day is `debug/test-palette-working.mts` [16])
  *   [8] the RAMP form (ADR-0122): a stop gradient's signature is pinned (to its pre-ramp
  *       string until 2026-09-14; since ADR-0123 to the form that carries blend, bias and
  *       interpolation — see the section); a ramp signs `ramp:<ramp>`; two different ramps never dedupe into one; a stop
@@ -324,11 +326,11 @@ console.log('\n[7] updateRecent refreshes a session entry in place');
     const id = store().collectRecent(cfg('#ff0000', '#0000ff'), 'Session', 'Browse')!;
     store().collectRecent(cfg('#00ff00'), 'Other');
     check(store().favients.length === 2 && store().favients[0].name === 'Other', 'precondition: two Recent entries, Other in front');
-    check(store().updateRecent(id, cfg('#ff0000', '#0000ff'), 'Session') === true, 'same content + name → true');
+    check(store().updateRecent(id, cfg('#ff0000', '#0000ff'), 'Session') === id, 'same content + name → its own id');
     const before = JSON.stringify(store().favients);
     store().updateRecent(id, cfg('#ff0000', '#0000ff'), 'Session');
     check(JSON.stringify(store().favients) === before, 'and writes nothing');
-    check(store().updateRecent(id, cfg('#ff0000', '#00ff00'), 'Session edited') === true, 'an edit → true');
+    check(store().updateRecent(id, cfg('#ff0000', '#00ff00'), 'Session edited') === id, 'an edit (an entry of today) → its own id');
     const e = store().favients.find(f => f.id === id)!;
     check(favientSig(e.config) === favientSig(cfg('#ff0000', '#00ff00')) && e.name === 'Session edited', 'the entry now holds the edited gradient and name');
     check(store().favients.length === 2 && store().favients[1].id === id, 'it keeps its id and its place in the run');
@@ -336,12 +338,12 @@ console.log('\n[7] updateRecent refreshes a session entry in place');
     // Converging on another Recent entry's content drops that entry: one-per-gradient.
     store().updateRecent(id, cfg('#00ff00'), 'Same as Other');
     check(store().favients.length === 1 && store().favients[0].id === id, 'an update that matches another Recent entry absorbs it');
-    // No longer Recent → false, untouched.
+    // No longer Recent → null, untouched.
     store().moveFavient(id, 0, 'g1');
     const kept = JSON.stringify(store().favients);
-    check(store().updateRecent(id, cfg('#123456'), 'Nope') === false, 'an entry dragged into a user group returns false');
+    check(store().updateRecent(id, cfg('#123456'), 'Nope') === null, 'an entry dragged into a user group returns null');
     check(JSON.stringify(store().favients) === kept, 'and is left byte-identical');
-    check(store().updateRecent('no-such-id', cfg('#123456'), 'Nope') === false, 'an unknown id returns false');
+    check(store().updateRecent('no-such-id', cfg('#123456'), 'Nope') === null, 'an unknown id returns null');
 }
 
 console.log('\n[8] the RAMP form (ADR-0122): load, import, dedupe, the drag payload');
