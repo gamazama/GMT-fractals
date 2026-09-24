@@ -804,7 +804,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             {/* PHONE: 4 px gaps rather than 6 — 6 px reclaimed across the cluster, which is
                 6 px the name keeps. The 26 px targets themselves are untouched. */}
             <div className={`flex items-center shrink-0 ${phone ? 'gap-1' : 'gap-1.5'}`}>
-              <Act icon active={!!favOf} className={favOf ? 'text-warn' : ''} onClick={toggleStar} title={favOf ? 'Saved in My Gradients — click to remove' : `Keep — save to ${keepInto}`}>
+              <Act icon active={!!favOf} className={favOf ? 'text-kept' : ''} onClick={toggleStar} title={favOf ? 'Saved in My Gradients — click to remove' : `Keep — save to ${keepInto}`}>
                 <Icon name="heart" size={15} />
               </Act>
               <Act icon onClick={onShare} title="Share — copy a link that opens this gradient">

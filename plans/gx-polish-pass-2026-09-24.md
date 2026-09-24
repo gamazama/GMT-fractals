@@ -46,9 +46,9 @@ trip · journeys + IA + motion) → ~118 findings → a critic merged them into 
    `ge-wave`, `ge-reduce`, `ge-phone`, `ge-session`, `ge-gradientfile`, `ge-uiundo`, `ge-livedrag`, `ge-wallpaper`,
    `ge-setsave`, `gmt-gradientdrop`, `gmt-gx-handoff`, `chrome`, `smoke-help-menu`. Each implementer ran its own
    area's smokes green, but with siblings editing (HMR noise). Also falsify `ge-ground` [14c] (below).
-1. **Kept ♥ gold wiring** — token `--kept` defined in `index.css` and exposed as `text-kept` in `tailwind.config.js`
-   (batch E); wire the ♥ in `WorkingHero.tsx` (today `text-warn`; Act's active accent now tints its box), then the
-   owner judges the colour.
+1. **Kept ♥ gold — wired, owner to judge.** The ♥ uses `text-kept` (token `--kept` in `index.css`, #CEA84D dark /
+   #876005 light, exposed in `tailwind.config.js`); `text-kept` sorts after Act's active ink so it wins (batch E
+   checked the built CSS). Act's active accent tints the button box when kept — the owner decides if the box should.
 2. **Glyph drafts** (owner approved drafting): Multiply for the wave tool (today the same ✕ as Discard), Help `?`,
    a back arrow for the phone's "Back to GMT", Wallpaper split / dither / handles / landscape / portrait. Draft in
    `gradient-explorer/v2/ui/Icon.tsx`'s set, check `H:/GMT/assets/GXN/` sheets first, rasterise at 16 px for the owner.
@@ -61,7 +61,8 @@ trip · journeys + IA + motion) → ~118 findings → a critic merged them into 
 6. Stale rule text: `.claude/rules/sibling-apps.md` ge-phone row says "no wider than the 100 px" → 108 (8d);
    `index.css` `@assumption` list of `fade-in-up` call sites misses ToastHost; the ge-ground row still says
    "Keep these N" (now "Group these N"), and could mention [14] / [15].
-7. Light Grey: Feedback's accent ink measured 2.88:1 (the light-regime accent ladder is pale) — owner call.
+7. Light Grey: Feedback's accent ink was 2.88:1 — fixed inside FeedbackPanel (`ACCENT_INK`, accent mixed with the
+   scheme's ink; Send measured 4.70:1). The light-regime accent ladder itself is still pale elsewhere — owner call.
 
 ## What's New — factual corrections made (owner to reword)
 - "**GMT and the Gradient Explorer remember each other's gradient** when you move between them." →
