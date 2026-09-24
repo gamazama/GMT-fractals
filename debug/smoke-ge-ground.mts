@@ -179,11 +179,10 @@ const working = (page: Page) =>
  *     along with the lasso (face null, Phase 0)" — the face closed AND baked;
  *   · [14b] BrowseStage's `useDismiss` for `zoomTool` removed → red "[14b] Esc left the zoom
  *     tool on".
- * NOT YET FALSIFIED: [14c], whose fix is ExportMenu's (another batch's file that day). The
- * mutation: `escape: false` on ExportMenu's `useDismiss([ref, previewRef], …)` → expected red
- * "[14c] one Esc left the Export window open"; or its pre-2026-09-24 hand-rolled keydown
- * (`git show bad4f68c:gradient-explorer/v2/ExportMenu.tsx`, grep `if (e.key !== 'Escape')
- * return;`) → expected red at the first [14c] check that the face or the window fails.
+ * [14c] falsified 2026-09-24 on a quiet tree: `escape: false` on ExportMenu's ESCAPE
+ * `useDismiss(ref, { outside: false, … })` (the second call; the first already has escape off —
+ * it is the click-away) → red "[14c] one Esc left the Export window open (face null)" — the
+ * shell's chain cancelled the face instead; restored → green.
  */
 async function escTakesTheNearest(browser: Browser, errors: string[]) {
   const ectx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
