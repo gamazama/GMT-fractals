@@ -91,7 +91,11 @@ export const FavientsCollectionMenu: React.FC<{
   /** The set an import files into, asked at import time: the set the user is viewing when it is
    *  theirs, else undefined (ADR-0123 Decision 4). */
   importGroup?: () => string | undefined;
-}> = ({ onFlash, withExport = true, onImported, importGroup }) => {
+  /** The kebab button's size and frame, for a host whose neighbouring buttons are not the
+   *  panel toolbar's bare 24 px glyphs — GE v2's set rail passes its own 26 px (34 on a phone)
+   *  bordered tool box (2026-09-24). Replaces `w-6 h-6 rounded`; the ink and hover stay. */
+  buttonClassName?: string;
+}> = ({ onFlash, withExport = true, onImported, importGroup, buttonClassName }) => {
   const favients = useFavientsStore((s) => s.favients);
   const groupLabels = useFavientsStore((s) => s.groupLabels);
   const importEntries = useFavientsStore((s) => s.importEntries);
@@ -285,8 +289,10 @@ export const FavientsCollectionMenu: React.FC<{
       />
       <button
         onClick={() => setOpen((o) => !o)}
-        title="Collection — save, load, export"
-        className={`flex items-center justify-center w-6 h-6 rounded transition-colors ${open ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
+        aria-label="Collection"
+        // The title names what the menu HOLDS: without `withExport` there is no export in it.
+        title={withExport ? 'Collection — save, load, export' : 'Collection — import, save, load'}
+        className={`flex items-center justify-center ${buttonClassName ?? 'w-6 h-6 rounded'} transition-colors ${open ? 'text-fg bg-line/10' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
       >
         <KebabIcon />
       </button>

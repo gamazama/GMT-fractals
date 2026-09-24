@@ -1,5 +1,5 @@
 /**
- * SetRail — the bottom edge NAMES the sets (GE v2 Phase D, 2026-09-08;
+ * SetRail — the top of the ground NAMES the sets (GE v2 Phase D, 2026-09-08;
  * plans/ge-v2-unified-shell-plan.md §4 Phase D, the DECIDED block).
  *
  * One row of chips in a FIXED order — All · Today · Yesterday · the date · Kept · every
@@ -32,8 +32,10 @@
  *   • the DOWNLOAD icon at the rail's end — export what is on the ground, which with more
  *     than one chip lit is the union. It is the hero's glyph, deliberately: the gesture
  *     means the same thing wherever you meet it.
- *     Delete group re-homes its gradients to Kept and says how many before you agree —
- *     deleting a container must not silently delete what is in it.
+ *     Delete group re-homes its gradients to Kept, in one undo step, and its toast says how
+ *     many went there and that Ctrl+Z undoes it — deleting a container must not silently
+ *     delete what is in it. (It asked first until 2026-09-24; nothing is lost, so it no
+ *     longer does — owner.)
  *   • drop a gradient on Kept or a named group — file it there (a favourite MOVES, a wall
  *     tile becomes a new favourite); drop it on the empty tail — a new group. Recent's bins
  *     take no drops (Recent is auto-managed), nor does All.
@@ -47,7 +49,9 @@
  *     a catalogue tile is not yours to throw away, so there is nothing to offer.
  *   • the + at the end of the chips — a new, EMPTY group, named on the spot. A group used
  *     to exist only once something was dropped into it; an empty one is a chip now
- *     (`listGroundSets`), so "make a place, then fill it" is a thing you can do.
+ *     (`listGroundSets`), so "make a place, then fill it" is a thing you can do. A gradient
+ *     DROPPED on the + starts a new group with it, as the tail does (G08, 2026-09-24 — the
+ *     one control that says "new group" refused the drop Help promised it takes).
  *   • the kebab at the right end is the COLLECTION menu — import a gradient file, save /
  *     merge / replace / clear the whole collection, export it, the contact sheet. It is
  *     all that remains of the old "more" pull-up (owner, 2026-09-09: "we can retire almost
@@ -73,6 +77,14 @@
  * a control you can scroll away from is a control you cannot find. The order is otherwise
  * the desktop one: on a desktop the + still sits between the chips and the tail.
  *
+ * DESKTOP, MANY GROUPS (G04, 2026-09-24). The desktop rail had no run: with twenty groups at
+ * 1280 every chip SHRANK to ~43 px and its label was clipped mid-word ("Grou", "oup nu").
+ * It now keeps the chips and the + in the same scrolling run the phone uses, every chip
+ * `shrink-0`, with the tail, the trash, export and the collection menu pinned outside it.
+ * Below the overflow point it lays out exactly as before; the end fade shows only while
+ * there is more of the run to the right. A save to a chip scrolled out of view still shows:
+ * the flash scrolls it in (grep `scrollIntoView` below).
+ *
  * The trash drop-well and the "drop a gradient here" tail are NOT RENDERED on a phone.
  * Touch fires no HTML drag events, so neither has anything to answer; the tail is also the
  * desktop rail's spacer, so hiding it (rather than leaving it out) would have left a
@@ -81,7 +93,7 @@
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_GROUP, newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
 import { fileFavientInto } from '../../palette/store/favientFiling';
 import { contributeToGlobal, isImportedSource } from './contributeToGlobal';
@@ -90,7 +102,7 @@ import { configToCss } from '../../palette/core/gradientCss';
 import type { GradientConfig } from '../../types';
 import { FAVIENT_DND_MIME, readFavientDrag, type FavientDragPayload } from '../../palette/core/favientDnd';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
-import { groupSetId, type GroundSetDesc } from '../../palette/core/groundSets';
+import { ALL_SET_ID, groupSetId, type GroundSetDesc } from '../../palette/core/groundSets';
 import type { ContextMenuItem } from '../../types/help';
 import { useStoreCallbacks } from '../../components/contexts/StoreCallbacksContext';
 import { showToast } from '../../engine/store/toastStore';
@@ -168,6 +180,23 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
       ?.querySelector(`[data-gx-set="${CSS.escape(saved.setId)}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   }, [saved?.serial]);
+  // DESKTOP: is there more of the chip run to the right than is on screen? Measured after
+  // every render (a chip added, renamed or recounted changes the run's width), on scroll,
+  // and when the run itself is resized (the window, the tools beside it).
+  const runRef = useRef<HTMLDivElement>(null);
+  const [runMore, setRunMore] = useState(false);
+  const measureRun = useCallback(() => {
+    const el = runRef.current;
+    setRunMore(!!el && el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+  useLayoutEffect(measureRun);
+  useEffect(() => {
+    const el = runRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(measureRun);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measureRun, phone]);
   const [renaming, setRenaming] = useState<{ group: string; value: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -220,16 +249,16 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
     if (over !== key) setOver(key);
   };
 
+  /** NO CONFIRM (owner, 2026-09-24): nothing is lost — the members move to Kept — it is one
+   *  undo step, and the toast says both. A native confirm was a guard rail on a door that
+   *  already has one. */
   const deleteGroup = (s: GroundSetDesc) => {
     const n = s.count;
-    const msg = n
-      ? `Delete the group “${s.label}”? Its ${n} gradient${n === 1 ? '' : 's'} move${n === 1 ? 's' : ''} to Kept — nothing is deleted.`
-      : `Delete the empty group “${s.label}”?`;
-    if (!window.confirm(msg)) return;
     paramEdit(() => removeGroup(s.group!));
     // The lit set just stopped existing; put the ground on the gradients that moved.
     if (activeIds.includes(s.id)) onSelect(groupSetId(DEFAULT_GROUP));
-    showToast(n ? `Group deleted — ${n} moved to Kept` : 'Group deleted');
+    // One undo step (the `paramEdit` above), so it says so, like every other removal toast.
+    showToast(n ? `Group deleted — ${n} moved to Kept — undo with Ctrl+Z` : 'Group deleted — undo with Ctrl+Z');
   };
 
   /** A new, empty group — a label with no members, which `listGroundSets` now shows as a
@@ -292,9 +321,12 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
                 : s.kind === 'bin'
                   ? 'What you picked that day'
                   : renamable
-                    ? 'Double-click to rename · drop a gradient here to file it · right-click for import, export and delete'
-                    : 'What you kept · drop a gradient here to file it · right-click for import and export',
-              s.kind === 'catalog' ? '' : lit ? 'Click to take it off the ground · ctrl-click for this set alone' : 'Click to add it to the ground · ctrl-click for this set alone',
+                    ? 'Double-click to rename · drop a gradient here to file it · right-click for import and delete'
+                    : 'What you kept · drop a gradient here to file it · right-click for import',
+              // "the wall", as Help and every other string say — "the ground" is the code's word
+              // (C09 / J09, 2026-09-24); and no "export": it left the right-click menu on
+              // 2026-09-09 for the rail's own icon (G07)
+              s.kind === 'catalog' ? '' : lit ? 'Click to take it off the wall · Ctrl-click to show it alone' : 'Click to add it to the wall · Ctrl-click to show it alone',
             ].filter(Boolean).join('\n')}
             onClick={(e) => {
               if (isRenaming) return;
@@ -310,8 +342,9 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
             className={[
               // 34 px tall on a phone: a 26 px chip is a comfortable click and a poor tap.
               // `snap-start` pairs with the run's `snap-x snap-proximity` so a flick parks a
-              // chip's left edge at the run's, never half a chip in.
-              phone ? 'inline-flex items-center h-[34px] px-3 shrink-0 snap-start' : 'inline-flex items-center h-[26px] px-3',
+              // chip's left edge at the run's, never half a chip in. `shrink-0` on a desk too:
+              // the run scrolls rather than squeezing a chip's label to nothing (G04).
+              phone ? 'inline-flex items-center h-[34px] px-3 shrink-0 snap-start' : 'inline-flex items-center h-[26px] px-3 shrink-0',
               // `relative overflow-hidden`: the fill below is an absolutely positioned child
               // and must be clipped to the chip's rounded box, or a collapsing gradient
               // paints over its neighbours.
@@ -370,8 +403,14 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
           </button>
         );
       })}
-      {/* the TRASH — only while a favourite is in flight, in the place the eye is already
-          on (the rail is where the drag is going anyway) */}
+    </>
+  );
+
+  /* the TRASH — only while a favourite is in flight, in the place the eye is already on (the
+     rail is where the drag is going anyway). Kept OUT of the desktop's scrolling run, so a
+     rail with more groups than fit cannot scroll the drop-well out of reach mid-drag. */
+  const trash = (
+    <>
       {trashable && (
         <div
           data-gx-trash=""
@@ -436,7 +475,11 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
       onClick={newGroup}
       title="New group"
       aria-label="New group"
-      className={`inline-flex items-center justify-center shrink-0 ${tool} rounded-lg border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 transition-colors`}
+      // A drop on the + is a drop on the tail: a new group with that gradient in it (G08).
+      onDragOver={dragOver(null, 'plus')}
+      onDragLeave={() => { if (over === 'plus') setOver(null); }}
+      onDrop={dropOn(null)}
+      className={`inline-flex items-center justify-center shrink-0 ${tool} rounded-lg border border-line/20 text-fg-muted hover:text-fg hover:border-line/40 transition-colors ${over === 'plus' ? 'outline outline-2 outline-dashed outline-gx-armed' : ''}`}
     >
       <Icon name="plus" />
     </button>
@@ -448,16 +491,21 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
           It replaces the per-chip "Export this set" menu item AND the Export block that used
           to live inside the collection menu beside it, which was whole-collection only, had
           no subject switch, and was the third surface doing this job. */}
+      {/* `data-gx-export-ground` is also how the Export window knows its opener: a
+          pointerdown here is not a click-away, so a second click TOGGLES the window shut
+          instead of closing it and opening it again (EW-04; the app owns the toggle). */}
       <button
         type="button"
         onClick={onExportGround}
         disabled={groundExportCount === 0}
         data-gx-export-ground=""
-        aria-label="Export what is on the ground"
+        aria-label="Export what is on the wall"
         title={
-          groundExportCount === 0
-            ? 'Nothing here to export — All is the whole library, not a set of your own. Pick a set.'
-            : `Export what is on the ground — ${groundExportCount} gradient${groundExportCount === 1 ? '' : 's'}`
+          groundExportCount > 0
+            ? `Export what is on the wall — ${groundExportCount} gradient${groundExportCount === 1 ? '' : 's'}`
+            : activeIds.includes(ALL_SET_ID)
+              ? 'All is the whole library — pick a set to export'
+              : 'Nothing here to export yet'
         }
         className={[
           `inline-flex items-center justify-center shrink-0 ${tool} rounded-lg border transition-colors`,
@@ -472,8 +520,16 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
       >
         <Icon name="download" size={16} />
       </button>
-      {/* the collection menu — what is left of "more": import, save, load, clear */}
-      <FavientsCollectionMenu onFlash={showToast} withExport={false} onImported={onImported} importGroup={importGroup} />
+      {/* the collection menu — what is left of "more": import, save, load, clear. Its button
+          wears the rail's own tool box (26 px bordered, 34 on a phone), like its neighbours
+          (G07 / L9, 2026-09-24 — it was a bare 24 px glyph beside them). */}
+      <FavientsCollectionMenu
+        onFlash={showToast}
+        withExport={false}
+        onImported={onImported}
+        importGroup={importGroup}
+        buttonClassName={`${tool} rounded-lg border border-line/20 hover:border-line/40`}
+      />
     </>
   );
 
@@ -486,7 +542,7 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
            trying to keep. The trash and the tail are simply not in the tree here: touch
            fires no drag events, so neither has anything to answer. */
         <div className="relative flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 overflow-x-auto gx-rail-scroll snap-x snap-proximity">{chips}</div>
+          <div className="flex items-center gap-1.5 overflow-x-auto gx-rail-scroll snap-x snap-proximity">{chips}{trash}</div>
           {/* the short fade over the run's END — the one thing that says there is more this
               way, now that the scrollbar is hidden. `from-surface-raised`, the rail's own
               ground, so it reads as the band swallowing the chips rather than as a panel. */}
@@ -494,8 +550,31 @@ export const SetRail: React.FC<Props> = ({ sets, activeIds, onSelect, onToggle, 
         </div>
       ) : (
         <>
-          {chips}
-          {plus}
+          {/* DESKTOP: the same run, sized to its chips — it takes only what it needs and
+              gives way (`min-w-0`) once the row runs out, where the tail's 48 px floor and
+              the pinned tools hold. Below that point this lays out exactly as the bare chips
+              did. The fade shows only while there is more to the right, and a mouse wheel
+              scrolls the run sideways (the bar is hidden; a trackpad and Tab reach it too). */}
+          <div className="relative min-w-0">
+            <div
+              ref={runRef}
+              onScroll={measureRun}
+              onWheel={(e) => {
+                const el = e.currentTarget;
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && el.scrollWidth > el.clientWidth) el.scrollLeft += e.deltaY;
+              }}
+              // A scroll box clips what hangs outside it, and a chip under a drag wears a 2 px
+              // outline OUTSIDE its border: `py-1` and `px-0.5 -mx-0.5` give the outline room
+              // without moving a chip (the rail is 40 px tall and centres the run).
+              className="flex items-center gap-1.5 overflow-x-auto gx-rail-scroll py-1 px-0.5 -mx-0.5"
+              data-gx-set-run=""
+            >
+              {chips}
+              {plus}
+            </div>
+            {runMore && <div aria-hidden className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-surface-raised to-transparent" />}
+          </div>
+          {trash}
           {tail}
         </>
       )}

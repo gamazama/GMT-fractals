@@ -10,7 +10,7 @@
  * Owner, 2026-09-24: "I just want to ensure that UI goes along with undo." The interface after an
  * undo or a redo must be the one that belongs with the gradient on show.
  *
- * THE INTERFACE IS CONTEXT (2026-09-24). Both providers here are CONTEXT providers
+ * THE INTERFACE IS CONTEXT (2026-09-24). Every provider here is a CONTEXT provider
  * (@see store/slices/historySlice.ts `HistoryProvider.context`): the interface an entry was made
  * IN rides EVERY entry, changed or not — undo puts it back as it was when the gesture began, redo
  * as it was when you pressed undo — and it never makes an entry of its own. Opening a face or
@@ -29,9 +29,12 @@
  * entry restores is the one captured in the same instant as the data it restores.
  *
  * WHAT RIDES: which face is open, whether the hero is folded, the two Export windows, the armed
- * Mix slot (`useShellUiHistory`); and the SELECTED STOPS while the stop inspector is the open
+ * Mix slot (`useShellUiHistory`); the SELECTED STOPS while the stop inspector is the open
  * face (`useStopSelectionHistory`, the hero's — the inspector face is only a portal host for the
- * selection, so a face restored without it is an empty panel).
+ * selection, so a face restored without it is an empty panel); and whether the ground's FILTERS
+ * rows are open and whether the hero's fold is theirs (`useFiltersHistory`, BrowseStage's —
+ * since 2026-09-24 opening Filters folds the hero, so a fold restored without the rows that made
+ * it is a hero hidden for no reason on screen).
  *
  * SCOPED TO GE v2 (owner: app-gmt "is not built in a way that UI undo would make sense"). The
  * providers are registered by the shell and the hero on mount and unregistered on unmount, so no
@@ -54,7 +57,11 @@
  *   leaving Mix: one undo — the Mix face with the live Mix", "[11] closing Adjust with a dial: undo
  *   gives the Adjust face and its dial"). Falsified 2026-09-24: both providers registered with
  *   `context: false` → [3] and [6]–[13] red; the hero's selection restore skipped → [6], [12] red
- *   (F1 / F2 in the guard's header).
+ *   (F1 / F2 in the guard's header). The Filters rows and their fold — proven by: npm run
+ *   smoke:ge-ground ("[15e] Ctrl+Z folded the hero with Filters CLOSED", "[15f] the undo that
+ *   reopened Filters FOLDED the hero"). Falsified the same day: `useFiltersHistory` not
+ *   registered → [15e] red; its restore read as a gesture (BrowseStage's `filtersShownWas` not
+ *   set) → [15f] red.
  */
 
 import { useEffect, useRef } from 'react';
@@ -77,6 +84,7 @@ export interface ShellUiState {
 
 const KEY = 'gx-v2-ui';
 const SEL_KEY = 'gx-v2-sel';
+const FILTERS_KEY = 'gx-v2-filters';
 
 /**
  * Put the shell's interface state on the param undo stack, as CONTEXT, for as long as the shell
@@ -98,6 +106,44 @@ export const useShellUiHistory = (state: ShellUiState, restore: (s: ShellUiState
       context: true,
     });
     return () => unregisterHistoryProvider(KEY);
+  }, []);
+};
+
+/** What the ground's FILTERS rows ride: whether they are open, and whether the hero's fold is
+ *  FILTERS' OWN (Filters folds the hero while it is open and unfolds only a fold it made —
+ *  BrowseStage, grep `filtersFolded`). */
+export interface FiltersUiState {
+  open: boolean;
+  foldIsFilters: boolean;
+}
+
+/**
+ * The Filters rows and the ownership of the fold, on the same entries as the face (context too).
+ * BrowseStage registers it, since both live there. Owner, 2026-09-24: opening Filters folds the
+ * hero, so the fold alone coming back without the rows that made it is exactly the "interface
+ * contradicting the data" this module exists to prevent (measured the same day: a Filters change
+ * made with the rows open, the rows closed, Ctrl+Z — the change undone and the hero FOLDED with
+ * Filters closed).
+ *
+ * @param read    the rows' state as of the last committed render, and the ownership flag.
+ * @param restore hands both back. Called from `undo`/`redo` in the same batch as the shell's
+ *                restore of `folded`, which stays the truth for the fold itself: the restore must
+ *                only set Filters' own state, and must not let BrowseStage read it as a gesture
+ *                (opening folds, closing unfolds) — see its `useFiltersHistory` call.
+ */
+export const useFiltersHistory = (read: () => FiltersUiState, restore: (s: FiltersUiState) => void): void => {
+  const live = useRef({ read, restore });
+  live.current = { read, restore };
+  useEffect(() => {
+    registerHistoryProvider(FILTERS_KEY, {
+      capture: () => ({ ...live.current.read() }),
+      restore: (snap) => {
+        const s = snap && typeof snap === 'object' ? (snap as Partial<FiltersUiState>) : {};
+        live.current.restore({ open: !!s.open, foldIsFilters: !!s.foldIsFilters });
+      },
+      context: true,
+    });
+    return () => unregisterHistoryProvider(FILTERS_KEY);
   }, []);
 };
 

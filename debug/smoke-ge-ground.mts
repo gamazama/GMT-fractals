@@ -12,8 +12,10 @@
  *   [4] click the OLDER tile in Today — the working gradient is that pick again (a set tile
  *       is a shelf pick: same mode, same shell rules)
  *   [5] click All — the pad, Filters and the four tools are back, the gutter is back
- *   [6] search narrows All; "Keep these N" files the narrowed wall as a group and puts it
- *       on the ground: a lit group chip with that count, the title carrying the label
+ *   [6] search narrows All; the sentence carries the count (the search pill does not repeat
+ *       it on a desk, 2026-09-24); "Group these N" (it said "Keep these N") files the narrowed
+ *       wall as a group and puts it on the ground: a lit group chip with that count, the
+ *       title carrying the label
  *   [7] reload — the ground comes back on that group (the set id persists)
  *   [8] the pad is the wall's map (D.2): on All the scrollbar beside the pad carries a thumb
  *       for the lightness on screen, and scrolling the wall moves it
@@ -62,8 +64,9 @@
  *       disabled").
  *   [13] NEW GRADIENT (parity row M10, owner 2026-09-23), each in a FRESH context so the empty
  *       state is real: [13a] the nothing-picked line offers "start a new one"; a real click makes
- *       the hero hold "New gradient", black → white on two stops, linear / oklab (the hero's own
- *       Reset Default), as a picked-style `gradient` input; one Ctrl+Z goes back to nothing and the
+ *       the hero hold "New gradient", black → white on two stops, linear / oklab (the stops
+ *       editor's default, `stopOps.default()` — the shell's `newGradientConfig`; the hero's ☰ no
+ *       longer offers Reset Default), as a picked-style `gradient` input; one Ctrl+Z goes back to nothing and the
  *       line returns, Ctrl+Y brings it back; a click on its track adds a stop at once; the edited
  *       gradient is in Recent. [13b] after a wall pick, the hero's ☰ LEADS with "New Gradient",
  *       which replaces the pick, and one Ctrl+Z gives the pick back. [13c] with the Mix face open,
@@ -76,6 +79,28 @@
  *       WorkingHero not passing `menuLead` reds "[13b] the hero ☰ menu has no "New Gradient""; the
  *       tray close taken out of `flushSync` reds "[13c] one Ctrl+Z brought the mix back without its
  *       face" alone. (A `beginEdit` after the `use` reds [13a] too, at the input-kind check.)
+ *   [14] ESC TAKES THE NEAREST HELD THING (the polish pass, 2026-09-24 — G02, EW-02 / J03). The
+ *       shell's own Esc chain (a wall selection → the open tray face → an armed slot) yields to
+ *       anything nearer that took the key through the shortcut registry, which marks it
+ *       `defaultPrevented`; a surface with a private keydown raced it, and the chain closed the
+ *       face under it — BAKING its dials. In a fresh context, with the Adjust face open and one
+ *       dial moved: [14a] the Lasso on, one Esc — the lasso is off, the face is still open and
+ *       the dial still live; [14b] the Zoom tool on, one Esc — off (it had no Esc at all), face
+ *       and dial the same; [14c] the Export window open over the face, one Esc — the window
+ *       closes, the face stays with its dial unbaked, and a second Esc closes the face. Run this
+ *       step alone with `ONLY=esc`. Falsification: see the note at [14].
+ *   [15] FILTERS FOLDS THE HERO (owner, 2026-09-24 — the polish plan's ASK-3), in a fresh
+ *       context with a hero up: [15a] opening Filters folds it, closing Filters brings it back;
+ *       [15b] a hero folded by hand before Filters opens stays folded when it closes; [15c]
+ *       unfolded by hand while Filters is open, then folded by hand again, it stays folded when
+ *       Filters closes (the fold is the user's now); [15d] a pick while Filters is open shows
+ *       the hero, and closing Filters then leaves it up; [15e] a Filters change made with the
+ *       rows open, the rows closed, Ctrl+Z: the change is undone AND the rows are open AND the
+ *       hero is folded (the rows ride undo as context, ADR-0120); Ctrl+Y redoes it with the rows
+ *       closed and the hero up; after Ctrl+Z again, closing the rows brings the hero back;
+ *       [15f] the same with the hero unfolded BY HAND while the rows were open: the undo brings
+ *       the rows back and leaves the hero up (a restore is not a gesture — it must not fold).
+ *       Run alone with `ONLY=filters`. Falsified: see the note at [15].
  *
  * FALSIFIED 2026-09-08 (each reverted): `useGroundSource` returning null for every set reds
  * [3] "the title does not say Today"; `tileSizeFor` returning the base for every count reds
@@ -84,7 +109,7 @@
  *
  * Run: `npm run smoke:ge-ground` (needs `npm run dev` on :3400, or ENGINE_URL).
  */
-import { chromium, devices, type Page } from 'playwright';
+import { chromium, devices, type Browser, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
@@ -144,8 +169,273 @@ const working = (page: Page) =>
     return JSON.stringify(w?.config?.stops?.map((s) => [Math.round(s.position * 1000), s.color]) ?? null);
   });
 
+/**
+ * [14] Esc takes the nearest held thing. Its own fresh context, so it runs the same whether it
+ * follows [13] or runs alone (`ONLY=esc`).
+ *
+ * FALSIFIED 2026-09-24, each reverted and green again after:
+ *   · [14a] `usePickerModel`'s tool Esc back to a plain window keydown (`if (e.key ===
+ *     'Escape') setTool(null)`, no `useDismiss`) → red "[14a] one Esc closed the Adjust face
+ *     along with the lasso (face null, Phase 0)" — the face closed AND baked;
+ *   · [14b] BrowseStage's `useDismiss` for `zoomTool` removed → red "[14b] Esc left the zoom
+ *     tool on".
+ * NOT YET FALSIFIED: [14c], whose fix is ExportMenu's (another batch's file that day). The
+ * mutation: `escape: false` on ExportMenu's `useDismiss([ref, previewRef], …)` → expected red
+ * "[14c] one Esc left the Export window open"; or its pre-2026-09-24 hand-rolled keydown
+ * (`git show bad4f68c:gradient-explorer/v2/ExportMenu.tsx`, grep `if (e.key !== 'Escape')
+ * return;`) → expected red at the first [14c] check that the face or the window fails.
+ */
+async function escTakesTheNearest(browser: Browser, errors: string[]) {
+  const ectx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await seedGeSmokeState(ectx);
+  const ep = await ectx.newPage();
+  ep.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  await ep.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+  await ep.waitForTimeout(1500);
+  const wb = (await ep.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
+  await ep.mouse.click(wb.x + 16, wb.y + 9);
+  await ep.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[14] setup: no hero after a wall click'));
+  await ep.mouse.move(640, 20);
+  await ep.waitForTimeout(700);
+
+  const TOOL = (label: string) => `[data-gx-tools="tools"] button[aria-label="${label}"]`;
+  // (no named helper inside `evaluate`: tsx wraps a named arrow in `__name`, which the page lacks)
+  const held = () =>
+    ep.evaluate(({ lasso, zoom }) => ({
+      face: ((document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray || null) as string | null,
+      phase: ((window as any).__store.getState().paletteGenerator?.phase ?? null) as number | null,
+      lasso: document.querySelector(lasso)?.getAttribute('aria-pressed') === 'true',
+      zoom: document.querySelector(zoom)?.getAttribute('aria-pressed') === 'true',
+      exportOpen: !!document.querySelector('[data-gx-export]'),
+    }), { lasso: TOOL('Lasso'), zoom: TOOL('Zoom') });
+  const esc = async () => {
+    await ep.keyboard.press('Escape');
+    await ep.waitForTimeout(400);
+  };
+  const DIAL = 0.05;
+  const dialLive = (h: { phase: number | null }) => h.phase != null && Math.abs(h.phase - DIAL) < 1e-9;
+
+  // The Adjust face, with one dial moved through the route its sliders take (the DDFS bracket).
+  await ep.click('[data-gx-tray-tab="adjust"]');
+  await ep.waitForTimeout(600);
+  await ep.evaluate((phase) => {
+    const s = (window as any).__store.getState();
+    s.handleInteractionStart('param');
+    s.setPaletteGenerator({ phase });
+    s.handleInteractionEnd();
+  }, DIAL);
+  await ep.waitForTimeout(400);
+  let h = await held();
+  if (h.face !== 'adjust' || !dialLive(h)) fail(`[14] setup: wanted the Adjust face with a live dial (${JSON.stringify(h)})`);
+
+  // [14a] a carve tool over the face. A REAL click: a pointerdown on the tool column is not a
+  // click-away for the tool, nor for a face (only the inspector closes on the ground).
+  await ep.click(TOOL('Lasso'), { timeout: 4000 }).catch(() => fail('[14a] setup: the Lasso tool cannot be clicked with the Adjust face open'));
+  await ep.waitForTimeout(300);
+  h = await held();
+  if (!h.lasso || h.face !== 'adjust') fail(`[14a] setup: wanted the Lasso on over the Adjust face (${JSON.stringify(h)})`);
+  await esc();
+  h = await held();
+  if (h.lasso) fail('[14a] Esc did not put the Lasso down');
+  if (h.face !== 'adjust') fail(`[14a] one Esc closed the Adjust face along with the lasso (face ${h.face}, Phase ${h.phase})`);
+  if (!dialLive(h)) fail(`[14a] the Esc that put the lasso down baked the Adjust dial (Phase ${h.phase})`);
+  console.log('✓ [14a] Lasso on over the Adjust face: one Esc puts the lasso down; the face and its dial stay');
+
+  // [14b] the zoom tool, which had no Esc at all
+  await ep.click(TOOL('Zoom'), { timeout: 4000 }).catch(() => fail('[14b] setup: the Zoom tool cannot be clicked with the Adjust face open'));
+  await ep.waitForTimeout(300);
+  h = await held();
+  if (!h.zoom || h.face !== 'adjust') fail(`[14b] setup: wanted the Zoom tool on over the Adjust face (${JSON.stringify(h)})`);
+  await esc();
+  h = await held();
+  if (h.zoom) fail('[14b] Esc left the zoom tool on');
+  if (h.face !== 'adjust' || !dialLive(h)) fail(`[14b] the Esc that put the zoom tool down also closed or baked the face (face ${h.face}, Phase ${h.phase})`);
+  console.log('✓ [14b] Zoom on over the Adjust face: one Esc turns it off; the face and its dial stay');
+
+  // [14c] the Export window over the face. Needs ExportMenu's Esc on the shortcut registry
+  // (the polish plan's C1) — before it, the shell's chain ran first and closed the face.
+  await ep.click('[data-gx-hero] button[title^="Export"]');
+  await ep.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[14c] setup: the Export window did not open'));
+  await ep.waitForTimeout(300);
+  h = await held();
+  if (h.face !== 'adjust' || !dialLive(h)) fail(`[14c] setup: opening Export closed or baked the face (${JSON.stringify(h)})`);
+  await esc();
+  h = await held();
+  if (h.exportOpen) fail(`[14c] one Esc left the Export window open (face ${h.face})`);
+  if (h.face !== 'adjust' || !dialLive(h))
+    fail(`[14c] one Esc with the Export window over the face closed the face too (face ${h.face}, Phase ${h.phase}) — the window's Esc is not taking the key through the shortcut registry`);
+  await esc();
+  h = await held();
+  if (h.face) fail(`[14c] a second Esc did not go on to close the face (${h.face})`);
+  console.log('✓ [14c] Export over the Adjust face: one Esc closes the window and leaves the face and its dial; the next Esc closes the face');
+  await ectx.close();
+}
+
+/**
+ * [15] Filters folds the hero while it is open, and only undoes a fold it made itself.
+ *
+ * FALSIFIED 2026-09-24 two ways, each reverted and green again after:
+ *   · BrowseStage's fold-on-open removed (the `onFoldHero(true)` in the `filtersShown` effect)
+ *     → red "[15a] opening Filters did not fold the hero";
+ *   · the effect that forgets Filters' fold once the hero comes back made a no-op → red "[15c]
+ *     closing Filters undid a fold the user made while it was open".
+ * [15e] / [15f] (the rows riding undo, same day), each reverted and green again after:
+ *   · BrowseStage not registering `useFiltersHistory` → red "[15e] Ctrl+Z folded the hero with
+ *     Filters CLOSED — the rows did not come back with the fold they made";
+ *   · its restore not marking the restored open state as already seen (`filtersShownWas`) →
+ *     [15e] stays GREEN (that undo restores a fold, so the fold-on-open finds nothing to do) and
+ *     red "[15f] the undo that reopened Filters FOLDED the hero" — which is why [15f] exists.
+ */
+async function filtersFoldTheHero(browser: Browser, errors: string[]) {
+  const fctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await seedGeSmokeState(fctx);
+  const fp = await fctx.newPage();
+  fp.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  await fp.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+  await fp.waitForTimeout(1500);
+  const tileAt = async (i: number) => {
+    const b = (await fp.locator('[data-gx-keepselect] canvas').first().boundingBox())!;
+    await fp.mouse.click(b.x + 16 + i * 33, b.y + 9);
+    await fp.mouse.move(640, 20);
+    await fp.waitForTimeout(800);
+  };
+  await tileAt(0);
+  await fp.waitForSelector('[data-gx-hero]', { timeout: 8000 }).catch(() => fail('[15] setup: no hero after a wall click'));
+  // (no named helper inside `evaluate`: tsx wraps a named arrow in `__name`, which the page lacks)
+  const look = () =>
+    fp.evaluate(() => ({
+      folded: document.querySelector('[data-gx-fold]')?.getAttribute('aria-pressed') === 'true',
+      heroH: Math.round((document.querySelector('[data-gx-hero]') as HTMLElement | null)?.getBoundingClientRect().height ?? -1),
+      // the Sources row's toggles exist only while the Filters rows are drawn
+      rows: !!document.querySelector('[data-gx-source]'),
+    }));
+  const filters = async () => { await fp.click('[data-gx-filters-trigger]'); await fp.waitForTimeout(400); };
+  const foldBtn = async () => { await fp.click('[data-gx-fold]'); await fp.waitForTimeout(400); };
+  let v = await look();
+  if (v.folded || v.heroH <= 0) fail(`[15] setup: wanted the hero up (${JSON.stringify(v)})`);
+  const upH = v.heroH;
+
+  // [15a] open folds, close unfolds
+  await filters();
+  v = await look();
+  if (!v.rows) fail('[15a] setup: the Filters rows did not open');
+  if (!v.folded || v.heroH > 0) fail(`[15a] opening Filters did not fold the hero (${JSON.stringify(v)})`);
+  await filters();
+  v = await look();
+  if (v.rows) fail('[15a] setup: the Filters rows did not close');
+  if (v.folded || Math.abs(v.heroH - upH) > 2) fail(`[15a] closing Filters did not bring the hero back (${JSON.stringify(v)}, was ${upH} px)`);
+  console.log(`✓ [15a] opening Filters folds the ${upH} px hero; closing it brings the hero back`);
+
+  // [15b] folded by hand first: Filters did not fold it, so closing does not unfold it
+  await foldBtn();
+  await filters();
+  await filters();
+  v = await look();
+  if (!v.folded) fail('[15b] closing Filters unfolded a hero the user had folded before opening it');
+  await foldBtn();
+  console.log('✓ [15b] a hero folded by hand before Filters stays folded when Filters closes');
+
+  // [15c] Filters folds, the user unfolds, then folds again: the fold is theirs now
+  await filters();
+  await foldBtn(); // unfold by hand
+  v = await look();
+  if (v.folded) fail('[15c] setup: the fold button did not unfold the hero with Filters open');
+  await foldBtn(); // fold by hand
+  await filters(); // close
+  v = await look();
+  if (!v.folded) fail('[15c] closing Filters undid a fold the user made while it was open');
+  await foldBtn();
+  console.log('✓ [15c] unfolded and folded again by hand while Filters is open: closing Filters leaves it folded');
+
+  // [15d] a pick while Filters has the hero folded shows it; closing Filters then leaves it up
+  await filters();
+  v = await look();
+  if (!v.folded) fail('[15d] setup: opening Filters did not fold the hero');
+  await tileAt(3);
+  v = await look();
+  if (v.folded || v.heroH <= 0) fail(`[15d] a pick with Filters open did not show the hero (${JSON.stringify(v)})`);
+  await filters();
+  v = await look();
+  if (v.folded || v.heroH <= 0) fail(`[15d] closing Filters after a pick folded the hero again (${JSON.stringify(v)})`);
+  console.log('✓ [15d] a pick with Filters open shows the hero; closing Filters leaves it up');
+
+  // [15e] UNDO BRINGS THE ROWS BACK WITH THEIR FOLD (ADR-0120, 2026-09-24). A Filters change is
+  // an undo entry, and the fold rides every entry as context — so without the rows riding too,
+  // undoing a change made with Filters open folded the hero with Filters CLOSED (measured).
+  // The change goes through the route the Arrange dropdowns take (a DDFS param in an
+  // interaction bracket).
+  const reverse = () => fp.evaluate(() => !!(window as any).__store.getState().paletteFilters?.reverse);
+  const undoKey = async (key: string) => {
+    await fp.evaluate(() => (document.activeElement as HTMLElement | null)?.blur?.());
+    await fp.keyboard.press(key);
+    await fp.waitForTimeout(700);
+  };
+  const before15e = await reverse();
+  await filters();
+  v = await look();
+  if (!v.folded || !v.rows) fail(`[15e] setup: wanted Filters open with the hero folded (${JSON.stringify(v)})`);
+  await fp.evaluate((r) => {
+    const st = (window as any).__store.getState();
+    st.handleInteractionStart('param');
+    st.setPaletteFilters({ reverse: r });
+    st.handleInteractionEnd();
+  }, !before15e);
+  await fp.waitForTimeout(400);
+  await filters();
+  v = await look();
+  if (v.folded || v.rows || (await reverse()) === before15e) fail(`[15e] setup: wanted the change made and Filters closed with the hero back (${JSON.stringify(v)})`);
+  await undoKey('Control+z');
+  v = await look();
+  if ((await reverse()) !== before15e) fail('[15e] Ctrl+Z did not undo the Filters change');
+  if (v.folded && !v.rows) fail('[15e] Ctrl+Z folded the hero with Filters CLOSED — the rows did not come back with the fold they made');
+  if (!v.rows || !v.folded) fail(`[15e] Ctrl+Z did not bring back Filters open over the folded hero (${JSON.stringify(v)})`);
+  await undoKey('Control+y');
+  v = await look();
+  if ((await reverse()) === before15e || v.rows || v.folded) fail(`[15e] Ctrl+Y did not redo the change with Filters closed and the hero up (${JSON.stringify(v)})`);
+  await undoKey('Control+z');
+  await filters(); // close: the fold came back as Filters' own, so this brings the hero back
+  v = await look();
+  if (v.rows || v.folded || v.heroH <= 0) fail(`[15e] closing the Filters an undo brought back did not bring the hero back (${JSON.stringify(v)})`);
+  console.log('✓ [15e] undo of a Filters change: the rows come back open over the fold; redo closes them with the hero up; closing them after the undo shows the hero');
+
+  // [15f] AN UNDO IS NOT A GESTURE: a change made with the rows open and the hero unfolded BY
+  // HAND comes back that way — the restore that reopens the rows must not run the fold-on-open.
+  await filters();
+  await foldBtn(); // unfold by hand
+  v = await look();
+  if (v.folded || !v.rows) fail(`[15f] setup: wanted Filters open with the hero up (${JSON.stringify(v)})`);
+  const before15f = await reverse();
+  await fp.evaluate((r) => {
+    const st = (window as any).__store.getState();
+    st.handleInteractionStart('param');
+    st.setPaletteFilters({ reverse: r });
+    st.handleInteractionEnd();
+  }, !before15f);
+  await fp.waitForTimeout(400);
+  await filters();
+  await undoKey('Control+z');
+  v = await look();
+  if ((await reverse()) !== before15f) fail('[15f] Ctrl+Z did not undo the Filters change');
+  if (!v.rows) fail(`[15f] Ctrl+Z did not bring the Filters rows back (${JSON.stringify(v)})`);
+  if (v.folded) fail('[15f] the undo that reopened Filters FOLDED the hero — a restore was read as opening Filters, though the change was made with the hero up');
+  await filters();
+  v = await look();
+  if (v.folded || v.rows) fail(`[15f] closing Filters after that undo left ${JSON.stringify(v)}`);
+  console.log('✓ [15f] undo of a change made with the hero unfolded by hand: the rows come back and the hero stays up');
+  await fctx.close();
+}
+
 async function main() {
   const browser = await chromium.launch();
+  if (process.env.ONLY === 'esc' || process.env.ONLY === 'filters') {
+    const only: string[] = [];
+    if (process.env.ONLY === 'esc') await escTakesTheNearest(browser, only);
+    else await filtersFoldTheHero(browser, only);
+    if (only.length) fail(`page errors: ${only.join(' | ')}`);
+    await browser.close();
+    console.log(`PASS smoke-ge-ground (ONLY=${process.env.ONLY})`);
+    return;
+  }
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await seedGeSmokeState(ctx);
   const page = await ctx.newPage();
@@ -259,22 +549,27 @@ async function main() {
   if ((s.canvasLeft ?? 0) < 60) fail(`[5] the gutter did not come back (x=${s.canvasLeft})`);
   console.log('✓ [5] All is back: pad, Filters, four tools, the gutter');
 
-  // [6] Keep these N.
+  // [6] Group these N (it said "Keep these N" until 2026-09-24: "keep" is the ♥ and Kept).
   //
   // The term has to narrow All to at most KEEP_MAX (400 in BrowseStage.tsx) — the button is
   // deliberately withheld above that. It was 'fire' until 2026-09-09, when the catalogue had
   // grown enough that 'fire' matched 535 and the smoke went red without anything being
   // broken. 'ember' matches 38. If this fails again, check the COUNT before the feature:
   // the failure below prints it.
+  // The count is read from the SENTENCE ("38 of 10,509 · …"): since 2026-09-24 a desk shows
+  // it there once, and neither the search pill nor Filters ▸ Arrange repeats it (owner).
   await page.fill('input[placeholder^="Search"]', 'ember');
   await page.waitForTimeout(500);
   s = await state(page);
-  const m = /Keep these ([\d,]+)/.exec(s.keep ?? '');
-  if (!m) {
-    const narrowed = await page.evaluate(() => document.body.innerText.match(/([\d,]+) match/)?.[1] ?? '?');
-    fail(`[6] "Keep these N" is not offered on a narrowed All (${s.keep}) — the search matched ${narrowed}; the button is withheld above KEEP_MAX (400), so a count over that means this term has outgrown the fixture, not that the feature broke`);
-  }
+  const narrowedTo = /^([\d,]+) of [\d,]+/.exec(s.sentence);
+  if (!narrowedTo) fail(`[6] the sentence does not carry the narrowed count ("${s.sentence}")`);
+  const narrowed = Number(narrowedTo![1].replace(/,/g, ''));
+  const m = /Group these ([\d,]+)/.exec(s.keep ?? '');
+  if (!m) fail(`[6] "Group these N" is not offered on a narrowed All (${s.keep}) — the search matched ${narrowed}; the button is withheld above KEEP_MAX (400), so a count over that means this term has outgrown the fixture, not that the feature broke`);
   const n = Number(m![1].replace(/,/g, ''));
+  if (!(n > 0) || n !== narrowed) fail(`[6] the button offers ${n}, the sentence says ${narrowed} match`);
+  const pillCount = await page.evaluate(() => /[\d,]+ match/.test((document.querySelector('[data-gx-search]')?.parentElement as HTMLElement | null)?.innerText ?? ''));
+  if (pillCount) fail('[6] the search pill repeats the count on a desk — the sentence carries it, once');
   await page.click('[data-gx-keep-these]');
   await page.waitForTimeout(700);
   s = await state(page);
@@ -284,7 +579,7 @@ async function main() {
   if (chip.count !== n) fail(`[6] the group holds ${chip.count}, the wall offered ${n}`);
   // the label is the search term, capitalised — kept in step with the term above
   if (!s.title || !/Ember/.test(s.title)) fail(`[6] the title does not carry the label ("${s.title}")`);
-  console.log(`✓ [6] Keep these ${n} → group "${s.title}" on the ground, chip lit`);
+  console.log(`✓ [6] the sentence says ${narrowed}, the pill does not repeat it; Group these ${n} → group "${s.title}" on the ground, chip lit`);
   const groundBefore = s.ground;
 
   // [7] persistence
@@ -358,6 +653,11 @@ async function main() {
       face: (document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray ?? null,
     }));
     await page.click('[data-gx-filters-trigger]');
+    await page.waitForTimeout(300);
+    // Opening Filters FOLDS the hero since 2026-09-24 ([15]), and a folded hero has no tabs:
+    // unfold it by hand, which also makes the fold the user's, so closing the rows below
+    // leaves the hero where it is.
+    await page.click('[data-gx-fold]');
     await page.waitForTimeout(300);
     await page.click('[data-gx-tray-tab="adjust"]');
     await page.waitForTimeout(400);
@@ -599,7 +899,7 @@ async function main() {
     await np.waitForTimeout(300);
     let n = await full(np);
     if (n.kind !== 'gradient') fail(`[13a] the new gradient is not a picked-style gradient input (${n.kind})`);
-    if (!isNew(n)) fail(`[13a] the new gradient is ${sigOf(n.config)} ${n.config?.colorSpace}/${n.config?.blendSpace} "${n.name}" — expected Reset Default's black → white, linear / oklab, "New gradient"`);
+    if (!isNew(n)) fail(`[13a] the new gradient is ${sigOf(n.config)} ${n.config?.colorSpace}/${n.config?.blendSpace} "${n.name}" — expected the editor's default black → white, linear / oklab, "New gradient"`);
     if (n.knots !== 2) fail(`[13a] the new gradient shows ${n.knots} knots, expected 2`);
     await undoKey(np);
     n = await full(np);
@@ -689,6 +989,11 @@ async function main() {
     await pctx.close();
     console.log('✓ [13d] Pixel 5: "start a new one" on screen, a tap makes the new gradient, the ☰ leads with New Gradient, no overflow');
   }
+
+  // [14] Esc takes the nearest held thing
+  await escTakesTheNearest(browser, errors);
+  // [15] Filters folds the hero
+  await filtersFoldTheHero(browser, errors);
 
   if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
   await browser.close();

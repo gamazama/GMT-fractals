@@ -84,7 +84,18 @@ export interface GroundListProps {
   /** A row dropped onto this band, in front of `beforeId` (null = the end). */
   onBandDrop: (bandKey: string, dt: DataTransfer, beforeId: string | null) => void;
   canBandDrop: (bandKey: string, dt: DataTransfer) => boolean;
+  /**
+   * A floor under the rows' left inset (px), whatever the list's own 24 px margin is — the
+   * wall's `minGutter`, for the list. A host that floats something over the left edge (GE
+   * v2's tool column) says how much room it needs and the rows start clear of it (G03,
+   * 2026-09-24: the column covered the left 16 px of every row's strip).
+   * @see docs/adr/0118-a-surface-says-what-it-does.md
+   */
+  minGutter?: number;
 }
+
+/** The list's own left inset — the shell's 24 px margin (`px-6`). */
+const PAD_LEFT = 24;
 
 export const GroundList: React.FC<GroundListProps> = ({
   groups,
@@ -97,6 +108,7 @@ export const GroundList: React.FC<GroundListProps> = ({
   onEntryDelete,
   onBandDrop,
   canBandDrop,
+  minGutter = 0,
 }) => {
   const selected = useWallSelection();
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -126,7 +138,7 @@ export const GroundList: React.FC<GroundListProps> = ({
   );
 
   return (
-    <div className="h-full overflow-auto custom-scroll pt-3 pb-14 px-6" data-gx-ground-list="">
+    <div className="h-full overflow-auto custom-scroll pt-3 pb-14 px-6" style={{ paddingLeft: Math.max(PAD_LEFT, minGutter) }} data-gx-ground-list="">
       {groups.map((g) => (
         <div
           key={g.key}
@@ -159,7 +171,10 @@ export const GroundList: React.FC<GroundListProps> = ({
           {g.entries.map((entry) => {
             const it = itemOf(entry);
             const isSel = selected.has(entry.id);
-            const caption = [it.source, g.label].filter(Boolean).join(' · ');
+            // 'Picker' is the code's name for a wall pick, not a place anyone reads about (G17,
+            // 2026-09-24). Nothing replaces it: per-tile provenance is ruled out (owner,
+            // 2026-09-13 — the catalogue's credit lives in category names only).
+            const caption = [it.source === 'Picker' ? undefined : it.source, g.label].filter(Boolean).join(' · ');
             return (
               <React.Fragment key={entry.id}>
                 {caret?.band === g.key && caret.beforeId === entry.id && (

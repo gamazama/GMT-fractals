@@ -33,6 +33,9 @@ import { refreshGlobalSet } from '../../palette/store/globalSetStore';
 import { showToast } from '../../engine/store/toastStore';
 import { catalogHashOf, loadCatalogSigs } from '../../palette/core/catalogSigs';
 import { PALETTE_LOCAL_BASE } from '../../palette/core/catalogLoader';
+import { configToCss } from '../../palette/core/gradientCss';
+import { GLOBAL_SET_ID } from '../../palette/core/groundSets';
+import { flashSetSave } from './setSaveFlash';
 
 /** The confirm text. One string, so the two entry points cannot promise different things. */
 export const CONTRIBUTE_CONFIRM =
@@ -95,7 +98,15 @@ export const contributeToGlobal = (config: GradientConfig, opts?: { imported?: b
         void submitToGlobalSet(config).then(
             (r) => {
                 showToast(r.added ? 'Added to GX global — thank you' : 'That one is already in GX global');
-                if (r.added) refreshGlobalSet();
+                if (r.added) {
+                    // A save is drawn where it lands (ADR-0119) — this set too (G14, 2026-09-24).
+                    // Not at drop time like the other chips: a confirm and a round trip come
+                    // first, so it plays when the server has said yes. The slow flash, because
+                    // by now the gesture that asked is well behind the user.
+                    const css = configToCss(config);
+                    if (css) flashSetSave(GLOBAL_SET_ID, css, { slow: true });
+                    refreshGlobalSet();
+                }
             },
             (err) => showToast(err instanceof GlobalSetError ? err.message : 'Could not add it to GX global'),
         );

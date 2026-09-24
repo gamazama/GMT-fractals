@@ -77,6 +77,11 @@ export const MapScrollbar: React.FC<Props> = ({ range, reach = null, height, onS
         }
       }}
     >
+      {/* HIT SLOP (G21, 2026-09-24): the bar is 8 px wide and was an 8 px target — the one
+          drag control in the header. An invisible 6 px either side (the width of the gap to
+          the pad) takes the pointer for it; its events bubble to the track's handlers, which
+          measure against the track, so nothing about the drag changes and the look stays 8 px. */}
+      {onSeek && <div aria-hidden className="absolute inset-y-0 -inset-x-1.5" data-gx-map-hitslop="" />}
       {reach && (() => {
         // the track in three parts: unreachable above, reachable, unreachable below
         // same value→pixel mapping as the thumb above, so the reachable band's edges land

@@ -8,12 +8,13 @@
  *
  * Narrowing (owner, 2026-09-06): the COLOUR PICKER is the main narrower — a hue × lightness
  * field with a ranged box (`HueLightnessPad`) and the saturation strip under it — then the
- * search field carrying the live match count, then a Filters button whose badge counts the
- * active narrowers (search excluded). Filters is NOT a popover (it covered the wall it
- * narrows, which updates live): it opens three inline rows under the bar — LOOK (simple ↔
- * complex, single-hue ↔ rainbow) · SOURCES · ARRANGE (group / rows / sort / reverse, the
- * count, clear-all). Cool ↔ warm is not rendered here (redundant with hue). Nothing narrows
- * the wall from anywhere else.
+ * search field, then a Filters button whose badge counts the active narrowers (search
+ * excluded). Filters is NOT a popover (it covered the wall it narrows, which updates live):
+ * it opens three inline rows under the bar — LOOK (simple ↔ complex, single-hue ↔ rainbow) ·
+ * SOURCES · ARRANGE (group / rows / sort / reverse, clear-all). Cool ↔ warm is not rendered
+ * here (redundant with hue). Nothing narrows the wall from anywhere else. The live COUNT
+ * shows once (owner, 2026-09-24): in the sentence on a desk; on the search pill and in
+ * Arrange on a phone, which hides the sentence.
  *
  * No hero here. A wall click is a candidate (`setHeroPick`); `WorkingHero` previews it.
  *
@@ -23,9 +24,10 @@
  * On a user set — a dated bin of Recent, Kept, a named group — the pad and Filters are
  * gone (they are the catalogue's lens), the header names the set, search still narrows,
  * "More like this" still ranks, the carve tools are gone (their ids are catalogue ids), the
- * gutter is 0 (no bands to label) and the tiles are as large as the count allows. "Keep
+ * gutter is 0 (no bands to label) and the tiles are as large as the count allows. "Group
  * these N" on a narrowed All files the narrowed wall as a new group and puts it on the
- * ground — a saved search that is also a place.
+ * ground — a saved search that is also a place. (It said "Keep these N" until 2026-09-24:
+ * "keep" is the ♥ and Kept, and nothing else — owner.)
  *
  * THE PAD IS THE WALL'S MAP (D.2): the wall reports which bands are on screen
  * (`onViewport`, each band's edges in px) and, while the rows are bucketed by lightness,
@@ -56,7 +58,8 @@
  *     `order-*` rather than a second copy of the tree. The arrange sentence goes (it
  *     describes the wall; the count is still on the search pill).
  *   • the Filters rows wanted ~550 px. Each label goes above its controls, one control per
- *     line, and the block caps at 60 % of the viewport and scrolls.
+ *     line, and the block caps at 60 % of the room below it and scrolls (the desktop takes
+ *     the same cap since 2026-09-24 — a short laptop window lost its wall the same way).
  *   • the TOOLS leave the left column for a 40 px-button ROW at the bottom-left — see the
  *     comment there for why the column's reading does not survive a thumb — and the zoom
  *     TOOL becomes a − / + pair (`stepZoom` in usePickerModel → `zoomStep` on PickerWall).
@@ -79,7 +82,7 @@ import { entryOrigin } from '../../palette/core/catalogOrigin';
 import { usePickerStore } from '../../palette/store/pickerStore';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickerWall, type WallBand, type WallView, ZOOM_MAX } from '../../palette/components/PickerWall';
-import { usePickerModel } from '../../palette/components/usePickerModel';
+import { usePickerModel, pickGroundItem } from '../../palette/components/usePickerModel';
 import Slider from '../../components/Slider';
 import { InputSkinProvider } from '../../components/inputs';
 import { PickerBundleToggles } from '../../palette/components/PickerControls';
@@ -114,17 +117,19 @@ import { showToast } from '../../engine/store/toastStore';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { fileFavientAt, fileFavientsAt } from '../../palette/store/favientFiling';
 import { FAVIENT_DND_MIME, readFavientDrag } from '../../palette/core/favientDnd';
-import { parseSetId, GLOBAL_SET_ID } from '../../palette/core/groundSets';
+import { parseSetId, membersOf, GLOBAL_SET_ID } from '../../palette/core/groundSets';
 import type { ContextMenuItem } from '../../types/help';
 import { useGroundSets, useGroundSource } from './useGroundSource';
 import { groupSetId } from '../../palette/core/groundSets';
-import { newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
+import { DEFAULT_GROUP, dayKey, newGroupId, useFavientsStore } from '../../palette/store/favientsStore';
 import { clearWallSelection } from '../../palette/store/wallSelection';
 import { entryToGradientConfig } from '../../palette/core/gradientSeam';
 import { paramEdit } from '../../palette/store/paramUndoBracket';
 import type { CatalogEntry } from '../../palette/core/presetCatalog';
+import { useDismiss } from '../../hooks/useDismiss';
+import { useFiltersHistory } from './uiHistory';
 
-/** "Keep these N" is offered up to this many — past it the narrowing is not a selection yet. */
+/** "Group these N" is offered up to this many — past it the narrowing is not a selection yet. */
 const KEEP_MAX = 400;
 
 // No "hand" entry: the rest state (pick on click, right-drag pans) is implicit and never
@@ -150,8 +155,17 @@ const TOOLBAR_LEFT = 6;
  *  + the `Floating` box's 3 px padding either side + a 32 px button, rounded up past its
  *  border. The wall keeps its content clear of this (`minGutter`) — before it did not, and on
  *  any ground with a small gutter (a set asks for 24) the column sat on the first tiles
- *  (owner, 2026-09-11). Phone is exempt: there the cluster is a row along the BOTTOM. */
+ *  (owner, 2026-09-11). The LIST view keeps its rows clear of it the same way (G03,
+ *  2026-09-24 — the column covered the left 16 px of every row's strip). Phone is exempt:
+ *  there the cluster is a row along the BOTTOM. */
 const TOOLBAR_CLEAR = TOOLBAR_LEFT + 3 + 32 + 3 + 8;
+/** The tool column's inset from the wall's top (`top-2.5`), and the same breath kept below it
+ *  when deciding whether it fits. */
+const TOOLBAR_TOP = 10;
+/** The column's natural height for `n` buttons: 32 px each, `gap-0.5` between them, the
+ *  `Floating` box's 3 px padding and 1 px border at both ends — 176 for the fold and all four
+ *  tools (measured, the polish pass's L8). */
+const toolColumnH = (n: number): number => n * 32 + Math.max(0, n - 1) * 2 + 2 * (3 + 1);
 
 /** PHONE: the pad's own height. 56 is the desktop field; 48 keeps the three-row bar inside
  *  the header without making the hue axis unpointable. */
@@ -168,6 +182,14 @@ const PHONE_GUTTER = 24;
 const PHONE_TOOL = 40;
 /** PHONE: one step of the − / + zoom pair, which replaces the drag-to-zoom tool. */
 const ZOOM_STEP = 1.25;
+/** The shared context menu's geometry, for opening one ABOVE the selection bar (its host
+ *  takes a top-left): a plain item is `px-4 py-2 text-xs` = 32 px, the box `py-1` plus a
+ *  1 px border = 10. Read from `components/GlobalContextMenu.tsx`; change them together. */
+const MENU_ITEM_H = 32;
+const MENU_CHROME_H = 10;
+/** The nothing-picked line's "or continue {name}": a longer name is cut here (the whole name
+ *  is the link's title), so one gradient's name cannot run the line to three. */
+const CONTINUE_NAME_MAX = 28;
 
 /** Faint dotted ground behind the swatches, so the wall reads as a canvas, not a list. */
 const GROUND: React.CSSProperties = {
@@ -217,7 +239,10 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   const m = usePickerModel({ source, pickOnDrag: false });
   // The ground can be several sets at once, so the title is their labels joined — the
   // model's `setId` is the joined selection and is not a label.
-  const setTitle = sets.filter((s) => setIds.includes(s.id)).map((s) => s.label).join(' + ') || m.setId;
+  const litSets = sets.filter((s) => setIds.includes(s.id));
+  const setTitle = litSets.map((s) => s.label).join(' + ') || m.setId;
+  /** Every lit set is one of YOUR groups (Kept, Presets, a named one) — not a dated bin. */
+  const groupGround = litSets.length > 0 && litSets.every((s) => s.kind === 'group');
 
   /**
    * THE SHARED SET IS THE ONLY GROUND WITH A WAY IN THAT NOBODY FINDS. Contributing to
@@ -234,7 +259,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   const workingKind = useWorkingStore((st) => st.input.kind);
   const shareToGlobal = useCallback(() => {
     const cfg = deriveWorkingNow()?.config;
-    if (!cfg) { showToast('Pick or build a gradient first — then share it here'); return; }
+    if (!cfg) { showToast('Pick or build a gradient first — then add it here'); return; }
     // Imported (or edited from an import) → the confirm carries the rights line.
     contributeToGlobal(cfg, { imported: importedSourceOfWorking(useWorkingStore.getState()) !== null });
   }, []);
@@ -244,6 +269,21 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   const pad = useMemo(() => padAxesFor(m.axes.rowsAxis, m.axes.sortAxis), [m.axes.rowsAxis, m.axes.sortAxis]);
   // Nothing picked yet — the hero is absent (L8) and the bar says what to do (see below).
   const nothingPicked = useWorkingDerived().empty;
+  // …and what it can offer to CONTINUE: the newest gradient in Today, read from the shelf the
+  // way the rail's own sets are (Today's tiles are that bin in shelf order, newest first), so
+  // the shell passes nothing. The link hands it to `pickGroundItem` with the item a click on
+  // that tile would carry — a favourite of your own, so `favId` and its origin (the
+  // non-shared branch of `useGroundSource`'s `itemOf`).
+  const favients = useFavientsStore((st) => st.favients);
+  const todayNewest = useMemo(() => {
+    const today = sets.find((s) => s.kind === 'bin' && s.day === dayKey(Date.now()));
+    return today ? membersOf(today.id, favients)[0] ?? null : null;
+  }, [sets, favients]);
+  const continueToday = useCallback(() => {
+    if (!todayNewest) return;
+    const f = todayNewest;
+    pickGroundItem(f.id, { config: f.config, name: f.name, source: f.source, favId: f.id, origin: f.origin });
+  }, [todayNewest]);
   // An image dropped / pasted before the first pick is being read: with no hero there is no
   // image slot to say so (ImageSlot's READING), so the nothing-picked line says it instead.
   const imageReading = useImageStore((st) => st.loading);
@@ -320,7 +360,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
     if (m.tool) m.setTool(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m.isSet]);
-  // Keep these N: the narrowed wall becomes a named group and the ground shows it.
+  // Group these N: the narrowed wall becomes a named group and the ground shows it.
   const keepThese = useCallback(() => {
     const entries = m.rows.flatMap((r) => r.entries);
     if (!entries.length || entries.length > KEEP_MAX) return;
@@ -350,7 +390,45 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   // The zoom tool is not a selection tool (it never carves), so it lives here; the two are
   // mutually exclusive — picking either clears the other.
   const [zoomTool, setZoomTool] = useState(false);
-  const activeTool: ToolId | null = zoomTool ? 'zoom' : (m.tool as ToolId | null);
+  // GRID or LIST, on a set (owner, 2026-09-09). The wall draws bars, which is right for
+  // choosing by colour and wrong for finding one you NAMED — the shelf panel has had this
+  // toggle all along and the ground had none, so reading your own names meant opening a
+  // floating panel over the wall you were looking at. Remembered, like the panel's.
+  const [listView, setListView] = useState<boolean>(() => {
+    try { return localStorage.getItem(GROUND_VIEW_KEY) === 'list'; } catch { return false; }
+  });
+  // The list is DOM rows, so the wall's zoom does nothing there (G03, 2026-09-24): the zoom
+  // tool, its caption and the corner readout stand down while the list is showing. The tool's
+  // STATE is kept, so switching back to bars finds the zoom you were using.
+  const showingList = m.loaded && m.count > 0 && m.isSet && listView;
+  const zoomOn = zoomTool && !m.tool && !showingList;
+  // Esc puts the zoom tool down, and only it (G02, 2026-09-24) — through the shortcut
+  // registry, like the carve tools' (grep `useDismiss` in usePickerModel), so the shell's Esc
+  // chain sees the key taken and leaves an open tray face alone. There was no Esc here at all:
+  // the one way out was the caption's "click the tool again to stop".
+  useDismiss(m.wallHostRef, { onClose: () => setZoomTool(false), enabled: zoomOn, outside: false });
+  const activeTool: ToolId | null = zoomOn ? 'zoom' : (m.tool as ToolId | null);
+  // THE WALL'S HEIGHT, for the tool column (ASK-3): when the wall is shorter than the whole
+  // column would be, the carve tools collapse first. Measured on the wall host, which is always
+  // mounted; the column's height is computed rather than measured, so hiding the tools cannot
+  // change the answer and flicker.
+  const [wallH, setWallH] = useState(Infinity);
+  useEffect(() => {
+    const el = m.wallHostRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWallH(el.clientHeight));
+    ro.observe(el);
+    setWallH(el.clientHeight);
+    return () => ro.disconnect();
+  }, [m.wallHostRef]);
+  const columnButtons = (onFoldHero ? 1 : 0) + TOOLS.length;
+  const carveFits = wallH >= TOOLBAR_TOP + toolColumnH(columnButtons) + TOOLBAR_TOP;
+  // A carve tool that has just been hidden is put down: a tool you cannot see is a mode you
+  // cannot leave (Esc would still work, but nothing on screen says it is on).
+  useEffect(() => {
+    if (!carveFits && m.tool) m.setTool(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carveFits, m.tool]);
   const pickTool = useCallback(
     (id: ToolId) => {
       if (id === 'zoom') {
@@ -365,12 +443,65 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   );
   const btnRef = useRef<HTMLButtonElement>(null);
   const toggleFilters = useCallback(() => setFiltersOpen((o) => !o), []);
-  // PHONE: how tall the Filters rows may grow. MEASURED from where the block starts, and a
+  /**
+   * FILTERS FOLDS THE HERO while it is open (owner, 2026-09-24, the polish plan's ASK-3): on a
+   * short window the rows and the hero together left the wall a few rows tall, and the wall is
+   * what Filters is there to watch. Only a hero that was UP when Filters opened is folded, and
+   * only a fold Filters made is undone when it closes: unfold by hand while it is open (or a
+   * pick unfolds it — a pick always shows the hero), and the fold is no longer Filters' to
+   * undo, so a fold you then make yourself stays. No hero yet (no `onFoldHero`) = nothing to fold.
+   *
+   * "Open" is what is DRAWN: the rows show on the catalogue only, so moving to a set while
+   * Filters is open closes it for this purpose and coming back reopens it. Phone and desk alike
+   * (the phone's fold hides its hero band the same way). Through the shell's own `fold`, so an
+   * open face closes as it does for the fold button.
+   */
+  const filtersShown = filtersOpen && !m.isSet;
+  const filtersFolded = useRef(false);
+  const filtersShownWas = useRef(filtersShown);
+  useEffect(() => {
+    if (filtersShownWas.current === filtersShown) return;
+    filtersShownWas.current = filtersShown;
+    if (filtersShown) {
+      if (onFoldHero && !heroFolded) {
+        filtersFolded.current = true;
+        onFoldHero(true);
+      }
+    } else if (filtersFolded.current) {
+      filtersFolded.current = false;
+      if (heroFolded) onFoldHero?.(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersShown]);
+  // Anything that brings the hero back while Filters is open makes the fold no longer Filters'.
+  useEffect(() => {
+    if (!heroFolded) filtersFolded.current = false;
+  }, [heroFolded]);
+  // …and both ride every undo entry as CONTEXT (ADR-0120; @see ./uiHistory `useFiltersHistory`):
+  // undo a Filters change and the rows come back open, over the fold they made, with the fold
+  // still theirs — so closing them then brings the hero back. The shell restores `folded` in the
+  // same batch and is the truth for it; this restores only what is Filters' own, and marks the
+  // restored open/closed state as already SEEN, so the transition effect above does not read it
+  // as a gesture (fold again on "open", or unfold on "close" what the shell just folded).
+  const isSetNow = useRef(m.isSet);
+  isSetNow.current = m.isSet;
+  useFiltersHistory(
+    () => ({ open: filtersOpen, foldIsFilters: filtersFolded.current }),
+    (s) => {
+      filtersShownWas.current = s.open && !isSetNow.current;
+      filtersFolded.current = s.foldIsFilters;
+      setFiltersOpen(s.open);
+    },
+  );
+  // How tall the Filters rows may grow. MEASURED from where the block starts, and a
   // fraction of the room BELOW it — not `60vh`, which was the first cut and pushed the wall
   // clean off the screen (measured: header 48 + hero 219 + rail 40 + bar 126 + a 506 px
   // block is 939 in an 844 px viewport, and the wall came out 1 px tall). Filters is inline
   // rows precisely so you can watch the wall answer them; a cap that hides the wall is the
   // popover it replaced, with extra steps.
+  // DESKTOP TOO since 2026-09-24 (L2): the same failure on a short window — with a hero, the
+  // wall was 38 px at 1366×657 and 1 px at 1024×640 and 800×600. The cap only binds when the
+  // room is short; a desktop floor for the wall is the owner's number (the polish plan's ASK-3).
   const [filtersMaxH, setFiltersMaxH] = useState(0);
   const filtersRo = useRef<ResizeObserver | null>(null);
   const filtersRef = useCallback((el: HTMLDivElement | null) => {
@@ -379,16 +510,23 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
     if (!el) return;
     const update = () => setFiltersMaxH(Math.max(120, Math.round((window.innerHeight - el.getBoundingClientRect().top) * 0.6)));
     update();
-    // the hero grows and shrinks under a tray face, which moves this block's top
+    // What moves this block's top: the window (the body), the hero growing or shrinking
+    // above the ground (it resizes this stage, the block's parent), and the header band
+    // just above it (the nothing-picked line goes on the first pick). On a desktop the body
+    // does not change size when the hero does, so the body alone missed the first pick.
     filtersRo.current = new ResizeObserver(update);
     filtersRo.current.observe(document.body);
+    if (el.parentElement) filtersRo.current.observe(el.parentElement);
+    if (el.previousElementSibling) filtersRo.current.observe(el.previousElementSibling);
   }, []);
 
   // Esc closes the rows (capture phase, so the shell's plain keydown does not also dismiss
   // the candidate). One exception: Esc typed into a NON-EMPTY search box belongs to the box
   // (it clears the query — see the input's onKeyDown), so it is let through to it.
+  // Only while the rows are DRAWN: on a set they are not, and an Esc there must not be spent
+  // closing rows nobody can see.
   useEffect(() => {
-    if (!filtersOpen) return;
+    if (!filtersShown) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const t = e.target as HTMLInputElement | null;
@@ -398,7 +536,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
-  }, [filtersOpen]);
+  }, [filtersShown]);
 
   // PickerThemeChips / PickerBundleToggles are DDFS custom-UI components: they read
   // `sliceState` and call `actions['set' + capitalised featureId]`. Mounting them here
@@ -519,13 +657,6 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
     });
   }, []);
 
-  // GRID or LIST, on a set (owner, 2026-09-09). The wall draws bars, which is right for
-  // choosing by colour and wrong for finding one you NAMED — the shelf panel has had this
-  // toggle all along and the ground had none, so reading your own names meant opening a
-  // floating panel over the wall you were looking at. Remembered, like the panel's.
-  const [listView, setListView] = useState<boolean>(() => {
-    try { return localStorage.getItem(GROUND_VIEW_KEY) === 'list'; } catch { return false; }
-  });
   const toggleListView = useCallback(() => {
     setListView((v) => {
       const next = !v;
@@ -554,12 +685,18 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
     clearWallSelection();
   }, []);
 
-  /** Move everything selected into a group the user picks from the shelf's own groups. */
-  const moveSelectionTo = useCallback(() => {
+  /** Move everything selected into a group the user picks from the shelf's own groups.
+   *  `anchor` is the button that asked: the menu opens ABOVE the bar, from that button's
+   *  left edge (G12, 2026-09-24 — anchored on the bar and pushed up by the viewport clamp,
+   *  it covered "2 selected" and the Move to… button itself). */
+  const moveSelectionTo = useCallback((anchor: DOMRect) => {
     const ids = [...m.selectedIds];
     if (!ids.length) return;
     const st = useFavientsStore.getState();
-    const groups = sets.filter((x) => x.kind === 'group');
+    // A group that already holds every one of them is not somewhere they can move TO — the
+    // pick was a no-op that still toasted "Moved N to …".
+    const groupOf = new Map(st.favients.map((f) => [f.id, f.group ?? DEFAULT_GROUP] as const));
+    const groups = sets.filter((x) => x.kind === 'group' && !ids.every((id) => groupOf.get(id) === x.group));
     const items: ContextMenuItem[] = groups.map((g) => ({
       label: g.label,
       action: () => {
@@ -581,9 +718,12 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
         showToast(`Moved ${ids.length} into a new group`);
       },
     });
-    // Anchored at the bar itself — the menu belongs to the button that opened it.
-    const el = document.querySelector('[data-gx-selection-bar]')?.getBoundingClientRect();
-    openContextMenu(el ? el.left + 60 : 200, el ? el.top : 200, items);
+    // The menu takes (x, y) as its top-left, so "above" is the bar's top less the menu's own
+    // height, which is known ahead: `GlobalContextMenu` draws a plain item `px-4 py-2 text-xs`
+    // (32 px) inside `py-1` and a 1 px border (measured: three items = 106 px). The bar sits
+    // on the wall's bottom edge, so there is always room above it.
+    const barTop = document.querySelector('[data-gx-selection-bar]')?.getBoundingClientRect().top ?? anchor.top;
+    openContextMenu(anchor.left, barTop - 4 - (items.length * MENU_ITEM_H + MENU_CHROME_H), items);
   }, [m.selectedIds, m.clearSelection, sets, openContextMenu]);
 
 
@@ -594,6 +734,11 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   const zoomPct = m.zoom.x === m.zoom.y
     ? `${Math.round(m.zoom.x * 100)}%`
     : `${m.zoom.x.toFixed(1)}× ${m.zoom.y.toFixed(1)}×`;
+  // The tool column's tools: the four on the catalogue, zoom alone on a set, none on a phone
+  // (its zoom is the − / + row) and none over the list, where nothing here would do anything.
+  // On a wall too SHORT for the whole column, the carve tools go first (owner, 2026-09-24,
+  // ASK-3): the fold and zoom stay, because the fold is what gives the wall the screen back.
+  const wallTools = TOOLS.filter((t) => (phone || showingList ? false : !m.isSet ? carveFits || t.id === 'zoom' : t.id === 'zoom'));
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -618,25 +763,48 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
         <div className={`flex items-center gap-3 min-w-0 ${phone ? 'order-3 empty:hidden' : ''}`}>
           {/* PHONE: the sentence itself goes. It is the wall described — worth a line on a
               desktop, and on a phone it is a line of the wall it describes. The COUNT is
-              still on the search pill's right edge, and "Keep these N" stays: that one is
-              an action. */}
+              still on the search pill's right edge, and "Group these N" stays: that one is
+              an action. On a DESK this sentence is the one place the count shows (owner,
+              2026-09-24 — the pill and Filters ▸ Arrange carried it too, three times over). */}
           <span className={`text-[12px] text-fg-dim tabular-nums truncate min-w-0 ${phone ? 'hidden' : ''}`} data-gx-arrange-text="">
             {!m.isSet && m.loaded && (
               <>{m.count < m.total ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : m.total.toLocaleString()} · {m.anchor ? 'nearest first' : m.arrangeText}</>
             )}
           </span>
-          {/* Keep these N — the sentence says what narrowed the wall; this keeps it as a
-              group in My Gradients and shows it (Phase D) */}
+          {/* Group these N — the sentence says what narrowed the wall; this files it as a
+              group in My Gradients and shows it (Phase D). `data-gx-keep-these` is the
+              smokes' handle from when it said "Keep", kept so they need not move. */}
           {!m.isSet && m.loaded && m.count > 0 && m.count < m.total && m.count <= KEEP_MAX && (
             <Act onClick={keepThese} title="File these as a new group in My Gradients and show it" data-gx-keep-these="" className="shrink-0">
-              <Icon name="plus" /> Keep these {m.count.toLocaleString()}
+              <Icon name="plus" /> Group these {m.count.toLocaleString()}
+            </Act>
+          )}
+          {/* The invitation, while the shared set is the ground. `Act` is the bar's own button
+              language; the accent ring is the one thing on this row that asks rather than
+              narrows, which is the point of it. Hidden only when there is nothing to give: an
+              empty working slot makes the button a dead end, and the empty-state line below
+              offers the same thing in a sentence. It sits HERE, where "Group these N" does —
+              the other button that acts on the wall — not beside Filters and search (G11,
+              2026-09-24: there it wrapped the search onto a second line while this cell,
+              which holds no sentence on a set, stood empty). "Add", as its confirm and toast
+              say (owner, 2026-09-24; "Share" is the hero's link). */}
+          {onGlobalGround && workingKind !== 'empty' && (
+            <Act
+              onClick={shareToGlobal}
+              data-gx-share-global=""
+              title="Add the gradient you are working on to GX global — everyone using the app will see it"
+              className="shrink-0 border-accent-400/40 bg-accent-400/10 text-accent-300"
+            >
+              <Icon name="plus" /> Add your gradient
             </Act>
           )}
         </div>
         {m.isSet && !m.arrangeable ? (
           /* a set on the ground: its name where the pad was — the pad and Filters are the
              catalogue's lens (their windows, themes and carve ids mean nothing here) */
-          <div className={`flex items-baseline gap-2 items-center ${phone ? 'order-2 h-9' : 'justify-self-center h-[56px]'}`} data-gx-set-title="">
+          /* 72 on a desk, the pad column's own height (pad 56 + gap 4 + strip 12), so the wall's
+             top does not jump 15 px when you cross between All and a set (G10, 2026-09-24) */
+          <div className={`flex items-baseline gap-2 items-center ${phone ? 'order-2 h-9' : 'justify-self-center h-[72px]'}`} data-gx-set-title="">
             <span className="text-[15px] text-fg">{setTitle}</span>
             <span className="text-[13px] text-fg-muted tabular-nums">{m.count < m.total ? `${m.count} of ${m.total}` : m.total}</span>
           </div>
@@ -650,8 +818,14 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
               not exist until the first pick (owner, 2026-09-09: "this can replace the 'click
               a gradient to preview it..' which is wrong anyway"). */}
           {nothingPicked && (
-            // PHONE: the line wraps to two there, so it gets a line height; one line on a desk.
-            <div className={`text-[12px] text-fg-muted text-center ${phone ? 'leading-snug' : 'leading-none'}`} data-gx-map-hint="">
+            // PHONE: the line wraps to two there, so it gets a line height; one line on a desk
+            // unless it offers "continue", which wraps it there too. `w-0 min-w-full`: the line
+            // is as wide as the pad and never WIDENS the column, which would push the pad off
+            // the centre (the grid's middle column is sized by its content).
+            <div
+              className={`w-0 min-w-full text-[12px] text-fg-muted text-center ${phone || todayNewest ? 'leading-snug' : 'leading-none'}`}
+              data-gx-map-hint=""
+            >
               {/* "click it again to keep and edit it" is gone (owner, 2026-09-09): it taught
                   the SECOND gesture before the first had been made, and the second one is
                   discovered by doing it. The pad beside this line says what IT is for. */}
@@ -676,6 +850,26 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
                           data-gx-new-gradient=""
                         >
                           start a new one
+                        </button>
+                      </span>
+                    </>
+                  )}
+                  {/* OR CONTINUE (owner, 2026-09-24): the newest gradient in Today, when there is
+                      one — the cheapest honest answer to "where did my work go" after a reload
+                      with autosave off. It does what a click on that tile does, nothing more. */}
+                  {todayNewest && (
+                    <>
+                      {' · '}
+                      <span className="whitespace-nowrap">
+                        {'or continue '}
+                        <button
+                          type="button"
+                          className="text-fg-secondary hover:text-accent-300 underline decoration-dotted underline-offset-2 transition-colors"
+                          onClick={continueToday}
+                          title={todayNewest.name}
+                          data-gx-continue=""
+                        >
+                          {todayNewest.name.length > CONTINUE_NAME_MAX ? `${todayNewest.name.slice(0, CONTINUE_NAME_MAX - 1)}…` : todayNewest.name}
                         </button>
                       </span>
                     </>
@@ -724,21 +918,6 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             <span className="truncate">sorted by similarity to <b className="font-semibold">{m.anchor.name}</b></span>
             <button onClick={() => m.setAnchor(null)} className="underline shrink-0 hover:text-fg">clear</button>
           </span>
-        )}
-        {/* The invitation, while the shared set is the ground. `Act` is the bar's own button
-            language; the accent ring is the one thing on this row that asks rather than
-            narrows, which is the point of it. Hidden on a phone only when there is nothing
-            to give: an empty working slot makes the button a dead end, and the empty-state
-            line below offers the same thing in a sentence. */}
-        {onGlobalGround && workingKind !== 'empty' && (
-          <Act
-            onClick={shareToGlobal}
-            data-gx-share-global=""
-            title="Add the gradient you are working on to GX global — everyone using the app will see it"
-            className="shrink-0 border-accent-400/40 bg-accent-400/10 text-accent-300"
-          >
-            <Icon name="plus" /> Share your gradient
-          </Act>
         )}
         {!filtersOpen && (m.narrowers.length > 0 || m.anchor) && (
           <button onClick={m.clearAll} className="text-[13px] text-accent-300 underline hover:text-fg whitespace-nowrap" title="Clear search, look ranges, sources, the carve and the similarity sort">
@@ -790,10 +969,16 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-fg placeholder-fg-faint"
           />
           {m.search && (
-            <button onClick={() => m.setSearch('')} title="Clear search" className="px-1 text-fg-dim hover:text-fg">×</button>
+            <button onClick={() => m.setSearch('')} title="Clear search" aria-label="Clear search" className="px-1 text-fg-dim hover:text-fg">
+              <Icon name="close" size={12} />
+            </button>
           )}
-          {m.loaded && m.count < m.total && (
-            <span className="text-[12px] text-fg-muted tabular-nums whitespace-nowrap">{m.count.toLocaleString()} match</span>
+          {/* The count, ONCE (owner, 2026-09-24): on a desk the sentence (All) or the set's
+              title already carries it, so the pill does not repeat it. A phone hides the
+              sentence and keeps this; so does GX global, which has neither a sentence nor a
+              title (it is arranged by colour, so the pad stands where the title would). */}
+          {m.loaded && m.count < m.total && (phone || (m.isSet && m.arrangeable)) && (
+            <span className="text-[12px] text-fg-muted tabular-nums whitespace-nowrap">{m.count.toLocaleString()} {m.count === 1 ? 'match' : 'matches'}</span>
           )}
         </div>
 
@@ -801,16 +986,19 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
       </div>
 
       {/* ── Filters: three inline rows, never over the wall ────────────────── */}
-      {filtersOpen && !m.isSet && (
+      {filtersShown && (
         /* PHONE: the rows need ~550 px side by side (a 72 px label plus three 160 px
            dropdowns), so each label goes ABOVE its controls and each control takes the line.
            That makes the block tall, so it is capped (`filtersMaxH` — measured, see there)
            and scrolls: the wall it narrows updates live and must stay in sight, which is
-           the whole reason Filters is inline rows rather than a popover. */
+           the whole reason Filters is inline rows rather than a popover. The DESKTOP takes
+           the same cap (L2, 2026-09-24); its rows are one line each, so it binds only on a
+           short window. Nothing inside needs to overflow the block: the Arrange dropdowns
+           are native selects and the rows' hints are `title`s. */
         <div
-          ref={phone ? filtersRef : undefined}
-          style={phone ? { maxHeight: filtersMaxH || undefined } : undefined}
-          className={`shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10 bg-surface-raised ${phone ? 'overflow-y-auto mobile-scroll' : ''}`}
+          ref={filtersRef}
+          style={{ maxHeight: filtersMaxH || undefined }}
+          className={`shrink-0 px-6 pb-2.5 flex flex-col gap-2 border-b border-line/10 bg-surface-raised overflow-y-auto ${phone ? 'mobile-scroll' : 'custom-scroll'}`}
           data-gx-selectable=""
         >
           {/* LOOK */}
@@ -834,11 +1022,15 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
               <label className="flex items-center gap-2 text-[13px] text-fg-muted select-none">
                 <input type="checkbox" checked={!!m.sliceState?.reverse} onChange={(e) => m.setPaletteFilters?.({ reverse: e.target.checked })} /> Reverse
               </label>
-              <span className={`text-[13px] text-fg-muted tabular-nums ${phone ? '' : 'ml-auto'}`}>
-                {m.loaded ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : 'loading…'}
-              </span>
+              {/* PHONE only: on a desk the sentence above carries the count (owner, 2026-09-24:
+                  once is enough), and clear-all takes the row's right end instead. */}
+              {phone && (
+                <span className="text-[13px] text-fg-muted tabular-nums">
+                  {m.loaded ? `${m.count.toLocaleString()} of ${m.total.toLocaleString()}` : 'loading…'}
+                </span>
+              )}
               {(m.narrowers.length > 0 || m.anchor) && (
-                <button onClick={m.clearAll} className="text-[13px] text-accent-300 underline hover:text-fg" title="Clear search, look ranges, sources, the carve and the similarity sort">
+                <button onClick={m.clearAll} className={`text-[13px] text-accent-300 underline hover:text-fg ${phone ? '' : 'ml-auto'}`} title="Clear search, look ranges, sources, the carve and the similarity sort">
                   clear all
                 </button>
               )}
@@ -862,12 +1054,14 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
         ref={m.wallHostRef}
         data-gx-keepselect=""
         style={GROUND}
-        className={`flex-1 min-h-0 relative border-t border-line/10 ${zoomTool && !m.tool ? 'cursor-zoom-in' : ''}`}
+        className={`flex-1 min-h-0 relative border-t border-line/10 ${zoomOn ? 'cursor-zoom-in' : ''}`}
       >
         {!m.loaded ? (
           <div className="h-full flex items-center justify-center text-[13px] text-fg-faint">Loading gradient library…</div>
-        ) : m.count > 0 && m.isSet && listView ? (
+        ) : showingList ? (
           <GroundList
+            // the list keeps its rows clear of the floating tool column, as the wall does (G03)
+            minGutter={phone ? 0 : TOOLBAR_CLEAR}
             groups={m.rows.map((r) => ({ key: r.key, label: r.label, entries: r.entries }))}
             itemOf={source!.itemOf}
             selectedId={m.selectedId}
@@ -896,15 +1090,18 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             // the phone tool row's − / + (Phase F); harmless on a desktop, where nothing
             // ever bumps the serial
             zoomStep={m.zoomStep ?? undefined}
-            zoomTool={zoomTool && !m.tool}
+            zoomTool={zoomOn}
             /* V2 as amended: 10 px on a bar, 20 on a box — a tile that has grown toward a
                box takes more rounding (the wall caps it at a third of the short side) */
             tileRadius={Math.round(Math.min(20, 8 + Math.max(0, m.tile.h - 18) / 9))}
             // A set has no row-label gutter to draw, but it still wants the shell's 24 px
             // margin: at 0 the user's own gradients ran flush into the window edge, out of
             // line with the rail chips and the header above them (owner, 2026-09-09: "the
-            // user areas are very tight against the edge of the screen"). Below 28 px the
-            // gutter draws nothing and is pure margin — which is exactly what is wanted.
+            // user areas are very tight against the edge of the screen"). A gutter ASKED for
+            // below 28 px draws no labels and is pure margin — which is exactly what is
+            // wanted. The wall decides that from the request, BEFORE `minGutter` below raises
+            // the margin to 52 (G09, 2026-09-24: deciding it from the raised one drew a stray
+            // "(5)" count in every set's margin).
             // PHONE: the catalogue takes the same 24 (see PHONE_GUTTER) — its own
             // auto-shrink lands on ~4 at 390 and runs the tiles into the window edge.
             gutter={phone ? PHONE_GUTTER : m.isSet ? 24 : undefined}
@@ -945,10 +1142,16 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
               </span>
             ) : m.setId === GLOBAL_SET_ID ? (
               <span>
-                Nothing has been shared yet — <button onClick={shareToGlobal} className="text-accent-300 underline">yours could be the first</button>.
+                Nothing has been added yet — <button onClick={shareToGlobal} className="text-accent-300 underline">yours could be the first</button>.
               </span>
             ) : m.isSet && !m.search.trim() ? (
-              <span>Nothing here yet — pick gradients from All and they land in Today; drop one on a chip below to file it.</span>
+              /* G05, 2026-09-24: one line per kind of set. The old one gave every set Today's
+                 advice and sent you to a chip "below" — the rail is ABOVE the ground. */
+              <span>
+                {groupGround
+                  ? `Nothing in ${setTitle} yet — drag a gradient onto its chip to file it here.`
+                  : 'Nothing here yet — gradients you pick land in Today.'}
+              </span>
             ) : m.search.trim() ? (
               <span>
                 Nothing matches “{m.search.trim()}”{m.keptIds ? ' in what you kept' : ''} —{' '}
@@ -986,6 +1189,8 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             home indicator.
             The zoom TOOL is not offered: drag-to-zoom competes with the wall's own touch
             panning. A − / + pair does the same job with no mode to be stuck in. */}
+        {/* Not drawn at all when it would be an empty box: the list, before any hero. */}
+        {(onFoldHero || wallTools.length > 0 || (phone && !showingList)) && (
         <Floating
           ref={m.toolbarRef}
           data-gx-tools="tools"
@@ -999,8 +1204,9 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
           {/* THE HERO'S FOLD sits with the wall's tools (owner, 2026-09-11: "move the
               'minimize hero' into the wall's toolbar — this way we don't need to leave a
               remnant of the hero when the wall is fullscreened"). Phone and desktop, every
-              ground. A pick brings the hero back. The one text glyph among the icons: the
-              set has no chevron. */}
+              ground, and the only thing in the column while the LIST is showing (G03). A pick
+              brings the hero back. Its glyph is the icon set's chevron, pointing the way the
+              hero will go (G13, 2026-09-24 — it was the one text glyph among the icons). */}
           {onFoldHero && (
             <button
               onClick={() => onFoldHero(!heroFolded)}
@@ -1009,12 +1215,12 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
               aria-pressed={heroFolded}
               data-gx-fold=""
               style={phone ? { width: PHONE_TOOL, height: PHONE_TOOL } : undefined}
-              className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${heroFolded ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
+              className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${heroFolded ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
             >
-              <span className="text-[14px] leading-none">{heroFolded ? '▾' : '▴'}</span>
+              <Icon name={heroFolded ? 'chevronDown' : 'chevronUp'} />
             </button>
           )}
-          {TOOLS.filter((t) => (phone ? false : !m.isSet || t.id === 'zoom')).map((t) => {
+          {wallTools.map((t) => {
             const on = activeTool === t.id;
             return (
               <button
@@ -1024,13 +1230,13 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
                 aria-label={t.label}
                 aria-pressed={on}
                 style={phone ? { width: PHONE_TOOL, height: PHONE_TOOL } : undefined}
-                className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-white/5'}`}
+                className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${on ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
               >
                 <Icon name={t.glyph} />
               </button>
             );
           })}
-          {phone && (
+          {phone && !showingList && (
             <>
               {m.zoom.x > 1 && (
               <button
@@ -1038,7 +1244,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
                 title="Zoom out"
                 aria-label="Zoom out"
                 style={{ width: PHONE_TOOL, height: PHONE_TOOL }}
-                className="rounded-lg flex items-center justify-center transition-colors text-fg-muted hover:text-fg hover:bg-white/5"
+                className="rounded-lg flex items-center justify-center transition-colors text-fg-muted hover:text-fg hover:bg-line/10"
               >
                 <Icon name="zoomOut" />
               </button>
@@ -1049,7 +1255,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
                 title="Zoom in"
                 aria-label="Zoom in"
                 style={{ width: PHONE_TOOL, height: PHONE_TOOL }}
-                className="rounded-lg flex items-center justify-center transition-colors text-fg-muted hover:text-fg hover:bg-white/5"
+                className="rounded-lg flex items-center justify-center transition-colors text-fg-muted hover:text-fg hover:bg-line/10"
               >
                 <Icon name="zoom" />
               </button>
@@ -1070,6 +1276,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             </>
           )}
         </Floating>
+        )}
 
         {/* GRID ⇄ LIST, on a set only: the catalogue's 11,131 rows would want virtualizing,
             and its entries carry no name of yours to look for. `data-gx-tools` marks it
@@ -1091,7 +1298,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
         )}
 
         {/* one-line caption while the zoom tool is active */}
-        {zoomTool && !m.tool && (
+        {zoomOn && (
           <Floating className={`absolute top-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 text-[12px] text-fg-secondary ${floatOver}`}>
             drag to zoom · right-drag pans · Fit resets · click the tool again to stop
           </Floating>
@@ -1125,11 +1332,12 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             className={`absolute left-4 flex items-center gap-2 px-3 py-1.5 text-[13px] ${floatOver} ${phone ? 'bottom-[64px] max-w-[calc(100%-2rem)] flex-wrap' : 'bottom-3'}`}
             data-gx-selection-bar=""
           >
+            {/* No "· drag them onto a set, or" (owner, 2026-09-24): the drag is found by doing
+                it, and the bar is for what can be pressed. */}
             <span className="text-fg">
               {m.selectedIds.size} selected
             </span>
-            <span className="text-fg-dim">· drag them onto a set, or</span>
-            <Act onClick={() => moveSelectionTo()} title="Move them into another group">Move to…</Act>
+            <Act onClick={(e) => moveSelectionTo(e.currentTarget.getBoundingClientRect())} title="Move them into another group">Move to…</Act>
             <Act onClick={removeSelection} title="Remove them from My Gradients">Remove</Act>
             <button onClick={m.clearSelection} className="text-fg-muted hover:text-fg" title="Clear the selection (Esc)">
               <Icon name="close" />
@@ -1140,12 +1348,13 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
         {/* zoom readout + Fit. PHONE: gone. The readout is a number about a gesture the
             phone does not have (middle-drag / right-drag), it sat over the tiles in the
             other bottom corner, and Fit — the one control in it that still means something
-            — has moved into the tool row. */}
-        {!phone && (
+            — has moved into the tool row. The LIST drops it too: its rows are DOM and the zoom
+            it reports does nothing to them (G03). */}
+        {!phone && !showingList && (
         <Floating className={`absolute bottom-3 right-4 flex items-center gap-2 px-2.5 py-1 text-[12px] text-fg-muted tabular-nums ${floatOver}`}>
           {/* C.11 (owner): with the zoom tool active, the wall's Padding is here too — the
               gap between swatches is what you tune while zoomed in on them */}
-          {zoomTool && !m.tool && (
+          {zoomOn && (
             <InputSkinProvider skin="soft">
               <div className="w-[150px] mr-1" data-gx-zoom-padding>
                 <Slider label="Padding" value={Number(m.sliceState?.paddingSize ?? 1)} min={0} max={40} step={1} onChange={(v) => m.setPaletteFilters?.({ paddingSize: v })} defaultValue={1} />

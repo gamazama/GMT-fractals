@@ -179,9 +179,10 @@ export interface PickerWallProps {
    * Make the wall keyboard-reachable (the migration audit's M14). ADDITIVE: without it the
    * wall has no tab stop and no key handling, exactly as before, so app-gmt and the old
    * stage opt in separately. With it: Tab focuses the wall, the arrows move a cursor ring
-   * that is deliberately NOT the pick (a white hairline against the pick's accent ring),
-   * Home / End jump to the ends, Enter or Space picks what the cursor is on, and Delete
-   * asks the host to remove it. The wall was pointer-only until 2026-09-09.
+   * that is deliberately NOT the pick (a white hairline against the pick's accent ring)
+   * through the grid as drawn (`stepCursor`), Home / End jump to the ends, Enter or Space
+   * picks what the cursor is on, and Delete asks the host to remove it. The wall was
+   * pointer-only until 2026-09-09.
    */
   keyboard?: boolean;
   /** Delete pressed on the focused tile. Absent = Delete does nothing. */
@@ -267,9 +268,10 @@ export interface PickerWallProps {
    * asks for 24 and the column is ~44 wide (owner, 2026-09-11: "the wall's toolbar is
    * obscuring the wall").
    *
-   * It raises the same `labelW` the labels and the tile grid are both laid out from, so the
-   * two stay in step and every hit test follows for free. On a ground whose gutter is already
-   * wider than this it does nothing.
+   * It raises the same `labelW` the label column and the tile grid are both laid out from, so
+   * the two stay in step and every hit test follows for free. On a ground whose gutter is
+   * already wider than this it does nothing. It never switches the row LABELS on: whether
+   * they draw is decided from `gutter` as asked (a floor is margin, not room for text).
    *
    * @see docs/adr/0118-a-surface-says-what-it-does.md
    */
@@ -319,6 +321,123 @@ const cellOf = (k: number, cols: number, nrows: number, rowMajor: boolean) =>
   rowMajor ? { col: k % cols, row: Math.floor(k / cols) } : { col: Math.floor(k / nrows), row: k % nrows };
 const indexAt = (col: number, row: number, cols: number, nrows: number, rowMajor: boolean) =>
   rowMajor ? row * cols + col : col * nrows + row;
+
+/** How many tiles one chunk canvas of a band holds: every chunk of a band is full but its
+ *  last. ONE rule, read by `GroupRow` when it slices a band and by the keyboard cursor when
+ *  it walks one — a second copy is how the two would drift. */
+const chunkLenFor = (cols: number, cellH: number): number =>
+  Math.max(1, cols * Math.max(1, Math.floor(MAX_CANVAS_CSS_H / Math.max(1, cellH))));
+
+/** A band as the keyboard cursor walks it: how many tiles, and which way they fill. */
+export interface CursorBand {
+  count: number;
+  rowMajor: boolean;
+}
+export type CursorKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
+
+/**
+ * One arrow-key step of the wall's keyboard cursor, in GRID space (G01, 2026-09-24).
+ *
+ * The cursor used to step the FLAT index — ±1 for ← →, ±cols for ↑ ↓ — which is right only
+ * for a row-major fill. The catalogue fills its bands COLUMN-major (a sorted continuum reads
+ * down the column), so there → moved DOWN and ↓ jumped five columns across (measured on All:
+ * → twice from the start put the ring on column 1, row 3).
+ *
+ * What the wall draws, top to bottom, is a stack of grids: each band is sliced into chunk
+ * canvases of `chunkLen` tiles, each chunk is `cols` wide and `ceil(n / cols)` rows tall,
+ * and its tiles fill row- or column-major (`cellOf` / `indexAt`). Every row of every chunk
+ * holds a PREFIX of the columns, whichever the fill. So:
+ *   • ← / → move one column along the row the cursor is on, and wrap onto the previous /
+ *     next row (its last / first tile) — for a row-major band that is exactly ±1;
+ *   • ↑ / ↓ move one row, across chunk and band edges, to the tile in the NEAREST column
+ *     (the row below may be a short last row).
+ * At either end of the wall it stays put. With no cursor yet, → / ↓ start at the first tile
+ * and ← / ↑ at the last, as before. Returns a flat index into the bands in order, or -1 when
+ * the wall is empty.
+ *
+ * @invariant ← / → / ↑ / ↓ move in the grid the wall DRAWS — a column-major band's → goes
+ *   across, not down; ↓ crosses into the next chunk and band at the nearest column; a
+ *   row-major band's ← / → are ±1 — proven by: `npx tsx debug/test-palette-wallzoom.mts`
+ *   ("[7] the keyboard cursor steps in grid space").
+ */
+export const stepCursor = (
+  bands: readonly CursorBand[],
+  cols: number,
+  chunkLen: number,
+  cur: number,
+  key: CursorKey,
+): number => {
+  const total = bands.reduce((s, band) => s + band.count, 0);
+  if (total === 0) return -1;
+  if (cur < 0 || cur >= total) return key === 'ArrowRight' || key === 'ArrowDown' ? 0 : total - 1;
+  const C = Math.max(1, cols);
+  const L = Math.max(1, chunkLen);
+  /** Each band's first flat index. */
+  const starts: number[] = [];
+  bands.reduce((s, band) => (starts.push(s), s + band.count), 0);
+
+  type Loc = { b: number; c: number; row: number };
+  /** The chunk's tile count and row count. */
+  const chunk = (b: number, c: number) => {
+    const n = Math.min(L, bands[b].count - c * L);
+    return { n, nrows: Math.max(1, Math.ceil(n / C)) };
+  };
+  /** The last column that holds a tile on this row (the row holds columns 0 … this). */
+  const lastCol = ({ b, c, row }: Loc): number => {
+    const { n, nrows } = chunk(b, c);
+    return bands[b].rowMajor ? Math.min(C - 1, n - 1 - row * C) : Math.floor((n - 1 - row) / nrows);
+  };
+  const indexOf = (loc: Loc, col: number): number => {
+    const { nrows } = chunk(loc.b, loc.c);
+    return starts[loc.b] + loc.c * L + indexAt(col, loc.row, C, nrows, bands[loc.b].rowMajor);
+  };
+  const nextRow = ({ b, c, row }: Loc): Loc | null => {
+    if (row + 1 < chunk(b, c).nrows) return { b, c, row: row + 1 };
+    if ((c + 1) * L < bands[b].count) return { b, c: c + 1, row: 0 };
+    for (let nb = b + 1; nb < bands.length; nb++) if (bands[nb].count > 0) return { b: nb, c: 0, row: 0 };
+    return null;
+  };
+  const prevRow = ({ b, c, row }: Loc): Loc | null => {
+    if (row > 0) return { b, c, row: row - 1 };
+    if (c > 0) return { b, c: c - 1, row: chunk(b, c - 1).nrows - 1 };
+    for (let pb = b - 1; pb >= 0; pb--) {
+      if (bands[pb].count === 0) continue;
+      const lc = Math.ceil(bands[pb].count / L) - 1;
+      return { b: pb, c: lc, row: chunk(pb, lc).nrows - 1 };
+    }
+    return null;
+  };
+
+  // Where the cursor is: band, chunk, and the cell inside that chunk.
+  let b = 0;
+  while (cur >= starts[b] + bands[b].count) b++;
+  const within = cur - starts[b];
+  const c = Math.floor(within / L);
+  const { nrows } = chunk(b, c);
+  const { col, row } = cellOf(within - c * L, C, nrows, bands[b].rowMajor);
+  const here: Loc = { b, c, row };
+
+  switch (key) {
+    case 'ArrowRight': {
+      if (col < lastCol(here)) return indexOf(here, col + 1);
+      const next = nextRow(here);
+      return next ? indexOf(next, 0) : cur;
+    }
+    case 'ArrowLeft': {
+      if (col > 0) return indexOf(here, col - 1);
+      const prev = prevRow(here);
+      return prev ? indexOf(prev, lastCol(prev)) : cur;
+    }
+    case 'ArrowDown': {
+      const next = nextRow(here);
+      return next ? indexOf(next, Math.min(col, lastCol(next))) : cur;
+    }
+    case 'ArrowUp': {
+      const prev = prevRow(here);
+      return prev ? indexOf(prev, Math.min(col, lastCol(prev))) : cur;
+    }
+  }
+};
 
 /**
  * Merge adjacent bucketed sub-rows within the SAME category while their combined swatch
@@ -671,11 +790,14 @@ const SwatchCanvas: React.FC<{
 
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, spaciousBands, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, labels, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, spaciousBands, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
   labelW: number;
+  /** Draw the row labels in the gutter — decided by the wall from the gutter the host ASKED
+   *  for, not from `labelW`, which `minGutter` may have raised to clear a floating toolbar. */
+  labels: boolean;
   swatchW: number;
   swatchH: number;
   gap: number;
@@ -728,8 +850,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
       }
     : {};
   const cellH = swatchH + gap;
-  const maxRows = Math.max(1, Math.floor(MAX_CANVAS_CSS_H / cellH));
-  const chunkLen = Math.max(1, cols * maxRows);
+  const chunkLen = chunkLenFor(cols, cellH);
   const chunks: CatalogEntry[][] = [];
   for (let i = 0; i < group.entries.length; i += chunkLen) chunks.push(group.entries.slice(i, i + chunkLen));
 
@@ -758,12 +879,12 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, swa
             swatch-row height (no leftover vertical gap). This gutter is
             the lowest-priority column: on a narrow wall `labelW` shrinks toward 0 so the
             swatches keep their size; its label truncates (never wraps), and below a legible
-            width the text is dropped entirely. */}
+            width the text is dropped entirely (`labels` — see where the wall computes it). */}
         <div
           className="shrink-0 flex items-center justify-end text-right leading-tight overflow-hidden"
-          style={{ width: labelW, paddingLeft: labelW >= 28 ? 8 : 0, paddingRight: labelW >= 28 ? 8 : 0 }}
+          style={{ width: labelW, paddingLeft: labels ? 8 : 0, paddingRight: labels ? 8 : 0 }}
         >
-          {labelW >= 28 && (
+          {labels && (
             <div className="text-[10px] text-fg-muted truncate w-full">
               {group.sublabel ? `${group.sublabel} ` : ''}
               <span className="text-fg-faint tabular-nums">({group.entries.length})</span>
@@ -943,10 +1064,13 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // The left label gutter is the lowest-priority column: full width on a roomy wall,
   // shrinking linearly to 0 as the wall narrows (≥700 → full, ≤380 → gone), so the
   // swatches keep their size on narrow screens instead of the gutter stealing space.
-  const labelW = Math.max(
-    minGutter,
-    gutter != null ? Math.max(0, gutter) : Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320))),
-  );
+  const askedGutter = gutter != null ? Math.max(0, gutter) : Math.max(0, Math.min(LABEL_W, Math.round((LABEL_W * (width - 380)) / 320)));
+  const labelW = Math.max(minGutter, askedGutter);
+  // Labels draw only in a gutter the host ASKED for at a legible width. `minGutter` is a
+  // floor under the MARGIN — room for something floating over the edge, not room for text —
+  // so it must not switch the labels on: deciding from `labelW` drew a lone "(5)" in the
+  // margin of every set, which asks for 24 and is floored to 52 (G09, 2026-09-24).
+  const drawLabels = askedGutter >= 28;
   // cols is derived from the BASE swatch width (NOT the zoom), so horizontal zoom never
   // reflows the grid — it only widens the swatches + the content, which then scrolls.
   // The gap between tiles grows with the tile as DRAWN — zoomed in, or grown because the
@@ -1640,7 +1764,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // ---- the keyboard cursor (M14) ---------------------------------------------------
   // A ring that moves with the arrows and is NOT the pick, so arrowing across the wall
   // costs nothing: Enter is what commits. Reading order comes from `rows`, which is what
-  // the wall actually draws, so the cursor never lands on a tile that is not there.
+  // the wall actually draws, so the cursor never lands on a tile that is not there; the
+  // arrows step through that order in GRID space (`stepCursor`), not ±1 / ±cols of it.
   const flatIds = useMemo(() => rows.flatMap((r) => r.entries.map((e) => e.id)), [rows]);
   const [focusedId, setFocusedId] = useState<string | undefined>(undefined);
   const entryById = useCallback(
@@ -1692,32 +1817,35 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     }
   }, [rows]);
 
-  const moveFocus = useCallback(
-    (delta: number, absolute?: 'first' | 'last') => {
-      if (!flatIds.length) return;
-      const cur = focusedId ? flatIds.indexOf(focusedId) : -1;
-      const next =
-        absolute === 'first' ? 0
-        : absolute === 'last' ? flatIds.length - 1
-        : cur < 0 ? (delta > 0 ? 0 : flatIds.length - 1)
-        : Math.max(0, Math.min(flatIds.length - 1, cur + delta));
+  const focusIndex = useCallback(
+    (next: number) => {
+      if (!flatIds.length || next < 0 || next >= flatIds.length) return;
       setFocusedId(flatIds[next]);
       revealIndex(next);
     },
-    [flatIds, focusedId, revealIndex],
+    [flatIds, revealIndex],
   );
+  // The bands as the cursor walks them, and the chunk size `GroupRow` slices them by — the
+  // arrows step through the grid the wall DRAWS (`stepCursor`), not the flat reading order.
+  const cursorBands = useMemo(() => rows.map((r) => ({ count: r.entries.length, rowMajor: !!r.rowMajor })), [rows]);
+  const cursorChunkLen = chunkLenFor(effCols, ewH + effGap);
 
   const onWallKeyDown = (e: React.KeyboardEvent) => {
     if (!keyboard) return;
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     switch (e.key) {
-      case 'ArrowRight': e.preventDefault(); moveFocus(1); break;
-      case 'ArrowLeft': e.preventDefault(); moveFocus(-1); break;
-      case 'ArrowDown': e.preventDefault(); moveFocus(effCols); break;
-      case 'ArrowUp': e.preventDefault(); moveFocus(-effCols); break;
-      case 'Home': e.preventDefault(); moveFocus(0, 'first'); break;
-      case 'End': e.preventDefault(); moveFocus(0, 'last'); break;
+      case 'ArrowRight':
+      case 'ArrowLeft':
+      case 'ArrowDown':
+      case 'ArrowUp': {
+        e.preventDefault();
+        const cur = focusedId ? flatIds.indexOf(focusedId) : -1;
+        focusIndex(stepCursor(cursorBands, effCols, cursorChunkLen, cur, e.key));
+        break;
+      }
+      case 'Home': e.preventDefault(); focusIndex(0); break;
+      case 'End': e.preventDefault(); focusIndex(flatIds.length - 1); break;
       case 'Enter':
       case ' ': {
         if (!focusedId) return;
@@ -1800,6 +1928,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               sprite={sprite}
               cols={effCols}
               labelW={labelW}
+              labels={drawLabels}
               swatchW={ewW}
               swatchH={ewH}
               gap={effGap}

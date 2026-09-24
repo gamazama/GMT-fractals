@@ -27,10 +27,17 @@
  * above: an anchor-relative check only proves the pin is self-consistent with whatever the
  * anchor says. It measures from the VIEW instead, which is the claim a user can see.
  *
+ * [7] (2026-09-24, the polish pass's G01) is the wall's KEYBOARD CURSOR, `stepCursor`: the
+ * arrows step through the grid the wall draws, not the flat reading order. It lives here
+ * because it is the same kind of claim — wall geometry that is pure arithmetic — and Help ▸
+ * Keyboard promises "← → ↑ ↓ … move between gradients". The catalogue fills its bands
+ * COLUMN-major, and the cursor used to step the flat index, so → moved down and ↓ jumped
+ * columns. Falsified the same day, each reverted — see the note at [7].
+ *
  * Run: npx tsx debug/test-palette-wallzoom.mts
  */
 
-import { clampWallZoom, zoomStepPlan, pinnedContentPoint } from '../palette/components/PickerWall';
+import { clampWallZoom, zoomStepPlan, pinnedContentPoint, stepCursor, type CursorBand, type CursorKey } from '../palette/components/PickerWall';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -111,6 +118,67 @@ console.log('[6] a step composes: two 1.25× steps land where one 1.5625× step 
   const b = zoomStepPlan(VIEW, 0, a.next, 1.25)!;
   const one = zoomStepPlan(VIEW, 0, { x: 1, y: 1 }, 1.25 * 1.25)!;
   ok(Math.abs(b.next.x - one.next.x) < 1e-12 && Math.abs(b.next.y - one.next.y) < 1e-12, `two steps → ${b.next.x}`);
+}
+
+console.log('[7] the keyboard cursor steps in grid space');
+// Falsified 2026-09-24 against mutated copies of `stepCursor` (the live file untouched):
+//   · the old flat-index step (±1 / ±cols) → 15 red, every column-major case among them
+//   · every band read as row-major → red on the short-row wrap and the nearest column
+//   · the chunk edge not crossed on ↓ → red on the three chunk cases
+//   · ↓ without the nearest-column clamp → red on the three short-row landings
+{
+  // Every case reads the answer off a drawn grid rather than off the function's own maths.
+  // A column-major band of 10 at 4 columns is 3 rows, drawn (flat index in each cell):
+  //     0 3 6 9
+  //     1 4 7
+  //     2 5 8
+  const R = 'ArrowRight', L = 'ArrowLeft', U = 'ArrowUp', D = 'ArrowDown';
+  const step = (bands: CursorBand[], cols: number, chunkLen: number, cur: number, key: CursorKey) => stepCursor(bands, cols, chunkLen, cur, key);
+  const walk = (bands: CursorBand[], cols: number, chunkLen: number, from: number, keys: CursorKey[]) =>
+    keys.reduce((cur, k) => step(bands, cols, chunkLen, cur, k), from);
+  const COL10: CursorBand[] = [{ count: 10, rowMajor: false }];
+  const BIG = 1000; // one chunk
+  ok(step(COL10, 4, BIG, 0, R) === 3, 'column-major: → goes ACROSS (0 → 3), not down');
+  ok(step(COL10, 4, BIG, 0, D) === 1, 'column-major: ↓ goes DOWN (0 → 1), not +cols');
+  ok(step(COL10, 4, BIG, 4, U) === 3 && step(COL10, 4, BIG, 4, L) === 1, 'column-major: ↑ and ← from the middle (4 → 3, 4 → 1)');
+  ok(step(COL10, 4, BIG, 9, R) === 1, 'column-major: → off the end of the top row wraps to the next row\'s first (9 → 1)');
+  ok(step(COL10, 4, BIG, 7, R) === 2, 'column-major: → off a SHORT row wraps too (7 → 2)');
+  ok(step(COL10, 4, BIG, 1, L) === 9, 'column-major: ← off a row\'s start wraps to the previous row\'s last (1 → 9)');
+  ok(step(COL10, 4, BIG, 9, D) === 7, 'column-major: ↓ under a short row lands on its nearest column (9 → 7)');
+  ok(step(COL10, 4, BIG, -1, R) === 0 && step(COL10, 4, BIG, -1, D) === 0, 'no cursor yet: → / ↓ start at the first tile');
+  ok(step(COL10, 4, BIG, -1, L) === 9 && step(COL10, 4, BIG, -1, U) === 9, 'no cursor yet: ← / ↑ start at the last tile');
+  ok(step(COL10, 4, BIG, 0, L) === 0 && step(COL10, 4, BIG, 0, U) === 0, 'the first tile stays put on ← and ↑');
+  ok(step(COL10, 4, BIG, 8, R) === 8 && step(COL10, 4, BIG, 8, D) === 8, 'the bottom row\'s last tile (8) stays put on → and ↓');
+  ok(step([], 4, BIG, -1, R) === -1, 'an empty wall has no cursor');
+  // The reviewer's reproduction on All: 33 columns, a first band 7 rows tall. Twice → from
+  // nothing put the ring on column 1, row 3; it belongs on column 1, row 0 = index 7.
+  ok(walk([{ count: 33 * 7, rowMajor: false }], 33, BIG, -1, [R, R]) === 7, 'All: → twice from nothing is column 1, row 0 (index 7)');
+
+  // A ROW-major band (a set, "More like this") is the reading order, so ← / → are exactly ±1.
+  const ROW11: CursorBand[] = [{ count: 11, rowMajor: true }];
+  let pm1 = true;
+  for (let i = 0; i < 11; i++) {
+    if (step(ROW11, 4, BIG, i, R) !== Math.min(10, i + 1) || step(ROW11, 4, BIG, i, L) !== Math.max(0, i - 1)) pm1 = false;
+  }
+  ok(pm1, 'row-major: ← / → are ±1 on every tile, wrapping rows');
+  ok(step(ROW11, 4, BIG, 1, D) === 5 && step(ROW11, 4, BIG, 7, D) === 10, 'row-major: ↓ is the column below, or the short row\'s nearest (1 → 5, 7 → 10)');
+
+  // Two bands: row-major 5 at 4 columns (0 1 2 3 / 4), then the column-major 10 above (5 …).
+  const TWO: CursorBand[] = [{ count: 5, rowMajor: true }, { count: 10, rowMajor: false }];
+  ok(step(TWO, 4, BIG, 3, D) === 4, 'across rows of band A: ↓ from column 3 onto its one-tile last row (3 → 4)');
+  ok(step(TWO, 4, BIG, 4, D) === 5, 'into the next BAND: ↓ from A\'s last row lands on B\'s first row (4 → 5)');
+  ok(step(TWO, 4, BIG, 5 + 6, U) === 4, 'back up: ↑ from B\'s top row, column 2, is A\'s short last row at its nearest column (11 → 4)');
+  ok(step(TWO, 4, BIG, 4, R) === 5 && step(TWO, 4, BIG, 5, L) === 4, '→ / ← wrap across the band edge (4 ↔ 5)');
+  ok(step([{ count: 3, rowMajor: true }, { count: 0, rowMajor: true }, { count: 2, rowMajor: true }], 4, BIG, 1, D) === 4, 'an empty band is stepped over (↓ from 1 → 4, nearest column 1)');
+
+  // CHUNKS: a band sliced into canvases of 6 at 3 columns, column-major. Drawn:
+  //   chunk 0:  0 2 4      chunk 1:  6 8 10
+  //             1 3 5                7 9 11
+  const CH: CursorBand[] = [{ count: 12, rowMajor: false }];
+  ok(step(CH, 3, 6, 1, D) === 6, 'across a CHUNK edge: ↓ from chunk 0\'s last row, column 0 (1 → 6)');
+  ok(step(CH, 3, 6, 3, D) === 8, '… and column 1 stays column 1 (3 → 8)');
+  ok(step(CH, 3, 6, 8, U) === 3, '↑ back into the chunk above (8 → 3)');
+  ok(step(CH, 3, 6, 5, R) === 6 && step(CH, 3, 6, 6, L) === 5, '→ / ← wrap across the chunk edge (5 ↔ 6)');
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);

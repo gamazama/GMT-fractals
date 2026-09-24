@@ -14,7 +14,8 @@
  *     clear-all, and whatever the popover's AutoFeaturePanel does);
  *   • the transient `pickerSearch` query and `pickerSimilarity` anchor;
  *   • the per-surface pick (`heroSelection`, mode `'picker'`) and the drag-out payload;
- *   • the active carve tool plus its Esc / click-outside cancel;
+ *   • the active carve tool plus its Esc / click-outside cancel (Esc through the shortcut
+ *     registry, so a host's own Esc chain sees the key taken — grep `useDismiss` below);
  *   • the wall's zoom readout, its reset signal and its stepped-zoom signal (`stepZoom`,
  *     for a host that offers − / + buttons instead of a drag-to-zoom tool — GE v2's phone
  *     tool row). Both are RISING SERIALS, not values: the wall owns the transform.
@@ -64,6 +65,7 @@ import {
 import type { CatalogEntry } from '../core/presetCatalog';
 import type { SelectionTool } from './PickerWall';
 import { ALL_SET_ID, tileSizeFor, type TileSize } from '../core/groundSets';
+import { useDismiss } from '../../hooks/useDismiss';
 import type { GradientConfig } from '../../types';
 import {
   arrangeRows,
@@ -128,6 +130,16 @@ export interface GroundSource {
    */
   arrangeable?: boolean;
 }
+
+/**
+ * A set tile's PICK: the shelf's own (mode `favients`, the favourite's id as the key), so the
+ * shell's rules apply unchanged. ONE payload shape, for the wall's tiles and for anything that
+ * stands in for a click on one — GE v2's nothing-picked line offers "or continue {name}",
+ * which must do exactly what a click on Today's newest tile does (owner, 2026-09-24).
+ */
+export const pickGroundItem = (key: string, it: GroundItem): void => {
+  setHeroPick({ mode: 'favients', key, payload: { config: it.config, name: it.name, source: it.source, favId: it.favId, origin: it.origin } });
+};
 
 /** The set's arrangement: one band, the set's own order, read left to right. */
 const SET_AXES: ArrangeAxes = { groupAxis: 'none', rowsAxis: 'none', sortAxis: 'order', reverse: false };
@@ -406,10 +418,18 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
     setPaletteFilters?.({ ...CLEAR_ALL_PATCH });
   }, [setPaletteFilters]);
 
-  // Esc, or a pointerdown on any non-wall / non-toolbar UI, cancels the active tool.
+  // Esc puts the tool down, and ONLY the tool (G02, 2026-09-24). It goes through the shortcut
+  // registry (`useDismiss`) rather than a private window keydown: the registry marks the key
+  // `defaultPrevented`, which is what a host's own Esc chain yields to — GE v2's shell closed
+  // the open tray face (and baked its dials) on the same press, because this listener neither
+  // ran first nor said it had taken the key. The tool's scope is pushed when the tool turns
+  // on, so it sits above anything already open (a modal host, a menu) and wins while it is
+  // the nearest held thing. The pointerdown rule below stays hand-rolled: its exemption is
+  // two refs AND an attribute, which `useDismiss`'s outside-click cannot express.
+  useDismiss(wallHostRef, { onClose: () => setTool(null), enabled: !!tool, outside: false });
+  // A pointerdown on any non-wall / non-toolbar UI cancels the active tool.
   useEffect(() => {
     if (!tool) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTool(null); };
     const onDown = (e: PointerEvent) => {
       const t = e.target as Node | null;
       if (wallHostRef.current?.contains(t) || toolbarRef.current?.contains(t)) return;
@@ -419,9 +439,8 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
       if (t instanceof Element && t.closest('[data-gx-tools]')) return;
       setTool(null);
     };
-    window.addEventListener('keydown', onKey);
     document.addEventListener('pointerdown', onDown, true);
-    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('pointerdown', onDown, true); };
+    return () => document.removeEventListener('pointerdown', onDown, true);
   }, [tool]);
 
   // Pick → SELECT it (drives the host's hero preview + the bin dock). The standalone studio
@@ -430,8 +449,7 @@ export const usePickerModel = (opts?: { source?: GroundSource | null; pickOnDrag
     if (source) {
       // A set tile is a shelf item: the same pick the strip made (mode `favients`, the
       // favourite's id as the key), so the shell's rules apply unchanged.
-      const it = source.itemOf(e);
-      setHeroPick({ mode: 'favients', key: e.id, payload: { config: it.config, name: it.name, source: it.source, favId: it.favId, origin: it.origin } });
+      pickGroundItem(e.id, source.itemOf(e));
       return;
     }
     // A catalogue pick stamps its ORIGIN on the config it produced — the credit rides along for
