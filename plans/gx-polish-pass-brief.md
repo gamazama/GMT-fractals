@@ -71,6 +71,23 @@ approval prompt — memory `feedback_adr_writes_need_owner`).
 - **Needs the owner, not code:** Library "Steps" palettes arriving smooth (a bake with a discrete
   flag plus a CDN re-upload); deleting the test row id 5 from the live GX Global set.
 
+## Undo calls for the owner (from the 2026-09-24 undo/interface audit, `134df14b`)
+
+The interface now rides every undo entry (ADR-0120, 2026-09-24 block). Six things the audit left
+for the owner rather than guessing:
+1. Undo now reopens a face you closed AFTER the edit (edit a stop, Esc, Ctrl+Z → the inspector
+   opens on that stop). ADR-0120 predicts it — confirm it feels right.
+2. A peek into Curves closed untouched leaves one undo step that shows nothing (already true
+   before). Should a peek leave no step at all?
+3. Which set the wall shows is not restored: undoing an import that switched the wall to Kept
+   leaves Kept showing. Should it be?
+4. Choosing any item in the hero's ☰ menu drops the stop selection before the item runs, so undoing
+   New Gradient returns with the inspector closed — likely the click falling through to the
+   editor's marquee.
+5. Changing the colour space in the Export window while editing is not its own undo step, and the
+   next unrelated Ctrl+Z quietly reverts it.
+6. Loading a session file that holds a live Mix or Image does not open that face.
+
 ## Checks to run after the pass
 
 On a quiet tree (browser smokes go red at random while files are being edited — HMR reloads the

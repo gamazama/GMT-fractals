@@ -116,6 +116,18 @@ design §5.8 formats (`.ase`, Tailwind, tokens) exist · pre-release-ui-pass §1
   chrome. (`smoke:ge-tray` goes red at random while other agents' edits hot-reload the page;
   it is green on a quiet tree, including the [14] the swap agent reported.)
 
+- 2026-09-23/24, with the owner — swap merged (`79b88b16`); GX `2.0.0` (`d56a341f`); built and
+  guarded: picks start Adjust / Curves fresh (`5af86e75`), the GMT ↔ Explorer trip (`2e7c288f`,
+  `61411cc7`, flat colour sends nothing `99e26612`; ADR-0126), the export text preview
+  (`6008f7a7`), About's preset credits and takedown line (`1233477b`), Reduce stops + stop count
+  (`5c0f4c98`; ADR-0127), New Gradient + drop hint + "reading image…" (`24b5a8b3`), an untouched
+  Curves visit leaving the gradient alone (`215722bd`), curve edits riding undo (`095cdfef`),
+  GX Global's rights line only for imports (`2bcae7e7`), and the interface riding every undo
+  entry (`134df14b`; ADR-0120 update). What's New in the owner's words (`3eb7dfe4`). Parity rows
+  M8, M10, O4, E10b are done; B3, M5, N2, M11, B13, B7 left as decided. Still to do: the `/polish`
+  pass (brief: `plans/gx-polish-pass-brief.md`), then the GMT `0.9.8.5` release commit and the
+  owner's push.
+
 ## 6. ADR text queued for the owner (ADR writes need approval)
 
 - **ADR-0124 update** — the bin pin now survives the first sync; merge/replace order Recent by day
