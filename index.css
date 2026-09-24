@@ -263,7 +263,8 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
      fade-in-up (LoadingScreen ×2, AudioLinkControls), fade-in-down
      (HelpBrowser, FormulaPicker), fade-in-left (CategoryPickerMenu,
      PerformanceMonitor, KeyframeInspector), fade-in-right, pop-in
-     (DraggableWindow, GraphContextMenu).
+     (DraggableWindow, GraphContextMenu). Since 2026-09-24 also fade-in-up in
+     engine/components/ToastHost (every toast, at 150 ms inline).
 
    @stale `.animate-fade-in` below has ZERO call sites — 595cfe21 removed all
      34 of them (an opacity animation of 16ms, one frame at 60Hz, that promoted

@@ -40,7 +40,20 @@ trip · journeys + IA + motion) → ~118 findings → a critic merged them into 
   #CEA84D dark / #876005 light — owner to judge on screen).
 - No landing / cancel morph (dead `dragVisual` exports → a later /simplify).
 
-## Not done (next session)
+## Continued the same evening (owner back, tokens reset)
+- **Closing gate RAN GREEN on a quiet tree** at `49f0b305`: typecheck, check:text-bytes, check:rule-guards,
+  check:zindex, orphans, `test:palette` + 8 node suites, 20 smokes (boot, ge-next, ge-hero, ge-tray, ge-ground,
+  ge-wave, ge-reduce, ge-phone, ge-session, ge-gradientfile, ge-uiundo, ge-livedrag, ge-wallpaper, ge-setsave,
+  ge-walltouch, ge-floor, gmt-gradientdrop, gmt-gx-handoff, help-menu, chrome), build. `ge-ground` [14c]
+  falsified (`d59d0ce3`).
+- **Glyphs:** owner picked from the 16 px sheets — Help `?` (H1), back ← (B1), Wallpaper split / handles / dither
+  (S1 · K1 · D3), orientation phone frames (L2 / P2); **Multiply keeps its ×** (owner). Wired `6449a166`.
+- **Recent across days** built `5f22d020` (test-palette-working [16], falsified three ways).
+- **ADR update blocks written** with the owner's approval: 0082, 0114, 0115, 0118, 0119, 0120, 0123, 0124, 0126;
+  sibling-apps rule text and the index.css fade-in-up list corrected.
+- Items 0–3 and 6 below are therefore DONE; 4 (What's New rewording) and 5 (tray vs rail) stay with the owner.
+
+## Not done (as of the cap, first half of the session)
 0. **The closing gate was not run.** On a quiet tree: `typecheck`, `check:text-bytes`, `check:rule-guards`,
    `orphans`, `build`, the palette node tests, and the smokes `boot`, `ge-next`, `ge-hero`, `ge-tray`, `ge-ground`,
    `ge-wave`, `ge-reduce`, `ge-phone`, `ge-session`, `ge-gradientfile`, `ge-uiundo`, `ge-livedrag`, `ge-wallpaper`,

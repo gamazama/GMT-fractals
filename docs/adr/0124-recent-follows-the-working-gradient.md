@@ -1,5 +1,28 @@
 # ADR-0124: Recent collects the working gradient, one entry per session, shown by day
 
+> **Update 2026-09-24 (a session no longer rewrites an earlier day's entry; Decisions 4 and 7 amended on
+> the owner's word):** "a gradient you resume on a later day files a NEW entry under Today, instead of
+> updating the entry filed under the earlier day." This closes the Consequences bullet "An entry keeps the
+> day its session opened".
+> - **The rule.** `updateRecent` returns the id of the entry that holds the gradient (`palette/store/
+>   favientsStore.ts`, grep `updateRecent`; the seam type is `RecentUpdater` in `workingStore.ts`): the same
+>   id when it refreshed in place or nothing changed; a NEW id when the entry was filed on an earlier local
+>   day — a `fresh` collect under today that carries the old entry's source and credit, leaving the earlier
+>   entry exactly as it was; null when the entry is gone or the gradient is filed in a group of yours.
+> - **The session follows the id.** `syncRecent` moves `sessionId` to what comes back and drops the pin. A
+>   sync with nothing changed writes nothing, so a session restored the next morning files nothing until it
+>   is edited; a rename alone also opens today's entry.
+> - **Decision 4's "one entry per gradient" is now per day.** The drop of another Recent entry holding the
+>   same content spares entries from earlier days — without that, an edit or an undo back to an earlier
+>   day's gradient deleted that day's entry.
+> - **Undo (Decision 7).** An undo that includes the session (a rename, a fold, a pick) puts the session back
+>   on the earlier day's entry, which matches again, so nothing is written; a dial or stop undo leaves the
+>   session on today's entry, which updates. Neither deletes or rewrites either entry.
+> - **Re-pick unchanged.** A gradient picked from an earlier day's bin is still promoted to today by the pick
+>   (Decision 5), and its first change opens a new entry.
+> - **Clock seam** `setFavientsClock`; guard `npx tsx debug/test-palette-working.mts` [16], falsified three
+>   ways (D1–D3 in its header).
+
 > **Update 2026-09-16 (three faults in the build this ADR described are fixed; decision unchanged):**
 > - **Decision 4's pin now holds.** The bullet read "as built, the pin does not survive the first
 >   sync" — it compared the collected id with the session id, which is still null then, so the pin

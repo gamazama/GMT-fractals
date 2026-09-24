@@ -4,9 +4,10 @@
 > wears the lit-toggle accent (the wash `primary` borrows, without its hover) — before, an open Export
 > button looked merely hovered — so sites no longer paint their own "on" colour over it. The kept ♥ wears
 > its own `--kept` gold (`text-kept`), which sorts after the accent and wins on the glyph. Rule 3's one
-> icon set was applied to the fold and the search clear (`Icon` chevrons and close, not text glyphs); the
-> glyphs the set still lacks (the wave tool's Multiply, Help, a back arrow, the Wallpaper toolbar's) are
-> being drafted for the owner.
+> icon set was applied to the fold and the search clear (`Icon` chevrons and close, not text glyphs), and
+> seven glyphs joined the set the same day, each picked by the owner from a 16 px raster sheet: `help`,
+> `back`, `split`, `handles`, `dither`, `landscape`, `portrait` (all weight 1.5, so the three 1.25
+> exceptions stand). The wave tool's Multiply keeps its × by the owner's choice.
 
 - **Status:** Accepted
 - **Date:** 2026-09-10
