@@ -66,6 +66,14 @@ const isMac = (): boolean => {
     return /Mac|iPhone|iPad|iPod/i.test(`${p} ${ua}`);
 };
 
+/**
+ * 'Mod' as this platform PRINTS it, for a title or a label that names a shortcut:
+ * '⌘' on a Mac (written with no joiner, as '⌘Z'), 'Ctrl+' elsewhere ('Ctrl+Z').
+ * The same detector `Mod` resolves with above, so a label cannot name a key the
+ * dispatcher does not bind.
+ */
+export const modKeyLabel = (): string => (isMac() ? '⌘' : 'Ctrl+');
+
 // ── Key normalization ──────────────────────────────────────────────────
 
 const MOD_ORDER = ['Ctrl', 'Alt', 'Shift', 'Meta'];

@@ -3,7 +3,10 @@
  * colours are three and each is a *filled* chip with white text: live = green, edited =
  * amber, armed = violet"). Never clickable-looking (no hover/border affordance) — a
  * pill is a STATE, an action is `Act`. `picked` and `snapshot` share one neutral fill
- * since neither carries a hue meaning.
+ * since neither carries a hue meaning. The one exception (owner, 2026-09-24, HT-20): a
+ * chip that IS an action names it in `action` ("cancel", "return to source"), and those
+ * words — only those, never the state before them — underline while the pointer is on the
+ * chip. It was the only visible cancel for Mix / Image and gave no sign of being one.
  *
  * The three hues are also exported as `MEANING_OUTLINE` so the thing a chip refers to
  * can carry the same colour as an outline (V3: "the referenced thing carries the colour
@@ -48,6 +51,9 @@ interface Props {
    *  sits INSIDE a heading bar and must read as part of it (owner, 2026-09-06: the pills
    *  "don't seem visually related to anything"). */
   variant?: 'fill' | 'inline';
+  /** With `onClick`: the words naming what a click does, drawn after the state as
+   *  " · {action}" and underlined on hover only (see the header). */
+  action?: React.ReactNode;
 }
 
 const INK: Record<ChipKind, string> = {
@@ -65,21 +71,29 @@ const DOT: Record<ChipKind, string> = {
   armed: 'bg-gx-armed',
 };
 
-export const StateChip: React.FC<Props> = ({ kind, children, title, className = '', onClick, variant = 'fill', ...rest }) => {
+export const StateChip: React.FC<Props> = ({ kind, children, title, className = '', onClick, variant = 'fill', action, ...rest }) => {
   const inline = variant === 'inline';
   const cls = [
     inline
       ? `inline-flex items-center gap-1.5 h-6 text-[13px] whitespace-nowrap select-none ${INK[kind]}`
       : 'inline-flex items-center gap-1 h-6 px-2.5 rounded-full text-[12px] font-semibold text-white whitespace-nowrap select-none',
     inline ? '' : FILL[kind],
-    onClick ? 'cursor-pointer' : '',
+    onClick ? 'cursor-pointer group/chip' : '',
     className,
   ].join(' ');
   if (onClick) {
     return (
       <button type="button" title={title} className={cls} onClick={onClick} {...rest}>
         {inline && <span className={`w-2 h-2 rounded-full ${DOT[kind]}`} />}
-        {children}
+        {action == null ? children : (
+          // ONE inline run, so the words space exactly as the plain text did (in the flex row a
+          // second item would take the row's gap instead of a space)
+          <span>
+            {children}
+            {' · '}
+            <span className="underline-offset-2 group-hover/chip:underline" data-gx-chip-action="">{action}</span>
+          </span>
+        )}
       </button>
     );
   }

@@ -34,8 +34,9 @@
  *       neither the window nor the rows below it move when it does · and the SET's preview: its
  *       .ai row previews the very .ai that downloads; its .gpl (a .zip) and .ase (binary) rows
  *       preview nothing
- *   [7b] the same gradient ALONE on the hero warns in the same words from the hero's own
- *       Export window, and a two-stop gradient never warns (2026-09-13)
+ *   [7b] the same gradient ALONE on the hero warns from the hero's own Export window, in the set's
+ *       words without the count — "Reduced to 40 colour stops" (2026-09-24) — and a two-stop
+ *       gradient never warns (2026-09-13)
  *   [7c] under a 2-stop budget in Settings, the 60-stop gradient's CSS preview holds two stops
  *       and is what Copy writes — the budget half of [5d], which [5d]'s three-colour pick cannot
  *       show (2026-09-23)
@@ -73,6 +74,31 @@
  * window (measured 2026-09-23: [5c] and [5d] each did, then passed on a re-run); [5d]'s section
  * search names a reload when it saw one (`navs`). Re-run a red like that before reading it.
  *
+ * Run FIRST, in a context of their own (fresh storage, so nothing they pick reaches the steps
+ * above), 2026-09-24:
+ *   [r1] J01 — THE PICK THAT BRINGS THE HERO ON SCREEN MOVES THE WALL ~240 px, so the second press
+ *        of a double-click lands in the hero. From the empty state, a double-click paced like a
+ *        person (down/up, 90 ms, down/up) on a tile: the second press lands on the hero's GRADIENT
+ *        — its palette row or ramp, the zone the guard covers (checked, else the step proves
+ *        nothing) — no face opens, the chip is `edited` (the keep a second tile click makes), and
+ *        the stops are the picked gradient's (`bakedFrom`) — no stray knot. [3] below is the other
+ *        half: a click on the Image TAB right after a pick is not swallowed (the tab row is a
+ *        control of its own, outside the zone).
+ *   [r2] the same after a FOLD: the hero hidden, a double-click on another tile unfolds it, and its
+ *        second press is the keep, not a knot.
+ *   [n1] HT-01 — a real mouse sweep across the name, unfocused and then focused: the value is
+ *        unchanged, the selection spans the name, and no drag starts (the header's own drag used
+ *        to start, and drop a second copy of the name into the field).
+ *   [n2] a drag from the header OUTSIDE the name still carries the gradient (the favient MIME).
+ *   FALSIFIED 2026-09-24, each reverted: WorkingHero's `onRevealPress` returning at once reds
+ *   "[r1] the second press reached the hero's controls: the inspector face opened"; the shell's
+ *   `revealing` ignoring `folded` reds [r2] alone the same way (r1 green); the header's
+ *   `draggable` back to `!emptySource` (no `headerDrag`) reds "[n1] sweeping across the unfocused
+ *   name started 1 drag(s) of the header"; the header never draggable reds "[n2] a drag from the
+ *   header (outside the name) did not start"; and `onRevealPress` no longer skipping the tab row
+ *   (a guard over the whole body) reds "[3] clicking Image with no image did not open the file
+ *   dialog" with every [r]/[n] step green — the zone's edge is guarded as well as its inside.
+ *
  * Falsified 2026-09-06 by re-introducing the old hide (`if (!shown) return null` →
  * `if (emptySource) return null`): step [3] goes red with "the hero unmounted on an empty
  * Image source (L8)". Wants `npm run dev` on port 3400, like every other browser smoke.
@@ -90,7 +116,7 @@
  */
 import fs from 'fs';
 import { unzipSync, strFromU8 } from 'fflate';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Browser, type Page } from 'playwright';
 import { seedGeSmokeState } from './geSmokeBoot.mts';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/gradient-explorer.html';
@@ -117,8 +143,146 @@ const heroState = async (page: Page) => {
   });
 };
 
+/**
+ * [r1] [r2] [n1] [n2] — see the header. A context of their own: fresh storage, so the picks and
+ * the keeps here reach nothing the numbered steps read.
+ */
+async function revealAndNameSteps(browser: Browser): Promise<void> {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await seedGeSmokeState(ctx);
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+  await page.goto(URL, { waitUntil: 'networkidle', timeout: 30000 });
+  await page.waitForTimeout(1500);
+  // Every press, and whether it landed ON THE GRADIENT — the hero's palette row and ramp, not the
+  // tab row under the bar (window capture: before React sees it). STRINGS, not functions: tsx's
+  // name-keeping wrappers do not exist in the page.
+  await page.evaluate(`(() => {
+    window.__downs = [];
+    window.addEventListener('pointerdown', (e) => {
+      const t = e.target;
+      const body = t && t.closest ? t.closest('[data-gx-hero-body]') : null;
+      const tabs = document.querySelector('[data-gx-tray-tabs]');
+      const row = tabs ? tabs.parentElement : null;
+      window.__downs.push(!!body && !(row && row.contains(t)));
+    }, true);
+  })()`);
+  const heroNow = () => page.evaluate(`(async () => {
+    // the working store at the EXACT url the app loaded (a bare-url import is a second instance)
+    const url = performance.getEntriesByType('resource').map((e) => e.name)
+      .find((n) => /\\/palette\\/store\\/workingStore\\.ts(\\?|$)/.test(n)) || '/palette/store/workingStore.ts';
+    const ws = (await import(url)).useWorkingStore.getState();
+    const w = window.__gxWorking ? window.__gxWorking() : null;
+    const hero = document.querySelector('[data-gx-hero]');
+    const chip = hero && hero.querySelector('[data-gx-state]');
+    const root = document.querySelector('[data-gx-tray-root]');
+    return {
+      hero: !!hero, hidden: !!(hero && hero.hidden),
+      chip: chip ? chip.dataset.gxState : null,
+      stops: w && w.config ? w.config.stops.length : 0,
+      srcStops: ws.bakedFrom && ws.bakedFrom.input && ws.bakedFrom.input.config ? ws.bakedFrom.input.config.stops.length : null,
+      face: root && root.dataset.gxTray ? root.dataset.gxTray : null,
+      name: (document.querySelector('[data-gx-hero] input[title="Name"]') || {}).value || '',
+      downs: window.__downs.slice(),
+    };
+  })()`) as Promise<{ hero: boolean; hidden: boolean; chip: string | null; stops: number; srcStops: number | null; face: string | null; name: string; downs: boolean[] }>;
+  /** A double-click paced like a person: down/up, 90 ms, down/up (the second is click 2). */
+  const personDoubleClick = async (x: number, y: number) => {
+    await page.evaluate('window.__downs = []');
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(90);
+    await page.mouse.down({ clickCount: 2 });
+    await page.mouse.up({ clickCount: 2 });
+    await page.waitForTimeout(900);
+  };
+  const kept = (label: string, s: Awaited<ReturnType<typeof heroNow>>) => {
+    if (s.downs.length < 2 || !s.downs[1]) fail(`${label} the second press did not land on the hero's gradient (${JSON.stringify(s.downs)}) — the hero had not moved under it yet, or the layout moved something else there, so this proves nothing`);
+    if (s.face) fail(`${label} the second press reached the hero's controls: the ${s.face} face opened`);
+    if (s.chip !== 'edited') fail(`${label} the double-click did not keep the gradient (chip ${s.chip})`);
+    if (s.srcStops == null || s.stops !== s.srcStops) fail(`${label} the double-click changed the stops: ${s.srcStops} picked → ${s.stops}`);
+  };
+
+  const wall = page.locator('[data-gx-keepselect] canvas').first();
+  await wall.waitFor({ state: 'visible', timeout: 15000 });
+  if (await page.$('[data-gx-hero]')) fail('[r1] a hero exists before the first pick');
+  const b1 = (await wall.boundingBox())!;
+  await personDoubleClick(b1.x + 24, b1.y + 14);
+  let s = await heroNow();
+  if (!s.hero) fail('[r1] no hero after a double-click on a tile');
+  kept('[r1]', s);
+  console.log(`✓ [r1] a double-click from the empty state keeps the gradient it picked: ${s.stops} stops, no knot added, no face`);
+
+  await page.click('[data-gx-fold]');
+  await page.waitForTimeout(600);
+  if (!(await heroNow()).hidden) fail('[r2] the fold did not hide the hero');
+  const name1 = s.name;
+  const b2 = (await wall.boundingBox())!;
+  await personDoubleClick(b2.x + 24 + 44 * 3, b2.y + 14);
+  s = await heroNow();
+  if (s.hidden) fail('[r2] the pick did not unfold the hero');
+  if (s.name === name1) fail(`[r2] the double-click picked the gradient already there ("${name1}") — aim at another tile`);
+  kept('[r2]', s);
+  console.log(`✓ [r2] folded: a double-click on another tile unfolds and keeps it (${s.stops} stops, no knot added)`);
+
+  // [n1] the name sweep. Past the reveal window first — a press inside it is a keep by design.
+  await page.waitForTimeout(600);
+  await page.evaluate(`(() => {
+    window.__ds = 0; window.__dsTypes = [];
+    // bubble phase on the document: after React's handler has filled the DataTransfer
+    document.addEventListener('dragstart', (e) => { window.__ds++; window.__dsTypes.push(Array.from(e.dataTransfer ? e.dataTransfer.types : [])); });
+  })()`);
+  const input = page.locator('[data-gx-hero] input[title="Name"]');
+  const readName = () => page.evaluate(`(() => { const i = document.querySelector('[data-gx-hero] input[title="Name"]'); return { value: i.value, start: i.selectionStart, end: i.selectionEnd, ds: window.__ds }; })()`) as Promise<{ value: string; start: number; end: number; ds: number }>;
+  await page.evaluate('document.activeElement && document.activeElement.blur()');
+  const v0 = (await readName()).value;
+  for (const focused of [false, true]) {
+    const r = (await input.boundingBox())!;
+    if (focused) {
+      await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2);
+      await page.waitForTimeout(150);
+    }
+    await page.mouse.move(r.x + 2, r.y + r.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(r.x + r.width + 6, r.y + r.height / 2, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(250);
+    const n = await readName();
+    const how = focused ? 'focused' : 'unfocused';
+    if (n.value !== v0) fail(`[n1] sweeping across the ${how} name changed it: "${v0}" → "${n.value}"`);
+    if (n.ds) fail(`[n1] sweeping across the ${how} name started ${n.ds} drag(s) of the header`);
+    if (n.start !== 0 || n.end !== v0.length) fail(`[n1] the ${how} sweep selected ${n.start}–${n.end}, not the whole name (0–${v0.length})`);
+    await page.keyboard.press('Escape'); // puts the name back and leaves the field
+    await page.waitForTimeout(150);
+  }
+  console.log(`✓ [n1] a sweep across the name selects "${v0}", focused or not, and drags nothing`);
+
+  // [n2] the header is still the drag handle everywhere else
+  const hdr = (await page.locator('[data-gx-hero-header]').first().boundingBox())!;
+  const ir = (await input.boundingBox())!;
+  const x0 = Math.round((ir.x + ir.width + hdr.x + hdr.width) / 2);
+  const y0 = hdr.y + hdr.height / 2;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move(x0 + 40, y0 + 4, { steps: 6 });
+  await page.waitForTimeout(150);
+  await page.mouse.move(x0, y0, { steps: 3 }); // back over the header, which files nothing
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  const types = (await page.evaluate('window.__dsTypes')) as string[][];
+  if (!types.length) fail('[n2] a drag from the header (outside the name) did not start');
+  if (!types[types.length - 1].includes('application/x-gmt-favient')) fail(`[n2] the header drag carries no gradient (${types[types.length - 1].join(', ')})`);
+  console.log('✓ [n2] a drag from the header outside the name still carries the gradient');
+
+  if (errors.length) fail(`[r1–n2] page errors: ${errors.join(' | ')}`);
+  await ctx.close();
+}
+
 async function main() {
   const browser = await chromium.launch();
+  await revealAndNameSteps(browser);
   // clipboard: [5c] reads back what the window's Copy wrote
   const ctx = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   await seedGeSmokeState(ctx);
@@ -327,6 +491,10 @@ async function main() {
   // the screen grows with the user). [6] is the other half of this.
   if (ramp.again.length) fail(`[5] Again showed with no history: ${ramp.again.join(' | ')}`);
   if (sw.image !== 'swatch-sheet') fail(`[5] the Swatches subject's image row should be the swatch sheet (${sw.image})`);
+  // Export REMEMBERS the subject (`gx.v2.exportSubject`, owner 2026-09-24): put Ramp back, or
+  // every step after this one opens on Swatches.
+  await page.click('[data-gx-subject="ramp"]');
+  await page.waitForTimeout(200);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   if (await page.$('[data-gx-export]')) fail('[5] Escape did not close the Export window');
@@ -340,7 +508,7 @@ async function main() {
   // as well as ticking"; the reset timer removed → red "still a tick".
   await page.click('[title^="Export"]');
   await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[5c] the Export window did not open'));
-  if (!(await page.$('[data-gx-export] [data-gx-copy="css"]'))) await page.click('[data-gx-export] [data-gx-section="For the web"]');
+  if (!(await page.$('[data-gx-export] [data-gx-copy="css"]'))) await page.click('[data-gx-export] [data-gx-section="Web"]');
   await page.click('[data-gx-export] [data-gx-copy="css"]');
   await page.waitForTimeout(250);
   const copyRow = () =>
@@ -512,9 +680,9 @@ async function main() {
   const back = await readWindow();
   if (back!.again.length !== 2) fail(`[6] Again should list the two seeded exports, listed ${back!.again.length}`);
   if (!/\.grd/.test(back!.again[0])) fail(`[6] the newest export is not first in Again (${back!.again[0]})`);
-  // .grd lives in "For design apps"; opening on "For the web" would mean the window forgot.
-  if (back!.openSections[0] !== 'For design apps')
-    fail(`[6] the section holding the last export (.grd → For design apps) did not open — "${back!.openSections[0]}" did`);
+  // .grd lives in "Design apps"; opening on "Web" would mean the window forgot.
+  if (back!.openSections[0] !== 'Design apps')
+    fail(`[6] the section holding the last export (.grd → Design apps) did not open — "${back!.openSections[0]}" did`);
   // [5]'s column check never sees an Again row — a fresh profile has no history — so this is
   // where the third row kind is measured against the other two. Falsified by dropping the
   // held-open copy slot from the Again rows: red with two different x values.
@@ -528,10 +696,10 @@ async function main() {
   // comes back on that one — outranking the last-export rule that chose the one above.
   // Falsified by not writing `gx.v2.exportSection` in `toggle`: red, because the reload
   // falls back to .grd's category, which is what it opened on before the click.
-  await page.click('[data-gx-section="For code + data"]');
+  await page.click('[data-gx-section="Code + data"]');
   await page.waitForTimeout(200);
   const stored = await page.evaluate(() => localStorage.getItem('gx.v2.exportSection'));
-  if (stored !== 'For code + data') fail(`[6b] the open category was not written down (${JSON.stringify(stored)})`);
+  if (stored !== 'Code + data') fail(`[6b] the open category was not written down (${JSON.stringify(stored)})`);
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1500);
   const wall3 = page.locator('[data-gx-keepselect] canvas').first();
@@ -543,7 +711,7 @@ async function main() {
   await page.click('[title^="Export"]');
   await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[6b] the Export window did not open'));
   const remembered = await readWindow();
-  if (remembered!.openSections[0] !== 'For code + data')
+  if (remembered!.openSections[0] !== 'Code + data')
     fail(`[6b] a new session opened on "${remembered!.openSections[0]}", not the category left open`);
   console.log('✓ [6b] the category you left open is the one a new session opens');
 
@@ -586,6 +754,8 @@ async function main() {
     );
     localStorage.setItem('gmt.favients.groups', JSON.stringify({ noted: 'Noted' }));
     localStorage.setItem('gmt.ge.groundSet', JSON.stringify(['group:noted']));
+    // the remembered Export subject: this step reads the Ramp subject's rows
+    localStorage.setItem('gx.v2.exportSubject', 'ramp');
   });
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(1800);
@@ -595,13 +765,13 @@ async function main() {
   await ground!.click();
   await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[7] the ground Export window did not open'));
   // A header TOGGLES, and the seeded .grd recent means this window may already have opened
-  // on "For design apps" — clicking it then would CLOSE it. (It did, and the failure read
+  // on "Design apps" — clicking it then would CLOSE it. (It did, and the failure read
   // as "no notice at all", which is the same trap [5]'s collect() had to learn.)
   const openNow2 = await page.evaluate(
     () => (document.querySelector('[data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null,
   );
-  if (openNow2 !== 'For design apps') {
-    await page.click('[data-gx-section="For design apps"]');
+  if (openNow2 !== 'Design apps') {
+    await page.click('[data-gx-section="Design apps"]');
     await page.waitForTimeout(250);
   }
   const lossyKeys = await page.evaluate(() =>
@@ -662,8 +832,9 @@ async function main() {
   // [7b] ONE GRADIENT says it too (owner, 2026-09-13). The hero's own Export window used to
   // compute the notice for a SET only (`lossy = isSet && bundles ? … : 0`), so the same
   // 60-stop gradient that warned inside a set went to Illustrator alone simplified and silent.
-  // Pick it off the ground, open the hero's window, and it must say the same words in the same
-  // strip; the two-stop member beside it must say nothing. Falsified 2026-09-13 by restoring
+  // Pick it off the ground, open the hero's window, and it must say so in the same strip (the
+  // set's words, less the count one gradient cannot have); the two-stop member beside it must
+  // say nothing. Falsified 2026-09-13 by restoring
   // `isSet && bundles ? … : 0`: red on "a 60-stop gradient exports alone to .ai with no
   // notice". A notice that fired for everything is what the Plain half is for.
   await page.keyboard.press('Escape');
@@ -688,8 +859,8 @@ async function main() {
     await page.click('[data-gx-hero] [title^="Export"]');
     await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail(`[7b] the hero's Export window did not open on "${name}"`));
     const open = await page.evaluate(() => (document.querySelector('[data-gx-section][data-open]') as HTMLElement | null)?.dataset.gxSection ?? null);
-    if (open !== 'For design apps') {
-      await page.click('[data-gx-section="For design apps"]');
+    if (open !== 'Design apps') {
+      await page.click('[data-gx-section="Design apps"]');
       await page.waitForTimeout(250);
     }
     const keys = await page.evaluate(() => Array.from(document.querySelectorAll('[data-gx-export] [data-gx-lossy]')).map((e) => (e as HTMLElement).dataset.gxFormat ?? ''));
@@ -702,8 +873,9 @@ async function main() {
   };
   const spiky = await heroLossy('Spiky');
   if (!spiky.keys.includes('ai')) fail(`[7b] a 60-stop gradient exports alone to .ai with no notice (noted: ${spiky.keys.join(', ') || 'none'})`);
-  if (spiky.text !== '1 gradient reduced to 40 colour stops')
-    fail(`[7b] one gradient's note reads "${spiky.text}" — expected the set's own words, "1 gradient reduced to 40 colour stops"`);
+  // One gradient has no count to give, so its note is the set's words without it (EW-17, 2026-09-24).
+  if (spiky.text !== 'Reduced to 40 colour stops')
+    fail(`[7b] one gradient's note reads "${spiky.text}" — expected "Reduced to 40 colour stops"`);
   const plain = await heroLossy('Plain');
   if (plain.keys.length) fail(`[7b] a two-stop gradient warns that it was reduced (${plain.keys.join(', ')}) — the notice is firing for everything`);
   if (plain.text) fail(`[7b] a two-stop gradient's .ai row says "${plain.text}" on hover`);
@@ -721,7 +893,7 @@ async function main() {
   await page.click('[data-gx-hero] [title^="Export"]');
   await page.waitForSelector('[data-gx-export]', { timeout: 5000 }).catch(() => fail('[7c] the hero\'s Export window did not open on "Spiky"'));
   if (!(await page.$('[data-gx-export] [data-gx-format="css"]'))) {
-    await page.click('[data-gx-export] [data-gx-section="For the web"]');
+    await page.click('[data-gx-export] [data-gx-section="Web"]');
     await page.waitForTimeout(200);
   }
   await page.hover('[data-gx-export] [data-gx-download="css"]');
@@ -903,7 +1075,7 @@ async function main() {
     console.log('\nFAIL — page errors');
     process.exit(1);
   }
-  console.log('\nPASS — the hero never unmounts (L8); one export window, two subjects, one reserved note line; credits ride unmodified exports; GX global refuses the catalogue');
+  console.log('\nPASS — a double-click that brings the hero on keeps the gradient; the name sweeps as text; the hero never unmounts (L8); one export window, two subjects, one reserved note line; credits ride unmodified exports; GX global refuses the catalogue');
 }
 
 main().catch((e) => {

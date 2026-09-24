@@ -62,6 +62,7 @@ const SlotBand: React.FC<{ which: 'A' | 'B'; ramp: import('../../palette/core/ok
       className={cls}
       style={{ height }}
       data-gx-mix-band={which === 'A' ? 'this' : 'other'}
+      // "(Esc cancels)": Esc on the Mix face is its Cancel (owner, 2026-09-24). See ARMED_CAPTION in ./Tray.
       title={title ?? (armed ? 'Takes the next pick — from the wall or My Gradients (Esc cancels)' : which === 'A' ? `${name} · click, then pick a gradient to replace it` : `Mixing with ${name} · click, then pick another`)}
       onClick={onClick ?? (() => armSlot(armed ? null : which))}
     >
@@ -95,7 +96,7 @@ const MixSources: React.FC<{ onKeepSource?: () => void }> = ({ onKeepSource }) =
         height={MIX_SOURCE_H}
         clean
         onClick={onKeepSource}
-        title={onKeepSource ? `${name} — keep it as it is: cancel the mix (the face closes)` : undefined}
+        title={onKeepSource ? `${name} — cancel the mix (the face closes)` : undefined}
       />
     </SourceBar>
   );
@@ -128,7 +129,7 @@ export const SourceBands: React.FC<{ derived: WorkingDerived; onKeepSource?: () 
       <Tag
         className="relative overflow-hidden w-full block text-left"
         style={{ height: SOURCE_BAND_H }}
-        title={onKeepSource ? 'The source — click to keep it as it is: what the face did is dropped (the face closes)' : 'The source this gradient is made from — the result is below it'}
+        title={onKeepSource ? 'The source — cancel what the face did (the face closes)' : 'The source this gradient is made from — the result is below it'}
         onClick={onKeepSource}
       >
         <GradientStrip ramp={ramp} height={SOURCE_BAND_H} rounded={false} />

@@ -38,6 +38,17 @@
  *   [13] the Image face: undo of a pick over it gives the live image with its face; undo of the
  *       image load closes the face (it left an Image face over a fixed gradient)
  *   [14] an undo under the Reduce popup does not reopen the inspector over its preview
+ *   [15] (J02, 2026-09-24) the ♥ with the MIX face open commits the blend the way a tab close
+ *       does and files it: no face, no live Mix left behind, no "live from Image", the ♥ lit; one
+ *       undo gives the live Mix back with its face AND takes the save back; redo does both again.
+ *       FALSIFIED 2026-09-24 by the shell's `revealGround` back to a bare `setTray(null)`: red
+ *       "[15] the ♥ closed the Mix face but left the Mix LIVE under it"; reverted.
+ *   [16] (ASK-1, 2026-09-24) ESC CANCELS A FACE: Adjust with a dial → Esc → the dial at rest, the
+ *       gradient exactly as before the face (not baked), the face closed; one undo gives the dial
+ *       back with its face. Mix with a blend → Esc → no longer live, the gradient and name from
+ *       before Mix. FALSIFIED 2026-09-24 by the shell's Esc going back to `openTray(null)` (the
+ *       bake): red "[16] Esc on Adjust changed the gradient … it baked the dial instead of
+ *       cancelling it"; reverted.
  *
  * FALSIFIED 2026-09-12 (steps [1]–[5], against the pre-context build):
  *   · `flushSync(onRevealGround)` → `onRevealGround()` in WorkingHero: [3] RED — React had not
@@ -446,6 +457,74 @@ async function main() {
     await page.keyboard.press('Escape');
     await settle();
     console.log('✓ [14] an undo under the Reduce popup keeps the popup and does not reopen the inspector over it');
+
+    // [15] THE ♥ WITH THE MIX FACE OPEN (J02). The ♥ closed the face with a bare close, which
+    // skipped the commit every other way out of Mix makes — so it filed the blend and left the
+    // Mix LIVE with no face to show or change it, its chip reading "live from Image". Now it
+    // leaves Mix the way a tab close does (the shell's `openTray(null)`, one entry with the save),
+    // and files the committed result, so the ♥ is lit over the gradient the hero shows.
+    await pickNew('[15]');
+    await tab('mix');
+    await dial({ mixL: 0.5, mixC: 0.5, mixH: 0.5 });
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build') fail(`[15] setup: Mix is not open live (${s.face}, ${s.kind})`);
+    const heart15 = page.locator('[data-gx-hero] button[title^="Keep"]').first();
+    if (!(await heart15.count())) fail('[15] setup: the blend is already kept — no ♥ to file it with');
+    const counts15 = (await shellState(page)).counts;
+    await heart15.click();
+    await settle(500);
+    s = await ui();
+    if (s.face) fail(`[15] the ♥ left the ${s.face} face open`);
+    if (s.kind === 'build') fail(`[15] the ♥ closed the Mix face but left the Mix LIVE under it (chip "${s.chipText}") — a live Mix lives only while its face is open`);
+    if (/live from/.test(s.chipText)) fail(`[15] after the ♥ the chip still reads "${s.chipText}"`);
+    const grown15 = grew(counts15, (await shellState(page)).counts);
+    if (!grown15) fail('[15] the ♥ filed nothing');
+    if (!(await page.$('[data-gx-hero] button[title^="Saved in My Gradients"]'))) fail('[15] the ♥ is not lit — it filed something other than the gradient the hero now shows');
+    await undo();
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build' || s.chip !== 'live') fail(`[15] one undo after the ♥ gave face ${s.face} over input ${s.kind} (chip ${s.chip}) — wanted the live Mix with its face`);
+    if (countOf((await shellState(page)).counts, grown15!.id) !== grown15!.from) fail(`[15] the same undo did not take the save back ("${grown15!.id}")`);
+    await redo();
+    s = await ui();
+    if (s.face || s.kind === 'build' || countOf((await shellState(page)).counts, grown15!.id) !== grown15!.to) fail(`[15] redo did not commit and file again (${s.face}, ${s.kind})`);
+    console.log('✓ [15] ♥ with the Mix face open: the Mix is committed and filed (♥ lit, no live Mix left behind); one undo gives the live Mix with its face and takes the save back');
+
+    // [16] ESC CANCELS A FACE (owner, 2026-09-24 — ASK-1). It BAKED until then: Esc on Adjust kept
+    // the dials in the stops while Adjust's own Cancel, one button over, would have dropped them,
+    // and Esc on Mix committed the blend while the Mix words said "Esc cancels". Now Esc is the
+    // face's Cancel (the shell's `escapeFace`); a tab click still bakes ([8], [11]).
+    const cfg = () => page.evaluate(`JSON.stringify((window.__gxWorking && window.__gxWorking().config || {}).stops || [])`) as Promise<string>;
+    await page.keyboard.press('Escape'); // the ♥ left no face; nothing here to cancel
+    await settle();
+    await pickNew('[16]');
+    const before16 = { kind: (await ui()).kind, stops: await cfg() };
+    await tab('adjust');
+    await dial({ phase: 0.05 });
+    s = await ui();
+    if (s.face !== 'adjust' || Math.abs(s.phase - 0.05) > 1e-9) fail(`[16] setup: Adjust did not take the dial (${s.face}, phase ${s.phase})`);
+    await page.keyboard.press('Escape');
+    await settle();
+    s = await ui();
+    if (s.face) fail(`[16] Esc left the ${s.face} face open`);
+    if (s.phase !== 0) fail(`[16] Esc on Adjust left the dial set (phase ${s.phase}) — it should be Adjust's Cancel`);
+    if (s.kind !== before16.kind || s.chip === 'edited' || (await cfg()) !== before16.stops) fail(`[16] Esc on Adjust changed the gradient (input ${before16.kind} → ${s.kind}, chip ${s.chip}) — it baked the dial instead of cancelling it`);
+    await undo();
+    s = await ui();
+    if (s.face !== 'adjust' || Math.abs(s.phase - 0.05) > 1e-9) fail(`[16] one undo after Esc did not give back the Adjust face with its dial (${s.face}, phase ${s.phase})`);
+    await page.keyboard.press('Escape');
+    await settle();
+    const preMix = { stops: await cfg(), name: (await ui()).name };
+    await tab('mix');
+    await dial({ mixL: 0.5, mixC: 0.5, mixH: 0.5 });
+    s = await ui();
+    if (s.face !== 'mix' || s.kind !== 'build') fail(`[16] setup: Mix is not open live (${s.face}, ${s.kind})`);
+    await page.keyboard.press('Escape');
+    await settle();
+    s = await ui();
+    if (s.face) fail(`[16] Esc left the ${s.face} face open`);
+    if (s.kind === 'build' || s.chip === 'live') fail(`[16] Esc closed Mix but left it live (chip ${s.chip})`);
+    if ((await cfg()) !== preMix.stops || s.name !== preMix.name) fail(`[16] Esc on Mix did not put back the gradient from before it ("${preMix.name}" → "${s.name}") — it committed the blend instead of cancelling it`);
+    console.log('✓ [16] Esc cancels a face: Adjust drops its dials (one undo gives them back with the face), Mix gives back the gradient from before it');
 
     if (errors.length) fail(`page errors: ${errors.join(' | ')}`);
     console.log('\nPASS — every undo entry carries the interface it was made in');

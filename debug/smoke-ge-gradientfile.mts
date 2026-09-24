@@ -18,7 +18,11 @@
  *   [b]  the same PNG with its text chunks stripped (in node) DROPPED on the wall imports as a ramp
  *        gradient whose display texels equal the original's exactly, and does NOT open the Image
  *        face; [b2] a plain PNG dropped the same way still goes to image extraction (the Image face
- *        opens) and adds nothing to the shelf.
+ *        opens) and adds nothing to the shelf. [b3] (2026-09-24, HT-02) the same drop on a hero
+ *        PALETTE SWATCH opens the Image face too — the palette row used to stop every drop, so a
+ *        file on its 1152 × 36 px strip was lost without a word. FALSIFIED 2026-09-24 by putting
+ *        PaletteRow's unconditional `e.stopPropagation()` back at the top of the swatch's `onDrop`:
+ *        red "[b3] a PNG dropped on a palette swatch was lost — no image extraction"; reverted.
  *   [c]  the owner's bug: with All on the ground, a CSS file picked through the same menu lands in
  *        Kept and the view switches to Kept.
  *   [d]  a `.gxsession.json` (saved through Settings ▸ Files ▸ Session) DROPPED on the wall opens as
@@ -152,7 +156,8 @@ const download = async (page: Page, click: () => Promise<void>) => {
 
 /** The rail's collection kebab, then one of its items. */
 const kebab = async (page: Page, label: string | RegExp) => {
-  await page.locator('button[title="Collection — save, load, export"]').first().click();
+  // the title's prefix: what follows the dash names what the menu holds, and varies by host
+  await page.locator('button[title^="Collection —"]').first().click();
   await page.waitForTimeout(250);
   return page.locator('button', { hasText: label }).first();
 };
@@ -180,6 +185,30 @@ const dropOnWall = async (page: Page, files: { name: string; type: string; bytes
       target.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
     },
     files.map((f) => ({ name: f.name, type: f.type, b64: Buffer.from(f.bytes).toString('base64') })),
+  );
+  await page.waitForTimeout(1200);
+};
+
+/** The hero's palette swatches (PaletteRow; only those buttons carry this title). */
+const SWATCH = '[data-gx-hero] button[title*="drag to slide along the ramp"]';
+
+/** `dropOnWall`'s drop, aimed at the `index`-th element matching `selector` instead. */
+const dropOn = async (page: Page, selector: string, index: number, files: { name: string; type: string; bytes: Uint8Array }[]) => {
+  await page.evaluate(
+    ({ sel, i, list }) => {
+      const dt = new DataTransfer();
+      for (const f of list) {
+        const bin = atob(f.b64);
+        const u = new Uint8Array(bin.length);
+        for (let k = 0; k < bin.length; k++) u[k] = bin.charCodeAt(k);
+        dt.items.add(new File([u], f.name, { type: f.type }));
+      }
+      const target = document.querySelectorAll(sel)[i];
+      if (!target) throw new Error(`no element ${sel} [${i}] to drop on`);
+      target.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+      target.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+    },
+    { sel: selector, i: index, list: files.map((f) => ({ name: f.name, type: f.type, b64: Buffer.from(f.bytes).toString('base64') })) },
   );
   await page.waitForTimeout(1200);
 };
@@ -364,6 +393,19 @@ async function main() {
   await page.waitForTimeout(600);
   console.log('✓ [b2] a plain PNG dropped the same way still opens the Image face and adds nothing');
 
+  // [b3] HT-02: the same kind of drop landing on a PALETTE SWATCH — a 1152 × 36 target across the
+  // top of the card — still reaches the shell. The row used to stop every drop, a file included.
+  const px3 = new Uint8Array(W * H * 3);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const o = (y * W + x) * 3; px3[o] = 255 - x * 4; px3[o + 1] = 60; px3[o + 2] = y * 8; }
+  if ((await page.$$(SWATCH)).length < 3) fail(`[b3] setup: the hero has ${(await page.$$(SWATCH)).length} palette swatches`);
+  if ((await working(page))!.kind === 'extract') fail('[b3] setup: the Image face from [b2] is still live');
+  await dropOn(page, SWATCH, 2, [{ name: 'swatch drop.png', type: 'image/png', bytes: encodePng(W, H, px3) }]);
+  await page.waitForFunction(() => (window as any).__gxWorking?.().input.kind === 'extract', undefined, { timeout: 8000 }).catch(() => fail('[b3] a PNG dropped on a palette swatch was lost — no image extraction'));
+  if ((await page.evaluate(() => (document.querySelector('[data-gx-tray-root]') as HTMLElement | null)?.dataset.gxTray)) !== 'image') fail('[b3] the drop reached extraction but the Image face did not open');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
+  console.log('✓ [b3] a PNG dropped on a palette swatch opens the Image face, as it does anywhere else');
+
   // [c] the owner's bug: on All, a CSS file lands in Kept and the view follows
   await page.click('[data-gx-set="all"]');
   await page.waitForTimeout(400);
@@ -500,8 +542,8 @@ async function main() {
 
   // [g4] NO REPEATS: CSS linear-gradient twice and CSS variables once → Again holds each export ONCE,
   // each row naming its FORMAT (both are .css).
-  if (!(await page.$('[data-gx-export] [data-gx-download="css"]'))) await page.click('[data-gx-export] [data-gx-section="For the web"]');
-  await page.waitForSelector('[data-gx-export] [data-gx-download="css"]', { timeout: 3000 }).catch(() => fail('[g4] the For the web section would not open'));
+  if (!(await page.$('[data-gx-export] [data-gx-download="css"]'))) await page.click('[data-gx-export] [data-gx-section="Web"]');
+  await page.waitForSelector('[data-gx-export] [data-gx-download="css"]', { timeout: 3000 }).catch(() => fail('[g4] the Web section would not open'));
   await download(page, () => page.click('[data-gx-export] [data-gx-download="css"]'));
   await download(page, () => page.click('[data-gx-export] [data-gx-download="css"]'));
   await download(page, () => page.click('[data-gx-export] [data-gx-download="cssvars"]'));

@@ -516,7 +516,7 @@ async function main() {
   await fresh();
   await openCurves();
   const beforeSpace = await ws(page);
-  await page.click('button[title="Axes space"]');
+  await page.click('button[title="Curve axes"]');
   await page.locator('button', { hasText: /^HSV$/ }).first().click();
   await page.waitForTimeout(500);
   const hsv0 = await ws(page);

@@ -148,11 +148,14 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
               setDropOver(i);
             }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropOver(null); }}
+            // Stop only the drop this row takes — a colour. Anything else (a FILE, a tile) goes
+            // on to the shell's window-level drop; stopping every drop here lost a file dropped
+            // on a swatch without a word (HT-02).
             onDrop={(e) => {
-              const hex = readColorDrag(e.dataTransfer);
-              e.stopPropagation();
               setDropOver(null);
+              const hex = readColorDrag(e.dataTransfer);
               if (!hex || !onDropColour) return;
+              e.stopPropagation();
               e.preventDefault();
               onDropColour(sw.t, hex);
             }}
@@ -177,6 +180,13 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
                 if (readOnly) {
                   copyHex(hex);
                   e.preventDefault();
+                  return;
+                }
+                // A KEYBOARD click (Enter / Space: `detail` 0) does what a tap does — a mouse
+                // or finger already did it in onPointerUp, so this never runs twice (HT-12).
+                if (e.detail === 0) {
+                  if (onSelect) onSelect(i, sw.t);
+                  else copyHex(hex);
                 }
               }}
             />
@@ -187,7 +197,7 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             )}
             {!readOnly && palette.length > PALETTE_MIN && (
               <button
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-black/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 title="Remove this swatch"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
@@ -219,10 +229,10 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
             }}
             onDragLeave={() => setDropOver(null)}
             onDrop={(e) => {
-              const hex = readColorDrag(e.dataTransfer);
-              e.stopPropagation();
               setDropOver(null);
-              if (!hex || !onDropColour) return;
+              const hex = readColorDrag(e.dataTransfer);
+              if (!hex || !onDropColour) return; // not a colour: let it reach the shell (HT-02)
+              e.stopPropagation();
               e.preventDefault();
               const t = useWorkingStore.getState().addSwatch();
               if (t != null) onDropColour(t, hex);
@@ -240,11 +250,17 @@ export const PaletteRow: React.FC<Props> = ({ palette, scale, readOnly = false, 
               button to save space"). Both halves live in `Segmented` now — this was the
               original, and copying it by hand is how the function tool ended up with a row
               of separate boxes instead. */}
+          {/* The lit rule is a BUTTON too (HT-07): after a swatch drag, "+" or ×, the rule is
+              still lit but the swatches no longer follow it, and a click on it lays them out
+              again (`repeat`). DESK ONLY: the phone's cycle button fires `onRepeat` on ARRIVAL as
+              well as `onChange`, which would lay the palette out twice — two undo entries — and
+              its title would promise "drawn afresh". */}
           <Segmented
             name="palette-rule"
-            options={hasStops ? RULES : RULES.map((o) => (o.id === 'stops' ? { ...o, disabled: true, title: 'This gradient is a 256-colour ramp — it has no stops to lay swatches on' } : o))}
+            options={(hasStops ? RULES : RULES.map((o) => (o.id === 'stops' ? { ...o, disabled: true, title: 'This gradient is a 256-colour ramp — it has no stops to lay swatches on' } : o))).map((o) => (phone ? o : { ...o, repeat: true }))}
             value={rule}
             onChange={(id) => useWorkingStore.getState().layoutPalette(id)}
+            onRepeat={phone ? undefined : (id) => useWorkingStore.getState().layoutPalette(id)}
             cycle={phone}
           />
         </div>

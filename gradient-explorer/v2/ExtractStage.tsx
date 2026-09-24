@@ -83,8 +83,11 @@ export const ExtractStage: React.FC<{
     <div className={`flex gap-4 px-4 py-3 ${phone ? 'flex-col' : 'items-stretch'}`}>
       {/* PHONE only: the picture leads, because it is what the methods below act on */}
       {slot}
-      {/* left, under the picture: the method, its tools, its dials */}
-      <div className={`${phone ? 'w-full' : 'w-[560px] shrink-0'} flex flex-col gap-3`}>
+      {/* left, under the picture: the method, its tools, its dials. DESK: 560 wide where there
+          is room and down to 280 where there is not (L7) — the tray caps the face at the right
+          edge the other faces stop at, and below ~910 px the fixed 560 pushed the colour cloud
+          off the window. A 560 BASIS rather than `flex-1`, so a wide window lays out as before. */}
+      <div className={`${phone ? 'w-full' : 'w-[560px] min-w-[280px] shrink'} flex flex-col gap-3`}>
         <div className="flex items-center gap-4 flex-wrap">
           {/* the same segmented control as the palette's Even · Perceptual · Stops (owner) —
               literally the same component since 2026-09-12, not the same class string */}

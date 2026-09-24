@@ -36,7 +36,8 @@
  *       column (grid of two columns) — the phone branch is gated, not global.
  *   [2b] the phone's ONE menu (added 2026-09-13, gradient-explorer/v2/ShellMenu.tsx): the top bar
  *       does not overflow, carries exactly one menu button and no separate Settings gear, and
- *       its controls take no more than the 100 px undo · redo · gear took before; the menu opens
+ *       its controls take no more than 108 px (undo · redo · the menu, three 32 px boxes — 100 px
+ *       with the 24 px menu it had until 2026-09-24's 8d); the menu opens
  *       inside the screen with Settings, Support and Send Feedback; Send Feedback closes the
  *       menu and opens a full-width sheet with the form's Send button, no sideways scroll, no
  *       page error and no error-boundary fallback; its × closes it.
@@ -102,7 +103,8 @@
  *   · the phone given the desktop controls (`phone ?` → `false ?` in GradientExplorerV2App) →
  *     "[2b] the Settings gear is still its own button on a phone".
  *   · the menu button widened to 32 px (`w-8` on ShellMenuButton) → "[2b] the top bar's
- *     controls take 108 px — wider than the 100 px they took before the menu".
+ *     controls take 108 px — wider than the 100 px they took before the menu". (32 px became the
+ *     design on 2026-09-24 and the budget 108; that break now passes by construction.)
  *   · the phone menu's own rows dropped (`phoneMenuItems().slice(1)`) → "[2b] the phone menu has
  *     no "Settings"".
  *   · `feedbackMenuItem()` dropped from installHelp's extraItems (v2/main.tsx) → "[2b] the phone
@@ -318,9 +320,11 @@ async function main() {
   if (bar!.sw > bar!.cw) fail(`[2b] the top bar overflows: scrollWidth ${bar!.sw} > clientWidth ${bar!.cw}`);
   if (bar!.triggers !== 1) fail(`[2b] the phone top bar has ${bar!.triggers} menu buttons, expected exactly one`);
   if (bar!.gears !== 0) fail('[2b] the Settings gear is still its own button on a phone — it belongs in the menu');
-  // undo · redo · gear measured 100 px before the menu existed (2026-09-13); the menu takes the
-  // gear's 24 px box, so the cluster may not grow past that.
-  if (bar!.cluster > 100) fail(`[2b] the top bar's controls take ${bar!.cluster} px — wider than the 100 px they took before the menu`);
+  // undo · redo · gear measured 100 px before the menu existed (2026-09-13), and the menu took the
+  // gear's 24 px box. Since 2026-09-24 it takes the bar's own 32 px box like undo / redo (owner,
+  // 8d: the phone's only door to Settings, Help and Feedback was the smallest target in the bar),
+  // so the budget is those 8 px more: 108. Anything past it is a new control, or a wider one.
+  if (bar!.cluster > 108) fail(`[2b] the top bar's controls take ${bar!.cluster} px — wider than the 108 px budget (undo · redo · a 32 px menu)`);
   await page.locator('header [data-gx-menu-trigger]').tap();
   await page.waitForSelector('[data-gx-menu]', { timeout: 4000 }).catch(() => fail('[2b] tapping the menu button opened no menu'));
   const menuText = ((await page.textContent('[data-gx-menu]')) ?? '').replace(/\s+/g, ' ');
@@ -417,7 +421,7 @@ async function main() {
   // swallowed click must not eat it): Copy on the same row puts exactly the previewed text on the
   // clipboard, and the panel's × closes the panel alone, not the sheet.
   if (!(await page.$('[data-gx-export] [data-gx-format="css"]'))) {
-    await page.locator('[data-gx-export] [data-gx-section="For the web"]').tap();
+    await page.locator('[data-gx-export] [data-gx-section="Web"]').tap();
     await page.waitForTimeout(250);
   }
   const hint5b = (await page.evaluate(`(function () { var n = document.querySelector('[data-gx-export] [data-gx-note]'); return n ? n.innerText.trim() : ''; })()`)) as string;

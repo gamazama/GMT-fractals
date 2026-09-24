@@ -35,18 +35,21 @@ import { useIsPhone } from './useIsPhone';
 interface ShellMenuButtonProps {
   /** A menu registered with `menu.register` (e.g. installHelp's 'help'). */
   menuId: string;
-  /** The glyph — sized like the gear beside it (components/Icons, 12 px). */
+  /** The glyph (components/Icons, 12 px). */
   icon: React.ReactNode;
   /** Tooltip + accessible name. Defaults to the registered menu's own title. */
   title?: string;
   /** The host's own rows, rendered above the registered menu's items. */
   prepend?: MenuItem[];
+  /** The button's classes, when the host's bar has a box of its own (the GX top bar's 32 px
+   *  `tb`, C04 / 8d). Default: a 24 px `icon-btn` box with the glyph pinned at 12 px. */
+  className?: string;
 }
 
 /** Menu width in px — held here, not in a class, because the anchor is its right edge. */
 const MENU_W = { desktop: 240, phone: 264 };
 
-export const ShellMenuButton: React.FC<ShellMenuButtonProps> = ({ menuId, icon, title, prepend }) => {
+export const ShellMenuButton: React.FC<ShellMenuButtonProps> = ({ menuId, icon, title, prepend, className }) => {
   const phone = useIsPhone();
   const { def, items } = useMenuItems(menuId);
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -63,10 +66,10 @@ export const ShellMenuButton: React.FC<ShellMenuButtonProps> = ({ menuId, icon, 
       <span className="relative inline-flex">
       <button
         type="button"
-        // `icon-btn` + a 12 px glyph is the gear's exact box (24 px), so on a phone this
-        // button replaces the gear without the bar growing (measured 2026-09-13: undo · redo ·
-        // gear = 100 px). `[&>svg]` pins a glyph drawn at another size to that box.
-        className="icon-btn [&>svg]:w-3 [&>svg]:h-3"
+        // Default: `icon-btn` + a 12 px glyph, the old gear's 24 px box; `[&>svg]` pins a glyph
+        // drawn at another size to it. The GX top bar passes its own 32 px box on both desk and
+        // phone since 2026-09-24 (C04, 8d), so the default only serves a host without one.
+        className={className ?? 'icon-btn [&>svg]:w-3 [&>svg]:h-3'}
         title={label}
         aria-label={label}
         aria-haspopup="menu"

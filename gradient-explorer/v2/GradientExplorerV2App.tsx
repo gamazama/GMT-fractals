@@ -41,7 +41,7 @@ import { ToastHost } from '../../engine/components/ToastHost';
 import { MobileViewportShell } from '../../engine/components/MobileViewportShell';
 import { useIsPhone } from './useIsPhone';
 import { FULL_FACES } from './Tray';
-import { SettingsHost, SettingsButton } from '../../components/SettingsAccess';
+import { SettingsHost } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
 import { BrowseStage } from './BrowseStage';
@@ -56,6 +56,8 @@ import type { SeedStop } from '../../palette/core/workingPipeline';
 import type { GradientConfig } from '../../types';
 import { useGeneratorStore, readGeneratorSlice, setGeneratorSlice, slotSnapshot, SLOT_MOD_DEFAULTS } from '../../palette/store/generatorStore';
 import { DEFAULT_CURVE_SPACE } from '../../palette/core/curveSpaces';
+import { isIdentityAdjust } from '../../palette/core/workingPipeline';
+import type { GeneratorParams } from '../../palette/core/generatorPipeline';
 import { useFavientsStore, favientSig, DEFAULT_GROUP } from '../../palette/store/favientsStore';
 import {
   GRADIENT_FILE_ACCEPT,
@@ -92,6 +94,7 @@ import { HelpOverlay } from '../../engine/plugins/Help';
 import type { MenuItem } from '../../engine/plugins/Menu';
 import { openSettings } from '../../store/settingsPanelState';
 import { GearIcon, HelpIcon, MenuIcon } from '../../components/Icons';
+import { modKeyLabel } from '../../engine/plugins/Shortcuts';
 
 /**
  * The PHONE's one menu, above the Help menu's own items (owner, 2026-09-13: "mobile will have
@@ -103,7 +106,16 @@ import { GearIcon, HelpIcon, MenuIcon } from '../../components/Icons';
 const phoneMenuItems = (): MenuItem[] => [
   { id: 'gx-settings', type: 'button', label: 'Settings', icon: <GearIcon />, onSelect: openSettings },
   ...(cameFromGmt
-    ? [{ id: 'gx-back-to-gmt', type: 'button', label: 'Back to GMT', title: 'Back to the GMT studio', onSelect: () => { void goBackToGmt(); } } as MenuItem]
+    ? [{
+        id: 'gx-back-to-gmt',
+        type: 'button',
+        label: 'Back to GMT',
+        title: 'Back to the GMT studio',
+        // An EMPTY icon slot, the rows' 12 px glyph width, so the label lines up with the rows
+        // around it (C22). The glyph itself waits for the owner's drawing (ASK-7).
+        icon: <span aria-hidden className="inline-block w-3 h-3 shrink-0" />,
+        onSelect: () => { void goBackToGmt(); },
+      } as MenuItem]
     : []),
   { id: 'gx-sep', type: 'separator' },
 ];
@@ -126,7 +138,14 @@ export type SourceId = 'browse' | 'build' | 'extract';
  *  the `extract` input, every other face (or none) is Browse. There are no source tabs. */
 const sourceOf = (face: TrayFace): SourceId => (face === 'mix' ? 'build' : face === 'image' ? 'extract' : 'browse');
 
-const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors';
+/** The top bar's pressable. `disabled:` — Undo / Redo with nothing to undo or redo (C03 = J11):
+ *  they did nothing and looked exactly as they did with history, the state `Act` already shows. */
+const tb = 'h-8 px-3 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent';
+/** The shortcuts the Undo / Redo titles name, as THIS platform types them — the registry binds
+ *  `Mod` (⌘ on a Mac) and a Mac's redo is ⇧⌘Z (grep `redo.global.shift` in engine/plugins/Undo). */
+const MOD = modKeyLabel();
+const UNDO_KEYS = `${MOD}Z`;
+const REDO_KEYS = MOD === '⌘' ? '⇧⌘Z' : 'Ctrl+Y';
 
 /**
  * Leaving the Curves face puts the AXES back on the default (plan §10, 2026-09-12, "Not
@@ -154,8 +173,9 @@ const resetBareCurveSpace = (): void => {
  * 2026-09-23: "bring back the capability, not the mode" — the one start that needs neither a
  * pick nor an image).
  *
- * The gradient is not invented here. It is the one the hero's own ☰ ▸ View ▸ Reset Default
- * writes (grep `Reset Default` in components/gradient/gradientActions.ts): `stopOps.default()`,
+ * The gradient is not invented here. It is the one GMT's ☰ ▸ View ▸ Reset Default writes (grep
+ * `Reset Default` in components/gradient/gradientActions.ts — the hero's trimmed menu no longer
+ * shows that item, owner 2026-09-24, 9a: New Gradient replaces it here): `stopOps.default()`,
  * black to white on two stops, with the same two spaces — which are also what a catalogue pick
  * carries (grep `entryToGradientConfig`), so a new gradient exports, shares and reaches GMT
  * exactly as a picked one does. A STOP gradient: the first gesture on the ramp edits it.
@@ -316,8 +336,27 @@ export const GradientExplorerV2App: React.FC = () => {
   // several); a Browse pick is one-shot and comes back to Mix.
   const trayRef = useRef<TrayFace>(tray);
   trayRef.current = tray;
+  /**
+   * THE PICK THAT BRINGS THE HERO ON SCREEN MOVES THE WALL (J01). The first pick mounts the hero
+   * and an unfold shows it again, and either pushes the wall down ~240 px in one frame — so the
+   * second half of a double-click, or the "click it again" Help teaches, lands on the RAMP, where a
+   * press inserts a knot. `revealAt` is when such a pick happened (`performance.now()`); the hero
+   * takes a press on the gradient (its palette row and ramp) within `REVEAL_DOUBLE_MS` of it as
+   * that second click — the keep, nothing else (grep `onRevealPress` in ./WorkingHero). Time, not
+   * the press's position on screen: it lands wherever the moved layout put it. `heroShown` mirrors
+   * the hero's own `lastGood` (it renders once a derive has produced a gradient, and never
+   * unmounts after — L8).
+   */
+  const revealAt = useRef(0);
+  /** The hero band's box (its wrapper) — where the hero's Export window hangs from, which the
+   *  set's Export window lifts to when the room below the rail is short (ASK-4). */
+  const heroWrapRef = useRef<HTMLDivElement>(null);
+  const heroShown = useRef(false);
+  if (derived.config && derived.ramp) heroShown.current = true;
   useEffect(() => {
     if (!candidate) return;
+    // Read BEFORE this pick changes anything: is the hero off screen right now?
+    const revealing = !heroShown.current || folded;
     // A pick is a request to SEE the gradient: a hidden hero comes back (owner, 2026-09-11).
     setFolded(false);
     const p = candidate.payload;
@@ -343,6 +382,8 @@ export const GradientExplorerV2App: React.FC = () => {
       setTray('mix');
       return;
     }
+    // This pick puts the hero on screen: the next press on its gradient is this click's second half.
+    if (revealing) revealAt.current = performance.now();
     const w = useWorkingStore.getState();
     const sig = favientSig(p.config);
     if (w.input.kind === 'gradient' && favientSig(w.input.config) === sig) {
@@ -459,9 +500,10 @@ export const GradientExplorerV2App: React.FC = () => {
     setTray(face);
   }, []);
 
-  // Cancel the open face (C.3 / C.9 — the state chip, or a click on the ramp's SOURCE
-  // half): what was there before the face comes back and the face closes WITHOUT baking
-  // (so not openTray, which would commit it). Bake = openTray(null): leaving commits.
+  // Cancel the open face (C.3 / C.9 — the state chip, a click on the ramp's SOURCE half, and
+  // since 2026-09-24 Esc, via `escapeFace`): what was there before the face comes back and the
+  // face closes WITHOUT baking (so not openTray, which would commit it). Bake = openTray(null):
+  // leaving by a tab or a pick commits.
   const cancelFace = useCallback(() => {
     useWorkingStore.getState().cancelFace();
     if (trayRef.current === 'curves') resetBareCurveSpace();
@@ -470,6 +512,47 @@ export const GradientExplorerV2App: React.FC = () => {
     setTray(null);
   }, []);
   const bakeFace = useCallback(() => openTray(null), [openTray]);
+
+  /**
+   * ESC CANCELS A FACE (owner, 2026-09-24 — ASK-1; it baked until then, while Adjust's own Cancel
+   * button and the Mix words said Esc cancels). Esc does what the face's own cancel does:
+   *   • Adjust with dials moved → `resetAdjust`, exactly Adjust's Cancel button (one undo step,
+   *     the stops untouched);
+   *   • Mix, Image → `cancelFace`: back to the gradient that was there before the face opened
+   *     (the live source is what is un-applied — the chip's "· cancel");
+   *   • Curves with an EDITED curve → `cancelFace` (the curves dropped, the source back);
+   *   • anything untouched — Curves on its own fit, Adjust at rest, the stop inspector — leaves
+   *     the way a tab close does, `openTray(null)`, which for those is a PEEK: nothing baked, no
+   *     undo entry (grep `peek` in `openTray`).
+   * Only Esc changed. A tab click and a new pick still BAKE on the way out (C.3), and so do the
+   * fold and the ♥ (which files the result). The order ahead of the face is unchanged — the
+   * nearer layers (a selection, a wall tool, the Export window, the wave tool, Reduce Stops…)
+   * take Esc first (see the Esc order below).
+   *
+   * Guard: `npm run smoke:ge-uiundo` [16] (Adjust and Mix cancelled by Esc) and [10] (an
+   * untouched Curves adds no entry).
+   */
+  const escapeFace = useCallback(() => {
+    const face = trayRef.current;
+    if (face === 'adjust') {
+      const g = (useEngineStore.getState() as unknown as { paletteGenerator?: GeneratorParams }).paletteGenerator;
+      if (g && !isIdentityAdjust(g)) {
+        useGeneratorStore.getState().resetAdjust();
+        setTray(null);
+        return;
+      }
+    } else if (face === 'mix' || face === 'image') {
+      cancelFace();
+      return;
+    } else if (face === 'curves') {
+      const g = useGeneratorStore.getState();
+      if (g.tracks && g.tracksEdited) {
+        cancelFace();
+        return;
+      }
+    }
+    openTray(null);
+  }, [openTray, cancelFace]);
 
   /**
    * NEW GRADIENT (see `newGradientConfig`) — from the nothing-picked line (BrowseStage) and the
@@ -597,8 +680,9 @@ export const GradientExplorerV2App: React.FC = () => {
     else imageFileRef.current?.click();
   }, [openTray]);
 
-  // Esc order (Phase C, L6): a wall selection → the open tray face (the inspector closes by
-  // clearing the stop selection, which the hero does when the face leaves) → an armed slot.
+  // Esc order (Phase C, L6): a wall selection → the open tray face, CANCELLED (`escapeFace`; the
+  // inspector closes by clearing the stop selection, which the hero does when the face leaves)
+  // → an armed slot.
   // Ahead of all three: anything NEARER that already consumed the key. A menu, a modal and an
   // armed Curves wave take Escape through the shortcut registry (`useDismiss`), which marks it
   // `defaultPrevented`; `installShortcuts()` runs at boot in main.tsx, so its window listener
@@ -610,12 +694,12 @@ export const GradientExplorerV2App: React.FC = () => {
       // A wall selection is the nearest thing to a popover: it is a held state you can be
       // stuck in, and it must let go before Esc starts closing faces.
       if (getWallSelection().size) { clearWallSelection(); return; }
-      if (trayRef.current) { openTray(null); return; }
+      if (trayRef.current) { escapeFace(); return; }
       if (getArmedSlot()) armSlot(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [openTray]);
+  }, [escapeFace]);
 
   // A debug handle for the smokes (smoke:ge-tray dumps the baked gradient on a drift).
   // `ramp` is the pipeline's OWN output and is the only thing here that is true mid-drag:
@@ -631,6 +715,9 @@ export const GradientExplorerV2App: React.FC = () => {
 
   const undo = () => (useEngineStore.getState() as unknown as { undoParam?: () => void }).undoParam?.();
   const redo = () => (useEngineStore.getState() as unknown as { redoParam?: () => void }).redoParam?.();
+  // Whether each has anything to do — the same test the engine's own UndoButton reads.
+  const canUndo = useEngineStore((s) => s.canUndo('param'));
+  const canRedo = useEngineStore((s) => s.canRedo('param'));
   // A share link opens straight into Working (once, on boot; the param is stripped). Failing
   // that, a gradient GMT's Explorer button handed over does the same (./fromGmt, 2026-09-23).
   useEffect(() => {
@@ -659,12 +746,22 @@ export const GradientExplorerV2App: React.FC = () => {
    * bracket opened, so one Ctrl+Z puts the face and the window back with the save it announced.
    * Called outside a bracket, the surfaces would close with no entry to bring them back. Returns
    * nothing — a caller that needs to know simply looks at the state it is about to change.
+   *
+   * A SOURCE face (Mix, Image) is left the way a tab close leaves it — `openTray(null)`, which
+   * commits the live result with `use` — because a live Mix or Image lives only while its face is
+   * open. A bare close stranded it (J02: a live Mix with no control for its blend, its chip reading
+   * "live from Image"). `openTray` groups its writes (`paramGroup`), so the caller must bracket with
+   * `paramGroup` as well for the commit and the save to be ONE entry — a `paramEdit` around it
+   * would be closed by the group's end, leaving the save outside undo. Every other face keeps the
+   * bare close, whose undo shape `smoke:ge-uiundo` [1]–[6] pins (the dials of an open Adjust or
+   * Curves face are not baked by it — probed separately before it changes).
    */
   const revealGround = useCallback(() => {
-    setTray(null);
+    if (trayRef.current === 'mix' || trayRef.current === 'image') openTray(null);
+    else setTray(null);
     setExportOpen(false);
     setExportGround(false);
-  }, []);
+  }, [openTray]);
   const wallpaper = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
     useWorkingStore.getState().syncRecentOutsideUndo();
@@ -691,19 +788,24 @@ export const GradientExplorerV2App: React.FC = () => {
         {/* `min-w-0` + a truncating title: on a phone the brand is the one elastic thing in
             this row, and without it the wordmark pushed undo / redo / settings off the
             right edge (measured 390 px, Phase F). */}
-        <a href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} className="flex items-center gap-2 mr-auto min-w-0 no-underline" title="GMT">
-          <GmtWordmark className={`w-auto shrink-0 opacity-80 ${phone ? 'h-3' : 'h-3.5'}`} />
+        {/* ONLY THE WORDMARK links out (owner, 2026-09-24, 10d): it is the door ADR-0126 names,
+            and a whole-title link made "Gradient Explorer" — the app you are in — a way out of
+            it. The app's name is plain text. */}
+        <div className="flex items-center gap-2 mr-auto min-w-0">
+          <a href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} className="flex items-center shrink-0 no-underline" title={cameFromGmt ? 'Back to GMT' : 'GMT'}>
+            <GmtWordmark className={`w-auto shrink-0 opacity-80 ${phone ? 'h-3' : 'h-3.5'}`} />
+          </a>
           <span className={`font-semibold text-fg truncate ${phone ? 'text-[13px]' : 'text-[15px]'}`}>Gradient Explorer</span>
-        </a>
+        </div>
         {/* 40 px hit boxes on a phone (`max-md:`): 32 is comfortable for a pointer and
             under the ~44 px a fingertip wants. The GLYPH stays 24 either way. */}
-        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Undo (Ctrl+Z)" onClick={undo}><Icon name="undo" size={phone ? 18 : 20} /></button>
-        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Redo (Ctrl+Y)" onClick={redo}><Icon name="redo" size={phone ? 18 : 20} /></button>
+        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title={`Undo (${UNDO_KEYS})`} disabled={!canUndo} onClick={undo}><Icon name="undo" size={phone ? 18 : 20} /></button>
+        <button className={`${tb} w-8 px-0 flex items-center justify-center`} title={`Redo (${REDO_KEYS})`} disabled={!canRedo} onClick={redo}><Icon name="redo" size={phone ? 18 : 20} /></button>
         {/* Back to GMT carries no gradient (owner, 2026-09-07): the working gradient is already
             in GMT's My Gradients panel through the shared `gmt.favients` Recent group. Only
             shown when this page was opened from the studio. Opened by GMT's Explorer button,
             it closes this tab to land back in the GMT tab, or restores GMT's stashed scene
-            here when it cannot (owner, 2026-09-23; ./fromGmt). The brand link does the same. */}
+            here when it cannot (owner, 2026-09-23; ./fromGmt). The wordmark link does the same. */}
         {cameFromGmt && !phone && (
           <a className={`${tb} flex items-center no-underline`} href={BACK_TO_GMT_HREF} onClick={onBackToGmtClick} title="Back to the GMT studio">
             Back to GMT
@@ -713,16 +815,24 @@ export const GradientExplorerV2App: React.FC = () => {
             from the shell's own buttons because there is no TopBarHost (@see ./ShellMenu).
             PHONE: ONE menu in the gear's place, the gear folded into it (owner, 2026-09-13). */}
         {phone ? (
-          <ShellMenuButton menuId="help" icon={<MenuIcon />} title="Menu" prepend={phoneMenuItems()} />
+          /* The bar's own 32 px box, like Undo / Redo beside it (owner, 2026-09-24, 8d): it was a
+             24 px `icon-btn` — the phone's ONLY door to Settings, Help and Feedback, and the
+             smallest target in the bar. The cluster grows 100 → 108 px (`smoke:ge-phone` [2b]). */
+          <ShellMenuButton menuId="help" icon={<MenuIcon />} title="Menu" prepend={phoneMenuItems()} className={`${tb} w-8 px-0 flex items-center justify-center`} />
         ) : (
           <>
-            <ShellMenuButton menuId="help" icon={<HelpIcon />} />
-            <SettingsButton />
+            {/* DESK (C04): the bar's own 32 px box for both, like Undo / Redo beside them — they
+                were 24 px `icon-btn`s from the old set. The gear is the v2 set's drawing; the
+                `?` keeps its glyph until the owner approves one for the set (ASK-7). */}
+            <ShellMenuButton menuId="help" icon={<HelpIcon />} className={`${tb} w-8 px-0 flex items-center justify-center`} />
+            <button className={`${tb} w-8 px-0 flex items-center justify-center`} title="Settings" aria-label="Settings" onClick={openSettings}>
+              <Icon name="settings" size={20} />
+            </button>
           </>
         )}
       </header>
 
-      <div className="shrink-0">
+      <div className="shrink-0" ref={heroWrapRef}>
       <WorkingHero
         derived={derived}
         source={source}
@@ -731,6 +841,7 @@ export const GradientExplorerV2App: React.FC = () => {
         onCancelFace={cancelFace}
         onBake={bakeFace}
         folded={folded}
+        revealAt={revealAt}
         onShare={share}
         onRevealGround={revealGround}
         onExport={exportOpenToggle}
@@ -746,15 +857,9 @@ export const GradientExplorerV2App: React.FC = () => {
               origin={derived.origin}
               config={derived.config}
               source={workingSourceOf(derived.input)}
-              colorSpace={derived.config?.colorSpace}
-              onColorSpace={(id) => {
-                // the profile is part of the stops document: editing it bakes first (as a
-                // stop edit would), then the document takes the profile
-                const w = useWorkingStore.getState();
-                if (w.input.kind !== 'stops') w.beginEdit();
-                const cur = usePaletteEditorStore.getState().config;
-                usePaletteEditorStore.getState().setConfig({ ...cur, colorSpace: id });
-              }}
+              // No colour profile here any more: Export ▸ Settings ▸ Output profile is gone (owner,
+              // 2026-09-24, 6c — every format writes sRGB; the row changed no file and baked the
+              // gradient when touched).
               onClose={() => setExportOpen(false)}
               positionClass="absolute right-2.5 top-[56px] z-40"
             />
@@ -801,7 +906,9 @@ export const GradientExplorerV2App: React.FC = () => {
           activeIds={groundSetIds}
           onSelect={setGroundSetId}
           onToggle={toggleGroundSetId}
-          onExportGround={() => setExportGround(true)}
+          // A toggle, like the hero's Export button (EW-04): the window's click-away ignores
+          // its opener, so a second click on the lit button closes it.
+          onExportGround={() => setExportGround((o) => !o)}
           groundExportCount={groundMembers.length}
           onImportInto={askImportInto}
           onImported={finishImport}
@@ -818,24 +925,28 @@ export const GradientExplorerV2App: React.FC = () => {
             // Deliberate: the SHARED set exports too. It is a public resource and taking a
             // copy of it is the point — stated here so it is a decision, not an accident.
             set={groundMembers}
+            // the hero's swatch count, so the set's swatch stepper starts where the hero is (EW-18)
+            palette={derived.palette.map((s) => s.color)}
             onClose={() => setExportGround(false)}
-            positionClass="absolute left-6 top-10 z-40"
+            // UNDER ITS OWN BUTTON (ASK-4, owner 2026-09-24): the rail's export icon is at the
+            // rail's right end, so the window hangs from the right, as the hero's hangs from its
+            // Export icon. With a hero on screen and a short room below the rail, the window
+            // lifts to the hero window's line instead (the band's top + that window's 56 px —
+            // grep `top-[56px]` above); with no hero (none yet, or folded) it stays put.
+            positionClass="absolute right-6 top-10 z-40"
+            liftTo={heroShown.current && !folded ? Math.round(heroWrapRef.current?.getBoundingClientRect().top ?? 0) + 56 : undefined}
           />
         )}
-        {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it. One line
-            above it only when it has something to say.
-            The nothing-picked line used to live here too, reading "Click a gradient to
-            preview it above · click it again to keep and edit it". It is gone: the hero it
-            pointed AT does not exist until the first pick (L8), so it named a place that
-            was not there, in the corner furthest from where the eye is. BrowseStage now
-            says it over the map instead (owner, 2026-09-09). */}
-        {armed && (
-          <div className="shrink-0 flex items-center gap-2 px-6 pt-2.5 text-[13px] bg-surface-raised">
-            <span className="text-gx-armed">{armed === 'B' ? 'Pick a gradient to mix with · Esc cancels' : 'Pick a gradient to replace this one · Esc cancels'}</span>
-          </div>
-        )}
+        {/* the ground is ALWAYS the wall (L3, Phase C) — the tray floats over it, and nothing
+            above it pushes it. Two lines used to: the nothing-picked line ("Click a gradient to
+            preview it above …" — the hero it pointed at does not exist until the first pick,
+            L8; BrowseStage says it over the map instead, owner 2026-09-09), and the ARMED line
+            ("Pick a gradient to mix with"), which the Mix face covered while it pushed the wall
+            down 30 px — it is a caption in the Mix face now (grep ARMED_CAPTION in ./Tray). */}
         <div className="flex-1 min-h-0 flex flex-col relative">
-          <BrowseStage heroFolded={folded} onFoldHero={fold} onNewGradient={startNewGradient} />
+          {/* The fold tool only once there is a hero to fold (L10): before the first pick it
+              flipped a pressed look over nothing. BrowseStage draws it only when handed this. */}
+          <BrowseStage heroFolded={folded} onFoldHero={heroShown.current ? fold : undefined} onNewGradient={startNewGradient} />
         </div>
       </div>
 
@@ -884,12 +995,15 @@ export const GradientExplorerV2App: React.FC = () => {
           moment the file drops or the drag leaves (`useImageDrop`'s 130 ms dragover timeout).
           Guard: `npm run smoke:ge-gradientfile` [h1] / [h2]. */}
       {fileOver && <DropScrim title="Drop to load" detail="Gradient files are imported · an image makes a gradient" data-gx-drop-hint="" />}
-      <SettingsHost />
+      {/* no Files ▸ Storage in GX (owner, 2026-09-24, 9b): it listed and cleared GMT's keys too */}
+      <SettingsHost storage={false} />
       {/* the Help browser (Getting Started / Keyboard Shortcuts, and the context menu's
           Help) and the Support modal — the Help menu's surfaces outside the menu itself */}
       <HelpOverlay />
       <FeedbackWindow />
-      <ToastHost />
+      {/* `toast` (3200), not the default shell tier: the Wallpaper overlay (2000) raises toasts
+          of its own — "Downloaded W×H", "Export failed" — and they were drawn under it (EW-01). */}
+      <ToastHost tier="toast" />
       <FullscreenGradientOverlay />
     </div>
     </MobileViewportShell>

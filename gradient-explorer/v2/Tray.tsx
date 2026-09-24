@@ -5,7 +5,7 @@
  * Mix · Image · Curves · Adjust · the stop inspector are five FACES of one thing: it hangs
  * from the card's bottom edge, inline with the gradient PANEL (its left edge follows the
  * panel's, so it never sits under the image column), floats OVER the wall (the wall and
- * the shelf never move — L6), one face open at a time, Esc closes it. The tab row that
+ * the shelf never move — L6), one face open at a time, Esc cancels it. The tab row that
  * opens the four named faces is the ramp's control row in `WorkingHero` (the editor's
  * `stripAside`); the inspector has no tab — selecting a stop opens it and clearing the
  * selection closes it.
@@ -14,8 +14,8 @@
  *   • Mix (owner, 2026-09-07) — band B as a bar (the wall / shelf pick fills it; opening Mix
  *     arms it — the shell does that, see `openTray`) beside a column of the three L / C / h
  *     sliders, plain horizontal, always shown, with a LINK switch (off) that moves all three
- *     together, and Swap. Band A is the hero ramp's top half. Leaving Mix bakes the result
- *     (the shell's `use`) and the sources are gone.
+ *     together, and Swap. Band A is the hero ramp's top half. Leaving Mix by a tab or a pick
+ *     bakes the result (the shell's `use`) and the sources are gone; Esc cancels it instead.
  *   • Image (C.6, 2026-09-07, second take) — the PICTURE is the hero's slot, not the tray:
  *     the tray holds the method chips, the Path tools and the method's dials on the left
  *     (under the slot) and the colour cloud on the right (`ExtractStage`; the tools and
@@ -50,6 +50,8 @@
  *   • the faces re-flow to one column: Mix's sliders go full width, Adjust's three bins
  *     stack, Curves puts its controls above the plot, and the Image face grows the picture
  *     (see `ExtractStage`).
+ * A DESK face has the same measured height cap since 2026-09-24 (L3), and scrolls inside it
+ * only when it is taller — see `deskScroll`.
  * `ChannelGraphEditor` collapses its keyframe inspector to a rail below 560 px on its own
  * (grep `width < 560` there), so Curves needs nothing passed for that.
  *
@@ -70,6 +72,7 @@ import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor'
 import Slider from '../../components/Slider';
 import { InputSkinProvider } from '../../components/inputs';
 import { MixBandB } from './SourceBands';
+import { useArmedSlot } from '../../palette/store/armedTarget';
 import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels, type GeneratorParams } from '../../palette/core/generatorPipeline';
 import { isIdentityAdjust } from '../../palette/core/workingPipeline';
 import { useWorkingStore, deriveWorkingNow, type WorkingDerived } from '../../palette/store/workingStore';
@@ -100,8 +103,13 @@ interface Props {
   imageToolsRef: (el: HTMLDivElement | null) => void;
   /** Left edge in the hero band's coordinates: the PANEL's left past its corner radius
    *  (owner, 2026-09-07: inline with the gradient panel, not under the image column). The
-   *  Image face ignores it and spans the full width — the one face that grows to a pane. */
+   *  Image face ignores it and grows from the card's left edge — the one face that grows to a
+   *  pane — no further right than `right`. */
   left: number;
+  /** Right edge, as an inset from the hero band's right: the ☰ menu's right edge, which ends the
+   *  control row the tray hangs from (HT-17 — before, a fixed 24 put it 3–11 px off both the ramp
+   *  and the ☰). Every desk face stops there; the Image face uses it as a cap, not a stretch. */
+  right?: number;
   /** PHONE (Phase F): span the shell, cap the height, scroll inside, one column per face. */
   phone?: boolean;
   /** PHONE: the picture, handed to the Image face (the hero has no image column there). */
@@ -129,32 +137,52 @@ export const FULL_FACES: ReadonlySet<Exclude<TrayFace, null>> = new Set(['image'
  *  over is still visibly there (which is the whole reason the tray floats). */
 const PHONE_MAX_FRACTION = 0.55;
 
-export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left, phone = false, imageSlot }) => {
+export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left, right = 24, phone = false, imageSlot }) => {
   // The cap is MEASURED from where the tray actually starts, not guessed as a `vh`: the
   // hero's height moves with the source (a split ramp, a Mix band), so a fraction of the
   // viewport would be a ceiling on the wrong number — the mistake `ExportMenu`'s `maxH`
   // records. Re-measured on resize and whenever the face changes (the face is what makes
   // the tray tall enough to care).
+  //
+  // DESK (L3, 2026-09-24): the same measured cap — the room below the tray's top less 8 px —
+  // and the face scrolls inside it ONLY when it is taller (`deskScroll`). The shell is
+  // `overflow-hidden`, so before this a face taller than the room (Adjust in two columns
+  // below ~1000 × 705) had its Apply / Cancel off the screen with no way to reach them. A face
+  // that fits keeps the `contents` wrapper, i.e. lays out exactly as it did.
   const rootRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [maxH, setMaxH] = useState<number>(0);
+  const [deskScroll, setDeskScroll] = useState(false);
   useEffect(() => {
-    if (!phone || face === null) return;
+    if (face === null) return;
     const measure = () => {
       const top = rootRef.current?.getBoundingClientRect().top ?? 0;
-      // Mix keeps the wall in view (its cap); every other face takes the whole room, since
-      // the wall under it is hidden by the shell while it is open (FULL_FACES).
       const room = window.innerHeight - top;
-      setMaxH(Math.max(160, Math.round(face !== null && FULL_FACES.has(face) ? room : room * PHONE_MAX_FRACTION)));
+      if (phone) {
+        // Mix keeps the wall in view (its cap); every other face takes the whole room, since
+        // the wall under it is hidden by the shell while it is open (FULL_FACES).
+        setMaxH(Math.max(160, Math.round(FULL_FACES.has(face) ? room : room * PHONE_MAX_FRACTION)));
+        return;
+      }
+      const cap = Math.max(160, Math.round(room - 8));
+      setMaxH(cap);
+      // The face's own height, whichever wrapper it is in: the children stack in both (as the
+      // root's flex items under `contents`, which do not shrink below their content, or as
+      // blocks in the scroller). +1 for the root's bottom border.
+      const kids = Array.from(wrapRef.current?.children ?? []) as HTMLElement[];
+      setDeskScroll(kids.reduce((h, k) => h + k.offsetHeight, 0) + 1 > cap);
     };
     measure();
     window.addEventListener('resize', measure);
     // The tray hangs from the hero band, and the band's height moves AFTER a face opens
     // (Curves shows the source band, Mix its bars): measured 2026-09-11, the Curves face
     // ran 17 px past the viewport because the cap was taken before the hero grew. So the
-    // band's own size is observed and the cap re-measured whenever it changes.
+    // band's own size is observed and the cap re-measured whenever it changes — and on a
+    // desk the face's own box too, since what decides the scroll there is its height.
     const band = rootRef.current?.parentElement ?? null;
     const ro = typeof ResizeObserver !== 'undefined' && band ? new ResizeObserver(measure) : null;
     if (ro && band) ro.observe(band);
+    if (ro && !phone) for (const k of Array.from(wrapRef.current?.children ?? [])) ro.observe(k);
     return () => { window.removeEventListener('resize', measure); ro?.disconnect(); };
   }, [phone, face]);
 
@@ -168,7 +196,15 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
     style={
       phone
         ? { top: `calc(100% - ${TUCK_PX}px)`, left: PHONE_INSET, right: PHONE_INSET, maxHeight: maxH || undefined, height: face !== null && FULL_FACES.has(face) ? maxH || undefined : undefined }
-        : { top: `calc(100% - ${TUCK_PX}px)`, left: face === 'image' ? 10 : left, right: face === 'image' ? 'auto' : 24 }
+        : {
+            top: `calc(100% - ${TUCK_PX}px)`,
+            left: face === 'image' ? 10 : left,
+            right: face === 'image' ? 'auto' : right,
+            // Image hugs its content from the card's left edge, but no further right than the
+            // other faces (L7): below ~910 px it ran off the window. Its dials give up the width.
+            maxWidth: face === 'image' ? `calc(100% - ${10 + right}px)` : undefined,
+            maxHeight: maxH || undefined,
+          }
     }
   >
     {/* THE SHADOW, and where it is allowed to fall (owner, 2026-09-10). The tray floats
@@ -194,8 +230,9 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
         visible` — the shadow above rides an element that reaches outside the box, and a
         face's dropdowns and the inspector's colour picker overflow it on purpose. On
         desktop this is `display: contents`, i.e. not a box at all, so the faces lay out
-        exactly as they did before it existed. */}
-    <div className={phone ? 'min-h-0 overflow-y-auto overflow-x-hidden mobile-scroll' : 'contents'}>
+        exactly as they did before it existed — unless the face is taller than the room
+        (`deskScroll`, L3), when it becomes the same scroller the phone has. */}
+    <div ref={wrapRef} className={phone ? 'min-h-0 overflow-y-auto overflow-x-hidden mobile-scroll' : deskScroll ? 'min-h-0 overflow-y-auto overflow-x-hidden' : 'contents'} data-gx-tray-scroll={!phone && deskScroll ? '' : undefined}>
       {/* every slider in a face wears the v2 'soft' skin (C.8) — one context, no per-face
           wiring; the studio keeps the default */}
       <InputSkinProvider skin="soft">
@@ -217,7 +254,21 @@ const MIX_CHANNELS: { param: 'mixL' | 'mixC' | 'mixH'; label: string }[] = [
   { param: 'mixH', label: 'Hue' },
 ];
 
+/**
+ * What the Mix face says while a bar is ARMED — the next pick fills it (L5 = HT-05). It lived
+ * on a row above the ground, where the face itself covered it (only "Pick a gr…" showed) and
+ * where it pushed the wall down 30 px each time Mix opened (L6: nothing pushes the ground). Here
+ * it sits over the bar the pick fills, and only while that is true (`smoke:ge-tray` reads it).
+ * "· Esc cancels" is true since the owner made Esc on a face its Cancel (2026-09-24, ASK-1; grep
+ * `escapeFace` in the shell) — the same words as SourceBands' armed title, the only other place.
+ */
+const ARMED_CAPTION: Record<'A' | 'B', string> = {
+  B: 'Pick a gradient to mix with · Esc cancels',
+  A: 'Pick a gradient to replace this one · Esc cancels',
+};
+
 const MixFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
+  const armed = useArmedSlot();
   const swap = useGeneratorStore((s) => s.swap);
   const [mixL, setL] = useGenParam<number>('mixL');
   const [mixC, setC] = useGenParam<number>('mixC');
@@ -236,8 +287,10 @@ const MixFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
     /* PHONE: the bar and the three sliders stack — 320 px of slider beside a bar needs a
        card this shell does not have at 390 (the two overlapped, measured Phase F). */
     <div className={`flex gap-4 px-4 py-3 ${phone ? 'flex-col' : 'items-stretch'}`}>
-      {/* the gradient you're mixing with — the bar the next pick fills */}
-      <div className="flex-1 min-w-0 flex flex-col justify-center">
+      {/* the gradient you're mixing with — the bar the next pick fills; while armed, the one
+          line saying so sits over it */}
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5">
+        {armed && <span className="text-[13px] text-gx-armed truncate" data-gx-armed-caption="">{ARMED_CAPTION[armed]}</span>}
         <MixBandB height={36} />
       </div>
       {/* the three channel blends, A (0) → B (1); Link moves them as one */}
@@ -246,7 +299,7 @@ const MixFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
           <Slider key={c.param} dense label={c.label} value={values[c.param]} min={0} max={1} step={0.01} defaultValue={0} onChange={(v) => change(c.param, v)} onDragStart={genEditStart} onDragEnd={genEditEnd} />
         ))}
         <div className="flex items-center gap-1.5 pt-1">
-          <Act active={linked} className={linked ? 'text-accent-300' : ''} onClick={() => setLinked((l) => !l)} title="Move the three sliders together">
+          <Act active={linked} onClick={() => setLinked((l) => !l)} title="Move the three sliders together">
             Link
           </Act>
           <Act onClick={swap} title="Swap the two gradients">
@@ -300,8 +353,9 @@ const ADJUST_GAP = 12;
  *   • CANCEL discards the dials (`resetAdjust` — all three bins, Frequency and Targets
  *     included), one undo step, the stops untouched.
  *   • Both are unavailable while the dials draw nothing (`isIdentityAdjust`).
- * Closing the face still bakes, as it did before and as every face does — so Apply is "bake
- * and keep going", and closing is "bake and leave".
+ * Closing the face from its tab still bakes, as every face does — so Apply is "bake and keep
+ * going", and a tab close is "bake and leave". Esc is this Cancel (owner, 2026-09-24; grep
+ * `escapeFace` in the shell).
  */
 const AdjustFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
   const bin = 'min-w-0 rounded-[10px] bg-surface-viewport px-3.5 py-3';
@@ -490,7 +544,13 @@ const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boo
       noun="axes"
       onSelect={(sp) => { setPreviewSpace(null); g.setCurveSpace(sp as CurveSpace, base); }}
       onPreview={(sp) => setPreviewSpace((sp as CurveSpace) ?? null)}
-      compact
+      // 10 px on a desk, the size of the hero's blend chooser (HT-10) — at 8 px the two read as
+      // the same control 49 px apart. The phone keeps it compact inside the track strip.
+      compact={phone}
+      // the quiet word "axes" before it, as the hero's row puts "blend" (owner, 5e), and a title
+      // that is not the blend chooser's
+      title="Curve axes"
+      showNoun
     />
   );
 

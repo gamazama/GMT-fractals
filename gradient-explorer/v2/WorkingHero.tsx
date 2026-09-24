@@ -97,6 +97,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, addStopsToWorking, workingSourceOf, type WorkingDerived } from '../../palette/store/workingStore';
 import { importedSourceOfWorking } from './contributeToGlobal';
+import { FROM_GMT_SOURCE } from './fromGmt';
 import { sameGradientBody } from '../../components/gradient/rampMode';
 import { isRampGradient, stopsOf } from '../../utils/gradientRamp';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
@@ -113,11 +114,26 @@ import { startPointerGradientDrag, cancelPointerGradientDrag } from '../../palet
  * attempt used a press-time zone and swallowed drags that were reaching for knots.
  */
 const MARQUEE_ESCAPE = 44;
+/**
+ * How long after a pick that put the hero on screen a press on the gradient is still that
+ * pick's second click (J01) — about the platform's double-click interval. The first pick mounts
+ * the hero (an unfold shows it again) and the wall drops ~240 px under the pointer, so a
+ * double-click on a tile, or the "click it again" Help teaches, lands its second press on the
+ * ramp — where a press inserts a knot, and a double-click selects every knot. Within this window
+ * the press does what a second click on the tile does (the keep, `beginEdit`) and nothing else
+ * (grep `onRevealPress` for which presses count).
+ */
+const REVEAL_DOUBLE_MS = 450;
+/** Working sources that are NOT a click on a tile — so the preview chip cannot say "click it
+ *  again" (HT-14). The strings are the ones the shell passes to `use` (grep `.use(` in
+ *  ./GradientExplorerV2App and ./fromGmt). */
+const NOT_A_PICK: ReadonlySet<string> = new Set(['New', 'Mix', 'Image', 'Shared link', FROM_GMT_SOURCE]);
 import { setDragOrigin } from '../../palette/store/dragVisual';
-import { useFavientsStore, favientSig, isRecentGroup } from '../../palette/store/favientsStore';
+import { useFavientsStore, favientSig, isRecentGroup, DEFAULT_GROUP } from '../../palette/store/favientsStore';
+import { KEPT_LABEL } from '../../palette/core/groundSets';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
 import { usePaletteEditorStore, editorEditStart, editorEditEnd, editorEdit } from '../../palette/store/paletteEditorStore';
-import { paramEdit } from '../../palette/store/paramUndoBracket';
+import { paramEdit, paramGroup } from '../../palette/store/paramUndoBracket';
 import { applyEditorChange } from '../../palette/core/editorConfig';
 import { GradientStrip } from '../../palette/components/GradientStrip';
 import { isColorDrag, readColorDrag, colorInFlight } from '../../components/gradient/colorDrag';
@@ -184,6 +200,10 @@ interface Props {
    *  editor keeps its state). The control lives with the wall's tools (BrowseStage), and a
    *  pick shows the band again. */
   folded: boolean;
+  /** When the last pick that put this hero ON SCREEN happened (`performance.now()`; the shell's
+   *  candidate effect writes it). A press on the gradient within `REVEAL_DOUBLE_MS` of it is the
+   *  second half of that click (J01) — see `onRevealPress`. */
+  revealAt?: React.MutableRefObject<number>;
   onShare: () => void;
   /** Close whatever covers the SET RAIL (a tray face, the Export windows), so a save can be
    *  seen landing there. The ♥ calls it inside its own undo bracket — @see ./uiHistory. */
@@ -198,11 +218,13 @@ interface Props {
   exportMenu?: React.ReactNode;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, onNewGradient, exportOpen, exportMenu, folded }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, onNewGradient, exportOpen, exportMenu, folded, revealAt }) => {
   const phone = useIsPhone();
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
   const favients = useFavientsStore((s) => s.favients);
+  const lastGroupId = useFavientsStore((s) => s.lastGroupId);
+  const groupLabels = useFavientsStore((s) => s.groupLabels);
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [rampRef, rampW] = useWidth();
   // the ramp ELEMENT too: useWidth's callback ref does not retain it, and projecting a drop
@@ -231,6 +253,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // effect with an empty dep list would run before the panel exists and never again (it
   // did — the 85 px default was right only by coincidence).
   const [panelLeft, setPanelLeft] = useState(85);
+  // …and its RIGHT edge is the ☰ menu's, where the control row it hangs from ends (HT-17): an
+  // inset from the band's right, measured with the left one. The panel's flat edge (its right
+  // less the corner radius) stands in before the row exists, mirroring the left rule.
+  const [panelRight, setPanelRight] = useState(24);
   // …and the panel's HEIGHT is the card's: the picture in the slot is sized from it (the slot
   // must never size the card — measuring the slot's own column fed back and crept: 302, 327…).
   const [panelH, setPanelH] = useState(200);
@@ -247,6 +273,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       const tabs = band.querySelector('[data-gx-tray-tabs]') as HTMLElement | null;
       const edge = tabs ? tabs.getBoundingClientRect().left : el.getBoundingClientRect().left + PANEL_RADIUS;
       setPanelLeft(Math.round(edge - band.getBoundingClientRect().left));
+      // The tabs' row ends with the editor's blend · ☰ group (its last child, right-aligned).
+      const menu = tabs?.parentElement?.lastElementChild as HTMLElement | null | undefined;
+      const rightEdge = menu && menu !== tabs ? menu.getBoundingClientRect().right : el.getBoundingClientRect().right - PANEL_RADIUS;
+      setPanelRight(Math.round(band.getBoundingClientRect().right - rightEdge));
       setPanelH(Math.round(el.getBoundingClientRect().height));
     };
     update();
@@ -307,6 +337,24 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selRestore]);
   const [scrubT, setScrubT] = useState<number | null>(null);
+  /** Whether the header may start a drag of the gradient, decided when the press lands (HT-01):
+   *  false for a press inside the name input. See the header row below. */
+  const [headerDrag, setHeaderDrag] = useState(true);
+  /** Until when the click / dblclick of a press taken as a reveal's second click are swallowed
+   *  too (J01; see the section's capture handlers). */
+  const swallowUntil = useRef(0);
+  /** The gradient's own body — the palette row and the ramp (J01's zone, see `onRevealPress`). */
+  const gradientBodyRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * RENAMING IS ONE EDIT (HT-06). While the name field has focus it edits a local DRAFT; the name
+   * is written once, on blur or Enter — one `setName`, one undo entry — instead of on every key
+   * (four entries for "Abcd"). An empty draft becomes the automatic name only then: written per
+   * keystroke, clearing the field refilled it at once, so a name could not be cleared and typed
+   * again. Esc puts the name back and leaves the field, and is marked handled
+   * (`preventDefault`) so the shell's Esc chain does not also close a face.
+   */
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const nameCancelled = useRef(false);
 
   // L8 — the hero never unmounts once it exists. An empty source (the Image tab with no
   // image, a Mix with nothing in it) used to return null and take the whole hero with it.
@@ -349,7 +397,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   const sourceH = mix ? mixSourceHeight() : SOURCE_BAND_H;
   // PHONE: an unsplit ramp is 44 rather than 60. Split heights are untouched — those bands
   // are already thin and a source you cannot read is worse than a tall card.
-  const resultH = split ? (mix ? MIX_RESULT_H : 42) : phone ? 44 : 60;
+  // The split result is what is LEFT of the 60: the source band and its 1 px divider (`mb-px`)
+  // come out of it, so splitting and merging the ramp never moves the wall (J13 — it was 42,
+  // and every face open or close nudged the wall by 1 px).
+  const resultH = split ? (mix ? MIX_RESULT_H : 60 - SOURCE_BAND_H - 1) : phone ? 44 : 60;
   const favOf = useMemo(() => {
     const c = derived.config ?? lastGood.current?.config;
     if (!c) return null;
@@ -358,6 +409,19 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
     // work), so it must not light the star.
     return favients.find((f) => !isRecentGroup(f.group) && favientSig(f.config) === sig) ?? null;
   }, [favients, config, derived.config]);
+  /**
+   * WHERE THE ♥ FILES, named on its title (owner, 2026-09-24: "Keep — save to {group}"). The group
+   * is the one `favientsStore.add()` will choose — the last group used, unless it has vanished or
+   * is Recent, else Kept (grep `Never land a deliberate user save in Recent` there; this mirrors
+   * that rule and must follow it if it changes) — labelled the way the set rail labels it
+   * (grep `KEPT_LABEL` in palette/core/groundSets). Read-only: the store is not touched.
+   */
+  const keepInto = useMemo((): string => {
+    const lg = lastGroupId;
+    const present = lg === DEFAULT_GROUP || !!groupLabels[lg] || favients.some((f) => (f.group ?? DEFAULT_GROUP) === lg);
+    const group = present && !isRecentGroup(lg) ? lg : DEFAULT_GROUP;
+    return groupLabels[group] ?? (group === DEFAULT_GROUP ? KEPT_LABEL : group);
+  }, [lastGroupId, groupLabels, favients]);
   const paletteHex = useMemo(() => derived.palette.map((s) => hexOf(s.color)), [derived.palette]);
   /** The swatch row as colours — what an export's SWATCHES subject takes (§8b item 5). */
   const paletteRgb = useMemo(() => derived.palette.map((s) => s.color), [derived.palette]);
@@ -390,6 +454,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
    * only when it CHANGED inside the bracket: the diff ran before a plain setState committed, so
    * the close was invisible to it. Since the interface became CONTEXT — captured when the bracket
    * opens and carried by every entry — the order inside the bracket does not matter.
+   *
+   * A LIVE SOURCE is committed first (J02): with the Mix or Image face open, `onRevealGround`
+   * leaves it the way a tab close does, so the live result becomes the working gradient and the
+   * ♥ files THAT — the gradient the hero shows afterwards, so the ♥ stays lit. The bracket is a
+   * `paramGroup` for that commit: the shell's `openTray` groups its own writes, and a group's end
+   * inside a plain `paramEdit` would close it before the save, leaving the save outside undo.
    */
   const toggleStar = () => {
     const st = useFavientsStore.getState();
@@ -397,17 +467,26 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       paramEdit(() => st.remove(favOf.id));
       return;
     }
+    const leavesSource = tray === 'mix' || tray === 'image';
     // The ♥ is a long way from the rail it files into, so the chip that takes the gradient
     // says so: it fills with the gradient and the fill collapses away, slower and with a
     // bloom because nothing else points at where this one went (owner, 2026-09-11).
-    paramEdit(() => {
+    paramGroup(() => {
       onRevealGround();
+      const now = useWorkingStore.getState().input;
+      const committed = leavesSource && now.kind === 'gradient' ? now : null;
+      const config = committed ? committed.config : shown.config;
       flashSaveWhereItLanded(
-        shown.config,
+        config,
         () => {
           useWorkingStore.getState().syncRecent();
           // The favourite keeps the catalogue origin when the gradient is still the one picked.
-          st.add(shown.config, derived.name, derived.input.kind === 'gradient' ? derived.input.source : 'Working', unmodifiedOrigin(derived.origin, shown.config) ?? undefined);
+          st.add(
+            config,
+            committed ? committed.name : derived.name,
+            committed ? committed.source : derived.input.kind === 'gradient' ? derived.input.source : 'Working',
+            unmodifiedOrigin(derived.origin, config) ?? undefined,
+          );
         },
         { slow: true },
       );
@@ -448,13 +527,16 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   // Bake and cancel are ONE mechanism, and the chip is it (C.3): a live face bakes when it
   // closes; clicking the chip cancels it instead — back to what was working before. An
   // edited bake's chip returns to its source the same way.
-  const liveName = source === 'build' ? 'Mix' : 'Image';
+  // From the INPUT, not the tray: a live input whose face is closed still names itself (J02).
+  const liveName = derived.input.kind === 'build' ? 'Mix' : 'Image';
   const stateChip = emptySource ? null : derived.live ? (
     <StateChip
       kind="live"
       variant="inline"
-      title={liveFrom ? `Cancel ${liveName}: go back to the gradient you had before it (closing the face keeps the result)` : undefined}
+      title={liveFrom ? `Cancel ${liveName} (or Esc): go back to the gradient you had before it` : undefined}
       onClick={liveFrom ? onCancelFace : undefined}
+      // the action words underline on hover (owner, 2026-09-24 — StateChip's `action`)
+      action={!phone && liveFrom ? 'cancel' : undefined}
       data-gx-state="live"
     >
       {/* PHONE: the chip STATES and the title EXPLAINS. " · cancel" is an affordance hint,
@@ -464,7 +546,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       {/* PHONE, later that day: the chip is the DOT alone — the fold's ▴ was half off-screen
           with the words in the row (owner). The colour still states, the title still explains,
           the tap still cancels. */}
-      {phone ? null : <>live from {liveName}{liveFrom ? ' · cancel' : ''}</>}
+      {phone ? null : <>live from {liveName}</>}
     </StateChip>
   ) : derived.edited ? (
     <StateChip
@@ -472,13 +554,91 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       variant="inline"
       title={bakedFrom ? 'Undo the bake and go back to the source that produced this gradient' : 'Edited stops'}
       onClick={bakedFrom ? () => useWorkingStore.getState().returnToSource() : undefined}
+      action={!phone && bakedFrom ? 'return to source' : undefined}
       data-gx-state="edited"
     >
-      {phone ? null : <>editing{bakedFrom ? ' · return to source' : ''}</>}
+      {phone ? null : 'editing'}
     </StateChip>
   ) : (
-    <StateChip kind="picked" variant="inline" title="A preview: click the same gradient again, or edit a stop, to keep it" data-gx-state="preview">{phone ? null : 'preview'}</StateChip>
+    // Titled by where it came from (HT-14): only a wall or shelf pick has a tile to click again.
+    // "Start editing", not "keep" — the ♥ beside it is Keep (save to My Gradients).
+    <StateChip
+      kind="picked"
+      variant="inline"
+      title={derived.input.kind === 'gradient' && NOT_A_PICK.has(derived.input.source) ? 'Change a stop to start editing it' : 'A preview — click it again on the wall, or change a stop, to start editing it'}
+      data-gx-state="preview"
+    >
+      {phone ? null : 'preview'}
+    </StateChip>
   );
+
+  /**
+   * THE REVEAL'S SECOND CLICK (J01). A press ON THE GRADIENT within REVEAL_DOUBLE_MS of the pick
+   * that put the hero on screen is taken as that pick's second click: it keeps the gradient (the
+   * keep a second click on the tile makes — `beginEdit`) and reaches nothing under it, so no knot
+   * is inserted and no stop selected. "On the gradient" is the body (`gradientBodyRef`: the palette
+   * row and the ramp — source band, bar, knot track), where a press edits; NOT the header, the
+   * tab row under the bar or the tray, which are controls of their own and act as clicked (a
+   * smoke, or a quick hand, reaching for the Image tab right after a pick must get the tab). Its
+   * click and dblclick are swallowed too, because the bar's own double-click selects every knot.
+   * One press per reveal: the window is spent by the first press it takes. Capture phase, so it
+   * lands before the knot track's and the swatches' own pointerdown.
+   */
+  const onRevealPress = (e: React.PointerEvent) => {
+    if (!revealAt || performance.now() - revealAt.current >= REVEAL_DOUBLE_MS) return;
+    const target = e.target as Node;
+    const body = gradientBodyRef.current;
+    if (!body || !body.contains(target)) return;
+    // the editor's tab row (the tabs, the blend chooser, the ☰) sits inside the body, under the bar
+    const tabRow = body.querySelector('[data-gx-tray-tabs]')?.parentElement;
+    if (tabRow && tabRow.contains(target)) return;
+    revealAt.current = 0;
+    swallowUntil.current = performance.now() + REVEAL_DOUBLE_MS;
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.button !== 0) return;
+    const w = useWorkingStore.getState();
+    if (w.input.kind === 'gradient') w.beginEdit();
+  };
+  const onRevealClick = (e: React.MouseEvent) => {
+    if (performance.now() >= swallowUntil.current) return;
+    if (e.type === 'dblclick') swallowUntil.current = 0;
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
+  /** Both name fields (phone and desk) — see `nameDraft` above. */
+  const nameValue = nameDraft ?? derived.name;
+  const nameField = {
+    value: nameValue,
+    onFocus: () => {
+      nameCancelled.current = false;
+      setNameDraft(derived.name);
+    },
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNameDraft(e.target.value),
+    onBlur: (e: React.FocusEvent<HTMLInputElement>) => {
+      const text = e.currentTarget.value;
+      setNameDraft(null);
+      if (nameCancelled.current) {
+        nameCancelled.current = false;
+        return;
+      }
+      if (text !== derived.name) useWorkingStore.getState().setName(text);
+    },
+    onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.currentTarget.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        nameCancelled.current = true;
+        e.currentTarget.blur();
+      }
+    },
+  };
+  /** A 1 px underline while the field is being edited (HT-13) — a text field matches
+   *  `:focus-visible` whenever it has focus. Nothing at rest and nothing on hover. */
+  const nameFocus = 'focus-visible:shadow-[inset_0_-1px_0_rgb(var(--line)/0.3)]';
 
   // What the EMPTY source band says (L8): the source is selected but has nothing in it.
   const emptyText =
@@ -498,6 +658,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       hidden={folded}
       data-gx-hero
       data-gx-selectable
+      onPointerDownCapture={onRevealPress}
+      onClickCapture={onRevealClick}
+      onDoubleClickCapture={onRevealClick}
     >
       {/* the CARD — radius 20 (same as the panel, owner 2026-09-07), one object, inset 10 px in the band, and the PANEL flush with the card's top / right / bottom (owner,
           2026-09-07); the 24 px gutter is 10 (band) + 1 (card border) + 13 */}
@@ -550,12 +713,21 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               the same on every bar — before this the only way to file what you were working
               on was ★ (which puts it in Kept) and then dragging the tile. The RAMP cannot
               be the handle here: it is the stops editor, and a drag on it moves a knot.
-              A drag begun inside the name input is left alone so selecting its text still
-              works, and an empty source has nothing to hand over. */}
+              A press inside the name input turns the header's `draggable` OFF for that press
+              (`headerDrag`, decided on pointerdown, before the browser's drag threshold), so
+              sweeping across the name selects its text. Returning early from `onDragStart`
+              alone did not do it: the browser's drag had already begun, and it dropped a
+              second copy of the name into the field (HT-01). The early return stays as a
+              belt. An empty source has nothing to hand over. */}
           <div
             className={`flex items-center gap-1.5 h-[42px] bg-surface-raised ${phone ? 'px-3' : 'px-4'}`}
-            draggable={!emptySource}
+            draggable={!emptySource && headerDrag}
             title={emptySource ? undefined : 'Drag onto a set below to file this gradient'}
+            data-gx-hero-header=""
+            onPointerDownCapture={(e) => setHeaderDrag(!(e.target as HTMLElement | null)?.closest('input'))}
+            onPointerUp={() => setHeaderDrag(true)}
+            onPointerCancel={() => setHeaderDrag(true)}
+            onDragEnd={() => setHeaderDrag(true)}
             onDragStart={(e) => {
               if (emptySource || !shown) return;
               if ((e.target as HTMLElement | null)?.closest('input')) return;
@@ -565,7 +737,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               const payload = { config: shown.config, name: derived.name, ...(importedSource ? { source: importedSource } : {}) };
               setFavientDrag(e.dataTransfer, payload);
               beginCustomAvatarDrag(e.dataTransfer); // register the drag + suppress the native image
-              setDragOrigin(e.currentTarget.getBoundingClientRect()); // the avatar morphs out of the header
+              setDragOrigin(e.currentTarget.getBoundingClientRect()); // recorded, but nothing reads it: the v2 avatar starts at the cursor (no morph)
             }}
           >
             {/* PHONE: the DOOR to the picture, first in the row — the image is a SOURCE, and
@@ -591,20 +763,18 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 /* `min-w-[56px]`: `min-w-0` alone let the row's fixed parts squeeze the name
                    out of existence entirely, which is worse than a clipped one. 56 is about
                    four characters at 18 px semibold — enough to tell two gradients apart. */
-                className="flex-1 min-w-[56px] bg-transparent border-0 outline-none text-fg text-[18px] font-semibold text-ellipsis"
-                value={derived.name}
-                onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
+                className={`flex-1 min-w-[56px] bg-transparent border-0 outline-none text-fg text-[18px] font-semibold text-ellipsis ${nameFocus}`}
+                {...nameField}
                 title="Name"
                 aria-label="Name"
               />
             ) : (
             <span className="inline-grid min-w-[40px] max-w-[60%] text-[18px] font-semibold">
-              <span className="invisible col-start-1 row-start-1 whitespace-pre pr-0.5" aria-hidden>{derived.name || ' '}</span>
+              <span className="invisible col-start-1 row-start-1 whitespace-pre pr-0.5" aria-hidden>{nameValue || ' '}</span>
               <input
                 size={1}
-                className="col-start-1 row-start-1 w-full min-w-0 bg-transparent border-0 outline-none text-fg"
-                value={derived.name}
-                onChange={(e) => useWorkingStore.getState().setName(e.target.value)}
+                className={`col-start-1 row-start-1 w-full min-w-0 bg-transparent border-0 outline-none text-fg ${nameFocus}`}
+                {...nameField}
                 title="Name"
               />
             </span>
@@ -634,7 +804,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
             {/* PHONE: 4 px gaps rather than 6 — 6 px reclaimed across the cluster, which is
                 6 px the name keeps. The 26 px targets themselves are untouched. */}
             <div className={`flex items-center shrink-0 ${phone ? 'gap-1' : 'gap-1.5'}`}>
-              <Act icon active={!!favOf} className={favOf ? 'text-warn' : ''} onClick={toggleStar} title={favOf ? 'Saved in My Gradients — click to remove' : 'Keep — save to My Gradients'}>
+              <Act icon active={!!favOf} className={favOf ? 'text-warn' : ''} onClick={toggleStar} title={favOf ? 'Saved in My Gradients — click to remove' : `Keep — save to ${keepInto}`}>
                 <Icon name="heart" size={15} />
               </Act>
               <Act icon onClick={onShare} title="Share — copy a link that opens this gradient">
@@ -677,6 +847,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               Refused while the source is EMPTY: the ramp is then the last gradient shown
               but not editable (L8), so a ghost promising a landing would be lying. */}
           <div
+            ref={gradientBodyRef}
+            data-gx-hero-body=""
             /* PHONE: 4 px off the top and 2 off the bottom of the panel's body — part of the
                ~65 px the card had to give up to come in under the phase's 220 px ceiling. */
             className={`px-4 flex flex-col relative ${phone ? 'pt-3 pb-1' : 'pt-4 pb-2'}`}
@@ -777,7 +949,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                   {split && (
                     <div className={`relative group/src ${gesture ? 'cursor-pointer' : ''} ${mix ? '' : 'mb-px'}`} style={{ minHeight: sourceH }} data-gx-source-half={gesture ? 'cancel' : undefined}>
                       <SourceBands derived={derived} onKeepSource={gesture ? onCancelFace : undefined} />
-                      {gesture && <HalfHint className="group-hover/src:opacity-100">Keep the source · cancel</HalfHint>}
+                      {gesture && <HalfHint className="group-hover/src:opacity-100">Cancel</HalfHint>}
                     </div>
                   )}
                   {/* the editor and everything it portals (the stop inspector's colour picker) speak
@@ -815,8 +987,8 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       // gradient, at full authored precision rather than 256 texels.
                       previewRamp={derived.passthrough ? undefined : derived.ramp ?? undefined}
                       onStripClick={gesture ? onBake : undefined}
-                      stripTitle={gesture ? 'Keep this result — bake it into the stops (the face closes)' : undefined}
-                      stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Keep this result · bake</HalfHint> : undefined}
+                      stripTitle={gesture ? 'Apply — bake it into the stops (the face closes)' : undefined}
+                      stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Apply</HalfHint> : undefined}
                       stripAside={
                         /* the TRAY'S TAB ROW (Phase C, restyled C.13 — owner 2026-09-07 evening): ONE
                            segmented control in the Even / Perceptual / Stops style; the open face's
@@ -839,12 +1011,16 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                               <button
                                 key={t.face}
                                 type="button"
-                                /* PHONE: 8 px of side padding, not 10. The editor's own row
+                                /* PHONE: 6 px of side padding, not 10. The editor's own row
                                    holds this pill and the blend / output / menu group, and at
                                    390 the two came to 338 in a 320 px line — so they WRAPPED,
-                                   and the wrap cost the card 30 px of height. 4 tabs × 4 px is
-                                   what puts them back on one line. */
-                                className={`relative h-7 text-[13px] ${phone ? 'px-2' : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                                   and the wrap cost the card 30 px of height. 4 tabs × 4 px put
+                                   them back on one line at 390; 4 × 4 more (L1, 2026-09-24) do
+                                   it at 375 (measured: 243 → 215 px). 360 needs ~12 px more,
+                                   which is the editor row's own padding and gaps to give.
+                                   `transition-colors` (J12): the tabs ease like every other
+                                   pressable in the shell instead of snapping. */
+                                className={`relative h-7 text-[13px] transition-colors ${phone ? 'px-1.5' : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
                                 onClick={() => onTray(t.face)}
                                 title={t.title}
                                 data-gx-tray-tab={t.face}
@@ -895,6 +1071,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         imageCloudRef={setImageCloudEl}
         imageToolsRef={setImageToolsEl}
         left={panelLeft}
+        right={panelRight}
         phone={phone}
         imageSlot={
           phone ? (
@@ -959,7 +1136,9 @@ const ExportButton: React.FC<{ open: boolean; onOpen: () => void; ramp: RGB[]; n
   const show = hover && !open && recents.length > 0 && pos;
   return (
     <div ref={btn} className="flex" onPointerEnter={enter} onPointerLeave={leave}>
-      <Act icon active={open} onClick={onOpen} title="Export — copy or download this gradient in a file format">
+      {/* `data-gx-export-opener`: the window's click-away ignores a press here, so the lit
+          button closes its own window instead of closing and reopening it (EW-04). */}
+      <Act icon active={open} onClick={onOpen} title="Export — copy or download this gradient in a file format" data-gx-export-opener="">
         <Icon name="download" size={15} />
       </Act>
       {show && (

@@ -1,7 +1,7 @@
 /**
  * smoke-ge-tray — the v2 TRAY contract (Phase C, plans/ge-v2-unified-shell-plan.md §4;
  * plans/ge-v2-figma/trays-spec.md §1): ONE surface under the hero card, one face at a time,
- * floating over the wall, Esc closes.
+ * floating over the wall, Esc closes (and since 2026-09-24 CANCELS the face — ASK-1).
  *
  *   [1] pick a tile — the hero exists, no tray is open, the wall sits at y0
  *   [2] Adjust — the tray opens on the Adjust face, hangs from the card's bottom edge INLINE
@@ -12,10 +12,13 @@
  *       is the ramp's top half and the gradient you mix with is a bar in the tray (owner,
  *       2026-09-07, no A / B language); a second wall click fills that bar and the Mix
  *       face stays open
- *   [5] Esc — the tray closes, the slot disarms, the hero is still there and the wall still
- *       has not moved; the bake RESET the leftover Adjust value set before [4] (it would
- *       apply again on every pass otherwise), and a second Mix on / off leaves every stop
- *       exactly where it was (the seeded fit + the half-texel step edge)
+ *   [5] Esc CANCELS Mix (owner, 2026-09-24 — ASK-1; it baked until then) — the tray closes, the
+ *       slot disarms, the hero is still there, the wall has not moved, the input is no longer
+ *       live and the gradient is the one from before Mix, the leftover Adjust value set before [4]
+ *       with it. Then the TAB close, which still bakes: Mix on / off from its tab folds that
+ *       leftover in ONCE and RESETS it (it would apply again on every pass otherwise), and a
+ *       second Mix on / off leaves every stop exactly where it was (the seeded fit + the
+ *       half-texel step edge)
  *   [7] C.3 — closing Adjust with a dial turned BAKES it (dial reset, chip "editing · return
  *       to source"); the chip click cancels the bake (the dial is live again)
  *   [8] C.3 — the "live from Mix · cancel" chip closes Mix without baking; the gradient from
@@ -70,7 +73,11 @@
  * why [6] also asserts the picker is gone. Dropping `{ bakes: true }` from the shell's
  * leave-Mix `use` → [5] red (first on "the wall moved (383 → 384)": the un-reset Adjust
  * re-opens the 1 px labelled source band and the hero grows, before the phase check itself
- * fires). Wants `npm run dev` on port 3400.
+ * fires). Since 2026-09-24 (J13) the split ramp totals the unsplit 60 px, so that break no
+ * longer moves the wall: expect it red on the phase check ("left Adjust set") instead — not
+ * re-falsified yet. [5]'s Esc half falsified 2026-09-24 by the shell's Esc going back to the
+ * bake (`openTray(null)` for `escapeFace`): red "[5] Escape did not put back the gradient from
+ * before Mix — it baked the mix"; reverted. Wants `npm run dev` on port 3400.
  *
  * Run: `npm run smoke:ge-tray`.
  */
@@ -177,6 +184,9 @@ async function main() {
   // Falsified by dropping the SLOT_MOD_DEFAULTS reset from enterMix: red on "entering Mix left
   // a slot modifier set (aHueRotate 45)".
   await page.evaluate(() => (window as any).__store.getState().setPaletteGenerator({ phase: 0.02, aHueRotate: 45, bMirror: true }));
+  // what Esc must give back in [5]: the gradient as it is before Mix (the leftover Phase in it)
+  const mixState = () => page.evaluate(() => { const w = (window as any).__gxWorking(); return { kind: w.input.kind as string, stops: JSON.stringify(w.config?.stops ?? []), phase: (window as any).__store.getState().paletteGenerator.phase as number }; });
+  const preMix = await mixState();
   await page.click('[data-gx-tray-tab="mix"]');
   await page.waitForTimeout(400);
   s = await state(page);
@@ -190,10 +200,11 @@ async function main() {
   // the tray overlays the wall's first rows: pick a tile CLEAR of it (measured, not assumed —
   // the Mix face's height moves with its design)
   const trayBottom = await page.evaluate(() => document.querySelector('[data-gx-tray-root]')!.getBoundingClientRect().bottom);
-  // Re-measure NOW: opening Mix adds the armed hint line above the ground, which pushes the
-  // wall down (and since Phase D the set rail and the taller header sit above it too), so a
-  // point computed from [1]'s box lands in the wall's header rather than on a tile. Take the
-  // first canvas that is clear of the tray.
+  // Re-measure NOW rather than trust [1]'s box: since Phase D the set rail and the taller
+  // header sit above the wall, so a point computed from an older box can land in the wall's
+  // header rather than on a tile. (The armed line no longer pushes the wall: since 2026-09-24
+  // it is a caption inside the Mix face, HT-05 / L5.) Take the first canvas that is clear of
+  // the tray.
   const cvs = page.locator('[data-gx-keepselect] canvas');
   let target = (await cvs.first().boundingBox())!;
   if (target.y + 10 < trayBottom + 8) target = (await cvs.nth(1).boundingBox())!;
@@ -213,14 +224,26 @@ async function main() {
   if (s.armedHint) fail('[5] Escape closed Mix but left the pick armed');
   if (!s.hero) fail('[5] the hero unmounted');
   if (s.wallY !== wallY0) fail(`[5] the wall moved (${wallY0} → ${s.wallY})`);
+  // Esc is Mix's CANCEL: back to what was there before the face opened, leftover Phase included
+  const escaped = await mixState();
+  if (escaped.kind === 'build') fail('[5] Escape closed Mix but left it live');
+  if (escaped.stops !== preMix.stops) fail('[5] Escape did not put back the gradient from before Mix — it baked the mix');
+  if (Math.abs(escaped.phase - preMix.phase) > 1e-9) fail(`[5] Escape did not give back the Adjust value from before Mix (phase ${preMix.phase} → ${escaped.phase})`);
+  // …and the TAB close still bakes: Mix on / off from its tab folds the leftover Phase in once
+  // and resets it
+  await page.click('[data-gx-tray-tab="mix"]');
+  await page.waitForTimeout(400);
+  await page.click('[data-gx-tray-tab="mix"]');
+  await page.waitForTimeout(400);
+  if ((await state(page)).face) fail(`[5] a second click on the Mix tab did not close it (${(await state(page)).face})`);
   const phase = await page.evaluate(() => (window as any).__store.getState().paletteGenerator.phase);
-  if (phase !== 0) fail(`[5] leaving Mix baked the result but left Adjust set (phase ${phase}) — it would apply again next pass`);
+  if (phase !== 0) fail(`[5] leaving Mix by its tab baked the result but left Adjust set (phase ${phase}) — it would apply again next pass`);
   const knotsA = await page.evaluate(() => Array.from(document.querySelector('[title="Double-click to select all"]')!.nextElementSibling!.children).map((k) => (k as HTMLElement).style.left).join(' '));
   // the baked gradient, for reproducing a drift offline (debug/scratch/mix-drift.json)
   const bakedJson = await page.evaluate(() => JSON.stringify({ name: (document.querySelector('[data-gx-hero] input') as HTMLInputElement).value, working: (window as any).__store ? null : null, ...((window as any).__gxWorking?.() ?? {}) }));
   await page.click('[data-gx-tray-tab="mix"]');
   await page.waitForTimeout(400);
-  await page.keyboard.press('Escape');
+  await page.click('[data-gx-tray-tab="mix"]'); // the tab close — the bake this checks for drift
   await page.waitForTimeout(400);
   const knotsB = await page.evaluate(() => Array.from(document.querySelector('[title="Double-click to select all"]')!.nextElementSibling!.children).map((k) => (k as HTMLElement).style.left).join(' '));
   if (knotsA !== knotsB) {
@@ -231,7 +254,7 @@ async function main() {
   if (knotsA !== knotsB) fail(`[5] a second Mix on/off moved the stops:
     ${knotsA}
     ${knotsB}`);
-  console.log('✓ [5] Escape closes the tray, disarms, resets Adjust; the wall never moved; a second toggle leaves the stops exactly');
+  console.log('✓ [5] Escape cancels Mix (the gradient and the Adjust value from before it, disarmed, the wall unmoved); the tab close bakes and resets Adjust; a second toggle leaves the stops exactly');
 
   const swatch = page.locator('[data-gx-hero] [class*="cursor-ew-resize"]').first();
   await swatch.click();
@@ -383,7 +406,7 @@ async function main() {
   // dashed rings, so a same-tick query sees the DOM as it was.
   const started = await page.evaluate(() => {
     const root = document.querySelector('[data-gx-picker-skin]');
-    const track = document.querySelector('[data-gx-hero] [title="Click & drag to add/move knot"]') as HTMLElement | null;
+    const track = document.querySelector('[data-gx-hero] [data-gx-knot-track]:not([data-gx-ramp-mode]):not([data-gx-knots-stale])') as HTMLElement | null;
     if (!root || !track) return { err: 'no picker or no knot track' };
     const chips = Array.from(root.querySelectorAll('button[title^="#"]')) as HTMLElement[];
     if (!chips.length) return { err: 'the picker has no colour chips to drag' };
@@ -421,7 +444,7 @@ async function main() {
   });
   await page.waitForTimeout(500);
   const landed = await page.evaluate((hex: string) => {
-    const track = document.querySelector('[data-gx-hero] [title="Click & drag to add/move knot"]')!;
+    const track = document.querySelector('[data-gx-hero] [data-gx-knot-track]:not([data-gx-ramp-mode]):not([data-gx-knots-stale])')!;
     return {
       count: track.querySelectorAll('[class*="cursor-grab"]').length,
       carries: Array.from(track.querySelectorAll('svg path')).some((n) => (n.getAttribute('fill') ?? '').toUpperCase() === hex),
@@ -731,7 +754,7 @@ async function main() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
   }
-  const heroKnots = () => page.evaluate(() => document.querySelector('[data-gx-hero] [title="Click & drag to add/move knot"]')?.querySelectorAll('[class*="cursor-grab"]').length ?? -1);
+  const heroKnots = () => page.evaluate(() => document.querySelector('[data-gx-hero] [data-gx-knot-track]:not([data-gx-ramp-mode]):not([data-gx-knots-stale])')?.querySelectorAll('[class*="cursor-grab"]').length ?? -1);
   await page.locator('[data-gx-hero] [class*="cursor-ew-resize"]').first().click();
   await page.waitForTimeout(500);
   if ((await state(page)).face !== 'inspector') fail(`[16] setup: a swatch click did not select a stop (${(await state(page)).face})`);

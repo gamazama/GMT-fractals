@@ -12,7 +12,7 @@
  * (`ReduceStopsPopup`) names `steps` and the editor pulls results from `reduce` ONE PER MACROTASK,
  * so a gradient of a hundred stops fills the popup in over a few frames instead of freezing one.
  * Apply emits the chosen result through the editor's own `editAction` + `emitChange` — the same
- * one undo step Invert or Double Knots is, on whatever history the host brackets.
+ * one undo step Invert or Double Stops is, on whatever history the host brackets.
  *
  * Contract for a reducer: called with a STOP gradient of three or more stops only (the menu
  * gates ramps and two-stop gradients before it gets here). `reduce` yields one result per entry
