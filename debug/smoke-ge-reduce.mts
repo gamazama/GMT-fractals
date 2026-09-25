@@ -28,7 +28,8 @@
  *       box stays unticked when the popup opens again AND in a new page (remembered), and ticks back
  *   [8b] the same on an already-EDITED gradient (Light applied, then Strong: one Ctrl+Z lands
  *       exactly on the Light result) — the case a missing bracket cannot hide behind the bake
- *   [9] a 256-colour RAMP gradient: the menu item is there, disabled, and its title says why
+ *   [9] a 256-colour RAMP gradient: the menu item is there and ASKS to add stops (2026-09-25 — it was
+ *       disabled with a reason until then); declining changes nothing and opens no popup
  *   [10] a PHONE (Pixel 5): taps reach the item, the popup sits inside the 390 px viewport, a tap
  *       on an amount previews it (nothing hovers there), Apply reduces
  *   [11] Spectral, desktop vs phone: blue → yellow MIXED like paint (green in the middle), handed
@@ -53,7 +54,9 @@
  *   the popup not passing `onPreview` to Segmented          → [3] "hovering light shows "16 stops"".
  *   real knots kept on the track during a preview           → [3] "12 preview knots and 16 real ones".
  *   gradientActions' ramp reason dropped                    → [9] the title check (the item stays
- *     disabled through the two-stop reason: a ramp has no knots).
+ *     disabled through the two-stop reason: a ramp has no knots). [9] was rewritten 2026-09-25 when
+ *     a ramp's item began to ask instead; that break now belongs to `test:gradient-rampmode`, and
+ *     [9] reds on `gradientActions`' `offer` never being set ("greyed out on a ramp").
  *   the popup anchored above the knot track                 → [2] "covers the bar it previews". GE v2's
  *     ☰ sits below the bar, so only a break reds it here; app-gmt's full-chrome ☰ sits ABOVE the
  *     strip and is where the anchor rule matters. That case has no committed guard (no smoke opens
@@ -392,16 +395,22 @@ async function desktop(browser: import('playwright').Browser) {
   if ((page as any).__errors.length) fail(`page errors: ${(page as any).__errors.join(' | ')}`);
   await page.close();
 
-  // [9] a ramp gradient
+  // [9] a ramp gradient: the item is there and ASKS to add stops (owner, 2026-09-25: "instead of
+  // disabling — perhaps they can just come up with a prompt to add stops if there are none"; it was
+  // disabled with its reason as a title until then). Declining changes nothing and opens no popup.
   const rp = await boot(ctx, rampCfg, 'Reduce ramp');
   await rp.click(MENU);
   const item = rp.locator(ITEM);
   await item.waitFor({ state: 'visible', timeout: 4000 }).catch(() => fail('[9] a ramp gradient\'s menu has no "Reduce Stops…" item'));
-  if (!(await item.isDisabled())) fail('[9] "Reduce Stops…" is enabled on a ramp gradient');
-  const why = await item.getAttribute('title');
-  if (!/ramp/i.test(why ?? '') || !/Add Stops/.test(why ?? '')) fail(`[9] the disabled item's title does not say why: "${why}"`);
-  if (await count(rp, '[data-gx-hero] [data-gx-stop-count]')) fail('[9] a ramp shows a stop count');
-  ok(`[9] a ramp: the item is disabled — "${why}"`);
+  if (await item.isDisabled()) fail('[9] "Reduce Stops…" is greyed out on a ramp gradient — it should ask to add stops');
+  let asked = '';
+  rp.once('dialog', (d) => { asked = d.message(); void d.dismiss(); });
+  await item.click();
+  await rp.waitForTimeout(400);
+  if (!asked) fail('[9] "Reduce Stops…" on a ramp did not ask to add stops');
+  if (await count(rp, POPUP)) fail('[9] declining opened the Reduce popup anyway');
+  if (await count(rp, '[data-gx-hero] [data-gx-stop-count]')) fail('[9] declining still gave the ramp stops');
+  ok(`[9] a ramp: the item asks ("${asked}"), and declining changes nothing`);
   await rp.close();
 
   // [11] desktop half: a paint mix handed over in RGB comes back in Spectral

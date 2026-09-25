@@ -8,10 +8,11 @@
  *
  *   [1] boot the v2 shell — no hero before the first pick (L9: the screen grows)
  *   [2] click a tile on the wall — the hero appears, with a ramp
- *   [3] click Image with NO image — Image ASKS for one first (owner, 2026-09-07: "image needs
- *       to request an image before it is active, otherwise it stays off"): the file dialog
- *       opens, the source does NOT switch, the hero and its ramp are untouched (L8's
- *       empty-source band is now reachable only by a drop that fails to decode)
+ *   [3] with NO image there is no Image tab (owner, 2026-09-25: it appears only with a picture
+ *       loaded); the empty picture slot ASKS for one (owner, 2026-09-07: "image needs to request
+ *       an image before it is active, otherwise it stays off"): the file dialog opens, the source
+ *       does NOT switch, the hero and its ramp are untouched (L8's empty-source band is now
+ *       reachable only by a drop that fails to decode)
  *   [4] Escape — the hero is still there
  *   [5] the EXPORT window's two subjects (§8b item 5, 2026-09-09): Ramp + Swatches,
  *       opening on Ramp, and Swatches narrowing the offer to the formats that have a
@@ -316,19 +317,21 @@ async function main() {
   if (s.gradientPixels === 0) fail('[2] the hero has no painted ramp after a wall click');
   console.log(`✓ [2] the hero appeared on the first pick (ramp ${s.gradientPixels}px of canvas)`);
 
-  // [3] Image with nothing loaded asks for an image and changes nothing else
+  // [3] With nothing loaded there is no Image TAB (owner, 2026-09-25: it appears only once a
+  //     picture is in); the picture SLOT asks for an image and changes nothing else
   const before = await heroState(page);
+  if (await page.$('[data-gx-tray-tab="image"]')) fail('[3] the Image tab shows with no image loaded');
   const chooser = page.waitForEvent('filechooser', { timeout: 3000 }).catch(() => null);
-  await page.click('[data-gx-tray-tab="image"]');
+  await page.click('[data-gx-hero] [data-gx-image-slot="empty"]');
   const fc = await chooser;
-  if (!fc) fail('[3] clicking Image with no image did not open the file dialog');
+  if (!fc) fail('[3] clicking the empty picture slot did not open the file dialog');
   await page.waitForTimeout(500);
   s = await heroState(page);
   if (!s.present) fail('[3] the hero unmounted when Image asked for an image (L8)');
   if (s.gradientPixels === 0) fail('[3] the ramp went blank while Image asked for an image');
   if (s.text !== before.text) fail(`[3] the hero changed while Image only asked for an image:\n    ${before.text}\n    ${s.text}`);
   if (/live from Image|drop one on the slot/i.test(s.text)) fail('[3] the source switched to Image without an image');
-  console.log('✓ [3] Image with no image asks for one and leaves the hero alone');
+  console.log('✓ [3] no Image tab without an image; the empty slot asks for one and leaves the hero alone');
 
   // [4] Escape (the shell's Esc chain) leaves the hero alone
   await page.keyboard.press('Escape');

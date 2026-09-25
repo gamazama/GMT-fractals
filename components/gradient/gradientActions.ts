@@ -59,6 +59,20 @@ export interface GradientMenuContext {
   reduceStops?: () => void;
   /** Why Reduce Stops… cannot run right now, when the editor knows a reason the menu cannot see. */
   reduceStopsBlocked?: string;
+  /** A host tool holds the strip (the editor's `stripTakeover` — GE v2's Paint face): the actions
+   *  that rewrite the stops under it are unavailable, and say so. Add Stops stays; the host applies
+   *  its tool's work before adding them (@see rampMode `editorAffordances`). */
+  takenOver?: boolean;
+  /**
+   * Ask to add stops, for a stop action tried where the stops cannot be edited — a gradient with
+   * none (a ramp), or one a host tool holds (`takenOver`). When given, Double Stops, Reduce Stops…
+   * and Bias Handles stay ENABLED there and call this instead of being greyed out (owner,
+   * 2026-09-25: "instead of disabling — perhaps they can just come up with a prompt to add stops if
+   * there are none"). The editor asks, and a yes runs its Add stops — through the host when it has
+   * one, which is what applies a host tool's work first. Distribute and Delete act on a selection
+   * there is none of, so they stay greyed. Omitted: all of them are disabled, as before.
+   */
+  offerStops?: () => void;
   /** Wrap a discrete mutation in one undo entry (the editor's editAction). */
   editAction: (mutate: () => void) => void;
   setSelectedIds: (ids: Set<string>) => void;
@@ -77,13 +91,17 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
   const {
     knots, config, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible,
     emit, editAction, setSelectedIds, setBiasHandlesVisible, copy, paste, setConfig, addStops,
-    reduceStops, reduceStopsBlocked,
+    reduceStops, reduceStopsBlocked, takenOver, offerStops,
   } = ctx;
 
   const wrap = (fn: () => void) => () => editAction(fn);
   const ids = Array.from(selectedIds);
   const ramp = rampOfEditorValue(config);
-  const can = editorAffordances({ isRamp: !!ramp, knotsStale: false, canAddStops: !!addStops });
+  const can = editorAffordances({ isRamp: !!ramp, knotsStale: false, canAddStops: !!addStops, takenOver });
+  /** The one reason every document action gives while a host tool holds the strip. */
+  const held = takenOver ? 'Apply or leave Paint first' : undefined;
+  /** Where the stops cannot be edited right now, a stop action ASKS to add them (see `offerStops`). */
+  const offer = (ramp || takenOver) && offerStops ? offerStops : undefined;
   /** Output space: a ramp keeps its texels and changes only the profile. */
   const setOutput = (cs: ColorSpaceMode) => wrap(() => (ramp ? setConfig({ ...ramp, colorSpace: cs }) : emit(knots, cs)));
 
@@ -109,24 +127,29 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
     { label: 'Actions', action: () => {}, isHeader: true },
     // A ramp's one way into stop editing (addStops self-brackets — no `wrap`).
     ...(can.addStops && addStops ? [{ label: 'Add Stops', action: addStops }] : []),
-    { label: 'Invert Gradient', action: wrap(() => (ramp ? setConfig(reverseRampGradient(ramp)) : emit(stopOps.invert(knots)))) },
-    { label: 'Double Stops', disabled: !can.stopActions, action: wrap(() => emit(stopOps.double(knots))) },
+    { label: 'Invert Gradient', disabled: !!held, title: held, action: wrap(() => (ramp ? setConfig(reverseRampGradient(ramp)) : emit(stopOps.invert(knots)))) },
+    offer
+      ? { label: 'Double Stops', action: offer }
+      : { label: 'Double Stops', disabled: !can.stopActions, title: held, action: wrap(() => emit(stopOps.double(knots))) },
     ...(reduceStops ? [(() => {
-      const why = ramp
+      if (offer) return { label: 'Reduce Stops…', action: offer };
+      const why = held ?? (ramp
         ? 'A 256-colour ramp has no stops to reduce. Add Stops gives it some'
         : knots.length <= 2
           ? 'Two stops are the fewest a gradient can have'
-          : reduceStopsBlocked;
+          : reduceStopsBlocked);
       return { label: 'Reduce Stops…', disabled: !!why, title: why, action: reduceStops };
     })()] : []),
     {
       label: 'Distribute Selected',
       disabled: !can.stopActions || selectedIds.size < 3,
+      title: held,
       action: wrap(() => emit(stopOps.distribute(knots, ids))),
     },
     {
       label: 'Delete Selected',
       disabled: !can.stopActions || selectedIds.size === 0 || knots.length <= 2,
+      title: held,
       danger: true,
       action: wrap(() => { emit(stopOps.delete(knots, ids)); setSelectedIds(new Set<string>()); }),
     },
@@ -155,8 +178,7 @@ export const buildGradientMenu = (ctx: GradientMenuContext): ContextMenuItem[] =
     {
       label: 'Bias Handles',
       checked: isBiasHandlesVisible,
-      disabled: !can.stopActions,
-      action: () => setBiasHandlesVisible(!isBiasHandlesVisible),
+      ...(offer ? { action: offer } : { disabled: !can.stopActions, title: held, action: () => setBiasHandlesVisible(!isBiasHandlesVisible) }),
     },
     {
       label: 'Reset Default',

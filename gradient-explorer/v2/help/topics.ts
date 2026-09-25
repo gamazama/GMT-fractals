@@ -80,13 +80,13 @@ Drop gradient files anywhere on the page to import them — a GMT gradient PNG, 
 - **Drag a stop** along the bar to move it. **Click the bar** to add one.
 - Select a stop to see its colour and settings below the bar. **Delete** removes the selected stops.
 
-## The five faces
+## The faces
 The tabs under the gradient open one face at a time, over the wall:
 - **Mix** blends your gradient with another. Pick the other one from the wall or My Gradients, then set how much Lightness, Chroma and Hue come from each.
-- **Image** makes a gradient from a picture — choose one, or drop or paste it anywhere.
+- **Image** makes a gradient from a picture. Its tab appears once a picture is loaded — click the picture slot beside the gradient, or drop or paste one anywhere.
 - **Curves** shapes the lightness, chroma and hue curves of the gradient.
 - **Adjust** changes hue, chroma, lightness and contrast, and adds posterize, scale (with mirrored tiles), phase and noise. Apply keeps the result and starts the dials fresh; Cancel throws the change away.
-- **Paint** puts a brush on the gradient itself. Pick a brush — Paint, Smudge, Soften, Sharpen, Tone, Clone or Restore — and drag along the bar. The brush's shape under the bar is its settings: drag its feet for size, its shoulders for hardness, the bar above it for strength, the diamond for flow and the triangle below for spacing. Paint mixes in the blend mode and colour space you choose; Clone copies from the ring (Alt-click the gradient to move it). Apply keeps the painting as the gradient; Cancel throws it away.
+- **Paint** puts a brush on the gradient itself. Pick a brush — Paint, Smudge, Soften, Sharpen, Tone, Clone or Restore — and drag along the bar. The brush's shape under the bar is its settings: drag its feet for size, its shoulders for hardness, the bar above it for strength, the diamond for flow and the triangle below for spacing. Paint mixes in the blend mode and colour space you choose; Clone copies from the ring (Alt-click the gradient to move it). Apply keeps the painting as the gradient; Cancel throws it away. A stop action from the menu asks to add stops first, since painting leaves a gradient without them.
 
 Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip next to the name takes you back to how the gradient was before.
 

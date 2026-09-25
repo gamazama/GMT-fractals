@@ -422,6 +422,9 @@ async function main() {
     await pickNew('[13]');
     s = await ui();
     if (s.face || s.kind !== 'gradient') fail(`[13] setup: a pick over the Image face did not replace it (${s.face}, ${s.kind})`);
+    // the picture is still loaded, so its tab stays with the face closed (owner, 2026-09-25: the
+    // Image tab shows only while an image is loaded — and then it does show)
+    if (!(await page.$('[data-gx-tray-tab="image"]'))) fail('[13] the Image tab went with its face while the picture is still loaded');
     await undo();
     s = await ui();
     if (s.face !== 'image' || s.kind !== 'extract' || s.chip !== 'live') fail(`[13] one undo after the pick gave face ${s.face} over input ${s.kind} — wanted the live image with its face`);

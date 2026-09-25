@@ -746,11 +746,19 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         editAction(() => onChangeRef.current(fit(ramp)));
     }, [editAction]);
 
+    /** A stop action where the stops cannot be edited — a ramp, or a host tool holding the strip —
+     *  ASKS to add them, and a yes is Add stops (the host's, which applies its tool's work first).
+     *  Offered only when there is an Add stops to run. @see gradientActions `offerStops`. */
+    const canOfferStops = !!onAddStops || (!!stopFitter && isRamp);
+    const offerStops = useCallback(() => {
+        if (window.confirm('Add stops so you can edit them?')) addStops();
+    }, [addStops]);
+
     /** Where the last menu opened (☰ or right-click): the Reduce popup opens in its place. */
     const menuAnchorRef = useRef<{ x: number; y: number } | null>(null);
     /** Why Reduce cannot run now, beyond what the menu sees for itself (a ramp, two stops). */
     const reduceBlocked = knotsStale ? 'These stops describe the gradient underneath. Bake the change to reduce them' : undefined;
-    const canReduceNow = !!stopReducer && !isRamp && !knotsStale && knots.length > 2;
+    const canReduceNow = !!stopReducer && !isRamp && !knotsStale && knots.length > 2 && !taken;
     const reduceOpen = reduceAt !== null;
     const reduceOpenRef = useRef(reduceOpen);
     reduceOpenRef.current = reduceOpen;
@@ -987,7 +995,9 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
         addStops: affordances.addStops ? addStops : undefined,
         reduceStops: stopReducer ? openReduce : undefined,
         reduceStopsBlocked: reduceBlocked,
-    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost, emitConfig, affordances.addStops, addStops, stopReducer, openReduce, reduceBlocked]);
+        takenOver: taken,
+        offerStops: canOfferStops ? offerStops : undefined,
+    })), [knots, currentConfig, selectedIds, blendSpace, colorSpace, isBiasHandlesVisible, emitChange, editAction, handleCopy, handlePaste, favientsBridge, inspectorHost, emitConfig, affordances.addStops, addStops, stopReducer, openReduce, reduceBlocked, taken, canOfferStops, offerStops]);
     /** The ☰ dropdown and the bar's right-click: the host's `menuLead` above the shared list. */
     const menuWithLead = useCallback(
         (): ContextMenuItem[] => (menuLead?.length ? [...menuLead, ...buildMenuItems()] : buildMenuItems()),
@@ -1354,6 +1364,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             addStops: affordances.addStops ? addStops : undefined,
             reduceStops: stopReducer ? openReduce : undefined,
             reduceStopsBlocked: reduceBlocked,
+            takenOver: taken,
+        offerStops: canOfferStops ? offerStops : undefined,
         });
         // the Interpolation section, then whatever the host's own trim leaves
         const interp: ContextMenuItem[] = [];

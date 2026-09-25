@@ -42,7 +42,7 @@ import { usePaintStore, setBrush, bumpPaint, commitPaint, discardPaint, paintUnd
 import { filledShape, shapePath, sourceMark, token } from './brushDraw';
 
 const TOOL_META: Record<PaintTool, { icon: IconName; name: string }> = {
-  paint: { icon: 'brush', name: 'Paint' },
+  paint: { icon: 'paintBrush', name: 'Paint' },
   smudge: { icon: 'smudge', name: 'Smudge' },
   soften: { icon: 'soften', name: 'Soften' },
   sharpen: { icon: 'sharpen', name: 'Sharpen' },

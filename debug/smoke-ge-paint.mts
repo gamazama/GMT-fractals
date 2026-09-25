@@ -19,7 +19,11 @@
  *   [6] Esc throws a painting away: the face closes, no entry, the stops and their knots are back;
  *   [7] leaving the face by another tab applies the painting in THAT click's one entry, and one
  *       Ctrl+Z gives back the gradient with the Paint face open;
- *   [8] only Paint shows the colour picker (Clone lays down no colour of its own).
+ *   [8] only Paint shows the colour picker (Clone lays down no colour of its own);
+ *   [9] Add stops with Paint open leaves the face, applies the unapplied painting and fits the
+ *       stops to it — two entries, the knots on the bar (owner report, 2026-09-25);
+ *  [10] a stop action on a gradient with no stops (☰ ▸ Double Stops after Apply) is not greyed: it
+ *       asks, and a yes adds the stops and closes Paint (owner, 2026-09-25).
  *
  * Falsified 2026-09-24 five ways, each break reverted after it went red:
  *   S1 leaving Paint without `commitPaint` in the shell's `openTray` → [7] red (0 entries);
@@ -31,6 +35,8 @@
  *   S5 the editor ignoring `stripTakeover` → [1] red;
  *   S6 the right gutter not recoloured from the painting → [3b] red;
  *   S7 no wrapped copy of the brush → [3b] red.
+ * And 2026-09-25: S8 Add stops not leaving Paint → [9] red (17 stops added, 0 knots on the bar —
+ * the owner's report); S9 `gradientActions`' `offer` never set → [10] red (Double Stops greyed).
  */
 
 import { chromium, type Page } from 'playwright';
@@ -231,6 +237,51 @@ async function run() {
   await page.waitForTimeout(120);
   if (!(await has(page, '[data-gx-paint-picker]'))) fail('[8] Paint lost its colour picker');
   ok('[8] only Paint shows the picker');
+
+  // [9] ADD STOPS WITH PAINT OPEN (owner, 2026-09-25: "clicking add-stops when paint is active
+  // appears to not work because stops are hidden"). Paint, Apply (a ramp: the row offers Add
+  // stops), paint again WITHOUT applying, Add stops: the face goes, the second painting is applied
+  // (its own entry) and the stops are fitted to it (another) — the knots show, the bar keeps it.
+  await stroke(page, 0.2, 0.36);
+  await page.click('[data-gx-paint-apply]');
+  await page.waitForTimeout(200);
+  const k = Math.round(0.68 * 256);
+  await stroke(page, 0.6, 0.76);
+  const paintedK = await texel(page, k);
+  const depth9 = await undoDepth(page);
+  await page.click('[data-gx-hero] [data-gx-add-stops]');
+  await page.waitForTimeout(500);
+  const w9 = await working(page);
+  const knots9 = await page.evaluate(() => document.querySelectorAll('[data-gx-hero] [data-gx-knot]').length);
+  if ((await tray(page)) !== null || !w9 || w9.stops < 2 || knots9 < 2) fail(`[9] Add stops left ${await tray(page)} open, ${JSON.stringify(w9)}, ${knots9} knots on the bar`);
+  if ((await undoDepth(page)) !== depth9 + 2) fail(`[9] Add stops with a painting made ${(await undoDepth(page)) - depth9} entries, not two (apply, add stops)`);
+  const barK = await page.evaluate((t) => {
+    const cv = document.querySelector('[data-gx-hero] canvas[data-gx-ramp]') as HTMLCanvasElement;
+    return Array.from(cv.getContext('2d')!.getImageData(Math.round(t * cv.width), 0, 1, 1).data).slice(0, 3);
+  }, (k + 0.5) / 256);
+  if (!paintedK || Math.max(...paintedK.map((v, n) => Math.abs(v - barK[n]))) > 30) fail(`[9] the stops were not fitted to the painting (painted ${paintedK}, bar ${barK})`);
+  ok(`[9] Add stops with Paint open applies the painting, fits ${w9!.stops} stops to it and shows them`);
+
+  // [10] A STOP ACTION WITH NO STOPS ASKS (owner, 2026-09-25: "instead of disabling — perhaps they
+  // can just come up with a prompt to add stops if there are none"). Paint, Apply (a ramp), then
+  // ☰ ▸ Double Stops: it is not greyed, it asks, and a yes adds the stops — and closes Paint.
+  await openPaint(page);
+  await stroke(page, 0.2, 0.36);
+  await page.click('[data-gx-paint-apply]');
+  await page.waitForTimeout(200);
+  if ((await working(page))?.stops !== 0) fail('[10] setup: Apply did not leave a ramp');
+  let asked = '';
+  page.once('dialog', (d) => { asked = d.message(); void d.accept(); });
+  await page.click('[data-gx-hero] button[title^="Stops menu"]');
+  const dbl = page.locator('button:has-text("Double Stops")').first();
+  await dbl.waitFor({ state: 'visible', timeout: 4000 }).catch(() => fail('[10] the ☰ menu has no Double Stops'));
+  if (await dbl.isDisabled()) fail('[10] Double Stops is greyed out on a ramp — it should ask');
+  await dbl.click();
+  await page.waitForTimeout(600);
+  const w10 = await working(page);
+  if (!asked) fail('[10] Double Stops on a ramp did not ask to add stops');
+  if (!w10 || w10.stops < 2 || (await tray(page)) !== null) fail(`[10] yes did not add stops and close Paint (${JSON.stringify(w10)}, ${await tray(page)})`);
+  ok(`[10] ☰ ▸ Double Stops on a ramp asks ("${asked}"), and yes adds ${w10!.stops} stops and closes Paint`);
 
   if (errors.length) fail(`pageerror during the run: ${errors[0]}`);
   await browser.close();

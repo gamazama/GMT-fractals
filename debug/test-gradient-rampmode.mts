@@ -12,7 +12,9 @@
  *       `previewRamp` still wins; a STOP value paints byte-identically to the pre-ramp-mode code.
  *   [4] the menu — on a ramp: Add Stops heads Actions, Invert reverses the texels through
  *       `setConfig` (never `emit`), the output space keeps the ramp, every stop-only item is
- *       disabled; on stops: nothing disabled that was enabled, and Invert still emits stops.
+ *       disabled; on stops: nothing disabled that was enabled, and Invert still emits stops; with
+ *       a host tool holding the strip (`takenOver`, GE v2's Paint face): Add Stops stays, and the
+ *       actions that rewrite the stops are off with the reason as their title.
  *   [5] `reverseRampGradient` / `sameGradientBody` — the pure helpers the menu and the GE v2
  *       hero's "is the image still the gradient" check lean on.
  *   [6] WIRING PIN (text, not behaviour): the editor's JSX actually reads the rules above — the
@@ -36,6 +38,8 @@
  *   sameGradientBody comparing stops only                             → [5] red "two different ramps differ".
  *   editor track back to `onPointerDown={knotsStale ? undefined : handleTrackPointerDown}` → [6] red.
  *   FavientsPanel back to `renderStopsToRamp(fav.config.stops, …)`    → [7] red naming the file and line.
+ * ── 2026-09-25 ──
+ *   gradientActions `offer` never set                                 → [4] red ×2 (the two "offerStops … ask" lines).
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -77,9 +81,9 @@ console.log('[1] affordances');
   const st = editorAffordances({ isRamp: false, knotsStale: true, canAddStops: true });
   check(!st.knots && !st.addKnot && st.selectMarquee && st.knotEdits && st.blendSpace, 'stale stops: only knots + insertion hide (the pre-ADR rule)');
   // a host tool holding the strip (GE v2's Paint face, 2026-09-24): every knot gesture stands down,
-  // the menu's document actions stay
+  // and so do the menu's stop actions (2026-09-25); copy and the blend space stay
   const tk = editorAffordances({ isRamp: false, knotsStale: false, canAddStops: true, takenOver: true });
-  check(!tk.knots && !tk.addKnot && !tk.selectMarquee && !tk.knotEdits && tk.clipboard && tk.blendSpace && tk.stopActions, 'taken over: no knots, insertion, marquee or knot edits; the menu stays');
+  check(!tk.knots && !tk.addKnot && !tk.selectMarquee && !tk.knotEdits && !tk.stopActions && tk.clipboard && tk.blendSpace, 'taken over: no knots, insertion, marquee, knot edits or stop actions; copy and the blend space stay');
   check(rampOfEditorValue(zebraCfg) === zebraCfg && rampOfEditorValue(stopCfg) === null && rampOfEditorValue(stops) === null && rampOfEditorValue({ stops: [] } as GradientConfig) === null,
     'the mode is read off the value: ramp config yes; stops, legacy array, `stops: []` without a ramp no');
 }
@@ -134,7 +138,7 @@ console.log('\n[3] the bar');
 }
 
 console.log('\n[4] the menu');
-const menuFor = (config: GradientConfig, knots: GradientStop[], sel: string[], addStops?: () => void) => {
+const menuFor = (config: GradientConfig, knots: GradientStop[], sel: string[], addStops?: () => void, takenOver?: boolean, offerStops?: () => void) => {
   const calls = { emit: 0, setConfig: [] as GradientConfig[] };
   const ctx: GradientMenuContext = {
     knots, config, selectedIds: new Set(sel), blendSpace: config.blendSpace ?? 'oklab', colorSpace: config.colorSpace ?? 'srgb',
@@ -147,6 +151,10 @@ const menuFor = (config: GradientConfig, knots: GradientStop[], sel: string[], a
     copy: () => {},
     paste: () => {},
     addStops,
+    takenOver,
+    offerStops,
+    // the offerStops block needs a Reduce Stops… item to ask through; the older blocks run without one
+    reduceStops: offerStops ? () => {} : undefined,
   };
   return { items: buildGradientMenu(ctx), calls };
 };
@@ -173,6 +181,38 @@ const item = (items: ContextMenuItem[], label: string) => items.find((i) => i.la
     'ramp: stop-only items disabled (double, distribute, delete, clipboard, bias handles, every blend mode)');
   check(!item(items, 'Reset Default')!.disabled, 'ramp: Reset Default stays (it replaces the ramp with a stop gradient)');
   check(!item(menuFor(zebraCfg, [], []).items, 'Add Stops'), 'ramp without an addStops: no Add Stops item');
+}
+{
+  // a host tool holds the strip (GE v2's Paint face, 2026-09-25): the actions that would rewrite
+  // the stops under an unapplied painting are off and say why; Add Stops stays (the host applies first)
+  const onRamp = menuFor(zebraCfg, [], [], () => {}, true).items;
+  check(!!item(onRamp, 'Add Stops') && !item(onRamp, 'Add Stops')!.disabled, 'taken over, on a ramp: Add Stops stays');
+  const onStops = menuFor(stopCfg, stops, ['a', 'b', 'c'], () => {}, true).items;
+  const held = ['Invert Gradient', 'Double Stops', 'Distribute Selected', 'Delete Selected', 'Bias Handles'];
+  check(held.every((l) => item(onStops, l)?.disabled && item(onStops, l)?.title === 'Apply or leave Paint first') && !!item(onRamp, 'Invert Gradient')?.disabled,
+    'taken over: invert (a ramp\'s too), double, distribute, delete and bias handles are off, and say why');
+}
+{
+  // with an offerStops (owner, 2026-09-25: "instead of disabling — a prompt to add stops if there are
+  // none"): where the stops cannot be edited, Double / Reduce / Bias Handles ASK instead of greying out
+  let asked = 0;
+  const ask = () => { asked++; };
+  const asking = ['Double Stops', 'Reduce Stops…', 'Bias Handles'];
+  const rampItems = menuFor(zebraCfg, [], [], () => {}, false, ask).items;
+  const heldItems = menuFor(stopCfg, stops, ['a', 'b', 'c'], () => {}, true, ask).items;
+  const stopItems = menuFor(stopCfg, stops, ['a', 'b', 'c'], () => {}, false, ask).items;
+  const offered = (items: ContextMenuItem[]) => asking.every((l) => {
+    const it = item(items, l);
+    if (!it || it.disabled) return false;
+    const n = asked;
+    it.action!();
+    return asked === n + 1;
+  });
+  check(offered(rampItems), 'offerStops, on a ramp: double, reduce and bias handles ask to add stops');
+  check(offered(heldItems) && !!item(heldItems, 'Invert Gradient')!.disabled && !!item(heldItems, 'Delete Selected')!.disabled, 'offerStops, taken over: they ask too; invert and delete stay off');
+  const before = asked;
+  item(stopItems, 'Double Stops')!.action!();
+  check(asked === before, 'offerStops, on stops with nothing holding them: double runs, nothing asks');
 }
 {
   const { items, calls } = menuFor(stopCfg, stops, ['a', 'b', 'c'], () => {});

@@ -88,7 +88,8 @@ import { rgbToHex } from '../../utils/colorUtils';
 
 export type TrayFace = 'mix' | 'image' | 'curves' | 'adjust' | 'paint' | 'inspector' | null;
 
-/** The faces with a tab, in tab order. */
+/** The faces with a tab, in tab order. Image's tab is shown only while a picture is loaded or its
+ *  face is open (owner, 2026-09-25) — `WorkingHero` filters the row; the picture slot is the way in. */
 export const TRAY_TABS: { face: Exclude<TrayFace, null | 'inspector'>; label: string; title: string }[] = [
   { face: 'mix', label: 'Mix', title: 'Blend this gradient with another — pick the other one from the wall or My Gradients' },
   { face: 'image', label: 'Image', title: 'Extract a gradient from an image' },

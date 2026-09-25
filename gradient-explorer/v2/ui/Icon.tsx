@@ -29,11 +29,13 @@
  * frame read as a digit 0 beside the word Portrait. They replace the Wallpaper toolbar's ⇅ ◉ ▦,
  * the Export panel's ▭ ▯, the desk top bar's old-set `?` and the phone menu's empty Back slot.
  *
- * DRAFTED FOR THE OWNER, NOT YET PICKED (2026-09-24, the Paint face) — smudge, soften, sharpen,
- * tone, clone, restore (the brushes; Paint itself is the owner's `brush`) and mirror, wrap, height
- * (the stroke toggles). Drawn on the same 2.2 … 13.8 ink box at the set's weight; `restore` is
- * `refresh` turned the other way, as undo is redo's. They stand in until the owner draws or picks
- * the set, the way the polish pass's drafts did.
+ * THE PAINT FACE'S BRUSHES ARE SOLID (owner, 2026-09-25: line drafts "not really a fan, I'd prefer
+ * if they look more like the photoshop icons", with a sheet of Photoshop-style tool glyphs) —
+ * `SOLID` below: paintBrush (with its ferrule), clone (a rubber stamp), smudge (a pointing hand),
+ * tone (a half-filled disc), soften (a drop), sharpen (a spike), on a 24-unit box like the hero's
+ * FILLED family, drawn here and refined with the owner over three rounds, each rendered at 16 px
+ * and magnified. Restore kept its line glyph at the owner's word, and the stroke TOGGLES beside
+ * them (mirror, wrap, height) are still line drafts for the owner to pick or redraw.
  *
  * WEIGHT. The set is one weight, 1.5 (V6). Two glyphs' worth of exception, `WEIGHT` below:
  * a glyph whose parts share the box needs air or it fills in at 16 px — the gear's teeth
@@ -80,6 +82,7 @@ export type IconName =
   | 'dither'
   | 'landscape'
   | 'portrait'
+  | 'paintBrush'
   | 'smudge'
   | 'soften'
   | 'sharpen'
@@ -109,7 +112,46 @@ const FILLED: Record<'heart' | 'share' | 'download' | 'photo' | 'fullscreen', st
   fullscreen: 'M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z',
 };
 
-const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.ReactNode> = {
+/**
+ * The Paint face's brushes — SOLID glyphs on a 24-unit box, Photoshop's tool shapes (see the
+ * header). A map of nodes rather than FILLED's single paths, because the hand is drawn upright
+ * and turned (`rotate`), which a bare `d` cannot say.
+ */
+const SOLID: Record<'paintBrush' | 'clone' | 'smudge' | 'tone' | 'soften' | 'sharpen', React.ReactNode> = {
+  // Material's "brush" blob on a handle that TAPERS to its end (owner, 2026-09-25: "needs taper";
+  // a separate ferrule band read as an extra segment)
+  paintBrush: <path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.21 0 4-1.79 4-4 0-1.66-1.34-3-3-3zM9 12.25 11.75 15l8.9-9.6a.95.95 0 0 0-1.35-1.35z" />,
+  // knob, neck, pad and the line it stamps — the line a little narrower than the pad (owner)
+  clone: <path d="M12 2.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 1 1 0-6.8zM10.3 9h3.4v3.4h-3.4zM5.2 14c0-.9.7-1.6 1.6-1.6h10.4c.9 0 1.6.7 1.6 1.6v3.1H5.2zM6.6 18.6h10.8V21H6.6z" />,
+  // a pointing hand drawn upright (finger, the curled fingers' block with the thumb, the cuff) and
+  // turned to point down-left, its fingertip SMEARING off to the left (owner, 2026-09-25: "the
+  // finger should be smearing to the left slightly at the fingertip") — the smear starts on the
+  // tip itself, so it reads as the finger's own mark rather than a line beside it
+  smudge: (
+    <>
+      <g transform="rotate(225 12 12)">
+        <path d="M9.2 3.6a1.6 1.6 0 0 1 3.2 0V10H9.2z" />
+        <path d="M9.2 9.2h6.4a2.6 2.6 0 0 1 2.6 2.6v4.4a3.4 3.4 0 0 1-3.4 3.4h-3.6a3.4 3.4 0 0 1-3.4-3.4v-2.4l-1.3-1.5a1.3 1.3 0 0 1 1.9-1.8l.8.8z" />
+        <path d="M9.6 20.4h6.6v2H9.6z" />
+      </g>
+      <path d="M7.4 17.1C5.6 17.8 3.6 18.9 1.4 20.2c2.2.3 4.3.4 6.3.2z" />
+    </>
+  ),
+  // a ring (outer clockwise, inner counter-clockwise: a hole under nonzero) and half its disc
+  tone: <path d="M12 3a9 9 0 1 1 0 18 9 9 0 1 1 0-18zm0 2a7 7 0 1 0 0 14 7 7 0 1 0 0-14zm4.95 2.05A7 7 0 0 1 7.05 16.95z" />,
+  // a drop with a fine tip leaning a little to the left (owner: "a finer curve at the top of the
+  // drop and a slight bias towards one side", then "inverted (L/R)") — drawn leaning right, mirrored
+  soften: (
+    <g transform="translate(24 0) scale(-1 1)">
+      <path d="M13 1.8c-.3 3.1-7.9 7.5-7.9 13a6.9 6.9 0 0 0 13.8 0c0-4.6-4.9-8-5.9-13z" />
+    </g>
+  ),
+  // a tall spike with curved-in sides, not an even triangle (owner: "sharpen is not normally a
+  // perfect triangle")
+  sharpen: <path d="M12 2.5C12.6 8 14.8 15 16.8 21H7.2C9.2 15 11.4 8 12 2.5z" />,
+};
+
+const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeof SOLID>, React.ReactNode> = {
   zoom: <path d="M13.8 13.73L11.08 11.01M7.36 5.42L7.36 9.29M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
   zoomOut: <path d="M13.8 13.73L11.08 11.01M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
   box: <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.74" strokeDasharray="2.76" />,
@@ -181,32 +223,12 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.React
       <path d="M6.9 11h2.2" />
     </>
   ),
-  // Paint face drafts (see the header). A fingertip dragging streaks behind it.
-  smudge: (
-    <>
-      <circle cx="11.2" cy="8" r="2.6" />
-      <path d="M2.2 5.6h6M3.6 8h5M2.2 10.4h6" />
-    </>
-  ),
-  // A soft edge — a dotted rim around a core — and a sharp one, the triangle image editors use.
-  soften: (
-    <>
-      <circle cx="8" cy="8" r="5.8" strokeDasharray="1.5 2" />
-      <circle cx="8" cy="8" r="2.2" />
-    </>
-  ),
-  sharpen: <path d="M8 2.2l5.8 11H2.2z" />,
-  // Half hatched: more or less of something (lightness, chroma, hue).
-  tone: (
-    <>
-      <circle cx="8" cy="8" r="5.8" />
-      <path d="M8 2.2v11.6M8 4.6h3.9M8 8h5.8M8 11.4h3.9" />
-    </>
-  ),
-  // A rubber stamp on its line.
-  clone: <path d="M6.2 2.2h3.6v4.2l2.9 1.5v2.3H3.3V7.9l2.9-1.5zM2.6 13.4h10.8" />,
-  // `refresh` turned the other way: back to what it was.
-  restore: <path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.7M2.5 2.2v3.2h3.2" />,
+  // Paint's Restore stays a line glyph (owner, 2026-09-25: "restore brush was fine before"): an
+  // arrow turning back. Re-centred the same day ("the arrow is now slightly off the centre"): the
+  // circle sits so the ink — ring and head — is centred on the box, and the head's corner is ON
+  // the arc's end rather than beside it.
+  restore: <path d="M3 8.7a5 5 0 1 0 1.46-3.54M4.46 2.3v2.86h2.86" />,
+  // Paint face stroke toggles — drafts (see the header).
   // Two halves facing each other across an axis.
   mirror: <path d="M8 2.2v11.6M5.6 4.6L2.2 8l3.4 3.4zM10.4 4.6L13.8 8l-3.4 3.4z" />,
   // Off one end and back in at the other.
@@ -233,6 +255,14 @@ export const Icon: React.FC<{ name: IconName; className?: string; title?: string
       <svg viewBox="0 0 24 24" width={size} height={size} className={className} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
         {title && <title>{title}</title>}
         <path d={FILLED[name as keyof typeof FILLED]} fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  if (name in SOLID) {
+    return (
+      <svg viewBox="0 0 24 24" width={size} height={size} className={className} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
+        {title && <title>{title}</title>}
+        <g fill="currentColor" stroke="none">{SOLID[name as keyof typeof SOLID]}</g>
       </svg>
     );
   }

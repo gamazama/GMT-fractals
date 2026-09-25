@@ -143,6 +143,7 @@ import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
 import { Tray, TRAY_TABS, type TrayFace } from './Tray';
+import { useImageStore } from '../../palette/store/imageStore';
 import { PaintSurface, PaintBeforeLine } from './paint/PaintSurface';
 import { syncPaintBase, endPaintSession, setBrush, usePaintStore } from './paint/paintStore';
 import { useStopSelectionHistory } from './uiHistory';
@@ -233,6 +234,12 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   const groupLabels = useFavientsStore((s) => s.groupLabels);
   const docConfig = usePaletteEditorStore((s) => s.config);
   const [rampRef, rampW] = useWidth();
+  /** IMAGE'S TAB SHOWS ONLY WITH A PICTURE LOADED (owner, 2026-09-25: "the image tab should only appear
+   *  when an image is loaded, this will make it more manageable in most cases, and prevent a dialogue
+   *  from coming up when unwanted") — or while its face is open. The way in without one is the
+   *  picture slot (and a drop or paste anywhere), which is what asks for a file. */
+  const hasImage = useImageStore((s) => !!s.model);
+  const tabs = useMemo(() => TRAY_TABS.filter((t) => t.face !== 'image' || hasImage || tray === 'image'), [hasImage, tray]);
   // the ramp ELEMENT too: useWidth's callback ref does not retain it, and projecting a drop
   // from anywhere on the gradient down onto the ramp needs its rect (§8b item 1).
   const rampElRef = useRef<HTMLDivElement | null>(null);
@@ -518,7 +525,13 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
    *  included): a ramp output is fitted uncapped (`addStopsToWorking`); an output that already
    *  carries stops — a ramp document under a live Adjust — is simply baked, as a stop edit would. */
   const onAddStops = () => {
-    if (stopsOf(derived.config).length > 0) useWorkingStore.getState().beginEdit();
+    // PAINT hides the knots, so stops added under it could not be seen — and would be fitted to the
+    // gradient as it was before the painting (owner, 2026-09-25). Leaving the face first applies
+    // the painting (its own undo step) and shows the knots; the stops are then fitted to what was
+    // painted. The pipeline is read afresh because `derived` is this render's, from before that.
+    if (tray === 'paint') onTray(null);
+    const now = deriveWorkingNow()?.config ?? derived.config;
+    if (stopsOf(now).length > 0) useWorkingStore.getState().beginEdit();
     else addStopsToWorking();
   };
   const ensureEditing = () => {
@@ -1015,13 +1028,13 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                            (owner: "the button's corners need hardening when it's under a tab"). No
                            chevrons: the tab says it is open. Click again closes. */
                         <div
-                          className={`inline-flex rounded-t-lg border border-line/20 ${tray === TRAY_TABS[0].face ? '' : 'rounded-bl-lg'} ${tray === TRAY_TABS[TRAY_TABS.length - 1].face ? '' : 'rounded-br-lg'}`}
+                          className={`inline-flex rounded-t-lg border border-line/20 ${tray === tabs[0].face ? '' : 'rounded-bl-lg'} ${tray === tabs[tabs.length - 1].face ? '' : 'rounded-br-lg'}`}
                           data-gx-tray-tabs
                         >
-                          {TRAY_TABS.map((t, i) => {
+                          {tabs.map((t, i) => {
                             const on = tray === t.face;
                             const first = i === 0;
-                            const last = i === TRAY_TABS.length - 1;
+                            const last = i === tabs.length - 1;
                             const ends = `${first ? 'rounded-tl-[7px]' : ''} ${first && !on ? 'rounded-bl-[7px]' : ''} ${last ? 'rounded-tr-[7px]' : ''} ${last && !on ? 'rounded-br-[7px]' : ''}`;
                             return (
                               <button
@@ -1037,12 +1050,14 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                                    A FIFTH tab (Paint, 2026-09-24) put the row back over: 222
                                    + 6 + the 123 px blend · ☰ group is 351 in 335 at 375 (1 px
                                    over even at 390), and the wrap cost the card 36 px — hero
-                                   249 against smoke:ge-phone's 240. 4 px a side, not 6, gives
-                                   the 20 back; the tabs keep their 28 px height. The owner's
-                                   call to revisit (a glyph for Paint on a phone is the other).
+                                   249 against smoke:ge-phone's 240. Image's tab now shows only
+                                   with a picture loaded (owner, 2026-09-25), so the row is four
+                                   tabs at 6 px most of the time, and five at 4 px a side — the
+                                   20 px back — only while an image is in; the tabs keep their
+                                   28 px height either way.
                                    `transition-colors` (J12): the tabs ease like every other
                                    pressable in the shell instead of snapping. */
-                                className={`relative h-7 text-[13px] transition-colors ${phone ? 'px-1' : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                                className={`relative h-7 text-[13px] transition-colors ${phone ? (tabs.length > 4 ? 'px-1' : 'px-1.5') : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
                                 onClick={() => onTray(t.face)}
                                 title={t.title}
                                 data-gx-tray-tab={t.face}
