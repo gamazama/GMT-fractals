@@ -80,12 +80,13 @@ Drop gradient files anywhere on the page to import them — a GMT gradient PNG, 
 - **Drag a stop** along the bar to move it. **Click the bar** to add one.
 - Select a stop to see its colour and settings below the bar. **Delete** removes the selected stops.
 
-## The four faces
+## The five faces
 The tabs under the gradient open one face at a time, over the wall:
 - **Mix** blends your gradient with another. Pick the other one from the wall or My Gradients, then set how much Lightness, Chroma and Hue come from each.
 - **Image** makes a gradient from a picture — choose one, or drop or paste it anywhere.
 - **Curves** shapes the lightness, chroma and hue curves of the gradient.
 - **Adjust** changes hue, chroma, lightness and contrast, and adds posterize, scale (with mirrored tiles), phase and noise. Apply keeps the result and starts the dials fresh; Cancel throws the change away.
+- **Paint** puts a brush on the gradient itself. Pick a brush — Paint, Smudge, Soften, Sharpen, Tone, Clone or Restore — and drag along the bar. The brush's shape under the bar is its settings: drag its feet for size, its shoulders for hardness, the bar above it for strength, the diamond for flow and the triangle below for spacing. Paint mixes in the blend mode and colour space you choose; Clone copies from the ring (Alt-click the gradient to move it). Apply keeps the painting as the gradient; Cancel throws it away.
 
 Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip next to the name takes you back to how the gradient was before.
 
@@ -125,6 +126,13 @@ Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip 
 - \`Delete\` — remove the selected gradients from My Gradients
 - \`[\` \`]\` — brush size, while the brush tool is on
 - Middle-drag zooms, right-drag pans
+
+## Paint
+- \`Ctrl+Z\` / \`Ctrl+Y\` — undo / redo a stroke, while the face has strokes
+- \`[\` \`]\` or the wheel over the gradient — brush size
+- Right-drag on the gradient — sideways for size, up and down for hardness
+- \`Alt\`+click on the gradient — Clone's source, or the colour under the brush
+- \`Esc\` — throw the painting away
 
 > On a Mac, use ⌘ where this says Ctrl.
 `,

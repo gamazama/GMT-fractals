@@ -41,6 +41,7 @@ import { ToastHost } from '../../engine/components/ToastHost';
 import { MobileViewportShell } from '../../engine/components/MobileViewportShell';
 import { useIsPhone } from './useIsPhone';
 import { FULL_FACES } from './Tray';
+import { commitPaint, discardPaint, hasPainting } from './paint/paintStore';
 import { SettingsHost } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
@@ -457,6 +458,9 @@ export const GradientExplorerV2App: React.FC = () => {
     const peek = untouchedCurves && from === to;
     if (peek) dropUntouchedFit();
     paramGroup(() => {
+      // Leaving PAINT applies the painting (the same rule — a face bakes on the way out), inside this
+      // click's entry: the painted ramp becomes the working gradient before anything below reads it.
+      if (cur === 'paint' && leaving) commitPaint();
       const w = useWorkingStore.getState();
       // ONE rule for every face (C.3, owner: "the default will be to bake after switching from
       // any mode"): leaving Curves or Adjust with something applied folds it into the stops
@@ -521,6 +525,8 @@ export const GradientExplorerV2App: React.FC = () => {
    *   • Mix, Image → `cancelFace`: back to the gradient that was there before the face opened
    *     (the live source is what is un-applied — the chip's "· cancel");
    *   • Curves with an EDITED curve → `cancelFace` (the curves dropped, the source back);
+   *   • Paint with something painted → `discardPaint`, exactly Paint's Cancel (nothing was written,
+   *     so there is no entry), and the face closes;
    *   • anything untouched — Curves on its own fit, Adjust at rest, the stop inspector — leaves
    *     the way a tab close does, `openTray(null)`, which for those is a PEEK: nothing baked, no
    *     undo entry (grep `peek` in `openTray`).
@@ -550,6 +556,10 @@ export const GradientExplorerV2App: React.FC = () => {
         cancelFace();
         return;
       }
+    } else if (face === 'paint' && hasPainting()) {
+      discardPaint();
+      setTray(null);
+      return;
     }
     openTray(null);
   }, [openTray, cancelFace]);
@@ -725,10 +735,19 @@ export const GradientExplorerV2App: React.FC = () => {
     if (shared) useWorkingStore.getState().use(shared.config, shared.name, 'Shared link');
     else applyGradientFromGmt();
   }, []);
+  /** A gradient that LEAVES the shell (a share link, the Wallpaper, an export) takes the painting
+   *  with it: an open Paint face applies first — one undo entry of its own — and the caller reads the
+   *  gradient afresh, since `derived` is this render's. Null when there was nothing to apply. */
+  const settlePaint = (): { config: GradientConfig; name: string } | null => {
+    if (trayRef.current !== 'paint' || !commitPaint()) return null;
+    const d = deriveWorkingNow();
+    return d?.config ? { config: d.config, name: workingNameNow() } : null;
+  };
   const share = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
+    const painted = settlePaint();
     useWorkingStore.getState().syncRecentOutsideUndo();
-    const url = shareUrlFor(derived.config, derived.name);
+    const url = shareUrlFor(painted?.config ?? derived.config, painted?.name ?? derived.name);
     navigator.clipboard?.writeText(url).then(
       () => showToast('Link copied — it opens this gradient'),
       () => window.prompt('Copy this link', url),
@@ -736,6 +755,7 @@ export const GradientExplorerV2App: React.FC = () => {
   };
   const exportOpenToggle = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
+    settlePaint(); // the window reads the working gradient on its next render
     setExportOpen((o) => !o);
   };
   /**
@@ -757,15 +777,17 @@ export const GradientExplorerV2App: React.FC = () => {
    * Curves face are not baked by it — probed separately before it changes).
    */
   const revealGround = useCallback(() => {
-    if (trayRef.current === 'mix' || trayRef.current === 'image') openTray(null);
+    // Paint too: a bare close would drop the painting the ♥ is about to file
+    if (trayRef.current === 'mix' || trayRef.current === 'image' || trayRef.current === 'paint') openTray(null);
     else setTray(null);
     setExportOpen(false);
     setExportGround(false);
   }, [openTray]);
   const wallpaper = () => {
     if (!derived.config) return showToast('Pick or build a gradient first');
+    const painted = settlePaint();
     useWorkingStore.getState().syncRecentOutsideUndo();
-    openFullscreen(derived.config, derived.name);
+    openFullscreen(painted?.config ?? derived.config, painted?.name ?? derived.name);
   };
 
   return (

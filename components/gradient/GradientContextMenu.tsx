@@ -15,6 +15,10 @@ interface ContextMenuProps {
     y: number;
     options: GradientMenuOption[];
     onClose: () => void;
+    /** The option under the pointer (its index), and null when the pointer leaves the list — for a
+     *  menu that PREVIEWS its choices on hover, as the blend-space chooser does (the Explorer's Paint
+     *  face shows your last stroke in the hovered blend mode). Absent, the menu is as it was. */
+    onPreview?: (index: number | null) => void;
 }
 
 const LazyGradientPreview: React.FC<{ stops: GradientStop[] }> = ({ stops }) => {
@@ -41,7 +45,7 @@ const LazyGradientPreview: React.FC<{ stops: GradientStop[] }> = ({ stops }) => 
     );
 };
 
-export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose }) => {
+export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose, onPreview }) => {
     return (
         <AnchoredMenu
             anchor={{ x, y }}
@@ -49,6 +53,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
             padding={12}
             className="bg-surface-raised border border-line/20 rounded-md shadow-2xl py-1 w-[220px] max-h-[400px] overflow-y-auto custom-scroll"
         >
+            <div onMouseLeave={onPreview ? () => onPreview(null) : undefined}>
             {options.map((opt, i) => (
                 opt.isHeader ? (
                     <div key={i} className="px-4 py-1 text-[10px] font-bold text-fg-dim border-b border-line/5 mt-1 mb-1 bg-surface-section">
@@ -58,6 +63,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
                     <button
                         key={i}
                         onClick={() => { onClose(); requestAnimationFrame(() => opt.action?.()); }}
+                        onMouseEnter={onPreview ? () => onPreview(i) : undefined}
                         disabled={opt.disabled}
                         title={opt.title}
                         className={`w-full text-left px-4 py-2 text-xs flex items-center justify-between group transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -77,6 +83,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose
                     </button>
                 )
             ))}
+            </div>
         </AnchoredMenu>
     );
 };

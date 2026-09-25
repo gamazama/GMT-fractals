@@ -396,8 +396,8 @@ async function main() {
   const phoneShot = await sendFeedbackWith(page, '3c', 'screenshot', true);
   console.log(`✓ [3c] a phone screenshot: thumbnail shown; ${assertScreenshotPayload('3c', phoneShot)}`);
 
-  // [4] each tray face opens inside the viewport
-  for (const face of ['adjust', 'curves', 'mix']) {
+  // [4] each tray face opens inside the viewport (Paint joined 2026-09-24)
+  for (const face of ['adjust', 'curves', 'paint', 'mix']) {
     await page.locator(`[data-gx-tray-tab="${face}"]`).tap();
     await page.waitForTimeout(500);
     b = await boxes(page);

@@ -76,6 +76,10 @@ console.log('[1] affordances');
   check(s.knots && s.addKnot && s.selectMarquee && s.knotEdits && s.clipboard && s.blendSpace && s.stopActions && !s.addStops, 'stops: everything as before, no Add stops');
   const st = editorAffordances({ isRamp: false, knotsStale: true, canAddStops: true });
   check(!st.knots && !st.addKnot && st.selectMarquee && st.knotEdits && st.blendSpace, 'stale stops: only knots + insertion hide (the pre-ADR rule)');
+  // a host tool holding the strip (GE v2's Paint face, 2026-09-24): every knot gesture stands down,
+  // the menu's document actions stay
+  const tk = editorAffordances({ isRamp: false, knotsStale: false, canAddStops: true, takenOver: true });
+  check(!tk.knots && !tk.addKnot && !tk.selectMarquee && !tk.knotEdits && tk.clipboard && tk.blendSpace && tk.stopActions, 'taken over: no knots, insertion, marquee or knot edits; the menu stays');
   check(rampOfEditorValue(zebraCfg) === zebraCfg && rampOfEditorValue(stopCfg) === null && rampOfEditorValue(stops) === null && rampOfEditorValue({ stops: [] } as GradientConfig) === null,
     'the mode is read off the value: ramp config yes; stops, legacy array, `stops: []` without a ramp no');
 }

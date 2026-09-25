@@ -72,13 +72,15 @@ export interface EditorAffordances {
 /**
  * What the editor lets a pointer do. `knotsStale` is the stop-mode rule the editor already had
  * (the bar shows something other than the knots — see `knotsStale` in the editor); on a stop
- * value this reproduces it exactly and adds nothing.
+ * value this reproduces it exactly and adds nothing. `takenOver`: a host tool holds the bar and
+ * the knot track (the editor's `stripTakeover`, GE v2's Paint face), so every knot gesture stands
+ * down whatever the value is; the menu's document actions stay.
  */
-export const editorAffordances = (o: { isRamp: boolean; knotsStale: boolean; canAddStops: boolean }): EditorAffordances => ({
-  knots: !o.isRamp && !o.knotsStale,
-  addKnot: !o.isRamp && !o.knotsStale,
-  selectMarquee: !o.isRamp,
-  knotEdits: !o.isRamp,
+export const editorAffordances = (o: { isRamp: boolean; knotsStale: boolean; canAddStops: boolean; takenOver?: boolean }): EditorAffordances => ({
+  knots: !o.isRamp && !o.knotsStale && !o.takenOver,
+  addKnot: !o.isRamp && !o.knotsStale && !o.takenOver,
+  selectMarquee: !o.isRamp && !o.takenOver,
+  knotEdits: !o.isRamp && !o.takenOver,
   clipboard: !o.isRamp,
   blendSpace: !o.isRamp,
   stopActions: !o.isRamp,

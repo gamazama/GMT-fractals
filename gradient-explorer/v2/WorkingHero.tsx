@@ -95,7 +95,7 @@
 import { unmodifiedOrigin, type CatalogOrigin } from '../../palette/core/catalogOrigin';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
-import { useWorkingStore, addStopsToWorking, workingSourceOf, type WorkingDerived } from '../../palette/store/workingStore';
+import { useWorkingStore, addStopsToWorking, workingSourceOf, deriveWorkingNow, type WorkingDerived } from '../../palette/store/workingStore';
 import { importedSourceOfWorking } from './contributeToGlobal';
 import { FROM_GMT_SOURCE } from './fromGmt';
 import { sameGradientBody } from '../../components/gradient/rampMode';
@@ -143,6 +143,8 @@ import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
 import { Tray, TRAY_TABS, type TrayFace } from './Tray';
+import { PaintSurface, PaintBeforeLine } from './paint/PaintSurface';
+import { syncPaintBase, endPaintSession, setBrush, usePaintStore } from './paint/paintStore';
 import { useStopSelectionHistory } from './uiHistory';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
@@ -155,6 +157,10 @@ import type { RGB } from '../../palette/core/oklab';
 import type { GradientConfig, GradientStop } from '../../types';
 import type { ContextMenuItem } from '../../types/help';
 import type { SourceId } from './GradientExplorerV2App';
+
+/** While the Paint face is open its brush takes the bar and the knot track over (the editor's
+ *  `stripTakeover` seam) — ONE object, so the editor sees the same takeover on every render. */
+const PAINT_TAKEOVER = { bar: <PaintSurface />, track: <PaintBeforeLine /> };
 
 /** The gradient panel's corner radius (px) — `rounded-[20px]` on the panel below. */
 const PANEL_RADIUS = 20;
@@ -306,6 +312,13 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   useEffect(() => {
     if (tray !== 'inspector' && selectionCount.current > 0) editorRef.current?.clearSelection();
   }, [tray]);
+  // PAINT paints on the working ramp as it is while the face is open: a new painting whenever that
+  // ramp changes under it (a pick, New, an undo), and none once the face has gone — the shell has
+  // applied or discarded it by then (@see ./paint/paintStore).
+  useEffect(() => {
+    if (tray === 'paint') syncPaintBase(derived.ramp);
+    else if (usePaintStore.getState().session) endPaintSession();
+  }, [tray, derived.ramp]);
   /**
    * THE INSPECTED STOP RIDES THE UNDO ENTRY WITH ITS FACE (2026-09-24). The inspector face is only
    * a portal host for the editor's selection, so the shell restoring `tray: 'inspector'` without
@@ -475,7 +488,9 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
       onRevealGround();
       const now = useWorkingStore.getState().input;
       const committed = leavesSource && now.kind === 'gradient' ? now : null;
-      const config = committed ? committed.config : shown.config;
+      // an open Paint face was applied by `onRevealGround` just now: file the painting, read afresh
+      const painted = tray === 'paint' ? deriveWorkingNow()?.config ?? null : null;
+      const config = committed ? committed.config : painted ?? shown.config;
       flashSaveWhereItLanded(
         config,
         () => {
@@ -910,10 +925,11 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                 palette={derived.palette}
                 scale={Math.max(1, rampW - 16)}
                 onScrub={setScrubT}
-                onSelect={editorIsRamp ? undefined : (_, t) => editorRef.current?.selectAt(t)}
+                // while Paint is open a swatch is a COLOUR for the brush, not a stop to select
+                onSelect={tray === 'paint' ? (i) => setBrush({ colour: derived.palette[i].color, tool: 'paint' }) : editorIsRamp ? undefined : (_, t) => editorRef.current?.selectAt(t)}
                 // a colour dragged from the picker onto a palette swatch lands on the ramp at
                 // that swatch's position (the editor recolours the nearest knot, or inserts one)
-                onDropColour={editorIsRamp ? undefined : (t, hex) => { ensureEditing(); editorRef.current?.dropColourAt(t, hex); }}
+                onDropColour={editorIsRamp || tray === 'paint' ? undefined : (t, hex) => { ensureEditing(); editorRef.current?.dropColourAt(t, hex); }}
                 // the Stops layout needs stops; a ramp gradient has none (ADR-0122)
                 hasStops={stopsOf(derived.config ?? shown.config).length >= 2}
                 /* PHONE: 32 px of swatch and 8 of gap — still a comfortable touch target,
@@ -1018,9 +1034,15 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                                    them back on one line at 390; 4 × 4 more (L1, 2026-09-24) do
                                    it at 375 (measured: 243 → 215 px). 360 needs ~12 px more,
                                    which is the editor row's own padding and gaps to give.
+                                   A FIFTH tab (Paint, 2026-09-24) put the row back over: 222
+                                   + 6 + the 123 px blend · ☰ group is 351 in 335 at 375 (1 px
+                                   over even at 390), and the wrap cost the card 36 px — hero
+                                   249 against smoke:ge-phone's 240. 4 px a side, not 6, gives
+                                   the 20 back; the tabs keep their 28 px height. The owner's
+                                   call to revisit (a glyph for Paint on a phone is the other).
                                    `transition-colors` (J12): the tabs ease like every other
                                    pressable in the shell instead of snapping. */
-                                className={`relative h-7 text-[13px] transition-colors ${phone ? 'px-1.5' : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
+                                className={`relative h-7 text-[13px] transition-colors ${phone ? 'px-1' : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
                                 onClick={() => onTray(t.face)}
                                 title={t.title}
                                 data-gx-tray-tab={t.face}
@@ -1034,6 +1056,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                         </div>
                       }
                       inspectorHost={inspectorEl}
+                      stripTakeover={tray === 'paint' ? PAINT_TAKEOVER : undefined}
                       onSelectionChange={onSelectionChange}
                       value={editorValue}
                       onChange={onEditorChange}

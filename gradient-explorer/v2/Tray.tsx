@@ -2,11 +2,11 @@
  * Tray — the ONE surface under the hero card (Phase C, plans/ge-v2-unified-shell-plan.md §4;
  * the design record is plans/ge-v2-figma/trays-spec.md and the "GE v2 Tray" canvas).
  *
- * Mix · Image · Curves · Adjust · the stop inspector are five FACES of one thing: it hangs
+ * Mix · Image · Curves · Adjust · Paint · the stop inspector are six FACES of one thing: it hangs
  * from the card's bottom edge, inline with the gradient PANEL (its left edge follows the
  * panel's, so it never sits under the image column), floats OVER the wall (the wall and
  * the shelf never move — L6), one face open at a time, Esc cancels it. The tab row that
- * opens the four named faces is the ramp's control row in `WorkingHero` (the editor's
+ * opens the five named faces is the ramp's control row in `WorkingHero` (the editor's
  * `stripAside`); the inspector has no tab — selecting a stop opens it and clearing the
  * selection closes it.
  *
@@ -30,6 +30,10 @@
  *     see `AdjustFace`. There is no noise TYPE control: the pipeline has one kind of noise
  *     (seeded value noise, linearly resampled at Frequency — grep `seededNoise` in
  *     palette/core/generatorPipeline.ts), so there is nothing to choose.
+ *   • Paint (2026-09-24) — the brush paints on the hero's bar itself (`paint/PaintSurface`, laid over
+ *     the Stops editor through its `stripTakeover` seam — no knots, no split); the tray holds the
+ *     brush lane, the brushes and the picker (`paint/PaintFace`). Leaving it applies the painting,
+ *     Esc throws it away — @see ./paint/paintStore.
  *   • Inspector — a portal host: `AdvancedGradientEditor` renders its stop inspector (the
  *     colour picker + the collapsible position / bias / interpolation column) INTO
  *     `inspectorHostRef` when a stop is selected. The host element must exist whatever face
@@ -79,15 +83,18 @@ import { useWorkingStore, deriveWorkingNow, type WorkingDerived } from '../../pa
 import { ExtractStage } from './ExtractStage';
 import { Act } from './ui/Act';
 import { Icon } from './ui/Icon';
+import { PaintFace } from './paint/PaintFace';
+import { rgbToHex } from '../../utils/colorUtils';
 
-export type TrayFace = 'mix' | 'image' | 'curves' | 'adjust' | 'inspector' | null;
+export type TrayFace = 'mix' | 'image' | 'curves' | 'adjust' | 'paint' | 'inspector' | null;
 
-/** The four faces with a tab, in tab order. */
+/** The faces with a tab, in tab order. */
 export const TRAY_TABS: { face: Exclude<TrayFace, null | 'inspector'>; label: string; title: string }[] = [
   { face: 'mix', label: 'Mix', title: 'Blend this gradient with another — pick the other one from the wall or My Gradients' },
   { face: 'image', label: 'Image', title: 'Extract a gradient from an image' },
   { face: 'curves', label: 'Curves', title: 'Shape the lightness, chroma and hue curves' },
   { face: 'adjust', label: 'Adjust', title: 'Hue, chroma, contrast, lightness, posterize, scale, mirror, phase, noise' },
+  { face: 'paint', label: 'Paint', title: 'Paint on the gradient — brushes, blend modes, smudge, soften, sharpen, clone' },
 ];
 
 interface Props {
@@ -131,7 +138,7 @@ const PHONE_INSET = 0;
 /** Phone: the faces that take the WHOLE room below the card and hide the wall (owner,
  *  2026-09-11: "except for mix mode, the other tabs don't need the wall visible at all").
  *  Mix is the exception because the wall IS its picker for the other gradient. */
-export const FULL_FACES: ReadonlySet<Exclude<TrayFace, null>> = new Set(['image', 'curves', 'adjust', 'inspector'] as const);
+export const FULL_FACES: ReadonlySet<Exclude<TrayFace, null>> = new Set(['image', 'curves', 'adjust', 'paint', 'inspector'] as const);
 /** Phone: how much of the room BELOW the card the tray may take before it scrolls. Just
  *  over half — enough that a face is worth opening, little enough that the wall it floats
  *  over is still visibly there (which is the whole reason the tray floats). */
@@ -151,6 +158,8 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
   // that fits keeps the `contents` wrapper, i.e. lays out exactly as it did.
   const rootRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Paint's picker offers the gradient's own colours as its palette row, as the stop inspector does
+  const paletteHex = useMemo(() => derived.palette.map((sw) => rgbToHex(sw.color)), [derived.palette]);
   const [maxH, setMaxH] = useState<number>(0);
   const [deskScroll, setDeskScroll] = useState(false);
   useEffect(() => {
@@ -240,6 +249,7 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
         {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} slot={imageSlot} phone={phone} />}
         {face === 'curves' && <CurvesFace derived={derived} width={width} phone={phone} />}
         {face === 'adjust' && <AdjustFace phone={phone} />}
+        {face === 'paint' && <PaintFace phone={phone} palette={paletteHex} />}
       </InputSkinProvider>
       {/* the inspector host lives whatever the face — the editor portals into it */}
       <div ref={inspectorHostRef} hidden={face !== 'inspector'} className="px-4 py-3" />

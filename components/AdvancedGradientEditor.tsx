@@ -247,6 +247,20 @@ interface AdvancedGradientEditorProps {
      * the menu is exactly the editor's.
      */
     menuLead?: ContextMenuItem[];
+    /**
+     * 'strip' chrome: a host TOOL takes the bar and the knot track over — GE v2's Paint face,
+     * whose brush paints on the bar (owner, 2026-09-24: "paint straight onto the hero instead of
+     * there being stops"). While it is set the knots, bias handles, selection brackets, the
+     * marquee, the bar's double-click and single click, colour drops and the ramp-mode label all
+     * stand down (through `editorAffordances`' `takenOver`); `bar` is laid over the bar AND its 8 px
+     * end gutters (the gutters' end colours are not painted — the host paints them, so a painted
+     * end shows), above the preview canvas, which keeps drawing under it; `track` fills the knot
+     * track's row. Everything else — the tab row, the menu, the
+     * blend chooser — is unchanged. Absent = the editor exactly as it was.
+     * Guard: `npm run smoke:ge-paint` [1] (the brush holds the bar, no knots) — ignoring the prop
+     * reds it (S5 in that smoke's header).
+     */
+    stripTakeover?: { bar: React.ReactNode; track?: React.ReactNode };
 }
 
 /**
@@ -341,7 +355,7 @@ const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelec
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops, menuLead }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops, menuLead, stripTakeover }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -539,7 +553,10 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     const setReduceSearch = useCallback((on: boolean) => { setReduceSearchState(on); safeLocalSet(REDUCE_SEARCH_KEY, on ? '1' : '0'); }, []);
     const [reducePreview, setReducePreview] = useState<GradientConfig | null>(null);
     const previewing = !!reducePreview;
-    const affordances = editorAffordances({ isRamp, knotsStale: knotsStale || previewing, canAddStops: !!onAddStops || !!stopFitter });
+    /** A host tool holds the bar and the track (`stripTakeover`): the knot gestures stand down
+     *  through the affordances, the bar's own clicks and the gutters' paint below. */
+    const taken = chrome === 'strip' && !!stripTakeover;
+    const affordances = editorAffordances({ isRamp, knotsStale: knotsStale || previewing, canAddStops: !!onAddStops || !!stopFitter, takenOver: taken });
     const showBias = affordances.knots && isBiasHandlesVisible && (chrome !== 'strip' || stripHover || (coarsePointer.current && selectedIds.size > 0));
     // Entering ramp mode drops any selection left from a stop value (an undo, a pick): the
     // ids point at nothing, and a live selection keeps the host's inspector face open.
@@ -1395,7 +1412,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
             data-help-id={helpId || "ui.gradient_editor"}
             onContextMenu={handleWrapperContextMenu}
             onPointerDown={(e) => {
-                if (e.button !== 0) return;
+                if (e.button !== 0 || taken) return;
                 if (!(e.target as HTMLElement).closest('.gradient-interactive-element')) {
                     if (knotTrackRef.current?.contains(e.target as Node)) return; // the track's own handlers
                     // RAMP MODE: no selection marquee — only the host's escape drag, if it has one.
@@ -1478,31 +1495,34 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                 chrome (GMT main) is unchanged. */}
             <div
                 className={`relative px-2 ${chrome === 'strip' ? `${stripCorners === 'bottom' ? 'rounded-b-[10px]' : 'rounded-[10px]'} overflow-hidden` : ''}`}
-                style={chrome === 'strip' && stripEnds ? {
+                style={chrome === 'strip' && stripEnds && !taken ? {
                     backgroundImage: `linear-gradient(to right, ${stripEnds.a} 50%, ${stripEnds.b} 50%)`,
                     backgroundSize: `100% ${stripHeight}px`,
                     backgroundRepeat: 'no-repeat',
                 } : undefined}
                 onContextMenu={openTrackContextMenu}
             >
+                {/* a TAKEOVER covers the bar AND its 8 px gutters (the `px-2` either side): the host
+                    paints the ends itself, so a painted end is not left wearing the stops' colour */}
+                {taken && <div className="absolute left-0 right-0 top-0 z-10" style={{ height: stripHeight }}>{stripTakeover!.bar}</div>}
                 <div
                     // `pointer` while a click BAKES (a face is open), otherwise `crosshair`:
                     // a drag here marquees the knots. It wore `pointer` unconditionally in full
                     // chrome and `default` in strip chrome, so the one surface with a real
                     // gesture on it was the one saying nothing happens here.
-                    className={`w-full relative mb-0 overflow-hidden group/strip ${onStripClick ? 'cursor-pointer' : affordances.selectMarquee ? 'cursor-crosshair' : 'cursor-default'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
+                    className={`w-full relative mb-0 overflow-hidden group/strip ${taken ? 'cursor-default' : onStripClick ? 'cursor-pointer' : affordances.selectMarquee ? 'cursor-crosshair' : 'cursor-default'} ${chrome === 'strip' ? '' : 'rounded-t border border-line/20'}`}
                     // The bar hosts drags of its own — the bias handles, and a marquee from the
                     // bar's background — so a finger on it belongs to the editor, not to
                     // whatever scrolls behind it. A mouse ignores `touch-action` entirely.
                     style={{ height: stripHeight, touchAction: 'none' }}
-                    onDoubleClick={(e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
-                    onClick={onStripClick ? (e) => { if (!(e.target as HTMLElement).closest('.bias-handle')) onStripClick(); } : undefined}
+                    onDoubleClick={taken ? undefined : (e) => { e.preventDefault(); setSelectedIds(new Set(knots.map(k => k.id))); }}
+                    onClick={onStripClick && !taken ? (e) => { if (!(e.target as HTMLElement).closest('.bias-handle')) onStripClick(); } : undefined}
                     onMouseEnter={chrome === 'strip' ? () => setStripHover(true) : undefined}
                     onMouseLeave={chrome === 'strip' ? () => setStripHover(false) : undefined}
-                    title={onStripClick ? stripTitle : isRamp ? undefined : 'Double-click to select all'}
-                    data-gx-result-half={onStripClick ? 'bake' : undefined}
+                    title={taken ? undefined : onStripClick ? stripTitle : isRamp ? undefined : 'Double-click to select all'}
+                    data-gx-result-half={onStripClick && !taken ? 'bake' : undefined}
                 >
-                     {stripHint}
+                     {!taken && stripHint}
                      {/* Exact 256-ramp preview (engine sampler) — pointer-events-none so
                          the strip's double-click + bias handles still receive events.
                          `data-gx-ramp` is the handle a test has on the RESULT bar, and it earns
@@ -1546,12 +1566,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     data-gx-knot-track=""
                     data-gx-knots-stale={knotsStale ? '' : undefined}
                     data-gx-ramp-mode={isRamp ? '' : undefined}
-                    className={`h-6 w-full bg-line/5 relative ${affordances.addKnot ? 'cursor-copy' : 'cursor-default'} ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
+                    className={`h-6 w-full ${taken ? '' : 'bg-line/5'} relative ${affordances.addKnot ? 'cursor-copy' : 'cursor-default'} ${chrome === 'strip' ? '' : 'border-x border-b border-line/10 rounded-b'}`}
                     // Every drag that starts here is the track's own (add / move a knot, the
                     // brackets, the marquee) — the browser must not read it as a scroll.
                     style={{ touchAction: 'none' }}
                     onPointerDown={affordances.addKnot ? handleTrackPointerDown : undefined}
-                    title={isRamp ? 'A 256-colour ramp: it has no stops to edit — Add stops to edit it stop by stop' : knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click and drag to add or move a stop'}
+                    title={taken ? undefined : isRamp ? 'A 256-colour ramp: it has no stops to edit — Add stops to edit it stop by stop' : knotsStale ? 'These stops describe the gradient underneath — bake the change to edit them' : 'Click and drag to add or move a stop'}
                     onDragOver={(e) => {
                         // a ramp takes no dropped colour: there is no knot to land it on
                         if (!affordances.knotEdits || !isColorDrag(e.dataTransfer)) return;
@@ -1590,7 +1610,8 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         />
                     )}
                     {/* RAMP MODE says what the track is, since it no longer answers a click */}
-                    {isRamp && (
+                    {taken && stripTakeover!.track}
+                    {isRamp && !taken && (
                         <span className="absolute inset-0 flex items-center justify-center text-[10px] text-fg-faint pointer-events-none select-none whitespace-nowrap overflow-hidden" data-gx-ramp-label="">
                             256-colour ramp · no stops
                         </span>
@@ -1664,7 +1685,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                         </div>
                     ))}
 
-                    {selectionRange && (
+                    {selectionRange && !taken && (
                         <>
                             {/* Selection background — solid fill behind handles, dashed bottom for drag affordance */}
                             <div

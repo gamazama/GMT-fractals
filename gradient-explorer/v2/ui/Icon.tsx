@@ -29,6 +29,12 @@
  * frame read as a digit 0 beside the word Portrait. They replace the Wallpaper toolbar's ⇅ ◉ ▦,
  * the Export panel's ▭ ▯, the desk top bar's old-set `?` and the phone menu's empty Back slot.
  *
+ * DRAFTED FOR THE OWNER, NOT YET PICKED (2026-09-24, the Paint face) — smudge, soften, sharpen,
+ * tone, clone, restore (the brushes; Paint itself is the owner's `brush`) and mirror, wrap, height
+ * (the stroke toggles). Drawn on the same 2.2 … 13.8 ink box at the set's weight; `restore` is
+ * `refresh` turned the other way, as undo is redo's. They stand in until the owner draws or picks
+ * the set, the way the polish pass's drafts did.
+ *
  * WEIGHT. The set is one weight, 1.5 (V6). Two glyphs' worth of exception, `WEIGHT` below:
  * a glyph whose parts share the box needs air or it fills in at 16 px — the gear's teeth
  * fuse into a disc and the two dashed outlines clog into solid ones. Checked by rasterising
@@ -73,7 +79,16 @@ export type IconName =
   | 'handles'
   | 'dither'
   | 'landscape'
-  | 'portrait';
+  | 'portrait'
+  | 'smudge'
+  | 'soften'
+  | 'sharpen'
+  | 'tone'
+  | 'clone'
+  | 'restore'
+  | 'mirror'
+  | 'wrap'
+  | 'height';
 
 /**
  * The hero's USE glyphs — the owner's pick in Figma (GE v2 Hero, 2026-09-07): Material
@@ -166,6 +181,38 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED>, React.React
       <path d="M6.9 11h2.2" />
     </>
   ),
+  // Paint face drafts (see the header). A fingertip dragging streaks behind it.
+  smudge: (
+    <>
+      <circle cx="11.2" cy="8" r="2.6" />
+      <path d="M2.2 5.6h6M3.6 8h5M2.2 10.4h6" />
+    </>
+  ),
+  // A soft edge — a dotted rim around a core — and a sharp one, the triangle image editors use.
+  soften: (
+    <>
+      <circle cx="8" cy="8" r="5.8" strokeDasharray="1.5 2" />
+      <circle cx="8" cy="8" r="2.2" />
+    </>
+  ),
+  sharpen: <path d="M8 2.2l5.8 11H2.2z" />,
+  // Half hatched: more or less of something (lightness, chroma, hue).
+  tone: (
+    <>
+      <circle cx="8" cy="8" r="5.8" />
+      <path d="M8 2.2v11.6M8 4.6h3.9M8 8h5.8M8 11.4h3.9" />
+    </>
+  ),
+  // A rubber stamp on its line.
+  clone: <path d="M6.2 2.2h3.6v4.2l2.9 1.5v2.3H3.3V7.9l2.9-1.5zM2.6 13.4h10.8" />,
+  // `refresh` turned the other way: back to what it was.
+  restore: <path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.7M2.5 2.2v3.2h3.2" />,
+  // Two halves facing each other across an axis.
+  mirror: <path d="M8 2.2v11.6M5.6 4.6L2.2 8l3.4 3.4zM10.4 4.6L13.8 8l-3.4 3.4z" />,
+  // Off one end and back in at the other.
+  wrap: <path d="M2.2 5.4h8.6a2.9 2.9 0 0 1 0 5.8H4M6.2 9L4 11.2l2.2 2.2" />,
+  // Up means more.
+  height: <path d="M8 13.4V3M5.4 5.6L8 3l2.6 2.6M3.4 13.4h9.2" />,
 };
 
 /**
