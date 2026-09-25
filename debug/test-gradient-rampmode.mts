@@ -84,6 +84,7 @@ console.log('[1] affordances');
   // and so do the menu's stop actions (2026-09-25); copy and the blend space stay
   const tk = editorAffordances({ isRamp: false, knotsStale: false, canAddStops: true, takenOver: true });
   check(!tk.knots && !tk.addKnot && !tk.selectMarquee && !tk.knotEdits && !tk.stopActions && tk.clipboard && tk.blendSpace, 'taken over: no knots, insertion, marquee, knot edits or stop actions; copy and the blend space stay');
+  check(tk.addStops && !editorAffordances({ isRamp: false, knotsStale: false, canAddStops: false, takenOver: true }).addStops, 'taken over: Add stops is offered over a stop value (when there is a way to add them)');
   check(rampOfEditorValue(zebraCfg) === zebraCfg && rampOfEditorValue(stopCfg) === null && rampOfEditorValue(stops) === null && rampOfEditorValue({ stops: [] } as GradientConfig) === null,
     'the mode is read off the value: ramp config yes; stops, legacy array, `stops: []` without a ramp no');
 }
@@ -248,7 +249,7 @@ console.log('\n[6] wiring pin (text)');
   check(has('editorBarSource({') && has('paintStripPixels(STRIP_PREVIEW_W, barSource') && has('barTexels256(barSource'), 'both chromes paint from editorBarSource');
   check(has('onChangeRef.current(editorEmitConfig('), 'emitChange emits through editorEmitConfig');
   check(has('if (rampValueRef.current) return', 4), 'selectAt / dropColourAt / track press / paste refuse a ramp');
-  check(has('{isRamp ? addStopsButton : ', 2), 'Add stops replaces the blend chooser in both chromes');
+  check(has('{isRamp ? addStopsButton : ', 1) && has('{isRamp || taken ? addStopsButton : ', 1), 'Add stops replaces the blend chooser in both chromes (and, in strip chrome, under a takeover)');
   const reg = readFileSync(new URL('../palette/registerPaletteUI.ts', import.meta.url), 'utf8');
   check(/setGradientStopFitter\(\(config\) => addStopsToConfig\(config,/.test(reg), 'registerPaletteUI fills the stop-fitter slot with addStopsToConfig');
 }

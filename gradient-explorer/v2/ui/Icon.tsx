@@ -34,8 +34,8 @@
  * `SOLID` below: paintBrush (with its ferrule), clone (a rubber stamp), smudge (a pointing hand),
  * tone (a half-filled disc), soften (a drop), sharpen (a spike), on a 24-unit box like the hero's
  * FILLED family, drawn here and refined with the owner over three rounds, each rendered at 16 px
- * and magnified. Restore kept its line glyph at the owner's word, and the stroke TOGGLES beside
- * them (mirror, wrap, height) are still line drafts for the owner to pick or redraw.
+ * and magnified. Restore kept its line glyph at the owner's word. The stroke TOGGLES beside them
+ * (mirror, wrap, height) went solid the same day to match — see their notes in `SOLID`.
  *
  * WEIGHT. The set is one weight, 1.5 (V6). Two glyphs' worth of exception, `WEIGHT` below:
  * a glyph whose parts share the box needs air or it fills in at 16 px — the gear's teeth
@@ -117,7 +117,7 @@ const FILLED: Record<'heart' | 'share' | 'download' | 'photo' | 'fullscreen', st
  * header). A map of nodes rather than FILLED's single paths, because the hand is drawn upright
  * and turned (`rotate`), which a bare `d` cannot say.
  */
-const SOLID: Record<'paintBrush' | 'clone' | 'smudge' | 'tone' | 'soften' | 'sharpen', React.ReactNode> = {
+const SOLID: Record<'paintBrush' | 'clone' | 'smudge' | 'tone' | 'soften' | 'sharpen' | 'mirror' | 'wrap' | 'height', React.ReactNode> = {
   // Material's "brush" blob on a handle that TAPERS to its end (owner, 2026-09-25: "needs taper";
   // a separate ferrule band read as an extra segment)
   paintBrush: <path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.21 0 4-1.79 4-4 0-1.66-1.34-3-3-3zM9 12.25 11.75 15l8.9-9.6a.95.95 0 0 0-1.35-1.35z" />,
@@ -149,6 +149,32 @@ const SOLID: Record<'paintBrush' | 'clone' | 'smudge' | 'tone' | 'soften' | 'sha
   // a tall spike with curved-in sides, not an even triangle (owner: "sharpen is not normally a
   // perfect triangle")
   sharpen: <path d="M12 2.5C12.6 8 14.8 15 16.8 21H7.2C9.2 15 11.4 8 12 2.5z" />,
+  // THE STROKE TOGGLES (2026-09-25, solid to match the brushes; the owner may swap any — the
+  // alternatives drawn beside them were two triangles on an axis, and an up-arrow on a baseline).
+  // Mirror: Photoshop's symmetry butterfly — one wing, the same wing mirrored, the axis between.
+  mirror: (
+    <>
+      <path d="M11.2 7.6C9.6 4.3 6 3 4 4.1 2.1 5.2 2.6 8.5 5.3 10.4 3.4 11.6 3.1 14.4 4.9 15.7c1.9 1.4 4.8.2 6.3-3.3z" />
+      <g transform="translate(24 0) scale(-1 1)"><path d="M11.2 7.6C9.6 4.3 6 3 4 4.1 2.1 5.2 2.6 8.5 5.3 10.4 3.4 11.6 3.1 14.4 4.9 15.7c1.9 1.4 4.8.2 6.3-3.3z" /></g>
+      <rect x="11.5" y="4.5" width="1" height="15" rx=".5" />
+    </>
+  ),
+  // Wrap: the gradient's bar, and an arrow that leaves one end and comes back in at the other.
+  wrap: (
+    <>
+      <rect x="3" y="6" width="18" height="4.4" rx="2.2" />
+      <path d="M19.2 12.6v1.6a3.2 3.2 0 0 1-3.2 3.2H8.2A3.2 3.2 0 0 1 5 14.2v-.4" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" />
+      <path d="M2 15.2 5 11.6l3 3.6z" />
+    </>
+  ),
+  // Height = strength: levels rising — the higher on the gradient, the stronger the brush.
+  height: (
+    <>
+      <rect x="3.5" y="14.5" width="4.4" height="6" rx="1.2" />
+      <rect x="9.8" y="9.5" width="4.4" height="11" rx="1.2" />
+      <rect x="16.1" y="3.5" width="4.4" height="17" rx="1.2" />
+    </>
+  ),
 };
 
 const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeof SOLID>, React.ReactNode> = {
@@ -228,13 +254,6 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeo
   // circle sits so the ink — ring and head — is centred on the box, and the head's corner is ON
   // the arc's end rather than beside it.
   restore: <path d="M3 8.7a5 5 0 1 0 1.46-3.54M4.46 2.3v2.86h2.86" />,
-  // Paint face stroke toggles — drafts (see the header).
-  // Two halves facing each other across an axis.
-  mirror: <path d="M8 2.2v11.6M5.6 4.6L2.2 8l3.4 3.4zM10.4 4.6L13.8 8l-3.4 3.4z" />,
-  // Off one end and back in at the other.
-  wrap: <path d="M2.2 5.4h8.6a2.9 2.9 0 0 1 0 5.8H4M6.2 9L4 11.2l2.2 2.2" />,
-  // Up means more.
-  height: <path d="M8 13.4V3M5.4 5.6L8 3l2.6 2.6M3.4 13.4h9.2" />,
 };
 
 /**

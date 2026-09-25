@@ -259,6 +259,7 @@ interface AdvancedGradientEditorProps {
      * blend chooser — is unchanged. Absent = the editor exactly as it was.
      * Guard: `npm run smoke:ge-paint` [1] (the brush holds the bar, no knots) — ignoring the prop
      * reds it (S5 in that smoke's header).
+     * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
      */
     stripTakeover?: { bar: React.ReactNode; track?: React.ReactNode };
 }
@@ -1762,8 +1763,12 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     <div className={`flex items-center ${tight ? 'gap-1.5' : 'gap-2'} text-[10px] text-fg-dim`}>
                         {/* "blend" is the picker's own quiet word (`showNoun`); on a coarse pointer
                             the picker IS the word (see BlendSpacePicker) */}
-                        {/* RAMP MODE: blend is inert on a ramp, so its slot holds Add stops */}
-                        {isRamp ? addStopsButton : (
+                        {/* RAMP MODE: blend is inert on a ramp, so its slot holds Add stops. So does a
+                            TAKEOVER (owner, 2026-09-25: the row still read "N stops" over a painting):
+                            the bar shows the tool's work, not these stops, and a blend change would
+                            re-render the gradient under it. Add stops there is the host's — it applies
+                            the work first and fits stops to it. */}
+                        {isRamp || taken ? addStopsButton : (
                             <>
                                 {/* THE STOP COUNT, where a ramp says it has none (owner's parity
                                     row E10b). Quiet on purpose — the ramp label's ink. Hidden (not

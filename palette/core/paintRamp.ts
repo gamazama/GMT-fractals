@@ -49,6 +49,7 @@
  *   • Mirror paints a second dab at 256 − c; Clone's mirrored dab samples with the offset
  *     negated, so the mirrored copy is the mirror of the copy.
  *
+ * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
  * @see gradient-explorer/v2/paint/PaintFace.tsx (the face) · utils/gradientRamp.ts (the ramp form)
  */
 

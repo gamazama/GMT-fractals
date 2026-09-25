@@ -71,6 +71,7 @@ export interface GradientMenuContext {
    * there are none"). The editor asks, and a yes runs its Add stops — through the host when it has
    * one, which is what applies a host tool's work first. Distribute and Delete act on a selection
    * there is none of, so they stay greyed. Omitted: all of them are disabled, as before.
+   * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
    */
   offerStops?: () => void;
   /** Wrap a discrete mutation in one undo entry (the editor's editAction). */

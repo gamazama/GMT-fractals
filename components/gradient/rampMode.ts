@@ -75,8 +75,9 @@ export interface EditorAffordances {
  * value this reproduces it exactly and adds nothing. `takenOver`: a host tool holds the bar and
  * the knot track (the editor's `stripTakeover`, GE v2's Paint face), so every knot gesture stands
  * down whatever the value is, and so do the menu's stop actions — they would rewrite the stops
- * under a painting the host has not applied yet (and could not be seen doing it). Add stops
- * stays: the host applies its tool's work first (owner, 2026-09-25). Copy and the blend space stay.
+ * under a painting the host has not applied yet (and could not be seen doing it). Add stops is
+ * OFFERED even over a stop value: the host applies its tool's work first — a painting becomes a
+ * ramp — and fits stops to it (owner, 2026-09-25). Copy and the blend space stay.
  */
 export const editorAffordances = (o: { isRamp: boolean; knotsStale: boolean; canAddStops: boolean; takenOver?: boolean }): EditorAffordances => ({
   knots: !o.isRamp && !o.knotsStale && !o.takenOver,
@@ -86,7 +87,7 @@ export const editorAffordances = (o: { isRamp: boolean; knotsStale: boolean; can
   clipboard: !o.isRamp,
   blendSpace: !o.isRamp,
   stopActions: !o.isRamp && !o.takenOver,
-  addStops: o.isRamp && o.canAddStops,
+  addStops: (o.isRamp || !!o.takenOver) && o.canAddStops,
 });
 
 /**

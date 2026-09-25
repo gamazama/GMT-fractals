@@ -36,7 +36,8 @@
  *   S6 the right gutter not recoloured from the painting → [3b] red;
  *   S7 no wrapped copy of the brush → [3b] red.
  * And 2026-09-25: S8 Add stops not leaving Paint → [9] red (17 stops added, 0 knots on the bar —
- * the owner's report); S9 `gradientActions`' `offer` never set → [10] red (Double Stops greyed).
+ * the owner's report); S9 `gradientActions`' `offer` never set → [10] red (Double Stops greyed);
+ * S10 the row back to `isRamp ? addStopsButton` (no takeover) → [1] red ("still reads a stop count").
  */
 
 import { chromium, type Page } from 'playwright';
@@ -117,7 +118,11 @@ async function run() {
     if (!(await has(page, sel))) fail(`[1] ${what} is missing`);
   }
   if (errors.length) fail(`[1] pageerror opening Paint: ${errors[0]}`);
-  ok('[1] Paint opens: the brush holds the bar, the lane and the picker are in the tray');
+  // the row says what the BAR is, not the stops under it (owner, 2026-09-25: "while paint is open after
+  // painting, the hero still shows [n] stops"): Add stops in the count's place, no blend chooser
+  if (await has(page, '[data-gx-hero] [data-gx-stop-count]')) fail('[1] the row still reads a stop count under the brush');
+  if (!(await has(page, '[data-gx-hero] [data-gx-add-stops]'))) fail('[1] the row does not offer Add stops while Paint holds the bar');
+  ok('[1] Paint opens: the brush holds the bar, the row offers Add stops, the lane and the picker are in the tray');
 
   // [2]
   const before = await texel(page, i);

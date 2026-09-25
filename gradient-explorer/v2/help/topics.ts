@@ -148,6 +148,8 @@ Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip 
 - **This is the Gradient Explorer now.** The page GMT and Fluid Toy open shows it, and coming from GMT's My Gradients gives you a Back to GMT link. The old Explorer is gone.
 - **Links shared from the preview still open.** New share links use the main address.
 - **The Explorer opens on the gradient you had in GMT**, and Back to GMT returns you to your scene.
+- **Paint** — a new face that puts a brush straight onto the gradient: paint, smudge, soften, sharpen, tone, clone and restore.
+- **The Image tab appears once a picture is loaded** — click the picture slot, or drop or paste one anywhere.
 - **Gradient ☰ menu → Reduce Stops…**
 - **Gradient ☰ menu → New Gradient.**
 - **Export text preview**, and other small UX improvements.

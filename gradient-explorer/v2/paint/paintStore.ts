@@ -28,6 +28,8 @@
  *
  * The brush persists (`gmt.ge.paint-brush`); the painting does not — it is a face's working
  * state, and the autosaved session carries the working gradient, which is what Apply writes.
+ *
+ * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
  */
 
 import { create } from 'zustand';
