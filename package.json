@@ -64,6 +64,7 @@
     "smoke:catalog-browse": "tsx debug/smoke-catalog-browse.mts",
     "smoke:catalog-load": "tsx debug/smoke-catalog-load.mts",
     "smoke:compile-failed": "tsx debug/smoke-compile-failed.mts",
+    "smoke:lazy-fallback": "tsx debug/smoke-lazy-fallback.mts",
     "smoke:deep-zoom-la": "tsx debug/smoke-deep-zoom-la.mts",
     "smoke:deep-zoom-nucleus": "tsx debug/smoke-deep-zoom-nucleus.mts",
     "smoke:deep-zoom-orbit": "tsx debug/smoke-deep-zoom-orbit.mts",

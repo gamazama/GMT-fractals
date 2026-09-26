@@ -9,12 +9,14 @@
 import React, { Suspense } from 'react';
 import { componentRegistry } from '../../components/registry/ComponentRegistry';
 import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
+import { lazyWithFallback } from '../../components/ui/lazyWithFallback';
 
 // --- Lazy helper for on-demand components ---
 function lazify<P extends object>(
-    factory: () => Promise<{ default: React.ComponentType<P> }>
+    factory: () => Promise<{ default: React.ComponentType<P> }>,
+    label: string,
 ): React.FC<P> {
-    const LazyComp = React.lazy(factory);
+    const LazyComp = lazyWithFallback(factory, label);
     return (props: P) => <Suspense fallback={null}><LazyComp {...(props as any)} /></Suspense>;
 }
 
@@ -23,13 +25,16 @@ import { AudioLinkControls } from './audioMod/AudioLinkControls';
 import { WebcamOverlay } from './webcam/WebcamOverlay';
 
 const LazyAudioPanel = lazify(() =>
-    import('./audioMod/AudioPanel').then(m => ({ default: m.AudioPanel })) as Promise<{ default: React.ComponentType<any> }>
+    import('./audioMod/AudioPanel').then(m => ({ default: m.AudioPanel })) as Promise<{ default: React.ComponentType<any> }>,
+    'The audio panel',
 );
 const LazyAudioSpectrum = lazify(() =>
-    import('./audioMod/AudioSpectrum').then(m => ({ default: m.AudioSpectrum })) as Promise<{ default: React.ComponentType<any> }>
+    import('./audioMod/AudioSpectrum').then(m => ({ default: m.AudioSpectrum })) as Promise<{ default: React.ComponentType<any> }>,
+    'The audio spectrum',
 );
 const LazyDebugToolsOverlay = lazify(() =>
-    import('./debug_tools/DebugToolsOverlay').then(m => ({ default: m.DebugToolsOverlay })) as Promise<{ default: React.ComponentType<any> }>
+    import('./debug_tools/DebugToolsOverlay').then(m => ({ default: m.DebugToolsOverlay })) as Promise<{ default: React.ComponentType<any> }>,
+    'Debug tools',
 );
 
 // --- Registration ---

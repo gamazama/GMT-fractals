@@ -97,7 +97,16 @@ npm run smoke:boot        # renders the whole panel tree headlessly; fails on pa
 npm run smoke:interact    # DDFS state flow end-to-end (demo feature)
 npm run smoke:ge-pagepick # the picker's pipette with `EyeDropper` deleted, and with it present
 npm run test:number-drag-rate # the number-vs-track band (node, sub-second)
+npm run smoke:lazy-fallback   # a lazy panel whose chunk can't be fetched shows a notice, app keeps running
 ```
+
+**Every lazily-imported surface goes through `lazyWithFallback`** (`components/ui/lazyWithFallback.tsx`),
+never bare `React.lazy`. A failed chunk fetch — a deploy that replaced the chunks under an open tab,
+or a stopped dev server — otherwise throws into the one root `AppErrorBoundary` and takes the whole
+app down for a panel the user merely opened (the gradient editor, 2026-09-20 in production and
+2026-09-25 in dev). `smoke:lazy-fallback` covers the gradient editor's site only; the other five
+(both HelpBrowsers, Timeline, the audio panel + spectrum, debug tools, StateDebugger) share the
+helper but aren't exercised.
 
 `test:number-drag-rate` reaches `components/inputs/numberDragRate.ts` only — the band itself.
 Falsified 2026-09-13 three ways, each reverted: dropping the "never faster" clamp (1682 of

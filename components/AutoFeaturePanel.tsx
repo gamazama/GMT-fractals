@@ -58,9 +58,12 @@ import { componentRegistry } from './registry/ComponentRegistry';
 import { useInputSkin } from './inputs';
 import { AlertIcon, CloseIcon } from './Icons';
 import { Hint } from './Hint';
+import { lazyWithFallback } from './ui/lazyWithFallback';
 
-// Code-split: gradient editor only renders for gradient params
-const AdvancedGradientEditor = React.lazy(() => import('./AdvancedGradientEditor'));
+// Code-split: gradient editor only renders for gradient params. A failed
+// fetch (stale deploy, dev server gone) shows a notice in place of the editor
+// instead of crashing the app — see lazyWithFallback.
+const AdvancedGradientEditor = lazyWithFallback(() => import('./AdvancedGradientEditor'), 'The gradient editor');
 import { FractalEvents } from '../engine/FractalEvents';
 import { tutorAnchors } from '../engine/plugins/Tutorial';
 import { SectionLabel, SectionDivider } from './SectionLabel';

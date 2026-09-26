@@ -27,10 +27,11 @@ import { menu, MenuItem } from './Menu';
 import { shortcuts } from './Shortcuts';
 import { hud, type HudSlot } from './Hud';
 import { listLessons, subscribeLessons, type TutorialLesson } from './Tutorial';
+import { lazyWithFallback } from '../../components/ui/lazyWithFallback';
 
 // Lazy-load the HelpBrowser so the ~3400-line topic bundle doesn't land
 // in the main chunk. Matches App.tsx's existing pattern.
-const HelpBrowser = React.lazy(() => import('../../components/HelpBrowser'));
+const HelpBrowser = lazyWithFallback(() => import('../../components/HelpBrowser'), 'Help');
 
 // ── Icons (local to this plugin; no cross-coupling to the app icon set) ─
 

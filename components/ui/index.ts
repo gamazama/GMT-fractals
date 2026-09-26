@@ -17,3 +17,4 @@ export type { Tier, TierDef, LayerDomain } from './zIndex';
 export { getLayerHost, setLayerHost } from './layerHost';
 export { useLayerStack, useLayerStackZ } from './layerStack';
 export { stopNavKeys } from './stopNavKeys';
+export { lazyWithFallback, isModuleLoadFailure } from './lazyWithFallback';

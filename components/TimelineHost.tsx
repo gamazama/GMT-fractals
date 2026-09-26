@@ -15,8 +15,9 @@ import { useEngineStore } from '../store/engineStore';
 import { useAnimationStore } from '../store/animationStore';
 import { TimelineOpenIcon } from './Icons';
 import { useShortcut } from '../engine/plugins/Shortcuts';
+import { lazyWithFallback } from './ui/lazyWithFallback';
 
-const Timeline = React.lazy(() => import('./Timeline'));
+const Timeline = lazyWithFallback(() => import('./Timeline'), 'The timeline');
 
 export interface TimelineHostProps {
     /** Hide the toggle + panel entirely (e.g. broadcast / clean-feed mode). */

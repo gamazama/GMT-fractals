@@ -14,9 +14,10 @@ import { TimelineHost } from './components/TimelineHost';
 import { TopBarHost } from './engine/plugins/TopBar';
 import { HudHost } from './engine/plugins/Hud';
 import { HelpOverlay } from './engine/plugins/Help';
+import { lazyWithFallback } from './components/ui/lazyWithFallback';
 
 // --- Code-split: loaded on demand ---
-const HelpBrowser = React.lazy(() => import('./components/HelpBrowser'));
+const HelpBrowser = lazyWithFallback(() => import('./components/HelpBrowser'), 'Help');
 import { useMobileLayout } from './hooks/useMobileLayout';
 import { FractalEvents } from './engine/FractalEvents';
 import { Dock } from './components/layout/Dock';
