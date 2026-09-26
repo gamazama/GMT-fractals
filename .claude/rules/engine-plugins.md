@@ -132,4 +132,6 @@ npm run smoke:hud-hint
 npm run smoke:pause-controls
 npm run test:gx-session          # engine/plugins/Session.ts boot restore + autosave loop; per-app autosave stores + rows
 npm run test:scene-file-claims   # engine/plugins/SceneFileClaims.ts only: claim order, removal-only, a throwing claim (node, sub-second)
+npm run smoke:pwa-update         # engine/plugins/PwaUpdate.tsx: BUILDS the app and serves it (the SW is off in dev);
+                                 # a deploy lights the Update pill, a first visit doesn't, nothing auto-reloads (~60 s)
 ```

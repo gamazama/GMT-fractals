@@ -25,9 +25,11 @@ export default defineConfig({
     },
     VitePWA({
       // 'prompt' is effectively vestigial: the workbox skipWaiting/clientsClaim
-      // below make every new SW take over immediately + SILENTLY — the chosen
-      // update model (decided 2026-06-17, suite-wide), so there's no waiting
-      // worker for the prompt to surface and no "Update" pill on any app.
+      // below make every new SW take over immediately — the chosen update model
+      // (decided 2026-06-17, suite-wide), so there's never a WAITING worker. Since
+      // 2026-09-26 the takeover itself is shown: engine/plugins/PwaUpdate.tsx
+      // lights its "Update" pill on `controllerchange` and a click reloads (never
+      // automatically). Guard: `npm run smoke:pwa-update` (builds + serves).
       registerType: 'prompt',
       // Don't run SW in dev (avoids middleware-mode complexity with Express server).
       devOptions: { enabled: false },
