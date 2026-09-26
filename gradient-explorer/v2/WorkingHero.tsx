@@ -128,7 +128,6 @@ const REVEAL_DOUBLE_MS = 450;
  *  again" (HT-14). The strings are the ones the shell passes to `use` (grep `.use(` in
  *  ./GradientExplorerV2App and ./fromGmt). */
 const NOT_A_PICK: ReadonlySet<string> = new Set(['New', 'Mix', 'Image', 'Shared link', FROM_GMT_SOURCE]);
-import { setDragOrigin } from '../../palette/store/dragVisual';
 import { useFavientsStore, favientSig, isRecentGroup, DEFAULT_GROUP } from '../../palette/store/favientsStore';
 import { KEPT_LABEL } from '../../palette/core/groundSets';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';
@@ -767,7 +766,6 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
               const payload = { config: shown.config, name: derived.name, ...(importedSource ? { source: importedSource } : {}) };
               setFavientDrag(e.dataTransfer, payload);
               beginCustomAvatarDrag(e.dataTransfer); // register the drag + suppress the native image
-              setDragOrigin(e.currentTarget.getBoundingClientRect()); // recorded, but nothing reads it: the v2 avatar starts at the cursor (no morph)
             }}
           >
             {/* PHONE: the DOOR to the picture, first in the row — the image is a SOURCE, and
@@ -1000,7 +998,6 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                         startPointerGradientDrag(
                           { config: shown.config, name: derived.name },
                           { x: ev.clientX, y: ev.clientY },
-                          rampElRef.current?.getBoundingClientRect(),
                         );
                       }}
                       stripHeight={resultH}

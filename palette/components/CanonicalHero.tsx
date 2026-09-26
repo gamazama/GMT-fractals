@@ -47,7 +47,6 @@ import {
   type HeroMode,
 } from '../store/heroSelection';
 import { useHeroPrefs, toggleHeroEnlarged, HERO_HEIGHT_TALL, HERO_HEIGHT_BASE } from '../store/heroPrefs';
-import { setDragOrigin } from '../store/dragVisual';
 
 interface CanonicalHeroProps {
   config: GradientConfig;
@@ -208,14 +207,10 @@ export const CanonicalHero: React.FC<CanonicalHeroProps> = ({
           const pn = payloadName();
           setFavientDrag(e.dataTransfer, { config, name: pn, source });
           beginCustomAvatarDrag(e.dataTransfer);
-          setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the strip
           // Drag mirrors click: set the pick so the avatar has a ramp + the source stays lit.
           setHeroDrag({ mode, key, payload: { config, name: pn, source }, selfTargetId: targetId });
         }}
-        onClick={(e) => {
-          setDragOrigin(e.currentTarget.getBoundingClientRect()); // in-hand avatar morphs from the strip
-          pick();
-        }}
+        onClick={() => pick()}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();

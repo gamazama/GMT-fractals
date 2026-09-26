@@ -32,19 +32,23 @@
  *   Handles authored in linear-value space and then evaluated as
  *   log-units give a curve nobody asked for.
  *
- * @bug PRODUCTION: one caller still does not thread it —
- *   `utils/CurveFitting.ts` `reTangentBezier`, reached from the Pencil tool
- *   (`hooks/usePencilTool.ts`), the graph editor's Bias handle
- *   (`components/graph/GraphSelectionBBox.tsx`) and `fitSamplesToKeys`. It
- *   takes a `Keyframe[]` and no trackId, so there is nothing to derive the
- *   flag from. Live for any app registering a log track — today that is
- *   fluid-toy's `julia.zoom`, which IS plotted and editable in the graph
- *   editor. Measured on the Bias path: authoring the same keys both ways
- *   diverges by up to 1.34 decades (22x) on a 24-decade track, 0.30 decades
- *   (2x) on an everyday 6-decade zoom; auto-tangents collapse toward flat
- *   because a linear-space slope is a rounding error in log-units. NOTE the
- *   Pencil path has a second, larger defect that fixing this alone will not
- *   cure: `components/GraphEditor.tsx`'s Douglas-Peucker epsilon
+ * @bug PRODUCTION: two curve-tool paths still author tangents in LINEAR
+ *   value space on a log track. (1) `utils/CurveFitting.ts`
+ *   `reTangentBezier`, reached from the graph editor's Bias handle
+ *   (`components/graph/GraphSelectionBBox.tsx`) and from `spliceSpan`'s seam
+ *   heal, which the Pencil tool (`hooks/usePencilTool.ts`) commits through.
+ *   It takes a `Keyframe[]` and no trackId, so there is nothing to derive the
+ *   flag from. (2) The Pencil's drawn span itself: since 8bdfa814
+ *   `fitSamplesToKeys` no longer re-tangents through (1) but SOLVES its
+ *   tangents against the samples (`fitKeysToSamples`), and it solves them in
+ *   linear value units too. Live for any app registering a log track — today
+ *   that is fluid-toy's `julia.zoom`, which IS plotted and editable in the
+ *   graph editor. Measured on the Bias path: authoring the same keys both
+ *   ways diverges by up to 1.34 decades (22x) on a 24-decade track, 0.30
+ *   decades (2x) on an everyday 6-decade zoom; auto-tangents collapse toward
+ *   flat because a linear-space slope is a rounding error in log-units. NOTE
+ *   the Pencil path has a further, larger defect that fixing both alone will
+ *   not cure: `components/GraphEditor.tsx`'s Douglas-Peucker epsilon
  *   (`range * 0.02`) is in linear value units and collapses a log-track
  *   stroke to 2-3 keys. See PROPOSALS.md (overnight audit, cycle 2).
  *   `engine-gmt/animation/cameraBinders.ts` had the same omission and was

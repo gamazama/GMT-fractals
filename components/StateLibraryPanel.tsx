@@ -112,18 +112,21 @@ export interface StateLibraryPanelProps<T> {
  *   non-active rows never render the modified marker even if dirty.
  *   The cyan highlight already identifies which row is "live"; the
  *   asterisk only adds value there.
- * @bug PRODUCTION: Delete fires immediately and is UNRECOVERABLE — no
- *   confirmation dialog, and nothing behind `onDelete` restores the row.
- *   The invariant here used to claim "UX safety is offloaded to the slice's
- *   undo hooks"; there are no such hooks. `createStateLibrarySlice`'s
- *   `[actions.delete]` is a bare `arr.filter(...)`, its only hook
- *   (`onApplied`) fires on apply — never on delete — and its module JSDoc
- *   states outright that "persistence and undo are deliberately app-side".
- *   Neither consumer opts in: `deleteCamera` (engine-gmt/store/cameraSlice.ts)
- *   and `deleteView` (fluid-toy/viewLibrary.ts) are the raw slice actions,
- *   unwrapped. One mis-click on the hover-revealed trash icon destroys a
- *   saved camera permanently. Fixing it is a product call (confirm-on-delete
- *   vs. undo vs. accept) — see PROPOSALS.md (overnight audit, cycle 4).
+ * @bug PRODUCTION: in fluid-toy, Delete fires immediately and is
+ *   UNRECOVERABLE — no confirmation dialog, and nothing behind `onDelete`
+ *   restores the row. Neither this panel nor the slice undoes anything:
+ *   `createStateLibrarySlice`'s `[actions.delete]` is a bare
+ *   `arr.filter(...)`, its only hook (`onApplied`) fires on apply — never on
+ *   delete — and its module JSDoc states outright that "persistence and undo
+ *   are deliberately app-side", so each consumer has to wrap the action.
+ *   app-gmt does: since c718d120 `deleteCamera` is bracketed onto the normal
+ *   param-undo stack (grep `origDeleteCamera` in
+ *   engine-gmt/store/cameraSlice.ts), so Ctrl+Z brings a deleted camera back.
+ *   fluid-toy does not: `deleteView` (fluid-toy/viewLibrary.ts) is still the
+ *   raw slice action, so one mis-click on the hover-revealed trash icon
+ *   destroys a saved view permanently. Fixing it is a product call (the
+ *   camera's wrap, confirm-on-delete, or accept) — see PROPOSALS.md
+ *   (overnight audit, cycle 4).
  * @assumption Rename submits on Enter or blur; Escape clears `editId`
  *   without firing `onRename` — cancel semantics are key-driven, not
  *   button-driven.

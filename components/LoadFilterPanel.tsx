@@ -7,7 +7,7 @@
  * open. Dismissed via its × button or by clicking "Load…". Filter choices
  * persist (localStorage) and stay in effect for subsequent loads.
  *
- * @see dev/engine-gmt/utils/loadFilter.ts
+ * @see engine-gmt/utils/loadFilter.ts
  */
 
 import React from 'react';

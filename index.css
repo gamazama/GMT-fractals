@@ -258,22 +258,18 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
      animate-fade-in-up>, then grep "@keyframes" out.css (non-zero expected,
      0 if this block is removed).
 
-   Live call sites, measured 2026-08-02 (`grep -rn 'animate-fade-in-\|animate-
-     pop-in' --include=*.tsx --include=*.ts`): 16 across 10 files —
-     fade-in-up (LoadingScreen ×2, AudioLinkControls), fade-in-down
+   Live call sites, measured 2026-09-26 (git grep for `animate-fade-in-` and
+     `animate-pop-in` over *.ts and *.tsx): 12 across 10 files — fade-in-up
+     (LoadingScreen ×2, AudioLinkControls, and engine/components/ToastHost:
+     every toast, at 150 ms inline, since 2026-09-24), fade-in-down
      (HelpBrowser, FormulaPicker), fade-in-left (CategoryPickerMenu,
-     PerformanceMonitor, KeyframeInspector), fade-in-right, pop-in
-     (DraggableWindow, GraphContextMenu). Since 2026-09-24 also fade-in-up in
-     engine/components/ToastHost (every toast, at 150 ms inline).
+     PerformanceMonitor, KeyframeInspector), fade-in-right (CategoryPickerMenu),
+     pop-in (DraggableWindow, GraphContextMenu).
 
-   @stale `.animate-fade-in` below has ZERO call sites — 595cfe21 removed all
-     34 of them (an opacity animation of 16ms, one frame at 60Hz, that promoted
-     every carrier to its own compositing layer for no visual return) and its
-     message says it removed the keyframe too. It did not; only the call sites
-     went. Harmless in the build — Tailwind never emits an unused utility, and
-     a probe on the booted app confirms `animate-fade-in` resolves to
-     `animationName: 'none'` while the five live ones resolve — but the two
-     lines are dead and should go with the next pass through this file.
+   The plain opacity `fade-in` that sat beside them is gone. 595cfe21 removed
+     its 34 call sites (a 16 ms fade, one frame at 60 Hz, that gave every
+     carrier its own compositing layer for no visual return); its rule and
+     keyframe followed on 2026-09-26.
 
    Note the fill-mode: all five live animations are `forwards`, so their end
      state persists. For the four directionals that is translate(0) and for
@@ -291,8 +287,10 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
    that were demonstrably correct in the demo) rather than re-authored.
 
    Kept as plain CSS rather than a tailwind.config animation extend because
-   .animate-slider-entry also sets overflow, which the `animation` utility
-   cannot express. Splitting six into config and one into CSS would be worse.
+   .animate-slider-entry also set overflow, which the `animation` utility
+   cannot express, and splitting the set between config and CSS would have
+   been worse. Slider-entry has since gone (see below), so that reason no
+   longer binds.
    ───────────────────────────────────────────────────────────────────────── */
 @layer utilities {
   /* `slider-entry` (0.35s max-height reveal) deliberately does NOT live here.
@@ -303,9 +301,6 @@ body::-webkit-scrollbar-thumb { background-color: rgb(var(--scrollbar-thumb-stro
      and left unused. GlobalContextMenu had already been carrying a
      `[&_.animate-slider-entry]:!animate-none` override to cancel it locally,
      which went with it. Do not reintroduce without the same call being revisited. */
-
-  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-  .animate-fade-in { animation: fade-in 16ms linear forwards; }
 
   @keyframes fade-in-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   .animate-fade-in-up { animation: fade-in-up 0.3s ease-out forwards; }

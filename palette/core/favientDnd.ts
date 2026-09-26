@@ -81,7 +81,7 @@ const EMPTY_DRAG_IMG: HTMLImageElement | null = (() => {
 /**
  * Begin a custom-avatar gradient drag. Two things, which always go together at a drag source:
  *  1. REGISTER the drag as in flight (`beginNativeDrag`) — the synchronous signal the avatar +
- *     dropbox passthrough rely on, set the instant a drag starts. This is the one chokepoint
+ *     the set rail rely on, set the instant a drag starts. This is the one chokepoint
  *     every custom-avatar source funnels through, so future sources get it for free just by
  *     calling this; the signal self-clears when the drag ends (drop / dragend / mousemove).
  *  2. SUPPRESS the browser's default frozen-bitmap drag image so the cursor-following avatar

@@ -438,13 +438,6 @@ export const ExportMenu: React.FC<{
    */
   liftTo?: number;
   /**
-   * @deprecated 2026-09-24 — the Output profile row is gone (owner); nothing reads these. They
-   * stay optional only so the host still compiles until it stops passing them.
-   */
-  colorSpace?: 'srgb' | 'linear' | 'aces_inverse';
-  /** @deprecated 2026-09-24 — see `colorSpace`. */
-  onColorSpace?: (id: 'srgb' | 'linear' | 'aces_inverse') => void;
-  /**
    * How a SET lays out each member's swatches: the hero's current rule (Even / Perceptual /
    * Stops, owner 2026-09-24 — it was always Even). Absent → read live from the working store,
    * which is where the hero keeps it. Unused for one gradient (its row is already laid out).

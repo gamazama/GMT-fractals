@@ -66,7 +66,6 @@ import {
 } from '../core/selectionGeometry';
 import { SelectionOverlay, type SelectionOverlayState } from './SelectionOverlay';
 import { shouldSquare, squareCols } from '../core/wallLayout';
-import { setDragOrigin } from '../store/dragVisual';
 
 /**
  * A band of the wall. The shape is defined ONCE, in the pure model that builds them
@@ -686,21 +685,6 @@ const SwatchCanvas: React.FC<{
     return { left: col * cellW - gap / 2, top: row * cellH };
   };
 
-  // The swatch's HOVER-preview rect (3×w·2×h, the enlarged zoom the user is looking at) — the
-  // morph source for the drag/click avatar. Shared by onDragStart + onClick.
-  const setHoverOrigin = (col: number, row: number): void => {
-    const cvr = canvasRef.current?.getBoundingClientRect();
-    if (!cvr) return;
-    const ew = swatchW * 3;
-    const eh = swatchH * 2;
-    setDragOrigin({
-      left: cvr.left + col * cellW + swatchW / 2 - ew / 2,
-      top: cvr.top + row * cellH + swatchH / 2 - eh / 2,
-      width: ew,
-      height: eh,
-    });
-  };
-
   const cb = caretBox();
   return (
     <div
@@ -740,9 +724,7 @@ const SwatchCanvas: React.FC<{
             // dead: the native-image suppression overrode it, and it differed the swatch path
             // from the hero's, which is why swatch→Favients didn't show the avatar/reorder the
             // same way.)
-            // Morph the avatar out of the HOVER-enlarged preview (the 3×w·2×h zoom in front of
-            // everything) — not the tiny grid cell. Then clear the hover so it doesn't linger.
-            setHoverOrigin(h.col, h.row);
+            // Clear the hover preview so it doesn't linger under the drag.
             onHover(null);
             onEntryDragStart(h.entry, e.dataTransfer);
           }}
@@ -767,9 +749,7 @@ const SwatchCanvas: React.FC<{
             // onClick, which deselects — so an empty-wall click clears the pick.
             if (h) {
               e.stopPropagation();
-              // Click-through: the pick goes in-hand and follows the cursor — morph it out of
-              // the hover preview (same source as the drag) and clear the hover.
-              setHoverOrigin(h.col, h.row);
+              // Click-through: the pick goes in-hand; clear the hover preview.
               onHover(null);
               onPick(h.entry, e);
             }

@@ -85,18 +85,16 @@ if (import.meta.env.DEV && 'serviceWorker' in navigator) {
 
 registerUI();
 
-// Override the default sampleCap (256, sized for GMT's path tracer).
-// Fluid-toy's TSAA only needs a fraction of that to look clean —
-// 64 samples ≈ 1s of accumulation at 60fps. The deep-accum gate
-// in viewportSlice fires at sampleCap/2 = 32, so adaptive stops
-// kicking in well before the fractal fully settles, keeping unrelated
-// slider drags from flipping resolution.
+// Pin sampleCap at 64. Fluid-toy's TSAA looks clean at that — 64 samples
+// ≈ 1s of accumulation at 60fps. The deep-accum gate in viewportSlice
+// fires at sampleCap/2 = 32, so adaptive stops kicking in well before the
+// fractal fully settles, keeping unrelated slider drags from flipping
+// resolution.
 //
-// @stale The "256" is no longer true and this call is therefore a NO-OP today:
-// grep `sampleCap:` in store/slices/renderControlSlice.ts — the engine default
-// is already 64. Kept, not deleted, because it pins the value fluid-toy
-// actually wants if that default ever moves again. Noticed 2026-07-29 when a
-// guard-sweep break renamed the slice default and `smoke:tsaa` still read 64.
+// The engine default is 64 as well today (grep `sampleCap:` in
+// store/slices/renderControlSlice.ts; it was once 256, sized for GMT's path
+// tracer), so this call changes nothing now. It stays because it pins the
+// value fluid-toy wants if that default ever moves again.
 useEngineStore.getState().setSampleCap(64);
 
 // Install @engine/viewport. Adaptive scales ONLY the fractal/canvas

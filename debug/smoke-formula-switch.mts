@@ -15,8 +15,11 @@
  * ⚠ Item 3 used to read "(IS_COMPILING event emitted) and the canvas continues
  * producing frames (framesRendered advances)". Neither was ever true as
  * coverage, measured 2026-07-29: `window.FractalEvents` is undefined on
- * fractal-toy.html (so the listener below never attaches), `__compileSeen` is
- * never read by any assertion, and `framesRendered` is not a store field here.
+ * fractal-toy.html, so the IS_COMPILING listener this file used to attach
+ * through it never attached, and the `__compileSeen` flag it set was never read
+ * by any assertion (the dead block went on 2026-09-26 — do not re-add it: an
+ * event listener here proves nothing unless fractal-toy exposes that bus); and
+ * `framesRendered` is not a store field here.
  * The uniform-set swap is what actually proves the rebuild, so that is what the
  * item now claims. The absence half was added at the same time — without it a
  * hypothetical assembler that emitted BOTH formulas' uniforms into one program
@@ -96,22 +99,7 @@ async function main() {
         throw new Error(`Mandelbox's uFoldLimit is live while Mandelbulb is selected — the programs are not disjoint, so every presence check below is satisfiable by a superset program: ${bulbUniforms.join(', ')}`);
     }
 
-    // 3. Switch formula.
-    //
-    // @stale The block below is DEAD and is left in place only so the next
-    // reader does not re-add it. Measured 2026-07-29: `window.FractalEvents` is
-    // undefined on fractal-toy.html, so `fe.on` never runs and no listener is
-    // attached; `window.__fractalEvents` is undefined too; and `__compileSeen`
-    // is not read by any assertion in this file. Removing it is a deletion, so
-    // it is left for the owner. The rebuild is proven by the uniform-set swap.
-    await page.evaluate(() => {
-        (window as any).__compileSeen = false;
-        const evt = (window as any).__fractalEvents ?? null;
-        // Fall back to monkey-patching compileGate via store's FractalEvents
-        const fe = (window as any).FractalEvents;
-        if (fe && fe.on) fe.on('is_compiling', () => { (window as any).__compileSeen = true; });
-    });
-
+    // 3. Switch formula. The rebuild is proven by the uniform-set swap below.
     await page.evaluate(() => {
         (window as any).__store.setState({ formula: 'Mandelbox' });
     });

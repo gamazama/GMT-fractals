@@ -23,8 +23,8 @@
  * future entry-point for bundled .gmf files; if we ever want to surface
  * it in the picker we can add a third group with a different loader.
  *
- * @see dev/engine-gmt/gallery/loadGalleryScene.ts
- * @see dev/engine-gmt/gallery/GalleryClient.ts (listGallery, listMySubmissions)
+ * @see engine-gmt/gallery/loadGalleryScene.ts
+ * @see engine-gmt/gallery/GalleryClient.ts (listGallery, listMySubmissions)
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

@@ -10,7 +10,7 @@
  * fetched + parsed on click and their full preset travels through. The
  * dice button bypasses the form and rolls a fresh random composition.
  *
- * @see dev/plans/new-scene-spec.md
+ * @see docs/history/plans-archive/new-scene-spec.md
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';

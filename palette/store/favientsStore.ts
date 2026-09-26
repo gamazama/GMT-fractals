@@ -443,18 +443,6 @@ interface FavientsState {
 }
 
 /**
- * The on-disk shape `exportCollection` wrote BEFORE ADR-0123. Still read (by
- * `decodeGradientDocument`) — old backups and every scene saved until then embed it — and
- * never written again.
- * @deprecated written by nothing since 2026-09-14; the writer is `encodeGradientDocument`.
- */
-export interface FavientsCollection {
-  version: 1;
-  favients: Favient[];
-  groupLabels: Record<string, string>;
-}
-
-/**
  * Read the valid favourites out of a parsed collection object — the GMT gradients document or
  * the legacy collection — through the same gate `importCollection` applies
  * (`decodeGradientDocument`). Lets callers preview what an import WOULD admit — e.g. the scene

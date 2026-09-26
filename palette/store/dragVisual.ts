@@ -1,30 +1,35 @@
 /**
- * dragVisual — the SOURCE rect of the gradient currently being dragged, captured at dragstart
- * so a cursor-following avatar can MORPH out of the grabbed swatch / hero rather than popping in
- * at the cursor (the first Explorer shell's DragAvatar did; it was retired on 2026-09-16). Transient (module-level, no React / no
- * persist), like pickerSearch: set on dragstart, read by the avatar on mount, cleared on
- * drag-end.
+ * dragVisual — the transient state a gradient drag's cursor avatar reads: WHAT is in flight
+ * (the payload) and WHETHER a custom-avatar drag is live (the in-flight flag). Module-level,
+ * no React state and no persistence, like pickerSearch: set at dragstart, cleared at drag-end.
+ *
+ * SEAMS. Written by `palette/core/favientDnd.ts` — `setFavientDrag` fills the payload on every
+ * gradient drag in the suite, `beginCustomAvatarDrag` raises the flag — and by
+ * `palette/core/pointerGradientDrag.ts`, the mouse-driven drag. Read through `useDragPayload`
+ * and `useNativeDragging` by `palette/components/GradientDragAvatar.tsx` (the chip at the
+ * cursor) and `gradient-explorer/v2/SetRail.tsx` (whose trash shows only while an existing
+ * favourite is in flight).
+ *
+ * PITFALLS. The flag clears ITSELF — on drop, on dragend, or on a mousemove with no dragover
+ * inside `DRAG_LIVE_GRACE_MS` — so a caller never pairs `beginNativeDrag` with an end, and
+ * clearing it clears the payload too, which is what takes the avatar away. Read the note above
+ * `DRAG_LIVE_GRACE_MS` before touching that heuristic: Firefox leaks mousemoves into a fast drag.
+ *
+ * The first Explorer shell's source-rect morph and its landing / cancel animations also lived
+ * here. Their readers went with that shell on 2026-09-16 and their state on 2026-09-26;
+ * `setDragOrigin` and `markPickLanded` at the bottom are no-ops kept only for the calls still in
+ * `palette/components/FavientsPanel.tsx`.
  *
  * @see palette/components/GradientDragAvatar.tsx (the small standalone avatar GE v2 mounts)
  */
 
 import { useSyncExternalStore } from 'react';
 
-export interface DragRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-let origin: DragRect | null = null;
-
-/** Record the grabbed element's rect (call in `onDragStart`). null to clear. */
-export const setDragOrigin = (rect: DragRect | null): void => {
-  origin = rect;
+const listeners = new Set<() => void>();
+const subscribe = (l: () => void): (() => void) => {
+  listeners.add(l);
+  return () => { listeners.delete(l); };
 };
-
-export const getDragOrigin = (): DragRect | null => origin;
 
 // --- WHAT is being dragged. Set by `setFavientDrag`, the one call every gradient drag in the
 // suite makes, so an avatar can paint the ramp without asking the DataTransfer (whose DATA is
@@ -53,121 +58,18 @@ export const setDragPayload = (p: DragPayloadPeek | null): void => {
   listeners.forEach((l) => l());
 };
 
-export const getDragPayload = (): DragPayloadPeek | null => dragPayload;
-
 /** Subscribe to what is being dragged (null between drags). */
 export const useDragPayload = (): DragPayloadPeek | null =>
   useSyncExternalStore(subscribe, () => dragPayload, () => dragPayload);
 
-// --- Landing — the reverse of the take-off morph: when a gradient is APPLIED to a target,
-// a fading copy flies from where it was (the avatar / cursor) INTO the destination rect.
-// Reactive (a standalone layer renders it), unlike the imperative origin above.
-
-export interface Landing {
-  from: DragRect;
-  to: DragRect;
-  ramp: Uint8Array;
-  /** Bumped per landing so the renderer remounts the animation from t=0. */
-  id: number;
-}
-
-let landing: Landing | null = null;
-let landingSeq = 0;
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void): (() => void) => {
-  listeners.add(l);
-  return () => { listeners.delete(l); };
-};
-
-/** Start a landing animation (a gradient settling into the target it was applied to). */
-export const triggerLanding = (from: DragRect, to: DragRect, ramp: Uint8Array): void => {
-  landing = { from, to, ramp, id: ++landingSeq };
-  cancel = null; // an in-hand session ends EITHER by landing or cancelling — never both
-  listeners.forEach((l) => l());
-};
-
-/** Clear a landing once its animation finishes (id-guarded so a newer one isn't dropped). */
-export const clearLanding = (id: number): void => {
-  if (landing && landing.id === id) {
-    landing = null;
-    listeners.forEach((l) => l());
-  }
-};
-
-export const useLanding = (): Landing | null =>
-  useSyncExternalStore(subscribe, () => landing, () => landing);
-
-// --- Cancel — the un-landing: when an in-hand pick is abandoned with NO destination
-// (empty-wall click / Esc / click-away / drop-on-nothing), the floating avatar wipes itself
-// off in place rather than just popping out — alpha masked away left→right while the ramp
-// shrinks on X. Mirrors Landing (separate reactive one-shot, same listeners).
-
-export interface Cancel {
-  /** Where the floating avatar was at the moment the pick was abandoned. */
-  at: DragRect;
-  ramp: Uint8Array;
-  /** Bumped per cancel so the renderer remounts the animation from t=0. */
-  id: number;
-}
-
-let cancel: Cancel | null = null;
-let cancelSeq = 0;
-
-/** Start a cancel wipe (an in-hand pick let go without a landing). */
-export const triggerCancel = (at: DragRect, ramp: Uint8Array): void => {
-  cancel = { at, ramp, id: ++cancelSeq };
-  landing = null; // same exclusivity as triggerLanding — only one one-shot at a time
-  listeners.forEach((l) => l());
-};
-
-/** Clear a cancel once its animation finishes (id-guarded so a newer one isn't dropped). */
-export const clearCancel = (id: number): void => {
-  if (cancel && cancel.id === id) {
-    cancel = null;
-    listeners.forEach((l) => l());
-  }
-};
-
-export const useCancel = (): Cancel | null =>
-  useSyncExternalStore(subscribe, () => cancel, () => cancel);
-
-// --- Landed signal — "the in-hand pick was CONSUMED by a destination, so do NOT play the
-// cancel wipe on teardown." Set by every place that accepts the pick: the dock targets
-// (GradientDropLayer.handleSent) AND the Favients panel's OWN drop (insert / reorder /
-// group), whose drop `stopPropagation`s and so never reaches the dock's apply path. A plain
-// module flag (not reactive) — the teardown reads-and-clears it. NOT part of Cancel/Landing
-// because it only gates them.
-
-let landed = false;
-
-/** Note that a destination consumed the in-hand pick (a dock apply or a Favients drop). */
-export const markPickLanded = (): void => {
-  landed = true;
-};
-
-/** Read-and-clear whether the in-hand pick was consumed (so the teardown can skip the wipe). */
-export const consumePickLanded = (): boolean => {
-  const v = landed;
-  landed = false;
-  return v;
-};
-
-/** Discard any stale landed signal at the start of a fresh in-hand session (≠ the teardown
- *  read above — same effect, but the intent is "reset", not "decide"). */
-export const clearPickLanded = (): void => {
-  landed = false;
-};
-
 // --- Native (custom-avatar) drag in flight — a SYNCHRONOUS signal set the instant a drag
 // starts (in beginCustomAvatarDrag, the one chokepoint every custom-avatar drag calls),
-// independent of the dragenter/dragleave DEPTH counting useDragInFlight relies on. That depth
-// counting is FRAGILE while a drop surface mounts/unmounts children mid-drag — the Favients
-// shelf inserts placeholders and the dragged swatch unmounts, so enter/leave can imbalance and
-// momentarily reset inFlight, which flips the Favients passthrough off and lets the drop be
-// intercepted as a flat-add. dragstart→dragend is exactly one-each, so this never desyncs.
-// Consumed by the avatar (GradientDropLayer) AND the dropbox/passthrough layer
-// (DropTargetLayer) so both engage the moment a drag starts and stay engaged for its whole
-// life.
+// independent of dragenter/dragleave DEPTH counting (what the first Explorer shell's
+// useDragInFlight did). That depth counting is FRAGILE while a drop surface mounts/unmounts
+// children mid-drag — the Favients shelf inserts placeholders and the dragged swatch unmounts,
+// so enter/leave can imbalance and momentarily read as "no drag". dragstart→dragend is exactly
+// one-each, so this never desyncs. Consumed by the avatar (GradientDragAvatar) and the set rail
+// (SetRail), so both engage the moment a drag starts and stay engaged for its whole life.
 //
 // Clearing: `drop` / `dragend` fire ONLY at a real drag-end, so they clear immediately. But
 // neither is guaranteed — a Favients drop `stopPropagation`s (so the window `drop` is skipped)
@@ -228,3 +130,13 @@ export const beginNativeDrag = (): void => {
 
 export const useNativeDragging = (): boolean =>
   useSyncExternalStore(subscribe, () => nativeDrag, () => nativeDrag);
+
+// --- Retired 2026-09-26. Nothing reads what these used to record (see the header).
+
+/** @deprecated a no-op: it recorded the grabbed element's rect for an avatar morph nothing
+ *  draws any more. Delete it with its calls in `palette/components/FavientsPanel.tsx`. */
+export const setDragOrigin = (_rect: { left: number; top: number; width: number; height: number } | null): void => {};
+
+/** @deprecated a no-op: nothing reads the "pick landed" signal since the cancel wipe went.
+ *  Delete it with its call in `palette/components/FavientsPanel.tsx`. */
+export const markPickLanded = (): void => {};

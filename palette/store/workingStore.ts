@@ -250,8 +250,6 @@ export interface WorkingState {
    *  Wallpaper. Before 2026-09-16 the debounce called `syncRecent` and fired inside any gesture
    *  held past it — a cancelled Curves wave left an undo entry holding only My Gradients. */
   syncRecentOutsideUndo: () => void;
-  /** @deprecated alias of syncRecent, kept for the S4 call sites. */
-  collectCurrent: () => void;
   /** Re-lay by a rule (Even / Perceptual / Stops); Even / Perceptual after Stops use HAND_COUNT. */
   layoutPalette: (rule: PaletteRule) => void;
   /** Re-lay with N swatches under the last rule. */
@@ -536,7 +534,6 @@ export const useWorkingStore = create<WorkingState>((set, get) => ({
     set({ sessionId: next, sessionPinned: next ? keepPin : false });
   },
   syncRecentOutsideUndo: () => outsideParamTransaction(syncRecentNow),
-  collectCurrent: () => get().syncRecent(),
 
   layoutPalette: (rule) => {
     const { ramp, config } = layoutSourceNow();

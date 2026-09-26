@@ -23,7 +23,7 @@
  *   • `bounceTension`/`bounceFriction` — `useGraphTools` smoothing physics
  *                          (default 0.5 / 0.6 when the source omits them).
  *
- * @see dev/plans/graph-editor-unification.md
+ * @see plans/graph-editor-unification.md
  */
 
 import { useCallback } from 'react';

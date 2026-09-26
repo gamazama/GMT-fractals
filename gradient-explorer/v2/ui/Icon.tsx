@@ -1,8 +1,9 @@
 /**
  * Icon — the v2 icon set (plans/ge-v2-unified-shell-plan.md §1 V6: "One icon set, one
- * weight. 16 px stroke glyphs in `currentColor`... star is the single filled glyph").
+ * weight. 16 px stroke glyphs in `currentColor`").
  * One inline-SVG per name, 16x16 viewBox, `fill:none; stroke:currentColor;
- * strokeWidth:1.5; round caps/joins` — except `star`, which is filled.
+ * strokeWidth:1.5; round caps/joins` — except the two filled families below, `FILLED` (the
+ * hero's use glyphs) and `SOLID` (the Paint face's brushes and toggles).
  *
  * Every emoji / unicode glyph in the v2 files this component covers (↶ ↷ ▾ ▴ ✕ ⚙ etc.)
  * is replaced with `<Icon name=… />` at its call site (V6: "No emoji, no unicode glyph
@@ -64,12 +65,9 @@ export type IconName =
   | 'close'
   | 'plus'
   | 'swap'
-  | 'pencil'
-  | 'refresh'
   | 'trash'
   | 'list'
   | 'grid'
-  | 'star'
   | 'heart'
   | 'share'
   | 'download'
@@ -99,8 +97,8 @@ export type IconName =
  * The hero's USE glyphs — the owner's pick in Figma (GE v2 Hero, 2026-09-07): Material
  * Symbols "favorite" (heart), "share", "download", "photo", plus "fullscreen" in the same
  * family for Wallpaper. FILLED, 24-unit viewBox, drawn in `currentColor` — a second style
- * beside the 16 px stroke set, confined to the hero header and the image slot. `star`
- * still marks a KEPT gradient on tiles (V8); `heart` is the button that keeps it.
+ * beside the 16 px stroke set, used by the hero header and the image slot, and `download` by
+ * the Export window's rows and the set rail too. `heart` is the button that keeps a gradient.
  */
 const FILLED: Record<'heart' | 'share' | 'download' | 'photo' | 'fullscreen', string> = {
   heart:
@@ -179,7 +177,7 @@ const SOLID: Record<'paintBrush' | 'clone' | 'smudge' | 'tone' | 'soften' | 'sha
   ),
 };
 
-const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeof SOLID>, React.ReactNode> = {
+const PATHS: Record<Exclude<IconName, keyof typeof FILLED | keyof typeof SOLID>, React.ReactNode> = {
   zoom: <path d="M13.8 13.73L11.08 11.01M7.36 5.42L7.36 9.29M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
   zoomOut: <path d="M13.8 13.73L11.08 11.01M5.49 7.43L9.36 7.43M12.51 7.43C12.51 10.29 10.22 12.58 7.36 12.58 4.49 12.58 2.2 10.29 2.2 7.43 2.2 4.56 4.49 2.27 7.36 2.27 10.22 2.27 12.51 4.56 12.51 7.43Z" />,
   box: <rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1.74" strokeDasharray="2.76" />,
@@ -199,8 +197,6 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeo
   close: <path d="M4 4l8 8M12 4l-8 8" />,
   plus: <path d="M8 3.5v9M3.5 8h9" />,
   swap: <path d="M3 5.5h8M9 3l2 2.5-2 2.5M13 10.5H5M7 8l-2 2.5 2 2.5" />,
-  pencil: <path d="M2.5 13.5l.7-2.8 7-7 2.1 2.1-7 7-2.8.7zM9.8 3.4l2.1 2.1" />,
-  refresh: <path d="M13.2 8a5.2 5.2 0 1 1-1.6-3.7M13.5 2.2v3.2h-3.2" />,
   // The trash zone that appears while a favourite is in flight. Drawn, not 🗑 — no
   // emoji glyphs in this shell (V-rules), and the shelf panel's two trash zones were
   // waiting on exactly this icon (plan §10, Phase A).
@@ -270,8 +266,6 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeo
  */
 const WEIGHT: Partial<Record<IconName, number>> = { box: 1.25, lasso: 1.25, settings: 1.25 };
 
-const STAR_PATH = 'M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4-3.6-1.9-3.6 1.9.7-4L2.2 6.5l4-.6z';
-
 export const Icon: React.FC<{ name: IconName; className?: string; title?: string; size?: number }> = ({ name, className: cls = '', title, size = 16 }) => {
   // `shrink-0`: a flex parent narrower than the glyph (an icon button whose padding won)
   // would otherwise squeeze the SVG to 0 wide and the glyph silently vanishes.
@@ -289,14 +283,6 @@ export const Icon: React.FC<{ name: IconName; className?: string; title?: string
       <svg viewBox="0 0 24 24" width={size} height={size} className={className} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
         {title && <title>{title}</title>}
         <g fill="currentColor" stroke="none">{SOLID[name as keyof typeof SOLID]}</g>
-      </svg>
-    );
-  }
-  if (name === 'star') {
-    return (
-      <svg viewBox="0 0 16 16" width={size} height={size} className={className} aria-hidden={title ? undefined : true} role={title ? 'img' : undefined}>
-        {title && <title>{title}</title>}
-        <path d={STAR_PATH} fill="currentColor" stroke="none" />
       </svg>
     );
   }

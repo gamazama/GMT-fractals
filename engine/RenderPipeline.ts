@@ -42,13 +42,11 @@ void main() {
  *   this; new callers must NOT assume `writeIndex == the just-written slot`.
  */
 export class RenderPipeline {
-    // MRT targets: texture[0] = Color, texture[1] = Depth
     // Double-buffered for temporal accumulation and async depth readback
     //
     // @deprecated-name "MRT" naming is historical — these are
-    //   single-attachment color-only targets. The header comment above
-    //   ("texture[0] = Color, texture[1] = Depth") describes an older
-    //   architecture that no longer exists.
+    //   single-attachment color-only targets. An older architecture wrote
+    //   color to texture[0] and depth to texture[1]; it no longer exists.
     private mrtTargetA: THREE.WebGLRenderTarget | null = null;
     private mrtTargetB: THREE.WebGLRenderTarget | null = null;
     
@@ -854,7 +852,8 @@ void main() { gl_FragColor = texture2D(tSrc, vUv); }`,
 
         const currentTarget = renderer.getRenderTarget();
 
-        // SINGLE render to MRT - outputs both color (location 0) and depth (location 1)
+        // SINGLE render into the write target — one color attachment (see the
+        // note on `mrtTargetA`; there is no MRT any more).
         renderer.setRenderTarget(writeTarget);
 
         // Bucket scissor: clip fragment-shader execution to the active GPU

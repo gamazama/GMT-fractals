@@ -358,22 +358,24 @@ let _proxy: WorkerProxy | null = null;
  *
  * @bug PRODUCTION: that invariant is VIOLATED in app-gmt today, and the
  *   violation is structural rather than an ordering accident.
- *   `engine-gmt/renderer/install.ts` imports `store/engineStore` (line 32),
- *   so ESM evaluates `engineStore`'s body — including its module-scope
- *   `const engine = getProxy()` (`store/engineStore.ts:29`) and, via its own
- *   import of `./slices/historySlice`, `store/slices/historySlice.ts:43` —
- *   BEFORE `installGmtRenderer()` can ever run `setProxy()`. Both consts are
+ *   `engine-gmt/renderer/install.ts` imports `store/engineStore` at module
+ *   level, so ESM evaluates `engineStore`'s body — including its module-scope
+ *   `const engine = getProxy()` and, via its own import of
+ *   `./slices/historySlice`, the same capture in `store/slices/historySlice.ts`
+ *   (grep `const engine = getProxy()` in both) — BEFORE
+ *   `installGmtRenderer()` can ever run `setProxy()`. Both consts are
  *   therefore permanently bound to the no-op stub. Verified at runtime on
  *   `app-gmt.html`: the captured instance reports `gpuInfo === 'Stub (no
  *   worker)'`, `isBooted === false`, while `getProxy()` and `window.__gmtProxy`
  *   both return the booted real proxy.
  *   Known consequences:
- *     · `store/engineStore.ts:341` — `if (!engine.isBooted && !engine.bootSent)`
- *       is always true, so `loadScene` always takes the "initial startup"
- *       branch. The post-boot branch (compileGate spinner, full-config flush,
- *       OFFSET_SET push, CONFIG_DONE) is unreachable in app-gmt.
- *     · `store/slices/historySlice.ts:190` — the `engine.resetAccumulation()`
- *       on undo/redo restore is a no-op against the stub.
+ *     · `store/engineStore.ts` `loadScene` — its
+ *       `if (!engine.isBooted && !engine.bootSent)` is always true, so it
+ *       always takes the "initial startup" branch. The post-boot branch
+ *       (compileGate spinner, full-config flush, OFFSET_SET push, CONFIG_DONE)
+ *       is unreachable in app-gmt.
+ *     · `store/slices/historySlice.ts` — the `engine.resetAccumulation()` on
+ *       undo/redo restore is a no-op against the stub.
  *
  *   SEVERITY, MEASURED 2026-07-28 — the second consequence is MASKED, so this
  *   is latent rather than user-visible today. Probed on the running app:

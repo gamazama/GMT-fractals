@@ -17,8 +17,8 @@
  * reloads. The Load menu item subscribes via `subscribeLoadFilter` to
  * italicise its label when a filter is in effect.
  *
- * @see dev/components/LoadFilterPanel.tsx
- * @see dev/engine-gmt/utils/applyPartialPreset.ts
+ * @see components/LoadFilterPanel.tsx
+ * @see engine-gmt/utils/applyPartialPreset.ts
  */
 
 import { useSyncExternalStore } from 'react';

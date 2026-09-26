@@ -12,7 +12,7 @@
  * @assumption Unknown feature ids are silently skipped (allows new
  *   features to register without forcing simultaneous protocol updates).
  *
- * @see dev/plans/capability-protocol.md
+ * @see plans/capability-protocol.md
  * @see docs/history/gmt/35_Capability_Protocol.md
  */
 

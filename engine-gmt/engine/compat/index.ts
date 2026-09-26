@@ -2,7 +2,7 @@
  * Feature compatibility protocol — barrel.
  *
  * @see docs/history/gmt/35_Capability_Protocol.md
- * @see dev/docs/adr/0059-feature-capability-protocol.md
+ * @see docs/adr/0059-feature-capability-protocol.md
  */
 
 export { evaluateCompat } from './evaluateCompat';

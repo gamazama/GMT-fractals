@@ -6,8 +6,9 @@
  * items, PaletteRow swatches, GeneratorSourceRow slots, SourceBands bands and the hero
  * ramp wrapper stop drifting into their own bar look.
  *
- * `kept` (the star overlay) is deliberately NOT drawn here — V8 says "kept = a star in
- * the corner", which is a positioned `<Icon name="star">` the caller renders, not a class.
+ * V8's "kept = a star in the corner" is not drawn: no caller of this helper renders a kept
+ * mark (the hero's ♥ is where a gradient is kept), and the icon set's unused `star` glyph
+ * and this helper's unused `kept` option went on 2026-09-26.
  *
  * **Radius (owner, 2026-09-07, amending V8's "radius 4"): gradients and swatches always
  * carry LARGE rounding — it is what separates them from each other.** 10 px for every
@@ -24,9 +25,6 @@ export interface GradientBarOpts {
   size?: GradientBarSize;
   selected?: boolean;
   armed?: boolean;
-  /** Caller still owns rendering the ★ overlay; this only says whether one is due,
-   *  so `gradientBarClass({ kept: true }).ring` style callers stay honest about intent. */
-  kept?: boolean;
 }
 
 /**

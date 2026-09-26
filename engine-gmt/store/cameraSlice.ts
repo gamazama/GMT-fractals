@@ -53,27 +53,10 @@ export interface SavedCameraPayload extends CameraState {
 }
 
 /** Public alias: a saved camera is a state-library snapshot whose
- *  payload is a SavedCameraPayload.
- *
- * @bug PRODUCTION: Scene/formula files written before the state-library
- * extraction (19e605a8, 2026-04-25) store `savedCameras` in the pre-extraction
- * FLAT shape — `SavedCamera extends CameraState`, i.e.
- * `{ id, label, position, rotation, sceneOffset, targetDistance, optics }`
- * with no `state` wrapper. That is still what `types/preset.ts` and
- * `engine-gmt/types/fractal.ts` declare, and `utils/defaultPresetFields.ts`
- * deserialises it with `set({ savedCameras: p.savedCameras as any })` — no
- * shape check, no migration registered in `engine/migrations.ts`. Loading such
- * a file therefore puts flat rows in the store with `activeCameraId` pointed at
- * row 0, and `snap.state` is `undefined`:
- *   - render → `isCameraModified(cam.state)` throws
- *     "Cannot read properties of undefined (reading 'sceneOffset')";
- *   - recall → `applyCameraState(snap.state)` throws
- *     "Cannot read properties of undefined (reading 'rotation')".
- * Reproduced against a real file on disk (`GMT_AmazingBox_v2.gmf`, `<Scene>`
- * block). Fix belongs at the load boundary — normalise flat → `{ id, label,
- * thumbnail, createdAt, state: {...} }` in the `savedCameras` preset field's
- * `deserialize`, and correct the two `Preset` type declarations — so render,
- * recall, the modified marker and re-save are all fixed at once. */
+ *  payload is a SavedCameraPayload. Files saved before the state-library
+ *  extraction (19e605a8) carry FLAT rows with no `state` wrapper; the
+ *  `savedCameras` preset field in `utils/defaultPresetFields.ts` wraps them on
+ *  load, so everything past the load boundary sees this shape. */
 export type SavedCamera = StateSnapshot<SavedCameraPayload>;
 
 const getSetOptics = (s: any): ((update: Partial<OpticsState>) => void) | null => {

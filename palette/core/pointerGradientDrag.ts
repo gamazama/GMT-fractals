@@ -38,7 +38,7 @@
  */
 
 import { setFavientDrag, type FavientDragPayload } from './favientDnd';
-import { beginNativeDrag, setDragOrigin, setDragPayload } from '../store/dragVisual';
+import { beginNativeDrag, setDragPayload } from '../store/dragVisual';
 
 interface Session {
   dt: DataTransfer;
@@ -93,15 +93,13 @@ export const cancelPointerGradientDrag = (): void => {
 export const isPointerGradientDragging = (): boolean => session !== null;
 
 /**
- * Pick a gradient up under the mouse. `origin` is the rect it came from, for the avatar's
- * sense of where it started. Ends on mouseup (dropping if something accepted), on Escape,
- * or on `cancelPointerGradientDrag`.
+ * Pick a gradient up under the mouse at `at`. Ends on mouseup (dropping if something
+ * accepted), on Escape, or on `cancelPointerGradientDrag`.
  */
-export const startPointerGradientDrag = (payload: FavientDragPayload, at: { x: number; y: number }, origin?: DOMRect): void => {
+export const startPointerGradientDrag = (payload: FavientDragPayload, at: { x: number; y: number }): void => {
   cancelPointerGradientDrag();
   const dt = new DataTransfer();
   setFavientDrag(dt, payload); // also fills the avatar's payload slot
-  if (origin) setDragOrigin(origin);
   beginNativeDrag();
 
   const s: Session = {

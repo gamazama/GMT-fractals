@@ -9,7 +9,7 @@
  * Lives in shared hooks/ (not a feature folder) so both the engine/ core
  * and engine-gmt/ feature layers can reuse it without crossing layers.
  *
- * @see dev/plans/formula-picker-design.md → "Performance — primary mechanism"
+ * @see plans/formula-picker-design.md → "Performance — primary mechanism"
  */
 
 import { useCallback, useEffect, useRef } from 'react';
