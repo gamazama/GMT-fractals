@@ -5,6 +5,7 @@ import { FractalEvents } from '../../engine/FractalEvents';
 import { ContextMenuItem } from '../../types/help';
 import { Uniforms } from '../../engine/UniformNames';
 import { safeLocalGet, safeLocalSet } from '../safeLocalStorage';
+import { getPanelDefinition } from '../../engine/PanelManifest';
 
 // Mirrors Dock.tsx: on mobile the left dock isn't mounted (see AppGmt), so a
 // left-located panel is presented in the RIGHT dock. Panel activation must use
@@ -324,6 +325,8 @@ export const createUISlice: StateCreator<EngineStoreState & EngineActions, [["zu
         // Non-floatable panels (e.g. the Gradient Explorer's canvas mode stages, which
         // desync from the centre stage when floated) can't be undocked — reject the move.
         if (targetZone === 'float' && panels[id]?.floatable === false) return {};
+        // Bare-chrome panels (`PanelDefinition.chrome`) are float-only — refuse a dock.
+        if (targetZone !== 'float' && getPanelDefinition(id)?.chrome === 'bare') return {};
 
         // Create panel dynamically if it doesn't exist (for Engine, Camera Manager, etc.)
         if (!panels[id]) {

@@ -37,6 +37,12 @@ registerGmtShaderCompilerProfiles();
 import { registerPaletteUI } from '../palette/registerPaletteUI';
 registerPaletteUI();
 
+// The Gradient Studio — a floating window with the Explorer's Curves / Adjust / Paint faces for
+// any gradient param, opened from the popout beside each editor's ★ (after registerPaletteUI, so
+// the popout sits after the star). Its panel entry and close watcher are in main.tsx.
+import { installGradientStudio } from '../palette/installGradientStudio';
+installGradientStudio();
+
 // Sky loader + library (bundled public/skies/*.hdr samples + IndexedDB user
 // skies) — the materials feature's customUI entry mounts this as the Sky
 // Image source's loader row in the Scene panel's Background & Sky section.

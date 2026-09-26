@@ -98,6 +98,7 @@
     "smoke:share-link": "tsx debug/smoke-share-link.mts",
     "smoke:statelibrary-drop": "tsx debug/smoke-statelibrary-drop.mts",
     "smoke:gmt-gradientdrop": "tsx debug/smoke-gmt-gradientdrop.mts",
+    "smoke:gradient-studio": "tsx debug/smoke-gradient-studio.mts",
     "smoke:gmt-gx-handoff": "tsx debug/smoke-gmt-gx-handoff.mts",
     "smoke:ge-reduce": "tsx debug/smoke-ge-reduce.mts",
     "smoke:ge-wave": "tsx debug/smoke-ge-wave.mts",

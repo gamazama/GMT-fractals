@@ -42,7 +42,8 @@ import { MobileViewportShell } from '../../engine/components/MobileViewportShell
 import { useIsPhone } from './useIsPhone';
 import { FULL_FACES, WALL_IDLE_FACES, type TrayBox } from './Tray';
 import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
-import { commitPaint, discardPaint, hasPainting } from './paint/paintStore';
+import { commitPaint, discardPaint, hasPainting } from '../../palette/store/paintStore';
+import { installWorkingPaintSink } from './paint/workingPaintSink';
 import { SettingsHost } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
 import { showToast } from '../../engine/store/toastStore';
@@ -183,6 +184,11 @@ const resetBareCurveSpace = (): void => {
  * exactly as a picked one does. A STOP gradient: the first gesture on the ramp edits it.
  */
 /** The wall's toggle is a remembered preference (owner, 2026-09-25: "minimize can be remembered"). */
+// The Paint face (shared with GMT's Gradient Studio since 2026-09-26) applies through a sink
+// each host registers; the Explorer's lands on the working gradient. At module scope, so it is in
+// place before the first Apply whatever mounts first.
+installWorkingPaintSink();
+
 const WALL_TUCK_KEY = 'gmt.ge.wall-tucked';
 
 const NEW_GRADIENT_NAME = 'New gradient';

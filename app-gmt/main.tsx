@@ -43,6 +43,7 @@ import ReactDOM from 'react-dom/client';
 import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { openExplorerFromGmt } from './explorerTrip';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
+import { gradientStudioPanelEntry, mountGradientStudio } from '../palette/installGradientStudio';
 import { isFavientsPanelShown, toggleFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { installGradientFileClaim } from '../palette/installGradientFileClaim';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
@@ -731,7 +732,12 @@ applyPanelManifest([
   ...GmtPanels,
   // Favients shelf — registered here so it can float; mountFavientsPanel() floats it.
   favientsPanelEntry({ dock: 'right', order: 90 }),
+  // The Gradient Studio — floats, closed at boot; an editor's popout opens it.
+  gradientStudioPanelEntry(),
 ]);
+
+// Closing the Gradient Studio commits its open face (a live Curves / Adjust bakes, Paint applies).
+mountGradientStudio();
 
 // Float the Favients shelf at its remembered (or default middle-left) spot, open by
 // default, persist later open/move/resize, and restore the picker filter prefs.

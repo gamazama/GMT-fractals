@@ -331,6 +331,16 @@ export interface PanelDefinition {
      *  Gradient Explorer's canvas mode stages, which desync from the centre stage when
      *  floated) — the drag-to-float zone then rejects them (reordering still works). */
     floatable?: boolean;
+
+    /** How a FLOATING window of this panel is dressed. 'window' (default) is the usual title
+     *  bar with the dock grip, ✕ and a corner resize. 'bare' is no window chrome at all: the
+     *  panel's own content carries it (`useFloatingPanelChrome` — its drag handle and close),
+     *  the height follows the content, and the width resizes from the side edges. A bare panel
+     *  is FLOAT-ONLY — `movePanel` keeps it floating, and it has no grip to drag into a dock
+     *  (2026-09-26, GMT's Gradient Studio: the Explorer's hero card as the window, owner: "the
+     *  hero's header should be the draggable chrome and it should not be dockable"). Declare
+     *  it with `dock: 'float'`. */
+    chrome?: 'window' | 'bare';
 }
 
 export type PanelManifest = PanelDefinition[];

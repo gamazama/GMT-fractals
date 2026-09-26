@@ -90,6 +90,32 @@ const DraggableWindow: React.FC<DraggableWindowProps> = ({
 
     const showClose = !disableClose && (!!onClose || (isManaged && !panel?.isCore));
 
+    // BARE (`PanelDefinition.chrome: 'bare'`): no title bar, no dock grip, no corner grip — the
+    // panel's content carries its drag handle and close (`useFloatingPanelChrome`), the height
+    // follows the content and the width resizes from the side edges.
+    if (isManaged && id && getPanelDefinition(id)?.chrome === 'bare') {
+        return (
+            <FloatingPanel
+                z={displayZ}
+                stackId={id}
+                position={panel?.floatPos ?? { x: 100, y: 100 }}
+                onPositionChange={(pos) => setFloatPosition(id, pos.x, pos.y)}
+                size={panel?.floatSize ?? { width: 640, height: 0 }}
+                onSizeChange={(s) => setFloatSize(id, s.width, s.height)}
+                autoHeight
+                edgeResize="x"
+                minSize={{ width: 420, height: 0 }}
+                draggable
+                onClose={showClose ? handleClose : undefined}
+                showClose={false}
+                className="flex flex-col animate-pop-in"
+                bodyClassName="overflow-y-auto overflow-x-hidden custom-scroll flex-1 min-h-0 relative"
+            >
+                {children}
+            </FloatingPanel>
+        );
+    }
+
     return (
         <FloatingPanel
             z={displayZ}

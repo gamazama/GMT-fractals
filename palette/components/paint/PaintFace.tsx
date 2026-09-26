@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   PAINT_TOOLS, PAINT_BLEND_MODES, PAINT_TEXELS, brushRadius, dabStep, isWashTool, strengthKey, usesColour,
   type PaintTool, type PaintBlendMode,
-} from '../../../palette/core/paintRamp';
+} from '../../core/paintRamp';
 import { BLEND_SPACE_ORDER, BLEND_SPACE_LABEL, rgbToHex, hexToRgb } from '../../../utils/colorUtils';
 import type { BlendColorSpace } from '../../../types/graphics';
 import EmbeddedColorPicker from '../../../components/EmbeddedColorPicker';
@@ -36,9 +36,9 @@ import { ContextMenu } from '../../../components/gradient/GradientContextMenu';
 import { COARSE_POINTER } from '../../../components/gradient/BlendSpacePicker';
 import Slider from '../../../components/Slider';
 import { useShortcut, useShortcutScope } from '../../../engine/plugins/Shortcuts';
-import { Act } from '../ui/Act';
-import { Icon, type IconName } from '../ui/Icon';
-import { usePaintStore, setBrush, bumpPaint, commitPaint, discardPaint, paintUndo, paintRedo } from './paintStore';
+import { Act } from '../../../components/ui/Act';
+import { Icon, type IconName } from '../../../components/ui/Icon';
+import { usePaintStore, setBrush, bumpPaint, commitPaint, discardPaint, paintUndo, paintRedo } from '../../store/paintStore';
 import { filledShape, shapePath, sourceMark, token } from './brushDraw';
 
 const TOOL_META: Record<PaintTool, { icon: IconName; name: string }> = {

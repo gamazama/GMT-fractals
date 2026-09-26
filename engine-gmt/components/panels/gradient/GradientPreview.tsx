@@ -14,6 +14,7 @@
 import React, { useMemo } from 'react';
 import { useEngineStore } from '../../../../store/engineStore';
 import { getGradientCssString } from '../../../../utils/colorUtils';
+import { useGradientParamPreview } from '../../../../components/gradient/gradientParamPreview';
 
 const Strip: React.FC<{ stops: any }> = ({ stops }) => {
     const bg = useMemo(() => {
@@ -30,10 +31,13 @@ const Strip: React.FC<{ stops: any }> = ({ stops }) => {
 
 export const GradientPreviewLayer1: React.FC = () => {
     const stops = useEngineStore((s) => (s as any).coloring?.gradient);
-    return <Strip stops={stops} />;
+    // a live render-only preview (the Gradient Studio mid-face) is what the fractal shows
+    const preview = useGradientParamPreview('coloring', 'gradient');
+    return <Strip stops={preview ?? stops} />;
 };
 
 export const GradientPreviewLayer2: React.FC = () => {
     const stops = useEngineStore((s) => (s as any).coloring?.gradient2);
-    return <Strip stops={stops} />;
+    const preview = useGradientParamPreview('coloring', 'gradient2');
+    return <Strip stops={preview ?? stops} />;
 };

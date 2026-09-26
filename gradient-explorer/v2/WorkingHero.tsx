@@ -142,9 +142,10 @@ import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
 import { Tray, TRAY_TABS, type TrayFace, type TrayBox } from './Tray';
+import { FaceTabs } from '../../palette/components/faces/FaceTabs';
 import { useImageStore } from '../../palette/store/imageStore';
-import { PaintSurface, PaintBeforeLine } from './paint/PaintSurface';
-import { syncPaintBase, endPaintSession, setBrush, usePaintStore } from './paint/paintStore';
+import { PaintSurface, PaintBeforeLine } from '../../palette/components/paint/PaintSurface';
+import { syncPaintBase, endPaintSession, setBrush, usePaintStore } from '../../palette/store/paintStore';
 import { useStopSelectionHistory } from './uiHistory';
 import { Act } from './ui/Act';
 import { StateChip } from './ui/StateChip';
@@ -322,7 +323,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
   }, [tray]);
   // PAINT paints on the working ramp as it is while the face is open: a new painting whenever that
   // ramp changes under it (a pick, New, an undo), and none once the face has gone — the shell has
-  // applied or discarded it by then (@see ./paint/paintStore).
+  // applied or discarded it by then (@see palette/store/paintStore).
   useEffect(() => {
     if (tray === 'paint') syncPaintBase(derived.ramp);
     else if (usePaintStore.getState().session) endPaintSession();
@@ -1018,56 +1019,10 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
                       stripTitle={gesture ? 'Apply — bake it into the stops (the face closes)' : undefined}
                       stripHint={gesture ? <HalfHint className="group-hover/strip:opacity-100">Apply</HalfHint> : undefined}
                       stripAside={
-                        /* the TRAY'S TAB ROW (Phase C, restyled C.13 — owner 2026-09-07 evening): ONE
-                           segmented control in the Even / Perceptual / Stops style; the open face's
-                           segment is a TAB — it takes the tray's colour and a tongue runs from its
-                           bottom to the tray's (borderless) top edge, 8 px below, so the two read as
-                           one piece. The corners under the open tab are HARD — the segment's bottom
-                           corners and, when it is an end segment, the pill's own outer bottom corner
-                           (owner: "the button's corners need hardening when it's under a tab"). No
-                           chevrons: the tab says it is open. Click again closes. */
-                        <div
-                          className={`inline-flex rounded-t-lg border border-line/20 ${tray === tabs[0].face ? '' : 'rounded-bl-lg'} ${tray === tabs[tabs.length - 1].face ? '' : 'rounded-br-lg'}`}
-                          data-gx-tray-tabs
-                        >
-                          {tabs.map((t, i) => {
-                            const on = tray === t.face;
-                            const first = i === 0;
-                            const last = i === tabs.length - 1;
-                            const ends = `${first ? 'rounded-tl-[7px]' : ''} ${first && !on ? 'rounded-bl-[7px]' : ''} ${last ? 'rounded-tr-[7px]' : ''} ${last && !on ? 'rounded-br-[7px]' : ''}`;
-                            return (
-                              <button
-                                key={t.face}
-                                type="button"
-                                /* PHONE: 6 px of side padding, not 10. The editor's own row
-                                   holds this pill and the blend / output / menu group, and at
-                                   390 the two came to 338 in a 320 px line — so they WRAPPED,
-                                   and the wrap cost the card 30 px of height. 4 tabs × 4 px put
-                                   them back on one line at 390; 4 × 4 more (L1, 2026-09-24) do
-                                   it at 375 (measured: 243 → 215 px). 360 needs ~12 px more,
-                                   which is the editor row's own padding and gaps to give.
-                                   A FIFTH tab (Paint, 2026-09-24) put the row back over: 222
-                                   + 6 + the 123 px blend · ☰ group is 351 in 335 at 375 (1 px
-                                   over even at 390), and the wrap cost the card 36 px — hero
-                                   249 against smoke:ge-phone's 240. Image's tab now shows only
-                                   with a picture loaded (owner, 2026-09-25), so the row is four
-                                   tabs at 6 px most of the time, and five at 4 px a side — the
-                                   20 px back — only while an image is in; the tabs keep their
-                                   28 px height either way.
-                                   `transition-colors` (J12): the tabs ease like every other
-                                   pressable in the shell instead of snapping. */
-                                className={`relative h-7 text-[13px] transition-colors ${phone ? (tabs.length > 4 ? 'px-1' : 'px-1.5') : 'px-2.5'} ${ends} ${on ? 'bg-surface-section text-accent-300' : 'text-fg-muted hover:text-fg'}`}
-                                onClick={() => onTray(t.face)}
-                                title={t.title}
-                                data-gx-tray-tab={t.face}
-                                data-gx-tab-open={on ? '' : undefined}
-                              >
-                                {t.label}
-                                {on && <span aria-hidden className="absolute -left-px -right-px top-full h-[9px] bg-surface-section border-x border-line/20" data-gx-tab-tongue />}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        /* the TRAY'S TAB ROW — the segmented control whose open segment is a tab
+                           with a tongue into the tray. Shared with GMT's Gradient Studio since
+                           2026-09-26; its design record is in palette/components/faces/FaceTabs.tsx. */
+                        <FaceTabs tabs={tabs} open={tray} onOpen={onTray} phone={phone} />
                       }
                       inspectorHost={inspectorEl}
                       stripTakeover={tray === 'paint' ? PAINT_TAKEOVER : undefined}

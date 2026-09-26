@@ -88,7 +88,7 @@ import { ContextMenu as PresetMenu } from './gradient/GradientContextMenu';
 import { MenuIcon } from './Icons';
 import { useRenderPause } from '../hooks/useRenderPause';
 import {
-    getGradientEditorEntrance,
+    getGradientEditorEntrances,
     subscribeGradientEditorEntrance,
 } from './gradient/gradientEditorEntrance';
 import {
@@ -262,6 +262,10 @@ interface AdvancedGradientEditorProps {
      * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
      */
     stripTakeover?: { bar: React.ReactNode; track?: React.ReactNode };
+    /** 'full' chrome: which surface this editor sits in, handed to every header entrance as
+     *  `host` (@see components/gradient/gradientEditorEntrance.ts). GMT's Gradient Studio passes
+     *  'studio' so its popout button does not offer to pop the Studio out of itself. Absent = no host. */
+    entranceHost?: string;
 }
 
 /**
@@ -356,7 +360,7 @@ const KnotIcon = ({ color, isSelected, interpolation }: { color: string, isSelec
     </svg>
 );
 
-const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops, menuLead, stripTakeover }, ref) => {
+const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, AdvancedGradientEditorProps>(({ value, onChange, helpId, onEditStart, onEditEnd, edit, featureId, paramKey, chrome = 'full', stripHeight = 32, pickerPalette, stripAside, inspectorHost, onSelectionChange, stripCorners = 'all', pickerRoomy, previewRamp, onStripClick, stripTitle, stripHint, previewConfig, marqueeEscape = Infinity, onMarqueeEscape, onAddStops, menuLead, stripTakeover, entranceHost }, ref) => {
     // --- PARSE POLYMORPHIC INPUT ---
     // Extract Stops and ColorSpace from input. Default to sRGB if legacy array.
     const { stops, colorSpace, blendSpace } = useMemo(() => {
@@ -597,7 +601,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
     // Host-injected header entrance (app-gmt / explorer mount the Favients shelf
     // button here). Engine-core can't import palette, so it renders whatever the
     // host registered through the gradientEditorEntrance seam — or nothing.
-    const entrance = useSyncExternalStore(subscribeGradientEditorEntrance, getGradientEditorEntrance);
+    const entrances = useSyncExternalStore(subscribeGradientEditorEntrance, getGradientEditorEntrances);
 
     // The editor's current gradient as a config — handed to the header entrance so the
     // host's Favients button can add it (when the shelf is already open), and reused for
@@ -1465,7 +1469,7 @@ const AdvancedGradientEditor = React.forwardRef<AdvancedGradientEditorHandle, Ad
                     {/* Host-injected header entrance (app-gmt / explorer mount the
                         Favients saved-gradients shelf button here; engine-core renders
                         whatever the host registered, or nothing). */}
-                    {entrance && entrance.render({ config: currentConfig, featureId, paramKey })}
+                    {entrances.map((en) => <React.Fragment key={en.id}>{en.render({ config: currentConfig, featureId, paramKey, host: entranceHost })}</React.Fragment>)}
 
                     {/* Utility menu (clipboard) */}
                     <button

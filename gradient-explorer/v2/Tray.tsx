@@ -22,6 +22,8 @@
  *     cloud are portalled in by the slot's `ImageStage chrome="face"`). Spans from the
  *     card's left edge — the one face that grows to a pane.
  *   • Curves — the channel graph over the working base (moved here from the hero's expander).
+ *     The face itself is `palette/components/faces/CurvesFace.tsx` since 2026-09-26, shared with
+ *     GMT's Gradient Studio; so is Adjust's (`faces/AdjustFace.tsx`, its Apply is `applyAdjust`).
  *   • Adjust — three containers (owner, 2026-09-07): Hue rotate · Chroma · Contrast |
  *     Phase · Repeats · Posterize | Noise: Strength · Noise: Frequency · Targets. Standard GMT
  *     sliders, descriptions as tooltips, no keyframe diamonds (V4). Reworked 2026-09-13: a
@@ -30,10 +32,10 @@
  *     see `AdjustFace`. There is no noise TYPE control: the pipeline has one kind of noise
  *     (seeded value noise, linearly resampled at Frequency — grep `seededNoise` in
  *     palette/core/generatorPipeline.ts), so there is nothing to choose.
- *   • Paint (2026-09-24) — the brush paints on the hero's bar itself (`paint/PaintSurface`, laid over
+ *   • Paint (2026-09-24) — the brush paints on the hero's bar itself (`palette/components/paint/PaintSurface`, laid over
  *     the Stops editor through its `stripTakeover` seam — no knots, no split); the tray holds the
- *     brush lane, the brushes and the picker (`paint/PaintFace`). Leaving it applies the painting,
- *     Esc throws it away — @see ./paint/paintStore.
+ *     brush lane, the brushes and the picker (`palette/components/paint/PaintFace`). Leaving it applies
+ *     the painting, Esc throws it away — @see palette/store/paintStore.
  *   • Inspector — a portal host: `AdvancedGradientEditor` renders its stop inspector (the
  *     colour picker + the collapsible position / bias / interpolation column) INTO
  *     `inspectorHostRef` when a stop is selected. The host element must exist whatever face
@@ -65,25 +67,19 @@
  * @see docs/adr/0115-the-shell-on-a-phone.md
  */
 
-import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import { AutoFeaturePanel } from '../../components/AutoFeaturePanel';
-import { useGeneratorStore, useGenParam, genEditStart, genEditEnd, fitChannelsToTracks, prospectiveFitCurves, prospectiveFitFrames, readAdjustParamsNow, readSampledCurvesNow } from '../../palette/store/generatorStore';
-import { useEngineStore } from '../../store/engineStore';
-import { CURVE_SPACE_ORDER, curveSpaceKeys, toCurveChannels, type CurveSpace } from '../../palette/core/curveSpaces';
-import { BlendSpacePicker } from '../../components/gradient/BlendSpacePicker';
-import type { BlendColorSpace } from '../../types/graphics';
-import { ChannelGraphEditor } from '../../palette/components/ChannelGraphEditor';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { useGeneratorStore, useGenParam, genEditStart, genEditEnd } from '../../palette/store/generatorStore';
 import Slider from '../../components/Slider';
 import { InputSkinProvider } from '../../components/inputs';
 import { MixBandB } from './SourceBands';
 import { useArmedSlot } from '../../palette/store/armedTarget';
-import { buildGradientRamp, DEFAULT_SLOT_MODS, unwrapHue, type Channels, type GeneratorParams } from '../../palette/core/generatorPipeline';
-import { isIdentityAdjust } from '../../palette/core/workingPipeline';
 import { useWorkingStore, deriveWorkingNow, type WorkingDerived } from '../../palette/store/workingStore';
 import { ExtractStage } from './ExtractStage';
 import { Act } from './ui/Act';
 import { Icon } from './ui/Icon';
-import { PaintFace } from './paint/PaintFace';
+import { AdjustFace } from '../../palette/components/faces/AdjustFace';
+import { CurvesFace } from '../../palette/components/faces/CurvesFace';
+import { PaintFace } from '../../palette/components/paint/PaintFace';
 import { rgbToHex } from '../../utils/colorUtils';
 
 export type TrayFace = 'mix' | 'image' | 'curves' | 'adjust' | 'paint' | 'inspector' | null;
@@ -277,7 +273,7 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
         {face === 'mix' && <MixFace phone={phone} />}
         {face === 'image' && <ExtractStage cloudHostRef={imageCloudRef} toolsHostRef={imageToolsRef} slot={imageSlot} phone={phone} />}
         {face === 'curves' && <CurvesFace derived={derived} width={width} phone={phone} />}
-        {face === 'adjust' && <AdjustFace phone={phone} />}
+        {face === 'adjust' && <AdjustFace phone={phone} onApply={applyAdjust} />}
         {face === 'paint' && <PaintFace phone={phone} palette={paletteHex} />}
       </InputSkinProvider>
       {/* the inspector host lives whatever the face — the editor portals into it */}
@@ -350,341 +346,19 @@ const MixFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
   );
 };
 
-/** The narrowest a bin may be before the face gives it a row of its own. MEASURED, not picked:
- *  the noise bin's Targets row is the widest thing any bin holds — "Targets" + the three chips
- *  is 250 px — plus the bin's 28 px of padding. At the old three-across layout a 767–800 px
- *  window gave each bin ~204 px and that row ran past its bin (measured 2026-09-13 at 800:
- *  the "hue" chip at x 716..760 in a bin ending at 759). */
-const ADJUST_BIN_MIN = 280;
-/** The gap between bins (`gap-3`) — part of the "do three fit" sum. */
-const ADJUST_GAP = 12;
-
 /**
- * THE ADJUST FACE — three bins of dials, and Cancel / Apply (owner, 2026-09-07; reworked
- * 2026-09-13). Modify/Noise carry `dynamicVisible: isMixed` (a Generator-era assumption);
- * Adjust belongs to WORKING, so `ignoreDynamicVisible` skips that gate for this mount only —
- * the shared param definition (also read by GeneratorStage / app-gmt) is untouched.
- * @see plans/ge-v2-design.md §12 item 4
- *
- *   • TONE — Hue rotate · Chroma × · Contrast · Lightness (an additive OkLab L offset,
- *     grep LIGHTNESS in palette/core/generatorPipeline.ts).
- *   • TILING — Posterize · Scale (the `repeats` key, continuous since 2026-09-13) with its
- *     mirror tiles / reverse toggles under it (the owner: mirror is a tiling control, so it sits
- *     next to Scale — the feature nests `palette-modify-toggles` under `repeats`) · Phase.
- *   • NOISE — Strength · Frequency · Targets, and a text RESEED at the bin's foot.
- *
- * ROWS, NOT SQUEEZE. The bins flow into as many columns as their content fits: three across
- * when the face has 3 × ADJUST_BIN_MIN, else two with the noise bin taking the full second
- * row, and one column on a phone. Measured from the face's own box (a ResizeObserver), because
- * the tray's width follows the panel's left edge, not the viewport.
- *
- * CANCEL / APPLY, NOT "RESET ALL" (owner, 2026-09-13: "this is the old paradigm which was
- * parametric — our current paradigm is destructive (with undo), so every application bakes a
- * new state and starts from fresh").
- *   • APPLY bakes the adjusted gradient into the working stops and resets the dials — the SAME
- *     bake a face-leave does (`beginEdit`, grep it in the shell's `openTray`), under the same
- *     guard, and it is one undo step because `beginEdit` brackets itself. The face stays open,
- *     so the next adjustment starts from the result. The noise is baked as it looks (the seed
- *     is in the derive). Frequency and Targets are left where they are, exactly as every other
- *     bake leaves them (MAIN_DEFAULTS): at Strength 0 they draw nothing, and a second reset
- *     could not share the bake's undo step (param brackets do not nest — the inner one pushes
- *     and clears the outer snapshot).
- *   • CANCEL discards the dials (`resetAdjust` — all three bins, Frequency and Targets
- *     included), one undo step, the stops untouched.
- *   • Both are unavailable while the dials draw nothing (`isIdentityAdjust`).
- * Closing the face from its tab still bakes, as every face does — so Apply is "bake and keep
- * going", and a tab close is "bake and leave". Esc is this Cancel (owner, 2026-09-24; grep
- * `escapeFace` in the shell).
+ * The Adjust face's APPLY in the Explorer (the face itself is shared since 2026-09-26 —
+ * `palette/components/faces/AdjustFace.tsx`): bake the adjusted gradient into the working stops and
+ * reset the dials — the SAME bake a face-leave does (`beginEdit`, grep it in the shell's `openTray`),
+ * under the same guard, one undo step because `beginEdit` brackets itself.
  */
-const AdjustFace: React.FC<{ phone?: boolean }> = ({ phone = false }) => {
-  const bin = 'min-w-0 rounded-[10px] bg-surface-viewport px-3.5 py-3';
-  const reseedNoise = useGeneratorStore((s) => s.reseedNoise);
-  const resetAdjust = useGeneratorStore((s) => s.resetAdjust);
-  // Reseeding draws the same grain again from a new seed, so at Strength 0 it changes nothing
-  // you can see — the button says so by being unavailable rather than by doing nothing.
-  const noiseOn = useEngineStore((s) => ((s as unknown as { paletteGenerator?: { noise?: number } }).paletteGenerator?.noise ?? 0) > 0);
-  // Whether the dials change the picture at all — the one condition both actions share. A
-  // boolean selector, so a slider drag re-renders this only when it flips.
-  const live = useEngineStore((s) => {
-    const g = (s as unknown as { paletteGenerator?: GeneratorParams }).paletteGenerator;
-    return !!g && !isIdentityAdjust(g);
-  });
-  const apply = useCallback(() => {
-    const w = useWorkingStore.getState();
-    const d = deriveWorkingNow();
-    // the shell's leave-face guard, verbatim: nothing to fold, or a live source (Mix / Image
-    // bake through `use` instead — and cannot be the input while this face is open)
-    if (!d || d.passthrough || w.input.kind === 'build' || w.input.kind === 'extract') return;
-    w.beginEdit();
-  }, []);
-  const [cols, setCols] = useState(phone ? 1 : 3);
-  const roRef = useRef<ResizeObserver | null>(null);
-  const measured = useCallback((el: HTMLDivElement | null) => {
-    roRef.current?.disconnect();
-    roRef.current = null;
-    if (!el) return;
-    const fit = (w: number) => setCols(phone ? 1 : w >= 3 * ADJUST_BIN_MIN + 2 * ADJUST_GAP ? 3 : w >= 2 * ADJUST_BIN_MIN + ADJUST_GAP ? 2 : 1);
-    fit(el.getBoundingClientRect().width);
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => fit(entries[0].contentRect.width));
-    ro.observe(el);
-    roRef.current = ro;
-  }, [phone]);
-  return (
-    <div className="flex flex-col px-4 py-3 gap-3" data-gx-adjust data-gx-adjust-cols={cols}>
-      <div ref={measured} className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-        <div className={bin} data-gx-adjust-bin="tone">
-          <AutoFeaturePanel featureId="paletteGenerator" whitelistParams={['hueRotate', 'chroma', 'contrast', 'lightness']} hints="tooltip" keyframes={false} ignoreDynamicVisible />
-        </div>
-        <div className={bin} data-gx-adjust-bin="tiling">
-          <AutoFeaturePanel featureId="paletteGenerator" whitelistParams={['bands', 'repeats', 'phase']} hints="tooltip" keyframes={false} ignoreDynamicVisible />
-        </div>
-        {/* two columns: the noise bin takes the whole second row rather than leaving a hole */}
-        <div className={`${bin} flex flex-col`} style={cols === 2 ? { gridColumn: '1 / -1' } : undefined} data-gx-adjust-bin="noise">
-          <AutoFeaturePanel
-            featureId="paletteGenerator"
-            groupFilter="Noise"
-            labelOverrides={{ noise: 'Noise: Strength', noiseFreq: 'Noise: Frequency' }}
-            hints="tooltip"
-            keyframes={false}
-            ignoreDynamicVisible
-          />
-          <div className="mt-auto pt-2 flex justify-end">
-            <Act
-              onClick={reseedNoise}
-              disabled={!noiseOn}
-              title={noiseOn ? 'The same grain, a new draw' : 'Turn Noise: Strength up first'}
-              data-gx-adjust-reseed=""
-            >
-              Reseed
-            </Act>
-          </div>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2">
-        <Act onClick={resetAdjust} disabled={!live} title="Put the dials back — the gradient stays as it is" data-gx-adjust-cancel="">
-          Cancel
-        </Act>
-        <Act primary onClick={apply} disabled={!live} title="Make this the gradient and start the dials again (undo brings them back)" data-gx-adjust-apply="">
-          Apply
-        </Act>
-      </div>
-    </div>
-  );
-};
-
-/**
- * Curves over the WORKING base: the same channel graph editor the Generator uses, fed the
- * working pipeline's base. The prospective-fit ghost + ghost points use the Generator's
- * recipe, computed here because the base is no longer the A×B mix.
- */
-const CurvesFace: React.FC<{ derived: WorkingDerived; width: number; phone?: boolean }> = ({ derived, width, phone = false }) => {
-  const tracks = useGeneratorStore((s) => s.tracks);
-  const curvesOn = useGeneratorStore((s) => s.curvesOn);
-  const detail = useGeneratorStore((s) => s.detail);
-  const smooth = useGeneratorStore((s) => s.smooth);
-  const noiseSeed = useGeneratorStore((s) => s.noiseSeed);
-  const base = derived.base;
-  const space = useGeneratorStore((st) => st.curveSpace);
-
-  // The ghost is built in OkLCh (the pipeline's space) and converted ONCE at the end into
-  // the authoring space, so it shares the editable curve's axes and overlays it. That
-  // conversion also does the unwrapping the old `unwrapHue` call did — for whichever
-  // angular channel the space actually has, which for RGB and Oklab is none.
-  const ghost = useMemo((): Record<string, number[]> | null => {
-    if (!base) return null;
-    let oklch: Channels | null;
-    if (curvesOn && tracks) {
-      oklch = buildGradientRamp(
-        base,
-        base,
-        DEFAULT_SLOT_MODS,
-        DEFAULT_SLOT_MODS,
-        { ...readAdjustParamsNow(), mixL: 0, mixC: 0, mixH: 0 },
-        prospectiveFitCurves(base, detail, smooth, space),
-        noiseSeed,
-      ).final;
-    } else {
-      oklch = derived.final ?? null;
-    }
-    if (!oklch) return null;
-    const [a, b, c] = toCurveChannels(space, oklch);
-    const keys = curveSpaceKeys(space);
-    return { [keys[0]]: a, [keys[1]]: b, [keys[2]]: c };
-  }, [base, curvesOn, tracks, detail, smooth, noiseSeed, derived.final, space]);
-  const ghostPoints = useMemo(() => (base ? prospectiveFitFrames(base, detail, smooth, space) : null), [base, detail, smooth, space]);
-  const g = useGeneratorStore.getState();
-  // Detail / Smooth being dragged: the ghost layer shows itself (C.16)
-  const [fitting, setFitting] = useState(false);
-  /** the plot box's ResizeObserver, held so a re-mount disconnects the old one */
-  const plotBoxRef = useRef<ResizeObserver | null>(null);
-  // Fit on entry (C.4, owner: "curved mode should start fitting when we enter that mode"):
-  // the face opens with the curves already editable. Leaving the face bakes (C.3) and
-  // resets the tracks, so the next entry fits the baked gradient afresh.
-  //
-  // The second line is what makes the removed "Curves on / off" button safe (owner,
-  // 2026-09-12: obsolete). `fitFromChannels` turns curves on itself, but tracks that
-  // survive from elsewhere — the Generator dock in app-gmt shares this store and has its
-  // own toggle — could arrive with `curvesOn` false, and with no button here the face
-  // would show a plot that changes nothing and no way to say so. Entering the face means
-  // editing the curves, so entering turns them on.
-  //
-  // Since 2026-09-24 the shell's tab switch does both of these FIRST, inside the click's undo
-  // entry (grep `Curves opens on curves` in GradientExplorerV2App's `openTray`): done here, after
-  // the face mounted, they were an entry made with the face already open, and its undo left the
-  // face saying "Nothing to fit yet". This stays as the fallback for a face that mounts some other
-  // way; on the tab route it finds the curves already there and does nothing.
-  useEffect(() => {
-    if (!tracks && base) g.fitFromChannels(base);
-    else if (tracks && !curvesOn) g.setCurvesOn(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // PHONE: the plot loses 40 px so the controls above it and the wall below both stay
-  // visible inside the tray's cap; the editor collapses its own inspector to a rail below
-  // 560 px, so the whole width goes to the curve.
-  // PHONE (owner, 2026-09-12): the plot's HEIGHT is no longer set from here — the editor
-  // puts its track list and tools in strips above the curve and then draws the curve at 4:3
-  // across whatever width it is given, so a fixed height would only fight the ratio. What is
-  // set here is that width: the face's full bleed (`px-0`, hence `+ 32`) less a 6 px gutter
-  // each side, which is the "min padding" the owner asked for.
-  /**
-   * THE SPACE CHOOSER, and its hover preview. The shared `BlendSpacePicker` previews a mode
-   * by SHOWING it rather than by labelling it (which is why its labels carry no descriptors
-   * — @see components/gradient/BlendSpacePicker.tsx). Here that means re-fitting the current
-   * curve into the hovered space and drawing THAT: you can see whether RGB gives this
-   * gradient a simpler line than OkLCh before you commit to redrawing in it.
-   *
-   * The preview is local and never written to the store — `onTracksChange` is a no-op while
-   * one is showing, so a hover cannot edit the document.
-   */
-  const [previewSpace, setPreviewSpace] = useState<CurveSpace | null>(null);
-  const shownSpace = previewSpace ?? space;
-  const previewTracks = useMemo(() => {
-    if (!previewSpace || !tracks) return null;
-    // The LIVE curve, not the source: the owner's edits are what they expect to see redrawn.
-    const live = readSampledCurvesNow() ?? base;
-    return live ? fitChannelsToTracks(live, detail, smooth, previewSpace) : null;
-  }, [previewSpace, tracks, detail, smooth, base]);
-  const shownTracks = previewTracks ?? tracks;
-  /**
-   * WHERE it goes differs by pointer, because the control itself does. On a desk it expands
-   * its five modes INLINE (that is what makes hover-preview possible), and the 112 px track
-   * rail cannot hold them — measured: the list overflowed and clipped. So the desk puts it in
-   * the controls row beside Detail and Smooth, which is the right company anyway: the space
-   * is part of the fit recipe. A phone gets the same component's dropdown variant — one
-   * compact button, no inline expansion — which fits the track strip fine, and the controls
-   * row there is already 409 px of content in 363.
-   */
-  const spaceChooser = (
-    <BlendSpacePicker
-      value={space}
-      order={CURVE_SPACE_ORDER as readonly BlendColorSpace[]}
-      noun="axes"
-      onSelect={(sp) => { setPreviewSpace(null); g.setCurveSpace(sp as CurveSpace, base); }}
-      onPreview={(sp) => setPreviewSpace((sp as CurveSpace) ?? null)}
-      // 10 px on a desk, the size of the hero's blend chooser (HT-10) — at 8 px the two read as
-      // the same control 49 px apart. The phone keeps it compact inside the track strip.
-      compact={phone}
-      // the quiet word "axes" before it, as the hero's row puts "blend" (owner, 5e), and a title
-      // that is not the blend chooser's
-      title="Curve axes"
-      showNoun
-    />
-  );
-
-  const plotH = phone ? 320 : 240;
-  const PHONE_SIDE_PAD = 6;
-  /**
-   * MEASURED, not derived from `width` (owner, 2026-09-12: the curve view "seems to be
-   * cropping 255 so we have to zoom out to see that point", and "the keyframe inspector is
-   * hidden so we cant open it" — one cause, this one).
-   *
-   * `width` is the RAMP's pixel width. The plot's box is this component's padded content
-   * width, which is 32 px narrower on a desk (`px-4`) and was not a different number by
-   * coincidence — measured 940 against 901. `ChannelGraphEditor` lays out sidebar + canvas +
-   * inspector rail to whatever width it is handed, so being handed 39 px too many put the
-   * canvas's right edge past the box: the t-axis end (frame 255) was clipped away, and the
-   * canvas overflowed ON TOP of the inspector rail, where it swallowed its clicks —
-   * `elementFromPoint` over the rail returned the canvas.
-   *
-   * So measure the box. A ResizeObserver rather than a second guess at the padding, because
-   * the next person to change `px-4` will not think to come back here.
-   */
-  const [plotBoxW, setPlotBoxW] = useState(0);
-  const plotBox = useCallback((el: HTMLDivElement | null) => {
-    plotBoxRef.current?.disconnect();
-    plotBoxRef.current = null;
-    if (!el) return;
-    setPlotBoxW(Math.round(el.getBoundingClientRect().width));
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver((entries) => setPlotBoxW(Math.round(entries[0].contentRect.width)));
-    ro.observe(el);
-    plotBoxRef.current = ro;
-  }, []);
-  const plotW = phone ? width + 32 - PHONE_SIDE_PAD * 2 : plotBoxW || width;
-  return (
-    <div className={`flex flex-col gap-3 py-3 ${phone ? 'px-0' : 'px-4'}`}>
-      <div className={`flex items-center gap-2 ${phone ? 'px-3 flex-nowrap' : 'flex-wrap'}`}>
-        <Act disabled={!base} onClick={() => base && g.fitFromChannels(base)} title="Fit the curves from the source again (Detail and Smooth are the recipe; the faint ghost previews it)">
-          Re-fit
-        </Act>
-        {/* the fit recipe; while either is being dragged the editor shows its ghost (C.16) */}
-        {/* PHONE (owner, 2026-09-12): Re-fit, Detail and Smooth share ONE row — and the two
-            sliders drop their VALUE WELLS to make it fit. Measured: a dense slider's floor is
-            ~150 px (a 45 % label, a 64 px track, a 56 px fixed value cell), so Re-fit's 57
-            plus two of them is 409 px of content in 363 and Detail's readout landed on
-            Smooth's label. The 56 px cell is what the row cannot afford; the bar still says
-            where the value is, and these two are small integers (owner: "I'd make the call
-            that we don't need the textfields for these sliders"). Typing a value goes with
-            it — the well is also the text field — which is the trade, on this screen only.
-
-            THE NUMBER CAME BACK IN THE LABEL (owner, 2026-09-12: "the display is not
-            showing"). Dropping the well took the value away entirely, and a bar alone does
-            not read as a value — least of all Smooth, whose new default of 0 leaves the track
-            EMPTY, so the control looked broken rather than merely terse. A one-or-two digit
-            suffix inside the existing label costs ~14 px against the 56 the row could not
-            afford, and the label is already `truncate` + `max-w-[45%]`, so it cannot push the
-            track out. Typing a value is still desk-only, which was the accepted trade. */}
-        <div className={phone ? 'flex-1 flex items-center gap-3 min-w-0' : 'contents'}>
-          <div className={`${phone ? 'flex-1 min-w-0' : 'w-[170px] ml-2'}`}><Slider dense noValueField={phone} label="Detail" labelSuffix={phone ? <span className="tabular-nums text-fg">{detail}</span> : undefined} value={detail} min={2} max={10} step={1} onChange={(v) => g.setDetail(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
-          <div className={phone ? 'flex-1 min-w-0' : 'w-[170px]'}><Slider dense noValueField={phone} label="Smooth" labelSuffix={phone ? <span className="tabular-nums text-fg">{smooth}</span> : undefined} value={smooth} min={0} max={10} step={1} onChange={(v) => g.setSmooth(Math.round(v))} onDragStart={() => setFitting(true)} onDragEnd={() => setFitting(false)} /></div>
-        </div>
-        {!phone && <div className="ml-auto flex items-center">{spaceChooser}</div>}
-      </div>
-      {shownTracks ? (
-        <div
-          ref={plotBox}
-          className={`relative overflow-hidden ${phone ? '' : 'rounded-[10px]'}`}
-          style={phone ? { paddingLeft: PHONE_SIDE_PAD, paddingRight: PHONE_SIDE_PAD } : { height: plotH }}
-        >
-          <ChannelGraphEditor
-            tracks={shownTracks}
-            onTracksChange={previewTracks ? () => {} : g.setTracks}
-            width={plotW}
-            height={plotH}
-            phone={phone}
-            previewRamp={derived.ramp ?? undefined}
-            ghost={ghost}
-            ghostPoints={ghostPoints}
-            // the same scale fitChannelsToTracks applies, so the Pencil, the brush and the
-            // wave simplify at the tolerance Detail is asking of the main fit
-            epsScale={(11 - detail) / 3}
-            ghostDefault={false}
-            ghostActive={fitting}
-            normalizeToggle={false}
-            space={shownSpace}
-            spaceChooser={phone ? spaceChooser : undefined}
-            interactive
-          />
-        </div>
-      ) : (
-        <div className="h-[120px] rounded-[10px] bg-surface-viewport flex items-center justify-center text-[13px] text-fg-muted">
-          Nothing to fit yet — pick a gradient.
-        </div>
-      )}
-    </div>
-  );
+const applyAdjust = (): void => {
+  const w = useWorkingStore.getState();
+  const d = deriveWorkingNow();
+  // the shell's leave-face guard, verbatim: nothing to fold, or a live source (Mix / Image
+  // bake through `use` instead — and cannot be the input while this face is open)
+  if (!d || d.passthrough || w.input.kind === 'build' || w.input.kind === 'extract') return;
+  w.beginEdit();
 };
 
 export default Tray;

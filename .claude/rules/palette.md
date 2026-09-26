@@ -148,6 +148,22 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
   `componentRegistry` ids, `store/sendTargetRegistry`, the capability flags in
   `palette/core/favientTargets.ts` (select-mode / browse / studio), and the
   `gradientEditorEntrance` seam. A component must not ask which app it is in.
+- **The Explorer's Curves / Adjust / Paint faces are SHARED components since 2026-09-26**
+  (`components/faces/CurvesFace.tsx`, `components/faces/AdjustFace.tsx`, `components/paint/`,
+  `store/paintStore.ts`), hosted by the Explorer's tray and by GMT's GRADIENT STUDIO
+  (`store/gradientStudio.ts`, `components/GradientStudioPanel.tsx`, `installGradientStudio.ts` —
+  a floating window opened from the popout beside every full-chrome editor's ★). What differs
+  between the hosts goes through a seam, never a branch: Adjust's `onApply`, Curves'
+  `CurvesFaceDerived` input, Paint's `setPaintSink` (the Explorer's is
+  `gradient-explorer/v2/paint/workingPaintSink.ts`). The Studio's rule: a live face PREVIEWS on the
+  fractal through the param's own uniform (`previewGradient`) and never writes the param until it
+  bakes — one `paramGroup` on Apply, on leaving the face, on closing the window — so the param IS the
+  source, and an undo or a sidebar edit mid-face just moves the preview.
+  The window is the Explorer's hero card itself: a BARE-chrome panel (`PanelDefinition.chrome:
+  'bare'` → `DraggableWindow` renders a `FloatingPanel` with no title bar, `autoHeight`,
+  `edgeResize="x"`; the card's name row takes `useFloatingPanelChrome().dragHandleProps`), float-only
+  (`movePanel` refuses a dock), and a tray that would run off the bottom scrolls inside it rather
+  than pushing it up. Guarded by `smoke:gradient-studio` [10].
 - **Undo rides the ENGINE param stack**, via `palette/store/paramUndoBracket`
   (aliased `genEdit` / `editorEdit` / `favEdit`). Discrete gestures self-bracket;
   drags open on pointerdown and close on window pointerup. Snapshots come from
@@ -179,6 +195,7 @@ npm run smoke:ge-gradientfile  # the same file WIRED (browser, dev server on 340
 npm run test:palette-reducestops  # Reduce stops (ADR-0127/0128): every count, the tolerances, the axis, the search (node, ~2 min)
 npm run smoke:ge-reduce      # the same WIRED (browser, dev server on 3400): the slider by a real mouse, the search, Apply / Ctrl+Z, a phone without Spectral
 npm run smoke:gmt-gradientdrop  # app-gmt's SCENE entrances (browser, dev server on 3400): a gradient file dropped / picked in Load Scene lands in My Gradients, a scene still loads
+npm run smoke:gradient-studio  # app-gmt's Gradient Studio (browser, dev server on 3400): the popout, a face previews without writing, Apply / leave / ✕ bake one entry, Esc cancels, Paint lands a ramp
 ```
 
 `smoke:boot` is the most useful citation for the store/feature layer: it boots
@@ -202,6 +219,7 @@ tells the reader which harness covers what:
 | the editor's ramp mode and the UI's either-form readers: `components/gradient/rampMode.ts`, `components/gradient/gradientStopFitter.ts` (the Add-stops seam `registerPaletteUI` fills), `components/AdvancedGradientEditor.tsx`, `components/gradient/gradientActions.ts` | `debug/test-gradient-rampmode.mts` (`npm run test:gradient-rampmode`; includes a scan that fails if a UI file passes `.stops` to a stop renderer) |
 | `core/oklab.ts`, `utils/stopOps.ts` | `debug/test-palette-stopops.mts` |
 | `core/channelCurve.ts` | `debug/test-palette-channelcurve.mts` |
+| THE GRADIENT STUDIO (2026-09-26): `store/gradientStudio.ts` (target, faces, `bakeStudio`, `cancelStudioFace`, the render-only `previewGradient`), `components/GradientStudioPanel.tsx`, `components/GradientStudioEntrance.tsx` (the popout), `installGradientStudio.ts` (the panel entry, the Paint sink, the close watcher), and the shared faces' GMT side | `debug/smoke-gradient-studio.mts` (`npm run smoke:gradient-studio`; browser, app-gmt, HMR blocked — see its header for the falsification record). The faces' EXPLORER side stays on the Explorer smokes (`smoke:ge-paint`, `smoke:ge-tray`, `smoke:ge-wave`, `smoke:ge-uiundo`) |
 | `core/paintRamp.ts` (the Explorer's PAINT face: 1-D brushes on the 256-texel ramp — Paint's blend modes and mix spaces through `blendLerp`, Smudge, Soften, Sharpen, Tone, Clone, Restore; the wash rule that makes Opacity a stroke's ceiling and Flow its rate; stroke undo; Wrap and Mirror; spacing to 1000 %) | `debug/test-palette-paint.mts` (`npm run test:palette-paint`, last link of `test:palette` since 2026-09-24; falsified six ways, see its header — the ceiling step PASSED the first break at flow 1 and was rewritten to flow 0.5). Wired: `npm run smoke:ge-paint` (sibling-apps rule) |
 | `core/waveGen.ts` (the Curves editor's FUNCTION TOOL — the five shapes, the span envelope, bias/skew) and `utils/CurveFitting.ts` `spliceSpan` (the span-local commit the Pencil, the smoothing brush and the wave all share) | `debug/test-palette-wavegen.mts` (`npm run test:palette-wavegen`; falsified three ways — the span bound, the amplitude-as-a-fraction scaling and the splice's `kept` filter — plus section [9], added 2026-09-12, which pins that `spliceSpan` never hands back a segment whose Bezier doubles back in time (the loop sparse keys used to draw at the seam), falsified two ways — and two of its own assertions were wrong on the first cut and rewritten: a pointwise periodicity test that a DISCONTINUOUS pulse cannot pass, and two thresholds picked rather than derived. Read its header before tightening one) |
 | `components/WaveOverlay.tsx` + `components/ChannelGraphEditor.tsx`'s armed wave (the React side of the function tool: handles that keep pointer capture, the live preview, Esc discards wherever focus is, one undo step back to pre-arm through `store/paramUndoBracket.ts`'s nested-start rule, handles 1:1 along t, the axes resetting on leave) | `debug/smoke-ge-wave.mts` (`npm run smoke:ge-wave`; browser, dev server on 3400, real mouse input with HMR blocked; falsified per step 2026-09-16 — a handle component inside render, preview only on release, a per-drag bracket, `wrapHue` removed, the `/100` dropped, Esc not restoring, the nested snapshot overwrite, the canvas-width scale, the axes reset; see its header. Since 2026-09-16 [7], [7b] and [7c] DWELL past the shell's 400 ms Recent sync before discarding and require NO undo entry — before the fix a cancelled wave left one holding only My Gradients) |

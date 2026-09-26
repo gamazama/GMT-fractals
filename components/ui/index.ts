@@ -1,7 +1,7 @@
 export { Modal } from './Modal';
 export type { ModalProps } from './Modal';
-export { FloatingPanel } from './FloatingPanel';
-export type { FloatingPanelProps } from './FloatingPanel';
+export { FloatingPanel, useFloatingPanelChrome } from './FloatingPanel';
+export type { FloatingPanelProps, FloatingPanelChrome } from './FloatingPanel';
 export { Segmented } from './Segmented';
 export { Act } from './Act';
 export { Floating } from './Floating';

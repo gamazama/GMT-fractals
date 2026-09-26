@@ -5,8 +5,9 @@
  * a WINDOW of texels around a centre, weighted by a profile (a plateau `hardness` wide with a
  * smoothstep shoulder), and a stroke is dabs laid along the pointer's path every `spacing`.
  * This module is that model and nothing else — no DOM, no store, no React. The face
- * (gradient-explorer/v2/paint/) owns the pointer, the canvases and the commit; it hands this a
- * texel coordinate and a pressure and reads the texels back.
+ * (palette/components/paint/, hosted by the Explorer and GMT's Gradient Studio) owns the pointer,
+ * the canvases and the commit; it hands this a texel coordinate and a pressure and reads the
+ * texels back.
  *
  * WHAT A SESSION IS. `PaintSession` holds the ramp as it was when the face opened (`original`,
  * what Restore paints back and what the face's thin "before" line shows), the ramp as painted
@@ -50,7 +51,7 @@
  *     negated, so the mirrored copy is the mirror of the copy.
  *
  * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
- * @see gradient-explorer/v2/paint/PaintFace.tsx (the face) · utils/gradientRamp.ts (the ramp form)
+ * @see palette/components/paint/PaintFace.tsx (the face) · utils/gradientRamp.ts (the ramp form)
  */
 
 import { blendLerp } from '../../utils/colorUtils';

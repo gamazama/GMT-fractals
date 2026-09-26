@@ -59,11 +59,21 @@ import { useInputSkin } from './inputs';
 import { AlertIcon, CloseIcon } from './Icons';
 import { Hint } from './Hint';
 import { lazyWithFallback } from './ui/lazyWithFallback';
+import { useGradientParamPreview } from './gradient/gradientParamPreview';
 
 // Code-split: gradient editor only renders for gradient params. A failed
 // fetch (stale deploy, dev server gone) shows a notice in place of the editor
 // instead of crashing the app — see lazyWithFallback.
 const AdvancedGradientEditor = lazyWithFallback(() => import('./AdvancedGradientEditor'), 'The gradient editor');
+
+/** A DDFS gradient param's editor — the shared editor, plus the param's render-only PREVIEW when a
+ *  tool has one live (GMT's Gradient Studio mid-face): the bar paints what the fractal is showing,
+ *  and the knots read as the gradient underneath until the tool bakes.
+ *  @see components/gradient/gradientParamPreview.ts */
+const GradientParamEditor: React.FC<React.ComponentProps<typeof AdvancedGradientEditor>> = (props) => {
+    const preview = useGradientParamPreview(props.featureId, props.paramKey);
+    return <AdvancedGradientEditor {...props} previewConfig={preview} />;
+};
 import { FractalEvents } from '../engine/FractalEvents';
 import { tutorAnchors } from '../engine/plugins/Tutorial';
 import { SectionLabel, SectionDivider } from './SectionLabel';
@@ -601,7 +611,7 @@ export const AutoFeaturePanel: React.FC<AutoFeaturePanelProps> = ({
              return (
                  <div className={`pr-1 ${isParamDisabled ? 'opacity-30 pointer-events-none' : ''}`}>
                      <Suspense fallback={null}>
-                         <AdvancedGradientEditor
+                         <GradientParamEditor
                             value={val}
                             onChange={(s) => handleUpdate(key, s)}
                             featureId={featureId}

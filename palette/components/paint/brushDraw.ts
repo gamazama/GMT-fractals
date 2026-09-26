@@ -11,8 +11,8 @@
  * All sizes are in canvas pixels; callers pass `d` (device pixels per CSS px) for line weights.
  */
 
-import { brushWeight, type PaintSession, type PaintBrush } from '../../../palette/core/paintRamp';
-import type { RGB } from '../../../palette/core/oklab';
+import { brushWeight, type PaintSession, type PaintBrush } from '../../core/paintRamp';
+import type { RGB } from '../../core/oklab';
 
 export const css = (c: RGB, a = 1): string => `rgba(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)},${a})`;
 

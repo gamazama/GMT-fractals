@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useId, type ReactNode } from 'react';
+import React, { createContext, useContext, useRef, useState, useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useDismiss } from '../../hooks/useDismiss';
 import { CloseIcon, ResizeHandleIcon } from '../Icons';
@@ -26,6 +26,16 @@ import { getLayerHost } from './layerHost';
  * would fight that: the 8 px on-screen clamp (which moved a (0,0) viewport-sized box to
  * (8,8) and pushed its right edge 8 px off a phone), the `90vh` cap, drag and resize.
  * The caller's `position`/`size`/`initial*` are ignored while it is set.
+ *
+ * CHROME IN THE CONTENT (2026-09-26, GMT's Gradient Studio — the Gradient Explorer's hero card
+ * floating on its own, owner: "the hero's header should be the draggable chrome"). A panel with no
+ * header can still be moved and closed: every panel provides `FloatingPanelChromeContext`, and a
+ * child spreads `useFloatingPanelChrome().dragHandleProps` on whatever should be its handle and calls
+ * `.close`. Two props suit such a panel: `autoHeight` (the height follows the content — `size`
+ * gives only the width, and the height is capped at the room below the panel's top, so a panel that
+ * grows past the bottom scrolls instead of being pushed up) and `edgeResize="x"` (grips on the left
+ * and right edges change the width; the left one moves the panel with it; they sit above the
+ * content, which may carry its own z). Both default off, so every existing panel is unchanged.
  */
 type Coords = { x: number; y: number };
 type Dimensions = { width: number; height: number };
@@ -63,6 +73,11 @@ export interface FloatingPanelProps {
     /** Show a bottom-right resize grip. Requires `size`/`initialSize`. Default false. */
     resizable?: boolean;
     minSize?: Dimensions;
+    /** The height follows the content: `size`/`initialSize` set the width only. Default false. */
+    autoHeight?: boolean;
+    /** 'x': invisible grips on the left and right edges resize the width (the left one moves the
+     *  panel's x with it). Requires coordinate mode and a size. Default none. */
+    edgeResize?: 'x';
     /** Fill the viewport (a phone's full-screen sheet): no clamp, no height cap, no drag
      *  or resize; position and size props are ignored. Default false. */
     sheet?: boolean;
@@ -88,6 +103,27 @@ export interface FloatingPanelProps {
 }
 
 const DEFAULT_MIN: Dimensions = { width: 200, height: 150 };
+/** An `autoHeight` panel's top is kept this far above the viewport's bottom, so its head stays grabbable. */
+const AUTO_HEIGHT_MIN_VISIBLE = 96;
+const EDGE_MARGIN = 8;
+
+/** What a panel lends its content when the content carries the chrome (see the header). */
+export interface FloatingPanelChrome {
+    /** Spread on the element that should drag the panel; null outside coordinate mode or when
+     *  the panel is not `draggable`. Buttons inside the handle still click. */
+    dragHandleProps: {
+        onPointerDown: (e: React.PointerEvent) => void;
+        onPointerMove: (e: React.PointerEvent) => void;
+        onPointerUp: (e: React.PointerEvent) => void;
+        onPointerCancel: (e: React.PointerEvent) => void;
+        onDragStart: (e: React.DragEvent) => void;
+    } | null;
+    /** The panel's `onClose`, when it has one. */
+    close?: () => void;
+}
+const FloatingPanelChromeContext = createContext<FloatingPanelChrome>({ dragHandleProps: null });
+/** The enclosing FloatingPanel's drag handle and close (see the header). */
+export const useFloatingPanelChrome = (): FloatingPanelChrome => useContext(FloatingPanelChromeContext);
 
 /**
  * One pointer-drag gesture with capture. `onBegin` returns the start snapshot
@@ -132,6 +168,8 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
     draggable = false,
     resizable = false,
     minSize = DEFAULT_MIN,
+    autoHeight = false,
+    edgeResize,
     sheet = false,
     dismissOnOutside = false,
     dismissOnEscape = false,
@@ -204,7 +242,14 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
             const w = el.offsetWidth;
             const h = el.offsetHeight;
             const maxX = Math.max(margin, window.innerWidth - w - margin);
-            const maxY = Math.max(margin, window.innerHeight - h - margin);
+            // An `autoHeight` panel grows and shrinks with its content (a tray opening), so its
+            // height never pushes it up: only its top edge must stay on screen, with room for a
+            // handle below it; what does not fit scrolls (the height is capped to the room
+            // below the top — see the style below). Owner, 2026-09-26: "when the tray would land
+            // offscreen, it should prefer a scrollbar rather than moving the panel up".
+            const maxY = autoHeight
+                ? Math.max(margin, window.innerHeight - AUTO_HEIGHT_MIN_VISIBLE)
+                : Math.max(margin, window.innerHeight - h - margin);
             const cx = Math.min(Math.max(effectivePos.x, margin), maxX);
             const cy = Math.min(Math.max(effectivePos.y, margin), maxY);
             if (cx !== effectivePos.x || cy !== effectivePos.y) applyPos({ x: cx, y: cy });
@@ -255,6 +300,42 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
         onEnd: (e, s) => applySize(clampSize(s, e)),
     });
 
+    // EDGE RESIZE (width only). The left grip moves x by what it takes from the width, so the
+    // right edge stays put; both clamp at minSize.width.
+    type EdgeStart = { px: number; ow: number; ox: number; oy: number; side: 'l' | 'r' };
+    const edgeWidth = (s: EdgeStart, e: React.PointerEvent): number =>
+        Math.max(minSize.width, s.ow + (s.side === 'r' ? 1 : -1) * (e.clientX - s.px));
+    const edge = (side: 'l' | 'r') => usePointerDrag<EdgeStart>({
+        onBegin: (e) => {
+            if (!effectivePos) return null;
+            const ow = effectiveSize?.width ?? panelRef.current?.offsetWidth;
+            if (!ow) return null;
+            e.preventDefault();
+            e.stopPropagation();
+            return { px: e.clientX, ow, ox: effectivePos.x, oy: effectivePos.y, side };
+        },
+        onMove: (e, s) => {
+            const el = panelRef.current;
+            if (!el) return;
+            const w = edgeWidth(s, e);
+            el.style.width = `${w}px`;
+            if (s.side === 'l') el.style.left = `${s.ox + s.ow - w}px`;
+        },
+        onEnd: (e, s) => {
+            const w = edgeWidth(s, e);
+            applySize({ width: w, height: effectiveSize?.height ?? panelRef.current?.offsetHeight ?? 0 });
+            if (s.side === 'l') applyPos({ x: s.ox + s.ow - w, y: s.oy });
+        },
+    });
+    // hooks, so called unconditionally
+    const edgeL = edge('l');
+    const edgeR = edge('r');
+
+    const chrome: FloatingPanelChrome = {
+        dragHandleProps: draggable && effectivePos ? { ...drag, onDragStart: (e) => e.preventDefault() } : null,
+        close: onClose,
+    };
+
     if (!open) return null;
 
     const showHeader = title != null || headerLeft != null || (showClose && !!onClose);
@@ -269,8 +350,12 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
             style={{
                 zIndex: effectiveZ,
                 ...(effectivePos ? { left: effectivePos.x, top: effectivePos.y } : null),
-                ...(effectiveSize ? { width: effectiveSize.width, height: effectiveSize.height } : null),
-                ...(sheet ? { inset: 0 } : { maxHeight: '90vh' }),
+                ...(effectiveSize ? (autoHeight ? { width: effectiveSize.width } : { width: effectiveSize.width, height: effectiveSize.height }) : null),
+                ...(sheet
+                    ? { inset: 0 }
+                    : autoHeight && effectivePos
+                      ? { maxHeight: `calc(100vh - ${Math.round(effectivePos.y)}px - ${EDGE_MARGIN}px)` }
+                      : { maxHeight: '90vh' }),
             }}
         >
             {showHeader && (
@@ -291,7 +376,16 @@ export const FloatingPanel: React.FC<FloatingPanelProps> = ({
                 </div>
             )}
 
-            <div className={bodyClassName}>{children}</div>
+            <div className={bodyClassName}>
+                <FloatingPanelChromeContext.Provider value={chrome}>{children}</FloatingPanelChromeContext.Provider>
+            </div>
+
+            {edgeResize === 'x' && effectivePos && (
+                <>
+                    <div className="absolute top-0 bottom-0 -left-1 w-2 z-20 cursor-ew-resize touch-none" title="Drag to resize" {...edgeL} data-floating-edge="left" />
+                    <div className="absolute top-0 bottom-0 -right-1 w-2 z-20 cursor-ew-resize touch-none" title="Drag to resize" {...edgeR} data-floating-edge="right" />
+                </>
+            )}
 
             {resizable && effectiveSize && (
                 <div

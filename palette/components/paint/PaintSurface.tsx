@@ -30,8 +30,8 @@
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { brushRadius, strengthKey, PAINT_TEXELS } from '../../../palette/core/paintRamp';
-import { usePaintStore, setBrush, bumpPaint } from './paintStore';
+import { brushRadius, strengthKey, PAINT_TEXELS } from '../../core/paintRamp';
+import { usePaintStore, setBrush, bumpPaint } from '../../store/paintStore';
 import { brushSource, colourTab, shapePath, sourceMark, strokeOnAnything } from './brushDraw';
 
 /** The editor's end gutters (its `px-2` around the bar) — this surface covers and paints them. */

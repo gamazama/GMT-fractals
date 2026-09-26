@@ -29,18 +29,22 @@
  * The brush persists (`gmt.ge.paint-brush`); the painting does not — it is a face's working
  * state, and the autosaved session carries the working gradient, which is what Apply writes.
  *
+ * TWO HOSTS (2026-09-26). Moved from `gradient-explorer/v2/paint/` with the face
+ * (`palette/components/paint/`) so GMT's Gradient Studio can host it. "The hero", "the tray" and
+ * "the working gradient" above are the Explorer's names; in the Studio the bar is the Studio's
+ * own, and the gradient is the DDFS param it is pointed at. Where an Apply lands is the host's
+ * `PaintSink` (below) — the one thing that differs between them.
+ *
  * @see docs/adr/0129-the-paint-face-paints-a-ramp.md
  */
 
 import { create } from 'zustand';
-import { PaintSession, DEFAULT_BRUSH, PAINT_TOOLS, PAINT_BLEND_MODES, type PaintBrush } from '../../../palette/core/paintRamp';
-import type { RGB } from '../../../palette/core/oklab';
-import { makeRampGradient } from '../../../utils/gradientRamp';
-import { BLEND_SPACE_ORDER } from '../../../utils/colorUtils';
-import { paramGroup } from '../../../palette/store/paramUndoBracket';
-import { useWorkingStore, deriveWorkingNow } from '../../../palette/store/workingStore';
-import { usePaletteEditorStore } from '../../../palette/store/paletteEditorStore';
-import { safeLocalGet, safeLocalSet } from '../../../store/safeLocalStorage';
+import { PaintSession, DEFAULT_BRUSH, PAINT_TOOLS, PAINT_BLEND_MODES, type PaintBrush } from '../core/paintRamp';
+import type { RGB } from '../core/oklab';
+import { BLEND_SPACE_ORDER } from '../../utils/colorUtils';
+import { paramGroup } from './paramUndoBracket';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
+import { createSingleSlot } from '../../store/createSingleSlot';
 
 const BRUSH_KEY = 'gmt.ge.paint-brush';
 
@@ -147,10 +151,29 @@ export const endPaintSession = (): void => usePaintStore.setState((s) => ({ sess
 export const hasPainting = (): boolean => !!usePaintStore.getState().session?.changed;
 
 /**
- * APPLY: the painted ramp becomes the working gradient, as a ramp, in one undo entry. Called by
- * the face's Apply and by every way of leaving the face (see the header). False when there is
- * nothing to write. Safe inside the shell's own `paramGroup` — a group inside a group adds no
- * entry of its own.
+ * WHERE AN APPLY LANDS — the host's gradient, through a registered sink (2026-09-26). The face
+ * moved here from `gradient-explorer/v2/paint/` so GMT's Gradient Studio can host it too, and the
+ * two hosts keep their gradient in different places: the Explorer folds into its working stops
+ * document (`gradient-explorer/v2/paint/workingPaintSink.ts`), the Studio writes the DDFS param it
+ * is pointed at (`palette/store/gradientStudio.ts`). The sink's `write` runs INSIDE the Apply's
+ * `paramGroup`, so whatever it writes is the one undo entry.
+ *
+ * @assumption One sink per page, last-writer-wins: each host registers at boot and no page mounts
+ *   both. Nothing checks it — a second host registering would silently take the first one's Applies.
+ */
+export interface PaintSink {
+  /** Make `ramp` (256 display-space texels) the host's gradient. Runs inside the Apply's undo group. */
+  write: (ramp: RGB[]) => void;
+}
+const _sink = createSingleSlot<PaintSink>();
+/** Register (or clear, with `null`) where an Apply writes. */
+export const setPaintSink = (sink: PaintSink | null): void => _sink.set(sink);
+
+/**
+ * APPLY: the painted ramp becomes the host's gradient (through the sink), in one undo entry. Called
+ * by the face's Apply and by every way of leaving the face (see the header). False when there is
+ * nothing to write, or no host registered a sink. Safe inside a host's own `paramGroup` — a group
+ * inside a group adds no entry of its own.
  *
  * @invariant Every Apply is exactly ONE undo entry that holds the painted ramp — the second one in
  *   a face too, where the document is already stops and only this group brackets the write —
@@ -159,18 +182,11 @@ export const hasPainting = (): boolean => !!usePaintStore.getState().session?.ch
  */
 export const commitPaint = (): boolean => {
   const s = usePaintStore.getState().session;
-  if (!s || !s.changed) return false;
+  const sink = _sink.get();
+  if (!s || !s.changed || !sink) return false;
   if (s.painting) s.endStroke();
   const ramp = s.toRamp();
-  paramGroup(() => {
-    const w = useWorkingStore.getState();
-    const d = deriveWorkingNow();
-    // the same fold a stop edit makes first (the hero's `ensureEditing`), so the chip then offers
-    // "return to source" and Ctrl+Z walks back through it in the same entry
-    if (w.input.kind !== 'stops' || (d && !d.passthrough)) w.beginEdit();
-    const doc = usePaletteEditorStore.getState().config;
-    usePaletteEditorStore.getState().setConfig(makeRampGradient(ramp, doc.colorSpace, doc.blendSpace));
-  });
+  paramGroup(() => sink.write(ramp));
   usePaintStore.setState((st) => ({ session: new PaintSession(ramp), rev: st.rev + 1, peeking: false }));
   return true;
 };
