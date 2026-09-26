@@ -39,7 +39,8 @@ import type { Capability } from '../types/capabilities';
 // grammar" of the family. The chart is bi-Lipschitz, not conformal: the map is
 // quasiregular, not rational — which is exactly the loophole left open by the
 // two obstructions (continuous fold-invariant ⟹ degree 0; continuous
-// piecewise-Möbius cover of S² ⟹ impossible). See plans/julia3d-offaxis-notes.md.
+// piecewise-Möbius cover of S² ⟹ impossible). Worked through in the owner's off-axis
+// research notes, kept outside this repo.
 export const Julia3DZorich: FractalDefinition = {
     id: 'Julia3DZorich',
     name: 'Julia 3D Zorich (pillowcase)',

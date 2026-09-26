@@ -66,7 +66,7 @@ export const NATIVE_CATEGORIES: PickerCategory[] = [
     {
         id: 'hybrids',
         name: 'Hybrids & Experimental',
-        items: ['Borromean', 'Appell', 'SineJulia3D', 'Julia3D', 'Julia3DKucera', 'Julia3DZorich'],
+        items: ['Borromean', 'Appell', 'SineJulia3D', 'Julia3D', 'Julia3DLattes', 'Julia3DKucera', 'Julia3DZorich'],
     },
 ];
 

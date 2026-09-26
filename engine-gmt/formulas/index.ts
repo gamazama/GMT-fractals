@@ -46,6 +46,7 @@ import { KleinianMobius } from './KleinianMobius';
 import { KleinianJos } from './KleinianJos';
 import { SineJulia3D } from './SineJulia3D';
 import { Julia3D } from './Julia3D';
+import { Julia3DLattes } from './Julia3DLattes';
 import { Julia3DKucera } from './Julia3DKucera';
 import { Julia3DZorich } from './Julia3DZorich';
 
@@ -71,6 +72,7 @@ const formulas = [
     Claude,
     SineJulia3D,
     Julia3D,
+    Julia3DLattes,
     Julia3DKucera,
     Julia3DZorich,
 

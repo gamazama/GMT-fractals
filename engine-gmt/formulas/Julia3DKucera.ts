@@ -42,8 +42,8 @@ import type { Capability } from '../types/capabilities';
 // structure essentially 2D (azimuthal), transversally tame (latitude rides
 // along). The truly-3D construction (Γ̃₂, limit set = whole sphere) remains
 // open; a continuous piecewise-Möbius degree-2 cover of S² provably does not
-// exist, so it needs genuinely non-conformal pieces — see
-// plans/julia3d-offaxis-notes.md.
+// exist, so it needs genuinely non-conformal pieces (worked through in the owner's
+// off-axis research notes, kept outside this repo).
 export const Julia3DKucera: FractalDefinition = {
     id: 'Julia3DKucera',
     name: 'Julia 3D Kučera (inflated)',
