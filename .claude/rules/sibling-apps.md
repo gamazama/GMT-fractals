@@ -21,6 +21,14 @@ too GMT-specific.
 | `gradient-explorer/` | [`docs/modules/gradient-explorer/app.md`](../../docs/modules/gradient-explorer/app.md) |
 | `demo/` | [`demo/README.md`](../../demo/README.md) — minimal three-file add-on contract |
 
+Decisions for `gradient-explorer/`: ADR-0114 (the v2 shell and its visual language),
+ADR-0115 (the shell on a phone), ADR-0119 (a save is drawn where it lands, and GX Global
+invites a contribution — grep `flashSetSave`), ADR-0125 (`gradient-explorer-next.html` is a
+permanent alias of the canonical page — grep `ALIAS_PAGE` in `v2/shareUrl.ts`), ADR-0126
+(the trip from GMT carries a gradient there and nothing back — `v2/fromGmt.ts`), ADR-0129
+(the Paint face paints a ramp — `v2/paint/`). The palette-side decisions the shell hosts
+are in [`palette.md`](./palette.md).
+
 ## Guards
 
 Guard coverage is **per app, and uneven** — this list is not interchangeable. Each

@@ -48,6 +48,11 @@ outlived it — app-gmt mounts one, v2 mounts the rest.
 | The hero (the stops editor) and the tray faces | `v2/WorkingHero.tsx`, `v2/Tray.tsx`, `v2/SourceBands.tsx` |
 | The wall, the set rail, the ground | `v2/BrowseStage.tsx`, `v2/SetRail.tsx`, `v2/useGroundSource.ts`, `v2/GroundList.tsx` |
 | Share links, "Back to GMT" | `v2/shareUrl.ts` |
+| Arriving from GMT with its gradient, and "Back to GMT" since 2026-09-23 | `v2/fromGmt.ts` (grep `applyGradientFromGmt`, `goBackToGmt`, `BACK_TO_GMT_HREF`) and ADR-0126 |
+| The Paint face (brushes on the gradient's 256-texel ramp) | `v2/paint/` (`PaintFace.tsx`, `PaintSurface.tsx`, `paintStore.ts`, `brushDraw.ts`), the brush maths in `palette/core/paintRamp.ts`, and ADR-0129 |
+| Undo bringing back the interface (the face, the inspected stop, the armed Mix slot, Filters) | `v2/uiHistory.ts` and ADR-0120 |
+| Sharing to GX Global (the confirm, the rights line, the chip's flash) | `v2/contributeToGlobal.ts` and ADR-0119 |
+| The wall under a face that does not use it — dim, woken by a click, hidden from its toolbar | grep `wallIdle` in `v2/GradientExplorerV2App.tsx` (`WALL_IDLE_FACES` in `v2/Tray.tsx`); guard `smoke:ge-wall` |
 | Export, session save / autosave | `v2/ExportMenu.tsx`, `v2/exportActions.ts`, `v2/session.ts` |
 | Help, About, What's New, the version | `v2/help/`, `v2/ShellMenu.tsx`, `v2/version.ts` |
 | Phone layout | `v2/useIsPhone.ts` and ADR-0115 |

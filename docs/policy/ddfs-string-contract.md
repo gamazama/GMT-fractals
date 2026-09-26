@@ -44,7 +44,7 @@ Given a `FeatureDefinition` with `id: string`, `createFeatureSlice` installs a Z
 set${id.charAt(0).toUpperCase() + id.slice(1)}
 ```
 
-i.e. PascalCase upper-first of the feature id, prefixed by `set`. So feature id `julia` becomes `setJulia`; id `coloring` becomes `setColoring`. The convention is materialised at `store/createFeatureSlice.ts:58` (`const actionName = \`set${feat.id.charAt(0).toUpperCase() + feat.id.slice(1)}\``). The setter body itself does the sanitisation, `onSet` extras merge, composite re-emission, and the batched `FractalEvents.emit('config', ...)` — see `store/createFeatureSlice.ts:60-235` and `docs/modules/engine/feature-system.md` for the per-call behaviour.
+i.e. PascalCase upper-first of the feature id, prefixed by `set`. So feature id `julia` becomes `setJulia`; id `coloring` becomes `setColoring`. The convention is materialised at `store/createFeatureSlice.ts:58` (`const actionName = \`set${feat.id.charAt(0).toUpperCase() + feat.id.slice(1)}\``). The setter body itself does the sanitisation, `onSet` extras merge, composite re-emission, and the batched `FractalEvents.emit('config', ...)` — see `store/createFeatureSlice.ts:60-235` and `docs/history/audit-2026-05-20/archive/engine/feature-system.md` for the per-call behaviour.
 
 ### Consumer sites (the four that re-derive the name)
 
@@ -122,7 +122,7 @@ These are MUST-hold rules. Violations are silent at compile time.
 ## Invariants
 
 - **The auto-setter is the canonical entry point.** Every per-param store write that goes through the DDFS pipeline (sanitisation, `onSet`, composite re-emission, CONFIG-event batching, accumulation reset) MUST go through `set${FeatureId}` — direct `set({[featId]: ...})` writes bypass all of that (`store/createFeatureSlice.ts:60-235`).
-- **`featureRegistry.getAll()` is the iteration source for all four auto-wiring sites.** The order is topologically sorted by `dependsOn` (`engine/FeatureSystem.ts:444-448, 543-595` — see `docs/modules/engine/feature-system.md`). Adding a new auto-wiring site MUST iterate this list, not the raw store keys.
+- **`featureRegistry.getAll()` is the iteration source for all four auto-wiring sites.** The order is topologically sorted by `dependsOn` (`engine/FeatureSystem.ts:444-448, 543-595` — see `docs/history/audit-2026-05-20/archive/engine/feature-system.md`). Adding a new auto-wiring site MUST iterate this list, not the raw store keys.
 - **`deriveTrackBinding` is the canonical producer.** UI components MUST NOT hand-construct track ids; they MUST call `deriveTrackBinding` (`engine/animation/trackBinding.ts:63-84`) and forward `trackKeys[]`. Hand-spelling is how F12/F13 happened.
 - **`binderRegistry.lookup(id)` wins over the case-4 DDFS fallback.** The check happens BEFORE any name-inference in `AnimationEngine.getBinder` (`engine/AnimationEngine.ts:74-87`). Apps with non-standard write paths MUST register binders, not rely on the registry catching them.
 - **The DOT form is read-only.** Never produced; only consumed for backward-compat with phase-5-era saved scenes (`engine/AnimationEngine.ts:194-201`).
@@ -130,18 +130,18 @@ These are MUST-hold rules. Violations are silent at compile time.
 
 ## Interactions with other subsystems
 
-- **`docs/modules/engine/feature-system.md`** — owns `featureRegistry`, `createFeatureSlice`, `set${FeatureId}` materialisation (the producer side of contract 1). The Invariants table in that doc lists both string contracts; this doc is the canonical reference they cite.
-- **`docs/modules/engine/animation.md`** — owns `AnimationEngine.getBinder` (the case-4 consumer of contract 1 plus the reader of contract 2), `binderRegistry` (the escape hatch), and `AnimationSystem.tick` (the modulation-dispatch reader of contract 2 via `applyLiveMod`).
-- **`docs/modules/engine/shared-ui.md`** — owns `AutoFeaturePanel`, `Slider`, `VectorAxisCell`, and the per-axis keyframe-button wiring (the writer-side consumer of contract 2 via `deriveTrackBinding`).
-- **`docs/modules/engine/features.md`** — covers `setFeature` and the typed-feature surface (the typed-imperative variant of contract 1 consumers).
-- **`utils/PresetLogic.ts` (load path)** — consumer site #1 for contract 1. See `docs/modules/engine/feature-system.md` Interactions.
+- **`docs/history/audit-2026-05-20/archive/engine/feature-system.md`** — owns `featureRegistry`, `createFeatureSlice`, `set${FeatureId}` materialisation (the producer side of contract 1). The Invariants table in that doc lists both string contracts; this doc is the canonical reference they cite.
+- **`docs/history/audit-2026-05-20/archive/engine/animation.md`** — owns `AnimationEngine.getBinder` (the case-4 consumer of contract 1 plus the reader of contract 2), `binderRegistry` (the escape hatch), and `AnimationSystem.tick` (the modulation-dispatch reader of contract 2 via `applyLiveMod`).
+- **`docs/history/audit-2026-05-20/archive/engine/shared-ui.md`** — owns `AutoFeaturePanel`, `Slider`, `VectorAxisCell`, and the per-axis keyframe-button wiring (the writer-side consumer of contract 2 via `deriveTrackBinding`).
+- **`docs/history/audit-2026-05-20/archive/engine/features.md`** — covers `setFeature` and the typed-feature surface (the typed-imperative variant of contract 1 consumers).
+- **`utils/PresetLogic.ts` (load path)** — consumer site #1 for contract 1. See `docs/history/audit-2026-05-20/archive/engine/feature-system.md` Interactions.
 - **`store/slices/historySlice.ts` (undo)** — consumer site #3 for contract 1 (iterates the registry but does not derive the setter — direct slice read).
 
 ## Known issues / Phase 2 carry-in
 
 | Kind | Item | Site | Source |
 |------|------|------|--------|
-| doc-rewrite | DDFS auto-wiring crosses four sites with NO type enforcement on the `set${FeatureId}` string. Each call site re-derives the name by string concat; a typo or non-conventional feature id breaks all consumers silently. The fragility-audit `F6` row is the historical write-up. This doc is the canonical reference; `docs/modules/engine/feature-system.md` Invariants links to it. | `store/createFeatureSlice.ts:58`; `utils/PresetLogic.ts:76`; `engine/AnimationEngine.ts:155`; `engine/typedSlices.ts:106` | q-013 |
+| doc-rewrite | DDFS auto-wiring crosses four sites with NO type enforcement on the `set${FeatureId}` string. Each call site re-derives the name by string concat; a typo or non-conventional feature id breaks all consumers silently. The fragility-audit `F6` row is the historical write-up. This doc is the canonical reference; `docs/history/audit-2026-05-20/archive/engine/feature-system.md` Invariants links to it. | `store/createFeatureSlice.ts:58`; `utils/PresetLogic.ts:76`; `engine/AnimationEngine.ts:155`; `engine/typedSlices.ts:106` | q-013 |
 | doc-rewrite | Track-id convention `${featureId}.${paramKey}` / `${featureId}.${paramKey}_<axis>` is the second load-bearing string contract. UNDERSCORE form is canonical; DOT form is legacy read-only. The producer is `deriveTrackBinding`; three readers (`AnimationEngine.getBinder`, `AnimationSystem.tick`, `AutoFeaturePanel`) consume independently. Drift = F12/F13 silent-no-animate. | `engine/animation/trackBinding.ts:63-84`; `engine/AnimationEngine.ts:181-205` | q-013, q-014 |
 | cleanup-opportunity | The six+ UI writer sites that each `useMemo` `setterName = \`set${cap(id)}\`` could route through `setSlice` instead, removing the inline string-concat duplication. The escape hatches (`setFeature`, `setSlice`) already exist; the section wrappers predate them. | `components/AutoFeaturePanel.tsx:107`; `components/CompilableFeatureSection.tsx:86`; `components/CompileDropdownSection.tsx:41`; `components/RuntimeSection.tsx:33`; `components/FeatureSection.tsx:57`; `store/slices/scalabilitySlice.ts:47` | q-013 (observation) |
 | cleanup-opportunity | `register()` does not validate that the resulting `set${FeatureId}` would be a valid JS identifier or unique. A boot-time check in `featureRegistry.register` or `freeze()` would catch malformed ids before any consumer hits the silent-no-op path. | `engine/FeatureSystem.ts:374-396, 399-404` | (observation) |

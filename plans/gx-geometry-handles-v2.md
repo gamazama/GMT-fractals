@@ -1,5 +1,7 @@
 # Gradient Explorer — Geometry Handles v2 (redesign)
 
+> **Status update 2026-09-26: LANDED** — merged 2026-06-10 in `a3dbc428` ("Geometry Handles v2 (Session B, item 1)"); the code is `gradient-explorer/fullscreen/GeometryHandleLayer.tsx`. The "in flight" status below is from before the merge.
+
 **Branch:** `exec/fs-onscreen-handles` (dev) · **Date:** 2026-06-10 · **Status:** in flight
 
 Follows the first on-screen-handles pass (commits `861bac8` + `8a99a9d`). Artist review

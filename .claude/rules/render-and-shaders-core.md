@@ -14,7 +14,11 @@ Read first: JSDoc on `engine/RenderPipeline.ts` and `engine/BloomPass.ts`
 plus [`docs/policy/uniform-plugin-contract.md`](../../docs/policy/uniform-plugin-contract.md)
 (uniform schema, BASE vs feature merge, the section escape hatch).
 
-Decisions: ADR-0018 (pipeline), ADRs 0019-0020 (shader builder).
+Decisions: ADR-0018 (pipeline), ADRs 0019-0020 (shader builder). For
+`engine/fractal/shaders/`: ADR-0063 (the host-agnostic `engine/fractal` carve these
+files came from — fluid-toy consumes them through re-export shims and the Gradient
+Explorer through `engine/fractal/FractalColorRenderer.ts`; neither forks them), ADR-0064
+(the LA→PO reference-index handoff in `fractalKernel.ts`).
 
 ## Keep it domain-agnostic
 

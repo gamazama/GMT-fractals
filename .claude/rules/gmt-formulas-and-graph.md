@@ -17,7 +17,10 @@ union); JSDoc on `engine-gmt/utils/GraphCompiler.ts` (DCE + topo-sort,
 `uModularParams` slots).
 
 Decisions: ADRs 0048-0049 (registry), ADRs 0050-0051 (graph),
-ADRs 0089-0091 (WeaveSpec core), ADR-0092 (faithful marcher).
+ADRs 0089-0091 (WeaveSpec core), ADR-0092 (faithful marcher), ADR-0059 (a formula
+declares its capabilities from a closed vocabulary in `shader.capabilities`, reduced
+against features' `requires` by `engine-gmt/engine/compat/` — the feature side is in
+[`ddfs.md`](./ddfs.md)).
 
 ## Watch out
 

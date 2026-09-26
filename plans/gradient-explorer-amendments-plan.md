@@ -467,7 +467,7 @@ Still open: which configs ship first vs "useful others"; cap the point-field cou
 full resolution.
 
 ## Workstream 12 — ColorBox-in-OKLCh generator mode — **scope M** (v1 addition, 2026-06-06)
-*(from [gradient-v1-additions-scope.md](gradient-v1-additions-scope.md) — competitive-research pass)*
+*(from [gradient-v1-additions-scope.md](../docs/history/plans-archive/gradient-v1-additions-scope.md) — competitive-research pass)*
 
 ### What
 A second generator mode that builds a ramp by sweeping each **OKLCh** channel (L, C, h) independently
@@ -498,7 +498,7 @@ Hue-path = **shortest only** (no long-way toggle). Leonardo contrast-target = **
 two modes only: `mixed` + `colorbox`.
 
 ## Workstream 13 — Richer per-segment interpolation bases — **scope S (Tier A) / M (Tier B)** (v1 addition)
-*(from [gradient-v1-additions-scope.md](gradient-v1-additions-scope.md))*
+*(from [gradient-v1-additions-scope.md](../docs/history/plans-archive/gradient-v1-additions-scope.md))*
 
 ### What
 Extend `GradientStop.interpolation` beyond `linear|step|smooth|cubic` with **monotone-cubic** (Tier A,
@@ -550,7 +550,7 @@ refactor if/when Tier B is undeferred. (Rationale + the sampler bake-parity inva
    work or standalone.
 5. **W7 Import** — after W4 (shares the file-drop routing); re-run a focused research agent first.
 
-### Polish-pass results (DONE — see [gradient-explorer-polish-findings.md](gradient-explorer-polish-findings.md))
+### Polish-pass results (DONE — see [gradient-explorer-polish-findings.md](../docs/history/plans-archive/gradient-explorer-polish-findings.md))
 The polish-planning pass ran (8 agents, 88 findings). It validated W1–W7 but added **two new
 structural workstreams** and **reframed two existing ones as one system**:
 

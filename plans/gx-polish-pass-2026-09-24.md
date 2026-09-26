@@ -1,6 +1,6 @@
 # GX /polish pass — 2026-09-24, with the owner
 
-> Brief: `plans/gx-polish-pass-brief.md`. Working files (reviews, critic plan, owner decisions) were in the
+> Brief: `docs/history/plans-archive/gx-polish-pass-brief.md`. Working files (reviews, critic plan, owner decisions) were in the
 > session scratchpad; the parts worth keeping are copied here. Ended early at the owner's 5-hour usage cap (95%).
 > Committed as five commits `bdb74608..0c885fe4` (one per batch: hero/tray/shell · shared editor + masters ·
 > Export + Wallpaper · the ground · Help/Settings/first run/GMT side); each passed the pre-commit typecheck of the

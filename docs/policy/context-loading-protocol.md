@@ -4,6 +4,12 @@
 
 ## Why this exists
 
+> **Update 2026-09-26:** this doc was written in the `dev/` tree, which was retired on
+> 2026-06-17. Read every `dev/` below as this repository — `stable/`, on `main` — which is
+> where the scripts run now (`npm run context:*` from the repo root). The file count has also
+> grown: `git ls-files | wc -l` gave 3,714 tracked files on 2026-09-26, against the 2,241 below;
+> the token figure was not re-measured.
+
 `dev/` is one git repo holding the engine plus several apps: **2,241 tracked
 files, ~8.65M tokens** of text if you loaded everything. No agent should ever
 load "everything." This protocol is how we decide *what is worth reading, in
@@ -262,3 +268,6 @@ Built: classification + costing (v1), import-graph reachability + dead context
 
 Remaining: a one-time real-token calibration of `CONTEXT_CPT_SCALE`, and
 generalising the path rules so `stable/` and `gmt-rs/` can run the same scripts.
+
+> **Update 2026-09-26:** the `stable/` half is moot — with `dev/` retired the scripts already
+> run in `stable/` (the map was last rebuilt there on 2026-09-23). `gmt-rs/` is still open.

@@ -3,7 +3,7 @@
 **Last updated:** 2026-05-03
 **Status:** Shipped on dev branch.
 **Companion docs:**
-- [`docs/history/gmt/02_Rendering_Internals.md`](gmt/02_Rendering_Internals.md) §2.6 — current architecture, params, performance, gotchas (authoritative reference).
+- [`docs/history/gmt/02_Rendering_Internals.md`](history/gmt/02_Rendering_Internals.md) §2.6 — current architecture, params, performance, gotchas (authoritative reference).
 - [`docs/BENCH_SHADER_HANDOFF.md`](BENCH_SHADER_HANDOFF.md) — bench harness, optimization log, ANGLE/D3D11 stack rules.
 
 ---

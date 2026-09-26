@@ -1,5 +1,7 @@
 # Fullscreen-v2 RE-SCOPE — Gradient Explorer fullscreen overlay, second pass
 
+> **Status update 2026-09-26: DONE** — fullscreen-v2 was built and merged 2026-06-10 (the modes, e.g. `gradient-explorer/fullscreen/modes/splineMode.tsx` in `026dd0ec`; the fold-in waves `28187eda` and `a3dbc428`); see `docs/history/plans-archive/execution/execution-progress.md`, "FULLSCREEN-V2 IS DONE". The "PENDING-HUMAN-REVIEW" status and the `dev/` workspace below are from before that; paths now resolve from the repo root.
+
 **Date:** 2026-06-08
 **Status:** FRESH RE-SCOPE on the merged foundation. **Supersedes** `docs/history/plans-archive/fullscreen-v2-scope.md`. **PENDING-HUMAN-REVIEW.**
 **Workspace:** `h:/GMT/workspace-gmt/dev/` (all paths relative to here).

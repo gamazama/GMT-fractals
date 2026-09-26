@@ -6,8 +6,8 @@
 enthusiast, not a sub-tool of the fractal studio. Purpose-built UI, plain language, one linear flow,
 and a discrete-palette face on every gradient.
 **Companions:** `plans/gradient-explorer-amendments-plan.md` (June, what was built),
-`plans/gradient-explorer-polish-findings.md` (June, why it felt like a console),
-`plans/execution/execution-progress.md` (how the June work was run).
+`docs/history/plans-archive/gradient-explorer-polish-findings.md` (June, why it felt like a console),
+`docs/history/plans-archive/execution/execution-progress.md` (how the June work was run).
 
 ---
 

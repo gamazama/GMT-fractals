@@ -93,7 +93,13 @@ Run `npm run typecheck` — exits 0 means the plumbing is correct.
 2. Register it in `engine-gmt/formulas/index.ts`.
 3. Run `npm run test:baseline` (from `../stable/`) to confirm the shader compiles.
 
-GMT-era formula docs (from `stable/`): [stable/docs/history/gmt/25_Formula_Dev_Reference.md](../../stable/docs/25_Formula_Dev_Reference.md).
+> **Update 2026-09-26:** these steps predate the retirement of the `dev/` tree (2026-06-17).
+> This tree *is* `stable/`, so run the script from the repo root. Formula files now sit
+> directly in `engine-gmt/formulas/` (there is no `built-in/` folder) and export a
+> `FractalDefinition`; `engine-gmt/formulas/index.ts` imports each one into the list it hands to
+> `registry.register`.
+
+GMT-era formula docs (from `stable/`): [stable/docs/history/gmt/25_Formula_Dev_Reference.md](../docs/history/gmt/25_Formula_Dev_Reference.md).
 
 ---
 

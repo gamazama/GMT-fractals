@@ -1,8 +1,10 @@
 # AI Formula Kit — build spec (synthesized from design+verify workflow)
 
+> **Status update 2026-09-26: BUILT** — `590793bb` (2026-06-24, "Modify-with-AI kit"): `engine-gmt/components/panels/formula/ModifyWithAIModal.tsx`, `engine-gmt/utils/formulaBrief.ts`, `engine-gmt/components/panels/formula/loadPastedFormula.ts`. The "Ready to build" line below is the pre-build status.
+
 > Status: design VERIFIED (`rendersClean: true`, design HOLDS). Ready to build. 2026-06-24.
 > Design source: workflow `wf_a43cec35-0d2` output (minGmf / docAudit / uiMap / landingMap / promptDesign / verify).
-> Companion: [ai-formula-kit-family-archetypes.md](ai-formula-kit-family-archetypes.md) (guide content for formula families).
+> Companion: [ai-formula-kit-family-archetypes.md](../docs/history/plans-archive/ai-formula-kit-family-archetypes.md) (guide content for formula families).
 > Memory: [[ai-formula-kit]].
 
 ## What we're building

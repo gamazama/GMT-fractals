@@ -6,12 +6,15 @@
 > re-listed as gaps. This file is the working list: tick items here, don't edit the source plans.
 
 Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-checklist.md`,
-`pre-release-ui-pass.md`, `ge-v2-old-shell-migration-audit.md`, `ge-v2-functionality.md`,
-`ge-v2-design.md`, `gradient-explorer-next-session-handoff.md`, `fullscreen-v2-rescope.md`,
-`ge-v2-research/*`, `gradient-explorer-amendments-plan.md`, `gradient-explorer-polish-findings.md`,
+`pre-release-ui-pass.md`, `ge-v2-old-shell-migration-audit.md`,
+`docs/history/plans-archive/ge-v2-functionality.md`,
+`ge-v2-design.md`, `docs/history/plans-archive/gradient-explorer-next-session-handoff.md`,
+`fullscreen-v2-rescope.md`, `ge-v2-research/*`, `gradient-explorer-amendments-plan.md`,
+`docs/history/plans-archive/gradient-explorer-polish-findings.md`,
 `gradient-ramp-backbone.md`, `gradient-file-format.md`, `ge-ramp-analysis-and-deep-fit.md`,
-`palette-catalogue-licensing.md`, `palette-studio-port-plan.md`, `gx-geometry-handles-v2.md`,
-`gx-live-fractal-coloring-scope.md`.
+`palette-catalogue-licensing.md`, `docs/history/plans-archive/palette-studio-port-plan.md`,
+`gx-geometry-handles-v2.md`, `gx-live-fractal-coloring-scope.md`. (The four under
+`docs/history/plans-archive/` were archived 2026-09-26; the rest are in `plans/`.)
 
 ## 1. Release work (no owner decision needed)
 
@@ -28,13 +31,17 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
   (separate repo), the ADR text in §6, and a `context:map` re-run after the merge.
 - [x] **Label sweep** "Favients" → "My Gradients" — `4ccd2674` (+ `panelLabel(id)` seam in
   `engine/PanelManifest.ts` for dock tabs / floating titles) and `39f2e74b`.
-- [ ] **`/polish` pass** on the v2 shell — not run: its output is UX judgement for the owner's eyes.
+- [x] **`/polish` pass** on the v2 shell — **ran 2026-09-24 with the owner**; decisions, what was
+  built and what is left: `plans/gx-polish-pass-2026-09-24.md`. (Was: not run — its output is UX
+  judgement for the owner's eyes.)
 - [x] **Recent auto-collect ADR** — ADR-0124 (`76f36007`), owner-approved.
 - [x] **ADR-0112 (Variants) update block** — `b37c095f`.
 - [x] **What's New showed "> OWNER REVIEW — first draft."** and stale counts — `e9fb88b0`
   (10,509 on a computer, 2,952 on a phone).
-- [ ] Credit the preset seeds — **needs the owner** (licensing §6 action 6 frames it as "credit or
-  re-derive"). Found 2026-09-16: six of the 20 seeds are exact CARTOColors palettes (CC BY 4.0):
+- [x] Credit the preset seeds — **done 2026-09-23 (`1233477b`): About credits the built-in presets
+  and carries a takedown line, the minimum the owner chose in §2.7.** The per-entry source/licence
+  notes in the bake script's `SOURCES` (the draft below) were not part of it. Was: **needs the
+  owner** (licensing §6 action 6 frames it as "credit or re-derive"). Found 2026-09-16: six of the 20 seeds are exact CARTOColors palettes (CC BY 4.0):
   Spectrum = Prism, Warm Sunset = SunsetDark, Cool Forest = Emrld, Pastel Dreams = TealRose,
   Spring Floral = Temps, Earth Tones = Fall. Turbo is © 2019 Google LLC (Apache-2.0); the
   non-seed "Rainbow Divergent" is ColorBrewer Spectral (Apache-2.0). Draft: a "Built-in presets"
@@ -45,7 +52,9 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
 - [x] A GX gradient file dropped on GMT (or picked in Load Scene) imports into My Gradients — `f53e61e3` (generic `engine/plugins/SceneFileClaims.ts`). Still open: bare `{stops}` / colour-list / token / GX Global JSON and `.gxsession.json` still reach the scene loader; the loading screen's "Load From File…" and the "Drop to load scene" overlay text are unchanged.
 - [x] A selected stop surviving a gradient swap — `d35ec179`.
 - [x] Export row Copy ticks instead of toasting — `38534e11`.
-- [ ] Kept heart gold — skipped: the plan says the gold token is "still owed"; no colour named.
+- [x] Kept heart gold — **built 2026-09-24 (`49f0b305`)**: the `--kept` token in `index.css`, worn by
+  the ♥ through `text-kept`; the owner is still judging it on screen (`plans/gx-polish-pass-2026-09-24.md`).
+  Was: skipped — the plan said the gold token is "still owed"; no colour named.
 - [x] Dead `FavientsPanel layout="strip"` — `4a679cc0`.
 - [x] Stale `setLossyCount` JSDoc — `38534e11`.
 - [x] Meta description on `gradient-explorer-next.html` — `1b116cb4` (copy for the owner's eye).
@@ -58,6 +67,11 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
 - Curves wave tool (found by `smoke:ge-wave`): Esc baked instead of discarding on a desk; undo after closing the face landed on the unbaked preview (nested `beginParamTransaction` overwrote the snapshot); span/feather/phase handles lagged the pointer (77.5 px per 96); the axes stayed in HSV after leaving the face — `dc71bd28`, `fa3e31ed`, `2ed960c5`.
 - A Recent sync inside an open undo bracket put a My-Gradients-only entry into a cancelled wave (and any gesture held past 400 ms) — `34706e77`.
 - Found, not fixed: the first-run "New here?" banner covers app-gmt's top bar at 1400×900 (`@bug PRODUCTION` in `FirstRunHint.tsx`, `e9f0074f`); the light-gizmo button (`engine-gmt/topbar/CenterHUD.tsx`) and the Support menu's photo button have no label.
+  **Update 2026-09-26: all three fixed 2026-09-24 in `0c885fe4`** — the pill sits under the top bar
+  and the `@bug PRODUCTION` marker is gone from `FirstRunHint.tsx`; the light-gizmo button has a title
+  and `aria-label`; the Support photo is now a second pointer target for its row, out of the tab
+  order and hidden from assistive tech, rather than a nameless control (grep `nameless stop` in
+  `engine/plugins/Help.tsx`).
 
 ## 2. Decisions owed by the owner
 
@@ -65,9 +79,10 @@ Sources swept: `ge-v2-unified-shell-plan.md` (+ `ge-v2-figma/*`), `ge-v2-parity-
    The alias for `gradient-explorer-next.html` is built in, as recommended.
 2. ~~Liquify~~ **Owner 2026-09-23: ships as is**, `wip: true` banner and all.
 3. ~~Group-by shape~~ **After this release** (recommended 2026-09-23, not objected to): new work, never in a release queue.
-4. **Parity rows without a decision:** theme chips (B3), new gradient from nothing (M10), export
-   text preview (O4), drop overlay / "reading image…" (M8), "N stops" readout (E10b), landing
-   morph (N2), Mix past 0..1 (M5); M11, B13, B7 unrecorded.
+4. ~~**Parity rows without a decision**~~ **Resolved 2026-09-23/24 (§5): M8, M10, O4 and E10b were
+   built; B3, M5, N2, M11, B13 and B7 were left as decided.** The list as it stood: theme chips (B3),
+   new gradient from nothing (M10), export text preview (O4), drop overlay / "reading image…" (M8),
+   "N stops" readout (E10b), landing morph (N2), Mix past 0..1 (M5); M11, B13, B7 unrecorded.
 5. ~~Name~~ **Owner 2026-09-23: keep "Gradient Explorer"** — a casual open-source release on gmt-fractals.com, not marketed; revisit only if it gets traction.
 6. ~~Version~~ **Owner 2026-09-23: 2.0.0**, a number to start versioning on, not marketed — `d56a341f`.
 7. **Licensing — owner 2026-09-23: the minimum for a casual open-source release.** Keep what is live (per-source credits, NC pack off by default, no-redistribute sets unshipped); ADD a preset credit line and a takedown/contact line in About; no legal review; share-alike and GPLv2-only data need no action beyond the credits already stating the licence. The original open items were: Softology families with unverified terms in the
@@ -125,10 +140,14 @@ design §5.8 formats (`.ase`, Tailwind, tokens) exist · pre-release-ui-pass §1
   GX Global's rights line only for imports (`2bcae7e7`), and the interface riding every undo
   entry (`134df14b`; ADR-0120 update). What's New in the owner's words (`3eb7dfe4`). Parity rows
   M8, M10, O4, E10b are done; B3, M5, N2, M11, B13, B7 left as decided. Still to do: the `/polish`
-  pass (brief: `plans/gx-polish-pass-brief.md`), then the GMT `0.9.8.5` release commit and the
-  owner's push.
+  pass (brief: `docs/history/plans-archive/gx-polish-pass-brief.md`), then the GMT `0.9.8.5` release
+  commit and the owner's push.
 
 ## 6. ADR text queued for the owner (ADR writes need approval)
+
+> **Update 2026-09-26: all of the text below is written.** The ADR-0124, ADR-0119 and ADR-0123
+> update blocks landed in `9827e471` (2026-09-20); the swap's ADR-0014 and ADR-0121 update blocks
+> and the new ADR-0125 in `f79865d0` (2026-09-23). Kept below as the record of what was asked.
 
 - **ADR-0124 update** — the bin pin now survives the first sync; merge/replace order Recent by day
   (`byDayNewestFirst`); Consequences' "bin pin" and "one day twice" fixed 2026-09-16 (guards

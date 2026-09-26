@@ -24,6 +24,9 @@ seconds), ADR-0003 (single-driver double-run guard), ADR-0004 (TickRegistry
 singleton scope), ADR-0015 (log-value-space + camera-pair linear-in-zoom),
 ADR-0016 (deterministic playback). Modulation dispatch off the ANIMATE tick:
 ADR-0107 (live-modulation transport), ADR-0109 (one modulation dispatcher).
+Timeline audio: ADR-0027 (never seek during steady-state play —
+`engine/animation/audioClipSync.ts`), ADR-0028 (the raw audio `File` is cached
+out-of-band in `engine/animation/audioFileCache.ts`, never in the animation store).
 There is no binder-registry ADR — `engine/animation/binderRegistry.ts`'s
 top-of-file JSDoc is the contract.
 

@@ -120,9 +120,9 @@ The `handleParamChangeRef.current(featureId, param, value)` callback at `engine-
 
 - **`docs/history/audit-2026-05-20/archive/engine/shared-ui.md`** — primary module doc. The Invariants section there names both violations (`docs/history/audit-2026-05-20/archive/engine/shared-ui.md:231`, `docs/history/audit-2026-05-20/archive/engine/shared-ui.md:247`) and the Known issues section carries the same followups (`docs/history/audit-2026-05-20/archive/engine/shared-ui.md:273`, `docs/history/audit-2026-05-20/archive/engine/shared-ui.md:275`). This doc supersedes those entries for prescriptive rules; that doc stays the structural reference for the primitive catalog.
 
-- **`docs/modules/engine/feature-system.md`** — the `onUpdate: 'compile'` param flag and `engineConfig.toggleParam` / `engineConfig.mode` shapes are owned by the feature system. The `compileRouter` capability's payload shape (`featureId`, `param`, `value`) must match what `engine-gmt/components/panels/EnginePanel.tsx:64-104` expects — that's the contract a future override must replicate.
+- **`docs/history/audit-2026-05-20/archive/engine/feature-system.md`** — the `onUpdate: 'compile'` param flag and `engineConfig.toggleParam` / `engineConfig.mode` shapes are owned by the feature system. The `compileRouter` capability's payload shape (`featureId`, `param`, `value`) must match what `engine-gmt/components/panels/EnginePanel.tsx:64-104` expects — that's the contract a future override must replicate.
 
-- **`docs/modules/engine/shortcuts-undo.md`** — `handleInteractionStart('param')` / `handleInteractionEnd()` bracket every primitive drag boundary, feeding the per-scope undo transaction system. Rule 1 keeps that surface uniform: every primitive consumes those two callbacks through the same context, so undo coverage is symmetric across `Slider`, `Knob`, `Vector*Input`, and any new primitive.
+- **`docs/history/audit-2026-05-20/archive/engine/shortcuts-undo.md`** — `handleInteractionStart('param')` / `handleInteractionEnd()` bracket every primitive drag boundary, feeding the per-scope undo transaction system. Rule 1 keeps that surface uniform: every primitive consumes those two callbacks through the same context, so undo coverage is symmetric across `Slider`, `Knob`, `Vector*Input`, and any new primitive.
 
 ## Known issues / Phase 2 carry-in
 

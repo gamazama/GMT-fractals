@@ -8,7 +8,11 @@ paths:
 Read first: [`plans/mb3d/converter-design.md`](../../plans/mb3d/converter-design.md),
 then `engine-gmt/utils/mb3d/*`.
 
-Decisions: ADR-0083, ADR-0101, ADR-0102.
+Decisions: ADR-0083, ADR-0101, ADR-0102; ADR-0086 (MB3D depth-cue / dynamic fog
+becomes GMT distance fog, grep `mapFog`), ADR-0087 (a formula's `[CONSTANTS]` override
+the Cp0/Cp8 abs/sign-mask decode — it changes `decompiled-formulas.ts`), ADR-0088 (the
+importer turns the faithful marcher on for every real `.m3p`; superseded in part by
+ADR-0092).
 
 ## What this covers
 

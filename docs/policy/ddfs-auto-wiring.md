@@ -75,10 +75,10 @@ Important: none of these sites imports the auto-setter convention from a shared 
 
 ## Interactions with other subsystems
 
-- **e01-feature-system** (`docs/modules/engine/feature-system.md`) — owns `featureRegistry` and the writer side of the auto-setter convention. This doc is the consumer-side catalog.
-- **e03-animation** (`docs/modules/engine/animation.md`) — owns the track-id convention (`engine/animation/trackBinding.ts:7-9` for the canonical comment; the binder reader is site 3 here).
-- **e08-shortcuts-undo** (`docs/modules/engine/shortcuts-undo.md`) — owns the per-scope undo stacks and routing; this doc captures only the DDFS-iteration site (`beginParamTransaction`).
-- **ddfs-string-contract** (`docs/modules/ddfs-string-contract.md`, sibling cross-cut) — owns the string conventions (`set${id}` shape, track-id grammar, vec axis suffix). This doc covers the four-site change contract; that doc covers the strings.
+- **e01-feature-system** (`docs/history/audit-2026-05-20/archive/engine/feature-system.md`) — owns `featureRegistry` and the writer side of the auto-setter convention. This doc is the consumer-side catalog.
+- **e03-animation** (`docs/history/audit-2026-05-20/archive/engine/animation.md`) — owns the track-id convention (`engine/animation/trackBinding.ts:7-9` for the canonical comment; the binder reader is site 3 here).
+- **e08-shortcuts-undo** (`docs/history/audit-2026-05-20/archive/engine/shortcuts-undo.md`) — owns the per-scope undo stacks and routing; this doc captures only the DDFS-iteration site (`beginParamTransaction`).
+- **ddfs-string-contract** (`docs/policy/ddfs-string-contract.md`, sibling cross-cut) — owns the string conventions (`set${id}` shape, track-id grammar, vec axis suffix). This doc covers the four-site change contract; that doc covers the strings.
 - **camera-plugin** / **presetField** registrars — `presetFieldRegistry` is populated by `utils/defaultPresetFields.ts`, `engine/plugins/camera/presetField.ts`, `engine-gmt/store/gmtPresetFields.ts`; both registries freeze together in `createFeatureSlice` (store/createFeatureSlice.ts:31, see q-013 / q-014). The freeze ordering is an invariant of e01, not of this contract.
 
 ## Known issues / Phase 2 carry-in
@@ -95,7 +95,7 @@ Important: none of these sites imports the auto-setter convention from a shared 
 
 No existing doc covered this four-site pattern as a synchronised-change obligation. The four sites were independently documented in their respective subsystem docs:
 
-- feature-system.md described the auto-setter convention and listed the four downstream consumers under "Invariants" + "Interactions" (see docs/modules/engine/feature-system.md headings).
+- feature-system.md described the auto-setter convention and listed the four downstream consumers under "Invariants" + "Interactions" (see docs/history/audit-2026-05-20/archive/engine/feature-system.md headings).
 - animation.md described `AnimationEngine.getBinder` case 4 as the universal DDFS resolver and explicitly noted the convention is read at three sites (AutoFeaturePanel writer, `getBinder` reader, `createFeatureSlice` setter) — but did not enumerate PresetLogic or historySlice as participants in the same string contract.
 - shortcuts-undo.md (the historySlice doc) covered the per-scope stacks but treated `getParamSnapshot`'s registry iteration as an implementation detail.
 

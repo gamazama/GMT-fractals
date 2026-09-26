@@ -604,7 +604,7 @@ rule-guards. Every new assertion falsified; details in §8.
 
 ### Phase G — parity, polish, swap
 - Parity checklist vs the old shell (`gradient-explorer.html`), item by item from
-  `plans/ge-v2-functionality.md`; `/polish` on the v2 shell; label sweep across the three hosts
+  `docs/history/plans-archive/ge-v2-functionality.md`; `/polish` on the v2 shell; label sweep across the three hosts
   (S5 remainder) and the S5 export formats (.ase, Tailwind, design tokens) into `exportFormats.ts`.
 - ADRs: pipeline input slot, Recent auto-collect, variants (already owed) **plus one for the unified
   shell and its visual language** (the §1 principles, as decided, with what each phase amended).
@@ -2203,7 +2203,7 @@ phase now carries**. Items move out of this list only when a later phase's entry
   is already merged and v2 is live on `main`, so "merge after the /dev walk" is moot, and
   ADR-0111 (pipeline input slot), ADR-0112 (variants), ADR-0114 (the shell's visual language)
   and ADR-0115 (the shell on a phone) are written. What G still means: (1) the PARITY
-  CHECKLIST against the old shell, item by item from `plans/ge-v2-functionality.md`; (2) the
+  CHECKLIST against the old shell, item by item from `docs/history/plans-archive/ge-v2-functionality.md`; (2) the
   label sweep across the three hosts (the S5 remainder — the swatch-native export formats
   landed in §8b item 5); (3) the **Recent auto-collect ADR** (the last owed); (4) `/polish` on
   the v2 shell; (5) the ENTRY-POINT SWAP — GMT and the old page point at v2, the old shell

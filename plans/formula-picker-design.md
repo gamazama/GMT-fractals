@@ -16,7 +16,7 @@
 - **List mode** shrinks the popover width from 640px → 380px.
 - **Render pause** uses the existing `isPaused` / `setIsPaused` store contract; restores the prior pause state on unmount.
 - **Modular graph panel** moved from the right dock to the left (`panels.ts` `dock: 'right'` → `dock: 'left'`). Picking Modular from the picker calls `togglePanel('Graph', true)` so the left dock surfaces + Graph activates.
-- **Interlace secondary picker** uses a small wrapper widget ([InterlaceSecondaryPicker.tsx](../engine-gmt/components/FormulaPicker/InterlaceSecondaryPicker.tsx)) registered with `componentRegistry` as `'interlace-secondary-picker'`. `AutoFeaturePanel` special-cases `key === 'interlaceFormula'` and dispatches to it instead of the flat dropdown. `disabledIds` come from the interlace feature's reject set (`shape:self-contained`, `shape:modular`).
+- **Interlace secondary picker** uses a small wrapper widget ([InterlaceSecondaryPicker.tsx](../engine-gmt/components/FormulaPicker/InterlaceSecondaryPicker.tsx)) registered with `componentRegistry` as `'interlace-secondary-picker'`. `AutoFeaturePanel` special-cases `key === 'interlaceFormula'` and dispatches to it instead of the flat dropdown. `disabledIds` come from the interlace feature's reject set (`shape:self-contained`, `shape:modular`). *(Update 2026-09-26: removed — `InterlaceSecondaryPicker.tsx` went with the interlace feature on 2026-07-04, `3c4c2b69`, when weave absorbed it; ADR-0089.)*
 
 ## Goals
 

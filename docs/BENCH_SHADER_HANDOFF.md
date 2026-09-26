@@ -348,7 +348,7 @@ change first, 3 = found-but-not-worth) and per-call leverage.
 
 - **`uAreaLights` compile-gate** *(IN PROGRESS — session 2)*.
   Boolean checkbox, default **false** (matches bench scene).
-  [features/lighting/index.ts:228](engine-gmt/features/lighting/index.ts#L228).
+  [features/lighting/index.ts:228](../engine-gmt/features/lighting/index.ts#L228).
   Wraps the entire stochastic-shadow path in `calculatePBRContribution`
   (dump 1939–1962 / `shaders/chunks/lighting/pbr.ts:67`): hemisphere tangent
   basis, jittered direction, **plus a full 128-step `GetHardShadow` march**.
@@ -891,7 +891,7 @@ scene.** User noticed that low-roughness materials (~0.05) showed no
 visible specular highlights from the lights, masquerading as some
 "anti-firefly code killing speculars."
 
-Real cause: `GGX_EPSILON = 0.0001` ([math.ts:162](engine-gmt/shaders/chunks/math.ts#L162))
+Real cause: `GGX_EPSILON = 0.0001` ([math.ts:162](../engine-gmt/shaders/chunks/math.ts#L162))
 was being added to the GGX D-distribution denominator:
 ```glsl
 float D = a² / (PI * denom² + GGX_EPSILON)

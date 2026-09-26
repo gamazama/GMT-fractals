@@ -41,9 +41,9 @@ The contract with GMT is **"feed it"**: every mode produces a **256-step RGB ram
 the output **seam** converts that to a GMT `GradientConfig` (stops + blendSpace +
 colorSpace) which GMT's existing stop-based pipeline bakes to a DataTexture. Stops are
 the interchange; bezier channel-curves are only an *authoring* representation. Full
-history + decisions:
-[palette-studio-port-plan.md](../../../plans/palette-studio-port-plan.md),
-[gradient-explorer-next-session-handoff.md](../../../plans/gradient-explorer-next-session-handoff.md).
+history + decisions (both archived 2026-09-26):
+[palette-studio-port-plan.md](../../history/plans-archive/palette-studio-port-plan.md),
+[gradient-explorer-next-session-handoff.md](../../history/plans-archive/gradient-explorer-next-session-handoff.md).
 
 89 `.ts`/`.tsx` files. State rides the engine's **DDFS** ([02_Feature_Registry.md](../../history/engine/02_Feature_Registry.md))
 where params are scalar/vec (so they get undo + keyframes + presets for free), and
@@ -77,6 +77,12 @@ catalog, the ingested image, the favourites collection) that doesn't fit DDFS pa
   `palette-bundle-toggles`, `palette-generator-extras`, `palette-modifier-actions`,
   `palette-noise-targets`, `palette-modify-toggles`, `palette-image-extras`, and
   `panel-favients` (the Favients shelf panel).
+
+  > **Update 2026-09-26:** `palette-generator-extras` and `palette-image-extras` are
+  > removed — their panels (`GeneratorExtrasPanel.tsx`, `ImageExtrasPanel.tsx`) were deleted
+  > once no host mounted the Generator / Image dock tabs (the first Explorer shell, retired
+  > 2026-09-16 in `0d6c393f`, was the last). `palette-editor-dock` (the Stops dock panel) has
+  > joined the list since. `componentRegistry.register` in `registerPaletteUI.ts` is the truth.
 - **A history provider** keyed `paletteGenerator` — bridges the generator's non-DDFS
   Zustand state (curves + slots) into engine undo ([06_Undo_Transactions.md](../../history/engine/06_Undo_Transactions.md)).
 - **Seeds** the Favients shelf with built-in `GRADIENT_PRESETS` on first run.
@@ -96,6 +102,10 @@ have: `rampCanvas.ts` (says "DOM-only" in its own header), `favientsExport.ts` a
 property — `rampGeometry.ts`, `importFormats.ts`, `stopFit.ts`, `generatorPipeline.ts`,
 the img2grad math — not a directory guarantee. Grep for `document.createElement` before
 assuming a core module runs under node or in a worker.
+
+> **Update 2026-09-26:** `rampCanvas.ts` is removed — deleted with the first Explorer shell
+> (`0d6c393f`, 2026-09-16). The other five files named above remain; the file counts are from
+> the June audit, so recount before relying on them.
 
 Covered by `npm run test:palette`: **sixteen `tsx debug/test-palette-*.mts` harnesses
 chained with `&&`**, not vitest — there is no vitest or jest dependency in this repo and
@@ -203,6 +213,14 @@ Build a gradient procedurally from two source slots + a per-channel curve editor
 **Entry:** **`GeneratorStage.tsx`** (canvas visuals: result hero, A/B source strips,
 mix, the channel-graph editor); dock-tab dials live in the `paletteGenerator` feature.
 
+> **Update 2026-09-26:** this section describes the first Explorer shell's Generator stage.
+> `GeneratorStage.tsx`, `GenParamSlider`, `GeneratorSlotMods` and `MixBlend` were deleted with
+> that shell (`0d6c393f`, 2026-09-16), and the stage's export block (`GeneratorExtrasPanel.tsx`,
+> `palette-generator-extras`) on 2026-09-26. The pipeline, the `paletteGenerator` feature, the
+> channel-curve editor and `generatorStore.ts` are still live — the v2 shell drives the curves
+> from its Curves face and the dials from its Adjust face (grep `featureId="paletteGenerator"`
+> in `gradient-explorer/v2/Tray.tsx`).
+
 - **Slots & params** (`paletteGenerator.ts`): `slotA`/`slotB` are catalog indices
   (default Turbo / Inferno). Each slot has hidden DDFS mods (`a/bHueRotate`, `…Chroma`,
   `…Contrast`, `…Reverse`, `…Repeats`, `…Phase`, `…Mirror`); global params are `mixL/C/H`,
@@ -245,7 +263,8 @@ Explorer, floating in app-gmt). **Entry:** `FavientsPanel.tsx` (`panel-favients`
 - A **Favient** (`favientsStore.ts`) wraps a `GradientConfig` (stops = interchange) +
   metadata (`id`, `name`, `source`, `createdAt`, `group`). `FavStar.tsx` is the
   reusable ☆/★ toggle on Generator + Image + Picker results, deduped by content
-  signature `favientSig()`. `FavientsIcon.tsx` centralizes the glyph + `FAVIENTS_ACCENT`
+  signature `favientSig()`. *(Update 2026-09-26: `FavStar.tsx` was removed on 2026-06-09,
+  `c9da3793`; `favientSig()` in `favientsStore.ts` still does the dedupe.)* `FavientsIcon.tsx` centralizes the glyph + `FAVIENTS_ACCENT`
   style tokens.
 - **Store** (`favientsStore.ts`): `favients[]` (localStorage `gmt.favients`, shared
   across all GMT apps same-origin), `groupLabels`, `selectedTargetId`; actions
@@ -272,7 +291,8 @@ Extract a 256-step gradient from an image. **Entry:** `ImageStage.tsx` (drop / p
 click to load → downsampled to ≤160px work copy + ≤1920px display thumb; mode tabs;
 result strip; rotatable OKLab colour cloud; Trace pane with draggable handles). Dials
 live in the `paletteImage` feature; `ImageExtrasPanel.tsx` (`palette-image-extras`) is
-the export block.
+the export block. *(Update 2026-09-26: `ImageExtrasPanel.tsx` is removed — deleted
+2026-09-26 with no host left to mount it; the v2 shell exports from its Export window.)*
 
 - **Pipeline** (`core/img2grad/`, pure + deterministic — same image+settings ⇒
   byte-identical ramp). `extract(model, path, params)` (`index.ts`):

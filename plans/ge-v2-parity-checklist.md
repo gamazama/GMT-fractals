@@ -1,6 +1,6 @@
 # GE v2 — Phase G parity checklist (old shell vs v2)
 
-Written 2026-09-13. Static source reading of both shells against `plans/ge-v2-functionality.md`
+Written 2026-09-13. Static source reading of both shells against `docs/history/plans-archive/ge-v2-functionality.md`
 (2026-09-06) and `plans/ge-v2-old-shell-migration-audit.md` (2026-09-08), plus an independent sweep
 of what the old shell's code installs. **Not run in a browser** except where noted. Two claims were
 spot-checked by grep on the same day: nothing appends `?from=gmt` (so `cameFromGmt` rests on the

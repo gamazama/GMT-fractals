@@ -22,7 +22,7 @@ entry-point. It does not duplicate `CLAUDE.md` — it points at it.
 
 | Concern | Read |
 |---|---|
-| Why a decision was made | [`docs/adr/`](docs/adr/) — append-only, ~110 ADRs |
+| Why a decision was made | [`docs/adr/`](docs/adr/) — append-only, numbered in sequence |
 | Cross-cutting policy spanning many files | [`docs/policy/`](docs/policy/) |
 | Full documentation tree | [`docs/DOCS_INDEX.md`](docs/DOCS_INDEX.md) |
 | Session-by-session progress log | [`HANDOFF.md`](HANDOFF.md) |
@@ -30,8 +30,8 @@ entry-point. It does not duplicate `CLAUDE.md` — it points at it.
 | Pre-extraction historical reference (attic — may be stale) | [`docs/history/`](docs/history/) |
 
 **Navigation policy: read source, not docs about source.** Default to reading
-source files and grepping the annotation markers (`@invariant`, `@bug PRODUCTION:`,
-`@see`, `@stale`, `@deprecated`). If you find yourself reading a doc that restates
+source files and grepping the annotation markers (`@invariant`, `@assumption`,
+`@bug PRODUCTION:`, `@see`, `@stale`, `@deprecated`). If you find yourself reading a doc that restates
 code, stop and read the code. External docs are reference-of-last-resort for
 context the code doesn't carry.
 
@@ -51,10 +51,16 @@ Before bulk-loading source for a subsystem, run a load plan:
 
 ## Citations
 
-Every architectural claim cites `path/to/file.ts:N` or `path/to/file.ts:N-M`.
-If you can't cite it, you don't know it yet.
+Every architectural claim cites where it lives: a file plus a grep target —
+"grep `DOUBLE_RUN_WINDOW_MS` in `engine/TickRegistry.ts`" — not a bare line
+number. Symbols survive edits; `path/to/file.ts:N` drifts and eventually points at
+unrelated code. A line number may ride along as a hint, never as the only locator
+(CLAUDE.md, "Cite grep targets, not line numbers"). If you can't cite it, you don't
+know it yet.
 
 ---
 
-Last reviewed: 2026-07-27 (path-scoped rules added; stale `docs/modules/` and
-`.clinerules` pointers removed).
+Last reviewed: 2026-09-26 (citation rule aligned with CLAUDE.md's grep targets;
+`@assumption` added to the marker list; the drifting ADR count dropped). Before that
+2026-07-27 (path-scoped rules added; stale `docs/modules/` and `.clinerules` pointers
+removed).

@@ -8,15 +8,18 @@ The source tree is the truth. In order of authority:
 2. **ADRs** ([`adr/`](adr/)) — dated, append-only decision records; cited from source via `@see docs/adr/NNNN-*.md`.
 3. **Policy docs** ([`policy/`](policy/)) — cross-cutting rules that span many files.
 
-External narrative docs (the old `docs/engine/*` and `docs/gmt/*`) have been **archived to [`history/`](history/)** — pre-extraction reference, superseded by the three layers above. Don't navigate *from* them; navigate from **CLAUDE.md's "Read first" table**, which maps each subsystem to its authoritative source JSDoc + ADRs.
+External narrative docs (the old `docs/engine/*` and `docs/gmt/*`) have been **archived to [`history/`](history/)** — pre-extraction reference, superseded by the three layers above. Don't navigate *from* them; navigate from **[`.claude/rules/`](../.claude/rules/)** — path-scoped rule files, each naming its subsystem's source JSDoc entry point, ADRs and guard scripts. (They replaced the "Read first" table CLAUDE.md carried until 2026-07-27.)
 
 ## Live layout
 
 ```
 docs/
 ├── DOCS_INDEX.md        ← you are here
-├── FEATURE_STATUS.md    engine snapshot (what works / what's missing)
+├── FEATURE_STATUS.md    engine + toys status snapshot, last edited 2026-04-29 — not maintained since
 ├── CHANGELOG_DEV.md     running dev log
+├── BENCH_SHADER_HANDOFF.md   shader-perf bench harness + optimisation log (May 2026 sessions)
+├── UI_PERF_HANDOFF.md        UI-perf bench framework + first findings (May 2026)
+├── VOLUMETRIC_HANDOFF.md     volumetric-scatter optimisation log (May 2026)
 ├── adr/                 architecture decision records — append-only, @see-cited from source
 ├── policy/              cross-cutting rules (engine-fork-rules, ddfs contracts, shader-compile, context-loading, …)
 ├── releases/            user-facing release notes (going-forward home)
@@ -28,17 +31,20 @@ docs/
 
 ## Where to start
 
-- **Any task** → [`CLAUDE.md`](../CLAUDE.md) — rules + the "Read first" table mapping each subsystem to its authoritative source JSDoc + ADRs.
+- **Any task** → [`CLAUDE.md`](../CLAUDE.md) — rules. Each subsystem's source JSDoc entry point, ADRs and guards live in [`.claude/rules/`](../.claude/rules/), which load automatically when you open a matching file.
 - **New contributor** → [`../CONTRIBUTING.md`](../CONTRIBUTING.md), then the app README below.
 - **Repo geography** → [`CODEBASE_MAP.md`](../CODEBASE_MAP.md).
 - **What to load & at what token cost** → `npm run context:cost -- <subsystem|tier|path|app:name>` (see [`policy/context-loading-protocol.md`](policy/context-loading-protocol.md)).
 
 Each app owns the canonical entry point for "I'm about to work on this app":
 
-| App | README |
+| App | Entry doc |
 |---|---|
 | `app-gmt` | [app-gmt/README.md](../app-gmt/README.md) |
+| `gradient-explorer` | [modules/gradient-explorer/app.md](modules/gradient-explorer/app.md) |
 | `fluid-toy` | [fluid-toy/README.md](../fluid-toy/README.md) |
+| `fractal-toy` | [modules/fractal-toy/index.md](modules/fractal-toy/index.md) |
+| `mesh-export` | [modules/mesh-export/index.md](modules/mesh-export/index.md) |
 | `demo` | [demo/README.md](../demo/README.md) |
 
 ## Decisions & policy
@@ -58,7 +64,7 @@ Each app owns the canonical entry point for "I'm about to work on this app":
 
 ## Style
 
-- Markdown links for paths: `[text](path/to/file.ts)`; line refs `[FeatureSystem.ts:236](../engine/FeatureSystem.ts#L236)`.
+- Markdown links for paths: `[text](path/to/file.ts)`. Point into code with a grep target, not a line number: "grep `DuplicateFeatureError` in `engine/FeatureSystem.ts`" survives edits, a `#L236` anchor rots (CLAUDE.md, *Cite grep targets, not line numbers*).
 - New decision (even rejected) → new ADR in `adr/` (append-only). New cross-cutting rule → a doc in `policy/`. A subsystem contract or invariant → JSDoc at the source site, **not** a new markdown file.
 
 ---

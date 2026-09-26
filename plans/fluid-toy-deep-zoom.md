@@ -177,7 +177,9 @@ smoothI continuity across rebases — important for force gradient modes.
   table-rebuild trigger fires only on store-level events (zoom past
   validity, c-base change), never per-frame.
 - **GPU shader**: forks `evalJulia` in [shaders.ts](../fluid-toy/fluid/shaders.ts) — standard f32
-  path when deep-zoom is off, perturbed/LA path when on.
+  path when deep-zoom is off, perturbed/LA path when on. *(Update 2026-09-26: `fluid-toy/fluid/shaders.ts`
+  was split into `fluid-toy/fluid/shaders/` on 2026-04-28 (`d29ec5e4`), and the kernel was later carved
+  into the shared library — grep `evalJulia` in `engine/fractal/shaders/fractalKernel.ts`, ADR-0063.)*
 
 ### 3.2 New module layout
 ```

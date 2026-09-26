@@ -1,5 +1,7 @@
 # Partial-Apply Utility — Spec
 
+> **Status update 2026-09-26: IMPLEMENTED** — `4dc40e09` (2026-05-26): `engine-gmt/utils/applyPartialPreset.ts`, guarded by `debug/test-partial-apply.mts`. The "not implemented" status below predates it.
+
 **Status**: Spec; not implemented.
 **Drafted**: 2026-05-25
 **Effort**: S (~3h)

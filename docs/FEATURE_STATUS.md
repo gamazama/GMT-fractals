@@ -1,5 +1,11 @@
 # Engine + Toys Feature Status
 
+> **Update 2026-09-26:** this page is a snapshot — last edited 2026-04-29 and not maintained
+> since, so it predates the ADR set (begun in the 2026-05-20 doc audit) and everything built
+> after it. The current state lives in source JSDoc (the `@invariant` / `@assumption` / `@bug`
+> markers), the path-scoped rules in `.claude/rules/`, and the ADRs in `docs/adr/`. Read what
+> follows as history.
+
 **Snapshot:** 2026-04-23, after phase 5 (commit `b82dc18`).
 **Purpose:** single page the user can hold while testing. Tells you what's working, what's broken, and what's missing.
 

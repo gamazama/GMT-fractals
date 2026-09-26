@@ -14,7 +14,10 @@ Read first: JSDoc at the top of `engine/FeatureSystem.ts`, then
 [`docs/policy/ddfs-string-contract.md`](../../docs/policy/ddfs-string-contract.md) and
 [`docs/policy/ddfs-auto-wiring.md`](../../docs/policy/ddfs-auto-wiring.md).
 
-Decisions: ADRs 0007-0014, 0036-0037.
+Decisions: ADRs 0007-0014, 0036-0037; ADR-0059 for `FeatureDefinition.requires` —
+a feature's needs are reduced against the formula's declared capabilities by the pure
+reducer in `engine-gmt/engine/compat/` (the formula side is in
+[`gmt-formulas-and-graph.md`](./gmt-formulas-and-graph.md)).
 
 ## Invariants
 

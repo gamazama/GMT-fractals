@@ -39,11 +39,20 @@ store/           Shared Zustand store composition (used by all apps).
 components/      Shared UI primitives (no store imports — pure components).
 ```
 
+> **Update 2026-09-26:** only `components/ui/**` is store-free (a PreToolUse hook enforces it);
+> the rest of `components/` holds store-aware composed panels by design — see CLAUDE.md,
+> "UI primitives are pure".
+
 Understand the three-tier model before writing code: [docs/history/engine/01_Architecture.md](docs/history/engine/01_Architecture.md).
 
 ## Read the docs first
 
 Every subsystem has a doc. The `CLAUDE.md` table maps "what you're touching" to "what to read." The short list:
+
+> **Update 2026-09-26:** the CLAUDE.md table was replaced on 2026-07-27 by the path-scoped rules
+> in [`.claude/rules/`](.claude/rules/), each naming its subsystem's source entry point, ADRs and
+> guards. The `docs/history/engine/*` docs below are pre-extraction reference: where they disagree
+> with source JSDoc or an ADR, the source and the ADR win.
 
 | Working on | Read first |
 |-----------|-----------|
@@ -65,7 +74,7 @@ Full index: [docs/DOCS_INDEX.md](docs/DOCS_INDEX.md).
 ## Finding something to work on
 
 - Check open issues on GitHub for `good first issue` tags.
-- [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) tracks what's done, what's in-progress, and what's deferred.
+- [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) tracks what's done, what's in-progress, and what's deferred. *(Update 2026-09-26: a snapshot last edited 2026-04-29 and not maintained since.)*
 - [docs/history/engine/20_Fragility_Audit.md](docs/history/engine/20_Fragility_Audit.md) lists known issues with remediation notes.
 
 ## Adding a DDFS feature (most common contribution)
@@ -100,6 +109,10 @@ npm run test:shader     # all compile checks (~2.5 min)
 npm run test:baseline   # every formula compiles (~8s)
 ```
 
+> **Update 2026-09-26:** there is no separate stable app any more. The `dev/` / `stable/` split
+> was retired on 2026-06-17 and this repository *is* `stable/`, so both scripts run from the repo
+> root like everything else.
+
 ## PR checklist
 
 - [ ] `npm run typecheck` exits 0
@@ -125,6 +138,11 @@ Full rules: [CLAUDE.md](CLAUDE.md) and [docs/history/engine/01_Architecture.md](
 ## Doc update policy
 
 After making changes, update the affected doc. If you discover undocumented behaviour, add it. If a doc says something no longer true, fix it in the same PR. Docs live in `docs/history/engine/` (authoritative) and per-app READMEs (`fluid-toy/README.md`, `app-gmt/README.md`, `demo/README.md`).
+
+> **Update 2026-09-26:** `docs/history/` is now the append-only attic, not the authority. The
+> order is source JSDoc and its markers, then `.claude/rules/`, then `docs/adr/`, then
+> `docs/policy/` (CLAUDE.md, "Read Docs Before Coding"); a hook blocks rewrites under
+> `docs/history/`.
 
 Don't modify `docs/history/gmt/` — those are pre-extraction GMT reference docs, read-only.
 

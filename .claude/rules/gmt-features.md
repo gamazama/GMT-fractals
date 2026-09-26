@@ -11,7 +11,13 @@ sharing) and `features/core_math.ts`; JSDoc on `engine-gmt/store/cameraSlice.ts`
 and `features/camera_manager/*` (savedCameras, slot hotkeys, the
 `installStateLibrary` consumer).
 
-Decisions: ADRs 0054-0055 (catalog), ADRs 0056-0057 (camera manager).
+Decisions: ADRs 0054-0055 (catalog), ADRs 0056-0057 (camera manager). In
+`features/reflections/`: ADR-0068 (raymarched reflections use VNDF importance sampling
+plus an env/AO fill), ADR-0071 (the soft-knee firefly clamp, grep `clampReflLum`),
+ADR-0100 (moving renders the same integrand as the final image — no cheaper motion
+path). In `features/quality.ts`: ADR-0077 (Edge Polish and Step Relaxation were removed;
+do not bring them back). The shader-chunk halves of 0068, 0071, 0077 and 0100 are in
+[`gmt-shader-chunks.md`](./gmt-shader-chunks.md).
 
 ## Watch out
 

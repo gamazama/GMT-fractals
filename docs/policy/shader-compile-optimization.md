@@ -395,8 +395,9 @@ the loop only at `bounces ≥ 2`; the single-bounce form is behaviour-identical
 since the continuation code is dead at 1 bounce).
 
 **Post-fix reflection cost map** (cold `gpu=`, Mandelbulb, 2 passes, min/median
-coherent, no fallbacks; tool:
-[`measure-reflection-compile.mts`](../../debug/scratch/measure-reflection-compile.mts)):
+coherent, no fallbacks; tool: `debug/scratch/measure-reflection-compile.mts` — a local
+scratch script, not in the repository (`debug/scratch/` is gitignored), so the numbers below
+cannot be re-run from a fresh checkout):
 
 | Config | cold gpu= | marginal |
 |---|---:|---|

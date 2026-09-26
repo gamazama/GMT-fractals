@@ -30,7 +30,15 @@ Decisions: **ADR-0084** (post-hit surface refinement), **ADR-0085** (numerical
 finite-difference DE), **ADR-0092** (the MB3D-faithful step IS the marcher — the
 legacy plain sphere step and `uMb3dStepDiv` must never come back), ADR-0093
 (zoom-normalised shadow march), ADR-0076 (trace/map inline removal), ADR-0070
-(path-tracer procedural sun NEE).
+(path-tracer procedural sun NEE). Also: ADR-0088 (the faithful marcher's first,
+MB3D-only compile-gated form — superseded in part by ADR-0092), ADR-0071 (the path
+tracer's soft-knee firefly clamp, grep `clampByLuminance`), ADR-0074 (area-light PT
+shadows fold into one shadow march, grep `shadowLogic`), ADR-0075 (one normal estimator
+in the path tracer, grep `getSurfaceMaterial`), ADR-0068 (the VNDF sampler in
+`chunks/vndf.ts`, shared by reflections and the path tracer), ADR-0077 (Edge Polish and
+Step Relaxation removed from the march loop), ADR-0100 (navigation renders the same
+integrand as the final image — no cheaper motion path in `ray.ts`, `trace.ts` or
+`lighting/shared.ts`).
 
 ## What's load-bearing
 

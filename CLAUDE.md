@@ -72,7 +72,7 @@ Architectural decisions live in [`docs/adr/`](./docs/adr/) as dated, append-only
 
 When making a load-bearing architectural decision (a contract, a fork pattern, an invariant that affects multiple subsystems), write an ADR before or alongside the implementation. Subsystem JSDoc references the relevant ADRs via `@see docs/adr/NNNN-*.md`.
 
-The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engine-gmt + app-gmt surface. The legacy `docs/modules/` tree from the same audit has been collapsed: 5 policy docs migrated to [`docs/policy/`](./docs/policy/), 28 subsystem state docs hoisted into source-file JSDoc + ADRs (originals archived at [`docs/history/audit-2026-05-20/archive/`](./docs/history/audit-2026-05-20/archive/) for traceability), and sibling-app overviews kept at `docs/modules/{fluid-toy,fractal-toy,gradient-explorer,mesh-export,palette}/index.md` as light entry points. The audit's harvest worksheets at `docs/history/doc-audit-state/harvest/` show what each archived doc contributed to which ADR.
+The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engine-gmt + app-gmt surface; decisions made since then continue the same numbering. The legacy `docs/modules/` tree from the same audit has been collapsed: 5 policy docs migrated to [`docs/policy/`](./docs/policy/), 28 subsystem state docs hoisted into source-file JSDoc + ADRs (originals archived at [`docs/history/audit-2026-05-20/archive/`](./docs/history/audit-2026-05-20/archive/) for traceability), and sibling-app overviews kept under `docs/modules/` as light entry points (`fluid-toy/index.md`, `fractal-toy/index.md`, `gradient-explorer/app.md`, `mesh-export/index.md`, `palette/palette-suite.md`). The audit's harvest worksheets at `docs/history/audit-2026-05-20/state/harvest/` show what each archived doc contributed to which ADR.
 
 ### TypeScript
 - `tsconfig` has `isolatedModules: true` — type-only cross-module re-exports MUST use `export type { X }` and `import type { X }`. Otherwise Vite/esbuild leaves the export in JS output → runtime SyntaxError.
@@ -83,7 +83,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 - **UI primitives are pure.** `components/ui/**` (Layer, Modal, FloatingPanel, AnchoredMenu and the stacking machinery) has zero store imports and a PreToolUse hook keeps it that way. Capabilities arrive via props or opt-in React context. Note this holds for `components/ui/**` specifically — the wider `components/` directory contains store-aware composed panels (AutoFeaturePanel, CompilableFeatureSection, and ~47 others) and that is not a violation. See `docs/history/engine/05_Shared_UI.md`.
 - **The render loop is app-owned.** Engine provides `TickRegistry` phases; the app (or `@engine/render-loop` core plugin) calls `runTicks(dt)` each frame. See `docs/history/engine/01_Architecture.md`.
 - **Feature registry is frozen at store construction.** Late registration throws in dev, no-ops in prod. All `featureRegistry.register()` calls must happen before `createEngineStore()` runs. See `docs/history/engine/03_Plugin_Contract.md`.
-- **Duplicate feature IDs are forbidden.** The second registration throws immediately.
+- **Duplicate feature IDs are forbidden.** Re-registering the same def object is a no-op (HMR / double import); a different def under an existing id throws `DuplicateFeatureError` in a production build but only warns and replaces in dev, so a quiet dev console proves nothing. Grep `DuplicateFeatureError` in `engine/FeatureSystem.ts`.
 - **Every DDFS param is animatable and undoable by construction.** No per-feature wiring. If you add a param, keyframes + undo + preset round-trip all work automatically. See `docs/history/engine/08_Animation.md`.
 
 ### What NOT to Do
@@ -108,7 +108,7 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 3. **Manifest-composed UI.** Panels are declarative compositions of features, widgets, sections, separators, collapsibles. Layout decisions live in the manifest — not in hand-written panel components. See `docs/history/engine/14_Panel_Manifest.md`.
 4. **Verbatim ports for self-contained widgets.** Where a piece of GMT (FormulaSelect, AudioSpectrum, FlowEditor, EnginePanel) is a coherent self-contained widget, port it verbatim with path rewrites, register it in `componentRegistry`, and let the manifest reference it. Don't rewrite the internals.
 5. **One source of truth for shared resources.** Component-class CSS, formula presets, scene fields, modulation events — single module that injects/registers, multiple consumers. If you find yourself copy-pasting a config block across entries / modules / apps, lift it into the engine.
-6. **Read code before reasoning.** After context compaction or for unfamiliar territory, trace the actual flow before proposing fixes (see `feedback_collaboration_patterns.md`).
+6. **Read code before reasoning.** After context compaction or for unfamiliar territory, trace the actual flow before proposing fixes (see `feedback_collaboration_patterns.md` — a note in the owner's Claude Code auto-memory, not a file in this repo).
 7. **Confirm understanding before implementing.** Numbered plans, audit-then-fix, not implement-then-debug.
 
 ### Anti-Patterns to Avoid
@@ -127,9 +127,12 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 - `npm run typecheck` — tsc, should exit 0.
 - `npm run check:rule-guards` — verifies every guard a `.claude/rules/` file cites can actually reach the files that rule scopes. Reports rather than gates; static analysers are listed separately because they read files as text and have no import edges to check.
 - `npm run check:text-bytes` — no tracked text file carries a NUL or stray control byte. One NUL makes grep call a source file binary and every grep-driven audit goes blind to it; the overnight audit lost a component and a guard that way. ~1 s.
+- `npm run check:zindex` — the stacking ratchet: fails on a new raw z-index literal (`z-[N]` / `zIndex: N`, N ≥ 100) in any source directory that doesn't come from the tier scale (`<Layer tier>` / `z('tier')`). Its rule, `layers-zindex.md`, loads only for `components/ui/**`, so it is listed here too.
 - `npm run orphans` — knip; lists unused files (real import-graph walk, not grep). Run before deleting "looks unused" code — grep gives false positives because the engine-core / engine-gmt trees both expose siblings with the same name. Config: [knip.json](knip.json).
+- `npm run build` — the production build the deploy runs; a type-clean tree can still fail here, so it closes every gate.
 - `npm run smoke:boot` — headless Chromium boot, fails on pageerrors.
 - `npm run smoke:interact` — state-flow + preset round-trip (demo feature).
+- `npm run smoke:chrome` — clicks every top-bar control and menu item in every app that has a top bar (plus a phone pass for GX and app-gmt) and fails on a pageerror or the error-boundary fallback. The only smoke that opens panels; `smoke:boot` sees boot alone.
 - `npm run smoke:screenshot` — visual baseline → `debug/scratch/engine-boot.png`.
 - `npm run context:cost -- <subsystem|tier|path|app:name>` — **scope your source reading before you start.** Prints which files matter for an area, ordered cheapest-first, with token costs and heavy-file (read-in-sections) flags. Aligns with the navigation policy above: it tells you *which* source to grep/read, not docs to read instead. `npm run context:map` rebuilds the cost map; `npm run context:check` gates staleness. See [docs/policy/context-loading-protocol.md](docs/policy/context-loading-protocol.md).
 

@@ -4,7 +4,7 @@ Written 2026-09-12. Companion to `gradient-browsers.md` (which asked *how do oth
 wall of 11,000 things*); this one asks *who else sells gradients, and what do they have that we
 don't*. Desk research only — web search plus page fetches, no code touched, no traffic data (the
 similarweb/ahrefs connectors are unauthenticated in this session, so every "how big" claim below is
-qualitative). Feature baseline for GE is `plans/ge-v2-functionality.md`.
+qualitative). Feature baseline for GE is `docs/history/plans-archive/ge-v2-functionality.md`.
 
 ## 1. The one-line version
 

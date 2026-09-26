@@ -19,9 +19,11 @@
 > instead of 8. Bound params are exempt (both reads return the same uniform name
 > and consume no slot). The slot-parity DECISION is unchanged and still correct;
 > what this update records is that the convention it rests on was never true. The
-> DEV-assertion hardening recommended below remains the right fix. Live
-> annotation: `@bug PRODUCTION:` on `updateModularUniforms` in
-> `engine-gmt/utils/GraphCompiler.ts`.
+> DEV-assertion hardening recommended below remains the right fix. The
+> `@bug PRODUCTION:` annotation that stood on `updateModularUniforms` in
+> `engine-gmt/utils/GraphCompiler.ts` was removed when the five node defs that
+> read a param twice were fixed (`a468ad6e`, 2026-09-02; guard
+> `npm run test:modular-parity`).
 
 ## Context
 

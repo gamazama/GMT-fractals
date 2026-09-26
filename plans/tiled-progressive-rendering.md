@@ -1,5 +1,7 @@
 # Tiled Progressive Rendering — keeping the UI responsive while rendering
 
+> **Status update 2026-09-26: BUILT, with follow-ups open** — core tiling (M1–M3) landed with this plan in `0fef907f` (2026-06-15; `engine-gmt/engine/BandScheduler.ts`), then the FPS-closed band count (M5b, `2e545c4`), tiling during slider drags (`c75e925`) and the convergence stop (`d91bf74`), all on `main`. Open as of `docs/history/plans-archive/tiled-progressive-rendering-HANDOVER.md` (2026-06-16), and `BandScheduler.ts` has not changed since: M4 (bloom at pass boundaries), the worker-owned idle loop (§5.2) and M6 (2D-tile fallback for deep zoom). The "design / for discussion" status below predates the build.
+
 **Status:** design / for discussion (2026-06-15) — owner decisions folded in for §6 seed, §7 handoff, §9 stop.
 **Problem owner:** perf — "UI unresponsive while the canvas renders expensive fractals (down to <1fps even switching tabs / scrolling)."
 

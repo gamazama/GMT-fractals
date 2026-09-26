@@ -26,7 +26,8 @@ down in `engine/plugins/topbar/` (`ProjectName`, `FpsCounter`, `PauseControls`,
 Decisions: ADR-0021 (slots), ADRs 0022-0023 (shortcuts + per-scope undo),
 ADRs 0024-0026 (adaptive resolution), ADRs 0029-0032 (camera / StateLibrary),
 ADRs 0009-0010 (tutorial — actionBus over store-monkeypatch, anchor registry
-over `data-tut` attributes).
+over `data-tut` attributes), ADR-0080 (the runtime UI colour-scheme system — CSS
+variables behind Tailwind semantic tokens, `engine/store/colorSchemeStore.ts`).
 
 ## Invariants
 

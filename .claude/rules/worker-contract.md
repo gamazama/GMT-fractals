@@ -11,7 +11,10 @@ Read first: JSDoc on `engine/worker/WorkerProxy.ts` (proxy stub + `getProxy`/
 (camera/canvas refs, display-camera snapshot, `mouseOverCanvas`) and
 `engine-gmt/engine/worker/WorkerExporter.ts` (bucket export).
 
-Decisions: ADRs 0034-0035, 0041-0042, ADR-0045 (bucket render + export).
+Decisions: ADRs 0034-0035, 0041-0042, ADR-0045 (bucket render + export),
+ADR-0033 (the `WorkerProxy` stub + `getProxy`/`setProxy` registry left after the
+extraction), ADR-0062 (low-latency `desynchronized` present, default on — grep
+`LOW_LATENCY_PRESENT` in `engine-gmt/engine/worker/WorkerProxy.ts`).
 
 ## Invariants
 

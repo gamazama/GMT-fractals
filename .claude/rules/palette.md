@@ -31,8 +31,9 @@ In this order — each is the entry point to a layer:
   the SWATCHES SUBJECT block in it before adding a format: an entry's `build` takes the
   256-step ramp and its optional `swatches` takes a colour list, and whether a format
   appears under the export window's Swatches subject is decided by whether it has the
-  second one (grep `formatsFor`). `build` is required on every entry — the old shell's
-  Extras panels call it unconditionally.
+  second one (grep `formatsFor`). `build` is required on every entry — the Ramp subject
+  offers the whole registry, and the export window and the set / collection export call
+  `.build` on whichever entry is picked (the `@invariant` there says where).
 - `palette/core/img2grad/index.ts` — the `extract()` pipeline.
 - `palette/core/oklab.ts` — **read its `@assumption` first.** It is a hand copy
   of engine colour code with a drift pin that does not actually pin anything.
@@ -43,9 +44,10 @@ In this order — each is the entry point to a layer:
 
 ## Decisions
 
-Two, both from the Gradient Explorer v2 work (2026-09-03); before that there were
-none (verified 2026-09-01, `grep -rl 'palette/core\|palette suite' docs/adr/
-docs/policy/` returned nothing).
+All from the Gradient Explorer work, 2026-09-03 on; before that there were none
+(verified 2026-09-01, `grep -rl 'palette/core\|palette suite' docs/adr/
+docs/policy/` returned nothing). ADR-0117, ADR-0118, ADR-0120 and ADR-0123 are cited
+beside their guards in the table under Guards.
 
 - `docs/adr/0111-working-pipeline-input-slot.md` — ONE pipeline over an input
   slot for every source (`palette/core/workingPipeline.ts`,
@@ -71,6 +73,27 @@ docs/policy/` returned nothing).
   phone) may apply a version in another blend mode, named in the readout. More stops never look
   worse than fewer (the axis repair). The editor reads it through
   `components/gradient/gradientStopReducer.ts`, filled in `registerPaletteUI.ts`.
+- `docs/adr/0113-blend-spaces-pigment-to-tint.md` (2026-09-10) — six blend spaces on one
+  measured axis from pigment to tint (`BLEND_SPACE_ORDER` in `utils/colorUtils.ts`; the
+  editor's whitelist is `core/editorConfig.ts` `BLEND_SPACES`). Polar modes gamut-map by
+  walking chroma down, never by clamping channels. The stored key `oklab` stays the polar
+  OkLCh mode and rectangular Oklab is `oklab-rect` — renaming `oklab` would silently reset
+  every saved gradient, share link and preset.
+- `docs/adr/0119-a-save-is-drawn-where-it-lands.md` (2026-09-11) — filing a gradient is
+  shown on the chip that takes it. The palette half is `core/gradientCss.ts` (a gradient as
+  a CSS background); the shell half is in `gradient-explorer/v2/` (sibling-apps rule).
+- `docs/adr/0124-recent-follows-the-working-gradient.md` (2026-09-16) — Recent collects the
+  working gradient, one entry per working session refreshed in place, shown in dated bins;
+  since 2026-09-24 a gradient resumed on a later day files a new entry under Today. Grep
+  `updateRecent` in `store/favientsStore.ts` and `syncRecent` / `sessionPinned` in
+  `store/workingStore.ts`.
+- `docs/adr/0126-the-trip-from-gmt-to-the-explorer.md` (2026-09-24) — GMT's Explorer button
+  carries the gradient to the Explorer and nothing back; the hand-off key and channel are
+  in `core/explorerHandoff.ts` (grep `EXPLORER_INCOMING_KEY`).
+- `docs/adr/0129-the-paint-face-paints-a-ramp.md` (2026-09-25) — the Paint face's brushes
+  paint the 256-texel RAMP (`core/paintRamp.ts`, grep `PaintSession`, `isWashTool`), and
+  Apply lands the painting as one undo entry. The brush maths guard is
+  `test-palette-paint.mts` in the table below.
 
 The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 

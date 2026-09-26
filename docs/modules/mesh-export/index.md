@@ -50,7 +50,7 @@ The pipeline is entirely separate from the worker bucket-render path (ADR-0045).
 
 ## Historical context
 
-The full file catalog + invariant list is archived at [`docs/history/audit-2026-05-20/archive/sibling-apps/mesh-export-catalog.md`](../../audit-2026-05-20/archive/sibling-apps/mesh-export-catalog.md). Pre-audit doc at `docs/history/gmt/30_Mesh_Export_Prototype.md` is the original design doc — kept as a historical record but doesn't reflect current TypeScript implementation (was the HTML+ES2020-scripts prototype).
+The full file catalog + invariant list is archived at [`docs/history/audit-2026-05-20/archive/sibling-apps/mesh-export-catalog.md`](../../history/audit-2026-05-20/archive/sibling-apps/mesh-export-catalog.md). Pre-audit doc at `docs/history/gmt/30_Mesh_Export_Prototype.md` is the original design doc — kept as a historical record but doesn't reflect current TypeScript implementation (was the HTML+ES2020-scripts prototype).
 
 Cross-cutting decisions:
 - ADR-0045 — export pipeline runs separate from bucket render
