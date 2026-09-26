@@ -11,8 +11,9 @@
  *     can't be a 24-option dropdown), state in generatorStore.
  *   • Channel-curve editor + its fit controls → the canvas (curves are a visual
  *     editing surface), Track[] state in generatorStore.
- *   • Reset-all / reseed / export → the `palette-generator-extras` custom-UI
- *     (buttons + a GMT Dropdown), pinned at the bottom of the panel.
+ *   • Reset / reseed / export → the host's own controls (the Gradient Explorer's
+ *     Adjust face has Reseed and Cancel; export is its Export window). The first
+ *     shell's `palette-generator-extras` block was deleted 2026-09-26.
  *
  * The pipeline reads these params from the feature slice (useGeneratorDerived).
  */
@@ -144,8 +145,6 @@ export const PaletteGeneratorFeature: FeatureDefinition = {
     // Stops-mode document controls (blend space / output space / reset), folded in from the
     // former standalone Stops tab. Shown only in Stops mode; acts on the shared stops doc.
     { componentId: 'palette-editor-dock', condition: { param: 'generatorMode', eq: 2 } },
-    // Bottom block: Reset all / Export.
-    { componentId: 'palette-generator-extras' },
   ],
 };
 

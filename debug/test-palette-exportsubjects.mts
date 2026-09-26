@@ -3,13 +3,15 @@
  *
  * A gradient has two faces and the export registry now knows both: `build` takes the
  * 256-step RAMP, `swatches` takes the palette composed on the hero. This harness pins the
- * seam between them, the four swatch-native formats added with it, and the one thing that
- * would break the OLD shell if it slipped.
+ * seam between them, the four swatch-native formats added with it, and the one thing the
+ * Ramp export would break on if it slipped.
  *
  *   [1] every registry format still builds from a 256-step ramp, and the ramp forms are
- *       unchanged — `palette/components/GeneratorExtrasPanel.tsx` and `ImageExtrasPanel.tsx`
- *       iterate EXPORT_FORMATS and call `.build` unconditionally, so a swatches-only entry
- *       would throw in the shell GMT still reaches
+ *       unchanged — `formatsFor('ramp')` offers the whole registry and the export window
+ *       (gradient-explorer/v2/exportActions.ts) and the set / collection export
+ *       (palette/core/favientsExport.ts) call `.build` on the entry picked, so a
+ *       swatches-only entry would throw there (the first shell's Extras panels, deleted
+ *       2026-09-26, were a third such caller)
  *   [2] `formatsFor('swatches')` is exactly the entries carrying a swatches builder, is a
  *       strict subset of the ramp list, and every one of them actually reads the colour
  *       list it is handed (not the ramp behind it)

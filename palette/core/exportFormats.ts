@@ -529,11 +529,14 @@ const buildUgr = (items: { name: string; ramp: RGB[] }[], budget?: number): stri
 // simply does not appear under the Swatches subject — the registry's shape IS the filter,
 // so there is no second list to keep in step.
 //
-// @invariant every EXPORT_FORMATS entry still has a `build`, so the old shell's Extras
-//   panels (palette/components/GeneratorExtrasPanel.tsx + ImageExtrasPanel.tsx, which
-//   iterate the registry and call `.build` unconditionally) cannot meet a format they
-//   choke on — proven by: `npx tsx debug/test-palette-exportsubjects.mts`
+// @invariant every EXPORT_FORMATS entry still has a `build`: `formatsFor('ramp')` offers the
+//   whole registry, and both the export window (grep `f.build(ramp` in
+//   gradient-explorer/v2/exportActions.ts) and the set / collection export
+//   (palette/core/favientsExport.ts) call `.build` on whichever entry is picked, so a
+//   swatches-only format would throw there — proven by:
+//   `npx tsx debug/test-palette-exportsubjects.mts`
 //   ("[1] every registry format still builds from a 256-step ramp").
+//   (Until 2026-09-26 the first shell's Extras panels were a third caller; they are deleted.)
 
 /** A Tailwind-shaped scale's step count, and its step names. */
 /** The .ase stop budget — the same 40 the .grd / .ai reductions use, so an .ase and an .ai

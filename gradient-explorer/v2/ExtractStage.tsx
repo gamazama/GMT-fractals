@@ -19,9 +19,9 @@
  *   • (the Dominant swatch row is gone, 2026-09-07 — the hero's palette row is that, live.)
  *
  * NO hero (the Working hero above shows the result live — "live from Image", §2), NO
- * export block (ImageStage never rendered one itself — the old shell's export block is
- * the `palette-image-extras` customUI entry, mounted only through the Dock tab, which
- * v2 doesn't mount; excluded here too via `whitelistParams`).
+ * export block (ImageStage never rendered one itself; the old shell's, the
+ * `palette-image-extras` custom-UI entry, was deleted 2026-09-26 — the Export window is
+ * the only export).
  *
  * Image drop anywhere: `GradientExplorerV2App` mounts `useImageDrop` once at the shell
  * root (`palette/components/useImageDrop.ts`, lifted out of ImageStage) so a drop while

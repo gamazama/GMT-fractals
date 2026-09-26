@@ -26,11 +26,9 @@ import { PaletteImageFeature } from './features/paletteImage';
 import { PaletteEditorFeature } from './features/paletteEditor';
 import { QualityRangePadConnected } from './components/QualityRangePadConnected';
 import { PickerThemeChips, PickerBundleToggles } from './components/PickerControls';
-import { GeneratorExtrasPanel } from './components/GeneratorExtrasPanel';
 import { GeneratorModifierActions } from './components/GeneratorModifierActions';
 import { NoiseTargetsControl } from './components/NoiseTargetsControl';
 import { ModifyTogglesControl } from './components/ModifyTogglesControl';
-import { ImageExtrasPanel } from './components/ImageExtrasPanel';
 import { FavientsPanel } from './components/FavientsPanel';
 import { FavientsEditorEntrance } from './components/FavientsEditorEntrance';
 import { StopsDockPanel } from './components/StopsDockPanel';
@@ -74,14 +72,12 @@ export const registerPaletteUI = (opts: { standaloneStopsMode?: boolean } = {}):
   // GX Global as a catalogue SOURCE beside the packs (Filters ▸ Sources). Nothing loads until
   // the toggle is ticked; the rail's GX global chip is unaffected.
   registerLiveSource(GX_GLOBAL_SOURCE);
-  // Generator dock tab: the dials are native DDFS params; this is the bottom
-  // actions + export block (uses the shared generatorStore, not the slice).
-  componentRegistry.register('palette-generator-extras', GeneratorExtrasPanel);
+  // The generator's custom-UI rows (its dials are native DDFS params). The first Explorer's
+  // dock-tab Extras blocks — `palette-generator-extras` / `palette-image-extras`, the reset +
+  // export rows — were deleted 2026-09-26: nothing mounted them after the first shell went.
   componentRegistry.register('palette-modifier-actions', GeneratorModifierActions);
   componentRegistry.register('palette-noise-targets', NoiseTargetsControl);
   componentRegistry.register('palette-modify-toggles', ModifyTogglesControl);
-  // Image dock tab: export suite (the dials are native DDFS params).
-  componentRegistry.register('palette-image-extras', ImageExtrasPanel);
   // Favients — the persistent gradient-favourites shelf (floating panel). The
   // component is host-agnostic; each host registers its own apply targets.
   componentRegistry.register('panel-favients', FavientsPanel);

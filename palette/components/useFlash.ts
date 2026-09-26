@@ -8,8 +8,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *  • `flash(message)` — show `message`, then auto-clear after `durationMs`.
  *
  * Folds the identical `useState<string | null>(null)` + `setTimeout(() => setToast(null))`
- * shape that was duplicated across FavientsPanel, GeneratorExtrasPanel, ImageExtrasPanel,
- * and ImageStage. The render markup (positioning / sizing) legitimately varies per panel,
+ * shape that was duplicated across FavientsPanel, ImageStage and the first shell's two
+ * Extras panels (deleted 2026-09-26). The render markup (positioning / sizing) legitimately varies per panel,
  * so it stays the caller's — this hook only owns the message lifecycle. `flash` is a stable
  * callback (safe to pass to children), and a pending timeout is cancelled on re-flash/unmount.
  *

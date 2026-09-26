@@ -8,8 +8,9 @@
  * (golden hour, even↔dwell) hide in Trace (no-ops there), mirroring the standalone.
  *
  * Heavy/structured state (the ImageModel, the Trace path, the export format) lives in
- * the imageStore. Export + "Send to Generator A/B" are the bottom custom-UI block
- * (`palette-image-extras`).
+ * the imageStore. The feature carries no custom UI: the first shell's export block
+ * (`palette-image-extras`, with "Send to Generator A/B") was deleted 2026-09-26, and the
+ * Gradient Explorer exports the result through its own Export window.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
@@ -95,11 +96,6 @@ export const PaletteImageFeature: FeatureDefinition = {
       description: 'Flip the extracted gradient.',
     },
   },
-
-  customUI: [
-    // Bottom block: export suite + "Send to Generator A/B" (the img2grad → generator merge).
-    { componentId: 'palette-image-extras' },
-  ],
 };
 
 /** Param defaults (mirrors the values above) for any reset path. */
