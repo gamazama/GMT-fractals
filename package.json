@@ -1,6 +1,6 @@
 {
   "name": "gmt-engine",
-  "version": "0.9.8.4a",
+  "version": "0.9.8.5",
   "private": true,
   "type": "module",
   "scripts": {

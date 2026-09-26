@@ -4,6 +4,62 @@ Chronological log of significant changes, newest first. Began with the v0.9.6
 engine-extraction cycle and continues past it. User-facing release notes live in
 [`docs/releases/`](releases/); this file is the engineering record.
 
+## 2026-09-12 – 2026-09-26 — 0.9.8.4, 0.9.8.4a and 0.9.8.5
+
+One section for three releases: 0.9.8.4 (Sep 14) and 0.9.8.4a (Sep 14) shipped without an
+entry here, and 0.9.8.5 closes the Gradient Explorer v2 work. User-facing notes:
+[0.9.8.4](releases/0.9.8.4.md), [0.9.8.4a](releases/0.9.8.4a.md),
+[0.9.8.5](releases/0.9.8.5.md). Decisions: ADRs 0120–0129 and their update blocks; the
+per-session detail is in `plans/gx-first-release-gaps.md` and
+`plans/gx-polish-pass-2026-09-24.md`.
+
+### The Explorer swap
+- `gradient-explorer.html` loads the v2 shell; `gradient-explorer-next.html` stays a
+  byte-identical alias (ADR-0125, guard `test:gx-share` [4]). The first shell is deleted
+  (`0d6c393f`, 21 files), and with it, on 2026-09-26, app-gmt's Gradient Library overlay and
+  `PickerStage.tsx`: System ▸ Gradient Explorer… now opens the Explorer (`fb75ccf9`).
+- The GMT ↔ Explorer trip (ADR-0126): the button stashes the scene and hands the Explorer a
+  gradient through a one-shot key; Back to GMT closes the tab or restores the stash
+  (`engine-gmt/utils/sceneStash.ts`, `app-gmt/explorerTrip.ts`).
+- Gradient files dropped on GMT or picked in Load Scene import into My Gradients through
+  the generic `engine/plugins/SceneFileClaims.ts` seam (`f53e61e3`).
+
+### Explorer features
+- Paint face — 1-D brushes on the 256-texel ramp (ADR-0129, `palette/core/paintRamp.ts`,
+  guards `test:palette-paint`, `smoke:ge-paint`).
+- Reduce Stops — a stop-count slider over a lazy plan with an optional blend-mode search
+  (ADR-0127/0128, guards `test:palette-reducestops`, `smoke:ge-reduce`); in every host's
+  gradient editor menu.
+- The interface rides undo as context (ADR-0120, `smoke:ge-uiundo`); Recent files resumed
+  gradients under Today (ADR-0124 update); the wall dims under faces that don't use it
+  (`wallIdle`, `smoke:ge-wall`); the 2026-09-24 /polish pass (Esc cancels a face, Export
+  and Wallpaper fixes, Help / first-run fixes).
+
+### GMT
+- Boot watchdog: a slow first compile no longer fails the app — 30 s only if no compile
+  started, 120 s from a compile's start; reports carry a `stage:` line and the version
+  (`406e76a2`).
+- Every `React.lazy` site goes through `components/ui/lazyWithFallback.tsx`: a chunk that
+  can't be fetched shows a Reload notice instead of taking the app down (`b1206ee0`,
+  `smoke:lazy-fallback`).
+- System and File menus carry explicit orders in blocks of ten (`22e5f889`); System ▸ My
+  Gradients toggles the shelf (`e527f4bc`).
+- Julia3DLattes (amoser) is public (`1b6ef7d9`), unannounced while experimental; the
+  local-only skip-worktree wiring is retired. `test:compat`'s FORMULA_FLOOR is the true
+  public count, 55 — the old 55 had been measured with Lattes wired in locally, so a clean
+  clone failed it.
+
+### Cleanup and tooling
+- Dead code removed after an annotation audit: the first shell's Extras panels,
+  `dragVisual`'s unread state, three unrendered glyphs, stale `@bug` / `@stale` markers
+  (`ec68c067`, `850b8658`, `22d95387`). A regex Tailwind misread as a class stopped the
+  build's CSS-minify warning; knip's unknown `classMembers` rule is gone (`0d1f18d4`).
+- Docs: six finished plans and `plans/execution/` archived, every ADR cited by a rule,
+  dead references fixed across the docs (`af847912`).
+- New guards: `smoke:chrome` (every top-bar control and menu item in every app),
+  `smoke:ge-wave`, `smoke:ge-paint`, `smoke:ge-wall`, `smoke:lazy-fallback`,
+  `smoke:gmt-gradientdrop`, `test:scene-file-claims`.
+
 ## 2026-09-11
 
 Not a release: no version bump and no `docs/releases/` note. Everything here lands on

@@ -28,9 +28,6 @@ import { HelpSection } from '../../../types/help';
  * headings, `- ` bullets, `**bold**`, `> ` muted asides, `` `code` `` spans, and
  * `---` rules.
  */
-// DRAFT COPY (branch gx-entry-swap, 2026-09-16): the top "Unreleased" entry was written for
-// the owner to rewrite. Before release give it a version and a date and bump package.json.
-//
 // Not exported: app-gmt/HelpExtras.tsx intentionally hardcodes this literal so
 // the lazy changelog content never gets pulled into the main bundle.
 const CHANGELOG_TOPIC_ID = 'changelog.whats-new';
@@ -43,14 +40,17 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
-## Unreleased — The new Gradient Explorer
-> September 2026
+## 0.9.8.5 — The new Gradient Explorer
+> September 26, 2026
 
-- **The Explorer button opens the new Gradient Explorer.**
+- **The new Gradient Explorer.** Open it from System ▸ Gradient Explorer… or the Explorer ↗ button in My Gradients — it opens on the gradient you're using, and Back to GMT returns you to your scene. It replaces the Gradient Library.
+- **System ▸ My Gradients** shows or hides your saved gradients.
 - **Reduce Stops** in the gradient editor's menu.
 - **Drop a gradient file on GMT** (Explorer PNG, set .zip, .map, .gpl and more) to add it to My Gradients.
 - **Favients are now called My Gradients**; your collection is unchanged.
+- **Tidier System and File menus.**
 - **Fixed:** Firefox's dark mode no longer darkens gradient swatches.
+- Bug fixes and touch-ups.
 
 ---
 

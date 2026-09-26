@@ -16,9 +16,6 @@
  * THE CHANGELOG: newest entry first, under a `## <GX_VERSION> — <title>` heading with a
  * `> <date>` line, and bump ../version.ts in the same change — that is what relights the
  * What's New dot.
- *
- * DRAFT COPY (branch gx-entry-swap, 2026-09-16): the top entry's wording is still for the owner
- * to rewrite; its version, 2.0.0, was chosen by the owner on 2026-09-23.
  */
 
 import type { HelpSection } from '../../../types/help';
@@ -152,6 +149,7 @@ Another tab or a new pick applies what a face did; \`Esc\` cancels it. The chip 
 - **The Image tab appears once a picture is loaded** — click the picture slot, or drop or paste one anywhere.
 - **Gradient ☰ menu → Reduce Stops…**
 - **Gradient ☰ menu → New Gradient.**
+- **The wall steps back while you edit** — it dims under Curves, Adjust, Paint and Image (click it to wake it), and its toolbar can hide it.
 - **Export text preview**, and other small UX improvements.
 
 ---
