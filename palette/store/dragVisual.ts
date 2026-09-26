@@ -16,9 +16,8 @@
  * `DRAG_LIVE_GRACE_MS` before touching that heuristic: Firefox leaks mousemoves into a fast drag.
  *
  * The first Explorer shell's source-rect morph and its landing / cancel animations also lived
- * here. Their readers went with that shell on 2026-09-16 and their state on 2026-09-26;
- * `setDragOrigin` and `markPickLanded` at the bottom are no-ops kept only for the calls still in
- * `palette/components/FavientsPanel.tsx`.
+ * here. Their readers went with that shell on 2026-09-16, and their state and writers on
+ * 2026-09-26.
  *
  * @see palette/components/GradientDragAvatar.tsx (the small standalone avatar GE v2 mounts)
  */
@@ -130,13 +129,3 @@ export const beginNativeDrag = (): void => {
 
 export const useNativeDragging = (): boolean =>
   useSyncExternalStore(subscribe, () => nativeDrag, () => nativeDrag);
-
-// --- Retired 2026-09-26. Nothing reads what these used to record (see the header).
-
-/** @deprecated a no-op: it recorded the grabbed element's rect for an avatar morph nothing
- *  draws any more. Delete it with its calls in `palette/components/FavientsPanel.tsx`. */
-export const setDragOrigin = (_rect: { left: number; top: number; width: number; height: number } | null): void => {};
-
-/** @deprecated a no-op: nothing reads the "pick landed" signal since the cancel wipe went.
- *  Delete it with its call in `palette/components/FavientsPanel.tsx`. */
-export const markPickLanded = (): void => {};

@@ -37,7 +37,6 @@ import {
 import { getSendTargets, subscribeSendTargets, type SendTarget } from '../../store/sendTargetRegistry';
 import { setFavientDrag, beginCustomAvatarDrag, readFavientDrag, FAVIENT_DND_MIME, type FavientDragPayload } from '../core/favientDnd';
 import { useHeroPick, useActiveHeroMode, setHeroDrag, setHeroPick } from '../store/heroSelection';
-import { setDragOrigin, markPickLanded } from '../store/dragVisual';
 import { setSimilarityAnchor } from '../store/pickerSimilarity';
 import { gradientDisplayRamp } from '../core/gmtGradient';
 import { configToName } from '../core/facetName';
@@ -243,7 +242,6 @@ const FavientSwatch: React.FC<{
       const payload = { config: fav.config, name: fav.name, source: fav.source, favId: fav.id };
       setFavientDrag(e.dataTransfer, payload);
       beginCustomAvatarDrag(e.dataTransfer); // register the drag + suppress the native image
-      setDragOrigin(e.currentTarget.getBoundingClientRect()); // morph the avatar out of the swatch
       // Drag mirrors select — gives the avatar its ramp + lets the favourite be sent to
       // a dropbox (its own internal reorder still works via the FAVIENT_INTERNAL_MIME).
       if (pickOnDrag) setHeroDrag({ mode: 'favients', key: fav.id, payload });
@@ -273,7 +271,7 @@ const FavientSwatch: React.FC<{
           tabIndex={0}
           role="button"
           aria-label={fav.name}
-          onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
+          onClick={() => onActivate(fav)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(fav); }
           }}
@@ -326,7 +324,7 @@ const FavientSwatch: React.FC<{
       {...menuProps}
     >
       <button
-        onClick={(e) => { setDragOrigin(e.currentTarget.getBoundingClientRect()); onActivate(fav); }}
+        onClick={() => onActivate(fav)}
         // V8 gradient-bar spec, inlined for the same app-boundary reason as above.
         className={`block ${radius} origin-center transition-transform cursor-grab active:cursor-grabbing overflow-hidden ${
           selected
@@ -625,10 +623,6 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
   // history provider). A drop that changes nothing yields an empty diff → no entry.
   const doDrop = (p: FavientDragPayload | null, t: DropTarget) => {
     if (!p || !t) return;
-    // The shelf is consuming this drag itself (insert / reorder / group / trash) — tell the
-    // drop layer the in-hand pick LANDED, so its teardown skips the cancel wipe. The shelf's
-    // drop `stopPropagation`s, so it never reaches the dock's apply path that would mark this.
-    markPickLanded();
     favEdit(() => {
       if (t.kind === 'trash') {
         if (p.favId) {
