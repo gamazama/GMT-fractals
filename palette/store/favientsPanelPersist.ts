@@ -124,6 +124,11 @@ export const useFavientsPanelOpen = (): boolean =>
 export const useFavientsPanelShown = (): boolean =>
   useEngineStore((s) => computeShown(s as unknown as DockState));
 
+/** Non-reactive twin of `useFavientsPanelShown`, for callers outside React — app-gmt's
+ *  System ▸ My Gradients toggle reads it as its checked state. */
+export const isFavientsPanelShown = (): boolean =>
+  computeShown(useEngineStore.getState() as unknown as DockState);
+
 /** Bring the Favients shelf into view, RESPECTING where it already lives: a docked
  *  shelf is revealed in its own dock (un-collapse that side + make it the active tab);
  *  only a floating (or not-yet-placed) shelf is brought up as a floating window. This is

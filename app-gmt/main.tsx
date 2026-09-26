@@ -43,6 +43,7 @@ import ReactDOM from 'react-dom/client';
 import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
 import { openExplorerFromGmt } from './explorerTrip';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
+import { isFavientsPanelShown, toggleFavientsPanel } from '../palette/store/favientsPanelPersist';
 import { installGradientFileClaim } from '../palette/installGradientFileClaim';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
 import { AppGmt } from './AppGmt';
@@ -148,6 +149,18 @@ menu.registerItem('system', {
   title: 'Open the Gradient Explorer in a new tab, on the gradient you are using.',
   order: 21, // after Formula Workshop… (engine-gmt/topbar.tsx numbers the System menu)
   onSelect: openExplorerFromGmt,
+});
+
+// My Gradients — show / hide the shelf wherever it lives (floating or docked). Before
+// 2026-09-26 the only way back to a closed shelf was the gradient editor's star.
+menu.registerItem('system', {
+  id: 'my-gradients',
+  type: 'toggle',
+  label: 'My Gradients',
+  title: 'Show or hide your saved gradients.',
+  order: 21.5,
+  isActive: isFavientsPanelShown,
+  onToggle: toggleFavientsPanel,
 });
 
 // Favients — the floating gradient-favourites shelf. No topbar toggle in app-gmt; the

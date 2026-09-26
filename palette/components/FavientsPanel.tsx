@@ -401,14 +401,6 @@ const ListIcon: React.FC = () => (
   </svg>
 );
 
-const StudioIcon: React.FC = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M15 3h6v6" />
-    <path d="M10 14 21 3" />
-    <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
-  </svg>
-);
-
 
 type DropTarget = { kind: 'group'; group: string; index: number } | { kind: 'newgroup' } | { kind: 'trash' } | null;
 
@@ -725,11 +717,14 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
             onClick={() => studio()}
             // The app's name everywhere else, and since ADR-0126 the button takes the gradient
             // with it (C23, 2026-09-24; smoke:gmt-gx-handoff selects this name).
+            // Words, not a glyph (owner, 2026-09-26): an icon here did not read as "go to the
+            // other app", and since the Gradient Library overlay went this is GMT's way to
+            // new gradients. The ↗ says it opens elsewhere.
             title="Open in Gradient Explorer"
             aria-label="Open in Gradient Explorer"
-            className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
+            className="shrink-0 flex items-center h-6 px-1.5 rounded text-[11px] text-fg-muted hover:text-fg hover:bg-line/10 transition-colors whitespace-nowrap"
           >
-            <StudioIcon />
+            Explorer ↗
           </button>
         )}
         <button
