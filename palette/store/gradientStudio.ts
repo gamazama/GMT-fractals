@@ -43,6 +43,7 @@
  * The param's own `colorSpace` is kept — a coloring layer is 'linear', the sky 'srgb', and the
  * pipeline works in display space whatever the texture hint says.
  *
+ * @see docs/adr/0130-gmt-hosts-the-explorer-faces.md
  * @see palette/components/GradientStudioPanel.tsx (the window) · palette/installGradientStudio.ts
  * @see docs/adr/0111-working-pipeline-input-slot.md · docs/adr/0122-the-ramp-is-the-gradient.md
  * @see docs/adr/0129-the-paint-face-paints-a-ramp.md

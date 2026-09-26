@@ -94,6 +94,11 @@ beside their guards in the table under Guards.
   paint the 256-texel RAMP (`core/paintRamp.ts`, grep `PaintSession`, `isWashTool`), and
   Apply lands the painting as one undo entry. The brush maths guard is
   `test-palette-paint.mts` in the table below.
+- `docs/adr/0130-gmt-hosts-the-explorer-faces.md` (2026-09-26) — GMT's Gradient Studio hosts the
+  Explorer's Curves / Adjust / Paint faces, MOVED to `components/faces/` and `components/paint/` and
+  shared (host seams: `onApply`, `CurvesFaceDerived`, `setPaintSink`); a live face previews
+  render-only and publishes the preview (`components/gradient/gradientParamPreview.ts`), and bakes
+  as one undo entry on Apply / leave / close; the window is the hero card as a `chrome: 'bare'` panel.
 
 The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
 

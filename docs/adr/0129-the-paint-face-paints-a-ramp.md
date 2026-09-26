@@ -1,5 +1,14 @@
 # ADR-0129: The Paint face paints a ramp, and a host tool can hold the strip
 
+> **Update 2026-09-26 (files moved; decision unchanged):** the face moved out of the Explorer so GMT's
+> Gradient Studio can host it (ADR-0130). `gradient-explorer/v2/paint/PaintFace.tsx`, `PaintSurface.tsx`
+> and `brushDraw.ts` are now `palette/components/paint/`; `paintStore.ts` is
+> `palette/store/paintStore.ts`. `commitPaint` no longer folds into the working gradient itself: it
+> runs the host's `PaintSink` (grep `setPaintSink`) inside the same `paramGroup`, and the Explorer's
+> sink — the old body, verbatim — is `gradient-explorer/v2/paint/workingPaintSink.ts`. The brush
+> glyphs moved with `Icon` to `components/ui/Icon.tsx` (the Explorer's `ui/Icon.tsx` re-exports it).
+> Everything decided below still applies, in both hosts; `smoke:ge-paint` stays green.
+
 - **Status:** Accepted
 - **Date:** 2026-09-25
 - **Relates to:** ADR-0122 (the 256-texel ramp is the gradient — this face writes one), ADR-0113
