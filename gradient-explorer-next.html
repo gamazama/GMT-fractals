@@ -1,11 +1,16 @@
 <!DOCTYPE html>
+<!-- ALIAS of gradient-explorer.html, kept since the entry-point swap (2026-09-16) so the share
+     links (?g=…) made while the v2 shell was in preview here keep opening. Everything below
+     this comment must stay identical to gradient-explorer.html: npm run test:gx-share [4]
+     fails when they drift. New share links are written on the canonical page (shareUrlFor). -->
 <html lang="en">
   <head>
     <meta name="darkreader-lock">
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>GMT Gradient Explorer (next)</title>
+    <meta name="description" content="Find, make and export colour gradients. Browse more than 10,000, edit their stops and curves, make one from an image, and export to CSS, SVG, Photoshop .grd, GIMP, Blender and more." />
+    <title>GMT Gradient Explorer</title>
     <style>
       html { background-color: #000; scrollbar-width: thin; scrollbar-color: #333 #000; color-scheme: dark; min-height: 100%; overflow-x: clip; }
       /* `overflow-x: clip` (NOT hidden) stops sideways scroll-off without
@@ -32,30 +37,27 @@
     <link rel="icon" type="image/x-icon" href="./favicon.ico" />
     <!-- Paint the saved UI theme before first frame (shared gmt.themeVars cache). -->
     <script>try{var s=localStorage.getItem('gmt.themeVars');if(s)document.documentElement.style.cssText+=s;}catch(e){}</script>
-    <script type="module" crossorigin src="./assets/gradient-explorer-next-DPMKG8LW.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/react-KfUPlHYY.js">
-    <link rel="modulepreload" crossorigin href="./assets/pako-DwGzBETv.js">
-    <link rel="modulepreload" crossorigin href="./assets/three-0VA8E5V9.js">
-    <link rel="modulepreload" crossorigin href="./assets/CollapsibleSection-BgQdBprm.js">
-    <link rel="modulepreload" crossorigin href="./assets/createSingleSlot-BAHyf9Ga.js">
-    <link rel="modulepreload" crossorigin href="./assets/gradientStopFitter-Bcqc-PYn.js">
-    <link rel="modulepreload" crossorigin href="./assets/FormulaFormat-Db1PXTxL.js">
-    <link rel="modulepreload" crossorigin href="./assets/Undo-dfLc-IFM.js">
-    <link rel="modulepreload" crossorigin href="./assets/colorSchemeStore-BdxDiM0a.js">
-    <link rel="modulepreload" crossorigin href="./assets/support-CQ1r2ZOk.js">
-    <link rel="modulepreload" crossorigin href="./assets/createBlueNoiseWebGL2-CnIURaXh.js">
-    <link rel="modulepreload" crossorigin href="./assets/KeyframeInspector-CkbRSUM8.js">
-    <link rel="modulepreload" crossorigin href="./assets/AnchoredMenu-CaPBYRpe.js">
-    <link rel="modulepreload" crossorigin href="./assets/AdvancedGradientEditor-CeTRqRfS.js">
-    <link rel="modulepreload" crossorigin href="./assets/roundRectPath-CmLijJrG.js">
-    <link rel="modulepreload" crossorigin href="./assets/gradientSeam-DyBUA4zy.js">
-    <link rel="modulepreload" crossorigin href="./assets/MobileViewportShell-50CYFYWP.js">
-    <link rel="modulepreload" crossorigin href="./assets/installPaletteSettings-Db9ewt-p.js">
-    <link rel="modulepreload" crossorigin href="./assets/AppErrorBoundary-5ecMBgKN.js">
-    <link rel="modulepreload" crossorigin href="./assets/Help-BCVYm3uH.js">
-    <link rel="modulepreload" crossorigin href="./assets/WhatsNew-n_o-ugxr.js">
-    <link rel="modulepreload" crossorigin href="./assets/useGlobalContextMenu-CezfKrnv.js">
-    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-DMFoXGyq.css">
+    <script type="module" crossorigin src="./assets/react-KfUPlHYY.js"></script>
+    <script type="module" crossorigin src="./assets/pako-DwGzBETv.js"></script>
+    <script type="module" crossorigin src="./assets/three-D_TtD-pt.js"></script>
+    <script type="module" crossorigin src="./assets/CollapsibleSection-Bxn9crzx.js"></script>
+    <script type="module" crossorigin src="./assets/createSingleSlot-BAHyf9Ga.js"></script>
+    <script type="module" crossorigin src="./assets/gradientStopReducer-BJH80QGk.js"></script>
+    <script type="module" crossorigin src="./assets/FormulaFormat-C51pfaf2.js"></script>
+    <script type="module" crossorigin src="./assets/AppErrorBoundary-Dpzfk5-n.js"></script>
+    <script type="module" crossorigin src="./assets/Undo-CMMa__D9.js"></script>
+    <script type="module" crossorigin src="./assets/colorSchemeStore-Cp7gCqcF.js"></script>
+    <script type="module" crossorigin src="./assets/support-D5ffEz2o.js"></script>
+    <script type="module" crossorigin src="./assets/Help-B3D_Mk1c.js"></script>
+    <script type="module" crossorigin src="./assets/WhatsNew-CswtFO7E.js"></script>
+    <script type="module" crossorigin src="./assets/roundRectPath-DZO8rcDf.js"></script>
+    <script type="module" crossorigin src="./assets/AnchoredMenu-C3ESk1ea.js"></script>
+    <script type="module" crossorigin src="./assets/AdvancedGradientEditor-Cop0jGYo.js"></script>
+    <script type="module" crossorigin src="./assets/KeyframeInspector-L3ZOp52l.js"></script>
+    <script type="module" crossorigin src="./assets/createBlueNoiseWebGL2-BQHZvM37.js"></script>
+    <script type="module" crossorigin src="./assets/gradientSeam-CymWVVto.js"></script>
+    <script type="module" crossorigin src="./assets/main-Ci6upAJE.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/CollapsibleSection-B5CngohN.css">
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="root"></div>
