@@ -40,7 +40,8 @@ import { StoreCallbacksProvider, type StoreCallbacks } from '../../components/co
 import { ToastHost } from '../../engine/components/ToastHost';
 import { MobileViewportShell } from '../../engine/components/MobileViewportShell';
 import { useIsPhone } from './useIsPhone';
-import { FULL_FACES } from './Tray';
+import { FULL_FACES, WALL_IDLE_FACES, type TrayBox } from './Tray';
+import { safeLocalGet, safeLocalSet } from '../../store/safeLocalStorage';
 import { commitPaint, discardPaint, hasPainting } from './paint/paintStore';
 import { SettingsHost } from '../../components/SettingsAccess';
 import { GmtWordmark } from '../../engine-gmt/topbar/GmtWordmark';
@@ -181,6 +182,9 @@ const resetBareCurveSpace = (): void => {
  * carries (grep `entryToGradientConfig`), so a new gradient exports, shares and reaches GMT
  * exactly as a picked one does. A STOP gradient: the first gesture on the ramp edits it.
  */
+/** The wall's toggle is a remembered preference (owner, 2026-09-25: "minimize can be remembered"). */
+const WALL_TUCK_KEY = 'gmt.ge.wall-tucked';
+
 const NEW_GRADIENT_NAME = 'New gradient';
 const newGradientConfig = (): GradientConfig => ({ stops: stopOps.default(), colorSpace: 'linear', blendSpace: 'oklab' });
 
@@ -253,6 +257,60 @@ export const GradientExplorerV2App: React.FC = () => {
   // under it — nothing to see, nothing to paint (owner, 2026-09-11). `invisible` keeps the
   // layout and the wall's scroll position; only its paint and hit-testing go.
   const groundHidden = phone && tray !== null && FULL_FACES.has(tray);
+  /**
+   * THE WALL WHILE A FACE THAT DOES NOT USE IT IS OPEN — the desk's version of the rule above
+   * (owner, 2026-09-25: "all the faces except mix dont use the selection canvas. my thought is to
+   * have it dimmed during these modes, and also to have a minimize canvas button to hide it when
+   * distracting"). `WALL_IDLE_FACES` says which faces; the stop inspector is not one of them.
+   *   • DIM, until it is clicked (owner: "it should stay dim until you click it"). The veil over the
+   *     ground takes that click, so it wakes the wall and does nothing else — no pick, no drag, no
+   *     hover. A press back in the hero or the tray (the face you are working in) dims it again,
+   *     and every face opens dim. The veil fades toward the ground's own colour and drains the
+   *     tiles' saturation rather than darkening them: the shell's default scheme is light, and a
+   *     neutral surround is what lets the gradient in the face be judged on its own. It is HEAVY —
+   *     86 % of the ground colour (owner, first look at 60 %: "more dimming, it is still too
+   *     transparent"): the wall should read as put away, with only its shape left.
+   *   • HIDDEN, by the toggle in the wall's toolbar (@see BrowseStage `onTuckWall`) — the ground
+   *     is `invisible` (layout and scroll kept, as on the phone) and the tool column alone stays,
+   *     moved to the ground's bottom-left corner (owner, 2026-09-25) — out of the way of the face.
+   *     It is a PREFERENCE, remembered across reloads and NOT part of the interface context that
+   *     rides undo (./uiHistory): it applies to every such face until it is turned off, and Mix or
+   *     no face shows the wall anyway, since the wall is their picker.
+   * A pick made on the woken wall under PAINT applies the painting first (grep `commitPaint` in the
+   * candidate effect below) — before that a stray pick threw the strokes away for good.
+   *
+   * @invariant under a face that does not use the wall, the first click on it only wakes it (no pick,
+   *   no entry); a press in the hero dims it again, and a face reached without one opens dim too —
+   *   proven by: npm run smoke:ge-wall ("[2] a click on the dim wall picked a gradient",
+   *   "[3] a press in the tray did not dim the wall again", "[8] the Image face opened over a wall
+   *   left awake"). Falsified 2026-09-25, nine breaks listed in the smoke's header.
+   */
+  const wallIdle = !phone && tray !== null && WALL_IDLE_FACES.has(tray);
+  const [wallTucked, setWallTucked] = useState<boolean>(() => safeLocalGet(WALL_TUCK_KEY) === '1');
+  // Awake belongs to the face it was woken in: a new face (or the same one re-opened) starts dim.
+  // Reset DURING render, so no frame shows a new face over a wall left awake by the last one.
+  const [wallWake, setWallWake] = useState<{ face: TrayFace; awake: boolean }>({ face: tray, awake: false });
+  let wallAwake = wallWake.awake;
+  if (wallWake.face !== tray) {
+    setWallWake({ face: tray, awake: false });
+    wallAwake = false;
+  }
+  const wallHiddenDesk = wallIdle && wallTucked;
+  const wallDim = wallIdle && !wallTucked && !wallAwake;
+  const toggleWallTuck = useCallback(() => {
+    const next = !wallTucked;
+    setWallTucked(next);
+    safeLocalSet(WALL_TUCK_KEY, next ? '1' : '0');
+    // Shown on purpose: you asked to see it, so it comes back awake.
+    if (!next) setWallWake({ face: tray, awake: true });
+  }, [wallTucked, tray]);
+  /** Where the open tray sits — the wall's tool column keeps clear of it (the Image face). */
+  const [trayBox, setTrayBox] = useState<TrayBox | null>(null);
+  // The tray reports on every re-measure (a resize, its face's own size); an unchanged box keeps the
+  // old object, so the shell does not re-render for it.
+  const onTrayBox = useCallback((box: TrayBox | null) => {
+    setTrayBox((prev) => (prev && box && prev.left === box.left && prev.bottom === box.bottom) || (!prev && !box) ? prev : box);
+  }, []);
   // FOLDED hero (owner, 2026-09-11): the card keeps its header + a strip, the wall gets the
   // screen. `fold` is defined below `openTray`, which it calls to close an open face.
   const [folded, setFolded] = useState(false);
@@ -385,6 +443,13 @@ export const GradientExplorerV2App: React.FC = () => {
     }
     // This pick puts the hero on screen: the next press on its gradient is this click's second half.
     if (revealing) revealAt.current = performance.now();
+    // A pick under PAINT applies the painting first, in an entry of its own, and files it in its
+    // Recent entry before `use` opens a new one (2026-09-25). Every other way off the painted
+    // gradient already applied it (a tab, the fold, ♥, Share, Export, Wallpaper — grep
+    // `settlePaint`); a pick did not, and the new gradient started a fresh painting
+    // (`syncPaintBase`), so the strokes were gone and no Ctrl+Z could bring them back — they are
+    // the face's own history, not the app's. Now one Ctrl+Z after the pick is the painted gradient.
+    if (trayRef.current === 'paint' && commitPaint()) useWorkingStore.getState().syncRecentOutsideUndo();
     const w = useWorkingStore.getState();
     const sig = favientSig(p.config);
     if (w.input.kind === 'gradient' && favientSig(w.input.config) === sig) {
@@ -854,8 +919,15 @@ export const GradientExplorerV2App: React.FC = () => {
         )}
       </header>
 
-      <div className="shrink-0" ref={heroWrapRef}>
+      {/* A press in the hero or its tray — the face you are working in — puts the wall back to
+          sleep (see `wallIdle`). Capture, so a control that stops propagation still counts. */}
+      <div
+        className="shrink-0"
+        ref={heroWrapRef}
+        onPointerDownCapture={() => { if (wallWake.awake) setWallWake((w) => ({ ...w, awake: false })); }}
+      >
       <WorkingHero
+        onTrayBox={onTrayBox}
         derived={derived}
         source={source}
         tray={tray}
@@ -903,8 +975,9 @@ export const GradientExplorerV2App: React.FC = () => {
           The top bar is deliberately NOT a click-away target: Undo / Redo while inspecting a
           stop must not also drop your place in the gradient. */}
       <div
-        className={`flex-1 min-h-0 flex flex-col relative ${groundHidden ? 'invisible' : ''}`}
+        className={`flex-1 min-h-0 flex flex-col relative ${groundHidden || wallHiddenDesk ? 'invisible' : ''}`}
         onPointerDownCapture={() => { if (trayRef.current === 'inspector') openTray(null); }}
+        data-gx-wall={wallHiddenDesk ? 'hidden' : wallDim ? 'dim' : undefined}
       >
         {/* The hero's shadow, falling onto the top of the ground — the set rail sits UNDER
             the card, not beside it, and without this the two read as one flat sheet
@@ -968,8 +1041,29 @@ export const GradientExplorerV2App: React.FC = () => {
         <div className="flex-1 min-h-0 flex flex-col relative">
           {/* The fold tool only once there is a hero to fold (L10): before the first pick it
               flipped a pressed look over nothing. BrowseStage draws it only when handed this. */}
-          <BrowseStage heroFolded={folded} onFoldHero={heroShown.current ? fold : undefined} onNewGradient={startNewGradient} />
+          <BrowseStage
+            heroFolded={folded}
+            onFoldHero={heroShown.current ? fold : undefined}
+            onNewGradient={startNewGradient}
+            wall={wallHiddenDesk ? 'hidden' : wallDim ? 'dim' : undefined}
+            onTuckWall={wallIdle ? toggleWallTuck : undefined}
+            wallTucked={wallTucked}
+            trayBox={phone ? null : trayBox}
+          />
         </div>
+        {/* THE VEIL over a sleeping wall (see `wallIdle`): the rail, the narrowing bar and the wall
+            under one layer, which takes the click that wakes them and fades away. z-15: over the
+            ground, under the hero's shadow band (z-20), the tool column (z-16 while dim), the tray
+            (z-30) and the Export windows (z-40). Mounted only while such a face is open, so the
+            backdrop filter costs nothing the rest of the time. */}
+        {wallIdle && !wallTucked && (
+          <div
+            aria-hidden
+            data-gx-wall-veil=""
+            onClick={() => setWallWake({ face: tray, awake: true })}
+            className={`absolute inset-0 z-[15] bg-surface/[.86] backdrop-saturate-[.2] transition-opacity duration-150 ${wallAwake ? 'opacity-0 pointer-events-none' : 'cursor-pointer'}`}
+          />
+        )}
       </div>
 
 

@@ -91,7 +91,9 @@ export type IconName =
   | 'restore'
   | 'mirror'
   | 'wrap'
-  | 'height';
+  | 'height'
+  | 'wallHide'
+  | 'wallShow';
 
 /**
  * The hero's USE glyphs — the owner's pick in Figma (GE v2 Hero, 2026-09-07): Material
@@ -254,6 +256,11 @@ const PATHS: Record<Exclude<IconName, 'star' | keyof typeof FILLED | keyof typeo
   // circle sits so the ink — ring and head — is centred on the box, and the head's corner is ON
   // the arc's end rather than beside it.
   restore: <path d="M3 8.7a5 5 0 1 0 1.46-3.54M4.46 2.3v2.86h2.86" />,
+  // DRAFTED 2026-09-25 for the wall's toggle, beside the fold's bare chevron: the same chevron
+  // going DOWN onto a floor line (the wall put away) and UP off it (the wall brought back). The
+  // floor is what tells them from the fold at 16 px. The owner may swap either.
+  wallHide: <path d="M4.5 4.5L8 8l3.5-3.5M3 12h10" />,
+  wallShow: <path d="M4.5 8.5L8 5l3.5 3.5M3 12h10" />,
 };
 
 /**

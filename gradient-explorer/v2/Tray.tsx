@@ -122,6 +122,8 @@ interface Props {
   phone?: boolean;
   /** PHONE: the picture, handed to the Image face (the hero has no image column there). */
   imageSlot?: React.ReactNode;
+  /** Told where the tray sits whenever it is re-measured, and null when it closes (@see TrayBox). */
+  onBox?: (box: TrayBox | null) => void;
 }
 
 /**
@@ -140,12 +142,22 @@ const PHONE_INSET = 0;
  *  2026-09-11: "except for mix mode, the other tabs don't need the wall visible at all").
  *  Mix is the exception because the wall IS its picker for the other gradient. */
 export const FULL_FACES: ReadonlySet<Exclude<TrayFace, null>> = new Set(['image', 'curves', 'adjust', 'paint', 'inspector'] as const);
+/** DESK: the faces that do not use the wall (owner, 2026-09-25: "all the faces except mix dont use
+ *  the selection canvas"). While one is open the wall is DIM until it is clicked, and the wall's
+ *  toolbar offers to hide it for every such face — the phone's `FULL_FACES` rule, as a switch.
+ *  The stop inspector is left out on purpose: it opens and closes with every knot click, so a dim
+ *  would flicker, and the ground is its click-away target (grep `onPointerDownCapture` in the shell).
+ *  @see ./GradientExplorerV2App (`wallIdle`) */
+export const WALL_IDLE_FACES: ReadonlySet<Exclude<TrayFace, null>> = new Set(['image', 'curves', 'adjust', 'paint'] as const);
+/** Where the open tray sits on screen (viewport px), or null when it is closed — for things on the
+ *  ground that must keep clear of it (the wall's tool column, which the Image face covers). */
+export interface TrayBox { left: number; bottom: number }
 /** Phone: how much of the room BELOW the card the tray may take before it scrolls. Just
  *  over half — enough that a face is worth opening, little enough that the wall it floats
  *  over is still visibly there (which is the whole reason the tray floats). */
 const PHONE_MAX_FRACTION = 0.55;
 
-export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left, right = 24, phone = false, imageSlot }) => {
+export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, imageCloudRef, imageToolsRef, left, right = 24, phone = false, imageSlot, onBox }) => {
   // The cap is MEASURED from where the tray actually starts, not guessed as a `vh`: the
   // hero's height moves with the source (a split ramp, a Mix band), so a fraction of the
   // viewport would be a ceiling on the wrong number — the mistake `ExportMenu`'s `maxH`
@@ -163,9 +175,25 @@ export const Tray: React.FC<Props> = ({ face, derived, width, inspectorHostRef, 
   const paletteHex = useMemo(() => derived.palette.map((sw) => rgbToHex(sw.color)), [derived.palette]);
   const [maxH, setMaxH] = useState<number>(0);
   const [deskScroll, setDeskScroll] = useState(false);
+  const onBoxRef = useRef(onBox);
+  onBoxRef.current = onBox;
+  // The box is reported AFTER a measure has settled the height, one frame on, so a face whose cap
+  // or scroll just changed is read at its new size rather than the one it is leaving.
+  const reportBox = (): void => {
+    requestAnimationFrame(() => {
+      const r = rootRef.current;
+      if (!r || r.hidden) return;
+      const b = r.getBoundingClientRect();
+      onBoxRef.current?.({ left: Math.round(b.left), bottom: Math.round(b.bottom) });
+    });
+  };
   useEffect(() => {
-    if (face === null) return;
+    if (face === null) {
+      onBoxRef.current?.(null);
+      return;
+    }
     const measure = () => {
+      reportBox();
       const top = rootRef.current?.getBoundingClientRect().top ?? 0;
       const room = window.innerHeight - top;
       if (phone) {

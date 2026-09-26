@@ -164,6 +164,7 @@
     "test:palette-wavegen": "tsx debug/test-palette-wavegen.mts",
     "test:palette-paint": "tsx debug/test-palette-paint.mts",
     "smoke:ge-paint": "tsx debug/smoke-ge-paint.mts",
+    "smoke:ge-wall": "tsx debug/smoke-ge-wall.mts",
     "test:palette-curvespaces": "tsx debug/test-palette-curvespaces.mts",
     "test:palette-exportsubjects": "tsx debug/test-palette-exportsubjects.mts",
     "test:palette-favients": "tsx debug/test-palette-favients.mts",

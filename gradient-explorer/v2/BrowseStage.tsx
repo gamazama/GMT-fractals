@@ -80,7 +80,7 @@
 
 import { entryOrigin } from '../../palette/core/catalogOrigin';
 import { usePickerStore } from '../../palette/store/pickerStore';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PickerWall, type WallBand, type WallView, ZOOM_MAX } from '../../palette/components/PickerWall';
 import { usePickerModel, pickGroundItem } from '../../palette/components/usePickerModel';
 import Slider from '../../components/Slider';
@@ -109,6 +109,7 @@ const enumOptions = (c: ParamConfig): { value: number; label: string }[] =>
   ((c as { options?: { value: number; label: string }[] }).options ?? []).map((o) => ({ value: o.value, label: o.label }));
 import { Icon } from './ui/Icon';
 import { Floating } from './ui/Floating';
+import type { TrayBox } from './Tray';
 import { useIsPhone } from './useIsPhone';
 import { GroundList } from './GroundList';
 import { Act } from './ui/Act';
@@ -209,9 +210,23 @@ interface Props {
   onFoldHero?: (folded: boolean) => void;
   /** Start a new gradient from nothing (parity row M10) — offered on the nothing-picked line. */
   onNewGradient?: () => void;
+  /** THE WALL WHILE A FACE THAT DOES NOT USE IT IS OPEN (desk, owner 2026-09-25 — the shell
+   *  decides, grep `wallIdle` there): 'dim' — the shell lays a veil over the ground that a click
+   *  lifts, and the tool column rides ABOVE it, so the toggle below stays in reach; 'hidden' — the
+   *  ground is invisible and the tool column alone stays, in the ground's bottom-left corner, holding the way back (its `visible`
+   *  overrides the ground's `invisible`) with nothing else in it: the wall's tools have no wall to
+   *  act on, and the fold's promise, "the wall gets the screen", is the toggle's now. */
+  wall?: 'dim' | 'hidden';
+  /** The toggle that hides the wall during those faces (owner: "the tool bar feels right, its
+   *  already got the maximize icon" — the fold). Handed in only while such a face is open. */
+  onTuckWall?: () => void;
+  wallTucked?: boolean;
+  /** The open tray's box. The Image face grows from the card's left edge, over the tool column,
+   *  so the column drops below any tray that reaches into the wall's left edge. */
+  trayBox?: TrayBox | null;
 }
 
-export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, onNewGradient }) => {
+export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, onNewGradient, wall, onTuckWall, wallTucked = false, trayBox }) => {
   const phone = useIsPhone();
   // PHONE: the pad is drawn at a measured pixel width, not the desktop's fixed 360 — the
   // bar needs 422 for the fixed one and has 390, which is what put the Filters button
@@ -421,8 +436,28 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
     setWallH(el.clientHeight);
     return () => ro.disconnect();
   }, [m.wallHostRef]);
-  const columnButtons = (onFoldHero ? 1 : 0) + TOOLS.length;
-  const carveFits = wallH >= TOOLBAR_TOP + toolColumnH(columnButtons) + TOOLBAR_TOP;
+  // THE COLUMN KEEPS CLEAR OF THE TRAY (2026-09-25). Every face but Image starts at the gradient
+  // panel's left edge, well right of the column; Image grows from the card's left edge and covered
+  // it (measured at 1440 × 900: tray x 10–900 down to y 598, column x 6–46 from y 450), which hid
+  // the fold — and would hide the wall toggle. So a tray reaching into the column's strip pushes
+  // the column down to just under the tray. Desk only: the phone's cluster is a row at the bottom.
+  const wallHidden = wall === 'hidden';
+  const [toolsTop, setToolsTop] = useState(TOOLBAR_TOP);
+  useLayoutEffect(() => {
+    const host = m.wallHostRef.current;
+    if (phone || !host || !trayBox) { setToolsTop(TOOLBAR_TOP); return; }
+    const hb = host.getBoundingClientRect();
+    setToolsTop(trayBox.left < hb.left + TOOLBAR_CLEAR ? Math.max(TOOLBAR_TOP, Math.round(trayBox.bottom - hb.top) + TOOLBAR_TOP) : TOOLBAR_TOP);
+  }, [phone, trayBox?.left, trayBox?.bottom, wallH, m.wallHostRef]);
+  const columnButtons = (onFoldHero && !wallHidden ? 1 : 0) + (onTuckWall ? 1 : 0) + TOOLS.length;
+  const carveFits = wallH >= toolsTop + toolColumnH(columnButtons) + TOOLBAR_TOP;
+  // A hidden wall puts its tools down, as a hidden carve tool is put down below.
+  useEffect(() => {
+    if (!wallHidden) return;
+    if (m.tool) m.setTool(null);
+    setZoomTool(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallHidden]);
   // A carve tool that has just been hidden is put down: a tool you cannot see is a mode you
   // cannot leave (Esc would still work, but nothing on screen says it is on).
   useEffect(() => {
@@ -738,7 +773,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
   // (its zoom is the − / + row) and none over the list, where nothing here would do anything.
   // On a wall too SHORT for the whole column, the carve tools go first (owner, 2026-09-24,
   // ASK-3): the fold and zoom stay, because the fold is what gives the wall the screen back.
-  const wallTools = TOOLS.filter((t) => (phone || showingList ? false : !m.isSet ? carveFits || t.id === 'zoom' : t.id === 'zoom'));
+  const wallTools = TOOLS.filter((t) => (phone || showingList || wallHidden ? false : !m.isSet ? carveFits || t.id === 'zoom' : t.id === 'zoom'));
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -1190,12 +1225,17 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
             The zoom TOOL is not offered: drag-to-zoom competes with the wall's own touch
             panning. A − / + pair does the same job with no mode to be stuck in. */}
         {/* Not drawn at all when it would be an empty box: the list, before any hero. */}
-        {(onFoldHero || wallTools.length > 0 || (phone && !showingList)) && (
+        {/* `visible` while the wall is HIDDEN (the column is the one thing left of the ground) and
+            `z-[16]` while it is DIM (above the shell's veil at z-15, under the tray at z-30) — grep
+            `wallIdle` in the shell. `top` is `toolsTop`: under a tray that reaches this edge. With the
+            wall HIDDEN it sits in the ground's bottom-left corner instead (owner, 2026-09-25: "can sit
+            at bottom left when minimized") — away from the face, and clear of any tray. */}
+        {(onFoldHero || onTuckWall || wallTools.length > 0 || (phone && !showingList)) && (
         <Floating
           ref={m.toolbarRef}
           data-gx-tools="tools"
-          className={`absolute flex gap-0.5 p-[3px] ${floatOver} ${phone ? 'bottom-3 left-4 items-center' : 'top-2.5 flex-col'}`}
-          style={phone ? undefined : { left: TOOLBAR_LEFT }}
+          className={`absolute flex gap-0.5 p-[3px] ${floatOver} ${phone ? 'bottom-3 left-4 items-center' : 'flex-col'} ${wallHidden ? 'visible' : ''} ${wall === 'dim' ? 'z-[16]' : ''}`}
+          style={phone ? undefined : wallHidden ? { left: TOOLBAR_LEFT, bottom: TOOLBAR_TOP } : { left: TOOLBAR_LEFT, top: toolsTop }}
         >
           {/* PHONE: no carving tools at all (owner, 2026-09-11: "not so useful for mobile") —
               keeping is the heart, and a group is made on a desktop. What is left is zoom,
@@ -1207,7 +1247,7 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
               ground, and the only thing in the column while the LIST is showing (G03). A pick
               brings the hero back. Its glyph is the icon set's chevron, pointing the way the
               hero will go (G13, 2026-09-24 — it was the one text glyph among the icons). */}
-          {onFoldHero && (
+          {onFoldHero && !wallHidden && (
             <button
               onClick={() => onFoldHero(!heroFolded)}
               title={heroFolded ? 'Show the gradient' : 'Hide the gradient — the wall gets the screen'}
@@ -1218,6 +1258,22 @@ export const BrowseStage: React.FC<Props> = ({ heroFolded = false, onFoldHero, o
               className={`${phone ? '' : 'w-8 h-8'} rounded-lg flex items-center justify-center transition-colors ${heroFolded ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
             >
               <Icon name={heroFolded ? 'chevronDown' : 'chevronUp'} />
+            </button>
+          )}
+          {/* THE WALL'S TOGGLE — the fold's opposite, beside it (owner, 2026-09-25): hide the wall
+              while a face that does not use it is open, and it STAYS hidden for every such face
+              until it is shown again (remembered across reloads). Offered only then — Mix and no
+              face bring the wall back by themselves, since the wall is their picker. */}
+          {onTuckWall && (
+            <button
+              onClick={onTuckWall}
+              title={wallTucked ? 'Show the wall' : 'Hide the wall'}
+              aria-label={wallTucked ? 'Show the wall' : 'Hide the wall'}
+              aria-pressed={wallTucked}
+              data-gx-wall-tuck=""
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${wallTucked ? 'bg-accent-400/15 text-accent-300' : 'text-fg-muted hover:text-fg hover:bg-line/10'}`}
+            >
+              <Icon name={wallTucked ? 'wallShow' : 'wallHide'} />
             </button>
           )}
           {wallTools.map((t) => {

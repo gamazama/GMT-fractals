@@ -142,7 +142,7 @@ import { flashSaveWhereItLanded } from './setSaveFlash';
 import { PaletteRow } from './PaletteRow';
 import { ImageSlot } from './ImageSlot';
 import { SourceBands, SOURCE_BAND_H, MIX_RESULT_H, mixSourceHeight } from './SourceBands';
-import { Tray, TRAY_TABS, type TrayFace } from './Tray';
+import { Tray, TRAY_TABS, type TrayFace, type TrayBox } from './Tray';
 import { useImageStore } from '../../palette/store/imageStore';
 import { PaintSurface, PaintBeforeLine } from './paint/PaintSurface';
 import { syncPaintBase, endPaintSession, setBrush, usePaintStore } from './paint/paintStore';
@@ -223,9 +223,11 @@ interface Props {
   exportOpen: boolean;
   /** Export's popover, anchored inside the use cluster. */
   exportMenu?: React.ReactNode;
+  /** Where the tray sits on screen, handed through from `Tray` (@see TrayBox). */
+  onTrayBox?: (box: TrayBox | null) => void;
 }
 
-export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, onNewGradient, exportOpen, exportMenu, folded, revealAt }) => {
+export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, onCancelFace, onBake, onShare, onRevealGround, onExport, onWallpaper, onNewGradient, exportOpen, exportMenu, folded, revealAt, onTrayBox }) => {
   const phone = useIsPhone();
   const bakedFrom = useWorkingStore((s) => s.bakedFrom);
   const liveFrom = useWorkingStore((s) => s.liveFrom);
@@ -1111,6 +1113,7 @@ export const WorkingHero: React.FC<Props> = ({ derived, source, tray, onTray, on
         left={panelLeft}
         right={panelRight}
         phone={phone}
+        onBox={onTrayBox}
         imageSlot={
           phone ? (
             <ImageSlot

@@ -250,6 +250,19 @@ async function main() {
     /** Pick a wall tile that changes the working gradient (aims that hit-test to the wall itself). */
     const pickNew = async (label: string) => {
         const before = (await ui()).name;
+        // Since 2026-09-25 the wall SLEEPS under Curves / Adjust / Paint / Image: a veil takes the
+        // first click and only wakes it (grep `wallIdle` in the shell, guard `smoke:ge-wall`). The
+        // pick is what is under test here, so wake the wall first — a click on the veil's far corner.
+        const veil = (await page.evaluate(`(() => {
+          const v = document.querySelector('[data-gx-wall-veil]');
+          if (!v || getComputedStyle(v).pointerEvents === 'none') return null;
+          const r = v.getBoundingClientRect();
+          return { x: r.right - 40, y: Math.min(r.bottom, window.innerHeight) - 20 };
+        })()`)) as { x: number; y: number } | null;
+        if (veil) {
+            await page.mouse.click(veil.x, veil.y);
+            await settle(250);
+        }
         const aims = (await page.evaluate(`(() => {
           const wallEl = document.querySelector('[data-gx-keepselect]');
           const r = wallEl.getBoundingClientRect();

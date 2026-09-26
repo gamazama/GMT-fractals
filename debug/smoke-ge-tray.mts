@@ -946,8 +946,23 @@ async function main() {
   });
   /** Pick a gradient the hero is not showing — a real click. A tile that turns out to BE the
    *  working gradient keeps it (the second-click rule); that is undone and the next tile tried. */
+  // Since 2026-09-25 the wall SLEEPS under Curves / Adjust / Paint / Image (a veil that takes the
+  // first click and only wakes it — grep `wallIdle` in the shell, guard `smoke:ge-wall`), and a
+  // press in the tray puts it back to sleep. A pick is the thing under test here, so wake it first.
+  const wakeWall = async () => {
+    const veilBox = await page.evaluate(() => {
+      const v = document.querySelector('[data-gx-wall-veil]') as HTMLElement | null;
+      if (!v || getComputedStyle(v).pointerEvents === 'none') return null;
+      const r = v.getBoundingClientRect();
+      return { x: r.right - 40, y: Math.min(r.bottom, window.innerHeight) - 20 };
+    });
+    if (!veilBox) return;
+    await page.mouse.click(veilBox.x, veilBox.y);
+    await page.waitForTimeout(250);
+  };
   const pickAnother = async (label: string): Promise<Probe> => {
     const was = await probe();
+    await wakeWall();
     for (const a of await wallAims18()) {
       const key = `${Math.round(a.x)},${Math.round(a.y)}`;
       if (usedAims.has(key)) continue;
