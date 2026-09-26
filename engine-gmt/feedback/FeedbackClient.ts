@@ -209,11 +209,13 @@ interface AppContext {
 }
 
 // Vite inlines __APP_VERSION__ at build via define{} in vite.config.ts. The
-// declaration lives in engine-gmt/types/common.ts but isn't picked up here
-// without an import, so we read it off globalThis (any) instead.
+// define only rewrites the bare identifier — this used to read
+// `(globalThis as any).__APP_VERSION__`, which survives the build untouched,
+// so every report said `version: unknown`. `typeof` keeps a test harness
+// without the define (no Vite) from throwing a ReferenceError.
+declare const __APP_VERSION__: string;
 function appVersion(): string {
-    const v = (globalThis as any).__APP_VERSION__;
-    return typeof v === 'string' ? v : 'unknown';
+    return typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown';
 }
 
 function collectAppContext(strippedFields?: string[], fileContext?: Record<string, unknown>): AppContext {

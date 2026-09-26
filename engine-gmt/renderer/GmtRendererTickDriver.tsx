@@ -62,11 +62,24 @@ registerTick('snapshotDisplayCamera', TICK_PHASE.SNAPSHOT, () => {
 
 // ── Component ────────────────────────────────────────────────────────
 
-// If the worker hasn't booted + compiled within this window, assume a silent
-// failure (e.g. a shader that won't compile/run on a weak mobile GPU → black
-// viewport) and surface the boot-failure panel. Generous so a slow-but-working
-// mobile compile isn't falsely tripped.
+// Boot watchdog. The worker posts COMPILING:<message> just before its first
+// compile blocks and BOOTED only after that compile finishes (renderWorker's
+// IS_COMPILING bridge), so while booting `proxy.isCompiling` is the only sign
+// of life — and a synchronous compile (Firefox is always single-stage) posts
+// nothing in between, so there is no heartbeat to key a no-progress window on.
+//
+//   - Nothing has started compiling by BOOT_WATCHDOG_MS → assume the worker or
+//     its WebGL context never came up, and surface the boot-failure panel.
+//   - A compile IS in flight → wait until BOOT_COMPILE_CEILING_MS after it
+//     began. A cold compile on an old CPU (Windows' shader compiler is
+//     CPU-bound) can pass 30 s and still succeed; the 30 s ceiling used to
+//     fail those machines outright (2026-09-23 report: GTX 480, Windows 7,
+//     Firefox 115).
+//
+// Either way the failure is emitted `recoverable` — if the boot completes
+// afterwards, LoadingScreen drops the panel and fades into the app.
 const BOOT_WATCHDOG_MS = 30000;
+const BOOT_COMPILE_CEILING_MS = 120000;
 
 interface GmtRendererTickDriverProps {
     onLoaded?: () => void;
@@ -110,6 +123,11 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         let finished = false;
         let watchdog: ReturnType<typeof setTimeout> | null = null;
         const clearWatchdog = () => { if (watchdog) { clearTimeout(watchdog); watchdog = null; } };
+        // Watchdog bookkeeping — when the worker first reported a compile, and
+        // its latest status text, so a timeout can say which stage stalled.
+        const mountedAt = performance.now();
+        let compileStartedAt: number | null = proxy.isCompiling ? mountedAt : null;
+        let compileMessage = '';
 
         const finalize = () => {
             if (finished) return;
@@ -157,7 +175,9 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         const unsubs = [
             FractalEvents.on(FRACTAL_EVENTS.WORKER_BOOTED, finalize),
             FractalEvents.on(FRACTAL_EVENTS.IS_COMPILING, (status) => {
-                if (status === false) finalize();
+                if (status === false) { compileStartedAt = null; finalize(); return; }
+                if (compileStartedAt === null) compileStartedAt = performance.now();
+                if (typeof status === 'string') compileMessage = status;
             }),
         ];
 
@@ -165,17 +185,36 @@ export const GmtRendererTickDriver: React.FC<GmtRendererTickDriverProps> = ({ on
         // effect runs (e.g. fast boot, StrictMode remount).
         finalize();
 
+        const secs = (ms: number) => `${Math.round(ms / 1000)}s`;
+        const check = () => {
+            watchdog = null;
+            if (finished) return;
+            const now = performance.now();
+            if (proxy.isCompiling && compileStartedAt !== null) {
+                const deadline = compileStartedAt + BOOT_COMPILE_CEILING_MS;
+                if (now < deadline) { watchdog = setTimeout(check, deadline - now); return; }
+            }
+            const headline = proxy.isCompiling
+                ? `Renderer timed out — the shader was still compiling after ${secs(now - (compileStartedAt ?? mountedAt))}.\n` +
+                  `This device may be too slow for the default scene, or the compile has hung. ` +
+                  `If it finishes, the app will still open.`
+                : proxy.hasCompiledShader
+                    ? `Renderer timed out — the shader compiled but the render worker never reported ready (${secs(now - mountedAt)}).`
+                    : `Renderer timed out — no shader compile started within ${secs(now - mountedAt)}.\n` +
+                      `The render worker or its WebGL context may have failed to start.`;
+            const stage =
+                `stage: booted=${proxy.isBooted ? 'yes' : 'no'}, ` +
+                `compiling=${proxy.isCompiling ? `yes (for ${secs(now - (compileStartedAt ?? mountedAt))})` : 'no'}, ` +
+                `compiled=${proxy.hasCompiledShader ? 'yes' : 'no'}` +
+                (compileMessage ? `, status="${compileMessage}"` : '');
+            FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOT_FAILED, {
+                reason: `${headline}\n${stage}`,
+                recoverable: true,
+            });
+        };
+
         // Arm the watchdog only if boot didn't already complete synchronously.
-        if (!finished) {
-            watchdog = setTimeout(() => {
-                if (finished) return;
-                FractalEvents.emit(FRACTAL_EVENTS.WORKER_BOOT_FAILED, {
-                    reason:
-                        `Renderer timed out — no frame after ${Math.round(BOOT_WATCHDOG_MS / 1000)}s.\n` +
-                        `The shader likely failed to compile or run on this GPU.`,
-                });
-            }, BOOT_WATCHDOG_MS);
-        }
+        if (!finished) watchdog = setTimeout(check, BOOT_WATCHDOG_MS);
 
         return () => { clearWatchdog(); unsubs.forEach((u) => u()); };
     }, []);

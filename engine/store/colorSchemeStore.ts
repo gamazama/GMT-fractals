@@ -354,6 +354,19 @@ export const useColorScheme = create<ColorSchemeState>((set, get) => {
     };
 });
 
+/**
+ * The current theme forced to its Dark pole (brightness 0; tint, contrast and hues kept),
+ * as inline vars + `colorScheme`. For a surface painted on a FIXED black backdrop — the
+ * app-gmt boot splash — whose tokens would otherwise follow a Light theme into dark-on-
+ * black. Spread onto that surface's `style`: custom properties inherit, so the subtree
+ * resolves every `rgb(var(--x))` against these instead of <html>'s. Not reactive —
+ * read it when the surface mounts.
+ */
+export const darkThemeVars = (): Record<string, string> => ({
+    ...buildThemeVars({ ...axesOf(useColorScheme.getState()), brightness: 0 }).vars,
+    colorScheme: 'dark',
+});
+
 // Apply the persisted theme on module load — the boot <script> already painted from the
 // cache; this reconciles to the exact live values + warms the getThemeColor cache.
 applyTheme(axesOf(useColorScheme.getState()));

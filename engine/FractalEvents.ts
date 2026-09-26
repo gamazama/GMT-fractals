@@ -70,7 +70,10 @@ type EventMap = {
     [FRACTAL_EVENTS.RESET_HINTS]: void;
     [FRACTAL_EVENTS.CAMERA_SLOT_SAVED]: { slot: number; label: string };
     [FRACTAL_EVENTS.WORKER_BOOTED]: void;
-    [FRACTAL_EVENTS.WORKER_BOOT_FAILED]: { reason: string };
+    /** `recoverable`: the failure is a timeout, not an error — the boot may
+     *  still finish, and a later successful boot supersedes it. Absent/false
+     *  for a real failure (worker crash, compile error), which stays final. */
+    [FRACTAL_EVENTS.WORKER_BOOT_FAILED]: { reason: string; recoverable?: boolean };
     [FRACTAL_EVENTS.COMPILE_FAILED]: { reason: string };
     [FRACTAL_EVENTS.RENDER_CONTEXT_LOST]: { reason: string };
 };

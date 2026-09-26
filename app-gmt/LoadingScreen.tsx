@@ -21,6 +21,7 @@ import { useCompileProgress, selectProgress } from '../store/CompileProgressStor
 import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 import { submitFeedback } from '../engine-gmt/feedback/FeedbackClient';
 import { collectBootDiagnostics } from '../engine-gmt/engine/webglDiagnostics';
+import { darkThemeVars } from '../engine/store/colorSchemeStore';
 
 // Injected by Vite's `define` from package.json (see vite.config.ts).
 declare const __APP_VERSION__: string;
@@ -101,12 +102,26 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     // would never become true. WorkerProxy now emits this event from
     // both _handleWorkerCrash (worker thread died) and the 'ERROR'
     // message handler (worker reported an error before BOOTED arrived).
+    //
+    // A `recoverable` failure is the boot watchdog's timeout, not an error:
+    // if the engine becomes ready afterwards the panel is dropped and the
+    // splash fades as normal. A real failure stays up even if `isReady`
+    // follows — a boot-time compile error still posts BOOTED right after
+    // its ERROR (renderWorker), so readiness alone doesn't mean it worked.
+    const bootErrorRecoverableRef = useRef(false);
     useEffect(() => {
-        const off = FractalEvents.on(FRACTAL_EVENTS.WORKER_BOOT_FAILED, ({ reason }) => {
+        const off = FractalEvents.on(FRACTAL_EVENTS.WORKER_BOOT_FAILED, ({ reason, recoverable }) => {
+            bootErrorRecoverableRef.current = !!recoverable;
             setBootError(reason);
         });
         return off;
     }, []);
+    useEffect(() => {
+        if (isReady && bootErrorRecoverableRef.current) {
+            bootErrorRecoverableRef.current = false;
+            setBootError(null);
+        }
+    }, [isReady]);
 
     // Boot-failure diagnostics — a main-thread WebGL2 probe (GPU, fragment
     // highp, extensions, OffscreenCanvas) collected lazily once a failure
@@ -131,6 +146,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
             setReportState('error');
         }
     };
+
+    // The splash is always black (the CPU Julia spinner and the glows are drawn
+    // for it), but its text, bar and panels use theme tokens — so under a Light
+    // theme the wordmark's G/T went dark-on-black. Pin the subtree to the Dark
+    // end of the user's theme (their accent hue survives).
+    const splashTheme = useMemo(() => darkThemeVars() as React.CSSProperties, []);
 
     const [hoveredId, setHoveredId] = useState<string | null>(null);
     const [subtitle] = useState(pickRandomName);
@@ -240,7 +261,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
 
     if (bootError) {
         return (
-            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black" style={{ opacity }}>
+            <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black" style={{ ...splashTheme, opacity }}>
                 <div className="text-center mb-8 relative animate-fade-in-up z-10">
                     <GmtWordmark accent="rgb(var(--danger))" className="h-16 w-auto mx-auto block drop-shadow-[0_0_15px_rgb(var(--danger)/0.5)] mb-2" />
                     <div className="text-xs text-danger/80 font-mono uppercase tracking-[0.4em]">Engine failed to start</div>
@@ -290,7 +311,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ isReady, onFinishe
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black transition-opacity duration-1000" style={{ opacity }}>
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black transition-opacity duration-1000" style={{ ...splashTheme, opacity }}>
             <div className="text-center mb-10 relative animate-fade-in-up z-10">
                 <div className="relative inline-block mb-2">
                     <GmtWordmark className="h-16 w-auto block drop-shadow-[0_0_15px_rgb(var(--accent-glow)/0.5)]" />
