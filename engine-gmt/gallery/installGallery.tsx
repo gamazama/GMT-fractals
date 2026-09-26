@@ -44,7 +44,8 @@ let _installed = false;
 export interface InstallGalleryOptions {
     /** Menu id to register the entry in. Default 'file' (SceneIO's menu). */
     menuId?: string;
-    /** Item order within the menu. Default 25 — sits above Save/Share entries. */
+    /** Item order within the menu (Browse; Submit takes order + 0.5). Default 25. GMT passes
+     *  41, after its Share row — SceneIO's File menu numbering is in engine/plugins/SceneIO.tsx. */
     order?: number;
     /** Item label. Default 'Browse Online Gallery'. */
     label?: string;

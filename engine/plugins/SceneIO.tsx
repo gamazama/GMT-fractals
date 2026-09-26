@@ -136,15 +136,22 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
         align: 'end',
         width: 'w-56',
     });
+    // THE ORDER is explicit, in blocks of ten, so an app's own items slot in by number:
+    //   0s New (an app's) · 10s Load · 20s Save · 30s Autosave · 40s Share / Gallery (an
+    //   app's) · 50s Import (an app's). An app that overrides an item by id passes the same
+    //   order (app-gmt's partial Load row does).
     menu.registerItem('file', {
         id: 'load',
         type: 'custom',
+        order: 10,
         component: LoadSceneMenuItem,
     });
+    menu.registerItem('file', { id: 'file-sep-save', type: 'separator', order: 19 });
     menu.registerItem('file', {
         id: 'save-scene',
         type: 'button',
         label: `Save Scene (${_fileExtension.toUpperCase()})`,
+        order: 20,
         onSelect: () => { saveScene(); },
     });
     if (_getCanvas) {
@@ -153,22 +160,26 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
             type: 'button',
             label: 'Save Scene (PNG)',
             shortcut: 'Alt+S',
+            order: 21,
             onSelect: () => { void saveScenePng(); },
         });
         menu.registerItem('file', {
             id: 'save-jpg',
             type: 'button',
             label: 'Save Image (JPG)',
+            order: 22,
             onSelect: () => { void saveSceneJpg(); },
         });
     }
     // Recover the previous session from the protected recovery slot. Shown
     // (with an amber glyph) only when a recovery exists — i.e. the last
     // session ended with unsaved autosaved work.
+    menu.registerItem('file', { id: 'file-sep-autosave', type: 'separator', order: 29 });
     menu.registerItem('file', {
         id: 'restore-autosave',
         type: 'button',
         label: 'Restore Last Session',
+        order: 30,
         icon: <RestoreIcon />,
         when: () => hasRecoverySession(),
         onSelect: () => { void restoreAutosave(); },
@@ -177,11 +188,13 @@ export const installSceneIO = (options: InstallSceneIOOptions = {}) => {
     menu.registerItem('file', {
         id: 'autosave-settings',
         type: 'custom',
+        order: 31,
         component: AutosaveMenuItem,
     });
     // Apps that want extra items in the File menu — e.g. GMT's "Copy
     // Share Link" — register them via menu.registerItem('file', …)
-    // directly after installSceneIO() returns. No bespoke API here.
+    // directly after installSceneIO() returns, with an `order` from the blocks above.
+    // No bespoke API here.
 
     // Standalone one-click snapshot button — the heavy-use PNG action
     // promoted out of the File menu so users don't have to open it for

@@ -365,45 +365,55 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         width: 'w-64',
     });
 
-    // --- File actions (share link lives in the topbar button, not the menu) ---
-
-    menu.registerItem('system', {
-        id: 'fluid-toy',
-        type: 'button',
-        label: 'Open Fluid Toy',
-        title: 'Switch to the 2D fluid / Julia set playground.',
-        onSelect: () => window.open('fluid-toy.html', '_blank', 'noopener'),
-    });
-
-    menu.registerItem('system', { id: 'sys-sep-apps', type: 'separator' });
-
-    menu.registerItem('system', {
-        id: 'formula-workshop',
-        type: 'button',
-        label: 'Formula Workshop…',
-        onSelect: openFormulaWorkshop,
-    });
-
+    // THE ORDER (owner, 2026-09-26) is explicit on every item, in blocks of ten, so an item
+    // registered elsewhere slots in by number instead of by registration order:
+    //   10s  Settings… · Hide Interface (+ the phone's Quality rows)
+    //   20s  the other tools and apps — Formula Workshop… · Gradient Explorer… (app-gmt/main.tsx)
+    //        · Open Fluid Toy
+    //   30s  feature toggles (Audio Modulation, Drawing Tools, …)
+    //   40s+ Advanced Mode, then everything it reveals — including any feature toggle
+    //        declared `advancedOnly`, which used to sit hidden among the 30s.
     menu.registerItem('system', {
         id: 'app-settings',
         type: 'button',
         label: 'Settings…',
         title: 'Preferences, hardware caps, and stored data.',
+        order: 10,
         onSelect: () => { openSettings(); },
     });
 
-    menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator' });
+    menu.registerItem('system', {
+        id: 'broadcast-mode',
+        type: 'toggle',
+        label: 'Hide Interface',
+        shortcut: 'B',
+        title: 'Hide all UI for recording / broadcasting.',
+        order: 11,
+        isActive: () => useEngineStore.getState().isBroadcastMode,
+        onToggle: () => {
+            const s = useEngineStore.getState();
+            s.setIsBroadcastMode(!s.isBroadcastMode);
+        },
+    });
 
     // --- Mobile-only: surrogates for items hidden from the topbar -----
+    menu.registerItem('system', {
+        id: 'mobile-sep-display',
+        type: 'separator',
+        order: 12,
+        when: () => isMobileSnapshot(),
+    });
     menu.registerItem('system', {
         id: 'mobile-quality-section',
         type: 'section',
         label: 'Quality',
+        order: 13,
         when: () => isMobileSnapshot(),
     });
     menu.registerItem('system', {
         id: 'mobile-quality',
         type: 'custom',
+        order: 14,
         when: () => isMobileSnapshot(),
         component: MobileQualityMenuItem,
     });
@@ -411,6 +421,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         id: 'mobile-adaptive',
         type: 'toggle',
         label: 'Reduce Quality on Touch',
+        order: 15,
         title: 'Drop render resolution while you drag the camera or sliders, restore on idle. Mobile uses interaction-only mode (no FPS-driven scaling) since mobile compute fluctuates too much for stable FPS targeting.',
         when: () => isMobileSnapshot(),
         isActive: () => {
@@ -428,11 +439,34 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
             s.setQuality?.(isOn ? { dynamicScaling: false, adaptiveTarget: 0 } : { dynamicScaling: true, adaptiveTarget: 30 });
         },
     });
+    menu.registerItem('system', { id: 'sys-sep-apps', type: 'separator', order: 19 });
+
     menu.registerItem('system', {
-        id: 'mobile-sep-display',
-        type: 'separator',
-        when: () => isMobileSnapshot(),
+        id: 'formula-workshop',
+        type: 'button',
+        label: 'Formula Workshop…',
+        order: 20,
+        onSelect: openFormulaWorkshop,
     });
+
+    // 21 = Gradient Explorer… (app-gmt/main.tsx)
+
+    menu.registerItem('system', {
+        id: 'fluid-toy',
+        type: 'button',
+        label: 'Open Fluid Toy',
+        title: 'Switch to the 2D fluid / Julia set playground.',
+        order: 22,
+        onSelect: () => window.open('fluid-toy.html', '_blank', 'noopener'),
+    });
+
+    menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator', order: 29 });
+
+    // Feature toggles number from 30 (plain) and from 50 (`advancedOnly`, inside the
+    // Advanced block), in registration order within each.
+    let plainOrder = 30;
+    let advancedOrder = 50;
+    const toggleOrder = (advancedOnly?: boolean): number => (advancedOnly ? advancedOrder++ : plainOrder++);
 
     // --- Dynamic feature toggles --------------------------------------
     // Each feature that declares `menuConfig` gets an auto-toggle here.
@@ -444,6 +478,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
             id: `feature-${feat.id}`,
             type: 'toggle',
             label: feat.label,
+            order: toggleOrder(feat.advancedOnly),
             when: feat.advancedOnly
                 ? () => useEngineStore.getState().advancedMode
                 : undefined,
@@ -481,6 +516,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
             id: `feature-item-${item.featureId}-${item.toggleParam}`,
             type: 'toggle',
             label: item.label,
+            order: toggleOrder(item.advancedOnly),
             when: item.advancedOnly ? () => useEngineStore.getState().advancedMode : undefined,
             isActive: () => {
                 const slice: any = (useEngineStore.getState() as any)[item.featureId];
@@ -496,27 +532,14 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         });
     });
 
-    menu.registerItem('system', { id: 'sys-sep-prefs', type: 'separator' });
+    menu.registerItem('system', { id: 'sys-sep-prefs', type: 'separator', order: 39 });
 
-    // --- Prefs toggles -----------------------------------------------
     // (Invert Look Y + UI Layout moved to the Settings panel — see installGmtSettings.)
-    menu.registerItem('system', {
-        id: 'broadcast-mode',
-        type: 'toggle',
-        label: 'Hide Interface',
-        shortcut: 'B',
-        title: 'Hide all UI for recording / broadcasting.',
-        isActive: () => useEngineStore.getState().isBroadcastMode,
-        onToggle: () => {
-            const s = useEngineStore.getState();
-            s.setIsBroadcastMode(!s.isBroadcastMode);
-        },
-    });
-
     menu.registerItem('system', {
         id: 'advanced-mode',
         type: 'toggle',
         label: 'Advanced Mode',
+        order: 40,
         title: 'Reveals advanced features and extra panels (e.g. Light, Engine Config).',
         isActive: () => useEngineStore.getState().advancedMode,
         onToggle: () => {
@@ -529,12 +552,14 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
     menu.registerItem('system', {
         id: 'sys-sep-advanced',
         type: 'separator',
+        order: 41,
         when: () => useEngineStore.getState().advancedMode,
     });
     menu.registerItem('system', {
         id: 'sys-advanced-section',
         type: 'section',
         label: 'Advanced',
+        order: 42,
         when: () => useEngineStore.getState().advancedMode,
     });
 
@@ -547,6 +572,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         type: 'toggle',
         label: 'Shader Compiler Panel',
         title: 'Show the bespoke Shader Compiler panel (compile-time toggles + profiles).',
+        order: 43,
         when: () => useEngineStore.getState().advancedMode,
         isActive: () => !!(useEngineStore.getState() as any).shaderCompiler?.showEngineTab,
         onToggle: () => {
@@ -565,6 +591,7 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         type: 'button',
         label: 'Mesh Export…',
         title: 'Convert the current fractal to a mesh.',
+        order: 44,
         when: () => useEngineStore.getState().advancedMode,
         onSelect: () => {
             try {

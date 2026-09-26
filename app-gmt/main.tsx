@@ -146,6 +146,7 @@ menu.registerItem('system', {
   type: 'button',
   label: 'Gradient Explorer…',
   title: 'Open the Gradient Explorer in a new tab, on the gradient you are using.',
+  order: 21, // after Formula Workshop… (engine-gmt/topbar.tsx numbers the System menu)
   onSelect: openExplorerFromGmt,
 });
 
@@ -308,30 +309,32 @@ installSceneIO({
 menu.registerItem('file', {
     id: 'load',
     type: 'custom',
+    order: 10, // engine/plugins/SceneIO.tsx numbers the File menu; keep the Load slot
     component: LoadSceneFilterMenuItem,
 });
 
-// New Scene wizard. `order: -10` puts it at the top of the File menu
-// (above Load + Save, defaulting to order 0+counter).
+// New Scene wizard — first in the File menu (SceneIO numbers the rest: Load 10s, Save 20s,
+// Autosave 30s; this app adds Share / Gallery in the 40s and Import in the 50s).
 menu.registerItem('file', {
     id: 'new-scene',
     type: 'button',
     label: 'New Scene…',
-    order: -10,
+    order: 0,
     onSelect: () => { useEngineStore.getState().openNewScene(); },
 });
 
 // Import section — external formula/scene files. The catalog browsers for
 // these live in the FormulaPicker (MB3D scenes + Fragmentarium/DEC formulas);
 // these menu items load an arbitrary file from disk.
-menu.registerItem('file', { id: 'import-section', type: 'section', label: 'Import', order: -9.5 });
+menu.registerItem('file', { id: 'import-sep', type: 'separator', order: 49 });
+menu.registerItem('file', { id: 'import-section', type: 'section', label: 'Import', order: 50 });
 // Import a Mandelbulb3D `.m3p` scene file (the bundled sample scenes live in the
 // FormulaPicker's "Mandelbulb3D" catalog group).
 menu.registerItem('file', {
     id: 'import-mb3d',
     type: 'button',
     label: 'Mandelbulb3D scene (.m3p)…',
-    order: -9,
+    order: 51,
     onSelect: () => pickAndLoadM3pFile(),
 });
 // Load a Fragmentarium `.frag` (or .glsl) file into the Formula Workshop.
@@ -339,24 +342,25 @@ menu.registerItem('file', {
     id: 'import-frag',
     type: 'button',
     label: 'Fragmentarium formula (.frag)…',
-    order: -8.9,
+    order: 52,
     onSelect: () => pickAndLoadFragFile(),
 });
 
 // Mobile users get Share Link only via this menu entry; desktop also
 // has the topbar icon (registered separately in registerGmtTopbar).
-menu.registerItem('file', { id: 'share-sep', type: 'separator' });
+menu.registerItem('file', { id: 'share-sep', type: 'separator', order: 39 });
 menu.registerItem('file', {
     id: 'share-link',
     type: 'button',
     label: 'Copy Share Link (URL)',
+    order: 40,
     onSelect: () => { void copyShareLink(); },
 });
 
 // Online gallery — Phase 1 read-only curated catalog (Supabase + R2).
 // Registers a "Browse Online Gallery" item in the File menu. The overlay
 // component is mounted in AppGmt.tsx as <GalleryOverlay />.
-installGallery();
+installGallery({ order: 41 }); // Browse 41, Submit 41.5 — after Copy Share Link
 
 // Supabase Auth — Phase 2B. Mounts the topbar profile chip (right slot) and
 // gates the gallery's Submit menu item on signed-in status. Auth overlay +
