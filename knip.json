@@ -43,7 +43,6 @@
     "types": "off",
     "duplicates": "off",
     "enumMembers": "off",
-    "classMembers": "off",
     "binaries": "off",
     "dependencies": "off",
     "devDependencies": "off",

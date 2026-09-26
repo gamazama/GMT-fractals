@@ -788,7 +788,10 @@ export async function runExportMesh(
     blob = vdbResult.blob;
     const baseName = (definition.name || definition.id || 'fractal')
       .toLowerCase().replace(/\s+/g, '-');
-    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12); // YYYYMMDDHHMI
+    // Digits only. A character class of hyphen, colon and T used to strip the separators, and
+    // Tailwind's class scanner (it reads comments too) took it for an arbitrary property and
+    // emitted a broken `-: T` rule, a CSS-minify warning on every build. Same first 12 digits.
+    const ts = new Date().toISOString().replace(/\D/g, '').slice(0, 12); // YYYYMMDDHHMI
     const colorTag = vdbParams.vdbColor ? '-density-color' : '-density';
     filename = baseName + '-' + vdbN + colorTag + '-' + ts + '.vdb';
     ui.log('VDB: ' + vdbResult.voxelCount.toLocaleString() + ' active voxels, ' +
