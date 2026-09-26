@@ -30,7 +30,6 @@ import {
 import { buildBlocks } from './favientBlocks';
 import {
   subscribeFavientHost,
-  getFavientBrowseAction,
   getFavientStudioAction,
   getFavientSelectMode,
 } from '../core/favientTargets';
@@ -378,13 +377,6 @@ const GroupDivider: React.FC<{ label: string; onRename: (v: string) => void; aut
   );
 };
 
-const PaletteIcon: React.FC = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M3 9h18M3 15h18" />
-  </svg>
-);
-
 const SearchIcon: React.FC = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="7" />
@@ -444,7 +436,6 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
   const setSelectedTarget = useFavientsStore((s) => s.setSelectedTarget);
   const reloadFromStorage = useFavientsStore((s) => s.reloadFromStorage);
   const targets = useHostTargets();
-  const browse = getFavientBrowseAction();
   const studio = getFavientStudioAction();
 
   const [hover, setHover] = useState<GradientHover | null>(null);
@@ -729,15 +720,6 @@ export const FavientsPanel: React.FC<FavientsPanelProps> = ({ hint, pickOnDrag =
         {/* Toolbar row — pushed to the right edge (the Destination row above carries the
             host-specific dropdown; this row is purely the shelf's own controls). */}
         <div className="flex-1" />
-        {browse && (
-          <button
-            onClick={() => browse()}
-            title="Browse the gradient library (Palettes)"
-            className="shrink-0 flex items-center justify-center w-6 h-6 rounded text-fg-muted hover:text-fg hover:bg-line/10 transition-colors"
-          >
-            <PaletteIcon />
-          </button>
-        )}
         {studio && (
           <button
             onClick={() => studio()}

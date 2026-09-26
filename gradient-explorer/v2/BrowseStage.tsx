@@ -71,8 +71,8 @@
  *
  * @see docs/adr/0115-the-shell-on-a-phone.md
  *
- * All of the behaviour is `usePickerModel` — the same hook the old `PickerStage` and
- * app-gmt's palette overlay run. This file is layout, wording and chrome. If you need the
+ * All of the behaviour is `usePickerModel` (the old `PickerStage` shared it until it was
+ * retired, 2026-09-26). This file is layout, wording and chrome. If you need the
  * wall to filter/sort/carve differently, change `palette/core/pickerModel.ts`, not this.
  *
  * @see plans/ge-v2-design.md §5.2

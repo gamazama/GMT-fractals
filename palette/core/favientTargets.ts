@@ -11,7 +11,9 @@
  * What remains here is host capability the generic registry can't express — the panel
  * still needs it to adapt to its embedding app:
  *   • select mode — does this host provide the select→reveal→place dock (the Explorer)?
- *   • browse / studio actions — the panel header's Palettes + open-studio buttons.
+ *   • studio action — the panel header's open-the-Explorer button. (A "browse palettes"
+ *     action for a Palettes button lived here too; its only host, app-gmt's Gradient
+ *     Library overlay, was retired 2026-09-26.)
  *
  * Host-agnostic + side-effect-free at import: hosts set these in their own registration
  * step (the same place they register their send targets).
@@ -23,17 +25,16 @@ import { createSingleSlot } from '../../store/createSingleSlot';
 // three hand-rolled value+listener pairs sharing one notify; now they ride the shared
 // `createSingleSlot` primitive (the same one the gradient editor seams use).
 const _selectMode = createSingleSlot<boolean>(false);
-const _browse = createSingleSlot<() => void>();
 const _studio = createSingleSlot<() => void>();
 
 /**
- * Subscribe to host-capability changes (select-mode / browse / studio). Returns
+ * Subscribe to host-capability changes (select-mode / studio). Returns
  * unsubscribe. These are normally set once at boot, but the panel subscribes defensively
  * in case a host registers later. (The panel separately subscribes to the send-target
  * registry for its destination LIST — that's where targets live now.)
  */
 export const subscribeFavientHost = (l: () => void): (() => void) => {
-  const unsubs = [_selectMode.subscribe(l), _browse.subscribe(l), _studio.subscribe(l)];
+  const unsubs = [_selectMode.subscribe(l), _studio.subscribe(l)];
   return () => unsubs.forEach((u) => u());
 };
 
@@ -45,12 +46,6 @@ export const subscribeFavientHost = (l: () => void): (() => void) => {
 export const setFavientSelectMode = (on: boolean): void => _selectMode.set(on);
 
 export const getFavientSelectMode = (): boolean => _selectMode.get() ?? false;
-
-// --- "browse palettes" action (host-specific) — drives the Favients header's Palettes
-// button. Studio switches to the Picker tab; app-gmt opens the Palettes overlay. ---
-export const setFavientBrowseAction = (fn: (() => void) | null): void => _browse.set(fn);
-
-export const getFavientBrowseAction = (): (() => void) | null => _browse.get();
 
 // --- "open GMT Gradient Explorer" action (host-specific) — drives the Favients header's
 // studio-launch button. Registered only where launching the standalone explorer makes

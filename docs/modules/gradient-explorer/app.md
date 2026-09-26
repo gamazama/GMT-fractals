@@ -6,7 +6,6 @@ additional_sources:
   - gradient-explorer/v2/GradientExplorerV2App.tsx
   - gradient-explorer/v2/shareUrl.ts
   - gradient-explorer/FullscreenGradientOverlay.tsx
-  - gradient-explorer/PickerStage.tsx
 audited: 2026-09-16T00:00:00Z
 audited_by: claude-opus-5
 public_api: []
@@ -61,7 +60,8 @@ outlived it — app-gmt mounts one, v2 mounts the rest.
 
 ## Outside `v2/` but live
 
-- `PickerStage.tsx` — mounted by app-gmt's `PalettePickerOverlay`.
+- ~~`PickerStage.tsx`~~ — deleted 2026-09-26 with its last host, app-gmt's Gradient Library
+  overlay; GMT's System menu opens the Explorer instead.
 - `FullscreenGradientOverlay.tsx` + `fullscreen/**` — the Wallpaper surface. The overlay
   follows whatever live source the host registers (`setFullscreenLiveSource`); with none it
   shows the open-time snapshot.

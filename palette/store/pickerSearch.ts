@@ -5,8 +5,8 @@
  * (only layout prefs survive a reload) so a stale query can never silently hide
  * gradients after a catalog reload. Resets to '' on a full page load.
  *
- * Why an external store rather than a `useState` in PickerStage: two sibling surfaces
- * drive the SAME query — the PickerStage hero search field AND the mobile Picker
+ * Why an external store rather than a `useState` in a stage: sibling surfaces can drive
+ * the SAME query — originally the old PickerStage's hero search field AND the mobile Picker
  * controls (`MobilePickerControls`, a separate subtree below the stage). Local state
  * couldn't reach both; a tiny `useSyncExternalStore`-backed holder keeps them in sync
  * while staying session-only.

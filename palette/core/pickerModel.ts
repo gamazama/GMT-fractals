@@ -1,8 +1,8 @@
 /**
  * pickerModel — the pure half of the gradient wall: catalog → filter → arrange → rows.
  *
- * Every host that shows the wall (the old Gradient Explorer's PickerStage, app-gmt's
- * palette overlay, the v2 Browse stage) runs THIS pipeline and differs only in chrome.
+ * Every host that shows the wall runs THIS pipeline and differs only in chrome — today the
+ * Gradient Explorer's Browse stage (app-gmt's Gradient Library overlay was retired 2026-09-26).
  * Nothing here touches React, the engine store, the DOM or `window`; the hook that binds
  * it to the stores is `palette/components/usePickerModel.ts`.
  *

@@ -3,7 +3,7 @@
  * with native GMT chrome via AutoFeaturePanel:
  *   • five dual-range "quality" windows (hidden vec2 params → custom QualityRangePad).
  *   • Group by (Category/Source) + Sort within + Reverse — group and sort are
- *     INDEPENDENT (PickerStage applies a COMPOUND sort: primary = group, secondary =
+ *     INDEPENDENT (the wall applies a COMPOUND sort: primary = group, secondary =
  *     sort), so grouping by category never blocks in-category sorting.
  *   • Swatch size + Padding (wall zoom/spacing).
  *   • Theme chips + Source (bundle) load/unload — custom-UI components.
@@ -25,7 +25,7 @@ export const QUALITY_AXES = [
   { axis: 'qWarm', loLabel: 'cool', hiLabel: 'warm', track: 'warmth', hint: 'Colour temperature — cool blues through to warm reds/oranges.' },
 ] as const;
 
-// Three independent axes (see PickerStage):
+// Three independent axes (see `arrangeRows` in palette/core/pickerModel.ts):
 //   • Group by — Category/Source → top-level bands.
 //   • Rows by  — a facet bucketed into sub-rows WITHIN each group.
 //   • Sort within — orders the columns within each row.

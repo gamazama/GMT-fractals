@@ -172,6 +172,9 @@ the only store coupling — binds the pure pad to a `paletteFilters` vec2 slice 
 ## Picker
 
 Browse the baked ~11k-gradient catalog as a faceted, re-orderable wall.
+> **Update 2026-09-26:** `PickerStage` and app-gmt's overlay are deleted; the wall's only
+> host is the Gradient Explorer's `v2/BrowseStage.tsx` over `PickerWall.tsx`.
+
 **Entry:** `PickerStage` (in [gradient-explorer](../gradient-explorer/app.md)) composes
 the controls + hero over **`PickerWall.tsx`** (the renderer). App-gmt mounts a compact
 variant.

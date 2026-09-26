@@ -106,7 +106,7 @@ registerPaletteUI();
 // after the engine store is constructed) rather than a static import, so this
 // module doesn't pull useEngineStore into the registration chain and freeze the
 // feature registry mid-register (see README "boot-order trap").
-import { setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
+import { setFavientStudioAction } from '../palette/core/favientTargets';
 import { registerSendTarget } from '../store/sendTargetRegistry';
 import type { FavientDragPayload } from '../palette/core/favientDnd';
 registerSendTarget<FavientDragPayload>({
@@ -122,5 +122,4 @@ registerSendTarget<FavientDragPayload>({
 // fluid-toy has no in-app Palette-Picker overlay, so the shelf's "Palettes"
 // browse button has nothing to open — hide it. The studio button opens the
 // standalone GMT Gradient Explorer (same origin) for richer authoring.
-setFavientBrowseAction(null);
 setFavientStudioAction(() => window.open('gradient-explorer.html', '_blank', 'noopener'));

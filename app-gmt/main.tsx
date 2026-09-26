@@ -41,7 +41,7 @@ import { setLiveModulationPublishInterval } from '../engine/animation/AnimationS
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { AppErrorBoundary } from '../engine/components/AppErrorBoundary';
-import { usePaletteOverlayStore } from './paletteOverlayStore';
+import { openExplorerFromGmt } from './explorerTrip';
 import { favientsPanelEntry, mountFavientsPanel } from '../palette/installFavients';
 import { installGradientFileClaim } from '../palette/installGradientFileClaim';
 import { isMobileSnapshot } from '../hooks/useMobileLayout';
@@ -137,15 +137,16 @@ registerUI();
 // componentIds for `component:` panels and `widgets:` slots).
 registerGmtUi();
 
-// Palette Picker (Gradient Library) — a full-width overlay opened from the System menu
-// ("Gradient Library…") or the Favients panel's Palettes button (both flip
-// usePaletteOverlayStore). The overlay host is mounted in AppGmt. No topbar button.
+// The Gradient Explorer, in its own tab — the same trip as the My Gradients panel's Explorer
+// button (./explorerTrip: it takes the gradient in use and stashes the scene for the way back).
+// Until 2026-09-26 this item was "Gradient Library…", a full-screen overlay over the first
+// Explorer's picker wall; the Explorer replaced it.
 menu.registerItem('system', {
-  id: 'gradient-library',
+  id: 'gradient-explorer',
   type: 'button',
-  label: 'Gradient Library…',
-  title: 'Browse + pick gradients (full-width palette wall).',
-  onSelect: () => usePaletteOverlayStore.getState().setOpen(true),
+  label: 'Gradient Explorer…',
+  title: 'Open the Gradient Explorer in a new tab, on the gradient you are using.',
+  onSelect: openExplorerFromGmt,
 });
 
 // Favients — the floating gradient-favourites shelf. No topbar toggle in app-gmt; the
@@ -711,9 +712,6 @@ async function resolveBootPreset(): Promise<BootChoice> {
 
 applyPanelManifest([
   ...GmtPanels,
-  // Palette picker now lives in a full-width overlay (topbar "Palettes" button →
-  // PalettePickerOverlay), which embeds the paletteFilters controls in a sidebar —
-  // no cramped right-dock panels.
   // Favients shelf — registered here so it can float; mountFavientsPanel() floats it.
   favientsPanelEntry({ dock: 'right', order: 90 }),
 ]);

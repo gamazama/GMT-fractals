@@ -53,8 +53,8 @@ export const whatsNewMenuItem = (opts: { id?: string; label?: string } = {}): Me
 
 /**
  * One line: the palette catalogue's credits (2026-09-13). The core pack's credits ship in
- * `public/palette/` whether or not the Palettes overlay was ever opened; any other pack the
- * overlay has loaded adds its own file, resolved where that pack came from. Deliberately not a
+ * `public/palette/`; any other pack this app has loaded adds its own file, resolved where
+ * that pack came from. Deliberately not a
  * catalogue section — GX's About carries the per-source list.
  */
 const CatalogueCreditsLine: React.FC = () => {

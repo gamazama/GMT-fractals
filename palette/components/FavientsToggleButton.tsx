@@ -9,8 +9,8 @@
  * registry, floated shelf). The first Explorer shell's `TopBarButtons.tsx` (dock-collapse
  * variant) was the other, until the entry-point swap of 2026-09-16. It replaced their
  * per-app copies. **app-gmt has no topbar toggle at all** — its copy
- * was deleted, not migrated, and the shelf is reached from the Palette Picker overlay
- * (grep `openFavientsPanel` in `app-gmt/PalettePickerOverlay.tsx`) and the System menu.
+ * was deleted, not migrated; the shelf floats open by default (grep `mountFavientsPanel` in
+ * `app-gmt/main.tsx`).
  * `desktopOnly` hides the button below the mobile breakpoint — the Explorer wants that
  * (the shelf is a dedicated tab on phones); fluid-toy doesn't.
  */

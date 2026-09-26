@@ -42,7 +42,6 @@ import { FirstRunHint } from '../engine-gmt/components/FirstRunHint';
 import { GalleryOverlay, SubmitGalleryOverlay, BucketRenderResultOverlay, MySubmissionsOverlay } from '../engine-gmt/gallery';
 import { NewSceneModal } from '../components/NewSceneModal';
 import { LoadFilterPanel } from '../components/LoadFilterPanel';
-import { PalettePickerOverlayHost } from './PalettePickerOverlay';
 import { SettingsHost } from './SettingsHost';
 import { AuthOverlayHost, AccountPanelHost } from '../engine-gmt/auth';
 import { DiagnosticsOverlay } from './DiagnosticsOverlay';
@@ -256,9 +255,7 @@ export const AppGmt: React.FC = () => {
 
                 {!isBroadcastMode && floatingPanels.map((p) => (
                     <BenchProfiler key={p.id} id={`FloatingPanel:${p.id}`}>
-                        {/* The Palettes overlay sits at Z.takeover (under floating panels),
-                            so Favients no longer needs a special elevation to stay draggable
-                            over it — every floating panel does, via the click-to-front stack. */}
+                        {/* Every floating panel rides the click-to-front stack (ADR-0081). */}
                         <DraggableWindow id={p.id} title={panelLabel(p.id)}>
                             <PanelRouter
                                 activeTab={p.id as PanelId}
@@ -444,7 +441,6 @@ export const AppGmt: React.FC = () => {
                 <AccountPanelHost />
                 <NewSceneModal />
                 <LoadFilterPanel />
-                <PalettePickerOverlayHost />
                 <SettingsHost />
 
                 <TutorialRunner />

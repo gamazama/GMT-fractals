@@ -1,11 +1,10 @@
 /**
  * usePickerModel — the gradient wall's whole behaviour, minus chrome.
  *
- * ONE hook, three hosts: the old Gradient Explorer stage (`gradient-explorer/PickerStage`),
- * app-gmt's palette overlay (which mounts that same stage) and the v2 Browse stage
- * (`gradient-explorer/v2/BrowseStage`). Each of them renders a different bar, a different
- * toolbar and a different empty state; none of them owns a second copy of the filtering,
- * grouping, carve or similarity logic. If you are about to write `catalog.filter(...)` in a
+ * ONE hook: the Gradient Explorer's Browse stage (`gradient-explorer/v2/BrowseStage`) is its
+ * host today. The old `PickerStage` was a second one until app-gmt's Gradient Library
+ * overlay was retired (2026-09-26). Chrome belongs to a host; no host owns a second copy of
+ * the filtering, grouping, carve or similarity logic. If you are about to write `catalog.filter(...)` in a
  * host, stop — extend the pure model at `palette/core/pickerModel.ts` instead.
  *
  * What lives here (and NOT in the pure model, because it is React/DOM/store):

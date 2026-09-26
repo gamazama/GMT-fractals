@@ -16,7 +16,7 @@
  * the session; a loaded live source re-loads when it says its content changed.
  * Each merge/unmerge rebuilds `catalog` (concatenated in group order) and REASSIGNS
  * every entry's `row` to its index in the merged set, so the shared sprite stays packed
- * (PickerStage rebuilds the sprite from `row` whenever `catalog` changes).
+ * (the wall rebuilds the sprite from `row` whenever `catalog` changes).
  */
 
 import { create } from 'zustand';

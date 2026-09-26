@@ -49,12 +49,11 @@ componentRegistry.register('sky-library', SkyLibrary);
 // HOST-group send targets in the shared registry (the panel's "Destination" dropdown lists
 // the host group); the apply payload carries the favourite's GradientConfig. Every apply
 // reports to `noteGradientApplied` — what the Explorer button sends (./explorerTrip).
-import { setFavientBrowseAction, setFavientStudioAction } from '../palette/core/favientTargets';
+import { setFavientStudioAction } from '../palette/core/favientTargets';
 import { noteGradientApplied, openExplorerFromGmt } from './explorerTrip';
 import { registerSendTarget } from '../store/sendTargetRegistry';
 import type { FavientDragPayload } from '../palette/core/favientDnd';
 import { applyGradientConfig, applyEnvGradient } from '../palette/core/gradientSeam';
-import { usePaletteOverlayStore } from './paletteOverlayStore';
 import { useEngineStore } from '../store/engineStore';
 import { requestAccordionOpen } from '../components/accordionReveal';
 
@@ -84,12 +83,6 @@ registerSendTarget<FavientDragPayload>({
   apply: (p) => { noteGradientApplied('env-gradient', p); applyEnvGradient(p.config); },
   editsParam: { featureId: 'materials', paramKey: 'envGradientStops' },
   reveal: () => revealGradientSection('Shader'),
-});
-
-// Favients header "Palettes" button → TOGGLE the full-width Palette Picker overlay.
-setFavientBrowseAction(() => {
-  const s = usePaletteOverlayStore.getState();
-  s.setOpen(!s.open);
 });
 
 // Favients header studio button → open the standalone GMT Gradient Explorer app (new tab),

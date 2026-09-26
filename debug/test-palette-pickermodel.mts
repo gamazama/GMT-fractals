@@ -1,6 +1,6 @@
 /**
  * pickerModel harness — the pure half of the gradient wall (palette/core/pickerModel.ts),
- * shared by the old PickerStage, app-gmt's palette overlay and the v2 Browse stage.
+ * behind the Gradient Explorer's Browse stage (the old PickerStage shared it until 2026-09-26).
  *
  *   1. search index + token-AND search over name · theme · source label.
  *   2. filter windows: each of the five quality axes carves independently; a full [0,1]

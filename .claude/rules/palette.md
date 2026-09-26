@@ -106,17 +106,15 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
   `engine/`, `engine-gmt/` and shared code freely, but never `app-gmt/`,
   `fluid-toy/` or `gradient-explorer/`. Currently zero violations; it is a cheap
   grep to keep that way.
-- **The gradient wall has ONE model, and two hosts.** `palette/core/pickerModel.ts`
+- **The gradient wall has ONE model, and one host.** `palette/core/pickerModel.ts`
   (pure: search index, filter windows, group/rows/sort, carve, More like this) plus
   `palette/components/usePickerModel.ts` (the React/store binding) hold ALL of it.
   Since 2026-09-08 (GE v2 Phase D) the hook also takes an optional `{ source }` — a set
   of the user's own gradients (`palette/core/groundSets.ts`) shown INSTEAD of the
-  catalogue by the same pipeline; called bare it is the catalogue, unchanged, which is how
-  app-gmt's overlay and the old stage stay untouched by construction.
-  `gradient-explorer/PickerStage.tsx` — mounted by app-gmt's `PalettePickerOverlay` (and by
-  the first Explorer shell until the entry-point swap, 2026-09-16) — and
-  `gradient-explorer/v2/BrowseStage.tsx` are chrome over that
-  hook and nothing else. A host that calls `catalog.filter(...)` itself is a fork; extend
+  catalogue by the same pipeline; called bare it is the catalogue, unchanged.
+  `gradient-explorer/v2/BrowseStage.tsx` is chrome over that hook and nothing else (the old
+  `PickerStage.tsx` was the other host until app-gmt's Gradient Library overlay was retired,
+  2026-09-26; GMT's System menu now opens the Explorer). A host that calls `catalog.filter(...)` itself is a fork; extend
   the model. Guard: `npx tsx debug/test-palette-pickermodel.mts`.
 - **The catalogue's LICENSING is data with five seams, and none of them is a label you
   can edit in place** (owner decisions 2026-09-13; `plans/palette-catalogue-licensing.md`,
