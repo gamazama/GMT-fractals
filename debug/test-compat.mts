@@ -236,7 +236,11 @@ function serialize(lines: SnapshotLine[]): string {
  *  "snapshot matches" forever. Raise a floor when formulas or `requires:` declarations
  *  are added; if you have deliberately REMOVED one, lower it in the same commit — which
  *  is the point, because that edit is where a human looks at the loss on purpose. */
-const FORMULA_FLOOR = 55;      // registry.getAll().length, measured 2026-07-29
+// The PUBLIC registry: 52 since 2026-09-26, when Julia3DKucera and Julia3DZorich left the repo.
+// (It was 55 from 2026-07-29 — measured in a checkout that also registers the owner's
+// local-only formulas, so a clean public clone of the day before, at 54, was already red.)
+// A checkout with local-only formulas wired in registers more; a floor tolerates that.
+const FORMULA_FLOOR = 52;      // registry.getAll().length on the public tree, measured 2026-09-26
 const SNAPSHOT_ROW_FLOOR = 2;  // disabled compat rows, measured 2026-07-29
 
 function main() {

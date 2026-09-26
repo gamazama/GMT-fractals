@@ -11,7 +11,7 @@
  * covers Workshop-imported formulas (importSource set) and any future native
  * we forget to classify.
  *
- * @see dev/plans/formula-picker-design.md
+ * @see plans/formula-picker-design.md
  */
 
 import type { FormulaType } from '../../types';
@@ -66,7 +66,7 @@ export const NATIVE_CATEGORIES: PickerCategory[] = [
     {
         id: 'hybrids',
         name: 'Hybrids & Experimental',
-        items: ['Borromean', 'Appell', 'SineJulia3D', 'Julia3D', 'Julia3DKucera', 'Julia3DZorich'],
+        items: ['Borromean', 'Appell', 'SineJulia3D', 'Julia3D'],
     },
 ];
 
