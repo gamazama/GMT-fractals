@@ -1941,6 +1941,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
    * scrolled away is unmounted — but their wrapper divs stay in the DOM to hold the scroll
    * space open, and they carry the geometry as data attributes. So the cursor can be moved
    * onto a tile that is not currently drawn and still scroll to exactly the right place.
+   *
+   * @invariant after an arrow key the tile the cursor is on is inside the wall's box, down
+   *   and across — proven by: `npx tsx debug/smoke-ge-wallzoom.mts` ("[13] the keyboard
+   *   cursor: … the wall follows it at 1:1 and at ×4 …").
    */
   const revealIndex = useCallback((flatIndex: number) => {
     const el = scrollRef.current;
@@ -1958,17 +1962,29 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     for (const w of wraps) {
       const start = Number(w.dataset.wallChunkStart ?? 0);
       const cols = Number(w.dataset.wallChunkCols ?? 1);
+      const cellW = Number(w.dataset.wallChunkCellw ?? 1);
       const cellH = Number(w.dataset.wallChunkCellh ?? 1);
-      const count = Math.round(w.offsetHeight / Math.max(1, cellH)) * cols;
+      const gridRows = Math.max(1, Math.round(w.offsetHeight / Math.max(1, cellH)));
+      const count = gridRows * cols;
       if (within < start || within >= start + count) continue;
-      const k = within - start;
-      const row = w.dataset.wallChunkRowmajor ? Math.floor(k / cols) : k % Math.max(1, Math.round(w.offsetHeight / Math.max(1, cellH)));
-      const top = w.offsetTop + row * cellH;
+      const { col, row } = cellOf(within - start, cols, gridRows, !!w.dataset.wallChunkRowmajor);
+      // The cell in the SCROLL BOX's coordinates — measured, not `w.offsetTop`. A chunk's offset
+      // parent is its BAND (`GroupRow`'s root is positioned), so `offsetTop` is the distance down
+      // the band, and read as a distance down the wall it had the wall follow the cursor through
+      // its first band only (measured 2026-10-02 on All: the cursor on row 50, `scrollTop` still 0).
+      const box = el.getBoundingClientRect();
+      const wr = w.getBoundingClientRect();
+      const top = wr.top - box.top + el.scrollTop + row * cellH;
+      const left = wr.left - box.left + el.scrollLeft + col * cellW;
       if (top < el.scrollTop) el.scrollTop = Math.max(0, top - cellH);
       else if (top + cellH > el.scrollTop + el.clientHeight) el.scrollTop = top + cellH - el.clientHeight + cellH;
+      // Sideways too: a zoomed wall is wider than its box. `minGutter` is what a host floats over
+      // the left edge, so a tile is not in view until it is clear of that as well.
+      if (left < el.scrollLeft + minGutter) el.scrollLeft = Math.max(0, left - cellW - minGutter);
+      else if (left + cellW > el.scrollLeft + el.clientWidth) el.scrollLeft = left + cellW - el.clientWidth + cellW;
       return;
     }
-  }, [rows]);
+  }, [rows, minGutter]);
 
   const focusIndex = useCallback(
     (next: number) => {

@@ -39,8 +39,9 @@
  *   [12] a chunk drawn by several canvases: on one that is NOT its first, the tile PAINTED at a point
  *        is the gradient the hover card shows for it, and a zoom-tool tap (which finds the tile through
  *        the wall's registry, as the carve tools do) picks it;
- *   [13] the keyboard cursor at ×4 walks the grid as drawn: N presses of ↓ then Enter pick the tile on
- *        that row of the first column, on a chunk's second canvas.
+ *   [13] the keyboard cursor: Home and N presses of ↓ walk the first column to a row past the first
+ *        screen, and the wall FOLLOWS — at 1:1, and at ×4, where that row is on its chunk's second
+ *        canvas and the zoom has left the wall scrolled sideways; Enter then picks the tile there.
  *
  * The limit this does not assert, because it is the wall's design: the wall is a bounded scroller, so a
  * zoom that brings one of its edges into the box stops at that edge (grep "bounded scroll" in
@@ -53,13 +54,14 @@
  *
  * FALSIFIED 2026-10-02 with the steps as they stand here, each break made to the fixed PickerWall.tsx
  * alone and put back (the file's hash checked after each):
- *   · the PRE-FIX file, whole → red on all thirteen. [1]–[11] on the claim ([1] "grabbed … and "carr333"
- *     is there … row 36 of 50, that spot is now … row 36 of 37"; [9] "left the live transform on the
- *     wall: … scale(1, 1.01884)"; [10] "7c … → … 10c"; [11] "row 72 of 110 … row 72 of 84"). [12] and
- *     [13] at SETUP: they are about a chunk drawn by several canvases, which did not exist — the three
- *     breaks below that touch it are what falsify them.
+ *   · the PRE-FIX file, whole (ad28b8bb) → red on all thirteen. [1]–[11] and [13] on the claim ([1]
+ *     "grabbed … and "carr333" is there … row 36 of 50, that spot is now … row 36 of 37"; [9] "left the
+ *     live transform on the wall: … scale(1, 1.01884)"; [10] "7c … → … 10c"; [11] "row 72 of 110 … row
+ *     72 of 84"; [13] "at 1:1 … that cell is not in the wall's box … (scroll 0,0)"). [12] at SETUP: it
+ *     is about a chunk drawn by several canvases, which did not exist — F8 and F9 are what falsify it.
  *   · F1 the chunk length sized from the zoomed cell (the old rule) → [1] [2] [3] [4] [7] [11], and
- *     [12] [13] at setup. NOT [5] [6]: no band there is tall enough for the cap to cut.
+ *     [12] at setup. NOT [5] [6]: no band there is tall enough for the cap to cut. Not [13] either —
+ *     under the old rule the cursor and the wall agreed with each other, which F10 separates.
  *   · F2 the top padding left in the scaled part → [1] [2] [3] [4] [5] [6] [7] [11], every one by the
  *     12 × (ratio − 1) it predicts (12.5 px at ×2, 23.1 at ×2.83, 36.6 at ×4, 183.3 at ×16, 3.1 for one
  *     press of +). At ×2 and ×2.83 the gradient is still the same one — only the slide inside the cell
@@ -77,7 +79,13 @@
  *     wrong — the case [12] exists for.
  *   · F9 a canvas FINDING tiles as if it held its chunk's first rows → [2] [3] [4] [7] [11] [12] [13],
  *     each saying the same cell now holds another gradient.
- *   · F10 the keyboard cursor handed a zoom-sized chunk length → [13] alone.
+ *   · F10 the keyboard cursor handed a zoom-sized chunk length while the wall draws 1:1-sized chunks →
+ *     [13] alone, at ×4 (the cursor is on another tile, and the wall followed that one).
+ *   · K1 `revealIndex` measuring down the BAND again (`w.offsetTop`, the old line) → [13] alone, at 1:1
+ *     ("its centre is at (149, 1221), the box is … y 199–1080 (scroll 0,0)"). This one was on HEAD
+ *     before any of the zoom work, and the step found it: the wall followed the cursor through its
+ *     first band and no further.
+ *   · K2 `revealIndex` not following sideways → [13] alone, at ×4 ("its centre is at (-2307, 959)").
  * Two things this file got wrong on the way and now does on purpose: a second click on the tile that
  * is already the working gradient is the app's "edit this one", so [10] picks the row above in between;
  * and the Explorer SAVES what a step does (a pick opens the hero, the arrangement is a setting), so on a
@@ -526,8 +534,8 @@ async function run() {
     });
 
     await step(browser, '13', DESK, async ({ page, mx, my }) => {
-      await zoomDrag(page, mx, my, DOUBLE * 2, DOUBLE * 2);
-      // The first chunk of at least 35 rows: at ×4 a canvas holds 27, so its row 30 is on its second.
+      /** Every chunk in order, and the first of at least 35 rows — its row 30 is past the first screen
+       *  at 1:1, and at ×4 (27 rows a canvas) on the chunk's second canvas. */
       const chunks = (await page.evaluate(`(function () {
         var out = [];
         __wz.grid().querySelectorAll('[data-wall-chunk]').forEach(function (w) { out.push({ chunk: w.dataset.wallChunk, rows: Math.round(w.offsetHeight / +w.dataset.wallChunkCellh) }); });
@@ -536,24 +544,34 @@ async function run() {
       const k = chunks.findIndex((c) => c.rows >= 35);
       if (k < 0) fail('[13] setup: no chunk of 35 rows on the wall');
       const rowsBefore = chunks.slice(0, k).reduce((s, c) => s + c.rows, 0);
-      await page.locator('[role="grid"]').focus();
-      // the first press lands on the first tile; every ↓ after it is one row of the first column, across bands
-      for (let i = 0; i <= rowsBefore + 30; i++) await page.keyboard.press('ArrowDown');
-      await page.waitForTimeout(300);
-      // Name the cell the cursor was sent to by its hover card — before the pick, which puts the
-      // gradient in hand and switches the card off. The cell is put in the middle of the box by hand.
       const cell = `__wz.cellCentre(${JSON.stringify(chunks[k].chunk)}, 0, 30)`;
-      const c = (await page.evaluate(cell)) as { x: number; y: number };
-      await page.evaluate(`(function () { var g = __wz.grid(); g.scrollLeft = 0; g.scrollTop = Math.max(0, g.scrollTop + ${c.y} - (g.getBoundingClientRect().top + g.clientHeight / 2)); })()`);
-      await page.waitForTimeout(350);
-      const here = (await page.evaluate(cell)) as { x: number; y: number };
-      const name = await nameAt(page, Math.round(here.x), Math.round(here.y));
+      /** Home, then ↓ down the first column to row 30 of that chunk — one row a press, across bands —
+       *  and where the cell the cursor is now on sits against the wall's box. */
+      const walk = async (at: string) => {
+        await page.locator('[role="grid"]').focus();
+        await page.keyboard.press('Home');
+        for (let i = 0; i < rowsBefore + 30; i++) await page.keyboard.press('ArrowDown');
+        await page.waitForTimeout(300);
+        const c = (await page.evaluate(cell)) as { x: number; y: number };
+        const b = await view(page);
+        if (c.y < b.top || c.y > b.top + b.ch || c.x < b.left || c.x > b.left + b.cw) {
+          // either the wall did not follow the cursor, or the cursor is not on that row — the box is where the wall went
+          fail(`[13] ${at}: after Home and ${rowsBefore + 30} presses of ↓ the cursor belongs on row 30 of ${chunks[k].chunk}, and that cell is not in the wall's box — its centre is at (${Math.round(c.x)}, ${Math.round(c.y)}), the box is x ${Math.round(b.left)}–${Math.round(b.left + b.cw)}, y ${Math.round(b.top)}–${Math.round(b.top + b.ch)} (scroll ${Math.round(b.sl)},${Math.round(b.st)})`);
+        }
+        return c;
+      };
+      await walk('at 1:1');
+      await zoomDrag(page, mx, my, DOUBLE * 2, DOUBLE * 2);
+      const c = await walk('at ×4');
+      // Name the cell by its hover card BEFORE the pick, which puts the gradient in hand and
+      // switches the card off; then Enter has to pick that gradient.
+      const name = await nameAt(page, Math.round(c.x), Math.round(c.y));
       if (!name) fail('[13] setup: no hover card on the cell the cursor was sent to');
       await page.keyboard.press('Enter');
       await page.waitForTimeout(500);
       const input = (await page.evaluate('(function () { var i = window.__gxWorking().input; return { kind: i.kind, name: i.name }; })()')) as { kind: string; name?: string };
-      if (input.kind !== 'gradient' || input.name !== name) fail(`[13] ${rowsBefore + 31} presses of ↓ then Enter picked ${input.kind === 'gradient' ? `"${input.name}"` : 'nothing'}, and row 30 of ${chunks[k].chunk} — where the cursor should be — holds "${name}"`);
-      ok(`[13] the keyboard cursor at ×4: ${rowsBefore + 31} presses of ↓ are on row 30 of ${chunks[k].chunk} (its second canvas) — Enter picks "${name}"`);
+      if (input.kind !== 'gradient' || input.name !== name) fail(`[13] ↓ to row 30 of ${chunks[k].chunk} at ×4, then Enter, picked ${input.kind === 'gradient' ? `"${input.name}"` : 'nothing'} — the cell the cursor should be on holds "${name}"`);
+      ok(`[13] the keyboard cursor: ${rowsBefore + 30} presses of ↓ reach row 30 of ${chunks[k].chunk} and the wall follows it at 1:1 and at ×4 (there on the chunk's second canvas, and back across from where the zoom left the wall); Enter picks "${name}"`);
     });
   } finally {
     // An open browser keeps the process alive — a red would hang instead of exiting.
