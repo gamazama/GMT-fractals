@@ -5,14 +5,17 @@
  *   • within a group the sorted list fills COLUMN-MAJOR (k → col=⌊k/nrows⌋, row=k%nrows);
  *     a RANKED group (`PickerRow.rowMajor`, "More like this") fills ROW-major instead, so
  *     nearest-first reads left to right, top to bottom (grep cellOf / indexAt).
- *   • a group is split into CHUNKED canvases each capped at MAX_CANVAS_CSS_H so no
- *     single canvas exceeds the browser's max dimension (a huge ungrouped group in a
- *     narrow dock would otherwise be tens of thousands of px tall and hang the tab).
- *   • chunk canvases are VIRTUALIZED, not draw-once: an IntersectionObserver
- *     (rootMargin 500px) mounts and paints a chunk near the viewport and UNMOUNTS it
+ *   • a group is split into CHUNKS, each its own grid, so that no single canvas exceeds
+ *     the browser's max dimension (a huge ungrouped group in a narrow dock would otherwise
+ *     be tens of thousands of px tall and hang the tab). A chunk is sized from the tile AT
+ *     1:1 (`wallGeometry`), never from the zoom — the zoom only decides how many CANVASES
+ *     draw it, each a run of its rows capped at MAX_CANVAS_CSS_H (`SwatchChunk`). So a
+ *     zoom scales the wall and cannot move a tile to another cell.
+ *   • those canvases are VIRTUALIZED, not draw-once: an IntersectionObserver
+ *     (rootMargin 500px) mounts and paints one near the viewport and UNMOUNTS it
  *     once it scrolls away — toggling rather than latching, so a zoom step doesn't
- *     repaint every chunk ever seen. The wrapper div keeps its box so scroll space is
- *     reserved regardless. A chunk therefore repaints on each viewport re-entry, on a
+ *     repaint every canvas ever seen. The wrapper div keeps its box so scroll space is
+ *     reserved regardless. A canvas therefore repaints on each viewport re-entry, on a
  *     zoom commit (zoom scales swatchW/H, which are deps), and on a selection change —
  *     but never per frame, and never on a plain DOM scroll. Painting is one drawImage
  *     per swatch from the shared 256×N sprite; treat this effect as a hot path.
@@ -44,8 +47,22 @@
  *   tool's: N shapes painted, scrollTop still X" / "no tool: touch-action pan-y, a swipe
  *   scrolled the wall"). Falsified three ways, including one that leaves the declaration
  *   correct and breaks the pointer path.
- * @invariant a `zoomStep` leaves the tile under the viewport centre under the viewport
- *   centre — proven by: `npx tsx debug/test-palette-wallzoom.mts` (see `zoomStepPlan`).
+ * @invariant a zoom leaves the gradient that was grabbed where it was grabbed, at the same
+ *   spot inside its cell, at any depth and anywhere in the zoom range — the middle-drag and
+ *   the zoom tool about the point the button went down on, a `zoomStep` about the viewport
+ *   centre — proven by: `npx tsx debug/smoke-ge-wallzoom.mts` ("[1] deep in the wall, one
+ *   drag to ×2.83: … is still at the grab point" through "[7]" for the drag, "[8] mid-drag
+ *   at ×2 the grabbed point has not moved", "[11] the − / + step at depth: … stays under the
+ *   viewport centre"). WITHIN THE SCROLL RANGE: the wall is a bounded scroller, so a zoom
+ *   that brings one of its edges into the box stops at that edge and the wall grows or
+ *   shrinks from there (grep "bounded scroll") — a wall that fits its box has no range at
+ *   all. Until 2026-10-01 this line named only the step and cited the pure harness, which
+ *   proves the anchor's arithmetic and cannot see the wall; the wall re-flowed on a zoom and
+ *   the claim was false in the DOM (`wallGeometry` has what was wrong).
+ * @invariant what a canvas PAINTS at a point is what a hover, a click and the carve tools
+ *   find there, on every canvas of a chunk — proven by: `npx tsx debug/smoke-ge-wallzoom.mts`
+ *   ("[12] … on a later canvas: the tile painted is the one the hover names …, and a
+ *   zoom-tool tap picks it"; painting goes through `eachTile`, finding through `tileIndexAt`).
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -278,7 +295,7 @@ export interface PickerWallProps {
 }
 
 const LABEL_W = 132;
-// Chunk height cap. Smaller chunks = finer windowing: only the ~viewport-worth of chunks
+// Canvas height cap. Smaller canvases = finer windowing: only the ~viewport-worth of them
 // stay mounted, so a zoom step redraws a small area instead of one giant canvas. (Also
 // keeps the backing ×dpr well under the browser's max canvas dimension.)
 const MAX_CANVAS_CSS_H = 2200;
@@ -290,17 +307,28 @@ const PAINT_STEP = 6; // px stride when interpolating the brush path between mov
 
 type SelPhase = 'idle' | 'drawing' | 'chosen';
 
-/** A mounted swatch chunk registered for selection hit-testing (visible chunks only). */
-interface ChunkDesc {
+/**
+ * The rows ONE canvas draws: `nrows` rows of its chunk's grid, from `row0`. `entries` are the
+ * CHUNK's and `gridRows` is the chunk's whole row count — what `cellOf` / `indexAt` fill by —
+ * so a tile's cell is the chunk's business and the canvas only says which rows it holds.
+ */
+interface CanvasRows {
+  entries: readonly CatalogEntry[];
+  cols: number;
+  gridRows: number;
+  row0: number;
+  nrows: number;
+  rowMajor: boolean;
+}
+
+/** A mounted swatch canvas registered for selection hit-testing (visible canvases only). */
+interface ChunkDesc extends CanvasRows {
   el: HTMLCanvasElement;
   entries: CatalogEntry[];
-  cols: number;
-  nrows: number;
   cellW: number;
   cellH: number;
   swatchW: number;
   swatchH: number;
-  rowMajor: boolean;
 }
 
 /** The scheme's accent, for canvas strokes (the DOM gets it as a class). Read once per
@@ -321,11 +349,42 @@ const cellOf = (k: number, cols: number, nrows: number, rowMajor: boolean) =>
 const indexAt = (col: number, row: number, cols: number, nrows: number, rowMajor: boolean) =>
   rowMajor ? row * cols + col : col * nrows + row;
 
-/** How many tiles one chunk canvas of a band holds: every chunk of a band is full but its
- *  last. ONE rule, read by `GroupRow` when it slices a band and by the keyboard cursor when
- *  it walks one — a second copy is how the two would drift. */
-const chunkLenFor = (cols: number, cellH: number): number =>
-  Math.max(1, cols * Math.max(1, Math.floor(MAX_CANVAS_CSS_H / Math.max(1, cellH))));
+/** How many rows fit under the canvas height cap at a cell height. */
+const rowsUnderCap = (cellH: number): number => Math.max(1, Math.floor(MAX_CANVAS_CSS_H / Math.max(1, cellH)));
+
+/** How many tiles one chunk of a band holds: every chunk of a band is full but its last.
+ *  ONE rule, read by `GroupRow` when it slices a band and by the keyboard cursor when it
+ *  walks one — a second copy is how the two would drift. `cellH` is the cell AT 1:1
+ *  (`wallGeometry` is the only caller): a chunk sized from the zoomed cell re-slices every
+ *  band on a zoom, and a column-major band then re-fills (grep `wallGeometry`). */
+const chunkLenFor = (cols: number, cellH: number): number => Math.max(1, cols * rowsUnderCap(cellH));
+
+/**
+ * Every tile ONE canvas draws, in the chunk's own order: (index into the chunk, column, row
+ * ON THE CANVAS). The outer loop runs along the fill's slow axis, so the index only grows
+ * and the first one past the end ends the walk.
+ */
+const eachTile = (d: CanvasRows, fn: (k: number, col: number, row: number) => void): void => {
+  const n = d.entries.length;
+  const outerN = d.rowMajor ? d.nrows : d.cols;
+  const innerN = d.rowMajor ? d.cols : d.nrows;
+  for (let o = 0; o < outerN; o++) {
+    for (let i = 0; i < innerN; i++) {
+      const col = d.rowMajor ? i : o;
+      const row = d.rowMajor ? o : i;
+      const k = indexAt(col, d.row0 + row, d.cols, d.gridRows, d.rowMajor);
+      if (k >= n) return;
+      fn(k, col, row);
+    }
+  }
+};
+
+/** The chunk index of the tile ONE canvas draws at (col, row on the canvas), or -1 for none. */
+const tileIndexAt = (d: CanvasRows, col: number, row: number): number => {
+  if (col < 0 || row < 0 || row >= d.nrows || col >= d.cols) return -1;
+  const k = indexAt(col, d.row0 + row, d.cols, d.gridRows, d.rowMajor);
+  return k < d.entries.length ? k : -1;
+};
 
 /** A band as the keyboard cursor walks it: how many tiles, and which way they fill. */
 export interface CursorBand {
@@ -342,10 +401,11 @@ export type CursorKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
  * down the column), so there → moved DOWN and ↓ jumped five columns across (measured on All:
  * → twice from the start put the ring on column 1, row 3).
  *
- * What the wall draws, top to bottom, is a stack of grids: each band is sliced into chunk
- * canvases of `chunkLen` tiles, each chunk is `cols` wide and `ceil(n / cols)` rows tall,
- * and its tiles fill row- or column-major (`cellOf` / `indexAt`). Every row of every chunk
- * holds a PREFIX of the columns, whichever the fill. So:
+ * What the wall draws, top to bottom, is a stack of grids: each band is sliced into chunks
+ * of `chunkLen` tiles (the wall's, sized at 1:1 — `wallGeometry`), each chunk is `cols` wide
+ * and `ceil(n / cols)` rows tall, and its tiles fill row- or column-major (`cellOf` /
+ * `indexAt`). How many canvases draw a chunk is not the cursor's business. Every row of
+ * every chunk holds a PREFIX of the columns, whichever the fill. So:
  *   • ← / → move one column along the row the cursor is on, and wrap onto the previous /
  *     next row (its last / first tile) — for a row-major band that is exactly ±1;
  *   • ↑ / ↓ move one row, across chunk and band edges, to the tile in the NEAREST column
@@ -357,7 +417,8 @@ export type CursorKey = 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown';
  * @invariant ← / → / ↑ / ↓ move in the grid the wall DRAWS — a column-major band's → goes
  *   across, not down; ↓ crosses into the next chunk and band at the nearest column; a
  *   row-major band's ← / → are ±1 — proven by: `npx tsx debug/test-palette-wallzoom.mts`
- *   ("[7] the keyboard cursor steps in grid space").
+ *   ("[7] the keyboard cursor steps in grid space"), and that the `chunkLen` it is handed is
+ *   the one the wall draws by, at a zoom, by `npx tsx debug/smoke-ge-wallzoom.mts` ("[13]").
  */
 export const stepCursor = (
   bands: readonly CursorBand[],
@@ -471,8 +532,9 @@ const mergeRows = (groups: PickerGroup[], cols: number): PickerGroup[] => {
 
 type Hover = { entry: CatalogEntry; ex: number; ey: number; ew: number; eh: number };
 
-/** One bounded canvas: `entries` laid out column-major into cols×nrows. */
-const SwatchCanvas: React.FC<{
+/** What a chunk and each of its canvases are both told. */
+interface SwatchChunkProps {
+  /** The CHUNK's tiles — one slice of a band, laid out into its own cols × rows grid. */
   entries: CatalogEntry[];
   sprite: HTMLCanvasElement;
   cols: number;
@@ -499,24 +561,24 @@ const SwatchCanvas: React.FC<{
   startIndex?: number;
   /** Report where a dragged gradient would be inserted, as a band-relative index. */
   onInsertAt?: (index: number) => void;
-  /** Draw the insertion caret before this band-relative index (null = none). */
-  caret?: number | null;
-}> = ({ entries, sprite, cols, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, chunkKey, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false, startIndex = 0, onInsertAt, caret = null }) => {
+}
+
+/** One bounded canvas: rows `row0 … row0 + nrows − 1` of its chunk's cols × gridRows grid. */
+const SwatchCanvas: React.FC<SwatchChunkProps & { gridRows: number; row0: number; nrows: number }> = ({ entries, sprite, cols, gridRows, row0, nrows, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, chunkKey, onHover, onPick, onEntryContextMenu, onEntryDragStart, onRegister, toolActive, tileRadius = 0, rowMajor = false, startIndex = 0, onInsertAt }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [visible, setVisible] = useState(false);
   const cellW = swatchW + gap;
   const cellH = swatchH + gap;
-  const nrows = Math.max(1, Math.ceil(entries.length / cols));
   // Keep the trailing cell gap: it's what spaces this canvas from the next bucket's rows,
   // so the `gap` (Padding) is uniform between EVERY row — within a canvas and across bucket
   // boundaries alike. At gap = 0 it's pixel-flush; raising Padding spaces all rows equally.
   const cssW = cols * cellW;
   const cssH = nrows * cellH;
 
-  // Virtualize: only mount + draw this chunk's canvas while it's near the viewport, and
+  // Virtualize: only mount + draw this canvas while it's near the viewport, and
   // UNMOUNT it once it scrolls away. Toggling (not latching) is what keeps zooming cheap —
-  // otherwise every chunk ever seen stays mounted and redraws on each zoom step. The
+  // otherwise every canvas ever seen stays mounted and redraws on each zoom step. The
   // wrapper div keeps its width/height so scroll space is reserved either way.
   useEffect(() => {
     const el = wrapRef.current;
@@ -544,8 +606,13 @@ const SwatchCanvas: React.FC<{
     // radius is capped at a THIRD of the tile's short side so a thin tile stays a rounded
     // bar, not a pill (measured 2026-09-07: 8 px on an 18 px tile read as pills).
     const r = Math.min(tileRadius, swatchW / 3, swatchH / 3);
-    for (let k = 0; k < entries.length; k++) {
-      const { col, row } = cellOf(k, cols, nrows, rowMajor);
+    const rows: CanvasRows = { entries, cols, gridRows, row0, nrows, rowMajor };
+    /** Where a tile of the chunk sits ON THIS CANVAS, or null when another canvas draws it. */
+    const cellHere = (k: number): { col: number; row: number } | null => {
+      const c = cellOf(k, cols, gridRows, rowMajor);
+      return c.row >= row0 && c.row < row0 + nrows ? { col: c.col, row: c.row - row0 } : null;
+    };
+    eachTile(rows, (k, col, row) => {
       if (r > 0) {
         ctx.save();
         ctx.beginPath();
@@ -554,7 +621,7 @@ const SwatchCanvas: React.FC<{
       }
       ctx.drawImage(sprite, 0, entries[k].row, 256, 1, col * cellW, row * cellH, swatchW, swatchH);
       if (r > 0) ctx.restore();
-    }
+    });
     // The selected swatch ENLARGES IN PLACE: redrawn last (on top of its neighbours),
     // oversized + centred on its cell, with a drop-shadow lift + a thin cyan ring. Clamped
     // to the canvas so a cell at a chunk edge isn't clipped. This is the wall's
@@ -565,9 +632,9 @@ const SwatchCanvas: React.FC<{
     // inside the tile's edge so it never overlaps a neighbour at the small sizes; a dark
     // hairline just inside it keeps it legible on a ramp near the accent's own hue.
     const selIdx = selectedId ? entries.findIndex((e) => e.id === selectedId) : -1;
-    if (selIdx >= 0) {
-      const { col, row } = cellOf(selIdx, cols, nrows, rowMajor);
-      const x = col * cellW, y = row * cellH;
+    const selCell = selIdx >= 0 ? cellHere(selIdx) : null;
+    if (selCell) {
+      const x = selCell.col * cellW, y = selCell.row * cellH;
       const r = Math.min(tileRadius, swatchW / 3, swatchH / 3);
       const ring = (inset: number, style: string, width: number) => {
         ctx.strokeStyle = style;
@@ -588,9 +655,8 @@ const SwatchCanvas: React.FC<{
       const rr = Math.min(tileRadius, swatchW / 3, swatchH / 3);
       ctx.strokeStyle = accentColour();
       ctx.lineWidth = 2;
-      for (let k = 0; k < entries.length; k++) {
-        if (!selectedIds.has(entries[k].id)) continue;
-        const { col, row } = cellOf(k, cols, nrows, rowMajor);
+      eachTile(rows, (k, col, row) => {
+        if (!selectedIds.has(entries[k].id)) return;
         const x = col * cellW, y = row * cellH;
         ctx.beginPath();
         if (rr > 0) roundRectPath(ctx, x + 1, y + 1, swatchW - 2, swatchH - 2, Math.max(0, rr - 1));
@@ -602,14 +668,14 @@ const SwatchCanvas: React.FC<{
         ctx.fillStyle = accentColour();
         ctx.fill();
         ctx.restore();
-      }
+      });
     }
     // The KEYBOARD cursor, when it is somewhere other than the pick: a thinner ring in the
     // foreground colour, so "where the keys are" and "what is picked" never look the same.
     const focIdx = focusedId && focusedId !== selectedId ? entries.findIndex((e) => e.id === focusedId) : -1;
-    if (focIdx >= 0) {
-      const { col, row } = cellOf(focIdx, cols, nrows, rowMajor);
-      const x = col * cellW, y = row * cellH;
+    const focCell = focIdx >= 0 ? cellHere(focIdx) : null;
+    if (focCell) {
+      const x = focCell.col * cellW, y = focCell.row * cellH;
       const rr = Math.min(tileRadius, swatchW / 3, swatchH / 3);
       const ring2 = (inset: number, style: string, width: number) => {
         ctx.strokeStyle = style;
@@ -622,31 +688,33 @@ const SwatchCanvas: React.FC<{
       ring2(1, 'rgba(0,0,0,0.5)', 2.5);
       ring2(1, '#fff', 1.5);
     }
-  }, [visible, entries, sprite, cols, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId, focusedId, selectedIds, rowMajor, tileRadius]);
+  }, [visible, entries, sprite, cols, gridRows, row0, nrows, cellW, cellH, swatchW, swatchH, cssW, cssH, selectedId, focusedId, selectedIds, rowMajor, tileRadius]);
 
-  // Register this chunk for selection hit-testing while it's mounted; deregister on unmount
-  // / when it scrolls away. The registry therefore only ever holds on-screen chunks → the
-  // selection sees exactly what the user sees (off-screen swatches are unmounted).
+  // Register this canvas for selection hit-testing while it's mounted; deregister on unmount
+  // / when it scrolls away. The registry therefore only ever holds on-screen canvases → the
+  // selection sees exactly what the user sees (off-screen swatches are unmounted). Keyed by
+  // the chunk AND the first row, since one chunk may be drawn by several canvases.
+  const regKey = `${chunkKey}@${row0}`;
   useEffect(() => {
     if (!visible) return;
     const el = canvasRef.current;
     if (!el) return;
-    onRegister(chunkKey, { el, entries, cols, nrows, cellW, cellH, swatchW, swatchH, rowMajor });
-    return () => onRegister(chunkKey, null);
-  }, [visible, chunkKey, entries, cols, nrows, cellW, cellH, swatchW, swatchH, onRegister, rowMajor]);
+    onRegister(regKey, { el, entries, cols, gridRows, row0, nrows, cellW, cellH, swatchW, swatchH, rowMajor });
+    return () => onRegister(regKey, null);
+  }, [visible, regKey, entries, cols, gridRows, row0, nrows, cellW, cellH, swatchW, swatchH, onRegister, rowMajor]);
 
   // Use getBoundingClientRect + clientX/Y (NOT offsetX/Y): under a CSS-transformed
   // ancestor (floating DraggableWindow uses translate), offsetX/Y is reported against
   // the untransformed layout, so picks land on the wrong swatch (offset by the translate).
+  // `row` is the row ON THIS CANVAS — what the hover box is positioned by.
   const hit = (e: React.MouseEvent): { entry: CatalogEntry; col: number; row: number } | null => {
     const cv = canvasRef.current;
     if (!cv) return null;
     const rect = cv.getBoundingClientRect();
     const col = Math.floor((e.clientX - rect.left) / cellW);
     const row = Math.floor((e.clientY - rect.top) / cellH);
-    if (col < 0 || row < 0 || row >= nrows || col >= cols) return null;
-    const k = indexAt(col, row, cols, nrows, rowMajor);
-    if (k < 0 || k >= entries.length) return null;
+    const k = tileIndexAt({ entries, cols, gridRows, row0, nrows, rowMajor }, col, row);
+    if (k < 0) return null;
     return { entry: entries[k], col, row };
   };
 
@@ -669,43 +737,12 @@ const SwatchCanvas: React.FC<{
     const row = Math.max(0, Math.min(nrows - 1, Math.floor(y / cellH)));
     const rawCol = x / cellW;
     const col = Math.max(0, Math.min(cols, Math.round(rawCol)));
-    const k = Math.max(0, Math.min(entries.length, row * cols + col));
+    const k = Math.max(0, Math.min(entries.length, (row0 + row) * cols + col));
     return startIndex + k;
   };
 
-  /** The caret's px position inside this chunk, or null when it belongs to another one. */
-  const caretBox = (): { left: number; top: number } | null => {
-    if (caret == null || !rowMajor) return null;
-    const k = caret - startIndex;
-    if (k < 0 || k > entries.length) return null;
-    // Past the last tile: park it just after it rather than at the start of a phantom row.
-    const at = Math.min(k, entries.length);
-    const row = Math.min(nrows - 1, Math.floor(at / cols));
-    const col = at - row * cols;
-    return { left: col * cellW - gap / 2, top: row * cellH };
-  };
-
-  const cb = caretBox();
   return (
-    <div
-      ref={wrapRef}
-      className="relative"
-      data-wall-chunk={chunkKey}
-      data-wall-chunk-start={startIndex}
-      data-wall-chunk-cols={cols}
-      data-wall-chunk-cellw={cellW}
-      data-wall-chunk-cellh={cellH}
-      data-wall-chunk-rowmajor={rowMajor ? '1' : ''}
-      style={{ width: cssW, height: cssH }}
-    >
-      {cb && (
-        <div
-          aria-hidden
-          data-wall-caret=""
-          className="absolute z-10 pointer-events-none rounded-full bg-accent-300"
-          style={{ left: cb.left, top: cb.top, width: 2, height: swatchH }}
-        />
-      )}
+    <div ref={wrapRef} style={{ width: cssW, height: cssH }}>
       {visible && (
         <canvas
           ref={canvasRef}
@@ -768,12 +805,79 @@ const SwatchCanvas: React.FC<{
   );
 };
 
+/**
+ * One CHUNK of a band: `entries` laid out into its own cols × nrows grid (column-major; a
+ * ranked band row-major), and drawn by as many canvases as the height cap asks for AT THE
+ * CELL AS DRAWN — each a run of the grid's rows.
+ *
+ * The two are kept apart on purpose. Which cell a tile sits in is decided by the chunk
+ * (sized at 1:1, so the same at every zoom); how the chunk is cut into canvases is a
+ * drawing matter that follows the zoom. Until 2026-10-01 the chunk WAS the canvas, so the
+ * cap re-sliced a band as the tile grew, and a column-major band re-filled: on the All
+ * wall a 2,567-tile band went from one 50-row grid to 37 + 13 rows at ×2.83 and the tile
+ * under the pointer moved nine columns and 21 rows.
+ *
+ * The wrapper carries the chunk's geometry as data attributes for `revealIndex`.
+ */
+const SwatchChunk: React.FC<SwatchChunkProps & {
+  /** Draw the insertion caret before this band-relative index (null = none). */
+  caret?: number | null;
+}> = ({ caret = null, ...p }) => {
+  const { entries, cols, swatchW, swatchH, gap, chunkKey, rowMajor = false, startIndex = 0 } = p;
+  const cellW = swatchW + gap;
+  const cellH = swatchH + gap;
+  const nrows = Math.max(1, Math.ceil(entries.length / cols));
+  const perCanvas = rowsUnderCap(cellH);
+  const firstRows: number[] = [];
+  for (let r = 0; r < nrows; r += perCanvas) firstRows.push(r);
+
+  /** The caret's px position inside this chunk, or null when it belongs to another one. */
+  const caretBox = (): { left: number; top: number } | null => {
+    if (caret == null || !rowMajor) return null;
+    const k = caret - startIndex;
+    if (k < 0 || k > entries.length) return null;
+    // Past the last tile: park it just after it rather than at the start of a phantom row.
+    const at = Math.min(k, entries.length);
+    const row = Math.min(nrows - 1, Math.floor(at / cols));
+    const col = at - row * cols;
+    return { left: col * cellW - gap / 2, top: row * cellH };
+  };
+
+  const cb = caretBox();
+  return (
+    <div
+      className="relative"
+      data-wall-chunk={chunkKey}
+      data-wall-chunk-start={startIndex}
+      data-wall-chunk-cols={cols}
+      data-wall-chunk-cellw={cellW}
+      data-wall-chunk-cellh={cellH}
+      data-wall-chunk-rowmajor={rowMajor ? '1' : ''}
+      style={{ width: cols * cellW, height: nrows * cellH }}
+    >
+      {cb && (
+        <div
+          aria-hidden
+          data-wall-caret=""
+          className="absolute z-10 pointer-events-none rounded-full bg-accent-300"
+          style={{ left: cb.left, top: cb.top, width: 2, height: swatchH }}
+        />
+      )}
+      {firstRows.map((row0, i) => (
+        <SwatchCanvas key={i} {...p} gridRows={nrows} row0={row0} nrows={Math.min(perCanvas, nrows - row0)} />
+      ))}
+    </div>
+  );
+};
+
 // memo: with stable callbacks + a memoised `rows` array, hovering a swatch (which
 // re-renders the wall to move the preview) skips re-rendering every group.
-const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, labels, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, spaciousBands, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
+const GroupRow = React.memo(function GroupRow({ group, sprite, cols, chunkLen, labelW, labels, swatchW, swatchH, gap, selectedId, focusedId, selectedIds, spaciousBands, onHover, onPick, onEntryContextMenu, onEntryDragStart, onBandDrop, canBandDrop, onRegister, toolActive, tileRadius }: {
   group: PickerGroup;
   sprite: HTMLCanvasElement;
   cols: number;
+  /** How many tiles one chunk of the band holds — the wall's, sized at 1:1 (`wallGeometry`). */
+  chunkLen: number;
   labelW: number;
   /** Draw the row labels in the gutter — decided by the wall from the gutter the host ASKED
    *  for, not from `labelW`, which `minGutter` may have raised to clear a floating toolbar. */
@@ -829,8 +933,6 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, lab
         },
       }
     : {};
-  const cellH = swatchH + gap;
-  const chunkLen = chunkLenFor(cols, cellH);
   const chunks: CatalogEntry[][] = [];
   for (let i = 0; i < group.entries.length; i += chunkLen) chunks.push(group.entries.slice(i, i + chunkLen));
 
@@ -873,7 +975,7 @@ const GroupRow = React.memo(function GroupRow({ group, sprite, cols, labelW, lab
         </div>
         <div className="flex flex-col">
           {chunks.map((chunk, ci) => (
-          <SwatchCanvas
+          <SwatchChunk
             key={ci}
             chunkKey={`${group.key}#${ci}`}
             entries={chunk}
@@ -921,9 +1023,76 @@ export const clampWallZoom = (z: number): number => Math.min(ZOOM_MAX, Math.max(
 const gapForTile = (floor: number, w: number): number => Math.max(floor, Math.round(w / 14));
 
 /**
+ * The tile and the gap between tiles AS DRAWN at a zoom. ONE rule: the layout, the commit
+ * maths and the 1:1 grid all size a tile through this, so they cannot round differently.
+ */
+const tileAtZoom = (swatchW: number, swatchH: number, gap: number, zx: number, zy: number): { w: number; h: number; gap: number } => {
+  const w = Math.max(1, Math.round(swatchW * zx));
+  const h = Math.max(1, Math.round(swatchH * zy));
+  return { w, h, gap: gapForTile(gap, w) };
+};
+
+/**
+ * The wall's geometry at a zoom, in the two halves a zoom has to keep apart:
+ *
+ *   • what SCALES — the tile and the gap as drawn (`ewW`, `ewH`, `effGap`), and with them
+ *     the content width. The gap grows with the tile as DRAWN — zoomed in, or grown because
+ *     the set is small (owner, 2026-09-08: "when the wall is zoomed in, or with fewer tiles,
+ *     there should be more padding between gradients"). The host's `gap` (Padding) is the
+ *     floor; a 32 px tile keeps 2 px, a 96 px tile gets 7, a 192 px tile 14.
+ *   • what does NOT — the GRID those tiles fill: `cols`, and `chunkLen`, the number of tiles
+ *     one chunk of a band holds. Both are sized from the tile AT 1:1.
+ *
+ * `cols` is derived from the BASE swatch width, so a zoom never reflows the grid — it only
+ * widens the swatches + the content, which then scrolls. The squarish reflow applies to the
+ * WHOLE wall when it is small enough to otherwise be just a few full-width strips: one
+ * count for the wall, so many small blocks each a couple of rows still tile uniformly (and
+ * a content-heavy wall is a no-op: it stays full width).
+ *
+ * Until 2026-10-01 both the squaring and the chunk length read the ZOOMED cell, so a zoom
+ * was not a scale of the wall: the chunk length re-sliced every band taller than the canvas
+ * cap (see `SwatchChunk`), and a one-axis zoom changed a small wall's column count (a
+ * 31-tile wall went 7 → 10 columns on ×2 in height alone). Either moves the grabbed tile to
+ * a cell the commit's scroll cannot follow.
+ *
+ * @invariant `cols` and `chunkLen` do not depend on `zoom`: a tile is in the same chunk,
+ *   column and row at every zoom — proven by: `npx tsx debug/test-palette-wallzoom.mts`
+ *   ("[8] a zoom scales the wall and never re-flows it") and, in the DOM, by
+ *   `npx tsx debug/smoke-ge-wallzoom.mts` (the chunk length: "[1] … its band is 50 rows
+ *   before and 50 after", "[7] an ungrouped wall, ×4 in chunk …", "[11]"; the columns: "[10] a
+ *   squared-up wall of 7 columns keeps its columns and rows through one-axis zooms").
+ */
+export const wallGeometry = (p: {
+  /** The wall's width and its label gutter (px). */
+  width: number;
+  labelW: number;
+  swatchW: number;
+  swatchH: number;
+  gap: number;
+  /** Tiles on the whole wall — what the squarish reflow decides from. */
+  total: number;
+  zoom: { x: number; y: number };
+}): { ewW: number; ewH: number; effGap: number; cols: number; chunkLen: number; contentWidth: number } => {
+  const baseGap = gapForTile(p.gap, p.swatchW);
+  const fullCols = Math.max(1, Math.floor((p.width - p.labelW - baseGap) / (p.swatchW + baseGap)));
+  const at1 = tileAtZoom(p.swatchW, p.swatchH, p.gap, 1, 1);
+  const cellW1 = at1.w + at1.gap;
+  const cellH1 = at1.h + at1.gap;
+  const cols = shouldSquare(p.total, fullCols, cellW1, cellH1) ? squareCols(p.total, cellW1, cellH1, fullCols) : fullCols;
+  const t = tileAtZoom(p.swatchW, p.swatchH, p.gap, p.zoom.x, p.zoom.y);
+  return { ewW: t.w, ewH: t.h, effGap: t.gap, cols, chunkLen: chunkLenFor(cols, cellH1), contentWidth: p.labelW + cols * (t.w + t.gap) };
+};
+
+/**
  * What a zoom commit needs to put the anchored point back where it was: where it sat in the
- * viewport (`relX/relY`), where it sat in the content (`ax`, and the header/swatch split of
- * `ay` — headers are fixed-height and do NOT scale), and the zoom it was anchored at.
+ * viewport (`relX/relY`), where it sat in the content (`ax`, and the fixed/swatch split of
+ * `ay`), and the zoom it was anchored at.
+ *
+ * `fixedAbove` is every px above the anchor that does NOT scale with the zoom: the scroll
+ * box's own top padding and the fixed-height header bands. `swatchAbove` is the rest — rows
+ * of tiles, which do. (The field was `headerAbove` and counted the headers alone until
+ * 2026-10-01; the 12 px of padding rode in `swatchAbove` and was scaled with the tiles, so
+ * the pin drifted by 12 × (ratio − 1) px — 13 px at ×2, 183 px at ×16, more than half a tile.)
  */
 export interface WallZoomAnchor {
   relX: number;
@@ -931,7 +1100,7 @@ export interface WallZoomAnchor {
   ax: number;
   czx: number;
   czy: number;
-  headerAbove: number;
+  fixedAbove: number;
   swatchAbove: number;
 }
 
@@ -940,16 +1109,20 @@ export interface WallZoomAnchor {
  * pins the point under the centre. Returns null when the clamp makes it a no-op (already
  * at a limit), so the caller does not commit a zoom that is not a change.
  *
- * `headerAbove` is the summed height of the fixed category-header bands above the anchor —
- * measured from the DOM by the caller, since only it can see them.
+ * `fixedAbove` is measured from the DOM by the caller, since only it can see the headers
+ * and the padding (see `WallZoomAnchor`).
  *
- * @invariant a step by `factor` leaves the tile under the viewport centre under the viewport
- *   centre — proven by: `npx tsx debug/test-palette-wallzoom.mts` ("the tile under the centre
- *   is the same tile after the step"), which composes this with `pinnedContentPoint`.
+ * @invariant on a wall that only SCALES, a step by `factor` leaves the row and column under
+ *   the viewport centre under the viewport centre — proven by:
+ *   `npx tsx debug/test-palette-wallzoom.mts` ("the tile under the centre is the same tile
+ *   after the step"), which composes this with `pinnedContentPoint`. That harness is
+ *   arithmetic: it cannot see whether the wall did only scale, and it stayed green while a
+ *   zoom re-flowed the bands under it. The claim about the wall as drawn is `wallGeometry`'s
+ *   and the file header's, and those name a browser guard.
  */
 export const zoomStepPlan = (
   view: { scrollLeft: number; scrollTop: number; clientWidth: number; clientHeight: number },
-  headerAbove: number,
+  fixedAbove: number,
   cur: { x: number; y: number },
   factor: number,
 ): { anchor: WallZoomAnchor; next: { x: number; y: number } } | null => {
@@ -959,7 +1132,7 @@ export const zoomStepPlan = (
   const relY = view.clientHeight / 2;
   const ax = view.scrollLeft + relX;
   const ay = view.scrollTop + relY;
-  return { anchor: { relX, relY, ax, czx: cur.x, czy: cur.y, headerAbove, swatchAbove: ay - headerAbove }, next };
+  return { anchor: { relX, relY, ax, czx: cur.x, czy: cur.y, fixedAbove, swatchAbove: ay - fixedAbove }, next };
 };
 
 /**
@@ -975,12 +1148,10 @@ export const pinnedContentPoint = (
   a: WallZoomAnchor,
   g: { labelW: number; swatchW: number; swatchH: number; ewW: number; ewH: number; effGap: number; gap: number },
 ): { contentX: number; contentY: number } => {
-  const ewWStart = Math.max(1, Math.round(g.swatchW * a.czx));
-  const ewHStart = Math.max(1, Math.round(g.swatchH * a.czy));
-  const gapStart = gapForTile(g.gap, ewWStart);
+  const start = tileAtZoom(g.swatchW, g.swatchH, g.gap, a.czx, a.czy);
   return {
-    contentX: g.labelW + (a.ax - g.labelW) * ((g.ewW + g.effGap) / (ewWStart + gapStart)),
-    contentY: a.headerAbove + a.swatchAbove * ((g.ewH + g.effGap) / (ewHStart + gapStart)),
+    contentX: g.labelW + (a.ax - g.labelW) * ((g.ewW + g.effGap) / (start.w + start.gap)),
+    contentY: a.fixedAbove + a.swatchAbove * ((g.ewH + g.effGap) / (start.h + start.gap)),
   };
 };
 
@@ -1051,28 +1222,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // so it must not switch the labels on: deciding from `labelW` drew a lone "(5)" in the
   // margin of every set, which asks for 24 and is floored to 52 (G09, 2026-09-24).
   const drawLabels = askedGutter >= 28;
-  // cols is derived from the BASE swatch width (NOT the zoom), so horizontal zoom never
-  // reflows the grid — it only widens the swatches + the content, which then scrolls.
-  // The gap between tiles grows with the tile as DRAWN — zoomed in, or grown because the
-  // set is small (owner, 2026-09-08: "when the wall is zoomed in, or with fewer tiles,
-  // there should be more padding between gradients"). The host's `gap` (Padding) is the
-  // floor; a 32 px tile keeps 2 px, a 96 px tile gets 7, a 192 px tile 14.
-  const gapAt = (w: number) => gapForTile(gap, w);
-  const baseGap = gapAt(swatchW);
-  const cols = Math.max(1, Math.floor((width - labelW - baseGap) / (swatchW + baseGap)));
-  // Effective (zoomed) swatch render size + the resulting content width.
-  const ewW = Math.max(1, Math.round(swatchW * zoom.x));
-  const ewH = Math.max(1, Math.round(swatchH * zoom.y));
-  // Global squarish reflow: when the WHOLE wall is small enough to otherwise be just a few
-  // full-width strips, drop the (global) column count so the overall layout is squarish.
-  // It's a single count for the wall — many small blocks each a couple of rows still tile
-  // uniformly (and a content-heavy wall is a no-op: it stays full width).
+  // The effective (zoomed) swatch render size + the resulting content width, and the grid
+  // those swatches fill — `effCols` and `chunkLen`, which a zoom does not change.
   const totalEntries = groups.reduce((s, g) => s + g.entries.length, 0);
-  const effGap = gapAt(ewW);
-  const effCols = shouldSquare(totalEntries, cols, ewW + effGap, ewH + effGap)
-    ? squareCols(totalEntries, ewW + effGap, ewH + effGap, cols)
-    : cols;
-  const contentWidth = labelW + effCols * (ewW + effGap);
+  const { ewW, ewH, effGap, cols: effCols, chunkLen, contentWidth } = wallGeometry({ width, labelW, swatchW, swatchH, gap, total: totalEntries, zoom });
   // Merge sparse adjacent buckets that still fit one row (memoised — hover re-renders the
   // wall, and this walks every group).
   const rows = useMemo(() => mergeRows(groups, effCols), [groups, effCols]);
@@ -1082,11 +1235,15 @@ export const PickerWall: React.FC<PickerWallProps> = ({
   // a zoom drag the content wrapper is scaled with a CSS transform around the grabbed point
   // — cheap (GPU), exact, and it touches neither React state nor scroll. On release we
   // commit ONCE: re-render the swatches crisp at the new size and set the real scroll so
-  // the grabbed swatch lands exactly where it was, accounting for the fixed-height category
-  // headers (which don't scale, so the swatch content above the cursor scales but they don't).
+  // the grabbed swatch lands exactly where it was, accounting for what does NOT scale above
+  // it — the scroll box's top padding and the fixed-height category headers (the swatch
+  // content above the cursor scales but they don't).
   const contentRef = useRef<HTMLDivElement>(null);
   const drag = useRef<
-    | { mode: 'zoom'; sx: number; sy: number; czx: number; czy: number; ax: number; ay: number; relX: number; relY: number; headerAbove: number; swatchAbove: number; lzx: number; lzy: number;
+    | { mode: 'zoom'; sx: number; sy: number; czx: number; czy: number; ax: number; ay: number; relX: number; relY: number; fixedAbove: number; swatchAbove: number; lzx: number; lzy: number;
+        /** Where the content box starts inside the scroll box (its top padding) — the
+         *  origin the live transform scales about. */
+        inset: number;
         /** The ZOOM TOOL started this (a left press), not a middle-click. A tap then picks
          *  the gradient under it instead of resetting the view — see `endDrag`. */
         viaTool: boolean }
@@ -1094,7 +1251,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     | null
   >(null);
   const dragging = useRef(false);
-  const commit = useRef<null | { relX: number; relY: number; ax: number; czx: number; czy: number; headerAbove: number; swatchAbove: number }>(null);
+  const commit = useRef<null | WallZoomAnchor>(null);
   const rafCoords = useRef<{ x: number; y: number } | null>(null);
   const rafId = useRef(0);
 
@@ -1199,10 +1356,9 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const r = d.el.getBoundingClientRect();
       const baseX = r.left - host.left;
       const baseY = r.top - host.top;
-      for (let k = 0; k < d.entries.length; k++) {
-        const { col, row } = cellOf(k, d.cols, d.nrows, d.rowMajor);
+      eachTile(d, (k, col, row) => {
         out.push({ id: d.entries[k].id, cx: baseX + col * d.cellW + d.swatchW / 2, cy: baseY + row * d.cellH + d.swatchH / 2 });
-      }
+      });
     }
     return out;
   };
@@ -1217,9 +1373,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) continue;
       const col = Math.floor((cx - r.left) / d.cellW);
       const row = Math.floor((cy - r.top) / d.cellH);
-      if (col < 0 || row < 0 || row >= d.nrows || col >= d.cols) continue;
-      const k = indexAt(col, row, d.cols, d.nrows, d.rowMajor);
-      if (k < 0 || k >= d.entries.length) continue;
+      const k = tileIndexAt(d, col, row);
+      if (k < 0) continue;
       return { id: d.entries[k].id, entry: d.entries[k], box: { x: r.left - host.left + col * d.cellW, y: r.top - host.top + row * d.cellH, w: d.swatchW, h: d.swatchH } };
     }
     return null;
@@ -1243,8 +1398,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const rowMax = Math.min(d.nrows - 1, Math.floor((ly + r) / d.cellH));
       for (let col = colMin; col <= colMax; col++) {
         for (let row = rowMin; row <= rowMax; row++) {
-          const k = indexAt(col, row, d.cols, d.nrows, d.rowMajor);
-          if (k < 0 || k >= d.entries.length) continue;
+          const k = tileIndexAt(d, col, row);
+          if (k < 0) continue;
           const ccx = col * d.cellW + d.swatchW / 2;
           const ccy = row * d.cellH + d.swatchH / 2;
           if (Math.hypot(lx - ccx, ly - ccy) > r) continue;
@@ -1393,21 +1548,27 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // else: a stray click with nothing selected — ignore.
   };
 
+  /** Where the content box starts inside the scroll box: the scroll box's own top padding
+   *  (the `pt` on it, see the JSX). It sits OUTSIDE the content, so no zoom scales it. */
+  const contentInset = (el: HTMLDivElement): number => parseFloat(getComputedStyle(el).paddingTop) || 0;
+
   /**
-   * Sum the fixed-height category-header bands above a content-y (one-time, at grab). They
-   * do NOT scale with the zoom, so the swatch content above the anchor scales and they don't
-   * — which is the whole reason the commit anchor carries the two apart.
+   * Sum what does NOT scale above a content-y (one-time, at grab): the scroll box's top
+   * padding and the fixed-height category-header bands. The swatch content above the anchor
+   * scales and these don't — which is the whole reason the commit anchor carries the two
+   * apart. Every header is in the DOM whatever is mounted (`GroupRow` draws it; only the
+   * canvases are virtualized), so the sum is complete at any depth.
    */
-  const headersAbove = (el: HTMLDivElement, ay: number): number => {
+  const fixedAbove = (el: HTMLDivElement, ay: number): number => {
     const rect = el.getBoundingClientRect();
-    let headerAbove = 0;
+    let fixed = Math.min(Math.max(ay, 0), contentInset(el));
     el.querySelectorAll('[data-wall-header]').forEach((h) => {
       const r = (h as HTMLElement).getBoundingClientRect();
       const top = r.top - rect.top + el.scrollTop;
-      if (top + r.height <= ay) headerAbove += r.height;
-      else if (top < ay) headerAbove += ay - top;
+      if (top + r.height <= ay) fixed += r.height;
+      else if (top < ay) fixed += ay - top;
     });
-    return headerAbove;
+    return fixed;
   };
 
   const applyLiveZoom = (clientX: number, clientY: number) => {
@@ -1424,14 +1585,26 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     // pan like a bounded scroll: the effective offset stays in [0, scaledContent − viewport].
     // Without this, zooming OUT leaves an empty gutter on the left/top that the (clamped)
     // commit then snaps away — the "pop". sl0/st0 are the real scroll at grab (unchanged here).
+    // The origin is the CONTENT box's, which sits `inset` px down the scroll box: the grabbed
+    // point is `ay − inset` in the content's own coordinates, and scaling it from `ay` slid
+    // the wall up under the pointer by inset × (scale − 1) as the drag went on.
     const sl0 = d.ax - d.relX, st0 = d.ay - d.relY;
     const effX = Math.min(Math.max(sl0 - d.ax * (1 - sx), 0), Math.max(0, contentWidth * sx - el.clientWidth));
-    const effY = Math.min(Math.max(st0 - d.ay * (1 - sy), 0), Math.max(0, el.scrollHeight * sy - el.clientHeight));
+    const effY = Math.min(Math.max(st0 - (d.ay - d.inset) * (1 - sy), 0), Math.max(0, el.scrollHeight * sy - el.clientHeight));
     cw.style.transform = `translate(${sl0 - effX}px, ${st0 - effY}px) scale(${sx}, ${sy})`;
   };
 
   // Commit: once the swatches have re-rendered at the new size, drop the live transform and
   // set the real scroll so the grabbed swatch is exactly where it was (header-aware).
+  //
+  // Keyed on the ZOOM, not on the rounded tile it draws at: every committed zoom is a new
+  // object, so this runs for every commit. Keyed on `[ewW, ewH]` it did not run for a zoom
+  // too small to change the rounded tile (a 5–10 px middle-drag: 18 px × 1.019 is still 18),
+  // and the live transform stayed on the wall until the next zoom gesture. Measured
+  // 2026-10-01: `scale(1, 1.01884)` left after a 7 px drag, and since every hit test divides
+  // by the unscaled cell, the hover card and a click named the tile one row BELOW the one
+  // drawn under the pointer from about 50 rows down a canvas. Nothing else clears it: "Back
+  // to 1:1" is such a zoom too.
   useLayoutEffect(() => {
     const c = commit.current;
     if (!c) return;
@@ -1446,7 +1619,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     el.scrollLeft = Math.max(0, Math.min(contentX - c.relX, contentWidth - el.clientWidth));
     el.scrollTop = Math.max(0, Math.min(contentY - c.relY, el.scrollHeight - el.clientHeight));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ewW, ewH]);
+  }, [zoom]);
 
   /**
    * A zoom STEP from the host (its − / + buttons): multiply both axes about the centre of the
@@ -1459,7 +1632,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     if (!zoomStep?.serial || !el) return;
     const plan = zoomStepPlan(
       { scrollLeft: el.scrollLeft, scrollTop: el.scrollTop, clientWidth: el.clientWidth, clientHeight: el.clientHeight },
-      headersAbove(el, el.scrollTop + el.clientHeight / 2),
+      fixedAbove(el, el.scrollTop + el.clientHeight / 2),
       zoom,
       zoomStep.factor,
     );
@@ -1561,8 +1734,8 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       const rect = el.getBoundingClientRect();
       const relX = e.clientX - rect.left, relY = e.clientY - rect.top;
       const ax = el.scrollLeft + relX, ay = el.scrollTop + relY;
-      const headerAbove = headersAbove(el, ay);
-      drag.current = { mode: 'zoom', sx: e.clientX, sy: e.clientY, czx: zoom.x, czy: zoom.y, ax, ay, relX, relY, headerAbove, swatchAbove: ay - headerAbove, lzx: zoom.x, lzy: zoom.y, viaTool: e.button === 0 };
+      const fixed = fixedAbove(el, ay);
+      drag.current = { mode: 'zoom', sx: e.clientX, sy: e.clientY, czx: zoom.x, czy: zoom.y, ax, ay, relX, relY, fixedAbove: fixed, swatchAbove: ay - fixed, lzx: zoom.x, lzy: zoom.y, inset: contentInset(el), viaTool: e.button === 0 };
       el.style.cursor = 'move';
     }
     el.setPointerCapture(e.pointerId);
@@ -1639,7 +1812,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       return;
     }
     // Commit: re-render at the new size; the layout effect drops the transform + re-pins.
-    commit.current = { relX: d.relX, relY: d.relY, ax: d.ax, czx: d.czx, czy: d.czy, headerAbove: d.headerAbove, swatchAbove: d.swatchAbove };
+    commit.current = { relX: d.relX, relY: d.relY, ax: d.ax, czx: d.czx, czy: d.czy, fixedAbove: d.fixedAbove, swatchAbove: d.swatchAbove };
     setZoom({ x: nzx, y: nzy });
     // moved → a zoom drag; otherwise we only reach here on a middle-click that actually
     // reset a non-1:1 zoom (the no-change case early-returned above).
@@ -1805,10 +1978,10 @@ export const PickerWall: React.FC<PickerWallProps> = ({
     },
     [flatIds, revealIndex],
   );
-  // The bands as the cursor walks them, and the chunk size `GroupRow` slices them by — the
-  // arrows step through the grid the wall DRAWS (`stepCursor`), not the flat reading order.
+  // The bands as the cursor walks them — with `chunkLen`, the chunk size `GroupRow` slices
+  // them by, the arrows step through the grid the wall DRAWS (`stepCursor`), not the flat
+  // reading order.
   const cursorBands = useMemo(() => rows.map((r) => ({ count: r.entries.length, rowMajor: !!r.rowMajor })), [rows]);
-  const cursorChunkLen = chunkLenFor(effCols, ewH + effGap);
 
   const onWallKeyDown = (e: React.KeyboardEvent) => {
     if (!keyboard) return;
@@ -1821,7 +1994,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
       case 'ArrowUp': {
         e.preventDefault();
         const cur = focusedId ? flatIds.indexOf(focusedId) : -1;
-        focusIndex(stepCursor(cursorBands, effCols, cursorChunkLen, cur, e.key));
+        focusIndex(stepCursor(cursorBands, effCols, chunkLen, cur, e.key));
         break;
       }
       case 'Home': e.preventDefault(); focusIndex(0); break;
@@ -1907,6 +2080,7 @@ export const PickerWall: React.FC<PickerWallProps> = ({
               group={g}
               sprite={sprite}
               cols={effCols}
+              chunkLen={chunkLen}
               labelW={labelW}
               labels={drawLabels}
               swatchW={ewW}

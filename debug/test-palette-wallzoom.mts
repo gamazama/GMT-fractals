@@ -34,10 +34,29 @@
  * COLUMN-major, and the cursor used to step the flat index, so → moved down and ↓ jumped
  * columns. Falsified the same day, each reverted — see the note at [7].
  *
+ * WHAT THIS HARNESS CANNOT SEE (2026-10-01). [1]–[6] check the anchor's arithmetic on a wall
+ * that is ASSUMED to scale, and they stayed green while the real wall did not: the chunk a band
+ * is cut into was sized from the zoomed cell, each chunk fills column-major by itself, and so a
+ * zoom past the canvas cap re-filled the band and moved the grabbed tile out of sight. [8] pins
+ * the rule that fixes it — the grid is sized at 1:1 (`wallGeometry`) — and the claim about the
+ * wall as drawn belongs to the browser: `debug/smoke-ge-wallzoom.mts`. The same day the anchor's
+ * `headerAbove` became `fixedAbove` (it now carries the scroll box's top padding as well as the
+ * header bands, both measured by the component); [5] is the same assertion under the new name,
+ * re-falsified.
+ *
+ * [8] falsified 2026-10-02, each reverted:
+ *   · `chunkLen` sized from the zoomed cell (the old rule) → 5 red: all four walls ("52 columns
+ *     and 5720 a chunk at 1:1 but 52 and 19032 at ×0.3 × ×0.3") and the ×2.83 line
+ *   · the squarish column count decided from the zoomed cell (the old rule) → 2 red, the two
+ *     small walls ("7 columns and 210 a chunk at 1:1 but 9 and 270 at ×0.3 × ×0.5"); the two
+ *     catalogue walls stay green, being too big to square
+ * [5] re-falsified the same day under its new name: `pinnedContentPoint` scaling the fixed px
+ * with the swatches → 2 red ("contentY = fixed + scaled swatch run").
+ *
  * Run: npx tsx debug/test-palette-wallzoom.mts
  */
 
-import { clampWallZoom, zoomStepPlan, pinnedContentPoint, stepCursor, type CursorBand, type CursorKey } from '../palette/components/PickerWall';
+import { clampWallZoom, zoomStepPlan, pinnedContentPoint, stepCursor, wallGeometry, type CursorBand, type CursorKey } from '../palette/components/PickerWall';
 
 let failures = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -100,16 +119,17 @@ for (const [start, factor] of [
   ok(Math.abs(rowBefore - rowAfter) < 1e-9, `${start}× ×${factor}: row ${rowBefore.toFixed(3)} stays ${rowAfter.toFixed(3)}`);
 }
 
-console.log('[5] fixed-height band headers do not scale with the swatches');
+console.log('[5] what does not scale above the anchor — the top padding, the header bands — is held out of the scaling');
 {
-  const HEAD = 40;
-  const plan = zoomStepPlan(VIEW, HEAD, { x: 1, y: 1 }, 2)!;
-  ok(plan.anchor.swatchAbove === 1200 - HEAD, 'the headers come off the swatch height, not out of the anchor');
+  // 12 px of padding + 28 px of headers, as the component would measure them (`fixedAbove`).
+  const FIXED = 40;
+  const plan = zoomStepPlan(VIEW, FIXED, { x: 1, y: 1 }, 2)!;
+  ok(plan.anchor.swatchAbove === 1200 - FIXED, 'the fixed px come off the swatch height, not out of the anchor');
   const after = tile(plan.next);
   const p = pinnedContentPoint(plan.anchor, { ...G, ...after });
   const scaled = (after.ewH + after.effGap) / (tile({ x: 1, y: 1 }).ewH + tile({ x: 1, y: 1 }).effGap);
-  ok(Math.abs(p.contentY - (HEAD + (1200 - HEAD) * scaled)) < 1e-9, 'contentY = header + scaled swatch run');
-  ok(p.contentY < 1200 * scaled, 'a wall with headers scrolls LESS than one without — they did not stretch');
+  ok(Math.abs(p.contentY - (FIXED + (1200 - FIXED) * scaled)) < 1e-9, 'contentY = fixed + scaled swatch run');
+  ok(p.contentY < 1200 * scaled, 'a wall with fixed px above the anchor scrolls LESS than one without — they did not stretch');
 }
 
 console.log('[6] a step composes: two 1.25× steps land where one 1.5625× step does');
@@ -179,6 +199,44 @@ console.log('[7] the keyboard cursor steps in grid space');
   ok(step(CH, 3, 6, 3, D) === 8, '… and column 1 stays column 1 (3 → 8)');
   ok(step(CH, 3, 6, 8, U) === 3, '↑ back into the chunk above (8 → 3)');
   ok(step(CH, 3, 6, 5, R) === 6 && step(CH, 3, 6, 6, L) === 5, '→ / ← wrap across the chunk edge (5 ↔ 6)');
+}
+
+console.log('[8] a zoom scales the wall and never re-flows it');
+// Which cell a tile sits in is decided by two numbers — the column count, and how many tiles one
+// chunk of a band holds (each chunk fills column-major by itself). If either moves with the zoom,
+// the wall re-flows on a zoom and no scroll can put the grabbed tile back. Both come out of
+// `wallGeometry`, which the component lays out from; the walls below are ones measured in the
+// browser on 2026-10-01, so the 1:1 numbers are pinned to what was drawn.
+{
+  const WALLS: { name: string; wall: { width: number; labelW: number; swatchW: number; swatchH: number; gap: number; total: number }; cols: number; chunkLen: number }[] = [
+    { name: 'the catalogue on a desk (10,509 tiles)', wall: { width: 1920, labelW: 132, swatchW: 32, swatchH: 18, gap: 1, total: 10509 }, cols: 52, chunkLen: 52 * 110 },
+    { name: 'the catalogue on a phone (2,952 tiles)', wall: { width: 393, labelW: 24, swatchW: 32, swatchH: 18, gap: 1, total: 2952 }, cols: 10, chunkLen: 10 * 110 },
+    { name: 'a search that leaves 31 tiles, squared up', wall: { width: 1920, labelW: 132, swatchW: 112, swatchH: 63, gap: 1, total: 31 }, cols: 7, chunkLen: 7 * 30 },
+    { name: 'a search that leaves 4 tiles, squared up', wall: { width: 1920, labelW: 132, swatchW: 192, swatchH: 108, gap: 1, total: 4 }, cols: 3, chunkLen: 3 * 18 },
+  ];
+  const ZOOMS = [0.3, 0.5, 0.77, 1, 1.25, 1.5625, 2, 2.83, 4, 8, 16];
+  for (const { name, wall, cols, chunkLen } of WALLS) {
+    const at1 = wallGeometry({ ...wall, zoom: { x: 1, y: 1 } });
+    ok(at1.cols === cols && at1.chunkLen === chunkLen, `${name}: ${at1.cols} columns, ${at1.chunkLen} tiles a chunk at 1:1 (drawn: ${cols}, ${chunkLen})`);
+    let moved = '';
+    for (const x of ZOOMS) {
+      for (const y of ZOOMS) {
+        const g = wallGeometry({ ...wall, zoom: { x, y } });
+        if (!moved && (g.cols !== at1.cols || g.chunkLen !== at1.chunkLen)) moved = `${at1.cols} columns and ${at1.chunkLen} a chunk at 1:1 but ${g.cols} and ${g.chunkLen} at ×${x} × ×${y}`;
+      }
+    }
+    ok(!moved, `${name}: the same columns and chunk at all ${ZOOMS.length * ZOOMS.length} zooms${moved ? ` — ${moved}` : ''}`);
+  }
+  // … while what is MEANT to scale does: the tile, the gap that grows with it, the content width.
+  const desk = WALLS[0].wall;
+  const z1 = wallGeometry({ ...desk, zoom: { x: 1, y: 1 } });
+  const z4 = wallGeometry({ ...desk, zoom: { x: 4, y: 4 } });
+  ok(z1.ewW === 32 && z1.ewH === 18 && z1.effGap === 2 && z4.ewW === 128 && z4.ewH === 72 && z4.effGap === 9, `the tile and its gap scale: 32×18 +2 → ${z4.ewW}×${z4.ewH} +${z4.effGap} at ×4`);
+  ok(z4.contentWidth === 132 + 52 * (128 + 9), `the content widens with it: ${z1.contentWidth} → ${z4.contentWidth} px, over the same 52 columns`);
+  // The reported case as arithmetic: the 2,567-tile band was one 50-row grid at 1:1, and at ×2.83
+  // the old chunk length (52 columns × the 37 rows a 58 px cell fits under the cap) cut it in two.
+  const z283 = wallGeometry({ ...desk, zoom: { x: 2.83, y: 2.83 } });
+  ok(z283.ewH + z283.effGap === 58 && 2567 <= z283.chunkLen && Math.ceil(2567 / z283.cols) === 50, `at ×2.83 (a ${z283.ewH + z283.effGap} px cell) a 2,567-tile band is still one chunk of 50 rows`);
 }
 
 console.log(`\n${failures === 0 ? '✓ ALL PASS' : `✗ ${failures} FAILURE(S)`}`);
