@@ -59,6 +59,13 @@ So, for anything under this rule that puts pixels on screen (`AudioPanel`,
   `tailwind.config.js`.
 - **No per-frame DOM write.** Write on change. The spectrum canvas is the one
   deliberate exception: 30 Hz, CPU-raster, only while on screen.
+- **The worklet is only proven in a browser.** `smoke:audio-worklet` is the one
+  guard that loads it: a 440 Hz tone on a deck, followed through to
+  `liveModulations`. Every other audio suite runs in node. Run it against a
+  production build too when you touch `worklet/**` or the `?worker&url` import —
+  the dev server cannot vouch for the built chunk.
+- **The hop's cost is `bench:audio-dsp`.** 0.11 ms at Detail 4096 after the dB
+  round trip was removed (it was 0.20); the FFT is ~85 % of what is left.
 - **Measure with `bench:audio`, not the fps counter.** Compare `lfo` against
   `audio` (same params moving, with and without the audio stack) and run a focus
   change (`lfo@bg`, `lfo@fg`) — the collapse only appears after one. Lead with
@@ -68,6 +75,7 @@ So, for anything under this rule that puts pixels on screen (`AudioPanel`,
 ## Guards
 
 ```
+npm run smoke:audio-worklet
 npm run smoke:idle-damage
 npm run test:filterbank
 npm run test:band-math

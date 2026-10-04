@@ -37,6 +37,9 @@ const BLACKMAN_COHERENT_GAIN = 0.42;
 export const WINDOW_CAL_DB =
     20 * Math.log10(BLACKMAN_COHERENT_GAIN / HANN_COHERENT_GAIN);
 
+/** The same calibration as a POWER ratio: 10^(WINDOW_CAL_DB / 10) = (0.42 / 0.5)². */
+const WINDOW_CAL_POWER = (BLACKMAN_COHERENT_GAIN / HANN_COHERENT_GAIN) ** 2;
+
 /** dBFS reported for a bin with no energy at all. Matches the `-Infinity`
  *  `getFloatFrequencyData` writes for silence, which `dbToUnit` maps to 0. */
 const SILENT_DB = -Infinity;
@@ -48,8 +51,12 @@ export class SpectrumFrame {
     private readonly window: Float32Array;
     private readonly re: Float32Array;
     private readonly im: Float32Array;
-    /** Per-bin dBFS, `binCount` long. Reused across frames — copy if retained. */
+    /** Per-bin dBFS, `binCount` long. Reused across frames — copy if retained.
+     *  Filled by `analyse()` only. */
     readonly db: Float32Array;
+    /** Per-bin linear POWER on the same calibrated scale (`10^(db/10)`),
+     *  `binCount` long. Filled by `analysePower()` only. */
+    readonly power: Float32Array;
 
     constructor(fftSize: number) {
         this.fftSize = fftSize;
@@ -58,6 +65,7 @@ export class SpectrumFrame {
         this.re = new Float32Array(fftSize);
         this.im = new Float32Array(fftSize);
         this.db = new Float32Array(this.binCount);
+        this.power = new Float32Array(this.binCount);
 
         // PERIODIC Hann (denominator N, not N-1) — the correct choice for
         // spectral analysis, where the frame is treated as one period of a
@@ -75,25 +83,64 @@ export class SpectrumFrame {
      * caller's ring buffer is never mutated.
      */
     analyse(samples: Float32Array): void {
-        const n = this.fftSize;
+        this.transformWindowed(samples);
         const re = this.re;
         const im = this.im;
-        const w = this.window;
-
-        for (let i = 0; i < n; i++) {
-            re[i] = samples[i] * w[i];
-            im[i] = 0;
-        }
-
-        this.fft.transform(re, im);
 
         // Magnitude normalised by fftSize — the AnalyserNode convention — then
         // re-levelled onto Blackman's scale. See the class @invariant.
-        const inv = 1 / n;
+        const inv = 1 / this.fftSize;
         const db = this.db;
         for (let k = 0; k < this.binCount; k++) {
             const mag = Math.hypot(re[k], im[k]) * inv;
             db[k] = mag > 0 ? 20 * Math.log10(mag) + WINDOW_CAL_DB : SILENT_DB;
         }
+    }
+
+    /**
+     * Transform `samples` into `this.power` — the same spectrum as `analyse()`
+     * on the same scale, as linear power instead of dB — and return the
+     * loudest bin's power.
+     *
+     * This is what the audio thread calls. The band stage averages POWER, so
+     * going through dB meant a `hypot` + `log10` per bin here and a `pow` per
+     * bin there to undo it: about a third of the whole hop, for a round trip
+     * that changes nothing (measured 2026-10-04, `npm run bench:audio-dsp`:
+     * 0.20 ms → 0.11 ms per hop at Detail 4096).
+     *
+     * @invariant `power[k]` equals `10^(db[k] / 10)` for the same input, to
+     *   float32 rounding — the two outputs are one scale. A level that reads
+     *   differently through one than the other would move every threshold
+     *   calibrated against the dB window.
+     *   — proven by: npm run test:fft ("analysePower agrees with analyse on
+     *   every bin", "and a silent frame is zero power, not NaN").
+     */
+    analysePower(samples: Float32Array): number {
+        this.transformWindowed(samples);
+        const re = this.re;
+        const im = this.im;
+        const power = this.power;
+        const inv = 1 / this.fftSize;
+        const scale = inv * inv * WINDOW_CAL_POWER;
+        let peak = 0;
+        for (let k = 0; k < this.binCount; k++) {
+            const p = (re[k] * re[k] + im[k] * im[k]) * scale;
+            power[k] = p;
+            if (p > peak) peak = p;
+        }
+        return peak;
+    }
+
+    /** Window into scratch and run the FFT. `samples` is never mutated. */
+    private transformWindowed(samples: Float32Array): void {
+        const n = this.fftSize;
+        const re = this.re;
+        const im = this.im;
+        const w = this.window;
+        for (let i = 0; i < n; i++) {
+            re[i] = samples[i] * w[i];
+            im[i] = 0;
+        }
+        this.fft.transform(re, im);
     }
 }

@@ -16,6 +16,12 @@
  *   is a deliberate trade: the naive form is verifiable against a textbook DFT
  *   (`debug/test-fft.mts` does exactly that), and glitches on the audio thread
  *   are audible. Measure before optimising this.
+ *
+ *   MEASURED 2026-10-04 (`npm run bench:audio-dsp`): 0.094 ms at 4096 points,
+ *   which is now ~85 % of the whole hop (0.11 ms) — the dB round trip that
+ *   used to share the bill is gone. The real-input trick would save roughly
+ *   0.045 ms a hop, i.e. take the audio thread from ~2.1 % of a core to ~1.2 %.
+ *   Left alone: the hop already uses 4 % of its render quantum.
  */
 
 export class FFT {

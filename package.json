@@ -6,6 +6,7 @@
   "scripts": {
     "bake:palette": "tsx debug/bake-palette-catalog.mts",
     "bench:audio": "tsx debug/runWithServer.mts -- npx tsx debug/bench-audio.mts",
+    "bench:audio-dsp": "tsx debug/bench-audio-dsp.mts",
     "bench:interaction-latency": "tsx debug/interaction-latency-harness.mts",
     "bench:perf": "tsx debug/bench-perf.mts",
     "bench:perf:gate": "tsx debug/bench-perf.mts --gate",
@@ -37,6 +38,7 @@
     "smoke:anim-play": "tsx debug/smoke-anim-play.mts",
     "smoke:anim-vec2": "tsx debug/smoke-anim-vec2.mts",
     "smoke:audio-fps-remap": "tsx debug/smoke-audio-fps-remap.mts",
+    "smoke:audio-worklet": "tsx debug/smoke-audio-worklet.mts",
     "smoke:bc-drag": "tsx debug/smoke-bc-drag.mts",
     "smoke:binder-registry": "tsx debug/smoke-binder-registry.mts",
     "smoke:boot": "tsx debug/smoke-boot.mts",
