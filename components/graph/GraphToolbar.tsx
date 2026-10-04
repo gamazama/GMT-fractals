@@ -47,7 +47,7 @@ const ToolButton = ({ onClick, active, icon, tooltip, onPointerDown, danger, onC
             active 
             ? 'bg-accent-900/80 text-accent-300 border-accent-500/50' 
             : danger 
-                ? 'bg-danger/15 text-danger border-danger/30 animate-pulse'
+                ? 'bg-danger/15 text-danger border-danger/30 animate-pulse-live'
                 : 'bg-surface/60 text-fg-muted border-line/10 hover:text-fg'
         }`}
     >

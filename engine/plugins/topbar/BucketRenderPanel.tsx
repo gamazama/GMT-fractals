@@ -461,7 +461,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                 <div className="space-y-2" data-help-id="bucket.render">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent-400 animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent-400 animate-pulse-live" />
                             <span className="text-[10px] font-bold text-fg-tertiary">Rendering</span>
                         </div>
                         <span className="font-mono tabular-nums text-[10px] text-accent-300">
@@ -524,7 +524,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                                 className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-secondary/60 bg-secondary/40 text-secondary hover:bg-secondary/50 transition-colors flex items-center gap-1"
                                 title={state.previewRegion ? 'Exit Preview Region (Esc)' : 'Cancel preview pick (Esc)'}
                             >
-                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-live" />
                                 {state.previewRegion ? 'Exit Preview' : 'Cancel Pick'}
                             </button>
                         )}
@@ -572,7 +572,7 @@ const BucketRenderPanel: React.FC<BucketRenderPanelProps> = ({ controller, align
                 {state.interactionMode === 'selecting_preview' && !state.previewRegion && supportsPreview && (
                     <div className="flex items-center justify-between text-[9px] bg-secondary/20 border border-secondary/20 rounded px-2 py-1">
                         <span className="text-secondary font-bold flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-live" />
                             Picking preview
                         </span>
                         <span className="text-fg-dim">drag on canvas to select</span>

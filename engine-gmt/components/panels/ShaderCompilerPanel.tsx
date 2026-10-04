@@ -209,7 +209,7 @@ export const ShaderCompilerPanel: React.FC<ShaderCompilerPanelProps> = ({ classN
                 ) : Object.keys(pendingChanges).length > 0 ? (
                     <>
                         <div className="flex items-center gap-1.5">
-                            <div className={`flex items-center gap-2 ${warn.text} text-[10px] font-bold animate-pulse`}>
+                            <div className={`flex items-center gap-2 ${warn.text} text-[10px] font-bold animate-pulse-live`}>
                                 <AlertIcon />
                                 <span>Pending</span>
                             </div>

@@ -101,7 +101,7 @@ const PwaUpdateButton: React.FC = () => {
             data-pwa-update=""
             className="px-2 py-1 rounded bg-warn/15 border border-warn/30 text-warn hover:bg-warn/25 transition-colors text-[10px] font-bold flex items-center gap-1.5"
         >
-            <span className="w-1.5 h-1.5 rounded-full bg-warn animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-warn animate-pulse-live" />
             Update
         </button>
     );

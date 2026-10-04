@@ -573,7 +573,7 @@ const FlowEditorInner: React.FC<FlowEditorProps> = ({ state, actions }) => {
                     {/* Pulses while the graph differs from what the shader was compiled
                         from. There is no auto-compile: structural edits wait for this
                         button (modularSlice.setGraph). */}
-                    <button onClick={actions.refreshPipeline} className={`text-[10px] font-bold px-3 py-1.5 rounded border shadow-lg transition-all ${shaderStale ? 'bg-purple-600 hover:bg-purple-500 text-fg border-purple-400 animate-pulse' : 'bg-surface-header text-fg-faint hover:text-fg border-line/20'}`} title={shaderStale ? 'Compile the edited graph' : 'Force Recompile Shader'}>COMPILE</button>
+                    <button onClick={actions.refreshPipeline} className={`text-[10px] font-bold px-3 py-1.5 rounded border shadow-lg transition-all ${shaderStale ? 'bg-purple-600 hover:bg-purple-500 text-fg border-purple-400 animate-pulse-live' : 'bg-surface-header text-fg-faint hover:text-fg border-line/20'}`} title={shaderStale ? 'Compile the edited graph' : 'Force Recompile Shader'}>COMPILE</button>
                 </div>
             </ReactFlow>
             

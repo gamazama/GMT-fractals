@@ -289,7 +289,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         <div className="h-8 border-b border-line/10 flex items-center px-2 gap-2 bg-line/5 shrink-0 z-50 select-none relative" data-help-id="ui.timeline" onContextMenu={handleContextMenu}>
             <div className="flex items-center gap-1 pr-2 mr-1" data-help-id="anim.transport">
                 <button onClick={stop} className="icon-btn"><StopIcon /></button>
-                <button onClick={isPlaying ? pause : play} className={`p-1.5 rounded text-fg ${isPlaying ? (isRecordingModulation ? 'bg-danger-strong animate-pulse' : 'bg-accent-700') : 'bg-fg-ghost hover:bg-fg-faint'}`} title="Space">
+                <button onClick={isPlaying ? pause : play} className={`p-1.5 rounded text-fg ${isPlaying ? (isRecordingModulation ? 'bg-danger-strong animate-pulse-live' : 'bg-accent-700') : 'bg-fg-ghost hover:bg-fg-faint'}`} title="Space">
                     {isPlaying ? <PauseIcon /> : <PlayIcon />}
                 </button>
 
@@ -303,7 +303,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                     onClick={toggleArmModulation}
                     disabled={isPlaying && !isRecordingModulation}
                     className={`icon-btn ${
-                        isRecordingModulation ? 'text-fg bg-danger-strong animate-pulse' :
+                        isRecordingModulation ? 'text-fg bg-danger-strong animate-pulse-live' :
                         isArmingModulation ? 'text-danger bg-danger/15 border border-danger/40' :
                         'hover:text-danger'
                     }`}

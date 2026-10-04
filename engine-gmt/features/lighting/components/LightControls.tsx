@@ -131,9 +131,14 @@ export const LightOrb = ({ index, color, active, type, rotation, onClick, onDrag
                     )}
                 </div>
                 
-                {/* LAYER 4: Ping Animation (Point Light) */}
+                {/* LAYER 4: Ping Animation (Point Light) — three pings, then still.
+                    An INFINITE animation here kept the whole page compositing at
+                    60 Hz for as long as a point light existed, converged scene or
+                    not; on the GMT viewport that alone was enough to starve the
+                    render worker (see the @invariant on SinglePositionGizmo). It
+                    replays whenever the orb remounts or the light changes type. */}
                 {active && type !== 'Directional' && (
-                    <div className="absolute inset-0 rounded-full border border-line/50 animate-ping opacity-20 pointer-events-none" />
+                    <div className="absolute inset-0 rounded-full border border-line/50 animate-ping [animation-iteration-count:3] opacity-20 pointer-events-none" />
                 )}
             </div>
             

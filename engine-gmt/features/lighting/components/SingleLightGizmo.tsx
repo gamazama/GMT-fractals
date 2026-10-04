@@ -88,6 +88,10 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
             if (!el) return;
             const rangeCircle = el.querySelector('.range-circle') as SVGCircleElement | null;
             if (rangeCircle) {
+                // Write-on-change: this runs every OVERLAY tick, and a per-frame DOM
+                // write over the viewport makes the compositor present every frame.
+                // @see the @invariant on SinglePositionGizmo.
+                const setOpacity = (v: string) => { if (rangeCircle.style.opacity !== v) rangeCircle.style.opacity = v; };
                 const lightRange = currentLight.range ?? 0;
                 const popupOpen = activeLightPopup.index === index;
                 if (lightRange > 0.001 && popupOpen) {
@@ -99,13 +103,14 @@ export const SingleLightGizmo = React.forwardRef((props: SingleLightGizmoProps, 
                         const dx = edgeScreen.x - originScreen.x;
                         const dy = edgeScreen.y - originScreen.y;
                         const screenRadius = Math.sqrt(dx * dx + dy * dy);
-                        rangeCircle.setAttribute('r', String(Math.max(8, screenRadius)));
-                        rangeCircle.style.opacity = '0.6';
+                        const r = String(Math.max(8, screenRadius));
+                        if (rangeCircle.getAttribute('r') !== r) rangeCircle.setAttribute('r', r);
+                        setOpacity('0.6');
                     } else {
-                        rangeCircle.style.opacity = '0';
+                        setOpacity('0');
                     }
                 } else {
-                    rangeCircle.style.opacity = '0';
+                    setOpacity('0');
                 }
             }
         }

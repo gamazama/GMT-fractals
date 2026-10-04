@@ -274,7 +274,7 @@ export const AppGmtExtraFormFields: React.FC<RenderDialogExtraFieldsProps<AppGmt
                         style={{ transform: `scaleX(${frameStats.progress})` }}
                     />
                     <span className="t-label-sm relative z-10 text-fg-muted">Viewport Sample</span>
-                    <span className={`text-[10px] font-mono font-bold relative z-10 ${frameStats.duration > 0 ? 'text-ok' : 'text-fg-dim animate-pulse'}`}>
+                    <span className={`text-[10px] font-mono font-bold relative z-10 ${frameStats.duration > 0 ? 'text-ok' : 'text-fg-dim animate-pulse-live'}`}>
                         {frameStats.duration > 0 ? formatDurationMs(frameStats.duration) : 'Estimating...'}
                     </span>
                 </div>

@@ -76,7 +76,7 @@ export const EngineFeatureRow: React.FC<EngineFeatureRowProps> = ({
             statusTitle = 'Controlled by Viewport Quality';
             break;
         case 'pending':
-            statusClass = 'bg-warn-strong shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse';
+            statusClass = 'bg-warn-strong shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse-live';
             statusTitle = 'Pending Compilation (Click Apply)';
             break;
         case 'runtime':

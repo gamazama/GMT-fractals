@@ -359,7 +359,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                 {label}
                 {labelSuffix}
                 {liveValue !== undefined && !disabled && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-live shadow-[0_0_4px_rgb(var(--secondary))]"></span>
                 )}
             </label>
         );
@@ -427,7 +427,7 @@ export const ScalarInput: React.FC<ScalarInputProps> = ({
                             {label}
                             {labelSuffix}
                             {liveValue !== undefined && !disabled && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse shadow-[0_0_4px_rgb(var(--secondary))]"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse-live shadow-[0_0_4px_rgb(var(--secondary))]"></span>
                             )}
                         </label>
                     </div>

@@ -145,7 +145,7 @@ const MobileControls: React.FC = () => {
                     }}
                     className="pointer-events-auto flex items-center gap-2 bg-surface/80 border border-line/20 px-4 py-2.5 rounded-full backdrop-blur-xl shadow-2xl active:scale-90 transition-all active:border-accent-400"
                 >
-                    <div className={`w-2 h-2 rounded-full ${isFly ? 'bg-accent-400 animate-pulse shadow-[0_0_5px_rgb(var(--accent-glow))]' : 'bg-secondary'}`} />
+                    <div className={`w-2 h-2 rounded-full ${isFly ? 'bg-accent-400 animate-pulse-live shadow-[0_0_5px_rgb(var(--accent-glow))]' : 'bg-secondary'}`} />
                     <span className="text-[10px] font-bold text-fg">
                         {cameraMode} Mode
                     </span>

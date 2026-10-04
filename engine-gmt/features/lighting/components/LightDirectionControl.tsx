@@ -255,7 +255,7 @@ export const LightDirectionControl: React.FC<LightDirectionControlProps> = ({
 
                 {/* Backlight Warning Zone */}
                 <div 
-                    className={`absolute inset-0 rounded-[30px] border-2 border-danger/30 pointer-events-none transition-opacity duration-300 ${handlePos.isBacklit ? 'opacity-100 animate-pulse' : 'opacity-0'}`}
+                    className={`absolute inset-0 rounded-[30px] border-2 border-danger/30 pointer-events-none transition-opacity duration-300 ${handlePos.isBacklit ? 'opacity-100 animate-pulse-live' : 'opacity-0'}`}
                 />
 
                 {/* Sun Handle */}

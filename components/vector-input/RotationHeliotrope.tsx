@@ -320,7 +320,7 @@ export const RotationHeliotrope: React.FC<RotationHeliotropeProps> = ({
             {/* Back zone indicator (subtle red tint when looking back) */}
             {arrowPos.isBack && (
                 <div
-                    className="absolute inset-0 rounded-full border-2 border-red-500/30 pointer-events-none animate-pulse"
+                    className="absolute inset-0 rounded-full border-2 border-red-500/30 pointer-events-none animate-pulse-live"
                 />
             )}
 

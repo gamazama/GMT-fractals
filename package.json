@@ -74,6 +74,7 @@
     "smoke:engine-demo": "tsx debug/smoke-engine-demo.mts",
     "smoke:engine-demo-modulation": "tsx debug/smoke-engine-demo-modulation.mts",
     "smoke:engine-gmt": "tsx debug/smoke-engine-gmt.mts",
+    "smoke:idle-damage": "tsx debug/smoke-idle-damage.mts",
     "smoke:export-watchdog": "tsx debug/smoke-export-watchdog.mts",
     "smoke:fluid-brush": "tsx debug/smoke-fluid-brush.mts",
     "smoke:fluid-presets": "tsx debug/smoke-fluid-presets.mts",

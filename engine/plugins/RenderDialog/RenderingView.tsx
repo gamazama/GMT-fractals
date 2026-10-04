@@ -49,7 +49,7 @@ export const RenderingView: React.FC<RenderingViewProps> = ({
                         className="h-full bg-gradient-to-r from-accent-600 to-accent-400 relative"
                         style={{ width: `${progress}%` }}
                     >
-                        <div className="absolute inset-0 bg-line/20 animate-pulse" />
+                        <div className="absolute inset-0 bg-line/20 animate-pulse-live" />
                     </div>
                 </div>
             </div>
