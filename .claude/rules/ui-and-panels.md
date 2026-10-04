@@ -81,8 +81,8 @@ every tick, makes the browser present the whole window at 60 Hz for as long as i
 is visible. On app-gmt that is not a cosmetic cost: the presents run on the same
 GPU-process thread that decodes the render worker's WebGL, and a 6 ms fractal
 frame was measured at 14 fps instead of 60 with one pulsing 6 px dot on a slider
-as the cause (2026-10-04; the mechanism is written up on `animate-pulse-live` in
-`tailwind.config.js` and on `SinglePositionGizmo`).
+as the cause (2026-10-04; ADR-0131, and the mechanism is written up on
+`animate-pulse-live` in `tailwind.config.js` and on `SinglePositionGizmo`).
 
 - A state indicator that can stay on screen (modulated, playing, recording,
   pending, rendering) uses **`animate-pulse-live`** — the same pulse, stepped, ~3

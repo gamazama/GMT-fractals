@@ -44,7 +44,7 @@
  *   rewrote its SVG every tick, and each point light's orb ran an infinite
  *   ping — which is why it also depended on what was on screen.
  *
- *   FIXED on the same day (the dot and the other persistent indicators are
+ *   FIXED on the same day — ADR-0131 (the dot and the other persistent indicators are
  *   stepped, `animate-pulse-live`; the marker steps; the gizmo writes on
  *   change; the ping runs three times). In the bench, 4 runs x 6 scenarios
  *   hold 60 fps through focus changes where 2 runs in 3 used to collapse.

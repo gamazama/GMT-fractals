@@ -315,6 +315,7 @@ export function classifyModulationTarget(
  *   "nor a composite branch"). The last three run on synthetic routings: no
  *   offered target of those kinds is flagged `noAccumReset` today, so the
  *   catalogue alone could not tell this rule from "exempt anything flagged".
+ * @see docs/adr/0132-display-pass-modulation-does-not-restart-accumulation.md
  */
 export function routingInvalidatesAccumulation(r: ModulationRouting): boolean {
     return !(r.sink === 'uniform' && r.noAccumReset && (r.branch === 'scalar' || r.branch === 'vecAxis'));

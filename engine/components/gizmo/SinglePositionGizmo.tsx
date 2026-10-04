@@ -15,6 +15,7 @@
 //   window lost focus (measured 2026-10-04, `npm run bench:audio`).
 //   — proven by: npm run smoke:idle-damage ("a still scene produces no DOM
 //   writes from the light gizmo").
+// @see docs/adr/0131-nothing-on-the-page-repaints-every-frame.md
 //
 // Consumer pattern:
 //   1. Mount <SinglePositionGizmo ref={gizmoRef} ... /> in a DOM overlay layer.

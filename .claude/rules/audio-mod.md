@@ -13,7 +13,8 @@ runs), `WorkletAnalysis.ts` (the main-thread receiver), then `filterBank.ts`
 
 Decisions: ADR-0103 (live-session hold), ADR-0104 (fractional-octave
 filterbank), ADR-0105 (per-band adaptive gain rejected), ADR-0106 (bands in
-Hz), **ADR-0110 (analysis moved into an AudioWorklet)**.
+Hz), **ADR-0110 (analysis moved into an AudioWorklet)**, **ADR-0131 (nothing on
+the page repaints every frame — why "audio" was slow)**.
 
 ## What's load-bearing
 

@@ -51,6 +51,7 @@ export default {
       // `animate-pulse-live`. Plain `animate-pulse` is for transient loaders that
       // are gone within seconds. `npm run smoke:idle-damage` fails on a smooth
       // infinite animation left running in app-gmt.
+      // @see docs/adr/0131-nothing-on-the-page-repaints-every-frame.md
       animation: {
         'pulse-live': 'pulse 2s steps(4, jump-none) infinite',
       },

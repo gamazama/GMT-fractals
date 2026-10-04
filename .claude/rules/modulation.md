@@ -11,7 +11,8 @@ Read first, in this order:
 3. `engine/features/modulation/paramMapping.ts` JSDoc — display curves.
 4. `engine/animation/AnimationSystem.tsx` — `AnimationSystem.tick`.
 
-Decisions: **ADR-0107** (targets), **ADR-0108** (slider curves), **ADR-0109** (dispatch).
+Decisions: **ADR-0107** (targets), **ADR-0108** (slider curves), **ADR-0109** (dispatch),
+**ADR-0132** (display-pass targets do not restart accumulation).
 
 ## The three things that bite
 

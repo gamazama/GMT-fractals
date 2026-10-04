@@ -55,6 +55,8 @@
  *   gpuMs flat while frames/s drops → the gate or the dispatch is pacing, not
  *     the GPU.
  *
+ * @see docs/adr/0131-nothing-on-the-page-repaints-every-frame.md
+ *
  * @assumption Zero cost when off. Every call site is guarded by `framePerf.on`
  *   (one boolean read); nothing is allocated, no query is created and no
  *   message is posted until `setEnabled(true)`.
