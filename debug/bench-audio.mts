@@ -32,6 +32,9 @@
  *   audio-hover  `audio` with the pointer wandering over the canvas
  *   audio-panel  `audio` with the Audio panel open
  *   mic          Chrome's fake capture device through the mic path + N rules
+ *   play         timeline playback of a keyframed param, timeline closed
+ *   play-timeline  the same with the timeline open — its playhead moves every
+ *                frame, which is LEGITIMATE per-frame page damage
  *
  * Any scenario takes an `@fg` / `@bg` suffix (`lfo@fg,lfo@bg`) that puts the
  * bench window in the OS foreground or behind the window that had focus when
@@ -78,14 +81,22 @@
  *     npm run bench:audio -- --formula=AmazingBox --secs=8
  *     npm run bench:audio -- --adaptive=60 --scenarios=lfo,audio,lfo,audio
  *     npx tsx debug/bench-audio.mts --url=http://localhost:3400   # reuse a dev server
+ *     npx tsx debug/bench-audio.mts --prod                        # build, serve the build, measure it
+ *     npx tsx debug/bench-audio.mts --prod=reuse                  # ...the build already in debug/scratch
+ *
+ * `--prod` matters for anything on the MAIN thread: the dev server runs React's
+ * development build, unminified, and overstates script cost several times over.
+ * GPU and worker numbers are the same either way.
  *
  * Output: console table + debug/bench-audio-latest.json (gitignored), or
  * `--out=<path>`. `--compare=<path>` prints deltas against a saved run.
  */
 
 import { chromium, type Page, type CDPSession } from 'playwright';
-import { execFile, spawn } from 'node:child_process';
-import { writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { execFile, execSync, spawn } from 'node:child_process';
+import { writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { join, extname, resolve } from 'node:path';
 import { acquireBenchLock } from './helpers/bench-lock.mts';
 
 // ─── args ──────────────────────────────────────────────────────────────
@@ -97,13 +108,40 @@ const arg = (name: string, def?: string) => {
 };
 const BASE = arg('url') || process.env.ENGINE_URL || 'http://localhost:3400';
 const QUERY = arg('query', '')!;                      // e.g. --query=lowlatency=0
-const URL = `${BASE.replace(/\/$/, '')}/app-gmt.html${QUERY ? '?' + QUERY : ''}`;
+const PROD = arg('prod');                             // 'true' = build first, 'reuse' = serve the last build
+const PROD_DIR = resolve('debug/scratch/bench-audio-build');
+const PROD_PORT = 3478;
+const URL = `${(PROD ? `http://localhost:${PROD_PORT}` : BASE).replace(/\/$/, '')}/app-gmt.html${QUERY ? '?' + QUERY : ''}`;
+
+/** Build (unless reusing) and serve the production bundle from this process. */
+async function serveProd(): Promise<() => void> {
+    if (!(PROD === 'reuse' && existsSync(join(PROD_DIR, 'app-gmt.html')))) {
+        console.log('[bench-audio] building the production bundle into debug/scratch/bench-audio-build …');
+        execSync(`npx vite build --outDir "${PROD_DIR}" --emptyOutDir`, { stdio: 'ignore' });
+    }
+    const TYPES: Record<string, string> = {
+        '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
+        '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.wasm': 'application/wasm',
+        '.webmanifest': 'application/manifest+json', '.gz': 'application/gzip', '.bin': 'application/octet-stream', '.frag': 'text/plain', '.gmf': 'text/plain',
+    };
+    const server = createServer((req, res) => {
+        let p = decodeURIComponent((req.url || '/').split('?')[0]);
+        if (p.endsWith('/')) p += 'index.html';
+        const file = join(PROD_DIR, p);
+        if (!file.startsWith(PROD_DIR) || !existsSync(file) || !statSync(file).isFile()) { res.writeHead(404); res.end(); return; }
+        res.writeHead(200, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+        res.end(readFileSync(file));
+    });
+    await new Promise<void>((r) => server.listen(PROD_PORT, r));
+    return () => server.close();
+}
 const FORMULA = arg('formula', 'Mandelbulb')!;
 const SECS = Number(arg('secs', '6'));
 const SETTLE_MS = Number(arg('settle', '2500'));
 const [W, H] = (arg('size', '1280x720')!).split('x').map(Number);
 const TARGETS = (arg('targets', 'coreMath.paramA')!).split(',').filter(Boolean);
 const AMP = Number(arg('amp', '0.05'));
+const CAP = Number(arg('cap', '0'));                  // sample cap for every scenario but `idle` (0 = accumulate forever)
 const ADAPTIVE = arg('adaptive', 'off')!;            // 'off' | 'keep' | '<fps>'
 const SCENARIOS = (arg('scenarios', 'still,lfo,audio,lfo,audio,audio-hover,audio-idle')!).split(',').filter(Boolean);
 const OUT = arg('out', 'debug/bench-audio-latest.json')!;
@@ -221,6 +259,7 @@ const BENCH_HELPERS = `(() => {
       s.setAnimations([]);
       for (const r of [...(s.modulation?.rules ?? [])]) s.removeModulation(r.id);
       try { w.__audioEngine.pause(0); } catch (e) {}
+      try { const a = w.useAnimationStore.getState(); if (a.isPlaying) a.pause(); if (a.sequence.tracks['coreMath.paramA']) a.removeTrack('coreMath.paramA'); } catch (e) {}
       try { if (w.__audioEngine.isMicActive) w.__audioEngine.disconnectLiveInput(); } catch (e) {}
       s.setAudio({ isEnabled: false });
     },
@@ -263,6 +302,12 @@ const BENCH_HELPERS = `(() => {
       store().setAudio({ isEnabled: true, gain: 0.02 });
       eng.play(0);
     },
+    play(amp) {
+      const a = w.useAnimationStore.getState(); const base = baseOf('coreMath.paramA');
+      a.addTrack('coreMath.paramA', 'Param A');
+      a.addKeyframe('coreMath.paramA', 0, base); a.addKeyframe('coreMath.paramA', 60, base + amp * 2); a.addKeyframe('coreMath.paramA', 120, base);
+      a.setLoopMode('Loop'); w.useAnimationStore.getState().play();
+    },
     async mic() {
       store().setAudio({ isEnabled: true, gain: 0.02 });
       return w.__audioEngine.connectMicrophone();
@@ -276,15 +321,15 @@ async function setup(page: Page, name: string): Promise<{ stop?: () => Promise<v
     const targets = JSON.stringify(TARGETS);
     await page.evaluate(`window.__bench.clear()`);
     await page.mouse.move(4, 4);
-    await page.evaluate(`(() => { const s = window.__store.getState(); if (s.togglePanel) s.togglePanel('audio', false); })()`).catch(() => {});
-    await page.evaluate(`window.__store.getState().setSampleCap(${name === 'idle' ? 8 : 0})`);
+    await page.evaluate(`(() => { const s = window.__store.getState(); if (s.togglePanel) s.togglePanel('Audio', false); })()`).catch(() => {});
+    await page.evaluate(`window.__store.getState().setSampleCap(${name === 'idle' ? 8 : CAP})`);
     switch (name) {
         case 'still': case 'idle': break;
         case 'lfo': await page.evaluate(`window.__bench.lfo(${targets}, ${AMP})`); break;
         case 'audio-idle': await page.evaluate(`window.__bench.deck()`); break;
         case 'audio': case 'audio-hover': case 'audio-panel':
             await page.evaluate(`window.__bench.deck(); window.__bench.rules(${targets}, ${AMP})`);
-            if (name === 'audio-panel') await page.evaluate(`window.__store.getState().togglePanel('audio', true)`);
+            if (name === 'audio-panel') await page.evaluate(`window.__store.getState().togglePanel('Audio', true)`);
             if (name === 'audio-hover') {
                 let alive = true;
                 const loop = (async () => {
@@ -295,6 +340,13 @@ async function setup(page: Page, name: string): Promise<{ stop?: () => Promise<v
             }
             break;
         case 'mic': await page.evaluate(`window.__bench.mic().then(() => window.__bench.rules(${targets}, ${AMP}))`); break;
+        case 'play': case 'play-timeline': {
+            const open = await page.evaluate(`!!document.querySelector('[data-help-id="ui.timeline"]')`);
+            if ((name === 'play-timeline') !== open) await page.keyboard.press('t');
+            await page.waitForTimeout(600);
+            await page.evaluate(`window.__bench.play(${AMP})`);
+            break;
+        }
         default: throw new Error(`unknown scenario '${name}'`);
     }
     return {};
@@ -461,6 +513,7 @@ async function main() {
         process.exit(2);
     }
     const release = await acquireBenchLock('bench-audio', { wait: !process.argv.includes('--no-wait'), force: FORCE });
+    const stopProd = PROD ? await serveProd() : null;
     const browser = await chromium.launch({
         channel: 'chrome', headless: false,
         args: [
@@ -606,6 +659,7 @@ async function main() {
         if (errors.length) { console.log(`[bench-audio] ${errors.length} page error(s):`); for (const e of errors.slice(0, 8)) console.log('   ' + e); }
     } finally {
         await browser.close().catch(() => {});
+        stopProd?.();
         release();
     }
 }

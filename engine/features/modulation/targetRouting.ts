@@ -285,6 +285,59 @@ export function classifyModulationTarget(
     return { branch: 'unresolved', sink: 'none', ddfsResolved: false, base, noAccumReset, curve };
 }
 
+// ── Does moving a target restart accumulation? ──────────────────────────────
+
+/**
+ * Does modulating this target change the TRACED image, so accumulation has to
+ * restart — or only how the finished image is displayed?
+ *
+ * A param declared `noAccumReset` (bloom, colour grading, the other
+ * post-process controls) is applied in the display pass. Dragging its slider
+ * has never reset accumulation; modulating it did, because the live tick
+ * emitted one blanket RESET_ACCUM for any offset that moved and the tick
+ * driver reported the scene as animating for any enabled rule. The result was
+ * a full re-trace on every frame to animate a number the trace never reads:
+ * measured 2026-10-04 at 2168x1384, an LFO on bloom intensity cost 24.7 ms of
+ * GPU per frame and held the image at one sample.
+ *
+ * @invariant Only a UNIFORM-sink scalar or vec axis that declares
+ *   `noAccumReset` is exempt. Everything else invalidates, including the two
+ *   sinks that look harmless:
+ *     - `display-only` / `none`: a uniformless engine-fork app (fluid-toy) reads
+ *       modulated values straight off the store and may key its own
+ *       accumulation on the reset; exempting them here would change that app
+ *       from the outside.
+ *     - `engine-mods` and `render-state`: camera, rotation, lights, optics —
+ *       all of them move the traced image whatever the param config says.
+ *   — proven by: npm run test:modulation-coverage ("bloom intensity does not
+ *   invalidate accumulation", "a formula param does", "a noAccumReset flag
+ *   does not exempt an engine-mods target", "nor a display-only target",
+ *   "nor a composite branch"). The last three run on synthetic routings: no
+ *   offered target of those kinds is flagged `noAccumReset` today, so the
+ *   catalogue alone could not tell this rule from "exempt anything flagged".
+ */
+export function routingInvalidatesAccumulation(r: ModulationRouting): boolean {
+    return !(r.sink === 'uniform' && r.noAccumReset && (r.branch === 'scalar' || r.branch === 'vecAxis'));
+}
+
+const _invalidatesMemo = new Map<string, boolean>();
+
+/**
+ * `routingInvalidatesAccumulation` by target key, memoised — the tick driver
+ * asks once per rule per frame. The answer depends only on the frozen feature
+ * registry, so it is cached for good once the target has RESOLVED; an
+ * unresolved target (its slice not in the store yet) answers `true` and is
+ * asked again next time rather than being pinned to the conservative answer.
+ */
+export function targetInvalidatesAccumulation(targetKey: string, storeState: Record<string, unknown>): boolean {
+    const hit = _invalidatesMemo.get(targetKey);
+    if (hit !== undefined) return hit;
+    const routing = classifyModulationTarget(targetKey, storeState);
+    const v = routingInvalidatesAccumulation(routing);
+    if (routing.ddfsResolved) _invalidatesMemo.set(targetKey, v);
+    return v;
+}
+
 // ── What the picker offers ──────────────────────────────────────────────────
 
 interface ParamConfigLike {

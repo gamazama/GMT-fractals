@@ -44,9 +44,9 @@ export interface RenderInteractionInputs {
  *  so this module stays store-free and node-testable. */
 export interface ModulationSourceState {
     lfosEnabled?: boolean;
-    animations?: { enabled?: boolean }[];
+    animations?: { enabled?: boolean; target?: string }[];
     audio?: { isEnabled?: boolean };
-    modulation?: { rules?: { enabled?: boolean; source?: string }[] };
+    modulation?: { rules?: { enabled?: boolean; source?: string; target?: string }[] };
 }
 
 /**
@@ -64,13 +64,37 @@ export interface ModulationSourceState {
  *   stays engaged and restarts at pass 0 each frame, so only the centre band
  *   repaints, and adaptive never downscales.
  *
- * LFO-sourced RULES need no clause of their own: they read `lfoValues`, which
- * only refresh while the LFO clause below is already true.
+ * LFO-sourced RULES need no clause of their own in the unfiltered form: they
+ * read `lfoValues`, which only refresh while the LFO clause below is already
+ * true.
+ *
+ * `invalidates` narrows the question from "is anything being modulated" to "is
+ * anything being modulated that changes the TRACED image". Pass
+ * `targetInvalidatesAccumulation` and a scene whose only live targets are
+ * display-pass params (bloom, colour grading) reports false — so it is not
+ * `isSceneAnimating`, adaptive does not downscale it and accumulation carries
+ * on converging underneath the moving post-process. Omit it and every enabled
+ * source counts, exactly as before.
+ *
+ * @invariant With a filter, an LFO-sourced rule DOES need its own clause. The
+ *   LFO feeding it may itself target a display-pass param (so the animation
+ *   clause is false) while the rule drives a formula param — which must still
+ *   read as animating.
+ *   — proven by: npm run test:interaction:wiring ("an LFO-sourced rule on a
+ *   scene param still animates when its LFO's own target is display-only").
  */
-export function hasLiveModulationSource(s: ModulationSourceState): boolean {
-    const lfoLive = !!s.lfosEnabled && !!s.animations?.some(a => a.enabled);
+export function hasLiveModulationSource(
+    s: ModulationSourceState,
+    invalidates?: (target: string) => boolean,
+): boolean {
+    const inv = (t: string | undefined) => !invalidates || t === undefined || invalidates(t);
+    const lfoRunning = !!s.lfosEnabled && !!s.animations?.some(a => a.enabled);
+    const lfoLive = lfoRunning && (
+        !!s.animations?.some(a => a.enabled && inv(a.target))
+        || (!!invalidates && !!s.modulation?.rules?.some(r => r.enabled && r.source !== 'audio' && inv(r.target)))
+    );
     const audioLive = !!s.audio?.isEnabled
-        && !!s.modulation?.rules?.some(r => r.enabled && r.source === 'audio');
+        && !!s.modulation?.rules?.some(r => r.enabled && r.source === 'audio' && inv(r.target));
     return lfoLive || audioLive;
 }
 

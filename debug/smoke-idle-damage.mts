@@ -46,8 +46,9 @@
  */
 import { chromium } from 'playwright';
 
-const BASE = process.env.ENGINE_URL || 'http://localhost:3400';
-const URL = /\.html($|\?)/.test(BASE) ? BASE : `${BASE.replace(/\/$/, '')}/app-gmt.html`;
+// `/` and `/app-gmt.html` are the same entry, so a bare ENGINE_URL (what
+// runWithServer exports) lands on the same app.
+const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
 
 /** Writes per second to one node that still count as "not every frame". */
 const IDLE_MAX = 5;
