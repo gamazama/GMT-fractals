@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "bake:palette": "tsx debug/bake-palette-catalog.mts",
+    "bench:audio": "tsx debug/runWithServer.mts -- npx tsx debug/bench-audio.mts",
     "bench:interaction-latency": "tsx debug/interaction-latency-harness.mts",
     "bench:perf": "tsx debug/bench-perf.mts",
     "bench:perf:gate": "tsx debug/bench-perf.mts --gate",

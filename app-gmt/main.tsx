@@ -61,6 +61,7 @@ import { installSceneIO } from '../engine/plugins/SceneIO';
 import { copyShareLink } from '../engine-gmt/topbar/ShareLinkButton';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installAudioAnalysis } from '../engine/animation/audioTick';
+import { audioAnalysisEngine } from '../engine/features/audioMod/AudioAnalysisEngine';
 import { installModulationUI, setLfoListConfig } from '../engine/components/modulation';
 import { installShortcuts, shortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
@@ -769,6 +770,9 @@ if (typeof window !== 'undefined') {
     (window as any).__fractalEvents = FractalEvents;
     (window as any).__fractalEventNames = FRACTAL_EVENTS;
     (window as any).__fractalRegistry = registry;
+    // The audio rig, for `npm run bench:audio` / `smoke:audio-worklet` — the
+    // harness loads a synthetic track and reads signal state through it.
+    (window as any).__audioEngine = audioAnalysisEngine;
     // `?perf` — the frame-rate diagnostic (engine-gmt/renderer/perfProbe.ts).
     // Loaded on demand so it costs nothing otherwise.
     let perfMode: string | null = null;
