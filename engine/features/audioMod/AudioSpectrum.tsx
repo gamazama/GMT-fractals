@@ -1,5 +1,5 @@
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useMemo } from 'react';
 import { audioAnalysisEngine } from './AudioAnalysisEngine';
 import { formatHz } from './freqScale';
 import { filterBank } from './filterBank';
@@ -26,7 +26,17 @@ export const AudioSpectrum: React.FC = () => {
         (store as any).updateModulation({ id, update });
     };
 
-    const rules = modulation.rules.filter(r => r.source === 'audio');
+    // Memoised on the store's own array. This component subscribes to the whole
+    // store, so it re-renders on every live-modulation publish (20 times a
+    // second while anything is modulated), and a fresh `.filter()` array each
+    // time made the draw-loop effect below tear down and restart on every one
+    // of those renders — a cancelled rAF and a new IntersectionObserver each
+    // time. Measured 2026-10-04 with the Audio panel open and one rule
+    // running: 21 observers built a second, 0 with this memo. (The draw count
+    // itself did not change; the restart drew at about the rate the throttle
+    // would have.)
+    const allRules = modulation.rules;
+    const rules = useMemo(() => allRules.filter(r => r.source === 'audio'), [allRules]);
     const selectedId = modulation.selectedRuleId;
 
     const dragRef = useRef<{ 
@@ -111,7 +121,9 @@ export const AudioSpectrum: React.FC = () => {
         // servicing rAF, which is the tell that this loop is the cost).
         // This change helped but did not close it — the drop persists with
         // system-audio capture running (owner 2026-09-02); see the
-        // `@bug PRODUCTION:` on `connectSystemAudio` in AudioTransport.ts.
+        // `@bug PRODUCTION:` on `connectSystemAudio` in AudioTransport.ts
+        // (cause found 2026-10-04: the page presenting every frame; this
+        // canvas at 30 Hz was measured and is not enough to trigger it).
         //
         // 30Hz is well above what a level display needs to read as continuous, and
         // skipping alternate frames hands those back to the renderer. The rAF is

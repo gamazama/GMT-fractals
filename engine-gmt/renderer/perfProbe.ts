@@ -20,11 +20,24 @@
  *   ticks N/s      RENDER_TICKs actually dispatched to the worker
  *   frames N/s     FRAME_READYs delivered back (proxy.frameCount delta)
  *   picks N/s lat  hover pre-picks issued and their mean round-trip
+ *   gpu / fence    from the render worker's own probe (framePerf.ts): median
+ *                  GPU ms per frame (timer query) and how long the
+ *                  frames-in-flight fence took to come back. gpu well under
+ *                  fence means the frame is cheap and something else is
+ *                  holding it — see the note on presents below.
+ *   skips N/s      gate polls that found the GPU still busy
  *
  * Reading it: raf 60 + ticks 60 + frames 30 → the WORKER is the bottleneck
  * (GPU-bound, or blocked by readbacks — look at picks). raf 30 → the MAIN
  * THREAD is (long tasks name the culprit's size). ticks 30 with raf 60 → the
  * convergence gate or the yield branch is skipping dispatches on purpose.
+ *
+ * WHAT THIS PROBE STILL CANNOT SEE: the browser's own presents. The 30-fps
+ * report turned out to be the GPU process's main thread blocked in the
+ * window's swap-chain Present (2026-10-04), which no page API exposes — it
+ * shows here only as its symptom, `fence` at two to four times `gpu`. The
+ * instrument for it is `npm run bench:audio`, which takes a Chrome trace per
+ * scenario and reports `presMs` and what is repainting the page (`--damage`).
  *
  * Zero cost when the flag is absent: nothing is imported or installed
  * (app-gmt/main.tsx loads this module only on `?perf`).
@@ -65,6 +78,8 @@ export function installPerfProbe(proxy: any, opts: { live?: boolean } = {}): Pro
     const origTick = proxy.sendRenderTick.bind(proxy);
     proxy.sendRenderTick = (...args: unknown[]) => { ticks++; return origTick(...args); };
     const origPick = proxy.pickWorldPosition.bind(proxy);
+    // The worker half: GPU ms per frame, fence latency, gate skips.
+    try { proxy.setPerfProbe?.(true); } catch { /* engine-core stub has none */ }
     proxy.pickWorldPosition = (...args: unknown[]) => {
         picks++;
         const t0 = performance.now();
@@ -115,18 +130,22 @@ export function installPerfProbe(proxy: any, opts: { live?: boolean } = {}): Pro
         lastFrames = frameCount;
         let audio = 'none';
         try { audio = `${audioAnalysisEngine.inputKind}${audioAnalysisEngine.hasSignal() ? '+sig' : ''}`; } catch { /* audio not initialised */ }
+        const ws = proxy.perfStats as { gpuMs?: { p50: number; n: number }; fenceMs?: { p50: number }; skips?: number } | null | undefined;
+        const worker = ws
+            ? ` gpu=${ws.gpuMs && ws.gpuMs.n ? ws.gpuMs.p50.toFixed(1) : '-'}ms fence=${ws.fenceMs ? ws.fenceMs.p50.toFixed(1) : '-'}ms skips=${ws.skips ?? 0}/s`
+            : '';
         const line =
             `focus=${document.hasFocus() ? 1 : 0} over=${isMouseOverCanvas() ? 1 : 0} audio=${audio} ` +
             `raf=${gaps.length}/s gap p50=${q(0.5).toFixed(1)} p95=${q(0.95).toFixed(1)} max=${(sorted[sorted.length - 1] ?? 0).toFixed(1)}ms ` +
             `long=${longTasks}/s max=${longMax.toFixed(0)}ms ticks=${ticks}/s frames=${frames}/s ` +
-            `picks=${picks}/s lat=${pickDone ? (pickLatSum / pickDone).toFixed(1) : '-'}ms`;
+            `picks=${picks}/s lat=${pickDone ? (pickLatSum / pickDone).toFixed(1) : '-'}ms` + worker;
         log.push(`${new Date().toISOString().slice(11, 19)} ${line}`);
         if (log.length > 120) log.shift();
         seconds++;
         // Quiet by default: one console line per 10 s (the last second's
         // reading); live mode prints every second and updates the overlay.
         if (live || seconds % 10 === 0) console.log('[perf] ' + line);
-        if (el) el.textContent = line.replace(/ (raf|long|ticks|picks)=/g, '\n$1=');
+        if (el) el.textContent = line.replace(/ (raf|long|ticks|picks|gpu)=/g, '\n$1=');
         gaps.length = 0; ticks = 0; picks = 0; pickDone = 0; pickLatSum = 0; longTasks = 0; longMax = 0;
     }, 1000);
 
@@ -135,6 +154,7 @@ export function installPerfProbe(proxy: any, opts: { live?: boolean } = {}): Pro
         cancelAnimationFrame(rafId);
         observer?.disconnect();
         el?.remove();
+        try { proxy.setPerfProbe?.(false); } catch { /* stub */ }
         proxy.sendRenderTick = origTick;
         proxy.pickWorldPosition = origPick;
         delete (window as any).__perfProbe;

@@ -637,8 +637,16 @@ async function main() {
             await setup(page, dmgScenario);
             await page.waitForTimeout(3000);
             const d = await page.evaluate(`(async () => {
-              const counts = { glDraw: 0, glClear: 0, c2d: 0, rafCallbacks: 0 };
+              const counts = { glDraw: 0, glClear: 0, c2d: 0, c2dClears: 0, observersCreated: 0 };
               const undo = [];
+              // Effect churn shows up as observers being rebuilt: a draw loop that is
+              // torn down and restarted on every render constructs one each time.
+              for (const name of ['IntersectionObserver', 'ResizeObserver']) {
+                const Orig = window[name]; if (!Orig) continue;
+                window[name] = class extends Orig { constructor(...a) { super(...a); counts.observersCreated++; } };
+                undo.push(() => { window[name] = Orig; });
+              }
+              { const orig = CanvasRenderingContext2D.prototype.clearRect; CanvasRenderingContext2D.prototype.clearRect = function (...a) { counts.c2dClears++; return orig.apply(this, a); }; undo.push(() => { CanvasRenderingContext2D.prototype.clearRect = orig; }); }
               for (const proto of [WebGL2RenderingContext.prototype, WebGLRenderingContext.prototype]) for (const [fn, key] of [['drawArrays', 'glDraw'], ['drawElements', 'glDraw'], ['clear', 'glClear']]) {
                 const orig = proto[fn]; proto[fn] = function (...a) { counts[key]++; return orig.apply(this, a); }; undo.push(() => { proto[fn] = orig; });
               }

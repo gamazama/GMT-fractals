@@ -26,43 +26,44 @@
  *   active mic; connecting the mic only PAUSES decks (asymmetric).
  * @bug PRODUCTION: with audio running, GMT renders at ~30fps while its
  *   window is focused and ~60fps while another window has focus
- *   (owner-observed 2026-07-25, still present 2026-09-02). A plain audio FILE
- *   on a deck shows it too (owner, 2026-09-02), so the screen-share surface
- *   of system-audio capture is at most an extra cost, not the cause. The
- *   owner's rule: nothing on the audio side may use or contend the GPU — it
- *   belongs to the render. What the audio path did to the GPU, and what
- *   changed on 2026-09-02:
- *     - every frame the modulation tick published a new liveModulations
- *       map into the store, and the panel router subscribes to the whole
- *       store, so every open panel re-rendered and repainted 60×/s — GPU
- *       raster + composite next to the worker's WebGL. app-gmt now publishes
- *       at 20 Hz for the UI (setLiveModulationPublishInterval in main.tsx);
- *       the render path reads getLiveModulationsNow() per frame, unchanged.
- *     - the spectrum canvas rasterised on the GPU 30×/s; it is CPU-raster
- *       now (willReadFrequently) and draws only while on screen.
- *     - the deck status poll re-rendered its row 10×/s on identical data.
- *   `b3e8b321` had already cut the spectrum redraw to 30Hz.
- *   OWNER VERDICT 2026-09-02, after testing: enabling audio still drops the
- *   GPU consistently. The mitigations above are not the whole story, and
- *   reasoning from the source has run out: the only honest next step is real
- *   profiling on the owner's machine — Chrome DevTools' Performance panel
- *   with the GPU track, or a purpose-built probe beyond `?perf` (which sees
- *   the main thread and the worker's delivered frames, not GPU time).
- *   Remaining suspects for that session: the pointer pre-pick readback
- *   (Navigation.tsx), the worklet→main message traffic, and whatever the
- *   compositor does with the audio panel while it repaints.
- *   Reproduce: connectSystemAudio, focus GMT, watch the fps counter; switch
- *   focus to another window and watch it recover. A fair test uses the
- *   mic path with a virtual audio device as the control: same analysis,
- *   no screen-share surface. If the control holds 60, the surface is it.
- *   Open the app with `?perf` first (engine-gmt/renderer/perfProbe.ts; it
- *   samples every second and prints every 10 s — `?perf=live` prints every
- *   second with an overlay, at a frame cost of its own): the main-thread rAF rate, long tasks,
- *   ticks dispatched, frames delivered and hover picks, so the reading says
- *   WHICH half dropped — the main thread (raf 30) or the worker (raf 60,
- *   frames 30) — and whether the pointer was over the canvas at the time.
- *   Run the matrix: audio none / mic / system × focused / unfocused ×
- *   pointer over / off the canvas, `window.__perfProbe.copy()` after each.
+ *   (owner-observed 2026-07-25, still present 2026-09-02; a plain audio FILE
+ *   on a deck shows it too).
+ *
+ *   CAUSE FOUND 2026-10-04, AND IT IS NOT THE AUDIO STACK. Measured with
+ *   `npm run bench:audio`: an audio rule and an LFO on the same param cost the
+ *   same, and the frame itself costs the same GPU time either way. What
+ *   changes is the PAGE. Switching modulation on lit the slider's "modulated"
+ *   dot — a smooth infinite CSS pulse — and its live marker, which carried a
+ *   transition that never finished. Either one makes Chrome present the whole
+ *   window on every vsync. Those presents run on the GPU process's main
+ *   thread, which is also the thread that decodes the render worker's WebGL
+ *   commands, and after a window focus change each present blocks for ~15 ms
+ *   of every 16.7 (`DXGISwapChainImageBacking::Present` in a Chrome trace).
+ *   The worker's fence then takes two to four vsyncs to come back: 30 fps, or
+ *   14. Two more sources did the same with no audio at all — the light gizmo
+ *   rewrote its SVG every tick, and each point light's orb ran an infinite
+ *   ping — which is why it also depended on what was on screen.
+ *
+ *   FIXED on the same day (the dot and the other persistent indicators are
+ *   stepped, `animate-pulse-live`; the marker steps; the gizmo writes on
+ *   change; the ping runs three times). In the bench, 4 runs x 6 scenarios
+ *   hold 60 fps through focus changes where 2 runs in 3 used to collapse.
+ *   Guard: `npm run smoke:idle-damage`.
+ *
+ *   STILL OPEN, which is why this annotation stays: the owner has not yet
+ *   confirmed it on their own machine and browser profile, where the report
+ *   came from. The bench reproduces a collapse that follows a focus CHANGE;
+ *   the report describes one that tracks focus STATE. Same mechanism is the
+ *   likely reading, not a proven one. To check: open the app normally, enable
+ *   audio with a rule on a formula param, and watch the fps counter while
+ *   switching windows. If it holds, delete this block. If it does not, run
+ *   `npm run bench:audio -- --damage=audio` for what is still repainting, and
+ *   look at `presMs` — anything above ~1 ms is the same starvation.
+ *
+ *   The earlier mitigations (20 Hz live-modulation publish, CPU-raster
+ *   spectrum canvas, deck status poll) stay; they reduce the same class of
+ *   damage. The hover pre-pick (Navigation.tsx) and the worklet's message
+ *   traffic were measured and are not it.
  * @assumption System-audio capture COSTS GPU and cannot be made not to. The
  *   spec requires a video surface — audio-only `getDisplayMedia` is still an
  *   unimplemented request as of 2026 — so Chrome starts a screen-capture
