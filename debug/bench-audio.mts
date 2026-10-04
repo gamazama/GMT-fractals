@@ -32,6 +32,10 @@
  *   audio-hover  `audio` with the pointer wandering over the canvas
  *   audio-panel  `audio` with the Audio panel open
  *   mic          Chrome's fake capture device through the mic path + N rules
+ *   system       system-audio capture (`getDisplayMedia`, auto-accepted) + N
+ *                rules — the path that needs a screen-share surface. Reported
+ *                as `input: system` when Chrome granted an audio track; if it
+ *                did not, the row says `input: none` and measures nothing new
  *   play         timeline playback of a keyframed param, timeline closed
  *   play-timeline  the same with the timeline open — its playhead moves every
  *                frame, which is LEGITIMATE per-frame page damage
@@ -341,6 +345,20 @@ async function setup(page: Page, name: string): Promise<{ stop?: () => Promise<v
             }
             break;
         case 'mic': await page.evaluate(`window.__bench.mic().then(() => window.__bench.rules(${targets}, ${AMP}))`); break;
+        case 'system': {
+            // getDisplayMedia needs a real user activation, so route it through a click.
+            await page.evaluate(`(() => {
+              const b = document.createElement('button'); b.id = '__bench_sys'; b.textContent = 'sys';
+              Object.assign(b.style, { position: 'fixed', left: '0', top: '0', zIndex: '99999', opacity: '0.01' });
+              b.onclick = () => { window.__benchSys = window.__audioEngine.connectSystemAudio(); };
+              document.body.appendChild(b);
+            })()`);
+            await page.click('#__bench_sys');
+            const granted = await page.evaluate(`Promise.resolve(window.__benchSys).catch(() => false)`);
+            await page.evaluate(`document.getElementById('__bench_sys')?.remove(); window.__store.getState().setAudio({ isEnabled: true, gain: 0.02 }); window.__bench.rules(${targets}, ${AMP})`);
+            if (!granted) console.log('[bench-audio] system-audio capture was not granted an audio track — the `system` row is not a capture measurement');
+            break;
+        }
         case 'play': case 'play-timeline': {
             const open = await page.evaluate(`!!document.querySelector('[data-help-id="ui.timeline"]')`);
             if ((name === 'play-timeline') !== open) await page.keyboard.press('t');
@@ -533,6 +551,7 @@ async function main() {
             '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--disable-background-timer-throttling',
             '--autoplay-policy=no-user-gesture-required',
             '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
+            '--auto-select-desktop-capture-source=Entire screen',
         ],
     });
     try {
@@ -541,6 +560,7 @@ async function main() {
         const errors: string[] = [];
         page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
         page.on('console', (m) => { if (m.type() === 'error') errors.push('console.error: ' + m.text().slice(0, 240)); });
+        page.on('response', (res) => { if (res.status() === 404) errors.push('404: ' + res.url()); });
         await page.addInitScript(INIT_SCRIPT);
         console.log(`[bench-audio] ${URL}  ${W}x${H}  formula=${FORMULA}  targets=${TARGETS.join(',')}  adaptive=${ADAPTIVE}  ${SECS}s/scenario`);
         await page.goto(URL, { waitUntil: 'domcontentloaded' });
