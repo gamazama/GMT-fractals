@@ -50,6 +50,30 @@ const BOUND_FRAMES_IN_FLIGHT = true;
 let _inflightFence: WebGLSync | null = null;
 let _inflightT0 = 0;
 
+// ── Gate retry pacing ────────────────────────────────────────────────────────
+// While a tick is pending and the GPU is still busy, the scheduler in
+// renderWorker.ts re-polls the fence on a timer. That timer used to be a flat
+// 4 ms, which is the gate's whole granularity: a frame that finishes 0.1 ms
+// after a poll waits the other 3.9 ms for nothing. For a GPU-bound scene that
+// is pure lost throughput — measured 2026-10-04 at 1528x1024 on an RTX 2070:
+// MengerSponge 19.0 ms of GPU per frame, delivered every 22.1 ms.
+//
+// So the retry is now timed from what the last frames actually took: sleep
+// until just before the fence is due, then poll every millisecond. The first
+// sleep aims at 80 % of the smoothed latency, never the whole of it — a sleep
+// tuned to the full latency could never observe a frame getting FASTER (the
+// reading would be censored at the sleep), and adaptive resolution makes
+// frames faster all the time.
+const GATE_POLL_MS = 1;
+let _fenceEmaMs = 0;
+
+/** How long the scheduler should wait before re-polling the in-flight fence. */
+export function gateRetryDelayMs(): number {
+    if (!_inflightFence || !_inflightT0 || _fenceEmaMs <= 0) return GATE_POLL_MS;
+    const wait = _fenceEmaMs * 0.8 - (performance.now() - _inflightT0);
+    return wait > GATE_POLL_MS ? Math.min(wait, 16) : GATE_POLL_MS;
+}
+
 // Wall-clock of the last rendered frame, for frame-rate-independent smoothing.
 // The worker renders on its own (gated) cadence, decoupled from the main thread's
 // per-tick delta — so the camera-smoothing / accumulation-reset step in
@@ -134,8 +158,10 @@ export const handleRenderTick = (
         try {
             const _s = _gl.clientWaitSync(_inflightFence, _gl.SYNC_FLUSH_COMMANDS_BIT, 0);
             _done = _s === _gl.ALREADY_SIGNALED || _s === _gl.CONDITION_SATISFIED || _s === _gl.WAIT_FAILED;
-            if (_perfOn && _inflightT0 && _s !== _gl.WAIT_FAILED && _done) {
-                framePerf.noteFence(performance.now() - _inflightT0);
+            if (_inflightT0 && _s !== _gl.WAIT_FAILED && _done) {
+                const _lat = performance.now() - _inflightT0;
+                _fenceEmaMs = _fenceEmaMs > 0 ? _fenceEmaMs * 0.7 + _lat * 0.3 : _lat;
+                if (_perfOn) framePerf.noteFence(_lat);
             }
         } catch {
             _done = true; // invalid/dead sync — never block on it
