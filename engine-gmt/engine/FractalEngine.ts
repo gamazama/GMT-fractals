@@ -420,6 +420,15 @@ export class FractalEngine {
         this.materials.setUniform(Uniforms.RegionMax, this._bandMax);
     }
 
+    /** Fraction of the screen the trace is confined to this tick (1 = full
+     *  frame). Read by the worker's frame probe: a tiled tick traces one band,
+     *  so its GPU time is that fraction of a full frame's. */
+    public get traceRegionArea(): number {
+        return Math.max(0, (this._bandMax.x - this._bandMin.x) * (this._bandMax.y - this._bandMin.y));
+    }
+    /** True while progressive tiling owns the render region. */
+    public get isTilingActive(): boolean { return this._tilingActive; }
+
     /** Force tiling to release the region uniforms back to full-frame and clear the
      *  blend override. Called when an exclusive render mode (export/bucket) starts,
      *  because those don't run compute()'s tiling-exit branch, so a leftover band

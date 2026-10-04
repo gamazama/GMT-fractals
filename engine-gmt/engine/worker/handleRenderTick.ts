@@ -206,11 +206,18 @@ export const handleRenderTick = (
     }
 
     if (_perfOn) framePerf.gpuBegin(renderer.getContext() as WebGL2RenderingContext);
+    const _accumBefore = _perfOn ? engine.pipeline.accumulationCount : 0;
     const _ftC0 = _perfOn ? performance.now() : 0;
     engine.compute(renderer);
     const _ftComputeMs = _perfOn ? performance.now() - _ftC0 : 0;
+    if (_perfOn) framePerf.gpuMark(renderer.getContext() as WebGL2RenderingContext);
     const _ftD0 = _perfOn ? performance.now() : 0;
-    if (_perfOn) framePerf.notePhase('compute', _ftComputeMs);
+    if (_perfOn) {
+        framePerf.notePhase('compute', _ftComputeMs);
+        const res = engine.mainUniforms.uResolution?.value;
+        framePerf.noteTrace(engine.traceRegionArea, engine.pipeline.isHolding, res ? res.x * res.y : 0,
+            engine.isTilingActive, !!engine.state.isSceneAnimating, _accumBefore, engine.pipeline.accumulationCount);
+    }
 
     // ── Blit first — submit display frame to the GPU before any readback work ──
     // Consistent frame timing: display render is always the first thing after

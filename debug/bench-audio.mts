@@ -152,6 +152,7 @@ const FORCE = arg('force') === 'true';
 const TRACE = (arg('trace', '')!).split(',').filter(Boolean);   // 1-based scenario positions to capture a Chrome trace for, e.g. --trace=2,3
 const PRESENT_PROBE = arg('no-present-probe') !== 'true';
 const DAMAGE = arg('damage');                         // after the scenarios: what dirties the page in this scenario? (`--damage` = idle, or `--damage=lfo`)
+const SHOTS = arg('shots') === 'true';                // save a screenshot per scenario to debug/scratch (what was actually on screen)
 const INJECT_CSS = arg('inject-css', '')!;            // A/B a style change without touching source, e.g. --inject-css=".animate-ping{animation:none!important}"
 const WIN = process.platform === 'win32';
 
@@ -428,7 +429,13 @@ async function measure(page: Page, cdp: CDPSession, name: string, benchPids: Set
         storeNotifies: +(m.notifies / secs).toFixed(1), livePub: +(m.livePub / secs).toFixed(1),
         posts, postsTotal: +postsTotal.toFixed(1),
         frames: +frames.toFixed(1), skips: +(wsum(s => s.skips) / wsecs).toFixed(1),
+        traceArea: +(wsum(s => s.traceArea * s.frames) / (wsum(s => s.frames) || 1)).toFixed(3), heldFrames: +(wsum(s => s.heldFrames) / wsecs).toFixed(1),
+        meanMP: +(wsum(s => s.meanMP * s.frames) / (wsum(s => s.frames) || 1)).toFixed(3), fboResizes: w.__gmtProxy.fboResizes,
+        tiledFrames: +(wsum(s => s.tiledFrames) / wsecs).toFixed(1), animatingFrames: +(wsum(s => s.animatingFrames) / wsecs).toFixed(1),
+        untracedFrames: +(wsum(s => s.untracedFrames) / wsecs).toFixed(1), blendedFrames: +(wsum(s => s.blendedFrames) / wsecs).toFixed(1),
         gpuMsP50: +med(wins.map(s => s.gpuMs.p50)).toFixed(2), gpuMsP95: +med(wins.map(s => s.gpuMs.p95)).toFixed(2),
+        gpuTraceMs: +med(wins.map(s => s.gpuTraceMs.p50)).toFixed(2), gpuTraceP95: +med(wins.map(s => s.gpuTraceMs.p95)).toFixed(2),
+        gpuPostMs: +med(wins.map(s => s.gpuPostMs.p50)).toFixed(2), gpuPostP95: +med(wins.map(s => s.gpuPostMs.p95)).toFixed(2),
         gpuSamples: wsum(s => s.gpuMs.n), gpuDisjoint: wsum(s => s.gpuDisjoint), gpuTimer: !!(last && last.gpuTimerAvailable),
         fenceMsP50: +med(wins.map(s => s.fenceMs.p50)).toFixed(2),
         gapMsP50: +med(wins.map(s => s.gapMs.p50)).toFixed(2), gapMsP95: +med(wins.map(s => s.gapMs.p95)).toFixed(2),
@@ -444,6 +451,10 @@ async function measure(page: Page, cdp: CDPSession, name: string, benchPids: Set
         input: eng.inputKind, signal: eng.hasSignal(), analysisFailed: eng.analysisFailed,
         rules: (st.modulation?.rules ?? []).length, lfos: (st.animations ?? []).filter(a => a.enabled).length, audioOn: !!st.audio?.isEnabled,
         liveKeys: Object.keys(st.liveModulations ?? {}).length,
+        // First target's stored base and current live value — a scenario that
+        // leaves a param somewhere else changes what the next one renders.
+        targetBase: (() => { const t = ${JSON.stringify(TARGETS[0])}; const i = t.indexOf('.'); const v = st[t.slice(0, i)]?.[t.slice(i + 1)]; return typeof v === 'number' ? +v.toFixed(4) : null; })(),
+        targetLive: (() => { const v = (st.liveModulations ?? {})[${JSON.stringify(TARGETS[0])}]; return typeof v === 'number' ? +v.toFixed(4) : null; })(),
       };
     })()`) as Record<string, unknown>;
     const wall = (c1.Timestamp - c0.Timestamp) || 1;
@@ -463,7 +474,7 @@ async function measure(page: Page, cdp: CDPSession, name: string, benchPids: Set
 // ─── report ────────────────────────────────────────────────────────────
 function table(rows: ScenarioResult[]) {
     const cols: [string, string, number][] = [
-        ['name', 'scenario', 15], ['fg', 'fg', 3], ['gpuMsP50', 'gpu ms', 7], ['gpuMsP95', 'p95', 6], ['frames', 'frm/s', 6], ['mpPerSec', 'MP/s', 6],
+        ['name', 'scenario', 15], ['fg', 'fg', 3], ['gpuMsP50', 'gpu ms', 7], ['gpuMsP95', 'p95', 6], ['frames', 'frm/s', 6], ['traceArea', 'area', 5], ['mpPerSec', 'MP/s', 6],
         ['swaps', 'swap/s', 6], ['presentMs', 'presMs', 6], ['gpuMainBusy', 'gpuTh%', 6], ['renderW', 'w', 5], ['fenceMsP50', 'fence', 6], ['skips', 'skip/s', 6], ['tickCpuMs', 'tick ms', 7], ['phaseReadbackMs', 'rb ms', 6], ['workerMsgsTotal', 'wmsg/s', 7], ['workerMsgCpuPct', 'wmsg %', 6],
         ['raf', 'raf', 5], ['rafGapP95', 'gapP95', 6], ['mainBusyPct', 'main %', 6], ['mainScriptPct', 'script%', 7], ['postsTotal', 'post/s', 6],
         ['storeNotifies', 'store/s', 7], ['livePub', 'pub/s', 5], ['awHops', 'hops', 5], ['gpuChrome3dPct', 'gpu3d%', 6], ['gpuOther3dPct', 'other%', 6], ['nvUtil', 'nv%', 4], ['nvWatts', 'W', 4], ['nvMhz', 'MHz', 5], ['nvPstate', 'P', 6],
@@ -602,6 +613,7 @@ async function main() {
             if (tracing) await browser.startTracing(page, { categories: ['toplevel', 'gpu', 'viz', 'cc', 'benchmark', 'audio', 'webaudio', 'disabled-by-default-gpu.service'] });
             const r = await measure(page, cdp, name, benchPids);
             const fg1 = await foreground();
+            if (SHOTS) await page.screenshot({ path: `debug/scratch/bench-audio-shot-${rows.length + 1}-${name}.png` }).catch(() => {});
             if (PRESENT_PROBE && !tracing) Object.assign(r, await presentProbe(browser, page));
             // 1 = bench Chrome held the OS foreground for the whole window, 0 = never, 0.5 = it changed mid-run.
             r.fg = (benchPids.has(fg0.pid) ? 0.5 : 0) + (benchPids.has(fg1.pid) ? 0.5 : 0);

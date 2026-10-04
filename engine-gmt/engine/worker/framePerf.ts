@@ -12,11 +12,14 @@
  *
  * WHAT EACH NUMBER MEANS
  *   gpuMs    GPU time for the whole frame (trace + bloom + display blit), from
- *            an `EXT_disjoint_timer_query_webgl2` TIME_ELAPSED query. This is
+ *            `EXT_disjoint_timer_query_webgl2` TIME_ELAPSED queries. This is
  *            the continuous cost figure. On ANGLE/D3D11 it is wall time between
  *            two points in this context's command stream, so GPU work another
  *            process interleaves shows up in it too — which is what a
  *            contention hunt wants. Absent (count 0) where the extension is.
+ *   gpuTraceMs / gpuPostMs  the same frame split in two back-to-back queries:
+ *            `engine.compute()` (the trace) and everything after it (bloom +
+ *            display blit). gpuMs is their sum per frame.
  *   fenceMs  submit → fence-signalled, as OBSERVED by the frames-in-flight
  *            gate. Polled, so it rounds UP to the next poll (see the retry
  *            timer in `renderWorker.ts`); it bounds how long the gate held the
@@ -30,6 +33,13 @@
  *            `display` (bloom + blit + flush) and `readback` (depth probe).
  *            A stage that suddenly costs milliseconds is a GPU sync point:
  *            the call blocked until the driver caught up.
+ *   traceArea  mean fraction of the screen the trace covered (the render
+ *            region, 1 = full frame). Progressive tiling renders one band per
+ *            tick, so a "frame" there is a fraction of an image — and its
+ *            gpuMs is that fraction of a full frame's. Read gpuMs with this
+ *            beside it, or a band reads as a mysteriously cheap frame.
+ *   heldFrames  ticks where the pipeline was holding (no trace at all, the
+ *            previous image re-blitted).
  *   skips    gate polls that found the GPU still busy and rendered nothing.
  *   msgs     messages received by type, and `msgCpuMs`, the CPU spent handling
  *            them — the per-frame UNIFORM traffic of a modulated scene lands
@@ -61,6 +71,27 @@ export interface WorkerPerfStats {
     windowMs: number;
     frames: number;
     skips: number;
+    /** Mean traced fraction of the screen per rendered tick (1 = full frame). */
+    traceArea: number;
+    /** Rendered ticks on which the pipeline was holding (nothing traced). */
+    heldFrames: number;
+    /** Mean internal render-target megapixels per rendered tick. Adaptive
+     *  resolution moves the target between ticks; `renderW`/`renderH` below are
+     *  one sample at flush time and can miss that entirely. */
+    meanMP: number;
+    /** Rendered ticks on which progressive tiling owned the region. */
+    tiledFrames: number;
+    /** Rendered ticks the worker saw `isSceneAnimating` on. A scene that is
+     *  being modulated must read frames == animatingFrames and tiledFrames 0;
+     *  anything else means bands are being painted from different moments. */
+    animatingFrames: number;
+    /** Rendered ticks that left the sample count where it was — the display
+     *  pass ran but nothing was traced (holding, capped, or skipped). */
+    untracedFrames: number;
+    /** Rendered ticks that ADDED a sample onto existing history rather than
+     *  starting fresh. While something is modulated every one of these blends
+     *  two different moments of the scene into one image. */
+    blendedFrames: number;
     gapMs: PerfSeries;
     cpuMs: PerfSeries;
     computeMs: PerfSeries;
@@ -68,6 +99,10 @@ export interface WorkerPerfStats {
     phaseMs: { update: number; compute: number; display: number; readback: number };
     fenceMs: PerfSeries;
     gpuMs: PerfSeries;
+    /** The trace half of gpuMs — `engine.compute()`. */
+    gpuTraceMs: PerfSeries;
+    /** The rest of gpuMs — bloom + display blit. */
+    gpuPostMs: PerfSeries;
     /** Timer-query results discarded because the GPU reported a disjoint
      *  event (context switch / throttle) — they are not trustworthy. */
     gpuDisjoint: number;
@@ -104,8 +139,17 @@ class FramePerf {
     private compute: number[] = [];
     private fence: number[] = [];
     private gpu: number[] = [];
+    private gpuTrace: number[] = [];
+    private gpuPost: number[] = [];
     private frames = 0;
     private skips = 0;
+    private traceAreaSum = 0;
+    private held = 0;
+    private mpSum = 0;
+    private tiled = 0;
+    private animating = 0;
+    private untraced = 0;
+    private blended = 0;
     private disjoint = 0;
     private msgs: Record<string, number> = {};
     private msgCpuMs = 0;
@@ -116,7 +160,10 @@ class FramePerf {
     /** undefined = not probed yet, null = extension unavailable. */
     private ext: TimerExt | null | undefined = undefined;
     private active: WebGLQuery | null = null;
-    private pending: WebGLQuery[] = [];
+    private activeTag: 'trace' | 'post' = 'trace';
+    private pending: { q: WebGLQuery; tag: 'trace' | 'post' }[] = [];
+    /** Trace ms of the frame whose post query is still outstanding. */
+    private traceHeld = -1;
 
     public setEnabled(on: boolean): void {
         if (on === this.on) return;
@@ -132,14 +179,24 @@ class FramePerf {
 
     private resetWindow(): void {
         this.gap.length = 0; this.cpu.length = 0; this.compute.length = 0;
-        this.fence.length = 0; this.gpu.length = 0;
+        this.fence.length = 0; this.gpu.length = 0; this.gpuTrace.length = 0; this.gpuPost.length = 0;
         this.frames = 0; this.skips = 0; this.disjoint = 0;
+        this.traceAreaSum = 0; this.held = 0; this.mpSum = 0; this.tiled = 0; this.animating = 0; this.untraced = 0; this.blended = 0;
         this.msgs = {}; this.msgCpuMs = 0;
         this.phase = { update: 0, compute: 0, display: 0, readback: 0 };
         this.windowStart = performance.now();
     }
 
     public noteSkip(): void { this.skips++; }
+    public noteTrace(area: number, holding: boolean, pixels: number, tiling: boolean, animating: boolean,
+                     accumBefore: number, accumAfter: number): void {
+        this.traceAreaSum += area; if (holding) this.held++; this.mpSum += pixels / 1e6;
+        if (tiling) this.tiled++;
+        if (animating) this.animating++;
+        // A tick that advanced the sample count traced; one that left it alone did not.
+        if (accumAfter === accumBefore) this.untraced++;
+        if (accumBefore > 0 && accumAfter > accumBefore) this.blended++;
+    }
     public notePhase(name: 'update' | 'compute' | 'display' | 'readback', ms: number): void { this.phase[name] += ms; }
     public noteFence(ms: number): void { this.fence.push(ms); }
     public noteMessage(type: string, ms: number): void {
@@ -168,21 +225,38 @@ class FramePerf {
             if (!ext) return;
             // A frame that threw between begin and end leaves a query open;
             // close it rather than nest (nesting is INVALID_OPERATION).
-            if (this.active) { gl.endQuery(ext.TIME_ELAPSED_EXT); this.pending.push(this.active); this.active = null; }
+            if (this.active) { gl.endQuery(ext.TIME_ELAPSED_EXT); this.pending.push({ q: this.active, tag: this.activeTag }); this.active = null; }
             // Results arrive a frame or two late. If they have stopped arriving
             // (lost context), stop issuing rather than grow without bound.
-            if (this.pending.length > 8) return;
+            if (this.pending.length > 16) return;
             const q = gl.createQuery();
             if (!q) return;
             gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
             this.active = q;
+            this.activeTag = 'trace';
+        } catch { this.active = null; }
+    }
+
+    /** End the trace query and start the post one. Back-to-back, never nested. */
+    public gpuMark(gl: WebGL2RenderingContext): void {
+        const ext = this.ext;
+        if (!ext || !this.active || this.activeTag !== 'trace') return;
+        try {
+            gl.endQuery(ext.TIME_ELAPSED_EXT);
+            this.pending.push({ q: this.active, tag: 'trace' });
+            this.active = null;
+            const q = gl.createQuery();
+            if (!q) return;
+            gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
+            this.active = q;
+            this.activeTag = 'post';
         } catch { this.active = null; }
     }
 
     public gpuEnd(gl: WebGL2RenderingContext): void {
         const ext = this.ext;
         if (!ext || !this.active) return;
-        try { gl.endQuery(ext.TIME_ELAPSED_EXT); this.pending.push(this.active); } catch { /* dead context */ }
+        try { gl.endQuery(ext.TIME_ELAPSED_EXT); this.pending.push({ q: this.active, tag: this.activeTag }); } catch { /* dead context */ }
         this.active = null;
     }
 
@@ -192,15 +266,23 @@ class FramePerf {
         if (!ext) return;
         try {
             while (this.pending.length) {
-                const q = this.pending[0];
+                const { q, tag } = this.pending[0];
                 if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
                 const disjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
-                const ns = gl.getQueryParameter(q, gl.QUERY_RESULT) as number;
+                const ms = (gl.getQueryParameter(q, gl.QUERY_RESULT) as number) / 1e6;
                 gl.deleteQuery(q);
                 this.pending.shift();
-                if (disjoint) this.disjoint++; else this.gpu.push(ns / 1e6);
+                if (disjoint) { this.disjoint++; if (tag === 'trace') this.traceHeld = -1; continue; }
+                // Queries complete in order, so a frame's trace result always
+                // lands before its post result.
+                if (tag === 'trace') { this.gpuTrace.push(ms); this.traceHeld = ms; }
+                else {
+                    this.gpuPost.push(ms);
+                    if (this.traceHeld >= 0) this.gpu.push(this.traceHeld + ms);
+                    this.traceHeld = -1;
+                }
             }
-        } catch { this.pending.length = 0; }
+        } catch { this.pending.length = 0; this.traceHeld = -1; }
     }
 
     // ── Flush ───────────────────────────────────────────────────────────────
@@ -212,6 +294,13 @@ class FramePerf {
             windowMs: now - this.windowStart,
             frames: this.frames,
             skips: this.skips,
+            traceArea: this.frames ? this.traceAreaSum / this.frames : 0,
+            heldFrames: this.held,
+            meanMP: this.frames ? this.mpSum / this.frames : 0,
+            tiledFrames: this.tiled,
+            animatingFrames: this.animating,
+            untracedFrames: this.untraced,
+            blendedFrames: this.blended,
             gapMs: summarise(this.gap),
             cpuMs: summarise(this.cpu),
             computeMs: summarise(this.compute),
@@ -221,6 +310,8 @@ class FramePerf {
             },
             fenceMs: summarise(this.fence),
             gpuMs: summarise(this.gpu),
+            gpuTraceMs: summarise(this.gpuTrace),
+            gpuPostMs: summarise(this.gpuPost),
             gpuDisjoint: this.disjoint,
             gpuTimerAvailable: !!this.ext,
             msgs: this.msgs,
