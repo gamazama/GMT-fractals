@@ -1,6 +1,7 @@
 # Deep Zoom gmt-shell - what the owner decided, and what is still open
 
-Architect pass, 2026-10-07; split into **decided** and **open** on 2026-10-08. Only calls that
+Architect pass, 2026-10-07; split into **decided** and **open** on 2026-10-08; O1 to O3 moved to
+decided (K6 to K8) the same day, before the first package was built. Only calls that
 change what gets built. The first version's numbers D3 to D15 are kept so the other documents'
 references still resolve; D1 and D2 are closed by K1 to K3.
 
@@ -49,15 +50,40 @@ Answers to `GMT-SYSTEMS.md` section 8, all "yes to the recommendation":
 Until stage N lands it flies on the module's own loop; until stage L lands it lights with plain
 sliders. `GMT-SYSTEMS.md` section 7 says which stage each rework belongs to.
 
-Nothing is to be built yet: this pass is documents only.
+## K6. The prototype is `deep-zoom-prototype`, dev-only (was O1)
+
+Decided 2026-10-08 ("yes to all 3"), restated by the owner at the start of the build session.
+Last week's embedded prototype moves to `deep-zoom-prototype/` with `deep-zoom-prototype.html`,
+`public/deep-zoom-prototype-core/` and `smoke:deep-zoom-prototype` (BLUEPRINT section 11 has the
+full table). It is **not a production build input**: it runs on the dev server only and its shell
+page is never built. *Closes O1; unblocks stage 1, package S1-A.*
+
+## K7. No push and no merge to `main` until the owner says ship (was O2)
+
+Decided 2026-10-08. Every commit of this build stays on the local branch `deep-zoom-tool`. A new
+HTML entry joins the precache and a push can interrupt live users, so the first push and the merge
+wait for the owner's word. *Closes O2.*
+
+## K8. Colour uses GMT's own mode numbers and its `scale` / `offset` / `bias` names (was O3)
+
+Decided 2026-10-08. From the first saved file the colour feature stores GMT's mode numbers
+(0, 1, 5, 7, 8, 13) and GMT's `scale` / `offset` / `bias` names (GMT-SYSTEMS 7.5), so a GMT
+colouring block reads across later with no migration. *Closes O3; unblocks stage 2, package S2-2.
+Where BLUEPRINT section 3 still shows the module's own `mode` enum for `dzColour`, K8 wins.*
+
+## K9. How the shell reaches the renderer, and how it is checked
+
+Restated by the owner at the start of the build session, 2026-10-08: the standalone page in
+`mandelbulb_deepzoom` is frozen and is not edited (K1); the shell mounts the module and there is
+no embedded page (K2); real-GPU checks run headed Chrome on d3d11, never SwiftShader.
+
+Building started 2026-10-08 on the owner's word (an overnight session, stage 1 first).
 
 # Open - in the order they block
 
 | Order | Id | The call | Blocks | Recommended |
 |---|---|---|---|---|
-| 1 | **O1** | The prototype's new name, and that it is dev-only (no build input) | stage 1, package S1-A | `deep-zoom-prototype`; dev-only |
-| 2 | **O2** | Hold the first push and the merge to `main` until you say ship (a new HTML entry joins the precache; a push can interrupt live users) | nothing to build; every push | hold; not before stage 4 is green |
-| 3 | **O3** | Colour uses GMT's mode numbers (0, 1, 5, 7, 8, 13) and GMT's `scale` / `offset` / `bias` names from the first saved file (GMT-SYSTEMS 7.5) | stage 2, S2-2 | yes: a rename after scenes exist is a migration |
+| - | O1, O2, O3 | **Decided**: see K6, K7, K8 above | - | - |
 | 4 | D7, D13, D14 | Developer levers; the 17 look values with no range; fixed frame size and the scale pill | stage 2 | as written below |
 | 5 | D6, D8 | Where saved locations live; which small engine changes ride along | stage 3 (E2 of D8 already in stage 2) | as written below |
 | 6 | D3, D9 | Keys while the mouse is captured (holds until N5); the tutorial card | stage 4 | as written below |
@@ -67,13 +93,6 @@ Nothing is to be built yet: this pass is documents only.
 | 10 | GMT-SYSTEMS 8.6, 8.9, 8.8 | Which attachments this shell offers; light count; route A only, or A then B | stage L: L0 (8.9), L4 and L5 (8.6); 8.8 only after stage 7 | Surface and Camera, World disabled below about 1e-6; 8 lights; A now |
 | 11 | D12 | Modulation (LFOs) | nothing in v1; L5 packs with an empty modulation map until it is decided | leave out of v1 |
 | 12 | GMT-SYSTEMS 8.10, 8.11, 8.12, 8.14 | Post stack; share-link schema; F8 stays out; shadow rows after route B | after stage 7 (8.11 after stage 3 shows the link's length) | as recommended there |
-
-## O1. The prototype's name
-
-Last week's embedded prototype moves to `deep-zoom-prototype/` with `deep-zoom-prototype.html`,
-`public/deep-zoom-prototype-core/`, `smoke:deep-zoom-prototype` (BLUEPRINT section 11 has the full
-table). Names are your call. Second half: it gets no build input, so it runs on the dev server
-only and never reaches the deployed precache; say so if you want it reachable on the preview deploy.
 
 ## O4. Keys once nothing captures the mouse (re-opens D3 for N5)
 

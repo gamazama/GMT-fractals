@@ -730,7 +730,7 @@ debug/deep-zoom-checks/*.mts    per-package node checks (no browser)
 
 ### The prototype moves aside (package S1-A, before anything new is written)
 
-Proposed name: **`deep-zoom-prototype`** (the name is the owner's call, DECISIONS O1). It stays
+Name: **`deep-zoom-prototype`**, dev-only (decided, DECISIONS K6, was O1). It stays
 runnable, with its own smoke, until the new shell matches it; then stage 7 removes it.
 
 | Today | Moves to | What else changes with it |
