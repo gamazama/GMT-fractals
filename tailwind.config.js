@@ -19,6 +19,7 @@ export default {
     './fluid-toy/**/*.{ts,tsx}',
     './fractal-toy/**/*.{ts,tsx}',
     './mesh-export/**/*.{ts,tsx}',
+    './deep-zoom/**/*.{ts,tsx}',
     './demo/**/*.{ts,tsx}',
     './engine/**/*.{ts,tsx}',
     './engine-gmt/**/*.{ts,tsx}',

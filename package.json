@@ -67,6 +67,8 @@
     "smoke:compile-failed": "tsx debug/smoke-compile-failed.mts",
     "smoke:lazy-fallback": "tsx debug/smoke-lazy-fallback.mts",
     "smoke:pwa-update": "tsx debug/smoke-pwa-update.mts",
+    "smoke:deep-zoom": "tsx debug/smoke-deep-zoom.mts",
+    "sync:deep-zoom-core": "node scripts/sync-deep-zoom-core.mjs",
     "smoke:deep-zoom-la": "tsx debug/smoke-deep-zoom-la.mts",
     "smoke:deep-zoom-nucleus": "tsx debug/smoke-deep-zoom-nucleus.mts",
     "smoke:deep-zoom-orbit": "tsx debug/smoke-deep-zoom-orbit.mts",

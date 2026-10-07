@@ -7,6 +7,7 @@
     "fluid-toy/main.tsx",
     "fractal-toy/main.tsx",
     "mesh-export/main.tsx",
+    "deep-zoom/main.tsx",
     "gradient-explorer/v2/main.tsx",
     "engine/plugins/**/*.{ts,tsx}",
     "debug/smoke-*.mts",
