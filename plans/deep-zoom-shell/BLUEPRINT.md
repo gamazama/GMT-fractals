@@ -188,6 +188,11 @@ first saved file (stage 3).
 | `roughness` | Roughness | float | 0.1..1 | 0.05 | 0.75 | shading = New |
 | `haze` | Haze | float | 0..1 | 0.05 | 0 | shading = New |
 
+**"Shown" as built (S2-2, read from the shading shader; it wins over the column above):** the New
+shading reads the light type too, so `lightType` is always shown, `lampFalloff` when the type is
+Lamp or Both, and `keyElevation` / `keyTurn` / `lightTint` / `shadows` only when shading is New and
+the type is not Lamp.
+
 Eleven params. Seventeen more look fields exist with defaults but **no range anywhere in the page**
 [params 2.2 rows 37-48, 51-53]: exposure 1, saturation 1, occlusion radius 0.12, shadow softness 0.05, shadow length 0.6, haze colour, key 3.0,
 fill 0.5, kicker 0.25, fill colour, kicker colour, metallic 0.2, reflectivity 0.6, diffuse 1.0, key
@@ -196,15 +201,33 @@ after someone reads the shading pass and sets a safe range for each; shipping a 
 guessed range breaks "never a control the core cannot honour" (INTERFACE principle 12).
 
 ### dzColour (panel Colour) - all A
+**As built (S2-2, 2026-10-08, under DECISIONS K8 - this table replaces the first version's index
+enum Plain / Iteration / Orbit trap):**
+
 | key | label | type | range | step | default | shown |
 |---|---|---|---|---|---|---|
-| `mode` | Colour mode | enum Plain / Iteration / Orbit trap | - | - | Plain | always |
-| `scale` | Palette scale | float | 0.1..16 | 0.1 | 1 | always |
-| `useGradient` | Gradient | boolean | - | - | false | always |
-| `gradient` | Gradient | gradient (`GradientConfig`, `colorSpace:'srgb'`) | - | - | a built-in ramp | `useGradient` true |
+| `plain` | Colour: Plain / Palette | boolean | - | - | true (Plain) | always |
+| `mode` | Mapping | float storing **GMT's mode number**, explicit option values as GMT's own `ColoringFeature.mode`: Orbit trap = 0, Iterations = 1 | - | - | 0 | see `features/colour.ts` |
+| `scale` | Scale | float (GMT's name; the module's range and units) | 0.1..16 | 0.1 | 1 | see `features/colour.ts` |
+| `useGradient` | Gradient | boolean | - | - | false | stage 5 |
+| `gradient` | Gradient | gradient (`GradientConfig`, `colorSpace:'srgb'`) | - | - | a built-in ramp | stage 5, `useGradient` true |
 
-Setting a gradient while mode is Plain also sets mode to Orbit trap, in the same store write, so the
+Why `plain` is its own key: the module's Plain is a constant colour, not a mapping, and GMT's
+number 0 is Orbit Trap (its default). Storing Plain as 0 would make GMT's most common number mean
+"no colouring" here. Module mode 2 (orbit trap) is GMT 0 and module mode 1 (iteration) is GMT 1;
+GMT's 5, 7, 8 and 13 are reserved until the module can draw them. `offset` and `bias` are reserved
+names: the module has no input for them yet. **Known gap:** the module's orbit-trap value is -7.5
+times GMT's (`1.5 * log(t)` against `-0.2 * log(t)`), so the same `scale` does not yet draw the
+same picture as in GMT. The stage-5 module adapter closes it; scenes saved before it are migrated
+by the scene version stamp (`ORBIT_TRAP_GMT_SCALE_RATIO` in `features/colour.ts`). The kernel
+already returns the trap as a length (`sqrt(trap)`), not squared as GMT-SYSTEMS 2.3 says.
+
+Setting a gradient while Plain also writes `plain: false`, in the same store write, so the
 shell does openly what the page does behind its back [params 4.3].
+
+**Light and Colour act in deep mode only.** The f32 path (precision Auto above 1e-4, or f32, or
+while the deep shader compiles) has no light, look or colour input, so at boot both tabs change no
+pixel. The tabs say so while `telemetry().mode` is `f32` (stage 2).
 
 ### dzInspect (collapsible in Quality) - session-only
 | key | label | type | default |
