@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/LookPanel.tsx — the 'Look' side panel: detail and reach, colour, light, formula.
+ * deep-zoom-prototype/ui/LookPanel.tsx — the 'Look' side panel: detail and reach, colour, light, formula.
  *
  * PURPOSE
  *   Every control here is bound to one renderer handle through the bridge. The panel holds no

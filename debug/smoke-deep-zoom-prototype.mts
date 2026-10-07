@@ -1,9 +1,10 @@
 /**
- * Smoke test: the deep-zoom tool (deep-zoom.html) on the REAL GPU.
+ * Smoke test: the deep-zoom PROTOTYPE (deep-zoom-prototype.html, the embedded-page shell moved
+ * aside 2026-10-08) on the REAL GPU. Dev server only: the prototype is not a build input.
  *
  *   npm run dev                      (port 3400), then
- *   npm run smoke:deep-zoom
- *   or against another port:  ENGINE_URL=http://localhost:3477 npm run smoke:deep-zoom
+ *   npm run smoke:deep-zoom-prototype
+ *   or against another port:  ENGINE_URL=http://localhost:3477 npm run smoke:deep-zoom-prototype
  *
  * Headed Chrome on ANGLE/d3d11, not the default headless Chromium: headless means SwiftShader,
  * and the perturbation shader either takes minutes to compile there or renders something that
@@ -27,7 +28,7 @@
 import { chromium } from 'playwright';
 
 const ORIGIN = (process.env.ENGINE_URL || 'http://localhost:3400').replace(/\/+$/, '');
-const URL = ORIGIN + '/deep-zoom.html';
+const URL = ORIGIN + '/deep-zoom-prototype.html';
 const READY_TIMEOUT_MS = 120_000;
 const SHOT = 'debug/scratch/deep-zoom-';
 
@@ -294,10 +295,10 @@ async function main() {
         for (const f of failures) console.log('  - ' + f);
         process.exit(1);
     }
-    console.log('\nPASS smoke:deep-zoom');
+    console.log('\nPASS smoke:deep-zoom-prototype');
 }
 
 main().catch((err) => {
-    console.error('smoke-deep-zoom crashed:', err);
+    console.error('smoke-deep-zoom-prototype crashed:', err);
     process.exit(2);
 });

@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/DepthGauge.tsx — the always-visible depth instrument on the left edge, plus the
+ * deep-zoom-prototype/ui/DepthGauge.tsx — the always-visible depth instrument on the left edge, plus the
  * small "chrome" store the TopBar and the gauge share.
  *
  * PURPOSE

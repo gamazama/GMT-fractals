@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/kit.tsx — the small presentational kit every deep-zoom panel uses.
+ * deep-zoom-prototype/ui/kit.tsx — the small presentational kit every deep-zoom panel uses.
  *
  * PURPOSE
  *   Button, Slider, Seg, Section, Field, Kbd, PanelFrame: dark, compact, keyboard accessible,

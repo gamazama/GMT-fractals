@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/HelpPanel.tsx — the Help side panel: Keys, Depth, Video, From other tools.
+ * deep-zoom-prototype/ui/HelpPanel.tsx — the Help side panel: Keys, Depth, Video, From other tools.
  *
  * PURPOSE
  *   Plain reference text for the deep-zoom tool. No bridge calls at all: everything here is static

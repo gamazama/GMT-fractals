@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/LocationsPanel.tsx — the Locations side panel: save / copy / paste a view,
+ * deep-zoom-prototype/ui/LocationsPanel.tsx — the Locations side panel: save / copy / paste a view,
  * starter dives, and the saved list ("My locations").
  *
  * INTEGRATION SEAMS (the shell wires these; nothing here depends on them being wired)

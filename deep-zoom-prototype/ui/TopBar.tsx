@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/TopBar.tsx — the one-row bar across the top of the picture.
+ * deep-zoom-prototype/ui/TopBar.tsx — the one-row bar across the top of the picture.
  *
  * PURPOSE
  *   Left: tool name, formula + power (opens Look), state chip (FLY / DIVE / REC with a clock /

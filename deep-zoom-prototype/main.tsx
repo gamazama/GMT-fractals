@@ -1,9 +1,10 @@
 /**
- * deep-zoom/main.tsx — boot for the deep-zoom tool (Vite entry: `deep-zoom.html`).
+ * deep-zoom-prototype/main.tsx — boot for the deep-zoom prototype (page: `deep-zoom-prototype.html`,
+ * served by the dev server only; it is not a build input).
  *
  * Deliberately the lean boot (the mesh-export pattern): no engine store, no plugins. The tool is
  * a React shell around the standalone renderer; see `DeepZoomApp.tsx` and `bridge.ts`.
- * `window.__dzStore` is the smoke/debug handle onto the tool's own store (`smoke:deep-zoom`).
+ * `window.__dzStore` is the smoke/debug handle onto the tool's own store (`smoke:deep-zoom-prototype`).
  */
 import '../index.css';
 import React from 'react';

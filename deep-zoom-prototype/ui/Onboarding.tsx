@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/Onboarding.tsx — the first-run strip at the bottom centre of the picture.
+ * deep-zoom-prototype/ui/Onboarding.tsx — the first-run strip at the bottom centre of the picture.
  *
  * PURPOSE
  *   One slim line of guidance at a time, never a modal, never taking input from flying. Each prompt

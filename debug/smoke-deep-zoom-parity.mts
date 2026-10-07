@@ -10,7 +10,7 @@
  * and stops it at the end. Headed Chrome on ANGLE/d3d11: headless means SwiftShader, which cannot
  * compile the perturbation shader in reasonable time. For the same reason this is not in smoke:all.
  *
- * The historical page is the engine's synced copy, public/deep-zoom-core/index.html, after
+ * The historical page is the engine's synced copy, public/deep-zoom-prototype-core/index.html, after
  * checking it is the pinned file apart from its one "SYNCED COPY" comment line. If it is not, the
  * pinned file is written to debug/scratch/deep-zoom-pinned/ and served from there.
  *
@@ -141,14 +141,14 @@ async function startServer(): Promise<{ origin: string; child: ChildProcess | nu
 function historicalPath(): string {
     const norm = (s: string) => s.replace(/\r\n/g, '\n');
     const pinned = pinnedFile('index.html');
-    const synced = path.join(ROOT, 'public', 'deep-zoom-core', 'index.html');
+    const synced = path.join(ROOT, 'public', 'deep-zoom-prototype-core', 'index.html');
     if (fs.existsSync(synced)) {
         const lines = norm(fs.readFileSync(synced, 'utf8')).split('\n');
         const marks = lines.filter((l) => l.includes('SYNCED COPY')).length;
         const rest = lines.filter((l) => !l.includes('SYNCED COPY')).join('\n');
         if (marks === 1 && rest === norm(pinned.toString('utf8'))) {
-            check(true, `historical page: public/deep-zoom-core/index.html is ${SOURCE_COMMIT}:index.html apart from its SYNCED COPY line`);
-            return '/deep-zoom-core/index.html?embed=1';
+            check(true, `historical page: public/deep-zoom-prototype-core/index.html is ${SOURCE_COMMIT}:index.html apart from its SYNCED COPY line`);
+            return '/deep-zoom-prototype-core/index.html?embed=1';
         }
     }
     const dir = path.join(SCRATCH, 'deep-zoom-pinned');

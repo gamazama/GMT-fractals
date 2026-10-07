@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 /**
- * sync-deep-zoom-core — refresh the vendored deep-zoom renderer.
+ * sync-deep-zoom-prototype-core — refresh the vendored deep-zoom renderer.
  *
- * The renderer's master copy is one HTML file in the `mandelbulb_deepzoom` repo. The engine's
- * deep-zoom tool serves a copy from `public/deep-zoom-core/index.html` (Vite copies `public/`
+ * NOT EXPECTED TO RUN AGAIN (2026-10-08): the standalone page is frozen at commit 3b65946 and the
+ * embedded-page prototype (`deep-zoom-prototype/`) keeps the copy it has. That copy is also the
+ * "historical page" of `npm run smoke:deep-zoom-parity`, which accepts it only while it equals
+ * 3b65946 apart from the SYNC_MARK line; syncing from a newer master makes that smoke fall back
+ * to its own pinned file. The new shell does not use this copy: it mounts `deep-zoom/renderer`.
+ *
+ * The renderer's master copy is one HTML file in the `mandelbulb_deepzoom` repo. The
+ * prototype serves a copy from `public/deep-zoom-prototype-core/index.html` (Vite copies `public/`
  * verbatim, so the inline script is untouched). This script overwrites that copy.
  *
- *   npm run sync:deep-zoom-core
- *   DEEPZOOM_SRC=/path/to/index.html npm run sync:deep-zoom-core     (a file or its folder)
+ *   npm run sync:deep-zoom-prototype-core
+ *   DEEPZOOM_SRC=/path/to/index.html npm run sync:deep-zoom-prototype-core     (a file or its folder)
  *
  * The copy differs from the master by ONE line: an HTML comment after the DOCTYPE saying it is a
  * synced copy (grep SYNC_MARK), so nobody edits the 260 KB file in place and loses it to the next
@@ -24,13 +30,13 @@ import { fileURLToPath } from 'node:url';
 
 const DEFAULT_SRC = 'H:/GMT/workspace-gmt/mandelbulb_deepzoom/index.html';
 const here = path.dirname(fileURLToPath(import.meta.url));
-const dest = path.resolve(here, '..', 'public', 'deep-zoom-core', 'index.html');
+const dest = path.resolve(here, '..', 'public', 'deep-zoom-prototype-core', 'index.html');
 
 let src = process.env.DEEPZOOM_SRC || DEFAULT_SRC;
 if (fs.existsSync(src) && fs.statSync(src).isDirectory()) src = path.join(src, 'index.html');
 
 if (!fs.existsSync(src)) {
-    console.error(`sync-deep-zoom-core: source not found: ${src}`);
+    console.error(`sync-deep-zoom-prototype-core: source not found: ${src}`);
     console.error('Set DEEPZOOM_SRC to the mandelbulb_deepzoom index.html (or its folder).');
     process.exit(1);
 }
@@ -42,7 +48,7 @@ if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
     droppedBom = true;
 }
 if (buf.includes(0)) {
-    console.error(`sync-deep-zoom-core: ${src} contains a NUL byte; refusing to vendor it.`);
+    console.error(`sync-deep-zoom-prototype-core: ${src} contains a NUL byte; refusing to vendor it.`);
     process.exit(1);
 }
 
@@ -51,15 +57,15 @@ const missing = [];
 if (!/window\.__dz\s*=/.test(text)) missing.push('window.__dz (the host handle)');
 if (!/['"]embed['"]/.test(text)) missing.push('the ?embed=1 switch');
 if (missing.length) {
-    console.error(`sync-deep-zoom-core: ${src} is missing ${missing.join(' and ')}.`);
+    console.error(`sync-deep-zoom-prototype-core: ${src} is missing ${missing.join(' and ')}.`);
     console.error('The deep-zoom shell cannot drive this version of the renderer. Nothing was copied.');
     process.exit(1);
 }
 
-const SYNC_MARK = '<!-- SYNCED COPY - do not edit; master: mandelbulb_deepzoom/index.html; refresh with: npm run sync:deep-zoom-core -->';
+const SYNC_MARK = '<!-- SYNCED COPY - do not edit; master: mandelbulb_deepzoom/index.html; refresh with: npm run sync:deep-zoom-prototype-core -->';
 const doctype = /^\s*<!doctype html>[^\n]*\n/i.exec(text);
 if (!doctype) {
-    console.error(`sync-deep-zoom-core: ${src} does not start with <!DOCTYPE html>. Nothing was copied.`);
+    console.error(`sync-deep-zoom-prototype-core: ${src} does not start with <!DOCTYPE html>. Nothing was copied.`);
     process.exit(1);
 }
 const eol = doctype[0].endsWith('\r\n') ? '\r\n' : '\n';
@@ -71,7 +77,7 @@ fs.writeFileSync(dest, buf);
 
 const lines = text.split('\n').length;
 const state = before === null ? 'created' : before.equals(buf) ? 'unchanged' : 'updated';
-console.log(`sync-deep-zoom-core: ${state}`);
+console.log(`sync-deep-zoom-prototype-core: ${state}`);
 console.log(`  from ${src}`);
 console.log(`  to   ${dest}`);
 console.log(`  ${buf.length} bytes, ${lines} lines${droppedBom ? ', BOM dropped' : ''}`);

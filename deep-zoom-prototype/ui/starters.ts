@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/starters.ts — the starter dives shown at the top of the Locations panel.
+ * deep-zoom-prototype/ui/starters.ts — the starter dives shown at the top of the Locations panel.
  *
  * GENERATED DATA, hand-editable. Each entry is a start view plus a straight-ahead dive target.
  * The start views are frames copied verbatim from mandelbulb_deepzoom/sample-flight.json (a

@@ -1,5 +1,5 @@
 /**
- * deep-zoom/ui/RecordPanel.tsx — the 'Record' side panel: fly a route, smooth it, set its length,
+ * deep-zoom-prototype/ui/RecordPanel.tsx — the 'Record' side panel: fly a route, smooth it, set its length,
  * render it to PNG frames, export a still. Sections run top to bottom in the order the job is done.
  *
  * SEAMS

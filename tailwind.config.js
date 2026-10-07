@@ -20,6 +20,9 @@ export default {
     './fractal-toy/**/*.{ts,tsx}',
     './mesh-export/**/*.{ts,tsx}',
     './deep-zoom/**/*.{ts,tsx}',
+    // The embedded-page prototype, moved aside 2026-10-08. Dev-only (no build input), but its
+    // classes must still be scanned or its page renders unstyled. Goes when the folder goes.
+    './deep-zoom-prototype/**/*.{ts,tsx}',
     './demo/**/*.{ts,tsx}',
     './engine/**/*.{ts,tsx}',
     './engine-gmt/**/*.{ts,tsx}',

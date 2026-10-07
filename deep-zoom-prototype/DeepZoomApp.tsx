@@ -1,9 +1,10 @@
 /**
- * deep-zoom/DeepZoomApp.tsx — the shell of the deep-zoom tool.
+ * deep-zoom-prototype/DeepZoomApp.tsx — the shell of the deep-zoom tool (the embedded-page
+ * prototype, moved aside 2026-10-08; dev-only, page `deep-zoom-prototype.html`).
  *
  * PURPOSE
  *   A full-window iframe running the standalone Mandelbulb perturbation renderer
- *   (`public/deep-zoom-core/index.html?embed=1`), with the tool's own interface laid over it:
+ *   (`public/deep-zoom-prototype-core/index.html?embed=1`), with the tool's own interface laid over it:
  *   top bar, depth gauge, one side panel at a time, first-run guide, a toast line.
  *
  * SEAMS
@@ -37,7 +38,7 @@ import { HelpPanel, openHelp } from './ui/HelpPanel';
 import { Onboarding } from './ui/Onboarding';
 
 /** Relative on purpose: the build uses `base: './'` and is also served from a subdirectory. */
-const CORE_SRC = './deep-zoom-core/index.html?embed=1';
+const CORE_SRC = './deep-zoom-prototype-core/index.html?embed=1';
 const TELEMETRY_MS = 125;
 const TOAST_MS = 3200;
 

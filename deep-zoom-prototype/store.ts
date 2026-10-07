@@ -1,5 +1,5 @@
 /**
- * deep-zoom/store.ts — the deep-zoom tool's own small Zustand store.
+ * deep-zoom-prototype/store.ts — the deep-zoom tool's own small Zustand store.
  *
  * PURPOSE
  *   Shell state only: the bridge to the renderer, the latest telemetry sample, saved locations,

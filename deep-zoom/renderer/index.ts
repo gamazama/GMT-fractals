@@ -111,7 +111,7 @@ import { createDeepZoom as createCore } from './core.js';
 import type { DeepZoomCoreInstance, DeepZoomCoreOptions } from './core.js';
 
 /** A camera view. Exactly the fields a recorded keyframe has, so a bookmark and a path frame are
- *  interchangeable. (Shapes copied from deep-zoom/bridge.ts, the iframe prototype's seam.) */
+ *  interchangeable. (Shapes copied from deep-zoom-prototype/bridge.ts, the iframe prototype's seam.) */
 export interface DzView {
     /** BigInt fixed-point decimal strings, exactly as the recorder's keyframes store them. */
     cam: [string, string, string];

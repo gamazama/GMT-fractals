@@ -1,12 +1,13 @@
 /**
- * deep-zoom/bridge.ts — the typed seam between the React shell and the standalone Mandelbulb
+ * deep-zoom-prototype/bridge.ts — the typed seam between the React shell and the standalone Mandelbulb
  * perturbation renderer.
  *
  * PURPOSE
  *   The renderer is one self-contained HTML page (master copy: the `mandelbulb_deepzoom` repo;
- *   engine copy: `public/deep-zoom-core/index.html`, refreshed by `npm run sync:deep-zoom-core`).
+ *   engine copy: `public/deep-zoom-prototype-core/index.html`, refreshed by
+ *   `npm run sync:deep-zoom-prototype-core`).
  *   The shell embeds it in a same-origin iframe opened with `?embed=1` and drives it ONLY through
- *   this file. Nothing else in `deep-zoom/` should touch `iframe.contentWindow` directly: every
+ *   this file. Nothing else in `deep-zoom-prototype/` should touch `iframe.contentWindow` directly: every
  *   handle name the core exposes is spelled exactly once, here.
  *
  * THE SEAM
@@ -18,7 +19,7 @@
  *     (`__deepReady === true`) and `__dz` exists; it rejects on a compile error or after 120 s.
  *
  * PITFALLS
- *   - Same origin is required. The iframe src must be RELATIVE (`deep-zoom-core/index.html?embed=1`)
+ *   - Same origin is required. The iframe src must be RELATIVE (`deep-zoom-prototype-core/index.html?embed=1`)
  *     because the build uses `base: './'`; a leading slash breaks the `/dev` preview deploy.
  *   - Keyboard focus: the fly controls listen on the iframe's window. After any click on a shell
  *     overlay the keys go to the shell; call `bridge.focus()` to hand them back.
@@ -31,7 +32,7 @@
  * @assumption The core page is version 1 of `__dz` and keeps every loose handle named below.
  *   Nothing fails at build time if the vendored copy drifts; `connectCore` checks `__dz.version`
  *   and each wrapper throws a named error when its handle is missing. Guarded only by the headed
- *   smoke `npm run smoke:deep-zoom`, which has not been falsified against a broken core.
+ *   smoke `npm run smoke:deep-zoom-prototype`, which has not been falsified against a broken core.
  * @assumption With `?embed=1` the core does not download the path JSON when a recording stops;
  *   the shell reads `lastPath()` instead (grep `EMBED` in the core's `__recordToggle`).
  */
@@ -199,10 +200,10 @@ export async function connectCore(iframe: HTMLIFrameElement): Promise<DzBridge> 
             if (performance.now() - t0 > CORE_READY_TIMEOUT_MS) {
                 reject(new Error(
                     ready === undefined
-                        ? 'The deep renderer did not start within 120 s (is deep-zoom-core/index.html present? run npm run sync:deep-zoom-core).'
+                        ? 'The deep renderer did not start within 120 s (is deep-zoom-prototype-core/index.html present? run npm run sync:deep-zoom-prototype-core).'
                         : dz
                             ? 'The deep renderer did not finish compiling within 120 s.'
-                            : 'The deep renderer is ready but has no __dz handle (the vendored core is older than the shell; run npm run sync:deep-zoom-core).',
+                            : 'The deep renderer is ready but has no __dz handle (the vendored core is older than the shell; run npm run sync:deep-zoom-prototype-core).',
                 ));
                 return;
             }
