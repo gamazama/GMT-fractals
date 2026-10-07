@@ -39,7 +39,8 @@
  *
  *   LIVE - required, implemented over a handle the module has today:
  *     `ready`             resolves once the deep shader has compiled (the module's telemetry says
- *                         ready); rejects with a readable message on a compile error or after 120 s.
+ *                         ready); rejects with a readable message on a compile error or after 120 s
+ *                         of running loop (a gap between two steps counts for a second at most).
  *     `getParams()`       a COPY of the module's own settings with the module's own keys, unmapped:
  *                         detail, reach, power, phase, color, cscale, light, falloff, normals, land,
  *                         frame, accum, lookMode. Keyed by renderer parameter id from stage 2
@@ -109,8 +110,10 @@
  *     feature setters first and hands the host a view whose look fields already equal them.
  *   - `step(now)` takes a TIMESTAMP in milliseconds (`performance.now()`). The engine tick hands
  *     its callback a DELTA in seconds: do not forward it.
- *   - Only the frame is tick-driven. A dive, a path preview and a render's frame waits still run
- *     on the browser's own animation frames, so they keep going while the engine loop is stopped.
+ *   - The frame and the dive are tick-driven: a dive advances once after each frame the renderer
+ *     ran, so it waits while the engine loop is stopped or a render owns the context. A path
+ *     preview and a render's frame waits still run on the browser's own animation frames and keep
+ *     going while the engine loop is stopped.
  *   - In stage 1 `ready`, telemetry, `recordingChanged` and `progress` are all read from inside
  *     `step`. With the engine loop stopped none of them arrives.
  *   - `ready` can reject. The implementation attaches its own empty catch so that a rejection
@@ -136,9 +139,10 @@
  *   them through with no conversion - proven by: npx tsx debug/deep-zoom-checks/host-contract.mts
  *   ("types: the contract's shapes equal the module's"). Falsified 2026-10-08, see the check's header.
  * @assumption The stage-1 column above is what `deep-zoom/host/moduleHost.ts` does. It was written
- *   before that file existed (package S1-0 precedes S1-1), from the module's source. Nothing
- *   compares the two; the stage smokes exercise only `ready`, `frameCount`, `getView`, `getParams`
- *   and `telemetry`.
+ *   before that file existed (package S1-0 precedes S1-1), from the module's source. The adapter's
+ *   own behaviour is checked against a fake instance by
+ *   `npx tsx debug/deep-zoom-checks/module-host.mts`; nothing compares that check with this column
+ *   line by line.
  */
 
 /** Call it to stop listening. Safe to call twice. */
@@ -308,10 +312,11 @@ export interface DeepZoomHost {
     /**
      * Fly straight ahead until the surface distance is about `depth`. Resolves on arrival, on a fly
      * key or Escape, on a newer dive or `setView`, on `cancel()`, or when it gives up. It does not
-     * say which: compare `telemetry().depth` afterwards.
+     * say which: compare `telemetry().depth` afterwards. Also ended by `seekPath`, `play`,
+     * `renderPathZip` and `dispose`. Before `ready` it resolves at once and moves nothing.
      */
     diveTo(depth: number): Promise<void>;
-    /** The current view as a square PNG data URL, 8..512 px ('' when nothing can be drawn yet). Restarts the still. */
+    /** The current view as a square PNG data URL, 8..512 px ('' when nothing can be drawn yet, or while a render runs). Restarts the still. */
     thumbnail(size?: number): string;
 
     // gradient
