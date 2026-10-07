@@ -182,6 +182,125 @@ Rule for every package: a smoke that covers a panel must open the panel. GPU che
 - **Depends on:** X1 (the kernel as modules), OWNER-DECISIONS 1. **Size:** about 1 week, in the standalone page, not in GMT.
 - **Steps:** per `FORMULA-ELIGIBILITY.md` section 4: a formula supplies a BigInt reference step, a GLSL delta step, its extra reference rows, and a parameter envelope. Prove it on the easiest maths (an exact polynomial delta, no trig).
 - **Acceptance:** the page's direct-check referee passes for Mandelbar3D at three depths down to 1e-30.
+- **Serves both routes:** a second formula in the page's renderer, and the shape of `shader.perturbed` in F6. Whichever of F1 and F6 runs first fixes the contract; the other adopts it.
 
-## F2 - Native perturbation in GMT's marcher
-- Not sized here beyond result-1's 2 to 4 months for the Mandelbulb. Not started without OWNER-DECISIONS 1.
+## F2 - Native perturbation in GMT's marcher: the go/no-go
+- **Old ids:** the native plan as a whole. **Depends on:** F3 and F4 both green, OWNER-DECISIONS 1. **Size:** not work - a decision, then F5 to F18.
+- **What it gates:** step 1 = F5 to F14 (about 5 to 7 weeks), step 2 = F15 and F16 (about 4 to 6 weeks), step 3 = F17, step 4 = F18. Sizes and what each step gives the user are in PLAN.md stage F.
+- **Rules for every package below:** the work sits behind one compile gate, and with the gate off the fragment source is byte-identical to today's (the `npm run test:refine` pattern, `W/.claude/rules/gmt-shader-chunks.md`). Sliders stay runtime; only the mode toggle recompiles. GPU checks on real d3d11.
+- **If F4 is red:** stop. What is left is deep primary rays shaded from the depth buffer, which stages A to E already deliver.
+
+## F3 - SPIKE: scaled-f32 march in the standalone page
+- **Stage:** F. **Old ids:** WP0a. **Depends on:** OWNER-DECISIONS 2 (an experiment on a branch of the page, behind a debug handle; it need not merge). **Size:** 1 session.
+- **Files and symbols:** Page: `marchNear` (grep `vec2 marchNear`), `deAt`, `hdrToFloat`, `uRefE`, `pertOrbit`, `pertOrbitJS`, the direct-check harness named in the page's HANDOFF.
+- **Steps:** copy `marchNear` to `marchNearF32` with a plain `float t` in units of 2^`uRefE`; feed the kernel delta = `rd*t` with exponent `uRefE`; convert the kernel's distance to scaled f32 with a clamp (it comes out as a mantissa+exponent pair that overflows f32 - check 11); switch between the two marches with a debug handle. Check 11 fixed what to look at: hit depth against `marchNear` on the same view at 1e-20 to 1e-25, and one grazing view that needs more than 1e4 surface distances of travel.
+- **Acceptance:** the page's referee gate passes at 1e-10, 1e-20 and 1e-30 with the float-t march, and the per-pixel depth difference against the `vec2` march is under one pixel-cone width, grazing view included. Red at any depth means GMT's float loop cannot be kept and step 1 roughly doubles.
+- **Risk:** low. The check read `marchNear` in full: the mantissa of its `t` is one f32 and every decision in the loop is a ratio, so the pair buys range, not digits.
+
+## F4 - SPIKE: one marched shadow ray through the perturbed kernel  [the gate]
+- **Old ids:** WP0b. **Depends on:** OWNER-DECISIONS 2; F3 for its last step. **Size:** 1 to 2 sessions.
+- **Files and symbols:** Page: pass G (`marchNear`, `OrbitOut`), `pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter)`, `pertOrbitJS`, `T_SWITCH`, `deF32`, the `exhausted` flag, pass S's depth-buffer shadow.
+- **Steps:** needs no new kernel. From a hit point march 32 to 64 steps toward the key light with the existing `pertOrbit`, delta = hit delta + s*L. Count a non-escaped sample as a hit (its distance is wrapped garbage). Past 1e-3 hand off to `deF32` as the primary march does. Write the result to a spare G-buffer channel and split-compare with the depth-buffer shadow. Run at 1e-10, 1e-25 and 1e-60, with one grazing light, and once more through F3's float march.
+- **Acceptance:** criteria fixed before the run (check 9): (1) the distance along the shadow ray agrees with `pertOrbitJS` / the BigInt direct orbit at offsets of 1, 1e2 and 1e4 surface distances from the hit; (2) the ray ends inside the step budget (the primary march caps at 256 steps and sets `exhausted`); (3) the accumulated shadow at 1e-20 shows no sparkle between samples and agrees with the depth-buffer shadow where both can see the occluder. Any one red = secondary rays need their own reference, and stage F stops at F2.
+- **Risk:** the largest unknown in stage F: nothing has run a marched shadow at depth anywhere. Known in advance: the delta resolves about 6e-8 of its own length, so shadow and AO epsilons must grow with distance from the camera; and the cost is about one extra march per shadowed light.
+
+## F5 - ADR and capability token
+- **Old ids:** WP1. **Depends on:** F2. **Size:** 1 session.
+- **Files and symbols:** NEW ADR under `W/docs/adr/`, plus the ADR-0059 amendment that `W/engine-gmt/types/capabilities.ts` requires for a new token; the `Capability` union (add `'iter:perturbable'`).
+- **Steps:** the ADR records the scaled camera frame, the compile gate, what a formula must supply, what is excluded (non-whole power, twist, Radiolaria, hybrid and interlace, `NUMERIC_DE` formulas; Julia unverified), and the depth figures from checks 11 and 12: about 1e-13 on today's camera, about 1e-32 after F8, ceiling about 3e-42.
+- **Acceptance:** `npm run typecheck` green; a formula that declares the token without `shader.perturbed` fails an assertion in F6's test. Red if the token can be used without a kernel.
+
+## F6 - Formula contract: `shader.perturbed` and the reference-builder registry
+- **Old ids:** WP2 (same contract as F1). **Depends on:** F5. **Size:** 1 session.
+- **Files and symbols:** the `shader` block in `W/engine-gmt/types/fractal.ts` (beside `function` / `loopBody` / `loopInit` / `getDist` / `preambleVars`); the `REGISTER_FORMULA` message in `W/engine-gmt/engine/worker/WorkerProtocol.ts`; NEW `W/engine-gmt/deepzoom/referenceRegistry.ts` (formula id -> TS builder).
+- **Steps:** add optional `perturbed: { function, loopBody, rowsPerIter }`; extend `REGISTER_FORMULA` to carry it; the CPU builder is looked up by formula id on the worker side, because TS code cannot cross the worker as a string.
+- **Acceptance:** NEW `npm run test:deep-contract` (node, text level): register a dummy formula with `perturbed` and assert the strings arrive in the worker-side registry. Falsify by dropping the field from the `REGISTER_FORMULA` payload.
+- **Risk:** Formula Workshop and imported formulas register over the same message and must keep working with the field absent.
+
+## F7 - CPU side: BigInt fixed point, reference orbit, referee
+- **Old ids:** WP3, merged with X1. **Depends on:** F5; X1 strongly preferred. **Size:** 2 sessions as a port; under 1 if X1's modules exist.
+- **Files and symbols:** if X1 is done, import its `hp.js` (`makeHP`, `buildRefOrbit`) and `cpu-kernel.js` (`pertOrbitJS`) - the layout in `CORE-EXTRACTION.md`. Otherwise NEW `W/engine-gmt/deepzoom/hp.ts`, `mandelbulbReference.ts`, `mandelbulbReferee.ts`, ported verbatim from the page. Pattern only (its maths is 2D): `computeReferenceOrbit` in `W/engine/fractal/deepZoom/referenceOrbit.ts`.
+- **Steps:** import rather than port wherever possible - a port keeps two copies of the maths, against the one-master rule. Output is Float32Array rows per iteration in the page's layout. Bring the page's node certification tests with it.
+- **Acceptance:** NEW `npm run test:deep-kernel`: referee against direct BigInt iteration at the page's 11 certified depths, same tolerances as the page. Falsify by changing one binomial coefficient.
+
+## F8 - Camera precision: make the offset pair a real double-double  [new, from check 12]
+- **Old ids:** none (fix A of the check on the native plan's fourth assumption). **Depends on:** F5. **Size:** about 2 sessions and an ADR (the check says "days"; my figure).
+- **Files and symbols:** `W/engine/plugins/navigation/core/VirtualSpace.ts` (`split`, `normalize`, `move`, `absorbCamera`, `setFromUnified`, `updateShaderUniforms`, `updateSmoothing`); `SerializedOffset` in `W/engine-gmt/engine/worker/WorkerProtocol.ts`.
+- **Steps:**
+  1. Ten-minute trace first (both unverified): the size of the deltas navigation sends as `OFFSET_SHIFT` at depth, and whether `camera.position` passes through an f32 on its way into `absorbCamera`.
+  2. In `normalize`, or a renormalise called from `move` and `absorbCamera`, use an error-free two-sum so the high word absorbs everything above half its ulp and the low word stays tiny. Today `normalize` only carries whole units (`THRESHOLD = 0.5`) and all travel piles into the low word.
+  3. Keep the `Math.fround` split at the uniform-writing step only (`updateShaderUniforms` already re-splits there), so the high word can be a full double.
+  4. Under the gate, scale the absolute thresholds in `updateSmoothing` (`1.0e-18` and `1.0e-21` squared distance) by the surface distance.
+- **Acceptance:** node test: from a generic point (coordinates 0.1 to 1) travel 0.1 first, so the low word is no longer fresh from a split, then make 1,000 `move` calls of 1e-20 to 1e-26; high + low equals a BigInt running total to 1e-28 (a 1e-25 view needs position good to about S/1000). Red on today's `normalize`: after the 0.1 of travel the low word resolves only about 1e-17, so every one of those moves is lost. Plus `npm run test:compat`: every existing scene loads to the same high + low sum as before.
+- **Risk:** this is shared engine code used by every app, and it changes what saved `sceneOffset` values look like. If the owner says no, F17 becomes a prerequisite of step 1 for anything deeper than about 1e-13.
+
+## F9 - GLSL perturbed kernel, the `mapPert` twins, the distance adapter
+- **Old ids:** WP4, plus item 3 of check 11. **Depends on:** F6, F7. **Size:** 3 to 4 sessions.
+- **Files and symbols:** NEW `W/engine-gmt/shaders/chunks/de_perturbed.ts`; `W/engine-gmt/shaders/chunks/de.ts` (`DE_MASTER`, the four `applyPrecisionOffset` sites, the wrappers `DE` / `DE_Dist`); `W/engine-gmt/formulas/Mandelbulb.ts` (`shader.perturbed`, the capability).
+- **Steps:** port the page's delta kernel as the Mandelbulb's `perturbed.function`. Emit `mapPert(vec3 dScaled)` and `mapPertDist` as twins from one body (the `map` / `mapDist` twin rule). Under the gate `DE` / `DE_Dist` call them with the camera-relative point and return distance in scaled units. Adapter: the kernel's distance is a mantissa+exponent pair that overflows f32 - convert it to units of 2^`uRefE` with a clamp, and renormalise `rd*t` on entry. Keep the non-escaped = hit rule and the orbit-trap and iteration outputs, so colouring works.
+- **Acceptance:** `npm run test:refine` gains a gate-off block: fragment source byte-identical to today. Gate on: `npm run test:baseline` compiles the Mandelbulb. Falsify by leaving one uniform declared with the gate off.
+- **Risk:** compile time. The page's deep program is about 15 s on a cold first compile by its own comment (the native plan assumed 5), and GMT's cold path-traced compiles already run 10 to 20 s. Measure before adding BLA.
+
+## F10 - Orbit build off the render thread, ordered against the camera
+- **Old ids:** WP5; shares its worker with X5. **Depends on:** F7, F8. **Size:** 2 sessions; 1 if X5 was built.
+- **Files and symbols:** NEW `W/engine-gmt/deepzoom/orbitRuntime.ts` on the pattern of `DeepZoomRuntime` / `getDeepZoomRuntime` in `W/engine/fractal/deepZoom/laRuntime.ts` and `DeepZoomRequest` / `DeepZoomOrbitResponse` in `deepZoomWorker.ts`; `W/engine-gmt/engine/worker/WorkerProtocol.ts` (new `DEEP_ORBIT` message with a generation number, beside `OFFSET_SET` / `OFFSET_SHIFT`); `W/engine-gmt/engine/worker/renderWorker.ts`.
+- **Steps:** a sibling worker builds the orbit from the camera's high and low words, each converted to BigInt separately. The result goes to the render worker as a transferable. Each orbit carries the exact camera it was built for; the render worker sends the residual (camera minus orbit centre) as a small uniform so frames between rebuilds stay valid - the reference-centre idea 2D already uses (`uDeepCenterOffset`, ADR-0065). The residual is computed on the CPU, high words first, then low words. Never from `updateShaderUniforms` or `uSceneOffsetHigh` + `uSceneOffsetLow`: those sum in one double, about 1e-16 (check 12).
+- **Acceptance:** NEW `npm run test:deep-orbit-order` (node, fake worker): interleave `OFFSET_SHIFT` and `DEEP_ORBIT` in every order and assert residual + orbit centre equals the true camera, with one case at 1e-24. Falsify twice: drop the generation check; take the residual through a single-double sum.
+- **Risk:** rebuild cost per camera move at high iteration counts - X0 measures it.
+
+## F11 - Orbit texture and uniforms
+- **Old ids:** WP6. **Depends on:** F9, F10. **Size:** 1 to 2 sessions.
+- **Files and symbols:** `W/engine-gmt/engine/UniformNames.ts`, `UniformSchema.ts`, `managers/UniformManager.ts` (`syncFrame`). Precedent for a float DataTexture made inside the worker: the `TEXTURE_HDR` handler in `W/engine-gmt/engine/worker/renderWorker.ts` and `_makeGradientTexture` in `W/engine-gmt/engine/MaterialController.ts`.
+- **Steps:** `uDeepOrbit` (RGBA32F, rows per iteration), `uDeepOrbitLen`, `uRefE`, `uDeepResidual`, a binomial array for the whole-number power. Upload on `DEEP_ORBIT` and reset accumulation. A power change marks the orbit dirty at runtime; no recompile.
+- **Acceptance:** `npm run smoke:engine-gmt` still boots with the gate off; with it on, the existing `GET_UNIFORMS_SNAPSHOT` message shows an orbit length above 0 after a camera move. Red if the texture never arrives.
+
+## F12 - The marcher in the scaled frame
+- **Old ids:** WP7, plus items 1, 2 and 4 of check 11 and item 1 of check 10. **Depends on:** F9, F11. **Size:** 5 to 6 sessions (the planner's 3 to 4, plus the far limits, the sentinel audit and the Physics probe; my figure).
+- **Files and symbols:** `getTraceGLSL` in `W/engine-gmt/shaders/chunks/trace.ts` (`floatPrecision`, `finalEps`, `mb3dStepW`, `maxMarch`, `stepJitter`, `innerDistCall`, the miss block's `map(p_end + uCameraPosition)`, the refine `mapDist`); `PRECISION_RATIO_HIGH`, `MAX_DIST`, `MISS_DIST` in `W/engine-gmt/shaders/chunks/math.ts`; the `variant === 'Physics'` `traceScene` in `W/engine-gmt/engine/ShaderBuilder.ts`; `W/engine-gmt/navigation/Navigation.tsx` (reads the `MISS_DIST` sentinel); the same floor in `material_eval.ts` (`floatLimit`), `lighting/pbr.ts` (`floatLimit`), `pathtracer.ts` (`floatLimitNEE`).
+- **Steps:**
+  1. Route the 3 direct sites in `trace.ts` and the Physics probe through `DE` / `DE_Dist`. They already pass a camera-relative point, so the swap stays in one place. (3 sites, not the 13 the plan counted - the rest are comments.)
+  2. Precision floor. `floatPrecision = max(1.0e-20, distFromFractalOrigin * PRECISION_RATIO_HIGH)` is about 5e18 in scaled units and makes every ray hit on step 0. Under the gate it becomes relative to scaled `t`. The same value feeds `finalEps` and the floor of `mb3dStepW`, so ADR-0092's step keeps its form with a different floor input. The Physics probe's `max(1.0e-5, ...)` floor gets the same treatment or it rejects every deep hit.
+  3. Far limits. `MAX_DIST 10000.0` and `MISS_DIST 1000.0` stop a scaled ray after 10,000 surface distances and call any hit past 1,000 sky. Scale them by 1/S or carry the miss as a flag - after auditing every reader of `d > MISS_DIST`.
+  4. Far-field hand-off: once scaled `t` times 2^`uRefE` passes about 1e-4 absolute, continue with today's absolute `map()`. The page has the same split (`uFarFrom`) to copy.
+  5. `stepJitter` loses its `d` term above about 5e5 scaled units (cosmetic; fix or note).
+- **Acceptance:** GPU smoke on real d3d11: at a fixed Mandelbulb view at 1e-12 the centre-pixel hit depth agrees with F7's CPU referee to within one pixel-cone width; a grazing view that needs more than 1e4 surface distances of travel still hits (red if a far limit stayed absolute); and the same smoke with the gate off must FAIL at that depth, which proves it can see the difference.
+- **Risk:** the hand-off seam can show as a ring. This is the uncertain half of step 1.
+
+## F13 - Shadows and AO in the scaled frame
+- **Old ids:** WP8. **Depends on:** F12; F4 green. **Size:** 2 sessions.
+- **Files and symbols:** `GetSoftShadow` and `GetHardShadow` in `W/engine-gmt/shaders/chunks/lighting/shadows.ts` (`DE_Dist(ro + rd * t)`, `surfEps`, `lightDist`; ADR-0093); AO in `W/engine-gmt/features/ao/shader.ts` (`DE_Dist(aopos)`); `W/engine-gmt/features/lighting/index.ts` (3 `DE_Dist` calls); the shadow call site in `lighting/pbr.ts`.
+- **Steps:** read `shadows.ts` whole first - check 11 read only its `t` and `lightDist` lines. Scale the light vector, `lightDist` and `surfEps` into frame units (`lightDist` of about 1e25 at a 1e-25 view fits f32). Carry the non-escaped = hit rule from F4. Epsilons grow with distance from the camera. AO radii in surface-footprint units. Cap the shadow march at the frame limit and hand the rest to the absolute map.
+- **Acceptance:** a split image from the same samples at 1e-12 (left marched shadow, right none) for the owner, plus a numeric check: a known self-shadowed pixel reads under 0.2 and a known lit pixel over 0.8. Red if shadows go uniformly 0 or 1 under the gate.
+- **Risk:** cost. About one extra march per shadowed light, so at depth this is a stills and accumulation feature.
+
+## F14 - Mode toggle, guard rails, certification smoke
+- **Old ids:** WP9; reuses A1 and D2. **Depends on:** F12, F13. **Size:** 2 sessions.
+- **Files and symbols:** the feature that owns precision and quality settings in engine-gmt (which file is unverified - grep `enableRefine` and `numericDE` for how a gate is armed from a feature's `inject()` in `W/engine-gmt/engine/ShaderBuilder.ts`). If D2 exists, the toggle is a mode of `W/engine-gmt/features/deepZoom.ts`, not a second feature. Eligibility is A1's `isDeepZoomEligible` plus a `NUMERIC_DE` refusal, lifted out of `W/deep-zoom/handoff.ts` into engine-gmt now that it has two consumers. app-gmt's panel manifest; package.json scripts.
+- **Steps:** a mode toggle that recompiles once. Disabled with a plain reason when power is not whole, twist or Radiolaria is on, a hybrid is active, or the formula uses numeric DE. NEW `smoke:deep-gmt` at 1e-8 and 1e-12, and at 1e-16 and 1e-24 once F8 is in.
+- **Acceptance:** `npm run smoke:deep-gmt` green on d3d11; `npm run smoke:chrome` opens the panel that holds the toggle without a pageerror; `npm run check:rule-guards` after the new smoke is cited from a rule.
+
+## F15 - Depth-relative units, and the absolute-position sites
+- **Old ids:** WP10, plus item 3 of check 10. **Depends on:** F14. **Size:** 6 to 8 sessions (the planner's 4 to 5, plus the position sites; my figure).
+- **Files and symbols:** `W/engine-gmt/engine/worker/WorkerDepthReadback.ts` (half-float target); fog, depth-of-field and light uniforms in `W/engine-gmt/engine/UniformSchema.ts`; `targetDistance` in `W/engine-gmt/types/fractal.ts`. The sites that rebuild `p + uCameraPosition + uSceneOffsetLow + uSceneOffsetHigh`: `lighting/shading.ts` (`p_fractal`), `lighting/pbr.ts` (`distFromFractalOrigin`), `lighting/volumetric_scatter.ts` (`_yWorld`, `_pfrac`), `pathtracer.ts` (`p_fractal`), `trace.ts` and `W/engine-gmt/features/reflections/shader.ts` (`worldOriginOffset`), `features/reflections/index.ts` (`p_next_fractal`), `features/lighting/index.ts` (`p_fractal`), `features/atmosphere/shader.ts` (`applyPrecisionOffset(p + uCameraPosition, ...)`).
+- **Steps:** grep every uniform that is a length and decide for each: scale by 2^`uRefE` under the gate, or leave absolute. Log-encode the depth output like the page's `log2(t) - uRefE`. Fly speed from the decoded depth. For each position site decide: scale-aware replacement, or accept as coarse (colouring by absolute position) - in a scaled frame these lose all detail below S, and several feed precision thresholds. `numericNormal` (`material_eval.ts`) and `numFootprint` (`de.ts`) are not converted; `NUMERIC_DE` formulas stay excluded.
+- **Acceptance:** a table-driven node test that lists every length uniform and every position site with its decision, and fails when a new one appears without one. Smoke: fly speed at 1e-20 is within 2x of one surface distance per second (needs F8).
+- **Risk:** the count is the cost, and the count of length uniforms is unverified until the grep is done. What each `p_fractal` consumer does with the value was not read.
+
+## F16 - Reflections, path tracer, tiled renderer and export under the gate
+- **Old ids:** WP11. **Depends on:** F15. **Size:** 4 to 6 sessions.
+- **Files and symbols:** `W/engine-gmt/shaders/chunks/pathtracer.ts` (`floatLimitNEE`, its one `DE_Dist(ro + rd * t)`, bounce origins); the wrapper callers the native plan's file list missed - `W/engine-gmt/features/reflections/shader.ts` (3 calls), `features/ao/shader.ts`, `features/lighting/index.ts` - which need no conversion but must be tested deep; `W/engine-gmt/engine/GmtBucketHost.ts`; `W/engine-gmt/engine/worker/WorkerExporter.ts`.
+- **Steps:** bounce rays are camera-relative deltas like shadows; verify each origin. Tiles share one orbit and one `uRefE` for the whole picture, so there is no per-tile state. Export holds the orbit generation fixed per frame.
+- **Acceptance:** a 2x2-tile render of a 1e-12 view is pixel-identical at the tile borders to a single-pass render of the same samples; a path-traced frame compiles on d3d11 inside the existing compile budget.
+- **Risk:** engine-gmt's accumulation and bucket path has no runtime guard today (`W/.claude/rules/gmt-renderer.md` says so); this package must add one.
+
+## F17 - Exact camera under the gate
+- **Old ids:** WP12, merged with E1 and E2. **Depends on:** F14; E1 and E2 if built. **Size:** 2 to 3 weeks alone; about 1 week on top of E1 and E2 (my figure).
+- **Files and symbols:** `W/engine/plugins/navigation/core/VirtualSpace.ts`; E1's `deepView` field; E2's `dzPath.u` binder. One field and one track for both renderers, not a second pair.
+- **Steps:** navigation moves in BigInt under the gate; the six numbers stay beside it. Check 7 already answered what the native plan left unverified here: `PresetField` accepts a string. State the ceiling: the scaled far hand-off overflows f32 near 3e-42. Going deeper needs the page's near/far `tF` split or its mantissa+exponent `t` inside `trace.ts` and `shadows.ts` - research, not sized.
+- **Acceptance:** save and reload a 1e-33 view; the orbit centre is identical to the last BigInt digit. A scene with only the six numbers still loads unchanged.
+- **Risk:** design risk, its own ADR. FBX and After Effects camera export stay six-number.
+
+## F18 - More formulas
+- **Old ids:** the native plan's stage 4 (it listed no package). **Depends on:** F14, F1, F0. **Size:** 1 to 3 weeks per smooth formula. Fold formulas (Mandelbox family, Buffalo, BoxBulb): no size.
+- **Steps:** the native plan names Quaternion and Tetrabrot. `FORMULA-ELIGIBILITY.md` ranks Mandelbar3D first and Quaternion fifth (its damping term uses the previous z), so order by that ranking and F0's count, not by the plan's pick. Each formula: derivation, CPU referee, certification, `shader.perturbed`. The formula picker's badge reads the `iter:perturbable` token.
+- **Acceptance:** `npm run test:deep-kernel` gains the formula at three depths; `npm run smoke:chrome` opens the picker and the badge is on exactly the formulas that declare the token.
