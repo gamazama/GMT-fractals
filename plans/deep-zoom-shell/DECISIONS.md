@@ -1,39 +1,93 @@
-# Deep Zoom gmt-shell - what the owner decides
+# Deep Zoom gmt-shell - what the owner decided, and what is still open
 
-Architect pass, 2026-10-07. Only calls that change what gets built. Each has options, the cost of
-each, and a recommendation. Everything else in `BLUEPRINT.md` follows from the standing rules.
+Architect pass, 2026-10-07; split into **decided** and **open** on 2026-10-08. Only calls that
+change what gets built. The first version's numbers D3 to D15 are kept so the other documents'
+references still resolve; D1 and D2 are closed by K1 to K3.
 
-## D1. Rebuild in place - the old panels disappear after stage 1 and return over stages 2 to 6
+# Decided
 
-Stage 1 replaces last week's shell with the engine chrome and an empty dock. The look panels come
-back in stage 2, locations in stage 3, the first-run guide in stage 4, record and lossless frames in
-stage 6a, video in stage 6b. Before stage 1 you create the tag `deep-zoom-lean-shell` on today's
-head: later stages port from it, and stage 1 deletes the files.
+K1 to K3 and K5 are as relayed in this job's brief, not verbatim. K4 is the owner's answer to five
+numbered questions: "yes to all 5 recommendations" (2026-10-08).
 
-- **A. In place (recommended).** One `deep-zoom/`, no parallel copy. Cost: for the length of the
-  build the branch has fewer features than last week. Last week's shell stays reachable as a git tag.
-- **B. Keep the old shell at a second entry page until stage 6.** Cost: a parallel copy, two sets
-  of files knip and the smokes must carry - the thing the "improve the master" rule forbids.
+## K1. The standalone page is frozen
 
-Recommend A, and do not merge `deep-zoom-tool` to `main` before stage 4 is green (a push to main
-deploys and can interrupt live users).
+`H:/GMT/workspace-gmt/mandelbulb_deepzoom`, commit 3b65946, is the historical reference. Nobody
+edits it. Every "small handle added to the page" in the first plan is now a change to the module.
+*Closes D2 (who edits the renderer page): nobody does.*
 
-## D2. Who edits the renderer page, and when
+## K2. The renderer is a module, and the new shell mounts it from stage 1
 
-The plan needs about ten small additive handles in `mandelbulb_deepzoom/index.html` (R packages).
-That file is the master on `kernel-perf`, where the kernel work is live and unpushed.
+`deep-zoom/renderer` (`createDeepZoom(canvas, options)`, commit a087bbb8), a scripted port proven
+against the page on the real GPU (`debug/smoke-deep-zoom-parity.mts` 47 of 47,
+`debug/deep-zoom-direct-check.mts` 11 of 11). The new shell has one way to reach the renderer.
+From now on `core.js` is edited directly, guarded by the parity smoke for anything meant to leave
+the picture unchanged. *Also covers GMT-SYSTEMS 8.13 (who edits the module). The owner's words are that core.js is edited
+directly; the rest is the architect's reading: the builders, one
+package at a time. That item is not marked there because it was not asked by number.*
 
-- **A. The shell builders add them on `kernel-perf` as they go.** Fastest; risk of colliding with
-  the open look / landing / colour work there.
-- **B. One R package per sitting, done by whoever holds `kernel-perf` that day, then synced
-  (recommended).** The shell never waits: every package has an interim except render-to-memory
-  (R-H4) and pause (R-K3). Cost: stage 6b (the render dialog and MP4) cannot start until R-H4 lands. Stage 6a (record, scrub, ZIP of PNGs, still) does not wait.
-- **C. Skip the handles; go straight to the module extraction.** Cleanest end state, but stages
-  2 to 6 would run on interims for longer and the extraction is the largest single item.
+## K3. The new shell owns `deep-zoom/`; last week's prototype moves aside
 
-Recommend B, with R-H1 (parameters by id) and R-H4 (seek and render one frame) first.
+It stays runnable under another name until the new shell matches it, then it is removed.
+`deep-zoom/renderer` stays where it is. *Closes D1 (rebuild in place, or keep the old shell at a
+second entry): it is kept at a second entry for the length of the build. The tag
+`deep-zoom-lean-shell` is no longer needed.*
+
+## K4. GMT's own navigation and Light Studio, reworked generically - no private copies
+
+Answers to `GMT-SYSTEMS.md` section 8, all "yes to the recommendation":
+
+| Item | Decided |
+|---|---|
+| 8.1 | GMT's navigation is the deep zoomer's flying (stage N) |
+| 8.2 | GMT's drag-look, not captured-mouse look |
+| 8.4 | Fly speed in this shell: range 0.01..8, default 3.6. GMT's own range and default stay |
+| 8.7 | Option (a): GMT does not show Surface lights until GMT can fit a surface plane itself |
+| 8.16 | The attachment keeps its behaviour and the name "Surface" |
+
+## K5. The shell does not wait for a rework
+
+Until stage N lands it flies on the module's own loop; until stage L lands it lights with plain
+sliders. `GMT-SYSTEMS.md` section 7 says which stage each rework belongs to.
+
+Nothing is to be built yet: this pass is documents only.
+
+# Open - in the order they block
+
+| Order | Id | The call | Blocks | Recommended |
+|---|---|---|---|---|
+| 1 | **O1** | The prototype's new name, and that it is dev-only (no build input) | stage 1, package S1-A | `deep-zoom-prototype`; dev-only |
+| 2 | **O2** | Hold the first push and the merge to `main` until you say ship (a new HTML entry joins the precache; a push can interrupt live users) | nothing to build; every push | hold; not before stage 4 is green |
+| 3 | **O3** | Colour uses GMT's mode numbers (0, 1, 5, 7, 8, 13) and GMT's `scale` / `offset` / `bias` names from the first saved file (GMT-SYSTEMS 7.5) | stage 2, S2-2 | yes: a rename after scenes exist is a migration |
+| 4 | D7, D13, D14 | Developer levers; the 17 look values with no range; fixed frame size and the scale pill | stage 2 | as written below |
+| 5 | D6, D8 | Where saved locations live; which small engine changes ride along | stage 3 (E2 of D8 already in stage 2) | as written below |
+| 6 | D3, D9 | Keys while the mouse is captured (holds until N5); the tutorial card | stage 4 | as written below |
+| 7 | **O4** with GMT-SYSTEMS 8.3, 8.5, 8.15, 8.17 | Keys once nothing captures the mouse; roll; which distance; a slow key; up and down along whose axis | stage N: N4 (8.3 sizes it) and N5 | below, and the recommendations in GMT-SYSTEMS |
+| 8 | D10 | Phone | N5 (the on-screen sticks arrive with GMT's navigation) | below |
+| 9 | D4, D5, D15, D11 | What the timeline number means; the `camera` feature id; default dive speed; lossless frames before video | stage 6a, then 6b | as written below |
+| 10 | GMT-SYSTEMS 8.6, 8.9, 8.8 | Which attachments this shell offers; light count; route A only, or A then B | stage L: L0 (8.9), L4 and L5 (8.6); 8.8 only after stage 7 | Surface and Camera, World disabled below about 1e-6; 8 lights; A now |
+| 11 | D12 | Modulation (LFOs) | nothing in v1; L5 packs with an empty modulation map until it is decided | leave out of v1 |
+| 12 | GMT-SYSTEMS 8.10, 8.11, 8.12, 8.14 | Post stack; share-link schema; F8 stays out; shadow rows after route B | after stage 7 (8.11 after stage 3 shows the link's length) | as recommended there |
+
+## O1. The prototype's name
+
+Last week's embedded prototype moves to `deep-zoom-prototype/` with `deep-zoom-prototype.html`,
+`public/deep-zoom-prototype-core/`, `smoke:deep-zoom-prototype` (BLUEPRINT section 11 has the full
+table). Names are your call. Second half: it gets no build input, so it runs on the dev server
+only and never reaches the deployed precache; say so if you want it reachable on the preview deploy.
+
+## O4. Keys once nothing captures the mouse (re-opens D3 for N5)
+
+D3's rule leans on "while the mouse is captured". With GMT's drag-look (K4) nothing captures it.
+Recommended for N5: `Space` and `C` are GMT's up and down, so the timeline's `Space` does not play
+while the picture has focus and colour mode loses the `C` key (another key, or the panel row
+only); `9` / `0` and `T` / `Y` lose their flying-only bindings, because the panels can be reached
+with a free pointer; slot digits act only when no fly key is held and nothing is recording; `Q` /
+`E` do nothing unless roll is switched on (GMT-SYSTEMS 8.3).
+
 
 ## D3. Three key meanings change
+
+*Open. Holds from stage 4 until N5; after N5 see O4.*
 
 One rule decides all of it: **while the mouse is captured, only the fly keys move the camera, and
 the look keys you tune while moving keep their old meaning. The suite's key language applies when
@@ -61,7 +115,7 @@ Recommend as stated. Lost for good: last week's `1` `2` `3` panel toggles (the d
   same step.
 - **B. View index, 0 to n-1.** A key means "exactly this recorded view at this frame"; inserting a
   view never moves other keys. Cost: speed between views is uneven unless the views are evenly
-  spaced, and the page's renderer would need the same sampler.
+  spaced, and the module's renderer would need the same sampler.
 
 Recommend A now. "Add the view I am looking at to the flight" is left out of v1 either way.
 
@@ -95,7 +149,7 @@ caps, force rebuild).
   widget, no saved state (recommended).** They stay reachable for kernel work without entering
   scenes or undo, and the gate is the engine's own switch, not a private `?dev` flag. The same
   switch shows the four advanced Quality rows.
-- **B. Leave them out of the shell;** use the standalone page for kernel work.
+- **B. Leave them out of the shell;** use the dev harness (`deep-zoom-harness.html`) for kernel work.
 - **C. Make them advanced DDFS params.** They would then be saved, keyframable and undoable -
   wrong for measurement switches.
 
@@ -112,10 +166,12 @@ Recommended to do during the stages (each under half a day, no ADR, other apps g
 - `openRenderPopup()` and the wider encoder input (E22, E23), in stage 6b;
 - the async snapshot source (E8), only if the first real-GPU PNG is blank.
 
-Your call:
-- the second key root for Shortcuts (E5). The interim relay is about 15 lines inside the transport
-  and disappears with the module transport. Recommend: keep the relay, skip E5 unless a popout
-  window needs it.
+No longer a call: the second key root for Shortcuts (E5) is dropped. The renderer is a module in
+the shell's own document, so there is no second document to listen in (ENGINE-GAPS section C).
+
+New since 2026-10-08, following from K4 (the owner answered the five items, not the ADRs): two ADRs ride with the reworks - "Navigation emits
+displacements" (package N2) and "Lights resolve against a view frame" (drafted in L3, finished in L4).
+
 
 Queued, each needs an ADR: shared app-shell component (E1), state-library persistence (E10),
 session-only params (E13), setter equality gate (E15), cross-app gradient hand-off (E28).
@@ -133,20 +189,24 @@ If the focus check fails, B becomes required.
 
 ## D10. Phone
 
-Flight is pointer lock plus keys; nothing in the page handles touch.
+*Re-opened by K4.* Before N5, flight is a captured mouse plus keys and nothing handles touch.
+After N5 GMT's navigation brings its two on-screen sticks, and its hook switches drag-look off on
+phones, so phone flight rests on the sticks alone (GMT-SYSTEMS 3.1; the sender component is
+unverified there).
 
-- **A. Desktop only in v1 (recommended):** the root still uses the phone-safe shell component, the
-  chrome smoke runs the desktop viewport only, and a phone visitor sees the picture and a one-line
-  notice.
-- **B. Design touch flight now.** A renderer feature first, then a shell layout; not small.
+- **A. Desktop only until N5, then the sticks, with a phone pass in the chrome smoke
+  (recommended).** The root uses the phone-safe shell component from stage 1; before N5 a phone
+  visitor sees the picture and a one-line notice.
+- **B. Desktop only in v1,** sticks left off even after N5.
+
 
 ## D11. Video before lossless frames
 
 The engine's render dialog makes MP4 / WebM; it has no image-sequence writer outside GMT's own.
 
-- **A. The page's ZIP of PNGs first (stage 6a, needs nothing from the page), video through the
-  engine dialog second (stage 6b, needs R-H4) (recommended).** The ZIP keeps the cancel confirm and
-  the ffmpeg line. Known limit until R-H4: the ZIP uses the page's own smooth-step timing, not the
+- **A. The module's own ZIP of PNGs first (stage 6a, needs no module package: the module downloads the ZIP parts itself and M6 leaves that one download in place), video through the
+  engine dialog second (stage 6b, needs M4) (recommended).** The ZIP keeps the cancel confirm and
+  the ffmpeg line. Known limit until M4: the ZIP uses the module's own smooth-step timing, not the
   curve you shaped on the timeline, and the Flight strip says so.
 - **B. Build an engine image-sequence writer first (E24, one to two days),** so the lossless master
   also comes from the dialog.
@@ -159,7 +219,7 @@ Say so if you want audio / LFO on the look from day one.
 
 ## D13. Seventeen look values have no range
 
-The page gives defaults but no range for exposure, saturation, fill, kicker, metallic, reflectivity,
+The module gives defaults but no range for exposure, saturation, fill, kicker, metallic, reflectivity,
 the fill and kicker colours and nine more. Recommend: ship the 11 ranged light controls in stage 2; add the rest as
 advanced rows only after someone reads the shading pass and sets each range. If you already know
 the safe ranges, give them and they go in with stage 2.
@@ -174,8 +234,8 @@ renderer sizes itself and nothing tells it the numbers.
   (recommended for stages 1-6).** Honest, zero engine work.
 - **B. Add a size sink to the viewport frame (ENGINE-GAPS E4, half a day to a day) after stage 2,
   then switch Fixed mode and the pill on and drop the readout widget.** More native; app-gmt and
-  fluid-toy could use the same sink. Needs a page handle for an exact width and height (today the
-  page takes a long edge only).
+  fluid-toy could use the same sink. Needs a module package for an exact width and height (today the
+  module takes a long edge only: `api.setFrame(longEdgePx)`, `deep-zoom/renderer/index.ts`).
 
 ## D15. Default speed of a recorded dive
 
@@ -188,12 +248,18 @@ curve is editable in the graph editor and the strip shows decades per second at 
 
 - The recorded flight and the saved locations go into scene files through the engine's document
   registry, not through preset fields. Share links then leave them out with no code.
-- Stage 6 is split: 6a (record, scrub, lossless frames) needs nothing from the page; 6b (video)
-  starts when R-H4 has landed.
+- Stage 6 is split: 6a (record, scrub, lossless frames) needs no module package; 6b (video)
+  starts when M4 has landed.
 - Every package has a check it can run alone, and the smoke is one file per stage.
 
 - The starter card line "deeper than Mandelbulber and Mandelbulb 3D reach" is removed: a claim with
   no source in the tree, and labels carry names and numbers only.
 - The Camera plugin is not installed; saved places use one mechanism, the state library.
-- Pause controls and the bucket renderer are not installed; the renderer keeps its own.
+- Pause controls are installed in stage 2 once the module can pause (package M5); the bucket
+  renderer is not installed in v1. The pause half is taken from GMT-SYSTEMS 7.3, which corrected
+  the first version. 7.3 also asks for a bucket controller in stage 6; that half is not taken - the
+  module keeps its own tiled export (BLUEPRINT section 1). You were not asked this one; say so if a
+  bucket controller belongs in v1.
+- Every former page handle is a module package, one at a time, with the parity smoke green (K1, K2).
+- The prototype is never edited to match the new shell; it is the porting source and then it goes.
 - Location thumbnails become 128 px JPEG (last week's PNGs are what filled the storage quota).

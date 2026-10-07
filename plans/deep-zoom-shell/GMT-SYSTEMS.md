@@ -341,8 +341,8 @@ up, wheel, drag delta) through to displacements, and add a fly step to `smoke:or
 | N2 | Integrator into `engine/plugins/navigation/` with the sink and the two floors as settings; `modifiers.ts` moves with it; `engine-gmt` re-exports | 0.75 | GMT identical (N0 green) |
 | N0b | Guard for the input hook, on today's code: replay extended to the hook's output shape; a smoke that flies (hold W, `sceneOffset` moved along the view direction); both falsified | 0.5 | Nothing moved |
 | N3 | Renderer-free input hook with the widened contract (3.2 e); GMT's hook becomes the wrapper | 1.25 | GMT identical (N0b, `smoke:orbit` for drag, `typecheck`). `test:interaction*` guards the ADR-0061 edges only if it reaches the hook - unverified |
-| N4 | Module: `setInputOwner`, `rawDist`, `setYawPitch` or basis; keeps computing `rawDist` / `smoothedDist` under host input | 0.75 to 1.35 | Shell still flies on the page's loop until N5 |
-| N5 | Shell `deep-zoom/navigation.ts`: mounts the hook on the surface, runs the integrator on a tick with `autoSlow: true` and the module's `rawDist` as `distEstimate`, levels the quaternion and writes it back each frame, sink -> `moveAlong([dx,dy,dz], 1)` with the 0.2 clamp, proportional wheel step, `isSuppressed` over the timeline, own DST / SPD readouts, home / step back; switches the module to host input | 1.75 | Shell flies on GMT's code; the page-loop interim is deleted |
+| N4 | Module: `setInputOwner`, `rawDist`, `setYawPitch` or basis; keeps computing `rawDist` / `smoothedDist` under host input | 0.75 to 1.35 | Shell still flies on the module's own loop until N5. `rawDist` is `api.dz.rawDistance()` in BUILD-PLAN; `setYawPitch` unless 8.3 turns roll on |
+| N5 | Shell `deep-zoom/navigation.ts`: mounts the hook on the surface, runs the integrator on a tick with `autoSlow: true` and the module's `rawDist` as `distEstimate`, levels the quaternion and writes it back each frame, sink -> `moveAlong([dx,dy,dz], 1)` with the 0.2 clamp, proportional wheel step, `isSuppressed` over the timeline, own DST / SPD readouts, home / step back; switches the module to host input | 1.75 | Shell flies on GMT's code; the module-loop interim (`deep-zoom/flyGuard.ts`) is deleted |
 | N6 | Optional: distance source (read raw, keep publishing smoothed) + HUD predicates so the shell mounts GMT's HUD cluster | 1.5 with the probe test | - |
 | Later | Module `fov` variable + shell param; camera-undo provider; orbit at depth only on request | 0.5 / 1 / 4 to 6 days | - |
 
@@ -647,17 +647,20 @@ ADR numbers are taken at write time; 0131 and 0132 already exist on the audio br
 Notes for the blueprint's authors; I did not edit their files.
 
 1. **BLUEPRINT section 2 ("under a host the renderer keeps fly keys only", `host.setHotkeys('fly')`)
-   becomes the interim, not the design.** Stage 1 still flies on the page's loop. A new **Stage N**
+   becomes the interim, not the design.** Stage 1 still flies on the module's own loop. A new **Stage N**
    (packages N0, N2, N0b, N3 in the engine and GMT - there is no N1 any more - N4 in the module,
    N5 in the shell) can start beside stage 2 - it
    shares no file with the shell integrators - and N5 lands after stage 4 (keys) and **before stage
    6**, so recorded flights are flown with the final controls. After N5 the module runs with host
-   input and S4-1's fly-key relay is deleted.
+   input and S4-1's `deep-zoom/flyGuard.ts` is deleted (the reconciled plan has no key relay).
 2. **DECISIONS D3 (three key meanings change) should be re-opened**: with GMT's map, vertical is
    Space/C and Q/E are roll or unbound. **D10 (phone)** changes too: flight no longer needs pointer lock.
 3. **BLUEPRINT plugin table, "PauseControls / BucketRender: not used" is half wrong**
    (render-export-anim): only `BucketRunner` is three.js-bound. Add to stage 2 an
    `AccumulationController` adapter + `installPauseControls()`, and to stage 6 a bucket controller.
+   *(2026-10-08: the stage-2 half is taken - BUILD-PLAN M5 and the pause controls. The stage-6
+   bucket controller is not taken for v1: the module keeps its own tiled export, BLUEPRINT
+   section 1; DECISIONS "Applied without asking" tells the owner so.)*
    Module needs `pause`, a sample-target setter and a public reset.
 4. **`dzLight` (S2-2) is the interim for the Light Studio.** Stage 2 ships the plain sliders. A new
    **Stage L** (L0 in the module any time; L1-L4 in GMT; L5 in the shell) lands after stage 5. At L5
@@ -669,31 +672,43 @@ Notes for the blueprint's authors; I did not edit their files.
    `scale` / `offset` / `bias` names from the start** - one session, no GMT change, and a GMT
    colouring block then reads across.
 6. **Stage B** (GMT's shading chunks in pass S) and the post stack go after stage 7; both need the
-   module transport, not the iframe.
-7. **BUILD-PLAN's R packages edit the page master on `kernel-perf`.** The owner's later instruction
+   module, which is the only way the new shell mounts the renderer.
+7. **BUILD-PLAN's first version had R packages that edited the page master on `kernel-perf`; they
+   are the M packages now and edit the module.** The owner's later instruction
    freezes the page; `deep-zoom/renderer/` exists in the worktree (`core.js`, `core.d.ts`, `port`).
    Every module handle in this document (`setInputOwner`, `rawDist`, basis input, `fov`, N lights,
-   `pause`, `setGradientTexels`, `pick`) belongs in the module. Stage N's N4 can still be proven on
-   the iframe transport with handles that exist today (`__moveAlong`, `__lockInput`,
-   `__smoothedDist`), except orientation, which needs the new handle.
+   `pause`, `setGradientTexels`, `pick`) belongs in the module. Stage N's N4 is proven on
+   the module itself (`debug/deep-zoom-checks/input-owner.mts` and the parity smoke, BUILD-PLAN N4);
+   there is no second transport.
 8. **Smoke growth:** add to `smoke:deep-zoom` at N5 "hold W 1 s with host input, `getView().cam`
-   changed and the page's own key handler did not fire"; at L5 "turn the pad, centre pixel changes".
+   changed and the module's own key handler did not fire"; at L5 "turn the pad, centre pixel changes".
 9. **Hold the first push** until the owner says ship (sweep M6: a new HTML entry joins the precache).
 
 ---
 
 ## 8. Decisions only the owner can make
 
-1. **Is GMT's navigation the deep zoomer's flying?** Yes (about 5.75 sessions, one master, the
+> **Update 2026-10-08:** the owner answered items 1, 2, 4, 7 and 16 - "yes to all 5
+> recommendations". Each is marked DECIDED in place; eleven are open; item 13 is covered by
+> `DECISIONS.md` K2, which is not one of the five numbered answers. The shell's four
+> documents were brought into line the same day (`DECISIONS.md` K4). Sections 3.4 and 7 were
+> corrected in place the same day (the module's own loop, no second transport, `flyGuard.ts` deleted
+> at N5). Elsewhere in sections 1 to 6, where the text says "the page" for the thing the shell talks
+> to, read "the module": the page is frozen and the new shell mounts the module only.
+
+1. **[DECIDED 2026-10-08: yes - GMT's navigation is the deep zoomer's flying, as Stage N.]**
+   **Is GMT's navigation the deep zoomer's flying?** Yes (about 5.75 sessions, one master, the
    on-screen sticks on phones) / keep the page's loop (0 now, a permanent second copy). **Recommend
    yes**, as Stage N. Know before saying yes: up/down follows the camera, held keys are normalised,
    and the horizon is kept level by the shell (3.1).
-2. **Mouse look.** GMT's left-drag rate control / the page's pointer lock (`cam.yaw += e.movementX*0.0009`).
+2. **[DECIDED 2026-10-08: GMT's drag-look, not captured-mouse look.]**
+   **Mouse look.** GMT's left-drag rate control / the page's pointer lock (`cam.yaw += e.movementX*0.0009`).
    **Recommend GMT's drag-look**; if pointer lock is missed, add it once, as a second look source in
    the engine hook, where GMT gets it too.
 3. **Roll.** Off in v1 (Q/E unbound, yaw/pitch, flight-path format unchanged) / on (module takes a
    basis, +0.5, and path format v2, +1). **Recommend off in v1.**
-4. **Fly speed.** GMT's default (0.5 x distance per second: a full dive is 5.9 minutes, 89 seconds
+4. **[DECIDED 2026-10-08: this shell passes range 0.01..8 and default 3.6; GMT's own range and default stay.]**
+   **Fly speed.** GMT's default (0.5 x distance per second: a full dive is 5.9 minutes, 89 seconds
    with Shift) / the page's (3.6: 49 seconds). **Recommend the shell passes range 0.01..8 and
    default 3.6**, shown as a number; GMT's range and default stay.
 5. **Which distance.** Nearest surface (the module's, exact, slows near any wall) / under the
@@ -701,7 +716,8 @@ Notes for the blueprint's authors; I did not edit their files.
    to the integrator, so nothing in GMT has to know which it is.
 6. **Light attachment in the deep zoomer.** Surface and Camera offered, World listed and disabled
    below about 1e-6 / all three always. **Recommend the first.**
-7. **Does GMT get Surface lights now?** (a) Not shown in GMT until GMT has a plane fit: GMT's
+7. **[DECIDED 2026-10-08: option (a) - GMT does not show Surface lights until GMT can fit a surface plane itself.]**
+   **Does GMT get Surface lights now?** (a) Not shown in GMT until GMT has a plane fit: GMT's
    attachment control stays exactly as it is, and Surface has one implementer for now / (b) shown
    but disabled in GMT with a reason (a visible change to a shipped control for no GMT gain) /
    (c) build GMT's plane fit inside stage L (+1 to 2 sessions) so the option has two implementers
@@ -715,7 +731,9 @@ Notes for the blueprint's authors; I did not edit their files.
 11. **Share link schema** (live table, backend repo not opened). Needed before "look at this at
     1e-40" links are short. Recommend deciding after stage 3 shows how long the packed link is.
 12. **F8 stays out.** Confirm: nothing here needs `VirtualSpace` changed, and no saved value moves.
-13. **Who edits the module once the port lands** (BUILD-PLAN D2 assumed the page master).
+13. **Who edits the module once the port lands** (DECISIONS D2 assumed the page master; K1 closed it).
+    **Covered by DECISIONS K2**, not one of the five numbered answers: the owner said core.js is
+    edited directly, guarded by the parity smoke.
 14. **Shadow rows after route B.** (a) A shadow provider owns its parameter block and its controls
     (rework R4, 0.5 to 1 session; the shell keeps Strength / Softness / Length) / (b) the deep
     zoomer's shadow controls become GMT's Opacity / Hardness / Bias with new meanings (0 sessions,
@@ -723,7 +741,8 @@ Notes for the blueprint's authors; I did not edit their files.
 15. **A slow key.** Neither app has one for flying (Alt slows only roll and the wheel step in GMT;
     the page has no Alt). Leave it out / add Alt = 0.1x to the shared integrator, which changes
     GMT's feel too. **Recommend leave it out** unless he wants it in both.
-16. **The name "Surface".** The light keeps its elevation above the surface but turns with the
+16. **[DECIDED 2026-10-08: the attachment keeps its behaviour and the name "Surface".]**
+    **The name "Surface".** The light keeps its elevation above the surface but turns with the
     camera. Keep the name / pick another (names only, his call) / make it truly surface-fixed
     (azimuth from a stored tangent instead of the camera; new behaviour, not the look approved on
     the page; about 1 session in the module). **Recommend keep the behaviour, his call on the name.**
