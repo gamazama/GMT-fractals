@@ -1,9 +1,9 @@
 # Work packages, in execution order
 
 W = `H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom`. Page = `H:/GMT/workspace-gmt/mandelbulb_deepzoom/index.html`.
-Ids are stable and prefixed by stage (A hand-off, K page handles, X extraction, D in-viewport, E saves and timeline, F native). Sizes are focused sessions. "Old id" names the planners' packages each one merges.
+Ids are stable and prefixed by stage (A hand-off, K page handles, X extraction, D in-viewport, E saves and timeline, F native). Sizes are focused sessions. "Old id" names the planners' packages each one merges; in stage F the old ids WP0a to WP12 are the native plan's (`W/debug/scratch/dz-wf2-plans.json`, label "plan: native-per-formula").
 
-**First three to run: A1, A2, A3** (then A4 straight after). K1-K4 can go to the owner's own `kernel-perf` session in parallel; they block nothing in stage A.
+**First three to run: A1, A2, A3** (then A4 straight after). K1-K4 can go to the owner's own `kernel-perf` session in parallel; they block nothing in stage A. So can the two native spikes, F3 and F4 (2 to 3 sessions, in the page): their result should be known before D4 is started.
 
 Rule for every package: a smoke that covers a panel must open the panel. GPU checks run headed on real d3d11, not SwiftShader.
 
@@ -87,8 +87,9 @@ Rule for every package: a smoke that covers a panel must open the panel. GPU che
 
 ## X0 - Baseline numbers before extraction
 - **Stage:** X. **Depends on:** OWNER-DECISIONS 2. **Size:** half a session.
-- **Steps:** `CORE-EXTRACTION.md` step 0: record the suites green, one `__timeThumb` number, the three programs' compile times (`compileMs`), and the BigInt rebuild time at 1e-77 through a forced rebuild. Confirm how the suites load the page (file:// or http).
-- **Acceptance:** four numbers written into the page's HANDOFF. These decide X5 and where in GMT's boot the module may be created.
+- **Steps:** `CORE-EXTRACTION.md` step 0: record the suites green, one `__timeThumb` number, and the three programs' compile times (`compileMs`). Time `buildRefOrbit` + `uploadOrbit` per frame WHILE FLYING at 1e-12, 1e-30 and 1e-77 - not one forced rebuild: the page rebuilds on every movement frame (`mv()` sets `orbitDirty`; `frame()` then calls `buildRefOrbit(camHP, cam.iters + 2)`), and that per-frame cost is the number nobody has. Confirm how the suites load the page (file:// or http).
+- **Already settled by check 8 (PLAN.md), so not measured here:** whether a slow tick trips GMT's guards. It does not - `DOUBLE_RUN_WINDOW_MS` in `W/engine/TickRegistry.ts` and `BOOT_WATCHDOG_MS` in `W/engine-gmt/renderer/GmtRendererTickDriver.tsx` were read and neither can fire from a blocking tick. Budget the cold first compile at about 15 s (the page's own comment), not 5.
+- **Acceptance:** the numbers written into the page's HANDOFF: suites green, `__timeThumb`, three compile times, three per-frame rebuild times. The rebuild times decide X5; the compile times decide where in GMT's boot the module may be created.
 
 ## X1 - Module script, shaders, pure maths, path maths, handle block
 - **Old ids:** A1, A2 (part), A3 (part). **Depends on:** X0, K4. **Size:** 1 session.
@@ -101,30 +102,33 @@ Rule for every package: a smoke that covers a panel must open the panel. GPU che
 ## X3 - `createDeepZoom(canvas, options)` and the host API
 - **Old ids:** A2, B1 (part). **Depends on:** X2. **Size:** 2 sessions.
 - **Steps:** `CORE-EXTRACTION.md` steps 7 to 9. The 6 page-assuming sites (canvas lookup, `EMBED` from `location.search`, the `document.body.innerHTML ... throw 0` failure path, `$id` lookups, `window.innerWidth/innerHeight` sizing) become options. Handles live on the instance; the standalone page re-publishes them on `window`. `__cam`, `__look`, `__march`, `__gate` stay the same live objects. Add `step(now)`, `start`/`stop`, `resize`, `dispose`, context-loss handling.
-- **Acceptance:** all page suites green, plus a new suite: create, dispose, create again leaves exactly one WebGL context and no stacked frame loop.
+- **Three rules from check 8:** (1) when a host calls `step(now)` the module's own trailing `requestAnimationFrame(frame)` never runs - a second driver that reached `runTicks` is the one thing that would trip GMT's 1 ms double-run guard; (2) camera motion and path playback use a wall clock inside the module, not a delta handed in by the host (GMT clamps its tick delta to 0.1 s, the page clamps its own to 0.05 s); (3) no synchronous compile from `step` - every program goes through `mkProgAsync` and the instance reports a "compiling" state. Today `ensureVariant` can force one (`blaPending[key].finish()` / `mkProg(vSrc(b, t))`); under a host it must wait instead.
+- **Acceptance:** all page suites green, plus a new suite: create, dispose, create again leaves exactly one WebGL context and no stacked frame loop; with `step()` driven by hand, a frame counter advances only when `step` is called (red if the internal loop is still alive); forcing the BLA variant on returns "compiling" and no single `step` call takes over 100 ms.
 - **Risk:** the one step with real risk. Must not run while the owner is mid-edit on the same file.
 
 ## X4 - Deep-zoom tool mounts the module; where the module lives
 - **Old ids:** B1, A3. **Depends on:** X3, OWNER-DECISIONS 2. **Size:** 1 to 2 sessions.
-- **Files and symbols:** `W/deep-zoom/DeepZoomApp.tsx`, `W/deep-zoom/bridge.ts` (transport swap from iframe handles to the instance), `registerTick` in `W/engine/TickRegistry.ts`. The module goes under `W/engine-gmt/` (not `W/engine/`, which must stay free of fractal code). Keep the iframe path behind a query flag for a week.
+- **Files and symbols:** `W/deep-zoom/DeepZoomApp.tsx`, `W/deep-zoom/bridge.ts` (transport swap from iframe handles to the instance), `registerTick` in `W/engine/TickRegistry.ts`. The module goes under `W/engine-gmt/` (not `W/engine/`, which must stay free of fractal code). Keep the iframe path behind a query flag for a week. The registered tick is the module's only driver (X3 rule 1). Without `KHR_parallel_shader_compile` (Firefox) the first compile blocks for about 15 s once: show a notice before it starts (OWNER-DECISIONS 7).
 - **Acceptance:** level 1's GPU smoke passes on the module path; mount, unmount, mount leaves one context and one registered tick. `npm run typecheck`, `npm run build` exit 0.
 
 ## X5 - Reference orbit in a worker (optional)
-- **Old ids:** F2. **Depends on:** X1; only if X0 shows a rebuild over about 8 ms. **Size:** 2 to 3 sessions. Pattern: `W/engine/fractal/deepZoom/laRuntime.ts`.
+- **Old ids:** F2. **Depends on:** X1; only if X0 shows a per-frame rebuild over roughly 30 to 50 ms while flying (check 8's threshold; the first draft guessed 8 ms). **Size:** 2 to 3 sessions. Pattern: `W/engine/fractal/deepZoom/laRuntime.ts`.
+- **Scope:** the BigInt orbit build (`buildRefOrbit`, and `blaBuild` if it is in the same path) in a plain Web Worker with no GL. NOT a move of the renderer into a worker with OffscreenCanvas: check 8 found no guard that needs it, and it would not help with a slow deep draw, which stalls the browser's one GPU process whichever thread issued it. The answer to that stall is the page's existing frame-size caps (720 / 1080 / 1440 px) and keeping GMT's renderer suspended (D1).
 - **Acceptance:** page suites green; no main-thread task over 50 ms from the orbit during continuous flight.
+- **Reused by:** F10 (the native route needs the same worker).
 
 ---
 
 ## D0 - MEASUREMENT: three contexts alive together
 - **Stage:** D. **Old ids:** WP8, C1. **Depends on:** stage 0. Can run any time GPU is free. **Size:** 1 day.
 - **Files and symbols:** NEW `W/app-gmt/DeepViewportLayer.tsx` behind `?deep=1` (throwaway rig); `W/app-gmt/AppGmt.tsx` (`<div ref={viewportRef}>` inside `<ViewportFrame>`).
-- **Steps:** mount the level-1 iframe over `GmtRendererCanvas`. On real d3d11 measure: (a) deep fps with GMT's dispatch stopped vs running; (b) GPU memory with all three contexts at a large viewport; (c) no context loss and no TDR over 5 minutes of flight; (d) time from "enter" to first deep frame, preloaded vs on demand; (e) pointer lock and Esc both ways.
-- **Acceptance:** a table of the five results and a go/no-go. Go = deep layer within 10% of the standalone tool's fps with GMT stopped, no context loss.
+- **Steps:** mount the level-1 iframe over `GmtRendererCanvas`. On real d3d11 measure: (a) deep fps with GMT's dispatch stopped vs running; (b) GPU memory with all three contexts at a large viewport; (c) no context loss and no TDR over 5 minutes of flight; (d) time from "enter" to first deep frame, preloaded vs on demand; (e) pointer lock and Esc both ways; (f) whether app-gmt's panels stay usable while the deep layer is flying at 1e-12, 1e-30 and 1e-77 - drag one slider and record the longest main-thread task (the same-origin iframe shares GMT's main thread, so this rig measures what the module will do). Check 8 could not find this number anywhere.
+- **Acceptance:** a table of the six results and a go/no-go. Go = deep layer within 10% of the standalone tool's fps with GMT stopped, no context loss. A long task over about 50 ms in (f) is not a no-go: it triggers X5.
 
 ## D1 - Suspend gate for GMT's renderer
 - **Old ids:** C1, C2 (part). **Depends on:** D0 go. **Size:** 1 to 2 sessions.
 - **Files and symbols:** `useFrame` in `W/engine-gmt/renderer/GmtRendererTickDriver.tsx` (`wantsRender`, `sendRenderTick`, `lastInvalidateRef`, `proxy.invalidateConvergedMirror`); the `ResizeObserver` in `W/engine-gmt/renderer/GmtRendererCanvas.tsx`.
-- **Steps:** a new "renderer suspended" input checked after `runTicks()` and before `sendRenderTick`, overriding every `wantsRender` term. Resume does what the existing wake does. Gate the resize path while suspended. Not `proxy.isPaused`. Block snapshot and bucket render while suspended (consumers of `#gmt-render-canvas` are unverified - trace first). Expose it as a generic engine-gmt seam, not a deep-zoom flag.
+- **Steps:** a new "renderer suspended" input checked after `runTicks()` and before `sendRenderTick`, overriding every `wantsRender` term. Resume does what the existing wake does. Gate the resize path while suspended. Not `proxy.isPaused`. Block snapshot and bucket render while suspended (consumers of `#gmt-render-canvas` are unverified - trace first). Also trace what reads `viewport.reportFps(t.fps)` (same `useFrame`): it feeds the main-thread frame rate to the adaptive loop, and a deep renderer on the main thread will lower it, so while suspended it must not drive GMT's adaptive resolution or its performance warning (unverified - check 8). Expose it as a generic engine-gmt seam, not a deep-zoom flag.
 - **Acceptance:** NEW smoke: suspend, assert zero `RENDER_TICK` posts over 1 s while an LFO is running and the sample cap is 0; resume, assert the frame count advances and the accumulation count was not reset. Red if any term still dispatches.
 
 ## D2 - `deepZoom` feature, the layer, and panel sync
@@ -152,13 +156,19 @@ Rule for every package: a smoke that covers a panel must open the panel. GPU che
 ## E1 - Exact camera in the scene file
 - **Stage:** E. **Old ids:** WP11, E1. **Depends on:** D3. **Size:** 1 to 2 sessions + ADR.
 - **Files and symbols:** `PresetField` and `presetFieldRegistry` in `W/utils/PresetFieldRegistry.ts`; pattern `W/engine-gmt/store/gmtPresetFields.ts`.
-- **Steps:** field `deepView` = three decimal strings + yaw, pitch, bits 256, written only while deep mode is active; the clamped f32 camera is saved too, so older builds open a sane view.
-- **Acceptance:** node test: a 78-digit cam string survives serialise, parse, deserialise byte-identical, and through `quantize` in `W/utils/UrlStateEncoder.ts`. Smoke: save at 1e-30, reload, depth within 2x. Red if any stage passes through `Number()`.
+- **Steps:** field `deepView` = three decimal strings + yaw, pitch, bits 256, written only while deep mode is active; the clamped f32 camera is saved too, so older builds open a sane view. Check 7 confirmed the route (`serializeAll` copies any value that is not undefined; `serializeScene` is `JSON.stringify`) and found three rules: register the field at install time, before `createEngineStore`, or it throws `PresetFieldFrozenError`; the key must not start with `is` (`getDiff` and `quantize` in `W/utils/UrlStateEncoder.ts` drop such keys silently - `deepView` is fine); every exact value is a string, never a number (share links cut numbers to 5 decimals).
+- **Acceptance:** node test: a 78-digit cam string survives serialise, parse, deserialise byte-identical, through `quantize` and `getDiff` in `W/utils/UrlStateEncoder.ts`, and through the PNG metadata leg (`W/utils/pngMetadata.ts` - the one leg check 7 did not read). Smoke: save at 1e-30, reload, depth within 2x. Red if any stage passes through `Number()`, or if the key is renamed to start with `is`.
 
 ## E2 - A dive as one timeline track
 - **Old ids:** WP12, E2. **Depends on:** E1. **Size:** 2 to 3 sessions + ADR.
-- **Steps:** FIRST check whether the track picker can show a binder-only id (`W/engine/animation/binderRegistry.ts`; unverified - the check was cut off). If not, a hidden DDFS float `deepZoom.u`. Position interpolation stays in the renderer (arc-length Catmull-Rom on BigInt); the timeline only holds a number. Needs a pure `seekPath(u)` with no frame loop.
-- **Acceptance:** smoke: record a dive to 1e-12; at three playhead positions the depth is monotonic and equal across two runs. Red if playback depends on wall-clock time.
+- **Files and symbols:** `binderRegistry` in `W/engine/animation/binderRegistry.ts`; `getBinder` in `W/engine/AnimationEngine.ts`; `addTrack` in `W/store/animation/sequenceSlice.ts`; patterns `W/hooks/useTrackAnimation.ts` and `recordPickKeyframes` in `W/engine-gmt/hooks/useInteractionManager.ts`; precedent for a non-DDFS id: `camera.unified.*` in `W/engine-gmt/animation/cameraBinders.ts`; `W/utils/timelineUtils.ts`.
+- **Steps:** check 7 settled the opening question, so there is no "check first" step and no hidden DDFS float. There is no track picker that lists binder ids (`binderRegistry.list()` has no UI consumer); tracks are made by code. So:
+  1. Register a binder for `dzPath.u` at install time, with E1's field, before `createEngineStore`.
+  2. Ship one small control in the deep-mode UI, "key path position", that calls `addTrack('dzPath.u', label)` and `addKeyframe`. `addTrack` makes a float track for any id.
+  3. Read `W/utils/timelineUtils.ts` to the end: it special-cases `camera.unified`, `camera.rotation` and `featureRegistry.get(parent)`, so a `dzPath.*` row may land in a fallback group in the dope sheet and graph editor and need a label case (unverified).
+  4. Position interpolation stays in the renderer (arc-length Catmull-Rom on BigInt); the timeline only holds a number. Needs a pure `seekPath(u)` with no frame loop.
+- **Acceptance:** smoke: record a dive to 1e-12; at three playhead positions the depth is monotonic and equal across two runs. Red if playback depends on wall-clock time. Plus a node test that a `binderRegistry` entry wins over name inference for an id that also parses as a feature param: `getBinder`'s lookup order is only an `@assumption` in the source, and this track depends on it. Falsify by moving the `binderRegistry.lookup(id)` line below the inference chain.
+- **Risk:** lower than first written - no engine type change and no new track type. What is left is the dope-sheet grouping in step 3.
 
 ## E3 - RESEARCH: exporting an animation with a deep section
 - **Old ids:** WP13. **Depends on:** E2. **Size:** 1 day to decide. Until then the product says "Deep sections export as a PNG sequence."
