@@ -43,8 +43,19 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
   must not change how fast you fly. (4) Q and E are down and up (the renderer has no roll), beside
   GMT's Space and C. With the surface distance at 0 (inside the solid) nothing moves; Backspace or
   Home is the way out. The depth readout no longer fades while flying and shows the fly speed.
-- **Precision Deep at a shallow depth draws one flat colour.** A smoke step about Light or Colour
-  uses a view that is deep by itself; the tabs say they act below 1e-4 and offer no switch.
+- **Precision Deep at a shallow depth draws one flat colour** - WRONG AS WRITTEN, corrected the same
+  day. It happens only with the camera exactly on the bulb's z axis, where the start view sits and
+  where the deep path's reference orbit is degenerate. 1e-9 off the axis the deep path draws the
+  whole bulb with the new look, better than f32. So f32 is needed only for the seconds the deep
+  shader compiles at boot; dropping it as the shallow picture is an open call with the owner (it
+  wants the on-axis case fixed, a palette colour for far ground, and refine for far hits). A smoke
+  step about Light or Colour still uses a view that is deep by itself.
+- **Measured 2026-10-08, not yet acted on: how small a march step a view needs.** Hit refine is
+  needed at every depth (5 to 32 % of pixels on the wrong surface without it, one sample). The step
+  size a view needs depends on the POWER far more than on depth: power 8 is fine at 0.85 with refine
+  down to 1e-30 and wants 0.5 below 1e-33; the owner's power-2 place at 5e-20 is 85 % wrong at 0.85
+  and needs 0.1. A rule keyed to depth is therefore wrong; an automatic step has to be measured per
+  view. Open call with the owner.
 - **`restoreDocuments` runs after the preset fields** (`loadPreset` in `store/engineStore.ts`), so the
   document carrier for saved places works as planned. Places in a scene are MERGED into the
   device's list by id; a scene never deletes a place saved on this device.

@@ -7,9 +7,13 @@
  * Light and Colour tabs move nothing. This widget states it at the top of those tabs while the
  * mode is f32; it renders nothing in deep mode.
  *
- * It offers no switch on purpose. Forcing precision to Deep at a shallow depth does not light the
- * picture: the perturbation path draws one flat colour there (seen 2026-10-08 at depth 1.1). The
- * way into deep mode is to go deeper.
+ * It offers no switch. CORRECTED 2026-10-08: this header said that forcing precision to Deep at a
+ * shallow depth "draws one flat colour". It does so only with the camera EXACTLY on the bulb's z
+ * axis - which is where the start view sits (0, 0, 2.6), the one place it was tried. The deep
+ * path's reference orbit is degenerate there. 1e-9 off the axis it draws the whole bulb, lit, and
+ * better than f32 does (measured the same day; pictures under debug/scratch/f32/). So a switch
+ * would work everywhere but the start view; whether deep becomes the picture at every depth, and
+ * this notice goes, is an open call with the owner.
  *
  * Registered as `dz-mode-notice` in registerFeatures.ts; panels.ts places it. Reads telemetry only.
  */

@@ -9,8 +9,10 @@
  *   - The store's values reach the renderer only after `host.ready`; `host.getParams()` holds the
  *     module's own keys (`detail`, `color`, ...) and the mapped params by id (`dzLight.keyElevation`).
  *   - Light and Colour change pixels in DEEP mode only (the f32 path has no light or colour input),
- *     and forcing precision to Deep at a shallow depth draws one flat colour. So a step about the
- *     picture first calls `enterDeepView` (a view that is deep by itself).
+ *     and forcing precision to Deep draws one flat colour AT THE START VIEW (the camera is exactly
+ *     on the z axis there; off the axis the deep path draws shallow views fine - corrected
+ *     2026-10-08). So a step about the picture first calls `enterDeepView` (a view that is deep by
+ *     itself).
  *   - Two thumbnails of one unchanged view are not byte-identical (the still restarts and the
  *     samples are jittered), so picture steps compare mean colour and carry a control: the same
  *     measure with nothing changed. With Accumulate OFF one view draws the same picture every
