@@ -31,14 +31,8 @@ const nothing = (): void => undefined;
 
 /** Call once, after `installShortcuts()`. */
 export function installFlyGuard(): void {
-    shortcuts.register({
-        id: 'deep-zoom.fly-guard.timeline',
-        key: 't',
-        scope: DZ_FLYING_SCOPE,
-        handler: nothing,
-        description: 'While flying: T does not open the timeline',
-        category: 'Flying',
-    });
+    // `t` needs no do-nothing binding here: deep-zoom/hotkeys.ts registers T in this same scope
+    // as "lamp falloff down", which shadows the timeline's T just the same.
     shortcuts.register({
         id: 'deep-zoom.fly-guard.play',
         key: 'Space',

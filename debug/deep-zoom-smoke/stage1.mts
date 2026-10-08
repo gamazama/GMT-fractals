@@ -268,16 +268,18 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'press C with the picture focused: host.getParams().color is unchanged',
+            // Rewritten in stage 4: this step pressed C until C became the shell's own "next
+            // colouring" key. N is a renderer shortcut (next normals mode) the shell does not bind.
+            name: 'press N with the picture focused: the shortcut of the renderer is off (normals unchanged)',
             owner: 'S1-1',
-            falsified: '2026-10-08: `shortcuts: true` in `shellOptions` (host/moduleHost.ts) -> "color 0 -> 1".',
+            falsified: '2026-10-08: `shortcuts: true` in `shellOptions` (host/moduleHost.ts) -> "normals 2 -> 3". (With C, before stage 4: "color 0 -> 1".)',
             async run(ctx) {
                 ctx.check(await ctx.focusPicture(), '#dz-frame takes the keyboard focus');
-                const before = await ctx.host<number>('getParams().color');
-                await ctx.page.keyboard.press('c');
+                const before = await ctx.host<number>('getParams().normals');
+                await ctx.page.keyboard.press('n');
                 await ctx.sleep(300);
-                const after = await ctx.host<number>('getParams().color');
-                ctx.check(typeof before === 'number' && before === after, 'color ' + before + ' -> ' + after);
+                const after = await ctx.host<number>('getParams().normals');
+                ctx.check(typeof before === 'number' && before === after, 'normals ' + before + ' -> ' + after);
             },
         },
         {
