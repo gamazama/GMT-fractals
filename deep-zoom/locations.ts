@@ -42,11 +42,23 @@ import { isFlying } from './navigationState';
 import type { DzColourSlice, DzFormulaSlice, DzLightSlice } from './storeTypes';
 
 /** The look a location was saved with: the three look slices and the detail. */
+/** The march settings a place needs to draw right (Quality tab: Step size, Hit refine, Reach). */
+export interface DzLocationMarch {
+    stepSize: number;
+    hitRefine: number;
+    reach: number;
+}
+
 export interface DzLocationLook {
     dzFormula: DzFormulaSlice;
     dzLight: DzLightSlice;
     dzColour: DzColourSlice;
     detail: number;
+    /** Saved with every location since 2026-10-08: the owner's power-2 place at 5e-20 draws 85 %
+     *  of its pixels on the wrong surface at the default step and needs 0.1, so a place that does
+     *  not carry its march comes back broken. Absent on older locations: a jump to one of those
+     *  leaves the Quality tab as it is. */
+    march?: DzLocationMarch;
 }
 
 export interface DzLocationState {
@@ -88,7 +100,10 @@ const THUMBNAIL_PX = 128;
 
 function captureLook(): DzLocationLook {
     const s = useEngineStore.getState();
-    return { dzFormula: { ...s.dzFormula }, dzLight: { ...s.dzLight }, dzColour: { ...s.dzColour }, detail: s.dzQuality.detail };
+    return {
+        dzFormula: { ...s.dzFormula }, dzLight: { ...s.dzLight }, dzColour: { ...s.dzColour }, detail: s.dzQuality.detail,
+        march: { stepSize: s.dzQuality.stepSize, hitRefine: s.dzQuality.hitRefine, reach: s.dzQuality.reach },
+    };
 }
 
 function applyLook(look: DzLocationLook): void {
@@ -96,7 +111,7 @@ function applyLook(look: DzLocationLook): void {
     s.setDzFormula(look.dzFormula);
     s.setDzLight(look.dzLight);
     s.setDzColour(look.dzColour);
-    s.setDzQuality({ detail: look.detail });
+    s.setDzQuality(look.march ? { detail: look.detail, ...look.march } : { detail: look.detail });
 }
 
 /** The look fields a bare view carries, written to the store (iterations, power, phase, light

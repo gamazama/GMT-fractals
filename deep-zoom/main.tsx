@@ -61,7 +61,7 @@ import { installLocations } from './locations';
 import { registerDeepZoomHotkeys } from './hotkeys';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LocationsPanel } from './components/LocationsPanel';
-import { StarterDives } from './components/StarterDives';
+import { KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShare, loadShareFromUrl, sceneCanvas } from './share';
@@ -177,6 +177,7 @@ try {
     registerDeepZoomHotkeys();
     componentRegistry.register('dz-locations', LocationsPanel);
     componentRegistry.register('dz-starters', StarterDives);
+    componentRegistry.register('dz-places', KeptPlaces);
     componentRegistry.register('dz-location-text', LocationText);
 
     // Scenes carry the saved places as a document; a share link carries the look and the view.

@@ -16,6 +16,8 @@ export const DeepZoomPanels: PanelManifest = [
     { id: 'Locations', dock: 'left', order: 0, active: true, items: [
         { type: 'section', label: 'Starter dives' },
         { type: 'widget', id: 'dz-starters' },
+        { type: 'section', label: 'Kept places' },
+        { type: 'widget', id: 'dz-places' },
         { type: 'section', label: 'My locations' },
         { type: 'widget', id: 'dz-locations' },
         { type: 'separator' },

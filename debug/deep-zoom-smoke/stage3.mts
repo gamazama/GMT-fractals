@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import type { DzCtx, DzStage } from '../smoke-deep-zoom.mts';
 import { DEEP_VIEW, enterDeepView } from './stage1.mts';
+import { PLACES } from '../../deep-zoom/data/places.ts';
 
 const DEPTH_TEXT = /^\d\.\d\de-?\d+$/;
 const cam = (ctx: DzCtx) => ctx.host<string[]>('getView().cam');
@@ -131,6 +132,41 @@ export const stage: DzStage = {
                 await ctx.page.keyboard.press('Backspace');
                 await ctx.sleep(400);
                 ctx.check(same(await cam(ctx), deep), 'Backspace: back where the dive ended, exactly');
+            },
+        },
+        {
+            name: 'a kept place brings its view and the march it needs; a location saved there remembers the march',
+            owner: 'owner, 2026-10-08',
+            falsified: '2026-10-08, three breaks, one run each: `applyLook` in deep-zoom/locations.ts made to ignore `look.march` -> red, "with the march it needs" false (step 0.85, hit refine 0); `march` taken out of `captureLook` -> red, "recalled with 1, the saved location brings the step and the refine back" false; the `dz-places` widget removed from the Locations panel in deep-zoom/panels.ts -> red, 0 cards for 3 places.',
+            async run(ctx) {
+                await fresh(ctx);
+                const cards = await ctx.ev<string[]>("[...document.querySelectorAll('[data-dz-place]')].map((b) => b.getAttribute('data-dz-place'))");
+                ctx.check(cards.length === PLACES.length && cards.length >= 3, 'the Locations tab shows the kept places (' + cards.length + ' cards for ' + PLACES.length + ' places)');
+                const place = PLACES[0];
+                const march = place.state.look?.march;
+                if (!ctx.check(!!march, 'the first kept place carries its march settings')) return;
+                await ctx.page.locator('[data-dz-place="' + place.name + '"]').click();
+                await ctx.sleep(1000);
+                ctx.check(same(await cam(ctx), place.state.view.cam), 'a click jumps to its camera strings, byte for byte');
+                const quality = () => ctx.ev<{ step: number; refine: number; reach: number; power: number }>(
+                    '(() => { const s = window.__store.getState(); return { step: s.dzQuality.stepSize, refine: s.dzQuality.hitRefine, reach: s.dzQuality.reach, power: s.dzFormula.power }; })()');
+                const q = await quality();
+                ctx.check(q.step === march!.stepSize && q.refine === march!.hitRefine && q.reach === march!.reach,
+                    'with the march it needs (step ' + q.step + ', hit refine ' + q.refine + ', reach ' + q.reach + ')');
+                ctx.check(q.power === place.state.look!.dzFormula.power && (await ctx.host<number>("getParams()['dzQuality.stepSize']")) === march!.stepSize,
+                    'its power (' + q.power + '), and the renderer holds that step');
+                // A location saved here must bring the march back, or the place comes back broken.
+                if (!(await saveWithB(ctx, 1))) return;
+                await ctx.ev('window.__store.getState().setDzQuality({ stepSize: 0.85, hitRefine: 0 })');
+                await ctx.withHost('host.moveAlong([0, 1, 0], host.rawDistance() * 0.5); return true;');
+                await ctx.sleep(400);
+                ctx.check((await quality()).step === 0.85 && !same(await cam(ctx), place.state.view.cam), 'left: moved away, step size back at 0.85');
+                await ctx.focusPicture();
+                await ctx.page.keyboard.press('1');
+                await ctx.sleep(800);
+                const back = await quality();
+                ctx.check(back.step === march!.stepSize && back.refine === march!.hitRefine, 'recalled with 1, the saved location brings the step and the refine back (' + back.step + ', ' + back.refine + ')');
+                ctx.check(same(await cam(ctx), place.state.view.cam), 'and the camera strings');
             },
         },
         {
