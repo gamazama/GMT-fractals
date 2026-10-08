@@ -723,6 +723,9 @@ uniform int       uGuide;        // 1 = this jittered sample starts its march fr
 uniform float     uGuideK;       // guide back-off, in pixel cones
 uniform int       uGuideR;       // guide neighbourhood radius in pixels (1 = 3×3, 2 = 5×5)
 uniform sampler2D uGuideTex;     // per pixel, over the earlier samples: x = nearest near-field hit (as PASS G OUTPUT x; 1e30 = some sample missed)
+/* the march as a PICTURE runs it (budget, HIT REFINE, FAR RELAX all live): the render, and probe 7
+   (grep MARCH PROBE). Probes 1-6 referee the plain 256-step march. */
+#define PICTURE_MARCH (uProbe == 0 || uProbe == 7)
 ${KERNEL_CORE}
 /* plain f32 DE for the far-field hybrid segment (t > T_SWITCH the features are
    f32-resolvable; identical to the baseline shader's deMandelbulb, power n + phase) */
@@ -812,8 +815,8 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
   vec2 t = t0, tPrev = t0, cap = vec2(0.0), de = vec2(0.0), dePrev = vec2(0.0);
   hit = false; steps = 0; tF = -1.0; bool esc = false;
   OrbitOut oo; OrbitOut lastOO; lastOO.escaped = false;   // last surface-side orbit → reused for colour
-  int budget = uProbe == 0 ? uMaxSteps : 256;        // the probes referee the plain march: 256 steps, no relaxing
-  int refine = uProbe != 0 ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);   // HIT REFINE
+  int budget = PICTURE_MARCH ? uMaxSteps : 256;      // the probes referee the plain march: 256 steps, no relaxing
+  int refine = !PICTURE_MARCH ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);   // HIT REFINE
   for (int st = 0; st < budget; st++) {
     steps = st;
     de = deAt(t, rd, uIters, esc, oo);
@@ -905,7 +908,7 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
        is a far feature thinner than the overshoot, which the ray then steps through: measured,
        0.1–1.6 % of a deep view's pixels show the surface behind the one they should. The near
        ground and every ordinary view are marched exactly as before. */
-    if (uFarRelax.x > 0.0 && uProbe == 0 && t.x != 0.0)
+    if (uFarRelax.x > 0.0 && PICTURE_MARCH && t.x != 0.0)
       relax = mix(relax, max(relax, uFarRelax.x), clamp((log2(t.x) + (t.y - uRefE) - uFarFrom) / uFarRelax.y, 0.0, 1.0));
     vec2 step = hdrMulF(de, relax);
     if (cap.x == 0.0) cap = hdrMulF(de, 0.05);
@@ -993,7 +996,7 @@ void main(){
         vec3 roF = uCamPosF;
         /* HIT REFINE reaches the far field too (2026-10-08): the same halving of the last step, on
            plain f32 numbers. Off (uHitRefine = 0) this loop is the page's, statement for statement. */
-        int farRefine = uProbe != 0 ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);
+        int farRefine = !PICTURE_MARCH ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);
         float tPrevF = tF;
         for (int st = 0; st < 256; st++) {
             vec3 p = roF + rd*tF;
@@ -1080,6 +1083,7 @@ void main(){
 #ifdef USE_STATS
     if (uProbe == 4) { o = vec4(float(steps), float(sOrb), float(sWork), float(gWork)); return; }
     if (uProbe == 5) { o = vec4(kind, float(gIters), float(gBis), float(gBig)); return; }
+    if (uProbe == 7) { o = vec4(lt, float(steps) + 65536.0*kind, float(sOrb), float(gWork)); return; }   // MARCH PROBE
 #endif
     o = vec4(lt, sPal, min(float(steps), 255.0) + 256.0*kind + (guided ? 1024.0 : 0.0), nPack);
 }`;
@@ -2981,7 +2985,7 @@ function drawSquare(n, fbo, D, probe, acc) {
   gl.uniform1i(x.normalMode, gNormalMode()); gl.uniform1i(x.bisectMax, Math.min(24, bisectMax));
   gl.uniform1i(x.normalIters, normalIters); gl.uniform1i(x.bisectIters, bisectIters);
   gl.uniform1f(x.stepRelax, stepRelax);
-  gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / n / surfMul);
+  gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / (acc && acc.pixH || n) / surfMul);
   const jx = acc ? acc.jitter[0] : 0, jy = acc ? acc.jitter[1] : 0;
   gl.uniform2f(x.jitter, jx, jy);
   setBlaUniforms(x); setPowerUniforms(x);
@@ -2989,6 +2993,11 @@ function drawSquare(n, fbo, D, probe, acc) {
     if (acc && acc.guide) {                      // a probe of a guided sample: the guide's depths are relative to uRefE, as drawDeep sets it
       gl.uniform1f(x.refE, Math.floor(Math.log2(Math.max(smoothedDist, 1e-300))));
       bindGuide(x, acc.guide);
+    }
+    if (probe === 7) {                           // the picture's own march: give pass G what drawDeep gives it
+      const dist = Math.max(smoothedDist, 1e-300), refE = Math.floor(Math.log2(dist));
+      gl.uniform2f(x.origin, 0, 0); gl.uniform1f(x.refE, refE); gl.uniform1f(x.landSplit, -1);
+      gl.uniform1f(x.farFrom, Math.log2(march.farFromDist * dist) - refE); bindGuide(x, null);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, n, n);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -3131,6 +3140,42 @@ api.stats = (n, guideSamples) => {
     skipRatio: 1 - sWT / Math.max(sIt, 1),         // iterations skipped by BLA (0 with BLA off)
     bigAngleShare: sum(big) / Math.max(2 * sWT, 1),// fraction of angle-delta evaluations on the large-angle branch
     lockLoss: { b2: lockLoss(2), b4: lockLoss(4), b8: lockLoss(8), b16: lockLoss(16) } };
+};
+/* MARCH PROBE (2026-10-08, a measuring handle: nothing draws through it). n×n rays of the current
+   view, marched exactly as a picture marches them - the live step size, hit refine, step budget
+   and far relax, unlike probes 1-6 - and read back raw, one RGBA32F texel per ray:
+     x  log2(t) − uRefE where the ray ended (PASS G OUTPUT x: differences between two calls at the
+        same view are exact)
+     y  steps + 65536·kind      kind 0 miss · 1 near hit · 2 far hit · 3 ran out of steps
+     z  orbits spent by the march (steps, bisections, refine halvings)
+     w  kernel passes in all, the normal taps included - the deterministic unit of cost
+   `pixH` is the picture height the hit tolerance is taken for (default n): a 128-ray grid can then
+   sample the march of a 1080-row picture. Returns the Float32Array itself, for a caller IN the
+   page (debug/deep-zoom-march-study.mts); null until the deep path is ready. The counter variant
+   compiles on first use (seconds, blocking). The far-field f32 segment's steps are not counted.
+   @invariant probe 7 marches what the picture marches: the same rays end at the same depth and in
+   the same way as in the picture's own G-buffer - proven by: npm run bench:deep-zoom-march
+   ("probe = picture: 0 of N rays end elsewhere"). Falsified 2026-10-08: probe 7 taken out of
+   PICTURE_MARCH -> 237998 of 278528 rays differ, exit 1. */
+let marchProbeFbo = null, marchProbeTex = null, marchProbeN = 0;
+api.marchProbe = (n, pixH) => {
+  if (!deepProg || !curOrbit) return null;
+  const v = ensureVariant(blaEnabled, true);
+  if (!v) return null;
+  n = n || 128;
+  if (marchProbeN !== n) {
+    if (marchProbeTex) { gl.deleteTexture(marchProbeTex); gl.deleteFramebuffer(marchProbeFbo); }
+    marchProbeTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, marchProbeTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, n, n, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    marchProbeFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, marchProbeFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, marchProbeTex, 0);
+    marchProbeN = n;
+  }
+  drawSquare(n, marchProbeFbo, v, 7, { jitter: [0, 0], pixH });
+  const px = new Float32Array(n * n * 4); gl.readPixels(0, 0, n, n, gl.RGBA, gl.FLOAT, px);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  return px;
 };
 /* pass G's raw output for the current view, n×n (layout: grep PASS G OUTPUT) — for referees and
    for looking at what the shading was given. */

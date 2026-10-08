@@ -279,6 +279,11 @@ export interface DeepZoomApi {
      *  faster than the step along the ray; a ray grazing a ridge never sees that.
      *  It refines far-field hits too: the same halving, on plain f32 numbers. */
     setHitRefine(n: number): void;
+    /** MARCH PROBE (added 2026-10-08; a measuring handle, nothing draws through it): `n` x `n` rays
+     *  of the current view marched as a picture `pixH` rows tall marches them, read back raw - four
+     *  floats a ray: where it ended, steps + 65536 x kind, march orbits, kernel passes. Layout and
+     *  proof: grep `MARCH PROBE` in core.js. The tool on it: `npm run bench:deep-zoom-march`. */
+    marchProbe(n?: number, pixH?: number): Float32Array | null;
     /** Read-back for the settings above that had setters only. (Added 2026-10-08.) */
     marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number };
     blaMode(): 'off' | 'auto' | 'on';

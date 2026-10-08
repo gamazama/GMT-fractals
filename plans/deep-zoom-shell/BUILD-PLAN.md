@@ -22,6 +22,7 @@ original plan and are not rewritten.
 | N | **Built: the shell flies with GMT's navigation.** N0 (replay guard), N2 (the integrator in the engine, ADR-0133), N0b (GMT's fly smoke covers the hook's wiring), N3 (the input hook in the engine, renderer-free), N4 (the module lets a host own the input), N5 (`deep-zoom/flyCamera.ts`, `DeepZoomNavigation.tsx`, `navigationState.ts`; smoke stage N5: 8 steps). N1 (a registered distance source) was dropped: the distance stays a plain argument. Not built: on-screen sticks for a phone, an orbit mode, roll. |
 | Engine | S2-4 (one overlay host) and S3-0 (state-library options) landed. |
 | Module (new, not in the plan) | **HIT REFINE**, opt-in, off by default (`api.setHitRefine`, the Quality tab's Hit refine, Inspect > Compare > Refine): halve each hit's last march step onto the level it was meant to land on. Built for the slicing the owner reported at 2.76e-39; numbers in the shader comment. Parity 52 and direct 11 green with it off. |
+| Tooling (2026-10-08) | **`npm run bench:deep-zoom-march`** (`debug/deep-zoom-march-study.mts`, on the renderer's new `api.marchProbe`): for the kept places and the sample flight, what share of rays each march setting puts on another surface than a careful march, and the work it costs, counted by the shader. 17 views x 14 marches in 3 s where the first studies took 4 to 10 minutes. It is the measuring tool for the automatic step, which is NOT built. |
 | Module | Done inside other packages: `setIters`, `setAutoIters`, two read-backs (part of M1); `setView` snaps the distance (M8); fly keys ignore a key pressed with Ctrl / Alt / Meta (part of M6). |
 
 How it was built changed after the first evening: one builder agent per package cost about the
@@ -65,6 +66,50 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
   down to 1e-30 and wants 0.5 below 1e-33; the owner's power-2 place at 5e-20 is 85 % wrong at 0.85
   and needs 0.1. A rule keyed to depth is therefore wrong; an automatic step has to be measured per
   view. Open call with the owner.
+- **The measurement above re-read with the march tool (2026-10-08, later the same day).** The first
+  studies compared shaded pixels; the tool compares where each ray ends. Their numbers reproduce
+  exactly with their own measure, but "on the wrong surface" was the wrong reading of most of them:
+  - Along the flight, the 5 to 32 % are rays on the RIGHT surface that landed 0.25 to 1 pixel cone
+    off the level (wherever the last step fell); shading from depth shows that as terraces. About
+    half of all rays are that far off at step 0.85, at every depth, and Hit refine 3 leaves 0.1 to
+    3 %. Rays on another surface (more than 4 cones away) are 0.1 to 1.4 % there at step 0.85.
+  - The step is what a wrong surface needs. At a 1080-row picture's tolerance, step 0.85: the
+    power-2 place at 5e-20 96 % wrong (1.8 % at 0.3, 0.8 % at 0.21), the slicing place at 2.8e-39
+    36 % (2.8 % at 0.6, 0.6 % at 0.42), the flight 0.2 to 2.5 %.
+  - A small step needs a larger step budget: at step 0.1 with the default 512 steps, 0.1 to 8 % of
+    the flight's rays run out. An automatic step has to scale the budget with 1 / step.
+  - The 1.1e-33 flight view at Detail 8 is NOT rays running out of steps (none do; 512, 2048 and
+    16384 steps give the same rays). Its wrong share falls with the step like any other view's (7 %
+    to 1.4 %, half of it the far relax). What stays, about 10 %, is rays landing a sixteenth to a
+    half of a pixel apart in the finely ridged part of the picture, where two careful marches
+    disagree with each other as well.
+  - The 3.5e-16 flight view's floor is a FAULT IN THE KERNEL, not in the march: in the bottom tenth
+    of that picture the GPU's distance estimate is off by up to 89 % against the BigInt direct
+    referee, while the same kernel in f64 on the CPU is right to 2e-9. Single-precision rounding,
+    growing steeply with how far the hit is from the camera in surface distances (1e-5 at 4, 1e-3
+    at 10, 0.3 at 13). No step size has a say there. Not fixed; the direct proof
+    (`smoke:deep-zoom-direct`) checks the centre ray only and does not see it.
+- **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
+  - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
+    0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at
+    Detail 1 and 8, with BLA off and on, the share of rays a rung puts more than 4 cones from the
+    next rung is 0.7 to 0.95 of its true wrong share against a 0.05 march. Take the first rung
+    under the threshold. At 1 %: the flight stays at 0.85 or 0.6, the slicing place gets 0.42, the
+    power-2 place at 5e-20 gets 0.21.
+  - *How many rays:* 64 x 64, at the picture's own tolerance (its display rows and live Detail,
+    not the grid's). 32 x 32 already reads within about a point of 128 x 128.
+  - *When to stop:* an honest view cuts its share by half or more per rung. Where the kernel is
+    noisy (the 3.5e-16 view) the share sits at 9 to 10 % on every rung: if a rung does not cut it
+    by a quarter, stop and keep the step you had.
+  - *The budget goes with it:* steps = 512 x 0.85 / step.
+  - *When:* as the camera comes to rest, with the still; per keyframe in a render. Not in flight.
+  - *Cost:* the first two rungs take 4 to 10 ms of wall clock (about 1 % of a 1280 x 720 picture's
+    work by count, 10 to 26 % of its march time: small draws are inefficient); all seven 17 to
+    104 ms, needed only where 0.85 fails.
+  - *In the renderer:* a march-only draw of the ordinary shader at a given picture height (its
+    G-buffer already holds each ray's depth and kind). Not `api.marchProbe` as it is: its counter
+    variant is a 9 s blocking compile.
+  - *Not measured:* how the answer moves as the view turns at one place; any power between 2 and 8.
 - **`restoreDocuments` runs after the preset fields** (`loadPreset` in `store/engineStore.ts`), so the
   document carrier for saved places works as planned. Places in a scene are MERGED into the
   device's list by id; a scene never deletes a place saved on this device.
