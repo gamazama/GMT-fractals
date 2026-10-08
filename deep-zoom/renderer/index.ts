@@ -289,7 +289,11 @@ export interface DeepZoomApi {
      *  `rebaseOrigin` sets it from the start). A precision repair, not a look: grep the name in
      *  core.js for the fault it cures and its proof (`npm run smoke:deep-zoom-direct`). */
     setRebaseOrigin(on: boolean): void;
-    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean };
+    /** FAR HAND-OFF (added 2026-10-08; 1e-3 = the page, clamped 1e-3 .. 12; the create option
+     *  `farHandOff` sets it from the start): how far the deep march carries a ray before the plain
+     *  f32 far-field march takes it. grep the name in core.js. */
+    setFarHandOff(t: number): void;
+    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */
     look: DzLook;

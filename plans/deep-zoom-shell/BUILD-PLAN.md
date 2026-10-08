@@ -24,6 +24,7 @@ original plan and are not rewritten.
 | Module (new, not in the plan) | **HIT REFINE**, opt-in, off by default (`api.setHitRefine`, the Quality tab's Hit refine, Inspect > Compare > Refine): halve each hit's last march step onto the level it was meant to land on. Built for the slicing the owner reported at 2.76e-39; numbers in the shader comment. Parity 52 and direct 11 green with it off. |
 | Tooling (2026-10-08) | **`npm run bench:deep-zoom-march`** (`debug/deep-zoom-march-study.mts`, on the renderer's new `api.marchProbe`): for the kept places and the sample flight, what share of rays each march setting puts on another surface than a careful march, and the work it costs, counted by the shader. 17 views x 14 marches in 3 s where the first studies took 4 to 10 minutes. It is the measuring tool for the automatic step, which is NOT built. |
 | Module (2026-10-08) | **REBASE TO THE ORIGIN**, a precision repair of the kernel, opt-in at the module (`rebaseOrigin`, default off = the frozen page) and ON in the shell: the grain where orbits pass the origin and run on is gone. What it is and what was measured: "That fault is REPAIRED" below. Parity 52 with it off; the direct proof gates on it. |
+| Module (2026-10-08) | **FAR HAND-OFF** moved out, opt-in at the module (`farHandOff`, default 1e-3 = the frozen page), 0.5 in the shell: the deep march, not the plain f32 one, now draws everything nearer than 0.5 from the camera. What was wrong and what was measured: "The error around 1e-4" below. |
 | Module | Done inside other packages: `setIters`, `setAutoIters`, two read-backs (part of M1); `setView` snaps the distance (M8); fly keys ignore a key pressed with Ctrl / Alt / Meta (part of M6). |
 
 How it was built changed after the first evening: one builder agent per package cost about the
@@ -105,6 +106,16 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
     to 0.2 % of pixels. Guard: the direct proof now ends with those two off-centre grids and gates
     on them (seen FAIL with the shader branch switched off); `ORIGIN=1` runs its 11 depths with
     the repair on, `BLA=1` passes too.
+- **The error around 1e-4 was the far hand-off (2026-10-08).** The page hands a ray that has gone
+  1e-3 from the camera without a hit to a plain f32 march from an f32 camera position. That march
+  resolves about 1e-7, and just past the hand-off its hit level (tolerance x t) is about 1e-7, so
+  its hits are noise: against the BigInt referee on a 1080-row picture, the share of far-march hits
+  standing more than half off their level is 7 % at camera depth 8e-3, 21 % at 3e-3, 68 % at
+  1.2e-3 and 79 % at 4.2e-4; deep-march hits, none. With the hand-off at 0.5 every hit in those
+  views is a deep-march hit on its level. Cost: nothing deeper than 2e-4 (those pictures had no far
+  hits); the shallow views between 1e-3 and 0.2 march 1.6 to 1.8 times longer, from a third of a
+  deep view's time to about as much as a 1e-4 view. Guard: the direct proof's two "far hand-off"
+  grids (seen FAIL with the threshold pinned back to 1e-3 in the shader).
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at

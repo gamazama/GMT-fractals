@@ -762,6 +762,7 @@ uniform float     uLandSplit;    // compare view: the divider's framebuffer x
 uniform int       uFarLook;      // 1 = a far-field hit carries a palette parameter, as a near hit does (grep FAR LOOK); 0 = the page
 uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
 uniform int       uRebaseOrigin; // 1 = the kernel rebases an orbit onto the origin (grep REBASE TO THE ORIGIN); 0 = the page: onto the reference's first point
+uniform float     uFarSwitch;    // the t at which a ray is handed to the f32 far-field march (grep FAR HAND-OFF); the page: 1e-3
 uniform int       uGuide;        // 1 = this jittered sample starts its march from the depth guide; 0 = from the camera
 uniform float     uGuideK;       // guide back-off, in pixel cones
 uniform int       uGuideR;       // guide neighbourhood radius in pixels (1 = 3×3, 2 = 5×5)
@@ -769,6 +770,20 @@ uniform sampler2D uGuideTex;     // per pixel, over the earlier samples: x = nea
 /* the march as a PICTURE runs it (budget, HIT REFINE, FAR RELAX all live): the render, and probe 7
    (grep MARCH PROBE). Probes 1-6 referee the plain 256-step march. */
 #define PICTURE_MARCH (uProbe == 0 || uProbe == 7)
+/* FAR HAND-OFF (uFarSwitch, 2026-10-08; the page: 1e-3). A ray that has travelled this far from
+   the camera without a hit is handed from the deep march to the plain f32 far-field march, which
+   starts from an f32 camera position and iterates in f32. That march resolves a distance of about
+   1e-7 and no better, and its hit level is tolerance x t: at t = 1e-3 that level IS about 1e-7, so
+   just past the hand-off its hits are noise. Measured against the BigInt referee on a 1080-row
+   picture: at camera depths 1.2e-3 and 4.2e-4 (where the hits lie past 1e-3) 68 % and 79 % of
+   far-march hits stand more than half off their level, deep-march hits none. The deep march has no
+   such floor - the camera and t are exact - so a host moves the hand-off out to where the f32
+   march is good again (the shell: 0.5, where the level is ~3e-4). The probes keep 1e-3: their CPU
+   referee (pertMarchJS) mirrors that march.
+   @invariant with the hand-off at 0.5 the hits of two shallow views stand on their level by the
+   BigInt referee - proven by: npm run smoke:deep-zoom-direct ("far hand-off ... at 0.5").
+   Falsified 2026-10-08: FAR_SWITCH pinned to 1e-3 in the shader -> those lines FAIL. */
+#define FAR_SWITCH (PICTURE_MARCH ? uFarSwitch : 1e-3)
 ${KERNEL_CORE}
 /* plain f32 DE for the far-field hybrid segment (t > T_SWITCH the features are
    f32-resolvable; identical to the baseline shader's deMandelbulb, power n + phase) */
@@ -938,7 +953,7 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
         }
         hit = true; break;
       }
-      if (hdrToFloat(t) > 1e-3) { tF = hdrToFloat(t); break; }   // hand off to f32 far-field
+      if (hdrToFloat(t) > FAR_SWITCH) { tF = hdrToFloat(t); break; }   // hand off to f32 far-field (grep FAR HAND-OFF)
     }
     tPrev = t; dePrev = de;
     float relax = uStepRelax > 0.0 ? uStepRelax : 0.85;
@@ -1060,7 +1075,7 @@ void main(){
             tPrevF = tF;
             tF += d*0.9;
         }
-    } else if (!hit && tF < 0.0 && hdrToFloat(t) <= 1e-3) {
+    } else if (!hit && tF < 0.0 && hdrToFloat(t) <= FAR_SWITCH) {
         exhausted = true;                                  // HDR budget ran out mid-field
     }
     /* ── PASS G OUTPUT — one RGBA32F texel per pixel; pass S (grep SHADE_FRAG) lights it ──
@@ -1581,7 +1596,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2186,6 +2201,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.hitRefine, look.compare === 3 ? -(hitRefine || 4) : hitRefine);   // compare 3: refined on the right of the divider only
   gl.uniform1i(x.farLook, dzFarLook);
   gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
+  gl.uniform1f(x.farSwitch, farHandOff);
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
@@ -2440,6 +2456,8 @@ api.setReach = (k)=>{ Object.assign(march, REACH[Math.max(0, Math.min(2, k|0))])
 let landMode = 0;                               // 1 = land each hit on a fixed level of the distance estimate (grep HIT LANDING)
 let hitRefine = 0;                              // n > 0: bisect each hit's last step n times (grep HIT REFINE)
 let rebaseOrigin = options.rebaseOrigin === true ? 1 : 0;   // 1 = the kernel rebases onto the origin (grep REBASE TO THE ORIGIN); 0 = the page
+const farClamp = (t) => Math.max(1e-3, Math.min(12, +t || 1e-3));
+let farHandOff = farClamp(options.farHandOff);  // where the deep march hands a ray to the f32 far-field march (grep FAR HAND-OFF); the page: 1e-3
                                                 // 4-tap tetrahedron = symmetric, reference-correct DE normal.
                                                 // 3-tap is a one-sided forward difference: 1 fewer orbit but a
                                                 // systematic +XYZ tilt (looks different). screen-space = free, speckles at depth.
@@ -3315,7 +3333,8 @@ api.setAutoIters = (b)=>{ autoIters=!!b; };
 api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
 api.setRebaseOrigin = (b)=>{ rebaseOrigin = b ? 1 : 0; accumReset = true; };   // REBASE TO THE ORIGIN on / off (off = the page's kernel)
-api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin });
+api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // FAR HAND-OFF distance, 1e-3 (the page) .. 12
+api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin, farHandOff });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
 api.setSurf = (m)=>{ surfMul=Math.max(0.25,Math.min(256,m||1)); accumReset=true; };  // ray-closeness ÷pixAng

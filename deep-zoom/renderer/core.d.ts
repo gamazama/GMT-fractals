@@ -59,6 +59,11 @@ export interface DeepZoomCoreOptions {
      *  pass the origin and run on (grep `REBASE TO THE ORIGIN` in core.js). The same orbit, so the
      *  picture moves only by rounding. `api.setRebaseOrigin` changes it later. */
     rebaseOrigin?: boolean;
+    /** Default 1e-3 (the page). The distance from the camera at which a ray without a hit leaves the
+     *  deep march for the plain f32 far-field march (grep `FAR HAND-OFF` in core.js). Just past
+     *  1e-3 the f32 march's hits are noise; the shell passes 0.5. Clamped to 1e-3 .. 12.
+     *  `api.setFarHandOff` changes it later. */
+    farHandOff?: number;
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).
      *  Nothing is restored: dispose and mount a fresh canvas. */
     onContextLost?: () => void;

@@ -84,10 +84,10 @@
  *   byte for byte - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("views: ..." lines).
  *   Falsified 2026-10-08: the "cam strings" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
- *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, resetStillOnResize:true, loseContextOnDispose:true` and
+ *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, farHandOff:0.5, resetStillOnResize:true, loseContextOnDispose:true` and
  *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
  *   Falsified 2026-10-08: the "options" group in the check's header, all seven; `rebaseOrigin` the same day
- *   (the line removed from `shellOptions` -> "options: rebaseOrigin is true" FAIL).
+ *   (the line removed from `shellOptions` -> "options: rebaseOrigin is true" FAIL), and `farHandOff` likewise.
  * @invariant `dispose()` calls the instance's `dispose` before the canvas is removed; a failed
  *   create leaves no canvas behind; the canvas is in the frame before create runs and carries no
  *   inline width or height - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("dispose:
@@ -608,6 +608,7 @@ export function shellOptions(frame: HTMLElement, hooks: DeepZoomMountHooks = {},
         mode: 'deep',                   // the deep path at every depth; f32 only until its shader has compiled
         farLook: true,                  // far ground (all of a shallow view) takes the palette, not the page's grey
         rebaseOrigin: true,             // the kernel's precision repair (grep REBASE TO THE ORIGIN in renderer/core.js); the page's kernel draws grain where orbits pass the origin
+        farHandOff: 0.5,                // the deep march carries a ray this far before the f32 far-field march takes it (grep FAR HAND-OFF); the page's 1e-3 leaves noisy hits in views shallower than about 1e-2
         resetStillOnResize: true,       // a dock resize restarts the still
         loseContextOnDispose: true,     // a remount frees every program and texture; each mount gets a fresh canvas
         sizeElement: frame,

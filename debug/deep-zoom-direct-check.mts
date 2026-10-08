@@ -17,9 +17,10 @@
  * It exits non-zero unless all 11 depths ran and passed.
  *
  * ADDED HERE, not in the historical suite (2026-10-08): `ORIGIN=1` runs the 11 depths with the
- * kernel's rebase to the origin on, and a last section, OFF-CENTRE RAYS, checks a 13 x 13 grid of
- * rays in two flight views - the historical probes are all on the centre ray, close to the camera,
- * and never saw the fault that section is about. It gates too: 2 grids must pass.
+ * kernel's rebase to the origin on, and a last section, OFF-CENTRE RAYS, checks 13 x 13 grids of
+ * rays - the historical probes are all on the centre ray, close to the camera, and never saw the
+ * two faults that section is about. It gates too: 4 grids must pass (2 deep views for the kernel's
+ * rebase to the origin, 2 shallow views for the far hand-off).
  *
  * Real GPU only: headed Chrome through ANGLE/d3d11 (SwiftShader cannot compile this shader in time).
  */
@@ -77,6 +78,16 @@ const GRID_VIEWS: Array<[string, unknown]> = [
     ['flight view B', { cam: ['-19106688270107543539847685334123376502389289999276832103627022535307503912317', '2056390632353040684939008940473484011303878643906907968396164569726249960005', '106035815535807683251647607458977423429431001610281789023943266795617768965116'],
         yaw: -1.0246361075243915, pitch: -0.5258098005280843, iters: 77, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 }],
 ];
+/** Two shallower views of the same flight (at 0.050 and 0.055 of its length): the camera is 1.2e-3 and
+ *  4.2e-4 from the surface, so all or some of the picture lies past t = 1e-3, where the page hands a
+ *  ray to its f32 far-field march. */
+const SHALLOW_VIEWS: Array<[string, unknown]> = [
+    ['shallow view C', { cam: ['-19046732671432570394081773715976993863903469215868497208446644796296350924885', '2076379810595939072153399088115487453004718385024755700255671128216884750421', '106281771504106054999210185471751680430396782842107932182700956172180423070672'],
+        yaw: -1.8394566450409213, pitch: -0.12603781373864897, iters: 14, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 }],
+    ['shallow view D', { cam: ['-19082505205565731662293154145790470885708412737629538703027974520364685036758', '2066148842953800398734239597330608173677951087521164826145490763161441423825', '106130557879253810564053022231711737571045729746810109130847397159932640350757'],
+        yaw: -1.858332816430437, pitch: -0.13825757920665438, iters: 38, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 }],
+];
+const GRIDS = GRID_VIEWS.length + SHALLOW_VIEWS.length;
 const ORIGIN = process.env.ORIGIN === '1';
 
 let pass = 0, ran = 0, gridPass = 0, gridRan = 0;
@@ -157,47 +168,60 @@ try {
 
   // ---- OFF-CENTRE RAYS (added 2026-10-08; not in the historical suite) ----
   // Everything above probes the centre ray, within half a surface distance of the camera. A
-  // picture's rays end 4 to 20 surface distances out and in every direction, and that is where
-  // the page's kernel was found wrong (grep REBASE TO THE ORIGIN in core.js). Here a 13 x 13 grid
-  // of rays is marched carefully, the centre ray is aimed along each in turn (the camera does not
-  // move, so the reference orbit is the same), and the GPU's de at 0.97 of that ray's hit distance
-  // is compared with the BigInt referee. Gated with the rebase to the origin ON; the page's own
-  // kernel is printed beside it and not gated - it is the fault.
+  // picture's rays end 4 to 20 surface distances out and in every direction. Here a 13 x 13 grid
+  // of rays is marched carefully, then the centre ray is aimed along each ray that hit (the camera
+  // does not move, so the reference orbit is the same) and the BigInt referee is asked at `at` x
+  // that ray's hit distance. Two things are gated on it, each printed beside the page's own
+  // behaviour, which is the fault and is not gated:
+  //   the kernel       GPU de against the referee just in front of the hit (grep REBASE TO THE ORIGIN)
+  //   the far hand-off the referee's de AT the hit against the level a hit stands on, tolerance x t
+  //                    (grep FAR HAND-OFF): a hit of the f32 far-field march just past 1e-3 does not
+  const grid = (view: unknown, origin: boolean, far: number, rows: number, at: number): Promise<any> => page.evaluate(`(async () => {
+    const w = window, G = 13, f = Math.tan(0.55), pa = f / ${rows};
+    w.__setRebaseOrigin(${origin}); w.__setFarHandOff(${far}); w.__dz.setView(${JSON.stringify(view)}); w.__setSurf(${rows} / G);   // the hit tolerance of a picture that many rows tall, on 13 rays
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(done))));
+    w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
+    const g = w.__readGbuf(G);
+    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
+    const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, refE = Math.floor(Math.log2(dist));
+    const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
+    const fwd = [cp * cy, sp, cp * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
+    const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    const rays = [];
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const i = (y * G + x) * 4, kind = Math.floor(g[i + 2] / 256) % 4;
+      if (kind !== 1 && kind !== 2) continue;                              // 1 = a hit of the deep march, 2 = of the f32 far-field march
+      const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
+      let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((c) => c / len);
+      w.__dz.setYawPitch(Math.atan2(d[2], d[0]), Math.asin(d[1]));
+      const q = w.__directCheckHP([Math.pow(2, g[i] + refE) * ${at}])[0];
+      rays.push({ kind, rel: q.escG === q.escD ? q.rel : 1, level: q.escD ? q.direct / (pa * q.t) : -1 });
+    }
+    w.__dz.setView(v0); w.__setSurf(1); w.__setRebaseOrigin(${ORIGIN}); w.__setFarHandOff(1e-3);
+    return { depth: dist, rays };
+  })()`);
   for (const [name, view] of GRID_VIEWS) {
     for (const origin of [false, true]) {
-      const r: any = await page.evaluate(`(async () => {
-        const w = window, G = 13, f = Math.tan(0.55);
-        w.__setRebaseOrigin(${origin}); w.__dz.setView(${JSON.stringify(view)}); w.__setSurf(360 / G);   // a 360-row picture's hit tolerance on 13 rays
-        await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(done))));
-        w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
-        const g = w.__readGbuf(G);
-        w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
-        const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, refE = Math.floor(Math.log2(dist));
-        const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
-        const fwd = [cp * cy, sp, cp * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
-        const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
-        let rays = 0, over3 = 0, over2 = 0, worst = 0;
-        for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
-          const i = (y * G + x) * 4;
-          if (Math.floor(g[i + 2] / 256) % 4 !== 1) continue;             // near hits only
-          const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
-          let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((c) => c / len);
-          w.__dz.setYawPitch(Math.atan2(d[2], d[0]), Math.asin(d[1]));
-          const q = w.__directCheckHP([Math.pow(2, g[i] + refE) * 0.97])[0], rel = q.escG === q.escD ? q.rel : 1;
-          rays++; if (rel > 1e-3) over3++; if (rel > 1e-2) over2++; if (rel > worst) worst = rel;
-        }
-        w.__dz.setView(v0); w.__setSurf(1); w.__setRebaseOrigin(${ORIGIN});
-        return { rays, over3, over2, worst, depth: dist };
-      })()`);
-      const ok = !origin || (r.rays >= 100 && r.over2 === 0 && r.over3 <= 0.02 * r.rays);
+      const r = await grid(view, origin, 1e-3, 360, 0.97);
+      const near = r.rays.filter((q: any) => q.kind === 1), over3 = near.filter((q: any) => q.rel > 1e-3).length, over2 = near.filter((q: any) => q.rel > 1e-2).length;
+      const ok = !origin || (near.length >= 100 && over2 === 0 && over3 <= 0.02 * near.length);
       if (origin) { gridRan++; if (ok) gridPass++; }
-      console.log(`off-centre rays, ${name} (${r.depth.toExponential(1)}), ${origin ? 'rebase to the origin' : "the page's kernel     "}: ${r.rays} rays  ${String(r.over3).padStart(3)} over 1e-3  ${String(r.over2).padStart(3)} over 1e-2  worst ${r.worst.toExponential(1)}  ${origin ? (ok ? 'PASS' : 'FAIL') : '(not gated)'}`);
+      console.log(`off-centre rays, ${name} (${r.depth.toExponential(1)}), ${origin ? 'rebase to the origin' : "the page's kernel     "}: ${near.length} rays  ${String(over3).padStart(3)} over 1e-3  ${String(over2).padStart(3)} over 1e-2  worst ${Math.max(...near.map((q: any) => q.rel)).toExponential(1)}  ${origin ? (ok ? 'PASS' : 'FAIL') : '(not gated)'}`);
+    }
+  }
+  for (const [name, view] of SHALLOW_VIEWS) {
+    for (const far of [1e-3, 0.5]) {
+      const r = await grid(view, true, far, 1080, 1);
+      const off = r.rays.filter((q: any) => q.level < 0.5 || q.level > 1.5).length, byFar = r.rays.filter((q: any) => q.kind === 2).length;
+      const ok = far === 1e-3 || (r.rays.length >= 100 && off <= 0.02 * r.rays.length);
+      if (far !== 1e-3) { gridRan++; if (ok) gridPass++; }
+      console.log(`far hand-off, ${name} (${r.depth.toExponential(1)}), ${far === 1e-3 ? "at 1e-3 (the page's)" : 'at 0.5              '}: ${r.rays.length} hits, ${String(byFar).padStart(3)} by the f32 march  ${String(off).padStart(3)} more than half off their level  ${far === 1e-3 ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
     }
   }
 } finally { await browser.close(); srv.stop(); }
 
 // The historical suite only prints; as a guard for the port this one also gates.
 if (pageErrors.length) console.log(`page errors (${pageErrors.length}):\n  ` + pageErrors.slice(0, 5).join('\n  '));
-const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRID_VIEWS.length && gridRan === GRID_VIEWS.length && pageErrors.length === 0;
-if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRID_VIEWS.length}/${GRID_VIEWS.length} off-centre grids and no page errors`);
+const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRIDS && gridRan === GRIDS && pageErrors.length === 0;
+if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids and no page errors`);
 process.exit(allOk ? 0 : 1);
