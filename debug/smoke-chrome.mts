@@ -56,7 +56,9 @@
  *
  * BOOTED means: no loading screen over the viewport (a fixed layer covering its centre and 95% of
  * it that does not hold the top bar — app-gmt's LoadingScreen, ~7 s with the GPU) and the top
- * bar's control count still for `STABLE_MS`. AMBIENT CHROME: an app can keep mounting controls
+ * bar's control count still for `STABLE_MS`. An app whose own picture is such a layer names it
+ * in its `APPS` row (`surface`), and that element alone is not counted; deep-zoom is the one so
+ * far, and its row says why. AMBIENT CHROME: an app can keep mounting controls
  * after that (app-gmt on a phone adds its camera-mode button as the loading screen goes), and a
  * boot snapshot taken first would call it "left open" after every test. So each pass first
  * watches its untouched page until the controls have held still for `AMBIENT_QUIET_MS` (at most
@@ -117,6 +119,17 @@ interface AppSpec {
     viewports: Viewport[];
     /** Playwright device for the phone pass (default Pixel 5). */
     phoneDevice?: string;
+    /**
+     * CSS selector of the app's own PICTURE, for an app whose picture is a positioned element that
+     * fills everything under the top bar. The loading-screen test (helper `splash`, BOOTED in the
+     * header) does not count that element, or anything inside it, as a loading screen. Without it
+     * such an app passes only while its top bar is taller than 5% of the window: a 56 px bar is
+     * 6.2% of the 900 px desktop pass and 4.3% of a 1300 px one, where the picture reads as a
+     * cover and the boot fails "still covered by <canvas>" (measured for deep-zoom, 2026-10-08).
+     * A real loading screen is a different element and is still seen. Leave it unset for an app
+     * that needs no exemption: unset is the strict test.
+     */
+    surface?: string;
 }
 
 const APPS: AppSpec[] = [
@@ -126,6 +139,13 @@ const APPS: AppSpec[] = [
     { name: 'fractal-toy', path: 'fractal-toy.html', viewports: ['desktop'] },
     { name: 'gradient-explorer', path: 'gradient-explorer.html', viewports: ['desktop'] },
     { name: 'gradient-explorer-next', path: 'gradient-explorer-next.html', viewports: ['desktop', 'phone'] },
+    // Desktop only: on a phone the shell shows "Flying needs a keyboard and a mouse" over the same
+    // chrome. `#dz-frame` is DZ_FRAME_ID in deep-zoom/host/current.ts; the app's real loading
+    // screen is `#dz-boot-splash`, outside it. Headless like the rest: with LAUNCH_ARGS this
+    // browser is on the real GPU and has KHR_parallel_shader_compile, so the deep shader compiles
+    // off the main thread (18 s for the pass, 2026-10-08). With --software it still passes, at
+    // about 30 s a press (262 s).
+    { name: 'deep-zoom', path: 'deep-zoom.html', viewports: ['desktop'], surface: '#dz-frame' },
 ];
 
 /**
@@ -317,10 +337,13 @@ const PAGE_HELPER = `
   }
   /* A loading screen or device gate: a fixed / absolute layer covering the viewport's centre and
      at least 95% of it, that does not contain the top bar. app-gmt's LoadingScreen is one (up for
-     ~7 s, and its chrome keeps mounting under it). Returns a description, or null. */
-  function splash() {
+     ~7 s, and its chrome keeps mounting under it). Returns a description, or null.
+     surface: the app's own picture (AppSpec.surface), or null. That element and what is inside
+     it are never a loading screen. */
+  function splash(surface) {
     var h = topBar();
     for (var n = document.elementFromPoint(innerWidth / 2, innerHeight / 2); n && n !== document.body; n = n.parentElement) {
+      if (surface && n.closest(surface)) continue;
       var cs = getComputedStyle(n);
       if (cs.position !== 'fixed' && cs.position !== 'absolute') continue;
       var r = n.getBoundingClientRect();
@@ -456,10 +479,13 @@ class Session {
     private navigationsAtBoot = 0;
     private navigatedAt = 0;
     readonly url: string;
+    /** The page expression that names a loading screen over the viewport, or null (helper `splash`). */
+    private readonly splashProbe: string;
 
     constructor(private ctx: BrowserContext, app: AppSpec, private report: Report, private touch: boolean,
                 private log: (msg: string) => void) {
         this.url = `${BASE}/${app.path}`;
+        this.splashProbe = `window.__smokeChrome.splash(${JSON.stringify(app.surface ?? null)})`;
     }
 
     /** A fresh tab on a wiped origin, up and snapshotted. Returns the top-bar controls. */
@@ -536,7 +562,7 @@ class Session {
         let cover: string | null = null;
         while (Date.now() - t0 < BOOT_TIMEOUT_MS) {
             const list = (await this.page.evaluate('window.__smokeChrome.topControls()').catch(() => null)) as Desc[] | null;
-            cover = (await this.page.evaluate('window.__smokeChrome.splash()').catch(() => 'the page is not answering')) as string | null;
+            cover = (await this.page.evaluate(this.splashProbe).catch(() => 'the page is not answering')) as string | null;
             const n = list && !cover ? list.length : -1;
             if (n !== lastCount) { lastCount = n; since = Date.now(); }
             else if (n > 0 && Date.now() - since >= STABLE_MS) {
