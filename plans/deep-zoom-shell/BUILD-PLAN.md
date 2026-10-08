@@ -14,11 +14,11 @@ original plan and are not rewritten.
 
 | Stage | State |
 |---|---|
-| 1 | **Closed.** S1-A, S1-0, S1-1, S1-2, S1-3. Smoke stage 1: 19 steps. |
-| 2 | **Built**, except: pause controls (S2-9, waits on a module pause), the Diagnostics tab (D7), the `actualPixels` row, a menu row for Advanced mode. Smoke stage 2: 9 steps. |
-| 3 | **Built**, except: Export all (JSON), the scene-file claims (S3-4), Session / autosave (the session half of S3-2). Smoke stage 3: 9 steps. |
-| 4 | **Keys built** (S4-1; smoke stage 4: 4 steps). Help topics, the shortcuts page, What's New and the first-dive lesson (S4-2, S4-3) are not built. |
-| N | N0 only (the replay guard, `npm run test:nav-replay`). |
+| 1 | **Closed.** S1-A, S1-0, S1-1, S1-2, S1-3. Smoke stage 1: 15 steps (19 before N5 took the pointer capture and the "hold W" steps). |
+| 2 | **Built**, except: pause controls (S2-9, waits on a module pause), the Diagnostics tab (D7), the `actualPixels` row, a menu row for Advanced mode. Smoke stage 2: 8 steps. |
+| 3 | **Built**, except: Export all (JSON), the scene-file claims (S3-4), Session / autosave (the session half of S3-2). Smoke stage 3: 8 steps. |
+| 4 | **Keys built** (S4-1; smoke stage 4: 3 steps). `C` is a fly key since N5; "next colouring" is `V`. Help topics, the shortcuts page, What's New and the first-dive lesson (S4-2, S4-3) are not built. |
+| N | **Built: the shell flies with GMT's navigation.** N0 (replay guard), N2 (the integrator in the engine, ADR-0133), N0b (GMT's fly smoke covers the hook's wiring), N3 (the input hook in the engine, renderer-free), N4 (the module lets a host own the input), N5 (`deep-zoom/flyCamera.ts`, `DeepZoomNavigation.tsx`, `navigationState.ts`; smoke stage N5: 8 steps). N1 (a registered distance source) was dropped: the distance stays a plain argument. Not built: on-screen sticks for a phone, an orbit mode, roll. |
 | Engine | S2-4 (one overlay host) and S3-0 (state-library options) landed. |
 | Module | Done inside other packages: `setIters`, `setAutoIters`, two read-backs (part of M1); `setView` snaps the distance (M8); fly keys ignore a key pressed with Ctrl / Alt / Meta (part of M6). |
 
@@ -29,8 +29,19 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
 **Corrections to this plan found by building** (each is in the code's JSDoc where it bites):
 - **The fly guard cannot be a priority-10 binding with a condition** (S2-6, S4-1, BLUEPRINT section 9).
   The shortcut dispatcher picks the winning binding for a key first and tests its `when` afterwards,
-  with no fall-through, so such a guard swallows the key with the pointer free too. It is a shortcut
-  SCOPE pushed while the pointer is captured (`deep-zoom/flyGuard.ts`).
+  with no fall-through, so such a guard swallows the key with the pointer free too. It was a shortcut
+  SCOPE pushed while the pointer was captured. **Gone at N5** with the capture itself: Space stays
+  fly-up through the store's `cameraMode` (the predicate the timeline's own binding tests), and the
+  captured-only keys (9 / 0, T / Y) left, since a slider is reachable with the pointer free.
+- **Navigation (stage N) as built differs from the plan in four places.** (1) The turn is not
+  "level the quaternion and write it back": the turn the integrator applied is taken apart and
+  added to the pitch and the yaw (a turntable), because reading yaw off a turned object flips at
+  the pole. (2) No stride clamp in the sink: the frame delta is clamped at 0.05 s (the standalone
+  page's own number) and the fly speed tops out at 4, so a boosted frame covers at most 0.8 of the
+  distance. (3) The fly speed is a preference in localStorage, not a feature param: a saved place
+  must not change how fast you fly. (4) Q and E are down and up (the renderer has no roll), beside
+  GMT's Space and C. With the surface distance at 0 (inside the solid) nothing moves; Backspace or
+  Home is the way out. The depth readout no longer fades while flying and shows the fly speed.
 - **Precision Deep at a shallow depth draws one flat colour.** A smoke step about Light or Colour
   uses a view that is deep by itself; the tabs say they act below 1e-4 and offer no switch.
 - **`restoreDocuments` runs after the preset fields** (`loadPreset` in `store/engineStore.ts`), so the
