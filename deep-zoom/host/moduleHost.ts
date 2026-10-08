@@ -84,7 +84,7 @@
  *   byte for byte - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("views: ..." lines).
  *   Falsified 2026-10-08: the "cam strings" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
- *   pointerLock:false, mode:'deep', resetStillOnResize:true, loseContextOnDispose:true` and
+ *   pointerLock:false, mode:'deep', farLook:true, resetStillOnResize:true, loseContextOnDispose:true` and
  *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
  *   Falsified 2026-10-08: the "options" group in the check's header, all seven.
  * @invariant `dispose()` calls the instance's `dispose` before the canvas is removed; a failed
@@ -605,6 +605,7 @@ export function shellOptions(frame: HTMLElement, hooks: DeepZoomMountHooks = {},
         dropTarget: null,               // the engine's drop zone owns drops
         pointerLock: false,             // no click listener in the module; nothing takes the pointer
         mode: 'deep',                   // the deep path at every depth; f32 only until its shader has compiled
+        farLook: true,                  // far ground (all of a shallow view) takes the palette, not the page's grey
         resetStillOnResize: true,       // a dock resize restarts the still
         loseContextOnDispose: true,     // a remount frees every program and texture; each mount gets a fresh canvas
         sizeElement: frame,

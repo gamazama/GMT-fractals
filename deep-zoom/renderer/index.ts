@@ -276,7 +276,8 @@ export interface DeepZoomApi {
      *  NOT KEPT, for whoever thinks of it next: Mandelbulb3D's overstep clamp and step damper
      *  (GMT's `mb3dPreHit`) were ported and measured the same day on the view that prompted this -
      *  57.1 % of pixels wrong without, 56.0 % with. That guard reacts to a distance that falls
-     *  faster than the step along the ray; a ray grazing a ridge never sees that. */
+     *  faster than the step along the ray; a ray grazing a ridge never sees that.
+     *  It refines far-field hits too: the same halving, on plain f32 numbers. */
     setHitRefine(n: number): void;
     /** Read-back for the settings above that had setters only. (Added 2026-10-08.) */
     marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number };

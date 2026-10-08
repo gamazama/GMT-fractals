@@ -271,6 +271,7 @@ function dzDispose() {
    (grep "HOST HANDLE"). Its own chrome is hidden by CSS (body.embed), its panels never open, and
    stopping a recording keeps the path in memory instead of downloading it — the host owns saving. */
 const EMBED = options.embed !== false;
+const dzFarLook = options.farLook === true ? 1 : 0;           // true: far ground takes the palette and the near albedo (grep FAR LOOK); the page: mid grey
 if (EMBED) dzScaffold.classList.add('embed');
 /* canvas: the createDeepZoom argument (the page looked up #gl here) */
 const gl = canvas.getContext('webgl2', { antialias:false, preserveDrawingBuffer:false });
@@ -716,6 +717,7 @@ uniform vec2      uFarRelax;     // FAR RELAX: toward step factor x over y octav
 uniform float     uFarFrom;      // where FAR RELAX starts, as PASS G OUTPUT x (log2 t − uRefE)
 uniform int       uLand;         // 1 = land a hit on the level de = pa·t instead of where the last step fell (grep HIT LANDING); 2 = only right of uLandSplit
 uniform float     uLandSplit;    // compare view: the divider's framebuffer x
+uniform int       uFarLook;      // 1 = a far-field hit carries a palette parameter, as a near hit does (grep FAR LOOK); 0 = the page
 uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
 uniform int       uGuide;        // 1 = this jittered sample starts its march from the depth guide; 0 = from the camera
 uniform float     uGuideK;       // guide back-off, in pixel cones
@@ -739,6 +741,27 @@ float deF32(vec3 pos){
         z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + pos;
     }
     return 0.5*log(max(r,1e-8))*r/max(dr,1e-20);
+}
+/* FAR LOOK (2026-10-08, off by default: the page draws far ground grey). The palette PARAMETER of a
+   far-field point, by the rules paletteParam uses for a near hit, from one plain f32 orbit: the
+   same iteration, the same escape radius, the count of iterations applied, |z| at escape, and the
+   smallest |z| after the first step. Without it a view shallower than about 1e-3 - where every
+   hit is a far hit - stays grey whatever the Colour tab says. */
+float paletteF32(vec3 pos){
+    if (uColorMode == 0) return 0.0;
+    vec3 z = pos; float r = length(z), trap2 = 1e30; int it = 0;
+    int N = int(uIters);
+    for (int i = 0; i < 256; i++) {
+        if (i >= N || r > 2.0) break;
+        float rp1 = pow(r, uPower-1.0);
+        float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
+        float phi = atan(z.y, z.x) * uPower + uPhase.y;
+        z = rp1*r*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + pos;
+        r = length(z); it++;
+        trap2 = min(trap2, r*r);
+    }
+    if (uColorMode == 1) return (float(it) + 1.0 - log(log(max(r, 2.0001))) / log(uPower)) * 0.18;
+    return log(max(sqrt(trap2), 1e-30)) * 1.5;
 }
 vec3 normalF32(vec3 p, float e){
     vec2 k = vec2(1.,-1.);
@@ -968,11 +991,27 @@ void main(){
        the 256-step HDR budget before). */
     if (!hit && tF > 0.0) {
         vec3 roF = uCamPosF;
+        /* HIT REFINE reaches the far field too (2026-10-08): the same halving of the last step, on
+           plain f32 numbers. Off (uHitRefine = 0) this loop is the page's, statement for statement. */
+        int farRefine = uProbe != 0 ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);
+        float tPrevF = tF;
         for (int st = 0; st < 256; st++) {
             vec3 p = roF + rd*tF;
             float d = deF32(p);
-            if (d < pixAng*tF) { farHit = true; break; }
+            if (d < pixAng*tF) {
+                if (farRefine > 0 && tPrevF < tF) {
+                    float fa = tPrevF, fb = tF;
+                    for (int r = 0; r < 12; r++) {
+                        if (r >= farRefine) break;
+                        float fm = 0.5 * (fa + fb);
+                        if (deF32(roF + rd*fm) < pixAng*fm) fb = fm; else fa = fm;
+                    }
+                    tF = fb;
+                }
+                farHit = true; break;
+            }
             if (tF > 12.0) break;
+            tPrevF = tF;
             tF += d*0.9;
         }
     } else if (!hit && tF < 0.0 && hdrToFloat(t) <= 1e-3) {
@@ -1034,6 +1073,7 @@ void main(){
         kind = 2.0;
         lt = log2(tF) - uRefE;
         nPack = octPack(normalF32(uCamPosF + rd*tF, 2.0*pixAng*tF));
+        if (uFarLook == 1) sPal = paletteF32(uCamPosF + rd*tF);
     } else if (exhausted) {
         kind = 3.0;
     }
@@ -1078,6 +1118,7 @@ uniform vec3  uPlaneN;           // the view's best-fit surface plane, its norma
 uniform vec2  uDepthRange;       // depth (as PASS G OUTPUT x) of the nearest and farthest 5 % of the view
 uniform float uSplitX;           // compare view: the divider's framebuffer x (< 0 = no compare)
 uniform int   uCompare;          // 1 = normals: packed 4-tap left of the divider, from depth right of it
+uniform int   uFarLook;          // 1 = far ground wears the near surface's albedo and palette (grep FAR LOOK in pass G); 0 = the page's mid grey
 uniform vec4  uLookA;            // occlusion strength, occlusion radius (fraction of picture height), shadow strength, haze strength
 uniform vec4  uLookB;            // key intensity, sky (dome) strength, -, colour saturation
 uniform vec4  uLookC;            // -, light softness (tan of its half-angle), shadow reach (in depths), exposure
@@ -1275,7 +1316,7 @@ void main(){
             else if (uNormalMode == 0) { n = normalize(cross(dLx*rd + dRx, dLy*rd + dRy)); if (dot(n, rd) > 0.0) n = -n; }
             else if (uNormalMode == 3) n = normalFromDepth(c, g.x, rd);
             else n = octUnpack(g.w);
-            vec3 alb = kind == 2.0 ? vec3(0.5) : albedoNew(g.y);
+            vec3 alb = (kind == 2.0 && uFarLook == 0) ? vec3(0.5) : albedoNew(g.y);
             vec3 v = -rd, L = uLightDir;
             if (uLookA.x > 0.0) open = clamp(1.0 - uLookA.x * occlusion(c, g.x, rd, n), 0.03, 1.0);
             ndl = max(dot(n, L), 0.0);
@@ -1493,7 +1534,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -1515,7 +1556,7 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
   colorMode:g('uColorMode'), colorScale:g('uColorScale'), gradient:g('uGradient'),
   useGradient:g('uUseGradient'), lightMode:g('uLightMode'), falloffRel:g('uFalloffRel'), guideTex:g('uGuideTex'),
   look:g('uLook'), view:g('uView'), sampleN:g('uSampleN'), planeN:g('uPlaneN'), depthRange:g('uDepthRange'), splitX:g('uSplitX'),
-  compare:g('uCompare'), lookA:g('uLookA'), lookB:g('uLookB'), lookC:g('uLookC'), haze:g('uHaze'),
+  compare:g('uCompare'), farLook:g('uFarLook'), lookA:g('uLookA'), lookB:g('uLookB'), lookC:g('uLookC'), haze:g('uHaze'),
   mat:g('uMat'), fillDir:g('uFillDir'), kickDir:g('uKickDir'), fillCol:g('uFillCol'), kickCol:g('uKickCol'), nrmTap:g('uNrmTap') }))(n => gl.getUniformLocation(shadeProg, n));
 /* ════════ THE NEW LOOK ════════
    look.mode 1: GMT's lighting on the G-buffer, with the lights hung off the surface in view.
@@ -1789,6 +1830,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
   gl.uniform1i(us.guideTex, 3);
   gl.uniform1i(us.look, newLook ? 1 : 0); gl.uniform1i(us.view, look.view); gl.uniform1i(us.sampleN, gd ? gd.n : 0);
   gl.uniform1f(us.splitX, splitX); gl.uniform1i(us.compare, look.compare); gl.uniform1i(us.nrmTap, look.nrmTap);
+  gl.uniform1i(us.farLook, dzFarLook);
   if (newLook) {
     gl.uniform3fv(us.planeN, rig.n); gl.uniform2f(us.depthRange, rig.near, rig.far);
     gl.uniform4f(us.lookA, look.ao, look.aoRadius, look.shadow, look.haze);
@@ -2095,6 +2137,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.guide, 0); gl.uniform1i(x.guideTex, 3);   // not a guided sample unless drawDeep / bindGuide says so
   gl.uniform1i(x.land, look.compare === 2 ? 2 : landMode);
   gl.uniform1i(x.hitRefine, look.compare === 3 ? -(hitRefine || 4) : hitRefine);   // compare 3: refined on the right of the divider only
+  gl.uniform1i(x.farLook, dzFarLook);
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)

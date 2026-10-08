@@ -12,8 +12,8 @@
  *     with `mode: 'deep'`); the f32 baseline, which has no light or colour input, shows only until
  *     the deep shader has compiled. The start view sits exactly on the bulb's z axis, where the
  *     deep path used to draw one flat colour: the renderer's POLE GUARD keeps the camera off it,
- *     and one step here looks at that picture. FAR ground (most of a shallow view) takes light
- *     but no palette colour yet, so the Colour check still uses `enterDeepView`.
+ *     and one step here looks at that picture. Far ground (every hit of a shallow view) takes the
+ *     palette too, because the shell asks for it (`farLook: true`); that step checks it.
  *   - Two thumbnails of one unchanged view are not byte-identical (the still restarts and the
  *     samples are jittered), so picture steps compare mean colour and carry a control: the same
  *     measure with nothing changed. With Accumulate OFF one view draws the same picture every
@@ -196,7 +196,7 @@ export const stage: DzStage = {
         {
             name: 'the deep path is the picture at every depth: Light changes the start view, and Light and Colour a deep one',
             owner: 'S2-3',
-            falsified: '2026-10-08, two breaks, one run each, for the start-view half: `mode: \'deep\'` removed from `shellOptions` in host/moduleHost.ts -> red, "at the start view the picture is the deep path" false (it was f32, with the notice up, and the light changed nothing); the POLE GUARD in renderer/core.js made dead -> red, "it is a picture, not one flat colour" false (levels 145 to 145). For the deep-view half, the same day and before: `useHostSync()` removed from deep-zoom/DeepZoomApp.tsx -> red, "key elevation 40 -> 85 changes the picture" and the colour line false.',
+            falsified: '2026-10-08, two breaks, one run each, for the start-view half: `mode: \'deep\'` removed from `shellOptions` in host/moduleHost.ts -> red, "at the start view the picture is the deep path" false (it was f32, with the notice up, and the light changed nothing); the POLE GUARD in renderer/core.js made dead -> red, "it is a picture, not one flat colour" false (levels 145 to 145); `farLook: true` removed from `shellOptions` -> red, "Palette colours the start view" false (channel spread 2.9 -> 2.9); the far loop\'s refinement made dead in renderer/core.js -> red, "Hit refine 4 moves far hits too" false (0.0 %). For the deep-view half, the same day and before: `useHostSync()` removed from deep-zoom/DeepZoomApp.tsx -> red, "key elevation 40 -> 85 changes the picture" and the colour line false.',
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Light"]').click();
@@ -217,6 +217,27 @@ export const stage: DzStage = {
                 const s2 = await meanColour(ctx);
                 ctx.check(dist(s1, s2) > Math.max(2, startNoise * 4), 'key elevation 40 -> 85 changes the start view (' + dist(s1, s2).toFixed(1) + ' levels; the control: ' + startNoise.toFixed(2) + ')');
                 await ctx.ev('window.__store.getState().setDzLight({ keyElevation: 40 })');
+                // Far ground (every hit of this view) takes the palette: before 2026-10-08 it was one grey.
+                const chromaOf = (v: number[]) => Math.max(...v) - Math.min(...v);
+                await ctx.sleep(200);
+                await settle(ctx);
+                const plain = await meanColour(ctx);
+                await ctx.ev('window.__store.getState().setDzColour({ plain: false })');
+                await ctx.sleep(200);
+                await settle(ctx);
+                const coloured = await meanColour(ctx);
+                ctx.check(chromaOf(coloured) > chromaOf(plain) + 6, 'Colour: Palette colours the start view (channel spread ' + chromaOf(plain).toFixed(1) + ' -> ' + chromaOf(coloured).toFixed(1) + ')');
+                await ctx.ev('window.__store.getState().setDzColour({ plain: true })');
+                // Hit refine reaches far hits as well.
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, hitRefine: 0 })');
+                await ctx.sleep(800);
+                const coarse = await pixels(ctx);
+                const same = shareChanged(coarse, await pixels(ctx));
+                await ctx.ev('window.__store.getState().setDzQuality({ hitRefine: 4 })');
+                await ctx.sleep(800);
+                const refined = shareChanged(coarse, await pixels(ctx));
+                ctx.check(refined > Math.max(1, same * 4), 'Hit refine 4 moves far hits too: ' + refined.toFixed(1) + ' % of the start view changes (the control: ' + same.toFixed(2) + ' %)');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, hitRefine: 0 })');
                 if (!(await enterDeepView(ctx))) return;
                 await settle(ctx);
                 const a = await meanColour(ctx);

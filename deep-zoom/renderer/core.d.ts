@@ -50,6 +50,10 @@ export interface DeepZoomCoreOptions {
      *  depth; the f32 baseline only until the deep shader has compiled) or 'f32'. `api.setMode`
      *  changes it later. */
     mode?: 'auto' | 'deep' | 'f32';
+    /** Default false (the page): far ground - a hit farther than about 1e-3 from the camera, which
+     *  is every hit of a shallow view - is drawn in one mid grey. True: it takes the palette and
+     *  the near surface's albedo (grep `FAR LOOK` in core.js). */
+    farLook?: boolean;
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).
      *  Nothing is restored: dispose and mount a fresh canvas. */
     onContextLost?: () => void;
