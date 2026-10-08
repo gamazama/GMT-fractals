@@ -16,6 +16,8 @@
  *   --ref      the careful march: step,refine,budget                          (default 0.1,8,16384)
  *   --cones    a ray is wrong when it ends more than this many pixel cones from the careful ray (default 4)
  *   --rebase   page (default) | origin: the kernel's rebase (grep REBASE TO THE ORIGIN in core.js)
+ *   --jac      0 (default) .. 7: the true-gradient estimate's bits (grep TRUE-GRADIENT ESTIMATE in core.js):
+ *              1 = step by the smaller estimate, 2 = normal from the gradient, 4 = hit test by the smaller
  *   --json     where the machine-readable result goes       (default debug/scratch/march-study.json)
  *
  * HOW IT MEASURES. Everything happens inside the page, in one task per view: set the view, run one
@@ -76,7 +78,7 @@ const nums = (text: string): number[] => text.split(',').map(Number);
 const RAYS = Number(arg('rays', '128')), DISPLAY = Number(arg('display', '1080')), CONES = Number(arg('cones', '4'));
 const REACH = Number(arg('reach', '1')), BUDGET = Number(arg('budget', '0'));
 const [refStep, refRefine, refBudget] = nums(arg('ref', '0.1,8,16384'));
-const WHICH = arg('views', 'all'), DETAIL = arg('detail', '1'), ORIGIN = arg('rebase', 'page') === 'origin';
+const WHICH = arg('views', 'all'), DETAIL = arg('detail', '1'), ORIGIN = arg('rebase', 'page') === 'origin', JAC = Number(arg('jac', '0'));
 const JSON_OUT = path.resolve(ROOT, arg('json', 'debug/scratch/march-study.json'));
 
 interface Setting { step: number; refine: number; reach: number; budget?: number; farRelax?: number; saved?: boolean }
@@ -166,12 +168,12 @@ const ready = (ms: number) => page.waitForFunction('window.__deepReady === true'
 await ready(1500).catch(async () => { await page.reload(); await ready(180_000); });
 const gpu = await page.evaluate(`(() => { const g = document.createElement('canvas').getContext('webgl2'), e = g.getExtension('WEBGL_debug_renderer_info'); return e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?'; })()`) as string;
 if (/swiftshader|llvmpipe/i.test(gpu)) { console.error('software renderer, not the real GPU: ' + gpu); await context.close(); process.exit(1); }
-await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); })()`);
+await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); window.__setJacobian(${JAC}); })()`);
 if (flight && chosen.some((t) => t.tau !== undefined)) await page.evaluate(`window.__flight = ${JSON.stringify(flight)}`);
 const startupMs = performance.now() - started;
 
 console.log(`${chosen.length} views x ${grid.length} settings   ${RAYS} x ${RAYS} rays as a ${DISPLAY}-row picture   wrong = more than ${CONES} pixel cones from the careful march, rough = 0.5 to ${CONES} (step ${refStep}, refine ${refRefine}, ${refBudget} steps)`);
-console.log(gpu + (ORIGIN ? '   kernel: rebase to the origin' : ''));
+console.log(gpu + (ORIGIN ? '   kernel: rebase to the origin' : '') + (JAC ? '   true-gradient estimate: bits ' + JAC : ''));
 const pad = (v: unknown, n: number) => String(v).padStart(n);
 const rows: unknown[] = [];
 let pageMs = 0, unlike = 0;
@@ -196,6 +198,6 @@ await context.close();
 console.log('');
 console.log(`probe = picture: ${unlike} of ${chosen.length * RAYS * RAYS} rays end elsewhere, or otherwise, in the picture's own G-buffer` + (unlike ? '   <- THE PROBE IS NOT MARCHING WHAT THE PICTURE MARCHES' : ''));
 fs.mkdirSync(path.dirname(JSON_OUT), { recursive: true });
-fs.writeFileSync(JSON_OUT, JSON.stringify({ rays: RAYS, display: DISPLAY, cones: CONES, ref: [refStep, refRefine, refBudget], rebase: ORIGIN ? 'origin' : 'page', rows }, null, 1) + '\n');
+fs.writeFileSync(JSON_OUT, JSON.stringify({ rays: RAYS, display: DISPLAY, cones: CONES, ref: [refStep, refRefine, refBudget], rebase: ORIGIN ? 'origin' : 'page', jac: JAC, rows }, null, 1) + '\n');
 console.log(`startup ${(startupMs / 1000).toFixed(1)} s   sweep ${(sweepMs / 1000).toFixed(1)} s (${(pageMs / 1000).toFixed(1)} s in the page) for ${chosen.length * (grid.length + 2)} marches   ->  ${path.relative(ROOT, JSON_OUT)}`);
 if (unlike) process.exit(1);

@@ -116,6 +116,40 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
   hits); the shallow views between 1e-3 and 0.2 march 1.6 to 1.8 times longer, from a third of a
   deep view's time to about as much as a 1e-4 view. Guard: the direct proof's two "far hand-off"
   grids (seen FAIL with the threshold pinned back to 1e-3 in the shader).
+- **The owner stepped back from the automatic step (2026-10-08): "perhaps we could improve the
+  input or the DE or the algorithm in a way that wont require adjusting the step size". The cause
+  was found, and a truer estimate is PROTOTYPED - opt-in, off everywhere, the shell does not use it.**
+  - *Why some places need a small step.* An estimate is safe to step by only while it falls no
+    faster than the distance travelled. Measured in f64: the renderer's estimate falls at about 0.5
+    of that rate in ordinary flight views, 1.6 to 3 at the slicing place and 1.9 to 3.3 at the
+    power-2 place at 5e-20. Its scalar running derivative under-counts the true gradient there by
+    3 to 4.6 times (the triplex power stretches the azimuth by up to n times more than n r^(n-1)).
+  - *What is built* (grep `TRUE-GRADIENT ESTIMATE` in core.js): a shader variant that carries the
+    orbit's real 3x3 derivative, `api.setJacobian(bits, floor)` - 1 = step by the smaller of the
+    two estimates (hit test unchanged: the same surface), 2 = the normal is the gradient instead
+    of four more orbits, 4 = hit test by the smaller one (untested) - a referee (`api.jacCheck`,
+    central differences through the f64 kernel) and `--jac` on the march tool.
+  - *It is right:* GPU against the referee on 162 points a view, 5 views: median 2e-6 to 6e-6,
+    worst 2e-3 (BLA on: 3e-5 to 6e-5, worst 8e-3); gradient direction within 0.04 degrees at 9 in
+    10 points.
+  - *It does what was hoped,* on the GPU, step 0.85, 16384 rays, 1080 rows, wrong surface: power-2
+    5e-20 96.6 % -> 2.7 %; power-2 1.6e-19 4.4 -> 0.5; slicing 41.5 -> 0.3; flight 0.2-3.4 ->
+    0.1-0.65.
+  - *It costs more than guessed.* Picture time against today's default, BLA on as the shell has it
+    (timed on an idle GPU): ordinary flight views 1.3 to 2.0; the power-2 place 1.0 (a hand-set
+    0.21 is 1.13); the slicing place 2.4 (a hand-set 0.42 is 1.6). With the gradient normal as
+    well: 1.2 to 2.0, 0.85, 2.2. BLA off: ordinary 1.07 to 1.47. Two causes: the matrix makes each
+    kernel pass about 1.15 to 1.4 dearer, and step counts become uneven - the mean rises 3 to 18 %
+    but the slowest ray of each 8 x 8 block, which is what the GPU waits for, 6 to 44 %.
+  - *The gradient normal alone does not pay for the matrix:* 0.93 to 1.24 of today (BLA off),
+    1.0 to 1.2 (BLA on).
+  - *Tried, no gain:* normalising the matrix only when it drifts; a floor on how far a step may be
+    shortened (0.25 saves a few per cent, 0.4 breaks the power-2 place: 7.9 % wrong).
+  - *Not done:* a guard for the estimate in the direct proof; pictures of the gradient normal for
+    the owner to judge; whether the hit test by the smaller estimate changes how much Detail a
+    view needs (his assumption, unmeasured); making ordinary views cheap - by drawing with the
+    plain variant wherever a small probe shows the scalar does not over-read, or by trimming the
+    per-pass work. The J variant compiles in 19 s (36 s with BLA).
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at

@@ -293,7 +293,16 @@ export interface DeepZoomApi {
      *  `farHandOff` sets it from the start): how far the deep march carries a ray before the plain
      *  f32 far-field march takes it. grep the name in core.js. */
     setFarHandOff(t: number): void;
-    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number };
+    /** TRUE-GRADIENT ESTIMATE (added 2026-10-08, 0 = off = the page; grep the name in core.js). A
+     *  second distance estimate built on the orbit's real 3x3 derivative. Bits: 1 = the march
+     *  steps by the smaller of the two estimates, so no place needs a hand-set step; 2 = the
+     *  surface normal is that gradient, instead of four more orbits; 4 = the hit test uses the
+     *  smaller estimate too (it moves the surface). The first use compiles a shader variant,
+     *  BLOCKING for seconds. */
+    setJacobian(bits: number): void;
+    /** A referee's read of both estimates on the centre ray at `t`; null unless `setJacobian` is on. */
+    jacProbeAt(t: number): { t: number; de: number; escaped: boolean; gde: number; gradPacked: number } | null;
+    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number; jacobian: number };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */
     look: DzLook;

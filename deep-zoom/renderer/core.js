@@ -352,7 +352,56 @@ int blaTrailingZeros(int m) {           // levels descend on trailing zeros of m
   return n;
 }
 #endif
-struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bool escaped; float trap; float escR; };
+struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bool escaped; float trap; float escR;
+#ifdef USE_JAC
+  vec2 gde; vec3 grad;                          // the true-gradient estimate (HDR) and the unit gradient of |z| (grep TRUE-GRADIENT ESTIMATE)
+#endif
+};
+#ifdef USE_JAC
+/* ════════ TRUE-GRADIENT ESTIMATE (the USE_JAC variant, 2026-10-08; api.setJacobian; off = the page) ════════
+   The distance estimate is  de = 0.5·r·ln r / dr  with dr the SCALAR running derivative
+   dr' = n·r^(n−1)·dr + 1. That recurrence takes n·r^(n−1) for the stretch of one triplex power
+   step. It is the stretch along r and along the polar angle; around the azimuth the step stretches
+   by n·r^(n−1)·sin(nθ)/sin θ, up to n times more. So dr can UNDER-count how fast r really changes
+   with c, and de then OVER-reads the distance: measured in f64, the estimate falls 1.9 to 3.3
+   times faster than the distance travelled at the owner's power-2 place (5e-20) and 1.6 to 3 times
+   at his 2.8e-39 place (about 0.5 in ordinary views) - which is exactly why those places needed a
+   step of 0.2 to 0.4 instead of 0.85.
+   Here the orbit also carries J = ∂z/∂c, the real 3×3 derivative,
+       J' = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ )·J + I ,   κ = sin(nθ)/sin θ ,
+   (e = the unit frame of z's spherical angles, E = the frame of the output angles nθ, nφ), as the
+   transpose Jᵀ = Jm·2^ej so that Jᵀ·v is one matrix-vector product. A BLA run is J' = A·J + B with
+   the A and B the table already holds. At the end ∇c|z| = Jᵀ·ẑ, and
+       gde = 0.5·r·ln r / |∇c|z||          the estimate with the true gradient in dr's place,
+       grad = ∇c|z| / |∇c|z||              the surface normal, from the hit orbit itself.
+   Used (uJacUse): 1 = the march steps by min(de, gde) - never longer than the page's step, shorter
+   where dr under-counts; the hit test is unchanged, so the surface is the same one. 2 = pass G
+   stores grad as the normal instead of four more orbits. 4 = the hit test uses min(de, gde) too.
+   gde alone is NOT safe to step by: it spikes where the gradient vanishes. */
+void jacNorm(inout mat3 M, inout float ej) {
+  vec3 a = max(abs(M[0]), max(abs(M[1]), abs(M[2])));
+  float m = max(a.x, max(a.y, a.z));
+  if (m == 0.0) return;
+  float adj = floor(log2(m));
+  M *= exp2(-adj); ej += adj;
+}
+/* one iteration z → zⁿ (+ c) applied to Jᵀ = M·2^ej. (sA, cA), (sB, cB): sin / cos of the OUTPUT
+   angles of this pixel's z; scale = n·|z|^(n−1). */
+void jacStep(inout mat3 M, inout float ej, vec3 z, float sA, float cA, float sB, float cB, float scale) {
+  float rz = length(z), rho = length(z.xy);
+  mat3 N = mat3(0.0);
+  if (rz > 0.0) {
+    float sth = rho / rz, cth = z.z / rz;
+    float cph = rho > 0.0 ? z.x / rho : 1.0, sph = rho > 0.0 ? z.y / rho : 0.0;
+    float kap = sth > 1e-12 ? clamp(sA / sth, -uPower, uPower) : uPower;
+    N = outerProduct(M * vec3(sth * cph, sth * sph, cth), vec3(sA * cB, sA * sB, cA))
+      + outerProduct(M * vec3(cth * cph, cth * sph, -sth), vec3(cA * cB, cA * sB, -sA))
+      + kap * outerProduct(M * vec3(-sph, cph, 0.0), vec3(-sB, cB, 0.0));
+  }
+  M = N * scale + mat3(exp2(max(-ej, -160.0)));
+  jacNorm(M, ej);
+}
+#endif
 /* ════════ THE δ KERNEL — shared exponent ════════
    The §3 residual forms, Zhuoran rebase, escape and reference-exhaustion logic of
    docs/triplex-perturbation-math.md, with δ carried as ONE vec3 of plain f32 mantissas and ONE
@@ -476,6 +525,10 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
   vec2 DR00 = texelFetch(orbit, ivec2(0, 3), 0).xy;
   vec4 cT0 = T00; vec2 cDR = DR00;
+#ifdef USE_JAC
+  mat3 Jm = mat3(1.0); float ej = 0.0;         // Jᵀ = Jm·2^ej; z₀ = c, so J₀ = I
+  vec3 zc = T00.xyz + D * sclPow2(e);          // this pixel's own z at the current index
+#endif
 #ifdef USE_BLA
   float lenC = length(C);                                    // |δc| mantissa (exponent ec) for BLA validity
 #endif
@@ -520,6 +573,13 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         float eAD = a1.w + e, eBC = a2.w + ec;
         sclAdd(AD, eAD, BC, eBC, D, e);
         sclNorm(D, e);
+#ifdef USE_JAC
+        { /* J ← A·J + B, transposed: Jᵀ·Aᵀ + Bᵀ (a1..a3 are A's rows, so they are Aᵀ's columns) */
+          mat3 Mn = Jm * mat3(a1.xyz, a2.xyz, a3.xyz);
+          float eA2 = ej + a1.w, eB2 = a2.w, en2 = max(eA2, eB2);
+          Jm = Mn * sclPow2(eA2 - en2) + mat3(b1.xyz, b2.xyz, b3.xyz) * sclPow2(eB2 - en2); ej = en2;
+          jacNorm(Jm, ej); }
+#endif
         m += span; it += span;
         applied = true;
         break;
@@ -575,6 +635,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       vec3 Dref = vec3(sa * cb, sa * sb, ca);
       vec3 Dn = t2.x * (DD + gN * (Dref + s * DD));
       float en = e + t2.y;
+#ifdef USE_JAC
+      jacStep(Jm, ej, zc, sa + s * dsA, ca + s * dcA, sb + s * dsB, cb + s * dcB, uPower * t2.z * sclPow2(t2.w) * (1.0 + gN1 * s));
+#endif
       /* δ ← Δ + δc : align the two exponents once, renormalise once */
       sclAdd(Dn, en, C, ec, D, e);
       sclNorm(D, e);
@@ -618,10 +681,18 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
           float ph = (rho > 0.0 ? atan2Acc(zf.y, zf.x) : 0.0) * uPower + uPhase.y;
           float sth, cth1, sph, cph1;
           sinCosm1Acc(th, sth, cth1); sinCosm1Acc(ph, sph, cph1);
+#ifdef USE_JAC
+          jacStep(Jm, ej, zf, sth, 1.0 + cth1, sph, 1.0 + cph1, uPower * rn1 * sclPow2((uPower - 1.0) * ez));
+#endif
           vec3 P = rn1 * rm * vec3(sth * (1.0 + cph1), sth * sph, 1.0 + cth1);   // z^n = P·2^(n·ez)
           sclAdd(P, uPower * ez, C, ec, D, e);
           Ddr = hdrMulF(drFull, uPower * rn1); Ddr.y += (uPower - 1.0) * ez;
-        } else { D = C; e = ec; Ddr = vec2(0.0); }
+        } else {
+          D = C; e = ec; Ddr = vec2(0.0);
+#ifdef USE_JAC
+          Jm = mat3(1.0); ej = 0.0;
+#endif
+        }
         sclNorm(D, e);
         m = 0; it++; rebases++;
         cT0 = T00; cDR = DR00;
@@ -636,6 +707,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         cT0 = T00; cDR = DR00;
       }
     }
+#ifdef USE_JAC
+    zc = zf;
+#endif
   }
   float sE = sclPow2(e);
   float QE = 2.0 * dot(cT0.xyz, D) + sE * dot(D, D);
@@ -647,7 +721,15 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
 #ifdef USE_STATS
   gOrbits++; gIters += it;
 #endif
+#ifdef USE_JAC
+  vec3 zE = cT0.xyz + D * sE;
+  vec3 gv = Jm * (zE / max(length(zE), 1e-30));       // ∇c|z| = Jᵀ·ẑ, a mantissa on ej
+  float gn = length(gv);
+  vec2 gde = gn > 0.0 ? hdrMul(hdrFromFloat(0.5 * rF * log(rF)), hdrRecip(hdrReduce(vec2(gn, ej)))) : vec2(0.0);
+  return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2), gde, gn > 0.0 ? gv / gn : vec3(0.0, 0.0, 1.0));
+#else
   return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2));
+#endif
 }
 `;
 
@@ -763,6 +845,10 @@ uniform int       uFarLook;      // 1 = a far-field hit carries a palette parame
 uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
 uniform int       uRebaseOrigin; // 1 = the kernel rebases an orbit onto the origin (grep REBASE TO THE ORIGIN); 0 = the page: onto the reference's first point
 uniform float     uFarSwitch;    // the t at which a ray is handed to the f32 far-field march (grep FAR HAND-OFF); the page: 1e-3
+#ifdef USE_JAC
+uniform float     uJacFloor;     // the step is never shortened below this share of the page's step (0 = no floor)
+uniform int       uJacUse;       // TRUE-GRADIENT ESTIMATE (grep), bits: 1 = step by min(de, gde) · 2 = the normal is the gradient · 4 = hit test by min(de, gde)
+#endif
 uniform int       uGuide;        // 1 = this jittered sample starts its march from the depth guide; 0 = from the camera
 uniform float     uGuideK;       // guide back-off, in pixel cones
 uniform int       uGuideR;       // guide neighbourhood radius in pixels (1 = 3×3, 2 = 5×5)
@@ -910,6 +996,9 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
     }
     if (t.x != 0.0) {
       float ratio = hdrToFloat(hdrMul(de, hdrRecip(t)));
+#ifdef USE_JAC
+      if ((uJacUse & 4) != 0 && oo.gde.x > 0.0) ratio = min(ratio, hdrToFloat(hdrMul(oo.gde, hdrRecip(t))));
+#endif
       if (ratio < pa) {
         /* HIT LANDING (uLand, off by default — it moves the surface, so the CPU referee
            pertMarchJS would have to follow before it becomes the default). A hit is accepted
@@ -968,7 +1057,16 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
        ground and every ordinary view are marched exactly as before. */
     if (uFarRelax.x > 0.0 && PICTURE_MARCH && t.x != 0.0)
       relax = mix(relax, max(relax, uFarRelax.x), clamp((log2(t.x) + (t.y - uRefE) - uFarFrom) / uFarRelax.y, 0.0, 1.0));
+#ifdef USE_JAC
+    vec2 est = de;                                    // TRUE-GRADIENT ESTIMATE: never longer than the page's step
+    if ((uJacUse & 1) != 0 && oo.gde.x > 0.0 && hdrGtPos(de, oo.gde)) {
+      vec2 lowest = hdrMulF(de, uJacFloor);
+      est = (uJacFloor > 0.0 && hdrGtPos(lowest, oo.gde)) ? lowest : oo.gde;
+    }
+    vec2 step = hdrMulF(est, relax);
+#else
     vec2 step = hdrMulF(de, relax);
+#endif
     if (cap.x == 0.0) cap = hdrMulF(de, 0.05);
     vec2 capEff = (t.x != 0.0 && hdrGtPos(t, cap)) ? t : cap;
     if (hdrGtPos(step, capEff)) step = capEff;
@@ -992,6 +1090,14 @@ void main(){
         o = vec4(pde, pesc ? 1.0 : 0.0, 0.0);
         return;
     }
+#ifdef USE_JAC
+    if (uProbe == 8) {
+        /* pointwise read of the TRUE-GRADIENT ESTIMATE at t = uProbeT on the centre ray */
+        bool jesc; OrbitOut joo; deAt(uProbeT, normalize(uFwd), uIters, jesc, joo);
+        o = vec4(joo.gde, octPack(joo.grad), jesc ? 1.0 : 0.0);
+        return;
+    }
+#endif
     if (uProbe == 2) {
         /* POPULATION probe: one pertOrbit per grid pixel at transverse offset
            δc = spread·(uv.x·right + uv.y·up) — measures the near-critical pixel
@@ -1096,6 +1202,10 @@ void main(){
     if (hit) {
         kind = 1.0;
         sPal = paletteParam(hitOrbit);                    // reuse the march's hit orbit — no extra march
+#ifdef USE_JAC
+        if (uNormalMode != 0 && (uJacUse & 2) != 0) nPack = octPack(hitOrbit.grad);   // the hit orbit's own gradient: no extra orbits
+        else
+#endif
         if (uNormalMode != 0) {
             /* DE-gradient normal at offset scale e = 2·pixAng·t (all HDR; de/e ratios are O(1)).
                ESCAPE-AWARE: a tap landing unescaped is inside the surface — its wrapped de is
@@ -1555,9 +1665,13 @@ function mkProgAsync(fs, cb){
    everything checks). The others are built on first use: BLA in the background (kickBlaAsync),
    or blocking when something asks for a variant outright. All gates draw through deepCtx(). */
 const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }  (null = failed to build)
-const vKey = (b, t) => 'P' + (b ? 'B' : '') + (t ? 'T' : '');
+/* jacUse != 0 selects the J twins of every variant (grep TRUE-GRADIENT ESTIMATE): bits 1 = step by
+   min(de, gde), 2 = the normal is the gradient, 4 = hit test by min(de, gde). A J variant is built
+   the way its twin is: blocking when asked for outright, in the background for BLA 'auto'. */
+let jacUse = 0, jacFloor = 0;
+const vKey = (b, t) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (jacUse ? 'J' : '');
 const vSrc = (b, t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
-  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : ''));
+  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (jacUse ? '\n#define USE_JAC' : ''));
 function ensureVariant(b, t){
   const key = vKey(b, t);
   if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();   // a background build is in flight: wait for IT, don't start a second
@@ -1596,7 +1710,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -1934,7 +2048,7 @@ mkProgAsync(vSrc(false, false), (p, err) => {
   const l = dzById('loading'); if (l) l.style.display = 'none';
   if (!p) { deepCompileErr = err; api.deepErr = err; api.deepReady = false; return; }
   deepProg = p; ud = makeUD(p); ud.hasBla = false; deepReady = true;
-  variants[vKey(false, false)] = { p, x: ud };
+  variants.P = { p, x: ud };                    // by name: jacUse may have been set while this compiled
   api.deepErr = ''; api.deepReady = true;
 });
 /* pick the active deep program + its uniform set: the BLA variant when BLA is on and it built,
@@ -2170,6 +2284,7 @@ function setBlaMode(m){                                   // 'off' | 'auto' | 'o
 api.setBla = (on)=>{ setBlaMode(on === 'auto' ? 'auto' : on ? 'on' : 'off'); };   // true / false / 'auto'
 api.blaMode = () => blaMode;
 api.blaErr = () => variantErr[vKey(true, false)] || '';
+api.variantErr = () => ({ ...variantErr });                  // every variant that failed to build, by key (P, PB, PT, PJ, ...)
 api.setBlaTau = (t)=>{ blaTau = Math.max(1e-9, +t); orbitDirty = true; };   // BLA maturation knob: rebuild table at a new tolerance
 api.getBlaTau = () => blaTau;
 let blaTex = null, curBla = null;
@@ -2202,6 +2317,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.farLook, dzFarLook);
   gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
   gl.uniform1f(x.farSwitch, farHandOff);
+  gl.uniform1i(x.jacUse, jacUse); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
@@ -2326,8 +2442,8 @@ function stableDeltaJS(V,d){                       // §3, residual forms (preci
   const DD=[sa*dcB+dsA*cb+dsA*dcB, sa*dsB+dsA*sb+dsA*dsB, dcA], Dref=[sa*cb,sa*sb,ca];
   return add3(scl3(DD,Rn), scl3(add3(Dref,DD),dRn));
 }
-function pertOrbitJS(O, dc, maxIter){
-  let d=dc.slice(), Ddr=0, m=0, escaped=false;
+function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter iterations, no escape test (neighbours that must stop together)
+  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0;
   for(let k=0;k<maxIter;k++){
     const V=O.Vf[m], R=O.Rk[m];
     const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
@@ -2338,12 +2454,13 @@ function pertOrbitJS(O, dc, maxIter){
     d=add3(sd,dc);
     m++;
     const z=add3(O.Vf[m],d);
-    if(dot3(z,z)>4){ escaped=true; break; }
+    it=k+1;
+    if(!fixed && dot3(z,z)>4){ escaped=true; break; }
     if(dot3(z,z)<dot3(d,d) || m>=O.len-1){ d=sub3(z,O.Vf[0]); Ddr=(O.DRk[m]-1)+Ddr; m=0; }
   }
   const V=O.Vf[m], R=O.Rk[m];
   const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,1e-300));
-  return { de: 0.5*r2*Math.log(Math.max(r2,1e-300))/(O.DRk[m]+Ddr), escaped };
+  return { de: 0.5*r2*Math.log(Math.max(r2,1e-300))/(O.DRk[m]+Ddr), escaped, r: r2, it };
 }
 /* CPU referee for the march-population study (probe 3): mirrors the GPU near-field HDR
    march EXACTLY — capped anti-arm-skip stepping + the [tPrev,t] bisection onto the n-iter
@@ -3334,7 +3451,52 @@ api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
 api.setRebaseOrigin = (b)=>{ rebaseOrigin = b ? 1 : 0; accumReset = true; };   // REBASE TO THE ORIGIN on / off (off = the page's kernel)
 api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // FAR HAND-OFF distance, 1e-3 (the page) .. 12
-api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin, farHandOff });
+api.setJacobian = (bits, floor)=>{ jacUse = Math.max(0, Math.min(7, bits|0)); if (floor !== undefined) jacFloor = Math.max(0, Math.min(1, +floor || 0)); accumReset = true; };   // TRUE-GRADIENT ESTIMATE: 0 = off (the page); the first use of a J variant compiles it, blocking
+/* pointwise read on the centre ray at t (needs setJacobian != 0): the page's de, the true-gradient
+   estimate, and the packed unit gradient (octPack) - for a referee. null when it cannot be drawn. */
+api.jacProbeAt = (tval)=>{
+  if (!curOrbit || !deepProg || !jacUse) return null;
+  const { fwd, right, up } = basis(), D = deepCtx(), x = D.x, px = new Float32Array(4), ht = hdrSplit(tval), out = { t: tval };
+  gl.useProgram(D.p); bindQuad(D.p);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, probeFbo); gl.viewport(0, 0, 1, 1);
+  gl.uniform2f(x.res, 2, 2);
+  gl.uniform3fv(x.fwd, fwd); gl.uniform3fv(x.right, right); gl.uniform3fv(x.up, up);
+  gl.uniform1f(x.fov, Math.tan(0.5 * 1.1));
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, orbitTex);
+  gl.uniform1i(x.orbit, 0); gl.uniform1i(x.len, curOrbit.len); gl.uniform1i(x.iters, cam.iters);
+  gl.uniform2f(x.jitter, 0, 0);
+  setBlaUniforms(x); setPowerUniforms(x);
+  gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / Math.max(canvas.clientHeight, 2));
+  gl.uniform2f(x.probeT, ht.m, ht.e);
+  for (const probe of [1, 8]) {
+    gl.uniform1i(x.probe, probe); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px);
+    if (probe === 1) { out.de = px[0] * Math.pow(2, px[1]); out.escaped = px[2] > 0.5; }
+    else { out.gde = px[0] * Math.pow(2, px[1]); out.gradPacked = px[2]; }
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.uniform1i(x.probe, 0);
+  return out;
+};
+/* referee for the TRUE-GRADIENT ESTIMATE. At each t on the centre ray: the GPU's gde and gradient,
+   and the same two from CENTRAL DIFFERENCES of |z| through the f64 CPU kernel, every neighbour
+   stopped on the centre point's iteration. The differences share the kernel's perturbation maths
+   (itself refereed against BigInt, __directCheckHP) but nothing of the Jacobian recurrence. */
+api.jacCheck = function(tvals){
+  if (!jacUse) return null;
+  curOrbit = buildRefOrbit(camHP, cam.iters + 2);
+  uploadOrbit(curOrbit);
+  const { fwd } = basis();
+  return tvals.map(tv => {
+    const g = api.jacProbeAt(tv), dc = scl3(fwd, tv), c = pertOrbitJS(curOrbit, dc, cam.iters);
+    const h = 1e-4 * Math.abs(c.de);
+    const gr = [0, 1, 2].map(j => { const e = [0, 0, 0]; e[j] = h;
+      return (pertOrbitJS(curOrbit, add3(dc, e), c.it, true).r - pertOrbitJS(curOrbit, sub3(dc, e), c.it, true).r) / (2 * h); });
+    const gn = len3(gr), ref = 0.5 * c.r * Math.log(c.r) / gn;
+    return { t: tv, gde: g.gde, ref, rel: Math.abs(g.gde - ref) / Math.abs(ref), de: g.de, escG: g.escaped, escC: c.escaped,
+             gradPacked: g.gradPacked, gradRef: gr.map(v => v / gn) };
+  });
+};
+api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin, farHandOff, jacobian: jacUse, jacobianFloor: jacFloor });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
 api.setSurf = (m)=>{ surfMul=Math.max(0.25,Math.min(256,m||1)); accumReset=true; };  // ray-closeness ÷pixAng
