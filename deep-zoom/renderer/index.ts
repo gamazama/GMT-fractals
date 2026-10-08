@@ -261,8 +261,19 @@ export interface DeepZoomApi {
     setStepRelax(r: number): void;
     /** Scales the deep resolution cap; 1 is the shipped cap. */
     setCapRelax(m: number): void;
-    /** Read-back for the three settings above that had setters only. (Added 2026-10-08.) */
-    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32' };
+    /** HIT REFINE (added 2026-10-08, 0 = OFF by default; grep `HIT REFINE` in core.js): halve each
+     *  hit's last march step `n` times (0..12) onto the level the hit was meant to land on. It
+     *  removes the terraces a hit "wherever the last step fell" leaves in the depth, at one orbit
+     *  per halving on rays that hit. It moves the surface, so with it on the picture differs from
+     *  the frozen page. `setLook({ compare: 3 })` shows it on the right of the divider only (with
+     *  4 halvings when this is 0), same samples on both sides.
+     *  NOT KEPT, for whoever thinks of it next: Mandelbulb3D's overstep clamp and step damper
+     *  (GMT's `mb3dPreHit`) were ported and measured the same day on the view that prompted this -
+     *  57.1 % of pixels wrong without, 56.0 % with. That guard reacts to a distance that falls
+     *  faster than the step along the ray; a ray grazing a ridge never sees that. */
+    setHitRefine(n: number): void;
+    /** Read-back for the settings above that had setters only. (Added 2026-10-08.) */
+    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */
     look: DzLook;

@@ -94,6 +94,7 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         normals: () => { api.setNormalMode(normalsToRenderer(num('dzQuality', 'normals'))); api.setLook({}); },
         nrmTap: () => api.setLook({ nrmTap: depthNormalRadiusToRenderer(num('dzQuality', 'depthNormalRadius')) }),
         land: () => api.setLand(flag('dzQuality', 'hitLanding')),
+        hitRefine: () => api.setHitRefine(num('dzQuality', 'hitRefine')),
         accum: () => api.setAccum(flag('dzQuality', 'accumulate')),
         precision: () => api.setMode(precisionToRenderer(num('dzQuality', 'precision'))),
         bla: pushBla,

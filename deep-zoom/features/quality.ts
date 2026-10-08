@@ -199,6 +199,17 @@ export const DzQualityFeature = {
             label: 'Hit landing',
             description: 'Places each surface hit on a fixed level of the distance estimate instead of where the last march step fell. Moves the surface by a fraction of a pixel.',
         },
+        hitRefine: {
+            type: 'int',
+            // Off by default: with it on the picture is no longer the frozen page's. Measured
+            // 2026-10-08 (grep HIT REFINE in renderer/core.js): 4 halvings take an ordinary
+            // 1e-17 view from 9.9 % of pixels on the wrong surface to 0.9 %, at 1.44x the render
+            // time; the owner's 2.76e-39 view needs Step size 0.5 as well (57 % -> 2.8 % with 3).
+            default: 0, min: 0, max: 8, step: 1,
+            label: 'Hit refine',
+            format: (v) => (Math.round(v) === 0 ? 'off' : `${Math.round(v)}`),
+            description: 'Halves each hit\'s last march step this many times, so the surface lands where it should instead of where the step fell. Removes cuts and terraced slices that show before the still has accumulated. Costs about a third more render time at 3 or 4. Where slices remain, lower Step size to 0.5 as well. Replaces Hit landing while it is on.',
+        },
         accumulate: {
             type: 'boolean',
             default: true,
@@ -228,14 +239,16 @@ export const DzQualityFeature = {
         stepSize: {
             type: 'float',
             // The page's own control stopped at 0.85 (it was a speed lever). The range goes down to
-            // 0.1 here because the distance estimate over-reads in places: seen 2026-10-08 on the
-            // owner's 2.8e-39 view, where 0.85 steps through the surface and draws dark terraced
-            // slices that 0.2 does not (debug/scratch study, one sample and 64).
+            // 0.1 here because the distance estimate over-reads in places. Measured 2026-10-08 on
+            // the owner's 2.76e-39 view, one sample, against a slow march: at 0.85, 57 % of the
+            // pixels show a surface behind the right one (dark cuts); 0.5 leaves 15 %, 0.3 7 %,
+            // and 0.5 with Hit refine 3 leaves 2.8 % at 1.4x the render time (0.2 alone: 2.4 % at
+            // 2.6x). So the cure is Hit refine first, then this slider to 0.5.
             default: 0.85, min: 0.1, max: 2, step: 0.05,
             label: 'Step size',
             isAdvanced: true,
             format: (v) => `${v.toFixed(2)}×`,
-            description: 'March step as a multiple of the distance estimate. Lower it where the surface shows terraced slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features.',
+            description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features.',
         },
         resolutionCap: {
             type: 'int',

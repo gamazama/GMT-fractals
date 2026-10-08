@@ -716,6 +716,7 @@ uniform vec2      uFarRelax;     // FAR RELAX: toward step factor x over y octav
 uniform float     uFarFrom;      // where FAR RELAX starts, as PASS G OUTPUT x (log2 t − uRefE)
 uniform int       uLand;         // 1 = land a hit on the level de = pa·t instead of where the last step fell (grep HIT LANDING); 2 = only right of uLandSplit
 uniform float     uLandSplit;    // compare view: the divider's framebuffer x
+uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
 uniform int       uGuide;        // 1 = this jittered sample starts its march from the depth guide; 0 = from the camera
 uniform float     uGuideK;       // guide back-off, in pixel cones
 uniform int       uGuideR;       // guide neighbourhood radius in pixels (1 = 3×3, 2 = 5×5)
@@ -789,6 +790,7 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
   hit = false; steps = 0; tF = -1.0; bool esc = false;
   OrbitOut oo; OrbitOut lastOO; lastOO.escaped = false;   // last surface-side orbit → reused for colour
   int budget = uProbe == 0 ? uMaxSteps : 256;        // the probes referee the plain march: 256 steps, no relaxing
+  int refine = uProbe != 0 ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);   // HIT REFINE
   for (int st = 0; st < budget; st++) {
     steps = st;
     de = deAt(t, rd, uIters, esc, oo);
@@ -833,11 +835,37 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
            of the last step are known — tPrev with de ≥ pa·t, t with de < pa·t — so put the hit
            where the line through them crosses de = pa·t. No extra orbit. Everything is a ratio
            to tPrev, so no magnitude touches f32. */
-        if ((uLand == 1 || (uLand == 2 && gl_FragCoord.x + uOrigin.x >= uLandSplit)) && tPrev.x != 0.0 && dePrev.x > 0.0) {
+        if (refine == 0 && (uLand == 1 || (uLand == 2 && gl_FragCoord.x + uOrigin.x >= uLandSplit)) && tPrev.x != 0.0 && dePrev.x > 0.0) {
           float r0 = hdrToFloat(hdrMul(dePrev, hdrRecip(tPrev)));
           float u  = hdrToFloat(hdrMul(hdrSub(t, tPrev), hdrRecip(tPrev)));
           float g0 = r0 - pa, g1 = (ratio - pa) * (1.0 + u);
           t = hdrMulF(tPrev, 1.0 + u * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0));
+        }
+        /* HIT REFINE (uHitRefine, off by default: it moves the surface, so the CPU referee
+           pertMarchJS would have to follow before it becomes the default). The hit above is
+           wherever the first step with de < pa·t fell - anywhere in the last step - and the
+           steps of neighbouring rays fall in step with each other, so the depth comes out in
+           terraces that shading from the depth buffer draws as cuts and contour lines (the
+           owner's 2.76e-39 view, 2026-10-08: "slicing - a stepping issue"). Both ends of the
+           last step are known - tPrev with de >= pa·t, t with de < pa·t - so halve that bracket n
+           times, keeping one end on each side, and stand on the last hit-side point found: the
+           hit is then within step / 2^n of a crossing of the level, whatever the step pattern.
+           One orbit per halving, on rays that hit only. Measured that day, share of pixels that
+           differ from a slow march (step 0.10, 8 halvings), one sample: an ordinary 1e-17 view
+           9.9 % -> 0.9 % with 4 halvings (render time x1.44); the 2.76e-39 view 57 % -> 35 %,
+           and 2.8 % with step 0.5 and 3 halvings (x1.4), where step 0.2 alone needs x2.6 for
+           2.4 %. It cannot find a surface the march stepped clean over: that takes a smaller
+           step. HIT LANDING is the free, one-shot form of the same idea and is skipped here. */
+        if (refine > 0 && tPrev.x != 0.0) {
+          vec2 ra = tPrev, rb = t;
+          for (int r = 0; r < 12; r++) {
+            if (r >= refine) break;
+            vec2 tm = hdrMulF(hdrAdd(ra, rb), 0.5);
+            bool me; OrbitOut moo; vec2 md = deAt(tm, rd, uIters, me, moo);
+            if (!me || md.x <= 0.0) { rb = tm; continue; }     // inside the n-iteration surface: the hit side, but not a point to stand on
+            if (hdrToFloat(hdrMul(md, hdrRecip(tm))) < pa) { rb = tm; t = tm; de = md; lastOO = moo; }
+            else ra = tm;
+          }
         }
         hit = true; break;
       }
@@ -1465,7 +1493,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2066,6 +2094,7 @@ function setPowerUniforms(x){
   gl.uniform2f(x.origin, 0, 0);
   gl.uniform1i(x.guide, 0); gl.uniform1i(x.guideTex, 3);   // not a guided sample unless drawDeep / bindGuide says so
   gl.uniform1i(x.land, look.compare === 2 ? 2 : landMode);
+  gl.uniform1i(x.hitRefine, look.compare === 3 ? -(hitRefine || 4) : hitRefine);   // compare 3: refined on the right of the divider only
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
@@ -2318,6 +2347,7 @@ api.march = march;
 api.setMarch = (o)=>{ Object.assign(march, o); accumReset = true; };
 api.setReach = (k)=>{ Object.assign(march, REACH[Math.max(0, Math.min(2, k|0))]); accumReset = true; };
 let landMode = 0;                               // 1 = land each hit on a fixed level of the distance estimate (grep HIT LANDING)
+let hitRefine = 0;                              // n > 0: bisect each hit's last step n times (grep HIT REFINE)
                                                 // 4-tap tetrahedron = symmetric, reference-correct DE normal.
                                                 // 3-tap is a one-sided forward difference: 1 fewer orbit but a
                                                 // systematic +XYZ tilt (looks different). screen-space = free, speckles at depth.
@@ -3137,6 +3167,7 @@ api.setDiv = (d)=>{ frameLong = Math.max(2, Math.round(Math.max(dzViewW(),dzView
 api.setFrame = (px)=>{ frameLong = Math.max(2, px|0); accumReset = true; };  // absolute live frame long-edge
 api.setNormalMode = (m)=>{ normalMode = m; };  // 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth
 api.setLand = (b)=>{ landMode = b ? 1 : 0; accumReset = true; };   // hit landing on / off
+api.setHitRefine = (n)=>{ hitRefine = Math.max(0, Math.min(12, n|0)); accumReset = true; };   // HIT REFINE: halvings per hit (0 = off, the default)
 api.setBisect = (n)=>{ bisectMax = n; };      // bisection iteration cap
 api.setNormalIters = (n)=>{ normalIters = Math.max(0, n|0); accumReset = true; };  // PERF LEVER: cap normal-tap pertOrbit iters (0 = full)
 api.setBisectIters = (n)=>{ bisectIters = Math.max(0, n|0); accumReset = true; };  // PERF LEVER: cap bisection pertOrbit iters (0 = full)
@@ -3150,7 +3181,7 @@ api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(160,n|0)); orbitDirty=true; 
 api.setAutoIters = (b)=>{ autoIters=!!b; };
 api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
-api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride });
+api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
 api.setSurf = (m)=>{ surfMul=Math.max(0.25,Math.min(256,m||1)); accumReset=true; };  // ray-closeness ÷pixAng

@@ -13,7 +13,8 @@
  *     picture first calls `enterDeepView` (a view that is deep by itself).
  *   - Two thumbnails of one unchanged view are not byte-identical (the still restarts and the
  *     samples are jittered), so picture steps compare mean colour and carry a control: the same
- *     measure with nothing changed.
+ *     measure with nothing changed. With Accumulate OFF one view draws the same picture every
+ *     time (measured: 0.00 % of pixels differ), which is what the Hit refine step leans on.
  *   - Every step sets what it needs at its start, so it can run alone and in any order.
  */
 import type { DzCtx, DzStage } from '../smoke-deep-zoom.mts';
@@ -38,6 +39,26 @@ async function meanColour(ctx: DzCtx): Promise<[number, number, number]> {
     `);
 }
 const dist = (a: number[], b: number[]) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+/** `host.thumbnail(size)` as RGBA bytes, decoded in the page. */
+async function pixels(ctx: DzCtx, size = 96): Promise<number[]> {
+    return ctx.withHost<number[]>(`
+        const url = host.thumbnail(${size});
+        const img = new Image();
+        await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; });
+        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+        const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+        return Array.from(g.getImageData(0, 0, c.width, c.height).data);
+    `);
+}
+/** The share (0..100) of pixels whose colour differs by more than 12 levels. */
+function shareChanged(a: number[], b: number[]): number {
+    if (a.length !== b.length || a.length === 0) return 100;
+    let off = 0;
+    for (let i = 0; i < a.length; i += 4) {
+        if ((Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2])) / 3 > 12) off++;
+    }
+    return (100 * off) / (a.length / 4);
+}
 const fmt = (c: number[]) => c.map((v) => v.toFixed(1)).join(' / ');
 
 /** Wait until the still has gathered `n` samples (deep mode only). */
@@ -198,6 +219,33 @@ export const stage: DzStage = {
                 ctx.check(Math.abs(chroma(c) - chroma(a)) > 4 || dist(a, c) > Math.max(4, noise * 4), 'Colour: Palette changes the picture (' + fmt(a) + ' -> ' + fmt(c) + ')');
                 await ctx.shot('stage2-deep-palette');
                 await ctx.ev(RESET);
+            },
+        },
+        {
+            name: 'Hit refine reaches the renderer and moves where rays land; back at off the picture is as it was',
+            owner: 'renderer',
+            falsified: '2026-10-08, two breaks, one run each: the `hitRefine` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds 4 halvings" false and 0.0 % of the pixels changed; the refine branch of the shader made dead (`if (false && refine > 0 ...)` in renderer/core.js) -> red, the renderer held 4 and 0.0 % of the pixels changed.',
+            async run(ctx) {
+                await ctx.boot({ clearStorage: true });
+                if (!(await enterDeepView(ctx))) return;
+                // One sample per frame: with the still accumulating, jitter hides what this changes.
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, hitRefine: 0 })');
+                await ctx.sleep(900);
+                const a = await pixels(ctx);
+                await ctx.sleep(300);
+                const control = shareChanged(a, await pixels(ctx));
+                ctx.note('control: the same view twice differs in ' + control.toFixed(2) + ' % of pixels');
+                await ctx.ev('window.__store.getState().setDzQuality({ hitRefine: 4 })');
+                await ctx.sleep(700);
+                ctx.check((await ctx.host<number>("getParams()['dzQuality.hitRefine']")) === 4, 'the renderer holds 4 halvings');
+                const b = await pixels(ctx);
+                const moved = shareChanged(a, b);
+                ctx.check(moved > Math.max(2, control * 4), 'Hit refine 4 changes ' + moved.toFixed(1) + ' % of the pixels (the control: ' + control.toFixed(2) + ' %)');
+                await ctx.ev('window.__store.getState().setDzQuality({ hitRefine: 0 })');
+                await ctx.sleep(700);
+                const back = shareChanged(a, await pixels(ctx));
+                ctx.check(back <= control + 0.5, 'back at off the picture is the first one again (' + back.toFixed(2) + ' % differ)');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true })');
             },
         },
         {

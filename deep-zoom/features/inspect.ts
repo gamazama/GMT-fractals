@@ -11,7 +11,7 @@
  *   never asked. No param here has `uniform` or `onUpdate`; the shell's host sync (BUILD-PLAN
  *   package S2-3, `deep-zoom/host/paramMap.ts`) pushes a changed value through `instance.api`:
  *     channel    api.setLook({ view })      view = channelToRenderer(index): 0, 2, 3, 4, 5
- *     compare    api.setLook({ compare })   compareToRenderer(index): 0, 1, 2
+ *     compare    api.setLook({ compare })   compareToRenderer(index): 0, 1, 2, 3
  *     overlays   NOT a renderer value. The shell reads it (`overlaysFromIndex(index)`: 'all' |
  *                'depth-only' | 'none') to decide which readouts it draws
  *   ENUMS. All three are enums: a float holding the option's INDEX (`engine/defineEnumParam.ts`).
@@ -53,7 +53,8 @@
  *     `deep-zoom/renderer/index.ts`). It is not followed while the pointer is locked.
  *   - `compare` overrides two quality settings while it is on: Normals forces the 4-tap normals
  *     into the G-buffer (grep `const gNormalMode`), Landing draws hit landing off on the left and
- *     on on the right whatever `dzQuality.hitLanding` says.
+ *     on on the right whatever `dzQuality.hitLanding` says, and Refine draws hit refine off on the
+ *     left and on on the right (with `dzQuality.hitRefine` halvings, 4 when that is 0).
  *   - WHY EVERY ENUM RESTATES `type: 'float'`: see the same heading in `quality.ts`. Without it
  *     the slice key is `any`.
  *   - No key may start with `is` (saved scenes and share links drop such keys), and no id may
@@ -83,9 +84,9 @@ export const channelToRenderer = (index: number | undefined) =>
     CHANNEL_RENDERER_VALUES[CHANNEL_OPTIONS.indexOf(channelParam.fromIndex(index))];
 
 // ── Compare — core.js: `compare: 0` in `const look = {`; the shader's `uCompare`.
-export const COMPARE_OPTIONS = ['off', 'normals', 'landing'] as const;
+export const COMPARE_OPTIONS = ['off', 'normals', 'landing', 'refine'] as const;
 /** `api.setLook({ compare })`, in option order. */
-export const COMPARE_RENDERER_VALUES = [0, 1, 2] as const;
+export const COMPARE_RENDERER_VALUES = [0, 1, 2, 3] as const;
 const compareParam = defineEnumParam(COMPARE_OPTIONS, 'Compare', { defaultIndex: 0 });
 export const compareToRenderer = (index: number | undefined) =>
     COMPARE_RENDERER_VALUES[COMPARE_OPTIONS.indexOf(compareParam.fromIndex(index))];
@@ -114,7 +115,7 @@ export const DzInspectFeature = {
         compare: {
             ...compareParam.config,
             type: 'float',
-            description: 'Splits the picture at the mouse. Normals: 4-tap on the left, from depth on the right. Landing: hit landing off on the left, on on the right.',
+            description: 'Splits the picture at the mouse. Normals: 4-tap on the left, from depth on the right. Landing: hit landing off on the left, on on the right. Refine: hit refine off on the left, on on the right (4 halvings, or what Hit refine is set to).',
         },
         overlays: {
             ...overlaysParam.config,
