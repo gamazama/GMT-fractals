@@ -145,6 +145,23 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
     1.0 to 1.2 (BLA on).
   - *Tried, no gain:* normalising the matrix only when it drifts; a floor on how far a step may be
     shortened (0.25 saves a few per cent, 0.4 breaks the power-2 place: 7.9 % wrong).
+  - *"Fat and blobby", the owner's reason for raising Detail (measured 2026-10-08, after the
+    prototype).* It is the hit tolerance and nothing else. At Detail 1 a hit stands a median of
+    about 3 px (a tenth of rays: 10 to 27 px) in front of the Detail-32 surface, at every depth
+    from 2e-3 to 4e-36; each doubling of Detail halves it. The estimate reads about 0.55 of the
+    true distance and rays meet the surface at an angle. Side-by-side pictures show Detail 1 fat
+    and Detail 8 crisp at every depth; the deep views are made of thin layers that the 3 px
+    swallow, which is why it reads as worse the further down one goes. The shell feeds the
+    renderer the same tolerance (one display pixel) at every depth. The true-gradient estimate
+    draws the same fat picture at Detail 1: it does not reduce the Detail a view needs. Detail 8
+    costs about 1.7 times Detail 1 in picture time.
+  - *At the Detail he actually flies, the estimate earns its cost.* Today's estimate at step 0.85,
+    1080 rows, wrong surface along the ordinary flight: 0.2-3.4 % at Detail 1, 1-12 % at Detail 8,
+    2.5-20 % at Detail 32. The true-gradient estimate at 0.85: 0.3-2.2 % at Detail 8 and 0.8-4.6 %
+    at Detail 32 - what today's estimate needs step 0.42 for. Picture time at Detail 8, BLA on,
+    against today at 0.85: today at 0.42 is 1.45 to 1.92; the true-gradient estimate with its
+    gradient normal is 1.10 to 1.98, cheaper than the smaller step in five of seven flight views.
+    The power-2 place at 5e-20 still has 8.8 % wrong at Detail 8 with it.
   - *Not done:* a guard for the estimate in the direct proof; pictures of the gradient normal for
     the owner to judge; whether the hit test by the smaller estimate changes how much Detail a
     view needs (his assumption, unmeasured); making ordinary views cheap - by drawing with the
