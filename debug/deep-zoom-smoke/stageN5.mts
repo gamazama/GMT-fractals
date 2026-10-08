@@ -119,7 +119,7 @@ export const stage: DzStage = {
         {
             name: 'the wheel changes the fly speed by a tenth a notch, within its range, and it is remembered',
             owner: 'N5',
-            falsified: "2026-10-08, two breaks, one run each: `wheelStep: dzWheelStep` removed (the engine's additive law applies) -> red, one notch gave 3.58 and six notches up 3.7; the `localStorage.setItem` line removed from deep-zoom/navigationState.ts -> red, nothing stored and 3.6 again after the reload.",
+            falsified: "2026-10-08, two breaks, one run each: `wheelStep: dzWheelStep` removed (the engine's additive law applies) -> red, one notch gave 3.58 and the notches up stopped far short of the top; the `localStorage.setItem` line removed from deep-zoom/navigationState.ts -> red, nothing stored and 3.6 again after the reload.",
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 ctx.check((await speedText(ctx)).includes('3.6'), 'the readout starts at the default speed ("' + (await speedText(ctx)) + '")');
@@ -130,11 +130,11 @@ export const stage: DzStage = {
                 const one = await storedSpeed(ctx);
                 ctx.check(Math.abs(one - 3.6 / 1.1) < 1e-9, 'one notch down: 3.6 -> 3.6 / 1.1 (' + one + ')');
                 ctx.check((await speedText(ctx)).includes('3.3'), 'the readout follows ("' + (await speedText(ctx)) + '")');
-                for (let i = 0; i < 6; i++) { await ctx.page.mouse.wheel(0, -100); await ctx.sleep(60); }
+                for (let i = 0; i < 12; i++) { await ctx.page.mouse.wheel(0, -100); await ctx.sleep(60); }
                 await ctx.sleep(200);
-                ctx.check((await storedSpeed(ctx)) === 4, 'six notches up stop at the top of the range, 4 (' + (await storedSpeed(ctx)) + ')');
+                ctx.check((await storedSpeed(ctx)) === 8, 'twelve notches up stop at the top of the range, 8 (' + (await storedSpeed(ctx)) + ')');
                 await ctx.boot();
-                ctx.check((await speedText(ctx)).includes('4.0'), 'after a reload the speed is still 4 ("' + (await speedText(ctx)) + '")');
+                ctx.check((await speedText(ctx)).includes('8.0'), 'after a reload the speed is still 8 ("' + (await speedText(ctx)) + '")');
                 await ctx.ev("(() => { localStorage.removeItem('gmt.deepZoom.flySpeed'); return true; })()");
             },
         },

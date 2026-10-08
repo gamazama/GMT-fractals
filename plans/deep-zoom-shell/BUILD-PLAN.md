@@ -37,9 +37,9 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
 - **Navigation (stage N) as built differs from the plan in four places.** (1) The turn is not
   "level the quaternion and write it back": the turn the integrator applied is taken apart and
   added to the pitch and the yaw (a turntable), because reading yaw off a turned object flips at
-  the pole. (2) No stride clamp in the sink: the frame delta is clamped at 0.05 s (the standalone
-  page's own number) and the fly speed tops out at 4, so a boosted frame covers at most 0.8 of the
-  distance. (3) The fly speed is a preference in localStorage, not a feature param: a saved place
+  the pole. (2) The fly speed has the owner's range, 0.01 to 8 (default 3.6). What keeps a fast,
+  boosted, slow frame out of the surface is the adapter: the frame delta is clamped at 0.05 s (the
+  standalone page's own number) and one frame's move is cut to 0.8 of the distance. (3) The fly speed is a preference in localStorage, not a feature param: a saved place
   must not change how fast you fly. (4) Q and E are down and up (the renderer has no roll), beside
   GMT's Space and C. With the surface distance at 0 (inside the solid) nothing moves; Backspace or
   Home is the way out. The depth readout no longer fades while flying and shows the fly speed.

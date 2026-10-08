@@ -39,15 +39,19 @@
  *     camera 22 decades past the surface. The price: with the distance at 0 (inside the solid)
  *     nothing moves, Shift or not. The way out is Backspace or Home.
  *   - THE DELTA IS CLAMPED AT `DZ_NAV_MAX_DELTA` (0.05 s, the standalone page's own clamp), tighter
- *     than the integrator's 0.1 s: a slow deep frame must not step through the surface. See
- *     `DZ_FLY_SPEED_RANGE` in navigationState.ts for the sum.
+ *     than the integrator's 0.1 s, AND ONE FRAME'S MOVE IS CUT TO `DZ_NAV_MAX_STRIDE` (0.8) OF THE
+ *     DISTANCE TO THE SURFACE. The fly speed goes to 8 distances a second (the owner's range):
+ *     with Shift, at 20 frames a second, that is 1.6 times the distance in one frame - through
+ *     the surface. The direction is kept; only the length is cut. At the default speed the limit
+ *     never bites (3.6 x 4 x 0.05 = 0.72).
  *   - The pitch is not clamped here. The renderer clamps it at +-1.55 in `setYawPitch`.
  *
  * @invariant W, D and Space move along the renderer's own forward, right and up for any yaw and
  *   pitch; a drag to the right raises the yaw and a drag up raises the pitch, each leaving the
  *   other angle alone; Q / E move down / up and turn nothing; with the surface at 1e-40 one frame
- *   moves a share of 1e-40 - proven by: npm run check:deep-zoom-fly-camera ("basis: ...", "turn:
- *   ...", "deep: ..." lines). Falsified 2026-10-08: see the check's header.
+ *   moves a share of 1e-40; no frame moves more than 0.8 of the distance - proven by: npm run
+ *   check:deep-zoom-fly-camera ("basis: ...", "turn: ...", "deep: ...", "stride: ..." lines).
+ *   Falsified 2026-10-08: see the check's header.
  */
 import * as THREE from 'three';
 import { FlyIntegrator } from '../engine/plugins/navigation/FlyIntegrator';
@@ -55,6 +59,8 @@ import type { DisplacementSink, FlyInputs, MoveInputState } from '../engine/plug
 
 /** The longest frame the fly step integrates over, in seconds. */
 export const DZ_NAV_MAX_DELTA = 0.05;
+/** The most one frame may move, as a share of the distance to the surface. */
+export const DZ_NAV_MAX_STRIDE = 0.8;
 
 export interface FlyCameraFrame {
     /** Seconds since the last frame. */
@@ -102,6 +108,14 @@ export function createFlyCamera(): FlyCamera {
             move.down = held.down || held.rollLeft;
             move.boost = held.boost; move.precise = held.precise;
 
+            // The stride limit (see PITFALLS): the same direction, no longer than 0.8 of the distance.
+            const limit = DZ_NAV_MAX_STRIDE * frame.distance;
+            const translate: DisplacementSink = (dx, dy, dz) => {
+                const length = Math.hypot(dx, dy, dz);
+                const k = length > limit && length > 0 ? limit / length : 1;
+                frame.translate(dx * k, dy * k, dz * k);
+            };
+
             integrator.update(
                 body,
                 Math.min(frame.delta, DZ_NAV_MAX_DELTA),
@@ -110,7 +124,7 @@ export function createFlyCamera(): FlyCamera {
                     baseSpeed: frame.speed,
                     distEstimate: frame.distance,
                     autoSlow: true,
-                    translate: frame.translate,
+                    translate,
                     minSpeed: 0,
                     boostMinDistance: 0,
                 },

@@ -114,7 +114,7 @@ export const DepthReadout: React.FC = () => {
             <div
                 data-dz-fly-speed
                 className={`${line} mt-1`}
-                title="Fly speed: how many times the distance to the surface the camera covers in a second. The wheel on the picture changes it; Shift flies four times as fast."
+                title="Fly speed: how many times the distance to the surface the camera covers in a second. The wheel on the picture changes it. Flying: W A S D, Space or E up, C or Q down, Shift four times as fast; drag the picture to look."
             >
                 fly speed {flySpeed}
             </div>

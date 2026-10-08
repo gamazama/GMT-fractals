@@ -26,7 +26,8 @@
  *     Space / C, E / Q   up / down along the camera's up (the renderer has no roll)
  *     Shift              four times the speed
  *     drag on the picture   look: the further from where the drag began, the faster the turn
- *     wheel on the picture  the fly speed, a tenth per notch (Shift: four notches, Alt: a tenth)
+ *     wheel on the picture  the fly speed, a tenth per notch (Shift: four notches, Alt: a tenth),
+ *                           0.01 to 8 distances a second
  *
  * PITFALLS
  *   - Keys are heard on the WINDOW, whatever has focus; only a text field stops them (the hook's

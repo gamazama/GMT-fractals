@@ -16,16 +16,16 @@
  *   digit does nothing while flying) and by anything that needs `isFlying()`.
  *
  * PITFALLS
- *   - `DZ_FLY_SPEED_RANGE[1]` is a safety number, not a taste: one frame moves at most
- *     speed x 4 (Shift) x 0.05 s of the distance to the surface (`DZ_NAV_MAX_DELTA` in
- *     DeepZoomNavigation.tsx). At 4 that is 0.8 of it. Raise the top and a boosted frame at a low
- *     frame rate steps through the surface.
- *   - The default is the standalone page's speed (`baseSpeed 0.06` a frame at 60 frames a second).
+ *   - The range and the default are the owner's decision of 2026-10-08 (0.01 to 8, default 3.6:
+ *     the standalone page's `baseSpeed 0.06` a frame at 60 frames a second).
+ *   - The top of the range is NOT what keeps the camera out of the surface: at 8, with Shift, a
+ *     slow frame would cover 1.6 times the distance to it. The stride limit in `flyCamera.ts`
+ *     (`DZ_NAV_MAX_STRIDE`) does that, whatever the speed.
  */
 import { create } from 'zustand';
 
 export const DZ_FLY_SPEED_DEFAULT = 3.6;
-export const DZ_FLY_SPEED_RANGE: readonly [number, number] = [0.05, 4];
+export const DZ_FLY_SPEED_RANGE: readonly [number, number] = [0.01, 8];
 
 const STORAGE_KEY = 'gmt.deepZoom.flySpeed';
 

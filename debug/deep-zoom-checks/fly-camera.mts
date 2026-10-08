@@ -17,8 +17,9 @@
  *   - `minSpeed: 0` removed (the engine's 1e-6 floor applies)         -> 1 red ("deep: ...": the frame moved 1.67e-8 with the surface at 1e-40)
  *   - `Math.min(frame.delta, DZ_NAV_MAX_DELTA)` -> `frame.delta`      -> 1 red ("delta: ...": 0.36 instead of 0.18)
  *   - `boostMinDistance: 0` removed (the engine's 1e-4 floor applies) -> 1 red ("deep: Shift is four times that there too ...")
+ *   - the stride limit removed (`const k = 1`)                         -> 1 red ("stride: speed 8 with Shift ...": 1.6 of the distance)
  */
-import { DZ_NAV_MAX_DELTA, createFlyCamera } from '../../deep-zoom/flyCamera.ts';
+import { DZ_NAV_MAX_DELTA, DZ_NAV_MAX_STRIDE, createFlyCamera } from '../../deep-zoom/flyCamera.ts';
 import type { FlyInputs, MoveInputState } from '../../engine/plugins/navigation/FlyIntegrator.ts';
 
 let failed = 0;
@@ -90,6 +91,12 @@ check(worstUp < 1e-12, "basis: Space moves along the renderer's up (the camera's
     const slow = moveOf(1.14, 0.29, { forward: true }, 1, 0.5, 3.6).d;
     check(!!slow && Math.abs(len(slow) - 3.6 * DZ_NAV_MAX_DELTA) < 1e-12, `delta: a half-second frame moves as a ${DZ_NAV_MAX_DELTA} s one`, slow ? String(len(slow)) : 'no move');
     check(moveOf(0, 0, {}).d === null, 'size: no key, no move');
+    // the top of the owner's speed range, with Shift, on a slow frame: 8 x 4 x 0.05 = 1.6 distances
+    const fast = moveOf(1.14, 0.29, { forward: true, boost: true }, 1e-30, 0.05, 8);
+    check(!!fast.d && Math.abs(len(fast.d) / 1e-30 - DZ_NAV_MAX_STRIDE) < 1e-9 && off(fast.d, rendererBasis(1.14, 0.29).fwd) < 1e-12,
+        `stride: speed 8 with Shift on a 0.05 s frame moves ${DZ_NAV_MAX_STRIDE} of the distance, along the view`, fast.d ? String(len(fast.d) / 1e-30) : 'no move');
+    const usual = moveOf(1.14, 0.29, { forward: true, boost: true }, 1e-30, 0.05, 3.6).d;
+    check(!!usual && Math.abs(len(usual) / 1e-30 - 0.72) < 1e-9, 'stride: at the default speed the limit does not bite (0.72 of the distance)', usual ? String(len(usual) / 1e-30) : 'no move');
 }
 
 // ── Q / E ──
