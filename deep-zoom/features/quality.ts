@@ -212,6 +212,17 @@ export const DzQualityFeature = {
             format: (v) => `${v.toFixed(2)}×`,
             description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features.',
         },
+        trueGradient: {
+            type: 'boolean',
+            // Off by default: the picture changes (the normal) and a frame costs more. Measured
+            // 2026-10-08 (grep TRUE-GRADIENT ESTIMATE in renderer/core.js, and the build plan): at
+            // Detail 8 the default step puts 1 to 12 % of an ordinary view's rays on a wrong
+            // surface, this 0.3 to 2.2 %, for 1.1 to 2.0 times the picture time - what halving the
+            // step costs 1.45 to 1.9 for.
+            default: false,
+            label: 'True-gradient march',
+            description: 'Measures the distance to the surface with the orbit\'s real derivative as well, steps by the smaller of the two estimates, and takes the surface direction from that gradient instead of four extra samples. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. Takes about 20 seconds to switch on the first time; the picture changes when it is ready.',
+        },
         accumulate: {
             type: 'boolean',
             default: true,

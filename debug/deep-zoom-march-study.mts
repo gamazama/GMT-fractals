@@ -168,7 +168,7 @@ const ready = (ms: number) => page.waitForFunction('window.__deepReady === true'
 await ready(1500).catch(async () => { await page.reload(); await ready(180_000); });
 const gpu = await page.evaluate(`(() => { const g = document.createElement('canvas').getContext('webgl2'), e = g.getExtension('WEBGL_debug_renderer_info'); return e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?'; })()`) as string;
 if (/swiftshader|llvmpipe/i.test(gpu)) { console.error('software renderer, not the real GPU: ' + gpu); await context.close(); process.exit(1); }
-await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); window.__setJacobian(${JAC}); })()`);
+await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); window.__setJacobian(${JAC}, 0, true); })()`);
 if (flight && chosen.some((t) => t.tau !== undefined)) await page.evaluate(`window.__flight = ${JSON.stringify(flight)}`);
 const startupMs = performance.now() - started;
 

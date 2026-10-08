@@ -93,6 +93,7 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         nrmTap: () => api.setLook({ nrmTap: depthNormalRadiusToRenderer(num('dzQuality', 'depthNormalRadius')) }),
         land: () => api.setLand(flag('dzQuality', 'hitLanding')),
         hitRefine: () => api.setHitRefine(num('dzQuality', 'hitRefine')),
+        jacobian: () => api.setJacobian(flag('dzQuality', 'trueGradient') ? 3 : 0),   // 3 = step by the smaller estimate + the gradient normal
         accum: () => api.setAccum(flag('dzQuality', 'accumulate')),
         bla: pushBla,
         stepRelax: () => api.setStepRelax(num('dzQuality', 'stepSize')),

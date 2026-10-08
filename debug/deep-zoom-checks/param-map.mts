@@ -42,7 +42,7 @@ function makeApi() {
         normals: 2, land: false, frame: 320, accum: true, lookMode: 1,
     };
     const look: Record<string, unknown> = { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 };
-    const lever = { stepRelax: 0, capRelax: 1, mode: 'auto' as 'auto' | 'deep' | 'f32', hitRefine: 0 };
+    const lever = { stepRelax: 0, capRelax: 1, mode: 'auto' as 'auto' | 'deep' | 'f32', hitRefine: 0, jacobian: 0 };
     const compiled: Record<string, number | undefined> = {};
     let bla: 'off' | 'auto' | 'on' = 'auto';
     let auto = true;
@@ -67,6 +67,7 @@ function makeApi() {
         compileMs: () => compiled,
         setStepRelax: (r: number) => { note('setStepRelax', r); lever.stepRelax = r; },
         setHitRefine: (n: number) => { note('setHitRefine', n); lever.hitRefine = n; },
+        setJacobian: (bits: number) => { note('setJacobian', bits); lever.jacobian = bits; },
         setCapRelax: (m: number) => { note('setCapRelax', m); lever.capRelax = m; },
         marchLevers: () => ({ ...lever }),
         setLight: (m: number, f?: number) => { note('setLight', m, f); s.light = m; if (f) s.falloff = f; },

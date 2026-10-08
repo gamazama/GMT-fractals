@@ -1665,20 +1665,21 @@ function mkProgAsync(fs, cb){
    everything checks). The others are built on first use: BLA in the background (kickBlaAsync),
    or blocking when something asks for a variant outright. All gates draw through deepCtx(). */
 const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }  (null = failed to build)
-/* jacUse != 0 selects the J twins of every variant (grep TRUE-GRADIENT ESTIMATE): bits 1 = step by
-   min(de, gde), 2 = the normal is the gradient, 4 = hit test by min(de, gde). A J variant is built
-   the way its twin is: blocking when asked for outright, in the background for BLA 'auto'. */
+/* jacUse != 0 asks for the J twins (grep TRUE-GRADIENT ESTIMATE): bits 1 = step by min(de, gde),
+   2 = the normal is the gradient, 4 = hit test by min(de, gde). A PICTURE never waits for a J
+   twin: deepCtx() builds it in the background (19 s; 36 s with BLA) and draws with the ordinary
+   variant until it is there. The probes and the stats variants build theirs blocking, as before. */
 let jacUse = 0, jacFloor = 0;
-const vKey = (b, t) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (jacUse ? 'J' : '');
-const vSrc = (b, t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
-  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (jacUse ? '\n#define USE_JAC' : ''));
-function ensureVariant(b, t){
-  const key = vKey(b, t);
+const vKey = (b, t, j = !!jacUse) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (j ? 'J' : '');
+const vSrc = (b, t, j = !!jacUse) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
+  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (j ? '\n#define USE_JAC' : ''));
+function ensureVariant(b, t, j = !!jacUse){
+  const key = vKey(b, t, j);
   if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();   // a background build is in flight: wait for IT, don't start a second
   if (variants[key] !== undefined) return variants[key];
   try {
     const t0 = performance.now();
-    const p = mkProg(vSrc(b, t));
+    const p = mkProg(vSrc(b, t, j));
     const x = makeUD(p); x.hasBla = !!b;
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
@@ -2055,7 +2056,14 @@ mkProgAsync(vSrc(false, false), (p, err) => {
    else the plain one. Use this everywhere a deep draw is issued. */
 function deepCtx(){
   if (!deepProg) return { p: null, x: ud };
-  const v = (blaEnabled && ensureVariant(true, false)) || ensureVariant(false, false);
+  if (jacUse) {                                  // the J twin of what would draw; never a blocking build (grep TRUE-GRADIENT ESTIMATE)
+    const want = variants[vKey(blaEnabled, false, true)];
+    if (want) return want;
+    kickVariantAsync(blaEnabled, true);
+    const plainJ = variants[vKey(false, false, true)];     // the BLA twin is still building: the estimate without BLA meanwhile
+    if (plainJ) return plainJ;
+  }
+  const v = (blaEnabled && ensureVariant(true, false, false)) || ensureVariant(false, false, false);
   return v || { p: deepProg, x: ud };
 }
 compileMs.S = performance.now() - shadeT0;      // pass S, built at load (blocking — it is small)
@@ -2255,29 +2263,31 @@ let blaEnabled = false;
 let blaMode = 'auto';
 const BLA_AUTO_ON = 1e-13, BLA_AUTO_OFF = 1e-12;       // hysteresis on the surface distance
 const blaPending = {};
-function kickBlaAsync(){
-  const key = vKey(true, false);
+function kickVariantAsync(b, j){                 // build the picture variant (BLA b, J j) without blocking; a no-op once started
+  const key = vKey(b, false, j);
   if (!deepProg || variants[key] !== undefined || blaPending[key]) return;
   const t0 = performance.now();
-  blaPending[key] = mkProgAsync(vSrc(true, false), (p, err) => {
+  blaPending[key] = mkProgAsync(vSrc(b, false, j), (p, err) => {
     blaPending[key] = null;
     if (!p) { variantErr[key] = err; variants[key] = null; return; }
-    const x = makeUD(p); x.hasBla = true;
+    const x = makeUD(p); x.hasBla = b;
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
+    accumReset = true;                           // the picture's program changed under a still
   });
 }
+function kickBlaAsync(){ kickVariantAsync(true, false); }
 /* per frame: turn the effective flag on/off for 'auto' (never triggers a blocking compile) */
 function updateBlaAuto(){
   if (blaMode !== 'auto') return;
   kickBlaAsync();
-  const ready = !!variants[vKey(true, false)];
+  const ready = !!variants[vKey(true, false, false)];
   const want = ready && deepActive && smoothedDist > 0 && smoothedDist < (blaEnabled ? BLA_AUTO_OFF : BLA_AUTO_ON);
   if (want !== blaEnabled) { blaEnabled = want; orbitDirty = true; }
 }
 function setBlaMode(m){                                   // 'off' | 'auto' | 'on'
   blaMode = m;
-  if (m === 'on') { blaEnabled = true; if (deepProg) ensureVariant(true, false); }
+  if (m === 'on') { blaEnabled = true; if (deepProg) ensureVariant(true, false, false); }
   else if (m === 'off') blaEnabled = false;
   orbitDirty = true;
 }
@@ -3451,12 +3461,21 @@ api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
 api.setRebaseOrigin = (b)=>{ rebaseOrigin = b ? 1 : 0; accumReset = true; };   // REBASE TO THE ORIGIN on / off (off = the page's kernel)
 api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // FAR HAND-OFF distance, 1e-3 (the page) .. 12
-api.setJacobian = (bits, floor)=>{ jacUse = Math.max(0, Math.min(7, bits|0)); if (floor !== undefined) jacFloor = Math.max(0, Math.min(1, +floor || 0)); accumReset = true; };   // TRUE-GRADIENT ESTIMATE: 0 = off (the page); the first use of a J variant compiles it, blocking
+/* TRUE-GRADIENT ESTIMATE: bits 0 = off (the page). A picture switches when the J variant has built
+   (background); `now` builds it at once, blocking - for a tool that must not measure the old one. */
+api.setJacobian = (bits, floor, now)=>{ jacUse = Math.max(0, Math.min(7, bits|0)); if (floor !== undefined) jacFloor = Math.max(0, Math.min(1, +floor || 0));
+  if (now && jacUse && deepProg) ensureVariant(blaEnabled, false, true);
+  accumReset = true; };
+api.jacobianState = ()=>{ if (!jacUse) return 'off';
+  const kb = vKey(blaEnabled, false, true), kp = vKey(false, false, true);
+  return variants[kb] || variants[kp] ? 'on' : (variants[kb] === null || variants[kp] === null) ? 'failed' : 'building'; };
 /* pointwise read on the centre ray at t (needs setJacobian != 0): the page's de, the true-gradient
    estimate, and the packed unit gradient (octPack) - for a referee. null when it cannot be drawn. */
 api.jacProbeAt = (tval)=>{
   if (!curOrbit || !deepProg || !jacUse) return null;
-  const { fwd, right, up } = basis(), D = deepCtx(), x = D.x, px = new Float32Array(4), ht = hdrSplit(tval), out = { t: tval };
+  const D = ensureVariant(blaEnabled, false, true);      // a referee's read: the J variant itself, built now if need be
+  if (!D) return null;
+  const { fwd, right, up } = basis(), x = D.x, px = new Float32Array(4), ht = hdrSplit(tval), out = { t: tval };
   gl.useProgram(D.p); bindQuad(D.p);
   gl.bindFramebuffer(gl.FRAMEBUFFER, probeFbo); gl.viewport(0, 0, 1, 1);
   gl.uniform2f(x.res, 2, 2);

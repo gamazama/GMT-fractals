@@ -297,9 +297,12 @@ export interface DeepZoomApi {
      *  second distance estimate built on the orbit's real 3x3 derivative. Bits: 1 = the march
      *  steps by the smaller of the two estimates, so no place needs a hand-set step; 2 = the
      *  surface normal is that gradient, instead of four more orbits; 4 = the hit test uses the
-     *  smaller estimate too (it moves the surface). The first use compiles a shader variant,
-     *  BLOCKING for seconds. */
-    setJacobian(bits: number): void;
+     *  smaller estimate too (it moves the surface). The picture switches when the variant has
+     *  compiled, in the background (about 19 s; 36 s with BLA) - `jacobianState()` says when.
+     *  `floor`: never shorten a step below this share of the page's (0 = no floor). `now`: build
+     *  it at once, BLOCKING - for a measuring tool. */
+    setJacobian(bits: number, floor?: number, now?: boolean): void;
+    jacobianState(): 'off' | 'building' | 'on' | 'failed';
     /** A referee's read of both estimates on the centre ray at `t`; null unless `setJacobian` is on. */
     jacProbeAt(t: number): { t: number; de: number; escaped: boolean; gde: number; gradPacked: number } | null;
     marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number; jacobian: number };
