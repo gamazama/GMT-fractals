@@ -11,6 +11,14 @@
   section 3 and `BUILD-PLAN.md` stage N.
 - **Numbering:** 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
 
+> **Update 2026-10-08 (the input hook followed; decision unchanged):** the keys / wheel / drag
+> hook is now `engine/plugins/navigation/useNavigationInput.ts`, renderer-free and store-free, with
+> `engine-gmt/navigation/useInputController.ts` as GMT's wrapper. The third consequence below
+> ("still unguarded in GMT") is narrowed: `npm run smoke:fly` now drives strafe, vertical, boost,
+> the wheel's speed, a text field, drag-look and the interaction session through the real
+> handlers, each line seen red. Roll, Alt, the sticks, invert-Y and the orthographic wheel remain
+> unopened by any test.
+
 ## Context
 
 The owner decided (2026-10-08, DECISIONS K4 in `plans/deep-zoom-shell/`) that the deep-zoom shell

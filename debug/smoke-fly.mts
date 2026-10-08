@@ -22,7 +22,9 @@
  *   5. three wheel notches up raise `navigation.flySpeed`, three down lower it   - the wheel's speed law
  *   6. W held while a text field has the keyboard moves nothing      - the typing-target rule
  *   7. after a left-drag across the picture, W no longer points along the old forward   - drag-look
- *   8. no page error.
+ *   8. the store's `interacting` flag is true while W is held and false after   - the hook's
+ *      per-frame half (`frame(delta)`), which opens and closes the ADR-0061 camera session
+ *   9. no page error.
  *
  * What it does NOT prove: exact speeds (only directions, "not zero" and one ratio), roll (Q / E),
  * Alt, the on-screen sticks, invert-Y, the orthographic wheel branch, Orbit mode's wheel. The
@@ -43,6 +45,12 @@
  *     the wheel keeps the old speed       -> "three wheel notches up raise the fly speed" (0.5 -> 0.500)
  *     no typing-target test on keydown    -> "W typed in a text field moves nothing" (displacement 5.7e-1)
  *     mouse down does not start a drag    -> "after a left-drag across the picture W points elsewhere" (cosine 1.000)
+ *   after the hook moved to `engine/plugins/navigation/useNavigationInput.ts` (same day):
+ *     engine hook: KeyD mapped to `left`, the wheel keeping the old speed, mouse down not starting a
+ *       drag                              -> the same three lines red
+ *     GMT's wrapper passing `isLocked: () => true`   -> 3 lines red (boost, wheel, drag)
+ *     GMT's wrapper never running `frame(delta)`     -> "the store's interaction session is open while
+ *       W is held" (before line 8 existed this break was GREEN: nothing saw the per-frame half)
  */
 import { chromium } from 'playwright';
 import type { Page } from 'playwright';
@@ -169,6 +177,17 @@ async function main() {
     await page.waitForTimeout(500);
     const turned = await hold('w');
     check(moved(turned) && cos(turned, forward) < 0.97, `after a left-drag across the picture W points elsewhere (cosine to the old forward ${moved(turned) ? cos(turned, forward).toFixed(3) : 'n/a'})`);
+
+    // 8. the interaction session: open while a fly key is held, closed after (the hook's per-frame half)
+    await page.mouse.move(cx, cy);
+    const idleBefore = await page.evaluate('window.__store.getState().interacting');
+    await page.keyboard.down('w');
+    await page.waitForTimeout(500);
+    const whileHeld = await page.evaluate('window.__store.getState().interacting');
+    await page.keyboard.up('w');
+    let closed = false;
+    for (let i = 0; i < 20 && !closed; i++) { await page.waitForTimeout(150); closed = !(await page.evaluate('window.__store.getState().interacting')); }
+    check(idleBefore === false && whileHeld === true && closed, `the store's interaction session is open while W is held and closed after (before ${idleBefore}, held ${whileHeld}, closed after ${closed})`);
 
     check(errors.length === 0, `no page error (${errors.length})${errors.length ? ': ' + errors.join(' | ') : ''}`);
     await browser.close();

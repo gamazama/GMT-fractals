@@ -41,15 +41,21 @@ npm run typecheck        # event constants, ref types, prop contracts
 npm run smoke:engine-gmt # app-gmt.html boot — Navigation mounts, 0 pageerrors
 npm run smoke:orbit      # app-gmt.html orbit drag → sceneOffset   (~25s; see below)
 npm run test:nav-replay  # node, ~1.5 s: the fly integrator replays a scripted flight to the last bit
-npm run smoke:fly        # app-gmt.html, Fly mode: W moves sceneOffset along the view, S back (~25 s)
+npm run smoke:fly        # app-gmt.html, Fly mode, the real handlers: keys, wheel, drag-look, the session (~60 s)
 ```
 
 **The fly integrator moved to the engine on 2026-10-08** (ADR-0133):
 `engine/plugins/navigation/FlyIntegrator.ts`, which hands each displacement to a sink.
 `engine-gmt/engine/controllers/CameraController.ts` and `engine-gmt/navigation/modifiers.ts` are
-re-exports; GMT's sink is `emitOffsetShift` in `Navigation.tsx`. `smoke:fly` is the guard for that
-call site (falsified 2026-10-08: a sink emitting `-z`, a sink emitting nothing); it proves
-direction and "not zero" for W and S only.
+re-exports; GMT's sink is `emitOffsetShift` in `Navigation.tsx`. **The input hook moved the same
+day**: `engine/plugins/navigation/useNavigationInput.ts` is renderer-free and store-free, and
+`useInputController.ts` is a wrapper that hands it the canvas, the lock, the timeline-hover
+suppression, the HUD exclusions, the orthographic wheel and the ADR-0061 session, and runs its
+`frame(delta)` from `useFrame`. `smoke:fly` is the guard for the sink AND the hook's wiring: W / S
+along the view, A / D and Space / C at right angles, Shift, the wheel's speed, a text field, a
+look drag, and the store's `interacting` flag while a key is held. Twelve lines, each seen red
+(the record is in its header). It does not cover roll, Alt, the sticks, invert-Y or the
+orthographic wheel.
 
 `test:nav-replay` (`debug/test-nav-replay.mts`, golden `debug/nav-replay-golden.json`) is the only
 guard on the fly integrator's numbers, `FlyIntegrator.update`: 17 scripted segments, every displacement
@@ -58,8 +64,8 @@ and the camera quaternion compared as float64 bit patterns. Falsified 2026-10-08
 other two bit-identical by construction; falsified again after the move (both default floors, the
 ease rate, the sink's sign, `CAMERA_PRECISE_MULT` in the engine file). It reaches
 `engine-gmt/navigation/**` through ONE file, the `modifiers.ts` re-export. It does not open `Navigation.tsx`,
-`useInputController.ts` or `usePhysicsProbe.ts`: the call site (grep `flyController.current.update`),
-the key map, the wheel speed law and the distance probe are still unguarded. Never re-record its
+`useInputController.ts` or `usePhysicsProbe.ts` - `smoke:fly` covers the first two; the distance
+probe is still unguarded. Never re-record its
 golden to make a refactor pass; `--update` needs an ADR that mentions `nav-replay`.
 
 `smoke:orbit` is the only browser guard that drives a real camera gesture through
