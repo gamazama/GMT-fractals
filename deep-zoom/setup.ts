@@ -11,6 +11,9 @@
  * `isLeftDockCollapsed: true`; this app's left dock holds where-am-I panels
  * (locations, formula, flight) that are worth seeing at first run. With no
  * left panel yet (stage 1) the call changes nothing on screen.
+ *
+ * And it puts the store's `cameraMode` on 'Fly' (stage N5), so the timeline leaves Space to the
+ * navigation.
  */
 
 import { applyPanelManifest } from '../engine/PanelManifest';
@@ -24,4 +27,9 @@ export const setupDeepZoom = () => {
     // of engine-gmt imports.
     applyPanelManifest([...DeepZoomPanels, feedbackPanelEntry()]);
     useEngineStore.getState().setDockCollapsed('left', false);
+    // This app always flies. `cameraMode` is the field the timeline's Space binding tests so
+    // that Space stays fly-up (grep `toggle-play` in components/TimelineHost.tsx); with the
+    // pointer over the timeline Space still plays. The engine's store type does not declare the
+    // field (GMT sets it the same way, grep `cameraMode` in app-gmt/main.tsx), hence the graft.
+    useEngineStore.setState({ cameraMode: 'Fly' } as Partial<ReturnType<typeof useEngineStore.getState>>);
 };

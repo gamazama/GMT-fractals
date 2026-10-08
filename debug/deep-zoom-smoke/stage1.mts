@@ -7,10 +7,13 @@
  * One step:              ... -- --stage 1 --step "press C"
  *
  * The steps are the stage-1 row of "Smoke growth" in plans/deep-zoom-shell/BUILD-PLAN.md, plus the
- * things only a browser can confirm about the module host (pointer lock, the canvas's size, the
- * camera strings on the real module). Each `falsified` field says how that step was seen red.
+ * things only a browser can confirm about the module host (the canvas's size, the camera strings
+ * on the real module). How it flies - keys, the look drag, the wheel - is stage N5's file. Each `falsified` field says how that step was seen red.
  *
  * WHAT IS NOT HERE, ON PURPOSE
+ *   - Flying. "Hold W, the camera strings change" was a step here until N5; it could not tell
+ *     who flew (seen 2026-10-08: green with the shell's navigation unmounted, the module's own
+ *     keys moved it). Stage N5's first step can: it holds W with the keyboard on the page body.
  *   - A dive. `host.diveTo` from the boot view lands about 250 times off its target (measured
  *     2026-10-08: the module's distance estimate flips between its f32 and deep modes near 1e-4).
  *   - A lost graphics context (one loss remounts, a second inside a minute shows the card). Probed
@@ -220,33 +223,6 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'hold W 1 s with the picture focused: the getView().cam strings changed',
-            owner: 'S1-2',
-            falsified: '2026-10-08: `tabIndex={0}` removed from #dz-frame in DeepZoomSurface.tsx -> "#dz-frame takes the keyboard focus" red and the cam strings equal before and after.',
-            async run(ctx) {
-                ctx.check(await ctx.focusPicture(), '#dz-frame takes the keyboard focus');
-                const before = await cam(ctx);
-                await ctx.holdKey('w', 1000);
-                await ctx.sleep(200);
-                const after = await cam(ctx);
-                ctx.check(!same(before, after), 'cam ' + short(before) + ' -> ' + short(after));
-            },
-        },
-        {
-            name: 'hold W 1 s with the focus outside the picture: the cam strings are unchanged',
-            owner: 'S1-1',
-            falsified: '2026-10-08: `keyTarget: frame` dropped from `shellOptions` in host/moduleHost.ts (the module then listens on window) -> "cam strings equal before and after" red. THIS is the step that guards `keyTarget`; the project-name step after it does not (see its text).',
-            async run(ctx) {
-                const where = await ctx.ev<string>("(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); return document.activeElement ? document.activeElement.tagName : 'none'; })()");
-                ctx.check(where === 'BODY', 'the focus is on the page body (' + where + ')');
-                const before = await cam(ctx);
-                await ctx.holdKey('w', 1000);
-                await ctx.sleep(200);
-                const after = await cam(ctx);
-                ctx.check(same(before, after), 'cam strings equal before and after');
-            },
-        },
-        {
             name: 'hold w 1 s in the project-name field: the field takes the letter and the cam strings are unchanged',
             owner: 'S1-1',
             falsified: 'not falsified: with `keyTarget` dropped, the break BUILD-PLAN names for this step, it stayed GREEN on 2026-10-08. The field stops the key itself (grep `e.stopPropagation()` in engine/plugins/topbar/ProjectName.tsx; the Feedback form does the same through `stopNavKeys`), so a listener on window never hears it. It can only go red with that engine line removed as well. The `keyTarget` seam is guarded by the step before this one.',
@@ -272,7 +248,7 @@ export const stage: DzStage = {
             // colouring" key. N is a renderer shortcut (next normals mode) the shell does not bind.
             name: 'press N with the picture focused: the shortcut of the renderer is off (normals unchanged)',
             owner: 'S1-1',
-            falsified: '2026-10-08: `shortcuts: true` in `shellOptions` (host/moduleHost.ts) -> "normals 2 -> 3". (With C, before stage 4: "color 0 -> 1".)',
+            falsified: '2026-10-08, after N5: TWO things keep the renderer\'s shortcuts off now, `shortcuts: false` in `shellOptions` (host/moduleHost.ts) and the input owner (under \'host\' the module reads no key at all). With `shortcuts: true` alone the step stays GREEN; with that and the `host.setInputOwner(\'host\')` call removed from DeepZoomNavigation.tsx -> red, "normals 2 -> 3". Before N5 the first break alone was red.',
             async run(ctx) {
                 ctx.check(await ctx.focusPicture(), '#dz-frame takes the keyboard focus');
                 const before = await ctx.host<number>('getParams().normals');
@@ -336,39 +312,6 @@ export const stage: DzStage = {
                 ctx.note('accumN ' + before + ', then every 75 ms after the resize: ' + samples.join(' '));
                 if (!ctx.check(low < before && low <= 16, 'accumN dropped back (' + before + ' -> ' + low + ')')) return;
                 ctx.check(Math.max(...samples.slice(lowAt)) > low, 'and the still is accumulating again (' + low + ' -> ' + Math.max(...samples.slice(lowAt)) + ')');
-            },
-        },
-        {
-            name: 'a click on the picture takes the pointer, and host.isCaptured() follows it both ways',
-            owner: 'S1-2',
-            falsified: '2026-10-08, two breaks, one run each: `isCaptured: () => false` in host/moduleHost.ts -> "host.isCaptured() is true" red; the `requestPointerLock` call removed from `onFrameClick` in DeepZoomSurface.tsx -> NOT PROVEN (a failure, exit 1): "a click on the picture did not lock the pointer".',
-            async run(ctx) {
-                ctx.check((await ctx.host<boolean>('isCaptured()')) === false, 'before the click host.isCaptured() is false');
-                if (!(await ctx.capture())) return;
-                const d = await ctx.withHost<{ lock: string; captured: boolean; active: string }>(
-                    'return { lock: document.pointerLockElement ? document.pointerLockElement.id : "", captured: host.isCaptured(), active: document.activeElement ? document.activeElement.id : "" };',
-                );
-                ctx.check(d.lock === 'dz-render-canvas', 'the pointer is locked on the canvas (' + d.lock + ')');
-                ctx.check(d.captured === true, 'host.isCaptured() is true');
-                ctx.check(d.active === 'dz-frame', 'the click also gave #dz-frame the keyboard (' + d.active + ')');
-                await ctx.release();
-                ctx.check((await ctx.host<boolean>('isCaptured()')) === false, 'after the pointer is given back host.isCaptured() is false');
-            },
-        },
-        {
-            name: 'host.setInputEnabled(false) gives the pointer back',
-            owner: 'S1-1',
-            falsified: '2026-10-08: the `exitPointerLock` line removed from `setInputEnabled` in host/moduleHost.ts -> "document.pointerLockElement is empty (still locked after 1.5 s)" and "host.isCaptured() is false" red.',
-            async run(ctx) {
-                if (!(await ctx.capture())) return;
-                try {
-                    await ctx.withHost('host.setInputEnabled(false); return true;');
-                    const waited = await ctx.until('!document.pointerLockElement', 1500, 50);
-                    ctx.check(waited >= 0, 'document.pointerLockElement is empty' + (waited >= 0 ? ' (' + waited + ' ms)' : ' (still locked after 1.5 s)'));
-                    ctx.check((await ctx.host<boolean>('isCaptured()')) === false, 'host.isCaptured() is false');
-                } finally {
-                    await ctx.withHost('host.setInputEnabled(true); return true;').catch(() => undefined);
-                }
             },
         },
         {

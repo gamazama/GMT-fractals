@@ -10,7 +10,7 @@
  *   - The list is `store.savedLocations` (each row `{ id, label, thumbnail, state: { view, look,
  *     depth } }`) and is mirrored to `localStorage['gmt.deepZoom.locations']`.
  *   - Slot digits are positions in the STORED list (the first place saved is 1), whatever order
- *     the panel shows. They act only with the pointer free.
+ *     the panel shows. They do nothing while the hands are flying (stage N5's file has that step).
  *   - Camera values are compared as strings, byte for byte.
  *   - Every step sets what it needs at its start, so it can run alone and in any order.
  */
@@ -103,29 +103,6 @@ export const stage: DzStage = {
                 await ctx.page.keyboard.press('Control+z');
                 await ctx.sleep(300);
                 ctx.check(same(await cam(ctx), before), 'Ctrl+Z: the strings from before the jump are back');
-            },
-        },
-        {
-            name: 'with the pointer captured a slot digit does not move the camera',
-            owner: 'S3-0 / S3-1',
-            falsified: '2026-10-08: the `when` removed from `slotShortcuts` in deep-zoom/locations.ts -> red, "captured: after 1 the camera strings are unchanged" false.',
-            async run(ctx) {
-                await fresh(ctx);
-                if (!(await saveWithB(ctx, 1))) return;
-                await ctx.withHost('host.moveAlong([0, 1, 0], 0.5); return true;');
-                await ctx.sleep(300);
-                if (!(await ctx.capture())) return;
-                ctx.check((await ctx.until("(document.querySelector('[data-dz-depth-readout]') || {}).className.includes('opacity-35')", 2000, 20)) >= 0, 'the shell shows the capture');
-                const before = await cam(ctx);
-                await ctx.page.keyboard.press('1');
-                await ctx.sleep(300);
-                if (!(await ctx.ev<boolean>('!!document.pointerLockElement'))) { ctx.notProven('the pointer lock was lost while the key was pressed'); return; }
-                ctx.check(same(await cam(ctx), before), 'captured: after 1 the camera strings are unchanged');
-                await ctx.release();
-                await ctx.focusPicture();
-                await ctx.page.keyboard.press('1');
-                await ctx.sleep(300);
-                ctx.check(!same(await cam(ctx), before), 'pointer free: 1 recalls the place');
             },
         },
         {

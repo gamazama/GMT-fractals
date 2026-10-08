@@ -6,8 +6,7 @@
  *   The shell talks to a `DeepZoomHost`; the renderer is the ported page script behind
  *   `deep-zoom/renderer` (`createDeepZoom`, `instance.api`, `api.dz`). This file is the only place
  *   the two meet. Two halves, so the first can be checked in node with a fake instance:
- *     `createModuleHost(instance, canvas, env?)`  the adapter. Touches no global: the document is
- *                                                 `canvas.ownerDocument`, the frame is
+ *     `createModuleHost(instance, canvas, env?)`  the adapter. Touches no global: the frame is
  *                                                 `canvas.parentElement` (or `env.frame`).
  *     `mountDeepZoom(frame, hooks, create?)`      the DOM half: makes the canvas, appends it to
  *                                                 `frame`, calls `createDeepZoom` with
@@ -22,8 +21,7 @@
  *   - `shellOptions(frame, hooks)` is the option table of BLUEPRINT section 7. Every row answers a
  *     PITFALL in the header of `deep-zoom/renderer/index.ts`; do not drop one without reading it.
  *   - Writes the telemetry store: `writeTelemetry` from `step` at most every
- *     `DZ_TELEMETRY_INTERVAL_MS`, `writeCaptured` on a pointer-lock change, `resetTelemetry` in
- *     `dispose`.
+ *     `DZ_TELEMETRY_INTERVAL_MS`, `resetTelemetry` in `dispose`.
  *   - Handles the module does not type (`LooseHandles` below) are narrowed here, each with its
  *     grep target in `deep-zoom/renderer/core.js`, and are checked to be functions at mount.
  *
@@ -41,8 +39,9 @@
  *     height` itself: empty at its first frame, pixels while its 1:1 view is on (grep
  *     `updateCanvasDisplay` in core.js). An inline 100 % here would be wiped at the first frame.
  *     The classes also take the canvas out of the flow, so the frame cannot shrink-wrap it.
- *   - `api.lockInput(true)` does not release a pointer lock and the module's mouse-look listener
- *     does not test it, so `setInputEnabled(false)` also leaves the lock.
+ *   - WHO FLIES. The module starts on its own keys. The shell's navigation calls
+ *     `setInputOwner('host')` once per host and from then on moves it with `moveAlong` and turns
+ *     it with `setYawPitch`; nothing here listens for a pointer lock any more (stage N5).
  *   - `step(now)` forwards a TIMESTAMP in milliseconds. Everything polled here (`ready`, telemetry,
  *     `compile`, `recordingChanged`, `progress`, the dive) runs from `step` and stops with it.
  *   - The dive advances only after a frame that RAN (`instance.frameCount` rose). While a render
@@ -74,9 +73,7 @@
  *     M6). `pause` is absent: M5. `setGradientRamp` is absent: stage 5, then M2.
  *   - `renderPathZip`, `play` and their frame waits run on the browser's animation frames: M4
  *     moves the render path onto `step`.
- *   - `LooseHandles` (`moveAlong` and the recorder) become typed product API at N4.
- *     `setInputEnabled` becomes `setInputOwner` at N4. `isCaptured`, the `captureChanged` event and
- *     the pointer-lock listener leave at N5.
+ *   - `LooseHandles` (`moveAlong` and the recorder) are still untyped in the module: M1.
  *   - The 1:1 view has no rule of its own here (the page centred `.fit1to1`): M1, with the
  *     parameter that turns it on.
  *
@@ -98,8 +95,8 @@
  *   unhandled rejection; the telemetry store is written at most 8 times a second - proven by:
  *   npx tsx debug/deep-zoom-checks/module-host.mts ("boot: ..." lines, "step: one second of 63
  *   steps ..."). Falsified 2026-10-08: the "boot" and "step" groups in the check's header.
- * @invariant The dive moves only after a frame that ran and not before ready;
- *   `setInputEnabled(false)` locks the module's input and leaves a pointer lock the canvas holds;
+ * @invariant The dive moves only after a frame that ran and not before ready; `setInputOwner`,
+ *   `rawDistance`, `yawPitch` and `setYawPitch` reach the module's own handles unchanged;
  *   `focus()` focuses the frame, not the canvas - proven by: npx tsx
  *   debug/deep-zoom-checks/module-host.mts ("dive: no move while the module's frame does not run",
  *   "dive: before ready ...", "input: ..." lines). Falsified 2026-10-08: the "input" group and
@@ -130,7 +127,7 @@ import { DZ_CANVAS_ID } from './current';
 import { createDive } from './dive';
 import { createParamPusher } from './looseParams';
 import { readParams } from './paramMap';
-import { DZ_TELEMETRY_HZ, DZ_TELEMETRY_INTERVAL_MS, resetTelemetry, writeCaptured, writeTelemetry } from './telemetry';
+import { DZ_TELEMETRY_HZ, DZ_TELEMETRY_INTERVAL_MS, resetTelemetry, writeTelemetry } from './telemetry';
 
 /** How long `ready` waits for the deep shader, counted over frames that ran (a gap between two
  *  steps counts for at most a second, so a background tab does not use it up). */
@@ -305,7 +302,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     const params = createParamPusher(api);
     /** The module's own settings keys, with the mapped params by id over them (see `getParams`). */
     const currentParams = (): DzParams => ({ ...dz.settings(), ...readParams(api) });
-    const doc = canvas.ownerDocument;
     const frame = env.frame === undefined ? canvas.parentElement : env.frame;
 
     let disposed = false;
@@ -343,17 +339,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         keyTarget: frame,
     });
-
-    // ── pointer lock (leaves at N5) ──
-    let captured = false;
-    const onLockChange = (): void => {
-        const now = doc.pointerLockElement === canvas;
-        if (now === captured) return;
-        captured = now;
-        writeCaptured(now);
-        emit('captureChanged', { captured: now });
-    };
-    doc.addEventListener('pointerlockchange', onLockChange);
 
     // ── context loss ──
     let lostSent = false;
@@ -543,12 +528,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         // surface and input
         canvas: () => canvas,
         focus: () => frame?.focus({ preventScroll: true }),
-        isCaptured: () => doc.pointerLockElement === canvas,
-        setInputEnabled(on) {
-            api.lockInput(!on);
-            // lockInput drops the held keys but not the pointer (see PITFALLS). Only our own lock.
-            if (!on && doc.pointerLockElement === canvas) doc.exitPointerLock();
-        },
 
         // lifecycle
         step(now) {
@@ -584,7 +563,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             disposed = true;
             dive.cancel();
             params.dispose();
-            doc.removeEventListener('pointerlockchange', onLockChange);
             if (env.contextLost) env.contextLost.current = null;
             listeners.clear();
             telemetrySubs.clear();

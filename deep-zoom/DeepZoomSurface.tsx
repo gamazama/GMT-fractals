@@ -7,7 +7,7 @@
  *   the telemetry store (`host/telemetry.ts`). This file is where a host comes to exist: it
  *   renders `#dz-frame`, calls `mountDeepZoom` on it, and registers the ONE tick that calls
  *   `host.step`. It also owns what happens when there is no picture (the failure handed to
- *   `components/BootCard.tsx`) and the click that starts flying.
+ *   `components/BootCard.tsx`). Flying is not here: `DeepZoomNavigation.tsx`.
  *
  * THE SEAM
  *   - Rendered by `DeepZoomApp.tsx` as a child of the engine's `<ViewportFrame
@@ -41,9 +41,11 @@
  *   - On a remount React takes the old frame out of the document before the cleanup disposes its
  *     host. That is harmless (the renderer's dispose needs no attached canvas; a pointer lock
  *     ends when its element leaves), but do not add dispose-time work that reads layout.
- *   - Keys reach the renderer only while `#dz-frame` has focus (it is the key target). A click
- *     focuses it and asks for the pointer; the browser's own Esc gives the pointer back. The
- *     pointer capture leaves at stage N5 with the engine's navigation.
+ *   - Nothing here captures the pointer and no key reaches the renderer module: the shell's
+ *     navigation owns the input (`DeepZoomNavigation.tsx`, `host.setInputOwner('host')`) and
+ *     hears its keys on the window. The frame is still focusable, and a click focuses it, so a
+ *     click on the picture takes the keyboard out of a text field (a fly key typed in a field is
+ *     a character, not a move).
  *   - The frame must not be 0 x 0 at mount (the renderer would draw 2 x 2): it is `absolute
  *     inset-0` in the viewport frame's sized box, and an effect runs after layout.
  */
@@ -157,41 +159,23 @@ export const DeepZoomSurface: React.FC = () => {
         };
     }, [mountKey, failed]);
 
-    const onFrameClick = () => {
-        const host = getHost();
-        if (!host) return;
-        host.focus();
-        // Mouse look needs the pointer; the renderer was created with its own click listener off.
-        // The browser refuses when it has no user gesture, or for about a second after Esc gave
-        // the pointer back: the next click works, so a refusal is not reported. Older browsers
-        // return nothing here, hence the optional call.
-        host.canvas().requestPointerLock()?.catch(() => undefined);
-    };
+    // The keyboard leaves whatever text field had it (see PITFALLS). No pointer is captured.
+    const onFrameClick = () => getHost()?.focus();
 
     return (
         <>
             {failed ? null : (
-                <>
-                    <div
-                        key={mountKey}
-                        ref={frameRef}
-                        id={DZ_FRAME_ID}
-                        data-dz-mount={mountKey}
-                        tabIndex={0}
-                        role="application"
-                        aria-label="Deep Zoom picture"
-                        onClick={onFrameClick}
-                        className="peer absolute inset-0 overflow-hidden bg-black outline-none cursor-crosshair"
-                    />
-                    {/* Focus cue: keys fly the camera only while the picture has focus. One thin
-                        line along its top edge, not a ring around the whole picture. A sibling,
-                        because the canvas would paint over a child. */}
-                    <div
-                        aria-hidden
-                        data-dz-focus-cue
-                        className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-accent-400/70 opacity-0 transition-opacity duration-150 peer-focus:opacity-100"
-                    />
-                </>
+                <div
+                    key={mountKey}
+                    ref={frameRef}
+                    id={DZ_FRAME_ID}
+                    data-dz-mount={mountKey}
+                    tabIndex={0}
+                    role="application"
+                    aria-label="Deep Zoom picture"
+                    onClick={onFrameClick}
+                    className="absolute inset-0 overflow-hidden bg-black outline-none cursor-crosshair"
+                />
             )}
             <BootCard failure={failure} />
         </>

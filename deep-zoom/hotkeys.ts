@@ -2,20 +2,15 @@
  * deep-zoom/hotkeys.ts - this app's one-shot keys, as engine shortcuts.
  *
  * Rule: a key is an engine shortcut that writes a store value or calls the shell's own action.
- * The renderer's own single-key shortcuts are off (it was created with `shortcuts: false`); only
- * its fly keys (W A S D Q E, Shift) and Escape reach it, and only while the picture has focus.
- * So none of those six letters is registered here. Every look key goes through the feature
- * setter inside one param transaction, so it is one undo step and the panels follow.
+ * The renderer's own keys are all off (`shortcuts: false`, and the shell's navigation owns the
+ * input). THE FLY KEYS ARE NOT SHORTCUTS: W A S D, Q E, Space, C, Shift and Alt are heard on the
+ * window by the navigation (deep-zoom/DeepZoomNavigation.tsx), whatever has focus. None of them
+ * may be registered here - `C` was "next colouring" until stage N5 and is `V` now. Every look
+ * key goes through the feature setter inside one param transaction, so it is one undo step and
+ * the panels follow.
  *
  * `B` is registered twice (`b` and `Shift+b`): Shift is held for speed while flying, and to the
  * dispatcher `Shift+B` is a different key from `B`.
- *
- * WHILE THE POINTER IS CAPTURED four keys keep the meaning a deep zoomer tunes while moving, and
- * nothing else on them fires: `9` / `0` step the colour scale and `T` / `Y` the lamp falloff
- * (a panel slider cannot be reached with the pointer locked). They are registered in the flying
- * scope (`DZ_FLYING_SCOPE`, deep-zoom/flyGuard.ts), which outranks the global bindings on the
- * same keys - the timeline's `T` and the state library's slot digits. Space is held to nothing
- * there (flyGuard.ts).
  *
  * Slot digits (1-9 recall, Ctrl+1-9 save) are the state library's own, installed in locations.ts.
  * Not here yet: record (M) and still export (X) arrive with the Flight tab; `/` with Help.
@@ -24,7 +19,6 @@ import { shortcuts } from '../engine/plugins/Shortcuts';
 import { useEngineStore } from '../store/engineStore';
 import { jumpBack, jumpHome, saveLocationHere } from './locations';
 import { stopDive, useDive } from './diveControl';
-import { DZ_FLYING_SCOPE } from './flyGuard';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
 import { LIGHT_TYPE_OPTIONS } from './features/light';
 import { OVERLAYS_OPTIONS } from './features/inspect';
@@ -54,17 +48,15 @@ const nextColour = (): void => {
 };
 const nextLightType = (): void => store().setDzLight({ lightType: (store().dzLight.lightType + 1) % LIGHT_TYPE_OPTIONS.length });
 const nextOverlays = (): void => store().setDzInspect({ overlays: (store().dzInspect.overlays + 1) % OVERLAYS_OPTIONS.length });
-const colourScale = (factor: number) => (): void => store().setDzColour({ scale: clamp(store().dzColour.scale * factor, 0.1, 16) });
-const lampFalloff = (step: number) => (): void => store().setDzLight({ lampFalloff: clamp(store().dzLight.lampFalloff + step, 0.5, 32) });
 const focusDiveField = (): void => {
     const field = document.querySelector<HTMLInputElement>('[data-dz-dive-exponent]');
     field?.focus();
     field?.select();
 };
 
-/** Call once, after `installShortcuts()`, `installLocations()` and `installFlyGuard()`. */
+/** Call once, after `installShortcuts()` and `installLocations()`. */
 export function registerDeepZoomHotkeys(): void {
-    const add = (id: string, key: string, handler: () => void, description: string, category: string, extra: { scope?: string; when?: () => boolean } = {}): void =>
+    const add = (id: string, key: string, handler: () => void, description: string, category: string, extra: { when?: () => boolean } = {}): void =>
         shortcuts.register({ id: `deep-zoom.${id}`, key, handler, description, category, ...extra });
 
     const save = (): void => { void saveLocationHere(); };
@@ -82,13 +74,7 @@ export function registerDeepZoomHotkeys(): void {
     add('auto-iters', 'i', undoable(autoIterations), 'Auto iterations on / off', 'Look');
     add('power-down', '-', undoable(power(-1)), 'Power down by 1', 'Look');
     add('power-up', '=', undoable(power(1)), 'Power up by 1', 'Look');
-    add('colour-mode', 'c', undoable(nextColour), 'Next colouring: Plain, Iterations, Orbit trap', 'Look');
+    add('colour-mode', 'v', undoable(nextColour), 'Next colouring: Plain, Iterations, Orbit trap', 'Look');
     add('light-type', 'l', undoable(nextLightType), 'Next light type: Direct, Lamp, Both', 'Look');
     add('overlays', 'o', undoable(nextOverlays), 'Overlays: All, Depth only, None', 'Look');
-
-    // While flying (pointer captured): the two pairs a slider cannot give you.
-    add('scale-down', '9', undoable(colourScale(1 / 1.25)), 'While flying: colour scale down (divide by 1.25)', 'Flying', { scope: DZ_FLYING_SCOPE });
-    add('scale-up', '0', undoable(colourScale(1.25)), 'While flying: colour scale up (times 1.25)', 'Flying', { scope: DZ_FLYING_SCOPE });
-    add('falloff-down', 't', undoable(lampFalloff(-0.5)), 'While flying: lamp falloff down by 0.5', 'Flying', { scope: DZ_FLYING_SCOPE });
-    add('falloff-up', 'y', undoable(lampFalloff(0.5)), 'While flying: lamp falloff up by 0.5', 'Flying', { scope: DZ_FLYING_SCOPE });
 }

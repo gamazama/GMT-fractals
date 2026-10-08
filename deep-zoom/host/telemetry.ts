@@ -1,7 +1,7 @@
 /**
  * deep-zoom/host/telemetry.ts - the renderer's live numbers as a small read-only store beside the
  * host: depth, fps, iterations, frame size, the still's progress, mode, ready, error, recording /
- * playing / exporting, and whether the pointer is captured.
+ * playing / exporting.
  *
  * PURPOSE
  *   Widgets (the depth readout, the status chip, the top-bar fps) show numbers the renderer
@@ -12,8 +12,8 @@
  *
  * THE SEAM
  *   - Written only from `deep-zoom/host/`: the host implementation (`moduleHost.ts`) calls
- *     `writeTelemetry(sample)` from its `step` every `DZ_TELEMETRY_INTERVAL_MS`, `writeCaptured`
- *     when the pointer lock changes, and `resetTelemetry()` in `dispose`. Nothing else writes.
+ *     `writeTelemetry(sample)` from its `step` every `DZ_TELEMETRY_INTERVAL_MS` and
+ *     `resetTelemetry()` in `dispose`. Nothing else writes.
  *   - Read by the shell:
  *       `useDzTelemetry(selector)`  React. The component re-renders only when the value the
  *                                   selector returns changes (compared with `Object.is`).
@@ -21,7 +21,7 @@
  *       `subscribeTelemetry(fn)`    non-React listeners (for example the fps forwarded to the
  *                                   engine's viewport plugin).
  *   - The sample's shape is `DzTelemetry` in `deep-zoom/host/DeepZoomHost.ts`; this store adds
- *     `live` and `captured`.
+ *     `live`.
  *
  * PITFALLS
  *   - Select ONE primitive per `useDzTelemetry` call: `useDzTelemetry((t) => t.depth)`. A selector
@@ -31,10 +31,9 @@
  *     are placeholders (depth 0 is not a depth). Check `live` before showing a number.
  *   - This store lags the renderer by up to 125 ms. Code that needs the value NOW (a save, a
  *     smoke) calls `host.telemetry()`.
- *   - `captured` goes away at N5 with `host.isCaptured()`.
  *
  * @invariant A sample equal to the one already held notifies nobody, a changed one notifies once,
- *   `writeCaptured` and `resetTelemetry` behave the same way, and this file reaches nothing but
+ *   `resetTelemetry` behaves the same way, and this file reaches nothing but
  *   `zustand` and the contract (so no write here can land in the engine store) - proven by:
  *   npx tsx debug/deep-zoom-checks/host-contract.mts ("telemetry: ..." lines). Falsified
  *   2026-10-08, see the check's header.
@@ -51,14 +50,11 @@ export const DZ_TELEMETRY_INTERVAL_MS = 1000 / DZ_TELEMETRY_HZ;
 export interface DzTelemetryState extends DzTelemetry {
     /** False until a host has written a sample, and again after it is disposed. */
     live: boolean;
-    /** The pointer is locked on the picture. Goes away at N5. */
-    captured: boolean;
 }
 
 /** What the store holds while no host is mounted. */
 export const DZ_TELEMETRY_INITIAL: Readonly<DzTelemetryState> = Object.freeze({
     live: false,
-    captured: false,
     ready: false,
     error: '',
     mode: 'f32',
@@ -112,15 +108,9 @@ export function writeTelemetry(sample: DzTelemetry): void {
     useTelemetryStore.setState({ ...sample, live: true });
 }
 
-/** Store the pointer-lock state. Goes away at N5. */
-export function writeCaptured(captured: boolean): void {
-    if (useTelemetryStore.getState().captured === captured) return;
-    useTelemetryStore.setState({ captured });
-}
-
 /** Back to `DZ_TELEMETRY_INITIAL`. The host implementation calls it from `dispose`. */
 export function resetTelemetry(): void {
     const held = useTelemetryStore.getState();
-    if (!held.live && !held.captured) return;
+    if (!held.live) return;
     useTelemetryStore.setState({ ...DZ_TELEMETRY_INITIAL }, true);
 }

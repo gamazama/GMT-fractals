@@ -28,7 +28,10 @@ frame, `type="scene"` inside an R3F canvas) and none carries its own loop — a 
 `getViewportOverlays().filter` finds that file only. Its guard is `smoke:engine-demo` (below);
 nothing goes red if an app shell stops MOUNTING it.
 `engine/plugins/navigation/FlyIntegrator.ts` (+ `modifiers.ts`) is the fly integrator both GMT and
-the deep-zoom shell fly with (ADR-0133: it emits displacements to a sink and holds no position).
+the deep-zoom shell fly with (ADR-0133: it emits displacements to a sink and holds no position);
+`useNavigationInput.ts` beside it is the keys / wheel / look-drag hook both use. A second guard
+reaches the integrator from the other app: `check:deep-zoom-fly-camera` (through
+`deep-zoom/flyCamera.ts`).
 Every number in it is pinned to the last bit - read its header before touching an expression.
 
 Decisions: ADR-0021 (slots), ADRs 0022-0023 (shortcuts + per-scope undo),

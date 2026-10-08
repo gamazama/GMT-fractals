@@ -27,8 +27,8 @@
  * WHEN A LATER PACKAGE CHANGES THE CONTRACT
  *   - A member whose kind changes (optional <-> required): edit the header table in
  *     `DeepZoomHost.ts` in the same change, or "[1] the header names every member" goes red.
- *   - N5 removes `isCaptured` and `captureChanged`: take them out of `BLUEPRINT_MEMBERS` and
- *     `BLUEPRINT_EVENTS` below in that package.
+ *   - N5 (2026-10-08) removed `isCaptured`, `setInputEnabled` and `captureChanged` with the pointer
+ *     capture, and added the four host-input members; the lists below follow.
  *   - A field added to the module's `DzView` / `DzTelemetry` / `DzPath` (`deep-zoom/renderer/index.ts`)
  *     must be added to the contract's copy in the same package, or [2] goes red.
  *
@@ -52,7 +52,7 @@
  *              unconditional -> 1 ("clearHost leaves a different host in place"); `DZ_CANVAS_ID`
  *              changed -> 2 (the holder line and [1] "the header names both DOM ids")
  *   telemetry  `writeTelemetry` without the equal-sample test -> 7 (the first is "an equal sample
- *              notifies nobody"); `writeCaptured` without its test -> 5; `resetTelemetry` made a
+ *              notifies nobody"); `resetTelemetry` made a
  *              no-op -> 3; a third import in `telemetry.ts` -> 1 ("loads only zustand and the contract")
  *   seam       the scanner's path test made to match nothing -> 1: "the scanner flags five made-up
  *              offenders".
@@ -81,7 +81,6 @@ import {
     getTelemetry,
     resetTelemetry,
     subscribeTelemetry,
-    writeCaptured,
     writeTelemetry,
 } from '../../deep-zoom/host/telemetry';
 import type { DeepZoomHost, DzTelemetry } from '../../deep-zoom/host/DeepZoomHost';
@@ -93,21 +92,22 @@ const HOLDER = 'deep-zoom/host/current.ts';
 const TELEMETRY = 'deep-zoom/host/telemetry.ts';
 const PROOF_FILE = 'debug/deep-zoom-checks/host-contract-types.ts';
 
-/** BLUEPRINT section 7's member list. `isCaptured` leaves at N5 (see the header). */
+/** BLUEPRINT section 7's member list, as it stands after N5 (see the header). */
 const BLUEPRINT_MEMBERS = [
     'ready',
     'setParam', 'setParams', 'getParams', 'bootParams',
     'telemetry', 'onTelemetry',
     'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail',
+    'setInputOwner', 'rawDistance', 'yawPitch', 'setYawPitch',
     'setGradientRamp',
     'setRecording', 'takePath', 'smoothPath', 'seekPath', 'play', 'stopPlay',
     'renderFramePixels', 'renderFrameBlob', 'exportStill', 'cancel',
-    'canvas', 'focus', 'isCaptured', 'setInputEnabled', 'pause',
+    'canvas', 'focus', 'pause',
     'step', 'frameCount', 'dispose',
     'on',
 ];
-/** BLUEPRINT section 7's event names. `captureChanged` leaves at N5. */
-const BLUEPRINT_EVENTS = ['paramChanged', 'recordingChanged', 'compile', 'progress', 'captureChanged', 'contextLost', 'error'];
+/** BLUEPRINT section 7's event names, less `captureChanged` (gone at N5). */
+const BLUEPRINT_EVENTS = ['paramChanged', 'recordingChanged', 'compile', 'progress', 'contextLost', 'error'];
 /** The contract may not spell these, anywhere, comments included. */
 const FORBIDDEN_IDENTIFIERS = ['Window', 'Document', 'DeepZoomInstance'];
 /** The two DOM types the contract may name (BLUEPRINT section 7). */
@@ -116,7 +116,7 @@ const ALLOWED_DOM_TYPES = new Set(['HTMLCanvasElement', 'Blob']);
 const LANGUAGE_TYPES = new Set(['Promise', 'Array', 'ReadonlyArray', 'Record', 'Partial', 'Readonly', 'Required',
     'Pick', 'Omit', 'Uint8Array', 'Uint8ClampedArray']);
 /** Only `deep-zoom/host/` may call these. */
-const TELEMETRY_WRITERS = new Set(['writeTelemetry', 'writeCaptured', 'resetTelemetry']);
+const TELEMETRY_WRITERS = new Set(['writeTelemetry', 'resetTelemetry']);
 
 let failures = 0;
 function check(ok: boolean, label: string, detail = ''): void {
@@ -355,20 +355,13 @@ console.log(`[4] telemetry ${TELEMETRY}`);
     check(calls === 2 && getTelemetry().fps === 32 && getTelemetry().depth === 6.4e-53,
         'telemetry: one changed field notifies once and the rest stays', `${calls} calls`);
 
-    writeCaptured(true);
-    writeCaptured(true);
-    check(calls === 3 && getTelemetry().captured === true && getTelemetry().fps === 32,
-        'telemetry: writeCaptured notifies once per change and keeps the sample', `${calls} calls`);
-    writeTelemetry({ ...sample, fps: 33 });
-    check(calls === 4 && getTelemetry().captured === true, 'telemetry: a sample leaves captured alone', `${calls} calls`);
-
     resetTelemetry();
-    check(calls === 5 && same(getTelemetry(), DZ_TELEMETRY_INITIAL), 'telemetry: resetTelemetry returns to the initial state, one notice',
+    check(calls === 3 && same(getTelemetry(), DZ_TELEMETRY_INITIAL), 'telemetry: resetTelemetry returns to the initial state, one notice',
         `${calls} calls, ${JSON.stringify(getTelemetry())}`);
     resetTelemetry();
-    check(calls === 5, 'telemetry: a second reset notifies nobody', `${calls} calls`);
+    check(calls === 3, 'telemetry: a second reset notifies nobody', `${calls} calls`);
     writeTelemetry(sample);
-    check(calls === 6 && getTelemetry().live, 'telemetry: the first sample after a reset is stored', `${calls} calls`);
+    check(calls === 4 && getTelemetry().live, 'telemetry: the first sample after a reset is stored', `${calls} calls`);
     resetTelemetry();
     stop();
 

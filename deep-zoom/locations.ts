@@ -38,6 +38,7 @@ import type { DzView } from './host/DeepZoomHost';
 import { LIGHT_TYPE_RENDERER_VALUES, lightTypeToRenderer } from './features/light';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
 import { formatDepth, validDepth } from './components/depthFormat';
+import { isFlying } from './navigationState';
 import type { DzColourSlice, DzFormulaSlice, DzLightSlice } from './storeTypes';
 
 /** The look a location was saved with: the three look slices and the detail. */
@@ -308,8 +309,9 @@ export function installLocations(): void {
             return validDepth(depth) ? formatDepth(depth) : undefined;
         },
         onReset: jumpHome,
-        // Digits recall and Ctrl+digit saves - only with the pointer free.
-        slotShortcuts: { count: 9, category: 'Locations', when: () => !(getHost()?.isCaptured() ?? false) },
+        // Digits recall and Ctrl+digit saves - not while a fly key or a look drag is held: a
+        // finger slipping from W onto 1 must not throw the camera to another place.
+        slotShortcuts: { count: 9, category: 'Locations', when: () => !isFlying() },
         menu: {
             menuId: 'locations',
             slot: 'left',

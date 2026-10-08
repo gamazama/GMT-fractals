@@ -23,9 +23,9 @@
  * smoke is not in `debug/run-smokes.mts` (smoke:all). One real-GPU smoke at a time on a machine.
  *
  * WINDOWLESS RUNS. A headed run opens a Chrome window that takes the keyboard: whatever is typed
- * while it is in front lands in the page under test, and a pointer-lock step fails when the window
- * loses focus to the person at the machine. `DZ_HEADLESS=1 npm run smoke:deep-zoom` runs the same
- * Chrome with no window. It is only a valid run if the first line still names the real GPU (the
+ * while it is in front lands in the page under test. `DZ_HEADLESS=1 npm run smoke:deep-zoom` runs
+ * the same Chrome with no window, and since stage N5 (nothing captures the pointer any more) no
+ * step needs a window. It is only a valid run if the first line still names the real GPU (the
  * software-renderer refusal applies unchanged).
  *
  * DEV SERVER ONLY. A step reaches the renderer through the host, which the page publishes as
@@ -73,7 +73,7 @@
  *   boot(opts?) -> DzBoot, bootInfo                   a fresh app; the timings of the last boot
  *   ev<T>(body), host<T>(member), withHost<T>(body), store<T>(path)
  *   until(body, ms), untilHost(cond, ms), sleep(ms)
- *   focusPicture(), capture(), release(), holdKey(key, ms), pictureCentre()
+ *   focusPicture(), holdKey(key, ms), pictureCentre()
  *   check(ok, what), notProven(what), note(what), shot(name)
  *   pageErrors, consoleLines, consoleErrors, expectConsoleError(pattern, why)
  *   downloads, dialogs(mode), dialogLog
@@ -85,8 +85,7 @@
  * to stand alone (it may be run alone with `--step`): set the state it needs at its start, and
  * call `await ctx.boot()` when it needs a fresh app (same context, so storage survives the reload;
  * `ctx.boot({ clearStorage: true })` wipes it first). Before every step the runner puts the
- * viewport back to 1280 x 800 and gives the pointer back if a step left it captured. Nothing else
- * is reset.
+ * viewport back to 1280 x 800. Nothing else is reset.
  *
  * WHAT FAILS BESIDES A CHECK. Any `pageerror`; any console line of type `error`; any console
  * line that starts `[TickRegistry] tick "<name>" threw` at any level (`engine/TickRegistry.ts`
@@ -96,10 +95,9 @@
  * dozens of `performance warning: READ-usage buffer` lines for the renderer's readbacks. A step
  * that provokes an error on purpose calls `ctx.expectConsoleError(pattern, why)` first.
  *
- * "NOT PROVEN". Whether a click obtains pointer lock depends on the browser and the window, not
- * on the shell. A step that needs the pointer captured calls `await ctx.capture()`: it clicks the
- * picture, and when `document.pointerLockElement` is not set it reports **not proven** and
- * returns false. Not proven counts as a FAILURE, never as a pass.
+ * "NOT PROVEN". A step that cannot establish its own precondition (something the browser or the
+ * machine decides, not the shell) calls `ctx.notProven(what)` and returns. Not proven counts as a
+ * FAILURE, never as a pass. (It was written for pointer lock, which left at stage N5.)
  *
  * PITFALLS
  *   - EVERY `page.evaluate` TAKES A STRING. tsx wraps a function callback in a `__name` helper
@@ -131,7 +129,7 @@
  *   `boot()` and wiped by `clearStorage`, a throwing step / a step with no check / a console
  *   error / a page error / a step over its time each a FAIL charged to that step, an expected
  *   console error not, a late check of an abandoned step counted nowhere, the page replaced after
- *   a timeout, the viewport and the pointer put back before each step, "not proven" a failure.
+ *   a timeout, the viewport put back before each step, "not proven" a failure.
  *   NO STANDING TEST runs the runner itself. Seen once, on 2026-10-08, with a throwaway pair of
  *   stage files (12 steps: the 7 written to pass passed, the 5 written to fail failed, each for
  *   its own reason), and "not proven" with the shell's `requestPointerLock` call removed. If you
@@ -241,13 +239,8 @@ export interface DzCtx {
     untilHost(cond: string, timeoutMs: number, pollMs?: number): Promise<number>;
     sleep(ms: number): Promise<void>;
 
-    /** Give `#dz-frame` the keyboard WITHOUT taking the pointer. Returns whether it has focus. */
+    /** Give `#dz-frame` the keyboard. Returns whether it has focus. */
     focusPicture(): Promise<boolean>;
-    /** Click the picture's centre and report whether the pointer is now locked on it. When it is
-     *  not, this reports NOT PROVEN (a failure) itself and returns false: return from the step. */
-    capture(): Promise<boolean>;
-    /** Give the pointer back (`document.exitPointerLock()`) and wait until it is. */
-    release(): Promise<void>;
     /** `keyboard.down(key)`, wait, `keyboard.up(key)`. A held key, not a typed character. */
     holdKey(key: string, ms: number): Promise<void>;
     /** The centre of `#dz-frame` in viewport pixels. */
@@ -335,7 +328,6 @@ const WHY_NO_HOST = '(() => { const out = [];'
 
 const FRAME_COUNT = '(' + HOST + ').frameCount()';
 const SPLASH_GONE = "!document.getElementById('dz-boot-splash')";
-const POINTER_BACK = 'document.pointerLockElement ? (document.exitPointerLock(), true) : false';
 
 // ── Small helpers ────────────────────────────────────────────────────────────────────────────────
 
@@ -530,11 +522,10 @@ class StageSession {
         return this.bootInfo;
     }
 
-    /** Before a step: the default viewport, a free pointer. Nothing else is reset (see ISOLATION). */
+    /** Before a step: the default viewport. Nothing else is reset (see ISOLATION). */
     async tidy(): Promise<void> {
         const vp = this.page.viewportSize();
         if (!vp || vp.width !== VIEWPORT.width || vp.height !== VIEWPORT.height) await this.page.setViewportSize(VIEWPORT);
-        await this.page.evaluate(POINTER_BACK).catch(() => false);
     }
 }
 
@@ -567,23 +558,6 @@ function makeCtx(session: StageSession, state: StepState, log: (line: string) =>
             alive();
             await session.page.focus(FRAME_SEL, { timeout: 2000 }).catch(() => undefined);
             return ev<boolean>("!!document.activeElement && document.activeElement.id === 'dz-frame'");
-        },
-        async capture() {
-            // Chrome grants the pointer only to a focused window. Raise the page first; when the
-            // window still has no focus (someone is using the machine) the message says so.
-            await session.page.bringToFront().catch(() => undefined);
-            const c = await ctx.pictureCentre();
-            await session.page.mouse.click(c.x, c.y);
-            if ((await until('document.pointerLockElement', 1500, 50)) < 0) {
-                const focused = await session.page.evaluate('document.hasFocus()').catch(() => false);
-                ctx.notProven('a click on the picture did not lock the pointer (document.pointerLockElement is not set; window focus: ' + focused + '), so nothing about the captured state was tested');
-                return false;
-            }
-            return true;
-        },
-        async release() {
-            await ev<boolean>(POINTER_BACK).catch(() => false);
-            await until('!document.pointerLockElement', 1500, 50);
         },
         async holdKey(key, ms) {
             alive();

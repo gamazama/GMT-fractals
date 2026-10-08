@@ -11,13 +11,15 @@
  * is worked out from successive samples in an effect and stored the same way.
  *
  * Shown unless Overlays is None (`dzInspect.overlays`); the top-bar chip keeps the depth on screen
- * then. Faded while the pointer is captured, so it does not sit on the picture while flying.
+ * then. The last line is the fly speed (surface-distances a second; the wheel on the picture
+ * changes it).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useEngineStore } from '../../store/engineStore';
 import { subscribeTelemetry, useDzTelemetry } from '../host/telemetry';
 import { overlaysFromIndex } from '../features/inspect';
 import { diveTo, stopDive, useDive } from '../diveControl';
+import { useDzNavigation } from '../navigationState';
 import {
     FLOOR_EXP, YARDSTICK_NOTE, decadesPerSecond, decadesToFloor, formatDepth, formatDepthCompact, validDepth, yardstickFor,
 } from './depthFormat';
@@ -57,10 +59,10 @@ export const DepthReadout: React.FC = () => {
     const magnification = useDzTelemetry((t) => (validDepth(t.depth) ? Math.max(0, -Math.log10(t.depth)).toFixed(1) : ''));
     const yardstick = useDzTelemetry((t) => (validDepth(t.depth) ? yardstickFor(t.depth) : ''));
     const zone = useDzTelemetry((t) => (!validDepth(t.depth) ? '' : t.depth <= 1e-74 ? 'floor' : t.depth < 1e-50 ? 'unchecked' : ''));
-    const captured = useDzTelemetry((t) => t.captured);
     const overlays = useEngineStore((s) => overlaysFromIndex(s.dzInspect?.overlays));
     const dive = useDive((s) => s.dive);
     const rate = useDepthRate();
+    const flySpeed = useDzNavigation((s) => (s.flySpeed >= 1 ? s.flySpeed.toFixed(1) : s.flySpeed.toFixed(2)));
     const [exponent, setExponent] = useState('12');
 
     if (!live || overlays === 'none') return null;
@@ -74,7 +76,7 @@ export const DepthReadout: React.FC = () => {
     return (
         <div
             data-dz-depth-readout
-            className={`m-2 px-2.5 py-2 rounded bg-black/60 border border-line/10 select-none transition-opacity ${captured ? 'opacity-35' : 'opacity-100'}`}
+            className="m-2 px-2.5 py-2 rounded bg-black/60 border border-line/10 select-none"
         >
             <div data-dz-depth className="font-mono tabular-nums text-[18px] leading-none text-fg" title="Depth: distance from the camera to the surface">
                 {depthText}
@@ -109,6 +111,13 @@ export const DepthReadout: React.FC = () => {
                     <button type="submit" className={button}>Dive</button>
                 </form>
             )}
+            <div
+                data-dz-fly-speed
+                className={`${line} mt-1`}
+                title="Fly speed: how many times the distance to the surface the camera covers in a second. The wheel on the picture changes it; Shift flies four times as fast."
+            >
+                fly speed {flySpeed}
+            </div>
         </div>
     );
 };

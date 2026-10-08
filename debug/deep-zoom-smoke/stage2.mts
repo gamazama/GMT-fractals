@@ -224,44 +224,6 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'while the pointer is captured T does not open the timeline; with the pointer free it does',
-            owner: 'S2-6',
-            falsified: '2026-10-08: the `pushScope` call removed from deep-zoom/flyGuard.ts -> red, "captured: after T and Space the timeline is still closed" false. Also red the same day on the first version of the guard (priority 10 + `when`): "pointer free: T opens the timeline" false.',
-            async run(ctx) {
-                await ctx.boot();
-                const closed = () => ctx.ev<boolean>("[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Animate')");
-                if (!ctx.check(await closed(), 'the timeline starts closed (its Animate button is shown)')) return;
-                if (!(await ctx.capture())) return;
-                // `document.pointerLockElement` is set a moment before the browser sends
-                // `pointerlockchange`, and the shell learns of the capture from that event. A key
-                // sent in between is faster than any hand: wait until the shell shows the capture
-                // (the readout fades). Seen 2026-10-08: without this wait the step failed about
-                // one run in two, with the pointer still locked.
-                ctx.check((await ctx.until("(document.querySelector('[data-dz-depth-readout]') || {}).className.includes('opacity-35')", 2000, 20)) >= 0,
-                    'the shell shows the capture (the depth readout fades)');
-                const before = await ctx.host<string[]>('getView().cam');
-                await ctx.page.keyboard.press('t');
-                await ctx.page.keyboard.press('Space');
-                await ctx.sleep(300);
-                // Chrome gives the pointer back when its window loses focus (someone using the machine
-                // during the run). Then the keys above were pressed with the pointer free and prove nothing.
-                if (!(await ctx.ev<boolean>('!!document.pointerLockElement'))) {
-                    ctx.notProven('the pointer lock was lost while the keys were pressed (window focus: ' + (await ctx.ev<boolean>('document.hasFocus()')) + ')');
-                    if (!(await closed())) await ctx.page.keyboard.press('t');
-                    return;
-                }
-                ctx.check(await closed(), 'captured: after T and Space the timeline is still closed');
-                const after = await ctx.host<string[]>('getView().cam');
-                ctx.check(before.join() === after.join(), 'and the camera strings are unchanged');
-                await ctx.release();
-                await ctx.focusPicture();
-                await ctx.page.keyboard.press('t');
-                await ctx.sleep(300);
-                ctx.check(!(await closed()), 'pointer free: T opens the timeline');
-                await ctx.page.keyboard.press('t');
-            },
-        },
-        {
             name: 'a dive from the Grain of sand view to 1e-30 arrives and stays there',
             owner: 'S1-1 (host/dive.ts)',
             falsified: '2026-10-08: red before a starter view was used - from the boot view the dive ran out its 45 s at 1.44e-5 ("within a decade of 1e-6" false). NOT falsified for the three-frame arrival rule: with DZ_DIVE_ARRIVAL_FRAMES = 1 this dive still arrived; that rule is pinned by debug/deep-zoom-checks/module-host.mts.',

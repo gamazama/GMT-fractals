@@ -27,7 +27,6 @@ export const DepthScale: React.FC = () => {
     // Rounded to a thousandth of the column: the marker moves, React does not re-render per sample.
     const position = useDzTelemetry((t) => (validDepth(t.depth) ? Math.round(scaleFraction(t.depth) * 1000) / 1000 : -1));
     const label = useDzTelemetry((t) => formatDepthCompact(t.depth));
-    const captured = useDzTelemetry((t) => t.captured);
     const overlays = useEngineStore((s) => overlaysFromIndex(s.dzInspect?.overlays));
     if (!live || overlays !== 'all') return null;
 
@@ -41,7 +40,7 @@ export const DepthScale: React.FC = () => {
             data-dz-depth-scale
             title="Depth scale, 1e0 to 1e-77. Click a depth to dive to it."
             onClick={onClick}
-            className={`absolute right-2 top-3 bottom-3 w-14 pointer-events-auto cursor-pointer select-none transition-opacity ${captured ? 'opacity-35' : 'opacity-100'}`}
+            className="absolute right-2 top-3 bottom-3 w-14 pointer-events-auto cursor-pointer select-none"
         >
             {/* the column: checked range, unchecked range, the last three decades */}
             <div className="absolute right-0 w-1 rounded-sm bg-line/40" style={{ top: 0, height: top(50) }} />

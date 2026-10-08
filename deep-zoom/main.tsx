@@ -55,7 +55,6 @@ import { StatusChip } from './components/StatusChip';
 import { DepthReadout } from './components/DepthReadout';
 import { hud } from '../engine/plugins/Hud';
 import { installModulation } from '../engine/animation/modulationTick';
-import { installFlyGuard } from './flyGuard';
 import { startMilestones } from './milestones';
 import { installLocations } from './locations';
 import { registerDeepZoomHotkeys } from './hotkeys';
@@ -115,10 +114,10 @@ try {
 
     // @engine/shortcuts — window-level keyboard listener, scope-aware
     // dispatcher. Bare: the renderer was created with its own single-key
-    // shortcuts off, so the dispatcher owns every one-shot key. The renderer
-    // still hears W A S D Q E, Shift and Escape, on the picture and only while
-    // the picture has focus; nothing registered here may bind those letters
-    // before stage N5.
+    // shortcuts off, so the dispatcher owns every one-shot key. The fly keys
+    // (W A S D, Q E, Space, C, Shift, Alt) are NOT shortcuts: the navigation
+    // hears them on the window (DeepZoomNavigation.tsx), so nothing registered
+    // here may bind them.
     installShortcuts();
 
     // @engine/undo — unified transaction stack. Ctrl+Z / Ctrl+Y via
@@ -145,9 +144,6 @@ try {
     // panels) is not installed - an LFO on power or phase would rebuild the reference
     // orbit every frame.
     installModulation();
-
-    // While the pointer is captured, T and Space do not reach the timeline.
-    installFlyGuard();
 
     // One line the first time a depth is passed (the telemetry store drives it).
     startMilestones();

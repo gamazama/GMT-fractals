@@ -2,8 +2,8 @@
  * DeepZoomApp — the Deep Zoom shell: layout only.
  *
  * fluid-toy's full-shell tree (top bar, docks, viewport frame, floating panels, help, settings,
- * context menu) with the engine's hosts and exactly one thing of our own in it,
- * <DeepZoomSurface/>. Everything else the app shows is REGISTERED and drawn by a host: dock tabs
+ * context menu) with the engine's hosts and two things of our own in it: <DeepZoomSurface/>
+ * (the picture) and <DeepZoomNavigation/> (the hands that fly it). Everything else the app shows is REGISTERED and drawn by a host: dock tabs
  * through the panel manifest (panels.ts), top-bar items through `topbar.register`, HUD widgets
  * through `hud.register`. Nothing custom is mounted by hand here.
  *
@@ -50,6 +50,7 @@ import { SettingsHost } from '../components/SettingsAccess';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import { ToastHost } from '../engine/components/ToastHost';
 import { DeepZoomSurface } from './DeepZoomSurface';
+import { DeepZoomNavigation } from './DeepZoomNavigation';
 import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
 import { TimelineHost } from '../components/TimelineHost';
 import { SceneFileDropZone } from '../engine/components/SceneFileDropZone';
@@ -115,6 +116,9 @@ export const DeepZoomApp: React.FC = () => {
                     as its size. Declined until the engine has a sink for it (gap E4). */}
                 <ViewportFrame className="flex-1" showModeControls={false}>
                     <DeepZoomSurface />
+                    {/* GMT's fly navigation, driving the renderer through its host. A sibling
+                        of the picture: it draws the look-drag reticle over it. */}
+                    <DeepZoomNavigation />
                     <HudHost />
                     {/* The depth scale (the `camera` feature's overlay). A sibling of the
                         picture's frame, never inside it. */}

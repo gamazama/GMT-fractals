@@ -19,6 +19,19 @@
 > handlers, each line seen red. Roll, Alt, the sticks, invert-Y and the orthographic wheel remain
 > unopened by any test.
 
+> **Update 2026-10-08 (the second app flies; decision unchanged):** the deep-zoom shell now flies
+> with this integrator and this hook, which is the case the decision was written for. What it took
+> on the app's side, none of it in the engine: `deep-zoom/flyCamera.ts` rebuilds the object from
+> the renderer's yaw and pitch each frame and reads the frame's turn back as a turntable (the
+> fourth consequence below: "a caller that wants a level horizon levels the quaternion" - it turned
+> out simpler to take the applied turn apart, `Rx(a) Ry(b) Rz(c)`, and add `a` to the pitch and
+> subtract `b` from the yaw, than to level a turned object, which flips the yaw at the pole);
+> both floors are passed as 0 and the delta is clamped at 0.05 s; Q and E are remapped to down and
+> up because that renderer has no roll. `deep-zoom/DeepZoomNavigation.tsx` is the wiring, and the
+> renderer module gained `setInputOwner('host')` so it reads no key of its own. Guards:
+> `npm run check:deep-zoom-fly-camera` (node; nine single breaks seen red) and stage N5 of
+> `npm run smoke:deep-zoom` (eight steps, each seen red). The engine files did not change for it.
+
 ## Context
 
 The owner decided (2026-10-08, DECISIONS K4 in `plans/deep-zoom-shell/`) that the deep-zoom shell

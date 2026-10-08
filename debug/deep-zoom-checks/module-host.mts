@@ -17,7 +17,7 @@
  *                  `setPendingView`, `takePath`, `smoothPath`, `seekPath`, `play`, `renderPathZip`.
  *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error`.
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
- *   [5] input      `focus`, `isCaptured`, `captureChanged`, `setInputEnabled`.
+ *   [5] input      `focus`, and the four host-input members straight through to the module.
  *   [6] flight     recording, copies, seek by time, one preview at a time.
  *   [7] render     the result mapping, `progress`, `cancel`, `thumbnail`.
  *   [8] dive       `dive.ts` alone, then through the host.
@@ -70,9 +70,11 @@
  *     the timestamp not forwarded -> 1; `frameCount()` a constant -> 1; context loss not polled
  *       -> 1; a throwing listener not caught -> 2: "step: a listener that throws ..." and the next
  *   input
- *     no `exitPointerLock` -> 4: "input: setInputEnabled(false) also exits the pointer lock" first
- *     `lockInput(on)` instead of `(!on)` -> 2; `focus()` on the canvas -> 2: "input: focus()
- *       focuses the frame ...", "mount: host.focus() focuses the frame"
+ *     `focus()` on the canvas -> 2: "input: focus() focuses the frame ...", "mount: host.focus()
+ *       focuses the frame"
+ *     (N5, 2026-10-08) `setInputOwner: () => undefined` in moduleHost.ts -> 1: "input:
+ *       setInputOwner reaches the module ..."; `setYawPitch: (yaw, pitch) => dz.setYawPitch(pitch,
+ *       yaw)` -> 1: "input: setYawPitch hands the module yaw then pitch"
  *   flight and render
  *     `setRecording` always toggles -> 3; previews not serialised -> 2: "flight: a second play
  *       stops the preview in flight first ..."; a render that does not stop a preview -> 1;
@@ -88,7 +90,7 @@
  *   seam
  *     `dive.ts` given a type import of the renderer -> 2: both "seam: ..." lines about the tree
  * NOT falsified: every line not named above (among them the result mapping of `renderPathZip`
- * line by line, `recordingChanged`, `captureChanged`, `compile`'s order, the forward vector, and
+ * line by line, `recordingChanged`, `compile`'s order, the forward vector, and
  * "a module without a handle the host needs"). They pass; nothing here has shown they can fail.
  * NOT checked at all, by anything in node: what the real module does behind each handle. See the
  * `@assumption` lines in `deep-zoom/host/moduleHost.ts`.
@@ -297,6 +299,11 @@ function makeRig() {
             },
             thumbnail: (size?: number): string => { note('thumbnail', size); return 'data:image/png;base64,AAAA'; },
             diveTo: (depth: number): Promise<void> => { note('dz.diveTo', depth); return Promise.resolve(); },
+            setInputOwner: (owner: 'module' | 'host'): void => { note('setInputOwner', owner); },
+            inputOwner: (): 'module' | 'host' => 'module',
+            rawDistance: (): number => 6.4e-53,
+            yawPitch: () => ({ yaw: state.view.yaw, pitch: state.view.pitch }),
+            setYawPitch: (yaw: number, pitch: number): void => { note('setYawPitch', yaw, pitch); },
         },
         lockInput: (locked: boolean): void => { note('lockInput', locked); },
         samplePath: (data: DzPath, tau: number): number[] | null => { note('samplePath', data, tau); return [0, 0, 0]; },
@@ -653,7 +660,7 @@ console.log('[4] step      the timestamp, frameCount, 8 Hz, context loss');
     check(lost === 1, 'step: a lost context is reported once, as the contextLost event', `${lost} events`);
 
     host.dispose();
-    check(getTelemetry().live === false && getTelemetry().captured === false, 'step: dispose resets the telemetry store');
+    check(getTelemetry().live === false && getTelemetry().depth === 0, 'step: dispose resets the telemetry store');
     const after = writes;
     const streamedBefore = streamed;
     host.step(5000);
@@ -692,7 +699,7 @@ console.log('[4] step      the timestamp, frameCount, 8 Hz, context loss');
 }
 
 // ── [5] input ────────────────────────────────────────────────────────────────────────────────────
-console.log('[5] input     focus, pointer lock, setInputEnabled');
+console.log('[5] input     focus, and the host-input members');
 {
     const rig = makeRig();
     const host = createModuleHost(rig.instance, rig.canvas);
@@ -700,27 +707,15 @@ console.log('[5] input     focus, pointer lock, setInputEnabled');
     check(rig.frame.focusCalls === 1 && rig.fakeCanvas.focusCalls === 0, 'input: focus() focuses the frame (the key target), not the canvas',
         `frame ${rig.frame.focusCalls}, canvas ${rig.fakeCanvas.focusCalls}`);
 
-    const capture: boolean[] = [];
-    host.on('captureChanged', (e) => { capture.push(e.captured); });
-    check(host.isCaptured() === false, 'input: isCaptured() is false with no pointer lock');
-    rig.doc.lock(rig.fakeCanvas);
-    check(host.isCaptured() === true && capture.join() === 'true' && getTelemetry().captured === true,
-        'input: a lock on the canvas turns isCaptured() true, fires captureChanged and writes the store', capture.join());
-    rig.doc.dispatchEvent(new Event('pointerlockchange'));
-    check(capture.length === 1, 'input: a pointerlockchange that changes nothing fires nothing');
-
-    host.setInputEnabled(false);
-    check(rig.count('lockInput') === 1 && rig.calls.lockInput[0][0] === true, 'input: setInputEnabled(false) locks the module\'s input (api.lockInput(true))');
-    check(rig.doc.exits === 1 && host.isCaptured() === false, 'input: setInputEnabled(false) also exits the pointer lock', `${rig.doc.exits} exits`);
-    check(capture.join() === 'true,false' && getTelemetry().captured === false, 'input: and captureChanged says false', capture.join());
-
-    host.setInputEnabled(true);
-    check(rig.count('lockInput') === 2 && rig.calls.lockInput[1][0] === false && rig.doc.exits === 1,
-        'input: setInputEnabled(true) unlocks the input and leaves the pointer alone');
-
-    rig.doc.lock({ other: 'element' });
-    host.setInputEnabled(false);
-    check(rig.doc.exits === 1 && host.isCaptured() === false, 'input: a lock held by another element is not ours: not captured, not released');
+    host.setInputOwner('host');
+    check(rig.count('setInputOwner') === 1 && rig.calls.setInputOwner[0][0] === 'host', 'input: setInputOwner reaches the module with the owner it was given');
+    check(host.rawDistance() === 6.4e-53, 'input: rawDistance is the module\'s own number', String(host.rawDistance()));
+    const look = host.yawPitch();
+    check(look.yaw === rig.state.view.yaw && look.pitch === rig.state.view.pitch, 'input: yawPitch is the module\'s own pair');
+    host.setYawPitch(0.25, -0.5);
+    check(rig.count('setYawPitch') === 1 && rig.calls.setYawPitch[0][0] === 0.25 && rig.calls.setYawPitch[0][1] === -0.5,
+        'input: setYawPitch hands the module yaw then pitch');
+    check(rig.doc.count('pointerlockchange') === 0, 'input: the host listens for no pointer lock');
     host.dispose();
 }
 
@@ -1056,8 +1051,6 @@ console.log('[9] dispose   order, twice, listeners');
     const host = createModuleHost(rig.instance, rig.canvas);
     let events = 0;
     host.on('compile', () => { events++; });
-    host.on('captureChanged', () => { events++; });
-    check(rig.doc.count('pointerlockchange') === 1, 'dispose: (before) the host listens for pointerlockchange on the canvas\'s document');
     host.dispose();
     const disposedAt = rig.log.indexOf('instance.dispose');
     const removedAt = rig.log.indexOf('canvas.remove');
@@ -1066,11 +1059,9 @@ console.log('[9] dispose   order, twice, listeners');
     check(rig.fakeCanvas.parentElement === null && rig.frame.children.length === 0, 'dispose: the canvas is out of the frame');
     host.dispose();
     check(rig.count('instance.dispose') === 1 && rig.log.filter((l) => l === 'canvas.remove').length === 1, 'dispose: a second dispose does nothing');
-    check(rig.doc.count('pointerlockchange') === 0, 'dispose: the pointerlockchange listener is removed');
     rig.state.ready = true;
     host.step(0);
-    rig.doc.lock(rig.fakeCanvas);
-    check(events === 0 && getTelemetry().captured === false && getTelemetry().live === false, 'dispose: no event and no store write after dispose');
+    check(events === 0 && getTelemetry().live === false, 'dispose: no event and no store write after dispose');
 }
 
 // ── [10] mount ───────────────────────────────────────────────────────────────────────────────────

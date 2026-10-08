@@ -70,9 +70,10 @@
  *     `renderPathZip(`    the module's own path render. The one member that downloads: the module
  *                         saves the ZIP parts itself.
  *     `cancel()`          ends a render, a path preview and a dive.
- *     `canvas()` `focus()` `setInputEnabled(` `step(` `frameCount()` `dispose()` `on(`
- *     `isCaptured()`      true while the pointer is locked on the canvas. LEAVES AT N5 together with
- *                         the `captureChanged` event, when the engine's navigation takes the input.
+ *     `canvas()` `focus()` `step(` `frameCount()` `dispose()` `on(`
+ *   GONE AT N5 (2026-10-08), with the pointer capture: `isCaptured()`, `setInputEnabled(` and the
+ *   `captureChanged` event. Nothing locks the pointer; whether the hands are flying is the
+ *   shell's own state (`deep-zoom/navigationState.ts`).
  *
  *   OPTIONAL - undefined until the named package. Test before calling (`host.pause?.(true)`) and
  *   show no control for a member that is not there:
@@ -87,7 +88,6 @@
  *   implementation and no existing caller changes.
  *
  *   EVENTS (`on(type, fn)`) in stage 1:
- *     `captureChanged`    live. Leaves at N5.
  *     `contextLost`       live, from the module's context-loss option.
  *     `error`             live for a failed deep compile (`fatal: true`).
  *     `compile`           live for the deep shader only; BLA and variant compiles are not visible
@@ -239,8 +239,6 @@ export interface DzEvents {
     compile: DzCompileState;
     /** null = the job ended. */
     progress: DzProgress | null;
-    /** Pointer lock on the render canvas. Leaves at N5. */
-    captureChanged: { captured: boolean };
     /** The browser took the WebGL context. No detail: nothing is restored, mount a fresh host. */
     contextLost: null;
     error: { message: string; fatal: boolean };
@@ -378,15 +376,8 @@ export interface DeepZoomHost {
     // surface and input
     /** The render canvas (`#dz-render-canvas`). */
     canvas(): HTMLCanvasElement;
-    /** Keyboard focus to the picture (`#dz-frame`), so the fly keys reach the renderer. */
+    /** Keyboard focus to the picture (`#dz-frame`): it leaves whatever text field had it. */
     focus(): void;
-    /** True while the pointer is locked on the canvas. LEAVES AT N5. */
-    isCaptured(): boolean;
-    /**
-     * false = the renderer ignores keys and mouse (a modal or a text field has the user): held fly
-     * keys are dropped and a pointer lock is released. true = back to normal.
-     */
-    setInputEnabled(on: boolean): void;
     /** Stop and resume drawing. Optional until M5. */
     pause?(on: boolean): void;
 

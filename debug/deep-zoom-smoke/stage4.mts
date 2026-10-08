@@ -3,13 +3,12 @@
  *
  *   DZ_HEADLESS=1 ENGINE_URL=http://localhost:3410 npm run smoke:deep-zoom -- --stage 4
  *
- * What the steps lean on (deep-zoom/hotkeys.ts, deep-zoom/flyGuard.ts):
+ * What the steps lean on (deep-zoom/hotkeys.ts):
  *   - Every look key writes a store value through its feature setter; the store-to-renderer sync
  *     then carries it. "Once" is checked on both sides: the store moved by one step, and the
  *     renderer holds the same value (a second writer would move it twice).
- *   - With the pointer captured, 9 / 0 and T / Y belong to the flying scope: colour scale and
- *     lamp falloff. The shell learns of a capture from `pointerlockchange`, a moment after
- *     `document.pointerLockElement` is set, so a step waits for the readout to fade first.
+ *   - The fly keys (W A S D, Q E, Space, C, Shift, Alt) are not shortcuts and are not here:
+ *     stage N5's file. `C` was "next colouring" until N5; it is `V` now.
  *   - Help topics, the shortcuts page and the first-dive lesson are not built yet; when they are,
  *     their steps join this file.
  */
@@ -55,8 +54,8 @@ export const stage: DzStage = {
                 await press(ctx, 'i');
                 ctx.check((await ctx.store<boolean>('dzFormula.autoIterations')) === false && (await ctx.host<boolean>("getParams()['dzFormula.autoIterations']")) === false, 'I: auto iterations off, in the renderer too');
                 const colours: number[] = [];
-                for (let i = 0; i < 3; i++) { await press(ctx, 'c'); colours.push(await ctx.host<number>('getParams().color')); }
-                ctx.check(colours.join() === '1,2,0', 'C three times: the renderer colouring goes 1, 2, 0 (' + colours.join(', ') + ')');
+                for (let i = 0; i < 3; i++) { await press(ctx, 'v'); colours.push(await ctx.host<number>('getParams().color')); }
+                ctx.check(colours.join() === '1,2,0', 'V three times: the renderer colouring goes 1, 2, 0 (' + colours.join(', ') + ')');
                 await press(ctx, 'l');
                 ctx.check((await ctx.store<number>('dzLight.lightType')) === 1 && (await ctx.host<number>('getParams().light')) === 1, 'L: light type Direct -> Lamp');
                 await press(ctx, 'o');
@@ -76,38 +75,12 @@ export const stage: DzStage = {
                 const field = ctx.page.locator('[data-dz-dive-exponent]');
                 await field.click();
                 await field.press('g');
-                await field.press('c');
+                await field.press('v');
                 await ctx.sleep(250);
-                ctx.check(near(await ctx.store<number>('dzQuality.detail'), 1) && (await ctx.host<number>('getParams().color')) === 0, 'G and C typed in the Dive field change nothing');
+                ctx.check(near(await ctx.store<number>('dzQuality.detail'), 1) && (await ctx.host<number>('getParams().color')) === 0, 'G and V typed in the Dive field change nothing');
                 await ctx.focusPicture();
                 await press(ctx, 'j');
                 ctx.check(await ctx.ev<boolean>("document.activeElement === document.querySelector('[data-dz-dive-exponent]')"), 'J: the Dive field has the keyboard');
-            },
-        },
-        {
-            name: 'while captured, 9 / 0 step the colour scale and T / Y the lamp falloff; the timeline stays closed and the camera still',
-            owner: 'S4-1',
-            falsified: '2026-10-08: the `falloff-down` (T) binding removed from deep-zoom/hotkeys.ts -> red, lamp falloff 4 -> 5 instead of 4.5 and "the timeline did not open on T" false.',
-            async run(ctx) {
-                await ctx.boot({ clearStorage: true });
-                await ctx.ev(RESET);
-                const closed = () => ctx.ev<boolean>("[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Animate')");
-                if (!(await ctx.capture())) return;
-                ctx.check((await ctx.until("(document.querySelector('[data-dz-depth-readout]') || {}).className.includes('opacity-35')", 2000, 20)) >= 0, 'the shell shows the capture');
-                const before = await cam(ctx);
-                await press(ctx, '0');
-                await press(ctx, '0');
-                await press(ctx, '9');
-                await press(ctx, 'y');
-                await press(ctx, 'y');
-                await press(ctx, 't');
-                if (!(await ctx.ev<boolean>('!!document.pointerLockElement'))) { ctx.notProven('the pointer lock was lost while the keys were pressed'); return; }
-                ctx.check(near(await ctx.store<number>('dzColour.scale'), 1.25), '0 twice and 9 once: colour scale 1 -> 1.25 (' + (await ctx.store<number>('dzColour.scale')) + ')');
-                ctx.check((await ctx.store<number>('dzLight.lampFalloff')) === 4.5, 'Y twice and T once: lamp falloff 4 -> 4.5 (' + (await ctx.store<number>('dzLight.lampFalloff')) + ')');
-                ctx.check(await closed(), 'the timeline did not open on T');
-                ctx.check(same(await cam(ctx), before), 'and the camera strings are unchanged');
-                await ctx.release();
-                await ctx.ev(RESET);
             },
         },
         {
