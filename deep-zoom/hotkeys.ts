@@ -48,6 +48,7 @@ const nextColour = (): void => {
 };
 const nextLightType = (): void => store().setDzLight({ lightType: (store().dzLight.lightType + 1) % LIGHT_TYPE_OPTIONS.length });
 const nextOverlays = (): void => store().setDzInspect({ overlays: (store().dzInspect.overlays + 1) % OVERLAYS_OPTIONS.length });
+const toggleAdvancedMode = (): void => store().setAdvancedMode(!store().advancedMode);
 const focusDiveField = (): void => {
     const field = document.querySelector<HTMLInputElement>('[data-dz-dive-exponent]');
     field?.focus();
@@ -77,4 +78,8 @@ export function registerDeepZoomHotkeys(): void {
     add('colour-mode', 'v', undoable(nextColour), 'Next colouring: Plain, Iterations, Orbit trap', 'Look');
     add('light-type', 'l', undoable(nextLightType), 'Next light type: Direct, Lamp, Both', 'Look');
     add('overlays', 'o', undoable(nextOverlays), 'Overlays: All, Depth only, None', 'Look');
+
+    // GMT's own key for it (grep `gmt.toggleAdvancedMode` in app-gmt/main.tsx). The same flag has
+    // a row in Settings (deep-zoom/settings.ts): a key alone is a switch nobody can find.
+    add('advanced-mode', '`', toggleAdvancedMode, 'Advanced mode on / off (shows the advanced rows of each tab)', 'View');
 }

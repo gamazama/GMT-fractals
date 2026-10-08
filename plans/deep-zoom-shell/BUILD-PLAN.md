@@ -15,7 +15,7 @@ original plan and are not rewritten.
 | Stage | State |
 |---|---|
 | 1 | **Closed.** S1-A, S1-0, S1-1, S1-2, S1-3. Smoke stage 1: 15 steps (19 before N5 took the pointer capture and the "hold W" steps). |
-| 2 | **Built**, except: pause controls (S2-9, waits on a module pause), the Diagnostics tab (D7), the `actualPixels` row, a menu row for Advanced mode. Smoke stage 2: 9 steps (one for Hit refine). |
+| 2 | **Built**, except: pause controls (S2-9, waits on a module pause), the Diagnostics tab (D7), the `actualPixels` row. Advanced mode has a Settings row and GMT's backtick key (it had no switch at all until the owner hit that on 2026-10-08); Step size is not advanced. Smoke stage 2: 10 steps (one for Hit refine, one for these). |
 | 3 | **Built**, except: Export all (JSON), the scene-file claims (S3-4), Session / autosave (the session half of S3-2). Smoke stage 3: 8 steps. |
 | 4 | **Keys built** (S4-1; smoke stage 4: 3 steps). `C` is a fly key since N5; "next colouring" is `V`. Help topics, the shortcuts page, What's New and the first-dive lesson (S4-2, S4-3) are not built. |
 | N | **Built: the shell flies with GMT's navigation.** N0 (replay guard), N2 (the integrator in the engine, ADR-0133), N0b (GMT's fly smoke covers the hook's wiring), N3 (the input hook in the engine, renderer-free), N4 (the module lets a host own the input), N5 (`deep-zoom/flyCamera.ts`, `DeepZoomNavigation.tsx`, `navigationState.ts`; smoke stage N5: 8 steps). N1 (a registered distance source) was dropped: the distance stays a plain argument. Not built: on-screen sticks for a phone, an orbit mode, roll. |

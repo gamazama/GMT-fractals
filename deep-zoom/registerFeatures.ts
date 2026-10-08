@@ -43,7 +43,7 @@ import './storeTypes';
 featureRegistry.register(DzFormulaFeature);
 
 // Quality — frame size, detail, reach, normals, accumulation, and the
-// advanced precision / BLA / step levers.
+// advanced precision / BLA / resolution-cap levers.
 featureRegistry.register(DzQualityFeature);
 
 // Inspect — the diagnostic channel and the compare split. Session-only.

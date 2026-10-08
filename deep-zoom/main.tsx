@@ -41,6 +41,7 @@ import { setupDeepZoom } from './setup';
 import { installViewport } from '../engine/plugins/Viewport';
 import { installTopBar, topbar } from '../engine/plugins/TopBar';
 import { registerCoreSettings } from '../store/coreSettings';
+import { registerDeepZoomSettings } from './settings';
 import { SettingsButton } from '../components/SettingsAccess';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
@@ -106,6 +107,8 @@ try {
     // ONCE: stage 3 replaces this line with the call that passes the app's own
     // autosave store, it does not add a second call (a second call is ignored).
     registerCoreSettings({ autosave: null });
+    // This app's own rows in the same panel: Advanced mode, Invert look Y.
+    registerDeepZoomSettings();
     topbar.register({ id: 'settings', slot: 'right', order: 100, component: SettingsButton });
 
     // PWA update pill. Surfaces an amber "Update" button in the topbar when a

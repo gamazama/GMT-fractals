@@ -222,6 +222,42 @@ export const stage: DzStage = {
             },
         },
         {
+            name: 'Step size and Hit refine are on the Quality tab without advanced mode; the backtick key and the Settings row switch the advanced rows',
+            owner: 'owner, 2026-10-08',
+            falsified: '2026-10-08, four breaks, one run each: `isAdvanced: true` put back on `stepSize` in deep-zoom/features/quality.ts -> red, "Step size is shown" false; the backtick binding removed from deep-zoom/hotkeys.ts -> red, "the backtick key turns advanced mode on" false; the Settings row given a `set` that does nothing (deep-zoom/settings.ts) -> red, "switched off there ..." false; `registerDeepZoomSettings()` removed from deep-zoom/main.tsx -> red, "Settings has an Advanced mode row" false. On its first run the step was red for a wrong reason of its own: it looked for the Precision row by `data-help-id`, which option rows do not carry.',
+            async run(ctx) {
+                await ctx.boot({ clearStorage: true });
+                await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
+                await ctx.sleep(300);
+                const has = (param: string) => ctx.ev<boolean>(`!!document.querySelector('[data-help-id^="dzQuality.${param} "]')`);
+                ctx.check((await ctx.store<boolean>('advancedMode')) === false, 'advanced mode starts off');
+                ctx.check(await has('stepSize'), 'Step size is shown');
+                ctx.check(await has('hitRefine'), 'Hit refine is shown');
+                // A slider row carries its param in `data-help-id`; an option row (Precision, BLA) does
+                // not, so those are looked for by their label.
+                const labelled = (label: string) => ctx.ev<boolean>(`document.body.innerText.includes(${JSON.stringify(label)})`);
+                ctx.check(!(await has('resolutionCap')) && !(await labelled('Precision')), 'Resolution cap and Precision (advanced) are hidden');
+                await ctx.focusPicture();
+                await ctx.page.keyboard.press('Backquote');
+                await ctx.sleep(300);
+                ctx.check((await ctx.store<boolean>('advancedMode')) === true, 'the backtick key turns advanced mode on');
+                ctx.check((await has('resolutionCap')) && (await labelled('Precision')), 'and Resolution cap and Precision are shown');
+                // The Settings row is the same flag (the panel that draws it is the engine's own).
+                const row = await ctx.ev<{ found: boolean; value: unknown }>(`(async () => {
+                    const m = await import('/store/settingsRegistry.ts');
+                    const d = m.getSettings().find((x) => x.id === 'deep-zoom.advanced-mode');
+                    if (!d) return { found: false, value: null };
+                    const value = d.get();
+                    d.set(false);
+                    return { found: true, value };
+                })()`);
+                ctx.check(row.found && row.value === true, 'Settings has an Advanced mode row and it reads on');
+                await ctx.sleep(300);
+                ctx.check((await ctx.store<boolean>('advancedMode')) === false && !(await has('resolutionCap')), 'switched off there, the advanced rows are hidden again');
+                ctx.check(await has('stepSize'), 'and Step size is still shown');
+            },
+        },
+        {
             name: 'Hit refine reaches the renderer and moves where rays land; back at off the picture is as it was',
             owner: 'renderer',
             falsified: '2026-10-08, two breaks, one run each: the `hitRefine` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds 4 halvings" false and 0.0 % of the pixels changed; the refine branch of the shader made dead (`if (false && refine > 0 ...)` in renderer/core.js) -> red, the renderer held 4 and 0.0 % of the pixels changed.',
