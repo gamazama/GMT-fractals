@@ -21,6 +21,11 @@
  *   4. Shift+W covers more than twice the ground of W               - the boost key
  *   5. three wheel notches up raise `navigation.flySpeed`, three down lower it   - the wheel's speed law
  *   6. W held while a text field has the keyboard moves nothing      - the typing-target rule
+ *   6b. Alt+S (a bound shortcut) moves nothing, Alt+W (unbound) still flies   - the dispatcher
+ *      running in the capture phase in app-gmt, so a chord that fires never reaches the hook.
+ *      Seen red 2026-10-08 with `installShortcuts()` in app-gmt/main.tsx given no `capture`:
+ *      Alt+S then moved the scene by 5e-2. (An app that installs the dispatcher WITHOUT capture
+ *      has to refuse such chords itself: the deep-zoom shell does, grep `keysSuppressed`.)
  *   7. after a left-drag across the picture, W no longer points along the old forward   - drag-look
  *   8. the store's `interacting` flag is true while W is held and false after   - the hook's
  *      per-frame half (`frame(delta)`), which opens and closes the ADR-0061 camera session
@@ -166,6 +171,17 @@ async function main() {
     const typed = await hold('w');
     await page.evaluate("document.getElementById('smoke-fly-field').remove()");
     check(!moved(typed), `W typed in a text field moves nothing (displacement ${len(typed).toExponential(2)})`);
+
+    // 6b. a shortcut chord on a fly letter is the shortcut, not a move: Alt+S is Save Scene (PNG).
+    //     Nothing in the navigation refuses it: app-gmt runs the shortcut dispatcher in the CAPTURE
+    //     phase (`installShortcuts({ capture: true })` in app-gmt/main.tsx), and a binding that
+    //     fires stops the event before the input hook's listener hears it. Alt with a letter that
+    //     is NOT bound still flies (Alt is the precise modifier).
+    await page.mouse.move(cx, cy);
+    const chord = await hold('Alt', 's');
+    check(!moved(chord), `Alt+S (Save Scene PNG) moves nothing (displacement ${len(chord).toExponential(2)})`);
+    const altW = await hold('Alt', 'w');
+    check(moved(altW) && cos(altW, forward) > 0.9, `Alt+W, which no shortcut owns, still flies forward (length ${len(altW).toExponential(2)})`);
     await page.mouse.move(cx, cy);
 
     // 7. drag-look turns the view
