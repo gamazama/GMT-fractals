@@ -54,6 +54,11 @@ export interface DeepZoomCoreOptions {
      *  is every hit of a shallow view - is drawn in one mid grey. True: it takes the palette and
      *  the near surface's albedo (grep `FAR LOOK` in core.js). */
     farLook?: boolean;
+    /** Default false (the page's kernel). True: an orbit that the kernel rebases is carried onto the
+     *  origin instead of onto the reference's first point, which keeps single precision where orbits
+     *  pass the origin and run on (grep `REBASE TO THE ORIGIN` in core.js). The same orbit, so the
+     *  picture moves only by rounding. `api.setRebaseOrigin` changes it later. */
+    rebaseOrigin?: boolean;
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).
      *  Nothing is restored: dispose and mount a fresh canvas. */
     onContextLost?: () => void;

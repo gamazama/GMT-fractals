@@ -16,6 +16,11 @@
  * fixed-point direct march that shares no math with the shader kernel, at 11 depths from 1e-5 to 1e-50.
  * It exits non-zero unless all 11 depths ran and passed.
  *
+ * ADDED HERE, not in the historical suite (2026-10-08): `ORIGIN=1` runs the 11 depths with the
+ * kernel's rebase to the origin on, and a last section, OFF-CENTRE RAYS, checks a 13 x 13 grid of
+ * rays in two flight views - the historical probes are all on the centre ray, close to the camera,
+ * and never saw the fault that section is about. It gates too: 2 grids must pass.
+ *
  * Real GPU only: headed Chrome through ANGLE/d3d11 (SwiftShader cannot compile this shader in time).
  */
 import { chromium } from 'playwright';
@@ -62,7 +67,19 @@ const srv = await server();
 const PAGE = srv.origin + '/deep-zoom-harness.html' + (process.env.MANUAL === '1' ? '?manual=1' : '');
 console.log('page:', PAGE);
 
-let pass = 0, ran = 0;
+/** Two views of the frozen page's sample flight (3b65946:sample-flight.json, at 0.28 and 0.81 of
+ *  its length), as plain data so this check needs no other repo. The first is where the page's
+ *  kernel was found 2 to 89 % wrong in the bottom tenth of the picture; the second had it mildly
+ *  (a fifth of its rays more than 1e-3 off). */
+const GRID_VIEWS: Array<[string, unknown]> = [
+    ['flight view A', { cam: ['-19106688270107589239900731000824630997268179563911966325659783872820568426676', '2056390632353064852223937457677118491523808047665681090998789597348598489238', '106035815535807823749833402101018299423493735995136270043159830313984249367966'],
+        yaw: -1.2423396513222302, pitch: -0.20912409747792154, iters: 54, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 }],
+    ['flight view B', { cam: ['-19106688270107543539847685334123376502389289999276832103627022535307503912317', '2056390632353040684939008940473484011303878643906907968396164569726249960005', '106035815535807683251647607458977423429431001610281789023943266795617768965116'],
+        yaw: -1.0246361075243915, pitch: -0.5258098005280843, iters: 77, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 }],
+];
+const ORIGIN = process.env.ORIGIN === '1';
+
+let pass = 0, ran = 0, gridPass = 0, gridRan = 0;
 const pageErrors: string[] = [];
 // DZ_HEADLESS=1: no window (same Chrome, same GPU flags).
 const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1',
@@ -80,6 +97,7 @@ try {
   if (BLA) { await page.evaluate(() => (window as any).__setBla(true));
     const e = await page.evaluate(() => (window as any).__blaErr()); if (e) { console.log('BLA COMPILE FAILED:\n' + e); process.exit(1); } }
   console.log('BLA path:', BLA ? 'ON' : 'off');
+  if (ORIGIN) { await page.evaluate('window.__setRebaseOrigin(true)'); console.log('rebase: to the ORIGIN (ORIGIN=1; the default is the page\'s)'); }   // not in the historical suite
   for (const depth of DEPTHS) {
     // base 32: +8 margin over escape time so boundary points don't sit at the budget
     // edge (measured at 1e-50: iters=92 flipped the escape flag, 96+ agreed)
@@ -136,10 +154,50 @@ try {
       console.log(`        t=${p.t.toExponential(2)}  gpu=${p.gpu.toExponential(6)}  direct=${p.direct.toExponential(6)}  pert=${p.pert.toExponential(6)}  esc G/D=${p.escG}/${p.escD}  rel=${p.rel.toExponential(1)}`);
   }
   console.log(`\n${pass}/${ran} depths: GPU perturbed de matches the INDEPENDENT BigInt direct referee.`);
+
+  // ---- OFF-CENTRE RAYS (added 2026-10-08; not in the historical suite) ----
+  // Everything above probes the centre ray, within half a surface distance of the camera. A
+  // picture's rays end 4 to 20 surface distances out and in every direction, and that is where
+  // the page's kernel was found wrong (grep REBASE TO THE ORIGIN in core.js). Here a 13 x 13 grid
+  // of rays is marched carefully, the centre ray is aimed along each in turn (the camera does not
+  // move, so the reference orbit is the same), and the GPU's de at 0.97 of that ray's hit distance
+  // is compared with the BigInt referee. Gated with the rebase to the origin ON; the page's own
+  // kernel is printed beside it and not gated - it is the fault.
+  for (const [name, view] of GRID_VIEWS) {
+    for (const origin of [false, true]) {
+      const r: any = await page.evaluate(`(async () => {
+        const w = window, G = 13, f = Math.tan(0.55);
+        w.__setRebaseOrigin(${origin}); w.__dz.setView(${JSON.stringify(view)}); w.__setSurf(360 / G);   // a 360-row picture's hit tolerance on 13 rays
+        await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(done))));
+        w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
+        const g = w.__readGbuf(G);
+        w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
+        const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, refE = Math.floor(Math.log2(dist));
+        const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
+        const fwd = [cp * cy, sp, cp * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
+        const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+        let rays = 0, over3 = 0, over2 = 0, worst = 0;
+        for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+          const i = (y * G + x) * 4;
+          if (Math.floor(g[i + 2] / 256) % 4 !== 1) continue;             // near hits only
+          const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
+          let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((c) => c / len);
+          w.__dz.setYawPitch(Math.atan2(d[2], d[0]), Math.asin(d[1]));
+          const q = w.__directCheckHP([Math.pow(2, g[i] + refE) * 0.97])[0], rel = q.escG === q.escD ? q.rel : 1;
+          rays++; if (rel > 1e-3) over3++; if (rel > 1e-2) over2++; if (rel > worst) worst = rel;
+        }
+        w.__dz.setView(v0); w.__setSurf(1); w.__setRebaseOrigin(${ORIGIN});
+        return { rays, over3, over2, worst, depth: dist };
+      })()`);
+      const ok = !origin || (r.rays >= 100 && r.over2 === 0 && r.over3 <= 0.02 * r.rays);
+      if (origin) { gridRan++; if (ok) gridPass++; }
+      console.log(`off-centre rays, ${name} (${r.depth.toExponential(1)}), ${origin ? 'rebase to the origin' : "the page's kernel     "}: ${r.rays} rays  ${String(r.over3).padStart(3)} over 1e-3  ${String(r.over2).padStart(3)} over 1e-2  worst ${r.worst.toExponential(1)}  ${origin ? (ok ? 'PASS' : 'FAIL') : '(not gated)'}`);
+    }
+  }
 } finally { await browser.close(); srv.stop(); }
 
 // The historical suite only prints; as a guard for the port this one also gates.
 if (pageErrors.length) console.log(`page errors (${pageErrors.length}):\n  ` + pageErrors.slice(0, 5).join('\n  '));
-const allOk = pass === DEPTHS.length && ran === DEPTHS.length && pageErrors.length === 0;
-if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths and no page errors`);
+const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRID_VIEWS.length && gridRan === GRID_VIEWS.length && pageErrors.length === 0;
+if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRID_VIEWS.length}/${GRID_VIEWS.length} off-centre grids and no page errors`);
 process.exit(allOk ? 0 : 1);

@@ -588,11 +588,53 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
     trap = min(trap, z2);
     if (z2 > 4.0) { escaped = true; escR2 = z2; break; }
     if (z2 < dot(dz, dz) || m >= orbitLen - 1) {             // Zhuoran rebase / reference exhausted
-      D = zf - T00.xyz; e = 0.0;
-      sclNorm(D, e);
-      Ddr = hdrAdd(hdrSub(cDR, vec2(1.0, 0.0)), Ddr);
-      m = 0; rebases++;
-      cT0 = T00; cDR = DR00;
+      if (uRebaseOrigin == 1 && it < maxIter) {
+        /* REBASE TO THE ORIGIN (uRebaseOrigin, 2026-10-08; off by default: the page's rebase is
+           the branch below). A rebase restarts the reference at its first point. The page does it
+           as δ = z − Z0, and Z0 is c, not 0: the reference orbit is stored from its first point on.
+           So a z that has come close to the origin - an orbit about to start over - gets a δ as
+           large as c itself, and every iteration from there on is plain f32 on numbers of size 1,
+           its rounding growing about tenfold an iteration. Where orbits pass the origin and then
+           need many more iterations than the camera's (the bottom of the sample flight's 3.5e-16
+           view: a pass at 0.19 on iteration 16, eight more to escape) the distance estimate came
+           out 2 to 89 % wrong against the BigInt direct referee, and the picture there is grain.
+           Here z itself is the δ of a reference standing at the origin, and one direct iteration
+           carries it onto Z0:   δ ← z^n + δc,   Δdr ← n·|z|^(n−1)·dr   (dr' = n|z|^(n−1)·dr + 1, DR0 = 1).
+           z^n is formed from z alone, to full f32 relative precision, so a small z gives a small δ
+           again. It is the same orbit - in f64 the two rebases agree to 1e-9 - and it is one real
+           iteration (it++). |z| is carried as mantissa·2^ez so that z^n cannot underflow.
+           @invariant with uRebaseOrigin = 1 the GPU distance estimate is within 1e-3 of the BigInt
+           direct referee on a 13 x 13 grid of rays of that view, just in front of each ray's hit -
+           proven by: npm run smoke:deep-zoom-direct ("off-centre rays ... rebase to the origin").
+           Falsified 2026-10-08: this branch switched off in the shader -> that line FAIL. */
+        vec2 drFull = hdrAdd(cDR, Ddr);                      // the pixel's own dr at this point
+        float rz = sqrt(z2);
+        if (rz > 0.0) {
+          float ez = floor(log2(rz)), rm = rz * exp2(-ez);   // |z| = rm·2^ez
+          float rn1 = 1.0;
+          for (int k = 1; k < uPowerI; k++) rn1 *= rm;       // rm^(n−1) by multiplication: the built-in pow is not f32-accurate
+          float rho = length(zf.xy);
+          float th = atan2Acc(rho, zf.z) * uPower + uPhase.x;
+          float ph = (rho > 0.0 ? atan2Acc(zf.y, zf.x) : 0.0) * uPower + uPhase.y;
+          float sth, cth1, sph, cph1;
+          sinCosm1Acc(th, sth, cth1); sinCosm1Acc(ph, sph, cph1);
+          vec3 P = rn1 * rm * vec3(sth * (1.0 + cph1), sth * sph, 1.0 + cth1);   // z^n = P·2^(n·ez)
+          sclAdd(P, uPower * ez, C, ec, D, e);
+          Ddr = hdrMulF(drFull, uPower * rn1); Ddr.y += (uPower - 1.0) * ez;
+        } else { D = C; e = ec; Ddr = vec2(0.0); }
+        sclNorm(D, e);
+        m = 0; it++; rebases++;
+        cT0 = T00; cDR = DR00;
+        dz = D * sclPow2(e); zf = cT0.xyz + dz; z2 = dot(zf, zf);
+        trap = min(trap, z2);
+        if (z2 > 4.0) { escaped = true; escR2 = z2; break; }
+      } else {
+        D = zf - T00.xyz; e = 0.0;
+        sclNorm(D, e);
+        Ddr = hdrAdd(hdrSub(cDR, vec2(1.0, 0.0)), Ddr);
+        m = 0; rebases++;
+        cT0 = T00; cDR = DR00;
+      }
     }
   }
   float sE = sclPow2(e);
@@ -719,6 +761,7 @@ uniform int       uLand;         // 1 = land a hit on the level de = pa·t inste
 uniform float     uLandSplit;    // compare view: the divider's framebuffer x
 uniform int       uFarLook;      // 1 = a far-field hit carries a palette parameter, as a near hit does (grep FAR LOOK); 0 = the page
 uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
+uniform int       uRebaseOrigin; // 1 = the kernel rebases an orbit onto the origin (grep REBASE TO THE ORIGIN); 0 = the page: onto the reference's first point
 uniform int       uGuide;        // 1 = this jittered sample starts its march from the depth guide; 0 = from the camera
 uniform float     uGuideK;       // guide back-off, in pixel cones
 uniform int       uGuideR;       // guide neighbourhood radius in pixels (1 = 3×3, 2 = 5×5)
@@ -1538,7 +1581,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2142,6 +2185,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.land, look.compare === 2 ? 2 : landMode);
   gl.uniform1i(x.hitRefine, look.compare === 3 ? -(hitRefine || 4) : hitRefine);   // compare 3: refined on the right of the divider only
   gl.uniform1i(x.farLook, dzFarLook);
+  gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
@@ -2395,6 +2439,7 @@ api.setMarch = (o)=>{ Object.assign(march, o); accumReset = true; };
 api.setReach = (k)=>{ Object.assign(march, REACH[Math.max(0, Math.min(2, k|0))]); accumReset = true; };
 let landMode = 0;                               // 1 = land each hit on a fixed level of the distance estimate (grep HIT LANDING)
 let hitRefine = 0;                              // n > 0: bisect each hit's last step n times (grep HIT REFINE)
+let rebaseOrigin = options.rebaseOrigin === true ? 1 : 0;   // 1 = the kernel rebases onto the origin (grep REBASE TO THE ORIGIN); 0 = the page
                                                 // 4-tap tetrahedron = symmetric, reference-correct DE normal.
                                                 // 3-tap is a one-sided forward difference: 1 fewer orbit but a
                                                 // systematic +XYZ tilt (looks different). screen-space = free, speckles at depth.
@@ -3269,7 +3314,8 @@ api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(160,n|0)); orbitDirty=true; 
 api.setAutoIters = (b)=>{ autoIters=!!b; };
 api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
-api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine });
+api.setRebaseOrigin = (b)=>{ rebaseOrigin = b ? 1 : 0; accumReset = true; };   // REBASE TO THE ORIGIN on / off (off = the page's kernel)
+api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
 api.setSurf = (m)=>{ surfMul=Math.max(0.25,Math.min(256,m||1)); accumReset=true; };  // ray-closeness ÷pixAng

@@ -285,7 +285,11 @@ export interface DeepZoomApi {
      *  proof: grep `MARCH PROBE` in core.js. The tool on it: `npm run bench:deep-zoom-march`. */
     marchProbe(n?: number, pixH?: number): Float32Array | null;
     /** Read-back for the settings above that had setters only. (Added 2026-10-08.) */
-    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number };
+    /** REBASE TO THE ORIGIN (added 2026-10-08, off by default = the page's kernel; the create option
+     *  `rebaseOrigin` sets it from the start). A precision repair, not a look: grep the name in
+     *  core.js for the fault it cures and its proof (`npm run smoke:deep-zoom-direct`). */
+    setRebaseOrigin(on: boolean): void;
+    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */
     look: DzLook;
