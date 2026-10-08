@@ -7,7 +7,57 @@ frozen; the renderer is the module `deep-zoom/renderer`; the embedded prototype 
 navigation and Light Studio are reworked generically and used here (stages N and L, from
 `GMT-SYSTEMS.md` sections 3.4, 4.5 and 7); the shell never waits for a rework. Target is
 `BLUEPRINT.md`; engine changes are `ENGINE-GAPS.md`; owner calls are `DECISIONS.md`.
-**Nothing here was run, and nothing is to be built yet** - this is the plan only.
+**Building started 2026-10-08.** State and corrections follow; the stage tables below are the
+original plan and are not rewritten.
+
+### As built, 2026-10-08 (branch `deep-zoom-tool`, unpushed)
+
+| Stage | State |
+|---|---|
+| 1 | **Closed.** S1-A, S1-0, S1-1, S1-2, S1-3. Smoke stage 1: 19 steps. |
+| 2 | **Built**, except: pause controls (S2-9, waits on a module pause), the Diagnostics tab (D7), the `actualPixels` row, a menu row for Advanced mode. Smoke stage 2: 9 steps. |
+| 3 | **Built**, except: Export all (JSON), the scene-file claims (S3-4), Session / autosave (the session half of S3-2). Smoke stage 3: 9 steps. |
+| 4 | **Keys built** (S4-1; smoke stage 4: 4 steps). Help topics, the shortcuts page, What's New and the first-dive lesson (S4-2, S4-3) are not built. |
+| N | N0 only (the replay guard, `npm run test:nav-replay`). |
+| Engine | S2-4 (one overlay host) and S3-0 (state-library options) landed. |
+| Module | Done inside other packages: `setIters`, `setAutoIters`, two read-backs (part of M1); `setView` snaps the distance (M8); fly keys ignore a key pressed with Ctrl / Alt / Meta (part of M6). |
+
+How it was built changed after the first evening: one builder agent per package cost about the
+same whatever the package's size, and the usage cap was hit with stage 1 barely closed. From
+stage 2 on it was built in one session, depth-first, one commit per visible piece.
+
+**Corrections to this plan found by building** (each is in the code's JSDoc where it bites):
+- **The fly guard cannot be a priority-10 binding with a condition** (S2-6, S4-1, BLUEPRINT section 9).
+  The shortcut dispatcher picks the winning binding for a key first and tests its `when` afterwards,
+  with no fall-through, so such a guard swallows the key with the pointer free too. It is a shortcut
+  SCOPE pushed while the pointer is captured (`deep-zoom/flyGuard.ts`).
+- **Precision Deep at a shallow depth draws one flat colour.** A smoke step about Light or Colour
+  uses a view that is deep by itself; the tabs say they act below 1e-4 and offer no switch.
+- **`restoreDocuments` runs after the preset fields** (`loadPreset` in `store/engineStore.ts`), so the
+  document carrier for saved places works as planned. Places in a scene are MERGED into the
+  device's list by id; a scene never deletes a place saved on this device.
+- **`installModulation()` is the only registration of the engine's animation tick.** Without it the
+  timeline does not play. It is called; the modulation UI is not installed.
+- **A view loaded before the renderer is ready must outlive React's first, disposed mount** (dev
+  StrictMode): it is kept until a mounted renderer is ready (`deep-zoom/presetFields.ts`).
+- **The renderer's canvas reads blank between frames**, so Save PNG draws one frame and copies it
+  in the same task (`sceneCanvas` in `deep-zoom/share.ts`). S3-6 (an engine snapshot option) is not needed.
+- **The share encoder rounds numbers to four decimals**, so yaw and pitch are stored as text beside
+  the camera strings.
+- **A dive flies straight ahead and the renderer's distance reading falls in cliffs at depth**
+  (2.3e-29 to 1.8e-34 across one 5 % step, traced), so a dive can end decades under its target, and
+  from a view that grazes the surface it stops on its 45 s limit. The fix is a truer distance in the
+  module (the ray's own hit distance); not planned as a package yet. Starter views need good aim:
+  the first two starters dive into the grainy f32 picture and want replacing by the owner.
+- **Colour** is `plain` + `mode` (GMT's numbers) + `scale` in the module's units (BLUEPRINT section 3,
+  as built). A module adapter that makes `scale` mean what it means in GMT changes the picture and
+  needs a scene-version migration; the stamp (`dzSceneVersion: 1`) is in every scene from the first.
+- **The smokes run with no window** (`DZ_HEADLESS=1`): same Chrome, same GPU. A headed window takes
+  the keyboard; keys typed elsewhere landed in the page under test and failed two parity lines.
+
+**Open calls built on their recommended answer** (say if any should differ): D3 keys, D6 A (places in
+scenes, plus a storage mirror), D8 (the engine changes rode along), D13 (11 ranged light rows only),
+D14 A (no Fixed mode). D7 (Diagnostics) and D9 (tutorial card) are untouched.
 
 In rows this pass did not rewrite, "the page" as the thing the shell talks to means the module,
 and `__name` means `instance.api.name`. Reader-map tags in brackets as in the blueprint; `[gmt n]`

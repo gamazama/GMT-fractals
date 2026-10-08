@@ -1,6 +1,7 @@
 ---
 paths:
   - "engine-gmt/navigation/**"
+  - "engine-gmt/engine/controllers/CameraController.ts"
 ---
 
 # Navigation + cursor-anchored gestures
@@ -39,7 +40,18 @@ entry point cannot go red on a Navigation regression, however relevant its name.
 npm run typecheck        # event constants, ref types, prop contracts
 npm run smoke:engine-gmt # app-gmt.html boot — Navigation mounts, 0 pageerrors
 npm run smoke:orbit      # app-gmt.html orbit drag → sceneOffset   (~25s; see below)
+npm run test:nav-replay  # node, ~1.5 s: the fly integrator replays a scripted flight to the last bit
 ```
+
+`test:nav-replay` (`debug/test-nav-replay.mts`, golden `debug/nav-replay-golden.json`) is the only
+guard on the fly integrator, `CameraController.update`: 17 scripted segments, every displacement
+and the camera quaternion compared as float64 bit patterns. Falsified 2026-10-08 -
+`DIST_INCREASE_LERP_RATE` 1.2 -> 1.3 reds six segments; 69 of 71 further single breaks red, the
+other two bit-identical by construction. It reaches `engine-gmt/navigation/**` through ONE file,
+`modifiers.ts` (`CAMERA_PRECISE_MULT` 0.1 -> 0.2 reds `roll`). It does not open `Navigation.tsx`,
+`useInputController.ts` or `usePhysicsProbe.ts`: the call site (grep `flyController.current.update`),
+the key map, the wheel speed law and the distance probe are still unguarded. Never re-record its
+golden to make a refactor pass; `--update` needs an ADR that mentions `nav-replay`.
 
 `smoke:orbit` is the only browser guard that drives a real camera gesture through
 this file. **It is GREEN as of 2026-07-29 and was fixed that day** — it had been

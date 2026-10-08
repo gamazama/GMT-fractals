@@ -22,6 +22,11 @@ down in `engine/plugins/topbar/` (`ProjectName`, `FpsCounter`, `PauseControls`,
 (`.claude/rules/navigation.md` is scoped to `engine-gmt/navigation/**`, not this one).
 `engine/plugins/RenderLoop.tsx` is deliberately NOT here — see
 `.claude/rules/tick-and-animation.md`.
+`engine/plugins/viewport/FeatureOverlays.tsx` is the ONE host for the viewport overlays features
+declare (`viewportConfig`): every app shell mounts it (`<FeatureOverlays />` inside its viewport
+frame, `type="scene"` inside an R3F canvas) and none carries its own loop — a grep for
+`getViewportOverlays().filter` finds that file only. Its guard is `smoke:engine-demo` (below);
+nothing goes red if an app shell stops MOUNTING it.
 
 Decisions: ADR-0021 (slots), ADRs 0022-0023 (shortcuts + per-scope undo),
 ADRs 0024-0026 (adaptive resolution), ADRs 0029-0032 (camera / StateLibrary),
@@ -122,6 +127,7 @@ flag to Navigation.
 
 ```
 npm run test:shortcuts-teardown  # node-only: uninstallShortcuts is the inverse of install
+npm run smoke:engine-demo        # engine/plugins/viewport/FeatureOverlays.tsx: a declared DOM overlay is drawn; red with the host returning null, 2026-10-08. The boot and chrome smokes stay green with it broken.
 npm run smoke:undo
 npm run smoke:camera
 npm run smoke:viewport
