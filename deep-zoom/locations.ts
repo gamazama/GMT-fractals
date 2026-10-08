@@ -117,7 +117,10 @@ export function viewForHost(view: DzView): DzView {
         cam: view.cam,
         yaw: view.yaw,
         pitch: view.pitch,
-        iters: s.dzFormula.iterations,
+        // The store holds the user's FLOOR; with auto iterations on the renderer raises its own
+        // count with depth and a saved view carries the count it was drawn with. Handing the
+        // floor here redrew a place saved at 98 iterations with 85 (seen 2026-10-08).
+        iters: Math.max(s.dzFormula.iterations, view.iters),
         power: s.dzFormula.power,
         phase: [s.dzFormula.phaseTheta, s.dzFormula.phasePhi],
         light: lightTypeToRenderer(s.dzLight.lightType),

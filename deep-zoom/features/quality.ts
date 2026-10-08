@@ -227,11 +227,15 @@ export const DzQualityFeature = {
         },
         stepSize: {
             type: 'float',
-            default: 0.85, min: 0.85, max: 2, step: 0.05,
+            // The page's own control stopped at 0.85 (it was a speed lever). The range goes down to
+            // 0.1 here because the distance estimate over-reads in places: seen 2026-10-08 on the
+            // owner's 2.8e-39 view, where 0.85 steps through the surface and draws dark terraced
+            // slices that 0.2 does not (debug/scratch study, one sample and 64).
+            default: 0.85, min: 0.1, max: 2, step: 0.05,
             label: 'Step size',
             isAdvanced: true,
             format: (v) => `${v.toFixed(2)}×`,
-            description: 'March step as a multiple of the distance estimate. Above 0.85 a ray takes fewer, longer steps and can pass through thin features.',
+            description: 'March step as a multiple of the distance estimate. Lower it where the surface shows terraced slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features.',
         },
         resolutionCap: {
             type: 'int',
