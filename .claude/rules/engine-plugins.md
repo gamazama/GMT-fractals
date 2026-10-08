@@ -27,6 +27,9 @@ declare (`viewportConfig`): every app shell mounts it (`<FeatureOverlays />` ins
 frame, `type="scene"` inside an R3F canvas) and none carries its own loop — a grep for
 `getViewportOverlays().filter` finds that file only. Its guard is `smoke:engine-demo` (below);
 nothing goes red if an app shell stops MOUNTING it.
+`engine/plugins/navigation/FlyIntegrator.ts` (+ `modifiers.ts`) is the fly integrator both GMT and
+the deep-zoom shell fly with (ADR-0133: it emits displacements to a sink and holds no position).
+Every number in it is pinned to the last bit - read its header before touching an expression.
 
 Decisions: ADR-0021 (slots), ADRs 0022-0023 (shortcuts + per-scope undo),
 ADRs 0024-0026 (adaptive resolution), ADRs 0029-0032 (camera / StateLibrary),
@@ -127,6 +130,7 @@ flag to Navigation.
 
 ```
 npm run test:shortcuts-teardown  # node-only: uninstallShortcuts is the inverse of install
+npm run test:nav-replay          # engine/plugins/navigation/FlyIntegrator.ts: 834 scripted frames, bit-exact
 npm run smoke:engine-demo        # engine/plugins/viewport/FeatureOverlays.tsx: a declared DOM overlay is drawn; red with the host returning null, 2026-10-08. The boot and chrome smokes stay green with it broken.
 npm run smoke:undo
 npm run smoke:camera

@@ -147,7 +147,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CameraController } from '../engine-gmt/engine/controllers/CameraController';
 import type { JoystickInput, MoveInputState } from '../engine-gmt/engine/controllers/CameraController';
-import { FractalEvents, FRACTAL_EVENTS } from '../engine/FractalEvents';
 
 // ---------------------------------------------------------------- the frame a real caller sends
 
@@ -175,7 +174,9 @@ interface Displacement { x: number; y: number; z: number }
 
 /** Displacements that left the integrator during the current `stepFrame` call. */
 const emitted: Displacement[] = [];
-FractalEvents.on(FRACTAL_EVENTS.OFFSET_SHIFT, ({ x, y, z }) => { emitted.push({ x, y, z }); });
+/** The test's sink (package N2, 2026-10-08: the integrator hands displacements to a sink; before
+ *  that it emitted `offset_shift` on the engine bus and this file listened there). */
+const sink = (x: number, y: number, z: number): void => { emitted.push({ x, y, z }); };
 
 /**
  * THE SEAM. Everything else in this file is script, recording and comparison; this is the one
@@ -187,7 +188,10 @@ function stepFrame(controller: CameraController, camera: THREE.Camera, f: Frame)
         camera,
         f.delta,
         { move: f.move, look: f.look, moveJoy: f.moveJoy, isDragging: f.isDragging, dragDelta: f.dragDelta, invertY: f.invertY },
-        { baseSpeed: f.baseSpeed, distEstimate: f.distEstimate, autoSlow: f.autoSlow },
+        // No floors are passed: GMT passes none either, so both run on the integrator's defaults
+        // (grep FLY_DEFAULT_MIN_SPEED). A second copy of the numbers typed here would stay green
+        // while GMT flew on a different one.
+        { baseSpeed: f.baseSpeed, distEstimate: f.distEstimate, autoSlow: f.autoSlow, translate: sink },
     );
 }
 
@@ -640,8 +644,8 @@ function inputsDigest(segment: Segment): string {
  * When the integrator moves (package N2), list its new files here in the same change.
  */
 const INTEGRATOR_SOURCES = [
-    'engine-gmt/engine/controllers/CameraController.ts',
-    'engine-gmt/navigation/modifiers.ts',
+    'engine/plugins/navigation/FlyIntegrator.ts',
+    'engine/plugins/navigation/modifiers.ts',
 ];
 
 interface GoldenSegment { inputs: string; frames: string[] }

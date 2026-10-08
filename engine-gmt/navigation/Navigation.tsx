@@ -134,6 +134,12 @@ import { useEngineStore as useFractalStore, selectMovementLock } from '../../sto
 import { INTERACTION_SOURCES } from '../interaction/interactionSources';
 import { useMobileLayout } from '../../hooks/useMobileLayout';
 import { CameraController } from '../engine/controllers/CameraController';
+
+/** Where the fly integrator's displacements go in GMT (ADR-0133): the engine bus's
+ *  `offset_shift`, which the worker's virtual space and the tick driver both hear. */
+const emitOffsetShift = (x: number, y: number, z: number): void => {
+    FractalEvents.emit('offset_shift', { x, y, z });
+};
 import { VirtualSpace } from '../engine/PrecisionMath';
 
 interface NavigationProps {
@@ -1401,7 +1407,10 @@ const Navigation: React.FC<NavigationProps> = ({
               {
                   baseSpeed: speedRef.current,
                   distEstimate: distAverageRef.current,
-                  autoSlow: navSettings?.autoSlow ?? true
+                  autoSlow: navSettings?.autoSlow ?? true,
+                  // The integrator holds no position: GMT's sink is the virtual-space shift
+                  // event, exactly what it emitted itself before it moved to the engine.
+                  translate: emitOffsetShift
               }
           );
 

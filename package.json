@@ -102,6 +102,7 @@
     "smoke:migrations": "tsx debug/smoke-migrations.mts",
     "smoke:mobile-layout": "tsx debug/smoke-mobile-layout.mts",
     "smoke:orbit": "tsx debug/smoke-orbit.mts",
+    "smoke:fly": "tsx debug/smoke-fly.mts",
     "smoke:particle-bounce": "tsx debug/smoke-particle-bounce.mts",
     "smoke:pause-controls": "tsx debug/smoke-pause-controls.mts",
     "smoke:picker-search-kb": "tsx debug/smoke-picker-search-kb.mts",
