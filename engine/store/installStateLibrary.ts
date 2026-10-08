@@ -16,6 +16,24 @@
  * Each section can be opted out of: pass `slotShortcuts: false` to
  * skip key bindings, `menu: null` to skip the topbar entry. Useful
  * when an app already has bespoke wiring for either.
+ *
+ * The slot keys can also be made conditional without giving them up:
+ * `slotShortcuts: { when }` (see `SlotShortcutOptions.when`) keeps the
+ * bindings and the menu's slot rows, and silences the KEYS while the
+ * predicate returns false. That is the answer for an app with a mode in
+ * which a stray digit must not apply a saved state; `slotShortcuts: false`
+ * is not, because it also removes the menu's slot rows (`resolveSlotCount`).
+ *
+ * Pitfalls:
+ *   - A SLOT IS A POSITION IN THE STORED ARRAY. Key `N` recalls
+ *     `store[arrayKey][N - 1]`, and the save key overwrites that same
+ *     position. A panel that shows the list in another order
+ *     (`<StateLibraryPanel sortBy>`) does not move the slots; it prints each
+ *     row's stored position so the digit on a row is the digit that recalls it.
+ *   - `when` guards keys only. A click on a menu slot row, and any direct
+ *     call of the slice's actions, runs whatever it returns.
+ *   - `when` is asked on every key press and a false answer leaves the key
+ *     event unconsumed — see its JSDoc for what that lets through.
  */
 
 import React from 'react';
@@ -38,6 +56,44 @@ export interface SlotShortcutOptions {
     /** Description prefixes — `${savePrefix} ${n}` / `${recallPrefix} ${n}`. */
     savePrefix?: string;
     recallPrefix?: string;
+    /**
+     * Runtime guard for the slot KEYS. While it returns false neither the
+     * recall key (`N`) nor the save key (`${saveModifier}+N`) does anything.
+     * For an app with a mode in which a stray digit must not apply or
+     * overwrite a saved state (a captured pointer, a modal tool, a capture in
+     * progress). Absent = the keys are always live, exactly as before.
+     *
+     * It is handed to BOTH `shortcuts.register` calls as their `when`, so the
+     * dispatcher's rules are the contract (grep `match.when` in
+     * `engine/plugins/Shortcuts.ts`):
+     *   - It is asked on every matching key press, at press time. Read live
+     *     state inside it (a store `getState()`), never a value captured at
+     *     install, and keep it cheap.
+     *   - A false answer leaves the event UNCONSUMED (no `preventDefault`,
+     *     no `stopPropagation`). Anything else listening for that key still
+     *     gets it, and whatever the browser itself binds to the save combo
+     *     (Ctrl+digit selects a tab in most desktop browsers) applies again
+     *     for as long as the answer is false.
+     *   - It does not pass the key on to another registered shortcut. The
+     *     dispatcher picks ONE match by scope and priority first and only
+     *     then asks that match's `when`; a second binding on the same digit
+     *     needs a higher `priority` or a deeper scope to be reached at all.
+     *
+     * Keys only: the menu's slot rows (`StateLibraryMenuOptions.slotItems`)
+     * do not consult it — a click on a row is deliberate, a digit under the
+     * hand is not — and neither does a direct call of the slice's actions.
+     *
+     * @invariant Both registrations carry the predicate, and neither fires
+     *   while it returns false — proven by:
+     *   npx tsx debug/test-state-library-options.mts ("the save registration
+     *   carries the predicate", "the recall registration carries the
+     *   predicate", "Mod+digit does not save while when() is false", "digit
+     *   does not recall while when() is false").
+     * @invariant A menu slot row acts whatever the predicate says — proven
+     *   by: npx tsx debug/test-state-library-options.mts ("a menu click
+     *   recalls while when() is false").
+     */
+    when?: () => boolean;
 }
 
 type IconRenderable = ComponentType<{ size?: number }> | React.ReactNode;
@@ -163,6 +219,10 @@ function registerSlotShortcuts<T>(
     const recallPrefix = cfg.recallPrefix ?? `Recall slot`;
 
     const idPrefix = opts.actions.saveToSlot;
+    // One predicate for both keys of a slot (see `SlotShortcutOptions.when`).
+    // `undefined` when the app passed none: the dispatcher treats a missing
+    // `when` as "always", which is the behaviour every library had before.
+    const when = cfg.when;
 
     // @assumption Read action functions at fire time, not install time —
     //   robust against ordering between `installStateLibrary` and the
@@ -174,6 +234,7 @@ function registerSlotShortcuts<T>(
             key: `${saveMod}+${n}`,
             description: `${savePrefix} ${n}`,
             category,
+            when,
             handler: () => {
                 const fn = (useEngineStore.getState() as any)[opts.actions.saveToSlot];
                 fn?.(slotIndex);
@@ -184,6 +245,7 @@ function registerSlotShortcuts<T>(
             key: `${n}`,
             description: `${recallPrefix} ${n}`,
             category,
+            when,
             handler: () => {
                 const arr = (useEngineStore.getState() as any)[opts.arrayKey] as any[];
                 const target = arr?.[slotIndex];
@@ -251,6 +313,9 @@ function registerLibraryMenu<T>(
     // Slot 1..N entries — click recalls (falls back to save when empty).
     // Mirrors the shortcut count exactly; with shortcuts off there is no slot
     // section, because each row advertises the key binding that saves to it.
+    // `SlotShortcutOptions.when` is deliberately NOT read here: it silences
+    // the keys, and a click on a row is not a stray key. The rows stay
+    // enabled and keep their key hint while the predicate is false.
     const count = resolveSlotCount(opts.slotShortcuts);
     if (m.slotItems !== false && count > 0) {
         menu.registerItem(m.menuId, {
