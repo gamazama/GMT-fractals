@@ -58,6 +58,8 @@
 export const DZ_DIVE_MIN_DEPTH = 1e-77;
 /** A dive gives up after this much flight; the caller compares the depth and may dive again. */
 export const DZ_DIVE_TIME_LIMIT_MS = 45_000;
+/** The largest share of the distance one frame may fly once within a decade of the target. */
+export const DZ_DIVE_NEAR_SHARE = 0.05;
 /** How many frames in a row must read at or under the target before the dive has arrived. */
 export const DZ_DIVE_ARRIVAL_FRAMES = 3;
 
@@ -158,7 +160,14 @@ export function createDive(deps: DiveDeps): Dive {
             }
             r.arrived = 0;
             const dt = Math.min(0.1, gapMs / 1000);
-            const share = Math.min(0.2, 1 - Math.exp(-r.rate * dt));
+            // Within a decade of the target the steps are small. The module's distance does not
+            // fall evenly at depth: it over-reads and then collapses, usually as its iteration count
+            // steps up. Traced 2026-10-08 on a dive from 1.1e-17 to 1e-30: 2.4e-24 -> 4.8e-26 and,
+            // at the end, 2.3e-29 -> 1.8e-34 across ONE step of 5 %. So a dive can end decades under
+            // its target. Small last steps keep that down; only a truer distance in the module
+            // (the ray's own hit distance, not the estimate at the camera) can remove it.
+            const near = d < r.target * 10;
+            const share = Math.min(near ? DZ_DIVE_NEAR_SHARE : 0.2, 1 - Math.exp(-r.rate * dt));
             // Never past 0.95 x target: the last move lands just inside the target instead of on it,
             // so the arrival test above is met by the next frame's distance.
             const want = Math.min(d * share, d - r.target * 0.95);

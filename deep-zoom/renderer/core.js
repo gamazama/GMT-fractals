@@ -2336,7 +2336,7 @@ const keys = {};
    other app would otherwise fly the camera mid-measurement (seen: a stray 'S' moved it 0.57). */
 let inputLocked = false;
 api.lockInput = (b)=>{ inputLocked = !!b; if (inputLocked) for (const k in keys) keys[k] = false; };
-dzListen(dzKeyTarget, 'keydown',e=>{ if (inputLocked) return; keys[e.code]=true; if (!dzShortcuts) return;
+dzListen(dzKeyTarget, 'keydown',e=>{ if (inputLocked) return; if (e.ctrlKey || e.altKey || e.metaKey) return;   /* a chord is the host's, not a fly key (2026-10-08) */ keys[e.code]=true; if (!dzShortcuts) return;
   if(e.key===']'){ cam.iters=Math.min(160,cam.iters+1); orbitDirty=true; }
   if(e.key==='['){ cam.iters=Math.max(4,cam.iters-1); orbitDirty=true; }
   if(e.code==='KeyI') autoIters=!autoIters;

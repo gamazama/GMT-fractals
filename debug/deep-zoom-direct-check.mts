@@ -64,7 +64,8 @@ console.log('page:', PAGE);
 
 let pass = 0, ran = 0;
 const pageErrors: string[] = [];
-const browser = await chromium.launch({ channel: 'chrome', headless: false,
+// DZ_HEADLESS=1: no window (same Chrome, same GPU flags).
+const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1',
   args: ['--use-gl=angle', '--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu'] });
 try {
   const page = await browser.newPage({ viewport: { width: 640, height: 400 } });

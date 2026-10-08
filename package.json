@@ -20,6 +20,7 @@
     "check:deep-zoom-module-host": "tsx debug/deep-zoom-checks/module-host.mts",
     "check:deep-zoom-param-map": "tsx debug/deep-zoom-checks/param-map.mts",
     "check:deep-zoom-depth-format": "tsx debug/deep-zoom-checks/depth-format.mts",
+    "check:deep-zoom-location-parse": "tsx debug/deep-zoom-checks/location-parse.mts",
     "check:mb3d-decompiler": "node plans/mb3d/decompiler/check-sync.mjs",
     "check:rule-guards": "node debug/check-rule-guards.mjs",
     "check:text-bytes": "node debug/check-text-bytes.mjs",

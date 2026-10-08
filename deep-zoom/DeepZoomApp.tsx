@@ -52,6 +52,7 @@ import { ToastHost } from '../engine/components/ToastHost';
 import { DeepZoomSurface } from './DeepZoomSurface';
 import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
 import { TimelineHost } from '../components/TimelineHost';
+import { SceneFileDropZone } from '../engine/components/SceneFileDropZone';
 import { useHostSync } from './useHostSync';
 
 export const DeepZoomApp: React.FC = () => {
@@ -124,6 +125,7 @@ export const DeepZoomApp: React.FC = () => {
             </div>
 
             <TimelineHost />
+            <SceneFileDropZone />
             <HelpOverlay />
 
             <SettingsHost />

@@ -25,6 +25,9 @@
 // Side-effect registrations — the DDFS features. MUST come before anything
 // that touches the store (the registries freeze when it is built).
 import './registerFeatures';
+// Preset fields (the view in a scene, the scene version). Before the store is first used:
+// the preset-field registry freezes when the store is built.
+import './presetFields';
 
 // Global Tailwind styles (build-time).
 import '../index.css';
@@ -59,6 +62,9 @@ import { registerDeepZoomHotkeys } from './hotkeys';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LocationsPanel } from './components/LocationsPanel';
 import { StarterDives } from './components/StarterDives';
+import { LocationText } from './components/LocationText';
+import { installSceneIO } from '../engine/plugins/SceneIO';
+import { installShare, loadShareFromUrl, sceneCanvas } from './share';
 import { dismissBootSplash } from './components/BootCard';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -123,6 +129,11 @@ try {
     // ready (and keeps toggle rows fresh); Help registers the one menu so far.
     installMenu();
 
+    // @engine/scene-io — File menu: Save / Load scene, Save PNG (the scene is embedded in the
+    // PNG), Alt+S. The canvas getter must be passed at this first call or the PNG rows never
+    // appear; `sceneCanvas` draws a frame and copies it at save time.
+    installSceneIO({ getCanvas: sceneCanvas });
+
     // @engine/hud — slot-based overlay host. <HudHost /> is mounted inside
     // DeepZoomApp's ViewportFrame. The depth readout is the instrument on the
     // picture; it takes the pointer (its Dive field), the rest of the HUD does not.
@@ -167,10 +178,17 @@ try {
     registerDeepZoomHotkeys();
     componentRegistry.register('dz-locations', LocationsPanel);
     componentRegistry.register('dz-starters', StarterDives);
+    componentRegistry.register('dz-location-text', LocationText);
+
+    // Scenes carry the saved places as a document; a share link carries the look and the view.
+    installShare();
 
     // The panel manifest. After every registration it refers to, and after the
     // store exists (the installs above built it).
     setupDeepZoom();
+
+    // A `#s=` link opens as a scene. Its view is parked until the renderer is mounted and ready.
+    loadShareFromUrl();
 } catch (err) {
     console.error('[deep-zoom] The app failed to start, before the first render.', err);
     bootError = err;

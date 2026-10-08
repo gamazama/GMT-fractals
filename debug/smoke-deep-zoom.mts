@@ -22,6 +22,12 @@
  * The runner prints the WebGL renderer first and refuses a software one. For the same reason this
  * smoke is not in `debug/run-smokes.mts` (smoke:all). One real-GPU smoke at a time on a machine.
  *
+ * WINDOWLESS RUNS. A headed run opens a Chrome window that takes the keyboard: whatever is typed
+ * while it is in front lands in the page under test, and a pointer-lock step fails when the window
+ * loses focus to the person at the machine. `DZ_HEADLESS=1 npm run smoke:deep-zoom` runs the same
+ * Chrome with no window. It is only a valid run if the first line still names the real GPU (the
+ * software-renderer refusal applies unchanged).
+ *
  * DEV SERVER ONLY. A step reaches the renderer through the host, which the page publishes as
  * `globalThis.__appHandles['deep-zoom.host'].ref.current` under `import.meta.env.DEV` alone (grep
  * `__appHandles` in `engine/appHandles.ts`). Against a build no host is ever found and the boot
@@ -778,7 +784,9 @@ async function main(): Promise<number> {
     }
 
     const t0 = Date.now();
-    const browser = await chromium.launch({ channel: 'chrome', headless: false, args: LAUNCH_ARGS });
+    // DZ_HEADLESS=1: no window (see the header, WINDOWLESS RUNS). Still Chrome, still the same GPU flags;
+    // the renderer line printed below is what says whether this run is on the real GPU.
+    const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1', args: LAUNCH_ARGS });
     const all: StepResult[] = [];
     const closingFails: string[] = [];
     try {

@@ -262,23 +262,25 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'a dive from a starter view to 1e-6 arrives within a decade and stays there',
+            name: 'a dive from the Grain of sand view to 1e-30 arrives and stays there',
             owner: 'S1-1 (host/dive.ts)',
             falsified: '2026-10-08: red before a starter view was used - from the boot view the dive ran out its 45 s at 1.44e-5 ("within a decade of 1e-6" false). NOT falsified for the three-frame arrival rule: with DZ_DIVE_ARRIVAL_FRAMES = 1 this dive still arrived; that rule is pinned by debug/deep-zoom-checks/module-host.mts.',
             timeoutMs: 100_000,
             async run(ctx) {
-                // A dive flies straight ahead, so it needs a view whose forward ray meets the surface:
-                // the second starter (start about 2e-3, in f32) crosses the f32 / deep switch near
-                // 1e-4, where the module's distance reads far too small for one frame.
-                const starter = STARTERS[1];
+                // A dive flies straight ahead, so it needs a view whose forward ray meets the surface.
+                // This is the fourth starter: it starts at 1.1e-17, in crisp structure, and goes 13
+                // decades down. (Until 2026-10-08 this step dived from the outside view to 1e-6,
+                // through the grainy f32 picture; the owner asked for a dive where there is something
+                // to see. The f32 / deep switch near 1e-4 is pinned by module-host.mts instead.)
+                const starter = STARTERS[3];
                 await ctx.boot({ clearStorage: true });
                 await ctx.withHost('host.setView(' + JSON.stringify(starter.view) + '); return true;');
                 await ctx.sleep(800);
                 const from = await ctx.host<number>('telemetry().depth');
-                ctx.check(from > 1e-4, 'the starter view is above 1e-4 (' + from.toExponential(2) + ', ' + (await ctx.host<string>('telemetry().mode')) + ')');
+                ctx.check(from < 1e-15 && from > 1e-19, 'the starter view is near 1e-17 (' + from.toExponential(2) + ', ' + (await ctx.host<string>('telemetry().mode')) + ')');
                 const field = ctx.page.locator('[data-dz-dive-exponent]');
                 if (!ctx.check((await field.count()) === 1, 'the readout has its Dive field')) return;
-                await field.fill('6');
+                await field.fill('30');
                 await field.press('Enter');
                 ctx.check((await ctx.until("!!document.querySelector('[data-dz-diving]')", 3000)) >= 0, 'the readout says a dive is in flight');
                 const waited = await ctx.until("!document.querySelector('[data-dz-diving]')", 70_000, 200);
@@ -286,11 +288,11 @@ export const stage: DzStage = {
                 const mode = await ctx.host<string>('telemetry().mode');
                 ctx.note('ended after ' + (waited / 1000).toFixed(1) + ' s at ' + depth.toExponential(2) + ' (' + mode + ')');
                 ctx.check(waited >= 0, 'the dive ended by itself');
-                ctx.check(depth <= 1e-5 && depth >= 1e-7, 'within a decade of 1e-6 (' + depth.toExponential(2) + ')');
+                ctx.check(depth <= 1e-29 && depth >= 1e-36, 'at or under 1e-30, and not through the surface (the distance reading falls in cliffs at depth, so a dive can end decades under its target) (' + depth.toExponential(2) + ')');
                 await ctx.sleep(1500);
                 const later = await ctx.host<number>('telemetry().depth');
-                ctx.check(later <= 1e-5, 'and it is still there 1.5 s later (' + later.toExponential(2) + '), not a one-frame reading');
-                await ctx.shot('stage2-dive-1e-6');
+                ctx.check(later <= 1e-29, 'and it is still there 1.5 s later (' + later.toExponential(2) + '), not a one-frame reading');
+                await ctx.shot('stage2-dive-1e-30');
             },
         },
     ],

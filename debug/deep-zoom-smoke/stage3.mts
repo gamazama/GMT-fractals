@@ -14,6 +14,7 @@
  *   - Camera values are compared as strings, byte for byte.
  *   - Every step sets what it needs at its start, so it can run alone and in any order.
  */
+import fs from 'node:fs';
 import type { DzCtx, DzStage } from '../smoke-deep-zoom.mts';
 import { DEEP_VIEW, enterDeepView } from './stage1.mts';
 
@@ -135,24 +136,147 @@ export const stage: DzStage = {
             async run(ctx) {
                 await fresh(ctx);
                 const home = await cam(ctx);
-                await ctx.page.locator('[data-dz-starter="1e-6"]').click();
+                await ctx.page.locator('[data-dz-starter="1e-30"]').click();
                 ctx.check((await ctx.until("!!document.querySelector('[data-dz-diving]')", 5000)) >= 0, 'the card started a dive');
                 ctx.check(!same(await cam(ctx), home), 'from its own start view, not the home view');
                 const waited = await ctx.until("!document.querySelector('[data-dz-diving]')", 60_000, 200);
                 const depth = await ctx.host<number>('telemetry().depth');
-                ctx.check(waited >= 0 && depth <= 1e-5 && depth >= 1e-7, 'the dive ended within a decade of 1e-6 (' + depth.toExponential(2) + ' after ' + (waited / 1000).toFixed(1) + ' s)');
+                ctx.check(waited >= 0 && depth <= 1e-29 && depth >= 1e-36, 'the dive ended at or under 1e-30, and not through the surface (' + depth.toExponential(2) + ' after ' + (waited / 1000).toFixed(1) + ' s)');
                 const deep = await cam(ctx);
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('Home');
                 await ctx.sleep(400);
                 ctx.check(same(await cam(ctx), home), 'Home: the start view, exactly');
                 // 0.4 s after the jump. Without the renderer's snap on setView the distance eases up
-                // from the dive's 1e-6 and reads about 0.4 here; with it, the home view's own 1.1.
+                // from the dive's depth and reads about 0.4 here; with it, the home view's own 1.1.
                 const homeDepth = await ctx.host<number>('telemetry().depth');
                 ctx.check(homeDepth > 0.8, 'and the depth reads the home view at once (' + homeDepth.toExponential(2) + ' after 0.4 s)');
                 await ctx.page.keyboard.press('Backspace');
                 await ctx.sleep(400);
                 ctx.check(same(await cam(ctx), deep), 'Backspace: back where the dive ended, exactly');
+            },
+        },
+        {
+            name: 'a scene carries the view, the look, its version and the saved places, and loads back exactly',
+            owner: 'S3-2',
+            falsified: '2026-10-08: `dzView.serialize` in deep-zoom/presetFields.ts made to return nothing -> red, 3 lines (no camera in the scene, no depth text, the load does not bring the camera back).',
+            async run(ctx) {
+                await fresh(ctx);
+                if (!(await enterDeepView(ctx))) return;
+                await ctx.sleep(300);
+                if (!(await saveWithB(ctx, 1))) return;
+                await ctx.ev('window.__store.getState().setDzLight({ keyElevation: 70 })');
+                await ctx.sleep(200);
+                const scene = await ctx.ev<string>('JSON.stringify(window.__store.getState().getPreset({ includeScene: true, includeDocuments: true }))');
+                const parsed = JSON.parse(scene);
+                ctx.check(same(parsed.dzView?.cam ?? [], DEEP_VIEW.cam), 'the scene holds the camera as the same three strings');
+                ctx.check(typeof parsed.dzView?.depth === 'string' && Number(parsed.dzView.depth) < 1e-9, 'and the depth as text (' + parsed.dzView?.depth + ')');
+                ctx.check(parsed.dzSceneVersion === 1, 'scene version 1');
+                ctx.check(parsed.features?.dzLight?.keyElevation === 70, 'the look (key elevation 70)');
+                ctx.check(Array.isArray(parsed.documents?.['deep-zoom.locations']) && parsed.documents['deep-zoom.locations'].length === 1, 'and the saved place, as a document');
+                // Leave: move, change the look, delete the place.
+                const id = (await rows(ctx))[0].id;
+                await ctx.withHost('host.moveAlong([0, 1, 0], 1.5); return true;');
+                await ctx.ev('window.__store.getState().setDzLight({ keyElevation: 20 }); window.__store.getState().deleteLocation(' + JSON.stringify(id) + ')');
+                await ctx.sleep(300);
+                ctx.check(!same(await cam(ctx), DEEP_VIEW.cam) && (await rows(ctx)).length === 0, 'moved away, look changed, place deleted');
+                await ctx.ev('window.__store.getState().loadPreset(JSON.parse(' + JSON.stringify(scene) + '))');
+                await ctx.sleep(600);
+                ctx.check(same(await cam(ctx), DEEP_VIEW.cam), 'after the load the camera strings are the saved ones, byte for byte');
+                ctx.check((await ctx.store<number>('dzLight.keyElevation')) === 70 && (await ctx.host<number>("getParams()['dzLight.keyElevation']")) === 70, 'the look is back in the store and in the renderer');
+                ctx.check((await rows(ctx)).length === 1, 'and the saved place is back in the list');
+            },
+        },
+        {
+            name: 'a share link opens the same view and look in a clean browser, and holds no saved places',
+            owner: 'S3-3',
+            falsified: '2026-10-08: red on the first version of the preset field, which cleared the parked view as soon as it handed it to a host: React\'s first (disposed) mount took it and the link opened at the start view ("the camera strings are equal, byte for byte" false).',
+            async run(ctx) {
+                await fresh(ctx);
+                if (!(await enterDeepView(ctx))) return;
+                await ctx.sleep(300);
+                if (!(await saveWithB(ctx, 1))) return;
+                await ctx.ev('window.__store.getState().setDzLight({ keyElevation: 65 })');
+                await ctx.sleep(200);
+                const link = await ctx.ev<string>("location.origin + location.pathname + '#s=' + window.__store.getState().getShareString()");
+                ctx.check(link.includes('#s=') && link.length > ctx.url.length + 20, 'the link carries a scene (' + link.length + ' characters)');
+                await ctx.ev('localStorage.clear()');
+                await ctx.page.goto('about:blank');
+                await ctx.page.goto(link);
+                ctx.check((await ctx.untilHost('host.telemetry().ready', 60_000, 100)) >= 0, 'the link opens the app');
+                ctx.check((await ctx.untilHost('host.getView().cam[0] === ' + JSON.stringify(DEEP_VIEW.cam[0]), 5000, 50)) >= 0 && same(await cam(ctx), DEEP_VIEW.cam),
+                    'at the same view: the camera strings are equal, byte for byte');
+                ctx.check((await ctx.store<number>('dzLight.keyElevation')) === 65, 'with the same look (key elevation 65)');
+                ctx.check((await rows(ctx)).length === 0, 'and no saved place came with it');
+            },
+        },
+        {
+            name: 'Copy location and Paste location go through the clipboard; last week\'s text jumps too; other text is refused',
+            owner: 'S3-3',
+            falsified: '2026-10-08: `applyLocationText` in deep-zoom/share.ts made to return before the jump -> red, "Paste location jumped to it" and the last-week line false.',
+            async run(ctx) {
+                await ctx.context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ctx.origin });
+                await fresh(ctx);
+                if (!(await enterDeepView(ctx))) return;
+                await ctx.sleep(300);
+                await ctx.page.locator('[data-dz-copy-location]').click();
+                await ctx.sleep(300);
+                const text = await ctx.ev<string>('navigator.clipboard.readText()');
+                ctx.check(DEEP_VIEW.cam.every((c) => text.includes('"' + c + '"')), 'Copy location wrote the three camera strings as text');
+                await ctx.withHost('host.moveAlong([0, 1, 0], 1.5); return true;');
+                await ctx.sleep(300);
+                const away = await cam(ctx);
+                await ctx.page.locator('[data-dz-paste-location]').click();
+                await ctx.sleep(400);
+                ctx.check(same(await cam(ctx), DEEP_VIEW.cam), 'Paste location jumped to it, byte for byte');
+                await ctx.focusPicture();
+                await ctx.page.keyboard.press('Control+z');
+                await ctx.sleep(300);
+                ctx.check(same(await cam(ctx), away), 'and Ctrl+Z went back');
+                const lastWeek = JSON.stringify({ ...DEEP_VIEW, depth: 1.14e-17, name: 'from last week' });
+                await ctx.ev('navigator.clipboard.writeText(' + JSON.stringify(lastWeek) + ')');
+                await ctx.page.locator('[data-dz-paste-location]').click();
+                await ctx.sleep(400);
+                ctx.check(same(await cam(ctx), DEEP_VIEW.cam), 'last week\'s flat text jumps too');
+                await ctx.withHost('host.moveAlong([0, 1, 0], 1.5); return true;');
+                await ctx.sleep(300);
+                const before = await cam(ctx);
+                await ctx.ev("navigator.clipboard.writeText('hello there')");
+                await ctx.page.locator('[data-dz-paste-location]').click();
+                await ctx.sleep(400);
+                ctx.check(same(await cam(ctx), before), 'text that is not a location moves nothing');
+                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('not a location')"), 'and a toast says why');
+            },
+        },
+        {
+            name: 'Alt+S saves a PNG of the picture that is not blank and holds the scene',
+            owner: 'S3-5',
+            falsified: '2026-10-08: SceneIO given the renderer\'s own canvas instead of `sceneCanvas` -> red, "the picture is not blank" false (mean level 0.0). Also red before the renderer\'s fly keys ignored chords: Alt+S flew the camera backwards and the strings in the PNG were not the view\'s.',
+            async run(ctx) {
+                await fresh(ctx);
+                if (!(await enterDeepView(ctx))) return;
+                await ctx.untilHost('host.telemetry().accumN >= 16', 15_000, 50);
+                const had = ctx.downloads.length;
+                await ctx.focusPicture();
+                await ctx.page.keyboard.press('Alt+s');
+                const start = Date.now();
+                while (ctx.downloads.length === had && Date.now() - start < 8000) await ctx.sleep(100);
+                if (!ctx.check(ctx.downloads.length > had, 'a file was downloaded')) return;
+                const file = await ctx.downloads[ctx.downloads.length - 1].path();
+                const bytes = fs.readFileSync(file);
+                fs.writeFileSync(ctx.root + '/debug/scratch/deep-zoom-shell-stage3-scene.png', bytes);   // kept for a look
+                ctx.check(bytes.length > 8 && bytes.subarray(1, 4).toString('latin1') === 'PNG', 'it is a PNG (' + bytes.length + ' bytes)');
+                ctx.check(bytes.includes(Buffer.from('dzView')) && bytes.includes(Buffer.from(DEEP_VIEW.cam[0].replace('-', ''))), 'with the scene inside it, camera strings included');
+                const mean = await ctx.ev<number[]>(`(async () => {
+                    const img = new Image();
+                    await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = 'data:image/png;base64,${bytes.toString('base64')}'; });
+                    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+                    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+                    const d = g.getImageData(0, 0, c.width, c.height).data; let s = 0, hi = 0;
+                    for (let i = 0; i < d.length; i += 4) { const v = d[i] + d[i + 1] + d[i + 2]; s += v; if (v > hi) hi = v; }
+                    return [img.width, img.height, s / (d.length / 4) / 3, hi / 3];
+                })()`);
+                ctx.check(mean[2] > 8 && mean[3] > 60, 'the picture is not blank (' + mean[0] + ' x ' + mean[1] + ', mean level ' + mean[2].toFixed(1) + ', brightest ' + mean[3].toFixed(0) + ')');
             },
         },
     ],

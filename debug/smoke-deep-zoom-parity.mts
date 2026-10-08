@@ -277,7 +277,9 @@ async function main(): Promise<void> {
 
         browser = await chromium.launch({
             channel: 'chrome',
-            headless: false,
+            // DZ_HEADLESS=1: no window, so nothing typed elsewhere lands in the page (2026-10-08: two lines
+            // went red when the person at the machine typed into the test window). Same Chrome, same GPU flags.
+            headless: process.env.DZ_HEADLESS === '1',
             args: [
                 '--use-gl=angle', '--use-angle=d3d11', '--ignore-gpu-blocklist', '--enable-gpu',
                 '--disable-renderer-backgrounding', '--disable-background-timer-throttling',

@@ -18,6 +18,8 @@ export const DeepZoomPanels: PanelManifest = [
         { type: 'widget', id: 'dz-starters' },
         { type: 'section', label: 'My locations' },
         { type: 'widget', id: 'dz-locations' },
+        { type: 'separator' },
+        { type: 'widget', id: 'dz-location-text' },
     ] },
     { id: 'Formula', dock: 'left', order: 1, items: [
         { type: 'feature', id: 'dzFormula', whitelistParams: ['power', 'phaseTheta', 'phasePhi'] },
