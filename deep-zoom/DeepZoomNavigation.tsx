@@ -37,6 +37,9 @@
  *     predicate the timeline's own Space binding tests (grep `toggle-play` in
  *     components/TimelineHost.tsx). With the pointer over the timeline Space plays, and the fly
  *     keys are ignored (`isTimelineHovered`), as in GMT.
+ *   - A fly letter pressed with Ctrl, Alt or Cmd is refused (`keysSuppressed`): those chords are
+ *     shortcuts here. Without that, Alt+S saved the scene AND flew backwards (seen 2026-10-08).
+ *     So this shell has no Alt "precise" modifier; it only ever scaled roll, which is not here.
  *   - A zero move is not sent: `moveAlong` marks the reference orbit dirty, and a rebuilt orbit
  *     restarts the still. The integrator calls its sink with (0, 0, 0) on a frame with no time.
  *   - A move from the hands ends a dive in flight. A look drag does not: it steers the dive.
@@ -75,7 +78,10 @@ const navigationLocked = (): boolean => {
     const t = getTelemetry();
     return t.exporting || t.playing;
 };
-const keysSuppressed = (): boolean => !!useEngineStore.getState().isTimelineHovered;
+/** A key that is not a move: the pointer is over the timeline (GMT's rule), or the key comes with
+ *  Ctrl / Alt / Cmd - a shortcut (Alt+S saves the scene, Ctrl+Z undoes), never a fly key. */
+const keysSuppressed = (e: KeyboardEvent): boolean =>
+    e.ctrlKey || e.altKey || e.metaKey || !!useEngineStore.getState().isTimelineHovered;
 const onFlyBegin = (): void => setFlying(true);
 const onFlyEnd = (): void => setFlying(false);
 

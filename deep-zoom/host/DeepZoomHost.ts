@@ -59,6 +59,7 @@
  *                         shell's navigation flies the camera through `moveAlong` and `setYawPitch`
  *                         once it has called `setInputOwner('host')`; `rawDistance` is the
  *                         unsmoothed distance its integrator eases itself.
+ *     `snapshot()`        the picture as a 2D canvas, read back by the renderer itself (a saved PNG).
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
  *     `diveTo(`           the host's own loop (`host/dive.ts`) over `moveAlong`, not the module's dive.
@@ -327,6 +328,12 @@ export interface DeepZoomHost {
     yawPitch(): { yaw: number; pitch: number };
     /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still. */
     setYawPitch(yaw: number, pitch: number): void;
+    /**
+     * The picture as it is on screen now, as a new 2D canvas of the frame's own size; null when it
+     * cannot be drawn (no renderer, a render in flight). What a saved PNG is made from. Do not
+     * copy `canvas()` yourself: once the still is done that copy is empty.
+     */
+    snapshot(): HTMLCanvasElement | null;
     /** The current view as a square PNG data URL, 8..512 px ('' when nothing can be drawn yet, or while a render runs). Restarts the still. */
     thumbnail(size?: number): string;
 

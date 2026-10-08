@@ -26,6 +26,10 @@
  *     field has focus (portaled dialogs, fast re-renders).
  *   - Space, Alt and Ctrl/Cmd+W have their default prevented BEFORE the `isSuppressed()` test, as
  *     the hook always did: a suppressed key still does not scroll the page.
+ *   - A fly letter pressed WITH Ctrl, Alt or Cmd still counts as that fly key here (GMT has always
+ *     flown that way: Alt is its precise modifier). An app whose shortcuts use such chords - Alt+S
+ *     to save, say - must refuse them in `isSuppressed(e)`, or saving also moves the camera (seen
+ *     in the deep-zoom shell, 2026-10-08).
  *   - The wheel is read on the element only, passively. Its modifier (Shift 4x, Alt 0.1x) comes
  *     from the event, not from the tracked key state: a wheel event can arrive before a keydown.
  *   - `onWheel` runs first and returning true ends the event there (GMT: the orthographic scale).
@@ -58,8 +62,10 @@ export interface NavigationInputOptions {
     orbitMode?: string;
     /** Movement is locked (an export, a gizmo drag, playback): wheel and mouse down do nothing. */
     isLocked: () => boolean;
-    /** Keys are ignored for now (the pointer is over something that owns them). */
-    isSuppressed?: () => boolean;
+    /** This key press is not navigation's: the pointer is over something that owns the keys, or
+     *  (the app's choice, it is handed the event) the press is a chord that belongs to a shortcut.
+     *  Asked on key DOWN only; a key up always clears its flag. */
+    isSuppressed?: (e: KeyboardEvent) => boolean;
     /** A phone-style layout: no look drag in fly mode. */
     isTouchLayout?: boolean;
     /** True for a mouse-down target that is not the picture's (a control drawn over it). */
@@ -233,7 +239,7 @@ export const useNavigationInput = (options: NavigationInputOptions): NavigationI
             // Prevent Alt menu
             if (e.key === 'Alt') e.preventDefault();
 
-            if (opts.current.isSuppressed?.()) return;
+            if (opts.current.isSuppressed?.(e)) return;
 
             let handled = true;
             switch (e.code) {

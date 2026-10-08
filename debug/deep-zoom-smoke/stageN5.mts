@@ -218,9 +218,18 @@ export const stage: DzStage = {
                 await ctx.focusPicture();
                 // At the start view (yaw -pi/2, pitch 0) the camera's up is the world's +Y.
                 const y = async () => BigInt((await cam(ctx))[1]);
+                // The key is held until the camera has moved (3 s at most), not for a fixed time: on a
+                // busy machine a 250 ms hold can fall between two frames (seen once, 2026-10-08, with
+                // the owner rendering a heavy view in his own browser on the same GPU).
                 const moved = async (key: string): Promise<bigint> => {
                     const before = await y();
-                    await ctx.holdKey(key, 250);
+                    await ctx.page.keyboard.down(key);
+                    try {
+                        const start = Date.now();
+                        while (Date.now() - start < 3000 && (await y()) === before) await ctx.sleep(50);
+                    } finally {
+                        await ctx.page.keyboard.up(key);
+                    }
                     await ctx.sleep(200);
                     return (await y()) - before;
                 };

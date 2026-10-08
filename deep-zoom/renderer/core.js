@@ -3972,6 +3972,40 @@ api.dz = {
     accumReset = true;                            // the thumbnail draw used the shared GL state — redraw the still
     return dzThumbCv.toDataURL('image/png');
   },
+  /* SNAPSHOT (2026-10-08) - the picture as it is on the canvas now, as a NEW 2D canvas of the
+     frame's own size, for a host that saves it. One frame is run and the drawing buffer is read
+     back in the same call.
+     THE ORDER BELOW IS THE POINT. After a frame has been shown, the browser owes the drawing
+     buffer a clear (the canvas keeps no buffer between frames), and Chrome pays it at the first
+     DRAW or READ - but a blitFramebuffer does not count. Once the still is done, a frame is one
+     blit and nothing else: read after it, and the read clears the buffer first and returns an
+     empty picture. So: one pixel is read BEFORE the frame (that pays the clear), then the frame
+     blits, then the whole buffer is read. Measured in one task each, the still done: frame +
+     read = mean level 0; 1-pixel read + frame + read = 149.7; frame + frame + read = 0. While
+     the still is accumulating a frame draws as well as blits, which is why it only failed on a
+     FINISHED still (the owner's saved PNGs: empty at 64 of 64 samples, fine at 23 of 64). A host
+     copying the canvas from outside (drawImage after a step) fails the same way.
+     The extra frame is not counted into the fps. Null while a render owns the context, or
+     after dispose. */
+  snapshot: () => {
+    if (exporting || dzDisposed) return null;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));   // pays the owed clear before the frame draws
+    const keepFps = fps, keepLast = last;
+    frame(performance.now());
+    fps = keepFps; last = keepLast;
+    const w = canvas.width, h = canvas.height, px = new Uint8Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c2 = cv.getContext('2d'), img = c2.createImageData(w, h);
+    for (let y = 0; y < h; y++) {                 // readPixels is bottom-up; a canvas is top-down
+      const src = (h - 1 - y) * w * 4, dst = y * w * 4;
+      for (let i = 0; i < w * 4; i++) img.data[dst + i] = (i & 3) === 3 ? 255 : px[src + i];
+    }
+    c2.putImageData(img, 0, 0);
+    return cv;
+  },
   /* Fly straight ahead (along the CURRENT look direction each frame, so the mouse can still steer)
      until the surface distance is about `depth`. Each frame moves a fraction of the distance
      estimate, which is a lower bound on the way to the surface, so the camera cannot pass through.

@@ -97,7 +97,7 @@ const BLUEPRINT_MEMBERS = [
     'ready',
     'setParam', 'setParams', 'getParams', 'bootParams',
     'telemetry', 'onTelemetry',
-    'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail',
+    'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail', 'snapshot',
     'setInputOwner', 'rawDistance', 'yawPitch', 'setYawPitch',
     'setGradientRamp',
     'setRecording', 'takePath', 'smoothPath', 'seekPath', 'play', 'stopPlay',

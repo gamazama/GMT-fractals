@@ -27,22 +27,16 @@ import { locationToText, parseLocationText } from './locationParse';
 import { validDepth } from './components/depthFormat';
 
 /**
- * The picture as a canvas a PNG can be made from. The renderer's WebGL canvas keeps no drawing
- * buffer between frames, so reading it at an arbitrary moment gives a blank image: this draws one
- * frame and copies it to a 2D canvas in the same task. Null when no renderer is mounted.
+ * The picture as a canvas a PNG or JPG can be made from: the renderer reads its own drawing
+ * buffer back (`host.snapshot()`). Null when no renderer is mounted or a render is in flight.
+ *
+ * It used to draw one frame and copy the WebGL canvas with `drawImage`. That works while the
+ * still is accumulating and returns an EMPTY picture once it is done: the owner's saved PNGs of
+ * a finished still were blank, 2026-10-08. Why, and the order of reads that avoids it: grep
+ * `SNAPSHOT` in deep-zoom/renderer/core.js.
  */
 export function sceneCanvas(): HTMLCanvasElement | null {
-    const host = getHost();
-    if (!host) return null;
-    host.step(performance.now());
-    const source = host.canvas();
-    const copy = document.createElement('canvas');
-    copy.width = source.width;
-    copy.height = source.height;
-    const g = copy.getContext('2d');
-    if (!g) return source;
-    g.drawImage(source, 0, 0);
-    return copy;
+    return getHost()?.snapshot() ?? null;
 }
 
 /** The fixed formula id every scene of this app carries. */

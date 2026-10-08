@@ -78,6 +78,8 @@
  *   flight and render
  *     `setRecording` always toggles -> 3; previews not serialised -> 2: "flight: a second play
  *       stops the preview in flight first ..."; a render that does not stop a preview -> 1;
+ *       (2026-10-08) `snapshot: () => null` in moduleHost.ts -> 1: "render: snapshot() is the
+ *       module's own canvas, untouched"
  *       `thumbnail` drawn during a render -> 1; the whole loading box instead of its first line
  *       -> 1: "mount: progress reads the first line ..."; `setParam` saying so every time -> 1
  *   dive
@@ -113,6 +115,9 @@ type Create = typeof createDeepZoom;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 let failures = 0;
+/** What the fake renderer's `snapshot()` returns: the host must hand on this very object. */
+const SNAPSHOT_CANVAS = { tag: 'snapshot canvas' } as unknown as HTMLCanvasElement;
+
 function check(ok: boolean, label: string, detail = ''): void {
     console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${!ok && detail ? `\n       ${detail}` : ''}`);
     if (!ok) failures++;
@@ -298,6 +303,7 @@ function makeRig() {
                 state.settings.power = v.power;   // the module's setView writes look values too
             },
             thumbnail: (size?: number): string => { note('thumbnail', size); return 'data:image/png;base64,AAAA'; },
+            snapshot: (): HTMLCanvasElement | null => { note('snapshot'); return SNAPSHOT_CANVAS; },
             diveTo: (depth: number): Promise<void> => { note('dz.diveTo', depth); return Promise.resolve(); },
             setInputOwner: (owner: 'module' | 'host'): void => { note('setInputOwner', owner); },
             inputOwner: (): 'module' | 'host' => 'module',
@@ -825,6 +831,8 @@ console.log('[7] render    the path render, progress, cancel, thumbnail');
     rig.state.exporting = false;
     host.step(1400);
 
+    // snapshot: the renderer's own read-back, handed on as it is
+    check(host.snapshot() === SNAPSHOT_CANVAS && rig.count('snapshot') === 1, 'render: snapshot() is the module\'s own canvas, untouched');
     // thumbnail
     check(host.thumbnail(128) === 'data:image/png;base64,AAAA' && rig.calls.thumbnail[0][0] === 128, 'render: thumbnail(size) is the module\'s, with the size');
     rig.state.exporting = true;

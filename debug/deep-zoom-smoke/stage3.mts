@@ -226,34 +226,44 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'Alt+S saves a PNG of the picture that is not blank and holds the scene',
+            name: 'Alt+S saves a PNG that holds the picture and the scene, while the still gathers AND once it is done, and moves nothing',
             owner: 'S3-5',
-            falsified: '2026-10-08: SceneIO given the renderer\'s own canvas instead of `sceneCanvas` -> red, "the picture is not blank" false (mean level 0.0). Also red before the renderer\'s fly keys ignored chords: Alt+S flew the camera backwards and the strings in the PNG were not the view\'s.',
+            falsified: '2026-10-08, three breaks, one run each: the one-pixel read before the frame removed from `snapshot` in renderer/core.js -> red, "still done: the picture is not blank" false (mean level 0.0), with "still gathering" green; `sceneCanvas` in deep-zoom/share.ts put back to a step and a `drawImage` of the canvas -> red, the same line; the Ctrl / Alt / Cmd test removed from `keysSuppressed` in DeepZoomNavigation.tsx -> red, "neither save moved the camera" false. HISTORY: until this date the step saved only while the still was gathering and never looked at the camera afterwards - it was green while the owner\'s PNGs of a finished still were blank and Alt+S flew him backwards. Before N5: red with SceneIO given the renderer\'s own canvas (mean level 0.0).',
             async run(ctx) {
                 await fresh(ctx);
                 if (!(await enterDeepView(ctx))) return;
+                const save = async (when: string): Promise<void> => {
+                    const had = ctx.downloads.length;
+                    await ctx.focusPicture();
+                    await ctx.page.keyboard.press('Alt+s');
+                    const start = Date.now();
+                    while (ctx.downloads.length === had && Date.now() - start < 8000) await ctx.sleep(100);
+                    if (!ctx.check(ctx.downloads.length > had, when + ': a file was downloaded')) return;
+                    const bytes = fs.readFileSync(await ctx.downloads[ctx.downloads.length - 1].path());
+                    fs.writeFileSync(ctx.root + '/debug/scratch/deep-zoom-shell-stage3-scene.png', bytes);   // kept for a look
+                    ctx.check(bytes.length > 8 && bytes.subarray(1, 4).toString('latin1') === 'PNG', when + ': it is a PNG (' + bytes.length + ' bytes)');
+                    ctx.check(bytes.includes(Buffer.from('dzView')) && bytes.includes(Buffer.from(DEEP_VIEW.cam[0].replace('-', ''))), when + ': the scene is inside it, camera strings included');
+                    const mean = await ctx.ev<number[]>(`(async () => {
+                        const img = new Image();
+                        await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = 'data:image/png;base64,${bytes.toString('base64')}'; });
+                        const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+                        const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+                        const d = g.getImageData(0, 0, c.width, c.height).data; let s = 0, hi = 0;
+                        for (let i = 0; i < d.length; i += 4) { const v = d[i] + d[i + 1] + d[i + 2]; s += v; if (v > hi) hi = v; }
+                        return [img.width, img.height, s / (d.length / 4) / 3, hi / 3];
+                    })()`);
+                    ctx.check(mean[2] > 8 && mean[3] > 60, when + ': the picture is not blank (' + mean[0] + ' x ' + mean[1] + ', mean level ' + mean[2].toFixed(1) + ', brightest ' + mean[3].toFixed(0) + ')');
+                };
                 await ctx.untilHost('host.telemetry().accumN >= 16', 15_000, 50);
-                const had = ctx.downloads.length;
-                await ctx.focusPicture();
-                await ctx.page.keyboard.press('Alt+s');
-                const start = Date.now();
-                while (ctx.downloads.length === had && Date.now() - start < 8000) await ctx.sleep(100);
-                if (!ctx.check(ctx.downloads.length > had, 'a file was downloaded')) return;
-                const file = await ctx.downloads[ctx.downloads.length - 1].path();
-                const bytes = fs.readFileSync(file);
-                fs.writeFileSync(ctx.root + '/debug/scratch/deep-zoom-shell-stage3-scene.png', bytes);   // kept for a look
-                ctx.check(bytes.length > 8 && bytes.subarray(1, 4).toString('latin1') === 'PNG', 'it is a PNG (' + bytes.length + ' bytes)');
-                ctx.check(bytes.includes(Buffer.from('dzView')) && bytes.includes(Buffer.from(DEEP_VIEW.cam[0].replace('-', ''))), 'with the scene inside it, camera strings included');
-                const mean = await ctx.ev<number[]>(`(async () => {
-                    const img = new Image();
-                    await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = 'data:image/png;base64,${bytes.toString('base64')}'; });
-                    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-                    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
-                    const d = g.getImageData(0, 0, c.width, c.height).data; let s = 0, hi = 0;
-                    for (let i = 0; i < d.length; i += 4) { const v = d[i] + d[i + 1] + d[i + 2]; s += v; if (v > hi) hi = v; }
-                    return [img.width, img.height, s / (d.length / 4) / 3, hi / 3];
-                })()`);
-                ctx.check(mean[2] > 8 && mean[3] > 60, 'the picture is not blank (' + mean[0] + ' x ' + mean[1] + ', mean level ' + mean[2].toFixed(1) + ', brightest ' + mean[3].toFixed(0) + ')');
+                const before = await cam(ctx);
+                await save('still gathering');
+                // The case that came out blank for the owner on 2026-10-08: a FINISHED still is shown by
+                // one blit a frame, and the read that followed it cleared the buffer first.
+                if (!ctx.check((await ctx.untilHost('host.telemetry().accumN >= host.telemetry().accumMax', 40_000, 100)) >= 0, 'the still is done')) return;
+                await ctx.sleep(500);
+                await save('still done');
+                await ctx.sleep(400);
+                ctx.check(same(await cam(ctx), before), 'and neither save moved the camera (S is a fly key; with Alt it is not)');
             },
         },
     ],

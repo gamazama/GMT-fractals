@@ -455,6 +455,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (disposed || !isReady) return Promise.resolve();
             return dive.start(depth);
         },
+        snapshot: () => (disposed ? null : dz.snapshot()),
         thumbnail(size) {
             // A render owns the GL state between its rows; a thumbnail drawn into it corrupts the frame.
             if (dz.telemetry().exporting) return '';

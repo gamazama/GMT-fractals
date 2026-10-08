@@ -196,6 +196,12 @@ export interface DzHostHandle {
     setView(v: DzView): void;
     /** The current view as a square PNG data URL ('' when nothing can be drawn yet). */
     thumbnail(size?: number): string;
+    /** The picture as it is on the canvas now, as a new 2D canvas of the frame's size; null while
+     *  a render owns the context. Use THIS to save the picture, never a copy of the canvas after
+     *  a step: once the still is done that copy is empty (the browser's owed clear lands on the
+     *  read; grep `SNAPSHOT` in core.js for the order that avoids it).
+     *  (Added 2026-10-08.) */
+    snapshot(): HTMLCanvasElement | null;
     /** Fly straight ahead until the surface distance is about `depth`; resolves on arrival,
      *  on a fly key / Esc, or after 20 s. */
     diveTo(depth: number): Promise<void>;
