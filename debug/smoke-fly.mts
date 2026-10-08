@@ -1,6 +1,6 @@
 /**
- * Fly smoke - app-gmt in Fly mode: holding W moves the scene ALONG THE VIEW, holding S moves it
- * back the other way.
+ * Fly smoke - app-gmt in Fly mode, through the real key handler, wheel handler, drag handler,
+ * frame loop, displacement sink and worker: the scene must move the way the hands say.
  *
  *   npm run dev                       (port 3400), then
  *   npm run smoke:fly
@@ -8,43 +8,64 @@
  *
  * WHY IT EXISTS. The fly integrator (`engine/plugins/navigation/FlyIntegrator.ts`) hands each
  * displacement to a sink; GMT's sink is one function in `engine-gmt/navigation/Navigation.tsx`
- * (grep `emitOffsetShift`) that emits `offset_shift`. `npm run test:nav-replay` pins the
- * integrator's numbers to the last bit but drives it directly: it never opens Navigation.tsx. This
- * is the guard for the call site - the real key handler, the real frame loop, the real sink, the
- * worker's virtual space - read back as `window.__gmtProxy.sceneOffset`.
+ * (grep `emitOffsetShift`). GMT's input hook (`engine-gmt/navigation/useInputController.ts`) turns
+ * keys, the wheel and a look drag into the integrator's inputs. `npm run test:nav-replay` pins the
+ * integrator's numbers to the last bit but drives it directly: it opens neither file. This is the
+ * guard for both - everything is read back as `window.__gmtProxy.sceneOffset` and the store.
  *
- * What it asserts:
- *   1. W held for 1.2 s moves `sceneOffset` (the view is not stuck);
- *   2. the move points along the camera's forward axis (the store's `cameraRot` applied to
- *      (0, 0, -1)): cosine above 0.9 - a sink that swaps or flips an axis fails here;
- *   3. S held the same time moves it the opposite way: cosine below -0.9;
- *   4. no page error.
+ * What it asserts (each line names what would have to break):
+ *   1. W moves the scene along the camera's forward axis (the store's `cameraRot` applied to
+ *      (0, 0, -1)), S moves it back                         - the sink's axes and signs, KeyW / KeyS
+ *   2. D moves it at right angles to forward, A the other way        - KeyD / KeyA
+ *   3. Space moves it at right angles to both, C the other way       - Space / KeyC
+ *   4. Shift+W covers more than twice the ground of W               - the boost key
+ *   5. three wheel notches up raise `navigation.flySpeed`, three down lower it   - the wheel's speed law
+ *   6. W held while a text field has the keyboard moves nothing      - the typing-target rule
+ *   7. after a left-drag across the picture, W no longer points along the old forward   - drag-look
+ *   8. no page error.
  *
- * What it does NOT prove: speed (only direction and "not zero"), strafe, vertical, roll, the wheel,
- * drag-look, the sticks. The integrator's maths for those is the replay's; their wiring through the
- * input hook is unguarded until the hook has its own guard.
+ * What it does NOT prove: exact speeds (only directions, "not zero" and one ratio), roll (Q / E),
+ * Alt, the on-screen sticks, invert-Y, the orthographic wheel branch, Orbit mode's wheel. The
+ * integrator's maths for those is the replay's.
  *
- * FALSIFIED 2026-10-08, each reverted:
- *   - `emitOffsetShift` emitting `z: -z`          -> exit 1, "W moved the scene off the view axis"
- *   - `emitOffsetShift` emitting nothing          -> exit 1, "W did not move the scene"
- *   - the `translate` line removed at the call site would be a type error (the setting is required).
+ * FALSIFIED 2026-10-08, each reverted (see the record at the end of this header).
  *
  * Every page.evaluate takes a STRING body: tsx injects `__name` into function callbacks.
+ *
+ * FALSIFICATION RECORD (2026-10-08; one break each, this smoke red, restored, green again)
+ *   the sink, in `engine-gmt/navigation/Navigation.tsx` (`emitOffsetShift`):
+ *     emits `z: -z`                       -> "W moves the scene along the view" (cosine -1.000)
+ *     emits nothing                       -> "W moves the scene along the view" (length 0)
+ *   the input hook, in `engine-gmt/navigation/useInputController.ts` (before it became a wrapper):
+ *     KeyD mapped to `left`               -> "A moves it the other way" (cosine to D 1.000)
+ *     the Space case does nothing         -> "Space moves it at right angles to both", "C moves it the other way"
+ *     Shift does not set `boost`          -> "Shift+W covers more than twice the ground of W" (0.76 times)
+ *     the wheel keeps the old speed       -> "three wheel notches up raise the fly speed" (0.5 -> 0.500)
+ *     no typing-target test on keydown    -> "W typed in a text field moves nothing" (displacement 5.7e-1)
+ *     mouse down does not start a drag    -> "after a left-drag across the picture W points elsewhere" (cosine 1.000)
  */
 import { chromium } from 'playwright';
+import type { Page } from 'playwright';
 
 const URL = process.env.ENGINE_URL || 'http://localhost:3400/app-gmt.html';
-const HOLD_MS = 1200;
+const HOLD_MS = 1000;
 
 interface V3 { x: number; y: number; z: number }
 const sub = (a: V3, b: V3): V3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
 const len = (a: V3): number => Math.hypot(a.x, a.y, a.z);
 const dot = (a: V3, b: V3): number => a.x * b.x + a.y * b.y + a.z * b.z;
-const fmt = (a: V3): string => `(${a.x.toFixed(4)}, ${a.y.toFixed(4)}, ${a.z.toFixed(4)})`;
+const cos = (a: V3, b: V3): number => dot(a, b) / (len(a) * len(b));
+const fmt = (a: V3): string => `(${a.x.toFixed(3)}, ${a.y.toFixed(3)}, ${a.z.toFixed(3)})`;
+
+const failures: string[] = [];
+function check(ok: boolean, what: string): void {
+    console.log(`${ok ? '  ok  ' : '  FAIL'} ${what}`);
+    if (!ok) failures.push(what);
+}
 
 async function main() {
     const browser = await chromium.launch({ args: ['--disable-gpu-sandbox', '--disable-blink-features=AutomationControlled'] });
-    const page = await (await browser.newContext({ viewport: { width: 1200, height: 800 } })).newPage();
+    const page: Page = await (await browser.newContext({ viewport: { width: 1200, height: 800 } })).newPage();
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 
@@ -62,6 +83,7 @@ async function main() {
         const x = q.x, y = q.y, z = q.z, w = q.w;
         return { x: -2 * (x * z + w * y), y: -2 * (y * z - w * x), z: -(1 - 2 * (x * x + y * y)) };
     })()`) as Promise<V3>;
+    const flySpeed = () => page.evaluate('window.__store.getState().navigation.flySpeed') as Promise<number>;
 
     await page.evaluate("window.__store.getState().setCameraMode('Fly')");
     await page.waitForTimeout(800);
@@ -70,7 +92,8 @@ async function main() {
 
     // The pointer over the picture, no button down: keys go to the navigation, nothing is dragged.
     const vp = page.viewportSize()!;
-    await page.mouse.move(vp.width / 2, vp.height / 2);
+    const cx = vp.width / 2, cy = vp.height / 2;
+    await page.mouse.move(cx, cy);
 
     /** The offset once it has stopped changing (the proxy's copy trails the worker by a few frames,
      *  and a headless frame can take a third of a second). */
@@ -84,31 +107,73 @@ async function main() {
         }
         return last;
     };
-    const hold = async (key: string): Promise<V3> => {
+    /** Hold the keys for HOLD_MS; the scene's displacement. */
+    const hold = async (...keys: string[]): Promise<V3> => {
         const before = await settledOffset();
-        await page.keyboard.down(key);
+        for (const k of keys) await page.keyboard.down(k);
         await page.waitForTimeout(HOLD_MS);
-        await page.keyboard.up(key);
+        for (const k of [...keys].reverse()) await page.keyboard.up(k);
         return sub(await settledOffset(), before);
     };
+    const moved = (d: V3): boolean => len(d) > 1e-4;
 
+    // 1. forward and back
     const forward = await readForward();
     const w = await hold('w');
-    console.log(`forward axis ${fmt(forward)}`);
-    console.log(`W for ${HOLD_MS} ms moved sceneOffset by ${fmt(w)}  length ${len(w).toExponential(3)}`);
-    if (!(len(w) > 1e-4)) throw new Error(`W did not move the scene (sceneOffset delta ${len(w).toExponential(3)})`);
-    const cosW = dot(w, forward) / (len(w) * len(forward));
-    if (!(cosW > 0.9)) throw new Error(`W moved the scene off the view axis (cosine to forward ${cosW.toFixed(3)}, wanted above 0.9)`);
-
+    console.log(`     forward axis ${fmt(forward)}; W moved ${fmt(w)}`);
+    check(moved(w) && cos(w, forward) > 0.9, `W moves the scene along the view (length ${len(w).toExponential(2)}, cosine ${moved(w) ? cos(w, forward).toFixed(3) : 'n/a'})`);
     const s = await hold('s');
-    console.log(`S for ${HOLD_MS} ms moved sceneOffset by ${fmt(s)}  length ${len(s).toExponential(3)}`);
-    if (!(len(s) > 1e-4)) throw new Error(`S did not move the scene (sceneOffset delta ${len(s).toExponential(3)})`);
-    const cosS = dot(s, forward) / (len(s) * len(forward));
-    if (!(cosS < -0.9)) throw new Error(`S did not move the scene back along the view axis (cosine to forward ${cosS.toFixed(3)}, wanted below -0.9)`);
+    check(moved(s) && cos(s, forward) < -0.9, `S moves it back (cosine ${moved(s) ? cos(s, forward).toFixed(3) : 'n/a'})`);
 
-    if (errors.length) throw new Error(`page errors: ${errors.join(' | ')}`);
-    console.log(`\n✓ in Fly mode W moves the scene along the view (cosine ${cosW.toFixed(3)}) and S back (cosine ${cosS.toFixed(3)})`);
+    // 2. strafe
+    const d = await hold('d');
+    check(moved(d) && Math.abs(cos(d, forward)) < 0.2, `D moves it at right angles to the view (cosine ${moved(d) ? cos(d, forward).toFixed(3) : 'n/a'})`);
+    const a = await hold('a');
+    check(moved(a) && moved(d) && cos(a, d) < -0.9, `A moves it the other way (cosine to D ${moved(a) && moved(d) ? cos(a, d).toFixed(3) : 'n/a'})`);
+
+    // 3. vertical
+    const up = await hold('Space');
+    check(moved(up) && Math.abs(cos(up, forward)) < 0.2 && moved(d) && Math.abs(cos(up, d)) < 0.2,
+        `Space moves it at right angles to both (cosine to forward ${moved(up) ? cos(up, forward).toFixed(3) : 'n/a'}, to D ${moved(up) && moved(d) ? cos(up, d).toFixed(3) : 'n/a'})`);
+    const down = await hold('c');
+    check(moved(down) && moved(up) && cos(down, up) < -0.9, `C moves it the other way (cosine to Space ${moved(down) && moved(up) ? cos(down, up).toFixed(3) : 'n/a'})`);
+
+    // 4. boost: back to the start between the two, so both cover the same ground
+    const w1 = await hold('w');
+    await hold('s');
+    const boosted = await hold('Shift', 'w');
+    await hold('Shift', 's');
+    check(moved(w1) && len(boosted) > 2 * len(w1), `Shift+W covers more than twice the ground of W (${(len(boosted) / Math.max(len(w1), 1e-12)).toFixed(2)} times)`);
+
+    // 5. the wheel changes the fly speed
+    const speed0 = await flySpeed();
+    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, -100); await page.waitForTimeout(60); }
+    const speedUp = await flySpeed();
+    for (let i = 0; i < 3; i++) { await page.mouse.wheel(0, 100); await page.waitForTimeout(60); }
+    const speedBack = await flySpeed();
+    check(speedUp > speed0 + 0.03 && Math.abs(speedBack - speed0) < 1e-9, `three wheel notches up raise the fly speed and three down put it back (${speed0} -> ${speedUp.toFixed(3)} -> ${speedBack.toFixed(3)})`);
+
+    // 6. a text field takes the keys
+    await page.evaluate(`(function() { const i = document.createElement('input'); i.id = 'smoke-fly-field'; i.style.cssText = 'position:fixed;left:8px;top:8px;z-index:99999'; document.body.appendChild(i); i.focus(); })()`);
+    const typed = await hold('w');
+    await page.evaluate("document.getElementById('smoke-fly-field').remove()");
+    check(!moved(typed), `W typed in a text field moves nothing (displacement ${len(typed).toExponential(2)})`);
+    await page.mouse.move(cx, cy);
+
+    // 7. drag-look turns the view
+    await page.mouse.move(cx, cy);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(cx + 260, cy, { steps: 8 });
+    await page.waitForTimeout(900);
+    await page.mouse.up({ button: 'left' });
+    await page.waitForTimeout(500);
+    const turned = await hold('w');
+    check(moved(turned) && cos(turned, forward) < 0.97, `after a left-drag across the picture W points elsewhere (cosine to the old forward ${moved(turned) ? cos(turned, forward).toFixed(3) : 'n/a'})`);
+
+    check(errors.length === 0, `no page error (${errors.length})${errors.length ? ': ' + errors.join(' | ') : ''}`);
     await browser.close();
+    if (failures.length) { console.error(`\n✗ ${failures.length} failed:\n  - ` + failures.join('\n  - ')); process.exit(1); }
+    console.log('\n✓ app-gmt flies: W/S, A/D, Space/C, Shift, the wheel, a text field and drag-look all behave');
 }
 
 main().catch((e) => { console.error('\n✗ ' + (e instanceof Error ? e.message : String(e))); process.exit(1); });
