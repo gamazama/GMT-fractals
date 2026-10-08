@@ -93,7 +93,7 @@ const BASE_TIERS = {
     shellLoading:         { base: 100,  span: 0, domain: 'shell' }, // LoadingScreen, MobileControls
     shellDock:            { base: 40,   span: 0, domain: 'shell' }, // Dock root + grips
     shellTimeline:        { base: 40,   span: 0, domain: 'shell' }, // Timeline chrome (own backdrop-blur trap)
-    shellViewportOverlay: { base: 20,   span: 0, domain: 'shell' }, // DomOverlays, region banner, perf monitor
+    shellViewportOverlay: { base: 20,   span: 0, domain: 'shell' }, // FeatureOverlays (feature viewport overlays), region banner, perf monitor
     shellHud:             { base: 10,   span: 0, domain: 'shell' }, // HudOverlay + HUD widgets
 } as const satisfies Record<string, TierDef>;
 

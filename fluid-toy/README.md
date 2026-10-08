@@ -89,7 +89,6 @@ fluid-toy/
 │   └── apply.ts                ref-preset → DDFS slice setters
 │
 ├── components/                 fluid-toy-only React components
-│   ├── DomOverlays.tsx         feature viewport overlays (DOM type)
 │   ├── HotkeysCheatsheet.tsx   bottom-left hint pill
 │   ├── JuliaCPicker.tsx        c-picker mounted under juliaC slider
 │   ├── MandelbrotPicker.tsx    full picker canvas

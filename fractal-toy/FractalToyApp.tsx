@@ -19,7 +19,6 @@ import { Dock } from '../components/layout/Dock';
 import { DropZones } from '../components/layout/DropZones';
 import DraggableWindow from '../components/DraggableWindow';
 import { panelLabel } from '../engine/PanelManifest';
-import { z } from '../components/ui';
 import { PanelRouter } from '../components/PanelRouter';
 import { PanelId, PanelState } from '../types';
 import { StoreCallbacksProvider } from '../components/contexts/StoreCallbacksContext';
@@ -29,24 +28,7 @@ import { TopBarHost } from '../engine/plugins/TopBar';
 import { EngineBridge } from '../components/EngineBridge';
 import GlobalContextMenu from '../components/GlobalContextMenu';
 import { FractalRendererCanvas } from './renderer';
-import { useViewportFps, useQualityFraction, ViewportFrame } from '../engine/plugins/Viewport';
-import { featureRegistry } from '../engine/FeatureSystem';
-import { componentRegistry } from '../components/registry/ComponentRegistry';
-
-const DomOverlays: React.FC = () => {
-    const overlays = featureRegistry.getViewportOverlays().filter(o => o.type === 'dom');
-    const state = useEngineStore();
-    return (
-        <div className="absolute inset-0 pointer-events-none" style={{ zIndex: z('shellViewportOverlay') }}>
-            {overlays.map(cfg => {
-                const C = componentRegistry.get(cfg.componentId);
-                const slice = (state as any)[cfg.id];
-                if (C && slice) return <C key={cfg.id} featureId={cfg.id} sliceState={slice} actions={state} />;
-                return null;
-            })}
-        </div>
-    );
-};
+import { useViewportFps, useQualityFraction, ViewportFrame, FeatureOverlays } from '../engine/plugins/Viewport';
 
 export const FractalToyApp: React.FC = () => {
     const state = useEngineStore();
@@ -84,7 +66,7 @@ export const FractalToyApp: React.FC = () => {
                 <div className="flex-1 flex overflow-hidden relative">
                     <ViewportFrame>
                         <FractalRendererCanvas />
-                        <DomOverlays />
+                        <FeatureOverlays />
                     </ViewportFrame>
 
                     <Dock side="right" />

@@ -7,7 +7,8 @@
  *   - useDeepZoomOrbit.ts     orbit/LA/AT rebuild loop + GPU-time poll.
  *   - features/<x>.ts         each owns its `sync<X>ToEngine` function.
  *   - FluidPointerLayer.tsx   canvas pointer / wheel / modifier-key gestures.
- *   - components/DomOverlays.tsx  feature viewport overlays (DOM-type).
+ *   - engine/plugins/viewport/FeatureOverlays.tsx  feature viewport overlays
+ *                             (DOM-type) — the engine's one host, mounted here.
  *
  * What stays here: store-callback wiring, floating-panel router glue,
  * resolution + render-control effects (which need canvasPixelSize and
@@ -17,6 +18,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useEngineStore } from '../store/engineStore';
 import { ViewportFrame } from '../engine/plugins/viewport/ViewportFrame';
+import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
 import { useQualityFraction, useViewportFps } from '../engine/plugins/Viewport';
 import { TopBarHost } from '../engine/plugins/TopBar';
 import { HudHost } from '../engine/plugins/Hud';
@@ -36,7 +38,6 @@ import { HelpOverlay } from '../engine/plugins/Help';
 import { SettingsHost } from '../components/SettingsAccess';
 // readBrushParams is not used here — useFluidEngine owns the RAF brush tick.
 import { FluidPointerLayer } from './FluidPointerLayer';
-import { DomOverlays } from './components/DomOverlays';
 import { DeepZoomStatus } from './components/DeepZoomStatus';
 import { DeepZoomBench } from './components/DeepZoomBench';
 import { useFluidEngine } from './useFluidEngine';
@@ -215,7 +216,7 @@ export const FluidToyApp: React.FC = () => {
                     />
                     <FluidPointerLayer canvasRef={canvasRef} engineRef={engineRef} />
                     <HudHost />
-                    <DomOverlays />
+                    <FeatureOverlays />
                     {deepZoomEnabled && (
                         <div style={{
                             position: 'absolute',
