@@ -54,6 +54,11 @@ import { hud } from '../engine/plugins/Hud';
 import { installModulation } from '../engine/animation/modulationTick';
 import { installFlyGuard } from './flyGuard';
 import { startMilestones } from './milestones';
+import { installLocations } from './locations';
+import { registerDeepZoomHotkeys } from './hotkeys';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
+import { LocationsPanel } from './components/LocationsPanel';
+import { StarterDives } from './components/StarterDives';
 import { dismissBootSplash } from './components/BootCard';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -154,6 +159,14 @@ try {
     // Store-free (it reads the telemetry store beside the host), registered
     // here with the other top-bar items.
     topbar.register({ id: 'deep-zoom.status', slot: 'center', order: 0, component: StatusChip });
+
+    // Saved locations on the engine's state library (list, thumbnails, slots 1-9, the
+    // Locations menu), the jump undo provider, and this app's keys. The two widgets read
+    // the store, so they are registered here and not in registerFeatures.ts.
+    installLocations();
+    registerDeepZoomHotkeys();
+    componentRegistry.register('dz-locations', LocationsPanel);
+    componentRegistry.register('dz-starters', StarterDives);
 
     // The panel manifest. After every registration it refers to, and after the
     // store exists (the installs above built it).

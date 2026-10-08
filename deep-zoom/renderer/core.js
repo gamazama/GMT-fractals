@@ -2291,6 +2291,7 @@ function gateProbeAt(tval){
 const cam = { pos:[0,0,2.6], yaw:-Math.PI/2, pitch:0, power:8, iters:14, baseSpeed:0.06 };
 let camHP = cam.pos.map(hp.fromNum);            // [DS-SEAM] authoritative position
 let smoothedDist = 1.0;
+let snapDist = false;                          // set by dz.setView: the next frame takes the raw distance, no easing (2026-10-08)
 let modeOverride = 'auto';                      // 'auto' | 'deep' | 'f32'
 let frameLong = 320;                            // deep-mode ABSOLUTE render long-edge (px); display upscales it
 let view1to1 = false;                           // true = show the frame at true pixel size, centred (no stretch)
@@ -3651,7 +3652,8 @@ function frame(now){
   } else {
     rawDist = Math.max(0, deCPU(cam.pos[0],cam.pos[1],cam.pos[2], cam.power, cam.iters));
   }
-  if (rawDist > smoothedDist) smoothedDist += (rawDist-smoothedDist)*(1-Math.exp(-1.2*dt));
+  if (snapDist) { smoothedDist = rawDist; snapDist = false; }
+  else if (rawDist > smoothedDist) smoothedDist += (rawDist-smoothedDist)*(1-Math.exp(-1.2*dt));
   else smoothedDist = rawDist;
   const boost = keys['ShiftLeft']||keys['ShiftRight'] ? 4.0 : 1.0;
   const speed = smoothedDist * cam.baseSpeed * boost * dt * 60;
@@ -3909,7 +3911,7 @@ api.dz = {
     if (v.color !== undefined) colorMode = v.color|0;
     if (v.cscale) colorScale = +v.cscale;
     if (v.surf) surfMul = Math.max(0.25, Math.min(256, +v.surf));
-    orbitDirty = true; accumReset = true;
+    orbitDirty = true; accumReset = true; snapDist = true;
   },
   thumbnail: (size) => {                          // the current view as a square PNG data URL
     const n = Math.max(8, Math.min(512, (size|0) || 96));

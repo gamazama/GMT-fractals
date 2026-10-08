@@ -63,6 +63,9 @@ export const stage: DzStage = {
                 }
                 const rowsOf = (feature: string) => ctx.ev<number>(
                     `[...document.querySelectorAll('[data-help-id^="${feature}."]')].filter((r) => r.querySelector('[data-role="thumb"]')).length`);
+                // Formula shares the left dock with Locations (the default tab since stage 3).
+                await ctx.page.locator('button[data-gx-mode-tab="Formula"]').click();
+                await ctx.sleep(250);
                 ctx.check((await rowsOf('dzFormula')) >= 3, 'Formula shows 3 slider rows or more (' + (await rowsOf('dzFormula')) + ')');
                 // With Colour on Plain the tab is one switch: the mapping and scale rows show for Palette.
                 await ctx.ev('window.__store.getState().setDzColour({ plain: false })');
@@ -93,7 +96,8 @@ export const stage: DzStage = {
                 ctx.check(missing.length === 0, 'no "[PanelRouter] ... not in componentRegistry" console line (' + missing.length + ')');
                 await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
                 ctx.check((await ctx.until("!!document.querySelector('[data-dz-frame-readout]')", 3000)) >= 0, 'the Quality tab shows the drawn-size readout');
-                ctx.check((await ctx.ev<boolean>("!!document.querySelector('[data-dz-iteration-readout]')")), 'the Formula tab shows the live iteration readout');
+                await ctx.page.locator('button[data-gx-mode-tab="Formula"]').click();
+                ctx.check((await ctx.until("!!document.querySelector('[data-dz-iteration-readout]')", 3000)) >= 0, 'the Formula tab shows the live iteration readout');
                 await ctx.page.locator('button[data-gx-mode-tab="Light"]').click();
             },
         },

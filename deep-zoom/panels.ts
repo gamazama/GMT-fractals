@@ -2,8 +2,8 @@
  * deep-zoom/panels.ts - the dock tabs, as a manifest.
  *
  * Left dock = where am I and where am I going; right dock = how it looks. A tab appears in the
- * stage that gives it a working row: Formula, Light, Colour, Quality here (stage 2); Locations in
- * stage 3; Flight in stage 6a. No `component: 'panel-X'` of our own: a panel is features, sections
+ * stage that gives it a working row: Formula, Light, Colour, Quality (stage 2); Locations
+ * (stage 3); Flight in stage 6a. No `component: 'panel-X'` of our own: a panel is features, sections
  * and registered widgets.
  *
  * Rows deliberately absent:
@@ -13,7 +13,13 @@
 import type { PanelManifest } from '../engine/PanelManifest';
 
 export const DeepZoomPanels: PanelManifest = [
-    { id: 'Formula', dock: 'left', order: 1, active: true, items: [
+    { id: 'Locations', dock: 'left', order: 0, active: true, items: [
+        { type: 'section', label: 'Starter dives' },
+        { type: 'widget', id: 'dz-starters' },
+        { type: 'section', label: 'My locations' },
+        { type: 'widget', id: 'dz-locations' },
+    ] },
+    { id: 'Formula', dock: 'left', order: 1, items: [
         { type: 'feature', id: 'dzFormula', whitelistParams: ['power', 'phaseTheta', 'phasePhi'] },
         { type: 'section', label: 'Iterations' },
         { type: 'widget', id: 'dz-iteration-readout' },
