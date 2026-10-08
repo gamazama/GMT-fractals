@@ -23,7 +23,9 @@ import { getHost } from '../host/current';
 const SETTLE_FRAMES = 6;
 
 async function runStarter(starter: Starter): Promise<void> {
-    if (!jumpTo(starter.view)) return;
+    const target = starter.look ? { view: starter.view, look: starter.look, depth: String(starter.startDepth) } : starter.view;
+    if (!jumpTo(target)) return;
+    if (!(starter.depth < starter.startDepth)) return;   // a place, not a dive
     const host = getHost();
     if (!host) return;
     await host.ready.catch(() => undefined);

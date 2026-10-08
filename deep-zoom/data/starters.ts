@@ -14,6 +14,7 @@
  *   at ..."). To replace a start view: fly to a good one, copy its location, paste its `view` here.
  */
 import type { DzView } from '../host/DeepZoomHost';
+import type { DzLocationLook } from '../locations';
 
 export interface Starter {
     name: string;
@@ -24,6 +25,8 @@ export interface Starter {
     view: DzView;
     /** About how deep the start view already is (see the assumption above). */
     startDepth: number;
+    /** The look the place was saved with. Absent: the card keeps the current light and colour. */
+    look?: DzLocationLook;
 }
 
 export const STARTERS: Starter[] = [
@@ -63,10 +66,19 @@ export const STARTERS: Starter[] = [
         view: {"cam":["-19106688270107543539847685334122574908462788363099593224465751636502417073449","2056390632353040684939008940472695153310485784884857827891628620567985409003","106035815535807683251647607458976088237621289450007267173621379188843051639489"],"yaw":-0.9470676032630783,"pitch":-0.6826967659566994,"iters":79,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
     },
     {
-        name: "Near the floor · 1e-75",
-        blurb: "Two decades above the end of the 256-bit reference. A long dive (about 40 decades); it may stop short, then dive again.",
-        depth: 1e-75,
-        startDepth: 4e-35,
-        view: {"cam":["-19106688270107543539847685334122574908462788363099593224465751636502417073449","2056390632353040684939008940472695153310485784884857827891628620567985409003","106035815535807683251647607458976088237621289450007267173621379188843051639489"],"yaw":-0.9470676032630783,"pitch":-0.6826967659566994,"iters":79,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
+        // The owner's own place, pasted 2026-10-08 ("Copy location" in this shell): power 4, palette
+        // colouring, at 3.4e-76 - less than a decade above the floor. A card whose target is not
+        // deeper than its start is a jump with no dive.
+        name: "Near the floor · 3.4e-76",
+        blurb: "Power 4, at 3.4e-76: less than a decade above the end of the 256-bit reference. A place to look around, not a dive.",
+        depth: 3.376850263024561e-76,
+        startDepth: 3.376850263024561e-76,
+        view: {"cam":["50824816761209212648773291794238013877590286934867614785660121322924421006886","1928097533739460807312423296524290262074950900961166079654313382524318228004","87416425370933128965049751237528334656564043486210832724862196155676155173062"],"yaw":-6.595496326794958,"pitch":-0.17619999999999764,"iters":148,"power":4,"phase":[0,0],"light":0,"falloff":4,"color":2,"cscale":1,"surf":7.740892961138752},
+        look: {
+            dzFormula: { power: 4, phaseTheta: 0, phasePhi: 0, iterations: 148, autoIterations: true },
+            dzLight: { shading: 1, lightType: 0, lampFalloff: 4, keyElevation: 40, keyTurn: 0, lightTint: 0.5, shadows: 1, occlusion: 1, sky: 0.3, roughness: 0.45, haze: 1 },
+            dzColour: { plain: false, mode: 0, scale: 1 },
+            detail: 7.740892961138752,
+        },
     },
 ];
