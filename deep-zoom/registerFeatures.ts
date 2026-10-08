@@ -29,6 +29,9 @@ import { DzQualityFeature } from './features/quality';
 import { DzInspectFeature } from './features/inspect';
 import { DzLightFeature } from './features/light';
 import { DzColourFeature } from './features/colour';
+import { componentRegistry } from '../components/registry/ComponentRegistry';
+import { ModeNotice } from './components/ModeNotice';
+import { IterationReadout, FrameReadout } from './components/Readouts';
 
 // Type-only: declaration-merges the dz* slices into the store's type, so
 // `useSlice('dzFormula')` and `setDzFormula(...)` are typed. No runtime content.
@@ -50,3 +53,9 @@ featureRegistry.register(DzLightFeature);
 
 // Colour — Plain / Palette, GMT's colouring mode number, scale.
 featureRegistry.register(DzColourFeature);
+
+// Panel widgets the manifest names (deep-zoom/panels.ts). Registered here, before the store
+// is built, as fluid-toy does for its own.
+componentRegistry.register('dz-mode-notice', ModeNotice);
+componentRegistry.register('dz-iteration-readout', IterationReadout);
+componentRegistry.register('dz-frame-readout', FrameReadout);

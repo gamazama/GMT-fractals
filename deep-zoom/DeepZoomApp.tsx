@@ -50,6 +50,7 @@ import { SettingsHost } from '../components/SettingsAccess';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import { ToastHost } from '../engine/components/ToastHost';
 import { DeepZoomSurface } from './DeepZoomSurface';
+import { useHostSync } from './useHostSync';
 
 export const DeepZoomApp: React.FC = () => {
     // Granular selectors — DO NOT use `useEngineStore()` with no selector
@@ -67,6 +68,8 @@ export const DeepZoomApp: React.FC = () => {
 
     // Preference-aware (Force Mobile UI counts): what is mounted, not how it is painted.
     const { isMobile } = useMobileLayout();
+    // The store's look values, sent to the renderer (one subscription per mapped feature).
+    useHostSync();
 
     const floatingPanels = (Object.values(panels) as PanelState[])
         .filter((p) => p.location === 'float' && p.isOpen);

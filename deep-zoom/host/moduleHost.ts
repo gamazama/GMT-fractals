@@ -62,8 +62,10 @@
  *     reports it (`contextLost`, once); the surface disposes and mounts fresh.
  *
  * INTERIMS - what each one waits for
- *   - `setParam` / `setParams` do nothing and say so once: `host/looseParams.ts`, package S2-3.
- *     `getParams` / `bootParams` use the module's own keys until then; ids from M1.
+ *   - `setParam` / `setParams` take ids `<feature>.<key>` and reach the module's own setters
+ *     through `host/looseParams.ts` (one table, `host/paramMap.ts`), until M1 gives the module
+ *     set-by-id. `getParams` / `bootParams` return the module's own settings keys AND the mapped
+ *     params by id (the ids hold a dot, the module's keys do not).
  *   - `ready`, telemetry, `compile`, `recordingChanged`, `progress` are polled at 8 Hz: events
  *     from the module, M3. `progress` is read off the module's status line in its hidden scaffold
  *     (`statusLineOf`): M3. `compile` sees the deep shader only: BLA and variants, M5.
@@ -126,6 +128,8 @@ import type {
 } from './DeepZoomHost';
 import { DZ_CANVAS_ID } from './current';
 import { createDive } from './dive';
+import { createParamPusher } from './looseParams';
+import { readParams } from './paramMap';
 import { DZ_TELEMETRY_HZ, DZ_TELEMETRY_INTERVAL_MS, resetTelemetry, writeCaptured, writeTelemetry } from './telemetry';
 
 /** How long `ready` waits for the deep shader, counted over frames that ran (a gap between two
@@ -284,13 +288,6 @@ function sequenceResult(r: ModuleRenderResult | null | undefined): DzSequenceRes
     return { ok: true, frames, zips: r.zips ?? 0, cancelled: !!r.cancelled };
 }
 
-let saidNoParams = false;
-function noParamsYet(): void {
-    if (saidNoParams) return;
-    saidNoParams = true;
-    console.info('[deep-zoom] host.setParam / setParams do nothing until host/looseParams.ts lands (package S2-3).');
-}
-
 function reportThrow(what: string, err: unknown): void {
     console.error(`[deep-zoom] ${what} threw`, err);
 }
@@ -305,6 +302,9 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     const api = instance.api;
     const dz = api.dz;
     const loose = looseHandles(api);
+    const params = createParamPusher(api);
+    /** The module's own settings keys, with the mapped params by id over them (see `getParams`). */
+    const currentParams = (): DzParams => ({ ...dz.settings(), ...readParams(api) });
     const doc = canvas.ownerDocument;
     const frame = env.frame === undefined ? canvas.parentElement : env.frame;
 
@@ -389,7 +389,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (!isReady) {
                 isReady = true;
                 // Before the parked view (which writes look values) and before anyone hears "ready".
-                boot = frozenParams({ ...dz.settings() });
+                boot = frozenParams(currentParams());
                 const parked = pendingView;
                 pendingView = null;
                 if (parked) host.setView(parked);
@@ -433,10 +433,10 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     const host: DeepZoomHost = {
         ready,
 
-        // parameters: no-ops until S2-3 (see INTERIMS)
-        setParam: () => noParamsYet(),
-        setParams: () => noParamsYet(),
-        getParams: () => ({ ...dz.settings() }),
+        // parameters: ids `<feature>.<key>` through host/looseParams.ts (see INTERIMS)
+        setParam: (id, value) => params.push({ [id]: value }),
+        setParams: (patch) => params.push(patch),
+        getParams: currentParams,
         bootParams: () => boot,
 
         telemetry: () => dz.telemetry(),
@@ -505,6 +505,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
                 return { stopped: !!(r && (r.stopped || r.error)) };
             } finally {
                 if (playRun === settled) playRun = null;
+                // A preview forces the module's precision to deep and never puts it back.
+                if (!disposed) params.repush('precision');
             }
         },
         stopPlay: () => api.stopPlay(),
@@ -524,6 +526,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
                 return { ok: false, reason: 'error', message: err instanceof Error ? err.message : String(err) };
             } finally {
                 sequences--;
+                if (!disposed) params.repush('precision');   // a render forces deep too
             }
         },
         cancel() {
@@ -575,6 +578,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (disposed) return;
             disposed = true;
             dive.cancel();
+            params.dispose();
             doc.removeEventListener('pointerlockchange', onLockChange);
             if (env.contextLost) env.contextLost.current = null;
             listeners.clear();

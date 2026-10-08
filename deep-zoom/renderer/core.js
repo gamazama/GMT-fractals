@@ -3136,6 +3136,13 @@ api.setStepRelax = (r)=>{ stepRelax = Math.max(0, +r); accumReset = true; };  //
 api.setCapRelax = (m)=>{ capRelax = Math.max(1, +m); accumReset = true; };    // QUALITY LEVER: scale deep res cap (1 = shipped; 1e6 = uncapped/full-res deep)
 api.setPower = (n)=>{ nPower=Math.max(2,Math.min(16,n|0)); cam.power=nPower; binomN=binomPad(nPower); binomN1=binomPad(nPower-1); orbitDirty=true; };
 api.setPhase = (th,ph)=>{ phaseTheta=th||0; phasePhi=ph||0; orbitDirty=true; };
+// Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
+// `auto-iters` control rows and its [ ] I keys do, for a host that owns those values.
+api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(160,n|0)); orbitDirty=true; };
+api.setAutoIters = (b)=>{ autoIters=!!b; };
+api.autoIters = ()=>autoIters;
+// Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
+api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
 api.setSurf = (m)=>{ surfMul=Math.max(0.25,Math.min(256,m||1)); accumReset=true; };  // ray-closeness ÷pixAng

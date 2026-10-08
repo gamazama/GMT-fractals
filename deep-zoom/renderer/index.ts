@@ -223,6 +223,31 @@ export interface DeepZoomApi {
     setMode(mode: 'auto' | 'deep' | 'f32'): void;
     setGate(on: boolean): void;
     setFrame(longEdgePx: number): void;
+    /** Whole number, clamped 2..16. Rebuilds the reference orbit. */
+    setPower(n: number): void;
+    /** Radians, absolute, always both. Rebuilds the reference orbit. */
+    setPhase(theta: number, phi: number): void;
+    /** Clamped 4..160. Rebuilds the reference orbit. With auto iterations on this is the floor:
+     *  the module raises the count with depth and never lowers it. (Added 2026-10-08.) */
+    setIters(n: number): void;
+    setAutoIters(on: boolean): void;
+    autoIters(): boolean;
+    /** 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth. Does NOT restart the still: follow it
+     *  with `setLook({})`. */
+    setNormalMode(mode: number): void;
+    setLand(on: boolean): void;
+    /** 0 direct / 1 lamp / 2 both. A falsy `falloff` leaves the falloff as it is; an undefined
+     *  `mode` sets Direct - always pass both. */
+    setLight(mode: number, falloff?: number): void;
+    /** March step factor; 0 means the default 0.85. */
+    setStepRelax(r: number): void;
+    /** Scales the deep resolution cap; 1 is the shipped cap. */
+    setCapRelax(m: number): void;
+    /** Read-back for the three settings above that had setters only. (Added 2026-10-08.) */
+    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32' };
+    blaMode(): 'off' | 'auto' | 'on';
+    /** The live look record `setLook` writes into. Read only. */
+    look: DzLook;
     lockInput(locked: boolean): void;
     samplePath(path: DzPath, tau: number): number[] | null;
     stopPlay(): void;

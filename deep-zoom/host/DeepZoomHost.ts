@@ -41,10 +41,15 @@
  *     `ready`             resolves once the deep shader has compiled (the module's telemetry says
  *                         ready); rejects with a readable message on a compile error or after 120 s
  *                         of running loop (a gap between two steps counts for a second at most).
- *     `getParams()`       a COPY of the module's own settings with the module's own keys, unmapped:
- *                         detail, reach, power, phase, color, cscale, light, falloff, normals, land,
- *                         frame, accum, lookMode. Keyed by renderer parameter id from stage 2
- *                         (`host/looseParams.ts`, package S2-3).
+ *     `setParam(` `setParams(`   store values by id `<feature>.<key>` (an enum param is its option
+ *                         index, colour `mode` is GMT's number). The host converts and calls the
+ *                         module's own setters (`host/paramMap.ts`, `host/looseParams.ts`); a value
+ *                         equal to the last one pushed is dropped, so whole slices may be sent.
+ *     `getParams()`       a COPY holding two things: the module's own settings under its own keys
+ *                         (detail, reach, power, phase, color, cscale, light, falloff, normals, land,
+ *                         frame, accum, lookMode) and, by id, every mapped param the module can
+ *                         read back, as the store would hold it. The ids hold a dot; the module's
+ *                         keys do not.
  *     `bootParams()`      null until `ready` resolves; from then on one frozen copy of what
  *                         `getParams()` returned at that moment, before the shell pushed anything.
  *     `telemetry()`       the module's sample, read now.
@@ -64,12 +69,6 @@
  *     `canvas()` `focus()` `setInputEnabled(` `step(` `frameCount()` `dispose()` `on(`
  *     `isCaptured()`      true while the pointer is locked on the canvas. LEAVES AT N5 together with
  *                         the `captureChanged` event, when the engine's navigation takes the input.
- *
- *   REQUIRED, A NO-OP FOR NOW - callers may call it; nothing happens yet:
- *     `setParam(` `setParams(`   do nothing, and say so once through `console.info`, until
- *                         `host/looseParams.ts` lands (S2-3). Required and not optional because the
- *                         whole of stage 2 calls them; an optional member would put `?.` on every
- *                         call for good.
  *
  *   OPTIONAL - undefined until the named package. Test before calling (`host.pause?.(true)`) and
  *   show no control for a member that is not there:
@@ -121,7 +120,7 @@
  *     caller that chains `.then` must add its own `.catch`. A host disposed before it was ready
  *     never settles `ready`.
  *   - `play` and `renderPathZip` force the module's precision mode to deep and never put it back.
- *     Push the formula and quality values again when either resolves.
+ *     The host sends the stored precision again when either resolves.
  *   - `setRecording(true)` throws the previous take away. Take it first.
  *   - After `contextLost` nothing is restored and telemetry still says ready. Dispose and mount a
  *     fresh host; do not keep calling the old one.

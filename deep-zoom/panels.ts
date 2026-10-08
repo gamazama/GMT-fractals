@@ -1,26 +1,37 @@
 /**
- * Deep Zoom — panel manifest.
+ * deep-zoom/panels.ts - the dock tabs, as a manifest.
  *
- * Left dock = where am I and where am I going (Locations, Formula, Flight);
- * right dock = how it looks (Light, Colour, Quality). The target layout is
- * BLUEPRINT section 4 (plans/deep-zoom-shell/).
+ * Left dock = where am I and where am I going; right dock = how it looks. A tab appears in the
+ * stage that gives it a working row: Formula, Light, Colour, Quality here (stage 2); Locations in
+ * stage 3; Flight in stage 6a. No `component: 'panel-X'` of our own: a panel is features, sections
+ * and registered widgets.
  *
- * EMPTY IN STAGE 1, ON PURPOSE. A tab appears in the stage that gives it a row
- * the renderer can honour: Formula, Light, Colour, Quality in stage 2,
- * Locations in stage 3, Flight in stage 6a. The five look features are
- * already registered (registerFeatures.ts) but nothing pushes their values to
- * the renderer yet, so a slider for one would be a control that does nothing.
- *
- * With no panel in a dock the engine's <Dock> renders no element at all (grep
- * `dockPanels.length === 0` in components/layout/Dock.tsx): in stage 1 the
- * picture runs edge to edge under the top bar.
- *
- * Every custom widget is `{ type: 'widget', id }` plus a
- * `componentRegistry.register(id, C)`. No `component: 'panel-X'` of our own.
- * The shared Feedback panel is spread in by setup.ts, so this file stays free
- * of engine-gmt imports.
+ * Rows deliberately absent:
+ *   - `dzQuality.actualPixels`: the renderer has no setter for its 1:1 view yet (host/paramMap.ts).
+ * The `dz-mode-notice` widget heads the two tabs whose controls act in deep mode only.
  */
-
 import type { PanelManifest } from '../engine/PanelManifest';
 
-export const DeepZoomPanels: PanelManifest = [];
+export const DeepZoomPanels: PanelManifest = [
+    { id: 'Formula', dock: 'left', order: 1, active: true, items: [
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['power', 'phaseTheta', 'phasePhi'] },
+        { type: 'section', label: 'Iterations' },
+        { type: 'widget', id: 'dz-iteration-readout' },
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['iterations', 'autoIterations'] },
+    ] },
+    { id: 'Light', dock: 'right', order: 0, active: true, items: [
+        { type: 'widget', id: 'dz-mode-notice' },
+        { type: 'feature', id: 'dzLight' },
+    ] },
+    { id: 'Colour', dock: 'right', order: 1, items: [
+        { type: 'widget', id: 'dz-mode-notice' },
+        { type: 'feature', id: 'dzColour' },
+    ] },
+    { id: 'Quality', dock: 'right', order: 2, items: [
+        { type: 'widget', id: 'dz-frame-readout' },
+        { type: 'feature', id: 'dzQuality', excludeParams: ['actualPixels'] },
+        { type: 'collapsible', label: 'Inspect', defaultOpen: false, items: [
+            { type: 'feature', id: 'dzInspect' },
+        ] },
+    ] },
+];

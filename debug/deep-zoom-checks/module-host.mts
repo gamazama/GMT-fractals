@@ -266,6 +266,7 @@ function makeRig() {
         recording: false,
         playing: false,
         exporting: false,
+        mode: 'auto',
         tick: 0,
         view: view(CAM_A),
         settings: {
@@ -332,6 +333,16 @@ function makeRig() {
             return new Promise((resolve) => { state.playEnd = resolve; });
         },
         renderPath: (data: DzPath, opts: unknown): Promise<unknown> => { note('renderPath', data, opts); return state.renderScript(data, opts); },
+        // What host/looseParams.ts pushes through and host/paramMap.ts reads back (stage 2).
+        look: { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 } as Record<string, unknown>,
+        setLook: (o: Record<string, unknown>): void => { note('setLook', o); Object.assign(api.look, o); },
+        setSurf: (m: number): void => { note('setSurf', m); state.settings.detail = m; },
+        setPower: (n: number): void => { note('setPower', n); state.settings.power = n; },
+        setMode: (m: string): void => { note('setMode', m); state.mode = m; },
+        autoIters: (): boolean => true,
+        marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
+        blaMode: (): string => 'auto',
+        compileMs: (): Record<string, number | undefined> => ({}),
     };
 
     const instance = {
@@ -1137,25 +1148,31 @@ console.log('[10] mount    the DOM half, with a fake create');
 }
 
 // ── [11] params ──────────────────────────────────────────────────────────────────────────────────
-console.log('[11] params   the stage-1 no-op');
+console.log('[11] params   by id, through host/looseParams.ts (the pushes themselves: param-map.mts)');
 {
     const rigA = makeRig();
     const rigB = makeRig();
     const a = createModuleHost(rigA.instance, rigA.canvas);
     const b = createModuleHost(rigB.instance, rigB.canvas);
-    const realInfo = console.info;
-    const said: string[] = [];
-    console.info = (...args: unknown[]) => { said.push(args.map(String).join(' ')); };
+    const realWarn = console.warn;
+    const warned: string[] = [];
+    console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(' ')); };
     try {
-        a.setParam('detail', 4);
-        a.setParams({ detail: 5, power: 6 });
-        b.setParam('detail', 4);
+        a.setParam('dzQuality.detail', 4);
+        a.setParams({ 'dzQuality.detail': 4, 'dzFormula.power': 6 });
+        a.setParam('detail', 9);          // the module's own key is not an id
+        a.setParam('detail', 9);
+        b.setParam('dzQuality.detail', 2);
     } finally {
-        console.info = realInfo;
+        console.warn = realWarn;
     }
-    check(said.length === 1 && said[0].includes('setParam'), 'params: setParam and setParams say once that they do nothing yet', `${said.length} lines`);
-    check(rigA.log.length === 1 && rigB.log.length === 1 && rigA.state.settings.detail === 1 && a.getParams().detail === 1,
-        'params: and they call nothing on the module', rigA.log.join(', '));
+    check(rigA.count('setSurf') === 1 && rigA.state.settings.detail === 4 && rigA.count('setPower') === 1 && rigA.state.settings.power === 6,
+        'params: an id reaches the setter of the module once; the same value sent again is dropped', rigA.log.join(', '));
+    check(rigB.count('setSurf') === 1 && rigB.state.settings.detail === 2, 'params: each host has its own pusher');
+    check(warned.length === 1 && warned[0].includes('"detail"'), 'params: an id with no map row is named once and pushes nothing', `${warned.length} lines`);
+    const got = a.getParams();
+    check(got.detail === 4 && got['dzQuality.detail'] === 4 && got['dzFormula.power'] === 6 && got['dzLight.keyElevation'] === 40,
+        'params: getParams holds the keys of the module and the mapped params by id');
     check(a.pause === undefined && a.setGradientRamp === undefined && a.renderFramePixels === undefined && a.renderFrameBlob === undefined && a.exportStill === undefined,
         'params: the five optional members are absent in stage 1 (pause, setGradientRamp, renderFramePixels, renderFrameBlob, exportStill)');
     a.dispose();
@@ -1191,7 +1208,12 @@ console.log('[12] seam     who under deep-zoom/host/ loads the renderer');
     }
     check(specifiers("import { a } from '../renderer';\nimport type {\n    B,\n} from '../renderer/index';\nexport * from './x';\nconst m = await import('../renderer');\n// import '../renderer' in a comment").length === 4,
         'seam: the scanner sees an import, a type import over several lines, a re-export and a dynamic import, and not a comment');
-    check(loaders.join() === 'moduleHost.ts', 'seam: moduleHost.ts is the only file under deep-zoom/host/ that loads deep-zoom/renderer', loaders.join(', '));
+    // Stage 2: paramMap.ts and looseParams.ts are typed against the module's api. A type import
+    // loads nothing; moduleHost.ts stays the one file that imports a VALUE from the renderer.
+    const typeOnly = (name: string): boolean =>
+        [...readFileSync(path.join(hostDir, name), 'utf8').matchAll(/^import\s+(type\s+)?[^;]*?from\s+'[^']*renderer[^']*';/gm)].every((m) => m[1] !== undefined);
+    check(loaders.join() === 'looseParams.ts,moduleHost.ts,paramMap.ts' && typeOnly('looseParams.ts') && typeOnly('paramMap.ts') && !typeOnly('moduleHost.ts'),
+        'seam: under deep-zoom/host/ only moduleHost.ts loads deep-zoom/renderer; paramMap.ts and looseParams.ts import its types only', loaders.join(', '));
     check(diveImports === 0, 'seam: dive.ts loads nothing at all', `${diveImports} imports`);
 }
 

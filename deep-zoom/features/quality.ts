@@ -217,7 +217,7 @@ export const DzQualityFeature = {
             ...precisionParam.config,
             type: 'float',
             isAdvanced: true,
-            description: 'Auto uses f32 until the surface is closer than 1e-4, then the deep (perturbation) path. Deep and f32 use one path at every depth.',
+            description: 'Auto uses f32 until the surface is closer than 1e-4, then the deep (perturbation) path. Deep and f32 use one path at every depth; Deep above about 1e-4 draws one flat colour.',
         },
         bla: {
             ...blaParam.config,

@@ -33,7 +33,7 @@ import type { DzTelemetry, DzView } from '../../deep-zoom/host/DeepZoomHost';
  * frozen page's sample flight); that folder is deleted in stage 7, so it is not imported.
  * Measured in the shell on 2026-10-08: depth 1.14e-17, mode deep, 64 of 64 samples in about 1.3 s.
  */
-const DEEP_VIEW: DzView = {
+export const DEEP_VIEW: DzView = {
     cam: [
         '-19106688270107545123610310944093228319268234083931764161217485625786859879978',
         '2056390632353041980388441420253193046898375110266709396020905008395931668174',
@@ -59,7 +59,7 @@ const same = (a: string[], b: string[]) => a.length === b.length && a.every((v, 
 const short = (c: string[]) => c.map((v) => v.slice(0, 12) + '…(' + v.length + ')').join(', ');
 
 /** Put the camera on `DEEP_VIEW` and wait for the perturbation picture. False when it never came. */
-async function enterDeepView(ctx: DzCtx): Promise<boolean> {
+export async function enterDeepView(ctx: DzCtx): Promise<boolean> {
     await ctx.withHost('host.setView(' + JSON.stringify(DEEP_VIEW) + '); return true;');
     const waited = await ctx.untilHost("host.telemetry().mode === 'deep'", 20_000, 50);
     return ctx.check(waited >= 0, 'host.setView(a deep view) switches the picture to perturbation' + (waited >= 0 ? ' (' + waited + ' ms)' : ' (still f32 after 20 s)'));
