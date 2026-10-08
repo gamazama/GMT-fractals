@@ -6,8 +6,8 @@
  * through here so the top bar, the readout, the scale and a saved place agree to the digit.
  * Pure: no React, no store. Checked by `debug/deep-zoom-checks/depth-format.mts`.
  *
- * The three honest lines of the range, used by the scale and by Help:
- *   1e-4   below this the renderer draws by perturbation (above it, plain f32)
+ * The two honest lines of the range, used by the scale and by Help (a third, "1e-4: perturbation
+ * below, plain f32 above", went on 2026-10-08 when the deep path became the picture at every depth):
  *   1e-50  as deep as the renderer's distance has been checked against an independent referee
  *          (`npm run smoke:deep-zoom-direct`)
  *   1e-77  the floor: the reference's 256 bits end here
@@ -70,7 +70,6 @@ export function yardstickFor(d: number): string {
 
 /** The fixed marks of the range. */
 export const RANGE_MARKS: ReadonlyArray<{ exp: number; label: string }> = [
-    { exp: 4, label: '1e-4 perturbation' },
     { exp: 50, label: '1e-50 checked' },
     { exp: 77, label: '1e-77 floor' },
 ];

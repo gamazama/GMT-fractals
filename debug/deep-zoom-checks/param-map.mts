@@ -131,10 +131,10 @@ console.log('[3] push');
     check(rig.calls.length === 0, 'push: the same whole set again sends nothing', rig.calls.map(([n]) => n).join(','));
 
     rig.clear();
-    p.push({ 'dzQuality.reach': 2, 'dzQuality.normals': 3, 'dzQuality.depthNormalRadius': 2, 'dzQuality.precision': 1, 'dzInspect.channel': 4, 'dzLight.shading': 0 });
+    p.push({ 'dzQuality.reach': 2, 'dzQuality.normals': 3, 'dzQuality.depthNormalRadius': 2, 'dzInspect.channel': 4, 'dzLight.shading': 0 });
     const looks = rig.of('setLook').map((a) => a[0]) as Array<Record<string, unknown>>;
-    check(JSON.stringify(rig.of('setReach')) === '[[2]]' && JSON.stringify(rig.of('setNormalMode')) === '[[3]]' && JSON.stringify(rig.of('setMode')) === '[["deep"]]',
-        'push: enum indices are converted (reach 2, normals 3, precision index 1 -> "deep")');
+    check(JSON.stringify(rig.of('setReach')) === '[[2]]' && JSON.stringify(rig.of('setNormalMode')) === '[[3]]' && rig.of('setMode').length === 0,
+        'push: enum indices are converted (reach 2, normals 3), and nothing ever sets the precision mode');
     check(looks.some((o) => o.nrmTap === 3) && looks.some((o) => o.view === 5) && looks.some((o) => o.mode === 0) && looks.some((o) => Object.keys(o).length === 0),
         'push: depth radius index 2 -> nrmTap 3, channel index 4 -> view 5, shading index 0 -> mode 0, and normals is followed by an empty setLook', JSON.stringify(looks));
 
@@ -166,10 +166,8 @@ console.log('[3] push');
     check(rig.calls.length === 0, 'push: a row with no push sends nothing', rig.calls.map(([n]) => n).join(','));
 
     rig.clear();
-    p.push({ 'dzQuality.precision': 0 });
-    rig.clear();
-    p.repush('precision');
-    check(JSON.stringify(rig.of('setMode')) === '[["auto"]]', 'push: repush sends the group again with the stored value', JSON.stringify(rig.calls));
+    p.push({ 'dzQuality.precision': 1 });
+    check(rig.of('setMode').length === 0, 'push: a `dzQuality.precision` from a scene saved before 2026-10-08 pushes nothing', JSON.stringify(rig.calls));
     p.dispose();
 }
 

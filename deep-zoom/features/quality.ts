@@ -3,8 +3,8 @@
  *
  * PURPOSE
  *   How the picture is rendered, as opposed to what is drawn or how it is lit: the frame size, how
- *   close and how far rays go, how normals are found, the march step, the still's accumulation, and three advanced
- *   levers (precision path, BLA, march step, the depth caps on the frame size). Twelve params.
+ *   close and how far rays go, how normals are found, the march step, the still's accumulation, and two advanced
+ *   levers (BLA, the depth caps on the frame size). Twelve params.
  *
  * THE SEAM
  *   The engine store OWNS these values. The renderer (`deep-zoom/renderer`) is a sink: it is told,
@@ -19,7 +19,6 @@
  *     hitLanding         api.setLand(on)
  *     accumulate         api.setAccum(on)
  *     actualPixels       no handle (`view1to1` is closure state in core.js) until module package M1
- *     precision          api.setMode(mode)           precisionToRenderer(index): 'auto' | 'deep' | 'f32'
  *     bla                api.setBla(v)               blaToRenderer(index): false | 'auto' | true
  *     stepSize           api.setStepRelax(r)
  *     resolutionCap      api.setCapRelax(m)          floor 1
@@ -36,7 +35,6 @@
  *
  * INVALIDATION
  *   Class A (the still restarts; cheap) for every param except two:
- *     precision   O — the reference orbit is rebuilt
  *     bla         O, and C when it goes to On: a blocking shader compile (see pitfalls)
  *
  * PITFALLS
@@ -64,10 +62,10 @@
  *     `api.dz.telemetry().frameW / frameH` and is shown by a readout, never written back.
  *   - `resolutionCap` above 1 lets a deep frame run past the ~2 s GPU watchdog (grep `TDR guard`
  *     in core.js: a device reset, a frozen desktop). That is why it is `isAdvanced`.
- *   - `precision`: playback and export set the renderer to 'deep' and never put it back (grep
- *     `modeOverride = 'deep'`, three sites). The host re-pushes this slice when a play or a render
- *     resolves. The renderer has no getter for the requested mode; `telemetry().mode` is the
- *     EFFECTIVE path ('deep' | 'f32').
+ *   - NO PRECISION CONTROL (removed 2026-10-08, the owner: "can we do away with the f32 version").
+ *     The shell starts the renderer with `mode: 'deep'` (host/moduleHost.ts, `shellOptions`): the
+ *     deep path draws at every depth, and the f32 baseline shows only until the deep shader has
+ *     compiled. A scene saved before that day may carry `dzQuality.precision`; it is ignored.
  *   - `detail` has a second writer: `api.dz.setView(view)` writes it from `view.surf`. The shell
  *     applies a jump through this feature's setter so the store stays the one owner.
  *   - `depthNormalRadius` is shown only while `normals` is Depth; its value is kept, and pushed,
@@ -94,7 +92,7 @@
  *   matching `CTLS` rows). No guard checks it yet; the stage-2 smoke step "every feature default
  *   equals the module's settings read at ready" is the intended proof. `api.dz.settings()` returns
  *   six of the twelve (frame, detail, reach, normals, land, accum); `api.look.nrmTap` and
- *   `api.blaMode()` give two more; precision, stepSize, resolutionCap and actualPixels have no
+ *   `api.blaMode()` give two more; stepSize, resolutionCap and actualPixels have no
  *   read-back at all until module package M1.
  */
 
@@ -133,17 +131,6 @@ const depthNormalRadiusParam = defineEnumParam(DEPTH_NORMAL_RADIUS_OPTIONS, 'Dep
 });
 export const depthNormalRadiusToRenderer = (index: number | undefined) =>
     DEPTH_NORMAL_RADIUS_RENDERER_VALUES[DEPTH_NORMAL_RADIUS_OPTIONS.indexOf(depthNormalRadiusParam.fromIndex(index))];
-
-// ── Precision — core.js: `let modeOverride = 'auto'`. The option names ARE the renderer's values.
-export const PRECISION_OPTIONS = ['auto', 'deep', 'f32'] as const;
-/** `api.setMode(mode)`, in option order. */
-export const PRECISION_RENDERER_VALUES = ['auto', 'deep', 'f32'] as const;
-const precisionParam = defineEnumParam(PRECISION_OPTIONS, 'Precision', {
-    defaultIndex: 0,
-    optionLabels: { f32: 'f32' },
-});
-export const precisionToRenderer = (index: number | undefined) =>
-    PRECISION_RENDERER_VALUES[PRECISION_OPTIONS.indexOf(precisionParam.fromIndex(index))];
 
 // ── BLA — core.js: `let blaMode = 'auto'`. `api.blaMode()` reads back 'off' | 'auto' | 'on'.
 export const BLA_OPTIONS = ['off', 'auto', 'on'] as const;
@@ -238,12 +225,6 @@ export const DzQualityFeature = {
             default: false,
             label: 'Actual pixels',
             description: 'Shows the frame at its true pixel size, centred, instead of scaled to fill the view.',
-        },
-        precision: {
-            ...precisionParam.config,
-            type: 'float',
-            isAdvanced: true,
-            description: 'Auto uses f32 until the surface is closer than 1e-4, then the deep (perturbation) path. Deep and f32 use one path at every depth. Deep draws shallow views too, except with the camera exactly on the bulb\'s vertical axis (the start view), where it shows one flat colour.',
         },
         bla: {
             ...blaParam.config,

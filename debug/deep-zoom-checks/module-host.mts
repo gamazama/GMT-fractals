@@ -408,7 +408,7 @@ console.log('[1] options   shellOptions(frame, hooks)');
     );
     const record = options as Record<string, unknown>;
     const want: Array<[keyof DeepZoomOptions, unknown]> = [
-        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false],
+        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'],
         ['resetStillOnResize', true], ['loseContextOnDispose', true], ['embed', true], ['publishOnWindow', false],
     ];
     for (const [name, value] of want) {

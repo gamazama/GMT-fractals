@@ -10,7 +10,7 @@
  * SEAMS
  *   - `createParamPusher(api)` is made once per host by `host/moduleHost.ts`. `push(patch)` takes
  *     store values by id; a value equal to the last one pushed is dropped, so the caller may send
- *     whole slices. `repush(group)` sends a group again after the module changed it by itself.
+ *     whole slices.
  *   - It starts from the feature defaults (`defaultParams()`), which are the module's own
  *     defaults, so a joint push (colour, light, phase) always has all its values.
  *
@@ -35,7 +35,7 @@ import type { DzParamId, DzParamValue, DzParams } from './DeepZoomHost';
 import { DZ_PARAM_ROW_BY_ID, defaultParams, paramId } from './paramMap';
 import type { DzPushGroup } from './paramMap';
 import {
-    reachToRenderer, normalsToRenderer, depthNormalRadiusToRenderer, precisionToRenderer, blaToRenderer,
+    reachToRenderer, normalsToRenderer, depthNormalRadiusToRenderer, blaToRenderer,
 } from '../features/quality';
 import { channelToRenderer, compareToRenderer } from '../features/inspect';
 import { shadingToRenderer, lightTypeToRenderer } from '../features/light';
@@ -44,8 +44,6 @@ import { colourToRenderer } from '../features/colour';
 export interface ParamPusher {
     /** Store values by id. Unchanged values are dropped; each changed group is pushed once. */
     push(patch: DzParams): void;
-    /** Send a group again with the values last pushed (the module changed it by itself). */
-    repush(group: DzPushGroup): void;
     /** The values last pushed, by id (the defaults for anything never pushed). */
     values(): DzParams;
     dispose(): void;
@@ -96,7 +94,6 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         land: () => api.setLand(flag('dzQuality', 'hitLanding')),
         hitRefine: () => api.setHitRefine(num('dzQuality', 'hitRefine')),
         accum: () => api.setAccum(flag('dzQuality', 'accumulate')),
-        precision: () => api.setMode(precisionToRenderer(num('dzQuality', 'precision'))),
         bla: pushBla,
         stepRelax: () => api.setStepRelax(num('dzQuality', 'stepSize')),
         capRelax: () => api.setCapRelax(num('dzQuality', 'resolutionCap')),
@@ -129,10 +126,6 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             }
             for (const group of groups) PUSH[group]();
             if (anyLook) api.setLook(lookFields);
-        },
-        repush(group) {
-            if (disposed || group === 'look') return;
-            PUSH[group]();
         },
         values: () => ({ ...v }),
         dispose() {

@@ -122,8 +122,9 @@
  *     nobody looked at is not an unhandled rejection (the smoke fails on any page error), but a
  *     caller that chains `.then` must add its own `.catch`. A host disposed before it was ready
  *     never settles `ready`.
- *   - `play` and `renderPathZip` force the module's precision mode to deep and never put it back.
- *     The host sends the stored precision again when either resolves.
+ *   - `play` and `renderPathZip` force the module's precision mode to deep. That is where this
+ *     shell keeps it anyway: the deep path draws at every depth (no Precision control since
+ *     2026-10-08), so nothing is put back.
  *   - `setRecording(true)` throws the previous take away. Take it first.
  *   - After `contextLost` nothing is restored and telemetry still says ready. Dispose and mount a
  *     fresh host; do not keep calling the old one.

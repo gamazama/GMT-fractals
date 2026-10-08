@@ -20,8 +20,9 @@
  *     once by hand on 2026-10-08; no step.
  *
  * NOTES FOR WHOEVER EDITS A STEP
- *   - The f32 picture at boot never accumulates (`accumN` stays 0). A step about the still first
- *     calls `enterDeepView`.
+ *   - Until 2026-10-08 the picture at boot was the f32 baseline, which never accumulates; steps
+ *     about the still call `enterDeepView` for that reason. The deep path draws the start view
+ *     now and accumulates there too, so new steps need not.
  *   - Every step sets what it needs at its start, so it can run alone and in any order.
  */
 import fs from 'node:fs';
@@ -64,8 +65,11 @@ const short = (c: string[]) => c.map((v) => v.slice(0, 12) + '…(' + v.length +
 /** Put the camera on `DEEP_VIEW` and wait for the perturbation picture. False when it never came. */
 export async function enterDeepView(ctx: DzCtx): Promise<boolean> {
     await ctx.withHost('host.setView(' + JSON.stringify(DEEP_VIEW) + '); return true;');
-    const waited = await ctx.untilHost("host.telemetry().mode === 'deep'", 20_000, 50);
-    return ctx.check(waited >= 0, 'host.setView(a deep view) switches the picture to perturbation' + (waited >= 0 ? ' (' + waited + ' ms)' : ' (still f32 after 20 s)'));
+    // The mode alone says nothing since 2026-10-08 (the deep path draws every depth): wait until a
+    // frame has run AT the new view - its distance is under 1e-10 - or a step that reads the
+    // picture next measures the old view, or the still of the old view.
+    const waited = await ctx.untilHost("host.telemetry().mode === 'deep' && host.telemetry().depth < 1e-10", 20_000, 50);
+    return ctx.check(waited >= 0, 'host.setView(a deep view): the deep path is drawing it' + (waited >= 0 ? ' (' + waited + ' ms)' : ' (not after 20 s)'));
 }
 
 /** Import specifiers of one source file, comments stripped. The same patterns as

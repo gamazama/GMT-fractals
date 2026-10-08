@@ -1,19 +1,18 @@
 /**
- * deep-zoom/components/ModeNotice.tsx - says when a tab's controls change no pixel.
+ * deep-zoom/components/ModeNotice.tsx - one line at the top of the Light and Colour tabs while the
+ * picture is the f32 baseline.
  *
- * The renderer has two paths. Above about 1e-4 surface distance (precision Auto), with precision
- * f32, and while the deep shader compiles, it draws the f32 picture, and that path has no light,
- * look or colour input at all (grep `const FRAG =` in deep-zoom/renderer/core.js). So at boot the
- * Light and Colour tabs move nothing. This widget states it at the top of those tabs while the
- * mode is f32; it renders nothing in deep mode.
+ * The f32 baseline has no light, look or colour input at all (grep `const FRAG =` in
+ * deep-zoom/renderer/core.js), so while it is the picture those tabs move nothing. SINCE 2026-10-08
+ * THAT IS ONLY WHILE THE DEEP SHADER COMPILES, a few seconds after the page opens: the shell
+ * starts the renderer with `mode: 'deep'` (host/moduleHost.ts) and the deep path draws at every
+ * depth. Before that day f32 drew everything shallower than 1e-4 and this line read "These act
+ * below 1e-4 surface distance".
  *
- * It offers no switch. CORRECTED 2026-10-08: this header said that forcing precision to Deep at a
- * shallow depth "draws one flat colour". It does so only with the camera EXACTLY on the bulb's z
- * axis - which is where the start view sits (0, 0, 2.6), the one place it was tried. The deep
- * path's reference orbit is degenerate there. 1e-9 off the axis it draws the whole bulb, lit, and
- * better than f32 does (measured the same day; pictures under debug/scratch/f32/). So a switch
- * would work everywhere but the start view; whether deep becomes the picture at every depth, and
- * this notice goes, is an open call with the owner.
+ * HISTORY, kept because it cost a day: this header once said that forcing the deep path at a
+ * shallow depth "draws one flat colour". It did so only with the camera EXACTLY on the bulb's z
+ * axis - where the start view sits, the one place it had been tried. The renderer now keeps the
+ * camera off that axis (grep `POLE GUARD` in core.js).
  *
  * Registered as `dz-mode-notice` in registerFeatures.ts; panels.ts places it. Reads telemetry only.
  */
@@ -26,7 +25,7 @@ export const ModeNotice: React.FC = () => {
     if (!live || mode === 'deep') return null;
     return (
         <div data-dz-mode-notice className="mx-2 my-1.5 px-2 py-1.5 rounded border border-line/15 text-[10px] leading-snug text-fg-tertiary">
-            These act below 1e-4 surface distance. The picture is f32 now.
+            The deep renderer is still starting. Light and colour act once it has.
         </div>
     );
 };

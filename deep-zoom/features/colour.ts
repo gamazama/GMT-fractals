@@ -86,8 +86,8 @@
  *   Class A, all three: `api.setColor` restarts the still. No orbit rebuild, no shader compile.
  *
  * PITFALLS
- *   - DEEP MODE ONLY. The f32 path (precision Auto above a surface distance of 1e-4, precision
- *     f32, or any precision while the deep shader is still compiling; grep `deepActive = deepProg`)
+ *   - DEEP PATH ONLY. The f32 baseline (the picture only while the deep shader is still
+ *     compiling, since 2026-10-08; grep `deepActive = deepProg`)
  *     draws with its own small shader (grep `const FRAG =` in core.js): one fixed colour, none of
  *     these inputs. Until `api.dz.telemetry().mode === 'deep'` no row of this tab changes a pixel.
  *   - `api.setColor(m, s)` is `colorMode = m|0; if (s) colorScale = s`. Called with the scale alone

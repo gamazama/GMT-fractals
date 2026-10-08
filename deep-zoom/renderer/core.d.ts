@@ -45,6 +45,11 @@ export interface DeepZoomCoreOptions {
      *  texture this instance made and abandons a deep compile in flight. The canvas CANNOT be used
      *  again afterwards — give each mount a fresh canvas. */
     loseContextOnDispose?: boolean;
+    /** Which path draws, from the first frame: 'auto' (the default, the page: the f32 baseline while
+     *  the surface is farther than 1e-4, the deep path below), 'deep' (the deep path at every
+     *  depth; the f32 baseline only until the deep shader has compiled) or 'f32'. `api.setMode`
+     *  changes it later. */
+    mode?: 'auto' | 'deep' | 'f32';
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).
      *  Nothing is restored: dispose and mount a fresh canvas. */
     onContextLost?: () => void;

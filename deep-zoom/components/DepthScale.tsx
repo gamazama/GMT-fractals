@@ -4,7 +4,7 @@
  * A viewport overlay: registered as `overlay-depth-scale` and declared by the `camera` feature's
  * `viewportConfig` (type `dom`), so the engine's `<FeatureOverlays />` mounts it - it is not
  * mounted by hand. The column runs from 1e0 at the top to the 1e-77 floor at the bottom, with a
- * tick every ten decades, the three fixed marks of the range (1e-4 perturbation, 1e-50 checked,
+ * tick every ten decades, the two fixed marks of the range (1e-50 checked,
  * 1e-77 floor) and a live marker at the current depth. Below 1e-50 the column is fainter; the
  * last three decades are amber. A click dives to that depth.
  *

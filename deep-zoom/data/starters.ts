@@ -39,7 +39,7 @@ export const STARTERS: Starter[] = [
     },
     {
         name: "Surface · 1e-6",
-        blurb: "Just past the f32 hand-over. Try this first.",
+        blurb: "Down to the surface, six decades in. Try this first.",
         depth: 1e-6,
         startDepth: 2e0,
         view: {"cam":["-12004329469645485047937427706023426690615009787959257048000668121821698064384","-3048675784628119469751797018997286768009585810962788698672706548352598147072","374318900487514760606603683363058317676782359194611622522743113598207757647872"],"yaw":-1.5374963267948958,"pitch":-1.2793585635328952e-17,"iters":14,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},

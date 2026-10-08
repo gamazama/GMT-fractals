@@ -49,7 +49,9 @@
  *   - `api.lastPath()` hands out the module's live recording array and `api.smoothPath` smooths in
  *     place: `takePath` and `smoothPath` copy.
  *   - `api.playPath` and `api.renderPath` set the module's precision mode to deep and leave it
- *     there; they, and the module's dive, tick on the browser's own animation frames.
+ *     there - which is where this shell keeps it anyway (`mode: 'deep'` in `shellOptions`; the
+ *     shell has had no Precision control since 2026-10-08). They, and the module's dive, tick on
+ *     the browser's own animation frames.
  *   - Two previews at once fight over the camera (the first one's end stops the second), and a
  *     preview running under a render moves the camera between rows. `play` ends the one in flight
  *     first; `renderPathZip` stops a preview.
@@ -82,8 +84,8 @@
  *   byte for byte - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("views: ..." lines).
  *   Falsified 2026-10-08: the "cam strings" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
- *   pointerLock:false, resetStillOnResize:true, loseContextOnDispose:true` and `keyTarget ===
- *   frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
+ *   pointerLock:false, mode:'deep', resetStillOnResize:true, loseContextOnDispose:true` and
+ *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
  *   Falsified 2026-10-08: the "options" group in the check's header, all seven.
  * @invariant `dispose()` calls the instance's `dispose` before the canvas is removed; a failed
  *   create leaves no canvas behind; the canvas is in the frame before create runs and carries no
@@ -496,8 +498,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
                 return { stopped: !!(r && (r.stopped || r.error)) };
             } finally {
                 if (playRun === settled) playRun = null;
-                // A preview forces the module's precision to deep and never puts it back.
-                if (!disposed) params.repush('precision');
             }
         },
         stopPlay: () => api.stopPlay(),
@@ -517,7 +517,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
                 return { ok: false, reason: 'error', message: err instanceof Error ? err.message : String(err) };
             } finally {
                 sequences--;
-                if (!disposed) params.repush('precision');   // a render forces deep too
             }
         },
         cancel() {
@@ -604,7 +603,8 @@ export function shellOptions(frame: HTMLElement, hooks: DeepZoomMountHooks = {},
         keyTarget: frame,               // keys reach the module only while the picture has focus
         shortcuts: false,               // the engine's dispatcher owns every one-shot key
         dropTarget: null,               // the engine's drop zone owns drops
-        pointerLock: false,             // no click listener in the module; the shell asks for the lock
+        pointerLock: false,             // no click listener in the module; nothing takes the pointer
+        mode: 'deep',                   // the deep path at every depth; f32 only until its shader has compiled
         resetStillOnResize: true,       // a dock resize restarts the still
         loseContextOnDispose: true,     // a remount frees every program and texture; each mount gets a fresh canvas
         sizeElement: frame,

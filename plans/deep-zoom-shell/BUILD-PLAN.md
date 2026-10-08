@@ -44,6 +44,13 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
   must not change how fast you fly. (4) Q and E are down and up (the renderer has no roll), beside
   GMT's Space and C. With the surface distance at 0 (inside the solid) nothing moves; Backspace or
   Home is the way out. The depth readout no longer fades while flying and shows the fly speed.
+- **f32 is no longer the shallow picture (2026-10-08, the owner: "can we do away with the fp32
+  version" - yes).** The shell starts the renderer with `mode: 'deep'`; the deep path draws every
+  depth and f32 shows only while the deep shader compiles. The renderer keeps the camera off the
+  exact z axis (POLE GUARD). The shell's Precision control, its map row and the pusher's `repush`
+  are gone; the notice on the Light and Colour tabs now says the renderer is still starting; the
+  depth scale lost its "1e-4 perturbation" mark. STILL OWED: far ground (most of a shallow view)
+  takes light but no palette colour, and far hits are not refined (ripples).
 - **Precision Deep at a shallow depth draws one flat colour** - WRONG AS WRITTEN, corrected the same
   day. It happens only with the camera exactly on the bulb's z axis, where the start view sits and
   where the deep path's reference orbit is degenerate. 1e-9 off the axis the deep path draws the

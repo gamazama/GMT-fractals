@@ -5,7 +5,7 @@
  * order: 0, component: StatusChip })` in deep-zoom/main.tsx.
  *
  * Stage 1 shows two things, and only while a host is drawing (`live`):
- *   - the engine badge: `f32` or `perturbation` (the renderer's own precision mode);
+ *   - the engine badge: `perturbation`, or `f32` for the seconds the deep shader takes to compile;
  *   - the depth, compact: `6.40e-53`. Depth is the camera's distance to the surface.
  * It keeps the depth on screen whichever dock tab is open and when the picture's own overlays are
  * hidden. Package S2-5 extends it (state, live iterations, drawn size, still progress) and moves
@@ -26,7 +26,7 @@ import { formatDepth } from './depthFormat';
  * S2-5 moves this to `components/depthFormat.ts`; keep the two outputs above when it does.
  */
 
-const ENGINE_TITLE = 'f32 above about 1e-4 surface distance. Below it, perturbation with a 256-bit reference.';
+const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';
 
 export const StatusChip: React.FC = () => {
     const live = useDzTelemetry((t) => t.live);
@@ -34,7 +34,7 @@ export const StatusChip: React.FC = () => {
     const depth = useDzTelemetry((t) => formatDepth(t.depth));
     const iters = useDzTelemetry((t) => t.iters);
     const size = useDzTelemetry((t) => `${t.frameW} x ${t.frameH}`);
-    // The still's progress, in deep mode only (the f32 picture does not accumulate).
+    // The still's progress, in deep mode only (the f32 picture, shown while the deep shader compiles, does not accumulate).
     const still = useDzTelemetry((t) => (t.mode === 'deep' && t.accumMax > 0 ? `${t.accumN}/${t.accumMax}` : ''));
 
     // Before the first sample, and after a host is disposed, the store holds placeholders.

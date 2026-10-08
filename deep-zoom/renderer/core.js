@@ -2321,7 +2321,7 @@ const cam = { pos:[0,0,2.6], yaw:-Math.PI/2, pitch:0, power:8, iters:14, baseSpe
 let camHP = cam.pos.map(hp.fromNum);            // [DS-SEAM] authoritative position
 let smoothedDist = 1.0;
 let snapDist = false;                          // set by dz.setView: the next frame takes the raw distance, no easing (2026-10-08)
-let modeOverride = 'auto';                      // 'auto' | 'deep' | 'f32'
+let modeOverride = options.mode === 'deep' || options.mode === 'f32' ? options.mode : 'auto';   // 'auto' | 'deep' | 'f32' (options.mode: where a host starts it; the page starts on 'auto')
 let frameLong = 320;                            // deep-mode ABSOLUTE render long-edge (px); display upscales it
 let view1to1 = false;                           // true = show the frame at true pixel size, centred (no stretch)
 let autoIters = true;                           // key I: scale iterations with depth
@@ -3656,6 +3656,19 @@ function frame(now){
   if (exporting) { dzScheduleFrame(); return; }   // hi-res export owns the GL context
   const dt=Math.min(0.05,(now-last)/1000); last=now; fps=fps*0.9+ (1/Math.max(1e-3,dt))*0.1;
   frameN++;
+  /* POLE GUARD (2026-10-08). With the camera EXACTLY on the z axis (x = y = 0: the start view is
+     (0, 0, 2.6)) the deep path draws one flat colour. The reference orbit then sits on the axis,
+     where an azimuth does not exist, and the kernel's angle step (grep `sclAtan(NP, denPhi`) is
+     handed 0 / 0: every pixel's orbit comes out NaN and is read as "inside the surface".
+     Measured: flat at x = 0, the whole bulb drawn at x = 1e-9. So the camera is never left
+     exactly there: x is moved by a billionth of the surface distance (never less than 1e-30,
+     the smallest step an f32 reference texel still holds apart from 0). No flight reaches the
+     exact axis; a start view, a jump home or a hand-written view can. For years this hid behind
+     the f32 baseline, which drew the start view instead. */
+  if (camHP[0] === 0n && camHP[1] === 0n) {
+    camHP[0] = hp.fromNum(Math.max(Math.max(smoothedDist, 0) * 1e-9, 1e-30));
+    cam.pos = camHP.map(hp.toNum); orbitDirty = true;
+  }
   const {fwd,right,up}=basis();
 
   deepActive = deepProg && (modeOverride==='deep' || (modeOverride==='auto' && smoothedDist < 1e-4));

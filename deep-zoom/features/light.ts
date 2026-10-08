@@ -63,9 +63,8 @@
  *   shader compile.
  *
  * PITFALLS
- *   - DEEP MODE ONLY, ALL ELEVEN. The f32 path (precision Auto above a surface distance of 1e-4,
- *     precision f32, or any precision while the deep shader is still compiling; grep
- *     `deepActive = deepProg`) draws with its own small shader (grep `const FRAG =` in core.js):
+ *   - DEEP PATH ONLY, ALL ELEVEN. The f32 baseline (the picture only while the deep shader is
+ *     still compiling, since 2026-10-08; grep `deepActive = deepProg`) draws with its own small shader (grep `const FRAG =` in core.js):
  *     one camera-fixed light, one fixed colour, none of these inputs. Until the renderer reports
  *     `api.dz.telemetry().mode === 'deep'` no row of this tab changes a pixel. No condition can
  *     say so here: the mode is renderer telemetry, not store state.

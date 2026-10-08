@@ -33,7 +33,7 @@ import type { DzParamId, DzParamValue, DzParams } from './DeepZoomHost';
 import { DzFormulaFeature } from '../features/formula';
 import {
     DzQualityFeature, REACH_RENDERER_VALUES, NORMALS_RENDERER_VALUES, DEPTH_NORMAL_RADIUS_RENDERER_VALUES,
-    PRECISION_RENDERER_VALUES, BLA_OPTIONS,
+    BLA_OPTIONS,
 } from '../features/quality';
 import { DzInspectFeature, CHANNEL_RENDERER_VALUES, COMPARE_RENDERER_VALUES } from '../features/inspect';
 import { DzLightFeature, SHADING_RENDERER_VALUES, LIGHT_TYPE_RENDERER_VALUES } from '../features/light';
@@ -46,7 +46,7 @@ export type DzInvalidation = 'O' | 'A' | 'C' | '-';
 export type DzPushGroup =
     | 'power' | 'phase' | 'iters' | 'autoIters'
     | 'frame' | 'detail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'accum'
-    | 'precision' | 'bla' | 'stepRelax' | 'capRelax'
+    | 'bla' | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
 
 export interface DzParamRow {
@@ -105,7 +105,6 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     { feature: 'dzQuality', key: 'hitRefine', cls: 'A', group: 'hitRefine', read: (api) => api.marchLevers().hitRefine },
     { feature: 'dzQuality', key: 'accumulate', cls: 'A', group: 'accum', read: (api) => api.dz.settings().accum },
     { feature: 'dzQuality', key: 'actualPixels', cls: 'A', group: null, why: 'the module has no setter for its 1:1 view, and the shell has no centring style for it yet' },
-    { feature: 'dzQuality', key: 'precision', cls: 'O', group: 'precision', read: (api) => indexIn(PRECISION_RENDERER_VALUES, api.marchLevers().mode) },
     { feature: 'dzQuality', key: 'bla', cls: 'C', group: 'bla', read: (api) => indexIn(BLA_OPTIONS, api.blaMode()) },
     // The module's raw value 0 means "the default 0.85".
     { feature: 'dzQuality', key: 'stepSize', cls: 'A', group: 'stepRelax', read: (api) => { const r = api.marchLevers().stepRelax; return r > 0 ? r : 0.85; } },

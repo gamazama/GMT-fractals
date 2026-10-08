@@ -8,11 +8,12 @@
  *     `[data-help-id^="<feature>.<param> "]` and holds a `[data-role="thumb"]`.
  *   - The store's values reach the renderer only after `host.ready`; `host.getParams()` holds the
  *     module's own keys (`detail`, `color`, ...) and the mapped params by id (`dzLight.keyElevation`).
- *   - Light and Colour change pixels in DEEP mode only (the f32 path has no light or colour input),
- *     and forcing precision to Deep draws one flat colour AT THE START VIEW (the camera is exactly
- *     on the z axis there; off the axis the deep path draws shallow views fine - corrected
- *     2026-10-08). So a step about the picture first calls `enterDeepView` (a view that is deep by
- *     itself).
+ *   - The deep path is the picture at EVERY depth since 2026-10-08 (the shell starts the renderer
+ *     with `mode: 'deep'`); the f32 baseline, which has no light or colour input, shows only until
+ *     the deep shader has compiled. The start view sits exactly on the bulb's z axis, where the
+ *     deep path used to draw one flat colour: the renderer's POLE GUARD keeps the camera off it,
+ *     and one step here looks at that picture. FAR ground (most of a shallow view) takes light
+ *     but no palette colour yet, so the Colour check still uses `enterDeepView`.
  *   - Two thumbnails of one unchanged view are not byte-identical (the still restarts and the
  *     samples are jittered), so picture steps compare mean colour and carry a control: the same
  *     measure with nothing changed. With Accumulate OFF one view draws the same picture every
@@ -68,7 +69,7 @@ const settle = (ctx: DzCtx, n = 24) => ctx.untilHost('host.telemetry().accumN >=
 
 /** Put the store back to the feature defaults this stage touches. */
 const RESET = `(() => { const s = window.__store.getState();
-    s.setDzQuality({ detail: 1, precision: 0 }); s.setDzLight({ shading: 1, lightType: 0, keyElevation: 40 });
+    s.setDzQuality({ detail: 1 }); s.setDzLight({ shading: 1, lightType: 0, keyElevation: 40 });
     s.setDzColour({ plain: true, mode: 0, scale: 1 }); return true; })()`;
 
 export const stage: DzStage = {
@@ -193,15 +194,30 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'in a deep view Light and Colour change the picture; in f32 the tabs say they do not',
+            name: 'the deep path is the picture at every depth: Light changes the start view, and Light and Colour a deep one',
             owner: 'S2-3',
-            falsified: '2026-10-08: `useHostSync()` removed from deep-zoom/DeepZoomApp.tsx -> red, "key elevation 40 -> 85 changes the picture" and the colour line false (both under the control\'s difference).',
+            falsified: '2026-10-08, two breaks, one run each, for the start-view half: `mode: \'deep\'` removed from `shellOptions` in host/moduleHost.ts -> red, "at the start view the picture is the deep path" false (it was f32, with the notice up, and the light changed nothing); the POLE GUARD in renderer/core.js made dead -> red, "it is a picture, not one flat colour" false (levels 145 to 145). For the deep-view half, the same day and before: `useHostSync()` removed from deep-zoom/DeepZoomApp.tsx -> red, "key elevation 40 -> 85 changes the picture" and the colour line false.',
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Light"]').click();
-                ctx.check((await ctx.until("!!document.querySelector('[data-dz-mode-notice]')", 5000)) >= 0, 'f32 at boot: the Light tab shows the deep-mode notice');
+                // The start view: depth about 1.2, where f32 used to draw, and exactly on the z axis.
+                ctx.check((await ctx.untilHost("host.telemetry().mode === 'deep'", 20_000, 50)) >= 0, 'at the start view the picture is the deep path (depth ' + (await ctx.host<number>('telemetry().depth')).toFixed(2) + ')');
+                ctx.check((await ctx.until("!document.querySelector('[data-dz-mode-notice]')", 5000)) >= 0, 'and the "still starting" notice is not shown');
+                await settle(ctx);
+                const start = await pixels(ctx, 64);
+                let lo = 255, hi = 0;
+                for (let i = 0; i < start.length; i += 4) { const v = (start[i] + start[i + 1] + start[i + 2]) / 3; if (v < lo) lo = v; if (v > hi) hi = v; }
+                ctx.check(hi - lo > 60, 'it is a picture, not one flat colour (levels ' + Math.round(lo) + ' to ' + Math.round(hi) + ')');
+                const s1 = await meanColour(ctx);
+                await settle(ctx);
+                const startNoise = dist(s1, await meanColour(ctx));
+                await ctx.ev('window.__store.getState().setDzLight({ keyElevation: 85 })');
+                await ctx.sleep(200);
+                await settle(ctx);
+                const s2 = await meanColour(ctx);
+                ctx.check(dist(s1, s2) > Math.max(2, startNoise * 4), 'key elevation 40 -> 85 changes the start view (' + dist(s1, s2).toFixed(1) + ' levels; the control: ' + startNoise.toFixed(2) + ')');
+                await ctx.ev('window.__store.getState().setDzLight({ keyElevation: 40 })');
                 if (!(await enterDeepView(ctx))) return;
-                ctx.check((await ctx.until("!document.querySelector('[data-dz-mode-notice]')", 5000)) >= 0, 'deep view: the notice is gone');
                 await settle(ctx);
                 const a = await meanColour(ctx);
                 await settle(ctx);
@@ -235,15 +251,15 @@ export const stage: DzStage = {
                 ctx.check((await ctx.store<boolean>('advancedMode')) === false, 'advanced mode starts off');
                 ctx.check(await has('stepSize'), 'Step size is shown');
                 ctx.check(await has('hitRefine'), 'Hit refine is shown');
-                // A slider row carries its param in `data-help-id`; an option row (Precision, BLA) does
-                // not, so those are looked for by their label.
+                // A slider row carries its param in `data-help-id`; an option row (BLA) does not, so
+                // that one is looked for by the first words of its description.
                 const labelled = (label: string) => ctx.ev<boolean>(`document.body.innerText.includes(${JSON.stringify(label)})`);
-                ctx.check(!(await has('resolutionCap')) && !(await labelled('Precision')), 'Resolution cap and Precision (advanced) are hidden');
+                ctx.check(!(await has('resolutionCap')) && !(await labelled('Bivariate linear approximation')), 'Resolution cap and BLA (advanced) are hidden');
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('Backquote');
                 await ctx.sleep(300);
                 ctx.check((await ctx.store<boolean>('advancedMode')) === true, 'the backtick key turns advanced mode on');
-                ctx.check((await has('resolutionCap')) && (await labelled('Precision')), 'and Resolution cap and Precision are shown');
+                ctx.check((await has('resolutionCap')) && (await labelled('Bivariate linear approximation')), 'and Resolution cap and BLA are shown');
                 // The Settings row is the same flag (the panel that draws it is the engine's own).
                 const row = await ctx.ev<{ found: boolean; value: unknown }>(`(async () => {
                     const m = await import('/store/settingsRegistry.ts');
