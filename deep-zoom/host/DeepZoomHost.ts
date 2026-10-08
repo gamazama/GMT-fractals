@@ -55,6 +55,10 @@
  *     `telemetry()`       the module's sample, read now.
  *     `onTelemetry(`      the same sample as a stream, 8 a second by default, sent from `step`.
  *     `getView()` `setView(` `moveAlong(` `thumbnail(`   straight through to the module.
+ *     `setInputOwner(` `rawDistance()` `yawPitch()` `setYawPitch(`   host input (stage N): the
+ *                         shell's navigation flies the camera through `moveAlong` and `setYawPitch`
+ *                         once it has called `setInputOwner('host')`; `rawDistance` is the
+ *                         unsmoothed distance its integrator eases itself.
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
  *     `diveTo(`           the host's own loop (`host/dive.ts`) over `moveAlong`, not the module's dive.
@@ -94,8 +98,6 @@
  *     `paramChanged`      never fires in stage 1. From stage 2 by comparing `getParams()`
  *                         (`cause: 'unknown'`), from M3 as an event.
  *
- *   NOT HERE YET, named so nobody adds them twice: `setInputOwner('module' | 'host')` and
- *   `rawDistance()` arrive at N4.
  *
  * PITFALLS
  *   - CAMERA STRINGS. `DzView.cam` holds three BigInt fixed-point numbers (256 fractional bits) as
@@ -315,6 +317,18 @@ export interface DeepZoomHost {
      * `renderPathZip` and `dispose`. Before `ready` it resolves at once and moves nothing.
      */
     diveTo(depth: number): Promise<void>;
+    /**
+     * Who flies the camera: 'module' (its own keys and captured-mouse look) or 'host' (the shell's
+     * navigation moves it with `moveAlong` and turns it with `setYawPitch`; the module then reads
+     * no key and no mouse). The module starts on 'module'.
+     */
+    setInputOwner(owner: 'module' | 'host'): void;
+    /** The surface distance of the last frame, unsmoothed. Telemetry `depth` is eased when it rises. */
+    rawDistance(): number;
+    /** The look angles in radians. Cheap: it formats no camera strings. */
+    yawPitch(): { yaw: number; pitch: number };
+    /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still. */
+    setYawPitch(yaw: number, pitch: number): void;
     /** The current view as a square PNG data URL, 8..512 px ('' when nothing can be drawn yet, or while a render runs). Restarts the still. */
     thumbnail(size?: number): string;
 

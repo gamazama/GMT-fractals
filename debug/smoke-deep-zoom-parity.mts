@@ -25,6 +25,10 @@
  *                   gives the same size and a mean level within 1.0.
  *   (d) lifecycle — with ?manual=1 frames advance only while step() is called; create, dispose,
  *                   create leaves one loop, the same listeners, one scaffold, and a correct picture.
+ *   (e) host input - port only (stage N4): after `__dz.setInputOwner('host')` a held W leaves the
+ *                   camera strings unchanged while `__moveAlong` and `__dz.setYawPitch` still act;
+ *                   handed back, W moves it again. Falsified 2026-10-08: the owner test taken out
+ *                   of the module's keydown listener -> the "holding W leaves ..." line red.
  *
  * Every page.evaluate takes a STRING body: tsx injects `__name` into function callbacks.
  */
@@ -398,6 +402,37 @@ async function main(): Promise<void> {
         const ref = H.shots.find((s) => s.tau === 0.5 && s.setting === 'defaults');
         const rd = compare(ref ? ref.px : null, rePx.px);
         check(within(rd) && rePx.err === 0, `lifecycle manual: the re-created instance draws the historical picture (tau 0.50 defaults: mean ${fx(rd.mean)}, ${fx(rd.over, 2)} % over 2 levels, WebGL error ${rePx.err})`);
+
+        /* (e) host input (stage N4, port only): while a host owns the input the module reads no key;
+           the host's own handles still move and turn the camera. The captured-mouse look is not
+           opened here (a pointer lock needs a real gesture). */
+        await ev(mp, "(() => { window.__lockInput(false); window.__setMode('auto'); })()");
+        const camOf = () => evJson<string[]>(mp, 'window.__dz.getView().cam');
+        const differ = (a: string[], b: string[]) => a.some((v, i) => v !== b[i]);
+        const holdW = async () => {
+            await ev(mp, "window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w', bubbles: true }))");
+            await mp.waitForTimeout(300);
+            await ev(mp, "window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w', bubbles: true }))");
+            await mp.waitForTimeout(80);
+        };
+        const k0 = await camOf();
+        await holdW();
+        const k1 = await camOf();
+        check(differ(k0, k1), 'host input: with the module owning the input, holding W moves the camera (the control for the next line)');
+        await ev(mp, "window.__dz.setInputOwner('host')");
+        await holdW();
+        const k2 = await camOf();
+        const dist = await ev<number>(mp, 'window.__dz.rawDistance()');
+        await ev(mp, 'window.__moveAlong([0, 0, 1], window.__dz.rawDistance() * 0.01)');
+        const k3 = await camOf();
+        const turned = await evJson<{ yaw: number; pitch: number; owner: string }>(mp,
+            '(() => { window.__dz.setYawPitch(0.3, 9); return { ...window.__dz.yawPitch(), owner: window.__dz.inputOwner() }; })()');
+        check(!differ(k1, k2) && turned.owner === 'host', `host input: with the host owning it, holding W leaves the camera strings unchanged (owner "${turned.owner}")`);
+        check(differ(k2, k3) && Number.isFinite(dist) && dist > 0, `host input: api.moveAlong still moves it, by a share of rawDistance() (${dist.toExponential(2)})`);
+        check(turned.yaw === 0.3 && turned.pitch === 1.55, `host input: setYawPitch(0.3, 9) turns it and clamps the pitch (yaw ${turned.yaw}, pitch ${turned.pitch})`);
+        await ev(mp, "window.__dz.setInputOwner('module')");
+        await holdW();
+        check(differ(k3, await camOf()), 'host input: handed back to the module, W moves the camera again');
         check(merr.length === 0, `lifecycle manual: no page errors (${merr.length})` + merr.slice(0, 2).map((e) => '  ' + e).join(''));
         await mp.close();
 

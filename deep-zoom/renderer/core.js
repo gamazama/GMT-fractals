@@ -2335,8 +2335,14 @@ const keys = {};
 /* test harnesses lock input: their headed Chrome window takes focus, and a key typed for some
    other app would otherwise fly the camera mid-measurement (seen: a stray 'S' moved it 0.57). */
 let inputLocked = false;
+/* HOST INPUT (2026-10-08). 'module': the page's own keys and captured-mouse look fly the camera.
+   'host': the module reads no key and no mouse; a host moves it with api.moveAlong and turns it
+   with api.dz.setYawPitch. The distance probe, auto iterations and everything else run as before. */
+let inputOwner = 'module';
+let lastRawDist = 1.0;                          // the unsmoothed surface distance of the last frame
+let hostMoveAt = -1e9;                          // when a host last moved the camera (the recorder's 'flying')
 api.lockInput = (b)=>{ inputLocked = !!b; if (inputLocked) for (const k in keys) keys[k] = false; };
-dzListen(dzKeyTarget, 'keydown',e=>{ if (inputLocked) return; if (e.ctrlKey || e.altKey || e.metaKey) return;   /* a chord is the host's, not a fly key (2026-10-08) */ keys[e.code]=true; if (!dzShortcuts) return;
+dzListen(dzKeyTarget, 'keydown',e=>{ if (inputLocked || inputOwner === 'host') return; if (e.ctrlKey || e.altKey || e.metaKey) return;   /* a chord is the host's, not a fly key (2026-10-08) */ keys[e.code]=true; if (!dzShortcuts) return;
   if(e.key===']'){ cam.iters=Math.min(160,cam.iters+1); orbitDirty=true; }
   if(e.key==='['){ cam.iters=Math.max(4,cam.iters-1); orbitDirty=true; }
   if(e.code==='KeyI') autoIters=!autoIters;
@@ -2532,7 +2538,7 @@ dzListen(document, 'pointerlockchange',()=>{
   cue.textContent = locked ? '✦ flying — ESC to release' : 'click to capture mouse';
   cue.style.color = locked ? '#7fd1b0' : '';
 });
-dzListen(window, 'mousemove',e=>{ if(document.pointerLockElement!==canvas) return;
+dzListen(window, 'mousemove',e=>{ if(inputOwner === 'host' || document.pointerLockElement!==canvas) return;
   cam.yaw   += e.movementX*0.0009;
   cam.pitch  = Math.max(-1.55,Math.min(1.55, cam.pitch - e.movementY*0.0009));
   accumReset = true;                                     // rotation changes the view (not the orbit)
@@ -3123,6 +3129,7 @@ api.renderThumbF32 = (n) => {
 };
 api.setCamHP = (p)=>{ camHP = p.map(hp.fromNum); cam.pos = camHP.map(hp.toNum); orbitDirty=true; };
 api.moveAlong = (dir, dist)=>{               // exact HP move (smoke-test dive)
+  if (inputOwner === 'host') hostMoveAt = performance.now();
   for(let j=0;j<3;j++) camHP[j] += hp.fromNum(dir[j]*dist);
   cam.pos = camHP.map(hp.toNum); orbitDirty=true;
 };
@@ -3313,7 +3320,7 @@ let kfLastHP=null, kfLastYaw=0, kfLastPitch=0, kfWasFlying=false;
 const KF_MOVE=0.35, KF_ROT=0.30;                 // base: emit after ~1/3 of the surface distance moved, or ~17° pan
 let   kfSpacing=1.5;                             // UI knob (key/slider): higher ⇒ fewer, sparser keyframes
 const SEG_BASE=1.4, SEG_MIN=0.7, SEG_MAX=3.0;    // cinematic seconds per segment (decoupled from real dwell)
-function isFlying(){ return !!(keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||keys['KeyE']||keys['KeyQ']); }
+function isFlying(){ return !!(keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||keys['KeyE']||keys['KeyQ']) || (inputOwner === 'host' && performance.now() - hostMoveAt < 150); }
 function pushKeyframe(move, rot){
   recPath.push({ cam:camHP.map(String), yaw:cam.yaw, pitch:cam.pitch,
     iters:cam.iters, power:nPower, phase:[phaseTheta,phasePhi], light:lightMode,
@@ -3652,6 +3659,7 @@ function frame(now){
   } else {
     rawDist = Math.max(0, deCPU(cam.pos[0],cam.pos[1],cam.pos[2], cam.power, cam.iters));
   }
+  lastRawDist = rawDist;
   if (snapDist) { smoothedDist = rawDist; snapDist = false; }
   else if (rawDist > smoothedDist) smoothedDist += (rawDist-smoothedDist)*(1-Math.exp(-1.2*dt));
   else smoothedDist = rawDist;
@@ -3895,6 +3903,12 @@ api.dz = {
   settings: () => ({ detail: surfMul, reach: reachMode(), power: nPower, phase: [phaseTheta, phasePhi],
     color: colorMode, cscale: colorScale, light: lightMode, falloff: falloffMul, normals: normalMode,
     land: !!landMode, frame: frameLong, accum: accumEnabled, lookMode: look.mode }),
+  /* host input (see HOST INPUT above) */
+  setInputOwner: (who) => { inputOwner = who === 'host' ? 'host' : 'module'; if (inputOwner === 'host') for (const k in keys) keys[k] = false; },
+  inputOwner: () => inputOwner,
+  rawDistance: () => lastRawDist,              // unsmoothed: a host that eases it itself must not ease twice
+  yawPitch: () => ({ yaw: cam.yaw, pitch: cam.pitch }),
+  setYawPitch: (yaw, pitch) => { cam.yaw = +yaw; cam.pitch = Math.max(-1.55, Math.min(1.55, +pitch)); accumReset = true; },
   getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, iters: cam.iters, power: nPower,
     phase: [phaseTheta, phasePhi], light: lightMode, falloff: falloffMul, color: colorMode,
     cscale: colorScale, surf: surfMul }),

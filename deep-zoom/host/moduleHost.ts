@@ -457,6 +457,11 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (v && isReady) { host.setView(v); return; }
             pendingView = v;
         },
+        // host input (stage N): the shell's navigation flies the camera through these
+        setInputOwner: (owner) => dz.setInputOwner(owner),
+        rawDistance: () => dz.rawDistance(),
+        yawPitch: () => dz.yawPitch(),
+        setYawPitch: (yaw, pitch) => dz.setYawPitch(yaw, pitch),
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         diveTo(depth) {
             // Not before the deep shader: until then the module flies on its f32 distance, good to

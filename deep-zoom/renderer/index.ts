@@ -199,6 +199,24 @@ export interface DzHostHandle {
     /** Fly straight ahead until the surface distance is about `depth`; resolves on arrival,
      *  on a fly key / Esc, or after 20 s. */
     diveTo(depth: number): Promise<void>;
+    /** Who flies the camera. 'module' (the default): the page's own keys and captured-mouse look.
+     *  'host': the module reads no key and no mouse; the host moves it with `api.moveAlong` and
+     *  turns it with `setYawPitch`. The distance probe and auto iterations run either way.
+     *  (Added 2026-10-08. grep `HOST INPUT` in core.js.)
+     *  @invariant under 'host' a held fly key does not move the camera, and `api.moveAlong` /
+     *  `setYawPitch` still do - proven by: npm run smoke:deep-zoom-parity ("host input: with the
+     *  host owning it, holding W leaves the camera strings unchanged"). Falsified 2026-10-08: the
+     *  owner test removed from the keydown listener -> red. The captured-mouse look under 'host'
+     *  is NOT opened by any test (a pointer lock needs a real gesture). */
+    setInputOwner(owner: 'module' | 'host'): void;
+    inputOwner(): 'module' | 'host';
+    /** The surface distance of the last frame, UNSMOOTHED (telemetry `depth` is eased when it
+     *  rises). For a host whose own integrator eases the distance: feed it this, not `depth`. */
+    rawDistance(): number;
+    /** The look angles, in radians. Cheap: unlike `getView` it formats no camera strings. */
+    yawPitch(): { yaw: number; pitch: number };
+    /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still; the reference orbit stays. */
+    setYawPitch(yaw: number, pitch: number): void;
 }
 
 /** `api`: every handle the page published as `window.__name`. Only the members a shell is likely
