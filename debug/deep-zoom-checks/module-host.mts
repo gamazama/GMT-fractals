@@ -901,6 +901,30 @@ console.log('[8] dive      dive.ts alone, then through the host');
     check(movedAfter === 0, 'dive: nothing moves after the dive has resolved', `${movedAfter} moves`);
 
     {
+        // The module's distance can read far too small for ONE frame where it switches between its
+        // f32 and deep paths. One such frame must not count as arrival; three in a row do.
+        const r = rigOf(1);
+        const done = r.dive.start(1e-6);
+        r.dive.advance(0);
+        r.dive.advance(100);
+        const real = r.s.depth;
+        r.s.depth = 3e-7;                 // one bogus frame under the target
+        r.dive.advance(200);
+        const stillFlying = r.dive.active && r.s.moves.every((m) => m.from !== 3e-7);
+        r.s.depth = real;
+        r.dive.advance(300);
+        const resumed = r.dive.active && r.s.moves[r.s.moves.length - 1].from === real;
+        r.s.depth = 5e-7;
+        r.dive.advance(400);
+        r.dive.advance(500);
+        const twoIsNotEnough = r.dive.active;
+        r.dive.advance(600);
+        check(stillFlying && resumed && twoIsNotEnough && !r.dive.active && await stateOf(done, 5) === 'resolved',
+            'dive: one frame under the target is not arrival and nothing moves on it; three frames in a row are',
+            `${stillFlying} ${resumed} ${twoIsNotEnough} ${r.dive.active}`);
+    }
+
+    {
         const r = rigOf(1);
         r.s.yaw = Math.PI / 2;
         void r.dive.start(1e-3);

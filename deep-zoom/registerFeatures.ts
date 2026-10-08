@@ -29,6 +29,8 @@ import { DzQualityFeature } from './features/quality';
 import { DzInspectFeature } from './features/inspect';
 import { DzLightFeature } from './features/light';
 import { DzColourFeature } from './features/colour';
+import { DzCameraFeature, DZ_DEPTH_SCALE_OVERLAY } from './features/camera';
+import { DepthScale } from './components/DepthScale';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { ModeNotice } from './components/ModeNotice';
 import { IterationReadout, FrameReadout } from './components/Readouts';
@@ -56,6 +58,10 @@ featureRegistry.register(DzColourFeature);
 
 // Panel widgets the manifest names (deep-zoom/panels.ts). Registered here, before the store
 // is built, as fluid-toy does for its own.
+featureRegistry.register(DzCameraFeature);
+
+// The depth scale: the `camera` feature's viewport overlay, mounted by <FeatureOverlays />.
+componentRegistry.register(DZ_DEPTH_SCALE_OVERLAY, DepthScale);
 componentRegistry.register('dz-mode-notice', ModeNotice);
 componentRegistry.register('dz-iteration-readout', IterationReadout);
 componentRegistry.register('dz-frame-readout', FrameReadout);

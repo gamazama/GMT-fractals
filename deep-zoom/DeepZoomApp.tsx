@@ -50,6 +50,8 @@ import { SettingsHost } from '../components/SettingsAccess';
 import { MobileViewportShell } from '../engine/components/MobileViewportShell';
 import { ToastHost } from '../engine/components/ToastHost';
 import { DeepZoomSurface } from './DeepZoomSurface';
+import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
+import { TimelineHost } from '../components/TimelineHost';
 import { useHostSync } from './useHostSync';
 
 export const DeepZoomApp: React.FC = () => {
@@ -113,11 +115,15 @@ export const DeepZoomApp: React.FC = () => {
                 <ViewportFrame className="flex-1" showModeControls={false}>
                     <DeepZoomSurface />
                     <HudHost />
+                    {/* The depth scale (the `camera` feature's overlay). A sibling of the
+                        picture's frame, never inside it. */}
+                    <FeatureOverlays />
                 </ViewportFrame>
 
                 <Dock side="right" />
             </div>
 
+            <TimelineHost />
             <HelpOverlay />
 
             <SettingsHost />

@@ -18,15 +18,13 @@
 
 import React from 'react';
 import { useDzTelemetry } from '../host/telemetry';
+import { formatDepth } from './depthFormat';
 
 /**
  * A depth as mantissa with two decimals and a bare exponent: `6.4e-53` gives `6.40e-53`, `1.5`
  * gives `1.50e0`. The shape the stage smokes match with `/^\d\.\d\de-?\d+$/`.
  * S2-5 moves this to `components/depthFormat.ts`; keep the two outputs above when it does.
  */
-function formatDepth(depth: number): string {
-    return depth.toExponential(2).replace('e+', 'e');
-}
 
 const ENGINE_TITLE = 'f32 above about 1e-4 surface distance. Below it, perturbation with a 256-bit reference.';
 
@@ -34,6 +32,10 @@ export const StatusChip: React.FC = () => {
     const live = useDzTelemetry((t) => t.live);
     const mode = useDzTelemetry((t) => t.mode);
     const depth = useDzTelemetry((t) => formatDepth(t.depth));
+    const iters = useDzTelemetry((t) => t.iters);
+    const size = useDzTelemetry((t) => `${t.frameW} x ${t.frameH}`);
+    // The still's progress, in deep mode only (the f32 picture does not accumulate).
+    const still = useDzTelemetry((t) => (t.mode === 'deep' && t.accumMax > 0 ? `${t.accumN}/${t.accumMax}` : ''));
 
     // Before the first sample, and after a host is disposed, the store holds placeholders.
     if (!live) return null;
@@ -50,6 +52,9 @@ export const StatusChip: React.FC = () => {
             <span data-dz-status-depth title="Depth: distance from the camera to the surface" className="text-fg-secondary tabular-nums">
                 {depth}
             </span>
+            <span data-dz-status-iters title="Iterations in use now" className="text-fg-tertiary tabular-nums">it {iters}</span>
+            <span data-dz-status-size title="The size the renderer is drawing at" className="text-fg-tertiary tabular-nums">{size}</span>
+            {still && <span data-dz-status-still title="Samples gathered for this still" className="text-fg-tertiary tabular-nums">{still}</span>}
         </div>
     );
 };

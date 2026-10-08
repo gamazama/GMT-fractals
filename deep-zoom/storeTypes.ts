@@ -26,12 +26,14 @@ import type { DzQualityFeature } from './features/quality';
 import type { DzInspectFeature } from './features/inspect';
 import type { DzLightFeature }   from './features/light';
 import type { DzColourFeature }  from './features/colour';
+import type { DzCameraFeature }  from './features/camera';
 
 export type DzFormulaSlice = SliceFromParams<typeof DzFormulaFeature['params']>;
 export type DzQualitySlice = SliceFromParams<typeof DzQualityFeature['params']>;
 export type DzInspectSlice = SliceFromParams<typeof DzInspectFeature['params']>;
 export type DzLightSlice   = SliceFromParams<typeof DzLightFeature['params']>;
 export type DzColourSlice  = SliceFromParams<typeof DzColourFeature['params']>;
+export type DzCameraSlice  = SliceFromParams<typeof DzCameraFeature['params']>;
 
 // Augment AppFeatureSlices so `useSlice('dzFormula')` is typed (engine-side
 // hook contract).
@@ -42,6 +44,7 @@ declare module '../engine/typedSlices' {
         dzInspect: DzInspectSlice;
         dzLight:   DzLightSlice;
         dzColour:  DzColourSlice;
+        camera:    DzCameraSlice;
     }
 }
 
@@ -54,5 +57,6 @@ declare module '../engine/features/types' {
         dzInspect: DzInspectSlice;
         dzLight:   DzLightSlice;
         dzColour:  DzColourSlice;
+        camera:    DzCameraSlice;
     }
 }

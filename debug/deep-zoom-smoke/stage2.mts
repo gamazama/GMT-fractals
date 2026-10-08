@@ -18,8 +18,10 @@
  */
 import type { DzCtx, DzStage } from '../smoke-deep-zoom.mts';
 import { enterDeepView } from './stage1.mts';
+import { STARTERS } from '../../deep-zoom/data/starters.ts';
 
 const FEATURES = ['dzFormula', 'dzQuality', 'dzInspect', 'dzLight', 'dzColour'];
+const DEPTH_TEXT = /^\d\.\d\de-?\d+$/;
 
 /** Mean R, G, B (0..255) of `host.thumbnail(48)`, decoded in the page. */
 async function meanColour(ctx: DzCtx): Promise<[number, number, number]> {
@@ -192,6 +194,99 @@ export const stage: DzStage = {
                 ctx.check(Math.abs(chroma(c) - chroma(a)) > 4 || dist(a, c) > Math.max(4, noise * 4), 'Colour: Palette changes the picture (' + fmt(a) + ' -> ' + fmt(c) + ')');
                 await ctx.shot('stage2-deep-palette');
                 await ctx.ev(RESET);
+            },
+        },
+        {
+            name: 'the depth instruments are on the picture, and Overlays None leaves the top-bar depth',
+            owner: 'S2-5',
+            falsified: '2026-10-08: the `hud.register` of `deep-zoom.depth` removed from deep-zoom/main.tsx -> red, 3 lines (no depth text, no decades line, no readout under Depth only).',
+            async run(ctx) {
+                await ctx.boot({ clearStorage: true });
+                const readout = await ctx.ev<string>("(document.querySelector('[data-dz-depth-readout]') || {}).innerText || ''");
+                const depthText = await ctx.ev<string>("(document.querySelector('[data-dz-depth]') || {}).textContent || ''");
+                ctx.check(DEPTH_TEXT.test(depthText.trim()), 'the readout shows the depth as ' + depthText.trim());
+                ctx.check(/decades to the 1e-77 floor/.test(readout) && /magnification 10\^\d/.test(readout), 'with the decades to the floor and the magnification');
+                ctx.check(await ctx.ev<boolean>("!!document.querySelector('[data-dz-depth-scale] [data-dz-depth-marker]')"), 'the depth scale is on the picture with its live marker');
+                const chip = await ctx.ev<string>("(document.querySelector('[data-dz-status]') || {}).innerText || ''");
+                ctx.check(/it \d+/.test(chip) && /\d+ x \d+/.test(chip), 'the top-bar chip shows iterations and the drawn size (' + chip.replace(/\s+/g, ' ') + ')');
+                await ctx.ev('window.__store.getState().setDzInspect({ overlays: 2 })');
+                await ctx.sleep(250);
+                ctx.check(!(await ctx.ev<boolean>("!!document.querySelector('[data-dz-depth-readout]') || !!document.querySelector('[data-dz-depth-scale]')")), 'Overlays None: the readout and the scale are gone');
+                ctx.check(DEPTH_TEXT.test((await ctx.ev<string>("(document.querySelector('[data-dz-status-depth]') || {}).textContent || ''")).trim()), 'and the top-bar chip still shows the depth');
+                await ctx.ev('window.__store.getState().setDzInspect({ overlays: 1 })');
+                await ctx.sleep(250);
+                ctx.check(await ctx.ev<boolean>("!!document.querySelector('[data-dz-depth-readout]') && !document.querySelector('[data-dz-depth-scale]')"), 'Overlays Depth only: the readout without the scale');
+                await ctx.ev('window.__store.getState().setDzInspect({ overlays: 0 })');
+            },
+        },
+        {
+            name: 'while the pointer is captured T does not open the timeline; with the pointer free it does',
+            owner: 'S2-6',
+            falsified: '2026-10-08: the `pushScope` call removed from deep-zoom/flyGuard.ts -> red, "captured: after T and Space the timeline is still closed" false. Also red the same day on the first version of the guard (priority 10 + `when`): "pointer free: T opens the timeline" false.',
+            async run(ctx) {
+                await ctx.boot();
+                const closed = () => ctx.ev<boolean>("[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Animate')");
+                if (!ctx.check(await closed(), 'the timeline starts closed (its Animate button is shown)')) return;
+                if (!(await ctx.capture())) return;
+                // `document.pointerLockElement` is set a moment before the browser sends
+                // `pointerlockchange`, and the shell learns of the capture from that event. A key
+                // sent in between is faster than any hand: wait until the shell shows the capture
+                // (the readout fades). Seen 2026-10-08: without this wait the step failed about
+                // one run in two, with the pointer still locked.
+                ctx.check((await ctx.until("(document.querySelector('[data-dz-depth-readout]') || {}).className.includes('opacity-35')", 2000, 20)) >= 0,
+                    'the shell shows the capture (the depth readout fades)');
+                const before = await ctx.host<string[]>('getView().cam');
+                await ctx.page.keyboard.press('t');
+                await ctx.page.keyboard.press('Space');
+                await ctx.sleep(300);
+                // Chrome gives the pointer back when its window loses focus (someone using the machine
+                // during the run). Then the keys above were pressed with the pointer free and prove nothing.
+                if (!(await ctx.ev<boolean>('!!document.pointerLockElement'))) {
+                    ctx.notProven('the pointer lock was lost while the keys were pressed (window focus: ' + (await ctx.ev<boolean>('document.hasFocus()')) + ')');
+                    if (!(await closed())) await ctx.page.keyboard.press('t');
+                    return;
+                }
+                ctx.check(await closed(), 'captured: after T and Space the timeline is still closed');
+                const after = await ctx.host<string[]>('getView().cam');
+                ctx.check(before.join() === after.join(), 'and the camera strings are unchanged');
+                await ctx.release();
+                await ctx.focusPicture();
+                await ctx.page.keyboard.press('t');
+                await ctx.sleep(300);
+                ctx.check(!(await closed()), 'pointer free: T opens the timeline');
+                await ctx.page.keyboard.press('t');
+            },
+        },
+        {
+            name: 'a dive from a starter view to 1e-6 arrives within a decade and stays there',
+            owner: 'S1-1 (host/dive.ts)',
+            falsified: '2026-10-08: red before a starter view was used - from the boot view the dive ran out its 45 s at 1.44e-5 ("within a decade of 1e-6" false). NOT falsified for the three-frame arrival rule: with DZ_DIVE_ARRIVAL_FRAMES = 1 this dive still arrived; that rule is pinned by debug/deep-zoom-checks/module-host.mts.',
+            timeoutMs: 100_000,
+            async run(ctx) {
+                // A dive flies straight ahead, so it needs a view whose forward ray meets the surface:
+                // the second starter (start about 2e-3, in f32) crosses the f32 / deep switch near
+                // 1e-4, where the module's distance reads far too small for one frame.
+                const starter = STARTERS[1];
+                await ctx.boot({ clearStorage: true });
+                await ctx.withHost('host.setView(' + JSON.stringify(starter.view) + '); return true;');
+                await ctx.sleep(800);
+                const from = await ctx.host<number>('telemetry().depth');
+                ctx.check(from > 1e-4, 'the starter view is above 1e-4 (' + from.toExponential(2) + ', ' + (await ctx.host<string>('telemetry().mode')) + ')');
+                const field = ctx.page.locator('[data-dz-dive-exponent]');
+                if (!ctx.check((await field.count()) === 1, 'the readout has its Dive field')) return;
+                await field.fill('6');
+                await field.press('Enter');
+                ctx.check((await ctx.until("!!document.querySelector('[data-dz-diving]')", 3000)) >= 0, 'the readout says a dive is in flight');
+                const waited = await ctx.until("!document.querySelector('[data-dz-diving]')", 70_000, 200);
+                const depth = await ctx.host<number>('telemetry().depth');
+                const mode = await ctx.host<string>('telemetry().mode');
+                ctx.note('ended after ' + (waited / 1000).toFixed(1) + ' s at ' + depth.toExponential(2) + ' (' + mode + ')');
+                ctx.check(waited >= 0, 'the dive ended by itself');
+                ctx.check(depth <= 1e-5 && depth >= 1e-7, 'within a decade of 1e-6 (' + depth.toExponential(2) + ')');
+                await ctx.sleep(1500);
+                const later = await ctx.host<number>('telemetry().depth');
+                ctx.check(later <= 1e-5, 'and it is still there 1.5 s later (' + later.toExponential(2) + '), not a one-frame reading');
+                await ctx.shot('stage2-dive-1e-6');
             },
         },
     ],

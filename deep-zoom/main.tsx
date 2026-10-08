@@ -49,6 +49,11 @@ import { setHelpTopicsLoader } from '../data/help/registry';
 import { gmtSupportConfig } from '../engine-gmt/support';
 import { feedbackMenuItem, registerFeedbackUI } from '../engine-gmt/feedback';
 import { StatusChip } from './components/StatusChip';
+import { DepthReadout } from './components/DepthReadout';
+import { hud } from '../engine/plugins/Hud';
+import { installModulation } from '../engine/animation/modulationTick';
+import { installFlyGuard } from './flyGuard';
+import { startMilestones } from './milestones';
 import { dismissBootSplash } from './components/BootCard';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
@@ -114,9 +119,22 @@ try {
     installMenu();
 
     // @engine/hud — slot-based overlay host. <HudHost /> is mounted inside
-    // DeepZoomApp's ViewportFrame. Nothing is registered until stage 2 (the
-    // depth readout).
+    // DeepZoomApp's ViewportFrame. The depth readout is the instrument on the
+    // picture; it takes the pointer (its Dive field), the rest of the HUD does not.
     installHud();
+    hud.register({ id: 'deep-zoom.depth', slot: 'top-left', component: DepthReadout, className: 'pointer-events-auto' });
+
+    // The engine's animation tick (`engine.animation`, ANIMATE phase). This call is its
+    // only registration: without it the timeline does not play. The modulation UI (LFO
+    // panels) is not installed - an LFO on power or phase would rebuild the reference
+    // orbit every frame.
+    installModulation();
+
+    // While the pointer is captured, T and Space do not reach the timeline.
+    installFlyGuard();
+
+    // One line the first time a depth is passed (the telemetry store drives it).
+    startMilestones();
 
     // @engine/help, minimal: the "?" menu with Show Hints (and its H key),
     // Send Feedback and Support GMT. No topic links until this app has topics

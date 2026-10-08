@@ -563,10 +563,14 @@ function makeCtx(session: StageSession, state: StepState, log: (line: string) =>
             return ev<boolean>("!!document.activeElement && document.activeElement.id === 'dz-frame'");
         },
         async capture() {
+            // Chrome grants the pointer only to a focused window. Raise the page first; when the
+            // window still has no focus (someone is using the machine) the message says so.
+            await session.page.bringToFront().catch(() => undefined);
             const c = await ctx.pictureCentre();
             await session.page.mouse.click(c.x, c.y);
             if ((await until('document.pointerLockElement', 1500, 50)) < 0) {
-                ctx.notProven('a click on the picture did not lock the pointer (document.pointerLockElement is not set), so nothing about the captured state was tested');
+                const focused = await session.page.evaluate('document.hasFocus()').catch(() => false);
+                ctx.notProven('a click on the picture did not lock the pointer (document.pointerLockElement is not set; window focus: ' + focused + '), so nothing about the captured state was tested');
                 return false;
             }
             return true;

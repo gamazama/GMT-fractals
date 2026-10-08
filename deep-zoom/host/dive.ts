@@ -58,6 +58,8 @@
 export const DZ_DIVE_MIN_DEPTH = 1e-77;
 /** A dive gives up after this much flight; the caller compares the depth and may dive again. */
 export const DZ_DIVE_TIME_LIMIT_MS = 45_000;
+/** How many frames in a row must read at or under the target before the dive has arrived. */
+export const DZ_DIVE_ARRIVAL_FRAMES = 3;
 
 /** The longest gap between two advances that counts toward the time limit. */
 const MAX_COUNTED_GAP_MS = 1000;
@@ -103,6 +105,8 @@ export function createDive(deps: DiveDeps): Dive {
         flownMs: number;
         /** The timestamp of the previous advance; null until the first one. */
         prev: number | null;
+        /** Frames in a row whose distance was at or under the target. */
+        arrived: number;
         resolve(): void;
     }
     let run: Run | null = null;
@@ -131,7 +135,7 @@ export function createDive(deps: DiveDeps): Dive {
             const decades = Math.max(1, Math.log10(d0 / target));
             const rate = (Math.LN10 * decades) / Math.min(40, Math.max(3, decades * 0.6));
             return new Promise<void>((resolve) => {
-                run = { target, rate, flownMs: 0, prev: null, resolve };
+                run = { target, rate, flownMs: 0, prev: null, arrived: 0, resolve };
                 deps.keyTarget?.addEventListener('keydown', onKey);
             });
         },
@@ -143,7 +147,16 @@ export function createDive(deps: DiveDeps): Dive {
             r.prev = now;
             r.flownMs += Math.min(gapMs, MAX_COUNTED_GAP_MS);
             const d = deps.depth();
-            if (!Number.isFinite(d) || d <= r.target || r.flownMs > DZ_DIVE_TIME_LIMIT_MS) { finish(); return; }
+            // A distance of 0 means the camera is inside the surface: that ends it at once.
+            if (!Number.isFinite(d) || d <= 0 || r.flownMs > DZ_DIVE_TIME_LIMIT_MS) { finish(); return; }
+            // One frame at or under the target is not arrival: where the module switches between its
+            // f32 and deep paths (near 1e-4) the distance can read hundreds of times too small for a
+            // single frame (measured 2026-10-08: 3.35e-7 for one frame at a true 2.5e-4).
+            if (d <= r.target) {
+                if (++r.arrived >= DZ_DIVE_ARRIVAL_FRAMES) finish();
+                return;
+            }
+            r.arrived = 0;
             const dt = Math.min(0.1, gapMs / 1000);
             const share = Math.min(0.2, 1 - Math.exp(-r.rate * dt));
             // Never past 0.95 x target: the last move lands just inside the target instead of on it,
