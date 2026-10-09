@@ -97,7 +97,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AdvancedGradientEditor, { type AdvancedGradientEditorHandle } from '../../components/AdvancedGradientEditor';
 import { useWorkingStore, addStopsToWorking, workingSourceOf, deriveWorkingNow, type WorkingDerived } from '../../palette/store/workingStore';
 import { importedSourceOfWorking } from './contributeToGlobal';
-import { FROM_GMT_SOURCE } from './fromGmt';
+import { FROM_HOST_SOURCE } from './fromGmt';
 import { sameGradientBody } from '../../components/gradient/rampMode';
 import { isRampGradient, stopsOf } from '../../utils/gradientRamp';
 import { setFavientDrag, beginCustomAvatarDrag } from '../../palette/core/favientDnd';
@@ -127,7 +127,7 @@ const REVEAL_DOUBLE_MS = 450;
 /** Working sources that are NOT a click on a tile — so the preview chip cannot say "click it
  *  again" (HT-14). The strings are the ones the shell passes to `use` (grep `.use(` in
  *  ./GradientExplorerV2App and ./fromGmt). */
-const NOT_A_PICK: ReadonlySet<string> = new Set(['New', 'Mix', 'Image', 'Shared link', FROM_GMT_SOURCE]);
+const NOT_A_PICK: ReadonlySet<string> = new Set(['New', 'Mix', 'Image', 'Shared link', FROM_HOST_SOURCE]);
 import { useFavientsStore, favientSig, isRecentGroup, DEFAULT_GROUP } from '../../palette/store/favientsStore';
 import { KEPT_LABEL } from '../../palette/core/groundSets';
 import { setSimilarityAnchor } from '../../palette/store/pickerSimilarity';

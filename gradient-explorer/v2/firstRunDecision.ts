@@ -33,7 +33,8 @@ export interface FirstRunInput {
   seeded: boolean;
   /** Has a brightness ever been chosen anywhere (`gmt.brightness`), or is it null? */
   chosenBrightness: string | null;
-  /** Was this page opened by GMT's Explorer button (`?from=gmt`, fromGmt.ts `openedByGmtButton`)? */
+  /** Was this page opened by a host app's Explorer button (`?from=gmt` or another id of
+   *  `EXPLORER_HOSTS`; fromGmt.ts `openedByHost`)? The name is from when GMT was the only one. */
   fromGmt: boolean;
 }
 

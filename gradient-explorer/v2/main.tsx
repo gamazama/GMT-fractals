@@ -38,7 +38,7 @@ import { installGxSession, gxAutosaveSettings, GX_AUTOSAVE_TEXT } from './sessio
 import { GradientExplorerV2App } from './GradientExplorerV2App';
 import { FirstRunBrightness } from './FirstRunBrightness';
 import { decideFirstRun, marksSeeded } from './firstRunDecision';
-import { openedByGmtButton } from './fromGmt';
+import { openedByHost } from './fromGmt';
 import { startBootTrace, BootDiag, diagWanted } from './bootTrace';
 import { NumberDragFeelProvider } from '../../components/inputs/dragFeel';
 
@@ -87,7 +87,8 @@ applyPanelManifest([feedbackPanelEntry()]);
  * user's first v2 boot OVERRODE a brightness they had already chosen in app-gmt. Someone
  * who has chosen keeps their choice and is not asked; only a genuinely new user is.
  *
- * A trip from GMT (`openedByGmtButton`) is neither asked nor marked — see firstRunDecision.ts.
+ * A trip from a host app (`openedByHost`: GMT, Deep Zoom) is neither asked nor marked — see
+ * firstRunDecision.ts.
  */
 const THEME_SEED_KEY = 'gmt.ge.themeSeeded';
 const BRIGHTNESS_KEY = 'gmt.brightness';
@@ -98,7 +99,7 @@ const decideFirstRunBrightness = (): boolean => {
   const input = {
     seeded: !!safeLocalGet(THEME_SEED_KEY),
     chosenBrightness: safeLocalGet(BRIGHTNESS_KEY),
-    fromGmt: openedByGmtButton,
+    fromGmt: openedByHost !== null,
   };
   // Written BEFORE the card can render, so a refresh mid-decision does not ask again.
   if (marksSeeded(input)) safeLocalSet(THEME_SEED_KEY, '1');

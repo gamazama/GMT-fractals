@@ -35,6 +35,7 @@
 
 import type { GradientConfig, GradientStop } from '../../types';
 import { coerceGradientConfig } from '../../palette/core/editorConfig';
+import { explorerHostOf, type ExplorerHostId } from '../../palette/core/explorerHandoff';
 import { isRampGradient } from '../../utils/gradientRamp';
 
 export const SHARE_PARAM = 'g';
@@ -196,13 +197,12 @@ export const takeShareFromLocation = (): { config: GradientConfig; name: string 
   return decodeShare(code);
 };
 
-/** The query value `openGradientExplorer` (palette/installFavients.ts) appends as `?from=`. */
-export const FROM_GMT = 'gmt';
-
 /**
- * Pure: was a page at `href` opened FROM the GMT studio? `?from=gmt` is the signal (what
- * app-gmt's `openGradientExplorer` appends, 2026-09-13); a same-origin referrer on the
- * studio's own entry is the fallback, for an Explorer tab opened some other way.
+ * Pure: which host app was a page at `href` opened FROM, if any? `?from=<id>` is the signal
+ * (what `openGradientExplorer` in palette/installFavients.ts appends: `gmt` since 2026-09-13,
+ * `deep-zoom` since 2026-10-09 — the ids are `EXPLORER_HOSTS`'). For the GMT studio alone a
+ * same-origin referrer on its own entry is the fallback, for an Explorer tab opened some other
+ * way.
  *
  * The studio's entry is `/` in production (app.gmt-fractals.com serves app-gmt at the root)
  * and `/app-gmt` under Cloudflare's pretty URLs, as well as `/app-gmt.html` on a dev server
@@ -210,21 +210,22 @@ export const FROM_GMT = 'gmt';
  * nothing appended the param either (the parity checklist's swap risk 2). The Explorer's own
  * pages are never the root, so matching `/` cannot mistake a reload for the studio.
  */
-export const cameFromGmtFor = (href: string, referrer: string): boolean => {
+export const cameFromFor = (href: string, referrer: string): ExplorerHostId | null => {
   try {
     const here = new URL(href);
-    if (here.searchParams.get('from') === FROM_GMT) return true;
-    if (!referrer) return false;
+    const named = explorerHostOf(here.searchParams.get('from'));
+    if (named) return named;
+    if (!referrer) return null;
     const ru = new URL(referrer);
-    return ru.origin === here.origin && /^\/(app-gmt(\.html)?)?$/.test(ru.pathname);
+    return ru.origin === here.origin && /^\/(app-gmt(\.html)?)?$/.test(ru.pathname) ? 'gmt' : null;
   } catch {
-    return false;
+    return null;
   }
 };
 
 /**
- * True when this page was opened from the GMT studio (`cameFromGmtFor` on this page). Read
- * once at module load. The `?from` param survives `takeShareFromLocation`'s rewrite (it
- * deletes only its own param), so a reload keeps the link.
+ * The host app this page was opened from (`cameFromFor` on this page), or null. Read once at
+ * module load. The `?from` param survives `takeShareFromLocation`'s rewrite (it deletes only its
+ * own param), so a reload keeps the link.
  */
-export const cameFromGmt = typeof window === 'undefined' ? false : cameFromGmtFor(window.location.href, document.referrer);
+export const cameFrom: ExplorerHostId | null = typeof window === 'undefined' ? null : cameFromFor(window.location.href, document.referrer);

@@ -41,7 +41,7 @@ import type { GradientConfig, GradientStop } from '../types';
 import type { FavientDragPayload } from '../palette/core/favientDnd';
 import { useFavientsStore, favientSig } from '../palette/store/favientsStore';
 import { coerceGradientConfig } from '../palette/core/editorConfig';
-import { answerExplorerTrips, newTripId, type ExplorerIncoming } from '../palette/core/explorerHandoff';
+import { answerExplorerTrips, newTripId, isFlatGradient, type ExplorerIncoming } from '../palette/core/explorerHandoff';
 import { openGradientExplorer } from '../palette/installFavients';
 import { getSendTargets, type SendTarget } from '../store/sendTargetRegistry';
 import { useEngineStore } from '../store/engineStore';
@@ -74,7 +74,7 @@ const gradientAt = (ep: SendTarget['editsParam']): GradientConfig | null => {
     ? ({ stops: v as GradientStop[], colorSpace: 'srgb', blendSpace: 'oklab' } as GradientConfig)
     : (v as GradientConfig | undefined);
   if (!config || !Array.isArray(config.stops)) return null;
-  if (config.stops.length > 0 && new Set(config.stops.map((s) => String(s.color).toUpperCase())).size < 2) return null;
+  if (isFlatGradient(config)) return null;
   return coerceGradientConfig(config) ? config : null;
 };
 

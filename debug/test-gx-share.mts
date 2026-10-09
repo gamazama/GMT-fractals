@@ -14,9 +14,14 @@
  *       byte below its leading comment, so an old `?g=` link opens the same app. Falsified
  *       2026-09-16, each reverted, exit 1: dropping the pathname rewrite in `shareUrlFor` → 2 red
  *       (the alias, the pretty URL); one changed `<title>` in the alias → 1 red (byte for byte).
- *   [5] "Back to GMT" shows only when the page came from the studio: `cameFromGmtFor` over
+ *   [5] "Back to GMT" shows only when the page came from the studio: `cameFromFor` over
  *       `?from=gmt` and the same-origin referrer at `/`, `/app-gmt`, `/app-gmt.html`; and
  *       app-gmt's `openGradientExplorer` actually appends the param (2026-09-13).
+ *       Since 2026-10-09 the answer is WHICH host app (`gmt`, `deep-zoom`, or none), and the
+ *       opener's page and its default host are two literals. Falsified that day, each restored,
+ *       exit 1: the opener's default host changed to 'x' -> 1 red ("app-gmt's opener carries
+ *       the signal"); `explorerHostOf` answering 'gmt' for any value -> 2 red ("?from=deep-zoom
+ *       is Deep Zoom", "another ?from value does not count").
  *   [6] (2026-09-14, ADR-0122) a RAMP gradient round-trips byte-exact as `s: []` + `r`, under
  *       2,000 characters of URL; a stop gradient's code is PINNED to the pre-ramp encoder's
  *       output (checked against HEAD's shareUrl.ts that day, three configs, byte-identical)
@@ -39,7 +44,7 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { encodeShare, decodeShare, shareUrlFor, takeShareFromLocation, cameFromGmtFor, SHARE_PARAM } from '../gradient-explorer/v2/shareUrl';
+import { encodeShare, decodeShare, shareUrlFor, takeShareFromLocation, cameFromFor, SHARE_PARAM } from '../gradient-explorer/v2/shareUrl';
 import type { GradientConfig } from '../types';
 
 let failures = 0;
@@ -165,7 +170,7 @@ console.log('\n[4] the Share URL round-trips');
   delete (globalThis as any).window;
 }
 
-console.log('\n[5] "Back to GMT" — cameFromGmtFor, and the opener that feeds it');
+console.log('\n[5] "Back to GMT" — cameFromFor, and the opener that feeds it');
 {
   // Until 2026-09-13 this could never pass in production: nothing appended `?from=gmt`, and
   // the referrer fallback wanted a path ending `app-gmt.html`, which the studio is not served
@@ -173,23 +178,29 @@ console.log('\n[5] "Back to GMT" — cameFromGmtFor, and the opener that feeds i
   // restoring `endsWith('app-gmt.html')` reds the `/` and `/app-gmt` referrer checks, and
   // taking `?from=gmt` back out of `openGradientExplorer` reds the last check.
   const GX = 'https://app.gmt-fractals.com/gradient-explorer.html';
-  check(cameFromGmtFor(`${GX}?from=gmt`, ''), '?from=gmt with no referrer (window.open noopener may send none)');
-  check(!cameFromGmtFor(GX, ''), 'a bare page with no referrer is not from GMT');
-  check(cameFromGmtFor(GX, 'https://app.gmt-fractals.com/'), 'the studio at the site root (production)');
-  check(cameFromGmtFor(GX, 'https://app.gmt-fractals.com/app-gmt'), 'the studio under a Cloudflare pretty URL');
-  check(cameFromGmtFor('http://localhost:3400/gradient-explorer-next.html', 'http://localhost:3400/app-gmt.html'), 'the studio on a dev server');
-  check(!cameFromGmtFor(GX, 'https://elsewhere.example/app-gmt.html'), 'a cross-origin referrer does not count');
-  check(!cameFromGmtFor(GX, 'https://app.gmt-fractals.com/fluid-toy.html'), 'fluid-toy is not the studio');
-  check(!cameFromGmtFor(GX, 'https://app.gmt-fractals.com/gradient-explorer.html'), 'a reload of the Explorer itself is not the studio');
-  check(!cameFromGmtFor(`${GX}?from=fluid`, ''), 'another ?from value does not count');
-  check(!cameFromGmtFor('not a url', 'also not'), 'garbage is false, never a throw');
+  check(cameFromFor(`${GX}?from=gmt`, '') === 'gmt', '?from=gmt with no referrer (window.open noopener may send none)');
+  check(cameFromFor(GX, '') === null, 'a bare page with no referrer is not from GMT');
+  check(cameFromFor(GX, 'https://app.gmt-fractals.com/') === 'gmt', 'the studio at the site root (production)');
+  check(cameFromFor(GX, 'https://app.gmt-fractals.com/app-gmt') === 'gmt', 'the studio under a Cloudflare pretty URL');
+  check(cameFromFor('http://localhost:3400/gradient-explorer-next.html', 'http://localhost:3400/app-gmt.html') === 'gmt', 'the studio on a dev server');
+  check(cameFromFor(GX, 'https://elsewhere.example/app-gmt.html') === null, 'a cross-origin referrer does not count');
+  check(cameFromFor(GX, 'https://app.gmt-fractals.com/fluid-toy.html') === null, 'fluid-toy is not the studio');
+  check(cameFromFor(GX, 'https://app.gmt-fractals.com/gradient-explorer.html') === null, 'a reload of the Explorer itself is not the studio');
+  check(cameFromFor(`${GX}?from=deep-zoom`, '') === 'deep-zoom', '?from=deep-zoom is Deep Zoom (2026-10-09)');
+  check(cameFromFor(`${GX}?from=fluid`, '') === null, 'another ?from value does not count');
+  check(cameFromFor('not a url', 'also not') === null, 'garbage is null, never a throw');
 
   // THE OPENER. The decoder above is only half of it — the page app-gmt actually opens has to
   // carry the signal. Read as text rather than imported: installFavients pulls the panel
   // registry and the store, which this node harness has no reason to boot.
   const src = readFileSync(new URL('../palette/installFavients.ts', import.meta.url), 'utf8');
-  const opened = /export const openGradientExplorer[\s\S]*?window\.open\('([^']+)'/.exec(src)?.[1] ?? '';
-  check(!!opened && cameFromGmtFor(new URL(opened, 'https://app.gmt-fractals.com/').toString(), ''), `app-gmt's opener carries the signal (${opened || 'no window.open found'})`);
+  // Two literals since 2026-10-09: the page with `?from=`, and the host a caller that names
+  // none gets — app-gmt's call names none.
+  const body = /export const openGradientExplorer[\s\S]*?\n};/.exec(src)?.[0] ?? '';
+  const page = /window\.open\('([^']+)' \+ from/.exec(body)?.[1] ?? '';
+  const host = /handoff\.from \?\? '([^']+)'/.exec(body)?.[1] ?? '';
+  const opened = page && host ? page + host : '';
+  check(!!opened && cameFromFor(new URL(opened, 'https://app.gmt-fractals.com/').toString(), '') === 'gmt', `app-gmt's opener carries the signal (${opened || 'no window.open found'})`);
 }
 
 console.log('\n[6] a RAMP gradient rides the link (ADR-0122); a stop gradient\'s link does not change');
