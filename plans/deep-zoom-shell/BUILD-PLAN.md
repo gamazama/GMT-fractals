@@ -228,6 +228,92 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
     - *The tools for it exist:* `npm run bench:deep-zoom-march` (seconds a sweep), the f64 CPU
       kernel lifted into node with no browser (`debug/scratch/norm-march.mjs`, `fat-study.mjs`,
       git-ignored), the BigInt and finite-difference referees, and the J variant itself.
+  - **RESEARCH RESULT, 2026-10-09 (the session after the one above): A CANDIDATE TRUE SOLUTION,
+    PROVEN ON THE CPU IN f64, NOT YET ON THE GPU. Nothing in the renderer or the shell changed.**
+    Tools (git-ignored, pure node, seconds a run): `debug/scratch/tm-kernel.js` (the f64 kernel
+    with the orbit's derivatives carried analytically, and ray-coherent orbits), `tm-lib.mjs`,
+    and the studies `tm-svd`, `tm-march`, `tm-ratio`, `tm-resume`, `tm-resume-err`, `tm-rules`,
+    `tm-passed`, `tm-final`, `tm-picture` (`.mjs`, each with its `.log`).
+    - *What is on screen, as maths.* A point p is in the bulb exactly when its k-th iterate
+      z_k(p) lies in the filled Julia set of c = p; across a deep view c changes by less than the
+      view's own size, so EVERY sample of EVERY ray, at its own escape iteration, is one point at
+      unit scale just outside ONE fixed set, and the picture is that set pulled back through the
+      smooth map p -> z_k(p). Today's estimate 0.5 r ln r / dr is two stand-ins: "0.5 r ln r" for
+      the distance from the escaping iterate to that set (the set taken as a ball), and the scalar
+      dr for how fast the iterate moves when the point moves. The second stand-in is the faulty one.
+    - *The map is not even, and that is the cause.* The full 3x3 derivative J at hits (three
+      analytic jets, checked against central differences to 2e-6): its largest stretch is 3 to 6
+      times the next at the median (9 in 10 hits: up to 13 to 39) and that one 2 to 8 times the
+      smallest, at EVERY depth from 2e-3 to 4e-36 - it does not pile up with depth. At the
+      power-2 places it is 100 to 160 in one direction, the same direction across the whole view
+      to about a degree: those views are stacks of parallel sheets. The scalar dr under-counts
+      the largest stretch by 1.7 to 6 times at the median in ordinary views, 3.5 at the power-2
+      place at 5e-20, 5.5 at the slicing place.
+    - *(1) The step: the iterate's speed ALONG THE RAY.* Carry one vector with the orbit,
+      zdot = J v (v = the ray's direction; zdot' = A zdot + v, three numbers where the J variant
+      carries nine). The escaping iterate cannot reach the set before it has travelled its
+      distance to it, and |zdot| is its speed as the point moves along this ray, so
+      E = 0.5 r ln r / |J v| is a lower bound of the distance left ALONG THE RAY - not of the
+      distance in every direction, which a ray does not need. Measured against a careful march
+      on 9 views (214,000 samples): at the 99.5th percentile E is 0.41 to 0.90 of the distance
+      left, today's estimate 0.42 to 3.1, the prototype's smaller-of-two 0.38 to 1.2. E's worst
+      sample is under 0.93 in six views and 1.5 to 2.5 in three, where the careful ray itself
+      stops at a graze. Stepping by E itself (factor 1, no step setting), 441 rays a view, iteration cap raised
+      by 40: 0 rays of 5,292 went through a solid in 12 views (flight x 9, both power-2 places,
+      slicing), 2 of 441 at the power-4 3e-76 view. Today at 0.85, Detail 8, ends behind the
+      careful ray on 1.3 to 5.8 % of rays along the flight, 45 % at the slicing place, 98 % at
+      the power-2 place.
+    - *(2) The hit: a fixed fraction of a pixel in the same measure.* A hit when E is under 1/64
+      of a pixel. Hits then stand 0.03 to 0.06 px from the true surface at the median (0.07 to
+      0.27 at 9 in 10); along the flight today's Detail 8 is 0.14 to 0.25 (0.24 to 0.49) and
+      Detail 32 is 0.03 to 0.06 (0.06 to 0.11). No Detail setting moves with depth, because nothing is keyed to depth.
+    - *(3) The cost: ray-coherent orbits.* Today every march step runs the whole orbit again from
+      iteration 0 (BLA shortens it by up to 2.4 times at depth). But the orbit of the next sample
+      on the SAME ray is the orbit of this one plus S zdot_k at every iteration k early enough
+      that the second-order term is small; only the last few iterations differ. So each sample
+      resumes the previous sample's orbit from the latest checkpoint (state + zdot at iteration k)
+      whose move keeps the evaluated point within 0.05 px of the true point. The error of a move
+      by S is S^2 Q_k / 2 with Q_k = sum over earlier iterations of |zdot_i| (n-1) / (distance of
+      z_i from the pole axis) - measured against true second-order errors: 0.5 to 0.9 of the
+      model at the median, 2.5 at worst. Kernel passes per march step: 3.6 at 2e-3, then 4.6 to
+      6.8 at EVERY depth from 2e-6 to 4e-36 (today: the escape iteration, 6 at 2e-3 rising to 45
+      at 4e-36); 16 at power 2, 10 at power 4. One full orbit a ray (the first sample - and that
+      one is the camera's own reference orbit).
+    - *Together, per ray, 225 rays a view* (passes = kernel iterations, the GPU tool's `work` with
+      BLA off; today at 0.85): flight 2e-3 today D8 188 / D32 236 / candidate 227; 7.7e-10
+      496 / 606 / 309; 1e-16 1442 / 1621 / 637; 2.5e-22 1348 / 1555 / 405; 4.4e-36 1936 / 2271 /
+      436; power-2 5e-20 1472 / 2112 / 614; slicing 950 / 1085 / 410; power-4 3e-76 24425 /
+      25755 / 2484. Mean over 12 views: 1182 / 1464 / 460. The candidate takes MORE steps (59 to
+      116 a ray against 34 to 70) and each costs a fraction. Pictures: `debug/scratch/tm-split-*.png`
+      (CPU, f64, left today, right candidate, same shading).
+    - *The iteration count stops being a quality setting.* The few rays that went through a
+      solid at the power-2 places (1 of 242 in one run, 2 of 162 in another) did so because the
+      saved cap of 86 iterations shapes the surface there; with the cap raised by 40, none. A resumed orbit runs until it escapes
+      and pays only for the iterations it needs, so the cap can be a wide margin.
+    - *What is NOT known - say it this way.* (a) Nothing ran on the GPU: f32 with exponents,
+      checkpoint arrays in the shader, compile time, per-step overhead and the real time against
+      today WITH BLA are all unmeasured; the pass counts above are against BLA off. (b) Shallower
+      than about 1e-6 there is no saving (227 against 188 passes) - the candidate is safer and
+      crisper there, not cheaper. (c) The four normal taps are sideways moves, which the ray's
+      one vector does not cover: as full orbits they would become a quarter of the work. The plan
+      is one full-J orbit at the hit and four resumed taps; unmeasured. (d) The resume's error
+      model lets 1 % of samples stand 0.1 px off and the worst 0.55 px where 0.05 was asked; it
+      needs tightening or one exact orbit at the hit. (e) 0.4 to 1.3 % of rays end more than 2 px
+      of depth behind the same rule marched four times as carefully without going through
+      anything: grazes that passed within 1/76 to 1/350 px. (f) The power-4 3e-76 view (2 of 441
+      through a solid, 255 steps a ray) is a camera skimming a surface; not understood.
+    - *Leads kept, untested.* The straight line z_(K-1) + s zdot_(K-1) against the sphere the
+      next shell lies inside (an exact first-order answer to "will this ray enter the next
+      shell, and when" - it is what would end the creeping past near-misses: the median sample's
+      estimate covers only 3 to 8 % of the distance actually left); a 3D texture of the distance
+      to the one Julia set, in place of "0.5 r ln r"; a larger bailout made the bound WORSE (6 of
+      637 through at 16 against 1 at 2) - not understood.
+    - *To build, if the owner says go - an opt-in variant like the J one, judged with
+      `bench:deep-zoom-march`:* (1) `USE_JET` in the shader kernel (jacStep for one vector) with
+      the ray rule for step and hit, full orbits: wrong % and work against today. (2) Checkpoints
+      and resume in the kernel: work and milliseconds, BLA on and off. (3) Normal taps from the
+      hit's checkpoints. (4) The cap as a margin. (5) Only then one shell switch for him to fly,
+      and his verdict decides whether Step size, Hit refine, Detail and True-gradient march go.
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at
