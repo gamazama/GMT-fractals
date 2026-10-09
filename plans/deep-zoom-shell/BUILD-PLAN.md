@@ -176,6 +176,31 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
     view needs (his assumption, unmeasured); making ordinary views cheap - by drawing with the
     plain variant wherever a small probe shows the scalar does not over-read, or by trimming the
     per-pass work. The J variant compiles in 19 s (36 s with BLA).
+- **THE GOAL, in the owner's words (2026-10-09): "Clean, intricate deep zooms without artifacts and
+  good performance, without the user having to fiddle with detail and step to keep a consistent
+  image throughout."** Everything below this line in the block is judged against it, at Detail 8
+  and up - Detail 1 numbers misled this work once already.
+  - *What each part needs, as measured so far.* INTRICATE = the hit tolerance: Detail 1 leaves the
+    surface about 3 px fat at every depth and the deep views are thin layers, so the same setting
+    shows less the deeper one goes; only a finer tolerance brings them back (Detail 8 costs about
+    1.7 times Detail 1). Jittered accumulation does not: finished 64-sample stills are as fat at
+    Detail 1 with the gradient normal as with 4-tap (busyness 6.3 and 5.6; 10.2 and 11.9 at Detail
+    8). CLEAN = the step: at Detail 8 the default step puts 1 to 12 % of an ordinary view's rays on
+    a wrong surface; the true-gradient march (in the shell, off by default) leaves 0.3 to 2.2 %.
+    PERFORMANCE = both of those cost: about 1.7 for Detail 8 and 1.1 to 2.0 for the march.
+  - *Tried 2026-10-09 for performance, CPU simulation, not good enough alone:* dividing the
+    estimate by its own slope, for the step and the hit test (it is then the first-order true
+    distance; today's reads about half of it on ordinary ground). 35 to 40 % fewer steps for the
+    same crispness, and Detail 4 with it is as crisp as today's Detail 4 to 8 - but 4 to 15 % wrong
+    surfaces in ordinary views where today has 0 to 5, and no help at the power-2 and slicing
+    places (the slope ahead is steeper than the slope here). The saving is real; it needs a check
+    that catches the long step that went wrong before it can be used.
+  - *Plan, in order.* (1) Measure how much detail survives against depth and Detail, and make
+    Detail follow it - the piece that removes the Detail slider from flying. (2) With that on,
+    the true-gradient march as the default below the depth where it pays; cost measured over the
+    whole sample flight. (3) Win the time back: verified longer steps (above), the gradient normal
+    where it is judged good enough, the plain shader where the two estimates agree. (4) The power-2
+    place, which still has 8.8 % wrong at Detail 8 with the march on.
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at
