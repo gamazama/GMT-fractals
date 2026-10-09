@@ -136,6 +136,14 @@ The audit on 2026-05-20 produced ADRs 0001-0058 covering the full engine + engin
 - `npm run smoke:screenshot` — visual baseline → `debug/scratch/engine-boot.png`.
 - `npm run context:cost -- <subsystem|tier|path|app:name>` — **scope your source reading before you start.** Prints which files matter for an area, ordered cheapest-first, with token costs and heavy-file (read-in-sections) flags. Aligns with the navigation policy above: it tells you *which* source to grep/read, not docs to read instead. `npm run context:map` rebuilds the cost map; `npm run context:check` gates staleness. See [docs/policy/context-loading-protocol.md](docs/policy/context-loading-protocol.md).
 
+**A new smoke has to earn its place.** The checks above exist to catch what nobody would notice, not to leave a receipt for every change, and a browser smoke costs its seconds on every run for good. The default for a change is **no new smoke and no new step in an existing one**: try it once (by hand, or a throwaway script outside the repo) and say in the report what you tried and what it showed. Write one only when all three hold:
+
+1. it crosses a seam nothing cheaper can see — a real GPU, a panel that has to open, storage across a reload, the boot. What a node test can prove is proved there.
+2. it is new ground, not a second way into code a smoke already opens (another gesture, button or row onto the same function), and not a default, a label or a rate.
+3. broken, it would not be seen at once by whoever uses the app next — it fails silently, or in a place nobody visits daily, or it has shipped broken before.
+
+The owner, 2026-10-09, on a smoke step written for a middle-drag zoom: "way over over kill". A plan's list of smoke steps is a ceiling, not a quota. The same goes for annotations: do not write a guard to earn the word `@invariant` — `@assumption` is the honest marker for most wiring, and the `@assumption` worklist is a list of what is unproven, not an order to write a test for each line. Falsifying a guard before citing it still stands; it is a rule about guards you cite, not a reason to write one.
+
 ## Build & Run
 ```bash
 npm run dev      # Vite on localhost:3400
