@@ -223,6 +223,18 @@ export const DzQualityFeature = {
             label: 'True-gradient march',
             description: 'Measures the distance to the surface with the orbit\'s real derivative as well, and steps by the smaller of the two estimates. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. It changes where rays land, not how the surface is shaded: for the smoother shading choose Normals: Gradient. Takes about 20 seconds to switch on the first time.',
         },
+        rayMarch: {
+            type: 'boolean',
+            // A PROTOTYPE, off by default (2026-10-09; grep THE RAY ESTIMATE and THE LINE AGAINST THE BALL
+            // in renderer/core.js, "RESEARCH RESULT" and "ON THE GPU" in the build plan). Measured on
+            // the GPU at Detail 32, 16,384 rays a view, 17 views: rays more than 2 px of depth from a
+            // careful march - 10.2 % with the default step, 2.0 % at Step size 0.42, 1.0 % with this
+            // (the power-2 place at 5e-20: 97.6 / 26.8 / 1.8 %). A 640 x 640 picture with 4-tap
+            // normals, mean of 11 views, BLA on for the first two: 21.8 / 34.3 / 22.6 ms.
+            default: false,
+            label: 'Ray march (prototype)',
+            description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size, True-gradient march and BLA are not used; Detail and Hit refine still are. Takes about 20 seconds to switch on the first time.',
+        },
         accumulate: {
             type: 'boolean',
             default: true,

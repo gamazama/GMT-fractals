@@ -367,6 +367,45 @@ export const stage: DzStage = {
             },
         },
         {
+            name: 'Ray march (prototype) reaches the renderer, builds without stopping the picture and changes where rays land; off, the picture is as it was',
+            owner: 'owner, 2026-10-09 ("go ahead with the gpu prototype")',
+            falsified: '2026-10-09: the `rayMarch` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out at 150 s).',
+            async run(ctx) {
+                await ctx.boot({ clearStorage: true });
+                await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
+                await ctx.sleep(300);
+                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('Ray march (prototype)')"), 'the row is shown without advanced mode');
+                if (!(await enterDeepView(ctx))) return;
+                // Detail 8: at Detail 1 the two marches stop inside the same fat shell and the picture barely moves
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, rayMarch: false, trueGradient: false, normals: 2, detail: 8 })');
+                await ctx.sleep(1200);
+                const a = await pixels(ctx);
+                await ctx.sleep(300);
+                const control = shareChanged(a, await pixels(ctx));
+                const frames0 = await ctx.host<number>('frameCount()');
+                await ctx.ev('window.__store.getState().setDzQuality({ rayMarch: true })');
+                await ctx.sleep(700);
+                ctx.check((await ctx.host<boolean>("getParams()['dzQuality.rayMarch']")) === true, 'the renderer holds the setting');
+                // Its variant compiles in the background (about 20 to 45 s here): the page's march keeps being drawn, then the picture changes.
+                let moved = 0, waited = 0, stalled = 0, last = await ctx.host<number>('frameCount()');
+                while (waited < 150 && moved <= Math.max(1, control * 4)) {
+                    await ctx.sleep(1000); waited++;
+                    const now = await ctx.host<number>('frameCount()');
+                    if (now === last) stalled++;
+                    last = now;
+                    moved = shareChanged(a, await pixels(ctx));
+                }
+                ctx.check(moved > Math.max(1, control * 4), 'after ' + waited + ' s the picture changed: ' + moved.toFixed(1) + ' % of the pixels (the control: ' + control.toFixed(2) + ' %)');
+                ctx.check(last > frames0 && stalled <= 2, 'the picture kept being drawn while it built (' + stalled + ' of ' + waited + ' seconds without a frame)');
+                await ctx.ev('window.__store.getState().setDzQuality({ rayMarch: false })');
+                await ctx.sleep(900);
+                ctx.check((await ctx.host<boolean>("getParams()['dzQuality.rayMarch']")) === false, 'switched off, the renderer holds off');
+                const back = shareChanged(a, await pixels(ctx));
+                ctx.check(back <= control + 0.5, 'and the picture is the first one again (' + back.toFixed(2) + ' % differ)');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, detail: 1 })');
+            },
+        },
+        {
             name: 'the depth instruments are on the picture, and Overlays None leaves the top-bar depth',
             owner: 'S2-5',
             falsified: '2026-10-08: the `hud.register` of `deep-zoom.depth` removed from deep-zoom/main.tsx -> red, 3 lines (no depth text, no decades line, no readout under Depth only).',

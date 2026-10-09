@@ -308,6 +308,22 @@ export interface DeepZoomApi {
     jacobianState(): 'off' | 'building' | 'on' | 'failed';
     /** A referee's read of both estimates on the centre ray at `t`; null unless `setJacobian` is on. */
     jacProbeAt(t: number): { t: number; de: number; escaped: boolean; gde: number; gradPacked: number } | null;
+    /** THE RAY ESTIMATE AND RAY-COHERENT ORBITS (a prototype, added 2026-10-09, 0 = off = the page;
+     *  grep the name in core.js). Bits: 1 = the march steps by 0.5 r ln r / |J v|, the escaping
+     *  iterate's speed along the ray - a first-order estimate of the distance left along it,
+     *  measured safe on the test views (not proven), so no step setting; 2 = a hit is tested by it at a fixed share of a display pixel (`hit`, default
+     *  1/64), so no detail setting; 4 = each sample resumes the previous sample's orbit and runs
+     *  only the last few iterations again. `tol`: how far, in display pixels, a resumed orbit's
+     *  point may stand from the true one (default 0.05). `floor`: with the page's hit test (bit 2
+     *  off), also a hit once the ray estimate is under a display pixel / this (0 = none) - it ends
+     *  the creeping of rays that pass very near something. `line`: THE LINE AGAINST THE BALL (grep
+     *  it in core.js) - the longer step that rule allows is taken, with this multiple of the bend
+     *  measure as its allowance (0 = off; 2 is the tested value). The picture switches when the variant has
+     *  compiled, in the background - `rayMarchState()` says when; `now` builds it BLOCKING. While
+     *  it is on, BLA and the true-gradient bits are not used. */
+    setRayMarch(bits: number, opt?: { factor?: number; hit?: number; tol?: number; floor?: number; line?: number }, now?: boolean): void;
+    rayMarchState(): 'off' | 'building' | 'on' | 'failed';
+    rayMarch(): { bits: number; factor: number; hit: number; tol: number; floor: number; line: number };
     marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number; jacobian: number };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */

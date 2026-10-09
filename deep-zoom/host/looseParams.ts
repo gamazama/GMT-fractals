@@ -94,6 +94,10 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         land: () => api.setLand(flag('dzQuality', 'hitLanding')),
         hitRefine: () => api.setHitRefine(num('dzQuality', 'hitRefine')),
         jacobian: () => api.setJacobian(flag('dzQuality', 'trueGradient') ? 1 : 0),   // 1 = step by the smaller estimate; the gradient NORMAL is Normals: Gradient (setNormalMode 4)
+        // bits 5 = step by the ray estimate + orbits resumed along the ray; the longer step of THE LINE AGAINST THE
+        // BALL is taken (allowance twice the bend measure); the hit test stays the page's, with a creep floor of
+        // 1/256 of a display pixel (grep both names in renderer/core.js)
+        rayMarch: () => api.setRayMarch(flag('dzQuality', 'rayMarch') ? 5 : 0, { factor: 1, floor: 256, line: 2 }),
         accum: () => api.setAccum(flag('dzQuality', 'accumulate')),
         bla: pushBla,
         stepRelax: () => api.setStepRelax(num('dzQuality', 'stepSize')),

@@ -356,6 +356,10 @@ struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bo
 #ifdef USE_JAC
   vec2 gde; vec3 grad;                          // the true-gradient estimate (HDR) and the unit gradient of |z| (grep TRUE-GRADIENT ESTIMATE)
 #endif
+#ifdef USE_JET
+  vec2 rde;                                     // THE RAY ESTIMATE (grep): 0.5·r·ln r / |J·v|, HDR; 0 when the orbit carried no jet
+  vec2 rls;                                     // THE LINE AGAINST THE BALL (grep): the step it allows, HDR; 0 when not asked for
+#endif
 };
 #ifdef USE_JAC
 /* ════════ TRUE-GRADIENT ESTIMATE (the USE_JAC variant, 2026-10-08; api.setJacobian; off = the page) ════════
@@ -402,6 +406,120 @@ void jacStep(inout mat3 M, inout float ej, vec3 z, float sA, float cA, float sB,
   }
   M = N * scale + mat3(exp2(max(-ej, -160.0)));
   jacNorm(M, ej);
+}
+#endif
+#ifdef USE_JET
+/* ════════ THE RAY ESTIMATE AND RAY-COHERENT ORBITS (the USE_JET variant, 2026-10-09; api.setRayMarch; off = the page) ════════
+   A PROTOTYPE of the research result in plans/deep-zoom-shell/BUILD-PLAN.md ("RESEARCH RESULT,
+   2026-10-09"), there proven in f64 on the CPU (debug/scratch/tm-*.mjs). Three parts, one bit each
+   of uRayUse:
+   1  THE STEP. A point is in the bulb exactly when its escaping iterate z_K lies in a set that is
+      the same for every sample of a deep view, and z_K cannot reach that set before it has
+      travelled its distance to it. As the sample moves along its ray the iterate moves at the speed
+      |zdot|, zdot = J·v (v = the ray's direction, J the orbit's 3x3 derivative). So
+          rde = 0.5·r·ln r / |J·v|
+      estimates the distance left ALONG THIS RAY from below, and the march steps by rde itself
+      (uRayFactor = 1): no step setting. MEASURED safe, not proven: it is a first-order number (the
+      iterate taken as heading straight at the set at the speed it has here), its worst samples
+      read 1.5 to 2.5 times the distance left in three views, and on the CPU it put 1 to 2 of
+      5,733 rays through a solid (power 4, 3e-76). zdot is ONE vector carried with the orbit,
+          zdot' = A·zdot + v ,   A = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ )
+      (the frames and κ of jacStep above), as jv·2^ev - three numbers where USE_JAC carries nine.
+   2  THE HIT. A hit when rde is under uRayHit·uPixAng of the ray's length (the host sets 1/64 of a
+      display pixel, whatever the detail setting): the same measure, so nothing is keyed to depth.
+   4  RAY-COHERENT ORBITS. Every sample of a ray is a point t·v, and the orbit of the sample at
+      t + S is the orbit at t plus S·zdot_k at every iteration k early enough that the second-order
+      term is small. So a sample does not run its orbit from iteration 0: it RESUMES the previous
+      sample's from the latest checkpoint (δ, zdot, Δdr, trap, m, it at the top of a kernel pass)
+      whose first-order move keeps the evaluated point within gTolN of the true point, and runs only
+      the passes after it. The price of a move by S is about S²·Q/2 in position, with
+          Q_k = Σ_{i<k} |zdot_i|·(n−1) / ρ_i     (ρ = the iterate's distance from the pole axis)
+      the size of the second derivative. Q is a MEASURE, not a bound: the true bend is 0.5 to 0.9
+      of it at the median but up to 2.5 times it, and above it on at least one sample in twenty in
+      every view (39,512 samples, the second chat's study) - hence CK_SAFE = 3; on the GPU 3 costs
+      no more passes or time than 2 did. A proven bound exists on the CPU (debug/scratch/pb-math.mjs)
+      and is not in a shader's form yet. Passes run again after a moved checkpoint inherit its
+      position error (ckErr) and carry jets that belong to the unmoved point: a relative jet error
+      ckJerr = travel·Q, which costs a further S·ckJerr when one of THEM is moved later.
+      Checkpoints live in a ring of CKN, keyed by pass number; a resumed orbit never rewrites the
+      checkpoint it started from. No checkpoint within tolerance ⇒ a full orbit, as before.
+      Tried and NOT kept (2026-10-09, RTX 5070 Ti, measured): named globals in place of the
+      arrays (compiled for five minutes, ran 1.4 times slower); LAZY WRITES - a resumed orbit
+      writing its checkpoints only when resumed orbits have come to run CK_WR passes more - which
+      ran a third more passes and no faster (CK_WR_ > 0 still builds it).
+   What is frozen in a resumed orbit and therefore only first-order right: Δdr (so the page's own
+   de, which the ray rule does not use) and trap. Never built together with USE_JAC or USE_BLA.
+   gRay is 0 outside the march: the normal taps and the probes run the page's orbit. */
+int   gRay = 0;                  // 0 = the page's orbit · 1 = carry zdot along gRd · 2 = and keep / resume checkpoints
+vec3  gRd = vec3(0.0);           // the ray's direction: the jet's seed
+float gTau = 0.0;                // this sample's ray parameter t, in units of 2^uRefE
+float gTolN = 0.0;               // how far the evaluated point may stand from the true one, same units
+#ifndef CKN_
+#define CKN_ 24
+#endif
+#ifndef CK_WR_
+#define CK_WR_ 0
+#endif
+#ifndef CK_SAFE_
+#define CK_SAFE_ 3.0
+#endif
+const int CKN = CKN_;
+const int CK_WR = CK_WR_;        // 0 = every orbit writes its checkpoints (the default) · n = a resumed orbit writes once resumed orbits run n passes more
+const float CK_SAFE = CK_SAFE_;
+#ifndef NO_CKPT
+vec4  gCkD[CKN];                 // δ: mantissa (xyz), exponent (w)
+vec4  gCkJ[CKN];                 // zdot: mantissa (xyz), exponent (w)
+vec4  gCkA[CKN];                 // Δdr (HDR, xy) · trap (z)
+vec4  gCkB[CKN];                 // the t this checkpoint was made at · inherited position error · relative jet error · pass number
+vec4  gCkC[CKN];                 // Q · m · it      (t, the error and Q in units of 2^uRefE: plain floats)
+#endif
+int   gCkTop = 0;                // checkpoints of the latest WRITING orbit: its pass count
+int   gCkLast = 0;               // the pass the last scan resumed from: while the ray moves on, nothing later can be valid again
+int   gCkSince = 0;              // orbits resumed since the last writing orbit
+int   gRunBase = 0;              // kernel passes the first of them ran
+int   gRunPrev = 0;              // kernel passes the previous orbit ran
+/* one iteration z → zⁿ (+ c) applied to zdot = jv·2^ev, and Q (as Qm·2^ev) gathered on the way.
+   Arguments as jacStep; jvs = 2^-ev, kept beside ev. The mantissa is renormalised only when it
+   leaves 2^±20, so most passes pay no log2 / exp2 here. */
+void jetStep(inout vec3 jv, inout float ev, inout float jvs, inout float Qm, vec3 z, float sA, float cA, float sB, float cB, float scale) {
+  float rz = length(z), rho = length(z.xy), irho = 1.0 / max(rho, 1e-30);
+  Qm += length(jv) * (uPower - 1.0) * irho;
+  vec3 nj = vec3(0.0);
+  if (rz > 0.0) {
+    float irz = 1.0 / rz, sth = rho * irz, cth = z.z * irz;
+    float cph = rho > 0.0 ? z.x * irho : 1.0, sph = rho > 0.0 ? z.y * irho : 0.0;
+    float kap = sth > 1e-12 ? clamp(sA / sth, -uPower, uPower) : uPower;
+    nj = dot(jv, vec3(sth * cph, sth * sph, cth)) * vec3(sA * cB, sA * sB, cA)
+       + dot(jv, vec3(cth * cph, cth * sph, -sth)) * vec3(cA * cB, cA * sB, -sA)
+       + kap * dot(jv, vec3(-sph, cph, 0.0)) * vec3(-sB, cB, 0.0);
+  }
+  jv = nj * scale + gRd * jvs;
+  float mx = max(abs(jv.x), max(abs(jv.y), abs(jv.z)));
+  if (mx > 1048576.0 || (mx < 9.5367e-7 && mx > 0.0)) { float adj = floor(log2(mx)), k = exp2(-adj); jv *= k; Qm *= k; ev += adj; jvs = exp2(max(-ev, -160.0)); }
+}
+/* THE LINE AGAINST THE BALL (uRayLine > 0; the rule of the second chat's study, BUILD-PLAN "FOLLOW-UP,
+   2026-10-09", there on the CPU: 47 to 62 steps a ray where the ray estimate alone takes 85, none of
+   5,733 rays through a solid). A bounded orbit never leaves the ball |z| <= rho, rho^n - |c| = rho
+   (uRayBall), so a sample is clear of the bulb while ANY of its iterates is outside that ball. Along
+   the ray an iterate u moves on the straight line u + s·udot, and strays from it by about
+   s²·Q·|udot| / 2 (the bend: Q as for the resumed orbits). The sample is therefore clear while
+       | u + s·udot |  -  uRayLine · s²·Q·|udot| / 2   >   rho ,
+   and a skimming ray - udot across u - gets a far longer step than the ray estimate, which takes
+   all of udot as aimed at the set. Returned: the travel x = s·|udot| of the first s where that
+   fails, approached from below (each move is one the left side cannot outrun: its slope in x is
+   at most 1 + kap·x). ALL of the safety is the allowance: with none nearly every ray goes through a
+   solid, and Q itself UNDER-reads the true bend by up to 2.5 times - hence uRayLine = 2, not 1. */
+float lineTravel(vec3 u, vec3 jm, float qm, float rho, float allow) {
+  float jl = length(jm);
+  if (!(jl > 0.0)) return 0.0;
+  float A = dot(u, u), b = dot(u, jm) / jl, kap = max(allow * qm / jl, 1e-12), x = 0.0;
+  for (int j = 0; j < 6; j++) {
+    float gx = sqrt(max(A + 2.0 * b * x + x * x, 0.0)) - 0.5 * kap * x * x - rho;
+    if (gx <= 0.0) break;
+    float L = 1.0 + x * kap;
+    x += 2.0 * gx / (L + sqrt(L * L + 2.0 * kap * gx));
+  }
+  return x;
 }
 #endif
 /* ════════ THE δ KERNEL — shared exponent ════════
@@ -531,11 +649,60 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   mat3 Jm = mat3(1.0); float ej = 0.0;         // Jᵀ = Jm·2^ej; z₀ = c, so J₀ = I
   vec3 zc = T00.xyz + D * sclPow2(e);          // this pixel's own z at the current index
 #endif
+#ifdef USE_JET
+  vec3 jv = gRd; float ev = 0.0, jvs = 1.0, Qm = 0.0, ckErr = 0.0, ckJerr = 0.0;     // zdot_0 = v (z_0 = c); Q = Qm·2^ev; jvs = 2^-ev
+  int pass = 0, ckFrom = -1;
+  bool ckWr = true;                                          // does this orbit write its checkpoints
+  vec3 zPv = vec3(0.0), jPv = vec3(0.0); float ePv = 0.0, qPv = 0.0;   // the iterate before the last, its zdot and Q: THE LINE AGAINST THE BALL
+#ifndef NO_CKPT
+  if (gRay == 2 && gTolN > 0.0) {
+    /* RAY-COHERENT ORBITS: resume from the latest checkpoint whose move stays within gTolN */
+    int p0 = min(gCkTop - 1, gCkLast);
+    for (int q = 0; q < CKN; q++) {
+      int p = p0 - q;
+      if (p < 1 || p < gCkTop - CKN) break;
+      int cs = p - (p / CKN) * CKN;
+      vec4 kb = gCkB[cs];
+      if (int(kb.w) != p) continue;                          // the ring slot holds another pass: not this orbit's
+      vec4 kc = gCkC[cs];
+      float S = gTau - kb.x, aS = abs(S), sq = aS * kc.x;    // the move along the ray; travel × Q = the relative change of the jets
+      float er = kb.y + CK_SAFE * (0.5 * aS * sq + aS * kb.z);
+      if (!(er <= gTolN)) continue;                          // too far for this checkpoint: try an earlier one
+      vec4 kd = gCkD[cs], kj = gCkJ[cs], ka = gCkA[cs];
+      vec3 Dm; float em;
+      sclAdd(kd.xyz, kd.w, kj.xyz * S, uRefE + kj.w, Dm, em);
+      D = Dm; e = em; sclNorm(D, e);
+      jv = kj.xyz; ev = kj.w; jvs = exp2(max(-ev, -160.0));
+      Qm = kc.x * exp2(clamp(-(ev + uRefE), -126.0, 126.0));
+      Ddr = ka.xy; trap = ka.z;
+      m = int(kc.y); it = int(kc.z);
+      ckErr = er; ckJerr = min(kb.z + sq, 1e30);
+      pass = p; ckFrom = p; gCkLast = p;
+      ckWr = CK_WR == 0 || (gCkSince >= 1 && gRunPrev >= gRunBase + CK_WR);   // LAZY WRITES: the passes a resumed orbit runs have grown (0: every orbit writes)
+      cT0 = texelFetch(orbit, ivec2(m, 0), 0); cDR = texelFetch(orbit, ivec2(m, 3), 0).xy;
+      break;
+    }
+  }
+  int nRun = 0;
+#endif
+#endif
 #ifdef USE_BLA
   float lenC = length(C);                                    // |δc| mantissa (exponent ec) for BLA validity
 #endif
   for (int loop = 0; loop < 512; loop++) {
     if (it >= maxIter) break;
+#if defined(USE_JET) && !defined(NO_CKPT)
+    nRun++;
+    if (gRay == 2 && ckWr) {
+      if (pass != ckFrom) {                                  // the checkpoint an orbit resumed from stays as it was
+        int cs = pass - (pass / CKN) * CKN;
+        gCkD[cs] = vec4(D, e); gCkJ[cs] = vec4(jv, ev); gCkA[cs] = vec4(Ddr, trap, 0.0);
+        gCkB[cs] = vec4(gTau, ckErr, ckJerr, float(pass));
+        gCkC[cs] = vec4(Qm * exp2(clamp(ev + uRefE, -126.0, 126.0)), float(m), float(it), 0.0);
+      }
+      pass++;
+    }
+#endif
     bool applied = false;
 #ifdef USE_STATS
     gWork++;                                   // one loop pass = one real step OR one BLA skip
@@ -640,6 +807,10 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
 #ifdef USE_JAC
       jacStep(Jm, ej, zc, sa + s * dsA, ca + s * dcA, sb + s * dsB, cb + s * dcB, uPower * t2.z * sclPow2(t2.w) * (1.0 + gN1 * s));
 #endif
+#ifdef USE_JET
+      if (gRay != 0) { zPv = V + df; jPv = jv; ePv = ev; qPv = Qm; }
+      if (gRay != 0) jetStep(jv, ev, jvs, Qm, V + df, sa + s * dsA, ca + s * dcA, sb + s * dsB, cb + s * dcB, uPower * t2.z * sclPow2(t2.w) * (1.0 + gN1 * s));
+#endif
       /* δ ← Δ + δc : align the two exponents once, renormalise once */
       sclAdd(Dn, en, C, ec, D, e);
       sclNorm(D, e);
@@ -686,6 +857,10 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
 #ifdef USE_JAC
           jacStep(Jm, ej, zf, sth, 1.0 + cth1, sph, 1.0 + cph1, uPower * rn1 * sclPow2((uPower - 1.0) * ez));
 #endif
+#ifdef USE_JET
+          if (gRay != 0) { zPv = zf; jPv = jv; ePv = ev; qPv = Qm; }
+          if (gRay != 0) jetStep(jv, ev, jvs, Qm, zf, sth, 1.0 + cth1, sph, 1.0 + cph1, uPower * rn1 * sclPow2((uPower - 1.0) * ez));
+#endif
           vec3 P = rn1 * rm * vec3(sth * (1.0 + cph1), sth * sph, 1.0 + cth1);   // z^n = P·2^(n·ez)
           sclAdd(P, uPower * ez, C, ec, D, e);
           Ddr = hdrMulF(drFull, uPower * rn1); Ddr.y += (uPower - 1.0) * ez;
@@ -693,6 +868,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
           D = C; e = ec; Ddr = vec2(0.0);
 #ifdef USE_JAC
           Jm = mat3(1.0); ej = 0.0;
+#endif
+#ifdef USE_JET
+          jv = gRd; ev = 0.0; jvs = 1.0; Qm = 0.0;
 #endif
         }
         sclNorm(D, e);
@@ -730,7 +908,35 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec2 gde = gn > 0.0 ? hdrMul(hdrFromFloat(0.5 * rF * log(rF)), hdrRecip(hdrReduce(vec2(gn, ej)))) : vec2(0.0);
   return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2), gde, gn > 0.0 ? gv / gn : vec3(0.0, 0.0, 1.0));
 #else
+#ifdef USE_JET
+  vec2 rde = vec2(0.0), rls = vec2(0.0);                // THE RAY ESTIMATE: 0.5·r·ln r / |zdot|
+  if (gRay != 0) {
+    float jl = length(jv);
+    if (jl > 0.0 && rF > 1.0) rde = hdrMul(hdrFromFloat(0.5 * rF * log(rF)), hdrRecip(hdrReduce(vec2(jl, ev))));
+    if (uRayLine > 0.0 && escaped && jl > 0.0) {
+      /* THE LINE AGAINST THE BALL, read at the escaping iterate and at the one before it (when that one
+         stands outside the ball): either says the sample is clear, so the longer step holds */
+      float xK = lineTravel(cT0.xyz + D * sE, jv, Qm, uRayBall, uRayLine);
+      if (xK > 0.0) rls = hdrReduce(vec2(xK / jl, -ev));
+      float jp = length(jPv);
+      if (jp > 0.0 && dot(zPv, zPv) > uRayBall * uRayBall) {
+        float xP = lineTravel(zPv, jPv, qPv, uRayBall, uRayLine);
+        vec2 sP = xP > 0.0 ? hdrReduce(vec2(xP / jp, -ePv)) : vec2(0.0);
+        if (sP.x > 0.0 && (rls.x <= 0.0 || hdrGtPos(sP, rls))) rls = sP;
+      }
+    }
+    if (gRay == 2) {
+#ifndef NO_CKPT
+      if (ckWr) { gCkTop = pass; gCkSince = 0; gCkLast = 1048576; }
+      else { if (gCkSince == 0) gRunBase = nRun; gCkSince++; }
+      gRunPrev = nRun;
+#endif
+    }
+  }
+  return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2), rde, rls);
+#else
   return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2));
+#endif
 #endif
 }
 `;
@@ -851,6 +1057,15 @@ uniform float     uFarSwitch;    // the t at which a ray is handed to the f32 fa
 uniform float     uJacFloor;     // the step is never shortened below this share of the page's step (0 = no floor)
 uniform int       uJacUse;       // TRUE-GRADIENT ESTIMATE (grep), bits: 1 = step by min(de, gde) · 2 = the normal is the gradient · 4 = hit test by min(de, gde)
 #endif
+#ifdef USE_JET
+uniform int       uRayUse;       // THE RAY ESTIMATE (grep), bits: 1 = step by it · 2 = hit test by it · 4 = ray-coherent orbits
+uniform float     uRayFactor;    // the step is this share of the ray estimate (1 = the bound itself)
+uniform float     uRayHit;       // the ray hit level as a multiple of uPixAng (the host: a 64th of a display pixel)
+uniform float     uRayTol;       // how far a resumed orbit's point may stand from the true one, as a multiple of uPixAng
+uniform float     uRayFloor;     // with the page's hit test (bit 2 off): also a hit once the ray estimate is under this multiple of uPixAng (0 = no floor)
+uniform float     uRayLine;      // THE LINE AGAINST THE BALL (grep): the allowance for the path's bend, as a multiple of Q (0 = off)
+uniform float     uRayBall;      // the radius no bounded orbit leaves: rho^n - |c| = rho
+#endif
 uniform int       uGuide;        // 1 = this jittered sample starts its march from the depth guide; 0 = from the camera
 uniform float     uGuideK;       // guide back-off, in pixel cones
 uniform int       uGuideR;       // guide neighbourhood radius in pixels (1 = 3×3, 2 = 5×5)
@@ -924,6 +1139,9 @@ vec3 normalF32(vec3 p, float e){
    never trusted for stepping (the second placement-failure mechanism). */
 vec2 deAt(vec2 t, vec3 rd, int mi, out bool esc, out OrbitOut oo) {
   Hdr3 dp = Hdr3(hdrMulF(t, rd.x), hdrMulF(t, rd.y), hdrMulF(t, rd.z));
+#ifdef USE_JET
+  gTau = t.x * exp2(clamp(t.y - uRefE, -126.0, 126.0)); gTolN = gTau * uRayTol * uPixAng;   // RAY-COHERENT ORBITS: where this sample is, and how far off it may be evaluated
+#endif
   oo = pertOrbit(uOrbit, uOrbitLen, dp, mi);
   esc = oo.escaped;
   return oo.de;
@@ -962,11 +1180,25 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
   hit = false; steps = 0; tF = -1.0; bool esc = false;
   OrbitOut oo; OrbitOut lastOO; lastOO.escaped = false;   // last surface-side orbit → reused for colour
   int budget = PICTURE_MARCH ? uMaxSteps : 256;      // the probes referee the plain march: 256 steps, no relaxing
+#ifdef USE_JET
+  if (PICTURE_MARCH && (uRayUse & 1) != 0) budget *= 4;   // THE RAY ESTIMATE: its steps are shorter than the page's, and never relaxed with distance
+#endif
   int refine = !PICTURE_MARCH ? 0 : uHitRefine > 0 ? uHitRefine : (gl_FragCoord.x + uOrigin.x >= uLandSplit ? -uHitRefine : 0);   // HIT REFINE
+#ifdef USE_JET
+  bool rayOn = PICTURE_MARCH && uRayUse != 0;        // THE RAY ESTIMATE: the probes that referee the page's march keep the page's
+  bool rayHit = rayOn && (uRayUse & 2) != 0;
+  gRay = !rayOn ? 0 : (uRayUse & 4) != 0 ? 2 : 1; gRd = rd; gCkTop = 0; gCkLast = 1048576; gCkSince = 0; gRunBase = 0; gRunPrev = 0;
+#endif
   for (int st = 0; st < budget; st++) {
     steps = st;
     de = deAt(t, rd, uIters, esc, oo);
     lastOO = oo;
+#ifdef USE_JET
+    if (rayHit && st == 0 && t0.x != 0.0 && esc && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) {
+      t0 = vec2(0.0); t = vec2(0.0); tPrev = vec2(0.0);    // GUIDED START re-check, by the ray hit level
+      continue;
+    }
+#endif
     if (st == 0 && t0.x != 0.0) {
       /* GUIDED START re-check (t0 ≠ 0 only for a guided sample). The guide is a promise that
          nothing lies in front of t0, so the start point must be OUTSIDE the surface: escaped, and
@@ -1000,6 +1232,18 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
       float ratio = hdrToFloat(hdrMul(de, hdrRecip(t)));
 #ifdef USE_JAC
       if ((uJacUse & 4) != 0 && oo.gde.x > 0.0) ratio = min(ratio, hdrToFloat(hdrMul(oo.gde, hdrRecip(t))));
+#endif
+#ifdef USE_JET
+      if (rayHit) {                                    // THE RAY ESTIMATE as the hit test: its own level, no landing, no refine
+        if (oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) { hit = true; break; }
+        ratio = 1e30;
+      } else if (rayOn && uRayFloor > 0.0 && oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayFloor * pa) {
+        /* THE CREEP FLOOR. The page's hit test stays, but where the iterate moves far faster along the ray than the
+           scalar derivative says, the ray estimate - and with it the step - falls far below the hit level while the
+           page's estimate does not: such a ray creeps for hundreds of steps past something it is a small part of a
+           pixel from, and the GPU waits for it. Under the floor that is a hit. */
+        hit = true; break;
+      }
 #endif
       if (ratio < pa) {
         /* HIT LANDING (uLand, off by default — it moves the surface, so the CPU referee
@@ -1067,7 +1311,14 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
     }
     vec2 step = hdrMulF(est, relax);
 #else
+#ifdef USE_JET
+    /* THE RAY ESTIMATE as the step: the bound itself (uRayFactor), never relaxed with distance */
+    bool rayStep = rayOn && (uRayUse & 1) != 0 && oo.rde.x > 0.0;
+    vec2 step = rayStep ? hdrMulF(oo.rde, uRayFactor) : hdrMulF(de, relax);
+    if (rayStep && oo.rls.x > 0.0 && hdrGtPos(oo.rls, step)) step = oo.rls;   // THE LINE AGAINST THE BALL: the longer of the two
+#else
     vec2 step = hdrMulF(de, relax);
+#endif
 #endif
     if (cap.x == 0.0) cap = hdrMulF(de, 0.05);
     vec2 capEff = (t.x != 0.0 && hdrGtPos(t, cap)) ? t : cap;
@@ -1075,6 +1326,9 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
     cap = hdrMulF(cap, 1.25);
     t = hdrAdd(t, step);
   }
+#ifdef USE_JET
+  gRay = 0;                                            // the normal taps that follow run the page's orbit
+#endif
   deOut = de;
   hitOrbit = lastOO;
   return t;
@@ -1671,9 +1925,10 @@ const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }
    2 = the normal is the gradient, 4 = hit test by min(de, gde). A PICTURE never waits for a J
    twin: deepCtx() builds it in the background (19 s; 36 s with BLA) and draws with the ordinary
    variant until it is there. The probes and the stats variants build theirs blocking, as before. */
+let rayUse = 0, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = 0, rayLine = 0;   // THE RAY ESTIMATE (grep; api.setRayMarch)
 let jacUse = 0, jacFloor = 0;
 let jacNormal = false;                            // normal mode 4, "gradient" (api.setNormalMode): the J twins are needed for the normal alone
-const jacBits = () => jacUse | (jacNormal ? 2 : 0);          // what the shader is told, and whether a J twin is wanted at all
+const jacBits = () => rayUse ? 0 : jacUse | (jacNormal ? 2 : 0);   // what the shader is told, and whether a J twin is wanted at all (never beside the ray variant)
 const vKey = (b, t, j = !!jacBits()) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (j ? 'J' : '');
 const vSrc = (b, t, j = !!jacBits()) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
   + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (j ? '\n#define USE_JAC' : ''));
@@ -1685,6 +1940,27 @@ function ensureVariant(b, t, j = !!jacBits()){
     const t0 = performance.now();
     const p = mkProg(vSrc(b, t, j));
     const x = makeUD(p); x.hasBla = !!b;
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+  } catch(e){ variantErr[key] = String(e); variants[key] = null; }
+  return variants[key];
+}
+/* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep; api.setRayMarch; 0 = off = the page). Its variant
+   is DEEP_FRAG with USE_JET: never with BLA (resumed orbits take its place) or with the J twins
+   (while it is on, the true-gradient bits are not asked for). Keys PR (the picture) and PTR (with
+   the work counters). A picture never waits for it: deepCtx() builds it in the background and
+   draws with the ordinary variant until it is there. */
+const rKey = (t) => 'P' + (t ? 'T' : '') + 'R';
+let rayDefs = '';                                 // extra #defines for the ray variant (experiments: api.setRayDefs)
+const rSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_JET' + rayDefs);
+function ensureRayVariant(t){
+  const key = rKey(t);
+  if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();
+  if (variants[key] !== undefined) return variants[key];
+  try {
+    const t0 = performance.now();
+    const p = mkProg(rSrc(t));
+    const x = makeUD(p); x.hasBla = false;
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
   } catch(e){ variantErr[key] = String(e); variants[key] = null; }
@@ -1715,7 +1991,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2060,6 +2336,11 @@ mkProgAsync(vSrc(false, false), (p, err) => {
    else the plain one. Use this everywhere a deep draw is issued. */
 function deepCtx(){
   if (!deepProg) return { p: null, x: ud };
+  if (rayUse) {                                  // THE RAY ESTIMATE's variant; never a blocking build
+    const want = variants[rKey(false)];
+    if (want) return want;
+    kickRayVariantAsync();
+  }
   if (jacBits()) {                               // the J twin of what would draw; never a blocking build (grep TRUE-GRADIENT ESTIMATE)
     const want = variants[vKey(blaEnabled, false, true)];
     if (want) return want;
@@ -2281,6 +2562,19 @@ function kickVariantAsync(b, j){                 // build the picture variant (B
   });
 }
 function kickBlaAsync(){ kickVariantAsync(true, false); }
+function kickRayVariantAsync(){                  // THE RAY ESTIMATE's picture variant, without blocking; a no-op once started
+  const key = rKey(false);
+  if (!deepProg || variants[key] !== undefined || blaPending[key]) return;
+  const t0 = performance.now();
+  blaPending[key] = mkProgAsync(rSrc(false), (p, err) => {
+    blaPending[key] = null;
+    if (!p) { variantErr[key] = err; variants[key] = null; return; }
+    const x = makeUD(p); x.hasBla = false;
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+    accumReset = true;
+  });
+}
 /* per frame: turn the effective flag on/off for 'auto' (never triggers a blocking compile) */
 function updateBlaAuto(){
   if (blaMode !== 'auto') return;
@@ -2332,6 +2626,12 @@ function setPowerUniforms(x){
   gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
   gl.uniform1f(x.farSwitch, farHandOff);
   gl.uniform1i(x.jacUse, jacBits()); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
+  gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
+  gl.uniform1f(x.rayHit, surfMul / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * surfMul);   // both as multiples of uPixAng, which is a display pixel ÷ detail
+  gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? surfMul / rayFloorDiv : 0);
+  { const cl = Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above
+    for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
+    gl.uniform1f(x.rayLine, rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
@@ -3292,8 +3592,8 @@ api.guideStudy = (n, samples) => {
 api.stats = (n, guideSamples) => {
   if (!deepProg || !curOrbit) return null;
   n = n || 128;
-  const v = ensureVariant(blaEnabled, true);
-  if (!v) return { error: variantErr[vKey(blaEnabled, true)] };
+  const v = rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
+  if (!v) return { error: variantErr[rayUse ? rKey(true) : vKey(blaEnabled, true)] };
   const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, n, n, 0, gl.RGBA, gl.FLOAT, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -3356,7 +3656,7 @@ api.stats = (n, guideSamples) => {
 let marchProbeFbo = null, marchProbeTex = null, marchProbeN = 0;
 api.marchProbe = (n, pixH) => {
   if (!deepProg || !curOrbit) return null;
-  const v = ensureVariant(blaEnabled, true);
+  const v = rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
   if (!v) return null;
   n = n || 128;
   if (marchProbeN !== n) {
@@ -3475,6 +3775,25 @@ api.setJacobian = (bits, floor, now)=>{ jacUse = Math.max(0, Math.min(7, bits|0)
 api.jacobianState = ()=>{ if (!jacBits()) return 'off';
   const kb = vKey(blaEnabled, false, true), kp = vKey(false, false, true);
   return variants[kb] || variants[kp] ? 'on' : (variants[kb] === null || variants[kp] === null) ? 'failed' : 'building'; };
+/* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep): bits 0 = off (the page) · 1 = the march steps by
+   the ray estimate · 2 = and tests a hit by it · 4 = orbits resume along the ray. opt: factor (the
+   step as a share of the estimate, default 1), hit (the hit level is a display pixel ÷ this,
+   default 64), tol (how far, in display pixels, a resumed orbit's point may stand from the true
+   one, default 0.05), floor (with bit 2 off: also a hit once the ray estimate is under a display
+   pixel ÷ this; 0 = none, the default), line (THE LINE AGAINST THE BALL - grep: the longer step it
+   allows is taken, with this multiple of Q as the allowance for the path's bend; 0 = off, the default). A picture switches when the variant has built (background); `now` builds it
+   at once, blocking - for a tool that must not measure the old one. */
+api.setRayMarch = (bits, opt, now)=>{ rayUse = Math.max(0, Math.min(15, bits|0));   // bit 8 (a measuring mode): carry the jet, march as the page does
+  if (opt) { if (opt.factor > 0) rayFactor = +opt.factor; if (opt.hit > 0) rayHitDiv = +opt.hit; if (opt.tol >= 0) rayTol = +opt.tol; if (opt.floor >= 0) rayFloorDiv = +opt.floor; if (opt.line >= 0) rayLine = +opt.line; }
+  if (now && rayUse && deepProg) ensureRayVariant(false);
+  accumReset = true; };
+api.rayMarchState = ()=>{ if (!rayUse) return 'off';
+  const v = variants[rKey(false)];
+  return v ? 'on' : v === null ? 'failed' : 'building'; };
+api.rayMarch = ()=>({ bits: rayUse, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine });
+/* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped */
+api.setRayDefs = (list)=>{ rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
+  for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; } };
 /* pointwise read on the centre ray at t (needs setJacobian != 0): the page's de, the true-gradient
    estimate, and the packed unit gradient (octPack) - for a referee. null when it cannot be drawn. */
 api.jacProbeAt = (tval)=>{

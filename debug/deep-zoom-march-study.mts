@@ -18,6 +18,16 @@
  *   --rebase   page (default) | origin: the kernel's rebase (grep REBASE TO THE ORIGIN in core.js)
  *   --jac      0 (default) .. 7: the true-gradient estimate's bits (grep TRUE-GRADIENT ESTIMATE in core.js):
  *              1 = step by the smaller estimate, 2 = normal from the gradient, 4 = hit test by the smaller
+ *   --ray      extra settings that march by THE RAY ESTIMATE (grep it in core.js), a list of
+ *              bits:factor[:hit[:tol[:floor]]] - bits 1 = step by it, 2 = hit test by it, 4 = orbits
+ *              resumed along the ray; factor = the step as a share of the estimate; hit = the hit
+ *              level is a display pixel / this (64); tol = pixels a resumed orbit may be off (0.05);
+ *              floor = with the page's hit test, also a hit under a display pixel / this (0 = none).
+ *              A sixth field, line = THE LINE AGAINST THE BALL's allowance as a multiple of Q (0 = off).
+ *              e.g. --ray 3:1,7:1. Each gets two more columns, against the SAME rule marched at
+ *              factor 0.25 with whole orbits: passed = ends more than 2 display pixels of depth
+ *              behind it (or misses where it hits), early = more than 2 in front.
+ *   --raybudget  the step budget of the ray settings                             (default 4096)
  *   --json     where the machine-readable result goes       (default debug/scratch/march-study.json)
  *
  * HOW IT MEASURES. Everything happens inside the page, in one task per view: set the view, run one
@@ -32,7 +42,9 @@
  *            wrong and rough.
  *   wrong    of the settled rays, those on ANOTHER SURFACE than the careful march's: both hit but
  *            more than --cones pixel cones apart, or one hit and the other did not. A smaller step
- *            is what cures it.
+ *            is what cures it. `behind` (JSON, and printed for the ray settings) is the part of it
+ *            that lies deeper than the careful ray, or missed what that hit: a surface stepped
+ *            through. The rest stopped in front of it.
  *   rough    settled rays on the right surface that landed 0.5 to --cones pixel cones off it: the scatter
  *            of "wherever the last step fell". Shading from depth draws it as terraces; Hit refine
  *            is what cures it. (The studies of 2026-10-08 compared shaded pixels, which counts
@@ -80,12 +92,15 @@ const REACH = Number(arg('reach', '1')), BUDGET = Number(arg('budget', '0'));
 const [refStep, refRefine, refBudget] = nums(arg('ref', '0.1,8,16384'));
 const WHICH = arg('views', 'all'), DETAIL = arg('detail', '1'), ORIGIN = arg('rebase', 'page') === 'origin', JAC = Number(arg('jac', '0'));
 const JSON_OUT = path.resolve(ROOT, arg('json', 'debug/scratch/march-study.json'));
+const RAY = arg('ray', ''), RAY_BUDGET = Number(arg('raybudget', '4096'));
 
-interface Setting { step: number; refine: number; reach: number; budget?: number; farRelax?: number; saved?: boolean }
+interface Setting { step: number; refine: number; reach: number; budget?: number; farRelax?: number; saved?: boolean; ray?: number; hitDiv?: number; tol?: number; floor?: number; line?: number }
 interface Target { label: string; view?: unknown; tau?: number; detail: number; saved?: Setting }
 
 const grid: Setting[] = [];
 for (const step of nums(arg('steps', '0.85,0.7,0.5,0.35,0.2,0.1'))) for (const refine of nums(arg('refine', '0,3'))) grid.push({ step, refine, reach: REACH, ...(BUDGET ? { budget: BUDGET } : {}) });
+for (const item of RAY ? RAY.split(',') : []) { const [bits, factor, hit, tol, floor, line] = item.split(':').map(Number);
+    grid.push({ step: factor || 1, refine: 0, reach: 2, budget: RAY_BUDGET, ray: bits, hitDiv: hit || 64, tol: tol === undefined || Number.isNaN(tol) ? 0.05 : tol, floor: floor || 0, line: line || 0 }); }
 
 let flight: { frames: Array<{ t: number }> } | null = null;
 if (WHICH !== 'places') {
@@ -114,7 +129,8 @@ function study(a: any): any {
         w.__setReach(s.reach);
         if (s.budget) w.__setMarch({ maxSteps: s.budget });
         if (s.farRelax !== undefined) w.__setMarch({ farRelax: s.farRelax });
-        w.__setStepRelax(s.step); w.__setHitRefine(s.refine);
+        w.__setStepRelax(s.ray ? 0 : s.step); w.__setHitRefine(s.refine);
+        w.__setRayMarch(s.ray || 0, s.ray ? { factor: s.step, hit: s.hitDiv, tol: s.tol, floor: s.floor || 0, line: s.line || 0 } : undefined, true);
         const t = performance.now(), px = w.__marchProbe(a.rays, s.own ? a.rays : a.display);
         return { px, ms: performance.now() - t, budget: w.__march.maxSteps };
     };
@@ -137,20 +153,36 @@ function study(a: any): any {
         const e = Math.abs((Math.pow(2, r.px[i * 4] - q.px[i * 4]) - 1) / pixAng);
         return e > a.cones ? 2 : e > 0.5 ? 1 : 0;
     };
+    /* of two rays on different surfaces: +1 when r lies BEHIND q (deeper, or r missed what q hit), -1 in front */
+    const side = (r: any, q: any, i: number) => {
+        const kr = kindOf(r.px, i), kq = kindOf(q.px, i), hr = kr === 1 || kr === 2, hq = kq === 1 || kq === 2;
+        return hr !== hq ? (hq ? 1 : -1) : r.px[i * 4] > q.px[i * 4] ? 1 : -1;
+    };
     const careful = { step: a.ref[0], refine: a.ref[1], reach: 2, budget: a.ref[2] };
     const ref = run(careful), ref2 = run({ step: a.ref[0] / 2, refine: a.ref[1] + 2, reach: 2, budget: a.ref[2] * 2 });
     const settled = new Uint8Array(N); let nSettled = 0;
     for (let i = 0; i < N; i++) if (apart(ref, ref2, i) < 2) { settled[i] = 1; nSettled++; }
+    /* the ray settings' own truth: the ray rule at a quarter of the estimate, whole orbits, per hit level */
+    const rayRef: any = {};
     const settings = a.settings.map((s: any) => {
-        const r = run(s); let wrong = 0, rough = 0;
-        for (let i = 0; i < N; i++) if (settled[i]) { const d = apart(r, ref, i); if (d === 2) wrong++; else if (d === 1) rough++; }
-        return { ...s, budget: r.budget, wrong: pct(wrong, nSettled), rough: pct(rough, nSettled), ...cost(r) };
+        const r = run(s); let wrong = 0, rough = 0, behind = 0;
+        for (let i = 0; i < N; i++) if (settled[i]) { const d = apart(r, ref, i); if (d === 2) { wrong++; if (side(r, ref, i) > 0) behind++; } else if (d === 1) rough++; }
+        const row: any = { ...s, budget: r.budget, wrong: pct(wrong, nSettled), behind: pct(behind, nSettled), rough: pct(rough, nSettled), ...cost(r) };
+        if (s.ray) {
+            const key = ((s.ray & 2) ? 'r' + s.hitDiv : 's' + (s.floor || 0));
+            const q = rayRef[key] || (rayRef[key] = run({ step: 0.25, refine: 0, reach: 2, budget: s.budget * 4, ray: (s.ray & 2) ? 3 : 1, hitDiv: s.hitDiv, tol: 0, floor: s.floor || 0 }));
+            let passed = 0, early = 0; const px1 = Math.tan(0.55) / a.display;
+            for (let i = 0; i < N; i++) { const kr = kindOf(r.px, i), kq = kindOf(q.px, i), hr = kr === 1 || kr === 2, hq = kq === 1 || kq === 2;
+                if (hq && !hr) passed++; else if (hr && hq) { const e = (Math.pow(2, r.px[i * 4] - q.px[i * 4]) - 1) / px1; if (e > 2) passed++; else if (e < -2) early++; } }
+            row.passed = pct(passed, N); row.early = pct(early, N);
+        }
+        return row;
     });
     /* is the probe's march the picture's? The same rays through the picture's own draw (its G-buffer), one setting */
     const own = run({ step: 0.5, refine: 3, reach: 1, own: true }).px, picture = w.__readGbuf(a.rays);
     let unlike = 0;
     for (let i = 0; i < N; i++) if (own[i * 4] !== picture[i * 4] || kindOf(own, i) !== Math.floor(picture[i * 4 + 2] / 256) % 4) unlike++;
-    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
+    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0); w.__setRayMarch(0);
     return { unlike, depth: tel.depth, power: tel.power, iters: tel.iters, mode: tel.mode,
         ref: { ...careful, ...cost(ref), unsettled: pct(N - nSettled, N) }, settings, ms: performance.now() - t0 };
 }
@@ -187,7 +219,8 @@ for (const t of chosen) {
     console.log('   step refine reach  wrong %  rough %  ran out %   steps   work   x cost    ms');
     const base = r.settings[0].work;
     for (const s of r.settings) {
-        console.log(pad(s.step, 7) + pad(s.refine, 7) + pad(s.reach, 6) + pad(s.wrong.toFixed(2), 9) + pad(s.rough.toFixed(2), 9) + pad(s.ranOut.toFixed(2), 11) + pad(s.steps, 8) + pad(s.work, 7) + pad((s.work / base).toFixed(2), 9) + pad(s.ms.toFixed(0), 6) + (s.saved ? '   <- as saved' : ''));
+        console.log(pad(s.step, 7) + pad(s.refine, 7) + pad(s.reach, 6) + pad(s.wrong.toFixed(2), 9) + pad(s.rough.toFixed(2), 9) + pad(s.ranOut.toFixed(2), 11) + pad(s.steps, 8) + pad(s.work, 7) + pad((s.work / base).toFixed(2), 9) + pad(s.ms.toFixed(0), 6) + (s.saved ? '   <- as saved' : '')
+            + (s.ray ? `   <- ray ${s.ray}, hit 1/${s.hitDiv} px, tol ${s.tol}, floor ${s.floor ? '1/' + s.floor + ' px' : 'none'}, line ${s.line || 'off'}: of wrong, behind ${s.behind.toFixed(2)} %; against its own careful march passed ${s.passed.toFixed(2)} %, early ${s.early.toFixed(2)} %` : ''));
         delete s.ms;
     }
     delete r.ref.ms; delete r.ms; delete r.unlike;

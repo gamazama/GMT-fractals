@@ -45,7 +45,7 @@ export type DzInvalidation = 'O' | 'A' | 'C' | '-';
 /** The pushes of `looseParams.ts`. `look` rows also name the field of `api.setLook`. */
 export type DzPushGroup =
     | 'power' | 'phase' | 'iters' | 'autoIters'
-    | 'frame' | 'detail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'jacobian' | 'accum'
+    | 'frame' | 'detail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'jacobian' | 'rayMarch' | 'accum'
     | 'bla' | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
 
@@ -104,6 +104,7 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     { feature: 'dzQuality', key: 'hitLanding', cls: 'A', group: 'land', read: (api) => api.dz.settings().land },
     { feature: 'dzQuality', key: 'hitRefine', cls: 'A', group: 'hitRefine', read: (api) => api.marchLevers().hitRefine },
     { feature: 'dzQuality', key: 'trueGradient', cls: 'A', group: 'jacobian', read: (api) => (api.marchLevers().jacobian & 1) !== 0 },
+    { feature: 'dzQuality', key: 'rayMarch', cls: 'A', group: 'rayMarch', read: (api) => api.rayMarch().bits !== 0 },
     { feature: 'dzQuality', key: 'accumulate', cls: 'A', group: 'accum', read: (api) => api.dz.settings().accum },
     { feature: 'dzQuality', key: 'actualPixels', cls: 'A', group: null, why: 'the module has no setter for its 1:1 view, and the shell has no centring style for it yet' },
     { feature: 'dzQuality', key: 'bla', cls: 'C', group: 'bla', read: (api) => indexIn(BLA_OPTIONS, api.blaMode()) },
