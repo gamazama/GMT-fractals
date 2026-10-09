@@ -99,10 +99,12 @@
  *   EVENTS (`on(type, fn)`) in stage 1:
  *     `contextLost`       live, from the module's context-loss option.
  *     `error`             live for a failed deep compile (`fatal: true`).
- *     `compile`           live for the deep shader (`what: 'deep'`) and for the ray march's shader
- *                         (`what: 'variant'`: `compiling` for the 20 or so seconds it builds while the
- *                         page's march is drawn, then `ready`, or `failed`); BLA compiles are not visible
- *                         until M5.
+ *     `compile`           live for the deep shader (`what: 'deep'`) and for the two shaders built
+ *                         later, in the background (`what: 'variant'`, named by `variant`): the ray
+ *                         march's (`compiling` for the 20 or so seconds it builds while the page's
+ *                         march is drawn, then `ready`, or `failed`) and the Mandelbox's (about 5 s
+ *                         from the first switch to it; its plain picture is drawn meanwhile). BLA
+ *                         compiles are not visible until M5.
  *     `recordingChanged`  live, found by comparing telemetry samples, so up to 125 ms late.
  *     `progress`          live but read off the module's own status line; `text` is always set,
  *                         the numbers when they can be parsed. Events from the module at M3.
@@ -265,6 +267,8 @@ export type DzParams = Partial<Record<DzParamId, DzParamValue>>;
 export type DzCompileState = {
     state: 'compiling' | 'ready' | 'failed';
     what: 'deep' | 'bla' | 'variant';
+    /** With `what: 'variant'`: which one. Absent means the ray march's (the only one until 2026-10-09). */
+    variant?: 'rayMarch' | 'mandelbox';
     error?: string;
 };
 

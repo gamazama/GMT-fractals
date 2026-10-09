@@ -15,6 +15,7 @@
  */
 import type { DzView } from '../host/DeepZoomHost';
 import type { DzLocationLook } from '../locations';
+import type { DzFormulaChoice } from '../features/formula';
 
 export interface Starter {
     name: string;
@@ -27,6 +28,9 @@ export interface Starter {
     startDepth: number;
     /** The look the place was saved with. Absent: the card keeps the current light and colour. */
     look?: DzLocationLook;
+    /** Which formula the view is of, for a card without a `look`. Absent: the Mandelbulb. The
+     *  Mandelbox's cards are in `data/boxStarters.ts`, not here (see that file's header for why). */
+    formula?: DzFormulaChoice;
 }
 
 export const STARTERS: Starter[] = [

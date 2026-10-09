@@ -6,6 +6,21 @@
  * The typed product surface is index.ts; import from there, not from here.
  */
 
+/** The Mandelbox's parameters (GMT's `AmazingBox`; grep `THE FORMULA SEAM` in core.js). Each is optional and
+ *  keeps its last value: scale 2, minR 0.5, fold 1, fixedR 1, no rotation at the start. */
+export interface DeepZoomBoxParams {
+    /** May be NEGATIVE. |scale| is held at or above 1.02 (at 1 nothing escapes) and at or below 8. */
+    scale?: number;
+    /** Min radius of the sphere fold. Held at or above 3.2e-5 (GMT floors its square at 1e-9). */
+    minR?: number;
+    /** Folding limit of the box fold. */
+    fold?: number;
+    /** Fixed radius of the sphere fold. Held at or above `minR`. */
+    fixedR?: number;
+    /** Pre-rotation about x, y, z in radians, applied in that order every iteration. */
+    rot?: [number, number, number];
+}
+
 export interface DeepZoomCoreOptions {
     /** Default true. True is the page's `?embed=1`: its own panels never open and stopping a
      *  recording keeps the path in memory instead of downloading it. */
@@ -64,11 +79,24 @@ export interface DeepZoomCoreOptions {
      *  1e-3 the f32 march's hits are noise; the shell passes 0.5. Clamped to 1e-3 .. 12.
      *  `api.setFarHandOff` changes it later. */
     farHandOff?: number;
+    /** Default false (the page). True: while the iteration count is too low for the camera's own orbit
+     *  to escape, the distance at the camera keeps its last value instead of reading 0, and the first
+     *  real one is taken at once instead of eased towards over seconds - a still started meanwhile
+     *  otherwise shows a faint second picture (grep `HOLD THE ESTIMATE` in core.js). The Mandelbox
+     *  does this whatever the option says. */
+    holdEstimate?: boolean;
     /** Default false (the page's march). True: the renderer starts with THE RAY MARCH on (grep `THE RAY
      *  ESTIMATE` in core.js) as the shell uses it - steps by the ray estimate and the line rule, orbits
      *  resumed along the ray, and iterations as a margin (the detail setting applies as ever). Its shader builds in the background (about 20 s; telemetry `rayMarch`
      *  says `building`), the page's march is drawn meanwhile. `api.setRayMarch` changes it later. */
     rayMarch?: boolean;
+    /** Default 'mandelbulb' (the page). 'mandelbox': start on the Mandelbox (grep `THE FORMULA SEAM` in
+     *  core.js); its deep shader variant starts to build at once, beside the bulb's. The box draws with the
+     *  page's march whatever `rayMarch`, BLA or the true-gradient settings ask for - those stay as asked
+     *  and apply again when the bulb is selected. `api.setFormula` changes it later. */
+    formula?: 'mandelbulb' | 'mandelbox';
+    /** The box's parameters from the start (they are kept while the bulb is drawn). */
+    formulaParams?: DeepZoomBoxParams;
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).
      *  Nothing is restored: dispose and mount a fresh canvas. */
     onContextLost?: () => void;

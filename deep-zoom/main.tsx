@@ -58,10 +58,11 @@ import { hud } from '../engine/plugins/Hud';
 import { installModulation } from '../engine/animation/modulationTick';
 import { startMilestones } from './milestones';
 import { installLocations } from './locations';
+import { installBoxScaleRule } from './boxScale';
 import { registerDeepZoomHotkeys } from './hotkeys';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LocationsPanel } from './components/LocationsPanel';
-import { KeptPlaces, StarterDives } from './components/StarterDives';
+import { BoxStarters, KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShare, loadShareFromUrl, sceneCanvas } from './share';
@@ -176,9 +177,12 @@ try {
     // Locations menu), the jump undo provider, and this app's keys. The two widgets read
     // the store, so they are registered here and not in registerFeatures.ts.
     installLocations();
+    // The Mandelbox's Scale never rests inside the band the renderer cannot draw (deep-zoom/boxScale.ts).
+    installBoxScaleRule();
     registerDeepZoomHotkeys();
     componentRegistry.register('dz-locations', LocationsPanel);
     componentRegistry.register('dz-starters', StarterDives);
+    componentRegistry.register('dz-box-starters', BoxStarters);
     componentRegistry.register('dz-places', KeptPlaces);
     componentRegistry.register('dz-location-text', LocationText);
 

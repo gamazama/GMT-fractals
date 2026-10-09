@@ -10,6 +10,8 @@
  *     (the owner, 2026-10-09: "the 20s switch on is fine except it needs some indication") - the
  *     picture is the page's march until it goes; and `ray march failed` if it could not be built;
  *   - the depth, compact: `6.40e-53`. Depth is the camera's distance to the surface.
+ *   - the same for the Mandelbox's shader, about 5 seconds from the first switch to that formula
+ *     (`mandelbox: building`; the box's plain picture is drawn until it is there);
  * It keeps the depth on screen whichever dock tab is open and when the picture's own overlays are
  * hidden. Package S2-5 extends it (state, live iterations, drawn size, still progress) and moves
  * `formatDepth` to `components/depthFormat.ts`, which is S2-5's file.
@@ -33,6 +35,8 @@ import { useDzNavigation } from '../navigationState';
 
 const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, about 20 seconds the first time. The picture is drawn with the older march until it is ready, then changes by itself.';
 const RAY_FAILED_TITLE = 'The ray march\'s shader could not be built on this machine. The older march is drawn instead; Step size applies again.';
+const BOX_BUILDING_TITLE = 'The Mandelbox\'s renderer is being built, a few seconds the first time. Its plain single-precision picture is drawn until it is ready, then changes by itself.';
+const BOX_FAILED_TITLE = 'The Mandelbox\'s renderer could not be built on this machine. Its plain single-precision picture is drawn instead, which runs out of precision a few decades in.';
 const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';
 
 export const StatusChip: React.FC = () => {
@@ -44,10 +48,15 @@ export const StatusChip: React.FC = () => {
     // sample keeps the frozen page's keys). It starts to build seconds after the host mounts, so nothing is missed.
     const host = useHost();
     const [ray, setRay] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
+    const [box, setBox] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
     React.useEffect(() => {
         setRay('ready');
+        setBox('ready');
         if (!host) return undefined;
-        return host.on('compile', (e) => { if (e.what === 'variant') setRay(e.state); });
+        return host.on('compile', (e) => {
+            if (e.what !== 'variant') return;
+            if (e.variant === 'mandelbox') setBox(e.state); else setRay(e.state);
+        });
     }, [host]);
     const size = useDzTelemetry((t) => `${t.frameW} x ${t.frameH}`);
     // The still's progress, in deep mode only (the f32 picture, shown while the deep shader compiles, does not accumulate).
@@ -73,6 +82,16 @@ export const StatusChip: React.FC = () => {
             {ray === 'failed' && (
                 <span data-dz-status-ray="failed" title={RAY_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
                     ray march failed
+                </span>
+            )}
+            {box === 'compiling' && (
+                <span data-dz-status-box="building" title={BOX_BUILDING_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
+                    mandelbox: building
+                </span>
+            )}
+            {box === 'failed' && (
+                <span data-dz-status-box="failed" title={BOX_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
+                    mandelbox failed
                 </span>
             )}
             <span data-dz-status-depth title="Depth: distance from the camera to the surface" className="text-fg-secondary tabular-nums">

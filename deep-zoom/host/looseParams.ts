@@ -24,6 +24,10 @@
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
  *   - An id with no row, or a row with `group: null`, is not pushed. Unknown ids are named once.
+ *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind and the box's seven numbers, and
+ *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
+ *     formula IN FORCE (160 for the bulb, 500 for the box), so a box place's 300 iterations sent
+ *     ahead of its formula would arrive as 160.
  *
  * @invariant A value reaches the module through the setter its row names, converted with the
  *   feature's own converter, and an unchanged value is not sent again - proven by:
@@ -40,6 +44,7 @@ import {
 import { channelToRenderer, compareToRenderer } from '../features/inspect';
 import { shadingToRenderer, lightTypeToRenderer } from '../features/light';
 import { colourToRenderer } from '../features/colour';
+import { formulaToRenderer, validBoxScale } from '../features/formula';
 
 export interface ParamPusher {
     /** Store values by id. Unchanged values are dropped; each changed group is pushed once. */
@@ -82,6 +87,15 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
 
     /** One push per group; `look` is called per field. */
     const PUSH: Record<Exclude<DzPushGroup, 'look'>, () => void> = {
+        // The store keeps the scale out of the band the renderer cannot draw (deep-zoom/boxScale.ts); `validBoxScale`
+        // here is for a value that did not come through the store (a host caller, a check).
+        formula: () => api.setFormula(formulaToRenderer(num('dzFormula', 'kind')), {
+            scale: validBoxScale(num('dzFormula', 'boxScale')),
+            minR: num('dzFormula', 'boxMinRadius'),
+            fold: num('dzFormula', 'boxFold'),
+            fixedR: num('dzFormula', 'boxFixedRadius'),
+            rot: [num('dzFormula', 'boxRotX'), num('dzFormula', 'boxRotY'), num('dzFormula', 'boxRotZ')],
+        }),
         power: () => api.setPower(num('dzFormula', 'power')),
         phase: () => api.setPhase(num('dzFormula', 'phaseTheta'), num('dzFormula', 'phasePhi')),
         iters: () => api.setIters(num('dzFormula', 'iterations')),
@@ -130,6 +144,7 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
                 if (row.group === 'look') { lookFields[row.look as string] = value; anyLook = true; }
                 else groups.add(row.group);
             }
+            if (groups.delete('formula')) PUSH.formula();          // first: see THE FORMULA GOES FIRST
             for (const group of groups) PUSH[group]();
             if (anyLook) api.setLook(lookFields);
         },

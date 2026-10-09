@@ -108,7 +108,11 @@
  *   that reads one bare would fail against the harness. Not swept.
  */
 import { createDeepZoom as createCore } from './core.js';
-import type { DeepZoomCoreInstance, DeepZoomCoreOptions } from './core.js';
+import type { DeepZoomBoxParams, DeepZoomCoreInstance, DeepZoomCoreOptions } from './core.js';
+
+export type { DeepZoomBoxParams };
+/** Which formula the renderer draws (grep `THE FORMULA SEAM` in core.js). */
+export type DzFormulaKind = 'mandelbulb' | 'mandelbox';
 
 /** A camera view. Exactly the fields a recorded keyframe has, so a bookmark and a path frame are
  *  interchangeable. (Shapes copied from deep-zoom-prototype/bridge.ts, the iframe prototype's seam.) */
@@ -311,9 +315,40 @@ export interface DeepZoomApi {
     setPower(n: number): void;
     /** Radians, absolute, always both. Rebuilds the reference orbit. */
     setPhase(theta: number, phi: number): void;
-    /** Clamped 4..160. Rebuilds the reference orbit. With auto iterations on this is the floor:
-     *  the module raises the count with depth and never lowers it. (Added 2026-10-08.) */
+    /** Clamped 4..160 (4..500 while the box is drawn). Rebuilds the reference orbit. With auto
+     *  iterations on this is the floor: the module raises the count with depth and never lowers it.
+     *  (Added 2026-10-08.) */
     setIters(n: number): void;
+    /** THE FORMULA SEAM (added 2026-10-09; grep the name in core.js). 'mandelbulb' is the page;
+     *  'mandelbox' is GMT's AmazingBox in Mandelbrot mode, with the parameters given (each optional,
+     *  each kept from call to call, also while the bulb is drawn). The camera and every setting stay;
+     *  the reference orbit and the still restart. Selecting the box for the first time starts its
+     *  shader variant building in the background (4.4 s measured, cold): its plain single-precision picture
+     *  is drawn until then, `dz.telemetry().ready` is false and `formulaState()` says 'building'.
+     *  The box always draws with the page's march: the ray march, BLA, the true-gradient estimate
+     *  and the rebase to the origin are the bulb's, stay as they were asked, and apply again when
+     *  the bulb is selected (`rayMarch().bits` is the ask; `rayMarchState()` says 'off' meanwhile).
+     *  Selecting the box raises the iteration count to the least that draws it; with auto iterations
+     *  the box then counts by its own rule, up to 500 (grep `ITERATIONS AS A MARGIN` in core.js).
+     *  The formula is NOT part of a view (`DzView` is unchanged): a host that saves a place saves
+     *  `formula()` beside it.
+     *  @invariant the box's orbit on the CPU - what `dz.sense`, `dz.freeDistance`, `dz.estimateAt`
+     *  and the probes' referee run - equals an exact fixed-point orbit of the same point, fold
+     *  crossings included - proven by: npm run check:deep-zoom-box-orbit ("twin = exact ..." lines).
+     *  Falsified 2026-10-09: the 19 breaks in that file's header.
+     *  @invariant the GPU kernel (BOX_KERNEL) computes what that CPU orbit computes, and what a
+     *  fixed-point orbit of the explicit point gives: from outside and at depth, both signs of scale,
+     *  and with the camera 3e-51 from a fold plane, where the reference's distance to that plane must
+     *  reach the shader as mantissa and exponent - proven by: npm run smoke:deep-zoom-direct ("mandelbox,
+     *  ... GPU vs twin: 0 over 1e-3 ... GPU vs direct: 0 over 1e-3 ... PASS", five lines). Falsified
+     *  2026-10-09: three breaks, each exit 1 - one case of the box fold in the shader (the three deep
+     *  lines FAIL), the sphere fold's shell case (two FAIL), and the fold distances uploaded as plain
+     *  floats (only the fold-plane line FAILS). The record is in that script's header. */
+    setFormula(kind: DzFormulaKind, params?: DeepZoomBoxParams): void;
+    /** What is selected, and the box's parameters as they are held (after the limits). */
+    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number] };
+    /** Whether the deep shader of the SELECTED formula is there. */
+    formulaState(): 'building' | 'on' | 'failed';
     setAutoIters(on: boolean): void;
     autoIters(): boolean;
     /** 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth / 4 the hit orbit's own gradient (added

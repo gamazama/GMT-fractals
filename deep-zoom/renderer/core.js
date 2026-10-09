@@ -271,6 +271,26 @@ function dzDispose() {
    (grep "HOST HANDLE"). Its own chrome is hidden by CSS (body.embed), its panels never open, and
    stopping a recording keeps the path in memory instead of downloading it — the host owns saving. */
 const EMBED = options.embed !== false;
+/* HOLD THE ESTIMATE (options.holdEstimate, 2026-10-09; off = the page). The distance at the camera is read off the
+   camera's own orbit, where that passes radius 2 (grep "distance probe"). An orbit that has NOT escaped within
+   the iteration count is read at its last point instead, as 0.5 R ln R / DR: a number that means nothing, and 0
+   whenever that last point lies inside radius 1. It takes a count the page's own rule does not mend (32 + 1.35 a
+   decade restores a count dropped at power 8 in the same frame; power 2 needs 3.7 a decade) - a low power, or
+   auto iterations off with a low count. Then:
+     - under the ray march the margin rule raises the count 32 a frame until the orbit escapes (ITERATIONS AS A
+       MARGIN), and the true distance, being LARGER than the 0 it replaces, is eased towards at 2 % a frame, over
+       seconds. A still that starts in that window is drawn with the depth scale and the far relax drifting
+       under its samples: a faint second picture. Measured at the owner's power-2 place (deep-zoom/data/places.ts,
+       "Power 2 · 5e-20"), auto iterations off at a count of 40 (distance reads 0), then on: 36.9 % of the
+       pixels of the still that starts then are more than 8 levels off a still started after it had settled
+       (twice; 2.4 % in a run where the still happened to start later). With the option: 0.01 % and 0.43 %, which
+       is what two settled stills of that view differ by (0.0 to 0.47 %).
+     - without the ray march the page's rule never raises a count from a distance of 0: the view stays at depth 0
+       and 40 iterations for good. With the option the distance holds and the rule raises the count again.
+   With the option the last estimate is KEPT while there is none, and the first real one is taken at once, not
+   eased towards (estOwed). The Mandelbox does this whatever the option says (grep boxCamEstimate): it was found
+   there. The tool that measures it: debug/scratch/formula-study/bulb-estimate-fault.mjs (git-ignored). */
+const dzHoldEstimate = options.holdEstimate === true;
 const dzFarLook = options.farLook === true ? 1 : 0;           // true: far ground takes the palette and the near albedo (grep FAR LOOK); the page: mid grey
 if (EMBED) dzScaffold.classList.add('embed');
 /* canvas: the createDeepZoom argument (the page looked up #gl here) */
@@ -287,6 +307,125 @@ let phaseTheta = 0, phasePhi = 0;                // constant lobe-twist offsets 
 const binom = (n) => { const c=[]; let v=1; for (let k=1;k<=n;k++){ v=v*(n-k+1)/k; c.push(v);} return c; };  // [C(n,1)..C(n,n)]
 function binomPad(n){ const c = binom(n), a = new Float32Array(17); for (let k=0;k<c.length;k++) a[k]=c[k]; return a; }
 let binomN = binomPad(nPower), binomN1 = binomPad(nPower-1);   // for (1+u)^n and (1+u)^(n-1)
+
+/* ════════ THE MANDELBOX KERNEL (GLSL ES 3.00; the USE_BOX variant - grep THE FORMULA SEAM) ════════
+   Spliced into KERNEL_CORE in pertOrbit's place: with USE_BOX defined the shader holds this pertOrbit and
+   not the bulb's, and without it not one token of this is in the program.
+   It compiles in 4.4 s where the bulb's kernel takes 12 (RTX 5070 Ti, a cold cache): no trigonometry, no jet.
+   @invariant this kernel computes what boxOrbitJS computes, and what a fixed-point orbit of the explicit point
+   gives, also where the reference stands 3e-51 from a fold plane - proven by: npm run smoke:deep-zoom-direct
+   ("mandelbox, ... GPU vs twin: 0 over 1e-3 ... GPU vs direct: 0 over 1e-3 ... PASS", five lines: both signs of
+   scale, from outside, deep, and beside the plane x = L). Falsified 2026-10-09, three breaks, each exit 1: `-gh`
+   -> `d` in boxFoldD (the three deep lines FAIL), the shell / shell case of the sphere fold -> 0 (two FAIL), and
+   the fold distances uploaded as plain floats in buildBoxOrbit (ONLY the fold-plane line FAILS). The record is in
+   debug/deep-zoom-direct-check.mts.
+   MEASURED beyond that check, the same day, by debug/scratch/formula-study/gpu-box.mjs (git-ignored): 3,438 points
+   over 8 views, among them scale 2.566 with GMT's default pre-rotation (the check has no rotated view) - no escape
+   flag differs, none more than 1e-3 off, the worst 5.3e-4, medians 2e-7 to 5e-7 from outside and 3e-6 to 8e-6 at
+   depth, 95th percentiles under 6e-5 at depth. */
+const BOX_KERNEL = `
+/* ════════ THE MANDELBOX's δ KERNEL (the USE_BOX variant; api.setFormula) ════════
+   pertOrbit for GMT's AmazingBox: the same OrbitOut, so the march, the hit test, the normal taps and the
+   probes below read it as they read the bulb's. The step is boxOrbitJS's (grep it for the maths), with δ on
+   the bulb kernel's footing: three f32 mantissas D and ONE exponent e, δ = D·2^e. Every δ-linear quantity of a
+   step shares e - the fold's result E, Q with q = Q·2^e = 2 W·E·2^e + |E·2^e|², and k' − k - so a step is
+   plain f32 arithmetic and e is handled once, on "+ δc".
+   THE REFERENCE'S DISTANCES to the fold surfaces (rows 2-5 of the orbit texture: grep buildBoxOrbit) are what
+   a crossing is decided by, and what a pixel that has crossed gets its step from. Each comes as a mantissa and
+   an exponent of its own and is brought onto e (boxOnE) - never as a plain float: at depth δ is 1e-50, and a
+   reference that stands 1e-40 from a fold plane must not read as standing ON it. Brought onto e, a distance
+   far larger than δ is capped at 2^120: it then only says "not crossed", which is all it is asked.
+   dr is the PIXEL'S OWN derivative, dr' = dr·k'·|scale| + 1, as drM·2^drE (renormalised when the mantissa
+   passes 2^20): the bulb's split into a reference part and a delta (Ddr / DR) is not needed, and OrbitOut.Ddr
+   carries the whole of it.
+   Not here, and not built with USE_BOX: BLA, the J twins, the jet and its checkpoints, the rebase to the
+   origin. The rebase is the page's: δ = z − Z0. */
+uniform vec4  uBoxA;             // scale · |scale| · the folding limit L · 2 L
+uniform vec4  uBoxB;             // minR² · fixedR² · fixedR² / minR² · the escape radius, squared
+uniform mat3  uBoxRot;           // the pre-rotation
+uniform int   uBoxHasRot;        // 0 = no pre-rotation: the matrix is not applied
+uniform float uBoxFar;           // how far from the camera the far-field march follows a ray (the bulb: 12)
+float boxOnE(vec2 g, float e) { return g.x * exp2(clamp(g.y - e, -160.0, 120.0)); }      // a distance (mantissa, exponent) as a mantissa on e
+/* one axis of the box fold. g = the reference's U − L (xy) and U + L (zw); d = the pixel's delta on this
+   axis, l2 = 2 L, both mantissas on e. Returns the folded delta, 2·(the clamp's difference) − d, on e. */
+float boxFoldD(vec4 g, float d, float e, float l2) {
+  float gh = boxOnE(g.xy, e), gl = boxOnE(g.zw, e), ph = gh + d, pl = gl + d;
+  int rr = g.x > 0.0 ? 1 : (g.z < 0.0 ? -1 : 0);              // the reference: past +L, past −L, between
+  int pr = ph > 0.0 ? 1 : (pl < 0.0 ? -1 : 0);                // the pixel
+  float cd;
+  if (rr == 0) cd = pr == 0 ? d : (pr == 1 ? -gh : -gl);
+  else if (rr == 1) cd = pr == 1 ? 0.0 : (pr == 0 ? ph : -l2);
+  else cd = pr == -1 ? 0.0 : (pr == 0 ? pl : l2);
+  return 2.0 * cd - d;
+}
+OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
+  vec3 C; float ec;
+  sclFromH3(dc, C, ec);                        // δc = C·2^ec, constant along the orbit
+  vec3 D = C; float e = ec;                    // δ  = D·2^e
+  float drM = 1.0, drE = 0.0;                  // dr = drM·2^drE
+  int m = 0, rebases = 0, it = 0;
+  bool escaped = false;
+  float trap = 1e30, escR2 = uBoxB.w;
+  float S = uBoxA.x, aS = uBoxA.y, m2 = uBoxB.x, F2 = uBoxB.y, kA = uBoxB.z;
+  vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
+  vec4 cT0 = T00;                              // (V, |V|) at the current reference index
+  for (int loop = 0; loop < 512; loop++) {
+    if (it >= maxIter) break;
+#ifdef USE_STATS
+    gWork++;
+#endif
+    vec4 tw = texelFetch(orbit, ivec2(m, 1), 0);             // W (xyz), |W|² (w)
+    vec4 gx = texelFetch(orbit, ivec2(m, 2), 0);             // per axis: U − L (m, e), U + L (m, e)
+    vec4 gy = texelFetch(orbit, ivec2(m, 3), 0);
+    vec4 gz = texelFetch(orbit, ivec2(m, 4), 0);
+    vec4 gs = texelFetch(orbit, ivec2(m, 5), 0);             // |W|² − minR² (m, e), |W|² − fixedR² (m, e)
+    float s = sclPow2(e), inv = exp2(clamp(-e, -160.0, 120.0));   // 2^e, and 2^−e for the three constants that are not δ-linear
+    if (uBoxHasRot == 1) D = uBoxRot * D;
+    float l2 = uBoxA.w * inv;
+    vec3 E = vec3(boxFoldD(gx, D.x, e, l2), boxFoldD(gy, D.y, e, l2), boxFoldD(gz, D.z, e, l2));
+    vec3 W = tw.xyz; float r2 = tw.w;
+    float Q = 2.0 * dot(W, E) + s * dot(E, E);               // the pixel's |w|² is r2 + Q·2^e
+    float r2p = r2 + s * Q;
+    float gm = boxOnE(gs.xy, e), gF = boxOnE(gs.zw, e), pm = gm + Q, pF = gF + Q;
+    int reg = gs.x < 0.0 ? 0 : (gs.z < 0.0 ? 1 : 2);         // the reference: inside minR, the inversion shell, outside fixedR
+    int pr = pm < 0.0 ? 0 : (pF < 0.0 ? 1 : 2);              // the pixel
+    float kp = pr == 0 ? kA : (pr == 1 ? F2 / r2p : 1.0);
+    float dk;                                                // k' − k, on e
+    if (reg == pr) dk = pr == 1 ? -F2 * Q / (r2 * r2p) : 0.0;
+    else if (reg == 0) dk = pr == 1 ? -F2 * pm / (r2p * m2) : (1.0 - kA) * inv;
+    else if (reg == 1) dk = pr == 0 ? F2 * gm / (m2 * r2) : gF / r2;
+    else dk = pr == 1 ? -pF / r2p : (kA - 1.0) * inv;
+    vec3 Dn = S * (kp * E + dk * W);
+    drM = drM * (kp * aS) + sclPow2(-drE);
+    if (drM > 1048576.0) { float adj = floor(log2(drM)); drM *= exp2(-adj); drE += adj; }
+    /* δ ← Δ + δc : align the two exponents once, renormalise once */
+    float en = e;
+    sclAdd(Dn, en, C, ec, D, e);
+    sclNorm(D, e);
+    m++; it++;
+    cT0 = texelFetch(orbit, ivec2(m, 0), 0);
+    vec3 dz = D * sclPow2(e);
+    vec3 zf = cT0.xyz + dz;
+    float z2 = dot(zf, zf);
+    trap = min(trap, z2);
+    if (z2 > uBoxB.w) { escaped = true; escR2 = z2; break; }
+    if (z2 < dot(dz, dz) || m >= orbitLen - 1) {             // Zhuoran rebase / reference exhausted
+      D = zf - T00.xyz; e = 0.0;
+      sclNorm(D, e);
+      m = 0; rebases++;
+      cT0 = T00;
+    }
+  }
+  vec3 zE = cT0.xyz + D * sclPow2(e);
+  float rF = length(zE);
+  vec2 drH = hdrReduce(vec2(drM, drE));
+  vec2 de = hdrMul(hdrFromFloat(rF - 1.0), hdrRecip(drH));  // GMT's estimate for this formula: (|z| − 1) / dr
+#ifdef USE_STATS
+  gOrbits++; gIters += it;
+#endif
+  return OrbitOut(sclToH3(D, e), vec2(0.0), drH, de, it, rebases, escaped, sqrt(trap), sqrt(escR2));
+}
+`;
 
 /* ════════ KERNEL CORE (GLSL ES 3.00) — VERBATIM from gpu-kernel.html ════════ */
 const KERNEL_CORE = `
@@ -630,6 +769,9 @@ void sclSinCosm1(float xM, float s, out float sM, out float cM) {
     cM = xM * xf * (-0.5 * (1.0 - x2 * 0.083333333 + x2 * x2 * 0.0027777778));
   }
 }
+#ifdef USE_BOX
+${BOX_KERNEL}
+#else
 OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec3 C; float ec;
   sclFromH3(dc, C, ec);                        // δc = C·2^ec, constant along the orbit
@@ -939,6 +1081,7 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
 #endif
 #endif
 }
+#endif
 `;
 
 /* ---------- shaders ---------- */
@@ -957,6 +1100,31 @@ uniform float uIters;
 uniform float uPrecRatio;
 uniform vec3  uLightDir;
 uniform vec2  uPhase;
+#ifdef USE_BOX
+/* THE FORMULA SEAM (grep): the f32 baseline of the Mandelbox - drawn while its deep variant compiles and
+   when the mode says f32. The map and the estimate of BOX_KERNEL on plain floats; it keeps the bulb's
+   function name so the march below is one text. Uniforms as in BOX_KERNEL. */
+uniform vec4  uBoxA;
+uniform vec4  uBoxB;
+uniform mat3  uBoxRot;
+uniform int   uBoxHasRot;
+uniform float uBoxFar;
+float deMandelbulb(vec3 pos){
+    vec3 z = pos; float dr = 1.0; float r2 = 0.0;
+    int N = int(uIters);
+    for (int i=0;i<512;i++){
+        if (i>=N) break;
+        if (uBoxHasRot == 1) z = uBoxRot * z;
+        z = clamp(z, -uBoxA.z, uBoxA.z) * 2.0 - z;
+        float k = clamp(uBoxB.y / max(dot(z,z), 1e-30), 1.0, uBoxB.z);
+        z = z * (k * uBoxA.x) + pos;
+        dr = dr * k * uBoxA.y + 1.0;
+        r2 = dot(z,z);
+        if (r2 > uBoxB.w) break;
+    }
+    return (sqrt(r2) - 1.0) / dr;
+}
+#else
 float deMandelbulb(vec3 pos){
     vec3 z = pos; float dr = 1.0; float r = 0.0;
     int N = int(uIters);
@@ -974,6 +1142,7 @@ float deMandelbulb(vec3 pos){
     }
     return 0.5*log(max(r,1e-8))*r/max(dr,1e-20);
 }
+#endif
 vec3 normal(vec3 p, float e){
     vec2 k = vec2(1.,-1.);
     return normalize(
@@ -990,14 +1159,27 @@ void main(){
         vec3 p = ro + rd*t;
         d = deMandelbulb(p);
         float eps = max(1e-20, length(p)*uPrecRatio);
+#ifdef USE_BOX
+        /* the box is drawn with three times the bulb's iterations from outside (36 at scale 2), and its surface at
+           that count has detail far below what f32 holds: at the bulb's hit level the baseline is grain. A pixel's
+           own footprint is the level the far-field march uses, and it is clean. */
+        eps = max(eps, t * uFovScale / uRes.y);
+#endif
         if (d < eps){ hit=true; break; }
+#ifdef USE_BOX
+        if (t > uBoxFar) break;
+#else
         if (t > 12.0) break;
+#endif
         t += d*0.9;
     }
     vec3 col = vec3(0.02,0.03,0.05);
     if (hit){
         vec3 p = ro + rd*t;
         float eps = max(1e-20, length(p)*uPrecRatio);
+#ifdef USE_BOX
+        eps = max(eps, t * uFovScale / uRes.y);     // the normal's taps a pixel apart, as the hit level above
+#endif
         vec3 n = normal(p, eps*2.0);
         float diff = max(0.0, dot(n, uLightDir));
         float ao = 1.0 - float(steps)/512.0;
@@ -1089,6 +1271,46 @@ uniform sampler2D uGuideTex;     // per pixel, over the earlier samples: x = nea
    Falsified 2026-10-08: FAR_SWITCH pinned to 1e-3 in the shader -> those lines FAIL. */
 #define FAR_SWITCH (PICTURE_MARCH ? uFarSwitch : 1e-3)
 ${KERNEL_CORE}
+#ifdef USE_BOX
+/* THE FORMULA SEAM (grep): the far field's two plain-f32 functions for the Mandelbox - the map, the escape
+   radius and the estimate of BOX_KERNEL on plain floats, an iteration tested AFTER its step as the kernel
+   tests it. A ray is handed to them where the bulb's is (grep FAR HAND-OFF) and followed to uBoxFar. boxMu is
+   the smooth iteration count: past the escape radius an iteration multiplies |z| by |scale|, so the share of
+   the last one is log(|z| / R) / log |scale| (the bulb's log log |z| / log n belongs to a power map). */
+void boxStepF32(inout vec3 z, inout float dr, vec3 c) {
+    if (uBoxHasRot == 1) z = uBoxRot * z;
+    z = clamp(z, -uBoxA.z, uBoxA.z) * 2.0 - z;
+    float k = clamp(uBoxB.y / max(dot(z, z), 1e-30), 1.0, uBoxB.z);
+    z = z * (k * uBoxA.x) + c;
+    dr = dr * k * uBoxA.y + 1.0;
+}
+float boxMu(float iters, float r) { return iters + 1.0 - 0.5 * log(max(r * r / uBoxB.w, 1.0)) / log(uBoxA.y); }
+float deF32(vec3 pos){
+    vec3 z = pos; float dr = 1.0, r2 = 0.0;
+    int N = int(uIters);
+    for (int i = 0; i < 512; i++) {
+        if (i >= N) break;
+        boxStepF32(z, dr, pos);
+        r2 = dot(z, z);
+        if (r2 > uBoxB.w) break;
+    }
+    return (sqrt(r2) - 1.0) / dr;
+}
+float paletteF32(vec3 pos){
+    if (uColorMode == 0) return 0.0;
+    vec3 z = pos; float dr = 1.0, r2 = 0.0, trap2 = 1e30; int it = 0;
+    int N = int(uIters);
+    for (int i = 0; i < 512; i++) {
+        if (i >= N) break;
+        boxStepF32(z, dr, pos);
+        r2 = dot(z, z); it++;
+        trap2 = min(trap2, r2);
+        if (r2 > uBoxB.w) break;
+    }
+    if (uColorMode == 1) return boxMu(float(it), sqrt(r2)) * 0.18;
+    return log(max(sqrt(trap2), 1e-30)) * 1.5;
+}
+#else
 /* plain f32 DE for the far-field hybrid segment (t > T_SWITCH the features are
    f32-resolvable; identical to the baseline shader's deMandelbulb, power n + phase) */
 float deF32(vec3 pos){
@@ -1128,6 +1350,7 @@ float paletteF32(vec3 pos){
     if (uColorMode == 1) return (float(it) + 1.0 - log(log(max(r, 2.0001))) / log(uPower)) * 0.18;
     return log(max(sqrt(trap2), 1e-30)) * 1.5;
 }
+#endif
 vec3 normalF32(vec3 p, float e){
     vec2 k = vec2(1.,-1.);
     return normalize(
@@ -1154,7 +1377,11 @@ vec2 deAt(vec2 t, vec3 rd, int mi, out bool esc, out OrbitOut oo) {
 float paletteParam(OrbitOut co){
   if (uColorMode == 1) {
     /* fractional iteration count: iters + 1 − log(log|z|)/log n → smooth gradients, no banding */
+#ifdef USE_BOX
+    float mu = boxMu(float(co.iters), co.escR);
+#else
     float mu = float(co.iters) + 1.0 - log(log(max(co.escR, 2.0001))) / log(uPower);
+#endif
     return mu * 0.18;
   }
   /* min-|z| barely varies across a deep-zoom frame; log() spreads that compressed range
@@ -1463,7 +1690,11 @@ void main(){
                 }
                 farHit = true; break;
             }
+#ifdef USE_BOX
+            if (tF > uBoxFar) break;
+#else
             if (tF > 12.0) break;
+#endif
             tPrevF = tF;
             tF += d*0.9;
         }
@@ -1964,10 +2195,11 @@ const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }
    bits 5 (step by the ray estimate, orbits resumed along the ray), creep floor 1/256 px, the line rule at twice
    the bend measure. Without the option it is off - the page. */
 const rayOpt = options.rayMarch === true;
-let rayUse = rayOpt ? 5 : 0, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = rayOpt ? 256 : 0, rayLine = rayOpt ? 2 : 0, rayDetail = 0;
+let rayAsk = rayOpt ? 5 : 0;                     // what was asked for; rayUse is what is in force - 0 while the box is drawn (grep THE FORMULA SEAM)
+let rayUse = rayAsk, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = rayOpt ? 256 : 0, rayLine = rayOpt ? 2 : 0, rayDetail = 0;
 let jacUse = 0, jacFloor = 0;
 let jacNormal = false;                            // normal mode 4, "gradient" (api.setNormalMode): the J twins are needed for the normal alone
-const jacBits = () => rayUse ? 0 : jacUse | (jacNormal ? 2 : 0);   // what the shader is told, and whether a J twin is wanted at all (never beside the ray variant)
+const jacBits = () => rayUse || boxOn() ? 0 : jacUse | (jacNormal ? 2 : 0);   // what the shader is told, and whether a J twin is wanted at all (never beside the ray variant)
 const vKey = (b, t, j = !!jacBits()) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (j ? 'J' : '');
 const vSrc = (b, t, j = !!jacBits()) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
   + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (j ? '\n#define USE_JAC' : ''));
@@ -1989,6 +2221,7 @@ function ensureVariant(b, t, j = !!jacBits()){
    (while it is on, the true-gradient bits are not asked for). Keys PR (the picture) and PTR (with
    the work counters). A picture never waits for it: deepCtx() builds it in the background and
    draws with the ordinary variant until it is there. */
+const BOX_ITER_MAX = 500;                        // the box's ceiling (grep ITERATIONS AS A MARGIN); the kernel's loop runs 512 passes at most
 const RAY_ITER_REACH = 20.7, RAY_ITER_MAX = 400;   // ITERATIONS AS A MARGIN (grep): e^20.7 = 1e9, five decades beyond a 1/32-pixel hit level at 1080 rows
 const rKey = (t) => 'P' + (t ? 'T' : '') + 'R';
 let rayDefs = '';                                 // extra #defines for the ray variant (experiments: api.setRayDefs)
@@ -2007,6 +2240,43 @@ function ensureRayVariant(t){
   return variants[key];
 }
 
+/* THE MANDELBOX's variant (grep THE FORMULA SEAM): DEEP_FRAG with USE_BOX, never with BLA, the J twins or the
+   jet, whatever was asked for. Keys X (the picture) and XT (with the work counters). A picture never waits
+   for it: it builds in the background from the moment the box is selected, and until it is there the frame
+   draws the box's f32 baseline (deepNow() is null), as the page draws the bulb's while its deep shader
+   compiles. A probe or a study that asks for it before then builds it at once, blocking. */
+const xKey = (t) => 'X' + (t ? 'T' : '');
+const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX');
+function ensureBoxVariant(t){
+  const key = xKey(t);
+  if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();
+  if (variants[key] !== undefined) return variants[key];
+  try {
+    const t0 = performance.now();
+    const p = mkProg(xSrc(t));
+    const x = makeUD(p); x.hasBla = false;
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+  } catch(e){ variantErr[key] = String(e); variants[key] = null; }
+  return variants[key];
+}
+function kickBoxVariantAsync(){                  // without blocking; a no-op once started
+  const key = xKey(false);
+  if (variants[key] !== undefined || blaPending[key]) return;
+  const t0 = performance.now();
+  blaPending[key] = mkProgAsync(xSrc(false), (p, err) => {
+    blaPending[key] = null;
+    if (!p) { variantErr[key] = err; variants[key] = null; return; }
+    const x = makeUD(p); x.hasBla = false;
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+    accumReset = true;
+  });
+}
+/* the program a deep PICTURE of the active formula needs, or null while it is not built: what "the deep path
+   is ready" means from here on (for the bulb it is deepProg, as ever) */
+const deepNow = () => (boxOn() ? (variants[xKey(false)] ? variants[xKey(false)].p : null) : deepProg);
+
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad);
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
@@ -2019,6 +2289,30 @@ const U  = n => gl.getUniformLocation(prog,n);
 const u = { res:U('uRes'), camPos:U('uCamPos'), right:U('uRight'), up:U('uUp'), fwd:U('uFwd'),
             fov:U('uFovScale'), power:U('uPower'), iters:U('uIters'), prec:U('uPrecRatio'),
             light:U('uLightDir'), phase:U('uPhase') };
+/* THE FORMULA SEAM (grep): the f32 baseline of the active formula - the page's program for the bulb, FRAG with
+   USE_BOX for the box (small: built on first use, blocking, well under a second). */
+let progBox = null, uBox = null;
+function baseCtx(){
+  if (!boxOn()) return { p: prog, u };
+  if (!progBox) {
+    progBox = mkProg(FRAG.replace('#version 300 es', '#version 300 es\n#define USE_BOX'));
+    const g = n => gl.getUniformLocation(progBox, n);
+    uBox = { res:g('uRes'), camPos:g('uCamPos'), right:g('uRight'), up:g('uUp'), fwd:g('uFwd'),
+             fov:g('uFovScale'), power:g('uPower'), iters:g('uIters'), prec:g('uPrecRatio'),
+             light:g('uLightDir'), phase:g('uPhase'),
+             boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') };
+  }
+  return { p: progBox, u: uBox };
+}
+/* the box's parameters on a program (x: its uniform table - a deep variant's or the baseline's) */
+function setBoxUniforms(x){
+  const p = boxP, R = p.R;
+  gl.uniform4f(x.boxA, p.scale, Math.abs(p.scale), p.fold, 2 * p.fold);
+  gl.uniform4f(x.boxB, p.m2, p.F2, p.kA, BOX_ESC2);
+  gl.uniformMatrix3fv(x.boxRot, false, [R[0][0], R[1][0], R[2][0], R[0][1], R[1][1], R[2][1], R[0][2], R[1][2], R[2][2]]);   // column by column
+  gl.uniform1i(x.boxHasRot, p.hasRot ? 1 : 0);
+  gl.uniform1f(x.boxFar, boxFar());
+}
 function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
   return { res:g('uRes'), right:g('uRight'), up:g('uUp'), fwd:g('uFwd'),
             fov:g('uFovScale'), orbit:g('uOrbit'), len:g('uOrbitLen'), iters:g('uIters'),
@@ -2031,7 +2325,8 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
+            boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') }; }   // the last five: null but in the USE_BOX variant
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2364,7 +2659,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
 const loadTimer = setTimeout(() => {
   if (!deepReady && !deepCompileErr) { const l = dzById('loading'); if (l) l.style.display = 'flex'; }
 }, 300);
-mkProgAsync(vSrc(false, false), (p, err) => {
+mkProgAsync(vSrc(false, false, false), (p, err) => {   // j named: the default would ask jacBits(), which reads the formula, and that is declared further down
   clearTimeout(loadTimer);
   const l = dzById('loading'); if (l) l.style.display = 'none';
   if (!p) { deepCompileErr = err; api.deepErr = err; api.deepReady = false; return; }
@@ -2375,6 +2670,7 @@ mkProgAsync(vSrc(false, false), (p, err) => {
 /* pick the active deep program + its uniform set: the BLA variant when BLA is on and it built,
    else the plain one. Use this everywhere a deep draw is issued. */
 function deepCtx(){
+  if (boxOn()) return ensureBoxVariant(false) || { p: null, x: ud };   // THE FORMULA SEAM: one variant, whatever else is asked (a frame gets here only once it is built)
   if (!deepProg) return { p: null, x: ud };
   if (rayUse) {                                  // THE RAY ESTIMATE's variant; never a blocking build
     const want = variants[rKey(false)];
@@ -2440,9 +2736,149 @@ function makeHP(P) {
     return [mul(mul(rN, sNth), cNph), mul(mul(rN, sNth), sNph), mul(rN, cNth)];
   };
   const addV = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-  return { P, fromNum, toNum, P8, addV, SCALE };
+  /* THE MANDELBOX map (grep THE FORMULA SEAM), one iteration in fixed point: multiplies and one divide.
+     B = boxFixed(parameters). boxParts gives what the reference rows are made of: the rotated point u,
+     the box-folded point w, |w|², which of the sphere fold's three regions that is (0 inside the min
+     radius, 1 the inversion shell, 2 outside the fixed radius) and the fold's factor k. */
+  const boxFixed = (p) => { const m2 = fromNum(p.m2), F2 = fromNum(p.F2);
+    /* kA is DIVIDED here, not converted from the f64 quotient: the factor must be continuous across the min-radius
+       sphere to the last bit, or a pixel that crosses it at depth gets a step wrong by 1e-16, far above its delta */
+    return { S: fromNum(p.scale), L: fromNum(p.fold), m2, F2, kA: fdiv(F2, m2), R: p.hasRot ? p.R.map(r => r.map(fromNum)) : null }; };
+  const boxParts = (v, B) => {
+    const u = B.R ? B.R.map(r => mul(r[0], v[0]) + mul(r[1], v[1]) + mul(r[2], v[2])) : v;
+    const w = u.map(x => x > B.L ? 2n * B.L - x : x < -B.L ? -2n * B.L - x : x);
+    const r2 = mul(w[0], w[0]) + mul(w[1], w[1]) + mul(w[2], w[2]);
+    const reg = r2 < B.m2 ? 0 : r2 < B.F2 ? 1 : 2;
+    return { u, w, r2, reg, k: reg === 0 ? B.kA : reg === 1 ? fdiv(B.F2, r2) : ONE };
+  };
+  const boxStep = (q, c, B) => q.w.map((x, i) => mul(mul(x, q.k), B.S) + c[i]);     // q = boxParts(v, B)
+  const norm2 = (v) => mul(v[0], v[0]) + mul(v[1], v[1]) + mul(v[2], v[2]);
+  return { P, fromNum, toNum, P8, addV, SCALE, mul, boxFixed, boxParts, boxStep, norm2 };
 }
 const hp = makeHP(256);
+
+/* ════════ THE FORMULA SEAM (2026-10-09) — a second formula, the Mandelbox ════════
+   The renderer draws one of two formulas: 'mandelbulb' (the default; everything outside this seam is
+   the page's, and with it selected the shader's active text, every uniform and every number are what
+   they were) and 'mandelbox' - GMT's AmazingBox (engine-gmt/formulas/AmazingBox.ts) in Mandelbrot
+   mode (z0 = c = the point):
+       z <- R z                                   a constant pre-rotation (X, then Y, then Z)
+       z <- clamp(z, -L, L) * 2 - z               box fold, L = the folding limit
+       k  = clamp(fixedR² / |z|², 1, fixedR² / minR²) ;  z <- k z        sphere fold
+       z <- scale * z + c ;   dr <- dr * k * |scale| + 1
+   with the estimate (|z| - 1) / dr read where |z|² first passes BOX_ESC2. The scale may be NEGATIVE.
+   WHAT IS THE SAME: the BigInt camera, a reference orbit rebuilt at the camera, a per-pixel delta as
+   f32 mantissas with one exponent, the page's march and hit test, the normals, the G-buffer, shading,
+   accumulation, export, the probes and the navigation's rays.
+   WHAT IS ITS OWN: the map (hp.boxParts / boxStep), the orbit rows (buildBoxOrbit), the delta step
+   (boxOrbitJS on the CPU, BOX_KERNEL on the GPU), and the three plain-f32 copies (grep USE_BOX).
+   WHAT THE BOX DOES NOT USE, whatever was asked for: the ray march (USE_JET), BLA, the true-gradient
+   variant (USE_JAC), the line-against-the-ball rule and the rebase to the origin - each is built on
+   the triplex power. The asks are kept and apply again when the bulb is selected (grep boxOn).
+   Why the folds need no approximation: both are continuous and piecewise smooth, so a pixel that
+   stands on the other side of a fold surface from the reference is handled BY CASES, exactly, from the
+   reference's own distance to that surface - and that distance is taken from the fixed-point orbit,
+   so it is right however small it is. Checked on the CPU before any of this was written
+   (debug/scratch/formula-study/dz-delta-check.mjs: f64 6e-15 against exact orbits at 1e-41).
+   Pitfalls:
+   - An escape radius of 10 (GMT's) leaves rings in the picture: the estimate jumps about a tenth
+     between iteration bands there. 1000 does not (the CPU study's stills).
+   - minR is held at or above 1e-4.5 (as GMT's sphereFold floors its square at 1e-9) and fixedR at or
+     above minR: the three-region logic assumes that order.
+   - This block and the CPU kernel further down are lifted as TEXT by the node checks
+     (debug/deep-zoom-checks/ray-probe.mts, box-orbit.mts): nothing in them may touch gl, api or options.
+   @invariant the box's per-pixel orbit on the CPU (boxOrbitJS, what `sense`, `freeDistance`,
+   `estimateAt` and the probes' referee run) equals an exact fixed-point orbit of the same point, fold
+   crossings included, shallow and deep, both signs of scale, with a pre-rotation - proven by: npm run
+   check:deep-zoom-box-orbit ("twin = exact ..." lines). Falsified 2026-10-09: see that file's header. */
+const BOX_ESC = 1000, BOX_ESC2 = BOX_ESC * BOX_ESC;
+const BOX_REF_MAX2 = 1e14;                       // the reference orbit is kept this far past the escape radius, so a pixel can ride it to its own escape
+let dzFormula = 'mandelbulb';
+let formulaStamp = 0;                            // bumped by every change of formula or of its parameters: kept orbits and kept rays are keyed by it
+const boxOn = () => dzFormula === 'mandelbox';
+const box = { scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] };
+/* the pre-rotation as one matrix (rows), from the formula's three mat2 steps: X on (y, z), Y on (x, z), Z on (x, y) */
+function boxRotMat(r){
+  const sx = Math.sin(r[0]), cx = Math.cos(r[0]), sy = Math.sin(r[1]), cy = Math.cos(r[1]), sz = Math.sin(r[2]), cz = Math.cos(r[2]);
+  const X = [[1, 0, 0], [0, cx, sx], [0, -sx, cx]], Y = [[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], Z = [[cz, sz, 0], [-sz, cz, 0], [0, 0, 1]];
+  const mm = (A, B) => A.map(a => [0, 1, 2].map(j => a[0] * B[0][j] + a[1] * B[1][j] + a[2] * B[2][j]));
+  return mm(Z, mm(Y, X));
+}
+/* what the map is computed from: the parameters as numbers, their squares, the matrix, and the fixed-point copies */
+function boxDerive(){
+  const m2 = box.minR * box.minR, F2 = box.fixedR * box.fixedR, hasRot = Math.hypot(box.rot[0], box.rot[1], box.rot[2]) > 0.001;   // GMT's own threshold
+  const p = { scale: box.scale, fold: box.fold, m2, F2, kA: F2 / m2, hasRot, R: boxRotMat(hasRot ? box.rot : [0, 0, 0]) };
+  p.fixed = hp.boxFixed(p);
+  return p;
+}
+let boxP = boxDerive();
+/* Set the formula. params (all optional, the box only): scale (|scale| held at or above 1.02: at 1 the
+   orbit of every point is bounded and there is no surface), minR, fold, fixedR, rot [x, y, z] in radians.
+   Returns true when anything changed. Pure state: the caller restarts the orbit and the still. */
+function applyFormula(kind, params){
+  const was = JSON.stringify([dzFormula, box]);
+  dzFormula = kind === 'mandelbox' ? 'mandelbox' : 'mandelbulb';
+  const q = params || {}, num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+  let s = num(q.scale, box.scale); if (Math.abs(s) < 1.02) s = s < 0 ? -1.02 : 1.02;
+  box.scale = Math.max(-8, Math.min(8, s));
+  box.minR = Math.max(3.1623e-5, Math.min(8, num(q.minR, box.minR)));
+  box.fold = Math.max(1e-3, Math.min(8, num(q.fold, box.fold)));
+  box.fixedR = Math.max(box.minR, Math.min(8, num(q.fixedR, box.fixedR)));
+  if (Array.isArray(q.rot)) box.rot = [0, 1, 2].map(i => num(q.rot[i], 0));
+  if (JSON.stringify([dzFormula, box]) === was) return false;
+  boxP = boxDerive(); formulaStamp++;
+  return true;
+}
+/* boxExtent: a radius about the origin that holds the whole box. The set lies in the cube
+   |x| <= 2 L (|s| + 1) / (|s| - 1) for a positive scale (the classic bound; for a negative scale it is smaller).
+   boxFar: the distance from the CAMERA beyond which a ray has left the box for good. */
+function boxExtent(){
+  const aS = Math.abs(box.scale);
+  return 1.8 * (2 * box.fold * (aS + 1) / (aS - 1) + box.fixedR);
+}
+function boxFar(){
+  return Math.hypot(hp.toNum(camHP[0]), hp.toNum(camHP[1]), hp.toNum(camHP[2])) + boxExtent();
+}
+/* The box's reference orbit at the camera, and its rows (grep BOX_KERNEL for how the shader reads them):
+     row 0   V (xyz), |V|                                  as the bulb's row 0
+     row 1   W = the box-folded, rotated V (xyz), |W|²
+     rows 2-4  one axis each: U - L and U + L, U = the rotated V - the distances to the two fold planes
+     row 5   |W|² - minR² and |W|² - fixedR² - the distances to the two fold spheres
+   Each of the eight distances is a mantissa and an exponent (hdrSplit), taken from the FIXED-POINT
+   difference: a crossing test compares a pixel's delta with it, and at depth a delta is 1e-50. As a
+   plain f32 a distance under 1e-38 would read 0 and lose its sign.
+   The same numbers in f64 (GH, GL, Wf, R2, GM, GF, REG) are what the CPU kernel reads; Rk and DRk are
+   the reference's own radius and derivative, for the estimate at the camera. */
+function buildBoxOrbit(CHP, lenMax) {
+  const p = boxP, B = p.fixed, Vs = [], Qs = [];
+  let v = CHP.slice();
+  for (let k = 0; k < lenMax; k++) {
+    const q = hp.boxParts(v, B);
+    Vs.push(v); Qs.push(q);
+    if (k > 0 && hp.toNum(hp.norm2(v)) > BOX_REF_MAX2) break;   // never one entry alone: a step needs the index after it, however far out the camera is
+    v = hp.boxStep(q, CHP, B);
+  }
+  const len = Vs.length, rows = 6, data = new Float32Array(len * rows * 4), A = () => new Float64Array(len);
+  const O = { box: p, len, rows, data, Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
+  const put = (row, k, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
+  let DR = 1;
+  for (let k = 0; k < len; k++) {
+    const q = Qs[k], vf = Vs[k].map(hp.toNum), wf = q.w.map(hp.toNum), R = Math.hypot(vf[0], vf[1], vf[2]);
+    O.Vf.push(vf); O.Wf.push(wf); O.Rk.push(R); O.DRk.push(DR);
+    O.R2[k] = hp.toNum(q.r2); O.GM[k] = hp.toNum(q.r2 - B.m2); O.GF[k] = hp.toNum(q.r2 - B.F2); O.REG[k] = q.reg;
+    put(0, k, [vf[0], vf[1], vf[2], R]);
+    put(1, k, [wf[0], wf[1], wf[2], O.R2[k]]);
+    for (let a = 0; a < 3; a++) {
+      O.GH[a][k] = hp.toNum(q.u[a] - B.L); O.GL[a][k] = hp.toNum(q.u[a] + B.L);
+      const h = hdrSplit(O.GH[a][k]), l = hdrSplit(O.GL[a][k]);
+      put(2 + a, k, [h.m, h.e, l.m, l.e]);
+    }
+    const gm = hdrSplit(O.GM[k]), gf = hdrSplit(O.GF[k]);
+    put(5, k, [gm.m, gm.e, gf.m, gf.e]);
+    DR = DR * hp.toNum(q.k) * Math.abs(p.scale) + 1;
+  }
+  return O;
+}
 
 function hdrSplit(v) {
   if (v === 0 || !isFinite(v)) return { m: 0, e: 0 };
@@ -2454,6 +2890,7 @@ function hdrSplit(v) {
    f64 metadata for the CPU gate. Stops past escape (R>100) — exhaustion wrap
    in the kernel covers pixels needing more iterations. */
 function buildRefOrbit(CHP, lenMax) {
+  if (boxOn()) return buildBoxOrbit(CHP, lenMax);            // THE FORMULA SEAM: the orbit carries its formula from here on (O.box)
   const V = [CHP.slice()];
   const Vf = [CHP.map(hp.toNum)];
   for (let k = 0; k < lenMax - 1; k++) {
@@ -2617,6 +3054,7 @@ function kickRayVariantAsync(){                  // THE RAY ESTIMATE's picture v
 }
 /* per frame: turn the effective flag on/off for 'auto' (never triggers a blocking compile) */
 function updateBlaAuto(){
+  if (boxOn()) return;                           // the table is the triplex power's (grep THE FORMULA SEAM)
   if (blaMode !== 'auto') return;
   kickBlaAsync();
   const ready = !!variants[vKey(true, false, false)];
@@ -2625,6 +3063,7 @@ function updateBlaAuto(){
 }
 function setBlaMode(m){                                   // 'off' | 'auto' | 'on'
   blaMode = m;
+  if (boxOn()) { blaEnabled = false; return; }   // kept as asked; in force again when the bulb is selected (setFormulaNow)
   if (m === 'on') { blaEnabled = true; if (deepProg) ensureVariant(true, false, false); }
   else if (m === 'off') blaEnabled = false;
   orbitDirty = true;
@@ -2674,6 +3113,7 @@ function setPowerUniforms(x){
     for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
     gl.uniform1f(x.rayLine, rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }
   gl.uniform1i(x.maxSteps, march.maxSteps);
+  if (boxOn()) setBoxUniforms(x);                // THE FORMULA SEAM: nothing is set here for the bulb that was not set before
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
     gl.uniform1f(x.refE, e); gl.uniform1f(x.farFrom, Math.log2(march.farFromDist * d) - e); }
@@ -2683,13 +3123,13 @@ function uploadOrbit(O) {
   if (orbitTex) gl.deleteTexture(orbitTex);
   orbitTex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, orbitTex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, O.len, 4, 0, gl.RGBA, gl.FLOAT, O.data);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, O.len, O.rows || 4, 0, gl.RGBA, gl.FLOAT, O.data);   // the box's orbit has six rows (buildBoxOrbit)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   /* BLA table (only when enabled — per-frame ~700 3×3 merges, trivial) */
-  if (blaEnabled) {
+  if (blaEnabled && !O.box) {
     curBla = packBlaTexture(blaBuild(O, blaTau));
     if (curBla) {
       if (!blaTex) blaTex = gl.createTexture();
@@ -2807,7 +3247,54 @@ function stableDeltaJS(V,d){                       // §3, residual forms (preci
   const DD=[sa*dcB+dsA*cb+dsA*dcB, sa*dsB+dsA*sb+dsA*dsB, dcA], Dref=[sa*cb,sa*sb,ca];
   return add3(scl3(DD,Rn), scl3(add3(Dref,DD),dRn));
 }
+/* THE MANDELBOX's per-pixel orbit on the CPU (grep THE FORMULA SEAM): what pertOrbitJS is for the bulb, and
+   reached through it - an orbit built for the box carries O.box. The reference iterate V, the pixel V + d.
+   One iteration of the delta, in the order of the map:
+     rotation     d <- R d                                 (linear: exact)
+     box fold     per axis, the clamp's difference cd by which side of -L / +L the reference (rr) and the
+                  pixel (pr) stand on, from the reference's distances gh = U - L, gl = U + L:  e = 2 cd - d
+     sphere fold  W = the folded reference, q = 2 W.e + |e|² (so the pixel's |w|² is r2 + q); the factor
+                  k' by the pixel's region, and k' - k by the two regions, from the reference's distances
+                  gm = r2 - minR², gF = r2 - fixedR²
+     step         d' = scale ( k' e + (k' - k) W ) + dc
+     derivative   dr' = dr k' |scale| + 1                  (the pixel's own: no delta form is needed)
+   No difference of two nearly equal numbers is ever formed, so a delta of 1e-58 keeps its 16 digits.
+   boxFoldJS is one axis of the box fold; L2 = 2 L. */
+function boxFoldJS(gh, gl, d, L2){
+  const ph = gh + d, pl = gl + d, rr = gh > 0 ? 1 : gl < 0 ? -1 : 0, pr = ph > 0 ? 1 : pl < 0 ? -1 : 0;
+  const cd = rr === 0 ? (pr === 0 ? d : pr === 1 ? -gh : -gl) : rr === 1 ? (pr === 1 ? 0 : pr === 0 ? ph : -L2) : (pr === -1 ? 0 : pr === 0 ? pl : L2);
+  return 2 * cd - d;
+}
+function boxOrbitJS(O, dc, maxIter, fixed){
+  const p = O.box, S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, R = p.hasRot ? p.R : null;
+  const V0 = O.Vf[0], GH = O.GH, GL = O.GL;
+  let dx = dc[0], dy = dc[1], dz = dc[2], m = 0, it = 0, dr = 1, escaped = false, trap2 = Infinity;
+  let zx = V0[0] + dx, zy = V0[1] + dy, zz = V0[2] + dz;
+  while (it < maxIter) {
+    if (R) { const a = R[0][0]*dx + R[0][1]*dy + R[0][2]*dz, b = R[1][0]*dx + R[1][1]*dy + R[1][2]*dz, c = R[2][0]*dx + R[2][1]*dy + R[2][2]*dz; dx = a; dy = b; dz = c; }
+    const ex = boxFoldJS(GH[0][m], GL[0][m], dx, L2), ey = boxFoldJS(GH[1][m], GL[1][m], dy, L2), ez = boxFoldJS(GH[2][m], GL[2][m], dz, L2);
+    const W = O.Wf[m], r2 = O.R2[m], gm = O.GM[m], gF = O.GF[m], reg = O.REG[m];
+    const q = 2 * (W[0]*ex + W[1]*ey + W[2]*ez) + ex*ex + ey*ey + ez*ez, r2p = r2 + q, pm = gm + q, pF = gF + q;
+    const pr = pm < 0 ? 0 : pF < 0 ? 1 : 2, kp = pr === 0 ? kA : pr === 1 ? F2 / r2p : 1;
+    let dk;
+    if (reg === pr) dk = pr === 1 ? -F2 * q / (r2 * r2p) : 0;
+    else if (reg === 0) dk = pr === 1 ? -F2 * pm / (r2p * m2) : 1 - kA;
+    else if (reg === 1) dk = pr === 0 ? F2 * gm / (m2 * r2) : gF / r2;
+    else dk = pr === 1 ? -pF / r2p : kA - 1;
+    dx = S * (kp * ex + dk * W[0]) + dc[0]; dy = S * (kp * ey + dk * W[1]) + dc[1]; dz = S * (kp * ez + dk * W[2]) + dc[2];
+    dr = dr * kp * aS + 1; m++; it++;
+    const V = O.Vf[m];
+    zx = V[0] + dx; zy = V[1] + dy; zz = V[2] + dz;
+    const z2 = zx*zx + zy*zy + zz*zz;
+    if (z2 < trap2) trap2 = z2;
+    if (!fixed && z2 > BOX_ESC2) { escaped = true; break; }
+    if (z2 < dx*dx + dy*dy + dz*dz || m >= O.len - 1) { dx = zx - V0[0]; dy = zy - V0[1]; dz = zz - V0[2]; m = 0; }   // the page's rebase: onto the reference's first point
+  }
+  const r = Math.hypot(zx, zy, zz);
+  return { de: (r - 1) / dr, escaped, r, it, dr, trap: Math.sqrt(trap2), z: [zx, zy, zz] };
+}
 function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter iterations, no escape test (neighbours that must stop together)
+  if (O.box) return boxOrbitJS(O, dc, maxIter, fixed);
   let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0;
   for(let k=0;k<maxIter;k++){
     const V=O.Vf[m], R=O.Rk[m];
@@ -2904,6 +3391,7 @@ function pertMarchJS(O, rd, maxIter, pixAng){
    Nothing here draws, reads the GPU or changes the camera. Proof: npm run check:deep-zoom-ray-probe (node). */
 const SENSE_ANGLE = 0.0735;                      // radians (4.2 degrees): how far off the axis the six outer rays stand
 const SENSE_FAR = 8;                             // a ray this far from the camera has left the bulb: "open"
+const senseFar = () => (boxOn() ? boxFar() : SENSE_FAR);   // the box is larger, and its size follows its scale (grep THE FORMULA SEAM)
 /* the triplex power's derivative at the full point z, applied to the direction j, plus the + c term's own (v) */
 function pushJetJS(z, j, v){
   const NP=nPower, x=z[0], y=z[1], zz=z[2];
@@ -2930,6 +3418,13 @@ function pullGradJS(z, w){
    point (one pass back over the iterates), G the estimate by it; ray is the larger of E and G - what a ray steps by.
    fixed: exactly maxIter iterations, no escape test. */
 function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
+  if (O.box) {
+    /* THE FORMULA SEAM: the box carries no jet. Its map stretches space alike on all three axes (widest over
+       narrowest 1.2 to 1.8 from 1e-3 to 1e-40, the bulb's 40 to 100: debug/scratch/formula-study/dz-shape-check.mjs),
+       so the ray estimate says what the scalar one says, and a ray steps by the scalar estimate. */
+    const o = boxOrbitJS(O, dc, maxIter, fixed);
+    return { de: o.de, escaped: o.escaped, r: o.r, it: o.it, z: o.z, jet: [0,0,0], E: o.de, grad: [0,0,0], G: o.de, ray: o.de };
+  }
   let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d); const zs=[];
   for(let k=0;k<maxIter;k++){
     const V=O.Vf[m], R=O.Rk[m];
@@ -2958,7 +3453,7 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
    prev is the last sample known to be outside), 2 = the camera itself is inside the drawn solid (t = 0).
    t0 / prev0: go on from where an open ray stopped (the camera not having moved since). */
 function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
-  let t=t0>0?t0:0, tPrev=prev0>0?prev0:0, steps=0;
+  let t=t0>0?t0:0, tPrev=prev0>0?prev0:0, steps=0; const far=senseFar();
   for(; steps<maxSteps; steps++){
     const o=pertOrbitJetJS(O, scl3(rd,t), rd, maxIter);
     if(!o.escaped || !(o.de>0)){
@@ -2971,7 +3466,7 @@ function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
       return { t:lo, prev:lo, kind:1, steps };
     }
     if(t>0 && (o.de<tol*t || o.ray<tol*0.125*t)) return { t, prev:t, kind:1, steps };
-    if(t>SENSE_FAR) return { t, prev:t, kind:0, steps };
+    if(t>far) return { t, prev:t, kind:0, steps };
     tPrev=t;
     t+=Math.max(Math.min(o.ray,8*o.de)*0.5, t*1e-7);
   }
@@ -2982,7 +3477,7 @@ function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
 let senseO = null, senseKey = null;
 function probeOrbit(){
   if (deepActive && curOrbit && !orbitDirty) return curOrbit;
-  const key = [camHP[0], camHP[1], camHP[2], cam.iters, nPower, phaseTheta, phasePhi];
+  const key = [camHP[0], camHP[1], camHP[2], cam.iters, nPower, phaseTheta, phasePhi, formulaStamp];
   if (!senseO || !senseKey || key.some((v, i) => v !== senseKey[i])) { senseO = buildRefOrbit(camHP, cam.iters + 2); senseKey = key; }
   return senseO;
 }
@@ -2998,19 +3493,19 @@ function senseDirs(axis){
 }
 const senseKept = {};                            // slot -> the last bundle really marched, and where the camera stood
 /* open: rays that ran out of steps short of SENSE_FAR - their distance is a lower bound, and they go on when asked again */
-const senseRead = (rays) => { const ts = rays.map(r => r.t).sort((a, b) => a - b);
-  return { near: ts[0], second: ts[1], hits: rays.filter(r => r.kind === 1).length, open: rays.filter(r => r.kind === 0 && r.t <= SENSE_FAR).length,
+const senseRead = (rays) => { const ts = rays.map(r => r.t).sort((a, b) => a - b), far = senseFar();
+  return { near: ts[0], second: ts[1], hits: rays.filter(r => r.kind === 1).length, open: rays.filter(r => r.kind === 0 && r.t <= far).length,
     inside: rays.some(r => r.kind === 2) }; };
 function senseBundle(axis, opt){
   const o = opt || {}, tol = o.tol > 0 ? +o.tol : 0.05, maxSteps = o.maxSteps > 0 ? (o.maxSteps|0) : 64, reuse = o.reuse >= 0 ? +o.reuse : 0.05;
   const ax = axis ? unit3(axis) : basis().fwd, slot = typeof o.slot === 'string' ? o.slot : '', k = slot ? senseKept[slot] : null;
-  if (k && reuse > 0 && k.iters === cam.iters && k.power === nPower && k.pt === phaseTheta && k.pp === phasePhi
+  if (k && reuse > 0 && k.iters === cam.iters && k.power === nPower && k.pt === phaseTheta && k.pp === phasePhi && k.fs === formulaStamp
       && Math.abs(k.ax[0]-ax[0]) + Math.abs(k.ax[1]-ax[1]) + Math.abs(k.ax[2]-ax[2]) < 1e-9) {
     const moved = Math.hypot(hp.toNum(camHP[0]-k.cam[0]), hp.toNum(camHP[1]-k.cam[1]), hp.toNum(camHP[2]-k.cam[2]));
     if (moved === 0) {
       /* the camera stands where it stood: a ray that ran out of steps goes on from where it stopped, so a still
          view is read to the end however many decades away it is (the power-4 place needs about 300 steps a ray) */
-      const open = k.rays.filter(r => r.kind === 0 && r.t <= SENSE_FAR);
+      const open = k.rays.filter(r => r.kind === 0 && r.t <= senseFar());
       if (open.length === 0) return { near: k.near, second: k.second, hits: k.hits, open: 0, inside: k.inside, marched: false };
       const O = probeOrbit();
       for (const r of open) { const g = rayFreeJS(O, r.rd, cam.iters, tol, maxSteps, r.t, r.prev); r.t = g.t; r.prev = g.prev; r.kind = g.kind; }
@@ -3022,7 +3517,7 @@ function senseBundle(axis, opt){
   const O = probeOrbit();
   const rays = senseDirs(ax).map(rd => { const g = rayFreeJS(O, rd, cam.iters, tol, maxSteps); return { rd, t: g.t, prev: g.prev, kind: g.kind }; });
   const res = senseRead(rays);
-  if (slot) senseKept[slot] = { ...res, rays, ax, cam: camHP.slice(), iters: cam.iters, power: nPower, pt: phaseTheta, pp: phasePhi };   // res carries near, second, hits, open, inside
+  if (slot) senseKept[slot] = { ...res, rays, ax, cam: camHP.slice(), iters: cam.iters, power: nPower, pt: phaseTheta, pp: phasePhi, fs: formulaStamp };   // res carries near, second, hits, open, inside
   return { ...res, marched: true };
 }
 
@@ -3357,7 +3852,43 @@ function keyLightDir(right, up, fwd){
               right[2]*0.5 + up[2]*0.85 - fwd[2]*0.35 ];
   const m = Math.hypot(...l) || 1; return [l[0]/m, l[1]/m, l[2]/m];
 }
+/* THE FORMULA SEAM (grep): the plain-f64 and the fixed-point orbits of an EXPLICIT point, for the box - what
+   deCPU, deCPUesc, hpDirectDE and hpDirectTrap are for the bulb, and reached through them. No reference orbit,
+   no delta: the direct referees of the probes. An iteration is tested after its step, as the kernel tests it. */
+function boxDirectF64(pos, N){
+  const p = boxP, R = p.hasRot ? p.R : null, aS = Math.abs(p.scale);
+  let z = pos.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
+  for (let i = 0; i < N; i++) {
+    const u = R ? R.map(r => r[0]*z[0] + r[1]*z[1] + r[2]*z[2]) : z, w = u.map(x => Math.max(-p.fold, Math.min(p.fold, x)) * 2 - x);
+    const k = Math.max(1, Math.min(p.kA, p.F2 / Math.max(w[0]*w[0] + w[1]*w[1] + w[2]*w[2], 1e-300)));
+    z = w.map((x, j) => x * k * p.scale + pos[j]); dr = dr * k * aS + 1; it++;
+    r2 = z[0]*z[0] + z[1]*z[1] + z[2]*z[2];
+    if (r2 < trap2) trap2 = r2;
+    if (r2 > BOX_ESC2) { escaped = true; break; }
+  }
+  return { de: (Math.sqrt(r2) - 1) / dr, escaped, iters: it, trap: Math.sqrt(trap2) };
+}
+function boxDirectHP(posFp, maxIter){
+  const B = boxP.fixed, SC = Number(hp.SCALE), aS = Math.abs(boxP.scale);
+  let v = posFp.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
+  for (let i = 0; i < maxIter; i++) {
+    const q = hp.boxParts(v, B);
+    v = hp.boxStep(q, posFp, B); dr = dr * (Number(q.k) / SC) * aS + 1; it++;
+    r2 = Number(hp.norm2(v)) / SC;
+    if (r2 < trap2) trap2 = r2;
+    if (r2 > BOX_ESC2) { escaped = true; break; }
+  }
+  return { de: (Math.sqrt(r2) - 1) / dr, escaped, iters: it, trap: Math.sqrt(trap2) };
+}
+/* the box's estimate at the camera itself, from its own orbit: where that first passes the escape radius. -1 when it
+   does not within the orbit: then there IS no estimate - the count is too low for this place (or the camera is in the set) */
+function boxCamEstimate(O){
+  for (let k = 0; k < O.len; k++) if (O.Rk[k] > BOX_ESC) return Math.max(0, (O.Rk[k] - 1) / O.DRk[k]);
+  return -1;
+}
+const itersMax = () => (boxOn() ? BOX_ITER_MAX : rayUse ? RAY_ITER_MAX : 160);   // what the count is held under: the page's 160, the ray march's and the box's own
 function deCPU(px,py,pz, power, N){
+    if (boxOn()) return Math.max(0, boxDirectF64([px,py,pz], N).de);
     let zx=px,zy=py,zz=pz, dr=1, r=0;
     for(let i=0;i<N;i++){
         r=Math.hypot(zx,zy,zz);
@@ -3377,6 +3908,7 @@ function deCPU(px,py,pz, power, N){
 
 /* deCPU with escape semantics matching the kernel (for the INDEPENDENT direct check) */
 function deCPUesc(px,py,pz, N){
+    if (boxOn()) return boxDirectF64([px,py,pz], N);
     let zx=px,zy=py,zz=pz, dr=1, r=0, escaped=false, it=0;
     for(let i=0;i<N;i++){
         r=Math.hypot(zx,zy,zz);
@@ -3417,6 +3949,7 @@ api.directCheck = function(tvals){
    ≈ 77 digits → de rel floor ~1e-27 even at depth 1e-50). Escape convention mirrors
    deCPUesc/the kernel: r checked at loop top; dr NOT updated on the escaping iteration. */
 function hpDirectDE(posFp, maxIter){
+  if (boxOn()) return boxDirectHP(posFp, maxIter);
   const Pb = BigInt(hp.P), SCALE = hp.SCALE, ONE = SCALE;
   const mul = (a,b) => (a*b) >> Pb;
   const isqrt = (n) => { if (n < 2n) return n < 0n ? 0n : n; let x = n, y = (x + 1n) >> 1n; while (y < x) { x = y; y = (x + n / x) >> 1n; } return x; };
@@ -3599,6 +4132,7 @@ api.marchPop = function(W){
    kernel code) with the same loop convention as pertOrbit (step, then test / track |z|). Reported:
    relative trap error (median / p95 / worst) and how many pixels disagree on the count. */
 function hpDirectTrap(posFp, maxIter){
+  if (boxOn()) return boxDirectHP(posFp, maxIter);
   const Pb = BigInt(hp.P), SC = Number(hp.SCALE), mul = (a,b) => (a*b) >> Pb;
   let v = posFp.slice(), trap2 = Infinity, it = 0, escaped = false;
   for (let i = 0; i < maxIter; i++) {
@@ -3817,8 +4351,8 @@ api.guideStudy = (n, samples) => {
 api.stats = (n, guideSamples) => {
   if (!deepProg || !curOrbit) return null;
   n = n || 128;
-  const v = rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
-  if (!v) return { error: variantErr[rayUse ? rKey(true) : vKey(blaEnabled, true)] };
+  const v = boxOn() ? ensureBoxVariant(true) : rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
+  if (!v) return { error: variantErr[boxOn() ? xKey(true) : rayUse ? rKey(true) : vKey(blaEnabled, true)] };
   const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, n, n, 0, gl.RGBA, gl.FLOAT, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -3881,7 +4415,7 @@ api.stats = (n, guideSamples) => {
 let marchProbeFbo = null, marchProbeTex = null, marchProbeN = 0;
 api.marchProbe = (n, pixH) => {
   if (!deepProg || !curOrbit) return null;
-  const v = rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
+  const v = boxOn() ? ensureBoxVariant(true) : rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
   if (!v) return null;
   n = n || 128;
   if (marchProbeN !== n) {
@@ -3951,15 +4485,17 @@ api.renderThumbF32 = (n) => {
     thumbN = n;
   }
   const { fwd, right, up } = basis();
-  gl.useProgram(prog); bindQuad(prog);
-  gl.uniform2f(u.res, n, n);
-  gl.uniform3fv(u.camPos, cam.pos);
-  gl.uniform3fv(u.fwd, fwd); gl.uniform3fv(u.right, right); gl.uniform3fv(u.up, up);
-  gl.uniform1f(u.fov, Math.tan(0.5 * 1.1));
-  gl.uniform1f(u.power, nPower); gl.uniform1f(u.iters, cam.iters);
-  gl.uniform1f(u.prec, 5e-7);
-  gl.uniform3fv(u.light, keyLightDir(right, up, fwd));
-  gl.uniform2f(u.phase, phaseTheta, phasePhi);
+  const B = baseCtx(), bu = B.u;                 // the active formula's baseline (the bulb: the page's program)
+  gl.useProgram(B.p); bindQuad(B.p);
+  gl.uniform2f(bu.res, n, n);
+  gl.uniform3fv(bu.camPos, cam.pos);
+  gl.uniform3fv(bu.fwd, fwd); gl.uniform3fv(bu.right, right); gl.uniform3fv(bu.up, up);
+  gl.uniform1f(bu.fov, Math.tan(0.5 * 1.1));
+  gl.uniform1f(bu.power, nPower); gl.uniform1f(bu.iters, cam.iters);
+  gl.uniform1f(bu.prec, 5e-7);
+  gl.uniform3fv(bu.light, keyLightDir(right, up, fwd));
+  gl.uniform2f(bu.phase, phaseTheta, phasePhi);
+  if (boxOn()) setBoxUniforms(bu);
   gl.bindFramebuffer(gl.FRAMEBUFFER, thumbFbo); gl.viewport(0, 0, n, n);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   const px = new Uint8Array(n * n * 4); gl.readPixels(0, 0, n, n, gl.RGBA, gl.UNSIGNED_BYTE, px);
@@ -3984,9 +4520,31 @@ api.setStepRelax = (r)=>{ stepRelax = Math.max(0, +r); accumReset = true; };  //
 api.setCapRelax = (m)=>{ capRelax = Math.max(1, +m); accumReset = true; };    // QUALITY LEVER: scale deep res cap (1 = shipped; 1e6 = uncapped/full-res deep)
 api.setPower = (n)=>{ nPower=Math.max(2,Math.min(16,n|0)); cam.power=nPower; binomN=binomPad(nPower); binomN1=binomPad(nPower-1); orbitDirty=true; };
 api.setPhase = (th,ph)=>{ phaseTheta=th||0; phasePhi=ph||0; orbitDirty=true; };
+/* THE FORMULA SEAM (grep; added 2026-10-09). kind 'mandelbulb' (the default, the page) or 'mandelbox'; params, the box
+   only, each optional and kept from call to call: scale (negative allowed; |scale| held at or above 1.02), minR, fold,
+   fixedR, rot [x, y, z] radians (applyFormula has the limits). The camera, the look and every setting stay; the
+   reference orbit and the still restart. The first time the box is selected its deep variant starts to build in
+   the background - the box's f32 baseline is drawn until it is there (telemetry `ready` is false meanwhile, and
+   formulaState says 'building'). The iteration count is only ever RAISED here and by the box's rule (grep
+   ITERATIONS AS A MARGIN): a host that wants fewer sets them after this call. What the box does not use is
+   listed in the seam's header. */
+function setFormulaNow(kind, params){
+  if (!applyFormula(kind, params)) return;
+  rayUse = boxOn() ? 0 : rayAsk;                   // the asks are kept; what is in force follows the formula
+  if (boxOn()) { blaEnabled = false; kickBoxVariantAsync();
+    /* the least count that draws the box at all: what a point at the edge of it needs to pass the escape radius
+       (|z| grows by |scale| an iteration out there), and 12 more. The bulb's 14 would draw a featureless lump. */
+    cam.iters = Math.max(cam.iters, Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(box.scale))) + 12)); }
+  else { setBlaMode(blaMode); cam.iters = Math.min(cam.iters, itersMax()); }
+  orbitDirty = true; accumReset = true; snapDist = true;
+}
+api.setFormula = setFormulaNow;
+api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice() });
+api.formulaState = ()=>{ if (!boxOn()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
+  const v = variants[xKey(false)]; return v ? 'on' : v === null ? 'failed' : 'building'; };
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
 // `auto-iters` control rows and its [ ] I keys do, for a host that owns those values.
-api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(160,n|0)); orbitDirty=true; };
+api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(boxOn() ? BOX_ITER_MAX : 160,n|0)); orbitDirty=true; };   // (the box runs longer: grep ITERATIONS AS A MARGIN)
 api.setAutoIters = (b)=>{ autoIters=!!b; };
 api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
@@ -4016,14 +4574,14 @@ api.jacobianState = ()=>{ if (!jacBits()) return 'off';
    detail (above 0: while the ray march is on the hit level is a display pixel ÷ this, whatever the
    detail setting says; default 0 = follow the detail setting). A picture switches when the variant has built (background); `now` builds it
    at once, blocking - for a tool that must not measure the old one. */
-api.setRayMarch = (bits, opt, now)=>{ rayUse = Math.max(0, Math.min(15, bits|0));   // bit 8 (a measuring mode): carry the jet, march as the page does
+api.setRayMarch = (bits, opt, now)=>{ rayAsk = Math.max(0, Math.min(15, bits|0)); rayUse = boxOn() ? 0 : rayAsk;   // bit 8 (a measuring mode): carry the jet, march as the page does
   if (opt) { if (opt.factor > 0) rayFactor = +opt.factor; if (opt.hit > 0) rayHitDiv = +opt.hit; if (opt.tol >= 0) rayTol = +opt.tol; if (opt.floor >= 0) rayFloorDiv = +opt.floor; if (opt.line >= 0) rayLine = +opt.line; if (opt.detail >= 0) rayDetail = +opt.detail; }
   if (now && rayUse && deepProg) ensureRayVariant(false);
   accumReset = true; };
 api.rayMarchState = ()=>{ if (!rayUse) return 'off';
   const v = variants[rKey(false)];
   return v ? 'on' : v === null ? 'failed' : 'building'; };
-api.rayMarch = ()=>({ bits: rayUse, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine, detail: rayDetail });
+api.rayMarch = ()=>({ bits: rayAsk, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine, detail: rayDetail });
 /* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped */
 api.setRayDefs = (list)=>{ rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
   for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; } };
@@ -4127,6 +4685,8 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
   // headlamp falloff must track THIS frame's depth (setPowerUniforms used the frozen smoothedDist,
   // wrong for a moving path). Derive the surface-distance scale from the reference orbit at the camera.
   let dScale;
+  if (curOrbit.box) { const est = boxCamEstimate(curOrbit); dScale = Math.max(1e-300, est > 0 ? est : smoothedDist); }
+  else
   { let ke = curOrbit.len-1; for (let k=0;k<curOrbit.len;k++) if (curOrbit.Rk[k] > 2) { ke=k; break; }
     dScale = Math.max(1e-300, 0.5*curOrbit.Rk[ke]*Math.log(Math.max(curOrbit.Rk[ke],1e-300))/curOrbit.DRk[ke]); }
   /* The new look's occlusion and shadows read the depth buffer far from the pixel, so the whole
@@ -4512,6 +5072,7 @@ function updateCanvasDisplay(W,H){
 }
 let last=performance.now(), fps=0, frameN=0, curOrbit=null, deepActive=false;
 let orbitDirty=true;                              // rebuild the reference orbit only when this is set
+let estOwed=false;                                // the camera's orbit has not escaped within the count yet: its first estimate is taken unsmoothed (grep HOLD THE ESTIMATE, boxCamEstimate)
 let accumReset=true;                              // restart progressive accumulation (camera moved)
 /* progressive TEMPORAL accumulation when idle (TSAA-style): each idle frame re-renders the deep
    view at the live frame res but with a sub-pixel Halton JITTER, and averages it into a float
@@ -4557,19 +5118,20 @@ function frame(now){
      the smallest step an f32 reference texel still holds apart from 0). No flight reaches the
      exact axis; a start view, a jump home or a hand-written view can. For years this hid behind
      the f32 baseline, which drew the start view instead. */
-  if (camHP[0] === 0n && camHP[1] === 0n) {
+  if (camHP[0] === 0n && camHP[1] === 0n && !boxOn()) {            // (the box has no pole: its kernel takes no angle)
     camHP[0] = hp.fromNum(Math.max(Math.max(smoothedDist, 0) * 1e-9, 1e-30));
     cam.pos = camHP.map(hp.toNum); orbitDirty = true;
   }
   const {fwd,right,up}=basis();
 
-  deepActive = deepProg && (modeOverride==='deep' || (modeOverride==='auto' && smoothedDist < 1e-4));
+  if (boxOn() && !deepNow()) kickBoxVariantAsync();            // THE FORMULA SEAM: the box's variant builds in the background; its f32 baseline is drawn meanwhile
+  deepActive = deepNow() && (modeOverride==='deep' || (modeOverride==='auto' && smoothedDist < 1e-4));
   updateBlaAuto();                              // BLA 'auto': on only below ~1e-13, once its shader is ready
 
   /* auto iteration budget: the n-iter surface needs ~1.35/decade to resolve at depth.
      Base 32 (not 24): boundary points escape at ~the budget edge, and a thin margin
      flips escape flags (measured at 1e-50: iters=92 mismatched, 96+ agreed). */
-  if (autoIters && deepActive && smoothedDist > 0) {
+  if (autoIters && deepActive && smoothedDist > 0 && !boxOn()) {   // (the box: by ITERATIONS AS A MARGIN alone, below)
     const rec = Math.min(160, 32 + Math.ceil(1.35 * Math.max(0, -Math.log10(smoothedDist))));
     if (rec > cam.iters) { cam.iters = rec; orbitDirty = true; }
   }
@@ -4587,11 +5149,26 @@ function frame(now){
 
   /* --- distance probe for the fly-slowdown --- */
   let rawDist;
-  if (deepActive && curOrbit) {
+  if (deepActive && curOrbit && curOrbit.box) {
+    /* THE FORMULA SEAM: the box's estimate, read where its orbit passes its own escape radius. While the count is
+       still too low for the camera's orbit to escape (a formula switched at a deep place; the margin rule below then
+       adds 32 a frame) there is no estimate: the last one is KEPT, and the first real one is then taken at once
+       (estOwed), not eased towards. Taken as 0 instead - as the bulb's branch below reads such an orbit - the
+       distance eases back up over seconds, and a still that starts meanwhile is drawn with the far relax and the
+       depth scale drifting under it: seen as a faint second picture over the first (47 % of pixels more than 8
+       levels off, 2026-10-09). */
+    const est = boxCamEstimate(curOrbit);
+    if (est < 0) { rawDist = lastRawDist; estOwed = true; }
+    else { rawDist = est; if (estOwed) { snapDist = true; estOwed = false; } }
+  } else if (deepActive && curOrbit) {
     // camera == reference, δ = 0 → de straight from reference escape quantities
     let ke = curOrbit.len - 1;
     for (let k = 0; k < curOrbit.len; k++) if (curOrbit.Rk[k] > 2) { ke = k; break; }
     rawDist = Math.max(0, 0.5*curOrbit.Rk[ke]*Math.log(Math.max(curOrbit.Rk[ke],1e-300))/curOrbit.DRk[ke]);
+    if (dzHoldEstimate) {                         // HOLD THE ESTIMATE (grep): an orbit that did not escape says nothing of the distance
+      if (!(curOrbit.Rk[ke] > 2)) { rawDist = lastRawDist; estOwed = true; }
+      else if (estOwed) { snapDist = true; estOwed = false; }
+    }
   } else {
     rawDist = Math.max(0, deCPU(cam.pos[0],cam.pos[1],cam.pos[2], cam.power, cam.iters));
   }
@@ -4602,16 +5179,25 @@ function frame(now){
      its hand-set 86 where the rule gives 59). Under the ray march an orbit runs until it escapes and pays only for
      the iterations it needs, so the cap can simply stand a margin above where the camera's own orbit escapes: as
      many more iterations as the map needs to stretch space by e^RAY_ITER_REACH, at the rate this orbit itself has
-     stretched it so far. Nothing in it names a depth or a power. Raised, never lowered, like the page's. */
-  if (rayUse && autoIters && deepActive && curOrbit) {
+     stretched it so far. Nothing in it names a depth or a power. Raised, never lowered, like the page's.
+     THE MANDELBOX (grep THE FORMULA SEAM) counts by this rule ALONE, whatever march draws it, with its own escape
+     radius: the page's rule above is the bulb's. It needs the margin for another reason than the ray march does -
+     with the cap too near the camera orbit's own escape an intricate place draws as a smooth wall (the CPU study:
+     24 iterations above it at scale 2, 44 at -1.5, where this rule gives 30 and 51 for a stretch of ln 2 and
+     ln 1.5 an iteration) - and it has a ceiling of its own, BOX_ITER_MAX: at scale -1.5 the map stretches by as
+     little as 1.48 an iteration, 5.9 iterations a decade (measured: 342 for the camera's own orbit at 7.7e-59),
+     where the bulb's worst is 3.7. In single precision an orbit that runs more than about 17 iterations (scale 2)
+     past where it left the reference is noise, so a cap far above this margin buys nothing. */
+  if ((rayUse || boxOn()) && autoIters && deepActive && curOrbit) {
+    const escR = curOrbit.box ? BOX_ESC : 2;
     let ke = -1;
-    for (let k = 0; k < curOrbit.len; k++) if (curOrbit.Rk[k] > 2) { ke = k; break; }
+    for (let k = 0; k < curOrbit.len; k++) if (curOrbit.Rk[k] > escR) { ke = k; break; }
     let want = cam.iters + 32;                    // the camera's own orbit has not escaped within the cap: certainly too low
     if (ke >= 0) {
       const grow = ke > 0 ? Math.log(Math.max(curOrbit.DRk[ke], 2)) / ke : 2;     // nats of stretch an iteration, from the orbit itself
       want = ke + 2 + Math.ceil(RAY_ITER_REACH / Math.max(grow, 0.2));
     }
-    want = Math.min(RAY_ITER_MAX, want);
+    want = Math.min(itersMax(), want);
     if (want > cam.iters) { cam.iters = want; orbitDirty = true; }
   }
   if (snapDist) { smoothedDist = rawDist; snapDist = false; }
@@ -4729,6 +5315,7 @@ function frame(now){
     setCanvasSize(w,h);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0,0,w,h);
+    const { p: prog, u } = baseCtx();            // the active formula's baseline (the bulb: the page's program)
     gl.useProgram(prog); bindQuad(prog);
     gl.uniform2f(u.res,w,h);
     gl.uniform3fv(u.camPos,cam.pos);
@@ -4738,6 +5325,7 @@ function frame(now){
     gl.uniform1f(u.prec,5e-7);
     gl.uniform3fv(u.light,light);
     gl.uniform2f(u.phase, phaseTheta, phasePhi);
+    if (boxOn()) setBoxUniforms(u);
     gl.drawArrays(gl.TRIANGLES,0,3);
   }
 
@@ -4782,7 +5370,7 @@ function diveHopJS(O, rd, maxIter, hint){
     const rn = probe(tn);
     if (!rn.escaped || rn.de <= 0) { lo = t; hi = tn; break; }
     t = tn; de = rn.de; cap *= 1.25;
-    if (t > 8) return { noSurface: true };
+    if (t > senseFar()) return { noSurface: true };
   }
   if (hi < 0) return { t };                       // never reached the set — use last t
   for (let b = 0; b < 100; b++) {
@@ -4801,7 +5389,7 @@ api.dive = async function(depth){
     const de = deCPU(cam.pos[0], cam.pos[1], cam.pos[2], cam.power, cam.iters);
     if (de <= 1e-5) break;
     api.moveAlong(fwd, de * 0.6);
-    if (Math.hypot(...cam.pos) > 8) return { error: 'left scene (no surface along fwd)' };
+    if (Math.hypot(...cam.pos) > (boxOn() ? 4 * boxExtent() : 8)) return { error: 'left scene (no surface along fwd)' };
   }
   /* stage 1+: perturbed hops. Each hop rebuilds the reference AT the camera, bisects
      the surface along fwd in-domain (t* ≈ current dist ≪ 1), then moves to
@@ -4850,7 +5438,7 @@ let dzDive = 0;                                   // id of the running diveTo (0
 const dzThumbCv = document.createElement('canvas');
 api.dz = {
   version: 1,
-  telemetry: () => ({ ready: !!deepReady, error: deepCompileErr || '', mode: deepActive ? 'deep' : 'f32',
+  telemetry: () => ({ ready: !!deepReady && !!deepNow(), error: deepCompileErr || (boxOn() && variantErr[xKey(false)]) || '', mode: deepActive ? 'deep' : 'f32',
     depth: smoothedDist, fps, frameW: canvas.width, frameH: canvas.height, iters: cam.iters, power: nPower,
     accumN, accumMax: ACCUM_MAX, recording, playing: playingPath, exporting,
     pathFrames: recPath.length, bla: !!blaEnabled }),
@@ -4882,7 +5470,7 @@ api.dz = {
     dzDive = 0;                                   // a jump ends any dive in progress
     camHP = v.cam.map(BigInt); cam.pos = camHP.map(hp.toNum);
     cam.yaw = +v.yaw; cam.pitch = +v.pitch;
-    if (v.iters) cam.iters = Math.max(4, Math.min(160, v.iters|0));
+    if (v.iters) cam.iters = Math.max(4, Math.min(boxOn() ? BOX_ITER_MAX : 160, v.iters|0));
     if (v.power && v.power !== nPower) api.setPower(v.power);
     if (v.phase) api.setPhase(v.phase[0], v.phase[1]);
     if (v.light !== undefined) lightMode = v.light|0;
@@ -4969,6 +5557,7 @@ api.dz = {
   }),
 };
 
+if (options.formula === 'mandelbox' || options.formulaParams) setFormulaNow(options.formula, options.formulaParams);   // THE FORMULA SEAM: the create option
 dzScheduleFrame();
 /* ════════ END ported page script ════════ */
 const instance = {

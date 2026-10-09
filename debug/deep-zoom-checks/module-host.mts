@@ -291,6 +291,8 @@ function makeRig() {
         mode: 'auto',
         tick: 0,
         rayState: 'off' as 'off' | 'building' | 'on' | 'failed',
+        formulaKind: 'mandelbulb' as 'mandelbulb' | 'mandelbox',
+        formulaState: 'on' as 'building' | 'on' | 'failed',
         view: view(CAM_A),
         settings: {
             detail: 1, reach: 1, power: 8, phase: [0.25, 0.5] as [number, number], color: 0, cscale: 1, light: 1,
@@ -389,6 +391,8 @@ function makeRig() {
         marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
         rayMarch: () => ({ bits: 0, factor: 1, hit: 64, tol: 0.05, floor: 0, line: 0, detail: 0 }),
         rayMarchState: () => state.rayState,
+        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] }),
+        formulaState: () => state.formulaState,
         normalDetail: () => 0,
         blaMode: (): string => 'auto',
         compileMs: (): Record<string, number | undefined> => ({}),
@@ -444,7 +448,7 @@ console.log('[1] options   shellOptions(frame, hooks)');
     );
     const record = options as Record<string, unknown>;
     const want: Array<[keyof DeepZoomOptions, unknown]> = [
-        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'], ['farLook', true], ['rebaseOrigin', true], ['rayMarch', true], ['farHandOff', 0.5],
+        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'], ['farLook', true], ['rebaseOrigin', true], ['rayMarch', true], ['farHandOff', 0.5], ['holdEstimate', true],
         ['resetStillOnResize', true], ['loseContextOnDispose', true], ['embed', true], ['publishOnWindow', false],
     ];
     for (const [name, value] of want) {
@@ -555,7 +559,8 @@ console.log('[3] boot      ready, bootParams, compile, error');
     const rig = makeRig();
     const host = createModuleHost(rig.instance, rig.canvas);
     const compile: string[] = [];
-    host.on('compile', (e) => { compile.push(`${e.what}:${e.state}`); });
+    const variants: string[] = [];
+    host.on('compile', (e) => { compile.push(`${e.what}:${e.state}`); if (e.what === 'variant') variants.push(`${e.variant}:${e.state}`); });
     check(host.bootParams() === null, 'boot: bootParams is null before the first step');
     const parked = view(CAM_C, { power: 5 });
     host.setPendingView(view(CAM_B));
@@ -596,6 +601,20 @@ console.log('[3] boot      ready, bootParams, compile, error');
     rig.state.rayState = 'off';
     run(host, 400, 5000, 200);
     check(compile.length === 4, 'boot: a ray march switched off says nothing more', compile.join());
+    check(variants.join() === 'rayMarch:compiling,rayMarch:ready', 'boot: and those two were named as the ray march\'s', variants.join());
+    // the Mandelbox's shader builds from the first switch to that formula: `compile` with what 'variant', named
+    rig.state.formulaState = 'building';
+    run(host, 400, 6000, 200);
+    check(compile.length === 4, 'boot: while the bulb is selected, formulaState is not asked (it speaks for the deep shader there)', compile.join());
+    rig.state.formulaKind = 'mandelbox';
+    run(host, 400, 7000, 200);
+    check(variants.join() === 'rayMarch:compiling,rayMarch:ready,mandelbox:compiling', 'boot: with the Mandelbox selected and its shader building, compile says variant compiling, named mandelbox, once', variants.join());
+    rig.state.formulaState = 'on';
+    run(host, 400, 8000, 200);
+    check(variants.join() === 'rayMarch:compiling,rayMarch:ready,mandelbox:compiling,mandelbox:ready', 'boot: and ready when it is there', variants.join());
+    rig.state.formulaState = 'failed';
+    run(host, 400, 9000, 200);
+    check(variants[variants.length - 1] === 'mandelbox:failed' && variants.length === 5, 'boot: a Mandelbox shader that cannot be built says failed', variants.join());
     host.dispose();
 }
 {

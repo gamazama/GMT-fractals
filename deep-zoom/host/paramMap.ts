@@ -18,6 +18,9 @@
  *   - Some values travel together because the module's setter takes them together: colour
  *     (`plain`, `mode`, `scale` -> one `setColor`), light type and lamp falloff (one `setLight`),
  *     the two phase angles (one `setPhase`). A row's `group` says which push carries it.
+ *   - The formula and the box's seven numbers are ONE push (`group: 'formula'`, one `setFormula`),
+ *     and that push goes before every other push of the same patch: the renderer's iteration ceiling
+ *     follows the formula (160 or 500), so an iteration count sent first would be cut to the old one.
  *   - `group: null` means no push of `looseParams.ts` carries the value: it is shell-only, it
  *     waits on a module change named in `why`, or (the gradient) it reaches the renderer by
  *     another member of the host, named in `why`. A row that waits must not be in a panel.
@@ -31,7 +34,7 @@
  */
 import type { DeepZoomApi } from '../renderer';
 import type { DzParamId, DzParamValue, DzParams } from './DeepZoomHost';
-import { DzFormulaFeature } from '../features/formula';
+import { DzFormulaFeature, FORMULA_OPTIONS } from '../features/formula';
 import {
     DzQualityFeature, REACH_RENDERER_VALUES, NORMALS_RENDERER_VALUES, DEPTH_NORMAL_RADIUS_RENDERER_VALUES,
     BLA_OPTIONS,
@@ -45,7 +48,7 @@ export type DzInvalidation = 'O' | 'A' | 'C' | '-';
 
 /** The pushes of `looseParams.ts`. `look` rows also name the field of `api.setLook`. */
 export type DzPushGroup =
-    | 'power' | 'phase' | 'iters' | 'autoIters'
+    | 'formula' | 'power' | 'phase' | 'iters' | 'autoIters'
     | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'jacobian' | 'rayMarch' | 'accum'
     | 'bla' | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
@@ -86,8 +89,22 @@ const look = (key: string, field: string): DzParamRow => ({
     feature: 'dzLight', key, cls: 'A', group: 'look', look: field, read: (api) => lookNumber(api, field),
 });
 
+/** One of the eight values `api.setFormula` takes, read back as the store would hold it. */
+const box = (key: string, read: (f: ReturnType<DeepZoomApi['formula']>) => DzParamValue | undefined): DzParamRow => ({
+    feature: 'dzFormula', key, cls: 'O', group: 'formula', read: (api) => read(api.formula()),
+});
+
 export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     // ── dzFormula: every change rebuilds the reference orbit ──
+    box('kind', (f) => indexIn(FORMULA_OPTIONS, f.kind)),
+    box('boxScale', (f) => f.scale),
+    box('boxMinRadius', (f) => f.minR),
+    box('boxFold', (f) => f.fold),
+    box('boxFixedRadius', (f) => f.fixedR),
+    box('boxRotX', (f) => f.rot[0]),
+    box('boxRotY', (f) => f.rot[1]),
+    box('boxRotZ', (f) => f.rot[2]),
+    { feature: 'dzFormula', key: 'boxRotation', cls: '-', group: null, why: 'a composed row with no state of its own: boxRotX, boxRotY and boxRotZ carry the value' },
     { feature: 'dzFormula', key: 'power', cls: 'O', group: 'power', read: (api) => api.dz.settings().power },
     { feature: 'dzFormula', key: 'phaseTheta', cls: 'O', group: 'phase', read: (api) => api.dz.settings().phase[0] },
     { feature: 'dzFormula', key: 'phasePhi', cls: 'O', group: 'phase', read: (api) => api.dz.settings().phase[1] },

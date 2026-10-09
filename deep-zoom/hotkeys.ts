@@ -27,6 +27,7 @@ import { stopDive, useDive } from './diveControl';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
 import { LIGHT_TYPE_OPTIONS } from './features/light';
 import { OVERLAYS_OPTIONS } from './features/inspect';
+import { iterationCeiling } from './features/formula';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 const store = () => useEngineStore.getState();
@@ -43,7 +44,7 @@ const undoable = (write: () => void) => (): void => {
 
 // ── what each key does (ranges are the feature params' own) ──
 const detail = (factor: number) => (): void => store().setDzQuality({ detail: clamp(store().dzQuality.detail * factor, 0.25, 32) });
-const iterations = (step: number) => (): void => store().setDzFormula({ iterations: clamp(store().dzFormula.iterations + step, 4, 160) });
+const iterations = (step: number) => (): void => store().setDzFormula({ iterations: clamp(store().dzFormula.iterations + step, 4, iterationCeiling(store().dzFormula.kind)) });
 const power = (step: number) => (): void => store().setDzFormula({ power: clamp(store().dzFormula.power + step, 2, 16) });
 const autoIterations = (): void => store().setDzFormula({ autoIterations: !store().dzFormula.autoIterations });
 /** Plain -> Iterations -> Orbit trap -> Plain: the renderer's own order of its three colourings. */

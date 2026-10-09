@@ -39,6 +39,21 @@
  *     stack between them, are one entry: taps of W would otherwise fill the 50 undo steps.
  *   - "Depth" saved with a location is the depth the app shows (`deep-zoom/depthNow.ts`: what is
  *     looked at) since 2026-10-09; before that it was the nearest surface in any direction.
+ *   - THE FORMULA IS NOT IN A VIEW (2026-10-09). A view is the renderer's own eleven fields and
+ *     says nothing of Mandelbulb or Mandelbox. A place carries it in its look (`look.dzFormula.kind`
+ *     and the box's numbers), a bare view that this file made itself (Back, Home) in `formula`, and
+ *     anything with neither - every place, scene and pasted text from before that day - means the
+ *     Mandelbulb. Two orders follow, both because the renderer's iteration ceiling is the formula's
+ *     (160 or 500) and `setView` cuts a view's count to it: a jump tells the renderer the formula
+ *     BEFORE it hands over the view (`pushFormulaNow`), and so does an undo (the history provider's
+ *     `restore` runs after the store has been put back, so the store already says which formula).
+ *   - A CAMERA OF ONE FORMULA MEANS NOTHING IN THE OTHER. The bulb's start view is inside the
+ *     Mandelbox (a blank wall, seen 2026-10-09), and a deep place of either is nowhere in the other.
+ *     So a change of `dzFormula.kind` that did not come from a jump moves the camera to the new
+ *     formula's whole-object view (`formulaHome`), inside the same undo bracket as the row's own
+ *     write: Ctrl+Z brings back the formula AND the place. A jump sets `jumping` and places the
+ *     camera itself; an undo or a scene load passes through here too, and its own view, restored
+ *     after the store, is the one that stays.
  */
 import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
@@ -49,10 +64,15 @@ import { getHost, subscribeHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
 import { LIGHT_TYPE_RENDERER_VALUES, lightTypeToRenderer } from './features/light';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
+import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS } from './features/formula';
+import type { DzFormulaChoice } from './features/formula';
+import { paramId } from './host/paramMap';
+import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
 import { formatDepth, validDepth } from './components/depthFormat';
 import { depthNow } from './depthNow';
 import { isFlying } from './navigationState';
 import type { DzColourSlice, DzFormulaSlice, DzLightSlice } from './storeTypes';
+import { STARTERS } from './data/starters';
 
 /** The look a location was saved with: the three look slices and the detail. */
 /** The march settings a place needs to draw right (Quality tab: Step size, Hit refine, Reach). */
@@ -62,8 +82,13 @@ export interface DzLocationMarch {
     reach: number;
 }
 
+/** The formula slice as a place holds it. The formula choice and the box's numbers are there on a
+ *  place saved since 2026-10-09; without them the place is a Mandelbulb's (see PITFALLS). */
+export type DzLocationFormula =
+    Pick<DzFormulaSlice, 'power' | 'phaseTheta' | 'phasePhi' | 'iterations' | 'autoIterations'> & Partial<DzFormulaChoice>;
+
 export interface DzLocationLook {
-    dzFormula: DzFormulaSlice;
+    dzFormula: DzLocationFormula;
     dzLight: DzLightSlice;
     /** With its gradient since stage 5 (2026-10-09): a place brings its colours back. A place
      *  saved before that has no `gradient` key, and a jump to one leaves the gradient as it is. */
@@ -80,6 +105,9 @@ export interface DzLocationState {
     view: DzView;
     /** Absent on a location that came in as a bare view (a starter, last week's bookmark). */
     look?: DzLocationLook;
+    /** For a bare view only (no `look`): which formula it is a view of. Back and Home set it; a
+     *  bare view from anywhere else has none and is a Mandelbulb's. */
+    formula?: DzFormulaChoice;
     /** The depth when saved, as text (`6.4e-53`); '' when unknown. */
     depth: string;
     note?: string;
@@ -113,6 +141,24 @@ const THUMBNAIL_PX = 128;
 
 // ── the look, between the store and a view ───────────────────────────────────────────────────────
 
+/** Which formula the store says is drawn, with the box's numbers. */
+function formulaChoiceNow(): DzFormulaChoice {
+    const f = useEngineStore.getState().dzFormula;
+    const out = {} as Record<string, number>;
+    for (const key of FORMULA_CHOICE_KEYS) out[key] = f[key];
+    return out as DzFormulaChoice;
+}
+
+/** Tell the renderer the store's formula NOW, ahead of the sync's own (delayed) push, so that the
+ *  view handed over next is taken under it. A host that is not ready yet is told nothing: at ready
+ *  the sync sends everything, and nothing may reach the renderer before then (useHostSync.ts). */
+function pushFormulaNow(host: DeepZoomHost): void {
+    if (!host.bootParams()) return;
+    const patch: DzParams = {};
+    for (const [key, value] of Object.entries(formulaChoiceNow())) patch[paramId('dzFormula', key)] = value;
+    host.setParams(patch);
+}
+
 function captureLook(): DzLocationLook {
     const s = useEngineStore.getState();
     return {
@@ -123,7 +169,7 @@ function captureLook(): DzLocationLook {
 
 function applyLook(look: DzLocationLook): void {
     const s = useEngineStore.getState();
-    s.setDzFormula(look.dzFormula);
+    s.setDzFormula({ kind: FORMULA_BULB, ...look.dzFormula });      // a look from before 2026-10-09 has no `kind`: the Mandelbulb
     s.setDzLight(look.dzLight);
     s.setDzColour(look.dzColour);
     s.setDzQuality(look.march ? { detail: look.detail, ...look.march } : { detail: look.detail });
@@ -131,9 +177,9 @@ function applyLook(look: DzLocationLook): void {
 
 /** The look fields a bare view carries, written to the store (iterations, power, phase, light
  *  type, falloff, colour, scale, detail). Used when a view arrives with no saved look. */
-function applyViewLook(view: DzView): void {
+function applyViewLook(view: DzView, formula?: DzFormulaChoice): void {
     const s = useEngineStore.getState();
-    s.setDzFormula({ power: view.power, phaseTheta: view.phase[0], phasePhi: view.phase[1], iterations: view.iters });
+    s.setDzFormula({ kind: FORMULA_BULB, ...formula, power: view.power, phaseTheta: view.phase[0], phasePhi: view.phase[1], iterations: view.iters });
     const lightType = LIGHT_TYPE_RENDERER_VALUES.indexOf(view.light as (typeof LIGHT_TYPE_RENDERER_VALUES)[number]);
     s.setDzLight({ lightType: lightType < 0 ? 0 : lightType, lampFalloff: view.falloff });
     s.setDzColour({ ...colourFromRenderer(view.color), scale: view.cscale });
@@ -165,9 +211,35 @@ export function viewForHost(view: DzView): DzView {
 // ── jumping ──────────────────────────────────────────────────────────────────────────────────────
 
 let jumpSeq = 0;
+/** True while `jumpTo` writes the look: a formula change inside a jump is the jump's own. */
+let jumping = false;
+
+/** A coordinate as the camera holds it: 256 fractional bits, as a decimal string. */
+const fixed = (x: number): string => String(BigInt(Math.round(x * 2 ** 40)) << BigInt(216));
+
+/**
+ * The whole of a formula from outside: where a switch of formula puts the camera. The bulb's is the
+ * first starter's view (the start of the sample flight). The box's follows its scale - the set fills
+ * a cube of half-side 2 L (s + 1) / (s - 1) for a positive scale s (6 at scale 2) and about 2.2 L for
+ * a negative one (measured at -1.5) - seen from 6.5 half-sides away along a fixed diagonal (at 5 the
+ * cube's corners left a square frame).
+ */
+function formulaHome(choice: DzFormulaChoice): DzView {
+    if (choice.kind !== FORMULA_BOX) return STARTERS[0].view;
+    const s = choice.boxScale, a = Math.abs(s);
+    const half = s > 0 ? 2 * choice.boxFold * (a + 1) / Math.max(a - 1, 0.02) : 2.2 * choice.boxFold;
+    const dir = [0.66, 0.43, 0.61], len = Math.hypot(dir[0], dir[1], dir[2]), d = 6.5 * half / len;
+    return {
+        cam: [fixed(dir[0] * d), fixed(dir[1] * d), fixed(dir[2] * d)],
+        yaw: Math.atan2(-dir[2], -dir[0]), pitch: Math.asin(-dir[1] / len),
+        iters: 14, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1,
+    };
+}
+/** A view with the formula it is a view of (the view alone does not say). */
+interface FormulaView { view: DzView; formula: DzFormulaChoice }
 /** Views to go back to, oldest first. Session only. */
-const backStack: DzView[] = [];
-let homeView: DzView | null = null;
+const backStack: FormulaView[] = [];
+let homeView: FormulaView | null = null;
 
 export interface JumpOptions {
     /** Keep the current light, colour, formula and detail; move the camera only. */
@@ -182,16 +254,19 @@ export function jumpTo(target: DzLocationState | DzView, opts: JumpOptions = {})
     if (!host) return false;
     const state: DzLocationState = 'view' in target ? target : { view: target, depth: '' };
     const store = useEngineStore.getState();
-    if (!opts.noBack) backStack.push(host.getView());
+    if (!opts.noBack) backStack.push({ view: host.getView(), formula: formulaChoiceNow() });
     store.beginParamTransaction();
+    jumping = true;
     try {
         jumpSeq++;
         if (!opts.keepLook) {
             if (state.look) applyLook(state.look);
-            else applyViewLook(state.view);
+            else applyViewLook(state.view, state.formula);
         }
+        pushFormulaNow(host);                                        // before the view: THE FORMULA IS NOT IN A VIEW
         host.setView(viewForHost(state.view));
     } finally {
+        jumping = false;
         useEngineStore.getState().endParamTransaction();
     }
     return true;
@@ -242,18 +317,18 @@ export function flightEnded(): void {
 
 /** Remember the view the renderer started with, once. */
 export function rememberHome(view: DzView): void {
-    if (!homeView) homeView = view;
+    if (!homeView) homeView = { view, formula: formulaChoiceNow() };
 }
 
 export function jumpHome(): void {
-    if (homeView) jumpTo(homeView);
+    if (homeView) jumpTo({ view: homeView.view, formula: homeView.formula, depth: '' });
 }
 
 /** Back to the view before the last jump. */
 export function jumpBack(): void {
-    const view = backStack.pop();
-    if (!view) { showToast('No earlier view to go back to', 'info'); return; }
-    jumpTo(view, { noBack: true });
+    const back = backStack.pop();
+    if (!back) { showToast('No earlier view to go back to', 'info'); return; }
+    jumpTo({ view: back.view, formula: back.formula, depth: '' }, { noBack: true });
 }
 
 // ── capture ──────────────────────────────────────────────────────────────────────────────────────
@@ -405,9 +480,22 @@ export function installLocations(): void {
         capture: () => ({ seq: jumpSeq, view: flightPending ?? getHost()?.getView() ?? null }),
         restore: (snapshot) => {
             const view = (snapshot as { view: DzView | null } | null)?.view;
-            if (view) getHost()?.setView(view);
+            const host = getHost();
+            if (!view || !host) return;
+            pushFormulaNow(host);                                    // the store is already put back: see PITFALLS
+            host.setView(view);
         },
         changeOf: (capture) => (capture as { seq: number }).seq,
+    });
+
+    // A switch of formula shows the whole of the new one (PITFALLS: A CAMERA OF ONE FORMULA ...).
+    useEngineStore.subscribe((s) => s.dzFormula?.kind, (kind, was) => {
+        const host = getHost();
+        if (jumping || kind === was || !host || !host.bootParams()) return;
+        backStack.push({ view: host.getView(), formula: { ...formulaChoiceNow(), kind: was ?? FORMULA_BULB } });
+        pushFormulaNow(host);
+        jumpSeq++;                                                   // the open bracket's undo entry takes the view with it
+        host.setView(viewForHost(formulaHome(formulaChoiceNow())));
     });
 
     // Home is the view the renderer started with, read once at the first ready.

@@ -99,6 +99,16 @@
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { SliceFromParams } from '../../engine/typedSlices';
 import { defineEnumParam } from '../../engine/defineEnumParam';
+import { FORMULA_BOX, FORMULA_BULB } from './formula';
+
+/* THE MANDELBOX DOES NOT USE FOUR THINGS ON THIS TAB (2026-10-09; grep THE FORMULA SEAM in renderer/core.js):
+   Ray march, True-gradient march, BLA and the Gradient normal are built on the bulb's power map. The renderer
+   keeps what was asked and draws the box with its own march (and 4-tap where Gradient was chosen), so nothing
+   breaks whatever these hold. Their rows are shown for the bulb only, and Gradient is greyed in the Normals
+   list, so the tab does not offer the box a switch that does nothing. The values are not touched: back on
+   the bulb they apply as they were. `$dzFormula.kind` reads the other feature's slice (utils/paramConditions.ts). */
+const BULB_ONLY = { param: '$dzFormula.kind', eq: FORMULA_BULB };
+const boxDrawn = (state: { dzFormula?: { kind?: number } }): boolean => state?.dzFormula?.kind === FORMULA_BOX;
 
 // ── Reach — how far a ray travels. core.js: `const REACH`, default `const march = {` = REACH[1].
 export const REACH_OPTIONS = ['short', 'relaxed', 'full'] as const;
@@ -183,6 +193,7 @@ export const DzQualityFeature = {
         normals: {
             ...normalsParam.config,
             type: 'float',
+            options: normalsParam.config.options?.map((o) => (o.value === NORMALS_OPTIONS.indexOf('gradient') ? { ...o, disabledIf: boxDrawn } : o)),
             description: 'How the surface direction is found for shading. Screen and Depth read the rendered picture. 3-tap and 4-tap sample the distance estimate around each hit. Gradient takes it from the hit\'s own orbit: smoother, and no extra samples. Gradient takes about 20 seconds to switch on the first time; 4-tap is shown until it is ready.',
         },
         depthNormalRadius: {
@@ -221,7 +232,7 @@ export const DzQualityFeature = {
             default: 0.85, min: 0.1, max: 2, step: 0.05,
             label: 'Step size',
             format: (v) => `${v.toFixed(2)}×`,
-            description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. Not used while Ray march is on.',
+            description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. Not used while Ray march is on; the Mandelbox always marches by it.',
         },
         trueGradient: {
             type: 'boolean',
@@ -232,6 +243,7 @@ export const DzQualityFeature = {
             // step costs 1.45 to 1.9 for.
             default: false,
             label: 'True-gradient march',
+            condition: BULB_ONLY,
             description: 'Measures the distance to the surface with the orbit\'s real derivative as well, and steps by the smaller of the two estimates. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. It changes where rays land, not how the surface is shaded: for the smoother shading choose Normals: Gradient. Takes about 20 seconds to switch on the first time. Not used while Ray march is on.',
         },
         rayMarch: {
@@ -246,6 +258,7 @@ export const DzQualityFeature = {
             // to retire the others but lets keep them around a little while longer for reference").
             default: true,
             label: 'Ray march',
+            condition: BULB_ONLY,
             description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size, True-gradient march and BLA are not used, and iterations follow the orbit; Detail and Hit refine apply as ever. Its shader takes about 20 seconds to build the first time; the top bar says so, and the older march is drawn meanwhile.',
         },
         accumulate: {
@@ -266,6 +279,7 @@ export const DzQualityFeature = {
             ...blaParam.config,
             type: 'float',
             isAdvanced: true,
+            condition: BULB_ONLY,
             description: 'Bivariate linear approximation: skips runs of perturbation iterations. Auto uses it below a surface distance of about 1e-13. On uses it at every depth; the first switch to On builds a shader, a pause of a few seconds.',
         },
         resolutionCap: {

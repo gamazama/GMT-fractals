@@ -12,6 +12,9 @@
  *   ?embed=0    leave the page's embed mode off (default on, like `?embed=1` of the page)
  *   ?lose=1     loseContextOnDispose on, and create() swaps in a FRESH canvas each time after the
  *               first (the remount path a React shell should use)
+ *   ?formula=mandelbox   the create option `formula` (the Mandelbox from the first frame)
+ *   ?ray=1      the create option `rayMarch`, as the shell passes it
+ *   ?hold=1     the create option `holdEstimate`, as the shell passes it
  *
  * `window.__harness` is the smoke's handle on the lifecycle. Not part of the build: the page is
  * served by the Vite dev server only and is not in vite.config.ts's inputs.
@@ -23,6 +26,9 @@ const query = new URLSearchParams(location.search);
 const manual = query.get('manual') === '1';
 const embed = query.get('embed') !== '0';
 const lose = query.get('lose') === '1';
+const startOnBox = query.get('formula') === 'mandelbox';
+const rayMarch = query.get('ray') === '1';
+const holdEstimate = query.get('hold') === '1';
 let canvas = document.getElementById('gl') as HTMLCanvasElement;
 let creations = 0;
 
@@ -45,6 +51,9 @@ function create(): void {
         autoStart: !manual,
         embed,
         loseContextOnDispose: lose,
+        ...(startOnBox ? { formula: 'mandelbox' as const } : {}),
+        ...(rayMarch ? { rayMarch: true } : {}),
+        ...(holdEstimate ? { holdEstimate: true } : {}),
         onNotice: (message) => { notices.push(message); console.warn(message); },
     });
 }

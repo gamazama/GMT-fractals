@@ -84,11 +84,12 @@
  *   byte for byte - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("views: ..." lines).
  *   Falsified 2026-10-08: the "cam strings" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
- *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, rayMarch:true, farHandOff:0.5, resetStillOnResize:true, loseContextOnDispose:true` and
+ *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, rayMarch:true, farHandOff:0.5, holdEstimate:true, resetStillOnResize:true, loseContextOnDispose:true` and
  *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
  *   Falsified 2026-10-08: the "options" group in the check's header, all seven; `rebaseOrigin` the same day
  *   (the line removed from `shellOptions` -> "options: rebaseOrigin is true" FAIL), `farHandOff` likewise, and
- *   `rayMarch` on 2026-10-09 ("options: rayMarch is true" FAIL).
+ *   `rayMarch` on 2026-10-09 ("options: rayMarch is true" FAIL), and `holdEstimate` the same day (the line removed
+ *   -> "options: holdEstimate is true" FAIL and "options: every option core.d.ts declares is set here" FAIL).
  * @invariant `dispose()` calls the instance's `dispose` before the canvas is removed; a failed
  *   create leaves no canvas behind; the canvas is in the frame before create runs and carries no
  *   inline width or height - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("dispose:
@@ -395,6 +396,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     let waitedMs = 0;
     let compileSaid: 'compiling' | 'ready' | 'failed' | null = null;
     let raySaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the ray march's shader; nothing is said until it starts to build
+    let boxSaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the Mandelbox's, likewise: it builds from the first switch to that formula
     let wasRecording = false;
     let jobShown = false;
     let lastStatus = '';
@@ -415,7 +417,12 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         // `compile` events with what 'variant' let the shell say so (the owner, 2026-10-09: "it needs some indication").
         const rayNow = api.rayMarchState();
         const raySay = rayNow === 'building' ? 'compiling' : rayNow === 'failed' ? 'failed' : 'ready';
-        if (raySay !== raySaid) { raySaid = raySay; emit('compile', { state: raySay, what: 'variant' }); }
+        if (raySay !== raySaid) { raySaid = raySay; emit('compile', { state: raySay, what: 'variant', variant: 'rayMarch' }); }
+        // The Mandelbox's shader, the same way. `formulaState` speaks for the SELECTED formula, and for the bulb that
+        // is the deep shader itself, which `what: 'deep'` already reports: it is asked only while the box is selected.
+        const boxNow = api.formula().kind === 'mandelbox' ? api.formulaState() : 'on';
+        const boxSay = boxNow === 'building' ? 'compiling' : boxNow === 'failed' ? 'failed' : 'ready';
+        if (boxSay !== boxSaid) { boxSaid = boxSay; emit('compile', { state: boxSay, what: 'variant', variant: 'mandelbox' }); }
         if (t.ready) {
             if (!isReady) {
                 isReady = true;
@@ -667,6 +674,9 @@ export function shellOptions(frame: HTMLElement, hooks: DeepZoomMountHooks = {},
         rebaseOrigin: true,             // the kernel's precision repair (grep REBASE TO THE ORIGIN in renderer/core.js); the page's kernel draws grain where orbits pass the origin
         rayMarch: true,                 // the ray march from the start (grep THE RAY ESTIMATE in renderer/core.js): clean at the page march's speed, no step or detail setting
         farHandOff: 0.5,                // the deep march carries a ray this far before the f32 far-field march takes it (grep FAR HAND-OFF); the page's 1e-3 leaves noisy hits in views shallower than about 1e-2
+        holdEstimate: true,             // a count too low for the camera's orbit to escape keeps the last distance instead of reading 0 (grep HOLD THE ESTIMATE in renderer/core.js): without it a still that starts while the count recovers shows a faint second picture
+        formula: 'mandelbulb',          // the module starts on its default; the store's choice (dzFormula.kind) is sent with every other value at ready (useHostSync.ts)
+        formulaParams: undefined,       // likewise: the box's numbers arrive through setFormula, not at create
         resetStillOnResize: true,       // a dock resize restarts the still
         loseContextOnDispose: true,     // a remount frees every program and texture; each mount gets a fresh canvas
         sizeElement: frame,

@@ -16,6 +16,8 @@ export const DeepZoomPanels: PanelManifest = [
     { id: 'Locations', dock: 'left', order: 0, active: true, items: [
         { type: 'section', label: 'Starter dives' },
         { type: 'widget', id: 'dz-starters' },
+        { type: 'section', label: 'Mandelbox' },
+        { type: 'widget', id: 'dz-box-starters' },
         { type: 'section', label: 'Kept places' },
         { type: 'widget', id: 'dz-places' },
         { type: 'section', label: 'My locations' },
@@ -24,7 +26,8 @@ export const DeepZoomPanels: PanelManifest = [
         { type: 'widget', id: 'dz-location-text' },
     ] },
     { id: 'Formula', dock: 'left', order: 1, items: [
-        { type: 'feature', id: 'dzFormula', whitelistParams: ['power', 'phaseTheta', 'phasePhi'] },
+        // One formula's rows at a time: each row carries its own condition on `kind` (features/formula.ts).
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation'] },
         { type: 'section', label: 'Iterations' },
         { type: 'widget', id: 'dz-iteration-readout' },
         { type: 'feature', id: 'dzFormula', whitelistParams: ['iterations', 'autoIterations'] },
