@@ -8,13 +8,7 @@ paths:
 The 21 files under `engine-gmt/shaders/chunks/` are the GLSL every GMT fragment
 shader is assembled from — the raymarcher, the distance-estimator twins, the
 lighting stack, the path tracer and the post chain. `ShaderFactory` concatenates
-them; nothing here is a module the app imports at runtime, it is source text that
-becomes a program.
-
-Created 2026-07-29 by the guard sweep. Before that this tree was scoped only by
-[`fork-rules.md`](./fork-rules.md), which covers all of `engine-gmt/**` and cites
-no guards at all — so a change to the marcher loaded a rule about forking policy
-and named nothing that could catch a mistake.
+them; it is source text that becomes a program, not modules the app imports.
 
 ## Read first
 
@@ -44,38 +38,23 @@ integrand as the final image — no cheaper motion path in `ray.ts`, `trace.ts` 
 
 - **Compile gates must collapse to nothing when off.** `enableRefine: false` and
   `numericDE: false` emit the *byte-identical* unrefined source, not a disabled
-  branch. Same source means same pixels and zero compile cost, and that is what
-  `test:refine`'s block A asserts character-for-character. If you add a gate,
-  add the collapsed-form assertion with it.
+  branch: same pixels, zero compile cost. `test:refine`'s block A asserts it
+  character-for-character. If you add a gate, add the collapsed-form assertion with it.
 - **`map()` and `mapDist()` are twins.** Both come out of `DE_MASTER` from the
   same formula body, loop init and `getDist`, because the refine loop's mid-point
   `mapDist` has to converge on the silhouette `map` found the hit on. `mapDist`
   strips the colour/trap machinery only — never anything that perturbs `z`.
 - **These are strings, so a typo is a runtime compile error, not a type error.**
-  `typecheck` cannot see inside them. That is why the text assertions in the
-  guards below are worth their apparent crudeness.
+  `typecheck` cannot see inside them.
 
 ## Guards
 
 ```
-npm run test:refine
+npm run test:refine        # fast (0.8 s); reaches 9 of the 21 files
 npm run test:env-sampling  # env-map sampling contract (ADR-0069 / ADR-0072)
-npm run test:shader        # long — full native config sweep, compiles the real programs
+npm run test:shader        # long — full native config sweep, compiles the real programs (19 of 21)
 ```
 
-`test:refine` reaches 9 of the 21 files here and is the fast one (0.8s, 83
-checks). Falsified 2026-07-29 five ways: forcing `enableRefine` true in `trace.ts`
-(8 red), forcing `numericDE` true in `de.ts` (8 red), moving `REFINE_HARD_CAP`
-from 8 to 6 in `data/constants.ts` (1 red), and — after a repair, because it did
-not previously fail — making `emitFusedHybrid` return no def (12 red). `test:shader`
-reaches 19 of 21 and actually compiles, so it catches GLSL that merely parses.
-
-`test:env-sampling` reads `chunks/lighting/env.ts` — the chunk behind every sky and
-reflection pixel, and unguarded at the text level until 2026-08-31. It exists because
-`typecheck` cannot see inside a GLSL string and `test:shader` only proves the program
-COMPILES: an implicit-LOD fetch compiles perfectly and renders wrong. That is exactly
-what shipped — `sampleEnvBicubic` fetched with `texture()` on a mipmapped env texture,
-and its deliberately discontinuous tap coordinates became 2x2-quad LOD noise, seen as
-hard stair-stepped mirror reflections. Falsified three ways 2026-08-31, including
-emptying `sampleEnvBicubic`'s body — the "green because the input vanished" case, which
-it catches by proving the four fetches exist before asserting what kind they are.
+`test:env-sampling` reads `chunks/lighting/env.ts` as text because `test:shader` only
+proves the program COMPILES: an implicit-LOD fetch (`texture()` on the mipmapped env
+texture) compiles and renders wrong.

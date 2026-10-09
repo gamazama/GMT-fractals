@@ -22,72 +22,52 @@ FloatingPanel, AnchoredMenu, the tier table — see
 
 ## Invariants
 
-- **Purity is scoped to the `components/ui/` subtree — not to all of `components/`.**
-  `components/ui/**` is the pure primitive layer: zero store imports, enforced by
-  the `PreToolUse` hook in `.claude/hooks/guard.mjs`. Capabilities arrive via
-  props or opt-in React context (`components/contexts/StoreCallbacksContext.tsx`).
-  The **rest** of `components/` is store-aware by design — roughly 29 of the 68
-  top-level `components/*.tsx` read `useEngineStore` directly, and that is not a
-  violation. ADR-0014 records this explicitly: the blanket "primitives must not
-  import the store" line in `docs/history/engine/05_Shared_UI.md` is *aspirational,
-  not enforced*, and the migration to `useStoreCallbacks()` is incremental. Don't
-  "fix" a store-aware composed panel; do keep new `components/ui/**` code pure.
-- **Panels are declarative compositions** of features, widgets, sections,
-  separators and collapsibles. Layout decisions live in the manifest, not in
-  hand-written panel components.
+- **Purity is scoped to `components/ui/**`**: zero store imports, enforced by the
+  `PreToolUse` hook in `.claude/hooks/guard.mjs`; capabilities arrive via props or opt-in
+  React context (`components/contexts/StoreCallbacksContext.tsx`). The rest of
+  `components/` is store-aware by design (ADR-0014) — don't "fix" a store-aware panel.
+- **Panels are declarative compositions** of features, widgets, sections, separators and
+  collapsibles. Layout lives in the manifest. Don't `component: 'panel-X'` around a
+  manifest gap: extend the manifest (a new item type or prop) in a way another app could use.
+- **Never create a parallel component.** If a widget nearly does what you need, improve the
+  master. Widgets ported verbatim from GMT (FormulaSelect, AudioSpectrum, FlowEditor,
+  EnginePanel) keep their internals.
+- **Every lazily-imported surface goes through `lazyWithFallback`**
+  (`components/ui/lazyWithFallback.tsx`), never bare `React.lazy`: a failed chunk fetch
+  otherwise throws into the root `AppErrorBoundary` and takes the whole app down.
 
-## The anti-pattern that matters
-
-**Don't `component: 'panel-X'` your way out of a manifest gap.** That's how five
-escape hatches become five forks. If a panel can't be expressed via `items`,
-extend the manifest — a new item type, or a new prop on an existing one — so that
-it can, in a way another app could also use.
-
-## Never create a parallel component
-
-If a widget nearly does what you need, find the master component and improve it.
-Do not add a second near-identical one alongside it.
-
-Self-contained widgets ported from GMT (FormulaSelect, AudioSpectrum, FlowEditor,
-EnginePanel) were ported **verbatim** with path rewrites and registered in
-`componentRegistry`. Don't rewrite their internals.
-
-## The colour picker is mounted by three hosts, and answers to all of them
+## The colour picker is mounted by three hosts
 
 `components/EmbeddedColorPicker.tsx` is THE picker (every colour DDFS param, the gradient
-editor's stop inspector, the drawing and lighting panels). Two things about it are easy to
-break from the outside, both recorded in
-[ADR-0116](../../docs/adr/0116-the-colour-picker-on-a-phone-and-without-a-pipette.md):
+editor's stop inspector, the drawing and lighting panels). See
+[ADR-0116](../../docs/adr/0116-the-colour-picker-on-a-phone-and-without-a-pipette.md).
 
-- It is **container-responsive, not viewport-responsive** — a ResizeObserver on its own root,
+- It is **container-responsive, not viewport-responsive**: a ResizeObserver on its own root,
   three layout branches (`cols` / `rows` / `stack`), plus a `narrow` re-flow of the `soft`
-  dialect for phones. Adding a control to the soft dialect means checking it at 390 px:
-  `npm run shot:ge-picker` prints anything laid out past the picker's own right edge, and
-  that list must stay empty. Anything past it is unreachable, not merely ugly.
+  dialect. After adding a control to the soft dialect, `npm run shot:ge-picker` at 390 px must
+  print nothing laid out past the picker's right edge.
 - **Whether a narrow mount starts FOLDED is the host's declaration (`roomy`), not a
-  measurement.** The picker sizes to its content and its host sizes to the picker, so asked
-  from the inside a folded picker always reports a cramped box. `AdvancedGradientEditor`
-  passes it through as `pickerRoomy`; only GE v2's hero sets it today.
-
-Its pipette is `window.EyeDropper` where that exists and a page-scoped pick
-(`components/gradient/pagePick.ts`) where it does not — Firefox, Safari, every phone. That
-hit-test deliberately does not trust `elementsFromPoint` alone: it honours `pointer-events`,
-and this app's most pickable canvases are `pointer-events-none`.
+  measurement.** `AdvancedGradientEditor` passes it through as `pickerRoomy`.
+- Its pipette is `window.EyeDropper` where that exists and a page-scoped pick
+  (`components/gradient/pagePick.ts`) elsewhere. That hit-test honours `pointer-events`
+  itself: this app's most pickable canvases are `pointer-events-none`.
 
 ## A slider's number field is the precision control
 
 Every slider (`ScalarInput`) carries two drags: the track, and the number beside it. The
 number moves a fixed band SLOWER than the track — at least `minSlowdown`×, at most
-`maxSlowdown`× (GMT 2–10×, GE v2 2–2.5× via `NumberDragFeelProvider` in its `main.tsx`), the
-step deciding where inside it, and it snaps to the step the track snaps to. Owner, 2026-09-13.
-Before that the number ran at `step × 0.5`/px whatever the range, so a 1..8 count crossed
-its whole range in 14 px while a 1e-6 log param needed millions. Grep `numberDragRate`.
+`maxSlowdown`× (GMT 2–10×, GE v2 2–2.5× via `NumberDragFeelProvider`) — and snaps to the
+track's step. Grep `numberDragRate`. The rate needs the track's WIDTH, so only variants that
+draw a track pass `getTrackPx`; vector cells and bare numbers keep the step rate on purpose.
+A numeric control with its own drag code (Knob, DualAxisPad, native range inputs) does not
+get this rule.
 
-Two things that are easy to undo from the outside: the rate needs the track's WIDTH, so only
-variants that draw a track pass `getTrackPx` — vector cells and bare numbers keep the step
-rate on purpose (a vector cell handed a range would get ~70× faster). And a new numeric
-control with its own drag code (Knob, DualAxisPad, native range inputs — the inventory in
-`plans/pre-release-ui-pass.md` §2 lists them) does not get this rule at all.
+## The input skin reaches the panel itself
+
+`AutoFeaturePanel` reads `useInputSkin()` (grep `softSkin`) for the chrome around a PARENT
+param's children; under `soft` the raised ground, the bracket rail and the scrim go.
+`InlineToggleButtons` reads the same context. The skin is a look on the master
+(`components/inputs/skin.tsx`); app-gmt provides none and is unchanged.
 
 ## Guards
 
@@ -100,71 +80,20 @@ npm run test:number-drag-rate # the number-vs-track band (node, sub-second)
 npm run smoke:lazy-fallback   # a lazy panel whose chunk can't be fetched shows a notice, app keeps running
 ```
 
-**Every lazily-imported surface goes through `lazyWithFallback`** (`components/ui/lazyWithFallback.tsx`),
-never bare `React.lazy`. A failed chunk fetch — a deploy that replaced the chunks under an open tab,
-or a stopped dev server — otherwise throws into the one root `AppErrorBoundary` and takes the whole
-app down for a panel the user merely opened (the gradient editor, 2026-09-20 in production and
-2026-09-25 in dev). `smoke:lazy-fallback` covers the gradient editor's site only; the other five
-(both HelpBrowsers, Timeline, the audio panel + spectrum, debug tools, StateDebugger) share the
-helper but aren't exercised.
+- `smoke:lazy-fallback` covers the gradient editor's site only; the other five lazy sites
+  share the helper but aren't exercised.
+- `test:number-drag-rate` reaches `components/inputs/numberDragRate.ts` only. The wiring
+  (`ScalarInput` handing the track width to `useDragValue`; the soft skin's stacked row) is
+  unguarded.
+- `smoke:ge-pagepick` is the only guard on `components/gradient/pagePick.ts` and the
+  pipette branch; `BROWSER=firefox` runs it in firefox. It wants `npm run dev` on 3400.
+- `smoke:ui-primitives` exercises `clampToViewport` only; its home is
+  [`layers-zindex.md`](./layers-zindex.md). `smoke:screenshot` asserts nothing.
+- What reaches a manifest-composed panel: `smoke:engine-demo` asserts two DDFS param labels
+  and a `ScalarInput` thumb; `smoke:engine-demo-modulation` asserts `applyPanelManifest`
+  swept an entry into `store.panels`. Neither asserts manifest structure and both run on
+  the demo entry, so changes to `AutoFeaturePanel` / `PanelManifest` item handling need a
+  manual pass.
 
-`test:number-drag-rate` reaches `components/inputs/numberDragRate.ts` only — the band itself.
-Falsified 2026-09-13 three ways, each reverted: dropping the "never faster" clamp (1682 of
-3528 sweep cases red, and the 1..8 count back at 14 px), dropping the "never slower" clamp
-(a 1e-6 log param at 595,238×), and a ceiling that ignores the app's feel (GX at 10×). The
-WIRING — `ScalarInput` handing the track width to `useDragValue`, and the soft skin's stacked
-row keeping the bar BESIDE the number (label on its own 18 px line; bar and number share the
-16 px line below, centres level; the bar never runs under the number) — is unguarded; it was
-measured in the browser that day (a 200 px drag on GX's Repeats: track +6, number +3; Adjust
-face: bar ends x 283, number from x 293, well and bar centred at the same y, row still 36 px).
-
-`smoke:ge-pagepick` is the only guard on `components/gradient/pagePick.ts` and on the picker's
-pipette branch; `BROWSER=firefox` runs the same four steps in real firefox. Like every `ge-*`
-smoke it wants `npm run dev` on 3400.
-
-**Known coverage gap — read before trusting a green run.** `smoke:ui-primitives`
-is often cited here. It is a genuine guard, not a dead one, but it is narrow: it
-exercises `clampToViewport` (`components/ui/viewportClamp.ts`) and nothing else,
-renders no React component, and reaches **1 of the 129 files this rule scopes** —
-measured, not estimated (`check:rule-guards --verbose` prints the ratio). Its home
-is [`layers-zindex.md`](./layers-zindex.md), which scopes `components/ui/**`, and
-the citation was moved there on 2026-07-29.
-
-**`smoke:screenshot` is not a test of any of this** — deliberately written here
-without the `npm run` prefix, because it must not become a citation. It launches
-chromium at `localhost:3400/` (the GMT app; `/` and `/app-gmt.html` are the same
-entry), waits a flat 2500 ms, writes `debug/scratch/engine-boot.png` and closes.
-That is the entire program: no assertion, no `pageerror` handler, no console
-handler, no comparison against a stored baseline. Measured 2026-08-02 — pointed
-at `about:blank` it writes a 5.7 KB white PNG and exits 0; the only thing that
-reds it is failing to reach a page at all. It is a capture for a human to look
-at, and the PNG is gitignored (`debug/.gitignore` → `scratch/`), so it cannot
-dirty the tree. `docs/history/engine/05_Shared_UI.md` says under "Testing
-primitives" that primitives are *snapshot-tested* via that harness "when they
-render in the demo feature". That is wrong twice: there is no snapshot
-comparison anywhere in it, and it boots the GMT root entry, not the demo. The
-history tree is append-only, so the correction lives here.
-
-What *does* reach a manifest-composed panel, and exactly how far it goes:
-`smoke:engine-demo` mounts the demo dock and asserts two DDFS param labels plus at
-least one `ScalarInput` thumb actually rendered; `smoke:engine-demo-modulation`
-asserts `applyPanelManifest` swept an entry into `store.panels`. Both of those
-assertions were added by the 2026-07-29 guard sweep — before it, they were logged
-and never checked. Neither asserts manifest **structure**: item order, sections,
-separators, collapsibles and `component:` widget items are all unchecked, and both
-run against the demo entry, not app-gmt's manifest. `smoke:boot` only proves the
-tree renders without throwing. So changes to `AutoFeaturePanel` / `PanelManifest`
-item handling still need a manual pass.
-
-(Guard names in this paragraph are deliberately written without the `npm run`
-prefix: `check:rule-guards` parses that prefix out of the whole rule body, so
-prefixing a name here would mint a citation from a sentence explaining a gap.)
-
-**The INPUT SKIN reaches the panel itself, not only its sliders.** `AutoFeaturePanel`
-reads `useInputSkin()` (grep `softSkin`) for the chrome it draws around a PARENT param's
-children — the raised ground, the bracket rail and the scrim that say "these belong to the
-row above". Under `soft` all three go: in GE v2's tray a face is already one flat bin per
-group, and the dock's bracket reads as the old dialect sitting inside the new one (owner,
-2026-09-12, of the Adjust face's noise targets). `InlineToggleButtons` reads the same
-context for the same reason. Neither is a fork — the skin is a look on the master, @see
-`components/inputs/skin.tsx` — and app-gmt, which provides no skin, is byte-identical.
+(Names written without the `npm run` prefix are deliberate: `check:rule-guards` reads every
+prefixed name in a rule as a citation.)

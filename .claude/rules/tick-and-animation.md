@@ -13,9 +13,8 @@ Read first: JSDoc at the top of `engine/TickRegistry.ts` and `engine/AnimationEn
 
 `engine/plugins/RenderLoop.tsx` (`@engine/render-loop`) is the *only* file under
 `engine/**` that calls `runTicks` — it is the default RAF driver. It is mounted by
-`App.tsx` (the demo entry, `demo.html` → `index.tsx` → `App.tsx`) and `fluid-toy/`
-(the first Gradient Explorer shell was a third host until the entry-point swap of
-2026-09-16; the v2 shell mounts none). **app-gmt does NOT mount it**: its canonical driver is
+`App.tsx` (the demo entry, `demo.html` → `index.tsx` → `App.tsx`) and `fluid-toy/`.
+**app-gmt does NOT mount it**: its canonical driver is
 `engine-gmt/renderer/GmtRendererTickDriver.tsx`, which runs the tick phases *and*
 dispatches the worker frame. Mounting both is the ADR-0003 double-run bug.
 
@@ -33,7 +32,6 @@ top-of-file JSDoc is the contract.
 ## Invariants
 
 - **`runTicks` takes SECONDS, not milliseconds.** `runTicks(deltaSec)` per ADR-0002.
-  The pre-extraction narrative doc claiming `runTicks(deltaMs)` is wrong.
 - **The render loop is app-owned.** The engine provides `TickRegistry` phases; the
   app (or the `@engine/render-loop` core plugin) calls `runTicks(dt)` each frame.
   Don't bypass it with an ad-hoc `useFrame`.

@@ -21,23 +21,18 @@ ADRs 0079 (quality consolidation), 0092 (the faithful marcher),
 
 [`docs/policy/shader-compile-optimization.md`](../../docs/policy/shader-compile-optimization.md)
 carries the cold/cached model, the measure→attribute→validate protocol, and
-per-switch cost. Cold PT compiles run ~10-20s; regressions here are expensive and
-easy to introduce.
+per-switch cost. Cold PT compiles run ~10-20s.
 
-**Sliders stay runtime. Only mode toggles recompile.** If a change would put a
-compile behind a continuous control, that's the bug.
-
-Expensive optional systems (volumetrics) stay out of the Shader Compiler panel and
-compile only when enabled — that's what keeps register pressure off the base shader.
+**Sliders stay runtime. Only mode toggles recompile.** A compile behind a continuous
+control is the bug. Expensive optional systems (volumetrics) stay out of the Shader
+Compiler panel and compile only when enabled.
 
 ## Benchmarking
 
-Bench on a real GPU (`d3d11`). Headless SwiftShader lies about relative cost, and
-ANGLE's D3D11 optimizer folds aggressively — always bench-verify an audit's claims
-rather than reasoning from the GLSL source.
-
-Accumulation FPS is not a valid measurement. Use timer queries over a full-frame
-region; dump once, measure many.
+Bench on a real GPU (`d3d11`): headless SwiftShader lies about relative cost and ANGLE's
+D3D11 optimizer folds aggressively, so bench-verify an audit's claims rather than reasoning
+from the GLSL source. Accumulation FPS is not a valid measurement — use timer queries over
+a full-frame region; dump once, measure many.
 
 ## Guards
 
@@ -46,59 +41,12 @@ npm run smoke:engine-gmt          # app-gmt boot: BOOTED, compile, FRAME_READY, 
 npm run test:shader               # long — full native config sweep
 ```
 
-**`test:shader` is four links but only two distinct tests.** It chains
-`test:baseline && test:hybrid && test:hybrid-adv && test:weave-sweep`, and the
-first three are the same script under `--mode=`. Measured 2026-07-29: the mode
-overrides set `geometry.hybridCompiled` / `hybridComplex` / `hybridMode`, none of
-which any shader-emitting code still reads — the interleaved emission was retired
-in P4.5 and the compiled box fold in P4.7, both superseded by weave (grep
-`hybridComplex` in `engine-gmt/utils/weaveMigration.ts`, which deletes the field).
-Hashing `ShaderFactory.generateFragmentShader` across all 54 eligible formulas
-gives 54/54 byte-identical output in all three modes, and a `#error` appended to
-the `de` block reds all three at exactly `0 pass / 54 fail`. So the compile gate
-is live and worth running, but the hybrid coverage the names promise is gone —
-`test:weave-sweep` is what actually exercises that area now. If you are short of
-time, `npm run test:baseline` alone gives you everything the first three links do
-in ~4s instead of ~11s.
-
-`smoke:tsaa` is NOT a guard for this area despite the name — it boots
-`fluid-toy.html`, whose TSAA is its own shader path (`fluid-toy/fluid/
-FluidEngine.ts`, `FRAG_TSAA_BLEND`). fluid-toy never imports `RenderPipeline`;
-`engine/RenderPipeline.ts` has exactly one importer, the
-`engine-gmt/engine/RenderPipeline.ts` re-export shim. An engine-gmt TSAA /
-accumulation regression cannot fail it. Same trap for `smoke:formula-switch`
-(fractal-toy.html) and `smoke:fractal-kind` (fluid-toy.html) — sibling apps, not
-engine-gmt.
-
-### `test:bucket-convergence` is NOT a guard for this rule — removed above
-
-**Correction (2026-07-29 guard sweep — falsified, not inferred.)** This section
-used to end "Use `test:bucket-convergence` for that path", and that script used to
-head the Guards block. It covers neither that path nor any file this rule scopes,
-so it has been removed from the block. The harness imports `engine/RenderPipeline`
-**directly**, not through the `engine-gmt/engine/RenderPipeline.ts` shim — and a
-re-export points engine-gmt→core, never the reverse — so nothing under
-`engine-gmt/engine/**` is in its import graph. The rule-guard checker had been
-reporting this as one of its four known miscitations.
-
-Three breaks, each applied to the source and reverted, running both that harness
-and `tsc`:
-
-- Remove `convergencePending = false` from engine-core's `resetAccumulation`
-  (grep `resetAccumulation` in `engine/RenderPipeline.ts`) → harness **RED**, exit
-  1, "FIXED: resetAccumulation cleared the stale pending measurement". The harness
-  is healthy — it simply guards `engine/RenderPipeline.ts`, which is scoped by
-  [`render-and-shaders-core.md`](./render-and-shaders-core.md), where the same
-  citation is correct and where it stays.
-- Gut `GmtBucketHost.resetAccumulation()` — the per-bucket
-  `pipeline.resetAccumulation()` call, grep `resetAccumulation` in
-  `engine-gmt/engine/GmtBucketHost.ts` → harness **GREEN** *and* typecheck green.
-  That is an engine-gmt accumulation regression passing everything.
-- Repoint the shim's `export *` at another module → harness **GREEN**, typecheck
-  **RED** (6 errors). The shim holds no runtime logic, so typecheck is its only
-  meaningful cover.
-
-So: for engine-core accumulation/convergence, `test:bucket-convergence` is the
-guard and it works — run it from `render-and-shaders-core.md`. For
-`engine-gmt/engine/**` accumulation there is **no runtime guard at all** — treat
-`GmtBucketHost` and the bucket path as unguarded and verify changes by hand.
+- `test:shader` chains `test:baseline && test:hybrid && test:hybrid-adv && test:weave-sweep`.
+  The first three emit byte-identical shaders (nothing reads the hybrid mode fields any
+  more), so `npm run test:baseline` alone gives what they give, in ~4 s.
+- **Not guards here:** `smoke:tsaa`, `smoke:formula-switch` and `smoke:fractal-kind` boot
+  sibling apps; `test:bucket-convergence` imports `engine/RenderPipeline` directly and its
+  home is [`render-and-shaders-core.md`](./render-and-shaders-core.md).
+- `engine-gmt/engine/**` accumulation — `GmtBucketHost` and the bucket path — has **no
+  runtime guard**; verify changes by hand. The `RenderPipeline.ts` re-export shim's only
+  cover is typecheck.
