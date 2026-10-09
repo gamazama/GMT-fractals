@@ -93,9 +93,12 @@ gradient"):
   options in the gradient explorers adjust tab, they dont need a live counterpart." They are
   Adjust dials of the Gradient Studio (Phase, Scale, ...), baked into the gradient. K8's reserved
   names stand; nothing is built behind them.
-- **Still open: whether the mapping values move to GMT's.** He agreed to settle it after a
-  measurement of how the mapping value spreads over a frame; the measurement is in BUILD-PLAN,
-  "Stage 5 as built", with a recommendation (keep the renderer's values).
+- **The mapping values stay the renderer's, and Iterations is the default mapping.** Decided
+  the same day, after the measurement he asked for (BUILD-PLAN, "Stage 5 as built": how much of
+  the gradient a frame covers under each mapping): "yes to all 3". GMT's values would make a deep
+  frame flatter; under Orbit trap, the old default, much of a deep frame is one colour. K8 still
+  holds for the NUMBERS and NAMES; the module adapter of GMT-SYSTEMS 2.3 ("Module computes GMT's
+  values") is not to be built.
 
 # Open - in the order they block
 

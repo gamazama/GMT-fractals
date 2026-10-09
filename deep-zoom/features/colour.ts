@@ -10,7 +10,9 @@
  *   (grep `MAPPING_MODES` in `engine-gmt/features/coloring/MappingModes.ts`; `mode:` in
  *   `engine-gmt/features/coloring/index.ts` is a float whose options carry explicit `value`s), and
  *   the frequency is named `scale` as there. A GMT colouring block (`mode`, `scale`, later `offset`,
- *   `bias`) is meant to read across into this slice with no migration. Therefore:
+ *   `bias`) is meant to read across into this slice with no migration of its KEYS. Its picture
+ *   does not come across: the values behind the numbers are the renderer's, by decision (THE
+ *   VALUES STAY THE RENDERER'S, below). Therefore:
  *   - `mode` is NOT built with `defineEnumParam`: that helper stores the option's index.
  *   - Only the GMT numbers the renderer can draw today are offered: 0 (Orbit Trap) and
  *     1 (Iterations). Never give a number here a meaning GMT does not give it, and never invent
@@ -51,14 +53,29 @@
  *     THE PALETTE is the `gradient` param since stage 5 (2026-10-09), as in GMT. The renderer's
  *       built-in cosine ramp (grep `vec3 palette(float s)`) is never drawn by this shell: see THE
  *       GRADIENT below.
- *   WHO CLOSES THEM: a module adapter (GMT-SYSTEMS 2.3, "Module computes GMT's values" /
- *   "Module's shading pass uses the same expression and GMT's param names"). NOT BUILT; whether
- *   the mapping values move to GMT's is the owner's open call (2026-10-09). Until it lands,
- *   `scale` is GMT's NAME over the RENDERER'S number: its range, step and default are the
- *   renderer's own (`CTLS` row 'palette': 0.1..16, 0.1; `colorScale = 1.0`) — GMT's `scale` has no
- *   range at all (it is hidden there and driven by a histogram widget). When the adapter lands, a
- *   scene saved before it with Orbit trap keeps its picture only if its `scale` is multiplied by
+ *   THE VALUES STAY THE RENDERER'S (the owner, 2026-10-09: "yes" to keeping them). The gaps
+ *   above are not waiting on anything: the module adapter GMT-SYSTEMS 2.3 planned ("Module
+ *   computes GMT's values") is NOT to be built. Measured that day over 17 views (BUILD-PLAN,
+ *   "Stage 5 as built"): GMT's values would make a deep frame flatter - its orbit-trap value is
+ *   this one divided by -7.5, and its iteration value is divided by the iteration count, about
+ *   1/80 of this spread at depth and a jump each time auto iterations raise the count. GMT gets
+ *   its contrast from the histogram's fit of scale and offset, which this app does not have.
+ *   So `scale` is GMT's NAME over the RENDERER'S number, for good: its range, step and default
+ *   are the renderer's own (`CTLS` row 'palette': 0.1..16, 0.1; `colorScale = 1.0`) — GMT's
+ *   `scale` has no range at all (it is hidden there and driven by a histogram widget). A GMT
+ *   block read into this slice draws Orbit trap's bands only if its `scale` is divided by
  *   `ORBIT_TRAP_GMT_SCALE_RATIO`; Iterations has no exact factor.
+ *
+ * THE DEFAULT MAPPING IS ITERATIONS (the owner, 2026-10-09; it was Orbit trap)
+ *   The same measurement: under Orbit trap the middle half of a deep frame spans 0.00 to 0.75 of
+ *   a run of the gradient, under 0.1 in 6 of the 17 views - the minimum is set in the early
+ *   iterations, which every pixel of a deep frame shares, so much of the frame is ONE colour.
+ *   Under Iterations it spans 0.16 to 1.03 at every depth, about one run across the frame. The
+ *   price: the value climbs 0.21 of a run for each decade of depth, so the colours travel through
+ *   the gradient while flying in and wrap every 4.6 decades (a gradient whose ends differ shows a
+ *   seam there; the Studio's Adjust > mirror tiles removes it). Orbit trap is still offered.
+ *   The default is what a new scene gets and what a stored number outside the offered set is
+ *   drawn as; a saved scene or place carries its `mode` and is not changed by this.
  *
  * THE SEAM
  *   The engine store OWNS these values. The renderer (`deep-zoom/renderer`) is a sink: it is told,
@@ -92,7 +109,7 @@
  *   - A WRITE FROM OUTSIDE THE EDITOR ALSO LEAVES PLAIN. The renderer's own file loader flips its
  *     mode from plain to orbit trap behind the caller's back (grep `give the gradient something
  *     to colour`); this shell never calls it, and does the same thing openly, in the store write
- *     that sets the gradient: `plain: false`. `mode` already holds a mapping (0, Orbit trap, by
+ *     that sets the gradient: `plain: false`. `mode` already holds a mapping (1, Iterations, by
  *     default).
  *   - WHO CARRIES IT. It is a param of this slice, so scenes, share links, undo and saved places
  *     carry it with no code of their own (`captureLook` in `deep-zoom/locations.ts` copies the
@@ -142,7 +159,9 @@
  *   `MAPPING_MODES`. They are restated here, not imported — nothing under `deep-zoom/` imports
  *   `engine-gmt/` — so no compiler or check ties them together. GMT cannot renumber without
  *   breaking its own saved scenes.
- * @assumption The defaults equal the renderer's own (read 2026-10-08 in core.js: `let colorMode =
+ * @assumption The defaults of `plain` and `scale` equal the renderer's own; `mode`'s is this
+ *   app's choice since 2026-10-09 (the renderer has no "mapping in waiting" to compare it with,
+ *   and no read-back while Plain). (Read 2026-10-08 in core.js: `let colorMode =
  *   0, colorScale = 1.0`, and the `CTLS` rows 'colour' and 'palette'). No guard checks it yet; the
  *   stage-2 smoke step "every feature default equals the module's settings read at ready" is the
  *   intended proof, read as `colourToRenderer(plain, mode) === settings().color`.
@@ -167,7 +186,8 @@ export const COLOUR_MODE_RENDERER_VALUES = [2, 1] as const;
 const COLOUR_MODE_LABELS = ['Orbit trap', 'Iterations'] as const;
 /** The renderer's colour mode for `plain`. It has no GMT number: see the header. */
 export const RENDERER_COLOUR_PLAIN = 0;
-const DEFAULT_MODE_INDEX = 0;
+/** Iterations: see THE DEFAULT MAPPING IS ITERATIONS in the header. */
+const DEFAULT_MODE_INDEX = 1;
 
 /** GMT mapping-mode number -> the renderer's colour mode. Only the numbers offered today. */
 export const GMT_MODE_TO_RENDERER: Readonly<Record<number, number | undefined>> = Object.fromEntries(
@@ -179,7 +199,8 @@ export const RENDERER_TO_GMT_MODE: Readonly<Record<number, number | undefined>> 
 );
 
 /** Orbit trap only: GMT's `scale` that draws the same bands = this times the `scale` stored here
- *  (renderer `1.5 * log(t)` against GMT's `-0.2 * log(t)`). For the stage-5 adapter's migration. */
+ *  (renderer `1.5 * log(t)` against GMT's `-0.2 * log(t)`). For reading a GMT block's scale
+ *  across; the values themselves stay the renderer's (the header). */
 export const ORBIT_TRAP_GMT_SCALE_RATIO = 1.5 / -0.2;
 
 /** The stored `mode` -> the renderer's colour mode (1 or 2). A fraction is truncated as GMT's

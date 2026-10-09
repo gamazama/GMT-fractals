@@ -149,11 +149,12 @@ console.log('[3] push');
     p.push({ 'dzColour.scale': 2.5 });
     check(JSON.stringify(rig.of('setColor')) === '[[0,2.5]]', 'push: scale alone still sends the mode with it (Plain = 0)', JSON.stringify(rig.of('setColor')));
     rig.clear();
+    // The default mapping is Iterations since 2026-10-09 (GMT mode 1); Orbit trap is GMT mode 0.
     p.push({ 'dzColour.plain': false });
-    check(JSON.stringify(rig.of('setColor')) === '[[2,2.5]]', 'push: Palette with GMT mode 0 is the module’s orbit trap (2)', JSON.stringify(rig.of('setColor')));
+    check(JSON.stringify(rig.of('setColor')) === '[[1,2.5]]', 'push: Gradient at the default mapping (GMT mode 1, Iterations) is the module’s iteration colouring (1)', JSON.stringify(rig.of('setColor')));
     rig.clear();
-    p.push({ 'dzColour.mode': 1 });
-    check(JSON.stringify(rig.of('setColor')) === '[[1,2.5]]', 'push: GMT mode 1 is the module’s iteration colouring (1)', JSON.stringify(rig.of('setColor')));
+    p.push({ 'dzColour.mode': 0 });
+    check(JSON.stringify(rig.of('setColor')) === '[[2,2.5]]', 'push: GMT mode 0 is the module’s orbit trap (2)', JSON.stringify(rig.of('setColor')));
 
     rig.clear();
     p.push({ 'dzLight.lampFalloff': 8 });

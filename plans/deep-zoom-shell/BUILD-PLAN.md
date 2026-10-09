@@ -894,8 +894,11 @@ and the three kept places.
   -7.5 (flatter still), and its iteration value is divided by the iteration count (about 1/80 of
   this spread at depth, and a jump each time auto-iterations raise the count) - GMT gets its
   contrast from the histogram's fit of scale and offset, which this app does not have.
-  RECOMMENDED to the owner, his call: keep the renderer's values; consider Iterations as the
-  default mapping. Not done.
+  Put to the owner as: keep the renderer's values; make Iterations the default mapping.
+  **DECIDED AND DONE the same day ("yes to all 3"):** the values stay the renderer's (DECISIONS
+  K10; the adapter of GMT-SYSTEMS 2.3 is not to be built) and `dzColour.mode` defaults to
+  Iterations (`DEFAULT_MODE_INDEX` in `features/colour.ts`). Saved scenes and places carry their
+  `mode` and are not changed; his two palette places and his e20 scene were Iterations already.
 
 ---
 
