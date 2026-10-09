@@ -2,11 +2,11 @@
  * debug/deep-zoom-march-study.mts - what share of a deep-zoom view's rays land on the wrong surface
  * under a march setting, and what the setting costs. The measuring tool for the automatic step.
  *
- *   npm run bench:deep-zoom-march                                  kept places + sample flight, detail 1
+ *   npm run bench:deep-zoom-march                                  kept places + sample flight, Detail 32, the ray march's row too
  *   npm run bench:deep-zoom-march -- --views "Power 2" --detail saved --steps 0.85,0.35,0.1 --refine 0,2
  *
  *   --views    places | flight | all (default) | any text: views whose label contains it
- *   --detail   list of Detail values, or `saved` = each view's own            (default 1)
+ *   --detail   list of Detail values, or `saved` = each view's own            (default 32)
  *   --steps    step sizes                                   (default 0.85,0.7,0.5,0.35,0.2,0.1)
  *   --refine   Hit refine values, crossed with --steps                        (default 0,3)
  *   --reach    0 short / 1 relaxed / 2 full, for every setting                (default 1)
@@ -14,11 +14,15 @@
  *   --rays     the grid is rays x rays                                        (default 128)
  *   --display  the picture height the hit tolerance is taken for              (default 1080)
  *   --ref      the careful march: step,refine,budget                          (default 0.1,8,16384)
- *   --cones    a ray is wrong when it ends more than this many pixel cones from the careful ray (default 4)
+ *   --wrongpx  a ray is wrong when it ends more than this many DISPLAY PIXELS of depth from the careful ray
+ *              (default 2). One measure at every Detail: the same distance on screen.
+ *   --cones    the older measure, in pixel cones of the Detail in use (a cone = a display pixel / Detail);
+ *              given, it replaces --wrongpx. The studies of 2026-10-08 used 4.
  *   --rebase   page (default) | origin: the kernel's rebase (grep REBASE TO THE ORIGIN in core.js)
  *   --jac      0 (default) .. 7: the true-gradient estimate's bits (grep TRUE-GRADIENT ESTIMATE in core.js):
  *              1 = step by the smaller estimate, 2 = normal from the gradient, 4 = hit test by the smaller
- *   --ray      extra settings that march by THE RAY ESTIMATE (grep it in core.js), a list of
+ *   --ray      settings that march by THE RAY ESTIMATE (grep it in core.js); default 5:1:64:0.05:256:2, the
+ *              shell's; `none` for no such row. A list of
  *              bits:factor[:hit[:tol[:floor]]] - bits 1 = step by it, 2 = hit test by it, 4 = orbits
  *              resumed along the ray; factor = the step as a share of the estimate; hit = the hit
  *              level is a display pixel / this (64); tol = pixels a resumed orbit may be off (0.05);
@@ -27,7 +31,7 @@
  *              e.g. --ray 3:1,7:1. Each gets two more columns, against the SAME rule marched at
  *              factor 0.25 with whole orbits: passed = ends more than 2 display pixels of depth
  *              behind it (or misses where it hits), early = more than 2 in front.
- *   --raybudget  the step budget of the ray settings                             (default 4096)
+ *   --raybudget  the step budget of the ray settings, which the shader multiplies by 4  (default 512, the shell's)
  *   --json     where the machine-readable result goes       (default debug/scratch/march-study.json)
  *
  * HOW IT MEASURES. Everything happens inside the page, in one task per view: set the view, run one
@@ -63,6 +67,12 @@
  * deep shader), under a second afterwards.
  * The sample flight is read from the frozen page's repo (DZ_SOURCE_REPO); without it, places only.
  *
+ * ONE MEASURE (2026-10-09). Wrong is counted in display pixels of depth, the same distance on screen at
+ * every Detail, and the default sweep runs at Detail 32 with the ray march's row in it. The ray march
+ * follows --detail like the page's march (for some hours that day it had a fixed level of its own; the
+ * owner found 32 too rough in many places and Detail applies again). Numbers from before that day were
+ * taken at Detail 1 or 8 in cones: `--detail 1 --cones 4 --ray none` is that sweep.
+ *
  * PITFALLS
  *   - `--display` is not the grid: 128 rays at --display 1080 march a 1080-row picture's tolerance
  *     on a sparse grid (128 x 128 rays read within 0.2 points of 360 x 360). The first studies of
@@ -87,12 +97,12 @@ const FLIGHT_TAUS = [0.10, 0.14, 0.18, 0.23, 0.28, 0.33, 0.40, 0.47, 0.55, 0.63,
 const argv = process.argv.slice(2);
 const arg = (name: string, fallback: string): string => { const i = argv.indexOf('--' + name); return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : fallback; };
 const nums = (text: string): number[] => text.split(',').map(Number);
-const RAYS = Number(arg('rays', '128')), DISPLAY = Number(arg('display', '1080')), CONES = Number(arg('cones', '4'));
+const RAYS = Number(arg('rays', '128')), DISPLAY = Number(arg('display', '1080')), CONES_ARG = arg('cones', ''), WRONG_PX = Number(arg('wrongpx', '2'));
 const REACH = Number(arg('reach', '1')), BUDGET = Number(arg('budget', '0'));
 const [refStep, refRefine, refBudget] = nums(arg('ref', '0.1,8,16384'));
-const WHICH = arg('views', 'all'), DETAIL = arg('detail', '1'), ORIGIN = arg('rebase', 'page') === 'origin', JAC = Number(arg('jac', '0'));
+const WHICH = arg('views', 'all'), DETAIL = arg('detail', '32'), ORIGIN = arg('rebase', 'page') === 'origin', JAC = Number(arg('jac', '0'));
 const JSON_OUT = path.resolve(ROOT, arg('json', 'debug/scratch/march-study.json'));
-const RAY = arg('ray', ''), RAY_BUDGET = Number(arg('raybudget', '4096'));
+const RAY_ARG = arg('ray', '5:1:64:0.05:256:2'), RAY = RAY_ARG === 'none' ? '' : RAY_ARG, RAY_BUDGET = Number(arg('raybudget', '512'));
 
 interface Setting { step: number; refine: number; reach: number; budget?: number; farRelax?: number; saved?: boolean; ray?: number; hitDiv?: number; tol?: number; floor?: number; line?: number }
 interface Target { label: string; view?: unknown; tau?: number; detail: number; saved?: Setting }
@@ -204,7 +214,8 @@ await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true)
 if (flight && chosen.some((t) => t.tau !== undefined)) await page.evaluate(`window.__flight = ${JSON.stringify(flight)}`);
 const startupMs = performance.now() - started;
 
-console.log(`${chosen.length} views x ${grid.length} settings   ${RAYS} x ${RAYS} rays as a ${DISPLAY}-row picture   wrong = more than ${CONES} pixel cones from the careful march, rough = 0.5 to ${CONES} (step ${refStep}, refine ${refRefine}, ${refBudget} steps)`);
+const MEASURE = CONES_ARG ? `${CONES_ARG} pixel cones` : `${WRONG_PX} display pixels of depth`;
+console.log(`${chosen.length} views x ${grid.length} settings   ${RAYS} x ${RAYS} rays as a ${DISPLAY}-row picture   wrong = more than ${MEASURE} from the careful march, rough = from half a cone up to that (step ${refStep}, refine ${refRefine}, ${refBudget} steps)`);
 console.log(gpu + (ORIGIN ? '   kernel: rebase to the origin' : '') + (JAC ? '   true-gradient estimate: bits ' + JAC : ''));
 const pad = (v: unknown, n: number) => String(v).padStart(n);
 const rows: unknown[] = [];
@@ -212,7 +223,7 @@ let pageMs = 0, unlike = 0;
 const sweepStart = performance.now();
 for (const t of chosen) {
     const settings = t.saved ? [...grid, t.saved] : grid;
-    const r = await page.evaluate(`(() => { const __name = (f) => f; return (${study.toString()})(${JSON.stringify({ view: t.view, tau: t.tau, detail: t.detail, rays: RAYS, display: DISPLAY, cones: CONES, ref: [refStep, refRefine, refBudget], settings })}); })()`) as any;
+    const r = await page.evaluate(`(() => { const __name = (f) => f; return (${study.toString()})(${JSON.stringify({ view: t.view, tau: t.tau, detail: t.detail, rays: RAYS, display: DISPLAY, cones: CONES_ARG ? Number(CONES_ARG) : WRONG_PX * t.detail, ref: [refStep, refRefine, refBudget], settings })}); })()`) as any;
     pageMs += r.ms; unlike += r.unlike;
     console.log(`\n${t.label}   depth ${r.depth.toExponential(1)}   power ${r.power}   iters ${r.iters}   detail ${t.detail}` + (r.mode === 'deep' ? '' : '   NOT DEEP'));
     console.log(`  careful march: ${r.ref.hit} % hit (${r.ref.far} % far ground), ${r.ref.ranOut} % ran out, ${r.ref.steps} steps a ray (most ${r.ref.stepsMax}), work ${r.ref.work}, ${r.ref.ms.toFixed(0)} ms.  UNSETTLED ${r.ref.unsettled} %`);
@@ -231,6 +242,6 @@ await context.close();
 console.log('');
 console.log(`probe = picture: ${unlike} of ${chosen.length * RAYS * RAYS} rays end elsewhere, or otherwise, in the picture's own G-buffer` + (unlike ? '   <- THE PROBE IS NOT MARCHING WHAT THE PICTURE MARCHES' : ''));
 fs.mkdirSync(path.dirname(JSON_OUT), { recursive: true });
-fs.writeFileSync(JSON_OUT, JSON.stringify({ rays: RAYS, display: DISPLAY, cones: CONES, ref: [refStep, refRefine, refBudget], rebase: ORIGIN ? 'origin' : 'page', jac: JAC, rows }, null, 1) + '\n');
+fs.writeFileSync(JSON_OUT, JSON.stringify({ rays: RAYS, display: DISPLAY, ...(CONES_ARG ? { cones: Number(CONES_ARG) } : { wrongPx: WRONG_PX }), ref: [refStep, refRefine, refBudget], rebase: ORIGIN ? 'origin' : 'page', jac: JAC, rows }, null, 1) + '\n');
 console.log(`startup ${(startupMs / 1000).toFixed(1)} s   sweep ${(sweepMs / 1000).toFixed(1)} s (${(pageMs / 1000).toFixed(1)} s in the page) for ${chosen.length * (grid.length + 2)} marches   ->  ${path.relative(ROOT, JSON_OUT)}`);
 if (unlike) process.exit(1);

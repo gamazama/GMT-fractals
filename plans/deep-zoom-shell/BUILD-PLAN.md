@@ -386,6 +386,31 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
       with the cap raised (minutes): run broken variants at the saved cap. `pb-lib.mjs` patches the
       kernel text at its last `return { orbit, makeRay`; it needs `pushJets`, `stable`, `O.Vf` and
       the `makeHP` .. `BLA table build` span of `core.js` to keep their names.
+    - *ADDED AFTER "ON THE GPU" BELOW (same chat, later the same day): the proven bound in a
+      shader's form, CPU, full orbits.* `pb-carried.mjs` (+ `pb-carried-*.log`), `carried` in
+      `pb-math.mjs`. (1) The obvious single-pass form FAILS - do not build it: a carried bound whose
+      suprema are taken on a ball of a FIXED fraction of each iterate's axis distance, with a
+      validity radius. 466 to 20,000 steps a ray (`pb-carried-fixed-fraction.log`): a fixed
+      fraction is a million times too large for the early iterates and inflates every pass, and
+      too small for the last ones, so the validity radius cuts every step. (2) The form that
+      works is a LADDER: the step length is fixed BEFORE the pass as a few multiples of the step
+      the ray took last (1 and 4 times is enough), and the theorem's recurrence runs once a rung -
+      one scalar recurrence each, its suprema on up to 12 pieces of the last iterates' paths. The
+      certified step is the best over the rungs of min(rung, the line against the ball with that
+      rung's bound). (3) Numbers, 1,053 rays, through a solid / steps a ray: E 0 / 85; the
+      shell's rule (the longer of E and the line at 2 Q) 0 / 54; the longer of E and the proven
+      ladder 1 / 66; the proven ladder alone 97 to 107 on 325 rays, with rays that STALL at the
+      power-2 places and one at power 4 (no rung certifies where a path reaches the pole axis; a
+      sound floor for those is not designed). (4) The one ray through a solid was an E step: at
+      the power-4 3e-76 view, ray 19 of 81, E = 1.3e-55 where the proof allowed 1.7e-56, and the
+      step crossed a solid 2e-57 past the careful hit. So "the longer of E and anything" is
+      exactly as safe as E, and E is the part with no proof - this is unknown (f) of the research
+      result. (5) Where that leaves it: the proof in a shader's form costs about a fifth more
+      steps than the shell's rule today (66 against 54), and time follows steps. The third-
+      derivative tightening has a measured ceiling of 52 to 62 steps for a rule that is proven
+      throughout, against today's 54 with the unproven Q and E in it: it buys the guarantee at
+      about today's speed, not more speed. An allowance of 1 Q (37 steps, 12.7 ms on the GPU) is
+      NOT supported by the maths: the exact bend times 1.5 already put a ray through a solid.
   - **ON THE GPU, 2026-10-09 (the research session, continued): THE RAY MARCH IS IN THE RENDERER AS AN
     OPT-IN VARIANT, WITH THE FOLLOW-UP'S LINE-AGAINST-BALL STEP, AND THE SHELL HAS A SWITCH FOR IT.
     Off by default: the module still equals the frozen page (parity 52, direct proof 15 lines).**
@@ -434,6 +459,54 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
       and the power-4 3e-76 view in milliseconds. The proven bend bound in a shader's form. The
       normal taps are still whole orbits without BLA (about 1 ms of the picture). Far relax is not
       applied to the ray step and its step budget is four times the page's - neither tuned.
+  - **THE RAY MARCH IS THE SHELL'S DEFAULT, 2026-10-09 (the owner flew it: "its amazing. its become much
+    easier and in some cases more possible to navigate the deep mandelbulb reaches at numerous powers").**
+    His calls that day: make it the default for now; keep Step size, True-gradient march and the rest "a
+    little while longer for reference"; solve Detail ("it will be able to improve our instrumentation aswell
+    to have a consistent measure of detail"); iterations as a margin and a profile of the step cost agreed;
+    "the 20s switch on is fine except it needs some indication". He also found places where rays RAN OUT OF
+    STEPS and offered to save them - OWED by him, none of the 17 test views shows it (most steps a ray there:
+    180 to 368 of 2,048).
+    - *On from the start.* The create option `rayMarch: true` (core.d.ts; `shellOptions` sets it, pinned by
+      the module-host check - seen FAIL with the line removed) starts the renderer as the shell uses it;
+      `dzQuality.rayMarch` defaults to true and the row is "Ray march". The module without the option is
+      still the page (parity 52).
+    - *CORRECTED THE SAME DAY - Detail applies again.* The owner, having flown the fixed level below:
+      "detail 32 seems too much in many instances, where it just makes the surface very rough". The
+      mechanism stays (`rayDetail`), its default is 0 = follow the Detail row. What went wrong in the
+      reasoning: Detail says how close a ray stops (pixel / detail) AND, through the same number, how far
+      apart the normal's taps stand (2 pixels / detail). The first is geometry and was cheap to make
+      fine; the second is the look, and a 16th of a pixel between taps reads the surface's own grain.
+      One fixed number cannot serve both. Open: split the two (a hit level of its own, a tap spacing in
+      screen pixels of its own) - not built, the owner's eye decides.
+    - *Detail is no longer needed (WITHDRAWN, see above).* While the ray march is on the hit level is 1/32 of a display pixel
+      whatever the Detail row says (`rayDetail`, grep it; `setRayMarch(.., { detail: 0 })` follows the row
+      again). A fine level is cheap under it: one 640 x 640 picture, mean of 11 views, Detail 8 / 16 / 64 =
+      15.9 / 18.2 / 20.7 ms, where the page's march goes 13.5 / 16.1 / 22.0.
+    - *One measure of detail in the tool.* `npm run bench:deep-zoom-march` now runs at Detail 32, counts
+      wrong in DISPLAY PIXELS (`--wrongpx`, default 2) and includes the ray march's row; `--detail 1
+      --cones 4 --ray none` is the sweep of the earlier studies.
+    - *Iterations as a margin* (grep ITERATIONS AS A MARGIN in core.js; with Auto iterations on, under the
+      ray march only): the cap stands above the camera orbit's own escape by as many iterations as the map
+      needs to stretch space by 1e9 at the rate that orbit has stretched it so far. No depth, no power in it.
+      The page's rule (32 + 1.35 a decade) still raises the cap as before; this one only adds, which is what
+      power 2 needed. NOT measured on the GPU beyond the smokes; the CPU's "cap + 40 and no ray goes through"
+      is its only evidence.
+    - *The indication.* The host's `compile` event now also speaks for the ray march's shader (`what:
+      'variant'`: compiling, ready, failed), and the top bar shows "ray march: building" meanwhile. Seen with
+      a fresh browser profile (`debug/scratch/ray-chip.mjs`): from 11.9 s to 39.4 s after the page opens -
+      the two shaders build one after the other. NOT a telemetry field: the module's telemetry must keep the
+      frozen page's 16 keys (parity checks it; that is how this was caught).
+    - *No start cap.* The page's first-steps cap is not applied to the ray step: CPU 57 -> 51 steps a ray
+      with no ray more through a solid; GPU, 17 views, wrong 1.04 -> 0.93 %, kernel passes 431 -> 410.
+    - *Where it stands.* Detail 32, a 640 x 640 picture with 4-tap normals, mean of 11 views: the page's
+      march 18.9 ms, at step 0.42 32.2, the ray march 19.9 (slowest view, the 1e-33 flight one: 26.3 against
+      17.5). Parity 52, direct proof 15, the shell smoke 47, typecheck, the three node checks, build.
+    - *The step's own cost is still unlocated.* Two suspects cleared by building the variant without them:
+      the line rule's root search (3 or 4 rounds for 6: more steps, no time saved) and the assembly of the
+      sample's offset from t (no change). Run-to-run noise is 3 to 5 %; compare only inside one run.
+    - *Not done.* His ran-out places (above). The two shaders could build side by side and cut the first
+      wait by about 12 s. Retiring Step size, True-gradient march, Detail and the J variant's shader code.
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at

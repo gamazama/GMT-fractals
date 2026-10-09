@@ -6,6 +6,9 @@
  *
  * Stage 1 shows two things, and only while a host is drawing (`live`):
  *   - the engine badge: `perturbation`, or `f32` for the seconds the deep shader takes to compile;
+ *   - beside it, for the 20 or so seconds the ray march's shader takes to build, `ray march: building`
+ *     (the owner, 2026-10-09: "the 20s switch on is fine except it needs some indication") - the
+ *     picture is the page's march until it goes; and `ray march failed` if it could not be built;
  *   - the depth, compact: `6.40e-53`. Depth is the camera's distance to the surface.
  * It keeps the depth on screen whichever dock tab is open and when the picture's own overlays are
  * hidden. Package S2-5 extends it (state, live iterations, drawn size, still progress) and moves
@@ -18,6 +21,7 @@
 
 import React from 'react';
 import { useDzTelemetry } from '../host/telemetry';
+import { useHost } from '../host/current';
 import { formatDepth } from './depthFormat';
 
 /**
@@ -26,6 +30,8 @@ import { formatDepth } from './depthFormat';
  * S2-5 moves this to `components/depthFormat.ts`; keep the two outputs above when it does.
  */
 
+const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, about 20 seconds the first time. The picture is drawn with the older march until it is ready, then changes by itself.';
+const RAY_FAILED_TITLE = 'The ray march\'s shader could not be built on this machine. The older march is drawn instead; Step size applies again.';
 const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';
 
 export const StatusChip: React.FC = () => {
@@ -33,6 +39,15 @@ export const StatusChip: React.FC = () => {
     const mode = useDzTelemetry((t) => t.mode);
     const depth = useDzTelemetry((t) => formatDepth(t.depth));
     const iters = useDzTelemetry((t) => t.iters);
+    // The ray march's shader: the host's `compile` event with what 'variant' (it is not telemetry - the module's
+    // sample keeps the frozen page's keys). It starts to build seconds after the host mounts, so nothing is missed.
+    const host = useHost();
+    const [ray, setRay] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
+    React.useEffect(() => {
+        setRay('ready');
+        if (!host) return undefined;
+        return host.on('compile', (e) => { if (e.what === 'variant') setRay(e.state); });
+    }, [host]);
     const size = useDzTelemetry((t) => `${t.frameW} x ${t.frameH}`);
     // The still's progress, in deep mode only (the f32 picture, shown while the deep shader compiles, does not accumulate).
     const still = useDzTelemetry((t) => (t.mode === 'deep' && t.accumMax > 0 ? `${t.accumN}/${t.accumMax}` : ''));
@@ -49,6 +64,16 @@ export const StatusChip: React.FC = () => {
             >
                 {mode === 'deep' ? 'perturbation' : 'f32'}
             </span>
+            {ray === 'compiling' && (
+                <span data-dz-status-ray="building" title={RAY_BUILDING_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
+                    ray march: building
+                </span>
+            )}
+            {ray === 'failed' && (
+                <span data-dz-status-ray="failed" title={RAY_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
+                    ray march failed
+                </span>
+            )}
             <span data-dz-status-depth title="Depth: distance from the camera to the surface" className="text-fg-secondary tabular-nums">
                 {depth}
             </span>

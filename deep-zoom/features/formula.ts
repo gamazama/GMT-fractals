@@ -100,7 +100,7 @@ export const DzFormulaFeature = {
             type: 'boolean',
             default: true,
             label: 'Auto iterations',
-            description: 'In deep mode, raises the live iteration count with depth: 32 plus 1.35 for each decade, up to 160. It never lowers it.',
+            description: 'In deep mode, raises the live iteration count with depth: 32 plus 1.35 for each decade, up to 160. With Ray march on it also keeps the count a margin above where the camera\'s own orbit escapes, which is what low powers need. It never lowers it.',
         },
     },
 } satisfies FeatureDefinition;

@@ -1320,10 +1320,19 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
     vec2 step = hdrMulF(de, relax);
 #endif
 #endif
+#ifdef USE_JET
+    /* The page's START CAP (first step 5 % of the estimate, growing a quarter a step: "anti-arm-skip") is there
+       because the page's estimate over-reads. The ray step does not need it: on the CPU, 1,053 rays, the cap
+       cost 57 against 51 steps a ray and kept no ray out of a solid that went in without it. */
+    if (!rayStep) {
+#endif
     if (cap.x == 0.0) cap = hdrMulF(de, 0.05);
     vec2 capEff = (t.x != 0.0 && hdrGtPos(t, cap)) ? t : cap;
     if (hdrGtPos(step, capEff)) step = capEff;
     cap = hdrMulF(cap, 1.25);
+#ifdef USE_JET
+    }
+#endif
     t = hdrAdd(t, step);
   }
 #ifdef USE_JET
@@ -1925,7 +1934,11 @@ const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }
    2 = the normal is the gradient, 4 = hit test by min(de, gde). A PICTURE never waits for a J
    twin: deepCtx() builds it in the background (19 s; 36 s with BLA) and draws with the ordinary
    variant until it is there. The probes and the stats variants build theirs blocking, as before. */
-let rayUse = 0, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = 0, rayLine = 0;   // THE RAY ESTIMATE (grep; api.setRayMarch)
+/* THE RAY ESTIMATE (grep; api.setRayMarch). The create option `rayMarch: true` starts with it ON as a host uses it:
+   bits 5 (step by the ray estimate, orbits resumed along the ray), creep floor 1/256 px, the line rule at twice
+   the bend measure. Without the option it is off - the page. */
+const rayOpt = options.rayMarch === true;
+let rayUse = rayOpt ? 5 : 0, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = rayOpt ? 256 : 0, rayLine = rayOpt ? 2 : 0, rayDetail = 0;
 let jacUse = 0, jacFloor = 0;
 let jacNormal = false;                            // normal mode 4, "gradient" (api.setNormalMode): the J twins are needed for the normal alone
 const jacBits = () => rayUse ? 0 : jacUse | (jacNormal ? 2 : 0);   // what the shader is told, and whether a J twin is wanted at all (never beside the ray variant)
@@ -1950,6 +1963,7 @@ function ensureVariant(b, t, j = !!jacBits()){
    (while it is on, the true-gradient bits are not asked for). Keys PR (the picture) and PTR (with
    the work counters). A picture never waits for it: deepCtx() builds it in the background and
    draws with the ordinary variant until it is there. */
+const RAY_ITER_REACH = 20.7, RAY_ITER_MAX = 400;   // ITERATIONS AS A MARGIN (grep): e^20.7 = 1e9, five decades beyond a 1/32-pixel hit level at 1080 rows
 const rKey = (t) => 'P' + (t ? 'T' : '') + 'R';
 let rayDefs = '';                                 // extra #defines for the ray variant (experiments: api.setRayDefs)
 const rSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_JET' + rayDefs);
@@ -2627,8 +2641,8 @@ function setPowerUniforms(x){
   gl.uniform1f(x.farSwitch, farHandOff);
   gl.uniform1i(x.jacUse, jacBits()); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
   gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
-  gl.uniform1f(x.rayHit, surfMul / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * surfMul);   // both as multiples of uPixAng, which is a display pixel ÷ detail
-  gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? surfMul / rayFloorDiv : 0);
+  gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
+  gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? detailNow() / rayFloorDiv : 0);
   { const cl = Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above
     for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
     gl.uniform1f(x.rayLine, rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }
@@ -2901,6 +2915,15 @@ let stepRelax = 0;                              // PERF LEVER (0 = default 0.85)
 let capRelax = 1;                               // QUALITY LEVER (1 = shipped TDR rungs): scales the deep res cap; large ⇒ uncapped (full-res deep)
 let colorMode = 0, colorScale = 1.0;            // key C: 0 plain / 1 iteration / 2 orbit-trap; 9/0 scale
 let surfMul = 1.0;                              // keys F/G: how close rays reach the surface (÷pixAng).
+/* THE RAY ESTIMATE's own detail (grep it): rayDetail > 0 fixes the hit level at a display pixel ÷ rayDetail while the
+   ray march is on, whatever the detail setting says. DEFAULT 0 = follow the detail setting. It was 32 for some hours
+   on 2026-10-09, on the reasoning that a fine level is cheap under the ray march (a 640 x 640 picture, mean of 11
+   views, RTX 5070 Ti: Detail 8 / 16 / 64 = 15.9 / 18.2 / 20.7 ms, where the page's march goes 13.5 / 16.1 / 22.0).
+   Cheap it is; right it was not - the owner, having flown it: "detail 32 seems too much in many instances, where it
+   just makes the surface very rough". Detail does TWO things at once: it says how close a ray stops (pixel ÷ detail)
+   and, through the same number, how far apart the normal's taps stand (2 pixels ÷ detail). The first is geometry,
+   the second is the look, and one fixed number cannot serve both. */
+const detailNow = () => (rayUse && rayDetail > 0 ? rayDetail : surfMul);
                                                 // higher = sharper/less blobby (more march+bisection cost)
 let gateOn = true;                              // key V: live ground-truth gate (1×1 readPixels sync, 2×/s)
 let lightMode = 0, falloffMul = 4.0;            // key L: 0 directional / 1 headlamp / 2 both; T/Y falloff
@@ -3481,7 +3504,7 @@ function drawSquare(n, fbo, D, probe, acc) {
   gl.uniform1i(x.normalMode, gNormalMode()); gl.uniform1i(x.bisectMax, Math.min(24, bisectMax));
   gl.uniform1i(x.normalIters, normalIters); gl.uniform1i(x.bisectIters, bisectIters);
   gl.uniform1f(x.stepRelax, stepRelax);
-  gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / (acc && acc.pixH || n) / surfMul);
+  gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / (acc && acc.pixH || n) / detailNow());
   const jx = acc ? acc.jitter[0] : 0, jy = acc ? acc.jitter[1] : 0;
   gl.uniform2f(x.jitter, jx, jy);
   setBlaUniforms(x); setPowerUniforms(x);
@@ -3551,7 +3574,7 @@ api.guideStudy = (n, samples) => {
     return { col, dep, ms };
   };
   const U = run(false), G = run(true), V = run(false, 0.86);   // V: unguided again, march step ×0.86 instead of ×0.85
-  const N = n * n, pixAng = Math.tan(0.5 * 1.1) / n / surfMul;
+  const N = n * n, pixAng = Math.tan(0.5 * 1.1) / n / detailNow();
   let dsum = 0, dmax = 0, fsum = 0;
   for (let i = 0; i < N; i++) for (let c = 0; c < 3; c++) { const d = Math.abs(U.col[i*4+c] - G.col[i*4+c]) * 255; dsum += d; if (d > dmax) dmax = d;
     fsum += Math.abs(U.col[i*4+c] - V.col[i*4+c]) * 255; }
@@ -3781,16 +3804,18 @@ api.jacobianState = ()=>{ if (!jacBits()) return 'off';
    default 64), tol (how far, in display pixels, a resumed orbit's point may stand from the true
    one, default 0.05), floor (with bit 2 off: also a hit once the ray estimate is under a display
    pixel ÷ this; 0 = none, the default), line (THE LINE AGAINST THE BALL - grep: the longer step it
-   allows is taken, with this multiple of Q as the allowance for the path's bend; 0 = off, the default). A picture switches when the variant has built (background); `now` builds it
+   allows is taken, with this multiple of Q as the allowance for the path's bend; 0 = off, the default),
+   detail (above 0: while the ray march is on the hit level is a display pixel ÷ this, whatever the
+   detail setting says; default 0 = follow the detail setting). A picture switches when the variant has built (background); `now` builds it
    at once, blocking - for a tool that must not measure the old one. */
 api.setRayMarch = (bits, opt, now)=>{ rayUse = Math.max(0, Math.min(15, bits|0));   // bit 8 (a measuring mode): carry the jet, march as the page does
-  if (opt) { if (opt.factor > 0) rayFactor = +opt.factor; if (opt.hit > 0) rayHitDiv = +opt.hit; if (opt.tol >= 0) rayTol = +opt.tol; if (opt.floor >= 0) rayFloorDiv = +opt.floor; if (opt.line >= 0) rayLine = +opt.line; }
+  if (opt) { if (opt.factor > 0) rayFactor = +opt.factor; if (opt.hit > 0) rayHitDiv = +opt.hit; if (opt.tol >= 0) rayTol = +opt.tol; if (opt.floor >= 0) rayFloorDiv = +opt.floor; if (opt.line >= 0) rayLine = +opt.line; if (opt.detail >= 0) rayDetail = +opt.detail; }
   if (now && rayUse && deepProg) ensureRayVariant(false);
   accumReset = true; };
 api.rayMarchState = ()=>{ if (!rayUse) return 'off';
   const v = variants[rKey(false)];
   return v ? 'on' : v === null ? 'failed' : 'building'; };
-api.rayMarch = ()=>({ bits: rayUse, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine });
+api.rayMarch = ()=>({ bits: rayUse, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine, detail: rayDetail });
 /* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped */
 api.setRayDefs = (list)=>{ rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
   for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; } };
@@ -3885,11 +3910,11 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
   gl.uniform1i(x.orbit,0); gl.uniform1i(x.len,curOrbit.len); gl.uniform1i(x.iters,cam.iters);
   gl.uniform1i(x.probe,0); gl.uniform3fv(x.camF, cam.pos);
   gl.uniform1i(x.normalMode, gNormalMode());
-  gl.uniform1i(x.bisectMax, Math.min(24, bisectMax + Math.max(0, Math.round(Math.log2(surfMul)))));
+  gl.uniform1i(x.bisectMax, Math.min(24, bisectMax + Math.max(0, Math.round(Math.log2(detailNow())))));
   gl.uniform1i(x.normalIters, normalIters);   // PERF LEVER (0 = full uIters)
   gl.uniform1i(x.bisectIters, bisectIters);   // PERF LEVER (0 = full uIters)
   gl.uniform1f(x.stepRelax, stepRelax);       // PERF LEVER (0 = default 0.85)
-  gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/H/surfMul);
+  gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/H/detailNow());
   setBlaUniforms(x); setPowerUniforms(x);
   // headlamp falloff must track THIS frame's depth (setPowerUniforms used the frozen smoothedDist,
   // wrong for a moving path). Derive the surface-distance scale from the reference orbit at the camera.
@@ -4363,6 +4388,24 @@ function frame(now){
     rawDist = Math.max(0, deCPU(cam.pos[0],cam.pos[1],cam.pos[2], cam.power, cam.iters));
   }
   lastRawDist = rawDist;
+  /* ITERATIONS AS A MARGIN (the ray march only; grep THE RAY ESTIMATE). The page's rule above counts iterations by
+     depth: 1.35 a decade, right for power 8 and far too few for power 2, whose hits escape 3.7 iterations a decade
+     later - there the cap, not the fractal, shaped the surface (measured 2026-10-08: the owner's power-2 place needs
+     its hand-set 86 where the rule gives 59). Under the ray march an orbit runs until it escapes and pays only for
+     the iterations it needs, so the cap can simply stand a margin above where the camera's own orbit escapes: as
+     many more iterations as the map needs to stretch space by e^RAY_ITER_REACH, at the rate this orbit itself has
+     stretched it so far. Nothing in it names a depth or a power. Raised, never lowered, like the page's. */
+  if (rayUse && autoIters && deepActive && curOrbit) {
+    let ke = -1;
+    for (let k = 0; k < curOrbit.len; k++) if (curOrbit.Rk[k] > 2) { ke = k; break; }
+    let want = cam.iters + 32;                    // the camera's own orbit has not escaped within the cap: certainly too low
+    if (ke >= 0) {
+      const grow = ke > 0 ? Math.log(Math.max(curOrbit.DRk[ke], 2)) / ke : 2;     // nats of stretch an iteration, from the orbit itself
+      want = ke + 2 + Math.ceil(RAY_ITER_REACH / Math.max(grow, 0.2));
+    }
+    want = Math.min(RAY_ITER_MAX, want);
+    if (want > cam.iters) { cam.iters = want; orbitDirty = true; }
+  }
   if (snapDist) { smoothedDist = rawDist; snapDist = false; }
   else if (rawDist > smoothedDist) smoothedDist += (rawDist-smoothedDist)*(1-Math.exp(-1.2*dt));
   else smoothedDist = rawDist;
@@ -4418,10 +4461,10 @@ function frame(now){
     gl.uniform1i(x.iters,cam.iters);
     gl.uniform1i(x.probe,0);
     setBlaUniforms(x); setPowerUniforms(x);
-    gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/Math.max(canvas.clientHeight,2)/surfMul);  // DISPLAY pixel ÷ detail
+    gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/Math.max(canvas.clientHeight,2)/detailNow());  // DISPLAY pixel ÷ detail
     gl.uniform3fv(x.camF, cam.pos);             // f32 camera for the far-field hybrid segment
     gl.uniform1i(x.normalMode, gNormalMode());  // 0 none (pass S derives it) / 1 3-tap / 2 4-tap (default)
-    gl.uniform1i(x.bisectMax, Math.min(24, bisectMax + Math.max(0, Math.round(Math.log2(surfMul)))));  // refine more when sharper
+    gl.uniform1i(x.bisectMax, Math.min(24, bisectMax + Math.max(0, Math.round(Math.log2(detailNow())))));  // refine more when sharper
     gl.uniform1i(x.normalIters, normalIters);   // PERF LEVER (0 = full uIters)
     gl.uniform1i(x.bisectIters, bisectIters);   // PERF LEVER (0 = full uIters)
     gl.uniform1f(x.stepRelax, stepRelax);       // PERF LEVER (0 = default 0.85)

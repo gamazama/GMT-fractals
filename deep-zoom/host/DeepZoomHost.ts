@@ -91,7 +91,9 @@
  *   EVENTS (`on(type, fn)`) in stage 1:
  *     `contextLost`       live, from the module's context-loss option.
  *     `error`             live for a failed deep compile (`fatal: true`).
- *     `compile`           live for the deep shader only; BLA and variant compiles are not visible
+ *     `compile`           live for the deep shader (`what: 'deep'`) and for the ray march's shader
+ *                         (`what: 'variant'`: `compiling` for the 20 or so seconds it builds while the
+ *                         page's march is drawn, then `ready`, or `failed`); BLA compiles are not visible
  *                         until M5.
  *     `recordingChanged`  live, found by comparing telemetry samples, so up to 125 ms late.
  *     `progress`          live but read off the module's own status line; `text` is always set,

@@ -210,7 +210,7 @@ export const DzQualityFeature = {
             default: 0.85, min: 0.1, max: 2, step: 0.05,
             label: 'Step size',
             format: (v) => `${v.toFixed(2)}×`,
-            description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features.',
+            description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. Not used while Ray march is on.',
         },
         trueGradient: {
             type: 'boolean',
@@ -221,7 +221,7 @@ export const DzQualityFeature = {
             // step costs 1.45 to 1.9 for.
             default: false,
             label: 'True-gradient march',
-            description: 'Measures the distance to the surface with the orbit\'s real derivative as well, and steps by the smaller of the two estimates. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. It changes where rays land, not how the surface is shaded: for the smoother shading choose Normals: Gradient. Takes about 20 seconds to switch on the first time.',
+            description: 'Measures the distance to the surface with the orbit\'s real derivative as well, and steps by the smaller of the two estimates. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. It changes where rays land, not how the surface is shaded: for the smoother shading choose Normals: Gradient. Takes about 20 seconds to switch on the first time. Not used while Ray march is on.',
         },
         rayMarch: {
             type: 'boolean',
@@ -231,9 +231,11 @@ export const DzQualityFeature = {
             // careful march - 10.2 % with the default step, 2.0 % at Step size 0.42, 1.0 % with this
             // (the power-2 place at 5e-20: 97.6 / 26.8 / 1.8 %). A 640 x 640 picture with 4-tap
             // normals, mean of 11 views, BLA on for the first two: 21.8 / 34.3 / 22.6 ms.
-            default: false,
-            label: 'Ray march (prototype)',
-            description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size, True-gradient march and BLA are not used; Detail and Hit refine still are. Takes about 20 seconds to switch on the first time.',
+            // THE DEFAULT since 2026-10-09 (the owner, having flown it: "lets make it the default for now, we can aim
+            // to retire the others but lets keep them around a little while longer for reference").
+            default: true,
+            label: 'Ray march',
+            description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size, True-gradient march and BLA are not used, and iterations follow the orbit; Detail and Hit refine apply as ever. Its shader takes about 20 seconds to build the first time; the top bar says so, and the older march is drawn meanwhile.',
         },
         accumulate: {
             type: 'boolean',

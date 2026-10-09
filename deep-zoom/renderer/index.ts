@@ -318,12 +318,15 @@ export interface DeepZoomApi {
      *  off), also a hit once the ray estimate is under a display pixel / this (0 = none) - it ends
      *  the creeping of rays that pass very near something. `line`: THE LINE AGAINST THE BALL (grep
      *  it in core.js) - the longer step that rule allows is taken, with this multiple of the bend
-     *  measure as its allowance (0 = off; 2 is the tested value). The picture switches when the variant has
+     *  measure as its allowance (0 = off; 2 is the tested value). `detail`: above 0, the hit level is a
+     *  display pixel / this whatever `setSurf` says (default 0 = follow `setSurf`). With
+     *  auto iterations the cap stands a margin above the camera orbit's own escape (grep ITERATIONS AS A
+     *  MARGIN). The picture switches when the variant has
      *  compiled, in the background - `rayMarchState()` says when; `now` builds it BLOCKING. While
      *  it is on, BLA and the true-gradient bits are not used. */
-    setRayMarch(bits: number, opt?: { factor?: number; hit?: number; tol?: number; floor?: number; line?: number }, now?: boolean): void;
+    setRayMarch(bits: number, opt?: { factor?: number; hit?: number; tol?: number; floor?: number; line?: number; detail?: number }, now?: boolean): void;
     rayMarchState(): 'off' | 'building' | 'on' | 'failed';
-    rayMarch(): { bits: number; factor: number; hit: number; tol: number; floor: number; line: number };
+    rayMarch(): { bits: number; factor: number; hit: number; tol: number; floor: number; line: number; detail: number };
     marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number; jacobian: number };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */

@@ -275,6 +275,7 @@ function makeRig() {
         exporting: false,
         mode: 'auto',
         tick: 0,
+        rayState: 'off' as 'off' | 'building' | 'on' | 'failed',
         view: view(CAM_A),
         settings: {
             detail: 1, reach: 1, power: 8, phase: [0.25, 0.5] as [number, number], color: 0, cscale: 1, light: 1,
@@ -354,7 +355,8 @@ function makeRig() {
         setMode: (m: string): void => { note('setMode', m); state.mode = m; },
         autoIters: (): boolean => true,
         marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
-        rayMarch: () => ({ bits: 0, factor: 1, hit: 64, tol: 0.05, floor: 0, line: 0 }),
+        rayMarch: () => ({ bits: 0, factor: 1, hit: 64, tol: 0.05, floor: 0, line: 0, detail: 0 }),
+        rayMarchState: () => state.rayState,
         blaMode: (): string => 'auto',
         compileMs: (): Record<string, number | undefined> => ({}),
     };
@@ -409,7 +411,7 @@ console.log('[1] options   shellOptions(frame, hooks)');
     );
     const record = options as Record<string, unknown>;
     const want: Array<[keyof DeepZoomOptions, unknown]> = [
-        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'], ['farLook', true], ['rebaseOrigin', true], ['farHandOff', 0.5],
+        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'], ['farLook', true], ['rebaseOrigin', true], ['rayMarch', true], ['farHandOff', 0.5],
         ['resetStillOnResize', true], ['loseContextOnDispose', true], ['embed', true], ['publishOnWindow', false],
     ];
     for (const [name, value] of want) {
@@ -551,6 +553,16 @@ console.log('[3] boot      ready, bootParams, compile, error');
         'views: a view parked after ready is applied at once, byte-identical');
     run(host, 400, 2000, 200);
     check(compile.length === 2, 'boot: compile is said once per state', compile.join());
+    // the ray march's shader builds in the background after the deep one: `compile` with what 'variant'
+    rig.state.rayState = 'building';
+    run(host, 400, 3000, 200);
+    check(compile.join() === 'deep:compiling,deep:ready,variant:compiling', 'boot: while the ray march\'s shader builds, compile says variant compiling, once', compile.join());
+    rig.state.rayState = 'on';
+    run(host, 400, 4000, 200);
+    check(compile.join() === 'deep:compiling,deep:ready,variant:compiling,variant:ready', 'boot: and variant ready when it is there', compile.join());
+    rig.state.rayState = 'off';
+    run(host, 400, 5000, 200);
+    check(compile.length === 4, 'boot: a ray march switched off says nothing more', compile.join());
     host.dispose();
 }
 {

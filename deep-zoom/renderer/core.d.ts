@@ -64,6 +64,11 @@ export interface DeepZoomCoreOptions {
      *  1e-3 the f32 march's hits are noise; the shell passes 0.5. Clamped to 1e-3 .. 12.
      *  `api.setFarHandOff` changes it later. */
     farHandOff?: number;
+    /** Default false (the page's march). True: the renderer starts with THE RAY MARCH on (grep `THE RAY
+     *  ESTIMATE` in core.js) as the shell uses it - steps by the ray estimate and the line rule, orbits
+     *  resumed along the ray, and iterations as a margin (the detail setting applies as ever). Its shader builds in the background (about 20 s; telemetry `rayMarch`
+     *  says `building`), the page's march is drawn meanwhile. `api.setRayMarch` changes it later. */
+    rayMarch?: boolean;
     /** Called once if the browser takes the WebGL context away (`instance.contextLost` turns true).
      *  Nothing is restored: dispose and mount a fresh canvas. */
     onContextLost?: () => void;
