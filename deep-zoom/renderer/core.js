@@ -376,7 +376,9 @@ struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bo
        grad = ∇c|z| / |∇c|z||              the surface normal, from the hit orbit itself.
    Used (uJacUse): 1 = the march steps by min(de, gde) - never longer than the page's step, shorter
    where dr under-counts; the hit test is unchanged, so the surface is the same one. 2 = pass G
-   stores grad as the normal instead of four more orbits. 4 = the hit test uses min(de, gde) too.
+   stores grad as the normal instead of four more orbits - set by NORMAL MODE 4, "gradient"
+   (api.setNormalMode), so stepping and the normal are chosen apart. 4 = the hit test uses
+   min(de, gde) too.
    gde alone is NOT safe to step by: it spikes where the gradient vanishes. */
 void jacNorm(inout mat3 M, inout float ej) {
   vec3 a = max(abs(M[0]), max(abs(M[1]), abs(M[2])));
@@ -1670,10 +1672,12 @@ const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }
    twin: deepCtx() builds it in the background (19 s; 36 s with BLA) and draws with the ordinary
    variant until it is there. The probes and the stats variants build theirs blocking, as before. */
 let jacUse = 0, jacFloor = 0;
-const vKey = (b, t, j = !!jacUse) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (j ? 'J' : '');
-const vSrc = (b, t, j = !!jacUse) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
+let jacNormal = false;                            // normal mode 4, "gradient" (api.setNormalMode): the J twins are needed for the normal alone
+const jacBits = () => jacUse | (jacNormal ? 2 : 0);          // what the shader is told, and whether a J twin is wanted at all
+const vKey = (b, t, j = !!jacBits()) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (j ? 'J' : '');
+const vSrc = (b, t, j = !!jacBits()) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
   + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (j ? '\n#define USE_JAC' : ''));
-function ensureVariant(b, t, j = !!jacUse){
+function ensureVariant(b, t, j = !!jacBits()){
   const key = vKey(b, t, j);
   if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();   // a background build is in flight: wait for IT, don't start a second
   if (variants[key] !== undefined) return variants[key];
@@ -2056,7 +2060,7 @@ mkProgAsync(vSrc(false, false), (p, err) => {
    else the plain one. Use this everywhere a deep draw is issued. */
 function deepCtx(){
   if (!deepProg) return { p: null, x: ud };
-  if (jacUse) {                                  // the J twin of what would draw; never a blocking build (grep TRUE-GRADIENT ESTIMATE)
+  if (jacBits()) {                               // the J twin of what would draw; never a blocking build (grep TRUE-GRADIENT ESTIMATE)
     const want = variants[vKey(blaEnabled, false, true)];
     if (want) return want;
     kickVariantAsync(blaEnabled, true);
@@ -2327,7 +2331,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.farLook, dzFarLook);
   gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
   gl.uniform1f(x.farSwitch, farHandOff);
-  gl.uniform1i(x.jacUse, jacUse); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
+  gl.uniform1i(x.jacUse, jacBits()); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
   gl.uniform1i(x.maxSteps, march.maxSteps);
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
   { const d = Math.max(smoothedDist, 1e-300), e = Math.floor(Math.log2(d));     // FAR RELAX reads depth against uRefE, in the probes too (drawDeep sets both again for a picture)
@@ -2560,7 +2564,9 @@ let frameLong = 320;                            // deep-mode ABSOLUTE render lon
 let view1to1 = false;                           // true = show the frame at true pixel size, centred (no stretch)
 let autoIters = true;                           // key I: scale iterations with depth
 let normalMode = 2;                             // key N: 0 screen-space (0 orbits) | 1 3-tap (biased) | 2 4-tap (default) | 3 from depth, edge-aware (0 orbits)
-const gNormalMode = () => look.compare === 1 ? 2 : normalMode === 3 ? 0 : normalMode;   // what pass G is told: only modes 1 and 2 cost it orbits (the normals compare needs the 4-tap one packed)
+                                                // 4 = GRADIENT (api.setNormalMode only): the hit orbit's own gradient, from the J variant (grep
+                                                // TRUE-GRADIENT ESTIMATE; 0 extra orbits). Until that variant has built, 4-tap is drawn in its place.
+const gNormalMode = () => look.compare === 1 ? 2 : normalMode === 3 ? 0 : normalMode === 4 ? 2 : normalMode;   // what pass G is told: a packed normal for 1, 2 and 4 (4 = 4-tap unless the J variant swaps in the gradient)
 /* HOW FAR THE MARCH REACHES. Looking along the surface, distant ground is 10⁴–10⁹ times farther
    than the near ground and rays creep past everything in between; with 256 steps and the detail
    slider up, 9–23 % of such a picture ran out of steps (far-study.mjs). Three settings (the
@@ -3443,7 +3449,7 @@ api.moveAlong = (dir, dist)=>{               // exact HP move (smoke-test dive)
 };
 api.setDiv = (d)=>{ frameLong = Math.max(2, Math.round(Math.max(dzViewW(),dzViewH())/Math.max(1,d))); };  // perf-matrix handle (divisor → absolute frame; window, not canvas — 1:1 mode resizes the canvas)
 api.setFrame = (px)=>{ frameLong = Math.max(2, px|0); accumReset = true; };  // absolute live frame long-edge
-api.setNormalMode = (m)=>{ normalMode = m; };  // 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth
+api.setNormalMode = (m)=>{ normalMode = m; jacNormal = m === 4; };  // 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth / 4 the orbit's gradient
 api.setLand = (b)=>{ landMode = b ? 1 : 0; accumReset = true; };   // hit landing on / off
 api.setHitRefine = (n)=>{ hitRefine = Math.max(0, Math.min(12, n|0)); accumReset = true; };   // HIT REFINE: halvings per hit (0 = off, the default)
 api.setBisect = (n)=>{ bisectMax = n; };      // bisection iteration cap
@@ -3464,15 +3470,15 @@ api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // 
 /* TRUE-GRADIENT ESTIMATE: bits 0 = off (the page). A picture switches when the J variant has built
    (background); `now` builds it at once, blocking - for a tool that must not measure the old one. */
 api.setJacobian = (bits, floor, now)=>{ jacUse = Math.max(0, Math.min(7, bits|0)); if (floor !== undefined) jacFloor = Math.max(0, Math.min(1, +floor || 0));
-  if (now && jacUse && deepProg) ensureVariant(blaEnabled, false, true);
+  if (now && jacBits() && deepProg) ensureVariant(blaEnabled, false, true);
   accumReset = true; };
-api.jacobianState = ()=>{ if (!jacUse) return 'off';
+api.jacobianState = ()=>{ if (!jacBits()) return 'off';
   const kb = vKey(blaEnabled, false, true), kp = vKey(false, false, true);
   return variants[kb] || variants[kp] ? 'on' : (variants[kb] === null || variants[kp] === null) ? 'failed' : 'building'; };
 /* pointwise read on the centre ray at t (needs setJacobian != 0): the page's de, the true-gradient
    estimate, and the packed unit gradient (octPack) - for a referee. null when it cannot be drawn. */
 api.jacProbeAt = (tval)=>{
-  if (!curOrbit || !deepProg || !jacUse) return null;
+  if (!curOrbit || !deepProg || !jacBits()) return null;
   const D = ensureVariant(blaEnabled, false, true);      // a referee's read: the J variant itself, built now if need be
   if (!D) return null;
   const { fwd, right, up } = basis(), x = D.x, px = new Float32Array(4), ht = hdrSplit(tval), out = { t: tval };
@@ -3501,7 +3507,7 @@ api.jacProbeAt = (tval)=>{
    stopped on the centre point's iteration. The differences share the kernel's perturbation maths
    (itself refereed against BigInt, __directCheckHP) but nothing of the Jacobian recurrence. */
 api.jacCheck = function(tvals){
-  if (!jacUse) return null;
+  if (!jacBits()) return null;
   curOrbit = buildRefOrbit(camHP, cam.iters + 2);
   uploadOrbit(curOrbit);
   const { fwd } = basis();
@@ -4173,7 +4179,7 @@ function frame(now){
     (deepActive
       ? `gate       ${!gateOn?'<span style="color:#678">off (V)</span>':isNaN(gate.relT)?'…':`relT <b class="${gateOK?'ok':'warn'}">${gate.relT.toExponential(1)}</b> (GPU ${gate.tGPU.toExponential(3)} vs CPU ${gate.tCPU.toExponential(3)})${gateOK?' <span class="ok">✓</span>':' <span class="warn">✗ MISMATCH</span>'}`}\n`
       : `f32 eps    ${(Math.hypot(...cam.pos)*5e-7).toExponential(2)}\n`)+
-    `<span class="hud-dim">power n    <b>${nPower}</b>   phase <b>${phaseTheta.toFixed(2)},${phasePhi.toFixed(2)}</b>   iters <b>${cam.iters}</b>   orbitLen ${curOrbit?curOrbit.len:'-'}   frame <b>${w}×${h}</b>   normals <b>${['screen','3-tap','4-tap','depth'][normalMode]}</b>`+
+    `<span class="hud-dim">power n    <b>${nPower}</b>   phase <b>${phaseTheta.toFixed(2)},${phasePhi.toFixed(2)}</b>   iters <b>${cam.iters}</b>   orbitLen ${curOrbit?curOrbit.len:'-'}   frame <b>${w}×${h}</b>   normals <b>${['screen','3-tap','4-tap','depth','gradient'][normalMode]}</b>`+
     `   color <b>${['plain','iteration','orbit-trap'][colorMode]}</b>   detail <b>${surfMul.toFixed(2)}×</b>   light <b>${['directional','headlamp','both'][lightMode]}</b></span>`+
     (deepActive&&accumEnabled?`   accum <b class="${accumN>=ACCUM_MAX?'ok':''}">${accumN>=ACCUM_MAX?`${accumN}× ✓`:accumN>0?`${accumN}×…`:'live '+w+'×'+h}</b>`:'')+`\n`+
     `pos        <span class="hud-dim">${cam.pos.map(v=>v.toFixed(5)).join(', ')}</span>`+

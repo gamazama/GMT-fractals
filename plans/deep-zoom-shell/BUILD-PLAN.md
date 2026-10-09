@@ -162,8 +162,12 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
     against today at 0.85: today at 0.42 is 1.45 to 1.92; the true-gradient estimate with its
     gradient normal is 1.10 to 1.98, cheaper than the smaller step in five of seven flight views.
     The power-2 place at 5e-20 still has 8.8 % wrong at Detail 8 with it.
-  - *In the shell since 2026-10-08:* Quality > True-gradient march (off by default; step by the
-    smaller estimate + the gradient normal). The owner on the pictures: "the gradient normal is
+  - *In the shell since 2026-10-08, as TWO controls since 2026-10-09:* Quality > True-gradient
+    march (off by default) only changes how the march steps; the gradient normal is the fifth
+    option of Quality > Normals, "Gradient" (renderer normal mode 4). At first the march switch
+    swapped the normal too while the Normals row still said 4-tap, and the owner could not tell
+    which normal he was looking at ("there is no option for gradient map normals"). His verdict on
+    high-quality renders: the gradient normal is smoother and less intricate than 4-tap. The owner on the pictures: "the gradient normal is
     producing a much higher quality image". The variant builds in the background - the picture
     keeps drawing and changes about 20 s after the first switch (30 s in a fresh browser).
     Smoke stage 2 has a step for it (seen red with the push made a no-op).

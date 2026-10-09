@@ -256,8 +256,10 @@ export interface DeepZoomApi {
     setIters(n: number): void;
     setAutoIters(on: boolean): void;
     autoIters(): boolean;
-    /** 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth. Does NOT restart the still: follow it
-     *  with `setLook({})`. */
+    /** 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth / 4 the hit orbit's own gradient (added
+     *  2026-10-08: no extra orbits, but it needs the J shader variant - grep `TRUE-GRADIENT
+     *  ESTIMATE` in core.js - which builds in the background; 4-tap is drawn until it is there).
+     *  Does NOT restart the still: follow it with `setLook({})`. */
     setNormalMode(mode: number): void;
     setLand(on: boolean): void;
     /** 0 direct / 1 lamp / 2 both. A falsy `falloff` leaves the falloff as it is; an undefined
@@ -296,7 +298,8 @@ export interface DeepZoomApi {
     /** TRUE-GRADIENT ESTIMATE (added 2026-10-08, 0 = off = the page; grep the name in core.js). A
      *  second distance estimate built on the orbit's real 3x3 derivative. Bits: 1 = the march
      *  steps by the smaller of the two estimates, so no place needs a hand-set step; 2 = the
-     *  surface normal is that gradient, instead of four more orbits; 4 = the hit test uses the
+     *  surface normal is that gradient whatever the normal mode (a tool's switch: a host asks
+     *  for the gradient with `setNormalMode(4)`); 4 = the hit test uses the
      *  smaller estimate too (it moves the surface). The picture switches when the variant has
      *  compiled, in the background (about 19 s; 36 s with BLA) - `jacobianState()` says when.
      *  `floor`: never shorten a step below this share of the page's (0 = no floor). `now`: build

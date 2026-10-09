@@ -324,16 +324,16 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'True-gradient march is on the Quality tab, reaches the renderer, builds without stopping the picture and changes it; back at off the picture is as it was',
-            owner: 'owner, 2026-10-08 ("yes lets see it in flight")',
-            falsified: '2026-10-08: the `jacobian` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out at 120 s).',
+            name: 'True-gradient march and Normals: Gradient reach the renderer apart; the gradient builds without stopping the picture and changes it; back at 4-tap and off the picture is as it was',
+            owner: 'owner, 2026-10-08 ("yes lets see it in flight") and 2026-10-09 ("im not sure which normals are being shown as there is no option for gradient map normals")',
+            falsified: '2026-10-08: the `jacobian` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out at 120 s). 2026-10-09, after Gradient became a Normals option: normal mode 4 made to ask for nothing (`jacNormal = false` in `api.setNormalMode`, renderer/core.js) -> red, the picture never changed (timed out at 120 s) although the march switch was on.',
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
                 await ctx.sleep(300);
                 ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('True-gradient march')"), 'the row is shown without advanced mode');
                 if (!(await enterDeepView(ctx))) return;
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, trueGradient: false })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, trueGradient: false, normals: 2 })');
                 await ctx.sleep(900);
                 const a = await pixels(ctx);
                 await ctx.sleep(300);
@@ -341,9 +341,13 @@ export const stage: DzStage = {
                 const frames0 = await ctx.host<number>('frameCount()');
                 await ctx.ev('window.__store.getState().setDzQuality({ trueGradient: true })');
                 await ctx.sleep(700);
-                ctx.check((await ctx.host<boolean>("getParams()['dzQuality.trueGradient']")) === true, 'the renderer holds the setting');
-                // The variant compiles in the background (about 20 s here): the picture keeps
-                // being drawn the old way, then changes - the gradient normal alone moves most pixels.
+                ctx.check((await ctx.host<boolean>("getParams()['dzQuality.trueGradient']")) === true, 'the renderer holds the march setting');
+                ctx.check((await ctx.host<number>("getParams()['dzQuality.normals']")) === 2, 'and the normals are still 4-tap: the march switch does not change them');
+                // Normals: Gradient is the fifth option. Its variant compiles in the background
+                // (about 20 s here): 4-tap keeps being drawn, then the picture changes.
+                await ctx.ev('window.__store.getState().setDzQuality({ normals: 4 })');
+                await ctx.sleep(700);
+                ctx.check((await ctx.host<number>("getParams()['dzQuality.normals']")) === 4, 'Normals: Gradient reaches the renderer');
                 let moved = 0, waited = 0, stalled = 0, last = await ctx.host<number>('frameCount()');
                 while (waited < 120 && moved <= Math.max(2, control * 4)) {
                     await ctx.sleep(1000); waited++;
@@ -354,7 +358,7 @@ export const stage: DzStage = {
                 }
                 ctx.check(moved > Math.max(2, control * 4), 'after ' + waited + ' s the picture changed: ' + moved.toFixed(1) + ' % of the pixels (the control: ' + control.toFixed(2) + ' %)');
                 ctx.check(last > frames0 && stalled <= 2, 'the picture kept being drawn while it built (' + stalled + ' of ' + waited + ' seconds without a frame)');
-                await ctx.ev('window.__store.getState().setDzQuality({ trueGradient: false })');
+                await ctx.ev('window.__store.getState().setDzQuality({ trueGradient: false, normals: 2 })');
                 await ctx.sleep(900);
                 ctx.check((await ctx.host<boolean>("getParams()['dzQuality.trueGradient']")) === false, 'switched off, the renderer holds off');
                 const back = shareChanged(a, await pixels(ctx));

@@ -14,7 +14,7 @@
  *     frameSize          api.setFrame(px)            floor 2, truncates
  *     detail             api.setSurf(mul)            clamps to 0.25..256
  *     reach              api.setReach(k)             k = reachToRenderer(index): 0, 1, 2
- *     normals            api.setNormalMode(m)        m = normalsToRenderer(index): 0..3. See pitfalls
+ *     normals            api.setNormalMode(m)        m = normalsToRenderer(index): 0..4. See pitfalls
  *     depthNormalRadius  api.setLook({ nrmTap })     depthNormalRadiusToRenderer(index): 1, 2, 3
  *     hitLanding         api.setLand(on)
  *     accumulate         api.setAccum(on)
@@ -109,9 +109,9 @@ export const reachToRenderer = (index: number | undefined) =>
     REACH_RENDERER_VALUES[REACH_OPTIONS.indexOf(reachParam.fromIndex(index))];
 
 // ── Normals — core.js: `let normalMode = 2`.
-export const NORMALS_OPTIONS = ['screen', '3-tap', '4-tap', 'depth'] as const;
+export const NORMALS_OPTIONS = ['screen', '3-tap', '4-tap', 'depth', 'gradient'] as const;
 /** `api.setNormalMode(m)`, in option order. */
-export const NORMALS_RENDERER_VALUES = [0, 1, 2, 3] as const;
+export const NORMALS_RENDERER_VALUES = [0, 1, 2, 3, 4] as const;
 const normalsParam = defineEnumParam(NORMALS_OPTIONS, 'Normals', {
     defaultIndex: 2,
     optionLabels: { '3-tap': '3-tap', '4-tap': '4-tap' },
@@ -172,7 +172,7 @@ export const DzQualityFeature = {
         normals: {
             ...normalsParam.config,
             type: 'float',
-            description: 'How the surface direction is found for shading. Screen and Depth read the rendered picture. 3-tap and 4-tap sample the distance estimate around each hit.',
+            description: 'How the surface direction is found for shading. Screen and Depth read the rendered picture. 3-tap and 4-tap sample the distance estimate around each hit. Gradient takes it from the hit\'s own orbit: smoother, and no extra samples. Gradient takes about 20 seconds to switch on the first time; 4-tap is shown until it is ready.',
         },
         depthNormalRadius: {
             ...depthNormalRadiusParam.config,
@@ -221,7 +221,7 @@ export const DzQualityFeature = {
             // step costs 1.45 to 1.9 for.
             default: false,
             label: 'True-gradient march',
-            description: 'Measures the distance to the surface with the orbit\'s real derivative as well, steps by the smaller of the two estimates, and takes the surface direction from that gradient instead of four extra samples. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. Takes about 20 seconds to switch on the first time; the picture changes when it is ready.',
+            description: 'Measures the distance to the surface with the orbit\'s real derivative as well, and steps by the smaller of the two estimates. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. It changes where rays land, not how the surface is shaded: for the smoother shading choose Normals: Gradient. Takes about 20 seconds to switch on the first time.',
         },
         accumulate: {
             type: 'boolean',
