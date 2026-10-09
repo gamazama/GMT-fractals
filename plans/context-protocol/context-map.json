@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-09T18:46:51.410Z",
+  "generated_at": "2026-10-09T19:06:30.215Z",
   "repo_root": "H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3868,
-    "bytes": 93174079,
-    "tokens": 14497898,
-    "loadable_tokens": 14365858,
-    "context_worthy_tokens": 6795067,
-    "source_of_truth_tokens": 5552512,
+    "files": 3874,
+    "bytes": 93229936,
+    "tokens": 14513405,
+    "loadable_tokens": 14381365,
+    "context_worthy_tokens": 6810715,
+    "source_of_truth_tokens": 5562166,
     "orientation_tokens": 26484,
-    "architecture_tokens": 1216071,
-    "reachable_union_files": 1187,
-    "reachable_union_tokens": 3848707,
+    "architecture_tokens": 1222065,
+    "reachable_union_files": 1189,
+    "reachable_union_tokens": 3850943,
     "dead_context_files": 24,
     "dead_context_tokens": 72448
   },
@@ -56,8 +56,8 @@
     },
     "deep-zoom": {
       "entry": "deep-zoom/main.tsx",
-      "files": 545,
-      "tokens": 1658944
+      "files": 547,
+      "tokens": 1661180
     }
   },
   "dead_context": [
@@ -184,8 +184,8 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 1279745,
-      "files": 335
+      "tokens": 1281981,
+      "files": 337
     },
     "app-gmt": {
       "tokens": 56928,
@@ -196,16 +196,16 @@
       "files": 259
     },
     "tooling": {
-      "tokens": 5944600,
-      "files": 609
+      "tokens": 5956241,
+      "files": 612
     },
     "demo": {
       "tokens": 8972,
       "files": 8
     },
     "docs": {
-      "tokens": 1833215,
-      "files": 529
+      "tokens": 1834845,
+      "files": 530
     },
     "engine-gmt": {
       "tokens": 2972012,
@@ -234,15 +234,15 @@
   },
   "by_context_class": {
     "source": {
-      "tokens": 4026345,
-      "files": 1251
+      "tokens": 4028581,
+      "files": 1253
     },
     "architecture": {
-      "tokens": 1216071,
-      "files": 321
+      "tokens": 1222065,
+      "files": 324
     },
     "data": {
-      "tokens": 6310935,
+      "tokens": 6310794,
       "files": 927
     },
     "config": {
@@ -258,8 +258,8 @@
       "files": 620
     },
     "source-tooling": {
-      "tokens": 1512987,
-      "files": 363
+      "tokens": 1520405,
+      "files": 364
     },
     "reference-legacy": {
       "tokens": 1259856,
@@ -272,15 +272,15 @@
   },
   "by_load_policy": {
     "on-demand": {
-      "tokens": 5552512,
-      "files": 1626
+      "tokens": 5562166,
+      "files": 1629
     },
     "read-for-area": {
-      "tokens": 1216071,
-      "files": 321
+      "tokens": 1222065,
+      "files": 324
     },
     "skip": {
-      "tokens": 4772949,
+      "tokens": 4772808,
       "files": 314
     },
     "read-first": {
@@ -298,7 +298,7 @@
   },
   "tier_policy_matrix": {
     "root": {
-      "on-demand": 1106369,
+      "on-demand": 1108605,
       "read-for-area": 20924,
       "skip": 10824,
       "read-first": 9588
@@ -311,9 +311,9 @@
       "on-demand": 720208
     },
     "tooling": {
-      "on-demand": 1513048,
-      "skip": 3583430,
-      "read-for-area": 845177,
+      "on-demand": 1520466,
+      "skip": 3583289,
+      "read-for-area": 849541,
       "read-first": 2945
     },
     "demo": {
@@ -321,7 +321,7 @@
       "read-first": 1542
     },
     "docs": {
-      "read-for-area": 345035,
+      "read-for-area": 346665,
       "read-first": 4078,
       "reference-only": 1259856,
       "skip": 224246
@@ -1508,6 +1508,12 @@
       "path": "components/timeline/DopeSheet.tsx",
       "tokens": 7427,
       "tier": "gmt-app",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "debug/deep-zoom-checks/box-orbit.mts",
+      "tokens": 7418,
+      "tier": "tooling",
       "loadPolicy": "on-demand"
     },
     {
@@ -8228,6 +8234,21 @@
       "reachableFrom": []
     },
     {
+      "path": "debug/deep-zoom-checks/box-orbit.mts",
+      "tier": "tooling",
+      "contextClass": "source-tooling",
+      "loadPolicy": "on-demand",
+      "ext": ".mts",
+      "reason": "tooling-script",
+      "bytes": 25291,
+      "lines": 337,
+      "tokens": 7418,
+      "structuralTokens": 9428,
+      "cpt": 3.4,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
       "path": "debug/deep-zoom-checks/depth-format.mts",
       "tier": "tooling",
       "contextClass": "source-tooling",
@@ -13418,6 +13439,23 @@
       "reachableFrom": []
     },
     {
+      "path": "deep-zoom/boxScale.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 2047,
+      "lines": 40,
+      "tokens": 603,
+      "structuralTokens": 592,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
       "path": "deep-zoom/components/BootCard.tsx",
       "tier": "root",
       "contextClass": "source",
@@ -13581,6 +13619,23 @@
       "lines": 105,
       "tokens": 1892,
       "structuralTokens": 1974,
+      "cpt": 3.4,
+      "heavy": false,
+      "reachableFrom": [
+        "deep-zoom"
+      ]
+    },
+    {
+      "path": "deep-zoom/data/boxStarters.ts",
+      "tier": "root",
+      "contextClass": "source",
+      "loadPolicy": "on-demand",
+      "ext": ".ts",
+      "reason": "app-source",
+      "bytes": 5554,
+      "lines": 71,
+      "tokens": 1633,
+      "structuralTokens": 1828,
       "cpt": 3.4,
       "heavy": false,
       "reachableFrom": [
@@ -16454,6 +16509,21 @@
       "lines": 193,
       "tokens": 3835,
       "structuralTokens": 4282,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0135-a-second-formula-in-the-deep-zoomer.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 6356,
+      "lines": 86,
+      "tokens": 1630,
+      "structuralTokens": 1895,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -49813,10 +49883,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1677469,
-      "lines": 66733,
-      "tokens": 578438,
-      "structuralTokens": 553402,
+      "bytes": 1677060,
+      "lines": 66715,
+      "tokens": 578297,
+      "structuralTokens": 553275,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -49828,10 +49898,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 11398,
+      "bytes": 11433,
       "lines": 165,
-      "tokens": 2918,
-      "structuralTokens": 4492,
+      "tokens": 2927,
+      "structuralTokens": 4503,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -50374,6 +50444,36 @@
       "structuralTokens": 7236,
       "cpt": 3.9,
       "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/deep-zoom-shell/MANDELBOLIC.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 8895,
+      "lines": 122,
+      "tokens": 2281,
+      "structuralTokens": 2733,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/deep-zoom-shell/MANDELBOX.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 8088,
+      "lines": 107,
+      "tokens": 2074,
+      "structuralTokens": 2443,
+      "cpt": 3.9,
+      "heavy": false,
       "reachableFrom": []
     },
     {
