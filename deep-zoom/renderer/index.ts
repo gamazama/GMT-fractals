@@ -298,6 +298,12 @@ export interface DeepZoomApi {
     /** Compile times in ms by variant key; `PB` is defined once the BLA variant has been built. */
     compileMs(): Record<string, number | undefined>;
     loadGradient(file: File): Promise<unknown>;
+    /** One row of RGBA texels as the palette, at once (added 2026-10-09). `width` defaults to the
+     *  row's own length. It does NOT touch the colour mode, where `loadGradient` flips Plain to
+     *  Orbit trap. The texels are the surface's albedo as they are - hand them over linear. */
+    setGradientTexels(rgba: Uint8Array, width?: number): void;
+    /** Back to the built-in cosine palette. */
+    clearGradient(): void;
     setMode(mode: 'auto' | 'deep' | 'f32'): void;
     setGate(on: boolean): void;
     setFrame(longEdgePx: number): void;

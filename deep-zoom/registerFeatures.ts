@@ -6,9 +6,14 @@
  * freezes when the store is built, and a late registration throws in dev and
  * does nothing in a production build).
  *
- * Boot-order trap, the same one fluid-toy/registerFeatures.ts records: this
- * file must import NOTHING that imports store/engineStore. A widget that reads
- * the store registers in main.tsx, after the installs.
+ * Boot-order trap, the same one fluid-toy/registerFeatures.ts records: nothing
+ * in this file may TOUCH the store (a first `useEngineStore` call builds it and
+ * freezes the registries mid-register). Importing a module that imports
+ * store/engineStore is harmless - the store is built on first use, grep
+ * `ensureStore` there - and the palette suite below does. What must not happen
+ * is a call: the My Gradients target reaches the store through the global
+ * handle, at click time. A widget that reads the store registers in main.tsx,
+ * after the installs.
  *
  * What is registered and what is not, as of stage 1:
  *   - The five look features are REGISTERED but have NO PANEL and NO SINK yet.
@@ -20,7 +25,8 @@
  *     sibling shells: PostEffects and ColorGrading are shader uniforms of a
  *     picture the engine does not draw here, Audio and Webcam feed Modulation,
  *     which this app does not install.
- *   - No palette UI, no send target, no custom widget: stage 5 and stage 2.
+ *   - The palette suite (stage 5, 2026-10-09), at the foot of this file: My
+ *     Gradients, the Gradient Studio, and this app's one Destination.
  */
 
 import { featureRegistry } from '../engine/FeatureSystem';
@@ -53,7 +59,7 @@ featureRegistry.register(DzInspectFeature);
 // What lights the picture until GMT's Light Studio takes over (stage L5).
 featureRegistry.register(DzLightFeature);
 
-// Colour — Plain / Palette, GMT's colouring mode number, scale.
+// Colour — Plain / Gradient, the gradient, GMT's colouring mode number, scale.
 featureRegistry.register(DzColourFeature);
 
 // Panel widgets the manifest names (deep-zoom/panels.ts). Registered here, before the store
@@ -65,3 +71,46 @@ componentRegistry.register(DZ_DEPTH_SCALE_OVERLAY, DepthScale);
 componentRegistry.register('dz-mode-notice', ModeNotice);
 componentRegistry.register('dz-iteration-readout', IterationReadout);
 componentRegistry.register('dz-frame-readout', FrameReadout);
+
+// ── The palette suite (stage 5) ──────────────────────────────────────────────
+// The same seam app-gmt and fluid-toy use: the My Gradients panel and its
+// providers, the star in the gradient editor's header, the starter presets.
+// Its generator / filters / image features come with it; the Studio's Adjust
+// dials are the generator's, so they are wanted here, not carried for nothing.
+import { registerPaletteUI } from '../palette/registerPaletteUI';
+registerPaletteUI();
+
+// The Gradient Studio — the Explorer's Curves / Adjust / Paint faces in a
+// floating window, opened from the button beside the editor's star. After
+// registerPaletteUI, so that button sits after the star. Its panel entry and
+// close watcher are in setup.ts.
+import { installGradientStudio } from '../palette/installGradientStudio';
+installGradientStudio();
+
+// Where a gradient from My Gradients lands: the surface's gradient. Forced to
+// 'linear' whatever the favourite says (most are stored 'srgb'): the renderer
+// lights the texel, as GMT's coloring layers do - THE GRADIENT in
+// features/colour.ts. The same write leaves Plain, so the gradient is seen.
+// The store is reached through the global handle, at click time (the header).
+import { setFavientStudioAction } from '../palette/core/favientTargets';
+import { registerSendTarget } from '../store/sendTargetRegistry';
+import type { FavientDragPayload } from '../palette/core/favientDnd';
+import type { GradientConfig } from '../types';
+import { DZ_GRADIENT_PARAM } from './features/colour';
+import { openExplorerFromDeepZoom } from './explorerTrip';
+
+type StoreHandle = { getState: () => { setDzColour?: (patch: { gradient: GradientConfig; plain: boolean }) => void; setActiveTab?: (id: string) => void } };
+const storeHandle = (): StoreHandle | undefined => (globalThis as { __engineStore?: StoreHandle }).__engineStore;
+
+registerSendTarget<FavientDragPayload>({
+    id: 'dz-gradient',
+    label: 'Deep Zoom · Gradient',
+    group: 'host',
+    editsParam: DZ_GRADIENT_PARAM,
+    apply: (p) => storeHandle()?.getState().setDzColour?.({ gradient: { ...p.config, colorSpace: 'linear' }, plain: false }),
+    reveal: () => storeHandle()?.getState().setActiveTab?.('Colour'),
+});
+
+// The panel's Explorer button: the Gradient Explorer in a new tab, on this
+// gradient, with a "Back to Deep Zoom" link (./explorerTrip).
+setFavientStudioAction(openExplorerFromDeepZoom);

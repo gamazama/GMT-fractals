@@ -4,7 +4,9 @@
  * Call this from a host app's side-effect `registerFeatures.ts` BEFORE the engine store
  * is constructed — the feature + component registries freeze on first store access.
  *
- * THREE hosts call it today (grep `registerPaletteUI(` outside this file):
+ * FOUR hosts call it today (grep `registerPaletteUI(` outside this file):
+ *   • `deep-zoom/registerFeatures.ts` — defaults (2026-10-09); it mounts the shelf and the
+ *     Gradient Studio and shows none of the mode tabs.
  *   • `app-gmt/registerFeatures.ts` — defaults, so the standalone Stops tab is ON.
  *   • `gradient-explorer/v2/registerFeatures.ts` — `{ standaloneStopsMode: false }`.
  *   • `fluid-toy/registerFeatures.ts` — defaults. fluid-toy DOES mount the palette

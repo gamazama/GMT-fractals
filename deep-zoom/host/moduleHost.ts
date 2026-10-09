@@ -72,7 +72,7 @@
  *     (`statusLineOf`): M3. `compile` sees the deep shader only: BLA and variants, M5.
  *   - `seekPath` goes by time (`api.samplePath`) and ignores `ease`: seek by arc, M4.
  *   - `renderFramePixels`, `renderFrameBlob`, `exportStill` are absent: M4 (the still's blob M4 or
- *     M6). `pause` is absent: M5. `setGradientRamp` is absent: stage 5, then M2.
+ *     M6). `pause` is absent: M5.
  *   - `renderPathZip`, `play` and their frame waits run on the browser's animation frames: M4
  *     moves the render path onto `step`.
  *   - `LooseHandles` (`moveAlong` and the recorder) are still untyped in the module: M1.
@@ -505,6 +505,16 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (disposed || !isReady) return Promise.resolve();
             return dive.start(depth);
         },
+        // gradient: texels straight to the module's strip, at once. The colour mode is not touched
+        // (grep `setGradientTexels` in renderer/core.js); the promise is the contract's shape.
+        setGradientRamp(rgba, width) {
+            if (!disposed) {
+                if (rgba) api.setGradientTexels(rgba, width);
+                else api.clearGradient();
+            }
+            return Promise.resolve();
+        },
+
         snapshot: () => (disposed ? null : dz.snapshot()),
         thumbnail(size) {
             // A render owns the GL state between its rows; a thumbnail drawn into it corrupts the frame.

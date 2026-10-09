@@ -79,6 +79,24 @@ no embedded page (K2); real-GPU checks run headed Chrome on d3d11, never SwiftSh
 
 Building started 2026-10-08 on the owner's word (an overnight session, stage 1 first).
 
+## K10. Gradients: what the surface wears, who carries it, and what stays in the Explorer
+
+Decided 2026-10-09, before stage 5 was built ("yes to all, places and explorer carry the
+gradient"):
+- **The gradient replaces the renderer's built-in palette.** The Colour tab is Plain or Gradient;
+  there is no "use gradient" switch (BUILD-PLAN S5-1's `useGradient` was not built). As in GMT.
+- **A saved place carries its gradient**, and a jump to it brings the colours back. A place saved
+  before stage 5 has none and leaves the gradient as it is.
+- **The Explorer button carries the gradient there**, and the Explorer links back ("Back to Deep
+  Zoom"). Nothing comes back, as with GMT (ADR-0126): the Explorer's gradient is in My Gradients.
+- **No live offset, bias or repeats in this app.** "offset and bias can stay as baked/rasterized
+  options in the gradient explorers adjust tab, they dont need a live counterpart." They are
+  Adjust dials of the Gradient Studio (Phase, Scale, ...), baked into the gradient. K8's reserved
+  names stand; nothing is built behind them.
+- **Still open: whether the mapping values move to GMT's.** He agreed to settle it after a
+  measurement of how the mapping value spreads over a frame; the measurement is in BUILD-PLAN,
+  "Stage 5 as built", with a recommendation (keep the renderer's values).
+
 # Open - in the order they block
 
 | Order | Id | The call | Blocks | Recommended |

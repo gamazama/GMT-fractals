@@ -2,9 +2,8 @@
  * deep-zoom/features/colour.ts — the DDFS feature `dzColour` (dock tab Colour).
  *
  * PURPOSE
- *   What colour the surface is: one plain colour, or a palette looked up by a value of the orbit
- *   (the mapping) at a frequency (the scale). Three params today: `plain`, `mode`, `scale`. The
- *   gradient arrives in stage 5 (see STAGE 5 below).
+ *   What colour the surface is: one plain colour, or a gradient looked up by a value of the orbit
+ *   (the mapping) at a frequency (the scale). Four params: `plain`, `gradient`, `mode`, `scale`.
  *
  * THE NUMBERS AND NAMES ARE GMT'S (DECISIONS K8)
  *   `mode` stores GMT's own mapping-mode NUMBER, exactly as GMT's colouring feature stores it
@@ -49,10 +48,12 @@
  *       from the trap. GMT divides by the iteration count and the renderer does not: `scale` S
  *       here is near GMT's `0.18 * iterations * S`, and that factor moves whenever auto
  *       iterations raise the count.
- *     THE PALETTE is the renderer's built-in cosine ramp (grep `vec3 palette(float s)`); GMT always
- *       samples a gradient. Stage 5 brings the gradient.
- *   WHO CLOSES THEM: the stage-5 module adapter (GMT-SYSTEMS 2.3, "Module computes GMT's values" /
- *   "Module's shading pass uses the same expression and GMT's param names"). Until it lands,
+ *     THE PALETTE is the `gradient` param since stage 5 (2026-10-09), as in GMT. The renderer's
+ *       built-in cosine ramp (grep `vec3 palette(float s)`) is never drawn by this shell: see THE
+ *       GRADIENT below.
+ *   WHO CLOSES THEM: a module adapter (GMT-SYSTEMS 2.3, "Module computes GMT's values" /
+ *   "Module's shading pass uses the same expression and GMT's param names"). NOT BUILT; whether
+ *   the mapping values move to GMT's is the owner's open call (2026-10-09). Until it lands,
  *   `scale` is GMT's NAME over the RENDERER'S number: its range, step and default are the
  *   renderer's own (`CTLS` row 'palette': 0.1..16, 0.1; `colorScale = 1.0`) — GMT's `scale` has no
  *   range at all (it is hidden there and driven by a histogram widget). When the adapter lands, a
@@ -62,9 +63,10 @@
  * THE SEAM
  *   The engine store OWNS these values. The renderer (`deep-zoom/renderer`) is a sink: it is told,
  *   never asked. No param here has `uniform` or `onUpdate`; the shell's host sync (BUILD-PLAN
- *   package S2-3, `deep-zoom/host/paramMap.ts`) pushes all three through ONE handle of
- *   `instance.api` (read in `deep-zoom/renderer/core.js`):
+ *   package S2-3, `deep-zoom/host/paramMap.ts`) pushes the three numbers through ONE handle of
+ *   `instance.api` (read in `deep-zoom/renderer/core.js`), and the gradient goes as texels:
  *     plain, mode, scale    api.setColor(m, scale)    m = colourToRenderer(plain, mode): 0, 1, 2
+ *     gradient              host.setGradientRamp(256 RGBA texels)    by `deep-zoom/GradientSync.tsx`
  *   Exports for the map: `COLOUR_MODE_OPTIONS` / `COLOUR_MODE_GMT_VALUES` /
  *   `COLOUR_MODE_RENDERER_VALUES` (option names, the number stored, the renderer's mode — same
  *   order), the two lookup tables `GMT_MODE_TO_RENDERER` and `RENDERER_TO_GMT_MODE`,
@@ -75,15 +77,34 @@
  *   the slice type (`storeTypes.ts`: `SliceFromParams<typeof DzColourFeature['params']>`) and
  *   places the rows (`panels.ts`).
  *
- * STAGE 5 (BUILD-PLAN package S5-1) edits this file: it adds `useGradient` and `gradient` at the
- *   marked place in `params`. The renderer's own gradient loader flips its mode from plain to
- *   orbit trap behind the caller's back (grep `give the gradient something to colour`); the shell
- *   is to do that openly, in the same store write as the gradient: `plain: false`. `mode` then
- *   already holds a mapping — 0, Orbit trap, by default — so "a gradient set while Plain also sets
- *   Orbit trap" (BLUEPRINT section 3) holds without touching `mode`.
+ * THE GRADIENT (stage 5, 2026-10-09; the owner: "yes to all" on the calls of that day)
+ *   - IT REPLACES THE BUILT-IN PALETTE. There is no "use gradient" switch (the plan's
+ *     `useGradient`): as in GMT, whatever is not Plain is the gradient. The default is the
+ *     renderer's cosine palette as stops (`DZ_DEFAULT_GRADIENT`), so a place saved before stage 5
+ *     with the palette on - two of the owner's kept places, one starter - draws as it did.
+ *   - IT IS LINEAR. The shading pass uses a texel as the surface's albedo, lights it, then tone
+ *     maps and applies the display gamma (grep `albedoNew`, then `0.4545` in SHADE_FRAG). A
+ *     gradient's `colorSpace: 'linear'` makes `generateGradientTextureBuffer` bake linearised
+ *     texels, which is what GMT's coloring layers do (`palette/core/gradientSeam.ts`). The
+ *     editor's colour-space choice is the user's; every OTHER way in forces 'linear' - the My
+ *     Gradients target does (`deep-zoom/registerFeatures.ts`), because a favourite is usually
+ *     stored 'srgb' and would draw washed out.
+ *   - A WRITE FROM OUTSIDE THE EDITOR ALSO LEAVES PLAIN. The renderer's own file loader flips its
+ *     mode from plain to orbit trap behind the caller's back (grep `give the gradient something
+ *     to colour`); this shell never calls it, and does the same thing openly, in the store write
+ *     that sets the gradient: `plain: false`. `mode` already holds a mapping (0, Orbit trap, by
+ *     default).
+ *   - WHO CARRIES IT. It is a param of this slice, so scenes, share links, undo and saved places
+ *     carry it with no code of their own (`captureLook` in `deep-zoom/locations.ts` copies the
+ *     whole slice). A place saved before stage 5 has no `gradient` key and leaves it as it is.
+ *   - NO OFFSET, NO BIAS, NO REPEATS HERE (the owner, 2026-10-09: they "can stay as baked /
+ *     rasterized options in the gradient explorers adjust tab, they dont need a live
+ *     counterpart"). Phase, Scale and the rest are Adjust dials of the Gradient Studio, baked
+ *     into the gradient. `offset` and `bias` stay reserved names all the same (above).
  *
  * INVALIDATION
- *   Class A, all three: `api.setColor` restarts the still. No orbit rebuild, no shader compile.
+ *   Class A, all four: `api.setColor` and a new gradient row restart the still. No orbit rebuild,
+ *   no shader compile.
  *
  * PITFALLS
  *   - DEEP PATH ONLY. The f32 baseline (the picture only while the deep shader is still
@@ -95,13 +116,14 @@
  *   - SECOND WRITERS. `api.dz.setView(view)` writes the mode and the scale from `view.color` /
  *     `view.cscale`; the shell applies a jump through this feature's setter
  *     (`colourFromRenderer`) so the store stays the one owner. `api.loadGradient` and a file
- *     dropped on the module flip plain to orbit trap (see STAGE 5). The module's own keys C, 9 and
- *     0 write both; the shell creates the module with `shortcuts: false`, which switches them off.
+ *     dropped on the module flip plain to orbit trap; the shell calls neither (`dropTarget: null`,
+ *     and a dropped gradient file goes to My Gradients). The module's own keys C, 9 and 0 write
+ *     both; the shell creates the module with `shortcuts: false`, which switches them off.
  *   - A STORED NUMBER OUTSIDE THE OFFERED SET (say a GMT block's 5) is kept in the store, shows no
  *     selection in the dropdown, and is drawn as the default mapping until the renderer computes
  *     it. `colourModeToRenderer` does that; it also takes a keyframed fraction the way GMT's
  *     shader does (`int(mode + 0.1)`).
- *   - `plain` hides the two rows below it; their values are kept, and pushed, whatever it is.
+ *   - `plain` hides the three rows below it; their values are kept, and pushed, whatever it is.
  *   - `scale` here is the PARAM KEY. `ParamConfig.scale` (the slider curve) is a different thing
  *     and is not set: the slider is linear, as the renderer's own.
  *   - GMT's histogram controls `repeats` and `phase` are not reserved here. An id containing `rot`,
@@ -110,7 +132,8 @@
  *     such keys).
  *
  * @invariant No key of the `dzColour` slice is typed `any`: `SliceFromParams` over this feature's
- *   params gives `boolean` for `plain` and `number` for `mode` and `scale` — proven by: npm run
+ *   params gives `boolean` for `plain`, `number` for `mode` and `scale` and (since stage 5)
+ *   `GradientConfig` for `gradient` — proven by: npm run
  *   typecheck ("does not satisfy the constraint 'never'" on the `SliceIsTyped` line at the foot of
  *   this file). Falsified 2026-10-08: with `satisfies FeatureDefinition` swapped for a
  *   `: FeatureDefinition` annotation, tsc reported "Type 'string' does not satisfy the constraint
@@ -125,10 +148,15 @@
  *   intended proof, read as `colourToRenderer(plain, mode) === settings().color`.
  * @assumption The gap table above was read from the two shaders, not measured: no check renders
  *   one view in both and compares the lookup positions.
+ * @assumption `DZ_DEFAULT_GRADIENT`, baked linear, is the renderer's cosine palette to within 9
+ *   levels of 255 on any channel (mean 1.6). Fitted and measured once, 2026-10-09, with the
+ *   palette suite's own fitter (`rampToGradientConfig` in `palette/core/stopFit.ts`, targetDE
+ *   0.01) over the display-encoded cosine; nothing re-checks it.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { SliceFromParams } from '../../engine/typedSlices';
+import type { GradientConfig } from '../../types';
 
 // ── Mapping — the slice stores GMT's mode number (`MAPPING_MODES`), not an index.
 export const COLOUR_MODE_OPTIONS = ['orbit-trap', 'iterations'] as const;
@@ -172,7 +200,26 @@ export const colourFromRenderer = (rendererMode: number): { plain: true } | { pl
     return gmt === undefined ? { plain: true } : { plain: false, mode: gmt };
 };
 
-/** Shown while a palette is in use. */
+/** The renderer's built-in cosine palette as a gradient: what "not Plain" drew before stage 5.
+ *  'linear' because the renderer lights the texel (the header, THE GRADIENT). How it was made
+ *  and how close it is: the last @assumption of the header. */
+const DZ_DEFAULT_STOPS: ReadonlyArray<readonly [number, string]> = [
+    [0, '#FF8B8B'], [0.0431, '#FD6CA7'], [0.0745, '#F953B9'], [0.1373, '#EA1AD7'],
+    [0.1882, '#D80BE9'], [0.2431, '#BF40F7'], [0.302, '#9E70FE'], [0.4078, '#51B5F8'],
+    [0.4353, '#39C3F3'], [0.5373, '#1FECD0'], [0.6157, '#64FCA7'], [0.6902, '#99FF76'],
+    [0.7843, '#CCF127'], [0.8627, '#EAD71A'], [0.9216, '#F8BB50'], [1, '#FF8B8B'],
+];
+export const DZ_DEFAULT_GRADIENT: GradientConfig = {
+    colorSpace: 'linear',
+    blendSpace: 'oklab',
+    stops: DZ_DEFAULT_STOPS.map(([position, color], i) => ({ id: String(i), position, color, bias: 0.5, interpolation: 'linear' as const })),
+};
+
+/** The gradient param's identity: what the My Gradients target, the Gradient Studio and the
+ *  renderer sync (`deep-zoom/GradientSync.tsx`) name it by. */
+export const DZ_GRADIENT_PARAM = { featureId: 'dzColour', paramKey: 'gradient' } as const;
+
+/** Shown while the gradient is in use. */
 const NOT_PLAIN = { param: 'plain', bool: false };
 
 export const DzColourFeature = {
@@ -191,9 +238,16 @@ export const DzColourFeature = {
             label: 'Colour',
             options: [
                 { label: 'Plain', value: true },
-                { label: 'Palette', value: false },
+                { label: 'Gradient', value: false },
             ],
-            description: 'Plain: one colour over the whole surface. Palette: a colour from the palette for each point, picked by the mapping below.',
+            description: 'Plain: one colour over the whole surface. Gradient: a colour from the gradient for each point, picked by the mapping below.',
+        },
+        gradient: {
+            type: 'gradient',
+            default: DZ_DEFAULT_GRADIENT,
+            label: 'Gradient',
+            condition: NOT_PLAIN,
+            description: 'The colours the surface takes. The star opens My Gradients; the button beside it opens the Gradient Studio (Curves, Adjust, Paint).',
         },
         mode: {
             type: 'float',
@@ -208,10 +262,8 @@ export const DzColourFeature = {
             default: 1, min: 0.1, max: 16, step: 0.1,
             label: 'Scale',
             condition: NOT_PLAIN,
-            description: 'How often the palette repeats over the mapped value. Higher values give more, narrower bands.',
+            description: 'How often the gradient repeats over the mapped value. Higher values give more, narrower bands.',
         },
-
-        // ── STAGE 5 (BUILD-PLAN package S5-1): `useGradient` and `gradient` go HERE. See the header.
     },
 } satisfies FeatureDefinition;
 

@@ -5,8 +5,8 @@
  * otherwise) and reflects `useFavientsPanelShown` (true only when actually on screen),
  * so a docked-but-collapsed shelf reads as "hidden" and the button reveals it.
  *
- * ONE host mounts it — grep for `FavientsToggleButton`: `fluid-toy/main.tsx` (topbar
- * registry, floated shelf). The first Explorer shell's `TopBarButtons.tsx` (dock-collapse
+ * TWO hosts mount it — grep for `FavientsToggleButton`: `fluid-toy/main.tsx` and, since
+ * 2026-10-09, `deep-zoom/main.tsx` (topbar registry, floated shelf). The first Explorer shell's `TopBarButtons.tsx` (dock-collapse
  * variant) was the other, until the entry-point swap of 2026-09-16. It replaced their
  * per-app copies. **app-gmt has no topbar toggle at all** — its copy
  * was deleted, not migrated; the shelf floats open by default (grep `mountFavientsPanel` in

@@ -8,7 +8,8 @@ paths:
 `palette/**` is the gradient/palette authoring suite: the colour core, the
 generator and img2grad pipelines, the Favients shelf, the picker wall, and the
 four DDFS features that expose them. It is mounted by more than one host —
-app-gmt and the Gradient Explorer today — through a single registration seam.
+app-gmt, fluid-toy, the Gradient Explorer and (since 2026-10-09) Deep Zoom — through a single
+registration seam.
 
 Written 2026-09-01, the last subsystem-sized area of the tree with no rule.
 Three auditors drafted it during the overnight audit and none wrote it, to avoid
@@ -89,7 +90,9 @@ beside their guards in the table under Guards.
   `store/workingStore.ts`.
 - `docs/adr/0126-the-trip-from-gmt-to-the-explorer.md` (2026-09-24) — GMT's Explorer button
   carries the gradient to the Explorer and nothing back; the hand-off key and channel are
-  in `core/explorerHandoff.ts` (grep `EXPLORER_INCOMING_KEY`).
+  in `core/explorerHandoff.ts` (grep `EXPLORER_INCOMING_KEY`). Since 2026-10-09 the trip takes
+  any app listed in `EXPLORER_HOSTS` there (Deep Zoom is the second): the Explorer's URL names
+  the host (`?from=<id>`) and its link reads "Back to <that app>".
 - `docs/adr/0129-the-paint-face-paints-a-ramp.md` (2026-09-25) — the Paint face's brushes
   paint the 256-texel RAMP (`core/paintRamp.ts`, grep `PaintSession`, `isWashTool`), and
   Apply lands the painting as one undo entry. The brush maths guard is
@@ -163,7 +166,10 @@ The cross-cutting write-up is still `docs/modules/palette/palette-suite.md`.
   `gradient-explorer/v2/paint/workingPaintSink.ts`). The Studio's rule: a live face PREVIEWS on the
   fractal through the param's own uniform (`previewGradient`) and never writes the param until it
   bakes — one `paramGroup` on Apply, on leaving the face, on closing the window — so the param IS the
-  source, and an undo or a sidebar edit mid-face just moves the preview.
+  source, and an undo or a sidebar edit mid-face just moves the preview. A host whose renderer takes
+  no uniform events gets no picture from that emit: it reads the PUBLISHED preview instead
+  (`components/gradient/gradientParamPreview.ts`), as Deep Zoom does in `deep-zoom/GradientSync.tsx`
+  (the Studio's second host, 2026-10-09).
   The window is the Explorer's hero card itself: a BARE-chrome panel (`PanelDefinition.chrome:
   'bare'` → `DraggableWindow` renders a `FloatingPanel` with no title bar, `autoHeight`,
   `edgeResize="x"`; the card's name row takes `useFloatingPanelChrome().dragHandleProps`), float-only

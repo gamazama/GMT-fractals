@@ -15,8 +15,8 @@
  *     engine's animation tick (`engine.animation`, engine/animation/modulationTick.ts). The
  *     timeline does not play without it, LFO panel or not.
  *   - PauseControls, BucketRender: the renderer has no pause yet and keeps its own tiled export.
- *   - SceneIO, the state library, session, tutorial, What's New, the render dialog, the palette
- *     UI and the timeline: stages 2 to 6, each when a renderer handle stands behind it.
+ *   - Session, tutorial, What's New and the render dialog: later stages, each when a renderer
+ *     handle stands behind it. (The palette suite came in stage 5: registerFeatures.ts, setup.ts.)
  *   - `engine/plugins/camera/presetField`: not imported, with the Camera plugin.
  *
  * The prototype this replaces is still served at deep-zoom-prototype.html (dev only).
@@ -66,6 +66,8 @@ import { LocationText } from './components/LocationText';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShare, loadShareFromUrl, sceneCanvas } from './share';
 import { dismissBootSplash } from './components/BootCard';
+import { FavientsToggleButton } from '../palette/components/FavientsToggleButton';
+import { installGradientFileClaim } from '../palette/installGradientFileClaim';
 
 if (import.meta.env.DEV && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
@@ -182,6 +184,12 @@ try {
 
     // Scenes carry the saved places as a document; a share link carries the look and the view.
     installShare();
+
+    // My Gradients in the top bar (the panel itself is an entry of the manifest, setup.ts), and
+    // a gradient FILE dropped on the app or picked in File > Load Scene goes to My Gradients
+    // instead of failing as a scene (palette/installGradientFileClaim.ts).
+    topbar.register({ id: 'favients-toggle', slot: 'left', order: 40, component: FavientsToggleButton });
+    installGradientFileClaim();
 
     // The panel manifest. After every registration it refers to, and after the
     // store exists (the installs above built it).

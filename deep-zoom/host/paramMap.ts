@@ -18,8 +18,9 @@
  *   - Some values travel together because the module's setter takes them together: colour
  *     (`plain`, `mode`, `scale` -> one `setColor`), light type and lamp falloff (one `setLight`),
  *     the two phase angles (one `setPhase`). A row's `group` says which push carries it.
- *   - `group: null` means the renderer has no input for the value today: it is shell-only, or it
- *     waits on a module change named in `why`. Such a row must not be in a panel unless shell-only.
+ *   - `group: null` means no push of `looseParams.ts` carries the value: it is shell-only, it
+ *     waits on a module change named in `why`, or (the gradient) it reaches the renderer by
+ *     another member of the host, named in `why`. A row that waits must not be in a panel.
  *   - Invalidation class O rebuilds the reference orbit (heavy at depth): the sync holds O pushes
  *     back while a slider is moving. A restarts the still. C can block on a shader compile.
  *
@@ -136,6 +137,9 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     // No read-back while Plain: the module's one number cannot say which mapping is waiting.
     { feature: 'dzColour', key: 'mode', cls: 'A', group: 'colour', read: (api) => { const c = colourFromRenderer(api.dz.settings().color); return c.plain ? undefined : c.mode; } },
     { feature: 'dzColour', key: 'scale', cls: 'A', group: 'colour', read: (api) => api.dz.settings().cscale },
+    // Not a number, so not a push of looseParams.ts: it goes as 256 texels through the host's own
+    // member, and a tool's render-only preview goes the same way without the store holding it.
+    { feature: 'dzColour', key: 'gradient', cls: 'A', group: null, why: 'sent as texels by deep-zoom/GradientSync.tsx through host.setGradientRamp' },
 ];
 
 export const DZ_PARAM_ROW_BY_ID: ReadonlyMap<DzParamId, DzParamRow> =

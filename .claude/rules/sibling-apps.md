@@ -42,6 +42,14 @@ worked out from the angles, so GMT's orbit code is not involved. A turn or a dra
 clearance: the camera is not carried to where the renderer's estimate of the nearest surface
 (`host.estimateAt`) is under a share of the pivot's distance (grep `DZ_ORBIT_CLEARANCE`). A flight
 or an orbit gesture is one undo step (`flightEnded` in `deep-zoom/locations.ts`).
+The surface's gradient (stage 5, 2026-10-09) is the param `dzColour.gradient`, 'linear' because the
+renderer lights the texel, and it reaches the renderer as texels through ONE component,
+`deep-zoom/GradientSync.tsx` - which sends a tool's published preview when there is one, so the
+Gradient Studio's faces are live here although the param has no uniform. The palette suite is
+installed as fluid-toy installs it, plus the Studio and the gradient-file claim; the Explorer trip
+is `deep-zoom/explorerTrip.ts`. Read THE GRADIENT in `deep-zoom/features/colour.ts` before adding
+a colour control: offset, bias and repeats are deliberately NOT params here (the owner: they stay
+baked options of the Adjust face).
 
 A step in `smoke:deep-zoom` has to earn its place (the owner, 2026-10-09, on one written for the
 middle drag: "way over over kill"). The default for a change is NO new step: try it once by hand

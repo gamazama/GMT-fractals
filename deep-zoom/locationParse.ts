@@ -14,9 +14,15 @@
  *
  * Camera values are decimal STRINGS of whole numbers and are never converted; a `cam` that is not
  * three such strings is refused, so a number-mangled copy cannot become a wrong place.
+ *
+ * A place carries its GRADIENT in `look.dzColour.gradient` (stage 5). Text from a chat is not
+ * trusted with one: it goes through the gradient gate every other entrance uses
+ * (`coerceGradientConfig`), and a gradient that does not pass is dropped from the place - the
+ * place still opens, with the gradient the app has.
  */
 import type { DzView } from './host/DeepZoomHost';
 import type { DzLocationState } from './locations';
+import { coerceGradientConfig } from '../palette/core/editorConfig';
 
 export type ParsedLocations =
     | { ok: true; locations: DzLocationState[]; labels: Array<string | undefined> }
@@ -47,6 +53,17 @@ function viewOf(o: Record<string, unknown>): DzView | string {
     };
 }
 
+/** A pasted look, with its gradient through the gate (see the header). The other look fields are
+ *  taken as they come, as before stage 5. */
+function lookOf(raw: object): DzLocationState['look'] {
+    const look = raw as NonNullable<DzLocationState['look']>;
+    const colour = look.dzColour as (typeof look.dzColour) | undefined;
+    if (!colour || typeof colour !== 'object' || !('gradient' in colour)) return look;
+    const { gradient: pasted, ...rest } = colour;
+    const gradient = coerceGradientConfig(pasted);
+    return { ...look, dzColour: gradient ? { ...rest, gradient } : rest };
+}
+
 const depthText = (v: unknown): string => {
     const n = typeof v === 'string' ? Number(v) : v;
     return isNum(n) && n > 0 ? String(n) : '';
@@ -65,7 +82,7 @@ function one(x: unknown): { state: DzLocationState; label?: string } | string {
         const view = viewOf(o.view as Record<string, unknown>);
         if (typeof view === 'string') return view;
         const state: DzLocationState = { view, depth: depthText(o.depth) };
-        if (o.look && typeof o.look === 'object') state.look = o.look as DzLocationState['look'];
+        if (o.look && typeof o.look === 'object') state.look = lookOf(o.look);
         if (typeof o.note === 'string') state.note = o.note;
         return { state, label: typeof o.label === 'string' ? o.label : (typeof o.name === 'string' ? o.name : undefined) };
     }

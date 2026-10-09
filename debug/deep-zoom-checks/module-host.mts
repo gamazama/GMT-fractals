@@ -381,6 +381,8 @@ function makeRig() {
         look: { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 } as Record<string, unknown>,
         setLook: (o: Record<string, unknown>): void => { note('setLook', o); Object.assign(api.look, o); },
         setSurf: (m: number): void => { note('setSurf', m); state.settings.detail = m; },
+        setGradientTexels: (rgba: Uint8Array, w?: number): void => { note('setGradientTexels', rgba, w); },
+        clearGradient: (): void => { note('clearGradient'); },
         setPower: (n: number): void => { note('setPower', n); state.settings.power = n; },
         setMode: (m: string): void => { note('setMode', m); state.mode = m; },
         autoIters: (): boolean => true,
@@ -1294,8 +1296,16 @@ console.log('[11] params   by id, through host/looseParams.ts (the pushes themse
     const got = a.getParams();
     check(got.detail === 4 && got['dzQuality.detail'] === 4 && got['dzFormula.power'] === 6 && got['dzLight.keyElevation'] === 40,
         'params: getParams holds the keys of the module and the mapped params by id');
-    check(a.pause === undefined && a.setGradientRamp === undefined && a.renderFramePixels === undefined && a.renderFrameBlob === undefined && a.exportStill === undefined,
-        'params: the five optional members are absent in stage 1 (pause, setGradientRamp, renderFramePixels, renderFrameBlob, exportStill)');
+    check(a.pause === undefined && a.renderFramePixels === undefined && a.renderFrameBlob === undefined && a.exportStill === undefined,
+        'params: four optional members are still absent (pause, renderFramePixels, renderFrameBlob, exportStill)');
+    // The gradient (stage 5, 2026-10-09): texels go to the module's own strip call, null to its
+    // reset; neither touches the colour mode. Seen red that day with the two calls swapped.
+    const ramp = new Uint8Array(1024);
+    void a.setGradientRamp?.(ramp, 256);
+    void a.setGradientRamp?.(null);
+    check(rigA.count('setGradientTexels') === 1 && rigA.calls.setGradientTexels[0][0] === ramp && rigA.calls.setGradientTexels[0][1] === 256
+        && rigA.count('clearGradient') === 1 && rigA.count('setColor') === 0,
+        'gradient: a row of texels reaches setGradientTexels as given, null reaches clearGradient, and the colour mode is not sent', rigA.log.join(', '));
     a.dispose();
     b.dispose();
 }

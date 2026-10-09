@@ -65,7 +65,9 @@ export interface DzLocationMarch {
 export interface DzLocationLook {
     dzFormula: DzFormulaSlice;
     dzLight: DzLightSlice;
-    dzColour: DzColourSlice;
+    /** With its gradient since stage 5 (2026-10-09): a place brings its colours back. A place
+     *  saved before that has no `gradient` key, and a jump to one leaves the gradient as it is. */
+    dzColour: Omit<DzColourSlice, 'gradient'> & Partial<Pick<DzColourSlice, 'gradient'>>;
     detail: number;
     /** Saved with every location since 2026-10-08: the owner's power-2 place at 5e-20 draws 85 %
      *  of its pixels on the wrong surface at the default step and needs 0.1, so a place that does

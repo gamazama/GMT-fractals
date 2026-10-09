@@ -4,7 +4,8 @@
  * PURPOSE
  *   The engine store owns every look, quality, formula and colour value (panels, undo, presets,
  *   keyframes); the renderer is a sink. This file is the one place that sends them: one store
- *   subscription per mapped feature, each change handed to `host.setParams` by id.
+ *   subscription per mapped feature, each change handed to `host.setParams` by id. The one value
+ *   it does not send is the gradient, which is texels and not a number: `GradientSync.tsx`.
  *
  * SEAMS
  *   - Mounted once by `DeepZoomApp.tsx` (`useHostSync()`). It reads the host from the holder, so it

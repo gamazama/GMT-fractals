@@ -21,6 +21,7 @@ original plan and are not rewritten.
 | 4 | **Keys built** (S4-1; smoke stage 4: 3 steps). `C` is a fly key since N5; "next colouring" is `V`. Help topics, the shortcuts page, What's New and the first-dive lesson (S4-2, S4-3) are not built. |
 | N | **Built: the shell flies with GMT's navigation.** N0 (replay guard), N2 (the integrator in the engine, ADR-0133), N0b (GMT's fly smoke covers the hook's wiring), N3 (the input hook in the engine, renderer-free), N4 (the module lets a host own the input), N5 (`deep-zoom/flyCamera.ts`, `DeepZoomNavigation.tsx`, `navigationState.ts`; smoke stage N5: 8 steps). N1 (a registered distance source) was dropped: the distance stays a plain argument. Not built: on-screen sticks for a phone, an orbit mode, roll. |
 | N, again (2026-10-09, not in the plan; ADR-0134) | **The speed follows rays, and Orbit mode.** The owner asked why the speed "isn't latching on" in difficult places; measured (the study: `H:/tmp/dz-nav-study/`), the estimate at the camera is the nearest surface in ANY direction - at his power-4 place a wall behind the camera, 22 decades nearer than anything in the picture - and it reads the true fractal, not the drawn solid (at the power-2 place W flew the camera inside in 4 s). Built: a CPU ray probe in the module (`api.dz.sense` / `freeDistance`: seven rays about an axis, to the solid as drawn); the pace = a third of the nearer of what is looked at and what lies ahead of the move, falling at once and rising at most 4 decades a second (`deep-zoom/flyPace.ts`; a third because he flew the whole distance and found it "3x too fast overall"); one frame never more than half the nearest ray ahead; the depth the app shows is what is looked at ("we lead with the looked at readout"), with the nearest surface beside it when it differs; the dive closes on the rays; a flight is one undo step; the old rule is a switch in Settings > Camera. **Orbit mode on Tab** (`deep-zoom/orbitCamera.ts`): drag turns about the point under the pointer, the wheel flies along its ray, right drag moves it - displacements from the angles alone, GMT's orbit code untouched (the plan's "4 to 6 days, high GMT risk" was for reworking GMT's own). A turn or a drag keeps a clearance of 0.08 of the pivot's distance from every surface, by the renderer's estimate at the place the move ends (`api.dz.estimateAt`; the owner, having flown it: "really fantastic ... if we could prevent it from colliding with the surface, relatively to the orbit's axis point"); a held turn slides (yaw alone, then pitch alone) and the pivot's mark fills in. A middle drag is the wheel's flight by hand (GMT's rate and direction: 0.005 a pixel, up is towards; tried once in the app - 140 pixels up covered 50.3 % of the way to the point under the pointer, 140 down gave it back - and given no smoke step, the owner: "way over over kill"). The engine did not change. Guards: `check:deep-zoom-ray-probe`, `check:deep-zoom-orbit-camera`, the pace lines of `check:deep-zoom-fly-camera`, seven new steps of smoke stage N5 (15 now). NOT done: his verdict on the rise limit, the clearance share and Orbit's feel; ROLL (Q / E) - not a performance or a maths limit: the renderer's camera is a yaw and a pitch, and every stored view carries those two numbers, so roll is a third number through views, paths, locations, scenes and links, about a session; the right drag, the middle drag and invert-Y are not opened by a test. **THE PROBE'S COST IN THE APP**, measured 2026-10-09 on the owner's machine (headless Chrome on d3d11, 1280 x 800, 4 s a case; the tool is `H:/tmp/dz-nav-study/bundle-cost.mts`): under 3.2 ms a frame on average at the Surface, Grain of sand and Certified edge starters in every case (idle, W, a strafe, backing out, W while looking round, an Orbit turn; worst single frame 18 ms, an Orbit turn at 1e-50), with 60 frames a second held at the two deeper of them (at Surface the W flight itself dropped frames, 169 in the 4 s, with the probe at 0.2 ms a frame). At the deepest starter (3.4e-76, 148 iterations and rising) it is 1.7 ms a frame flying straight, but 10.5 ms looking round while flying (worst 30 ms) and 7.1 ms in an Orbit turn (worst 63 ms): a look or a turn marches a fresh bundle every frame, and every orbit in it runs all the iterations. That place drops frames in every moving case (137 to 214 frames in the 4 s against 241 idle) and the probe is only part of it: backing out fell to 137 frames with the probe at 0.8 ms a frame, so the renderer's own work for a moved camera is the larger part; the probe's share is biggest looking round (10.5 ms of a 24 ms frame). NOT fixed, and the old rule was not measured there for comparison. The lever that changes no reading is skipping iterations in the CPU probe the way the GPU march does (BLA); the other is the picture's own depth (ADR-0134, the last alternative). |
+| 5 (2026-10-09) | **Built: gradients, My Gradients, the Gradient Studio, the Explorer trip.** Not as planned in three ways (DECISIONS K10): no `useGradient` switch - the gradient replaces the built-in palette; no PNG interim - the module got the direct call (M2, as `api.setGradientTexels`); a dropped gradient file goes to My Gradients through the engine's file claim, not to the renderer's loader. What was built and tried: "Stage 5 as built" under the stage's table. No smoke step was added. |
 | Engine | S2-4 (one overlay host) and S3-0 (state-library options) landed. |
 | Module (new, not in the plan) | **HIT REFINE**, opt-in, off by default (`api.setHitRefine`, the Quality tab's Hit refine, Inspect > Compare > Refine): halve each hit's last march step onto the level it was meant to land on. Built for the slicing the owner reported at 2.76e-39; numbers in the shader comment. Parity 52 and direct 11 green with it off. |
 | Tooling (2026-10-08) | **`npm run bench:deep-zoom-march`** (`debug/deep-zoom-march-study.mts`, on the renderer's new `api.marchProbe`): for the kept places and the sample flight, what share of rays each march setting puts on another surface than a careful march, and the work it costs, counted by the shader. 17 views x 14 marches in 3 s where the first studies took 4 to 10 minutes. It is the measuring tool for the automatic step, which is NOT built. |
@@ -821,6 +822,80 @@ with "Deep Zoom - Gradient" as a destination; a gradient made in Gradient Explor
 | **S5-1 Gradient param and push** | `features/colour.ts`, `deep-zoom/colourSync.ts`, `host/gradientPush.ts` | `useGradient` + `gradient`; setting a gradient in Plain mode also sets Orbit trap; push ramp then mode; one push per animation frame with a sequence counter. A dropped image is claimed by the engine's drop zone and handed to `api.loadGradient(file)` (the module's own drop listener is off). No stage-3 or stage-4 package owns `features/colour.ts`, so writing this early collides with nothing | typecheck; `param-map.mts` still green; on a real GPU **check the colours against the editor swatch** - whether the module treats the strip as display or linear is unverified [palette G8] | stage 2. **M2**; interim: a 256 x 1 PNG through `api.loadGradient` [palette 2.3] |
 | **S5-2 Integrator** | the shared set | `registerPaletteUI()`, send target with `editsParam`, `favientsPanelEntry`, `mountFavientsPanel` after the manifest with its own `storageKey`, the toggle button. Opens after stage 4's integrator has closed. | all gates; red if `mountFavientsPanel` runs before the manifest (the panel never opens) | S5-1 |
 | **S5-3 Smoke** | `debug/deep-zoom-smoke/stage5.mts` | The stage-5 steps that earn their place ("Smoke growth": the plan's row is a ceiling). | `npm run smoke:deep-zoom` | S5-2 |
+
+### Stage 5 as built, 2026-10-09
+
+**What the owner gets.** Colour is Plain or Gradient. Under Gradient: the engine's stop editor, a
+star that opens My Gradients, and a button that opens the Gradient Studio - the Explorer's Curves,
+Adjust and Paint faces in a floating window, previewed on the picture and baked on Apply / leaving
+the face / closing it (one undo step). My Gradients is in the top bar; its one Destination is
+"Deep Zoom - Gradient"; its Explorer button opens the Gradient Explorer on the gradient in use and
+the Explorer says "Back to Deep Zoom". A gradient file dropped on the app lands in My Gradients.
+Scenes, share links, undo and saved places carry the gradient.
+
+**Where it is.**
+- Module: `api.setGradientTexels(rgba, width)` (grep `A HOST'S GRADIENT` in `renderer/core.js`):
+  one row of texels at once, the colour mode left alone. The only change to the renderer.
+- Host: `setGradientRamp` is there (`host/moduleHost.ts`). Its one caller is
+  `deep-zoom/GradientSync.tsx`, which sends the gradient ON SHOW: a tool's published preview
+  (`components/gradient/gradientParamPreview.ts`) when there is one, else the stored value. That
+  read is what makes the Studio's faces live here - the Studio's own route to a picture is the
+  param's uniform name, which this app's param does not have.
+- The param: `dzColour.gradient` (`features/colour.ts`, THE GRADIENT in its header). LINEAR: the
+  shading pass lights the texel, then tone maps (read in the shader, and measured on screen: a
+  #808080 gradient draws a median of 135 of 255 as 'linear' and 175 as 'srgb'; plain white clay is
+  202). The My Gradients target forces 'linear' and leaves Plain in the same write.
+- The palette suite: `registerFeatures.ts` (registerPaletteUI, installGradientStudio, the send
+  target, the Explorer action), `setup.ts` (the two panel entries and their mounts, after the
+  manifest), `main.tsx` (the top-bar button, the gradient-file claim).
+- The Explorer trip from a second app: `deep-zoom/explorerTrip.ts`; `EXPLORER_HOSTS` in
+  `palette/core/explorerHandoff.ts`; the Explorer's end in `gradient-explorer/v2/fromGmt.ts`
+  (`openedByHost`, `BACK_HREF`) and `shareUrl.ts` (`cameFromFor`). ADR-0126 has the update block.
+- A pasted location's gradient goes through the gradient gate (`lookOf` in `locationParse.ts`).
+
+**The default gradient is the old palette.** Two of the owner's kept places and one starter were
+saved with the palette on and carry no gradient, so `DZ_DEFAULT_GRADIENT` is the renderer's cosine
+palette fitted to 16 stops with the palette suite's own fitter (worst 9 of 255 on a channel, mean
+1.6). They draw as they did until the gradient is changed.
+
+**Tried once, by hand or by a throwaway script, on the real GPU (2026-10-09) - no smoke step:**
+a tile in My Gradients lands as 'linear', leaves Plain, opens the Colour tab and recolours the
+picture; the Studio's Adjust face changes the picture while the stored gradient does not change,
+Apply writes it as one undo step, undo gives back the gradient and the dial; a place saved with a
+gradient brings it back after another was set, and its copy in local storage holds it; a share
+link opened after a reload has the gradient; a gradient PNG dropped on the window is added to My
+Gradients, the panel opens and the surface's gradient is untouched; the Explorer button with Plain
+on hands nothing over, with a gradient the Explorer works on it "From Deep Zoom", "Back to Deep
+Zoom" closes the Explorer's tab while this tab is alive and goes to `deep-zoom.html` when it is
+not. Why no step: none of these fails silently - each is seen the first time the control is used -
+and the panel opening is already pressed by the top-bar smoke. Node checks added instead: the
+host's gradient member (`module-host.mts`) and the pasted gradient's gate (`location-parse.mts`).
+
+**Not built:** the favourite last applied is not shown selected in the Explorer (GMT's trip does
+that); no stashed scene behind "Back to Deep Zoom" (GMT's trip has one); a gradient cannot be
+keyframed (no gradient track exists in the engine; Scale can).
+
+**THE MAPPING VALUE OVER A FRAME, measured 2026-10-09** (the owner's condition for settling GMT's
+values or the renderer's). Pass G's own palette value, near hits, a 96-row picture, Detail 8,
+scale 1 - so one unit is one run of the gradient. 14 views of the sample flight (6e-7 to 3e-37)
+and the three kept places.
+- *Orbit trap.* The middle half of the frame spans 0.00 to 0.75 of a run, under 0.1 in 6 of the
+  17 views (0.00 at 3.3e-37 and at the power-2 place of 1.6e-19). The median sits between -0.19
+  and -0.25 in 10 of the 14 flight views: the minimum is set in the early iterations, which every
+  pixel of a deep frame shares. The 2nd to 98th percentile spans 0.2 to 3.1 - a tail of pixels,
+  not the body. So under Orbit trap much of a deep frame is ONE colour of the gradient.
+- *Iterations.* The middle half spans 0.16 to 1.03 and the 2nd to 98th 0.6 to 4.0: about one run
+  of the gradient across the frame at every depth. The median climbs from 1.85 at 6e-7 to 8.41 at
+  3e-37, 0.21 of a run for each decade of depth: flying in, the colours move through the gradient
+  and wrap every 4.6 decades (a gradient whose ends differ shows a seam there; Adjust's "mirror
+  tiles" removes it).
+- *What follows.* Iterations is the mapping that stays rich at every depth; Orbit trap, the
+  default, goes flat. GMT's values would not help: its orbit-trap value is this one divided by
+  -7.5 (flatter still), and its iteration value is divided by the iteration count (about 1/80 of
+  this spread at depth, and a jump each time auto-iterations raise the count) - GMT gets its
+  contrast from the histogram's fit of scale and offset, which this app does not have.
+  RECOMMENDED to the owner, his call: keep the renderer's values; consider Iterations as the
+  default mapping. Not done.
 
 ---
 

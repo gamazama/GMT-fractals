@@ -9,6 +9,8 @@
  *
  * FALSIFICATION RECORD, 2026-10-08: the whole-number test on `cam` removed (`isCam` accepting any
  * three strings) -> 1 red ("a cam holding a decimal point is refused").
+ * 2026-10-09, the gradient a place carries (stage 5): `lookOf` returning the look as pasted ->
+ * 1 red ("a pasted gradient that is not one is dropped ...").
  */
 import { locationToText, parseLocationText } from '../../deep-zoom/locationParse.ts';
 
@@ -57,6 +59,27 @@ const sameCam = (c: unknown): boolean => Array.isArray(c) && c.length === 3 && c
     check(bad(JSON.stringify({ ...VIEW, cam: [CAM[0], CAM[1]] })) !== '', 'a cam of two values is refused');
     check(bad(JSON.stringify({ cam: CAM })) !== '', 'a camera with no yaw and pitch is refused');
     check(/item 2/.test(bad(JSON.stringify([VIEW, { nope: 1 }]))), 'in a list the reason names the item');
+}
+
+{
+    // A place carries its gradient in the look (stage 5). Pasted text is not trusted with one.
+    const GRADIENT = { colorSpace: 'linear', blendSpace: 'oklab', stops: [
+        { id: 'a', position: 0, color: '#102030', bias: 0.5, interpolation: 'linear' },
+        { id: 'b', position: 1, color: '#F0E0D0', bias: 0.5, interpolation: 'linear' },
+    ] };
+    const withColour = (dzColour: unknown): string => JSON.stringify({ view: VIEW, look: { dzColour, detail: 2 }, depth: '1e-9' });
+    const colourOf = (text: string): Record<string, unknown> | undefined => {
+        const r = parseLocationText(text);
+        return r.ok ? (r.locations[0].look?.dzColour as Record<string, unknown> | undefined) : undefined;
+    };
+    const good = colourOf(withColour({ plain: false, mode: 0, scale: 2, gradient: GRADIENT }));
+    const kept = good?.gradient as typeof GRADIENT | undefined;
+    check(JSON.stringify(kept?.stops) === JSON.stringify(GRADIENT.stops) && kept?.colorSpace === 'linear' && kept?.blendSpace === 'oklab' && good?.scale === 2,
+        'a pasted place keeps a well-formed gradient, and the fields beside it');
+    const junk = colourOf(withColour({ plain: false, mode: 0, scale: 2, gradient: { stops: 'red to blue' } }));
+    check(!!junk && !('gradient' in junk) && junk.scale === 2 && junk.plain === false, 'a pasted gradient that is not one is dropped, and the place keeps its other colour fields');
+    const none = colourOf(withColour({ plain: true, mode: 0, scale: 1 }));
+    check(!!none && !('gradient' in none), 'a place from before the gradient has no gradient key (a jump leaves the gradient alone)');
 }
 
 console.log(failed === 0 ? 'location-parse: all green' : `location-parse: ${failed} FAILED`);

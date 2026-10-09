@@ -85,7 +85,9 @@
  *   OPTIONAL - undefined until the named package. Test before calling (`host.pause?.(true)`) and
  *   show no control for a member that is not there:
  *     `pause?`               M5. The module has no pause today.
- *     `setGradientRamp?`     stage 5 (the PNG interim), then M2.
+ *     `setGradientRamp?`     THERE since stage 5 (2026-10-09). Optional in the type only because
+ *                            a host without a palette is still a host; `deep-zoom/GradientSync.tsx`
+ *                            is its one caller.
  *     `renderFramePixels?`   M4. The module cannot render one frame to memory today.
  *     `renderFrameBlob?`     M4.
  *     `exportStill?`         needs a module change: today the module's still export saves the PNG
@@ -404,9 +406,9 @@ export interface DeepZoomHost {
     // gradient
     /**
      * One row of RGBA texels, `width` wide (256 from the palette editor). null = the built-in
-     * palette. Resolves when the renderer has taken the ramp: the upload can be asynchronous, and
-     * the colour mode must be pushed AFTER it resolves, because loading a ramp flips the module's
-     * colour mode by itself. Optional until stage 5.
+     * palette. The texels are the surface's albedo as they are, so they arrive LINEAR (a
+     * gradient whose `colorSpace` is 'linear' bakes that way). Resolves when the renderer has
+     * taken the row; the module host takes it at once and leaves the colour mode alone.
      */
     setGradientRamp?(rgba: Uint8Array | null, width?: number): Promise<void>;
 

@@ -55,6 +55,7 @@ import { FeatureOverlays } from '../engine/plugins/viewport/FeatureOverlays';
 import { TimelineHost } from '../components/TimelineHost';
 import { SceneFileDropZone } from '../engine/components/SceneFileDropZone';
 import { useHostSync } from './useHostSync';
+import { GradientSync } from './GradientSync';
 
 export const DeepZoomApp: React.FC = () => {
     // Granular selectors — DO NOT use `useEngineStore()` with no selector
@@ -89,6 +90,8 @@ export const DeepZoomApp: React.FC = () => {
         <MobileViewportShell className="bg-black text-fg select-none overflow-hidden flex flex-col">
             <EngineBridge />
             <RenderLoopDriver />
+            {/* The gradient goes to the renderer as texels, by itself (see its header). */}
+            <GradientSync />
             <DropZones />
 
             {floatingPanels.map((p) => (

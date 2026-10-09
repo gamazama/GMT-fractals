@@ -2760,6 +2760,16 @@ api.loadGradientFile = () => new Promise((res) => {
   inp.click();
 });
 api.clearGradient = () => { gradientTex = null; accumReset = true; };  // back to the built-in cosine palette
+/* A HOST'S GRADIENT (added 2026-10-09; the page has no such call): one row of RGBA texels straight
+   to the strip, at once. Unlike a loaded FILE it leaves the colour mode alone — a host owns that
+   and sets it with setColor. The texels are used as they are, as the surface's albedo before the
+   light and the tone map (grep albedoNew), so a host hands them over already linear. */
+api.setGradientTexels = (rgba, w) => {
+  const a = rgba instanceof Uint8Array ? rgba : new Uint8Array(rgba);
+  const keep = colorMode;
+  uploadStrip(a, w || (a.length >> 2));
+  colorMode = keep;
+};
 
 /* drag-and-drop a gradient file anywhere on the page */
 dzListen(dzDropTarget, 'dragover', e => { e.preventDefault(); });
