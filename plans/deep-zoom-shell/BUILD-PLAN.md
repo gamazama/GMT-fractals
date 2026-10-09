@@ -20,6 +20,7 @@ original plan and are not rewritten.
 | 3 | **Built**, except: Export all (JSON), the scene-file claims (S3-4), Session / autosave (the session half of S3-2). Smoke stage 3: 8 steps. |
 | 4 | **Keys built** (S4-1; smoke stage 4: 3 steps). `C` is a fly key since N5; "next colouring" is `V`. Help topics, the shortcuts page, What's New and the first-dive lesson (S4-2, S4-3) are not built. |
 | N | **Built: the shell flies with GMT's navigation.** N0 (replay guard), N2 (the integrator in the engine, ADR-0133), N0b (GMT's fly smoke covers the hook's wiring), N3 (the input hook in the engine, renderer-free), N4 (the module lets a host own the input), N5 (`deep-zoom/flyCamera.ts`, `DeepZoomNavigation.tsx`, `navigationState.ts`; smoke stage N5: 8 steps). N1 (a registered distance source) was dropped: the distance stays a plain argument. Not built: on-screen sticks for a phone, an orbit mode, roll. |
+| N, again (2026-10-09, not in the plan; ADR-0134) | **The speed follows rays, and Orbit mode.** The owner asked why the speed "isn't latching on" in difficult places; measured (the study: `H:/tmp/dz-nav-study/`), the estimate at the camera is the nearest surface in ANY direction - at his power-4 place a wall behind the camera, 22 decades nearer than anything in the picture - and it reads the true fractal, not the drawn solid (at the power-2 place W flew the camera inside in 4 s). Built: a CPU ray probe in the module (`api.dz.sense` / `freeDistance`: seven rays about an axis, to the solid as drawn); the pace = a third of the nearer of what is looked at and what lies ahead of the move, falling at once and rising at most 4 decades a second (`deep-zoom/flyPace.ts`; a third because he flew the whole distance and found it "3x too fast overall"); one frame never more than half the nearest ray ahead; the depth the app shows is what is looked at ("we lead with the looked at readout"), with the nearest surface beside it when it differs; the dive closes on the rays; a flight is one undo step; the old rule is a switch in Settings > Camera. **Orbit mode on Tab** (`deep-zoom/orbitCamera.ts`): drag turns about the point under the pointer, the wheel flies along its ray, right drag moves it - displacements from the angles alone, GMT's orbit code untouched (the plan's "4 to 6 days, high GMT risk" was for reworking GMT's own). A turn or a drag keeps a clearance of 0.08 of the pivot's distance from every surface, by the renderer's estimate at the place the move ends (`api.dz.estimateAt`; the owner, having flown it: "really fantastic ... if we could prevent it from colliding with the surface, relatively to the orbit's axis point"); a held turn slides (yaw alone, then pitch alone) and the pivot's mark fills in. A middle drag is the wheel's flight by hand (GMT's rate and direction: 0.005 a pixel, up is towards; tried once in the app - 140 pixels up covered 50.3 % of the way to the point under the pointer, 140 down gave it back - and given no smoke step, the owner: "way over over kill"). The engine did not change. Guards: `check:deep-zoom-ray-probe`, `check:deep-zoom-orbit-camera`, the pace lines of `check:deep-zoom-fly-camera`, seven new steps of smoke stage N5 (15 now). NOT done: his verdict on the rise limit, the clearance share and Orbit's feel; ROLL (Q / E) - not a performance or a maths limit: the renderer's camera is a yaw and a pitch, and every stored view carries those two numbers, so roll is a third number through views, paths, locations, scenes and links, about a session; the right drag, the middle drag and invert-Y are not opened by a test. **THE PROBE'S COST IN THE APP**, measured 2026-10-09 on the owner's machine (headless Chrome on d3d11, 1280 x 800, 4 s a case; the tool is `H:/tmp/dz-nav-study/bundle-cost.mts`): under 3.2 ms a frame on average at the Surface, Grain of sand and Certified edge starters in every case (idle, W, a strafe, backing out, W while looking round, an Orbit turn; worst single frame 18 ms, an Orbit turn at 1e-50), with 60 frames a second held at the two deeper of them (at Surface the W flight itself dropped frames, 169 in the 4 s, with the probe at 0.2 ms a frame). At the deepest starter (3.4e-76, 148 iterations and rising) it is 1.7 ms a frame flying straight, but 10.5 ms looking round while flying (worst 30 ms) and 7.1 ms in an Orbit turn (worst 63 ms): a look or a turn marches a fresh bundle every frame, and every orbit in it runs all the iterations. That place drops frames in every moving case (137 to 214 frames in the 4 s against 241 idle) and the probe is only part of it: backing out fell to 137 frames with the probe at 0.8 ms a frame, so the renderer's own work for a moved camera is the larger part; the probe's share is biggest looking round (10.5 ms of a 24 ms frame). NOT fixed, and the old rule was not measured there for comparison. The lever that changes no reading is skipping iterations in the CPU probe the way the GPU march does (BLA); the other is the picture's own depth (ADR-0134, the last alternative). |
 | Engine | S2-4 (one overlay host) and S3-0 (state-library options) landed. |
 | Module (new, not in the plan) | **HIT REFINE**, opt-in, off by default (`api.setHitRefine`, the Quality tab's Hit refine, Inspect > Compare > Refine): halve each hit's last march step onto the level it was meant to land on. Built for the slicing the owner reported at 2.76e-39; numbers in the shader comment. Parity 52 and direct 11 green with it off. |
 | Tooling (2026-10-08) | **`npm run bench:deep-zoom-march`** (`debug/deep-zoom-march-study.mts`, on the renderer's new `api.marchProbe`): for the kept places and the sample flight, what share of rays each march setting puts on another surface than a careful march, and the work it costs, counted by the shader. 17 views x 14 marches in 3 s where the first studies took 4 to 10 minutes. It is the measuring tool for the automatic step, which is NOT built. |
@@ -613,6 +614,8 @@ is `GMT-SYSTEMS.md` section n, whose file names I did not re-open.
   `stepRenderers.register`), never mounted by hand. No `component: 'panel-X'` of our own.
 - Labels: names and numbers. Stacking: `<Layer tier>` / `z('tier')`.
 - New `@invariant` lines name the check or smoke step that proves them and are falsified first.
+  Where nothing that already exists proves a line, it is an `@assumption`: no smoke step is
+  written to earn the word (see "Smoke growth").
 
 ## Before stage 1
 
@@ -655,9 +658,28 @@ throws every frame raises no `pageerror`; the stage-1 smoke watches the console 
 
 ## Smoke growth - `debug/deep-zoom-smoke/stageN.mts`
 
-Each step's header records its owner and how it was falsified. Steps are never removed; a step
-whose behaviour is replaced (the captured-mouse steps, at N5) is rewritten in the stage that
-replaces it. "Captured" below means the pointer is locked on the picture, which exists only before
+**A step has to earn its place.** The owner, 2026-10-09, on a step written for Orbit mode's middle
+drag: "im pretty sure we dont need a smoke test for the middle mouse drag that seems way over over
+kill". A step costs its real-GPU seconds on every run for good (55 steps took four minutes that
+day), and a break-and-rerun when it is written. So the default for a change is NO new step. Add
+one only when all three hold:
+
+1. it crosses a seam nothing cheaper can see: the renderer on the real GPU, a panel that has to
+   open, storage across a reload, the boot. What a node check under `debug/deep-zoom-checks/` can
+   prove is proved there;
+2. it is new ground: not a second way into code a step already opens (another gesture, button or
+   row onto the same function), and not a default, a label or a rate;
+3. broken, it would not be seen at once by whoever uses the app next: it fails silently, or in a
+   place nobody visits daily, or it has shipped broken before.
+
+Anything else is tried once (by hand, or a throwaway script outside the repo) and the report says
+what was tried and what it showed. The table below is what the plan foresaw for each stage: a
+ceiling, not a quota - a stage may close with fewer steps than its row lists. A step that proves
+to guard nothing a user would miss may be taken out, with the reason in the commit.
+
+Each step that is written records its owner and how it was falsified (one break, seen red; not a
+matrix of them). A step whose behaviour is replaced (the captured-mouse steps, at N5) is rewritten
+in the stage that replaces it. "Captured" below means the pointer is locked on the picture, which exists only before
 N5. Whether Playwright's click obtains pointer lock in headed Chrome is unverified; each captured
 step first asserts `document.pointerLockElement` is set and reports **not proven** (a failure, not
 a pass) if it is not.
@@ -798,7 +820,7 @@ with "Deep Zoom - Gradient" as a destination; a gradient made in Gradient Explor
 |---|---|---|---|---|
 | **S5-1 Gradient param and push** | `features/colour.ts`, `deep-zoom/colourSync.ts`, `host/gradientPush.ts` | `useGradient` + `gradient`; setting a gradient in Plain mode also sets Orbit trap; push ramp then mode; one push per animation frame with a sequence counter. A dropped image is claimed by the engine's drop zone and handed to `api.loadGradient(file)` (the module's own drop listener is off). No stage-3 or stage-4 package owns `features/colour.ts`, so writing this early collides with nothing | typecheck; `param-map.mts` still green; on a real GPU **check the colours against the editor swatch** - whether the module treats the strip as display or linear is unverified [palette G8] | stage 2. **M2**; interim: a 256 x 1 PNG through `api.loadGradient` [palette 2.3] |
 | **S5-2 Integrator** | the shared set | `registerPaletteUI()`, send target with `editsParam`, `favientsPanelEntry`, `mountFavientsPanel` after the manifest with its own `storageKey`, the toggle button. Opens after stage 4's integrator has closed. | all gates; red if `mountFavientsPanel` runs before the manifest (the panel never opens) | S5-1 |
-| **S5-3 Smoke** | `debug/deep-zoom-smoke/stage5.mts` | The stage-5 steps. | `npm run smoke:deep-zoom` | S5-2 |
+| **S5-3 Smoke** | `debug/deep-zoom-smoke/stage5.mts` | The stage-5 steps that earn their place ("Smoke growth": the plan's row is a ceiling). | `npm run smoke:deep-zoom` | S5-2 |
 
 ---
 

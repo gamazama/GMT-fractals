@@ -33,6 +33,14 @@
  * `__appHandles` in `engine/appHandles.ts`). Against a build no host is ever found and the boot
  * says so. `ctx.host` / `ctx.withHost` / `ctx.HOST` hide that path: stage files never spell it.
  *
+ * ── BEFORE ADDING A STEP ────────────────────────────────────────────────────────────────────────
+ * A step has to earn its place: it costs real-GPU seconds on every run, for good. The default for
+ * a change is NO new step - try it once by hand and say what it showed. Add one only for a seam
+ * nothing cheaper can see (the GPU, a panel that has to open, storage across a reload, the boot),
+ * that is new ground (not a second way into code a step already opens; not a default, a label or
+ * a rate), and whose failure nobody would see at once. The bar and where it comes from (the
+ * owner, 2026-10-09): `plans/deep-zoom-shell/BUILD-PLAN.md`, "Smoke growth".
+ *
  * ── HOW A STAGE ADDS ITS FILE ───────────────────────────────────────────────────────────────────
  * Create `debug/deep-zoom-smoke/stage<id>.mts` (`stage2.mts`, `stage6a.mts`, `stageN5.mts`) with
  * ONE export, `stage`. Nothing else is needed: no list to edit, no npm script. Files run in name
