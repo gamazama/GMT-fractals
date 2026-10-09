@@ -368,6 +368,34 @@ export const stage: DzStage = {
             },
         },
         {
+            name: 'Normal detail shades the surface as a lower Detail would; at 0 the picture is Detail\'s own again',
+            owner: 'owner, 2026-10-09 ("detail 32 seems too much in many instances, where it just makes the surface very rough")',
+            falsified: '2026-10-09: the `normalDetail` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and "shaded differently" at 0.0 % of the pixels.',
+            async run(ctx) {
+                await ctx.boot({ clearStorage: true });
+                await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
+                await ctx.sleep(300);
+                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('Normal detail')"), 'the row is shown without advanced mode');
+                if (!(await enterDeepView(ctx))) return;
+                // on the page's march: the ray march's shader may still be building, and the picture must not change under the step for that reason
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, rayMarch: false, normals: 2, detail: 16, normalDetail: 0 })');
+                await ctx.sleep(1500);
+                const a = await pixels(ctx);
+                await ctx.sleep(300);
+                const control = shareChanged(a, await pixels(ctx));
+                await ctx.ev('window.__store.getState().setDzQuality({ normalDetail: 2 })');
+                await ctx.sleep(900);
+                ctx.check((await ctx.host<number>("getParams()['dzQuality.normalDetail']")) === 2, 'the renderer holds the setting');
+                const moved = shareChanged(a, await pixels(ctx));
+                ctx.check(moved > Math.max(2, control * 4), 'the surface is shaded differently: ' + moved.toFixed(1) + ' % of the pixels (the control: ' + control.toFixed(2) + ' %)');
+                await ctx.ev('window.__store.getState().setDzQuality({ normalDetail: 0 })');
+                await ctx.sleep(900);
+                const back = shareChanged(a, await pixels(ctx));
+                ctx.check(back <= control + 0.5, 'at 0 the picture is the first one again (' + back.toFixed(2) + ' % differ)');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, detail: 1, rayMarch: true })');
+            },
+        },
+        {
             name: 'Ray march is on from the start, says so while its shader builds, and changes where rays land; off and on again the renderer follows',
             owner: 'owner, 2026-10-09 ("go ahead with the gpu prototype")',
             falsified: '2026-10-09: the `rayMarch` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out). Again the same day as the default: `rayMarch: true` taken out of `shellOptions` (deep-zoom/host/moduleHost.ts) -> red, "on from the start" false.',

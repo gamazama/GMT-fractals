@@ -164,6 +164,17 @@ export const DzQualityFeature = {
             label: 'Detail',
             description: 'How close rays get to the surface before they stop. Higher values need more march steps.',
         },
+        normalDetail: {
+            type: 'float',
+            // An EXPERIMENT for the owner to fly (2026-10-09; grep THE LOOK LEVEL in renderer/core.js). He found
+            // Detail 32 "too much in many instances, where it just makes the surface very rough". Detail does two
+            // things through one number - how close rays stop, and how far apart the normal's taps stand. This row
+            // gives the second a number of its own. 0 = the same as Detail (the page; nothing changes).
+            default: 0, min: 0, max: 32, step: 0.25,
+            label: 'Normal detail',
+            format: (v) => (v <= 0 ? 'as Detail' : `${v.toFixed(2)}×`),
+            description: 'How finely the surface is shaded, apart from how close rays stop. At 0 it follows Detail. Set below Detail, rays still stop as Detail says, so thin layers stay apart, but the surface is shaded as the lower value would shade it: calmer, less grain. Needs Normals: 4-tap.',
+        },
         reach: {
             ...reachParam.config,
             type: 'float',

@@ -45,7 +45,7 @@ export type DzInvalidation = 'O' | 'A' | 'C' | '-';
 /** The pushes of `looseParams.ts`. `look` rows also name the field of `api.setLook`. */
 export type DzPushGroup =
     | 'power' | 'phase' | 'iters' | 'autoIters'
-    | 'frame' | 'detail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'jacobian' | 'rayMarch' | 'accum'
+    | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'jacobian' | 'rayMarch' | 'accum'
     | 'bla' | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
 
@@ -98,6 +98,7 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     // ── dzQuality ──
     { feature: 'dzQuality', key: 'frameSize', cls: 'A', group: 'frame', read: (api) => api.dz.settings().frame },
     { feature: 'dzQuality', key: 'detail', cls: 'A', group: 'detail', read: (api) => api.dz.settings().detail },
+    { feature: 'dzQuality', key: 'normalDetail', cls: 'A', group: 'normalDetail', read: (api) => api.normalDetail() },
     { feature: 'dzQuality', key: 'reach', cls: 'A', group: 'reach', read: (api) => indexIn(REACH_RENDERER_VALUES, api.dz.settings().reach) },
     { feature: 'dzQuality', key: 'normals', cls: 'A', group: 'normals', read: (api) => indexIn(NORMALS_RENDERER_VALUES, api.dz.settings().normals) },
     { feature: 'dzQuality', key: 'depthNormalRadius', cls: 'A', group: 'nrmTap', read: (api) => indexIn(DEPTH_NORMAL_RADIUS_RENDERER_VALUES, api.look.nrmTap) },

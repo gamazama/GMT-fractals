@@ -357,6 +357,7 @@ function makeRig() {
         marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
         rayMarch: () => ({ bits: 0, factor: 1, hit: 64, tol: 0.05, floor: 0, line: 0, detail: 0 }),
         rayMarchState: () => state.rayState,
+        normalDetail: () => 0,
         blaMode: (): string => 'auto',
         compileMs: (): Record<string, number | undefined> => ({}),
     };

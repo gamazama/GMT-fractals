@@ -46,6 +46,7 @@ function makeApi() {
     const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module as the shell creates it (create option `rayMarch`)
     const compiled: Record<string, number | undefined> = {};
     let bla: 'off' | 'auto' | 'on' = 'auto';
+    let normalDetail = 0;
     let auto = true;
     const api = {
         dz: { settings: () => ({ ...s, phase: [s.phase[0], s.phase[1]] as [number, number] }) },
@@ -58,6 +59,8 @@ function makeApi() {
         autoIters: () => auto,
         setFrame: (px: number) => { note('setFrame', px); s.frame = px; },
         setSurf: (m: number) => { note('setSurf', m); s.detail = m; },
+        setNormalDetail: (d: number) => { note('setNormalDetail', d); normalDetail = d; },
+        normalDetail: () => normalDetail,
         setReach: (k: number) => { note('setReach', k); s.reach = k; },
         setNormalMode: (m: number) => { note('setNormalMode', m); s.normals = m; },
         setLand: (on: boolean) => { note('setLand', on); s.land = on; },

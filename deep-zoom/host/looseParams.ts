@@ -88,6 +88,7 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         autoIters: () => api.setAutoIters(flag('dzFormula', 'autoIterations')),
         frame: () => api.setFrame(num('dzQuality', 'frameSize')),
         detail: () => api.setSurf(num('dzQuality', 'detail')),
+        normalDetail: () => api.setNormalDetail(num('dzQuality', 'normalDetail')),
         reach: () => api.setReach(reachToRenderer(num('dzQuality', 'reach'))),
         normals: () => { api.setNormalMode(normalsToRenderer(num('dzQuality', 'normals'))); api.setLook({}); },
         nrmTap: () => api.setLook({ nrmTap: depthNormalRadiusToRenderer(num('dzQuality', 'depthNormalRadius')) }),

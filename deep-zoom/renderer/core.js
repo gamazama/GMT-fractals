@@ -1053,6 +1053,7 @@ uniform int       uFarLook;      // 1 = a far-field hit carries a palette parame
 uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
 uniform int       uRebaseOrigin; // 1 = the kernel rebases an orbit onto the origin (grep REBASE TO THE ORIGIN); 0 = the page: onto the reference's first point
 uniform float     uFarSwitch;    // the t at which a ray is handed to the f32 far-field march (grep FAR HAND-OFF); the page: 1e-3
+uniform float     uLookLevel;    // THE LOOK LEVEL (grep): the normal is taken on the level this many times the hit level (1 = the page: on the hit itself)
 #ifdef USE_JAC
 uniform float     uJacFloor;     // the step is never shortened below this share of the page's step (0 = no floor)
 uniform int       uJacUse;       // TRUE-GRADIENT ESTIMATE (grep), bits: 1 = step by min(de, gde) · 2 = the normal is the gradient · 4 = hit test by min(de, gde)
@@ -1175,7 +1176,17 @@ float octPack(vec3 n){
    IDENTICALLY. Returns the surface t (HDR); sets hit, steps, de-at-hit, and tF≥0 if the ray
    handed off to the far-field f32 segment (t>T_SWITCH). The march starts at t0: 0 = the camera
    (always, for the probes), else a guided start, which is zeroed again if its re-check fails. */
-vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, out vec2 deOut, out float tF, out OrbitOut hitOrbit) {
+/* THE LOOK LEVEL (uLookLevel > 1; an experiment of 2026-10-09, off = the page). The detail setting does two things
+   through one number: it says how close a ray stops (de < pa·t, pa = a display pixel ÷ detail), and it sets how far
+   apart the normal's taps stand (2·pa·t). The first is geometry - a coarse level draws a fat surface that swallows
+   thin layers. The second is the look - taps a 16th of a pixel apart read the surface's own grain, and the owner
+   found Detail 32 "too much in many instances, where it just makes the surface very rough". Here the two are
+   parted: the ray still stops on the fine level pa, but on its way in it crossed the coarser level pa·uLookLevel,
+   and the normal is taken THERE, with taps as far apart as that level asks. tLook is that crossing (the last one
+   before the hit, placed between the two march samples that bracket it, as HIT LANDING places a hit); 0 when the
+   march never stood outside the look level (then the caller backs off along the ray instead). */
+vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, out vec2 deOut, out float tF, out OrbitOut hitOrbit, out vec2 tLook) {
+  vec2 tLa = vec2(0.0); float rLa = 0.0; bool lookSet = false; tLook = vec2(0.0);
   vec2 t = t0, tPrev = t0, cap = vec2(0.0), de = vec2(0.0), dePrev = vec2(0.0);
   hit = false; steps = 0; tF = -1.0; bool esc = false;
   OrbitOut oo; OrbitOut lastOO; lastOO.escaped = false;   // last surface-side orbit → reused for colour
@@ -1230,6 +1241,15 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
     }
     if (t.x != 0.0) {
       float ratio = hdrToFloat(hdrMul(de, hdrRecip(t)));
+      if (uLookLevel > 1.0) {                           // THE LOOK LEVEL: remember where the ray last came in through it
+        float paL = pa * uLookLevel;
+        if (ratio >= paL) { tLa = t; rLa = ratio; lookSet = false; }
+        else if (!lookSet && tLa.x != 0.0) {
+          float uL = hdrToFloat(hdrMul(hdrSub(t, tLa), hdrRecip(tLa)));
+          float g0 = rLa - paL, g1 = (ratio - paL) * (1.0 + uL);
+          tLook = hdrMulF(tLa, 1.0 + uL * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0)); lookSet = true;
+        }
+      }
 #ifdef USE_JAC
       if ((uJacUse & 4) != 0 && oo.gde.x > 0.0) ratio = min(ratio, hdrToFloat(hdrMul(oo.gde, hdrRecip(t))));
 #endif
@@ -1394,10 +1414,11 @@ void main(){
         float g = texelFetch(uGuideTex, clamp(pc + ivec2(i, j), ivec2(0), pmax), 0).x;
         if (g > 1e29 || g < -1e29) ok = false; else ln = min(ln, g);
       }
-      float back = 1.0 - uGuideK * pixAng;
+      float back = 1.0 - uGuideK * pixAng * max(uLookLevel, 1.0);   // THE LOOK LEVEL: a guided ray must still start outside it
       if (ok && back > 0.0) { float L = ln + log2(back), e = floor(L); t0 = vec2(exp2(L - e), e + uRefE); }
     }
-    vec2 t = marchNear(rd, pixAng, t0, hit, steps, de, tF, hitOrbit);   // shared near-field HDR march (orbit reused for colour)
+    vec2 tLook;
+    vec2 t = marchNear(rd, pixAng, t0, hit, steps, de, tF, hitOrbit, tLook);   // shared near-field HDR march (orbit reused for colour)
     bool guided = t0.x != 0.0;                    // this ray really started from the guide (its step count is not a full march's)
 #ifdef USE_STATS
     int sOrb = gOrbits, sWork = gWork;           // march-only counts (the normal taps come after)
@@ -1477,7 +1498,12 @@ void main(){
                garbage; use the boundary value 0. Mode 1 = 3-tap forward diff (reuse hit de as the
                base point, −25% taps); mode 2 = legacy 4-tap tetrahedron. */
             vec3 n = vec3(0.0);
+            vec2 tN = t;                                   // where the normal is taken: the hit, unless THE LOOK LEVEL is on
             vec2 eH = hdrMulF(t, 2.0 * pixAng);
+            if (uLookLevel > 1.0 && uNormalMode == 2) {
+                tN = tLook.x != 0.0 ? tLook : hdrMulF(t, 1.0 - min(0.5, pixAng * uLookLevel));
+                eH = hdrMulF(tN, 2.0 * pixAng * uLookLevel);
+            }
             if (eH.x == 0.0) eH = de.x != 0.0 ? hdrMulF(de, 4.0) : vec2(1.0, -30.0);
             vec2 ke = hdrRecip(eH);
             int nIt = uNormalIters > 0 ? min(uIters, uNormalIters) : uIters;   // PERF LEVER: capped iters for the gradient taps
@@ -1496,9 +1522,9 @@ void main(){
                 for (int j = 0; j < 4; j++) {
                     vec3 kv = j==0 ? vec3(1.,-1.,-1.) : j==1 ? vec3(-1.,-1.,1.) : j==2 ? vec3(-1.,1.,-1.) : vec3(1.,1.,1.);
                     Hdr3 dp = Hdr3(
-                        hdrAdd(hdrMulF(t, rd.x), hdrMulF(eH, kv.x)),
-                        hdrAdd(hdrMulF(t, rd.y), hdrMulF(eH, kv.y)),
-                        hdrAdd(hdrMulF(t, rd.z), hdrMulF(eH, kv.z)));
+                        hdrAdd(hdrMulF(tN, rd.x), hdrMulF(eH, kv.x)),
+                        hdrAdd(hdrMulF(tN, rd.y), hdrMulF(eH, kv.y)),
+                        hdrAdd(hdrMulF(tN, rd.z), hdrMulF(eH, kv.z)));
                     OrbitOut oo = pertOrbit(uOrbit, uOrbitLen, dp, nIt);
                     n += kv * (oo.escaped ? hdrToFloat(hdrMul(oo.de, ke)) : 0.0);
                 }
@@ -2005,7 +2031,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex') }; }
 let ud = null;
 /* ════════ the two-pass deep draw ════════
    Every shaded deep picture — live frame, accumulated still, thumbnail, tiled export — goes
@@ -2639,6 +2665,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.farLook, dzFarLook);
   gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
   gl.uniform1f(x.farSwitch, farHandOff);
+  gl.uniform1f(x.lookLevel, normalDetail > 0 ? Math.max(1, detailNow() / normalDetail) : 1);   // THE LOOK LEVEL: how many times coarser than the hit level the normal's level is
   gl.uniform1i(x.jacUse, jacBits()); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
   gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
@@ -2915,6 +2942,7 @@ let stepRelax = 0;                              // PERF LEVER (0 = default 0.85)
 let capRelax = 1;                               // QUALITY LEVER (1 = shipped TDR rungs): scales the deep res cap; large ⇒ uncapped (full-res deep)
 let colorMode = 0, colorScale = 1.0;            // key C: 0 plain / 1 iteration / 2 orbit-trap; 9/0 scale
 let surfMul = 1.0;                              // keys F/G: how close rays reach the surface (÷pixAng).
+let normalDetail = 0;                           // THE LOOK LEVEL (grep; api.setNormalDetail): the detail the NORMAL is taken at; 0 = the same as the detail setting, the page
 /* THE RAY ESTIMATE's own detail (grep it): rayDetail > 0 fixes the hit level at a display pixel ÷ rayDetail while the
    ray march is on, whatever the detail setting says. DEFAULT 0 = follow the detail setting. It was 32 for some hours
    on 2026-10-09, on the reasoning that a fine level is cheap under the ray march (a 640 x 640 picture, mean of 11
@@ -3790,6 +3818,12 @@ api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
 api.setRebaseOrigin = (b)=>{ rebaseOrigin = b ? 1 : 0; accumReset = true; };   // REBASE TO THE ORIGIN on / off (off = the page's kernel)
 api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // FAR HAND-OFF distance, 1e-3 (the page) .. 12
+/* THE LOOK LEVEL (grep; an experiment, 0 = off = the page): a detail of its own for the NORMAL. With 4-tap normals
+   and a normal detail below the detail setting, a ray still stops where the detail setting says, and its normal is
+   taken on the coarser level the normal detail names: Detail 32 with a normal detail of 8 stops rays as Detail 32
+   does and shades them as Detail 8 would. At or above the detail setting it changes nothing. */
+api.setNormalDetail = (d)=>{ normalDetail = Math.max(0, Math.min(256, +d || 0)); accumReset = true; };
+api.normalDetail = ()=>normalDetail;
 /* TRUE-GRADIENT ESTIMATE: bits 0 = off (the page). A picture switches when the J variant has built
    (background); `now` builds it at once, blocking - for a tool that must not measure the old one. */
 api.setJacobian = (bits, floor, now)=>{ jacUse = Math.max(0, Math.min(7, bits|0)); if (floor !== undefined) jacFloor = Math.max(0, Math.min(1, +floor || 0));

@@ -477,8 +477,23 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
       reasoning: Detail says how close a ray stops (pixel / detail) AND, through the same number, how far
       apart the normal's taps stand (2 pixels / detail). The first is geometry and was cheap to make
       fine; the second is the look, and a 16th of a pixel between taps reads the surface's own grain.
-      One fixed number cannot serve both. Open: split the two (a hit level of its own, a tap spacing in
-      screen pixels of its own) - not built, the owner's eye decides.
+      One fixed number cannot serve both.
+    - *THE SPLIT, BUILT AS AN EXPERIMENT FOR HIM TO FLY: Quality > Normal detail* (0 = as Detail = the page;
+      `api.setNormalDetail`, grep THE LOOK LEVEL in core.js). With 4-tap normals and a Normal detail below
+      Detail, a ray still stops where Detail says, and its normal is taken on the coarser level the Normal
+      detail names, at the place where the ray crossed that level on its way in - no extra orbits. Checked:
+      with it set, 0 of 16,384 rays end at another depth, in three views, both marches. Pictures, one view
+      five times (Detail 2, 8, 32, then Detail 32 shaded as 8 and as 2): `debug/scratch/look-strip-*.png` -
+      the grain of Detail 32 goes, the thin layers it separates stay. Smoke stage 2 has a step (seen red
+      with the push made a no-op): the shell smoke is 48. NOT decided: whether this is the right shape (two
+      Detail numbers), what the defaults should be, and whether shadows and ambient shade from the depth
+      buffer need the same treatment - his calls, after flying it. HIS FIRST IMPRESSION (same day): "something
+      looks off about setting them to different values" - he needs more time with it and went on to the
+      navigation interface; PARKED until he comes back to it. Suspects to look at then, none tested: the
+      normal now belongs to a point up to several pixels before the hit along a grazing ray, while shadows,
+      ambient shade and colour are read at the hit; a guided ray that starts inside the look level falls
+      back to a point backed off along the ray, so a still mixes two kinds of normal; the four taps with
+      some of them inside the surface. It sits in a commit of its own so that it can be taken out.
     - *Detail is no longer needed (WITHDRAWN, see above).* While the ray march is on the hit level is 1/32 of a display pixel
       whatever the Detail row says (`rayDetail`, grep it; `setRayMarch(.., { detail: 0 })` follows the row
       again). A fine level is cheap under it: one 640 x 640 picture, mean of 11 views, Detail 8 / 16 / 64 =

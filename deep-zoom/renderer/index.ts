@@ -295,6 +295,13 @@ export interface DeepZoomApi {
      *  `farHandOff` sets it from the start): how far the deep march carries a ray before the plain
      *  f32 far-field march takes it. grep the name in core.js. */
     setFarHandOff(t: number): void;
+    /** THE LOOK LEVEL (an experiment, added 2026-10-09; 0 = off = the page; grep the name in core.js).
+     *  The detail setting says both how close a ray stops and how far apart the normal's taps stand.
+     *  A normal detail `d` below the detail setting, with 4-tap normals: the ray still stops where the
+     *  detail setting says, but its normal is taken as detail `d` would take it, where the ray crossed
+     *  that coarser level - fine geometry, a calmer surface. */
+    setNormalDetail(d: number): void;
+    normalDetail(): number;
     /** TRUE-GRADIENT ESTIMATE (added 2026-10-08, 0 = off = the page; grep the name in core.js). A
      *  second distance estimate built on the orbit's real 3x3 derivative. Bits: 1 = the march
      *  steps by the smaller of the two estimates, so no place needs a hand-set step; 2 = the
