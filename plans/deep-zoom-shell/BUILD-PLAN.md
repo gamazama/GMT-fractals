@@ -314,6 +314,126 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
       and resume in the kernel: work and milliseconds, BLA on and off. (3) Normal taps from the
       hit's checkpoints. (4) The cap as a margin. (5) Only then one shell switch for him to fly,
       and his verdict decides whether Step size, Hit refine, Detail and True-gradient march go.
+  - **FOLLOW-UP, 2026-10-09 (a second chat, beside the research session): THE STEP'S SAFETY IS A
+    SECOND-ORDER QUESTION, AND ITS BOUND IS NOW DERIVED. CPU, f64, pure node. Nothing in the renderer
+    or the shell was changed by it.** Tools (git-ignored, `debug/scratch/`, each with its `.log`):
+    `pb-leap.mjs` (the line-against-ball step on resumed orbits), `pb-math.mjs` (the lemmas, the
+    theorem and its proof, written out in the header), `pb-check.mjs` (lemmas against the map),
+    `pb-lib.mjs` (reads `tm-kernel.js` and `core.js` as text and adds `trace()` = every iterate and
+    its jet), `pb-stray.mjs` (theorem against true strays), `pb-proven.mjs` (the march; rules
+    `ray`, `model`, `proven`, `exactF`), `pb-diag.mjs` (where the bound is loose).
+    - *A correction to the block above: E is measured safe, not proven.* It is a first-order
+      number - it takes the iterate as heading straight at the set at the speed it has at the
+      sample. Its own ratio table has worst samples at 1.5 to 2.5 of the distance left in three
+      views, and it put 1 to 2 of 5,733 rays through a solid here (power 4, 3e-76). Say "measured
+      safe on these views", not "a lower bound".
+    - *The line-against-sphere lead, tested.* The longest step for which the straight line
+      z_j + s zdot_j, thickened by an allowance for the path bending away from it, stays outside the
+      ball that holds the whole Julia set of c (radius rho, rho^n - |c| = rho: 1.09 on the flight,
+      1.10 slicing, 1.20 power 4, 1.56 power 2). Read at the last unescaped iterate when it stands
+      outside that ball and at the escaping one; the longer step wins (the escaping one alone:
+      132 steps a ray). Hit test unchanged (E under 1/64 px). Resumed orbits, 441 rays x 13 views,
+      cap + 40, through a solid / steps a ray / passes a ray: E 2 of 5,733 / 85 / 614; allowance =
+      the resume's measured Q (s^2 Q |zdot| / 2) 0 / 47 / 408; twice that 0 / 62 / 513. With Q as it
+      stands: flight 38 to 59 % fewer steps, power 4 253 -> 125, slicing 56 -> 38, the power-2
+      places no gain (38 -> 36, 37 -> 49: the set fills 1.56 of the bailout 2, one ball is a poor
+      stand-in there).
+    - *All of the safety is that allowance.* 1,053 rays, saved cap: with none 1,052 go through a
+      solid; with half of Q 127; with Q one (none once the cap is raised by 40). So the straight
+      line alone is useless, and the number that decides everything is how far the path can bend.
+    - *The measured Q is not a bound of that.* Against true strays on real orbits (fresh orbits at
+      displaced points, 39,512 samples): the true bend is up to 2.5 times Q |zdot| (model / true
+      0.40 at worst), and above it on at least one sample in twenty in every view. So a safety
+      factor of 2 on Q does not cover the worst case - this is the likely cause of unknown (d)
+      above (resumed samples standing 0.1 to 0.55 px off where 0.05 was asked).
+    - *What was derived (`pb-math.mjs`).* (1) The exact second derivative of the triplex power
+      along a straight line, in closed form (frame: along the pole axis, away from it, around it).
+      (2) Its size: r^(n-2) (n(n-1) m^2 + n h p^2 / sin th + 2 n g m p / sin th), m the speed in
+      the plane through the axis, p the speed around it, h <= 1 + n |U|, g <= n + |U|,
+      U = sin n th / sin th - motion around the axis bends far more, without limit near the axis.
+      (3) A theorem: a forward recurrence along the orbit, b' = L b + A + X e + B e^2 with the
+      worst case taken over the path each iterate travels during the step, such that iterate j
+      strays from its straight line by at most s^2 b_j / 2 for every s of the step. b depends on
+      the step length, so the step is solved for (30 trials a sample on the CPU).
+    - *Checked.* The formulas equal the map to one part in a million on 160,000 points (powers 2,
+      3, 4, 8, a third of them close to the axis); the bound was never exceeded on those points or
+      on the 39,512 real-orbit samples; the exact second derivative carried with the orbit equals
+      the true stray of a short step (ratio 1.00). Derived and checked numerically, NOT
+      machine-checked; exact arithmetic is assumed (rounding is not covered); a path that reaches
+      the pole axis has no bound (20 of 474,182 samples got a tiny step that way, none stalled).
+    - *In the march, the proven allowance in place of Q.* Full orbits (the theorem needs every
+      iterate of the sample point), so steps only; 441 rays x 13 views, cap + 40, through a solid /
+      steps a ray: E 1 of 5,733 / 85; measured Q 0 / 47; PROVEN 0 / 83. Flight 12 to 26 % fewer
+      steps than E; power 4 254 -> 234; slicing 57 -> 59; the power-2 places WORSE (39 -> 88,
+      37 -> 103: long slow orbits, many terms, the carried norms pile up; finer pieces do not help).
+    - *Why it is still twice too cautious, and the ceiling.* The certified step is about 0.5 to 0.6
+      of what the exact second derivative would allow (the bound is 3.2 to 4.2 times it at the
+      certified step, about 2 of that from carrying sizes where the exact vector could be carried).
+      The ceiling, measured with the exact second derivative times a factor as the allowance (NOT a
+      proof), 1,053 rays: x1 2 through / 39 steps; x1.5 1 / 47; x2 0 / 52; x3 0 / 62 (power 2 at
+      x2: 46 to 48). So the bend really drifts over a step, a sound rule lands at 52 to 62 steps,
+      and the unproven 47 ran closer to the edge than its 0 of 5,733 shows.
+    - *Not done, and the order I would do it in.* (a) Nothing here ran on the GPU, and there is no
+      single-pass form of the theorem for a shader (it would be a carried bound plus a validity
+      radius, as BLA has). (b) The theorem is already tight for SHORT moves (1.1 to 2.6 times the
+      true stray at a tenth of a typical step): that is the resumed orbits' regime, where it can
+      replace Q and its safety factor - the first use worth building. (c) The next tightening for
+      LONG steps: carry the exact second-derivative vector and bound only its drift, which needs a
+      bound on the third derivative (terms worked out, 1 / a^2 at the axis, not proven or coded).
+      Hold it until the GPU numbers say long steps pay there: passes a step rise with the step.
+      (d) A tighter enclosure of the Julia set than one ball, for power 2.
+    - *Tool traps.* A variant that sends many rays through solids makes the through-check crawl
+      with the cap raised (minutes): run broken variants at the saved cap. `pb-lib.mjs` patches the
+      kernel text at its last `return { orbit, makeRay`; it needs `pushJets`, `stable`, `O.Vf` and
+      the `makeHP` .. `BLA table build` span of `core.js` to keep their names.
+  - **ON THE GPU, 2026-10-09 (the research session, continued): THE RAY MARCH IS IN THE RENDERER AS AN
+    OPT-IN VARIANT, WITH THE FOLLOW-UP'S LINE-AGAINST-BALL STEP, AND THE SHELL HAS A SWITCH FOR IT.
+    Off by default: the module still equals the frozen page (parity 52, direct proof 15 lines).**
+    - *What is built* (grep `THE RAY ESTIMATE`, `THE LINE AGAINST THE BALL`, `THE CREEP FLOOR` in
+      core.js): the variant `USE_JET` (keys PR and PTR; never with BLA or the J twins; 19 to 45 s
+      to compile, in the background for a picture); `api.setRayMarch(bits, { factor, hit, tol,
+      floor, line }, now)` - bits 1 = step by the ray estimate, 2 = hit test by it, 4 = orbits
+      resumed along the ray - with `rayMarchState()`, `rayMarch()`, and `setRayDefs()` for
+      experiments. The shell: Quality > Ray march (prototype) = bits 5, creep floor 1/256 px, line
+      rule with twice the bend measure as allowance; while it is on Step size, True-gradient march
+      and BLA are not used, Detail and Hit refine are. Smoke stage 2 has a step for it (seen red
+      with the push made a no-op). The march tool takes `--ray bits:factor:hit:tol:floor:line` and
+      prints, for those rows, `behind` (of wrong: deeper than today's careful ray) and `passed` /
+      `early` against the same rule marched at a quarter of the estimate with whole orbits.
+    - *Clean.* Detail 32, 17 views, 16,384 rays each as a 1080-row picture, rays more than 2 px of
+      depth from today's careful march (step 0.1, refine 8): today at 0.85 10.2 % (flight 0.3 to
+      4.5, slicing 44, power-2 5e-20 97.6); today at 0.42 2.0 % (power-2 26.8); the ray march
+      1.0 % (0.5 to 2.3 in every view; 0.6 behind, the rest in front). Pictures, the renderer's
+      own, left today, right the ray march: `debug/scratch/ray-split-*.png`.
+    - *As fast as today's default.* One 640 x 640 picture with 4-tap normals, RTX 5070 Ti, BLA on
+      for today's, mean of 11 views in one run: today at 0.85 21.8 ms, today at 0.42 34.3, the ray
+      march 22.6 (a view: 0.70 to 1.32 of the default's speed - slowest at the 1e-33 flight view,
+      28.7 against 20.0 ms; fastest at 8e-20, 19.9 against 26.2). It takes 42 to 80 steps a ray and
+      223 to 794 kernel passes (mean 431) where today takes 1,636 with BLA off.
+    - *What the GPU corrected in the CPU result above.* (1) Kernel passes are not the cost there.
+      BLA already shortens today's orbits to 10 to 13 passes, and a march step carries a cost of
+      its own worth 8 to 10 plain passes: a resumed step ran 4 to 5 passes and cost what a BLA step
+      of 11 does. With the ray estimate alone the march was 1.4 times today's default in time
+      (26.2 against 18.4 ms) at a third of the passes. (2) So time follows STEPS, and LONGER STEPS
+      PAY - the follow-up's question: the line rule at allowance 2 Q took steps from 77 to 46,
+      passes from 315 to 217 and the march from 28.2 to 18.4 ms (1.2e-12 flight view; the two
+      deeper ones the same); at 1 Q 37 steps and 12.7 ms; at 3 Q 52 and 20.2. Wrong and behind did
+      not move with it (1.05 / 1.05 / 1.04 / 1.04 % wrong at off / 1 / 2 / 3 Q). The third-
+      derivative work for long steps is therefore worth doing. (3) A ray whose iterate moves far
+      faster along it than the scalar derivative says creeps for hundreds of steps (4,095 = the
+      budget) a small part of a pixel from something, and its 8 x 8 group waits for it: under 1/256
+      of a pixel that is now a hit (33.7 -> 23.1 ms). (4) The ray estimate is the better STEP and
+      today's estimate the better HIT TEST: as the hit level (bit 2, 1/64 px) the ray estimate is
+      fat wherever the iterate moves fast along the ray (4.4 % wrong against 1.0). (5) The vector
+      costs 20 to 25 % a kernel pass. (6) Checkpoints as arrays stay: named globals compiled for
+      5 minutes and ran 1.4 times slower; writing them only now and then ran a third more passes
+      and no faster. (7) A safety factor of 3 on the bend measure for the resumed orbits (the
+      follow-up: it under-reads by up to 2.5 times) costs neither passes nor time.
+    - *Not known.* The owner's verdict in flight. Where the per-step cost sits (unprofiled: the
+      scan, the restore, the array traffic, the march loop's own exponent arithmetic). Detail 8
+      and the power-4 3e-76 view in milliseconds. The proven bend bound in a shader's form. The
+      normal taps are still whole orbits without BLA (about 1 ms of the picture). Far relax is not
+      applied to the ray step and its step budget is four times the page's - neither tuned.
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at
