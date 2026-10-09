@@ -201,6 +201,33 @@ stage 2 on it was built in one session, depth-first, one commit per visible piec
     whole sample flight. (3) Win the time back: verified longer steps (above), the gradient normal
     where it is judged good enough, the plain shader where the two estimates agree. (4) The power-2
     place, which still has 8.8 % wrong at Detail 8 with the march on.
+  - **THE PLAN ABOVE IS A WORKAROUND, AND THE OWNER SAID SO (2026-10-09):** "I think we will need
+    to discover some new maths for this one, because a solution certainly exists, even though it
+    may have not been discovered - one which is responsive to what's on screen, rather than based on
+    attributes like depth and perceived difficulty ... your proposal is a workaround and we are
+    looking for a true solution." Do not build "Detail follows depth" or any rule keyed to depth,
+    power or a per-view probe as the answer. What the next session starts from instead:
+    - *The problem, stated as maths.* The renderer stops a ray on a level of ONE number, an
+      estimate of distance, compared with the pixel's cone radius. That number is not the distance
+      (about 0.55 of it on ordinary ground, less in creases, two to three times too much where the
+      scalar derivative under-counts), and one number cannot say what a pixel needs to know about a
+      thin layer: how large the structure is ACROSS the screen and how far it is ALONG the ray are
+      different questions. The orbit's 3x3 derivative, carried since the true-gradient variant,
+      holds exactly that directional information; the march reduces it to a norm and throws the
+      rest away.
+    - *What any true solution has to reproduce,* all measured here: the fat surface (about 3 px at
+      Detail 1) at every depth; the deep views being thin layers; wrong surfaces rising with Detail
+      at a fixed step (1-12 % at Detail 8); the estimate's slope being about 0.5 and not 1; a
+      first-order slope correction saving 35-40 % of the steps and overshooting.
+    - *Two leads, untested, named so they are not lost - neither is a result.* (a) Use the gradient
+      as a direction against the ray and the screen: the clearance across the pixel and the
+      remaining distance along the ray become two estimates, and only the first is a reason to
+      stop short. (b) Stop treating a hit as all-or-nothing: let a ray carry the share of its
+      pixel a thin structure covers and go on behind it, so thin layers are kept as coverage
+      instead of being swallowed or skipped.
+    - *The tools for it exist:* `npm run bench:deep-zoom-march` (seconds a sweep), the f64 CPU
+      kernel lifted into node with no browser (`debug/scratch/norm-march.mjs`, `fat-study.mjs`,
+      git-ignored), the BigInt and finite-difference referees, and the J variant itself.
 - **How the automatic step should probe a view - measured 2026-10-08, NOT built.**
   - *Against what:* no careful march is needed. Walk a ladder of steps 0.7 apart (0.85, 0.6, 0.42,
     0.3, 0.21, 0.15, 0.105) and compare each rung with the next finer one. On all 17 test views, at
