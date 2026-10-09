@@ -2874,9 +2874,21 @@ function pertMarchJS(O, rd, maxIter, pixAng){
    So navigation asks a different question: how far is it free ALONG A RAY, from the camera as it is now, to the solid
    as it is drawn. The answer is a march on the CPU in f64, on the same reference orbit and kernel maths as the
    referee above:
-     step  half of THE RAY ESTIMATE (grep it): 0.5 r ln r / |J rd|, the escaping iterate's speed along the ray, carried
-           with the orbit as one vector (pertOrbitJetJS) - and never more than 8 scalar estimates. The study measured
-           it safe at a whole estimate; a scalar-estimate step at 0.3 once reached 0.82 of the free distance.
+     step  half of the larger of two first-order estimates, and never more than 8 scalar estimates:
+             - THE RAY ESTIMATE (grep it): 0.5 r ln r / |J rd|, the escaping iterate's speed along the ray, carried
+               with the orbit as one vector (pertOrbitJetJS). The study measured it safe at a whole estimate; a
+               scalar-estimate step at 0.3 once reached 0.82 of the free distance.
+             - the TRUE-GRADIENT estimate (grep it; here by one pass back over the orbit, pullGradJS):
+               0.5 r ln r / |grad|, grad = how fast the escaping RADIUS changes with the point.
+           Both are at most the distance along the ray to the level's tangent plane, 0.5 r ln r / |grad . rd|
+           (|J rd| >= |z^ . J rd| = |grad . rd|, and |grad| >= |grad . rd|), so the larger is as safe to first order as
+           either. They fail apart. The gradient's is a ball: a ray running ALONG a wall creeps by it (615 steps where
+           the ray estimate takes 40). The ray estimate counts the iterate's swing ROUND the pole axis as speed: with
+           a theta phase the triplex power is discontinuous on that axis, a point 3e-5 off it swings a full turn in
+           6e-5, and nothing gets nearer the surface. At the owner's power-9 place on the axis (theta phase -1.552,
+           2026-10-09, "going extremely slowly") it read 5.7e-7 sideways where the solid is 0.53 away and 7.9e-5
+           ahead where it is 2.3e-4 away, in 165 to 340 steps a ray; the larger of the two reads 0.38 and 1.9e-4
+           in 67 and 12. At the starter views the two rules agree within 3 %, the larger in fewer steps.
      end   the scalar estimate under tol x t (a hit, to a share tol of its distance), or the ray estimate under an
            eighth of that (a ray creeping along a surface); or a sample INSIDE the drawn solid - the last step is then
            halved back onto the boundary, so the answer is the drawn surface and not the estimate's idea of it; or
@@ -2903,10 +2915,22 @@ function pushJetJS(z, j, v){
   const A=NP*rn1*rd, B=rn*NP*thd, C=rn*NP*phd*sa;
   return [A*sa*cb+B*ca*cb-C*sb+v[0], A*sa*sb+B*ca*sb+C*cb+v[1], A*ca-B*sa+v[2]];
 }
+/* the TRANSPOSE of that derivative at z, applied to w: one step back of the gradient of |z_k| (TRUE-GRADIENT ESTIMATE) */
+function pullGradJS(z, w){
+  const NP=nPower, x=z[0], y=z[1], zz=z[2];
+  const rho2=Math.max(x*x+y*y,1e-300), rho=Math.sqrt(rho2), r2=rho2+zz*zz, r=Math.sqrt(r2);
+  const th=Math.acos(Math.max(-1,Math.min(1,zz/r))), ph=Math.atan2(y,x);
+  const a=NP*th+phaseTheta, b=NP*ph+phasePhi, sa=Math.sin(a), ca=Math.cos(a), sb=Math.sin(b), cb=Math.cos(b);
+  const wr=sa*cb*w[0]+sa*sb*w[1]+ca*w[2], wt=ca*cb*w[0]+ca*sb*w[1]-sa*w[2], wp=-sb*w[0]+cb*w[1];
+  const k=NP*Math.pow(r,NP-1), kp=k*wp*sa*r/rho2;
+  return [k*(wr*x/r+wt*zz*x/(rho*r))-kp*y, k*(wr*y/r+wt*zz*y/(rho*r))+kp*x, k*(wr*zz/r-wt*rho/r)];
+}
 /* pertOrbitJS with one vector more: jet = d z_k / d t for the point dc + t rd (z_0 = c, so it starts as rd).
-   E is THE RAY ESTIMATE at the iterate the orbit ended on. fixed: exactly maxIter iterations, no escape test. */
+   E is THE RAY ESTIMATE at the iterate the orbit ended on; grad is the gradient of that iterate's radius with the
+   point (one pass back over the iterates), G the estimate by it; ray is the larger of E and G - what a ray steps by.
+   fixed: exactly maxIter iterations, no escape test. */
 function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
-  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d);
+  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d); const zs=[];
   for(let k=0;k<maxIter;k++){
     const V=O.Vf[m], R=O.Rk[m];
     const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
@@ -2914,6 +2938,7 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
     const Dp=Rp*powm1N(u,nPower-1);
     Ddr=nPower*(Dp*O.DRk[m]+(Rp+Dp)*Ddr);
     jet=pushJetJS(z,jet,rd);
+    zs.push(z);
     d=add3(stableDeltaJS(V,d),dc);
     m++;
     z=add3(O.Vf[m],d);
@@ -2923,7 +2948,11 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
     if(z2<dot3(d,d) || m>=O.len-1){ d=sub3(z,O.Vf[0]); Ddr=(O.DRk[m]-1)+Ddr; m=0; }
   }
   const r=len3(z), g=0.5*r*Math.log(Math.max(r,1e-300)), speed=len3(jet), de=g/(O.DRk[m]+Ddr);
-  return { de, escaped, r, it, z, jet, E: speed>0 ? g/speed : de };
+  let w=r>0 ? [z[0]/r,z[1]/r,z[2]/r] : [0,0,0], grad=[0,0,0];
+  for(let k=zs.length-1;k>=0;k--){ grad=add3(grad,w); w=pullGradJS(zs[k],w); }    // z_(k+1) = f(z_k) + c, z_0 = c
+  grad=add3(grad,w);
+  const slope=len3(grad), E=speed>0 ? g/speed : de, G=slope>0 ? g/slope : de;
+  return { de, escaped, r, it, z, jet, E, grad, G, ray: Math.max(E, G) };
 }
 /* one ray from the camera: { t, prev, kind, steps }, kind 1 = met the drawn solid at t, 0 = open (t is a lower bound;
    prev is the last sample known to be outside), 2 = the camera itself is inside the drawn solid (t = 0).
@@ -2941,10 +2970,10 @@ function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
       }
       return { t:lo, prev:lo, kind:1, steps };
     }
-    if(t>0 && (o.de<tol*t || o.E<tol*0.125*t)) return { t, prev:t, kind:1, steps };
+    if(t>0 && (o.de<tol*t || o.ray<tol*0.125*t)) return { t, prev:t, kind:1, steps };
     if(t>SENSE_FAR) return { t, prev:t, kind:0, steps };
     tPrev=t;
-    t+=Math.max(Math.min(o.E,8*o.de)*0.5, t*1e-7);
+    t+=Math.max(Math.min(o.ray,8*o.de)*0.5, t*1e-7);
   }
   return { t, prev:tPrev, kind:0, steps };
 }

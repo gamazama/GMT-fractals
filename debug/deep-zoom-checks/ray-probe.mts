@@ -31,6 +31,9 @@
  *   - `senseBundle`: the `k.iters === cam.iters` test removed               -> 1 red ("kept: a changed iteration count ...")
  *   - `senseBundle`: an open ray not carried on (`open.length >= 0`)        -> 1 red ("wall behind: asked again it reads on ...": 5.6e-71 after 40 asks)
  *   - `senseRead`: `second: ts[1]` -> `second: ts[0]`                       -> 1 red ("bundle: near is the nearest ...")
+ *   - `pertOrbitJetJS`: `ray: Math.max(E, G)` -> `ray: E` (the ray estimate alone, as it was until the owner's
+ *     power-9 place)                                                        -> 2 red ("gradient: on the pole axis ...", "gradient: and a ray sideways ...")
+ *   - `pullGradJS`: `-kp*y` -> `+kp*y`                                      -> 1 red ("gradient: along the ray it equals ...")
  *   - `senseRead`: `open` counting every open ray (the `r.t <= SENSE_FAR` test removed)
  *                                                                           -> 1 red ("open: away from the bulb ... and finished")
  */
@@ -47,7 +50,7 @@ function check(ok: boolean, label: string, detail = ''): void {
 type V3 = [number, number, number];
 interface View { cam: string[]; yaw: number; pitch: number; iters: number; power: number; phase?: number[] }
 interface Orbit { len: number; Rk: number[]; DRk: number[] }
-interface OrbitOut { de: number; escaped: boolean; r: number; it: number; z: V3; jet: V3; E: number }
+interface OrbitOut { de: number; escaped: boolean; r: number; it: number; z: V3; jet: V3; E: number; grad: V3; G: number; ray: number }
 interface Sense { near: number; second: number; hits: number; open: number; inside: boolean; marched: boolean }
 interface Lib {
     buildRefOrbit(cam: bigint[], lenMax: number): Orbit;
@@ -162,6 +165,34 @@ function jetError(v: View, phase?: [number, number]): number {
     let phased = 0;
     for (const { v } of views.slice(0, 4)) phased = Math.max(phased, jetError(v, [0.3, -0.2]));
     check(phased < 1e-4, 'jet: and with a phase on both angles', `worst relative error ${phased.toExponential(2)}`);
+}
+
+// ── gradient: the second estimate a ray steps by, and the place that needed it ──
+{
+    // grad . rd and z^ . jet are the same number (how fast the escaping radius changes along the ray), reached two ways.
+    let worst = 0;
+    for (const [i, { v }] of views.entries()) {
+        const { O } = enter(v, i < 4 ? [0.3, -0.2] : undefined);
+        const rd = forward(v), o = lib.pertOrbitJetJS(O, [0, 0, 0], rd, lib.iters());
+        if (!o.escaped) continue;
+        const along = o.grad[0] * rd[0] + o.grad[1] * rd[1] + o.grad[2] * rd[2], radial = (o.z[0] * o.jet[0] + o.z[1] * o.jet[1] + o.z[2] * o.jet[2]) / o.r;
+        worst = Math.max(worst, Math.abs(along - radial) / Math.max(Math.abs(radial), len(o.jet) * 1e-6));
+    }
+    check(worst < 1e-8, `gradient: along the ray it equals the radial part of the carried vector, at ${views.length} views (four with a phase)`, `worst relative difference ${worst.toExponential(2)}`);
+
+    // The owner's "navigation error" place, 2026-10-09: power 9, a theta phase, the camera 3e-5 from the pole axis.
+    // The ray estimate alone read 7.9e-5 ahead (the solid is 2.3e-4 away) and 5.7e-7 sideways (0.53 away).
+    const POLE: View = { power: 9, iters: 14, yaw: 4.672714459592559, pitch: -0.125782234694118,
+        cam: ['1045507870444327203643905949574513453933117855847290941416464801270333440', '3187620729426300654784347974141872565367634436226280355534665186973581312', '107572381174902257437865052021319054150741217940668403970679567291730098126848'] };
+    const { O } = enter(POLE, [-1.552, 0]);
+    const iters = lib.iters(), f = forward(POLE), side: V3 = [Math.sin(POLE.yaw), 0, -Math.cos(POLE.yaw)];
+    const ahead = lib.rayFreeJS(O, f, iters, 0.05, 64), aheadRef = referee(O, f, iters);
+    const beside = lib.rayFreeJS(O, side, iters, 0.05, 400), besideRef = referee(O, side, iters);
+    check(ahead.kind === 1 && aheadRef.kind === 'hit' && ahead.t > 0.7 * aheadRef.t && ahead.t < 1.02 * aheadRef.t,
+        'gradient: on the pole axis under a theta phase the ray ahead reads the solid, not the iterate\'s swing round the axis', `${ahead.t.toExponential(2)} in ${ahead.steps} steps, the referee ${aheadRef.t.toExponential(2)}`);
+    // Sideways the nearest thing is a graze 0.45 away (inside the ray's twentieth, outside the referee's 500th).
+    check(beside.t > 0.1 && (besideRef.kind !== 'hit' || beside.t < 1.02 * besideRef.t),
+        'gradient: and a ray sideways from there runs a tenth of a unit or more (it stopped at 5.6e-7)', `${beside.t.toExponential(2)} in ${beside.steps} steps, the referee ${besideRef.kind} ${besideRef.t.toExponential(2)}`);
 }
 
 // ── ray: the cheap ray against the referee ──

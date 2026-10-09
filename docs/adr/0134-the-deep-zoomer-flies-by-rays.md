@@ -59,6 +59,22 @@
 > alternative says, or skipping iterations in the CPU probe the way the GPU march does (BLA),
 > which changes no reading.
 
+> **Update 2026-10-09 (what a ray steps by; the rule above unchanged):** the owner, at a power-9
+> place with a theta phase of -1.552 and the camera 3e-5 from the pole axis: "going extremely
+> slowly". A ray stepped by the ray estimate alone, 0.5 r ln r / |J rd| - the escaping iterate's
+> speed along the ray. Under a theta phase the triplex power is discontinuous on the pole axis: a
+> point beside it swings a full turn round it within its own distance from it, and the estimate
+> counted that swing as speed. It read 7.9e-5 ahead where the solid is 2.3e-4 away, and 5.7e-7
+> sideways where it is 0.53 away, in 165 to 340 steps a ray. A ray now steps by the LARGER of that
+> and the true-gradient estimate, 0.5 r ln r / |grad| (how fast the escaping radius changes with
+> the point; one pass back over the orbit, grep `pullGradJS`). Both are at most the distance to the
+> level's tangent plane along the ray, so the larger is as safe to first order as either; they fail
+> apart (the gradient's creeps along a wall, the ray's at the axis). At that place: 1.9e-4 ahead in
+> 12 steps; at the starter views the readings agree with the old rule within 3 %, in fewer steps.
+> Guard: the three "gradient:" lines of `npm run check:deep-zoom-ray-probe`. NOT changed: the
+> picture's own ray march on the GPU steps by the same ray estimate (grep THE RAY ESTIMATE) and
+> can be expected to crawl at the same axis.
+
 ## Context
 
 Flying covers `speed x distance` a second, so the hands work the same at 1e-3 and at 1e-70. Which
