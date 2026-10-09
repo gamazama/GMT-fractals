@@ -24,22 +24,13 @@
  *
  * WINDOWLESS RUNS. A headed run opens a Chrome window that takes the keyboard: whatever is typed
  * while it is in front lands in the page under test. `DZ_HEADLESS=1 npm run smoke:deep-zoom` runs
- * the same Chrome with no window, and since stage N5 (nothing captures the pointer any more) no
- * step needs a window. It is only a valid run if the first line still names the real GPU (the
- * software-renderer refusal applies unchanged).
+ * the same Chrome with no window; no step needs one. It is only a valid run if the first line
+ * still names the real GPU.
  *
  * DEV SERVER ONLY. A step reaches the renderer through the host, which the page publishes as
  * `globalThis.__appHandles['deep-zoom.host'].ref.current` under `import.meta.env.DEV` alone (grep
  * `__appHandles` in `engine/appHandles.ts`). Against a build no host is ever found and the boot
  * says so. `ctx.host` / `ctx.withHost` / `ctx.HOST` hide that path: stage files never spell it.
- *
- * ── BEFORE ADDING A STEP ────────────────────────────────────────────────────────────────────────
- * A step has to earn its place: it costs real-GPU seconds on every run, for good. The default for
- * a change is NO new step - try it once by hand and say what it showed. Add one only for a seam
- * nothing cheaper can see (the GPU, a panel that has to open, storage across a reload, the boot),
- * that is new ground (not a second way into code a step already opens; not a default, a label or
- * a rate), and whose failure nobody would see at once. The bar and where it comes from (the
- * owner, 2026-10-09): `plans/deep-zoom-shell/BUILD-PLAN.md`, "Smoke growth".
  *
  * ── HOW A STAGE ADDS ITS FILE ───────────────────────────────────────────────────────────────────
  * Create `debug/deep-zoom-smoke/stage<id>.mts` (`stage2.mts`, `stage6a.mts`, `stageN5.mts`) with
@@ -67,10 +58,8 @@
  *
  * THE STEP SHAPE (`DzStep`, below):
  *   name       what the step proves. Unique in its file. `--step` matches a part of it.
- *   owner      the package that owns the behaviour, so a red step has one owner (BUILD-PLAN,
- *              "Rules for every package").
- *   falsified  how the step was SEEN RED: what was broken, what the step printed, the date. A step
- *              nobody could turn red says `not falsified: <why>`. Never claim a red you did not see.
+ *   owner      the package that owns the behaviour, so a red step has one owner.
+ *   falsified  how the step was seen red, or `not falsified: <why>`.
  *   timeoutMs  optional, default 120 s. A step that runs over is a FAIL and the page is replaced.
  *   run(ctx)   the step. It passes when it made at least one `ctx.check`, every check was true,
  *              it reported no `ctx.notProven`, it did not throw, and no page error or console
@@ -105,7 +94,7 @@
  *
  * "NOT PROVEN". A step that cannot establish its own precondition (something the browser or the
  * machine decides, not the shell) calls `ctx.notProven(what)` and returns. Not proven counts as a
- * FAILURE, never as a pass. (It was written for pointer lock, which left at stage N5.)
+ * FAILURE, never as a pass.
  *
  * PITFALLS
  *   - EVERY `page.evaluate` TAKES A STRING. tsx wraps a function callback in a `__name` helper
@@ -117,19 +106,15 @@
  *     but there is nothing here to import: everything a step needs is on `ctx`.
  *   - Never keep the host across an `await` in page code written by hand: the holder is emptied
  *     and refilled by a context-loss remount. `ctx.host` reads it fresh on every call.
- *   - One Bash call on the build machine is capped at 10 minutes and this smoke grows with every
- *     stage: run it a stage at a time (`--stage`). Measured 2026-10-08 on the dev server: the
- *     first load of a run takes 6 to 8 s (the browser fetches every module), a `ctx.boot()` after
- *     it about 1 s, and stage 1's 19 steps about 20 s in all.
+ *   - One Bash call on the build machine is capped at 10 minutes: run it a stage at a time
+ *     (`--stage`). The first load of a run takes 6 to 8 s (the browser fetches every module), a
+ *     `ctx.boot()` after it about 1 s.
  *   - The engine's text fields stop their own key events (`stopNavKeys`, and `ProjectName`'s
  *     input), so "a key typed in a field does not reach the renderer" is true twice over and a
  *     step about a field cannot prove the renderer's key target. Test that with the focus on the
  *     page body (stage 1 does).
  *   - A step's screenshots go to `debug/scratch/deep-zoom-shell-<name>.png` (git-ignored). A
  *     failing step gets one automatically: `deep-zoom-shell-fail-<stage>-<step number>.png`.
- *   - Do not add a dive that must ARRIVE to a step before the module's distance estimate is
- *     fixed: measured 2026-10-08, `host.diveTo` from the boot view lands about 250 times off its
- *     target (the estimate flips between the f32 and deep modes near 1e-4).
  *   - `check:rule-guards` resolves this smoke to the app it boots from the default address in the
  *     `DEFAULT_ADDRESS` line below. Keep `/deep-zoom.html` in that literal.
  *
@@ -138,11 +123,8 @@
  *   error / a page error / a step over its time each a FAIL charged to that step, an expected
  *   console error not, a late check of an abandoned step counted nowhere, the page replaced after
  *   a timeout, the viewport put back before each step, "not proven" a failure.
- *   NO STANDING TEST runs the runner itself. Seen once, on 2026-10-08, with a throwaway pair of
- *   stage files (12 steps: the 7 written to pass passed, the 5 written to fail failed, each for
- *   its own reason), and "not proven" with the shell's `requestPointerLock` call removed. If you
- *   change the running code below, write such a pair again (a step named for the outcome it
- *   expects is enough), run it with `--stage`, and delete it.
+ *   No standing test runs the runner itself. If you change the running code below, try it once
+ *   with a throwaway pair of stage files (steps written to pass and to fail), then delete them.
  */
 import { chromium } from 'playwright';
 import type { Browser, BrowserContext, Download, Page } from 'playwright';
