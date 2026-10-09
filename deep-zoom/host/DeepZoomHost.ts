@@ -59,6 +59,12 @@
  *                         shell's navigation flies the camera through `moveAlong` and `setYawPitch`
  *                         once it has called `setInputOwner('host')`; `rawDistance` is the
  *                         unsmoothed distance its integrator eases itself.
+ *     `sense(` `freeDistance(`   the free distance along rays, from the camera as it is now to the
+ *                         solid as it is drawn (2026-10-09): `sense` seven rays about an axis, the
+ *                         view's by default; `freeDistance` one ray. What the navigation's speed,
+ *                         the one-frame limit of a move, the depth readout and the dive go by.
+ *     `estimateAt(`       the renderer's own distance estimate at a point beside the camera: the
+ *                         nearest surface in any direction, there. Orbit mode's clearance.
  *     `snapshot()`        the picture as a 2D canvas, read back by the renderer itself (a saved PNG).
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
@@ -100,6 +106,7 @@
  *                         the numbers when they can be parsed. Events from the module at M3.
  *     `paramChanged`      never fires in stage 1. From stage 2 by comparing `getParams()`
  *                         (`cause: 'unknown'`), from M3 as an event.
+ *     `viewSet`           live (2026-10-09): every `setView`, after the module has taken the view.
  *
  *
  * PITFALLS
@@ -208,6 +215,39 @@ export interface DzTelemetry {
     bla: boolean;
 }
 
+/** What a bundle of rays read (`DeepZoomHost.sense`). Distances are in world units from the camera. */
+export interface DzSense {
+    /** The nearest of the seven rays: what one frame's move along the axis must stay inside. */
+    near: number;
+    /** The second nearest: what the speed follows. One stray ray, or a hole one ray wide, cannot set it. */
+    second: number;
+    /** How many of the seven met the drawn solid. A ray that did not is "open": its distance is how
+     *  far it was followed, a LOWER bound. Under 2, `second` is not a distance to anything. */
+    hits: number;
+    /** How many are open because they ran out of steps short of the far limit: UNFINISHED rays. While
+     *  this is above 0, `near` and `second` may be lower bounds; asked again with the camera where it
+     *  stood, those rays go on from where they stopped. (An open ray past the far limit is finished:
+     *  nothing lies that way.) */
+    open: number;
+    /** The camera itself is inside the drawn solid (every distance is then 0). */
+    inside: boolean;
+    /** False: nothing was marched; the answer is the kept bundle, shortened by the camera's move. */
+    marched: boolean;
+}
+
+export interface DzSenseOptions {
+    /** Keep the bundle under this name between calls: asked again for the same axis with the camera
+     *  moved less than `reuse` of its nearest ray, it is not marched again; with the camera not
+     *  moved at all, rays that ran out of steps go on from where they stopped. */
+    slot?: string;
+    /** Default 0.05. 0: always march. */
+    reuse?: number;
+    /** A ray ends where the estimate is under this share of its distance. Default 0.05. */
+    tol?: number;
+    /** Steps a ray may take in one call. Default 64. */
+    maxSteps?: number;
+}
+
 /**
  * A renderer parameter id. LOOSE ON PURPOSE in stage 1: any string, because `getParams()` hands
  * back the module's settings under the module's own keys. The package that lands
@@ -245,6 +285,9 @@ export interface DzEvents {
     progress: DzProgress | null;
     /** The browser took the WebGL context. No detail: nothing is restored, mount a fresh host. */
     contextLost: null;
+    /** The view was SET (`setView`: a jump to a place, an undo, a loaded scene). Not sent for a
+     *  move or a turn. Whoever eases something by the camera's own travel starts afresh on it. */
+    viewSet: null;
     error: { message: string; fatal: boolean };
 }
 
@@ -331,6 +374,24 @@ export interface DeepZoomHost {
     yawPitch(): { yaw: number; pitch: number };
     /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still. */
     setYawPitch(yaw: number, pitch: number): void;
+    /**
+     * Seven rays about `axis` (a unit vector in world axes; null or absent: the view axis), marched
+     * on the CPU from the camera as it is NOW to the solid as it is DRAWN. Unlike `rawDistance` it
+     * looks one way, and it cannot read past the drawn surface. Costs up to a few milliseconds;
+     * draws nothing and moves nothing. Works before `ready`.
+     */
+    sense(axis?: [number, number, number] | null, opt?: DzSenseOptions): DzSense;
+    /** One such ray (a pick under the pointer: `tol: 0.005`). `kind` 'open': no surface within the
+     *  steps allowed or within 8 units, and `t` is how far the ray was followed. */
+    freeDistance(dir: [number, number, number], opt?: { tol?: number; maxSteps?: number }): { t: number; kind: 'hit' | 'open' | 'inside' };
+    /**
+     * The renderer's distance estimate at the camera moved by `offset` (world units): the nearest
+     * surface in ANY direction as the estimate reads it there, 0 inside the drawn solid.
+     * `rawDistance()` is this at no offset. What Orbit mode keeps the camera's clearance by. It is
+     * a comfort distance - it under-reads on ordinary ground and can over-read beside the drawn
+     * surface - so a move is never trusted to it; `sense` is what stops a move.
+     */
+    estimateAt(offset: [number, number, number]): number;
     /**
      * The picture as it is on screen now, as a new 2D canvas of the frame's own size; null when it
      * cannot be drawn (no renderer, a render in flight). What a saved PNG is made from. Do not

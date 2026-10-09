@@ -89,6 +89,15 @@
  *       host line; half the distance per frame -> 1: "dive: no move is more than a fifth ..."
  *     `cancel` a no-op -> 5; keys ignored -> 3; no time limit -> 1; no 1e-77 floor -> 1; a gap
  *       counted in full -> 1; a finished dive not cleared -> 7
+ *     (2026-10-09) host: the dive reading the estimate at the camera again (`depth: () =>
+ *       dz.telemetry().depth`) -> 2: "dive: it closes on what is ahead ...", "dive: every reading
+ *       is a bundle ..."; host: the nothing-ahead test removed (`return s.near`) -> 1: "dive:
+ *       nothing ahead at all ..."; host: the ask-on loop removed -> 2: "dive: unfinished rays are
+ *       asked on ...", "dive: and the dive then flies ..."
+ *   input (2026-10-09)
+ *     `sense: (axis, opt) => dz.sense(null, opt)` -> 1: "input: sense hands the module the axis
+ *       ..."; `freeDistance` answering a constant -> 1: "input: freeDistance is the module's own ray";
+ *       `estimateAt: () => 1` -> 1: "input: estimateAt is the module's own estimate ..."
  *   seam
  *     `dive.ts` given a type import of the renderer -> 2: both "seam: ..." lines about the tree
  * NOT falsified: every line not named above (among them the result mapping of `renderPathZip`
@@ -106,7 +115,7 @@ import { DZ_CANVAS_ID } from '../../deep-zoom/host/current';
 import { DZ_DIVE_MIN_DEPTH, DZ_DIVE_TIME_LIMIT_MS, createDive } from '../../deep-zoom/host/dive';
 import { DZ_READY_TIMEOUT_MS, createModuleHost, mountDeepZoom, shellOptions } from '../../deep-zoom/host/moduleHost';
 import { getTelemetry, subscribeTelemetry } from '../../deep-zoom/host/telemetry';
-import type { DeepZoomHost, DzPath, DzProgress, DzTelemetry, DzView } from '../../deep-zoom/host/DeepZoomHost';
+import type { DeepZoomHost, DzPath, DzProgress, DzSense, DzSenseOptions, DzTelemetry, DzView } from '../../deep-zoom/host/DeepZoomHost';
 import type { DeepZoomInstance, DeepZoomOptions, createDeepZoom } from '../../deep-zoom/renderer';
 
 /** The third argument of `mountDeepZoom`: the check hands it a fake so no WebGL is needed. */
@@ -266,6 +275,12 @@ function makeRig() {
         /** What telemetry reports. Refreshed from `trueDepth` only by a frame that ran, as in the module. */
         depth: 1,
         trueDepth: 1,
+        /** What the rays about the view axis read. null: `trueDepth` on all seven (the surface is straight ahead). */
+        ahead: null as number | null,
+        aheadHits: 7,
+        /** Asks that still answer unfinished rays (a lower bound of `aheadBound`) before the bundle is read through. */
+        aheadUnfinished: 0,
+        aheadBound: 1e-30,
         frameN: 0,
         frameRuns: true,
         contextLost: false,
@@ -311,6 +326,21 @@ function makeRig() {
             rawDistance: (): number => 6.4e-53,
             yawPitch: () => ({ yaw: state.view.yaw, pitch: state.view.pitch }),
             setYawPitch: (yaw: number, pitch: number): void => { note('setYawPitch', yaw, pitch); },
+            // The ray probe reads the camera as it is NOW (it is not refreshed by a frame, unlike `depth`).
+            sense: (axis?: [number, number, number] | null, opt?: DzSenseOptions): DzSense => {
+                note('sense', axis ?? null, opt);
+                if (state.aheadUnfinished > 0) {
+                    state.aheadUnfinished--;
+                    return { near: state.aheadBound, second: state.aheadBound, hits: 0, open: 7, inside: false, marched: true };
+                }
+                const ahead = state.ahead ?? state.trueDepth;
+                return { near: ahead, second: ahead * 1.5, hits: state.aheadHits, open: 0, inside: ahead <= 0, marched: true };
+            },
+            freeDistance: (dir: [number, number, number], opt?: { tol?: number; maxSteps?: number }) => {
+                note('freeDistance', dir, opt);
+                return { t: 1.25e-9, kind: 'hit' as const };
+            },
+            estimateAt: (offset: [number, number, number]): number => { note('estimateAt', offset); return 7.5e-41; },
         },
         lockInput: (locked: boolean): void => { note('lockInput', locked); },
         samplePath: (data: DzPath, tau: number): number[] | null => { note('samplePath', data, tau); return [0, 0, 0]; },
@@ -736,6 +766,17 @@ console.log('[5] input     focus, and the host-input members');
     check(rig.count('setYawPitch') === 1 && rig.calls.setYawPitch[0][0] === 0.25 && rig.calls.setYawPitch[0][1] === -0.5,
         'input: setYawPitch hands the module yaw then pitch');
     check(rig.doc.count('pointerlockchange') === 0, 'input: the host listens for no pointer lock');
+    const axis: [number, number, number] = [0, 0.6, 0.8];
+    const sensed = host.sense(axis, { slot: 'move', reuse: 0.1 });
+    check(rig.count('sense') === 1 && rig.calls.sense[0][0] === axis && (rig.calls.sense[0][1] as DzSenseOptions).slot === 'move'
+        && sensed.near === 1 && sensed.second === 1.5 && sensed.hits === 7 && !sensed.inside,
+        'input: sense hands the module the axis and the options it was given, and hands its answer back', JSON.stringify(sensed));
+    host.sense();
+    check(rig.calls.sense[1][0] === null, 'input: sense with no axis asks for the view axis');
+    const one = host.freeDistance(axis, { tol: 0.005 });
+    check(rig.count('freeDistance') === 1 && rig.calls.freeDistance[0][0] === axis && one.t === 1.25e-9 && one.kind === 'hit',
+        'input: freeDistance is the module\'s own ray');
+    check(host.estimateAt(axis) === 7.5e-41 && rig.count('estimateAt') === 1 && rig.calls.estimateAt[0][0] === axis, 'input: estimateAt is the module\'s own estimate, at the offset it was given');
     host.dispose();
 }
 
@@ -1046,8 +1087,14 @@ console.log('[8] dive      dive.ts alone, then through the host');
     run(host, 32_200, 32_400, 16);
     check(rig.count('moveAlong') > movesBefore && await stateOf(deeper, 5) === 'pending', 'dive: and it resumes with the frames');
 
+    let viewSets = 0;
+    const offViewSet = host.on('viewSet', () => { viewSets++; });
     host.setView(view(CAM_B));
     check(await stateOf(deeper, 5) === 'resolved', 'dive: setView ends a dive');
+    host.moveAlong([0, 0, 1], 1e-9);
+    host.setYawPitch(0.1, 0.2);
+    check(viewSets === 1, 'views: setView says so (the viewSet event), a move and a turn do not', `${viewSets} events`);
+    offViewSet();
     rig.state.trueDepth = 1;
     host.step(32_500);
     const third = host.diveTo(1e-9);
@@ -1060,6 +1107,43 @@ console.log('[8] dive      dive.ts alone, then through the host');
     const sixth = host.diveTo(1e-9);
     void host.play(pathOf([CAM_A, CAM_B], [0, 2]));
     check(await stateOf(fifth, 5) === 'resolved' && await stateOf(sixth, 5) === 'resolved', 'dive: a newer dive and a path preview each end a dive');
+    // What a dive closes on is what is AHEAD (the rays), not the estimate at the camera (telemetry).
+    {
+        const r2 = makeRig();
+        const h2 = createModuleHost(r2.instance, r2.canvas);
+        r2.state.ready = true;
+        h2.step(0);
+        r2.state.depth = 1e-30;                      // a wall close behind: the estimate at the camera
+        r2.state.trueDepth = 1;                      // the surface ahead is a whole unit away
+        const far = h2.diveTo(1e-6);
+        // the fake's frame copies trueDepth into depth; keep the estimate small, as a wall behind would
+        for (let t = 16; t <= 30_000; t += 16) { h2.step(t); r2.state.depth = 1e-30; }
+        check(await stateOf(far, 5) === 'resolved' && r2.count('moveAlong') > 10 && r2.state.trueDepth <= 1e-6 && r2.state.trueDepth >= 0.95e-6 * (1 - 1e-9),
+            'dive: it closes on what is ahead (1 away) with the estimate at the camera reading 1e-30, and lands on the target',
+            `${r2.count('moveAlong')} moves, ahead ${r2.state.trueDepth.toExponential(3)}`);
+        check(r2.count('sense') > 10 && (r2.calls.sense ?? []).every((c) => c[0] === null && ((c[1] as DzSenseOptions).reuse ?? 1) < 1e-6),
+            'dive: every reading is a bundle about the view axis, marched from where the camera is (never a kept one shortened by a move)');
+        r2.state.trueDepth = 1;
+        r2.state.ahead = 9;                          // every ray ran open past the scene
+        r2.state.aheadHits = 0;
+        const movesBefore = r2.count('moveAlong');
+        const none = h2.diveTo(1e-6);
+        for (let t = 30_016; t <= 30_200; t += 16) h2.step(t);
+        check(await stateOf(none, 5) === 'resolved' && r2.count('moveAlong') === movesBefore, 'dive: nothing ahead at all ends it at once, without a move');
+        // Rays that ran out of steps are a lower bound - here 1e-30, far under the target - and not a
+        // distance: the dive asks on until the bundle is read through, and only then reads 1 and flies.
+        r2.state.ahead = null;
+        r2.state.aheadHits = 7;
+        r2.state.aheadUnfinished = 5;
+        const asksBefore = r2.count('sense');
+        const bound = h2.diveTo(1e-6);
+        check(r2.count('sense') - asksBefore === 6 && r2.count('moveAlong') === movesBefore, 'dive: unfinished rays are asked on (five times here) before a distance is read',
+            `${r2.count('sense') - asksBefore} asks at take-off`);
+        for (let t = 30_216; t <= 30_400; t += 16) h2.step(t);
+        check(await stateOf(bound, 5) === 'pending' && r2.count('moveAlong') > movesBefore, 'dive: and the dive then flies, although their lower bound was under its target');
+        h2.dispose();
+    }
+
     const last = host.diveTo(1e-9);
     host.dispose();
     check(await stateOf(last, 5) === 'resolved' && rig.frame.count('keydown') === 0, 'dive: dispose ends a dive and removes its key listener');

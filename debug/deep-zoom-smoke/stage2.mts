@@ -462,7 +462,7 @@ export const stage: DzStage = {
         {
             name: 'a dive from the Grain of sand view to 1e-30 arrives and stays there',
             owner: 'S1-1 (host/dive.ts)',
-            falsified: '2026-10-08: red before a starter view was used - from the boot view the dive ran out its 45 s at 1.44e-5 ("within a decade of 1e-6" false). NOT falsified for the three-frame arrival rule: with DZ_DIVE_ARRIVAL_FRAMES = 1 this dive still arrived; that rule is pinned by debug/deep-zoom-checks/module-host.mts.',
+            falsified: '2026-10-08: red before a starter view was used - from the boot view the dive ran out its 45 s at 1.44e-5 ("within a decade of 1e-6" false). NOT falsified for the three-frame arrival rule: with DZ_DIVE_ARRIVAL_FRAMES = 1 this dive still arrived; that rule is pinned by debug/deep-zoom-checks/module-host.mts. 2026-10-09, after the dive was pointed at the rays ahead (ADR-0134) and this step at what it closes on: `depth: aheadOf` made `depth: () => dz.telemetry().depth` again in deep-zoom/host/moduleHost.ts -> red, the dive ended with the surface 4.486e-34 ahead (3.3 decades under its target) and the readout at "6.08e-34".',
             timeoutMs: 100_000,
             async run(ctx) {
                 // A dive flies straight ahead, so it needs a view whose forward ray meets the surface.
@@ -482,14 +482,21 @@ export const stage: DzStage = {
                 await field.press('Enter');
                 ctx.check((await ctx.until("!!document.querySelector('[data-dz-diving]')", 3000)) >= 0, 'the readout says a dive is in flight');
                 const waited = await ctx.until("!document.querySelector('[data-dz-diving]')", 70_000, 200);
-                const depth = await ctx.host<number>('telemetry().depth');
+                // What a dive closes on, since 2026-10-09: the nearest of the rays about the view axis (ADR-0134), not
+                // the estimate at the camera. Until then this step allowed 1e-36 to 1e-29, because that estimate "falls
+                // in cliffs at depth, so a dive can end decades under its target". On this very dive it reads 1.4e-28
+                // with the surface 1e-30 ahead: 150 times too far.
+                const ahead = await ctx.host<{ near: number; inside: boolean }>('sense(null)');
+                const estimate = await ctx.host<number>('telemetry().depth');
                 const mode = await ctx.host<string>('telemetry().mode');
-                ctx.note('ended after ' + (waited / 1000).toFixed(1) + ' s at ' + depth.toExponential(2) + ' (' + mode + ')');
+                ctx.note('ended after ' + (waited / 1000).toFixed(1) + ' s with the surface ' + ahead.near.toExponential(2) + ' ahead (the estimate at the camera reads ' + estimate.toExponential(2) + '; ' + mode + ')');
                 ctx.check(waited >= 0, 'the dive ended by itself');
-                ctx.check(depth <= 1e-29 && depth >= 1e-36, 'at or under 1e-30, and not through the surface (the distance reading falls in cliffs at depth, so a dive can end decades under its target) (' + depth.toExponential(2) + ')');
+                ctx.check(!ahead.inside && ahead.near <= 1.001e-30 && ahead.near >= 0.5e-30, 'on its target, not under it and not through the surface: the nearest ray ahead is ' + ahead.near.toExponential(3));
                 await ctx.sleep(1500);
-                const later = await ctx.host<number>('telemetry().depth');
-                ctx.check(later <= 1e-29, 'and it is still there 1.5 s later (' + later.toExponential(2) + '), not a one-frame reading');
+                const later = await ctx.host<{ near: number }>('sense(null)');
+                ctx.check(later.near <= 1.001e-30 && later.near >= 0.5e-30, 'and it is still there 1.5 s later (' + later.near.toExponential(3) + '), not a one-frame reading');
+                const shown = await ctx.ev<string>("(document.querySelector('[data-dz-depth]') || { textContent: '' }).textContent.trim()");
+                ctx.check(/e-3[01]$/.test(shown), 'the depth readout shows where it is ("' + shown + '")');
                 await ctx.shot('stage2-dive-1e-30');
             },
         },

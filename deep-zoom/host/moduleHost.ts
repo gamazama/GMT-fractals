@@ -100,11 +100,20 @@
  *   npx tsx debug/deep-zoom-checks/module-host.mts ("boot: ..." lines, "step: one second of 63
  *   steps ..."). Falsified 2026-10-08: the "boot" and "step" groups in the check's header.
  * @invariant The dive moves only after a frame that ran and not before ready; `setInputOwner`,
- *   `rawDistance`, `yawPitch` and `setYawPitch` reach the module's own handles unchanged;
- *   `focus()` focuses the frame, not the canvas - proven by: npx tsx
+ *   `rawDistance`, `yawPitch`, `setYawPitch`, `sense`, `freeDistance` and `estimateAt` reach the
+ *   module's own handles unchanged; `focus()` focuses the frame, not the canvas - proven by: npx tsx
  *   debug/deep-zoom-checks/module-host.mts ("dive: no move while the module's frame does not run",
  *   "dive: before ready ...", "input: ..." lines). Falsified 2026-10-08: the "input" group and
- *   the two "host:" lines of the "dive" group in the check's header.
+ *   the two "host:" lines of the "dive" group in the check's header; `sense` / `freeDistance` on
+ *   2026-10-09 (the same group).
+ * @invariant A dive closes on the free distance AHEAD (the nearest of seven rays about the view
+ *   axis), not on the estimate at the camera: with a wall close behind and the surface ahead far
+ *   away it flies; inside the solid, or with nothing ahead at all, it ends at once; rays that ran
+ *   out of steps are asked on before a distance is read - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("dive: it closes on what is ahead ...", "dive: nothing
+ *   ahead ...", "dive: unfinished rays ...") and, on the real GPU at the power-4 place,
+ *   `npm run smoke:deep-zoom -- --stage N5` ("a dive from there closes on what is ahead").
+ *   Falsified 2026-10-09, see the check's header and the step's own record.
  * @assumption The signatures in `LooseHandles`, and what this file expects each `api.*` call to do,
  *   were read from core.js on 2026-10-08. core.js is untyped; only the fake instance of the check
  *   and the stage smoke stand behind them. The stage-1 smoke exercises `ready`, `frameCount`,
@@ -136,6 +145,19 @@ import { DZ_TELEMETRY_HZ, DZ_TELEMETRY_INTERVAL_MS, resetTelemetry, writeTelemet
 /** How long `ready` waits for the deep shader, counted over frames that ran (a gap between two
  *  steps counts for at most a second, so a background tab does not use it up). */
 export const DZ_READY_TIMEOUT_MS = 120_000;
+
+/** The slot the dive's bundle is kept under in the renderer, and how often it is asked on while
+ *  rays are unfinished (64 steps an ask: 16 asks carry a ray 1000 steps). */
+const DZ_DIVE_SLOT = 'dive';
+const DZ_DIVE_ASKS = 16;
+/** The share of its nearest ray the camera may have moved for the dive's kept bundle to be taken
+ *  again: none that a move can be. A kept bundle is every ray shortened by the distance moved,
+ *  which is exact for the middle ray only, and a dive decides its ARRIVAL by this reading: with the
+ *  renderer's default (a twentieth) a dive to 1e-60 once stopped 1.7 % short of it (2026-10-09,
+ *  smoke stage N5 on a busy machine; three runs alone landed on it). So a camera that has moved is
+ *  marched afresh, and only one standing where it stood is answered from the kept rays - which is
+ *  what lets unfinished rays go on (0 would switch that off too: it means "always march"). */
+const DZ_DIVE_REUSE = 1e-9;
 
 /** Seconds a segment of a path without times is given by `seekPath`: the module's own fallback
  *  (grep `(ks.length-1)*1.4` in core.js). */
@@ -337,8 +359,22 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     const telemetrySubs = new Set<TelemetrySub>();
 
     // ── the dive ──
+    // What a dive closes on: the nearest of seven rays about the view axis, as of the camera now.
+    // 0 inside the solid (the dive ends); NaN when no ray met anything (nothing ahead: it ends too).
+    // A ray that ran out of steps is a LOWER BOUND, not a distance - read as one, a dive from beside
+    // a wall saw "already that deep" and never took off (seen 2026-10-09 at the power-4 place: the
+    // first ask reads 5.6e-71, the surface ahead is at 3e-54). So unfinished rays are asked on, the
+    // camera standing still, until they have met the surface or left the scene; that costs a few
+    // asks once, at take-off, and nothing in flight (the camera is then away from the wall).
+    const aheadOf = (): number => {
+        const ask = () => dz.sense(null, { slot: DZ_DIVE_SLOT, reuse: DZ_DIVE_REUSE });
+        let s = ask();
+        for (let i = 0; i < DZ_DIVE_ASKS && s.open > 0 && !s.inside; i++) s = ask();
+        if (s.inside) return 0;
+        return s.hits === 0 ? NaN : s.near;
+    };
     const dive = createDive({
-        depth: () => dz.telemetry().depth,
+        depth: aheadOf,
         look: () => dz.getView(),
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         keyTarget: frame,
@@ -447,6 +483,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         setView(v) {
             dive.cancel();
             dz.setView(v);
+            emit('viewSet', null);
         },
         setPendingView(v) {
             if (v && isReady) { host.setView(v); return; }
@@ -457,6 +494,9 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         rawDistance: () => dz.rawDistance(),
         yawPitch: () => dz.yawPitch(),
         setYawPitch: (yaw, pitch) => dz.setYawPitch(yaw, pitch),
+        sense: (axis, opt) => dz.sense(axis, opt),
+        freeDistance: (dir, opt) => dz.freeDistance(dir, opt),
+        estimateAt: (offset) => dz.estimateAt(offset),
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         diveTo(depth) {
             // Not before the deep shader: until then the module flies on its f32 distance, good to

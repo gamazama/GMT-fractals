@@ -14,8 +14,11 @@
  *     panel manifest (the library's fields must be on the store when the panel first renders).
  *   - The panel is `components/LocationsPanel.tsx` (the engine's `StateLibraryPanel` with a depth
  *     line and depth order). The starter cards are `components/StarterDives.tsx`.
- *   - Undo: a history provider `dzView` whose `changeOf` is a jump counter. Flying never makes an
- *     undo entry; a jump always does, and it stores the exact strings on both sides.
+ *   - Undo: a history provider `dzView` whose `changeOf` is a counter of jumps AND flights. A jump
+ *     always makes an undo entry, and it stores the exact strings on both sides. A flight - from
+ *     the first fly key down to the last one up - makes one when it moved the camera
+ *     (`flightBegan` / `flightEnded`, called by `deep-zoom/DeepZoomNavigation.tsx`): Ctrl+Z after
+ *     a flight that went wrong puts the camera back where it took off. A look alone makes none.
  *
  * PITFALLS
  *   - Camera values are STRINGS and never pass through `Number()`. Depth is kept as a string too:
@@ -27,6 +30,15 @@
  *     file mirrors the list to `localStorage['gmt.deepZoom.locations']`, dropping thumbnails if the
  *     quota is hit. Last week's `gmt.deepzoom.bookmarks.v1` rows are imported once, then removed.
  *   - Slot keys act only with the pointer free: a slip from W onto 1 at 1e-50 must not teleport.
+ *   - A FLIGHT'S ENTRY IS OPENED AND CLOSED AT ITS END, in one go, with the take-off view handed to
+ *     the provider's capture for that one call (`flightPending`). The history slice holds ONE open
+ *     bracket: a bracket kept open for the whole flight would be overwritten by any key that makes
+ *     its own entry in the air (detail, iterations), and its own close would then find nothing.
+ *     For the same reason no entry is made while another bracket is open (a slider held).
+ *   - Flights that follow one another within `FLIGHT_MERGE_MS`, with nothing else put on the undo
+ *     stack between them, are one entry: taps of W would otherwise fill the 50 undo steps.
+ *   - "Depth" saved with a location is the depth the app shows (`deep-zoom/depthNow.ts`: what is
+ *     looked at) since 2026-10-09; before that it was the nearest surface in any direction.
  */
 import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
@@ -38,6 +50,7 @@ import type { DzView } from './host/DeepZoomHost';
 import { LIGHT_TYPE_RENDERER_VALUES, lightTypeToRenderer } from './features/light';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
 import { formatDepth, validDepth } from './components/depthFormat';
+import { depthNow } from './depthNow';
 import { isFlying } from './navigationState';
 import type { DzColourSlice, DzFormulaSlice, DzLightSlice } from './storeTypes';
 
@@ -182,6 +195,49 @@ export function jumpTo(target: DzLocationState | DzView, opts: JumpOptions = {})
     return true;
 }
 
+// ── a flight is one undo step ────────────────────────────────────────────────────────────────────
+
+/** Flights closer together than this are one undo step. */
+export const FLIGHT_MERGE_MS = 1500;
+/** Where the flight in the air took off; null on the ground. */
+let flightFrom: { view: DzView; at: number } | null = null;
+/** Set for the one capture that opens a flight's entry: the "before" of that entry. */
+let flightPending: DzView | null = null;
+/** The last flight's entry on the undo stack, and when it landed. */
+let lastFlight: { entry: unknown; landedAt: number } | null = null;
+const sameCamera = (a: DzView, b: DzView): boolean => a.cam[0] === b.cam[0] && a.cam[1] === b.cam[1] && a.cam[2] === b.cam[2];
+
+/** The hands took off (the navigation's activity session began). */
+export function flightBegan(): void {
+    const host = getHost();
+    flightFrom = host ? { view: host.getView(), at: performance.now() } : null;
+}
+
+/** The hands landed. One undo entry when the camera moved; none for a look alone. */
+export function flightEnded(): void {
+    const from = flightFrom;
+    flightFrom = null;
+    const host = getHost();
+    if (!host || !from || sameCamera(from.view, host.getView())) return;
+    const store = useEngineStore.getState();
+    if (store.interactionSnapshot) return;                       // another bracket is open (see PITFALLS)
+    const stack = store.paramUndoStack;
+    if (lastFlight && stack[stack.length - 1] === lastFlight.entry && from.at - lastFlight.landedAt < FLIGHT_MERGE_MS) {
+        lastFlight.landedAt = performance.now();                 // the same flight, continued: its entry already holds the take-off
+        return;
+    }
+    flightPending = from.view;
+    try {
+        store.beginParamTransaction();
+    } finally {
+        flightPending = null;
+    }
+    jumpSeq++;
+    useEngineStore.getState().endParamTransaction();
+    const after = useEngineStore.getState().paramUndoStack;
+    lastFlight = { entry: after[after.length - 1], landedAt: performance.now() };
+}
+
 /** Remember the view the renderer started with, once. */
 export function rememberHome(view: DzView): void {
     if (!homeView) homeView = view;
@@ -203,7 +259,7 @@ export function jumpBack(): void {
 function captureLocation(): DzLocationState {
     const host = getHost();
     if (!host) throw new Error('No renderer is mounted: there is no view to save.');
-    const depth = host.telemetry().depth;
+    const depth = depthNow(host);
     return { view: host.getView(), look: captureLook(), depth: validDepth(depth) ? String(depth) : '' };
 }
 
@@ -320,7 +376,7 @@ export function installLocations(): void {
         captureThumbnail,
         // The default name is the depth with its mantissa: `6.40e-53`.
         suggestLabel: () => {
-            const depth = getHost()?.telemetry().depth;
+            const depth = depthNow();
             return validDepth(depth) ? formatDepth(depth) : undefined;
         },
         onReset: jumpHome,
@@ -341,9 +397,10 @@ export function installLocations(): void {
         },
     });
 
-    // A jump is one undo entry holding the exact view on both sides; flying makes none.
+    // A jump, and a flight that moved the camera, is one undo entry holding the exact view on both
+    // sides. `flightPending` is the take-off view, for the one capture that opens a flight's entry.
     registerHistoryProvider('dzView', {
-        capture: () => ({ seq: jumpSeq, view: getHost()?.getView() ?? null }),
+        capture: () => ({ seq: jumpSeq, view: flightPending ?? getHost()?.getView() ?? null }),
         restore: (snapshot) => {
             const view = (snapshot as { view: DzView | null } | null)?.view;
             if (view) getHost()?.setView(view);

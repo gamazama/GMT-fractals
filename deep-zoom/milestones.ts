@@ -1,12 +1,12 @@
 /**
  * deep-zoom/milestones.ts - one line the first time a depth is passed in a session.
  *
- * Driven by the telemetry store (8 samples a second), not by React: `startMilestones()` is called
- * once from main.tsx. A view that is already deep when the first sample arrives (a loaded scene,
+ * Driven by the depth the app shows (`deep-zoom/navigationState.ts`, 8 samples a second), not by
+ * React: `startMilestones()` is called once from main.tsx. A view that is already deep when the first sample arrives (a loaded scene,
  * a jump) marks everything above it as seen without a toast, so only a crossing made by
  * travelling says something. Names and numbers only.
  */
-import { subscribeTelemetry } from './host/telemetry';
+import { useDzNavigation } from './navigationState';
 import { showToast } from '../engine/store/toastStore';
 import { validDepth } from './components/depthFormat';
 
@@ -26,9 +26,9 @@ const TRAVEL_DECADES = 3;
 export function startMilestones(): () => void {
     const seen = new Set<number>();
     let last: number | null = null;
-    return subscribeTelemetry((t) => {
-        if (!t.live || !validDepth(t.depth)) { last = null; return; }
-        const depth = t.depth;
+    return useDzNavigation.subscribe((s) => {
+        if (!validDepth(s.depth)) { last = null; return; }
+        const depth = s.depth;
         const travelled = last !== null && Math.abs(Math.log10(last / depth)) <= TRAVEL_DECADES;
         for (const m of MILESTONES) {
             if (depth > m.depth || seen.has(m.depth)) continue;

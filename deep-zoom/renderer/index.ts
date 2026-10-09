@@ -223,6 +223,60 @@ export interface DzHostHandle {
     yawPitch(): { yaw: number; pitch: number };
     /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still; the reference orbit stays. */
     setYawPitch(yaw: number, pitch: number): void;
+    /** THE FREE DISTANCE ALONG A RAY (added 2026-10-09; grep the name in core.js): seven rays about
+     *  `axis` (a unit vector in world axes; null or absent = the view axis), marched on the CPU from
+     *  the camera as it is NOW to the solid as it is DRAWN. What a host's navigation flies by,
+     *  instead of the estimate at the camera (`rawDistance`), which is the nearest surface in any
+     *  direction and reads the true fractal rather than the drawn one. Draws nothing, moves nothing.
+     *  @invariant the vector carried with the orbit is the iterate's derivative along the ray; no ray
+     *  ends past the surface an independent referee finds, also next to the drawn surface where the
+     *  estimate at the camera reads many times the free distance; a kept bundle reads shorter by the
+     *  move and is marched again when the iteration count changes - proven by: npm run
+     *  check:deep-zoom-ray-probe ("jet: ...", "ray: no ray ends past ...", "drawn surface: ...",
+     *  "kept: ..." lines). Falsified 2026-10-09: the eight breaks in the check's header. */
+    sense(axis?: [number, number, number] | null, opt?: DzSenseOptions): DzSense;
+    /** One such ray on its own (a pick under the pointer: pass `tol: 0.005`). `kind` 'open': no
+     *  surface within the steps allowed or within 8 units; `t` is then how far it was followed. */
+    freeDistance(dir: [number, number, number], opt?: { tol?: number; maxSteps?: number }): { t: number; kind: 'hit' | 'open' | 'inside' };
+    /** The distance estimate at the camera moved by `offset` (world units): the nearest surface in
+     *  any direction as the estimate reads it there; 0 inside the drawn solid. `rawDistance()` is
+     *  this at no offset. One orbit on the CPU. A comfort distance (it under-reads on ordinary
+     *  ground and can over-read beside the drawn surface), not a limit to trust a move to.
+     *  (Added 2026-10-09.) */
+    estimateAt(offset: [number, number, number]): number;
+}
+
+/** What a bundle of rays read (`DzHostHandle.sense`). Distances are in world units from the camera. */
+export interface DzSense {
+    /** The nearest of the seven rays: what one frame's move along the axis must stay inside. */
+    near: number;
+    /** The second nearest: what the speed follows. One stray ray, or a hole one ray wide, cannot set it. */
+    second: number;
+    /** How many of the seven met the drawn solid. A ray that did not is "open": its distance is how
+     *  far it was followed, a LOWER bound. Under 2, `second` is not a distance to anything. */
+    hits: number;
+    /** How many are open because they ran out of steps short of the far limit: UNFINISHED rays. While
+     *  this is above 0, `near` and `second` may be lower bounds; asked again with the camera where it
+     *  stood, those rays go on from where they stopped. (An open ray past the far limit is finished:
+     *  nothing lies that way.) */
+    open: number;
+    /** The camera itself is inside the drawn solid (every distance is then 0). */
+    inside: boolean;
+    /** False: nothing was marched; the answer is the kept bundle, shortened by the camera's move. */
+    marched: boolean;
+}
+
+export interface DzSenseOptions {
+    /** Keep the bundle under this name between calls: asked again for the same axis with the camera
+     *  moved less than `reuse` of its nearest ray, it is not marched again; with the camera not
+     *  moved at all, rays that ran out of steps go on from where they stopped. */
+    slot?: string;
+    /** Default 0.05. 0: always march. */
+    reuse?: number;
+    /** A ray ends where the estimate is under this share of its distance. Default 0.05. */
+    tol?: number;
+    /** Steps a ray may take in one call. Default 64. */
+    maxSteps?: number;
 }
 
 /** `api`: every handle the page published as `window.__name`. Only the members a shell is likely

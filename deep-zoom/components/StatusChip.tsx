@@ -23,6 +23,7 @@ import React from 'react';
 import { useDzTelemetry } from '../host/telemetry';
 import { useHost } from '../host/current';
 import { formatDepth } from './depthFormat';
+import { useDzNavigation } from '../navigationState';
 
 /**
  * A depth as mantissa with two decimals and a bare exponent: `6.4e-53` gives `6.40e-53`, `1.5`
@@ -37,7 +38,7 @@ const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f3
 export const StatusChip: React.FC = () => {
     const live = useDzTelemetry((t) => t.live);
     const mode = useDzTelemetry((t) => t.mode);
-    const depth = useDzTelemetry((t) => formatDepth(t.depth));
+    const depth = useDzNavigation((s) => formatDepth(s.depth));   // the depth the app shows: what is looked at
     const iters = useDzTelemetry((t) => t.iters);
     // The ray march's shader: the host's `compile` event with what 'variant' (it is not telemetry - the module's
     // sample keeps the frozen page's keys). It starts to build seconds after the host mounts, so nothing is missed.

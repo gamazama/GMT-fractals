@@ -10,8 +10,12 @@
  *   - No target below 1e-77 (the floor) is ever sent.
  *   - `host.diveTo` does not say how it ended (arrival, a fly key, the time limit): the depth is
  *     read afterwards and the toast says "Arrived" only within a decade of the target.
- *   - A dive flies straight along the view. From a view that grazes the surface it closes slowly
- *     and can end on the host's time limit well short of the target.
+ *   - A dive flies straight along the view, and closes on the nearest of the rays about the view
+ *     axis (`aheadOf` in host/moduleHost.ts). The depth read here is the depth the app shows (the
+ *     second nearest of the same rays, `deep-zoom/depthNow.ts`), so "Arrived at" can read a
+ *     little above the target. With nothing ahead at all the dive ends at once.
+ *   - From a view that grazes the surface it closes slowly and can end on the host's time limit
+ *     well short of the target.
  *   - The host can be replaced while a dive is in flight (a context loss): the result is read from
  *     whichever host is mounted when the promise resolves.
  */
@@ -19,6 +23,7 @@ import { create } from 'zustand';
 import { getHost } from './host/current';
 import { showToast } from '../engine/store/toastStore';
 import { FLOOR_DEPTH, formatDepth, validDepth } from './components/depthFormat';
+import { depthNow } from './depthNow';
 
 export interface DiveInFlight {
     from: number;
@@ -33,7 +38,7 @@ export async function diveTo(target: number): Promise<void> {
     const host = getHost();
     if (!host || !(target > 0)) return;
     const to = Math.max(FLOOR_DEPTH, target);
-    const from = host.telemetry().depth;
+    const from = depthNow(host);
     if (!validDepth(from)) return;
     if (from <= to) {
         showToast(`Already at ${formatDepth(from)}`, 'info');
@@ -46,7 +51,7 @@ export async function diveTo(target: number): Promise<void> {
         await host.diveTo(to);
     } finally {
         if (useDive.getState().dive === mine) useDive.setState({ dive: null });
-        const depth = getHost()?.telemetry().depth;
+        const depth = depthNow();
         if (validDepth(depth)) showToast(`${depth <= to * 10 ? 'Arrived at' : 'Stopped at'} ${formatDepth(depth)}`, 'info');
     }
 }

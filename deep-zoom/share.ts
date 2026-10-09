@@ -25,6 +25,7 @@ import { jumpTo } from './locations';
 import type { DzLocation, DzLocationState } from './locations';
 import { locationToText, parseLocationText } from './locationParse';
 import { validDepth } from './components/depthFormat';
+import { depthNow } from './depthNow';
 
 /**
  * The picture as a canvas a PNG or JPG can be made from: the renderer reads its own drawing
@@ -57,7 +58,7 @@ function currentLocation(): DzLocationState | null {
     const host = getHost();
     if (!host) return null;
     const s = useEngineStore.getState();
-    const depth = host.telemetry().depth;
+    const depth = depthNow(host);
     return {
         view: host.getView(),
         look: { dzFormula: { ...s.dzFormula }, dzLight: { ...s.dzLight }, dzColour: { ...s.dzColour }, detail: s.dzQuality.detail },

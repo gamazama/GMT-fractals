@@ -5,8 +5,9 @@
  * `viewportConfig` (type `dom`), so the engine's `<FeatureOverlays />` mounts it - it is not
  * mounted by hand. The column runs from 1e0 at the top to the 1e-77 floor at the bottom, with a
  * tick every ten decades, the two fixed marks of the range (1e-50 checked,
- * 1e-77 floor) and a live marker at the current depth. Below 1e-50 the column is fainter; the
- * last three decades are amber. A click dives to that depth.
+ * 1e-77 floor) and a live marker at the current depth (the depth the app shows: what is looked
+ * at, `deep-zoom/navigationState.ts`). Below 1e-50 the column is fainter; the last three decades
+ * are amber. A click dives to that depth.
  *
  * Shown only when Overlays is All (`dzInspect.overlays`). The overlay box ignores the pointer;
  * the column itself takes it. Stacking comes from the overlay host's tier, none set here.
@@ -17,6 +18,7 @@ import { useEngineStore } from '../../store/engineStore';
 import { useDzTelemetry } from '../host/telemetry';
 import { overlaysFromIndex } from '../features/inspect';
 import { diveTo } from '../diveControl';
+import { useDzNavigation } from '../navigationState';
 import { FLOOR_EXP, RANGE_MARKS, depthAtFraction, formatDepthCompact, scaleFraction, validDepth } from './depthFormat';
 
 const TICKS = [10, 20, 30, 40, 50, 60, 70];
@@ -25,8 +27,8 @@ const top = (exp: number): string => `${(exp / FLOOR_EXP) * 100}%`;
 export const DepthScale: React.FC = () => {
     const live = useDzTelemetry((t) => t.live);
     // Rounded to a thousandth of the column: the marker moves, React does not re-render per sample.
-    const position = useDzTelemetry((t) => (validDepth(t.depth) ? Math.round(scaleFraction(t.depth) * 1000) / 1000 : -1));
-    const label = useDzTelemetry((t) => formatDepthCompact(t.depth));
+    const position = useDzNavigation((s) => (validDepth(s.depth) ? Math.round(scaleFraction(s.depth) * 1000) / 1000 : -1));
+    const label = useDzNavigation((s) => formatDepthCompact(s.depth));
     const overlays = useEngineStore((s) => overlaysFromIndex(s.dzInspect?.overlays));
     if (!live || overlays !== 'all') return null;
 

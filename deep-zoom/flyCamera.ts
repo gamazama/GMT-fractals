@@ -14,6 +14,14 @@
  *          `useNavigationInput`, the fly speed, the distance to the surface, and the sink.
  *     out  the sink is called with the move in the RENDERER'S world axes and units; the return
  *          value is the new `{ yaw, pitch }` when the frame turned the camera, else null.
+ *   TWO SPEED RULES, chosen by the caller per frame:
+ *     `frame.sense` given (the rule since 2026-10-09)  the integrator is run for a distance of 1,
+ *          which gives the move's DIRECTION and its length per unit of pace; `sense(direction)` is
+ *          then asked once and answers the pace (eased by its owner, `deep-zoom/flyPace.ts`) and the
+ *          most this frame may move (a share of the nearest ray ahead of the move).
+ *     `frame.sense` absent (the rule before it, kept to compare in flight)  the speed follows
+ *          `frame.distance`, the estimate at the camera, eased by the integrator; one frame is cut
+ *          to `DZ_NAV_MAX_STRIDE` of it.
  *   The object is rebuilt from yaw and pitch every frame, so a jump, a recalled place or a preview
  *   that turned the camera needs no resync here. Only the integrator's own velocities persist.
  *
@@ -45,6 +53,13 @@
  *     the surface. The direction is kept; only the length is cut. At the default speed the limit
  *     never bites (3.6 x 4 x 0.05 = 0.72).
  *   - The pitch is not clamped here. The renderer clamps it at +-1.55 in `setYawPitch`.
+ *   - UNDER THE NEW RULE NOTHING IS SENT FOR A PACE OR A LIMIT THAT IS NOT A POSITIVE NUMBER: no
+ *     reading yet, the camera inside the solid (the nearest ray is 0), or a frame with no time.
+ *     `sense` is not asked on a frame without a move.
+ *   - EACH RULE HAS AN INTEGRATOR OF ITS OWN. The integrator eases the distance it is handed when
+ *     it rises (1.2 a second, on the distance itself). The new rule always hands it 1, so that
+ *     ease never acts - but only in an integrator the old rule has not left standing at 1e-30:
+ *     with one shared, the first frames after switching rules would crawl up from there.
  *
  * @invariant W, D and Space move along the renderer's own forward, right and up for any yaw and
  *   pitch; a drag to the right raises the yaw and a drag up raises the pitch, each leaving the
@@ -52,6 +67,11 @@
  *   moves a share of 1e-40; no frame moves more than 0.8 of the distance - proven by: npm run
  *   check:deep-zoom-fly-camera ("basis: ...", "turn: ...", "deep: ...", "stride: ..." lines).
  *   Falsified 2026-10-08: see the check's header.
+ * @invariant With `sense` given, a frame moves `pace x speed x delta` (four times with Shift) along
+ *   the same direction the old rule moves in, never more than the limit `sense` answers, `sense` is
+ *   asked exactly once and only on a frame that moves, and a pace or a limit of 0 or NaN moves
+ *   nothing - proven by: npm run check:deep-zoom-fly-camera ("sense: ..." lines). Falsified
+ *   2026-10-09: see the check's header.
  */
 import * as THREE from 'three';
 import { FlyIntegrator } from '../engine/plugins/navigation/FlyIntegrator';
@@ -71,8 +91,15 @@ export interface FlyCameraFrame {
     inputs: FlyInputs;
     /** Surface-distances per second. */
     speed: number;
-    /** The distance to the surface this frame, unsmoothed (the integrator eases it itself). */
+    /** The distance to the surface this frame, unsmoothed (the integrator eases it itself). The
+     *  speed follows it only when `sense` is absent. */
     distance: number;
+    /**
+     * The speed rule since 2026-10-09 (see THE SEAM). Asked once, in a frame that moves, with the
+     * move's unit direction in the renderer's world axes. `pace`: the distance the speed is
+     * multiplied by. `limit`: the most this frame may move, in world units.
+     */
+    sense?: (direction: [number, number, number]) => { pace: number; limit: number };
     /** Receives the move, in the renderer's world axes and units. */
     translate: DisplacementSink;
 }
@@ -86,6 +113,7 @@ export interface FlyCamera {
 
 export function createFlyCamera(): FlyCamera {
     const integrator = new FlyIntegrator();
+    const paced = new FlyIntegrator();                 // the new rule's own (see PITFALLS)
     const body = new THREE.Object3D();
     const euler = new THREE.Euler();
     const before = new THREE.Quaternion();
@@ -108,33 +136,41 @@ export function createFlyCamera(): FlyCamera {
             move.down = held.down || held.rollLeft;
             move.boost = held.boost; move.precise = held.precise;
 
-            // The stride limit (see PITFALLS): the same direction, no longer than 0.8 of the distance.
-            const limit = DZ_NAV_MAX_STRIDE * frame.distance;
-            const translate: DisplacementSink = (dx, dy, dz) => {
-                const length = Math.hypot(dx, dy, dz);
-                const k = length > limit && length > 0 ? limit / length : 1;
-                frame.translate(dx * k, dy * k, dz * k);
-            };
-
-            integrator.update(
-                body,
-                Math.min(frame.delta, DZ_NAV_MAX_DELTA),
-                { ...frame.inputs, move },
-                {
-                    baseSpeed: frame.speed,
-                    distEstimate: frame.distance,
-                    autoSlow: true,
-                    translate,
-                    minSpeed: 0,
-                    boostMinDistance: 0,
-                },
-            );
+            const delta = Math.min(frame.delta, DZ_NAV_MAX_DELTA);
+            const flying = { ...frame.inputs, move };
+            if (frame.sense) {
+                // The integrator for a distance of 1: the move's direction, and its length per unit of pace.
+                let perPace: [number, number, number] | null = null;
+                paced.update(body, delta, flying, {
+                    baseSpeed: frame.speed, distEstimate: 1, autoSlow: true, minSpeed: 0, boostMinDistance: 0,
+                    translate: (dx, dy, dz) => { perPace = [dx, dy, dz]; },
+                });
+                const per = perPace as [number, number, number] | null;   // assigned in the sink: the compiler cannot see through the closure
+                const unit = per ? Math.hypot(per[0], per[1], per[2]) : 0;
+                if (per && unit > 0) {
+                    const direction: [number, number, number] = [per[0] / unit, per[1] / unit, per[2] / unit];
+                    const { pace, limit } = frame.sense(direction);
+                    const length = Math.min(unit * pace, limit);          // NaN (no reading yet) fails the test below
+                    if (length > 0) frame.translate(direction[0] * length, direction[1] * length, direction[2] * length);
+                }
+            } else {
+                // The stride limit (see PITFALLS): the same direction, no longer than 0.8 of the distance.
+                const limit = DZ_NAV_MAX_STRIDE * frame.distance;
+                integrator.update(body, delta, flying, {
+                    baseSpeed: frame.speed, distEstimate: frame.distance, autoSlow: true, minSpeed: 0, boostMinDistance: 0,
+                    translate: (dx, dy, dz) => {
+                        const length = Math.hypot(dx, dy, dz);
+                        const k = length > limit && length > 0 ? limit / length : 1;
+                        frame.translate(dx * k, dy * k, dz * k);
+                    },
+                });
+            }
 
             if (body.quaternion.equals(before)) return null;
             turn.copy(before).invert().multiply(body.quaternion);
             euler.setFromQuaternion(turn, 'XYZ');
             return { yaw: frame.yaw - euler.y, pitch: frame.pitch + euler.x };
         },
-        reset: () => integrator.reset(),
+        reset: () => { integrator.reset(); paced.reset(); },
     };
 }

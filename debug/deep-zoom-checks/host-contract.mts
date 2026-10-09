@@ -98,7 +98,7 @@ const BLUEPRINT_MEMBERS = [
     'setParam', 'setParams', 'getParams', 'bootParams',
     'telemetry', 'onTelemetry',
     'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail', 'snapshot',
-    'setInputOwner', 'rawDistance', 'yawPitch', 'setYawPitch',
+    'setInputOwner', 'rawDistance', 'yawPitch', 'setYawPitch', 'sense', 'freeDistance', 'estimateAt',
     'setGradientRamp',
     'setRecording', 'takePath', 'smoothPath', 'seekPath', 'play', 'stopPlay',
     'renderFramePixels', 'renderFrameBlob', 'exportStill', 'cancel',
@@ -107,7 +107,7 @@ const BLUEPRINT_MEMBERS = [
     'on',
 ];
 /** BLUEPRINT section 7's event names, less `captureChanged` (gone at N5). */
-const BLUEPRINT_EVENTS = ['paramChanged', 'recordingChanged', 'compile', 'progress', 'contextLost', 'error'];
+const BLUEPRINT_EVENTS = ['paramChanged', 'recordingChanged', 'compile', 'progress', 'contextLost', 'error', 'viewSet'];
 /** The contract may not spell these, anywhere, comments included. */
 const FORBIDDEN_IDENTIFIERS = ['Window', 'Document', 'DeepZoomInstance'];
 /** The two DOM types the contract may name (BLUEPRINT section 7). */

@@ -109,7 +109,7 @@ export const stage: DzStage = {
         {
             name: 'a starter card jumps to its start view and dives; Home and Backspace jump back',
             owner: 'S3-3',
-            falsified: '2026-10-08: `snapDist = true` removed from the renderer\'s setView (deep-zoom/renderer/core.js) -> red, "the depth reads the home view at once" false (4.74e-1 after 0.4 s).',
+            falsified: '2026-10-08: `snapDist = true` removed from the renderer\'s setView (deep-zoom/renderer/core.js) -> red, "the depth reads the home view at once" false (4.74e-1 after 0.4 s). 2026-10-09 (the dive closes on the rays ahead since then, ADR-0134): the dive made to read the estimate at the camera again (`depth: () => dz.telemetry().depth` in deep-zoom/host/moduleHost.ts) -> red, "the dive ended on its target" false: 7.432e-35 ahead after 17.2 s.',
             timeoutMs: 90_000,
             async run(ctx) {
                 await fresh(ctx);
@@ -118,8 +118,9 @@ export const stage: DzStage = {
                 ctx.check((await ctx.until("!!document.querySelector('[data-dz-diving]')", 5000)) >= 0, 'the card started a dive');
                 ctx.check(!same(await cam(ctx), home), 'from its own start view, not the home view');
                 const waited = await ctx.until("!document.querySelector('[data-dz-diving]')", 60_000, 200);
-                const depth = await ctx.host<number>('telemetry().depth');
-                ctx.check(waited >= 0 && depth <= 1e-29 && depth >= 1e-36, 'the dive ended at or under 1e-30, and not through the surface (' + depth.toExponential(2) + ' after ' + (waited / 1000).toFixed(1) + ' s)');
+                // The nearest ray ahead, which is what a dive closes on (see the dive step of stage 2).
+                const ahead = await ctx.host<{ near: number; inside: boolean }>('sense(null)');
+                ctx.check(waited >= 0 && !ahead.inside && ahead.near <= 1.001e-30 && ahead.near >= 0.5e-30, 'the dive ended on its target, 1e-30, and not through the surface (' + ahead.near.toExponential(3) + ' ahead after ' + (waited / 1000).toFixed(1) + ' s)');
                 const deep = await cam(ctx);
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('Home');

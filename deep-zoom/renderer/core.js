@@ -2852,6 +2852,141 @@ function pertMarchJS(O, rd, maxIter, pixAng){
   return {t, steps, hit};
 }
 
+/* ════════ THE FREE DISTANCE ALONG A RAY (2026-10-09) — what a host's navigation flies by ════════
+   The fly speed used to follow the distance estimate at the camera itself (grep "distance probe"). That number is
+   wrong for flying in two ways, both measured on the kept places (the study and its logs: H:/tmp/dz-nav-study):
+     - it is the nearest surface in ANY direction. At the power-4 "3e-76" view that surface is behind the camera and
+       everything in the picture is 18 to 22 decades farther, so the speed stays a million times too slow for the
+       scene after 30 s of flying towards it;
+     - it is the distance to the true fractal, not to the solid that is DRAWN (limited iterations). Next to the drawn
+       surface it can read 20 times the free distance: at the power-2 5e-20 place W at the default speed put the
+       camera inside the solid in 4 s.
+   So navigation asks a different question: how far is it free ALONG A RAY, from the camera as it is now, to the solid
+   as it is drawn. The answer is a march on the CPU in f64, on the same reference orbit and kernel maths as the
+   referee above:
+     step  half of THE RAY ESTIMATE (grep it): 0.5 r ln r / |J rd|, the escaping iterate's speed along the ray, carried
+           with the orbit as one vector (pertOrbitJetJS) - and never more than 8 scalar estimates. The study measured
+           it safe at a whole estimate; a scalar-estimate step at 0.3 once reached 0.82 of the free distance.
+     end   the scalar estimate under tol x t (a hit, to a share tol of its distance), or the ray estimate under an
+           eighth of that (a ray creeping along a surface); or a sample INSIDE the drawn solid - the last step is then
+           halved back onto the boundary, so the answer is the drawn surface and not the estimate's idea of it; or
+           SENSE_FAR, or out of steps: "open", and t is then how far the ray was followed - a LOWER bound.
+   Rays come as a BUNDLE about an axis (the view axis: what is looked at; a move's direction: what lies ahead of it):
+   the axis and six rays SENSE_ANGLE off it. "near" (the nearest) is what one frame's move must stay inside; "second"
+   (the second nearest) is what the speed follows - one stray ray, or a hole one ray wide, cannot set it.
+   A bundle is KEPT per slot: asked again for the same axis with the camera moved less than a twentieth of its nearest
+   ray, it is not marched again - every ray is taken as shorter by the whole distance moved, which can only under-read.
+   A ray has a step budget a call (64): one that runs out is "open" at a lower bound, and goes on from there the next
+   time the bundle is asked for with the camera where it stood. (A camera hugging a wall and looking away needs about
+   300 steps a ray: five asks, not one long one.)
+   Nothing here draws, reads the GPU or changes the camera. Proof: npm run check:deep-zoom-ray-probe (node). */
+const SENSE_ANGLE = 0.0735;                      // radians (4.2 degrees): how far off the axis the six outer rays stand
+const SENSE_FAR = 8;                             // a ray this far from the camera has left the bulb: "open"
+/* the triplex power's derivative at the full point z, applied to the direction j, plus the + c term's own (v) */
+function pushJetJS(z, j, v){
+  const NP=nPower, x=z[0], y=z[1], zz=z[2];
+  const rho2=Math.max(x*x+y*y,1e-300), rho=Math.sqrt(rho2), r2=rho2+zz*zz, r=Math.sqrt(r2);
+  const th=Math.acos(Math.max(-1,Math.min(1,zz/r))), ph=Math.atan2(y,x);
+  const rn1=Math.pow(r,NP-1), rn=rn1*r;
+  const a=NP*th+phaseTheta, b=NP*ph+phasePhi, sa=Math.sin(a), ca=Math.cos(a), sb=Math.sin(b), cb=Math.cos(b);
+  const rd=(x*j[0]+y*j[1]+zz*j[2])/r, thd=(zz*(x*j[0]+y*j[1])/rho-rho*j[2])/r2, phd=(x*j[1]-y*j[0])/rho2;
+  const A=NP*rn1*rd, B=rn*NP*thd, C=rn*NP*phd*sa;
+  return [A*sa*cb+B*ca*cb-C*sb+v[0], A*sa*sb+B*ca*sb+C*cb+v[1], A*ca-B*sa+v[2]];
+}
+/* pertOrbitJS with one vector more: jet = d z_k / d t for the point dc + t rd (z_0 = c, so it starts as rd).
+   E is THE RAY ESTIMATE at the iterate the orbit ended on. fixed: exactly maxIter iterations, no escape test. */
+function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
+  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d);
+  for(let k=0;k<maxIter;k++){
+    const V=O.Vf[m], R=O.Rk[m];
+    const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
+    const u=Dr/R, Rp=Math.pow(R,nPower-1);
+    const Dp=Rp*powm1N(u,nPower-1);
+    Ddr=nPower*(Dp*O.DRk[m]+(Rp+Dp)*Ddr);
+    jet=pushJetJS(z,jet,rd);
+    d=add3(stableDeltaJS(V,d),dc);
+    m++;
+    z=add3(O.Vf[m],d);
+    it=k+1;
+    const z2=dot3(z,z);
+    if(!fixed && z2>4){ escaped=true; break; }
+    if(z2<dot3(d,d) || m>=O.len-1){ d=sub3(z,O.Vf[0]); Ddr=(O.DRk[m]-1)+Ddr; m=0; }
+  }
+  const r=len3(z), g=0.5*r*Math.log(Math.max(r,1e-300)), speed=len3(jet), de=g/(O.DRk[m]+Ddr);
+  return { de, escaped, r, it, z, jet, E: speed>0 ? g/speed : de };
+}
+/* one ray from the camera: { t, prev, kind, steps }, kind 1 = met the drawn solid at t, 0 = open (t is a lower bound;
+   prev is the last sample known to be outside), 2 = the camera itself is inside the drawn solid (t = 0).
+   t0 / prev0: go on from where an open ray stopped (the camera not having moved since). */
+function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
+  let t=t0>0?t0:0, tPrev=prev0>0?prev0:0, steps=0;
+  for(; steps<maxSteps; steps++){
+    const o=pertOrbitJetJS(O, scl3(rd,t), rd, maxIter);
+    if(!o.escaped || !(o.de>0)){
+      if(t===0) return { t:0, prev:0, kind:2, steps };
+      let lo=tPrev, hi=t;                           // lo: the last sample outside; hi: this one, inside
+      for(let b=0; b<40 && (hi-lo)>tol*0.25*hi; b++){
+        const tm=0.5*(lo+hi), om=pertOrbitJS(O, scl3(rd,tm), maxIter); steps++;
+        if(!om.escaped || !(om.de>0)) hi=tm; else lo=tm;
+      }
+      return { t:lo, prev:lo, kind:1, steps };
+    }
+    if(t>0 && (o.de<tol*t || o.E<tol*0.125*t)) return { t, prev:t, kind:1, steps };
+    if(t>SENSE_FAR) return { t, prev:t, kind:0, steps };
+    tPrev=t;
+    t+=Math.max(Math.min(o.E,8*o.de)*0.5, t*1e-7);
+  }
+  return { t, prev:tPrev, kind:0, steps };
+}
+/* the reference orbit a probe marches on: the frame's own while it stands at the camera, else one built here (the
+   camera was moved since the last frame, the deep shader is still compiling, or the iteration count changed) */
+let senseO = null, senseKey = null;
+function probeOrbit(){
+  if (deepActive && curOrbit && !orbitDirty) return curOrbit;
+  const key = [camHP[0], camHP[1], camHP[2], cam.iters, nPower, phaseTheta, phasePhi];
+  if (!senseO || !senseKey || key.some((v, i) => v !== senseKey[i])) { senseO = buildRefOrbit(camHP, cam.iters + 2); senseKey = key; }
+  return senseO;
+}
+const unit3 = (v) => { const l = len3(v) || 1; return [v[0]/l, v[1]/l, v[2]/l]; };
+const cross3 = (a, b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+/* the axis and six directions SENSE_ANGLE off it, evenly around */
+function senseDirs(axis){
+  const e1 = unit3(cross3(axis, Math.abs(axis[1]) < 0.9 ? [0,1,0] : [1,0,0])), e2 = cross3(axis, e1);
+  const c = Math.cos(SENSE_ANGLE), s = Math.sin(SENSE_ANGLE), out = [axis];
+  for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3, ca = Math.cos(a) * s, sa = Math.sin(a) * s;
+    out.push(unit3([c*axis[0]+ca*e1[0]+sa*e2[0], c*axis[1]+ca*e1[1]+sa*e2[1], c*axis[2]+ca*e1[2]+sa*e2[2]])); }
+  return out;
+}
+const senseKept = {};                            // slot -> the last bundle really marched, and where the camera stood
+/* open: rays that ran out of steps short of SENSE_FAR - their distance is a lower bound, and they go on when asked again */
+const senseRead = (rays) => { const ts = rays.map(r => r.t).sort((a, b) => a - b);
+  return { near: ts[0], second: ts[1], hits: rays.filter(r => r.kind === 1).length, open: rays.filter(r => r.kind === 0 && r.t <= SENSE_FAR).length,
+    inside: rays.some(r => r.kind === 2) }; };
+function senseBundle(axis, opt){
+  const o = opt || {}, tol = o.tol > 0 ? +o.tol : 0.05, maxSteps = o.maxSteps > 0 ? (o.maxSteps|0) : 64, reuse = o.reuse >= 0 ? +o.reuse : 0.05;
+  const ax = axis ? unit3(axis) : basis().fwd, slot = typeof o.slot === 'string' ? o.slot : '', k = slot ? senseKept[slot] : null;
+  if (k && reuse > 0 && k.iters === cam.iters && k.power === nPower && k.pt === phaseTheta && k.pp === phasePhi
+      && Math.abs(k.ax[0]-ax[0]) + Math.abs(k.ax[1]-ax[1]) + Math.abs(k.ax[2]-ax[2]) < 1e-9) {
+    const moved = Math.hypot(hp.toNum(camHP[0]-k.cam[0]), hp.toNum(camHP[1]-k.cam[1]), hp.toNum(camHP[2]-k.cam[2]));
+    if (moved === 0) {
+      /* the camera stands where it stood: a ray that ran out of steps goes on from where it stopped, so a still
+         view is read to the end however many decades away it is (the power-4 place needs about 300 steps a ray) */
+      const open = k.rays.filter(r => r.kind === 0 && r.t <= SENSE_FAR);
+      if (open.length === 0) return { near: k.near, second: k.second, hits: k.hits, open: 0, inside: k.inside, marched: false };
+      const O = probeOrbit();
+      for (const r of open) { const g = rayFreeJS(O, r.rd, cam.iters, tol, maxSteps, r.t, r.prev); r.t = g.t; r.prev = g.prev; r.kind = g.kind; }
+      Object.assign(k, senseRead(k.rays));
+      return { near: k.near, second: k.second, hits: k.hits, open: k.open, inside: k.inside, marched: true };
+    }
+    if (moved <= reuse * k.near) return { near: k.near - moved, second: k.second - moved, hits: k.hits, open: k.open, inside: k.inside, marched: false };
+  }
+  const O = probeOrbit();
+  const rays = senseDirs(ax).map(rd => { const g = rayFreeJS(O, rd, cam.iters, tol, maxSteps); return { rd, t: g.t, prev: g.prev, kind: g.kind }; });
+  const res = senseRead(rays);
+  if (slot) senseKept[slot] = { ...res, rays, ax, cam: camHP.slice(), iters: cam.iters, power: nPower, pt: phaseTheta, pp: phasePhi };   // res carries near, second, hits, open, inside
+  return { ...res, marched: true };
+}
+
 /* probe FBO: 1×1 RGBA32F readback of the GPU center-ray march */
 const probeTex = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, probeTex);
@@ -4689,6 +4824,17 @@ api.dz = {
   rawDistance: () => lastRawDist,              // unsmoothed: a host that eases it itself must not ease twice
   yawPitch: () => ({ yaw: cam.yaw, pitch: cam.pitch }),
   setYawPitch: (yaw, pitch) => { cam.yaw = +yaw; cam.pitch = Math.max(-1.55, Math.min(1.55, +pitch)); accumReset = true; },
+  /* what a host's navigation flies by (grep THE FREE DISTANCE ALONG A RAY): a bundle of seven rays about `axis`
+     (a unit vector in world axes; null = the view axis), and one ray on its own (a pick: opt.tol 0.005) */
+  sense: (axis, opt) => senseBundle(axis, opt),
+  freeDistance: (dir, opt) => { const o = opt || {}, r = rayFreeJS(probeOrbit(), unit3(dir), cam.iters, o.tol > 0 ? +o.tol : 0.05, o.maxSteps > 0 ? (o.maxSteps|0) : 64);
+    return { t: r.t, kind: r.kind === 1 ? 'hit' : r.kind === 2 ? 'inside' : 'open' }; },
+  /* the distance estimate at the camera moved by `offset` (world units): the nearest surface in ANY direction as the
+     estimate reads it there (the number rawDistance is at no offset); 0 inside the drawn solid. One orbit on the CPU.
+     What a host keeps an orbiting camera's clearance by: a ray says what lies along a move, this says what lies around
+     where the move ends. It under-reads the true clearance by 1.4 to 3.6 times on ordinary ground and can over-read
+     next to the drawn surface (see the block above), so it is a comfort distance, never the thing that stops a move. */
+  estimateAt: (offset) => { const o = pertOrbitJS(probeOrbit(), [+offset[0], +offset[1], +offset[2]], cam.iters); return o.escaped && o.de > 0 ? o.de : 0; },
   getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, iters: cam.iters, power: nPower,
     phase: [phaseTheta, phasePhi], light: lightMode, falloff: falloffMul, color: colorMode,
     cscale: colorScale, surf: surfMul }),

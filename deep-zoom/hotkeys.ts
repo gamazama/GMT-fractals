@@ -12,11 +12,16 @@
  * `B` is registered twice (`b` and `Shift+b`): Shift is held for speed while flying, and to the
  * dispatcher `Shift+B` is a different key from `B`.
  *
+ * `Tab` switches the camera mode, Fly and Orbit: GMT's key, writing GMT's store field
+ * (`cameraMode`), which the navigation reads every frame and the timeline's Space binding tests.
+ *
  * Slot digits (1-9 recall, Ctrl+1-9 save) are the state library's own, installed in locations.ts.
  * Not here yet: record (M) and still export (X) arrive with the Flight tab; `/` with Help.
  */
 import { shortcuts } from '../engine/plugins/Shortcuts';
 import { useEngineStore } from '../store/engineStore';
+import { showToast } from '../engine/store/toastStore';
+import { DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf } from './navigationState';
 import { jumpBack, jumpHome, saveLocationHere } from './locations';
 import { stopDive, useDive } from './diveControl';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
@@ -49,6 +54,15 @@ const nextColour = (): void => {
 const nextLightType = (): void => store().setDzLight({ lightType: (store().dzLight.lightType + 1) % LIGHT_TYPE_OPTIONS.length });
 const nextOverlays = (): void => store().setDzInspect({ overlays: (store().dzInspect.overlays + 1) % OVERLAYS_OPTIONS.length });
 const toggleAdvancedMode = (): void => store().setAdvancedMode(!store().advancedMode);
+/** Fly <-> Orbit: GMT's own key and its own store field (grep `gmt.toggleCameraMode` in
+ *  app-gmt/main.tsx). What each mode's hands do is in the header of deep-zoom/DeepZoomNavigation.tsx. */
+const toggleCameraMode = (): void => {
+    const next = cameraModeOf(store()) === DZ_MODE_ORBIT ? DZ_MODE_FLY : DZ_MODE_ORBIT;
+    useEngineStore.setState({ cameraMode: next } as Partial<ReturnType<typeof useEngineStore.getState>>);
+    showToast(next === DZ_MODE_ORBIT
+        ? 'Orbit: drag turns about the point under the pointer, the wheel or a middle drag flies to it, right drag moves it. Tab: Fly'
+        : 'Fly: W A S D, drag to look, the wheel sets the speed. Tab: Orbit', 'info', 4000);
+};
 const focusDiveField = (): void => {
     const field = document.querySelector<HTMLInputElement>('[data-dz-dive-exponent]');
     field?.focus();
@@ -82,4 +96,5 @@ export function registerDeepZoomHotkeys(): void {
     // GMT's own key for it (grep `gmt.toggleAdvancedMode` in app-gmt/main.tsx). The same flag has
     // a row in Settings (deep-zoom/settings.ts): a key alone is a switch nobody can find.
     add('advanced-mode', '`', toggleAdvancedMode, 'Advanced mode on / off (shows the advanced rows of each tab)', 'View');
+    add('camera-mode', 'Tab', toggleCameraMode, 'Camera mode: Fly / Orbit', 'View');
 }

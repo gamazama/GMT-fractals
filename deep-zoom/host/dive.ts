@@ -8,8 +8,14 @@
  *   70 % of the distance estimate in one frame; in deep mode that estimate comes from a reference
  *   orbit with a bailout of 2 and can be well over the true distance, so a dive from a starter view
  *   overshot by two decades or ran through the surface (depth reads 0). Here every frame moves a
- *   small share (at most a fifth) of the CURRENT estimate, so the approach is exponential and
+ *   small share (at most a fifth) of the CURRENT distance, so the approach is exponential and
  *   cannot jump.
+ *   WHICH DISTANCE (2026-10-09): the free distance AHEAD - the nearest of seven rays about the view
+ *   axis, marched to the solid as it is drawn (`dz.sense` in the module; `aheadOf` in
+ *   moduleHost.ts). Until then it was the module's estimate at the camera, which is the nearest
+ *   surface in any direction and reads the true fractal: a dive ended decades under its target
+ *   (traced 2026-10-08, 1.1e-17 to 1e-30: 2.3e-29 -> 1.8e-34 across ONE step of 5 %), stopped at
+ *   once with a wall close behind, and could not see the surface it was flying at.
  *
  * THE SEAM
  *   - Made once per host by `deep-zoom/host/moduleHost.ts` (`createDive(deps)`), which hands it
@@ -17,14 +23,11 @@
  *     loads nothing: not the renderer, not the DOM, no clock of its own.
  *   - THE CLOCK IS THE HOST'S `step`. `advance(now)` is called by `moduleHost.ts` once after every
  *     frame the renderer actually ran, with that frame's timestamp. There is no
- *     requestAnimationFrame in here, on purpose: the module refreshes its distance inside its own
- *     frame, for the camera position that frame started with (grep `distance probe` in
- *     `deep-zoom/renderer/core.js`), and with `autoStart: false` that frame runs only from
- *     `host.step`. A loop on the browser's animation frames would keep moving on a distance
- *     nobody refreshed whenever the engine loop is stopped or a render owns the context (the frame
- *     returns early: grep `if (exporting)` in `function frame`), and every such move is measured
- *     somewhere the camera no longer is. Advancing after a frame that ran makes "one move per
- *     fresh distance" hold by construction.
+ *     requestAnimationFrame in here, on purpose: a dive is a flight the person watches, so it
+ *     moves once per frame that was DRAWN. With `autoStart: false` the module's frame runs only
+ *     from `host.step`, and returns early while a render owns the context (grep `if (exporting)`
+ *     in `function frame`): a loop on the browser's animation frames would fly on, unseen, through
+ *     a stopped engine loop or between a render's rows.
  *   - It ends, and the promise resolves, on: arrival (`depth <= target`, which also covers a
  *     camera that got inside, where the depth reads 0); `cancel()`; a newer `start()`; a fly key
  *     or Escape on the key target; `DZ_DIVE_TIME_LIMIT_MS` of flight. It does not say which.
@@ -49,9 +52,9 @@
  *   "dive: no move is more than a fifth ...", "dive: cancel() resolves it ...", "dive: a fly key
  *   ends it ...", "dive: a dive that never arrives ...", "dive: a ten-minute gap ...", "dive: a
  *   target below 1e-77 ..."). Falsified 2026-10-08: the "dive" group in the check's header.
- * @assumption A fifth of the module's distance estimate per frame cannot pass the surface. True for
- *   a distance estimate that is a lower bound; the module's deep estimate is not always one (see
- *   PURPOSE). The prototype flew this loop on a real GPU last week; this port has not been flown.
+ * @assumption A fifth of the free distance ahead per frame cannot pass the surface. True as far as
+ *   the rays are: the ray probe never ended past an independent referee's surface on the saved
+ *   views (`npm run check:deep-zoom-ray-probe`), which is a measurement on those views, not a proof.
  */
 
 /** The deepest target a dive accepts. */
@@ -73,7 +76,8 @@ const CANCEL_KEYS: ReadonlySet<string> = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD'
 export type DiveKeyTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;
 
 export interface DiveDeps {
-    /** The surface distance at the camera, as of the frame that just ran (telemetry depth). */
+    /** The free distance straight ahead, from the camera as it is now: 0 inside the solid, NaN when
+     *  nothing lies ahead at all (either ends the dive). */
     depth(): number;
     /** The look angles now, in radians. */
     look(): { yaw: number; pitch: number };
@@ -160,12 +164,8 @@ export function createDive(deps: DiveDeps): Dive {
             }
             r.arrived = 0;
             const dt = Math.min(0.1, gapMs / 1000);
-            // Within a decade of the target the steps are small. The module's distance does not
-            // fall evenly at depth: it over-reads and then collapses, usually as its iteration count
-            // steps up. Traced 2026-10-08 on a dive from 1.1e-17 to 1e-30: 2.4e-24 -> 4.8e-26 and,
-            // at the end, 2.3e-29 -> 1.8e-34 across ONE step of 5 %. So a dive can end decades under
-            // its target. Small last steps keep that down; only a truer distance in the module
-            // (the ray's own hit distance, not the estimate at the camera) can remove it.
+            // Within a decade of the target the steps are small: the last approach is the part
+            // the eye follows, and a ray that grazes a ridge can shorten by more than the move.
             const near = d < r.target * 10;
             const share = Math.min(near ? DZ_DIVE_NEAR_SHARE : 0.2, 1 - Math.exp(-r.rate * dt));
             // Never past 0.95 x target: the last move lands just inside the target instead of on it,

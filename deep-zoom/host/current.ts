@@ -47,6 +47,11 @@ export const DZ_FRAME_ID = 'dz-frame';
 /** The canvas the renderer draws on. Created by `mountDeepZoom`, a child of `#dz-frame`. */
 export const DZ_CANVAS_ID = 'dz-render-canvas';
 
+/** How far the renderer follows a ray before calling it open: its own `SENSE_FAR` (grep it in
+ *  deep-zoom/renderer/core.js). A bundle of `host.sense` whose rays all ran open PAST this has
+ *  nothing that way at all; open short of it, the rays only ran out of steps. */
+export const DZ_SENSE_FAR = 8;
+
 /** The holder itself. Prefer the accessors below; this is exported for `reset()` in tests. */
 export const deepZoomHost = defineAppHandles<DeepZoomHost | null>('deep-zoom.host', null);
 

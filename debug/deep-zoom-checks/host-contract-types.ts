@@ -18,11 +18,13 @@
  */
 import type {
     DzPath as ModulePath,
+    DzSense as ModuleSense,
+    DzSenseOptions as ModuleSenseOptions,
     DzSettings as ModuleSettings,
     DzTelemetry as ModuleTelemetry,
     DzView as ModuleView,
 } from '../../deep-zoom/renderer';
-import type { DzParams, DzPath, DzTelemetry, DzView } from '../../deep-zoom/host/DeepZoomHost';
+import type { DzParams, DzPath, DzSense, DzSenseOptions, DzTelemetry, DzView } from '../../deep-zoom/host/DeepZoomHost';
 
 /** true only when A and B are the same type: an added, removed, renamed, retyped or newly optional
  *  field on either side, at any depth, makes it false. */
@@ -43,6 +45,9 @@ export const proofs: {
     pathModuleToContract: Fits<ModulePath, DzPath>;
     pathContractToModule: Fits<DzPath, ModulePath>;
     pathSame: Same<ModulePath, DzPath>;
+    /** What the ray probe answers, and its options: `sense` passes both through untouched. */
+    senseSame: Same<ModuleSense, DzSense>;
+    senseOptionsSame: Same<ModuleSenseOptions, DzSenseOptions>;
     /** Stage 1: `getParams()` returns a spread copy of the module's settings as `DzParams`. */
     settingsFitParams: Fits<Flat<ModuleSettings>, DzParams>;
 } = {
@@ -55,5 +60,7 @@ export const proofs: {
     pathModuleToContract: true,
     pathContractToModule: true,
     pathSame: true,
+    senseSame: true,
+    senseOptionsSame: true,
     settingsFitParams: true,
 };

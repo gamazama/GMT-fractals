@@ -1,6 +1,7 @@
 /**
  * fly-camera check: GMT's fly integrator driving the deep renderer's yaw / pitch camera
- * (`deep-zoom/flyCamera.ts`). Node only, no browser.
+ * (`deep-zoom/flyCamera.ts`), and the rule the speed follows (`deep-zoom/flyPace.ts`). Node only,
+ * no browser.
  *
  *   npx tsx debug/deep-zoom-checks/fly-camera.mts        (npm run check:deep-zoom-fly-camera)
  *
@@ -18,8 +19,28 @@
  *   - `Math.min(frame.delta, DZ_NAV_MAX_DELTA)` -> `frame.delta`      -> 1 red ("delta: ...": 0.36 instead of 0.18)
  *   - `boostMinDistance: 0` removed (the engine's 1e-4 floor applies) -> 1 red ("deep: Shift is four times that there too ...")
  *   - the stride limit removed (`const k = 1`)                         -> 1 red ("stride: speed 8 with Shift ...": 1.6 of the distance)
+ *
+ * FALSIFICATION RECORD, 2026-10-09 (the "sense:" and "pace:" lines), one break per run:
+ *   deep-zoom/flyCamera.ts
+ *   - `Math.min(unit * pace, limit)` -> `unit * pace`                  -> 2 red ("sense: a frame never moves more than the limit ...", "sense: a pace or a limit that is 0 ...")
+ *   - `distEstimate: 1` -> `distEstimate: frame.distance` (new path)    -> 2 red ("sense: one frame moves pace x speed x delta ...", "... the old distance is not read")
+ *   - the new rule sharing the old rule's integrator (`paced.update` -> `integrator.update`)
+ *                                                                       -> 1 red ("sense: after the old rule at 1e-30 ...": the first frame moved 2 % of its pace)
+ *   - `if (length > 0)` -> `if (true)`                                  -> 1 red ("sense: a pace or a limit that is 0 or not a number moves nothing")
+ *   deep-zoom/flyPace.ts
+ *   - no fall (`Math.min(target, pace * ...)` -> `pace * ...`)          -> 6 red ("pace: a nearer target is taken at once", "pace: and stops on the target", four more)
+ *   - the rise uncapped (`pace = target` in the else branch)            -> 4 red ("pace: it rises by 4 decades a second ...": 22 in a second; "pace: three wrong frames ..."; two more)
+ *   - `(f.boost ? DZ_PACE_BOOST : 1)` -> `1`                            -> 1 red ("pace: Shift rises four times as fast")
+ *   - `Math.min(look, ahead)` -> `look`                                 -> 1 red ("pace: the nearer of the two readings ...")
+ *   - `reset()` a no-op                                                 -> 1 red ("pace: after reset the next reading is taken as it is")
+ *   - the delta not cut (`DZ_PACE_MAX_DELTA` -> `Infinity`)             -> 1 red ("pace: a ten-second frame rises as an eighth of a second")
+ *   - `paceReading`: `s.hits === 0 && s.near > DZ_SENSE_FAR` -> `false` -> 1 red ("reading: with nothing that way at all the fallback stands in")
+ *   - `lookDistance`: `s.hits < 2` -> `s.hits < 1`                      -> 1 red ("reading: the readout wants two rays on a surface")
+ *   - `lookDistance`: `s.open > 0 ||` removed                           -> 1 red ("reading: with a ray unfinished the readout waits ...")
+ *   - `paceReading`: `* DZ_PACE_SHARE` removed (the whole distance)     -> 3 red (the three "reading:" lines that name a third)
  */
 import { DZ_NAV_MAX_DELTA, DZ_NAV_MAX_STRIDE, createFlyCamera } from '../../deep-zoom/flyCamera.ts';
+import { DZ_PACE_BOOST, DZ_PACE_MAX_DELTA, DZ_PACE_SHARE, createPace, lookDistance, paceReading } from '../../deep-zoom/flyPace.ts';
 import type { FlyInputs, MoveInputState } from '../../engine/plugins/navigation/FlyIntegrator.ts';
 
 let failed = 0;
@@ -140,6 +161,93 @@ function dragFor(frames: number, drag: { x: number; y: number }, yaw: number, pi
     const over = dragFor(60, { x: 0, y: 1 }, 1.0, 1.5);
     check(over.pitch > 1.6 && Math.abs(over.yaw - 1.0) < 1e-9, 'turn: pushed past the pole the pitch runs on and the yaw does not flip', `yaw ${over.yaw}, pitch ${over.pitch.toFixed(3)}`);
     check(dragFor(5, { x: 0, y: 0 }, 1.0, 0.6).yaw === 1.0, 'turn: no drag, no turn');
+}
+
+// ── sense: the speed rule since 2026-10-09 - the caller answers a pace and a one-frame limit ──
+{
+    const b = rendererBasis(1.14, 0.29);
+    /** One frame under the new rule: the move, how often `sense` was asked, and with what. */
+    function sensed(move: Partial<MoveInputState>, pace: number, limit: number, opt: { delta?: number; speed?: number; distance?: number; cam?: ReturnType<typeof createFlyCamera> } = {}) {
+        let d: V3 | null = null, asks = 0, asked: V3 | null = null;
+        (opt.cam ?? createFlyCamera()).step({
+            delta: opt.delta ?? 1 / 60, yaw: 1.14, pitch: 0.29, inputs: inputs(move), speed: opt.speed ?? 3.6, distance: opt.distance ?? 123,
+            sense: (direction) => { asks++; asked = direction; return { pace, limit }; },
+            translate: (x, y, z) => { d = [x, y, z]; },
+        });
+        return { d: d as V3 | null, asks, asked: asked as V3 | null };
+    }
+    const one = sensed({ forward: true }, 2e-30, Infinity);
+    check(!!one.d && Math.abs(len(one.d) / (2e-30 * 3.6 / 60) - 1) < 1e-12 && off(one.d, b.fwd) < 1e-12 && one.asks === 1 && off(one.asked, b.fwd) < 1e-12,
+        'sense: one frame moves pace x speed x delta along the view, and sense is asked once, with that direction', one.d ? `${len(one.d)}, ${one.asks} asks` : 'no move');
+    const other = sensed({ forward: true }, 2e-30, Infinity, { distance: 1e-60 });
+    check(!!one.d && !!other.d && len(other.d) === len(one.d), 'sense: the old distance is not read under the new rule');
+    const boosted = sensed({ forward: true, boost: true }, 2e-30, Infinity);
+    check(!!one.d && !!boosted.d && Math.abs(len(boosted.d) / len(one.d) - 4) < 1e-12, 'sense: Shift is four times that');
+    const side = sensed({ right: true, up: true }, 1, Infinity);
+    const diag: V3 = [b.right[0] + b.up[0], b.right[1] + b.up[1], b.right[2] + b.up[2]];
+    check(off(side.asked, diag.map((c) => c / len(diag)) as V3) < 1e-12 && off(side.d, diag.map((c) => c / len(diag)) as V3) < 1e-12, 'sense: a diagonal (D + Space) is asked about, and moved along, as one direction');
+    const capped = sensed({ forward: true, boost: true }, 1e-30, 0.25e-30, { delta: 0.05, speed: 8 });
+    check(!!capped.d && Math.abs(len(capped.d) / 0.25e-30 - 1) < 1e-12 && off(capped.d, b.fwd) < 1e-12, 'sense: a frame never moves more than the limit sense answers, and keeps its direction', capped.d ? String(len(capped.d)) : 'no move');
+    const none = [sensed({ forward: true }, NaN, 1), sensed({ forward: true }, 1, 0), sensed({ forward: true }, 0, 1), sensed({ forward: true }, 1, NaN)];
+    check(none.every((r) => r.d === null && r.asks === 1), 'sense: a pace or a limit that is 0 or not a number moves nothing');
+    const idle = sensed({}, 1, 1);
+    check(idle.d === null && idle.asks === 0, 'sense: no key, no move, and sense is not asked');
+    // The pace's ease is the caller's: a pace 1000 times farther is flown at once.
+    const cam = createFlyCamera();
+    const near = sensed({ forward: true }, 1e-30, Infinity, { cam });
+    const far = sensed({ forward: true }, 1e-27, Infinity, { cam });
+    check(!!near.d && !!far.d && Math.abs(len(far.d) / len(near.d) / 1000 - 1) < 1e-9, 'sense: a pace 1000 times farther is flown at once (its ease is the caller\'s)',
+        near.d && far.d ? `x${(len(far.d) / len(near.d)).toFixed(1)}` : 'no move');
+    // Switching rules in flight: the old rule leaves ITS integrator's eased distance at 1e-30; the new rule must not start from it.
+    const both = createFlyCamera();
+    for (let i = 0; i < 30; i++) both.step({ delta: 1 / 60, yaw: 1.14, pitch: 0.29, inputs: inputs({ forward: true }), speed: 3.6, distance: 1e-30, translate: () => undefined });
+    const after = sensed({ forward: true }, 2e-30, Infinity, { cam: both });
+    check(!!after.d && Math.abs(len(after.d) / (2e-30 * 3.6 / 60) - 1) < 1e-12, 'sense: after the old rule at 1e-30, the first frame under the new rule moves by its pace (the rules do not share an eased distance)',
+        after.d ? `${(len(after.d) / (2e-30 * 3.6 / 60)).toPrecision(3)} of it` : 'no move');
+    // A turn is read back the same way under both rules.
+    const turnOld = createFlyCamera().step({ delta: 1 / 60, yaw: 1, pitch: 0.2, inputs: inputs({}, { x: 0.5, y: 0.25 }), speed: 3.6, distance: 1, translate: () => undefined });
+    const turnNew = createFlyCamera().step({ delta: 1 / 60, yaw: 1, pitch: 0.2, inputs: inputs({}, { x: 0.5, y: 0.25 }), speed: 3.6, distance: 1, sense: () => ({ pace: 1, limit: 1 }), translate: () => undefined });
+    check(!!turnOld && !!turnNew && turnOld.yaw === turnNew.yaw && turnOld.pitch === turnNew.pitch && turnNew.yaw !== 1, 'sense: a look drag turns the camera exactly as under the old rule');
+}
+
+// ── pace: what the speed is multiplied by, and how fast it may change (deep-zoom/flyPace.ts) ──
+{
+    const frame = (look: number, ahead = NaN, delta = 1 / 60, boost = false) => ({ delta, look, ahead, rise: 4, boost });
+    let p = createPace();
+    check(Number.isNaN(p.value()) && p.step(frame(1e-20)) === 1e-20, 'pace: the first reading is taken as it is');
+    check(p.step(frame(1e-25)) === 1e-25, 'pace: a nearer target is taken at once');
+    // rise: 4 decades a second, whatever the gap
+    let v = 0;
+    for (let i = 0; i < 60; i++) v = p.step(frame(1e-3));
+    check(Math.abs(Math.log10(v / 1e-25) - 4) < 1e-9, 'pace: it rises by 4 decades a second towards a target 22 decades away', `rose ${Math.log10(v / 1e-25).toFixed(3)} decades in a second`);
+    for (let i = 0; i < 60 * 6; i++) v = p.step(frame(1e-3));
+    check(v === 1e-3, 'pace: and stops on the target');
+    p = createPace(); p.step(frame(1e-30));
+    for (let i = 0; i < 3; i++) v = p.step(frame(1e-10));
+    check(v / 1e-30 < 1.6 && v / 1e-30 > 1.5, 'pace: three wrong frames (a reading 20 decades too far) raise it 1.6 times, no more', `x${(v / 1e-30).toFixed(3)}`);
+    p = createPace(); p.step(frame(1e-30));
+    const plain = p.step(frame(1, NaN, 1 / 60, false));
+    p = createPace(); p.step(frame(1e-30));
+    const shift = p.step(frame(1, NaN, 1 / 60, true));
+    check(Math.abs(Math.log10(shift / 1e-30) / Math.log10(plain / 1e-30) - DZ_PACE_BOOST) < 1e-9, 'pace: Shift rises four times as fast');
+    p = createPace();
+    check(p.step(frame(1e-20, 1e-22)) === 1e-22 && p.step(frame(1e-25, 1e-22)) === 1e-25, 'pace: the nearer of the two readings (what is looked at, what lies ahead of the move) is the target');
+    p = createPace(); p.step(frame(1e-20));
+    check(p.step(frame(NaN, NaN)) === 1e-20 && p.step(frame(NaN, 1e-21)) === 1e-21, 'pace: nothing read, the pace stands; one reading alone is the target');
+    p = createPace(); p.step(frame(1e-30)); p.reset();
+    check(Number.isNaN(p.value()) && p.step(frame(1e-3)) === 1e-3, 'pace: after reset the next reading is taken as it is (a jump out of a deep place)');
+    p = createPace(); p.step(frame(1e-30));
+    check(p.step(frame(0)) === 0 && p.step(frame(1e-12)) === 1e-12, 'pace: inside the solid it is 0, and the first reading outside is taken at once');
+    p = createPace(); p.step(frame(1e-30));
+    const long = p.step(frame(1, NaN, 10));
+    check(Math.abs(Math.log10(long / 1e-30) - 4 * DZ_PACE_MAX_DELTA) < 1e-9, 'pace: a ten-second frame rises as an eighth of a second', `${Math.log10(long / 1e-30).toFixed(3)} decades`);
+
+    const s = (near: number, second: number, hits: number, inside = false, open = 0) => ({ near, second, hits, open, inside, marched: true });
+    check(DZ_PACE_SHARE === 1 / 3 && paceReading(s(1e-30, 3e-30, 7), 9) === 3e-30 * DZ_PACE_SHARE && paceReading(s(0, 0, 0, true), 9) === 0, 'reading: a third of the second nearest ray; 0 inside the solid');
+    check(paceReading(s(8.5, 9, 0), 1.25) === 1.25, 'reading: with nothing that way at all the fallback stands in, as it is');
+    check(paceReading(s(1e-20, 3e-20, 0), 1.25) === 3e-20 * DZ_PACE_SHARE, 'reading: rays that only ran out of steps give a third of their lower bound');
+    check(lookDistance(s(1e-30, 2e-30, 7)) === 2e-30 && lookDistance(s(1e-30, 2e-30, 1)) === 0 && lookDistance(s(0, 0, 7, true)) === 0, 'reading: the readout wants two rays on a surface, and shows nothing from inside');
+    check(lookDistance(s(1e-30, 2e-30, 5, false, 2)) === 0 && paceReading(s(1e-30, 2e-30, 5, false, 2), 9) === 2e-30 * DZ_PACE_SHARE, 'reading: with a ray unfinished the readout waits (it may be a lower bound); the pace may follow it');
 }
 
 console.log(failed === 0 ? 'fly-camera: all green' : `fly-camera: ${failed} FAILED`);

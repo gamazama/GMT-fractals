@@ -25,6 +25,7 @@
  */
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { getHost, subscribeHost } from './host/current';
+import { depthNow } from './depthNow';
 import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
@@ -96,7 +97,7 @@ presetFieldRegistry.register({
         const host = getHost();
         if (!host) return undefined;
         const view = host.getView();
-        const depth = host.telemetry().depth;
+        const depth = depthNow(host);
         const saved: DzSavedView = { v: 1, cam: view.cam, yaw: String(view.yaw), pitch: String(view.pitch), depth: depth > 0 && Number.isFinite(depth) ? String(depth) : '' };
         return saved;
     },
