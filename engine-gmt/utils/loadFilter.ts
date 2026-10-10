@@ -263,6 +263,7 @@ export function buildFilteredPreset(current: Preset, file: Preset, filter: LoadF
         merged.animations = file.animations ? deepClone(file.animations) : undefined;
         merged.sequence = file.sequence ? deepClone(file.sequence) : undefined;
         merged.duration = file.duration;
+        merged.fps = file.fps;     // the rate the frames above were counted at; absent in a scene saved before 2026-10-11
     }
 
     return merged as Preset;

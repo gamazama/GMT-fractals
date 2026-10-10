@@ -449,6 +449,7 @@ const storeFactory: StateCreator<
             const animStore = useAnimationStore.getState();
             p.sequence = animStore.sequence;
             p.duration = animStore.durationFrames;
+            p.fps = animStore.fps;     // both of the above are in frames: the rate is what makes them a length
         } catch (e) {
             console.warn("Failed to save animation sequence:", e);
         }

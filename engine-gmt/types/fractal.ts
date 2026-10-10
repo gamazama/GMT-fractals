@@ -29,8 +29,11 @@ export interface Preset {
   
   // Animation System
   sequence?: AnimationSequence;
-  duration?: number; 
-  
+  duration?: number;
+  /** The timeline's frame rate, which `sequence` and `duration` are counted at. Written since
+   *  2026-10-11 (`types/preset.ts` has the same field); a scene saved before then has none. */
+  fps?: number;
+
   // Legacy root props used by RendererSlice/LightSlice logic
   renderMode?: 'Direct' | 'PathTracing';
   navigation?: { flySpeed: number, autoSlow: boolean };

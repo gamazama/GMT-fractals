@@ -17,6 +17,22 @@
  *
  * Cleanest design choice (option B from the porting plan) — explicit
  * registration, no feature-registry heuristics, no hardcoding.
+ *
+ * Two things an entry can say about its track beyond the id:
+ *   - `hidden`: created out of the timeline's sight (DD-pair lo-words).
+ *   - `releaseOnRecord: false`: the track KEEPS being driven while the
+ *     camera is recorded during playback. By default record-camera mode
+ *     lets go of every `camera.*` track so the user can steer; an app
+ *     whose position rides the timeline while only its look is steered
+ *     holds the position track with this. Grep `heldOnRecord` in
+ *     `engine/AnimationEngine.ts`. Tracks nobody registered, and every
+ *     track of an app that does not say it, behave as before.
+ *
+ * A camera track whose keys carry app data (`Keyframe.payload`, a track
+ * registered in `payloadTrackRegistry.ts`) needs its own capture function:
+ * the default walker below reads one number per track and has no payload
+ * to give, so it leaves such a track alone. The app's function writes
+ * `addKeyframe(trackId, frame, value, interpolation, payload)`.
  */
 
 /** Track entry for `registerCameraKeyTracks`. Plain string for the
@@ -24,9 +40,9 @@
  *  `hidden:true` for sub-f64 DD-pair lo-words like fluid-toy's
  *  `centerLow_x/_y`, which are paired-and-auto-managed and would
  *  clutter the timeline if shown). */
-export type CameraKeyTrackEntry = string | { id: string; hidden?: boolean };
+export type CameraKeyTrackEntry = string | { id: string; hidden?: boolean; releaseOnRecord?: boolean };
 
-interface NormalizedTrackEntry { id: string; hidden?: boolean }
+interface NormalizedTrackEntry { id: string; hidden?: boolean; releaseOnRecord?: boolean }
 
 let cameraKeyTracks: readonly NormalizedTrackEntry[] = [];
 /** Cached `id`-only projection of `cameraKeyTracks`. Critical that this
@@ -77,6 +93,8 @@ export function setCameraKeyCaptureFn(fn: CameraKeyCaptureFn): void {
 
 import { useEngineStore } from '../../store/engineStore';
 import { useAnimationStore } from '../../store/animationStore';
+import { animationEngine } from '../AnimationEngine';
+import { isPayloadTrack } from './payloadTrackRegistry';
 
 /** Capture the current camera into keyframes at `frame`. The single
  *  entry point — every site that wants to snapshot the camera (Key
@@ -104,6 +122,7 @@ export function captureCameraKeyFrame(
     const resolved: Array<{ tid: string; v: number; hidden?: boolean }> = [];
     for (const entry of cameraKeyTracks) {
         const tid = entry.id;
+        if (isPayloadTrack(tid)) continue;     // no payload to give: that track needs the app's own capture
         const parts = tid.split('.');
         let v: any = state;
         for (let i = 0; i < parts.length; i++) {
@@ -160,6 +179,7 @@ export function captureCameraKeyFrame(
 export function registerCameraKeyTracks(tracks: readonly CameraKeyTrackEntry[]): void {
     cameraKeyTracks = tracks.map(t => typeof t === 'string' ? { id: t } : { ...t });
     cameraKeyTrackIds = cameraKeyTracks.map(e => e.id);
+    animationEngine.setCameraTracksHeldOnRecord(new Set(cameraKeyTracks.filter(e => e.releaseOnRecord === false).map(e => e.id)));
     listeners.forEach(l => l());
 }
 

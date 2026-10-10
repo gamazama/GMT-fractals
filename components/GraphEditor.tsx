@@ -15,6 +15,7 @@ import { GraphSelectionBBox } from './graph/GraphSelectionBBox';
 import { WaveIcon, BakeIcon, MagicIcon } from './Icons';
 import { GRAPH_LEFT_GUTTER_WIDTH, GRAPH_RULER_HEIGHT } from '../data/constants';
 import { isLogTrack } from '../engine/animation/logTrackRegistry';
+import { isPayloadTrack } from '../engine/animation/payloadTrackRegistry';
 import { ContextMenuItem } from '../types/help';
 
 interface GraphEditorProps {
@@ -208,7 +209,8 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
         getTarget: () => {
             const sel = selectedTrackIds.filter(id => displayTrackIds.includes(id));
             const tid = sel.length === 1 ? sel[0] : (displayTrackIds.length === 1 ? displayTrackIds[0] : null);
-            if (!tid) return null;
+            // No stroke on a payload track: a drawn key has no payload (the store would drop it anyway).
+            if (!tid || isPayloadTrack(tid)) return null;
             const keys = sequence.tracks[tid]?.keyframes ?? [];
             let mn = Infinity, mx = -Infinity;
             keys.forEach(k => { if (k.value < mn) mn = k.value; if (k.value > mx) mx = k.value; });

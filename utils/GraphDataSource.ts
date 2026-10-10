@@ -68,7 +68,7 @@ export interface GraphDataSource {
   /**
    * Wholesale-replace a track's keyframe array (bake / simplify add and remove
    * keys, so this can't go through `updateKeyframes` which only patches existing
-   * keys by id). Timeline = `useAnimationStore.setState`; palette = `onTracksChange`.
+   * keys by id). Timeline = the store's `replaceKeyframes`; palette = `onTracksChange`.
    */
   replaceKeyframes?(updates: { trackId: string; newKeys: Keyframe[] }[]): void;
   /** `useGraphTools` create-key-at-mouse. */
@@ -137,18 +137,10 @@ export const useAnimationStoreDataSource = (): GraphDataSource => {
   // the viewport reflects the edit. Stable ref (animationEngine is a singleton).
   const onAfterMutate = useCallback((frame: number) => animationEngine.scrub(frame), []);
 
-  // Bake / simplify wholesale-replace track keyframe arrays (immutable — new
-  // track + sequence objects so subscribers re-render; the drag snapshot in
-  // useGraphTools is an independent deep clone, unaffected).
-  const replaceKeyframes = useCallback((updates: { trackId: string; newKeys: Keyframe[] }[]) => {
-    useAnimationStore.setState((state) => {
-      const newTracks = { ...state.sequence.tracks };
-      updates.forEach((u) => {
-        if (newTracks[u.trackId]) newTracks[u.trackId] = { ...newTracks[u.trackId], keyframes: u.newKeys };
-      });
-      return { sequence: { ...state.sequence, tracks: newTracks } };
-    });
-  }, []);
+  // Bake / simplify wholesale-replace track keyframe arrays. A store action since
+  // 2026-10-11 (it was a setState here), so the payload-track rule sits with the
+  // other writers: @see engine/animation/payloadTrackRegistry.ts
+  const replaceKeyframes = useAnimationStore((s) => s.replaceKeyframes);
 
   return {
     sequence,

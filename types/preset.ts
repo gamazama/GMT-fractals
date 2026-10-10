@@ -33,6 +33,11 @@ export interface Preset {
   // Animation System
   sequence?: AnimationSequence;
   duration?: number;
+  /** The timeline's frame rate. `sequence` and `duration` are counted in frames, so
+   *  without it a scene's length in seconds is whatever the session's rate happens to
+   *  be. Written since 2026-10-11; a scene saved before then has none and leaves the
+   *  rate alone on load. */
+  fps?: number;
   
   // Legacy root props used by RendererSlice/LightSlice logic
   renderMode?: 'Direct' | 'PathTracing';

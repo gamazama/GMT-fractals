@@ -8,11 +8,23 @@ import { AnimationMath } from '../../engine/math/AnimationMath';
 import { TrackUtils } from '../../engine/algorithms/TrackUtils';
 import { splitCubicBezier, solveCubicBezierT } from '../../engine/BezierMath';
 import { isLogTrack } from '../../engine/animation/logTrackRegistry';
+import { isPayloadTrack } from '../../engine/animation/payloadTrackRegistry';
 import { calculateTangentModeUpdates, calculateGlobalInterpolationUpdates } from '../../utils/timelineUtils';
 
 const DEFAULT_SEQUENCE: AnimationSequence = {
     durationFrames: 300,
     tracks: {}
+};
+
+// The payload-track contract is enforced in this file: grep `isPayloadTrack`.
+// @see engine/animation/payloadTrackRegistry.ts
+
+/** On a payload track a key's value moves only in a write that also carries a
+ *  payload (the app's own); every other patch loses its `value` here. */
+const lockPayloadValue = (trackId: string, patch: Partial<Keyframe>): Partial<Keyframe> => {
+    if (patch.value === undefined || patch.payload !== undefined || !isPayloadTrack(trackId)) return patch;
+    const { value: _locked, ...rest } = patch;
+    return rest;
 };
 
 // Build a HistoryItem of the same shape as `item` from the current store —
@@ -153,10 +165,12 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         });
     },
 
-    addKeyframe: (trackId, frame, value, explicitInterpolation) => {
+    addKeyframe: (trackId, frame, value, explicitInterpolation, payload) => {
         set(state => {
             const track = state.sequence.tracks[trackId];
             if (!track) return state;
+            // A payload track takes no key the caller could not give a payload to.
+            if (payload === undefined && isPayloadTrack(trackId)) return state;
 
             let interpolation: 'Linear' | 'Step' | 'Bezier' = explicitInterpolation || 'Bezier';
             if (!explicitInterpolation) {
@@ -165,6 +179,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
 
             const autoTangent = interpolation === 'Bezier';
             const tempKey: Keyframe = { id: nanoid(), frame, value, interpolation, autoTangent, brokenTangents: false };
+            if (payload !== undefined) tempKey.payload = payload;
             const others = track.keyframes.filter(k => Math.abs(k.frame - frame) > 0.001);
             const sorted = [...others, tempKey].sort((a,b) => a.frame - b.frame);
             const idx = sorted.findIndex(k => k.id === tempKey.id);
@@ -177,7 +192,9 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                 // the existing curve shape exactly. The new key adopts curve-derived
                 // tangents and the neighbours' adjacent handles are rewritten so the
                 // visual segment is unchanged. Falls back to Auto tangents at endpoints.
-                const canSplit = prev && next && prev.interpolation === 'Bezier' && next.interpolation === 'Bezier';
+                // Not for a key with a payload: the split puts the key ON the curve, and that
+                // key's value is the caller's (it and the payload say the same thing).
+                const canSplit = payload === undefined && prev && next && prev.interpolation === 'Bezier' && next.interpolation === 'Bezier';
                 if (canSplit) {
                     const k1HandleX = prev.rightTangent ? prev.rightTangent.x : (next.frame - prev.frame) / 3;
                     const k1HandleY = prev.rightTangent ? prev.rightTangent.y : 0;
@@ -242,6 +259,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
             let hasChanges = false;
 
             updates.forEach(({ trackId, value }) => {
+                if (isPayloadTrack(trackId)) return;     // a recorded key has no payload to carry
                 if (!newTracks[trackId]) {
                     newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
                     hasChanges = true;
@@ -300,6 +318,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
             const isAuto = explicitInterpolation === 'Bezier';
 
             updates.forEach(({ trackId, value }) => {
+                if (isPayloadTrack(trackId)) return;
                 if (!newTracks[trackId]) {
                     newTracks[trackId] = { id: trackId, type: 'float', label: trackId, keyframes: [] };
                     hasChanges = true;
@@ -348,6 +367,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
             const trackOps = new Map<string, { frame: number, value: number }[]>();
             for (const entry of entries) {
                 for (const { trackId, value } of entry.updates) {
+                    if (isPayloadTrack(trackId)) continue;
                     let ops = trackOps.get(trackId);
                     if (!ops) { ops = []; trackOps.set(trackId, ops); }
                     for (let f = entry.startFrame; f <= entry.endFrame; f++) {
@@ -416,7 +436,8 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
         set(state => {
             const track = state.sequence.tracks[trackId];
             if (!track) return state;
-            const newKeys = track.keyframes.map(k => k.id === keyframeId ? { ...k, ...updates } : k).sort((a, b) => a.frame - b.frame);
+            const patch = lockPayloadValue(trackId, updates);
+            const newKeys = track.keyframes.map(k => k.id === keyframeId ? { ...k, ...patch } : k).sort((a, b) => a.frame - b.frame);
             return { 
                 sequence: { 
                     ...state.sequence, 
@@ -455,7 +476,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                          if (patch.interpolation === 'Bezier' && currentKey.interpolation !== 'Bezier') {
                              patch.autoTangent = true;
                          }
-                         track.keyframes[idx] = { ...currentKey, ...patch };
+                         track.keyframes[idx] = { ...currentKey, ...lockPayloadValue(trackId, patch) };
                     }
                 }
             });
@@ -463,6 +484,21 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
             // their original references so other cache consumers don't invalidate.
             touchedTracks.forEach(tid => {
                 newTracks[tid].keyframes.sort((a, b) => a.frame - b.frame);
+            });
+            return { sequence: { ...state.sequence, tracks: newTracks } };
+        });
+    },
+
+    // Bake / simplify / pencil / ctrl-drag copy: new track + sequence objects so
+    // subscribers re-render. A payload track drops a swap that would bring in a key
+    // without a payload — which is every tool that makes keys up, and not a copy.
+    replaceKeyframes: (updates) => {
+        set(state => {
+            const newTracks = { ...state.sequence.tracks };
+            updates.forEach(({ trackId, newKeys }) => {
+                if (!newTracks[trackId]) return;
+                if (isPayloadTrack(trackId) && newKeys.some(k => k.payload === undefined)) return;
+                newTracks[trackId] = { ...newTracks[trackId], keyframes: newKeys };
             });
             return { sequence: { ...state.sequence, tracks: newTracks } };
         });
@@ -571,7 +607,8 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     interpolation: k.interpolation, 
                     leftTangent: k.leftTangent, 
                     rightTangent: k.rightTangent, 
-                    originalTrackId: tid 
+                    originalTrackId: tid,
+                    ...(k.payload !== undefined ? { payload: k.payload } : {}),
                 });
             }
         });
@@ -615,7 +652,8 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                         leftTangent: c.leftTangent,
                         rightTangent: c.rightTangent,
                         autoTangent: false,
-                        brokenTangents: false
+                        brokenTangents: false,
+                        ...(c.payload !== undefined ? { payload: c.payload } : {}),
                     };
                     track.keyframes = [...track.keyframes.filter(k => Math.abs(k.frame - f) > 0.001), newKey].sort((a,b)=>a.frame-b.frame);
                 }
@@ -732,7 +770,8 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                 const track = { ...originalTrack };
                 newTracks[tid] = track;
 
-                if (selectedKeys.length < 3) return;
+                // (a payload track is left alone: a fitted key has no payload to carry)
+                if (selectedKeys.length < 3 || isPayloadTrack(tid)) return;
 
                 const sortedSelection = selectedKeys.sort((a,b) => a.frame - b.frame);
                 
