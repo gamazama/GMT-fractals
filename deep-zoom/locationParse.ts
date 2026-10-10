@@ -3,7 +3,7 @@
  *
  * "Copy location" writes one location as JSON; people paste those into chats and notes, and
  * texts made by last week's prototype are already out there. So the parser accepts:
- *   - this shell's shape:      { "view": { "cam": ["..","..",".."], "yaw", "pitch", ... }, "look"?, "depth"? }
+ *   - this shell's shape:      { "view": { "cam": ["..","..",".."], "yaw", "pitch", "roll"?, ... }, "look"?, "depth"? }
  *   - a whole saved row:       { "id", "label", "state": { "view": ... } }
  *   - a bare view, which is also last week's flat shape:
  *                              { "cam": [...], "yaw", "pitch", "iters", "power", "phase", "light",
@@ -15,14 +15,12 @@
  * Camera values are decimal STRINGS of whole numbers and are never converted; a `cam` that is not
  * three such strings is refused, so a number-mangled copy cannot become a wrong place.
  *
- * A place carries its GRADIENT in `look.dzColour.gradient` (stage 5). Text from a chat is not
- * trusted with one: it goes through the gradient gate every other entrance uses
- * (`coerceGradientConfig`), and a gradient that does not pass is dropped from the place - the
- * place still opens, with the gradient the app has.
+ * Of a pasted `look` only the formula is kept (`look.dzFormula`): that is all a place holds. Text
+ * copied before 2026-10-10 also carries the light, the colour with its gradient, the detail and
+ * the march there; they are dropped here, and the place opens with what the app has.
  */
 import type { DzView } from './host/DeepZoomHost';
 import type { DzLocationState } from './locations';
-import { coerceGradientConfig } from '../palette/core/editorConfig';
 
 export type ParsedLocations =
     | { ok: true; locations: DzLocationState[]; labels: Array<string | undefined> }
@@ -42,6 +40,7 @@ function viewOf(o: Record<string, unknown>): DzView | string {
         cam: o.cam,
         yaw: o.yaw,
         pitch: o.pitch,
+        ...(isNum(o.roll) && o.roll !== 0 ? { roll: o.roll } : {}),
         iters: isNum(o.iters) ? o.iters : 14,
         power: isNum(o.power) ? o.power : 8,
         phase,
@@ -53,15 +52,10 @@ function viewOf(o: Record<string, unknown>): DzView | string {
     };
 }
 
-/** A pasted look, with its gradient through the gate (see the header). The other look fields are
- *  taken as they come, as before stage 5. */
-function lookOf(raw: object): DzLocationState['look'] {
-    const look = raw as NonNullable<DzLocationState['look']>;
-    const colour = look.dzColour as (typeof look.dzColour) | undefined;
-    if (!colour || typeof colour !== 'object' || !('gradient' in colour)) return look;
-    const { gradient: pasted, ...rest } = colour;
-    const gradient = coerceGradientConfig(pasted);
-    return { ...look, dzColour: gradient ? { ...rest, gradient } : rest };
+/** A pasted look: its formula, taken as it comes, and nothing else of it (see the header). */
+function lookOf(raw: unknown): DzLocationState['look'] {
+    const formula = (raw as Partial<NonNullable<DzLocationState['look']>> | null)?.dzFormula;
+    return formula && typeof formula === 'object' ? { dzFormula: formula } : undefined;
 }
 
 const depthText = (v: unknown): string => {
@@ -82,7 +76,8 @@ function one(x: unknown): { state: DzLocationState; label?: string } | string {
         const view = viewOf(o.view as Record<string, unknown>);
         if (typeof view === 'string') return view;
         const state: DzLocationState = { view, depth: depthText(o.depth) };
-        if (o.look && typeof o.look === 'object') state.look = lookOf(o.look);
+        const look = lookOf(o.look);
+        if (look) state.look = look;
         if (typeof o.note === 'string') state.note = o.note;
         return { state, label: typeof o.label === 'string' ? o.label : (typeof o.name === 'string' ? o.name : undefined) };
     }

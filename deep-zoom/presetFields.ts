@@ -4,7 +4,8 @@
  * Three preset fields, registered at import. MUST be imported before the store is first used (the
  * registry freezes when the store is built): main.tsx imports it right after `./registerFeatures`.
  *
- *   dzView          the camera: three 256-bit decimal STRINGS, yaw, pitch, and the depth as text.
+ *   dzView          the camera: three 256-bit decimal STRINGS, yaw, pitch, the roll when there is
+ *                   one, and the depth as text.
  *                   A scene file, a scene PNG and a share link all carry it. `serialize` reads the
  *                   renderer (the camera is never in the store); `deserialize` hands the view to
  *                   the host, or parks it until one is mounted and ready.
@@ -40,6 +41,8 @@ export interface DzSavedView {
      *  accepted on load (a hand-written scene). */
     yaw: string | number;
     pitch: string | number;
+    /** Written only when the camera has a roll; a scene without it has none. */
+    roll?: string | number;
     /** Depth when saved, as text; '' when unknown. For display and sorting only. */
     depth: string;
 }
@@ -59,10 +62,12 @@ function viewFromSaved(saved: DzSavedView, state: Slices): DzView {
     const l = state.dzLight ?? {};
     const c = state.dzColour ?? {};
     const q = state.dzQuality ?? {};
+    const roll = Number(saved.roll);                    // NaN when there is none
     return {
         cam: saved.cam,
         yaw: Number(saved.yaw),
         pitch: Number(saved.pitch),
+        ...(Number.isFinite(roll) && roll !== 0 ? { roll } : {}),
         iters: num(f.iterations, 14),
         power: num(f.power, 8),
         phase: [num(f.phaseTheta, 0), num(f.phasePhi, 0)],
@@ -98,7 +103,10 @@ presetFieldRegistry.register({
         if (!host) return undefined;
         const view = host.getView();
         const depth = depthNow(host);
-        const saved: DzSavedView = { v: 1, cam: view.cam, yaw: String(view.yaw), pitch: String(view.pitch), depth: depth > 0 && Number.isFinite(depth) ? String(depth) : '' };
+        const saved: DzSavedView = {
+            v: 1, cam: view.cam, yaw: String(view.yaw), pitch: String(view.pitch), ...(view.roll ? { roll: String(view.roll) } : {}),
+            depth: depth > 0 && Number.isFinite(depth) ? String(depth) : '',
+        };
         return saved;
     },
     deserialize: (preset, _set, get) => {

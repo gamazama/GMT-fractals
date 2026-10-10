@@ -1,24 +1,34 @@
 /**
- * fly-camera check: GMT's fly integrator driving the deep renderer's yaw / pitch camera
+ * fly-camera check: GMT's fly integrator driving the deep renderer's camera of three angles
  * (`deep-zoom/flyCamera.ts`), and the rule the speed follows (`deep-zoom/flyPace.ts`). Node only,
  * no browser.
  *
  *   npx tsx debug/deep-zoom-checks/fly-camera.mts        (npm run check:deep-zoom-fly-camera)
  *
- * The renderer's basis is copied here from `function basis()` in deep-zoom/renderer/core.js, so
- * the "basis:" lines compare the adapter against the renderer's own formula, not against itself.
+ * The renderer's basis is copied here from `function basis()` in deep-zoom/renderer/core.js, roll
+ * included, so the "basis:" lines compare the adapter against the renderer's own formula, not
+ * against itself. The "turn:" lines fly a second camera beside the adapter's: a three.js object
+ * turned by the engine's integrator and NEVER taken apart into angles. What the adapter hands back,
+ * read through the renderer's formula, must be that camera.
  *
- * FALSIFICATION RECORD, 2026-10-08, one break per run in deep-zoom/flyCamera.ts:
- *   - `-(frame.yaw + Math.PI / 2)` -> `-(frame.yaw)`                 -> 4 red (the three "basis:" lines, "keys: E moves up and Q down")
- *   - the Euler order 'YXZ' -> 'XYZ'                                  -> 4 red (the same four)
- *   - `frame.yaw - euler.y` -> `frame.yaw + euler.y`                  -> 1 red ("turn: a drag to the right ...": yaw 1 -> 0.04)
- *   - `frame.pitch + euler.x` -> `frame.pitch - euler.x`              -> 2 red ("turn: a drag up ...", "turn: pushed past the pole ...")
- *   - `move.up = held.up || held.rollRight` -> `move.up = held.up`    -> 1 red ("keys: E moves up and Q down")
- *   - the roll flags passed through (`{ ...frame.inputs }`, no `move`) -> 2 red ("keys: E moves up ...", "keys: Q and E turn nothing": 60 frames turned)
- *   - `minSpeed: 0` removed (the engine's 1e-6 floor applies)         -> 1 red ("deep: ...": the frame moved 1.67e-8 with the surface at 1e-40)
+ * FALSIFICATION RECORD, one break per run in deep-zoom/flyCamera.ts. First made 2026-10-08 (when the
+ * read-back was a turntable and E / Q were up / down; those lines went on 2026-10-10) and made again
+ * on 2026-10-11 against this version - the counts are that run's, all four in the old rule's call:
+ *   - `minSpeed: 0` removed (the engine's 1e-6 floor applies)         -> 2 red ("deep: Shift is four times that there too ...": 8.00e-41 both times, "stride: at the default speed the limit does not bite": 0.8 - the stride cut catches what the floor throws)
  *   - `Math.min(frame.delta, DZ_NAV_MAX_DELTA)` -> `frame.delta`      -> 1 red ("delta: ...": 0.36 instead of 0.18)
- *   - `boostMinDistance: 0` removed (the engine's 1e-4 floor applies) -> 1 red ("deep: Shift is four times that there too ...")
+ *   - `boostMinDistance: 0` removed (the engine's 1e-4 floor applies) -> 2 red (the same two lines)
  *   - the stride limit removed (`const k = 1`)                         -> 1 red ("stride: speed 8 with Shift ...": 1.6 of the distance)
+ *
+ * FALSIFICATION RECORD, 2026-10-10 (the roll: the "basis:", "keys:" and "turn:" lines), one break per run:
+ *   deep-zoom/orbitCamera.ts (the mapping the adapter is built on)
+ *   - `toQuaternion`: `-(o.yaw + Math.PI / 2)` -> `-(o.yaw)`          -> 14 red (all four "basis:" lines, "stride: ... along the view", "keys: the roll is the engine's own ...", five "turn:" lines, three "sense:" lines)
+ *   - `toQuaternion`: `o.roll` -> `-o.roll`                            -> 6 red ("basis: D ...", "basis: Space ...", "keys: Q turns ...", "keys: the roll is the engine's own ...", "turn: with the pitch off zero ...", "turn: read through the renderer's formula ...": 1.99 off)
+ *   - `toOrientation`: `roll: euler.z` -> `roll: 0`                    -> 6 red (three "keys:" lines, "turn: with the pitch off zero ...", "turn: read through ...", "turn: straight over a pole ...")
+ *   - `toOrientation`: the yaw not brought back near the one it had    -> 2 red ("turn: on the level a drag to the right ...": yaw 1 -> -4.3253, "turn: a drag to the left ...")
+ *   deep-zoom/flyCamera.ts
+ *   - the roll keys also shown to the integrator that moves (`Object.assign(move, held)`)
+ *                                                                      -> 3 red ("keys: the roll is the engine's own ...": 101 degrees in a second, "keys: Shift rolls four times ...", "turn: read through ...")
+ *   - `DZ_NAV_ROLL_GEAR = 7.2` -> `1`                                   -> 2 red ("keys: the roll is the engine's own ...": 88.8 degrees in a second, "keys: Shift rolls four times ...")
  *
  * FALSIFICATION RECORD, 2026-10-09 (the "sense:" and "pace:" lines), one break per run:
  *   deep-zoom/flyCamera.ts
@@ -39,8 +49,10 @@
  *   - `lookDistance`: `s.open > 0 ||` removed                           -> 1 red ("reading: with a ray unfinished the readout waits ...")
  *   - `paceReading`: `* DZ_PACE_SHARE` removed (the whole distance)     -> 3 red (the three "reading:" lines that name a third)
  */
-import { DZ_NAV_MAX_DELTA, DZ_NAV_MAX_STRIDE, createFlyCamera } from '../../deep-zoom/flyCamera.ts';
+import * as THREE from 'three';
+import { DZ_NAV_MAX_DELTA, DZ_NAV_MAX_STRIDE, DZ_NAV_ROLL_GEAR, createFlyCamera } from '../../deep-zoom/flyCamera.ts';
 import { DZ_PACE_BOOST, DZ_PACE_MAX_DELTA, DZ_PACE_SHARE, createPace, lookDistance, paceReading } from '../../deep-zoom/flyPace.ts';
+import { FlyIntegrator } from '../../engine/plugins/navigation/FlyIntegrator.ts';
 import type { FlyInputs, MoveInputState } from '../../engine/plugins/navigation/FlyIntegrator.ts';
 
 let failed = 0;
@@ -50,14 +62,17 @@ function check(ok: boolean, label: string, detail = ''): void {
 }
 
 type V3 = [number, number, number];
+type Look = { yaw: number; pitch: number; roll: number };
 
-/** `function basis()` of deep-zoom/renderer/core.js. */
-function rendererBasis(yaw: number, pitch: number): { fwd: V3; right: V3; up: V3 } {
+/** `function basis()` of deep-zoom/renderer/core.js: the page's, then its ROLL about the view axis. */
+function rendererBasis(yaw: number, pitch: number, roll = 0): { fwd: V3; right: V3; up: V3 } {
     const cp = Math.cos(pitch), sp = Math.sin(pitch), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const fwd: V3 = [cp * cy, sp, cp * sy];
     const right: V3 = [Math.cos(yaw + Math.PI / 2), 0, Math.sin(yaw + Math.PI / 2)];
     const up: V3 = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
-    return { fwd, right, up };
+    if (!roll) return { fwd, right, up };
+    const cr = Math.cos(roll), sr = Math.sin(roll);
+    return { fwd, right: right.map((v, i) => v * cr + up[i] * sr) as V3, up: up.map((v, i) => v * cr - right[i] * sr) as V3 };
 }
 
 const noKeys = (): MoveInputState => ({
@@ -74,10 +89,10 @@ const inputs = (move: Partial<MoveInputState> = {}, drag?: { x: number; y: numbe
 });
 
 /** One frame with these keys from a fresh camera: the move handed to the sink. */
-function moveOf(yaw: number, pitch: number, move: Partial<MoveInputState>, distance = 1, delta = 1 / 60, speed = 3.6): { d: V3 | null; turned: boolean } {
+function moveOf(yaw: number, pitch: number, move: Partial<MoveInputState>, distance = 1, delta = 1 / 60, speed = 3.6, roll = 0): { d: V3 | null; turned: boolean } {
     let d: V3 | null = null;
     const turned = createFlyCamera().step({
-        delta, yaw, pitch, inputs: inputs(move), speed, distance,
+        delta, yaw, pitch, roll, inputs: inputs(move), speed, distance,
         translate: (x, y, z) => { d = [x, y, z]; },
     });
     return { d, turned: turned !== null };
@@ -86,18 +101,24 @@ const len = (v: V3): number => Math.hypot(v[0], v[1], v[2]);
 /** The largest component difference between `v / |v|` and the unit vector `u`. */
 const off = (v: V3 | null, u: V3): number => (v ? Math.max(...v.map((c, i) => Math.abs(c / len(v) - u[i]))) : Infinity);
 
-// ── basis: the three move keys against the renderer's own formula, at several looks ──
-const LOOKS: Array<[number, number]> = [[-Math.PI / 2, 0], [0, 0], [1.14, 0.29], [-6.6, -0.18], [2.5, 1.2], [-0.7, -1.5]];
+// ── basis: the three move keys against the renderer's own formula, at several looks, three of them rolled ──
+const LOOKS: Array<[number, number, number]> = [[-Math.PI / 2, 0, 0], [0, 0, 0], [1.14, 0.29, 0], [-6.6, -0.18, 0.7], [2.5, 1.2, -2.1], [-0.7, -1.5, 3]];
 let worstW = 0, worstD = 0, worstUp = 0;
-for (const [yaw, pitch] of LOOKS) {
-    const b = rendererBasis(yaw, pitch);
-    worstW = Math.max(worstW, off(moveOf(yaw, pitch, { forward: true }).d, b.fwd));
-    worstD = Math.max(worstD, off(moveOf(yaw, pitch, { right: true }).d, b.right));
-    worstUp = Math.max(worstUp, off(moveOf(yaw, pitch, { up: true }).d, b.up));
+for (const [yaw, pitch, roll] of LOOKS) {
+    const b = rendererBasis(yaw, pitch, roll);
+    worstW = Math.max(worstW, off(moveOf(yaw, pitch, { forward: true }, 1, 1 / 60, 3.6, roll).d, b.fwd));
+    worstD = Math.max(worstD, off(moveOf(yaw, pitch, { right: true }, 1, 1 / 60, 3.6, roll).d, b.right));
+    worstUp = Math.max(worstUp, off(moveOf(yaw, pitch, { up: true }, 1, 1 / 60, 3.6, roll).d, b.up));
 }
-check(worstW < 1e-12, `basis: W moves along the renderer's forward at ${LOOKS.length} looks`, `worst ${worstW.toExponential(2)}`);
-check(worstD < 1e-12, "basis: D moves along the renderer's right", `worst ${worstD.toExponential(2)}`);
-check(worstUp < 1e-12, "basis: Space moves along the renderer's up (the camera's, not the world's)", `worst ${worstUp.toExponential(2)}`);
+check(worstW < 1e-12, `basis: W moves along the renderer's forward at ${LOOKS.length} looks, three of them rolled`, `worst ${worstW.toExponential(2)}`);
+check(worstD < 1e-12, "basis: D moves along the renderer's right, the roll included", `worst ${worstD.toExponential(2)}`);
+check(worstUp < 1e-12, "basis: Space moves along the renderer's up (the camera's, not the world's), the roll included", `worst ${worstUp.toExponential(2)}`);
+{
+    // No roll in and nothing that turns: the page's own basis, and no orientation handed back (the renderer keeps its roll of 0).
+    const page = rendererBasis(1.14, 0.29), d = moveOf(1.14, 0.29, { right: true }), up = moveOf(1.14, 0.29, { up: true });
+    check(off(d.d, page.right) < 1e-12 && off(up.d, page.up) < 1e-12 && !d.turned && !up.turned,
+        "basis: with no roll and nothing that turns, D and Space move along the page's right and up and no orientation is handed back");
+}
 
 // ── the size of a move ──
 {
@@ -120,47 +141,79 @@ check(worstUp < 1e-12, "basis: Space moves along the renderer's up (the camera's
     check(!!usual && Math.abs(len(usual) / 1e-30 - 0.72) < 1e-9, 'stride: at the default speed the limit does not bite (0.72 of the distance)', usual ? String(len(usual) / 1e-30) : 'no move');
 }
 
-// ── Q / E ──
-{
-    const b = rendererBasis(1.14, 0.29);
-    const e = moveOf(1.14, 0.29, { rollRight: true });
-    const q = moveOf(1.14, 0.29, { rollLeft: true });
-    check(off(e.d, b.up) < 1e-12 && off(q.d, [-b.up[0], -b.up[1], -b.up[2]]) < 1e-12, 'keys: E moves up and Q down');
-    // Roll builds up over frames: hold both for a second of frames and watch the angles.
-    const cam = createFlyCamera();
-    let turned = 0;
-    for (let i = 0; i < 60; i++) {
-        if (cam.step({ delta: 1 / 60, yaw: 0.4, pitch: 0.3, inputs: inputs({ rollLeft: i < 30, rollRight: i >= 30 }), speed: 3.6, distance: 1, translate: () => undefined })) turned++;
+// ── the camera beside the adapter's: a three.js object the engine's integrators turn, never taken apart into angles ──
+/** The object for an orientation: `Euler(pitch, -(yaw + pi/2), roll, 'YXZ')`, the mapping deep-zoom/orbitCamera.ts writes out. */
+const objectOf = (o: Look): THREE.Object3D => { const b = new THREE.Object3D(); b.quaternion.setFromEuler(new THREE.Euler(o.pitch, -(o.yaw + Math.PI / 2), o.roll, 'YXZ')); return b; };
+const axisOf = (b: THREE.Object3D, x: number, y: number, z: number): V3 => { const v = new THREE.Vector3(x, y, z).applyQuaternion(b.quaternion); return [v.x, v.y, v.z]; };
+const apart = (a: V3, b: V3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const nowhere = (): void => undefined;
+/**
+ * `frames` frames of the adapter with these keys and this drag, its camera keeping what it is handed back (as the
+ * renderer does), flown beside the reference camera: the look by one integrator, the roll keys by one told the
+ * speed over the gear, both on the object itself. `worst`: the most the adapter's camera, read through the
+ * renderer's formula, ever stood off the reference's forward and up. `jump`: the largest change of the yaw
+ * handed back in one frame.
+ */
+function flyBeside(start: Look, frames: number, keys: Partial<MoveInputState>, drag?: { x: number; y: number }, speed = 3.6) {
+    const cam = createFlyCamera(), ref = objectOf(start), look = new FlyIntegrator(), roll = new FlyIntegrator();
+    let o = start, worst = 0, jump = 0, moved = false, turnedFrames = 0;
+    for (let i = 0; i < frames; i++) {
+        const next = cam.step({ delta: 1 / 60, ...o, inputs: inputs(keys, drag), speed, distance: 1, translate: () => { moved = true; } });
+        if (next) {
+            jump = Math.max(jump, Math.abs(Math.atan2(Math.sin(next.yaw - o.yaw), Math.cos(next.yaw - o.yaw))));
+            o = next;
+            turnedFrames++;
+        }
+        look.update(ref, 1 / 60, inputs({ ...keys, rollLeft: false, rollRight: false }, drag), { baseSpeed: speed, distEstimate: 1, autoSlow: true, minSpeed: 0, boostMinDistance: 0, translate: nowhere });
+        roll.update(ref, 1 / 60, inputs({ rollLeft: !!keys.rollLeft, rollRight: !!keys.rollRight, boost: !!keys.boost }), { baseSpeed: speed / DZ_NAV_ROLL_GEAR, distEstimate: 1, autoSlow: true, translate: nowhere });
+        const b = rendererBasis(o.yaw, o.pitch, o.roll);
+        worst = Math.max(worst, apart(b.fwd, axisOf(ref, 0, 0, -1)), apart(b.up, axisOf(ref, 0, 1, 0)));
     }
-    check(turned === 0, 'keys: Q and E turn nothing (the renderer has no roll)', `${turned} frames turned`);
+    return { o, worst, jump, moved, turnedFrames };
+}
+const degrees = (r: number): string => (r * 180 / Math.PI).toFixed(1);
+
+// ── Q / E: roll ──
+{
+    const start: Look = { yaw: 1.14, pitch: 0.29, roll: 0 };
+    const q = flyBeside(start, 60, { rollLeft: true }), e = flyBeside(start, 60, { rollRight: true });
+    const b0 = rendererBasis(start.yaw, start.pitch), bq = rendererBasis(q.o.yaw, q.o.pitch, q.o.roll);
+    check(apart(bq.fwd, b0.fwd) < 1e-12 && apart(bq.up, b0.up) > 0.1 && q.o.roll > 0.1 && !q.moved,
+        'keys: Q turns the camera about its view axis (forward stays, up turns, the roll rises) and moves nothing', `roll ${q.o.roll}, forward off by ${apart(bq.fwd, b0.fwd).toExponential(2)}, moved ${q.moved}`);
+    check(Math.abs(e.o.roll + q.o.roll) < 1e-12 && !e.moved, 'keys: E rolls the other way by as much, and moves nothing', `Q ${q.o.roll}, E ${e.o.roll}`);
+    check(q.worst < 1e-9 && e.worst < 1e-9 && 3.6 / DZ_NAV_ROLL_GEAR === 0.5,
+        `keys: the roll is the engine's own, told the speed over ${DZ_NAV_ROLL_GEAR}: the default 3.6 rolls as GMT's default 0.5 does (a second of Q: ${degrees(q.o.roll)} degrees so far)`, `off the reference by ${Math.max(q.worst, e.worst).toExponential(2)}`);
+    const shift = flyBeside(start, 60, { rollLeft: true, boost: true });
+    check(Math.abs(shift.o.roll / q.o.roll - 4) < 1e-9, 'keys: Shift rolls four times as fast', `x${(shift.o.roll / q.o.roll).toFixed(4)}`);
 }
 
-// ── turn: a look drag, read back as a turntable ──
-function dragFor(frames: number, drag: { x: number; y: number }, yaw: number, pitch: number): { yaw: number; pitch: number } {
-    const cam = createFlyCamera();
-    for (let i = 0; i < frames; i++) {
-        const next = cam.step({ delta: 1 / 60, yaw, pitch, inputs: inputs({}, drag), speed: 3.6, distance: 1, translate: () => undefined });
-        if (next) { yaw = next.yaw; pitch = next.pitch; }
-    }
-    return { yaw, pitch };
-}
+// ── turn: a look drag, about the camera's own axes, read back whole ──
 {
-    const right = dragFor(60, { x: 0.5, y: 0 }, 1.0, 0.6);
-    check(right.yaw > 1.0 + 0.5 && Math.abs(right.pitch - 0.6) < 1e-9, 'turn: a drag to the right raises the yaw and leaves the pitch alone',
-        `yaw 1 -> ${right.yaw.toFixed(4)}, pitch 0.6 -> ${right.pitch}`);
-    const left = dragFor(60, { x: -0.5, y: 0 }, 1.0, 0.6);
-    check(Math.abs((1.0 - left.yaw) - (right.yaw - 1.0)) < 1e-9, 'turn: a drag to the left lowers it by the same amount');
-    const up = dragFor(60, { x: 0, y: 0.25 }, 1.0, 0.1);
-    check(up.pitch > 0.1 + 0.2 && Math.abs(up.yaw - 1.0) < 1e-9, 'turn: a drag up raises the pitch and leaves the yaw alone',
-        `pitch 0.1 -> ${up.pitch.toFixed(4)}, yaw 1 -> ${up.yaw}`);
-    // The same drag turns the yaw as fast near the pole as on the level: a turntable.
-    const level = dragFor(30, { x: 0.5, y: 0 }, 0, 0).yaw;
-    const steep = dragFor(30, { x: 0.5, y: 0 }, 0, 1.5).yaw;
-    check(Math.abs(level - steep) < 1e-9, 'turn: the yaw turns as fast at pitch 1.5 as on the level', `level ${level.toFixed(5)}, steep ${steep.toFixed(5)}`);
-    // Over the pole: the pitch runs on (the renderer clamps it), the yaw does not jump.
-    const over = dragFor(60, { x: 0, y: 1 }, 1.0, 1.5);
-    check(over.pitch > 1.6 && Math.abs(over.yaw - 1.0) < 1e-9, 'turn: pushed past the pole the pitch runs on and the yaw does not flip', `yaw ${over.yaw}, pitch ${over.pitch.toFixed(3)}`);
-    check(dragFor(5, { x: 0, y: 0 }, 1.0, 0.6).yaw === 1.0, 'turn: no drag, no turn');
+    const level = flyBeside({ yaw: 1.0, pitch: 0, roll: 0 }, 60, {}, { x: 0.5, y: 0 });
+    check(level.o.yaw > 1.0 + 0.5 && Math.abs(level.o.pitch) < 1e-12 && Math.abs(level.o.roll) < 1e-12, 'turn: on the level a drag to the right raises the yaw and leaves the pitch and the roll alone',
+        `yaw 1 -> ${level.o.yaw.toFixed(4)}, pitch ${level.o.pitch}, roll ${level.o.roll}`);
+    const left = flyBeside({ yaw: 1.0, pitch: 0, roll: 0 }, 60, {}, { x: -0.5, y: 0 });
+    check(Math.abs((1.0 - left.o.yaw) - (level.o.yaw - 1.0)) < 1e-9, 'turn: a drag to the left lowers it by the same amount');
+    const up = flyBeside({ yaw: 1.0, pitch: 0.1, roll: 0 }, 60, {}, { x: 0, y: 0.25 });
+    check(up.o.pitch > 0.1 + 0.2 && Math.abs(up.o.yaw - 1.0) < 1e-9 && Math.abs(up.o.roll) < 1e-9, 'turn: a drag up raises the pitch and leaves the yaw and the roll alone',
+        `pitch 0.1 -> ${up.o.pitch.toFixed(4)}, yaw 1 -> ${up.o.yaw}, roll ${up.o.roll}`);
+    // With the pitch off zero a drag across is about the camera's OWN up: that axis stays where it was, and the horizon tilts.
+    const steep = flyBeside({ yaw: 1.0, pitch: 0.6, roll: 0 }, 60, {}, { x: 0.5, y: 0 });
+    const upMoved = apart(rendererBasis(steep.o.yaw, steep.o.pitch, steep.o.roll).up, rendererBasis(1.0, 0.6).up);
+    check(upMoved < 1e-9 && Math.abs(steep.o.roll) > 0.1, "turn: with the pitch off zero a drag across is about the camera's own up (that axis stays) and tilts the horizon, as in GMT",
+        `up moved ${upMoved.toExponential(2)}, roll ${steep.o.roll}`);
+    // Over a pole: the angles jump, the camera does not. Straight over the top (no roll), past it with a roll, and
+    // under the bottom while rolling and turning.
+    const over = flyBeside({ yaw: 1.0, pitch: 1.5, roll: 0 }, 60, {}, { x: 0, y: 1 });
+    const beside = flyBeside({ yaw: 1.0, pitch: 1.5, roll: 0.4 }, 60, {}, { x: 0, y: 1 });
+    const under = flyBeside({ yaw: -2.2, pitch: -1.45, roll: -1.1 }, 90, { rollLeft: true }, { x: 0.4, y: -1 });
+    const worst = Math.max(level.worst, left.worst, up.worst, steep.worst, over.worst, beside.worst, under.worst);
+    check(worst < 1e-9, "turn: read through the renderer's formula, what is handed back is the camera that was never taken apart into angles - four drags, and three carried past a pole",
+        `worst ${worst.toExponential(2)} (over ${over.worst.toExponential(2)}, beside ${beside.worst.toExponential(2)}, under ${under.worst.toExponential(2)})`);
+    check(Math.abs(over.jump - Math.PI) < 1e-9 && Math.abs(Math.abs(over.o.roll) - Math.PI) < 1e-9 && Math.abs(over.o.pitch) < 1 && Math.max(level.jump, up.jump, steep.jump) < 0.1,
+        'turn: straight over a pole the yaw handed back jumps by half a turn in one frame, the roll with it, and the pitch comes back down; away from the poles nothing jumps',
+        `jump ${over.jump}, roll ${over.o.roll}, pitch ${over.o.pitch.toFixed(3)}; elsewhere ${Math.max(level.jump, up.jump, steep.jump).toFixed(4)}`);
+    check(flyBeside({ yaw: 1.0, pitch: 0.6, roll: 0.3 }, 5, {}).turnedFrames === 0, 'turn: no drag and no roll key, no turn');
 }
 
 // ── sense: the speed rule since 2026-10-09 - the caller answers a pace and a one-frame limit ──
@@ -170,7 +223,7 @@ function dragFor(frames: number, drag: { x: number; y: number }, yaw: number, pi
     function sensed(move: Partial<MoveInputState>, pace: number, limit: number, opt: { delta?: number; speed?: number; distance?: number; cam?: ReturnType<typeof createFlyCamera> } = {}) {
         let d: V3 | null = null, asks = 0, asked: V3 | null = null;
         (opt.cam ?? createFlyCamera()).step({
-            delta: opt.delta ?? 1 / 60, yaw: 1.14, pitch: 0.29, inputs: inputs(move), speed: opt.speed ?? 3.6, distance: opt.distance ?? 123,
+            delta: opt.delta ?? 1 / 60, yaw: 1.14, pitch: 0.29, roll: 0, inputs: inputs(move), speed: opt.speed ?? 3.6, distance: opt.distance ?? 123,
             sense: (direction) => { asks++; asked = direction; return { pace, limit }; },
             translate: (x, y, z) => { d = [x, y, z]; },
         });
@@ -200,14 +253,14 @@ function dragFor(frames: number, drag: { x: number; y: number }, yaw: number, pi
         near.d && far.d ? `x${(len(far.d) / len(near.d)).toFixed(1)}` : 'no move');
     // Switching rules in flight: the old rule leaves ITS integrator's eased distance at 1e-30; the new rule must not start from it.
     const both = createFlyCamera();
-    for (let i = 0; i < 30; i++) both.step({ delta: 1 / 60, yaw: 1.14, pitch: 0.29, inputs: inputs({ forward: true }), speed: 3.6, distance: 1e-30, translate: () => undefined });
+    for (let i = 0; i < 30; i++) both.step({ delta: 1 / 60, yaw: 1.14, pitch: 0.29, roll: 0, inputs: inputs({ forward: true }), speed: 3.6, distance: 1e-30, translate: () => undefined });
     const after = sensed({ forward: true }, 2e-30, Infinity, { cam: both });
     check(!!after.d && Math.abs(len(after.d) / (2e-30 * 3.6 / 60) - 1) < 1e-12, 'sense: after the old rule at 1e-30, the first frame under the new rule moves by its pace (the rules do not share an eased distance)',
         after.d ? `${(len(after.d) / (2e-30 * 3.6 / 60)).toPrecision(3)} of it` : 'no move');
     // A turn is read back the same way under both rules.
-    const turnOld = createFlyCamera().step({ delta: 1 / 60, yaw: 1, pitch: 0.2, inputs: inputs({}, { x: 0.5, y: 0.25 }), speed: 3.6, distance: 1, translate: () => undefined });
-    const turnNew = createFlyCamera().step({ delta: 1 / 60, yaw: 1, pitch: 0.2, inputs: inputs({}, { x: 0.5, y: 0.25 }), speed: 3.6, distance: 1, sense: () => ({ pace: 1, limit: 1 }), translate: () => undefined });
-    check(!!turnOld && !!turnNew && turnOld.yaw === turnNew.yaw && turnOld.pitch === turnNew.pitch && turnNew.yaw !== 1, 'sense: a look drag turns the camera exactly as under the old rule');
+    const turnOld = createFlyCamera().step({ delta: 1 / 60, yaw: 1, pitch: 0.2, roll: 0, inputs: inputs({}, { x: 0.5, y: 0.25 }), speed: 3.6, distance: 1, translate: () => undefined });
+    const turnNew = createFlyCamera().step({ delta: 1 / 60, yaw: 1, pitch: 0.2, roll: 0, inputs: inputs({}, { x: 0.5, y: 0.25 }), speed: 3.6, distance: 1, sense: () => ({ pace: 1, limit: 1 }), translate: () => undefined });
+    check(!!turnOld && !!turnNew && turnOld.yaw === turnNew.yaw && turnOld.pitch === turnNew.pitch && turnOld.roll === turnNew.roll && turnNew.yaw !== 1, 'sense: a look drag turns the camera exactly as under the old rule');
 }
 
 // ── pace: what the speed is multiplied by, and how fast it may change (deep-zoom/flyPace.ts) ──

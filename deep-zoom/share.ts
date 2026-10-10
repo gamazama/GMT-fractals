@@ -1,9 +1,10 @@
 /**
  * deep-zoom/share.ts - a place as text, a scene as a link, and the saved places inside a scene file.
  *
- *   Copy location / Paste location   one place as JSON on the clipboard (`locationParse.ts` reads
- *                                    it back, and last week's shapes too). A paste is a jump: one
- *                                    undo step.
+ *   Copy location / Paste location   one place as JSON on the clipboard: the camera and the
+ *                                    formula, as a saved place holds them (`captureLocation` in
+ *                                    locations.ts; `locationParse.ts` reads it back, and last
+ *                                    week's shapes too). A paste is a jump: one undo step.
  *   Copy link                        `<this page>#s=<share string>`: the engine's share encoder
  *                                    over the scene - the look and the view (`dzView` preset
  *                                    field). It never holds the saved places or the recorded
@@ -21,11 +22,9 @@ import { parseShareString } from '../utils/Sharing';
 import { registerDocumentProvider } from '../store/documentRegistry';
 import { showToast } from '../engine/store/toastStore';
 import { getHost } from './host/current';
-import { jumpTo } from './locations';
-import type { DzLocation, DzLocationState } from './locations';
+import { captureLocation, jumpTo } from './locations';
+import type { DzLocation } from './locations';
 import { locationToText, parseLocationText } from './locationParse';
-import { validDepth } from './components/depthFormat';
-import { depthNow } from './depthNow';
 
 /**
  * The picture as a canvas a PNG or JPG can be made from: the renderer reads its own drawing
@@ -53,22 +52,8 @@ async function writeClipboard(text: string, done: string): Promise<void> {
     }
 }
 
-/** The view on screen as a location (no thumbnail). Null when no renderer is mounted. */
-function currentLocation(): DzLocationState | null {
-    const host = getHost();
-    if (!host) return null;
-    const s = useEngineStore.getState();
-    const depth = depthNow(host);
-    return {
-        view: host.getView(),
-        look: { dzFormula: { ...s.dzFormula }, dzLight: { ...s.dzLight }, dzColour: { ...s.dzColour }, detail: s.dzQuality.detail },
-        depth: validDepth(depth) ? String(depth) : '',
-    };
-}
-
 export async function copyLocation(): Promise<void> {
-    const here = currentLocation();
-    if (here) await writeClipboard(locationToText(here), 'Location copied');
+    if (getHost()) await writeClipboard(locationToText(captureLocation()), 'Location copied');
 }
 
 export async function pasteLocation(): Promise<void> {

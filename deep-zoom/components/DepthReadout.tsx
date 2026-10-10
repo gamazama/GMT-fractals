@@ -147,15 +147,15 @@ export const DepthReadout: React.FC = () => {
                 data-dz-mode
                 className={`${line} mt-1`}
                 title={orbit
-                    ? 'Orbit mode. Drag: turn about the point under the pointer. Wheel, or a middle drag up and down: fly along the pointer\'s ray to that point, or back from it. Right drag: move it. The fly keys do nothing here. Tab: Fly mode.'
-                    : 'Fly mode. W A S D, Space or E up, C or Q down, Shift four times as fast; drag the picture to look; the wheel sets the speed. Tab: Orbit mode.'}
+                    ? 'Orbit mode. Drag: turn about the point under the pointer. Wheel, or a middle drag up and down: fly along the pointer\'s ray to that point, or back from it. Right drag: move it. Q and E roll; the other fly keys do nothing here. Tab: Fly mode.'
+                    : 'Fly mode. W A S D, Space up, C down, Q and E roll, Shift four times as fast; drag the picture to look; the wheel sets the speed. Tab: Orbit mode.'}
             >
                 {orbit ? 'orbit' : 'fly'} mode · Tab switches
             </div>
             <div
                 data-dz-fly-speed
                 className={line}
-                title="Fly speed: how many paces the camera covers in a second. The wheel on the picture changes it. Flying: W A S D, Space or E up, C or Q down, Shift four times as fast; drag the picture to look."
+                title="Fly speed: how many paces the camera covers in a second. The wheel on the picture changes it; the roll of Q and E follows it. Flying: W A S D, Space up, C down, Q and E roll, Shift four times as fast; drag the picture to look."
             >
                 fly speed {flySpeed}
             </div>

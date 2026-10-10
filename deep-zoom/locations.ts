@@ -2,12 +2,15 @@
  * deep-zoom/locations.ts - saved places, and the one way the camera jumps.
  *
  * PURPOSE
- *   A location is a view (the camera as three 256-bit decimal strings plus yaw and pitch), the
- *   look it was saved with, and its depth. They live in the engine's state library
+ *   A location is a view (the camera as three 256-bit decimal strings plus yaw, pitch and, when
+ *   there is one, roll), the formula it is a view of, and its depth. NOTHING ELSE: no light, no
+ *   colour or gradient, no detail, no march setting (the owner, 2026-10-10: "a place shouldnt
+ *   store light and colour - this will make it hard to improve the lighting and color system").
+ *   A jump leaves all of those as they are. They live in the engine's state library
  *   (`savedLocations`): thumbnails, labels, nine slots, the Locations menu. `jumpTo` is the single
  *   path for every jump - a saved place, a slot key, Home, Back, a starter dive's start, a pasted
  *   location - so each one is one undo step and the renderer never becomes a second writer of the
- *   look values.
+ *   look values. A scene file and a share link are not places: they carry the whole scene.
  *
  * SEAMS
  *   - `installLocations()` is called once from main.tsx, after the store exists and before the
@@ -24,8 +27,12 @@
  *   - Camera values are STRINGS and never pass through `Number()`. Depth is kept as a string too:
  *     the share encoder zeroes numbers under 1e-9.
  *   - `host.setView` also writes iterations, power, phase, light, falloff, colour and detail in the
- *     renderer. A jump therefore applies the look through the feature setters FIRST and hands the
- *     host a view whose look fields already equal the store (`viewForHost`).
+ *     renderer. A jump therefore writes the formula through its feature setter FIRST and hands the
+ *     host a view whose look fields are the store's own, whatever the saved view says of light,
+ *     colour and detail (`viewForHost`).
+ *   - A PLACE SAVED BEFORE 2026-10-10 STILL HOLDS `look.dzLight`, `look.dzColour`, `look.detail` AND
+ *     `look.march`, in storage and in scene files. Nothing reads them and nothing strips them: the
+ *     stored key layout (`look.dzFormula`) is the same, so no place needed migrating.
  *   - The state library does not keep its list across a reload. Until it can (plan gap E10) this
  *     file mirrors the list to `localStorage['gmt.deepZoom.locations']`, dropping thumbnails if the
  *     quota is hit. Last week's `gmt.deepzoom.bookmarks.v1` rows are imported once, then removed.
@@ -39,7 +46,7 @@
  *     stack between them, are one entry: taps of W would otherwise fill the 50 undo steps.
  *   - "Depth" saved with a location is the depth the app shows (`deep-zoom/depthNow.ts`: what is
  *     looked at) since 2026-10-09; before that it was the nearest surface in any direction.
- *   - THE FORMULA IS NOT IN A VIEW (2026-10-09). A view is the renderer's own eleven fields and
+ *   - THE FORMULA IS NOT IN A VIEW (2026-10-09). A view is the renderer's own fields and
  *     says nothing of Mandelbulb or Mandelbox. A place carries it in its look (`look.dzFormula.kind`
  *     and the box's numbers), a bare view that this file made itself (Back, Home) in `formula`, and
  *     anything with neither - every place, scene and pasted text from before that day - means the
@@ -62,8 +69,8 @@ import { registerHistoryProvider } from '../store/slices/historySlice';
 import { showToast } from '../engine/store/toastStore';
 import { getHost, subscribeHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
-import { LIGHT_TYPE_RENDERER_VALUES, lightTypeToRenderer } from './features/light';
-import { colourFromRenderer, colourToRenderer } from './features/colour';
+import { lightTypeToRenderer } from './features/light';
+import { colourToRenderer } from './features/colour';
 import { FORMULA_BOX, FORMULA_BULB, FORMULA_CHOICE_KEYS } from './features/formula';
 import type { DzFormulaChoice } from './features/formula';
 import { paramId } from './host/paramMap';
@@ -71,39 +78,23 @@ import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
 import { formatDepth, validDepth } from './components/depthFormat';
 import { depthNow } from './depthNow';
 import { isFlying } from './navigationState';
-import type { DzColourSlice, DzFormulaSlice, DzLightSlice } from './storeTypes';
+import type { DzFormulaSlice } from './storeTypes';
 import { STARTERS } from './data/starters';
-
-/** The look a location was saved with: the three look slices and the detail. */
-/** The march settings a place needs to draw right (Quality tab: Step size, Hit refine, Reach). */
-export interface DzLocationMarch {
-    stepSize: number;
-    hitRefine: number;
-    reach: number;
-}
 
 /** The formula slice as a place holds it. The formula choice and the box's numbers are there on a
  *  place saved since 2026-10-09; without them the place is a Mandelbulb's (see PITFALLS). */
 export type DzLocationFormula =
     Pick<DzFormulaSlice, 'power' | 'phaseTheta' | 'phasePhi' | 'iterations' | 'autoIterations'> & Partial<DzFormulaChoice>;
 
+/** What a place holds besides its view: the formula, under the key it has always been stored
+ *  under. (The name is from when the light, the colour, the detail and the march were here too.) */
 export interface DzLocationLook {
     dzFormula: DzLocationFormula;
-    dzLight: DzLightSlice;
-    /** With its gradient since stage 5 (2026-10-09): a place brings its colours back. A place
-     *  saved before that has no `gradient` key, and a jump to one leaves the gradient as it is. */
-    dzColour: Omit<DzColourSlice, 'gradient'> & Partial<Pick<DzColourSlice, 'gradient'>>;
-    detail: number;
-    /** Saved with every location since 2026-10-08: the owner's power-2 place at 5e-20 draws 85 %
-     *  of its pixels on the wrong surface at the default step and needs 0.1, so a place that does
-     *  not carry its march comes back broken. Absent on older locations: a jump to one of those
-     *  leaves the Quality tab as it is. */
-    march?: DzLocationMarch;
 }
 
 export interface DzLocationState {
     view: DzView;
-    /** Absent on a location that came in as a bare view (a starter, last week's bookmark). */
+    /** The formula. Absent on a location that came in as a bare view (a starter, last week's bookmark). */
     look?: DzLocationLook;
     /** For a bare view only (no `look`): which formula it is a view of. Back and Home set it; a
      *  bare view from anywhere else has none and is a Mandelbulb's. */
@@ -139,7 +130,7 @@ const LEGACY_BOOKMARKS_KEY = 'gmt.deepzoom.bookmarks.v1';
 /** Thumbnails are 128 px JPEG: last week's PNGs are what filled the storage quota. */
 const THUMBNAIL_PX = 128;
 
-// ── the look, between the store and a view ───────────────────────────────────────────────────────
+// ── the formula, between the store and a view ────────────────────────────────────────────────────
 
 /** Which formula the store says is drawn, with the box's numbers. */
 function formulaChoiceNow(): DzFormulaChoice {
@@ -159,31 +150,16 @@ function pushFormulaNow(host: DeepZoomHost): void {
     host.setParams(patch);
 }
 
-function captureLook(): DzLocationLook {
-    const s = useEngineStore.getState();
-    return {
-        dzFormula: { ...s.dzFormula }, dzLight: { ...s.dzLight }, dzColour: { ...s.dzColour }, detail: s.dzQuality.detail,
-        march: { stepSize: s.dzQuality.stepSize, hitRefine: s.dzQuality.hitRefine, reach: s.dzQuality.reach },
-    };
-}
-
-function applyLook(look: DzLocationLook): void {
-    const s = useEngineStore.getState();
-    s.setDzFormula({ kind: FORMULA_BULB, ...look.dzFormula });      // a look from before 2026-10-09 has no `kind`: the Mandelbulb
-    s.setDzLight(look.dzLight);
-    s.setDzColour(look.dzColour);
-    s.setDzQuality(look.march ? { detail: look.detail, ...look.march } : { detail: look.detail });
-}
-
-/** The look fields a bare view carries, written to the store (iterations, power, phase, light
- *  type, falloff, colour, scale, detail). Used when a view arrives with no saved look. */
-function applyViewLook(view: DzView, formula?: DzFormulaChoice): void {
-    const s = useEngineStore.getState();
-    s.setDzFormula({ kind: FORMULA_BULB, ...formula, power: view.power, phaseTheta: view.phase[0], phasePhi: view.phase[1], iterations: view.iters });
-    const lightType = LIGHT_TYPE_RENDERER_VALUES.indexOf(view.light as (typeof LIGHT_TYPE_RENDERER_VALUES)[number]);
-    s.setDzLight({ lightType: lightType < 0 ? 0 : lightType, lampFalloff: view.falloff });
-    s.setDzColour({ ...colourFromRenderer(view.color), scale: view.cscale });
-    s.setDzQuality({ detail: view.surf });
+/** All a jump writes to the store: the formula. A place's saved one; for a bare view the fields the
+ *  view itself carries (power, phase, iterations) with the formula it came with. Without a formula
+ *  choice - every place and view from before 2026-10-09 - it is the Mandelbulb. A view's own light,
+ *  colour and detail fields are not read. */
+function applyFormula(state: DzLocationState): void {
+    const v = state.view;
+    useEngineStore.getState().setDzFormula({
+        kind: FORMULA_BULB,
+        ...(state.look ? state.look.dzFormula : { ...state.formula, power: v.power, phaseTheta: v.phase[0], phasePhi: v.phase[1], iterations: v.iters }),
+    });
 }
 
 /** `view` with its look fields replaced by what the store holds now, so `host.setView` writes
@@ -194,6 +170,7 @@ export function viewForHost(view: DzView): DzView {
         cam: view.cam,
         yaw: view.yaw,
         pitch: view.pitch,
+        ...(view.roll ? { roll: view.roll } : {}),
         // The store holds the user's FLOOR; with auto iterations on the renderer raises its own
         // count with depth and a saved view carries the count it was drawn with. Handing the
         // floor here redrew a place saved at 98 iterations with 85 (seen 2026-10-08).
@@ -211,7 +188,7 @@ export function viewForHost(view: DzView): DzView {
 // ── jumping ──────────────────────────────────────────────────────────────────────────────────────
 
 let jumpSeq = 0;
-/** True while `jumpTo` writes the look: a formula change inside a jump is the jump's own. */
+/** True while `jumpTo` writes the formula: a formula change inside a jump is the jump's own. */
 let jumping = false;
 
 /** A coordinate as the camera holds it: 256 fractional bits, as a decimal string. */
@@ -242,13 +219,12 @@ const backStack: FormulaView[] = [];
 let homeView: FormulaView | null = null;
 
 export interface JumpOptions {
-    /** Keep the current light, colour, formula and detail; move the camera only. */
-    keepLook?: boolean;
     /** Internal: a Back jump does not push the view it leaves. */
     noBack?: boolean;
 }
 
-/** Move the camera to a location (or a bare view). One undo step. False when no renderer is mounted. */
+/** Move the camera to a location (or a bare view) and switch to its formula. One undo step. False
+ *  when no renderer is mounted. */
 export function jumpTo(target: DzLocationState | DzView, opts: JumpOptions = {}): boolean {
     const host = getHost();
     if (!host) return false;
@@ -259,10 +235,7 @@ export function jumpTo(target: DzLocationState | DzView, opts: JumpOptions = {})
     jumping = true;
     try {
         jumpSeq++;
-        if (!opts.keepLook) {
-            if (state.look) applyLook(state.look);
-            else applyViewLook(state.view, state.formula);
-        }
+        applyFormula(state);
         pushFormulaNow(host);                                        // before the view: THE FORMULA IS NOT IN A VIEW
         host.setView(viewForHost(state.view));
     } finally {
@@ -333,11 +306,13 @@ export function jumpBack(): void {
 
 // ── capture ──────────────────────────────────────────────────────────────────────────────────────
 
-function captureLocation(): DzLocationState {
+/** The view on screen as a location: its camera, its formula and its depth. What a saved place and
+ *  "Copy location" both hold. Throws when no renderer is mounted. */
+export function captureLocation(): DzLocationState {
     const host = getHost();
     if (!host) throw new Error('No renderer is mounted: there is no view to save.');
     const depth = depthNow(host);
-    return { view: host.getView(), look: captureLook(), depth: validDepth(depth) ? String(depth) : '' };
+    return { view: host.getView(), look: { dzFormula: { ...useEngineStore.getState().dzFormula } }, depth: validDepth(depth) ? String(depth) : '' };
 }
 
 /** The module's PNG thumbnail re-encoded as a small JPEG. */

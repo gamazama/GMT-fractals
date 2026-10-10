@@ -9,8 +9,12 @@
  *
  * FALSIFICATION RECORD, 2026-10-08: the whole-number test on `cam` removed (`isCam` accepting any
  * three strings) -> 1 red ("a cam holding a decimal point is refused").
- * 2026-10-09, the gradient a place carries (stage 5): `lookOf` returning the look as pasted ->
- * 1 red ("a pasted gradient that is not one is dropped ...").
+ * 2026-10-10, a place is a camera and a formula, and a view may carry a roll (one break per run in
+ * deep-zoom/locationParse.ts, 1 red each): `lookOf` returning the look as pasted -> "of a pasted
+ * look only the formula is kept ..."; `lookOf` answering a look whatever it was given -> "a pasted
+ * look with no formula in it ..."; the roll line taken out of `viewOf` -> "a view with a roll reads
+ * back with it"; the roll written whatever it is -> "a view without a roll ... has no roll key".
+ * (The line of 2026-10-09 about a pasted gradient went with the gradient a place no longer holds.)
  */
 import { locationToText, parseLocationText } from '../../deep-zoom/locationParse.ts';
 
@@ -62,24 +66,31 @@ const sameCam = (c: unknown): boolean => Array.isArray(c) && c.length === 3 && c
 }
 
 {
-    // A place carries its gradient in the look (stage 5). Pasted text is not trusted with one.
-    const GRADIENT = { colorSpace: 'linear', blendSpace: 'oklab', stops: [
-        { id: 'a', position: 0, color: '#102030', bias: 0.5, interpolation: 'linear' },
-        { id: 'b', position: 1, color: '#F0E0D0', bias: 0.5, interpolation: 'linear' },
-    ] };
-    const withColour = (dzColour: unknown): string => JSON.stringify({ view: VIEW, look: { dzColour, detail: 2 }, depth: '1e-9' });
-    const colourOf = (text: string): Record<string, unknown> | undefined => {
-        const r = parseLocationText(text);
-        return r.ok ? (r.locations[0].look?.dzColour as Record<string, unknown> | undefined) : undefined;
+    // A place is a camera and a formula. Text copied before 2026-10-10 carries the whole look of that day.
+    const FORMULA = { power: 4, phaseTheta: 0, phasePhi: 0, iterations: 148, autoIterations: true };
+    const OLD_LOOK = {
+        dzFormula: FORMULA,
+        dzLight: { shading: 1, lightType: 0, lampFalloff: 4, keyElevation: 40 },
+        dzColour: { plain: false, mode: 0, scale: 2, gradient: { colorSpace: 'linear', stops: [{ id: 'a', position: 0, color: '#102030' }] } },
+        detail: 7.5,
+        march: { stepSize: 0.1, hitRefine: 2, reach: 2 },
     };
-    const good = colourOf(withColour({ plain: false, mode: 0, scale: 2, gradient: GRADIENT }));
-    const kept = good?.gradient as typeof GRADIENT | undefined;
-    check(JSON.stringify(kept?.stops) === JSON.stringify(GRADIENT.stops) && kept?.colorSpace === 'linear' && kept?.blendSpace === 'oklab' && good?.scale === 2,
-        'a pasted place keeps a well-formed gradient, and the fields beside it');
-    const junk = colourOf(withColour({ plain: false, mode: 0, scale: 2, gradient: { stops: 'red to blue' } }));
-    check(!!junk && !('gradient' in junk) && junk.scale === 2 && junk.plain === false, 'a pasted gradient that is not one is dropped, and the place keeps its other colour fields');
-    const none = colourOf(withColour({ plain: true, mode: 0, scale: 1 }));
-    check(!!none && !('gradient' in none), 'a place from before the gradient has no gradient key (a jump leaves the gradient alone)');
+    const old = parseLocationText(JSON.stringify({ view: VIEW, look: OLD_LOOK, depth: '3.4e-76' }));
+    check(old.ok && JSON.stringify(old.locations[0].look) === JSON.stringify({ dzFormula: FORMULA }) && sameCam(old.locations[0].view.cam),
+        'of a pasted look only the formula is kept: the light, the colour with its gradient, the detail and the march of an older text are dropped, and the place still reads',
+        old.ok ? JSON.stringify(old.locations[0].look) : old.reason);
+    const none = parseLocationText(JSON.stringify({ view: VIEW, look: { dzLight: OLD_LOOK.dzLight, detail: 2 }, depth: '1e-9' }));
+    check(none.ok && !('look' in none.locations[0]), 'a pasted look with no formula in it leaves the place a bare view');
+}
+{
+    // The roll: carried when the camera has one, absent when it has none.
+    const rolled = parseLocationText(locationToText({ view: { ...VIEW, roll: -0.75 } as never, depth: '1e-9' }));
+    check(rolled.ok && rolled.locations[0].view.roll === -0.75, 'a view with a roll reads back with it');
+    const level = parseLocationText(JSON.stringify({ view: VIEW }));
+    const zero = parseLocationText(JSON.stringify({ view: { ...VIEW, roll: 0 } }));
+    const junk = parseLocationText(JSON.stringify({ view: { ...VIEW, roll: 'sideways' } }));
+    check(level.ok && !('roll' in level.locations[0].view) && zero.ok && !('roll' in zero.locations[0].view) && junk.ok && !('roll' in junk.locations[0].view),
+        'a view without a roll, with a roll of 0 or with one that is not a number has no roll key (it reads as 0)');
 }
 
 console.log(failed === 0 ? 'location-parse: all green' : `location-parse: ${failed} FAILED`);

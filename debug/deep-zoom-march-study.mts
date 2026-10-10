@@ -120,7 +120,7 @@ if (WHICH !== 'places') {
 const targets: Target[] = [];
 const details = (own: number): number[] => DETAIL === 'saved' ? [own] : nums(DETAIL);
 for (const place of PLACES) {
-    const m = place.state.look.march;
+    const m = place.march;
     for (const detail of details(place.state.view.surf)) targets.push({ label: place.name, view: place.state.view, detail,
         saved: m && { step: m.stepSize || 0.85, refine: m.hitRefine, reach: m.reach, saved: true } });
 }

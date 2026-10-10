@@ -17,7 +17,7 @@
  *                  `setPendingView`, `takePath`, `smoothPath`, `seekPath`, `play`, `renderPathZip`.
  *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error`.
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
- *   [5] input      `focus`, and the four host-input members straight through to the module.
+ *   [5] input      `focus`, and the host-input members straight through to the module.
  *   [6] flight     recording, copies, seek by time, one preview at a time.
  *   [7] render     the result mapping, `progress`, `cancel`, `thumbnail`.
  *   [8] dive       `dive.ts` alone, then through the host.
@@ -73,8 +73,11 @@
  *     `focus()` on the canvas -> 2: "input: focus() focuses the frame ...", "mount: host.focus()
  *       focuses the frame"
  *     (N5, 2026-10-08) `setInputOwner: () => undefined` in moduleHost.ts -> 1: "input:
- *       setInputOwner reaches the module ..."; `setYawPitch: (yaw, pitch) => dz.setYawPitch(pitch,
- *       yaw)` -> 1: "input: setYawPitch hands the module yaw then pitch"
+ *       setInputOwner reaches the module ..."
+ *     (2026-10-10, the roll) `setOrientation: (yaw, pitch, roll) => dz.setOrientation(yaw, roll,
+ *       pitch)` -> 1: "input: setOrientation hands the module yaw, pitch, then roll ..."; the same
+ *       sent through the module's `setYawPitch` -> 1: that line; `orientation` built from the
+ *       module's `yawPitch` with a roll of 0 -> 1: "input: orientation is the module's own three angles"
  *   flight and render
  *     `setRecording` always toggles -> 3; previews not serialised -> 2: "flight: a second play
  *       stops the preview in flight first ..."; a render that does not stop a preview -> 1;
@@ -328,6 +331,8 @@ function makeRig() {
             rawDistance: (): number => 6.4e-53,
             yawPitch: () => ({ yaw: state.view.yaw, pitch: state.view.pitch }),
             setYawPitch: (yaw: number, pitch: number): void => { note('setYawPitch', yaw, pitch); },
+            orientation: () => ({ yaw: state.view.yaw, pitch: state.view.pitch, roll: 0.75 }),
+            setOrientation: (yaw: number, pitch: number, roll: number): void => { note('setOrientation', yaw, pitch, roll); },
             // The ray probe reads the camera as it is NOW (it is not refreshed by a frame, unlike `depth`).
             sense: (axis?: [number, number, number] | null, opt?: DzSenseOptions): DzSense => {
                 note('sense', axis ?? null, opt);
@@ -781,11 +786,11 @@ console.log('[5] input     focus, and the host-input members');
     host.setInputOwner('host');
     check(rig.count('setInputOwner') === 1 && rig.calls.setInputOwner[0][0] === 'host', 'input: setInputOwner reaches the module with the owner it was given');
     check(host.rawDistance() === 6.4e-53, 'input: rawDistance is the module\'s own number', String(host.rawDistance()));
-    const look = host.yawPitch();
-    check(look.yaw === rig.state.view.yaw && look.pitch === rig.state.view.pitch, 'input: yawPitch is the module\'s own pair');
-    host.setYawPitch(0.25, -0.5);
-    check(rig.count('setYawPitch') === 1 && rig.calls.setYawPitch[0][0] === 0.25 && rig.calls.setYawPitch[0][1] === -0.5,
-        'input: setYawPitch hands the module yaw then pitch');
+    const look = host.orientation();
+    check(look.yaw === rig.state.view.yaw && look.pitch === rig.state.view.pitch && look.roll === 0.75, 'input: orientation is the module\'s own three angles');
+    host.setOrientation(0.25, -2, 1.25);
+    check(rig.count('setOrientation') === 1 && rig.calls.setOrientation[0][0] === 0.25 && rig.calls.setOrientation[0][1] === -2 && rig.calls.setOrientation[0][2] === 1.25
+        && rig.count('setYawPitch') === 0, 'input: setOrientation hands the module yaw, pitch, then roll, as given, and not through its setYawPitch (which clamps the pitch)');
     check(rig.doc.count('pointerlockchange') === 0, 'input: the host listens for no pointer lock');
     const axis: [number, number, number] = [0, 0.6, 0.8];
     const sensed = host.sense(axis, { slot: 'move', reuse: 0.1 });
@@ -1113,7 +1118,7 @@ console.log('[8] dive      dive.ts alone, then through the host');
     host.setView(view(CAM_B));
     check(await stateOf(deeper, 5) === 'resolved', 'dive: setView ends a dive');
     host.moveAlong([0, 0, 1], 1e-9);
-    host.setYawPitch(0.1, 0.2);
+    host.setOrientation(0.1, 0.2, 0.3);
     check(viewSets === 1, 'views: setView says so (the viewSet event), a move and a turn do not', `${viewSets} events`);
     offViewSet();
     rig.state.trueDepth = 1;

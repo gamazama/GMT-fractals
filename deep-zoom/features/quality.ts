@@ -66,8 +66,9 @@
  *     The shell starts the renderer with `mode: 'deep'` (host/moduleHost.ts, `shellOptions`): the
  *     deep path draws at every depth, and the f32 baseline shows only until the deep shader has
  *     compiled. A scene saved before that day may carry `dzQuality.precision`; it is ignored.
- *   - `detail` has a second writer: `api.dz.setView(view)` writes it from `view.surf`. The shell
- *     applies a jump through this feature's setter so the store stays the one owner.
+ *   - `detail` has a second writer: `api.dz.setView(view)` writes it from `view.surf`. A jump does
+ *     not change the detail: the shell hands the renderer a view that carries the store's own
+ *     value (`viewForHost` in deep-zoom/locations.ts), so the store stays the one owner.
  *   - `depthNormalRadius` is shown only while `normals` is Depth; its value is kept, and pushed,
  *     whatever `normals` is.
  *   - `reach` read back through `api.dz.settings().reach` is 1 for any custom `api.setMarch`

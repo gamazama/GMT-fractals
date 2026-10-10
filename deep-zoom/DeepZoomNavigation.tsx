@@ -17,8 +17,8 @@
  *     (`host.canvas().parentElement`), so a remount after a lost context re-attaches by itself.
  *   - One tick, `deepZoom.navigate`, in the ANIMATE phase: before `deepZoom.step` (OVERLAY) draws,
  *     so a move is in the frame it was made in.
- *   - Out: `host.moveAlong([dx, dy, dz], 1)` for a move, `host.setYawPitch(yaw, pitch)` for a
- *     turn. In: `host.yawPitch()`, `host.sense(...)`, `host.freeDistance(...)` and
+ *   - Out: `host.moveAlong([dx, dy, dz], 1)` for a move, `host.setOrientation(yaw, pitch, roll)`
+ *     for a turn. In: `host.orientation()`, `host.sense(...)`, `host.freeDistance(...)` and
  *     `host.rawDistance()`. No position is ever read back.
  *   - The mode is the engine store's `cameraMode` ('Fly' or 'Orbit'), the field GMT's own Tab key
  *     flips; this app's Tab is in `deep-zoom/hotkeys.ts`. The fly speed, the speed rule's two
@@ -40,30 +40,36 @@
  * WHAT THE HANDS DO
  *   Fly (the mode the app starts in):
  *     W A S D            forward, left, back, right
- *     Space / C, E / Q   up / down along the camera's up (the renderer has no roll)
- *     Shift              four times the speed
- *     drag on the picture   look: the further from where the drag began, the faster the turn
+ *     Space / C          up / down along the camera's up
+ *     Q / E              roll left / right about the view axis (GMT's keys; the rate is
+ *                        `DZ_NAV_ROLL_GEAR` in deep-zoom/flyCamera.ts)
+ *     Shift              four times the speed, of the roll too
+ *     drag on the picture   look, about the camera's own axes as in GMT (with the pitch off zero
+ *                           it tilts the horizon): the further from where the drag began, the
+ *                           faster the turn
  *     wheel on the picture  the fly speed, a tenth per notch (Shift: four notches, Alt: a tenth),
  *                           0.01 to 8 paces a second
  *   Orbit (Tab; the maths is `deep-zoom/orbitCamera.ts`):
- *     drag               turns the camera about the point under the pointer where the drag began;
- *                        that point stays where it is in the picture (a full picture height of
- *                        drag is a full turn, as in GMT)
+ *     drag               turns the camera about the point under the pointer where the drag began,
+ *                        about the camera's own up (a drag across) and its own right (a drag up or
+ *                        down), so the picture follows the hand whatever the roll; that point stays
+ *                        where it is in the picture (a full picture height of drag is a full turn,
+ *                        as in GMT). Nothing stops at a pole.
  *     wheel              flies along the pointer's ray: a notch covers 14 % of the way to the point
  *                        under the pointer, or backs away by as much (Shift four times, Alt a tenth)
  *     middle drag        the same flight by hand, as in GMT: up is towards the point under the
  *                        pointer where the drag began, down is back from it; about 140 pixels
  *                        halve the distance (Shift four times, Alt a tenth)
  *     right drag         drags the point under the pointer: the camera moves in the picture's plane
- *     the fly keys do nothing, as in GMT's Orbit mode
+ *     Q / E              roll, as in Fly mode; the other fly keys do nothing, as in GMT's Orbit mode
  *   The pivot is ONE ray of the renderer's through the pointer (`host.freeDistance`); with nothing
  *   under the pointer it is the middle of the picture at the depth the app shows (GMT: the view
  *   axis at the last surface distance). Every orbit move is cut to half the nearest ray ahead of
  *   it, like a fly move, so a turn that would swing the camera into a wall stops short of it.
  *   And a turn or a drag keeps a CLEARANCE (`DZ_ORBIT_CLEARANCE`): the camera is not carried to
  *   where the nearest surface, in any direction, is nearer than a share of the pivot's distance.
- *   A turn that is held tries its yaw alone, then its pitch alone, so the camera slides along
- *   what holds it; while it is held the pivot's mark fills in. The wheel and the middle drag are
+ *   A turn that is held tries its turn across alone, then its turn up alone, so the camera slides
+ *   along what holds it; while it is held the pivot's mark fills in. The wheel and the middle drag are
  *   not held by it: they fly along one ray to the pivot, and the rays keep them off it.
  *   A flight - from the first key down to the last key up - or an orbit gesture is one undo step
  *   when it moved the camera (`flightBegan` / `flightEnded` in `deep-zoom/locations.ts`).
@@ -78,7 +84,10 @@
  *     plays in either mode, and the fly keys are ignored (`isTimelineHovered`).
  *   - A fly letter pressed with Ctrl, Alt or Cmd is refused (`keysSuppressed`): those chords are
  *     shortcuts here. Without that, Alt+S saved the scene AND flew backwards (seen 2026-10-08).
- *     So this shell has no Alt "precise" modifier; it only ever scaled roll, which is not here.
+ *     So this shell has no Alt "precise" modifier (in GMT it slows the roll to a tenth).
+ *   - A ROLL IS A LOOK, NOT A MOVE: it steers a dive without ending it and leaves no undo step. It
+ *     eases out for a second or two after the key is up (GMT's own ease), and the still gathers
+ *     only once it has stopped.
  *   - A zero move is not sent: `moveAlong` marks the reference orbit dirty, and a rebuilt orbit
  *     restarts the still.
  *   - A move from the hands ends a dive in flight. A look drag does not: it steers the dive.
@@ -104,18 +113,21 @@
  *     `estimateAt`, never of `rawDistance()`: the two differ by 0.1 % outside radius 2.
  *
  * @assumption The wiring is what the stage-N5 smoke opens (`npm run smoke:deep-zoom -- --stage N5`:
- *   W / S, a look drag, the wheel, a text field, a dive, a deep view, the wall-behind place, a
- *   flight's undo, and Orbit mode's turn, its clearance, the wheel and Tab). The on-screen sticks, a
- *   touch layout, invert-Y, the right drag, the middle drag (it shares the wheel's `zoomBy`) and
- *   the lock during a preview are not opened by any test.
+ *   W / S, a look drag, the wheel, a text field, a dive, a deep view, Space / C and the roll keys
+ *   in Fly mode, the wall-behind place, a flight's undo, and Orbit mode's turn, its clearance, the
+ *   wheel and Tab). The on-screen sticks, a touch layout, invert-Y, the right drag, the middle drag
+ *   (it shares the wheel's `zoomBy`), the roll keys in Orbit mode, a look drag or an orbit turn
+ *   that starts with a roll, and the lock during a preview are not opened by any test.
  */
 import React, { useEffect, useRef } from 'react';
 import { registerTick, TICK_PHASE } from '../engine/TickRegistry';
 import { getCameraModifierFromEvent } from '../engine/plugins/navigation/modifiers';
 import { useNavigationInput } from '../engine/plugins/navigation/useNavigationInput';
 import type { NavigationInput } from '../engine/plugins/navigation/useNavigationInput';
+import type { FlyInputs } from '../engine/plugins/navigation/FlyIntegrator';
 import { useEngineStore } from '../store/engineStore';
 import { getHost, useHost } from './host/current';
+import type { DzOrientation } from './host/DeepZoomHost';
 import { getTelemetry } from './host/telemetry';
 import { createFlyCamera } from './flyCamera';
 import { DZ_NAV_STRIDE_SHARE, createPace, paceReading } from './flyPace';
@@ -182,6 +194,11 @@ const navigationLocked = (): boolean => {
 const keysSuppressed = (e: KeyboardEvent): boolean =>
     e.ctrlKey || e.altKey || e.metaKey || !!useEngineStore.getState().isTimelineHovered;
 const orbiting = (): boolean => cameraModeOf(useEngineStore.getState()) === DZ_MODE_ORBIT;
+/** What Orbit mode hands the fly step: of the fly keys only Q and E act there (Shift with them). */
+const orbitInputs = (held: FlyInputs['move']): FlyInputs => ({
+    move: { ...held, forward: false, backward: false, left: false, right: false, up: false, down: false },
+    look: { x: 0, y: 0 }, moveJoy: { x: 0, y: 0 }, isDragging: false, dragDelta: { x: 0, y: 0 }, invertY: false,
+});
 // The hook's session (a key or a fly look-drag held). In Orbit mode a held key moves nothing, and
 // its begin must not restart the take-off view of an orbit gesture in the air (see PITFALLS).
 const onFlyBegin = (): void => { if (orbiting()) return; setFlying(true); flightBegan(); };
@@ -267,8 +284,7 @@ export const DeepZoomNavigation: React.FC = () => {
             if (!(rect.height > 0)) return null;
             const u = (clientX - (rect.left + rect.width / 2)) / rect.height;
             const v = ((rect.top + rect.height / 2) - clientY) / rect.height;
-            const look = host.yawPitch();
-            const hit = host.freeDistance(viewRay(look.yaw, look.pitch, u, v), DZ_PICK);
+            const hit = host.freeDistance(viewRay(host.orientation(), u, v), DZ_PICK);
             if (hit.kind === 'hit' && hit.t > 0) return { pivot: { u, v, distance: hit.t }, height: rect.height };
             // Nothing under the pointer: the middle of the picture, at the depth the app shows.
             return { pivot: { u: 0, v: 0, distance: useDzNavigation.getState().depth }, height: rect.height };
@@ -340,13 +356,13 @@ export const DeepZoomNavigation: React.FC = () => {
         /** A flight along a pivot's ray - the wheel's and the middle drag's. `log` is the logarithm of
          *  the share of the pivot's distance to leave. One frame covers at most DZ_ZOOM_MAX_SHARE of
          *  the way, and no more than the rays allow. */
-        const zoomBy = (look: { yaw: number; pitch: number }, pivot: OrbitPivot, log: number): void => {
+        const zoomBy = (look: DzOrientation, pivot: OrbitPivot, log: number): void => {
             let factor = Math.max(Math.exp(log), 1 - DZ_ZOOM_MAX_SHARE);
-            let zoom = orbitZoom(look.yaw, look.pitch, pivot, factor);
+            let zoom = orbitZoom(look, pivot, factor);
             const share = allowed(zoom.move);
             if (share < 1) {
                 factor = 1 - (1 - factor) * share;
-                zoom = orbitZoom(look.yaw, look.pitch, pivot, factor);
+                zoom = orbitZoom(look, pivot, factor);
             }
             if (zoom.move[0] !== 0 || zoom.move[1] !== 0 || zoom.move[2] !== 0) {
                 openGesture();
@@ -357,7 +373,7 @@ export const DeepZoomNavigation: React.FC = () => {
         /** One frame of Orbit mode. Returns the pivot to mark in the picture (and whether the
          *  clearance held a move back this frame), or null. */
         const orbitFrame = (now: number): { pivot: OrbitPivot; height: number; held: boolean } | null => {
-            const look = host.yawPitch();
+            const look = host.orientation();
             const drag = orbit.drag;
             let held = false;
             if (drag && drag.kind === 'zoom') {
@@ -378,29 +394,30 @@ export const DeepZoomNavigation: React.FC = () => {
                     return there >= DZ_ORBIT_CLEARANCE * pivot.distance || there >= here;
                 };
                 if (drag.kind === 'turn') {
-                    // Right raises the yaw and down lowers the pitch: the picture turns with the hand.
-                    const dYaw = DZ_ORBIT_TURN * du, dPitch = DZ_ORBIT_TURN * dv;
-                    // The whole turn; where the clearance holds that, the yaw alone, then the pitch
-                    // alone: the camera slides along what holds it instead of sticking to it.
-                    const tries: Array<[number, number]> = dYaw !== 0 && dPitch !== 0 ? [[dYaw, dPitch], [dYaw, 0], [0, dPitch]] : [[dYaw, dPitch]];
+                    // A drag to the right turns the view to the camera's right and a drag down turns
+                    // it down, about the camera's own axes: the picture turns with the hand.
+                    const across = DZ_ORBIT_TURN * du, up = DZ_ORBIT_TURN * dv;
+                    // The whole turn; where the clearance holds that, the turn across alone, then the turn
+                    // up alone: the camera slides along what holds it instead of sticking to it.
+                    const tries: Array<[number, number]> = across !== 0 && up !== 0 ? [[across, up], [across, 0], [0, up]] : [[across, up]];
                     for (const [a, b] of tries) {
-                        let turn = orbitTurn(look.yaw, look.pitch, pivot, a, b);
+                        let turn = orbitTurn(look, pivot, a, b);
                         if (turn.move[0] !== 0 || turn.move[1] !== 0 || turn.move[2] !== 0) {
                             // The clearance first: it is one orbit, where the limit by rays is a bundle of them.
                             if (!clear(turn.move)) { held = true; continue; }
                             const share = allowed(turn.move);
                             if (share < 1) {
-                                turn = orbitTurn(look.yaw, look.pitch, pivot, a * share, b * share);
+                                turn = orbitTurn(look, pivot, a * share, b * share);
                                 if (!clear(turn.move)) { held = true; continue; }
                             }
                         }
                         openGesture();
                         translate(turn.move[0], turn.move[1], turn.move[2]);
-                        host.setYawPitch(turn.yaw, turn.pitch);
+                        host.setOrientation(turn.yaw, turn.pitch, turn.roll);
                         break;
                     }
                 } else {
-                    const move = orbitDrag(look.yaw, look.pitch, pivot, du, dv);
+                    const move = orbitDrag(look, pivot, du, dv);
                     const share = clear(move) ? allowed(move) : 0;
                     const cut: V3 = [move[0] * share, move[1] * share, move[2] * share];
                     if (share > 0 && clear(cut)) {
@@ -445,49 +462,45 @@ export const DeepZoomNavigation: React.FC = () => {
             const view = (): DepthReading => (got.read ??= readDepth(host));
 
             let pivotMark: { pivot: OrbitPivot; height: number; held: boolean } | null = null;
-            if (inOrbit) {
-                if (locked) { orbit.drag = null; orbit.wheel = null; closeGesture(); } else pivotMark = orbitFrame(now);
-            } else {
-                // Left Orbit mode with a gesture in the air: it ends here.
-                if (orbit.drag || orbit.wheel || orbit.gesture) { orbit.drag = null; orbit.wheel = null; closeGesture(); }
-                if (!locked) {
-                    const look = host.yawPitch();
-                    const cp = Math.cos(look.pitch);
-                    const fwd: V3 = [cp * Math.cos(look.yaw), Math.sin(look.pitch), cp * Math.sin(look.yaw)];
-                    const held = inp.moveState.current;
-                    const turned = camera.step({
-                        delta,
-                        yaw: look.yaw,
-                        pitch: look.pitch,
-                        inputs: {
-                            move: held,
-                            look: inp.joystickLook.current,
-                            moveJoy: inp.joystickMove.current,
-                            isDragging: dragging,
-                            dragDelta: { x: dragX, y: dragY },
-                            invertY: inp.invertY,
-                        },
-                        speed: inp.speedRef.current,
-                        distance: host.rawDistance(),
-                        sense: nav.followView ? (direction) => {
-                            got.moved = true;
-                            const nearest = host.rawDistance();
-                            const looked = view().sense;
-                            const alongView = direction[0] * fwd[0] + direction[1] * fwd[1] + direction[2] * fwd[2] > 1 - 1e-9;
-                            const ahead = alongView ? looked : host.sense(direction, { slot: DZ_MOVE_SLOT });
-                            const value = pace.step({
-                                delta,
-                                look: paceReading(looked, nearest),
-                                ahead: paceReading(ahead, nearest),
-                                rise: nav.paceRise,
-                                boost: held.boost,
-                            });
-                            return { pace: value, limit: DZ_NAV_STRIDE_SHARE * ahead.near };
-                        } : undefined,
-                        translate,
-                    });
-                    if (turned) host.setYawPitch(turned.yaw, turned.pitch);
-                }
+            if (inOrbit && !locked) pivotMark = orbitFrame(now);
+            else if (orbit.drag || orbit.wheel || orbit.gesture) { orbit.drag = null; orbit.wheel = null; closeGesture(); }   // locked, or Orbit mode left, with a gesture in the air: it ends here
+            // The fly step, in both modes: in Orbit mode it is handed the roll keys alone.
+            if (!locked) {
+                const look = host.orientation();
+                const cp = Math.cos(look.pitch);
+                const fwd: V3 = [cp * Math.cos(look.yaw), Math.sin(look.pitch), cp * Math.sin(look.yaw)];
+                const held = inp.moveState.current;
+                const turned = camera.step({
+                    delta,
+                    ...look,
+                    inputs: inOrbit ? orbitInputs(held) : {
+                        move: held,
+                        look: inp.joystickLook.current,
+                        moveJoy: inp.joystickMove.current,
+                        isDragging: dragging,
+                        dragDelta: { x: dragX, y: dragY },
+                        invertY: inp.invertY,
+                    },
+                    speed: inp.speedRef.current,
+                    distance: host.rawDistance(),
+                    sense: nav.followView ? (direction) => {
+                        got.moved = true;
+                        const nearest = host.rawDistance();
+                        const looked = view().sense;
+                        const alongView = direction[0] * fwd[0] + direction[1] * fwd[1] + direction[2] * fwd[2] > 1 - 1e-9;
+                        const ahead = alongView ? looked : host.sense(direction, { slot: DZ_MOVE_SLOT });
+                        const value = pace.step({
+                            delta,
+                            look: paceReading(looked, nearest),
+                            ahead: paceReading(ahead, nearest),
+                            rise: nav.paceRise,
+                            boost: held.boost,
+                        });
+                        return { pace: value, limit: DZ_NAV_STRIDE_SHARE * ahead.near };
+                    } : undefined,
+                    translate,
+                });
+                if (turned) host.setOrientation(turned.yaw, turned.pitch, turned.roll);
             }
 
             // The reticle: where a fly look-drag has got to (measured from the picture's centre),

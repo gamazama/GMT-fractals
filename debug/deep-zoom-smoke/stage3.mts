@@ -136,38 +136,49 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'a kept place brings its view and the march it needs; a location saved there remembers the march',
-            owner: 'owner, 2026-10-08',
-            falsified: '2026-10-08, three breaks, one run each: `applyLook` in deep-zoom/locations.ts made to ignore `look.march` -> red, "with the march it needs" false (step 0.85, hit refine 0); `march` taken out of `captureLook` -> red, "recalled with 1, the saved location brings the step and the refine back" false; the `dz-places` widget removed from the Locations panel in deep-zoom/panels.ts -> red, 0 cards for 3 places.',
+            name: 'a kept place brings its camera and its formula and leaves the light, the colour, the detail and the march as they were; a location saved there holds the camera and the formula only',
+            owner: 'owner, 2026-10-10 (a place is a camera and a formula)',
+            falsified: '2026-10-08: the `dz-places` widget removed from the Locations panel in deep-zoom/panels.ts -> red, 0 cards for 3 places. 2026-10-10, when a place became a camera and a formula, four breaks in deep-zoom/locations.ts, one run each: `applyFormula(state)` taken out of `jumpTo` -> red, "with its formula (power 8 -> 8)" false; `applyFormula` made to write the view\'s own detail to the store as well -> red, "and nothing else: ... detail 32 ..." and "in the renderer too: detail 32 ..." false; `viewForHost` handing on the view\'s own `surf` -> red, "in the renderer too: detail 32 ..." false alone (the store still said 3); `captureLocation` made to save the light too -> red, "a location saved there holds its formula and no light ... (its look holds: dzFormula, dzLight)" false.',
             async run(ctx) {
                 await fresh(ctx);
                 const cards = await ctx.ev<string[]>("[...document.querySelectorAll('[data-dz-place]')].map((b) => b.getAttribute('data-dz-place'))");
                 ctx.check(cards.length === PLACES.length && cards.length >= 3, 'the Locations tab shows the kept places (' + cards.length + ' cards for ' + PLACES.length + ' places)');
                 const place = PLACES[0];
-                const march = place.state.look?.march;
-                if (!ctx.check(!!march, 'the first kept place carries its march settings')) return;
+                const power = place.state.look!.dzFormula.power;
+                // What the hands set and no place may change. None of it is what this place's own view or march says.
+                await ctx.ev('(() => { const s = window.__store.getState(); s.setDzQuality({ stepSize: 0.6, hitRefine: 1, reach: 1, detail: 3 }); s.setDzLight({ keyElevation: 55 }); s.setDzColour({ plain: false, scale: 1.5 }); return true; })()');
+                await ctx.sleep(300);
+                const held = () => ctx.ev<{ step: number; refine: number; reach: number; detail: number; key: number; plain: boolean; scale: number; power: number }>(
+                    '(() => { const s = window.__store.getState(); return { step: s.dzQuality.stepSize, refine: s.dzQuality.hitRefine, reach: s.dzQuality.reach, detail: s.dzQuality.detail, key: s.dzLight.keyElevation, plain: s.dzColour.plain, scale: s.dzColour.scale, power: s.dzFormula.power }; })()');
+                const same7 = (a: Awaited<ReturnType<typeof held>>, b: Awaited<ReturnType<typeof held>>) =>
+                    a.step === b.step && a.refine === b.refine && a.reach === b.reach && a.detail === b.detail && a.key === b.key && a.plain === b.plain && a.scale === b.scale;
+                const before = await held();
+                if (!ctx.check(before.power !== power && before.step !== place.march.stepSize && before.detail !== place.state.view.surf && before.scale !== place.state.view.cscale,
+                    'the hands set a look that is not the place\'s (power ' + before.power + ', step ' + before.step + ', detail ' + before.detail + ', colour scale ' + before.scale + ')')) return;
                 await ctx.page.locator('[data-dz-place="' + place.name + '"]').click();
                 await ctx.sleep(1000);
                 ctx.check(same(await cam(ctx), place.state.view.cam), 'a click jumps to its camera strings, byte for byte');
-                const quality = () => ctx.ev<{ step: number; refine: number; reach: number; power: number }>(
-                    '(() => { const s = window.__store.getState(); return { step: s.dzQuality.stepSize, refine: s.dzQuality.hitRefine, reach: s.dzQuality.reach, power: s.dzFormula.power }; })()');
-                const q = await quality();
-                ctx.check(q.step === march!.stepSize && q.refine === march!.hitRefine && q.reach === march!.reach,
-                    'with the march it needs (step ' + q.step + ', hit refine ' + q.refine + ', reach ' + q.reach + ')');
-                ctx.check(q.power === place.state.look!.dzFormula.power && (await ctx.host<number>("getParams()['dzQuality.stepSize']")) === march!.stepSize,
-                    'its power (' + q.power + '), and the renderer holds that step');
-                // A location saved here must bring the march back, or the place comes back broken.
+                const after = await held();
+                ctx.check(after.power === power, 'with its formula (power ' + before.power + ' -> ' + after.power + ')');
+                ctx.check(same7(after, before), 'and nothing else: step ' + after.step + ', hit refine ' + after.refine + ', reach ' + after.reach + ', detail ' + after.detail + ', key elevation ' + after.key + ' and colour scale ' + after.scale + ' are as the hands left them');
+                const params = await ctx.host<Record<string, number>>('getParams()');
+                const drawn = { detail: params.detail, cscale: params.cscale, step: params['dzQuality.stepSize'] };
+                ctx.check(drawn.detail === before.detail && drawn.cscale === before.scale && drawn.step === before.step,
+                    'in the renderer too: detail ' + drawn.detail + ', colour scale ' + drawn.cscale + ' and step ' + drawn.step + ', not the ' + place.state.view.surf + ', ' + place.state.view.cscale + ' and ' + place.march.stepSize + ' this place was saved with');
+                // A location saved here is the camera and the formula, and a recall changes nothing else.
                 if (!(await saveWithB(ctx, 1))) return;
+                const saved = await ctx.ev<{ look: string[]; power: number }>("(() => { const st = window.__store.getState().savedLocations[0].state; return { look: Object.keys(st.look || {}), power: st.look.dzFormula.power }; })()");
+                ctx.check(saved.look.join() === 'dzFormula' && saved.power === power, 'a location saved there holds its formula and no light, colour, detail or march (its look holds: ' + saved.look.join(', ') + ')');
                 await ctx.ev('window.__store.getState().setDzQuality({ stepSize: 0.85, hitRefine: 0 })');
                 await ctx.withHost('host.moveAlong([0, 1, 0], host.rawDistance() * 0.5); return true;');
                 await ctx.sleep(400);
-                ctx.check((await quality()).step === 0.85 && !same(await cam(ctx), place.state.view.cam), 'left: moved away, step size back at 0.85');
+                const left = await held();
+                ctx.check(left.step === 0.85 && !same(await cam(ctx), place.state.view.cam), 'left: moved away, step size 0.85, hit refine 0');
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('1');
                 await ctx.sleep(800);
-                const back = await quality();
-                ctx.check(back.step === march!.stepSize && back.refine === march!.hitRefine, 'recalled with 1, the saved location brings the step and the refine back (' + back.step + ', ' + back.refine + ')');
-                ctx.check(same(await cam(ctx), place.state.view.cam), 'and the camera strings');
+                ctx.check(same(await cam(ctx), place.state.view.cam), 'recalled with 1, the saved location brings the camera strings back');
+                ctx.check(same7(await held(), left), 'and leaves the step, the refine and the rest of the look as they were left');
             },
         },
         {

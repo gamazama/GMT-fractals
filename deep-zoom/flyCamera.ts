@@ -1,19 +1,20 @@
 /**
- * deep-zoom/flyCamera.ts - one frame of GMT's fly navigation, for a camera that is a yaw, a pitch
- * and a position somebody else holds.
+ * deep-zoom/flyCamera.ts - one frame of GMT's fly navigation, for a camera that is three angles and
+ * a position somebody else holds.
  *
  * PURPOSE
  *   The engine's `FlyIntegrator` (engine/plugins/navigation/FlyIntegrator.ts, ADR-0133) turns a
- *   three.js object and hands displacements to a sink. The deep renderer's camera is a yaw and a
- *   pitch in radians (no roll) and three 256-bit integers. This file is the adapter between the
- *   two, and nothing else: no DOM, no host, no store, so it runs in a node check.
+ *   three.js object about the object's own axes and hands displacements to a sink. The deep
+ *   renderer's camera is a yaw, a pitch and a roll in radians and three 256-bit integers. This file
+ *   is the adapter between the two, and nothing else: no DOM, no host, no store, so it runs in a
+ *   node check.
  *
  * THE SEAM
  *   `createFlyCamera().step(frame)` once per frame, from `deep-zoom/DeepZoomNavigation.tsx`:
- *     in   the frame delta in seconds, the renderer's current yaw and pitch, the input state of
+ *     in   the frame delta in seconds, the renderer's current orientation, the input state of
  *          `useNavigationInput`, the fly speed, the distance to the surface, and the sink.
  *     out  the sink is called with the move in the RENDERER'S world axes and units; the return
- *          value is the new `{ yaw, pitch }` when the frame turned the camera, else null.
+ *          value is the new orientation when the frame turned the camera, else null.
  *   TWO SPEED RULES, chosen by the caller per frame:
  *     `frame.sense` given (the rule since 2026-10-09)  the integrator is run for a distance of 1,
  *          which gives the move's DIRECTION and its length per unit of pace; `sense(direction)` is
@@ -22,26 +23,25 @@
  *     `frame.sense` absent (the rule before it, kept to compare in flight)  the speed follows
  *          `frame.distance`, the estimate at the camera, eased by the integrator; one frame is cut
  *          to `DZ_NAV_MAX_STRIDE` of it.
- *   The object is rebuilt from yaw and pitch every frame, so a jump, a recalled place or a preview
- *   that turned the camera needs no resync here. Only the integrator's own velocities persist.
- *
- * HOW THE TWO CAMERAS MEET (the renderer's basis: grep `function basis()` in renderer/core.js)
- *     forward = [cos p cos y, sin p, cos p sin y]     right = [-sin y, 0, cos y]
- *   At the renderer's start (yaw -pi/2, pitch 0) that is forward -Z, right +X, up +Y: three.js's
- *   identity camera. So the world axes are shared, and the object for any yaw and pitch is
- *   `Euler(pitch, -(yaw + pi/2), 0, 'YXZ')`.
+ *   The object is rebuilt from the three angles every frame (`toQuaternion` in
+ *   deep-zoom/orbitCamera.ts, where the mapping is written out), so a jump, a recalled place or a
+ *   preview that turned the camera needs no resync here. Only the integrators' own velocities persist.
  *
  * PITFALLS
- *   - THE TURN IS READ BACK AS A TURNTABLE. The integrator turns about the object's own axes,
- *     which rolls the horizon once pitch is not zero, and the renderer has no roll. So the turn it
- *     applied this frame is taken apart (`Rx(a) Ry(b) Rz(c)`, an 'XYZ' Euler of
- *     `before^-1 * after`) and applied as `pitch += a`, `yaw -= b`. `c` is dropped. Reading yaw
- *     and pitch off the turned object's forward vector instead flips the yaw by pi when a frame
- *     carries the pitch over the pole, and spins the yaw by 1 / cos(pitch) near it.
- *   - Q AND E ARE DOWN AND UP HERE, not roll: the renderer cannot roll, and the standalone page
- *     flew with E up and Q down. Space and C (GMT's up and down) work as well.
- *   - Up and down follow GMT: along the CAMERA's up, not the world's. The standalone page moved
- *     along world Y.
+ *   - A TURN IS ABOUT THE CAMERA'S OWN AXES, as in GMT: a look drag with the pitch off zero tilts
+ *     the horizon, and Q / E are there to level it. The whole orientation is read back from the
+ *     turned object, so over a pole the pitch comes back down the other side while the yaw and the
+ *     roll each jump by pi: the three angles are one orientation, none is continuous on its own.
+ *     (Away from the poles the yaw runs on unwrapped.) Within 4.5e-4 radians of a pole the roll is read
+ *     back as 0 and folded into the yaw (three.js's rule): a camera that lands there with a roll
+ *     snaps by up to 9e-4 radians, once (grep the same in deep-zoom/orbitCamera.ts).
+ *   - Q AND E ROLL (the hook's `rollLeft` / `rollRight`), and move nothing. The engine's roll follows
+ *     the fly speed it is told, and GMT's speed runs from 0.001 to 1 where this app's runs from 0.01
+ *     to 8: told this app's 3.6, a tap of a tenth of a second rolls 9 degrees and a second of Q 148.
+ *     So the roll keys go to an integrator of their own, told the speed over `DZ_NAV_ROLL_GEAR`;
+ *     the two that move are never shown them. Shift rolls four times as fast, as in GMT.
+ *   - Up and down (Space, C) follow GMT: along the CAMERA's up, not the world's. The standalone
+ *     page moved along world Y.
  *   - BOTH FLOORS ARE ZERO (`minSpeed`, `boostMinDistance`). The engine's defaults are absolute
  *     numbers (1e-6 a second, 1e-4): at a surface distance of 1e-30 one frame at 1e-6 throws the
  *     camera 22 decades past the surface. The price: with the distance at 0 (inside the solid)
@@ -52,7 +52,7 @@
  *     with Shift, at 20 frames a second, that is 1.6 times the distance in one frame - through
  *     the surface. The direction is kept; only the length is cut. At the default speed the limit
  *     never bites (3.6 x 4 x 0.05 = 0.72).
- *   - The pitch is not clamped here. The renderer clamps it at +-1.55 in `setYawPitch`.
+ *   - The pitch is not clamped anywhere: the read-back keeps it within +-pi/2 by itself.
  *   - UNDER THE NEW RULE NOTHING IS SENT FOR A PACE OR A LIMIT THAT IS NOT A POSITIVE NUMBER: no
  *     reading yet, the camera inside the solid (the nearest ray is 0), or a frame with no time.
  *     `sense` is not asked on a frame without a move.
@@ -61,12 +61,13 @@
  *     ease never acts - but only in an integrator the old rule has not left standing at 1e-30:
  *     with one shared, the first frames after switching rules would crawl up from there.
  *
- * @invariant W, D and Space move along the renderer's own forward, right and up for any yaw and
- *   pitch; a drag to the right raises the yaw and a drag up raises the pitch, each leaving the
- *   other angle alone; Q / E move down / up and turn nothing; with the surface at 1e-40 one frame
- *   moves a share of 1e-40; no frame moves more than 0.8 of the distance - proven by: npm run
- *   check:deep-zoom-fly-camera ("basis: ...", "turn: ...", "deep: ...", "stride: ..." lines).
- *   Falsified 2026-10-08: see the check's header.
+ * @invariant W, D and Space move along the renderer's own forward, right and up for any yaw, pitch
+ *   and roll; Q / E turn the camera about its view axis (Q raises the roll) and move nothing; a
+ *   turn is read back as the orientation a camera that was never taken apart into angles has, over
+ *   a pole too; with the surface at 1e-40 one frame moves a share of 1e-40; no frame moves more
+ *   than 0.8 of the distance - proven by: npm run check:deep-zoom-fly-camera ("basis: ...",
+ *   "keys: ...", "turn: ...", "deep: ...", "stride: ..." lines). Falsified 2026-10-08, and with
+ *   the roll 2026-10-10 and 11: see the check's header.
  * @invariant With `sense` given, a frame moves `pace x speed x delta` (four times with Shift) along
  *   the same direction the old rule moves in, never more than the limit `sense` answers, `sense` is
  *   asked exactly once and only on a frame that moves, and a pace or a limit of 0 or NaN moves
@@ -76,18 +77,22 @@
 import * as THREE from 'three';
 import { FlyIntegrator } from '../engine/plugins/navigation/FlyIntegrator';
 import type { DisplacementSink, FlyInputs, MoveInputState } from '../engine/plugins/navigation/FlyIntegrator';
+import type { DzOrientation } from './host/DeepZoomHost';
+import { toOrientation, toQuaternion } from './orbitCamera';
 
 /** The longest frame the fly step integrates over, in seconds. */
 export const DZ_NAV_MAX_DELTA = 0.05;
 /** The most one frame may move, as a share of the distance to the surface. */
 export const DZ_NAV_MAX_STRIDE = 0.8;
+/** The roll is told the fly speed over this (see PITFALLS): this app's default speed over GMT's,
+ *  3.6 / 0.5, so the default rolls as GMT's default does - a second of Q is 20 degrees. A feel
+ *  number: the owner's to set. */
+export const DZ_NAV_ROLL_GEAR = 7.2;
 
-export interface FlyCameraFrame {
+/** One frame's input. Its `yaw`, `pitch` and `roll` are the renderer's orientation now. */
+export interface FlyCameraFrame extends DzOrientation {
     /** Seconds since the last frame. */
     delta: number;
-    /** The renderer's look angles now, in radians. */
-    yaw: number;
-    pitch: number;
     inputs: FlyInputs;
     /** Surface-distances per second. */
     speed: number;
@@ -105,36 +110,36 @@ export interface FlyCameraFrame {
 }
 
 export interface FlyCamera {
-    /** One frame. The new angles when the camera turned, else null. */
-    step(frame: FlyCameraFrame): { yaw: number; pitch: number } | null;
+    /** One frame. The new orientation when the camera turned, else null. */
+    step(frame: FlyCameraFrame): DzOrientation | null;
     /** Drop the turn velocity (a teleport does not need it: nothing here holds a position). */
     reset(): void;
 }
 
+const noKeys = (): MoveInputState => ({
+    forward: false, backward: false, left: false, right: false, up: false, down: false,
+    rollLeft: false, rollRight: false, boost: false, precise: false,
+});
+const nowhere: DisplacementSink = () => undefined;
+
 export function createFlyCamera(): FlyCamera {
     const integrator = new FlyIntegrator();
     const paced = new FlyIntegrator();                 // the new rule's own (see PITFALLS)
+    const roller = new FlyIntegrator();                // the roll keys' own (see PITFALLS)
     const body = new THREE.Object3D();
-    const euler = new THREE.Euler();
     const before = new THREE.Quaternion();
-    const turn = new THREE.Quaternion();
-    const move: MoveInputState = {
-        forward: false, backward: false, left: false, right: false, up: false, down: false,
-        rollLeft: false, rollRight: false, boost: false, precise: false,
-    };
+    const move = noKeys();
+    const rolling: FlyInputs = { move: noKeys(), look: { x: 0, y: 0 }, moveJoy: { x: 0, y: 0 }, isDragging: false, dragDelta: { x: 0, y: 0 }, invertY: false };
 
     return {
         step(frame) {
-            body.quaternion.setFromEuler(euler.set(frame.pitch, -(frame.yaw + Math.PI / 2), 0, 'YXZ'));
+            toQuaternion(frame, body.quaternion);
             before.copy(body.quaternion);
 
-            // Q / E: down / up (see PITFALLS). The roll flags never reach the integrator.
+            // The moves and the look go to the rule's integrator, the roll keys to `roller`.
             const held = frame.inputs.move;
-            move.forward = held.forward; move.backward = held.backward;
-            move.left = held.left; move.right = held.right;
-            move.up = held.up || held.rollRight;
-            move.down = held.down || held.rollLeft;
-            move.boost = held.boost; move.precise = held.precise;
+            Object.assign(move, held, { rollLeft: false, rollRight: false });
+            Object.assign(rolling.move, { rollLeft: held.rollLeft, rollRight: held.rollRight, boost: held.boost, precise: held.precise });
 
             const delta = Math.min(frame.delta, DZ_NAV_MAX_DELTA);
             const flying = { ...frame.inputs, move };
@@ -165,12 +170,11 @@ export function createFlyCamera(): FlyCamera {
                     },
                 });
             }
+            // After the look, as in one integrator (it turns about X, Y, then Z). It moves nothing: no move key reaches it.
+            roller.update(body, delta, rolling, { baseSpeed: frame.speed / DZ_NAV_ROLL_GEAR, distEstimate: 1, autoSlow: true, translate: nowhere });
 
-            if (body.quaternion.equals(before)) return null;
-            turn.copy(before).invert().multiply(body.quaternion);
-            euler.setFromQuaternion(turn, 'XYZ');
-            return { yaw: frame.yaw - euler.y, pitch: frame.pitch + euler.x };
+            return body.quaternion.equals(before) ? null : toOrientation(body.quaternion, frame.yaw);
         },
-        reset: () => { integrator.reset(); paced.reset(); },
+        reset: () => { integrator.reset(); paced.reset(); roller.reset(); },
     };
 }

@@ -41,7 +41,7 @@
  *     The classes also take the canvas out of the flow, so the frame cannot shrink-wrap it.
  *   - WHO FLIES. The module starts on its own keys. The shell's navigation calls
  *     `setInputOwner('host')` once per host and from then on moves it with `moveAlong` and turns
- *     it with `setYawPitch`; nothing here listens for a pointer lock any more (stage N5).
+ *     it with `setOrientation`; nothing here listens for a pointer lock any more (stage N5).
  *   - `step(now)` forwards a TIMESTAMP in milliseconds. Everything polled here (`ready`, telemetry,
  *     `compile`, `recordingChanged`, `progress`, the dive) runs from `step` and stops with it.
  *   - The dive advances only after a frame that RAN (`instance.frameCount` rose). While a render
@@ -101,12 +101,12 @@
  *   npx tsx debug/deep-zoom-checks/module-host.mts ("boot: ..." lines, "step: one second of 63
  *   steps ..."). Falsified 2026-10-08: the "boot" and "step" groups in the check's header.
  * @invariant The dive moves only after a frame that ran and not before ready; `setInputOwner`,
- *   `rawDistance`, `yawPitch`, `setYawPitch`, `sense`, `freeDistance` and `estimateAt` reach the
- *   module's own handles unchanged; `focus()` focuses the frame, not the canvas - proven by: npx tsx
- *   debug/deep-zoom-checks/module-host.mts ("dive: no move while the module's frame does not run",
- *   "dive: before ready ...", "input: ..." lines). Falsified 2026-10-08: the "input" group and
- *   the two "host:" lines of the "dive" group in the check's header; `sense` / `freeDistance` on
- *   2026-10-09 (the same group).
+ *   `rawDistance`, `orientation`, `setOrientation`, `sense`, `freeDistance` and `estimateAt` reach
+ *   the module's own handles unchanged; `focus()` focuses the frame, not the canvas - proven by: npx
+ *   tsx debug/deep-zoom-checks/module-host.mts ("dive: no move while the module's frame does not
+ *   run", "dive: before ready ...", "input: ..." lines). Falsified 2026-10-08: the "input" group
+ *   and the two "host:" lines of the "dive" group in the check's header; `sense` / `freeDistance`
+ *   on 2026-10-09 and `setOrientation` on 2026-10-10 (the same group).
  * @invariant A dive closes on the free distance AHEAD (the nearest of seven rays about the view
  *   axis), not on the estimate at the camera: with a wall close behind and the surface ahead far
  *   away it flies; inside the solid, or with nothing ahead at all, it ends at once; rays that ran
@@ -499,8 +499,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         // host input (stage N): the shell's navigation flies the camera through these
         setInputOwner: (owner) => dz.setInputOwner(owner),
         rawDistance: () => dz.rawDistance(),
-        yawPitch: () => dz.yawPitch(),
-        setYawPitch: (yaw, pitch) => dz.setYawPitch(yaw, pitch),
+        orientation: () => dz.orientation(),
+        setOrientation: (yaw, pitch, roll) => dz.setOrientation(yaw, pitch, roll),
         sense: (axis, opt) => dz.sense(axis, opt),
         freeDistance: (dir, opt) => dz.freeDistance(dir, opt),
         estimateAt: (offset) => dz.estimateAt(offset),

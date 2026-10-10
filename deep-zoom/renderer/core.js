@@ -3565,7 +3565,7 @@ function gateProbeAt(tval){
 }
 
 /* ---------- camera + free-fly with adaptive slowdown ---------- */
-const cam = { pos:[0,0,2.6], yaw:-Math.PI/2, pitch:0, power:8, iters:14, baseSpeed:0.06 };
+const cam = { pos:[0,0,2.6], yaw:-Math.PI/2, pitch:0, roll:0, power:8, iters:14, baseSpeed:0.06 };
 let camHP = cam.pos.map(hp.fromNum);            // [DS-SEAM] authoritative position
 let smoothedDist = 1.0;
 let snapDist = false;                          // set by dz.setView: the next frame takes the raw distance, no easing (2026-10-08)
@@ -3630,7 +3630,8 @@ const keys = {};
 let inputLocked = false;
 /* HOST INPUT (2026-10-08). 'module': the page's own keys and captured-mouse look fly the camera.
    'host': the module reads no key and no mouse; a host moves it with api.moveAlong and turns it
-   with api.dz.setYawPitch. The distance probe, auto iterations and everything else run as before. */
+   with api.dz.setYawPitch or, roll included, api.dz.setOrientation. The distance probe, auto iterations and
+   everything else run as before. */
 let inputOwner = 'module';
 let lastRawDist = 1.0;                          // the unsmoothed surface distance of the last frame
 let hostMoveAt = -1e9;                          // when a host last moved the camera (the recorder's 'flying')
@@ -3841,7 +3842,11 @@ function basis(){
   const fwd=[cp*cy, sp, cp*sy];
   const right=[Math.cos(cam.yaw+Math.PI/2),0,Math.sin(cam.yaw+Math.PI/2)];
   const up=[ right[1]*fwd[2]-right[2]*fwd[1], right[2]*fwd[0]-right[0]*fwd[2], right[0]*fwd[1]-right[1]*fwd[0] ];
-  return {fwd,right,up};
+  if (!cam.roll) return {fwd,right,up};                  // no roll: the page's basis, to the bit
+  /* ROLL: a turn of the camera about its own view axis. Positive tips its right-hand side up (three.js: a turn
+     about the camera's own +Z, which points at the viewer), so the picture turns clockwise. fwd does not change. */
+  const cr=Math.cos(cam.roll), sr=Math.sin(cam.roll);
+  return { fwd, right: right.map((v,i)=>v*cr+up[i]*sr), up: up.map((v,i)=>v*cr-right[i]*sr) };
 }
 /* three-quarter KEY light, camera-relative: upper-right and toward the camera (front-lit). Fixed
    world-direction lighting grazes/backlights as you fly because the surface's orientation relative
@@ -5433,7 +5438,8 @@ api.dive = async function(depth){
    with ?embed=1). Read-only summaries of the live state plus the three things the loose __ handles
    do not offer: a whole view in one object, a thumbnail as a PNG, and an animated dive. Additive —
    every __ handle above works as before. A VIEW has exactly the fields a recorded keyframe has
-   (pushKeyframe), so a bookmark and a path frame are interchangeable. */
+   (pushKeyframe), so a bookmark and a path frame are interchangeable - plus `roll` when the camera has
+   one (grep ROLL), which the recorder and the path sampler neither write nor set. */
 let dzDive = 0;                                   // id of the running diveTo (0 = none); bumping it cancels
 const dzThumbCv = document.createElement('canvas');
 api.dz = {
@@ -5451,6 +5457,9 @@ api.dz = {
   rawDistance: () => lastRawDist,              // unsmoothed: a host that eases it itself must not ease twice
   yawPitch: () => ({ yaw: cam.yaw, pitch: cam.pitch }),
   setYawPitch: (yaw, pitch) => { cam.yaw = +yaw; cam.pitch = Math.max(-1.55, Math.min(1.55, +pitch)); accumReset = true; },
+  /* the whole orientation, roll included (grep ROLL). NO pitch clamp here: within +-pi/2 is the caller's promise */
+  orientation: () => ({ yaw: cam.yaw, pitch: cam.pitch, roll: cam.roll }),
+  setOrientation: (yaw, pitch, roll) => { cam.yaw = +yaw; cam.pitch = +pitch; cam.roll = +roll || 0; accumReset = true; },
   /* what a host's navigation flies by (grep THE FREE DISTANCE ALONG A RAY): a bundle of seven rays about `axis`
      (a unit vector in world axes; null = the view axis), and one ray on its own (a pick: opt.tol 0.005) */
   sense: (axis, opt) => senseBundle(axis, opt),
@@ -5462,14 +5471,15 @@ api.dz = {
      where the move ends. It under-reads the true clearance by 1.4 to 3.6 times on ordinary ground and can over-read
      next to the drawn surface (see the block above), so it is a comfort distance, never the thing that stops a move. */
   estimateAt: (offset) => { const o = pertOrbitJS(probeOrbit(), [+offset[0], +offset[1], +offset[2]], cam.iters); return o.escaped && o.de > 0 ? o.de : 0; },
-  getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, iters: cam.iters, power: nPower,
+  getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, ...(cam.roll ? { roll: cam.roll } : {}),   // roll only when there is one: a view without it reads as it always did
+    iters: cam.iters, power: nPower,
     phase: [phaseTheta, phasePhi], light: lightMode, falloff: falloffMul, color: colorMode,
     cscale: colorScale, surf: surfMul }),
   setView: (v) => {                               // apply a view the way the path sampler applies a keyframe
     if (!v || !v.cam) return;
     dzDive = 0;                                   // a jump ends any dive in progress
     camHP = v.cam.map(BigInt); cam.pos = camHP.map(hp.toNum);
-    cam.yaw = +v.yaw; cam.pitch = +v.pitch;
+    cam.yaw = +v.yaw; cam.pitch = +v.pitch; cam.roll = +v.roll || 0;
     if (v.iters) cam.iters = Math.max(4, Math.min(boxOn() ? BOX_ITER_MAX : 160, v.iters|0));
     if (v.power && v.power !== nPower) api.setPower(v.power);
     if (v.phase) api.setPhase(v.phase[0], v.phase[1]);

@@ -75,8 +75,9 @@
  *     alone it sets the light type to Direct (`undefined|0` is 0). Always pass both, light type
  *     first. It does not clamp the falloff.
  *   - A SECOND WRITER. `api.dz.setView(view)` writes the light type and the lamp falloff from
- *     `view.light` / `view.falloff` (grep `setView: (v) =>`). The shell applies a jump through this
- *     feature's setter so the store stays the one owner (BLUEPRINT section 2). Recorded keyframes
+ *     `view.light` / `view.falloff` (grep `setView: (v) =>`). A jump does not change the light: the
+ *     shell hands the renderer a view that carries the store's own two values (`viewForHost` in
+ *     deep-zoom/locations.ts), so the store stays the one owner (BLUEPRINT section 2). Recorded keyframes
  *     carry both fields too, but path playback does not apply them (grep `function pathApplyCR`).
  *     The module's own keys L, T and Y write them as well; the shell creates the module with
  *     `shortcuts: false`, which switches those off (grep `dzShortcuts`).

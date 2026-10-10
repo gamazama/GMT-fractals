@@ -29,7 +29,7 @@
  *     in `function frame`): a loop on the browser's animation frames would fly on, unseen, through
  *     a stopped engine loop or between a render's rows.
  *   - It ends, and the promise resolves, on: arrival (`depth <= target`, which also covers a
- *     camera that got inside, where the depth reads 0); `cancel()`; a newer `start()`; a fly key
+ *     camera that got inside, where the depth reads 0); `cancel()`; a newer `start()`; W, A, S, D
  *     or Escape on the key target; `DZ_DIVE_TIME_LIMIT_MS` of flight. It does not say which.
  *
  * PITFALLS
@@ -42,7 +42,8 @@
  *   - The target is never below `DZ_DIVE_MIN_DEPTH` (1e-77): the camera is 256-bit fixed point,
  *     about 77 digits, and a move smaller than one step of it is no move.
  *   - The direction is read every frame, so the mouse can steer during a dive. The formula must
- *     stay the module's (grep `function basis` in core.js).
+ *     stay the module's (grep `function basis` in core.js). A roll turns the camera about this
+ *     very direction, so it is not read.
  *   - The first advance after `start` moves nothing: it only takes the timestamp.
  *
  * @invariant A head-on dive lands between 0.95 x target and target, takes at most a fifth of the
@@ -68,9 +69,9 @@ export const DZ_DIVE_ARRIVAL_FRAMES = 3;
 
 /** The longest gap between two advances that counts toward the time limit. */
 const MAX_COUNTED_GAP_MS = 1000;
-/** The keys that take the camera back: the module's fly keys (grep `function isFlying` in core.js)
- *  and Escape. */
-const CANCEL_KEYS: ReadonlySet<string> = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'Escape']);
+/** The keys that take the camera back: the four that move it, and Escape. Not Q and E: they roll
+ *  (deep-zoom/DeepZoomNavigation.tsx), and a roll, like a look drag, steers a dive. */
+const CANCEL_KEYS: ReadonlySet<string> = new Set(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Escape']);
 
 /** Where the fly keys arrive: the module's key target (`#dz-frame`). */
 export type DiveKeyTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>;

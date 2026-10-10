@@ -97,8 +97,8 @@
  * THE GRADIENT (stage 5, 2026-10-09; the owner: "yes to all" on the calls of that day)
  *   - IT REPLACES THE BUILT-IN PALETTE. There is no "use gradient" switch (the plan's
  *     `useGradient`): as in GMT, whatever is not Plain is the gradient. The default is the
- *     renderer's cosine palette as stops (`DZ_DEFAULT_GRADIENT`), so a place saved before stage 5
- *     with the palette on - two of the owner's kept places, one starter - draws as it did.
+ *     renderer's cosine palette as stops (`DZ_DEFAULT_GRADIENT`), so a scene saved before stage 5
+ *     with the palette on draws as it did.
  *   - IT IS LINEAR. The shading pass uses a texel as the surface's albedo, lights it, then tone
  *     maps and applies the display gamma (grep `albedoNew`, then `0.4545` in SHADE_FRAG). A
  *     gradient's `colorSpace: 'linear'` makes `generateGradientTextureBuffer` bake linearised
@@ -111,9 +111,9 @@
  *     to colour`); this shell never calls it, and does the same thing openly, in the store write
  *     that sets the gradient: `plain: false`. `mode` already holds a mapping (1, Iterations, by
  *     default).
- *   - WHO CARRIES IT. It is a param of this slice, so scenes, share links, undo and saved places
- *     carry it with no code of their own (`captureLook` in `deep-zoom/locations.ts` copies the
- *     whole slice). A place saved before stage 5 has no `gradient` key and leaves it as it is.
+ *   - WHO CARRIES IT. It is a param of this slice, so scenes, share links and undo carry it with
+ *     no code of their own. A saved place does not: a place is a camera and a formula
+ *     (`deep-zoom/locations.ts`), and a jump leaves the colour and its gradient as they are.
  *   - NO OFFSET, NO BIAS, NO REPEATS HERE (the owner, 2026-10-09: they "can stay as baked /
  *     rasterized options in the gradient explorers adjust tab, they dont need a live
  *     counterpart"). Phase, Scale and the rest are Adjust dials of the Gradient Studio, baked
@@ -131,8 +131,9 @@
  *   - `api.setColor(m, s)` is `colorMode = m|0; if (s) colorScale = s`. Called with the scale alone
  *     it sets the mode to plain; a scale of 0 is ignored; nothing is clamped. Always pass both.
  *   - SECOND WRITERS. `api.dz.setView(view)` writes the mode and the scale from `view.color` /
- *     `view.cscale`; the shell applies a jump through this feature's setter
- *     (`colourFromRenderer`) so the store stays the one owner. `api.loadGradient` and a file
+ *     `view.cscale`; a jump does not change the colour, so the shell hands the renderer a view that
+ *     carries the store's own two values (`viewForHost` in deep-zoom/locations.ts) and the store
+ *     stays the one owner. `api.loadGradient` and a file
  *     dropped on the module flip plain to orbit trap; the shell calls neither (`dropTarget: null`,
  *     and a dropped gradient file goes to My Gradients). The module's own keys C, 9 and 0 write
  *     both; the shell creates the module with `shortcuts: false`, which switches them off.

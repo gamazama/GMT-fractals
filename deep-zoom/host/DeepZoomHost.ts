@@ -55,10 +55,10 @@
  *     `telemetry()`       the module's sample, read now.
  *     `onTelemetry(`      the same sample as a stream, 8 a second by default, sent from `step`.
  *     `getView()` `setView(` `moveAlong(` `thumbnail(`   straight through to the module.
- *     `setInputOwner(` `rawDistance()` `yawPitch()` `setYawPitch(`   host input (stage N): the
- *                         shell's navigation flies the camera through `moveAlong` and `setYawPitch`
- *                         once it has called `setInputOwner('host')`; `rawDistance` is the
- *                         unsmoothed distance its integrator eases itself.
+ *     `setInputOwner(` `rawDistance()` `orientation()` `setOrientation(`   host input (stage N): the
+ *                         shell's navigation flies the camera through `moveAlong` and
+ *                         `setOrientation` once it has called `setInputOwner('host')`; `rawDistance`
+ *                         is the unsmoothed distance its integrator eases itself.
  *     `sense(` `freeDistance(`   the free distance along rays, from the camera as it is now to the
  *                         solid as it is drawn (2026-10-09): `sense` seven rays about an axis, the
  *                         view's by default; `freeDistance` one ray. What the navigation's speed,
@@ -121,8 +121,9 @@
  *   - `thumbnail()` draws through the live GL state and RESTARTS the still's convergence. Do not
  *     call it on a timer or from a render path.
  *   - `setView` is a second writer of look values: besides the camera it sets iterations, power,
- *     phase, light, falloff, colour, colour scale and detail. A jump applies the look through the
- *     feature setters first and hands the host a view whose look fields already equal them.
+ *     phase, light, falloff, colour, colour scale and detail. A jump writes the formula through
+ *     its feature setter first and hands the host a view whose look fields are the store's own
+ *     (`viewForHost` in deep-zoom/locations.ts): a place brings a camera and a formula, no more.
  *   - `step(now)` takes a TIMESTAMP in milliseconds (`performance.now()`). The engine tick hands
  *     its callback a DELTA in seconds: do not forward it.
  *   - The frame and the dive are tick-driven: a dive advances once after each frame the renderer
@@ -167,14 +168,17 @@ export type Unsubscribe = () => void;
 // ── data that crosses the seam ───────────────────────────────────────────────────────────────────
 
 /**
- * A whole view. Exactly the fields a recorded keyframe has, so a saved location and a path frame
- * are interchangeable.
+ * A whole view. The fields a recorded keyframe has, so a saved location and a path frame are
+ * interchangeable, plus the roll.
  */
 export interface DzView {
     /** Camera position: three BigInt fixed-point decimal STRINGS. Never parse them to numbers. */
     cam: [string, string, string];
     yaw: number;
     pitch: number;
+    /** A turn about the view axis, in radians. Left out when it is 0, and read as 0 when it is not
+     *  there, so every view from before the roll is as it was. */
+    roll?: number;
     iters: number;
     power: number;
     phase: [number, number];
@@ -183,6 +187,14 @@ export interface DzView {
     color: number;
     cscale: number;
     surf: number;
+}
+
+/** Which way the camera faces, in radians: the yaw and the pitch of its view axis (pitch within
+ *  +-pi/2) and the roll about that axis. */
+export interface DzOrientation {
+    yaw: number;
+    pitch: number;
+    roll: number;
 }
 
 /** A recorded flight, in the module's own file shape. */
@@ -370,16 +382,16 @@ export interface DeepZoomHost {
     diveTo(depth: number): Promise<void>;
     /**
      * Who flies the camera: 'module' (its own keys and captured-mouse look) or 'host' (the shell's
-     * navigation moves it with `moveAlong` and turns it with `setYawPitch`; the module then reads
-     * no key and no mouse). The module starts on 'module'.
+     * navigation moves it with `moveAlong` and turns it with `setOrientation`; the module then
+     * reads no key and no mouse). The module starts on 'module'.
      */
     setInputOwner(owner: 'module' | 'host'): void;
     /** The surface distance of the last frame, unsmoothed. Telemetry `depth` is eased when it rises. */
     rawDistance(): number;
-    /** The look angles in radians. Cheap: it formats no camera strings. */
-    yawPitch(): { yaw: number; pitch: number };
-    /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still. */
-    setYawPitch(yaw: number, pitch: number): void;
+    /** Which way the camera faces. Cheap: it formats no camera strings. */
+    orientation(): DzOrientation;
+    /** Turn the camera. Nothing is clamped: a pitch within +-pi/2 is the caller's promise. Restarts the still. */
+    setOrientation(yaw: number, pitch: number, roll: number): void;
     /**
      * Seven rays about `axis` (a unit vector in world axes; null or absent: the view axis), marched
      * on the CPU from the camera as it is NOW to the solid as it is DRAWN. Unlike `rawDistance` it

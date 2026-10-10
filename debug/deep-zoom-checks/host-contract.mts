@@ -28,7 +28,11 @@
  *   - A member whose kind changes (optional <-> required): edit the header table in
  *     `DeepZoomHost.ts` in the same change, or "[1] the header names every member" goes red.
  *   - N5 (2026-10-08) removed `isCaptured`, `setInputEnabled` and `captureChanged` with the pointer
- *     capture, and added the four host-input members; the lists below follow.
+ *     capture, and added the four host-input members; the lists below follow. With the roll
+ *     (2026-10-10) two of those four, `yawPitch` and `setYawPitch`, became `orientation` and
+ *     `setOrientation`, and `DzView` gained `roll?` on both sides. Seen red that day: `roll?` taken
+ *     off the contract's `DzView` alone -> 1: [2], on `viewSame` and `pathSame`; `orientation`
+ *     taken off the interface -> 1: "every member of BLUEPRINT section 7 is there".
  *   - A field added to the module's `DzView` / `DzTelemetry` / `DzPath` (`deep-zoom/renderer/index.ts`)
  *     must be added to the contract's copy in the same package, or [2] goes red.
  *
@@ -98,7 +102,7 @@ const BLUEPRINT_MEMBERS = [
     'setParam', 'setParams', 'getParams', 'bootParams',
     'telemetry', 'onTelemetry',
     'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail', 'snapshot',
-    'setInputOwner', 'rawDistance', 'yawPitch', 'setYawPitch', 'sense', 'freeDistance', 'estimateAt',
+    'setInputOwner', 'rawDistance', 'orientation', 'setOrientation', 'sense', 'freeDistance', 'estimateAt',
     'setGradientRamp',
     'setRecording', 'takePath', 'smoothPath', 'seekPath', 'play', 'stopPlay',
     'renderFramePixels', 'renderFrameBlob', 'exportStill', 'cancel',

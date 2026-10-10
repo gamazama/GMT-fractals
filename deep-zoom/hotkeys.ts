@@ -61,8 +61,8 @@ const toggleCameraMode = (): void => {
     const next = cameraModeOf(store()) === DZ_MODE_ORBIT ? DZ_MODE_FLY : DZ_MODE_ORBIT;
     useEngineStore.setState({ cameraMode: next } as Partial<ReturnType<typeof useEngineStore.getState>>);
     showToast(next === DZ_MODE_ORBIT
-        ? 'Orbit: drag turns about the point under the pointer, the wheel or a middle drag flies to it, right drag moves it. Tab: Fly'
-        : 'Fly: W A S D, drag to look, the wheel sets the speed. Tab: Orbit', 'info', 4000);
+        ? 'Orbit: drag turns about the point under the pointer, the wheel or a middle drag flies to it, right drag moves it, Q E roll. Tab: Fly'
+        : 'Fly: W A S D, Q E roll, drag to look, the wheel sets the speed. Tab: Orbit', 'info', 4000);
 };
 const focusDiveField = (): void => {
     const field = document.querySelector<HTMLInputElement>('[data-dz-dive-exponent]');

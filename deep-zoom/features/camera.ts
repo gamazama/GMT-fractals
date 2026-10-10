@@ -15,7 +15,7 @@
  * overlay), which is how the engine's `<FeatureOverlays />` comes to mount it. The component is
  * registered in registerFeatures.ts.
  *
- * The renderer owns the camera itself (three 256-bit numbers, yaw, pitch); it is never in the store.
+ * The renderer owns the camera itself (three 256-bit numbers, yaw, pitch, roll); it is never in the store.
  */
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 

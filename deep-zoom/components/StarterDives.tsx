@@ -96,7 +96,7 @@ export const BoxStarters: React.FC = () => {
 
 /**
  * The kept places (deep-zoom/data/places.ts): the owner's own, which are also the quality tooling's
- * hard cases. A card is a jump - view, look and the march settings the place needs - never a dive.
+ * hard cases. A card is a jump - the camera and the formula, as for any place - never a dive.
  * Registered as `dz-places`; panels.ts puts it on the Locations tab.
  */
 export const KeptPlaces: React.FC = () => {

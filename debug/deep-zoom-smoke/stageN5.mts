@@ -6,14 +6,16 @@
  * What the steps lean on (deep-zoom/DeepZoomNavigation.tsx, flyCamera.ts, navigationState.ts):
  *   - Nothing captures the pointer, so every step runs headless: real key and mouse events
  *     through the engine's input hook, the fly integrator, and `host.moveAlong` /
- *     `host.setYawPitch`.
+ *     `host.setOrientation`.
  *   - A move is read off the camera strings as a DIRECTION: the difference of two 256-bit
  *     integers per axis, as a float (their scale cancels), against the renderer's own forward
  *     for the current yaw and pitch (`function basis()` in renderer/core.js).
  *   - The fly speed is a preference in `localStorage['gmt.deepZoom.flySpeed']` and the last line
  *     of the depth readout (`[data-dz-fly-speed]`).
- *   - The maths of the adapter (basis, turntable turn, zero floors) is pinned in node by
- *     `npm run check:deep-zoom-fly-camera`; these steps prove it is WIRED.
+ *   - The maths of the adapter (basis, the turn about the camera's own axes, the roll, zero
+ *     floors) is pinned in node by `npm run check:deep-zoom-fly-camera`; these steps prove it is
+ *     WIRED. They turn the camera on one axis at a time from a level start, where a yaw and a
+ *     pitch can still be read apart.
  *   - Since 2026-10-09 the speed follows what is looked at and what lies ahead of the move
  *     (deep-zoom/flyPace.ts; the rays are the renderer's, `npm run check:deep-zoom-ray-probe`).
  *     The last three steps prove THAT is wired, at the one saved place where it differs from the
@@ -32,7 +34,7 @@ import { STARTERS } from '../../deep-zoom/data/starters.ts';
 
 type V3 = [number, number, number];
 const cam = (ctx: DzCtx) => ctx.host<string[]>('getView().cam');
-const look = (ctx: DzCtx) => ctx.host<{ yaw: number; pitch: number }>('yawPitch()');
+const look = (ctx: DzCtx) => ctx.host<{ yaw: number; pitch: number; roll: number }>('orientation()');
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 /** The move from `a` to `b` as a unit direction (null when nothing moved). */
 function direction(a: string[], b: string[]): V3 | null {
@@ -68,8 +70,7 @@ async function under(ctx: DzCtx, dx: number, dy: number): Promise<{ u: number; v
         const m = await import('/deep-zoom/orbitCamera.ts');
         const rect = host.canvas().getBoundingClientRect();
         const u = ${dx} / rect.height, v = ${-dy} / rect.height;
-        const look = host.yawPitch();
-        const ray = m.viewRay(look.yaw, look.pitch, u, v);
+        const ray = m.viewRay(host.orientation(), u, v);
         const hit = host.freeDistance(ray, { tol: 0.005, maxSteps: 512 });
         return { u, v, ray, distance: hit.t, kind: hit.kind, height: rect.height };`);
 }
@@ -256,9 +257,9 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'Space and E fly up, C and Q down; C no longer changes the colouring, V does; Space does not play the timeline',
+            name: 'Space flies up and C down; Q and E roll the camera and move nothing; C no longer changes the colouring, V does; Space does not play the timeline',
             owner: 'N5',
-            falsified: '2026-10-08, three breaks, one run each: the `cameraMode: \'Fly\'` line removed from deep-zoom/setup.ts -> red, "Space on the picture did not start the timeline" false; the colouring key put back on `c` in deep-zoom/hotkeys.ts -> red, "C did not change the colouring" false; `move.up = held.up` in deep-zoom/flyCamera.ts -> red, "Space and E raised the camera" false.',
+            falsified: '2026-10-08, two breaks, one run each: the `cameraMode: \'Fly\'` line removed from deep-zoom/setup.ts -> red, "Space on the picture did not start the timeline" false; the colouring key put back on `c` in deep-zoom/hotkeys.ts -> red, "C did not change the colouring" false. 2026-10-10, when Q and E became the roll: the `roller.update(...)` line removed from deep-zoom/flyCamera.ts -> red, "Q rolled the camera to the left about its view axis (roll 0.0000, ...)" and "E rolled it to the right (0.0000)" false.',
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 await ctx.focusPicture();
@@ -281,10 +282,29 @@ export const stage: DzStage = {
                 };
                 const up = await moved('Space');
                 const down = await moved('c');
-                const e = await moved('e');
-                const q = await moved('q');
-                ctx.check(up > 0n && e > 0n, 'Space and E raised the camera');
-                ctx.check(down < 0n && q < 0n, 'C and Q lowered it');
+                ctx.check(up > 0n && down < 0n, 'Space raised the camera and C lowered it');
+                // Q and E roll, as in GMT. A roll eases out after the key is up: each reading waits until it stands.
+                const atRest = async (): Promise<{ yaw: number; pitch: number; roll: number }> => {
+                    let a = await look(ctx);
+                    for (let i = 0; i < 40; i++) { await ctx.sleep(150); const b = await look(ctx); if (b.roll === a.roll) return b; a = b; }
+                    return a;
+                };
+                const rolled = async (key: string, way: 1 | -1): Promise<{ by: number; turned: number; moved: boolean }> => {
+                    const l0 = await atRest(), c0 = await cam(ctx);
+                    await ctx.page.keyboard.down(key);
+                    try {
+                        const start = Date.now();
+                        while (Date.now() - start < 3000 && way * ((await look(ctx)).roll - l0.roll) < 0.03) await ctx.sleep(50);
+                    } finally {
+                        await ctx.page.keyboard.up(key);
+                    }
+                    const l1 = await atRest();
+                    return { by: l1.roll - l0.roll, turned: Math.abs(l1.yaw - l0.yaw) + Math.abs(l1.pitch - l0.pitch), moved: !same(c0, await cam(ctx)) };
+                };
+                const q = await rolled('q', 1);
+                const e = await rolled('e', -1);
+                ctx.check(q.by > 0.03 && q.turned < 1e-6 && !q.moved, 'Q rolled the camera to the left about its view axis (roll ' + fx(q.by) + ', yaw and pitch as they were) and moved nothing');
+                ctx.check(e.by < -0.03 && e.turned < 1e-6 && !e.moved, 'E rolled it to the right (' + fx(e.by) + ') and moved nothing');
                 ctx.check((await ctx.host<number>('getParams().color')) === 0, 'C did not change the colouring');
                 await ctx.page.keyboard.press('v');
                 await ctx.sleep(250);

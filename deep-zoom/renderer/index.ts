@@ -114,13 +114,16 @@ export type { DeepZoomBoxParams };
 /** Which formula the renderer draws (grep `THE FORMULA SEAM` in core.js). */
 export type DzFormulaKind = 'mandelbulb' | 'mandelbox';
 
-/** A camera view. Exactly the fields a recorded keyframe has, so a bookmark and a path frame are
- *  interchangeable. (Shapes copied from deep-zoom-prototype/bridge.ts, the iframe prototype's seam.) */
+/** A camera view. The fields a recorded keyframe has, so a bookmark and a path frame are
+ *  interchangeable, plus the roll. (Shapes copied from deep-zoom-prototype/bridge.ts, the iframe prototype's seam.) */
 export interface DzView {
     /** BigInt fixed-point decimal strings, exactly as the recorder's keyframes store them. */
     cam: [string, string, string];
     yaw: number;
     pitch: number;
+    /** A turn about the view axis, in radians (grep `ROLL` in core.js). `getView` leaves it out when it
+     *  is 0, and `setView` reads a view without it as 0: every view from before the roll is as it was. */
+    roll?: number;
     iters: number;
     power: number;
     phase: [number, number];
@@ -211,7 +214,7 @@ export interface DzHostHandle {
     diveTo(depth: number): Promise<void>;
     /** Who flies the camera. 'module' (the default): the page's own keys and captured-mouse look.
      *  'host': the module reads no key and no mouse; the host moves it with `api.moveAlong` and
-     *  turns it with `setYawPitch`. The distance probe and auto iterations run either way.
+     *  turns it with `setYawPitch` or `setOrientation`. The distance probe and auto iterations run either way.
      *  (Added 2026-10-08. grep `HOST INPUT` in core.js.)
      *  @invariant under 'host' a held fly key does not move the camera, and `api.moveAlong` /
      *  `setYawPitch` still do - proven by: npm run smoke:deep-zoom-parity ("host input: with the
@@ -225,8 +228,18 @@ export interface DzHostHandle {
     rawDistance(): number;
     /** The look angles, in radians. Cheap: unlike `getView` it formats no camera strings. */
     yawPitch(): { yaw: number; pitch: number };
-    /** Turn the camera. Pitch is clamped to +-1.55. Restarts the still; the reference orbit stays. */
+    /** Turn the camera. Pitch is clamped to +-1.55, the roll stays as it is. Restarts the still; the
+     *  reference orbit stays. */
     setYawPitch(yaw: number, pitch: number): void;
+    /** The whole orientation, in radians: `yawPitch` and the roll about the view axis. */
+    orientation(): { yaw: number; pitch: number; roll: number };
+    /** Set the whole orientation. NOTHING IS CLAMPED: a pitch within +-pi/2 is the caller's promise
+     *  (the basis is well defined at the poles; beyond them the picture is upside down). Restarts
+     *  the still; the reference orbit stays.
+     *  @invariant with the roll at 0 the picture is the page's, pixel for pixel - proven by: npm run
+     *  smoke:deep-zoom-parity (the 20 "picture ..." lines). Falsified 2026-10-10: the camera started
+     *  with a roll of 0.1 in core.js -> 22 lines red (all 20 pictures and the two re-created ones). */
+    setOrientation(yaw: number, pitch: number, roll: number): void;
     /** THE FREE DISTANCE ALONG A RAY (added 2026-10-09; grep the name in core.js): seven rays about
      *  `axis` (a unit vector in world axes; null or absent = the view axis), marched on the CPU from
      *  the camera as it is NOW to the solid as it is DRAWN. What a host's navigation flies by,

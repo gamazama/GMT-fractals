@@ -4,20 +4,24 @@
  * WHAT THESE ARE FOR (the owner, 2026-10-08: "we need these deep zoom locations for our flythroughs,
  * which will become rich testing data for the quality questions"). Two readers:
  *   - the app: `KeptPlaces` in components/StarterDives.tsx draws one card each on the Locations tab;
- *     a click is `jumpTo(place.state)` - the view, the look, and the march settings the place needs.
+ *     a click is `jumpTo(place.state)` - the camera and the formula, as for any place.
  *   - the quality tooling: a script imports `PLACES` and marches these views. They are the HARD
  *     cases - found by a person, not sampled from one dive - so a march rule that holds on the
  *     sample flight and fails here is wrong (which is how the depth-only step rule died).
  *
- * A place is a location (`DzLocationState` in deep-zoom/locations.ts): the same object a saved
- * location holds and "Copy location" puts on the clipboard. To add one: go there, set the march
- * so it draws right, Copy location, and append `{ name, note, state: <the pasted object> }`.
+ * `state` is a location (`DzLocationState` in deep-zoom/locations.ts): the same object a saved
+ * location holds and "Copy location" puts on the clipboard. To add one: go there, Copy location,
+ * and append `{ name, note, state: <the pasted object>, march: <the Quality tab's three numbers> }`.
  *
  * PITFALLS
  *   - The three `cam` values are 256-bit integers as decimal STRINGS. Paste them; never retype them
  *     and never let anything turn them into numbers.
- *   - `state.look.march` (step size, hit refine, reach) is what makes a hard place draw right.
- *     Without it a jump keeps whatever the Quality tab holds.
+ *   - `march` (step size, hit refine, reach) is TEST DATA, not part of the place: what the owner
+ *     drew it with under the page's march, which `npm run bench:deep-zoom-march` marches again as
+ *     its "saved" row. No jump applies it: a place brings no march, and a jump keeps whatever the
+ *     Quality tab holds.
+ *   - Each view still carries the renderer's own `light`, `color`, `cscale` and `surf` (detail)
+ *     fields: a view has them. A jump does not read them; the bench's `--detail saved` reads `surf`.
  *   - This file was first written by a script from the owner's saved files
  *     (e20power2iters85.json, e-19.png, and the 2.8e-39 location he pasted). It is edited by hand
  *     from here on; the script was session tooling.
@@ -29,6 +33,8 @@ export interface KeptPlace {
     /** Why it is kept, and what was measured there. Shown as the card's tooltip. */
     note: string;
     state: DzLocationState;
+    /** The Quality tab's Step size, Hit refine and Reach the place was drawn with (see PITFALLS). */
+    march: { stepSize: number; hitRefine: number; reach: number };
 }
 
 export const PLACES: KeptPlace[] = [
@@ -63,33 +69,14 @@ export const PLACES: KeptPlace[] = [
                     "phasePhi": 0,
                     "iterations": 86,
                     "autoIterations": true
-                },
-                "dzLight": {
-                    "shading": 1,
-                    "lightType": 0,
-                    "lampFalloff": 4,
-                    "keyElevation": 23,
-                    "keyTurn": 0,
-                    "lightTint": 0.5,
-                    "shadows": 1,
-                    "occlusion": 2,
-                    "sky": 0.3,
-                    "roughness": 0.75,
-                    "haze": 0
-                },
-                "dzColour": {
-                    "plain": false,
-                    "mode": 1,
-                    "scale": 0.8
-                },
-                "detail": 32.0,
-                "march": {
-                    "stepSize": 0.1,
-                    "hitRefine": 2,
-                    "reach": 2
                 }
             },
             "depth": "5.0845759552981455e-20"
+        },
+        "march": {
+            "stepSize": 0.1,
+            "hitRefine": 2,
+            "reach": 2
         }
     },
     {
@@ -123,33 +110,14 @@ export const PLACES: KeptPlace[] = [
                     "phasePhi": 0,
                     "iterations": 86,
                     "autoIterations": true
-                },
-                "dzLight": {
-                    "shading": 1,
-                    "lightType": 0,
-                    "lampFalloff": 4,
-                    "keyElevation": 23,
-                    "keyTurn": 0,
-                    "lightTint": 0.5,
-                    "shadows": 1,
-                    "occlusion": 2,
-                    "sky": 0.3,
-                    "roughness": 0.75,
-                    "haze": 0
-                },
-                "dzColour": {
-                    "plain": false,
-                    "mode": 1,
-                    "scale": 0.8
-                },
-                "detail": 32.0,
-                "march": {
-                    "stepSize": 0.5,
-                    "hitRefine": 4,
-                    "reach": 1
                 }
             },
             "depth": "1.5686261975430396e-19"
+        },
+        "march": {
+            "stepSize": 0.5,
+            "hitRefine": 4,
+            "reach": 1
         }
     },
     {
@@ -183,33 +151,14 @@ export const PLACES: KeptPlace[] = [
                     "phasePhi": 0,
                     "iterations": 98,
                     "autoIterations": true
-                },
-                "dzLight": {
-                    "shading": 1,
-                    "lightType": 0,
-                    "lampFalloff": 4,
-                    "keyElevation": 40,
-                    "keyTurn": 0,
-                    "lightTint": 0.5,
-                    "shadows": 1,
-                    "occlusion": 1,
-                    "sky": 0.3,
-                    "roughness": 0.45,
-                    "haze": 1
-                },
-                "dzColour": {
-                    "plain": true,
-                    "mode": 0,
-                    "scale": 1
-                },
-                "detail": 1,
-                "march": {
-                    "stepSize": 0.5,
-                    "hitRefine": 3,
-                    "reach": 1
                 }
             },
             "depth": "2.7593205824225345e-39"
+        },
+        "march": {
+            "stepSize": 0.5,
+            "hitRefine": 3,
+            "reach": 1
         }
     }
 ];
