@@ -132,6 +132,7 @@
     "test:band-math": "tsx debug/test-band-math.mts",
     "test:baseline": "tsx debug/native-config-sweep.mts --mode=baseline --fresh",
     "test:bucket-convergence": "tsx debug/test-bucket-convergence.mts",
+    "test:camera-pair": "tsx debug/test-camera-pair.mts",
     "test:compat": "tsx debug/test-compat.mts",
     "test:compat:write": "tsx debug/test-compat.mts --write",
     "test:dither": "tsx debug/test-dither.mts",
