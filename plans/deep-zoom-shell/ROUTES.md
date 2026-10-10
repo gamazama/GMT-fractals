@@ -107,9 +107,10 @@ position moves in a straight line, so the direction changes at each key; its sav
 shallow end, `(zT - z0) / (z1 - z0)`, which runs out of digits: on one leg from zoom 1 to 1e-30 the
 position is 0.0008 of a screen off at 1e-14, 0.11 of a screen off at 1e-16, and at 1e-20 it has
 already arrived (a full screen off). The two-word precision does not help: the weak number is the
-progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, keeps every digit. Not
-yet run through `evaluatePairedTrack` with a real sequence; R0 does that. If it holds it is a live
-fluid-toy bug for any leg longer than about 13 decades.
+progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, keeps every digit.
+**Confirmed in R0 and fixed in R2a** (`80a5916e`, `npm run test:camera-pair`): through the real
+`evaluatePairedTrack` the pan was 0.45 of a view off from 1e-17 on, and is 6e-18 of a view off at
+1e-16 after the fix. It was live in fluid-toy for two camera keys more than about 13 decades apart.
 
 ## The stages
 
@@ -252,6 +253,13 @@ states the turntable and "Q and E are remapped to down and up", both now false; 
 
 ### R2. Engine: a key can carry app data
 
+**Split for the overnight run of 2026-10-11** so the first playable route comes sooner. **R2a, built
+first**: the payload on keys, the release flag, the in-between module, the pair's long-leg fix, the
+frame rate in a saved scene. **R2b, moved to after R5**: the exponential-track tool faults and the
+undoable timeline length. Until R2b the Bias handle and the Pencil are still wrong on an
+exponential track, as they are in fluid-toy today. The decision record is drafted, not filed: an
+ADR write raises an approval prompt, so it waits for the owner.
+
 Generic, and the one stage with a decision record (it extends ADR-0015). ADR numbers 0131 and 0132
 are taken on the unmerged `audio-perf-overnight` branch; take the next free one at the time.
 
@@ -278,6 +286,48 @@ are taken on the unmerged `audio-perf-overnight` branch; take the next free one 
   GMT's does too. Answer 9: fix it, and make the timeline's length undoable in the same stage.
 - **Guards**: `smoke:anim-play`, `smoke:track-binding`, `smoke:fluid-toy` (fluid-toy is the only app
   with an exponential track and a pair).
+
+**R2a as built, 2026-10-11** (`80a5916e`: the pair fix on its own, so it can go to `main` ahead of
+the branch; `0672e352`: the rest. One builder: 517 thousand tokens, 48 minutes; outside `debug/`
++535 / -53, of which 261 lines are code). By the builder: typecheck, the three new node tests, the
+animation smokes, `smoke:fluid-toy`, `smoke:interact`, `smoke:chrome` (8 passes) and
+`smoke:deep-zoom` (55 of 55) against the worktree's server, the build. By the orchestrator:
+typecheck, the four node tests, the pair diff, and the study's own pair check against the fixed
+function.
+
+What a later stage calls:
+- `Keyframe.payload` (`types/animation.ts`); `registerPayloadTrack` / `isPayloadTrack`
+  (`engine/animation/payloadTrackRegistry.ts`, whose header is the contract);
+  `addKeyframe(trackId, frame, value, interpolation?, payload?)`; `updateKeyframes` (on a payload
+  track `value` is dropped unless the patch also carries a `payload`); `replaceKeyframes`.
+- `registerCameraKeyTracks([{ id, hidden?, releaseOnRecord? }])`.
+- `engine/animation/zoomPath.ts`: `buildZoomPath(keys, { unit, scaleAt? })`, `zoomPathPosition`,
+  `zoomLegOnScreen` (e-folds; seconds = that / ln 10 / pace), `zoomPathOrientation`. `unit` is
+  fixed-point steps per 1.0 (2 ** 256 here). Keys in rising time; reversing a route means negating
+  its headings.
+- `Preset.fps`.
+
+Decided without the owner:
+- The pair test's bar is 1e-12 of a view or two steps of the low word, whichever is coarser: two
+  f64 words cannot hold more (about 4e-6 of a view at zoom 1e-29).
+- Orientation is a cumulative cubic in the rotation group, not squad: squad's turning rate is
+  continuous only for evenly spaced keys.
+- A scene load sets the frame rate directly, like the length. Changing the frame rate now counts
+  as an unsaved change, and a share link carries `fps`.
+- GMT's filtered load carries the frame rate too (`engine-gmt/utils/loadFilter.ts`), and GMT's own
+  preset type has the field (`engine-gmt/types/fractal.ts`): added by the orchestrator.
+
+Found, not fixed:
+- A share link rounds every number to 5 decimals and anything under 1e-9 to 0
+  (`utils/UrlStateEncoder.ts`, grep `quantize`). Read, not run: if so, a deep `julia.zoom` does not
+  survive a fluid-toy share link today. Exact data in a payload must be strings.
+- On a payload track the key inspector's value field and a vertical drag in the graph editor do
+  nothing, and nothing is greyed out.
+- `plans/deep-zoom-shell/gmt-systems/camera-systems.md` still describes the pair's old formula.
+
+Waiting for the owner: the decision record (`ADR-DRAFT-keys-carry-app-data.md` beside this file,
+to be filed as `docs/adr/0136-...`); `.claude/rules/tick-and-animation.md` should cite
+`test:key-payload`, `test:zoom-path` and `test:camera-pair`.
 
 ### R3. Keyframes as you dive
 
