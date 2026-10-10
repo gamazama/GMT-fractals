@@ -38,6 +38,20 @@
  *     (caller falls back to standard interpolation).
  *   - Frame outside the pan track's first/last key: returns the clamp
  *     value (matches AnimationEngine's standard out-of-range behaviour).
+ *
+ * @bug PRODUCTION: on ONE pan segment whose zoom changes by more than about
+ *   13 decades the pan runs out of digits long before the zoom does. The
+ *   path progress is a single f64 measured from the SHALLOW key (grep
+ *   `progress = (zT_virt - z0) / (z1 - z0)`); the DD words carry the pan to
+ *   ~1e-32 but cannot help, because the weak number is the progress itself.
+ *   Measured 2026-10-10 by calling `evaluatePairedTrack` on one segment,
+ *   zoom 1 -> 1e-30 (log track), pan 0.45, against the same formula in exact
+ *   integers: 1.4e-4 of a view off at zoom 1e-13, 5 % of a view at 1e-16, and
+ *   from 1e-17 on the pan has already arrived - 0.45 of a view off, the whole
+ *   remaining pan. Live for fluid-toy (`julia.zoom` with `julia.center_*`)
+ *   whenever two camera keys sit that far apart. The cure is to measure from
+ *   the DEEPER key: `(zT - zDeep) / (zShallow - zDeep)` keeps every digit, and
+ *   the pan is then `cDeep + (cShallow - cDeep) * that`.
  */
 
 import type { AnimationSequence, Keyframe } from '../../types';
