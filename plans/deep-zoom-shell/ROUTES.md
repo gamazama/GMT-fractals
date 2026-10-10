@@ -226,6 +226,30 @@ heading, so R4's "pick keyframes from the trail" needs no fitting of tangents.
   `smoke:deep-zoom` stage N5 presses the fly keys.
 - **Not planned**: a horizon lock. Flying becomes GMT's. Say if it is wanted.
 
+**As built, 2026-10-11** (one builder: 723 thousand tokens, 73 minutes, 29 files, +729 / -592). On
+the real GPU, by the builder: parity 52 of 52 and the direct proof with neither script changed, the
+shell smoke 55 of 55, the build. By the orchestrator: typecheck, the nine node checks, the renderer
+diff (22 lines). The owner flew it before it was committed: "I see the rolls is working. looking
+good."
+
+Decided without him, for him to confirm:
+- **The roll rate.** The engine's roll follows the fly speed, and this app's default speed is 3.6
+  against GMT's 0.5: passed straight through, one second of Q rolled 148 degrees. The roll keys run
+  at a gear of 7.2 (`DZ_NAV_ROLL_GEAR` in `deep-zoom/flyCamera.ts`), so the default speed rolls 20
+  degrees a second, as GMT's default does; Shift is four times.
+- **Q and E no longer end a Dive to depth** (they were in `CANCEL_KEYS` as fly keys).
+- **Home, Back, a starter card and pasted text change the camera and the formula only**, like a
+  place. None of them resets detail, light type or colouring any more.
+- **His kept places without their march settings**: with the ray march on (the default) 1.7 %,
+  1.7 % and 0.7 % of rays land on the wrong surface; with it off they draw wrong (98 %, 4 %, 48 %)
+  until the step is set by hand. The numbers stay with the bench (`KeptPlace.march`).
+- Within 4.5e-4 radians of straight up or down the roll reads back as 0, so the view can snap once
+  by up to 9e-4 radians.
+
+Waiting for him, because each edit raises an approval prompt: ADR-0133's update block of 2026-10-08
+states the turntable and "Q and E are remapped to down and up", both now false; and
+`.claude/rules/sibling-apps.md` says the navigation hands the host "a yaw / pitch".
+
 ### R2. Engine: a key can carry app data
 
 Generic, and the one stage with a decision record (it extends ADR-0015). ADR numbers 0131 and 0132
@@ -248,8 +272,9 @@ are taken on the unmerged `audio-perf-overnight` branch; take the next free one 
   plain value units, 1.34 decades off on a 24-decade track. A route's depth track spans 20 to 77
   decades and he will retime with these tools. Fix them, then remove the `@bug`.
 - **The pair's long-leg fault**, if R0 confirms it: evaluate from the deeper end.
-- **The frame rate in a saved scene.** The survey read `getPreset` as writing the sequence and the
-  duration and not the fps; confirm first. If so a route's length in seconds changes on reload, and
+- **The frame rate in a saved scene.** Confirmed by reading, 2026-10-10: `getPreset` in
+  `store/engineStore.ts` writes `p.sequence` and `p.duration` and no frame rate (grep
+  `p.duration = animStore.durationFrames`). So a route's length in seconds changes on reload, and
   GMT's does too. Answer 9: fix it, and make the timeline's length undoable in the same stage.
 - **Guards**: `smoke:anim-play`, `smoke:track-binding`, `smoke:fluid-toy` (fluid-toy is the only app
   with an exponential track and a pair).
@@ -368,8 +393,9 @@ drawing, length parsing, estimate and ffmpeg line are worth lifting); module pac
   fall-through: a failing `when` swallows the key.
 - `loadPreset` order: feature setters, then the sequence, then preset fields (the saved view,
   `dzView`), then the duration, then documents.
-- A share string carries the sequence by default (`utils/Sharing.ts`, `includeAnimations`); check
-  what `deep-zoom/share.ts` passes (answer 7: a link carries the view, not the route).
+- A share string carries the sequence by default (`utils/Sharing.ts`, `includeAnimations`), and
+  `deep-zoom/share.ts` calls `getShareString()` with no options (read 2026-10-10). So a link WOULD
+  carry the route; R3 passes `includeAnimations: false` (answer 7: a link carries the view only).
 - The Mandelbox has no ray march and no skip table, and in a render its distance scale falls back to
   a stale value (grep `renderFrameToBlob`).
 - `api.dz.diveTo` overshoots; the shell's `host/dive.ts` does not and rides `step`.
