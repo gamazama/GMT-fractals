@@ -620,33 +620,27 @@ about 7 to 9.5 sessions in GMT, 1.5 in the module, 2 to 2.5 in the shell.
 ---
 
 
-## Stage 6a - a dive on the timeline: record, scrub, lossless frames
+## Stage 6a - a dive on the timeline: replaced by `ROUTES.md`
 
-What the owner sees: the Flight tab. Record a dive; it lands on the timeline as one track; the
-strip's depth curve scrubs it and shows the depth at the playhead; Space previews (mouse free);
-length in seconds, decades per second, an estimate; "Render PNG sequence (ZIP)" and still export.
-No engine render dialog yet. **Does not wait for any module package.**
+**Replaced 2026-10-10.** The owner redesigned how a dive is recorded: the trail is the record button,
+keyframes are dropped as you dive, and the camera rides an exponential track on the timeline with the
+exact view on each key (DECISIONS K11 to K15). The plan is `ROUTES.md`, stages R0 to R5. What stood
+here - one track `camera.u` along a path held beside the timeline, a Flight strip ported from the
+prototype's record panel, a ZIP of PNGs from the module's own path render - is in this file's history
+(`git log -p`).
 
-| Id | Owns | Steps | Acceptance | Needs |
-|---|---|---|---|---|
-| **S6a-1 Flight state** | `deep-zoom/flight.ts`, `features/flight.ts` | `dzPath` history provider; record stop -> smooth -> track (one undo snapshot) with the default curve of BLUEPRINT section 8; the `camera.u` subscription -> `host.seekPath(path, u)` with the module's ease off; the `deep-zoom.path` claim; `registerCameraKeyTracks(['camera.u'])`. | typecheck | stage 3. **M4 seekPath**; interim: `__samplePath(p, u x lastT)` - by time, so a scrubbed frame does not match a rendered frame, and the strip says so |
-| **S6a-2 Flight strip** | `components/FlightStrip.tsx`, `deep-zoom/flightMath.ts`, `debug/deep-zoom-checks/flight-math.mts` | Port the top half of `ui/RecordPanel.tsx` (under `deep-zoom-prototype/`): Record / Smooth / Preview; the depth curve as a scrubber bound both ways to `camera.u` (Left / Right, Shift = 1 s); the playhead line `t 4.2 s / 10.0 s · frame 126/300 · 6.40e-53`; Go to start, Go to deepest; length typed as seconds or m:ss (writes the timeline length and rescales the keys); fps 24 / 30 / 60; decades per second **read from the key curve at the playhead**; the estimate before a render. | typecheck; `flight-math.mts`: a straight 0 -> 1 curve over 10 s on a 30-decade flight gives 3.0 decades/s at every sample; rescaling 10 s to 20 s halves it | S6a-1 for the store field name only (frozen by the integrator's open step) |
-| **S6a-3 Still and ZIP** | `components/StillExport.tsx`, `components/RenderProgress.tsx`, `deep-zoom/zipRender.ts` | Still export saves the blob with the scene embedded. ZIP = the module's own path render, which downloads the ZIP parts itself (`core.js` `dlBlob(makeZip(...))`; M6 leaves that one download in place, BLUEPRINT section 7): cancel with the "finished frames are saved as a partial ZIP" confirm, the ffmpeg line with Copy, and one line stating that this route uses the module's own smooth-step timing, not the timeline curve (the module applies `easeInOut` itself). | typecheck | S1-1 |
-| **S6a-4 Integrator** | the shared set, `tutorial/firstDive.ts` (adds the recording step, ending with the Flight tab active) | The Flight tab; register the widgets; HUD progress. | all gates | S6a-1..3 |
+Found by reading on 2026-10-10, and why the old packages would not have held: the module's recorder
+keeps sparse waypoints, throws the timing away and drops the tail of a flight; its seek writes
+iterations, power and phase behind the store; its path render skips the per-frame rules and blends the
+light rig from frame to frame; and `Space` is a fly key, so "Space previews" stopped being true at N5.
+`ROUTES.md` "Traps found by reading" has the full list with what to grep.
 
-## Stage 6b - video from the engine's render dialog
+## Stage 6b - video: replaced by `ROUTES.md` R6
 
-**Entry gate: module package M4 (`seekPath` by arc and `renderFrame` to memory) has landed, with
-the parity and direct proofs green.** It is our own file now, not the owner's page, so the gate is
-a dependency and not a wait on anyone. Until then the dialog is not installed - never a control
-the renderer cannot honour.
-
-
-| Id | Owns | Steps | Acceptance | Needs |
-|---|---|---|---|---|
-| **S6b-1 Runner** | `deep-zoom/exportRunner.ts`, `deep-zoom/renderPresets.ts`, `components/RenderEstimateRows.tsx` | Copy fluid-toy's runner skeleton; per frame scrub -> `host.renderFrameBlob({ path, u, longEdge, samples })` -> encode; first frame and every resume pass a fresh light rig [timeline G12]. `renderPresets.ts`: 720 / 1080 / 1440 / 2160 long edge at the surface's aspect, for the dialog's `resolutionPresets` (function form). `RenderEstimateRows` = the dialog's `extraInfoRows`: the estimate. | typecheck | M4 |
-| **S6b-2 Engine: open the dialog from anywhere, wider encoder input (E22, E23)** | `engine/animation/renderPopupRegistry.ts`, `engine/export/videoEncoder.ts` | `openRenderPopup()` beside today's three exports (`registerRenderPopup`, `getRenderPopup`, `subscribeRenderPopup`); `encodeCanvas(source: CanvasImageSource, ...)` (today `HTMLCanvasElement | OffscreenCanvas`). | typecheck; `smoke:chrome`; fluid-toy's and app-gmt's export still typecheck | - |
-| **S6b-3 Integrator** | the shared set, `components/FlightStrip.tsx` (the Render button's one line) | `installRenderDialog` with `defaults` 10 s, 30 fps, 4 samples, `resolutionPresets`, `extraInfoRows`; the ZIP route also as `registerRenderAdjunct`; a File-menu "Render..." row; the strip's Render button calls `openRenderPopup()`. | all gates | S6b-1..2 |
+**Replaced 2026-10-10.** Rendering is `ROUTES.md` R6: a single-frame render in the module, a runner in
+the shape of fluid-toy's, PNG frames to a folder and MP4 / WebM through the engine's dialog. The two
+engine changes of the old S6b-2 stand (ENGINE-GAPS E22 and E23), and E24 (a folder-of-frames sink)
+joins them.
 
 ---
 
@@ -674,7 +668,7 @@ stage 6b.
 |---|---|---|---|---|
 | M6 | The option seams proven: one test drives a key, a drop, a click, a resize and a context loss through `keyTarget`, `shortcuts`, `dropTarget`, `pointerLock`, `resetStillOnResize`, `onContextLost` - the `@assumption` in `renderer/index.ts` becomes an `@invariant`. Fly keys ignore events with Ctrl, Alt or Meta down. No `alert` and no download under `embed`, with one download left in place: the path render's ZIP parts (`dlBlob(makeZip(...))`), which S6a-3 is built on | each seam's line goes red with that option's branch removed | trust in stage 1 and S4-1 | the options as written, untested |
 | M1 | `api.dz.params()`, `api.dz.set(patch)`, `api.dz.schema()` from the `CTLS` rows given ids; setters for iterations, auto iterations, actual pixels, fly speed [host 2.4] [params 5] | `set` then `params` round-trips every id; `schema` ranges equal BLUEPRINT section 3 | S2-3 fully; boot-time range check | `host/looseParams.ts`; two rows left out |
-| M4 | `api.dz.seekPath(path, u, ease)` with `ease` off-able; `api.dz.renderFrame(req)` -> pixels or blob; the render's frame waits ride `step`, not requestAnimationFrame | a frame rendered at `u` equals the still at the same view within the parity floor | S6a-1 exact scrub; **all of stage 6b** | scrub by time through `api.samplePath`; **none for render** |
+| M4 | **Replaced 2026-10-10 by `ROUTES.md`**: the seek half is gone (the route's evaluator calls `setView`), the render half is R6's `renderFrame`. Was: `api.dz.seekPath(path, u, ease)` with `ease` off-able; `api.dz.renderFrame(req)` -> pixels or blob; the render's frame waits ride `step`, not requestAnimationFrame | a frame rendered at `u` equals the still at the same view within the parity floor | S6a-1 exact scrub; **all of stage 6b** | scrub by time through `api.samplePath`; **none for render** |
 | M2 | `api.dz.setGradientTexels(rgba, width)` without the colour-mode flip | the centre pixel follows a two-colour ramp; the colour mode is unchanged after the call | S5-1 | the PNG route, asynchronous |
 | M8 | `setView` resets the depth smoothing | telemetry depth equals the new view's distance on the next `step` | S3-1 | the readout lags a jump by a few frames |
 | M3 | `api.dz.on(fn)` events: param changed, recording, progress, compile, error | each event fires once for its cause | S6a-3 progress, S2-3 write-back | polling from the tick |
@@ -686,6 +680,8 @@ reaches them. Not planned: a field of view in views (GMT-SYSTEMS "Later").
 
 
 ## Dependencies at a glance
+
+Since 2026-10-10 read `6a -> 6b` below as `ROUTES.md` R0 to R7, and `M4 -> Stage 6b` as gone.
 
 ```
 S1-A (move the prototype aside, npm scripts) -> S1-0 -> (S1-1 | S1-2 | S1-3 written together) -> land S1-1 -> S1-2 -> run S1-3
@@ -699,8 +695,9 @@ Stage 7 removes the prototype; it does not wait for stage L
 
 ## What is not verified and could move a package
 
-- Which tick phase the animation engine writes `camera.u` in - decides the phase of
-  `deepZoom.step` (S1-2 reads it; the 6a smoke is the proof).
+- Settled 2026-10-10 by reading, no longer open: the animation engine writes in `TICK_PHASE.ANIMATE`
+  (tick `engine.animation`, `engine/animation/modulationTick.ts`) and `deepZoom.step` draws in
+  `OVERLAY`, so a played frame is never a tick behind. A scrub from the UI writes outside any tick.
 - Whether StrictMode's double mount restarts the 15 s deep compile in dev.
 - Whether a Playwright click obtains pointer lock in headed Chrome - decides whether the captured
   steps prove anything before N5 (they report "not proven" if not).

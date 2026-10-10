@@ -87,7 +87,7 @@ One row per engine plugin or system. "Call" is what `deep-zoom/main.tsx` (or the
 | **RenderLoop / TickRegistry** | the renderer's frame, from stage 1, and animation playback. The module is created with `autoStart: false`, so it never schedules its own frame; `<RenderLoopDriver/>` + `<EngineBridge/>` are mounted in stage 1 because nothing else calls `runTicks` | exactly one tick, in `deep-zoom/DeepZoomSurface.tsx`: `registerTick('deepZoom.step', phase, () => host.step(performance.now()))` (`engine/TickRegistry.ts` `registerTick(name, phase, fn)` returns the unregister function; the tick's argument is seconds, `step` wants a millisecond timestamp, so it reads the clock itself). Phase: see section 7 | [boot 1.7] + `deep-zoom/renderer/core.d.ts` `autoStart`, `step` |
 | **RenderDialog** | video render of a flight, opened from the Flight strip's Render button, File > Render... and the timeline toolbar (stage 6b, after module package M4) | `installRenderDialog({ runner: runDeepZoomExport, title:'Render', defaults:{ samplesPerFrame: 4 }, formatFilter: f => !f.imageSequence, resolutionPresets: () => presetsAtSurfaceAspect([720, 1080, 1440, 2160]), extraInfoRows: RenderEstimateRows })` - `resolutionPresets` (function form) and `extraInfoRows` ("an estimated total-render panel") are existing options in `engine/plugins/RenderDialog/types.ts`. Not installed before H4. The page's own ZIP render is a button in the Flight strip from stage 6a, and also `registerRenderAdjunct({ label:'PNG sequence (ZIP)', Dialog })` once the dialog exists | [timeline 1.9, 2.5, G2] |
 | **PwaUpdate** | the Update pill | `installPwaUpdate()` early | [boot 1.2 row 6] |
-| **Animation timeline** | one track, `camera.u`, moves the camera along the recorded flight; every DDFS param is keyframable for free | `<TimelineHost/>`; `registerCameraKeyTracks(['camera.u'])`; no `registerLogTrack`, no `registerCameraPair` | [timeline 1.2, 1.5, 2.1] |
+| **Animation timeline** | *(rewritten 2026-10-10, section 8 and `ROUTES.md`)* one exponential track, `camera.depth`, one key per keyframe with the exact view on the key; three look tracks; every DDFS param is keyframable for free | `<TimelineHost/>`; `registerLogTrack('camera.depth')`; `registerCameraKeyTracks` with a capture function; a post-scrub hook as the evaluator | [timeline 1.2, 1.5, 2.1] |
 | **Palette UI / Favients / send targets** | the engine's gradient editor on `dzColour.gradient`; My Gradients shelf; "Deep Zoom - Gradient" as a destination | `registerPaletteUI()`; `registerSendTarget({ id:'dz-gradient', label:'Deep Zoom - Gradient', group:'host', editsParam:{featureId:'dzColour', paramKey:'gradient'}, apply })`; `setFavientStudioAction(() => window.open('gradient-explorer.html','_blank','noopener'))`; after the manifest: `mountFavientsPanel({ storageKey:'deep-zoom.favients.panel', paletteFilters:false })` | [palette 1.4, 2.5] |
 | **Toasts** | "Location saved", "Arrived at 1.0e-30", "Stopped at ...", errors | `showToast(msg, tone)`; `<ToastHost/>` mounted once | [keys 1.5] |
 | **Settings** | theme, autosave rows | **one call, once**: `registerCoreSettings({ autosave: { store: settings, ...DZ_AUTOSAVE_TEXT } })` - the option is an object with a `store` key (`store/coreSettings.ts` `CoreSettingsOptions`; Gradient Explorer's `main.tsx` is the one caller that passes it), and the function returns early on any second call (`if (registered) return;`). Stage 1 writes `{ autosave: null }`; stage 3 replaces that line, it does not add one. `<SettingsHost/>` | [conv 1.8] |
@@ -531,52 +531,34 @@ never edited. `core.d.ts` and the types in `index.ts` change in the same package
 
 ---
 
-## 8. The timeline track for a dive, and the render path
+## 8. A dive on the timeline, and the render path
 
-- The exact views stay in `dzPath` (256-bit strings). The timeline carries **one float**:
-  `camera.u`, 0..1 = fraction of the flight's arc length. The engine's two-word scheme stops near
-  1e-32 [timeline 1.5]; a side table is the only shape that reaches 1e-77.
-- Why the feature id is `camera`: the track lands in the timeline's Camera group and is skipped while
-  recording the camera; both rules are keyed on the `camera.` prefix. Any other id is filed under
-  "Shading" [timeline 1.3, 1.7]. See DECISIONS D5.
-- A plain store subscription on `camera.u` (not a React effect) calls `host.seekPath(flight, u)`
-  when `u` differs from the last value pushed. Slider, timeline and undo share that path [timeline 2.1].
-- **Record -> smooth -> preview -> render, in one place: the Flight strip.** The timeline is a
-  second view of the same number, not a required stop. Last week the two-click flow was "Record a
-  dive", then Render; it stays two clicks.
-  1. Record: `host.setRecording(true)`; flying or a dive records. Stop: `host.takePath()`,
-     `host.smoothPath(p)` (returns a new path), store it as `dzPath`, set the timeline length to
-     `round(seconds x fps)` and write two Bezier keys `camera.u` 0 -> 1, all in one undo snapshot
-     [timeline 2.3]. **Default curve: a straight line with a short ease at each end** (flat handles
-     one tenth of the span long). The page measures arc length as depth-relative distance plus turn
-     (`pathArc`), so equal steps of `u` are equal steps of zoom: the body of the flight runs at a
-     constant number of decades per second, which is what a zoom video is judged on. The user
-     reshapes it in the graph editor. **The page's own `easeInOut` is off whenever the shell drives
-     `u`** - the page applies it in its preview and its path render, and applying both would ease
-     twice.
-  2. Preview: play the timeline. Space plays. Scrubbing is exact once the module has `seekPath` (M4);
-     until then `__samplePath` by time - fine to look at, not frame-matched to a render [host 2.3].
-  3. Render (stage 6b): the strip's Render button opens the engine's RenderDialog through
-     `openRenderPopup()` (gap E22, required for this, not optional). The runner per frame:
-     `animationEngine.scrub(frame)` -> `host.renderFrameBlob({ path, u, longEdge, samples })` ->
-     encode. MP4 / WebM come from the engine's encoder [timeline 1.10]. Needs M4.
-  4. Lossless frames (stage 6a, no module package needed): the strip's `Render PNG sequence (ZIP)`
-     runs the module's own path render (the module downloads the ZIP parts itself - `core.js`
-     `dlBlob(makeZip(...))`, the one download M6 leaves in place), with last week's cancel confirm
-     ("the finished frames are saved as a partial ZIP") and the ffmpeg line with Copy. PNG frames
-     are the master for a zoom video; MP4 from the dialog is the convenience. Until M4 this route
-     uses the module's own smooth-step timing, not the timeline curve, and the strip says so in one line.
-- Seconds and fps in, frames out; the estimate comes from frames this machine rendered
-  (`status.setLastFrameTime`) - INTERFACE principles 9 and 11. It is shown **before** the render, in
-  the strip and again in the dialog (`extraInfoRows`).
-- What the strip shows, all of it ported from the top half of last week's `ui/RecordPanel.tsx`:
-  the depth curve as a scrubber bound both ways to `camera.u` (Left / Right step a frame, Shift =
-  1 s); the playhead line `t 4.2 s / 10.0 s · frame 126/300 · 6.40e-53`; Go to start, Go to deepest;
-  length typed as seconds or m:ss (writes the timeline length and rescales the keys); fps 24 / 30 /
-  60; **decades per second read from the key curve at the playhead**, not total decades over total
-  seconds; the estimate. In the dialog the size is a preset list at the surface's aspect (720 / 1080
-  / 1440 / 2160 long edge), so a mismatched width and height cannot be typed by accident.
-- Key Cam (`registerCameraKeyTracks(['camera.u'])`) keys the current `u`: a retiming key [timeline 2.4].
+**Rewritten 2026-10-10; the plan is `ROUTES.md`.** The first version put one float `camera.u` on the
+timeline and the exact views in a side table `dzPath`, because the engine's two-word camera pair stops
+near 1e-32. The owner's call that day (DECISIONS K11 to K15) was to build on the engine's own
+exponential tracks and widen them, not go round them.
+
+- **`camera.depth`** is an exponential track (`registerLogTrack`): one key per keyframe, its value the
+  depth there. Its curve is the pace and its slope is decades per second.
+- **Each key carries the exact view** (three 256-bit positions as strings, yaw, pitch, roll) as a
+  payload the engine does not read; that is an engine change (`ROUTES.md` R2). A keyframe and a saved
+  place hold the same thing, and neither holds light or colour.
+- **A route has one formula, the scene's.** Formula params, light and colour are the DDFS tracks they
+  already are.
+- **One evaluator** runs after every scrub, works out the exact view between two keys by the
+  in-between rule and calls `host.setView` once, and only when the view changed. The rule is chosen by
+  a CPU study (`ROUTES.md` R0); whatever it is, it is evaluated from the deeper end of the leg.
+- **A route is made two ways**: a key drops a keyframe as you dive, or "Route to here" cuts one from
+  the trail the app keeps while you fly. The trail's switch is the record button.
+- **The look pass** is three plain tracks composed on the route's rotation.
+- **Rendering**: a single-frame render in the module, a runner per frame (scrub, render, sink), PNG
+  frames to a folder and MP4 / WebM from the engine's dialog (`ROUTES.md` R6).
+
+Every other mention of the first version in this document is superseded by the above. Grep
+`camera.u`, `dzPath`, `dzFlight`, `deep-zoom.path`, `Flight strip`, `FlightStrip` and `flight.ts`:
+each hit outside this section describes the design that was replaced. One more line is out of date
+for another reason: "Tick phase, not settled here" in section 7 is settled (the animation writes in
+`TICK_PHASE.ANIMATE`, `deepZoom.step` draws in `OVERLAY`).
 
 ---
 

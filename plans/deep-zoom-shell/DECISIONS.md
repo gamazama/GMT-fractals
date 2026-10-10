@@ -100,6 +100,58 @@ gradient"):
   holds for the NUMBERS and NAMES; the module adapter of GMT-SYSTEMS 2.3 ("Module computes GMT's
   values") is not to be built.
 
+## K11. A dive is a route on the timeline: the trail records, keyframes are dropped as you dive
+
+Decided 2026-10-10, in a design conversation that set the current limits aside ("lets loose the
+current inherant limitations, and instead think of what would be ideal"). Both ways of making a route
+are wanted: "record the dive live and retime", and "set keyframes as you dive so you can look around
+and choose where the next keyframe will be". The trail - the app keeping how you got here - is the
+live recorder: "the trail is the record button, and it can be disabled ... you never really know where
+you will end up." A jump to a saved place starts a new trail, "perhaps a warning if the trail is more
+than a few decades deep." *Supersedes D4 and D15; the plan is `ROUTES.md`.*
+
+## K12. The camera rides the engine's own tracks, widened generically
+
+"gmt does support most of this, including exponential tracks, if not fully then at least conceptually
+waiting for an opportunity like this to be intergrated into the engine." "camera and light will be
+keyframed in their own tracks." So no private path player and no side table: the route is keys on an
+exponential track, and where the engine falls short it is widened for any app. How the exact view
+rides on a key is the architect's recommendation, not his words (`ROUTES.md` "The shape"; the ADR is
+written in R2). *Supersedes D5 and the interim of ENGINE-GAPS E16.*
+
+## K13. Route first, the camera second, and the second is optional
+
+"route first - the camera second - but that part is optional. all it means is we can playback the
+route and record/view a rotation offset ontop of it." (`ROUTES.md` R5.)
+
+## K14. Roll comes before routes
+
+"the lack of q/e roll seems like a major problem that would prevent users from being able to keyframe
+rotation." Roll moves from "offered, not asked for" (GMT-SYSTEMS 8.3) to the first flyable stage
+(`ROUTES.md` R1). *Closes the roll half of O4.*
+
+## K15. A place is camera and formula only
+
+"a place shouldnt store light and colour - this will make it hard to improve the lighting and color
+system. currently it is relatvie to the camera in the default setting." and "saved places can also
+keep camera and formula only." A dive keyframe likewise carries the camera alone. *As the architect
+reads it this reverses K10's "a saved place carries its gradient"; whether the gradient and the march
+settings go with light and colour was put back to him and answered yes the same day (K16).*
+
+## K16. The route calls, answered
+
+Decided 2026-10-10, to a numbered list: "1-3 yes / 4 returns to route / 5-7 yes / 8 - to use improve
+gmt's rendering with this option would be ideal. / 9. yes good fixes. / all good to go ahead". In
+`ROUTES.md`'s numbering: a place also loses its gradient, detail and march settings (reverses that
+line of K10); `K` drops a keyframe after the last one, or replaces the one the playhead is parked on;
+the default pace is 0.5 decades a second; a fly key stops a playing route and an unrecorded turn
+returns to the route's aim; one route a scene; each keyframe keys the iterations in effect and the
+automatic rule is off while a route plays; the timeline shows one Depth track and three Look tracks;
+the frame rate is saved in a scene and the timeline's length becomes undoable. **Rendering**: the
+folder of PNG frames, the resume and the preview video are built into the shared render dialog so
+GMT's own rendering gains them, and the module's ZIP render is dropped. *Closes D11.* Building
+started the same day on his word, with `ROUTES.md` R0.
+
 # Open - in the order they block
 
 | Order | Id | The call | Blocks | Recommended |
@@ -110,7 +162,7 @@ gradient"):
 | 6 | D3, D9 | Keys while the mouse is captured (holds until N5); the tutorial card | stage 4 | as written below |
 | 7 | **O4** with GMT-SYSTEMS 8.3, 8.5, 8.15, 8.17 | Keys once nothing captures the mouse; roll; which distance; a slow key; up and down along whose axis | stage N: N4 (8.3 sizes it) and N5 | below, and the recommendations in GMT-SYSTEMS |
 | 8 | D10 | Phone | N5 (the on-screen sticks arrive with GMT's navigation) | below |
-| 9 | D4, D5, D15, D11 | What the timeline number means; the `camera` feature id; default dive speed; lossless frames before video | stage 6a, then 6b | as written below |
+| 9 | D4, D5, D15, D11 | **Replaced 2026-10-10**: D4, D5 and D15 are superseded by K11 and K12; D11 is closed by K16. The route calls were answered the same day: K16 and "Answered by the owner" in `ROUTES.md` | - | - |
 | 10 | GMT-SYSTEMS 8.6, 8.9, 8.8 | Which attachments this shell offers; light count; route A only, or A then B | stage L: L0 (8.9), L4 and L5 (8.6); 8.8 only after stage 7 | Surface and Camera, World disabled below about 1e-6; 8 lights; A now |
 | 11 | D12 | Modulation (LFOs) | nothing in v1; L5 packs with an empty modulation map until it is decided | leave out of v1 |
 | 12 | GMT-SYSTEMS 8.10, 8.11, 8.12, 8.14 | Post stack; share-link schema; F8 stays out; shadow rows after route B | after stage 7 (8.11 after stage 3 shows the link's length) | as recommended there |
@@ -147,6 +199,9 @@ Recommend as stated. Lost for good: last week's `1` `2` `3` panel toggles (the d
 
 ## D4. What the timeline number means
 
+*Superseded 2026-10-10 by K11 and K12: there is no `camera.u`. A key's value is the depth at that
+keyframe and the key carries the exact view. Kept for the record.*
+
 `camera.u` is one float per frame.
 
 - **A. Fraction of the flight's length, 0 to 1 (recommended).** Matches what the page's preview and
@@ -160,6 +215,10 @@ Recommend as stated. Lost for good: last week's `1` `2` `3` panel toggles (the d
 Recommend A now. "Add the view I am looking at to the flight" is left out of v1 either way.
 
 ## D5. The feature that holds that number is called `camera`
+
+*Superseded 2026-10-10 by K12: the track is `camera.depth`, which lands in the Camera group as it is.
+The cost this entry did not name - with Record on, playback stops driving every `camera.` track - is
+handled in `ROUTES.md` R2. Kept for the record.*
 
 The timeline files tracks into groups by hardcoded prefix; `camera.` lands in Camera and is skipped
 while the camera is being recorded. Any other id is filed under "Shading".
@@ -242,6 +301,11 @@ unverified there).
 
 ## D11. Video before lossless frames
 
+*Closed 2026-10-10 by K16, as B and wider. The module's own path render has its own easing on top of
+the timeline's, skips the per-frame rules and holds every PNG in memory until the end, so it is
+dropped; lossless frames come from a folder-of-frames option of the shared render dialog, which GMT
+gains too (`ROUTES.md` R6).*
+
 The engine's render dialog makes MP4 / WebM; it has no image-sequence writer outside GMT's own.
 
 - **A. The module's own ZIP of PNGs first (stage 6a, needs no module package: the module downloads the ZIP parts itself and M6 leaves that one download in place), video through the
@@ -278,6 +342,10 @@ renderer sizes itself and nothing tells it the numbers.
   module takes a long edge only: `api.setFrame(longEdgePx)`, `deep-zoom/renderer/index.ts`).
 
 ## D15. Default speed of a recorded dive
+
+*Superseded 2026-10-10 by K11: a leg's default timing is a pace in decades per second, and a route cut
+from the trail is timed as flown or at an even pace. The number is `ROUTES.md` open call 3. Kept for
+the record.*
 
 A new flight gets a straight line with a short ease at each end, so the body runs at a constant
 number of decades per second. Last week's preview and render used a smooth step whose middle ran

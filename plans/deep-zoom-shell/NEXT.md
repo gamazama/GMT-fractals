@@ -1,0 +1,164 @@
+# Deep zoom - what is left, session by session
+
+Written 2026-10-10; sessions 1 to 3 rewritten the same day after the owner redesigned how a dive is
+recorded (`ROUTES.md`). This is the order to work in; the detail of each stage stays where it is
+(`ROUTES.md` for routes and rendering, `BUILD-PLAN.md` for the shell's other stages and the module
+packages, `MANDELBOX.md`, `MANDELBOLIC.md`, `GMT-SYSTEMS.md` for the Light Studio, the ADRs for
+decisions). Sizes are in sessions; a size marked "guess" has no measurement or earlier estimate
+behind it.
+
+## Where it stands
+
+- Branch `deep-zoom-tool` in the worktree `.claude/worktrees/deep-zoom`: 72 commits ahead of `main`,
+  0 behind, never pushed. The owner holds push and merge ("not before stage 4 is green").
+- Built and flown by the owner: the shell on the engine's plugins (stages 1 to 3, the keys of 4), GMT's
+  navigation with speed by rays and Orbit mode (ADR-0133, ADR-0134), gradients (stage 5), the ray march
+  as the default march, and since 2026-10-09 a second formula, the Mandelbox with negative scale
+  (ADR-0135, `c2a84035`).
+- `deep-zoom/renderer/core.js` is 5,573 lines in one file. The prototype that stage 7 deletes is about
+  8,500 lines (`deep-zoom-prototype/` and its page copy under `public/`).
+- Already in place for routes, though nothing uses it: the timeline is mounted, the animation tick
+  runs, and the renderer draws after the timeline has written its values.
+
+## The order, and why
+
+His priority after gradients is dives on the timeline, and on 2026-10-10 he set the shape: the trail
+is the record button, keyframes are dropped as you dive, the camera rides real tracks on the timeline,
+roll comes first, and a place carries camera and formula only. So routes come first, then rendering,
+then what lets it ship, then quality, then the large optional pieces.
+
+| # | Session | What he gets | Needs first | Size |
+|---|---|---|---|---|
+| 1 | **Routes** (`ROUTES.md` R0 to R5) | Roll on Q / E; the trail; keyframes as you dive; a route on the timeline that plays and scrubs exactly and retimes by sliding; the look pass | nothing: his answers are in `ROUTES.md` | 8 to 10, guess |
+| 2 | **Rendering** (`ROUTES.md` R6, R7) | A small preview video, PNG frames to a folder, MP4 / WebM with an estimate | 1 | 3 to 4, guess |
+| 3 | **Zoom-outs** | A route made from one place without flying it, his kept places first (`e20power2iters85.json`); a route played backwards | 1 | 1, guess |
+| 4 | **Help and the first dive** (the rest of stage 4) | Help topics, the shortcuts page, What's New, lesson 1 | 1 for the route step of the lesson; the rest any time | 1 to 2 |
+| 5 | **The prototype goes** (stage 7) | Nothing new on screen; about 8,500 lines leave the repo; the map page and README | 1 and 2 (the prototype's record panel is the last thing only it has) | 1 |
+| 6 | **Ship** | The app on the site | 4 green, his word | his call |
+| 7 | **The march, finished** | Fewer places that crawl or run out of steps; the older marches retired | his places where rays ran out of steps (owed by him) | 1 to 2 |
+| 8 | **Mandelbox, the rest** | Faster flying on the box, cheaper deep frames | nothing | 1 to 2 |
+| 9 | **Navigation leftovers** | Cheaper rays at the deepest places; his numbers for the rise limit and the clearance | his calls | 1 |
+| 10 | **Shell leftovers** | Pause controls, Diagnostics, autosave, Export all | module package M5 for pause | 1 to 2 |
+| 11 | **Light Studio** (stage L) | GMT's light list, orb strip and aim-by-drag lighting the deep zoomer | nothing; the largest piece | 10 to 13 |
+| 12 | **More formulas** | His choice of the next one | his choice | 1 to 4 each |
+
+Sessions 1 to 5 are one line of work and should run in that order. 7 to 12 are independent of each other
+and of 1 to 5, except that only one session at a time may own `core.js`.
+
+## Each session, to start from
+
+### 1. Routes
+- `ROUTES.md` is the whole brief: the words, his decisions, the shape, stages R0 to R5 and the open
+  calls. Start with R0, a CPU study with no app change, unless he has changed the order.
+- Roll (R1) was "offered, not asked for" under Navigation leftovers; it is now the first thing he
+  can fly, because a keyframe has to hold a full orientation and the view format is about to be saved
+  in scenes.
+- R2 changes the engine and writes a decision record. With him in the session, write the ADR when it
+  is due: the tool prompt is his approval.
+
+### 2. Rendering
+- `ROUTES.md` R6 and R7. Three engine changes ride along: the render dialog opened from anywhere
+  (ENGINE-GAPS E22), the encoder taking any image source (E23), a folder-of-frames sink (E24).
+- The module's single-frame render must give the same picture alone as in sequence; that is the
+  check, and it is what makes a render resumable.
+- Manual check owed: what a cancelled MP4 leaves on disk.
+
+### 3. Zoom-outs
+- A route played backwards is its key times mirrored: one button once routes exist.
+- A zoom-out from a place nobody flew to (a pasted place has no trail): keyframes generated back along
+  the view axis until the whole object is in frame, each leg tested against the rays the navigation
+  already casts (`api.dz.freeDistance`); a straight line back can pass through the solid. Each
+  keyframe needs its own iterations.
+- His kept place `e20power2iters85.json` (copy in `debug/scratch/owner-e20/`) is the first target:
+  "an incredible and beautiful zoomout from here".
+- No design yet beyond this: one page and his yes before code.
+
+### 4. Help and the first dive
+- S4-2 and S4-3 in `BUILD-PLAN.md`. The Mandelbox, the navigation by rays and routes postdate the help
+  text of the prototype: write the topics from the app as it is, not from last week's tabs.
+- What's New entries: see the memory note on the in-app changelog for where they live.
+
+### 5. The prototype goes
+- S7-1 starts with a table: every step of the prototype's smoke against the shell step that covers
+  it. Nothing is deleted until that table has no empty row.
+
+### 6. Ship
+- Before asking: `main` merged in if it has moved, every gate, `npm run build`, the smokes headless.
+- A push deploys the whole site and can interrupt people mid-session: his word, his timing.
+- ADR numbers 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
+
+### 7. The march, finished
+- Owed by him: the places where rays ran out of steps. Ask; add them to `deep-zoom/data/places.ts`,
+  which is also the test set of `npm run bench:deep-zoom-march`.
+- Known: power 2 gains nothing from the line-against-the-ball rule; the picture's march can crawl
+  beside the pole axis under a theta phase (the navigation's probe was fixed for it in `68718c65`,
+  the picture's march was not); where a step's fixed cost sits is unprofiled; the ray variant and the
+  plain one build one after the other (about 12 s of first wait).
+- Retiring Step size, True-gradient march and the J variant: he said keep them "a little while
+  longer". Ask before removing.
+- Parked by him, do not touch: Detail defaults and Normal detail.
+- The standing rule for this session: a method that responds to what is on screen, never a rule keyed
+  to depth or power.
+
+### 8. Mandelbox, the rest
+- The navigation's rays step by half the scalar estimate on the box (`pertOrbitJetJS` returns it):
+  with equal stretch on every axis the true ray estimate is close to the scalar one, so measure how
+  much of the half can be given back.
+- Not measured on the GPU: where orbits run past the reference turn to noise (the 24-bit CPU
+  emulation says about 17 iterations at scale 2). No noise was seen in any picture.
+- No kept GPU line for pre-rotation (the direct proof's five lines are unrotated).
+- Time, only with numbers: resumed orbits, skipping runs that cross no fold (`MANDELBOX.md` stage 7).
+- Detail depends on the place (6 of 24 searched directions were intricate at 2e-20). A dive aims
+  straight ahead; steering a dive toward intricate ground is an idea, not a plan - the same wish he
+  voiced for the bulb ("dives into the more defined areas").
+
+### 9. Navigation leftovers
+- His calls, a number each: the rise limit (4 decades a second), the clearance share (0.08), whether
+  the old speed rule's switch in Settings can go.
+- The rays cost up to 10.5 ms a frame at the deepest starter. Levers: the skip table in the CPU probe,
+  or reading the picture's own depth. Routes lean on the same rays (the clip warning, the trail cut).
+- Inside the solid: he wants GMT's overlay for it, "camera undo must be ready first". A flight is one
+  undo step since ADR-0134; check whether that is the camera undo he meant before starting.
+- Roll is no longer here: it is `ROUTES.md` R1.
+
+### 10. Shell leftovers
+- Stage 2: pause controls (module package M5 first), the Diagnostics tab, the `actualPixels` row.
+- Stage 3: Export all (JSON), the scene-file claims, session autosave.
+- Module packages left: M6 (the option seams driven by one test), M1 (params / set / schema), M3
+  (events), M5 (pause). Each is additive and keeps parity. M4 is replaced by `ROUTES.md` R6.
+
+### 11. Light Studio
+- `BUILD-PLAN.md` "Stage L" and `GMT-SYSTEMS.md`. L0 (N lights in the module's shading pass) can go
+  any time; L-guard and L1 to L4 are GMT files only; L5 is the shell.
+- No test in the repo touches a light today: the guard comes first.
+- It is as large as everything above it together. Worth asking him whether it still ranks where it
+  did before routes and formulas existed.
+- Since 2026-10-10 a place and a keyframe carry no light: lights are keyframed on their own tracks.
+  The L5 migration of "saved places and flight paths made before L5" shrinks to scenes.
+
+### 12. More formulas
+- What a formula costs is now known: its fixed-point map, reference rows, kernel step and CPU orbit
+  (ADR-0135); the Mandelbox took 631 lines in `core.js` and 486 in the shell.
+- Measured on the CPU, in `debug/scratch/formula-study/` (git-ignored; do not delete):
+  - **KaliBox, the Kleinian family, the generated fold formulas**: reuse the box's two fold pieces.
+    Not measured; Kleinian sets are close to self-similar, so depth may show more of the same.
+  - **Julia mode** of either formula: the cheapest addition (same kernel, a constant c). Not measured.
+  - **MandelBolic**: planned and parked. Depth is reached only toward its plane; its look is the level
+    surface of an estimate and has Burning Mode on. `MANDELBOLIC.md` is complete.
+  - **Radiolaria, Mandelorus**: exact delta steps, but they flatten at depth. Not recommended.
+- GMT's own AmazingBox Scale row stays 1 to 4 (his call, 2026-10-10).
+
+## For whoever opens the next session
+
+- `git status` first, in the worktree; another chat may be working there. Name whose changes are whose.
+- The dev server for the worktree is the preview `dz-worktree-dev` on port 3410, hot reload off: the
+  owner reloads the page to see a change. Say so the moment a stage is flyable.
+- Browser checks: `DZ_HEADLESS=1`. Parity and the direct proof read `PORT=3410`; the shell smoke reads
+  `ENGINE_URL=http://localhost:3410`. After any edit of `core.js`: parity (52 lines) and the direct proof.
+- No new smoke script or step unless he asks (he declined one for the formula switch, 2026-10-10).
+- Rebuild the context map (`npm run context:map`) as the last thing before staging: a file added after
+  it makes `context:check` fail.
+- Agents: one builder at a time, continued with a message rather than replaced. The Mandelbox took one
+  agent three runs and about 1.46 million tokens.
+- His standing worry is the size of the codebase: report lines added, code against comment, when a
+  stage closes.

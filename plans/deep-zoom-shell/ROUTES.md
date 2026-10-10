@@ -1,0 +1,403 @@
+# Deep zoom - routes: the trail, keyframes and the timeline
+
+Written 2026-10-10 with the owner. This page replaces "Stage 6a" and "Stage 6b" of `BUILD-PLAN.md`,
+section 8 of `BLUEPRINT.md` and sessions 1 to 3 of `NEXT.md`; their old text is in `git log -p`
+(`NEXT.md` was never committed in its first form). It also supersedes the "Key Cam and camera tracks"
+row of `GMT-SYSTEMS.md` (one float `camera.u` and a side table) and module package M4. His decisions
+are DECISIONS K11 to K15. Nothing here is built. Sizes are in sessions and every one is a guess: no stage has been measured.
+
+What it rests on: three read-only surveys of the engine's timeline, the renderer's path code and the
+shell (2026-10-10), and the two engine files read directly (`engine/animation/logTrackRegistry.ts`,
+`engine/animation/cameraPairRegistry.ts`). Where a line below is worked out and not run, it says so.
+
+## Words
+
+- **Trail**: what the app remembers of how you flew here. On by default; its switch is the record button.
+- **Route**: a camera move on the timeline - keyframes, and the timing between them.
+- **Keyframe**: one exact view on the route (position and orientation) at a time.
+- **Leg**: the stretch between two keyframes.
+- **Look pass**: an optional rotation offset laid over a playing route.
+
+Two words are taken in the code and are not used for the new thing: a "flight" is one hand-flown
+stretch and one undo step (`flightBegan` in `deep-zoom/locations.ts`), and a "dive" is the
+Dive-to-depth action (`deep-zoom/diveControl.ts`).
+
+## Decided by the owner, 2026-10-10
+
+- "lets loose the current inherant limitations, and instead think of what would be ideal."
+- Two ways to make a route, both wanted: "record the dive live and retime", and "set keyframes as you
+  dive so you can look around and choose where the next keyframe will be".
+- "the trail is the record button, and it can be disabled ... the trail is a great way to record an
+  exploration, especially since you never really know where you will end up."
+- "route first - the camera second - but that part is optional. all it means is we can playback the
+  route and record/view a rotation offset ontop of it."
+- "a place shouldnt store light and colour - this will make it hard to improve the lighting and color
+  system ... camera and light will be keyframed in their own tracks." And: "saved places can also keep
+  camera and formula only." The light follows the camera by default, so a route needs no light keys to
+  stay consistent.
+- "the lack of q/e roll seems like a major problem that would prevent users from being able to keyframe
+  rotation." Roll comes before routes.
+- "gmt does support most of this, including exponential tracks, if not fully then at least conceptually
+  waiting for an opportunity like this to be intergrated into the engine." Build on the engine's own
+  pieces and widen them generically; no private path player.
+- A jump to a saved place starts a new trail: "correct. perhaps a warning if the trail is more than a
+  few decades deep."
+- On corners at keyframes: "you right about those corners - and I believe fluid toy may have some
+  insight on how to create easing at log scales instead of straight lines."
+
+## What he gets
+
+1. **The trail.** The record switch is lit from the start. The app keeps how you got here; when you
+   find the place, "Route to here" cuts a clean route from it. A jump that would drop a deep trail
+   asks first.
+2. **Keyframes as you dive.** One key drops a keyframe; between keyframes you look around freely and
+   nothing is captured. A Route tab shows them as thumbnails with depth and time.
+3. **One route either way.** A route cut from the trail has many keyframes and follows what was
+   flown; a hand-set one has few. Everything after that is shared.
+4. **Timing on the timeline.** Each keyframe is a key: slide it to arrive sooner or later. The depth
+   curve between keys is the pace, read in decades per second.
+5. **The look pass.** Play the route and turn the camera on top of it: viewed, or recorded as its own
+   tracks.
+6. **Light and colour** are ordinary tracks. A place and a keyframe carry neither.
+7. **A warning before the render**: a leg that enters the solid shows red.
+8. **A small fast preview video**, then PNG frames to a folder, resumable; MP4 / WebM from the
+   engine's dialog.
+
+## The shape (recommended; the decision record is written in R2)
+
+- **`camera.depth`** is an exponential track (`registerLogTrack`): one key per keyframe, its value
+  the depth there. The engine already eases these in log space with Bezier handles and plots them in
+  log in the graph editor, so the curve is the pace and its slope is decades per second.
+- **Each key carries the exact view** (the same object `api.dz.getView()` returns: three 256-bit
+  positions as strings, yaw, pitch, roll) and, since R0, its heading: the direction of travel when
+  it was set. One row, one diamond per keyframe. A keyframe and a saved place hold the same view.
+- **The look pass** is three plain tracks, composed on the route's rotation.
+- **Light, colour and formula params** are the DDFS tracks they already are.
+- **A route has one formula, the scene's.** A keyframe holds the camera only. A deep place exists only
+  under the formula it was found with, so a formula param changed mid-route moves the surface away
+  from the keyframes; nothing stops that and nothing follows it. This also answers `MANDELBOX.md`'s
+  open "the formula in a recorded flight": the scene carries it.
+- **After every scrub** one evaluator reads the keys round the frame and the depth at that frame,
+  works out the exact view by the in-between rule (R0) and hands it to the renderer once, and only
+  when the view changed.
+
+Why not GMT's six camera tracks (`camera.unified.{x,y,z}`, `camera.rotation.{x,y,z}`): at depth a
+position has no meaningful plotted value, and exact positions as extra hidden word-tracks have to move
+in lockstep with the visible keys. One key holding the view cannot come apart.
+
+What this buys over the old plan's "one number along a path held beside the timeline": the keyframes
+are visible and slide; the route and its timing are in one place and on one undo stack (the
+animation's); it is saved with the scene by the engine; and the dope sheet, graph editor, Key Cam and
+Record work as they do in GMT.
+
+**Used as they are**: exponential tracks and their Bezier-on-log (`engine/math/AnimationMath.ts`,
+grep `isLog`); Key Cam and its custom capture (`engine/animation/cameraKeyRegistry.ts`,
+`setCameraKeyCaptureFn`); scrub hooks (`registerScrubHook`); `animationEngine.evaluateTrack` (no side
+effects); the timeline host, already mounted in `deep-zoom/DeepZoomApp.tsx`; the draw tick
+`deepZoom.step`, already after the animation's write (`TICK_PHASE.OVERLAY` after `ANIMATE`); roll in
+the engine's fly code (`engine/plugins/navigation/FlyIntegrator.ts`).
+
+**What fluid-toy has, and has not** (read 2026-10-10). It has the pacing half: `julia.zoom` is an
+exponential track with Bezier handles in log units, and the pair makes position inherit that curve
+("linear-in-zoom", `cameraPairRegistry.ts`). It does not have the path half: between two keys the
+position moves in a straight line, so the direction changes at each key; its saved-view tween
+(`fluid-toy/viewLibrary.ts`, `tweenView`) is a plain lerp of the centre with the zoom in log.
+
+**A fault found in the pair, on the formula's arithmetic only.** It computes progress from the
+shallow end, `(zT - z0) / (z1 - z0)`, which runs out of digits: on one leg from zoom 1 to 1e-30 the
+position is 0.0008 of a screen off at 1e-14, 0.11 of a screen off at 1e-16, and at 1e-20 it has
+already arrived (a full screen off). The two-word precision does not help: the weak number is the
+progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, keeps every digit. Not
+yet run through `evaluatePairedTrack` with a real sequence; R0 does that. If it holds it is a live
+fluid-toy bug for any leg longer than about 13 decades.
+
+## The stages
+
+One line of work, in this order. Each ends with something he can fly or see, except R2.
+
+| # | Stage | What he gets | Size |
+|---|---|---|---|
+| R0 | The in-between, studied on the CPU | Plots and numbers for how the camera travels between keyframes, on his own places; one rule recommended | 1 |
+| R1 | Roll, and places slimmed | Q / E roll; flying turns about the camera's own axes as in GMT; a place is camera and formula | 1 to 2 |
+| R2 | Engine: a key can carry app data | Nothing on screen; the decision record | 1 to 2 |
+| R3 | Keyframes as you dive | Drop keyframes, see them on the Route tab, play and scrub the route exactly, retime by sliding | 2 |
+| R4 | The trail | The record switch, "Route to here", as flown or even pace, a smoothing slider | 2 |
+| R5 | The look pass | Turn the camera over a playing route; record it | 1 |
+| R6 | Rendering | Preview video, PNG frames to a folder, MP4 / WebM | 2 to 3 |
+| R7 | Tidy | Dead handles gone, help text, docs | 1 |
+
+### R0. The in-between, studied on the CPU
+
+No app change. A scratch folder `debug/scratch/route-study/` (git-ignored, like `formula-study/`),
+with the renderer's spans lifted into node the way the navigation study did (in `core.js` grep
+`THE FREE DISTANCE ALONG A RAY`, `rayFreeJS`; that study's logs are in `H:/tmp/dz-nav-study/`).
+
+- **Test routes**: a straight dive; a dive that turns at each keyframe; half an orbit; a slide along a
+  wall; in, out and in again; keyframes 1, 10 and 30 decades apart; his kept places
+  (`deep-zoom/data/places.ts`, `debug/scratch/owner-e20/`); one Mandelbox place.
+- **Candidates**:
+  - a. the engine's rule: a straight line, progress linear in depth;
+  - b. today's module spline (`pathApplyCR`, uniform Catmull-Rom). Its tangent at a keyframe is half
+    the distance between the neighbours, which the shallow side dominates, so with keyframes decades
+    apart it should overshoot into the solid (worked out, not run);
+  - c. a Hermite curve with depth as the knot: the turn happens in the first decade after a keyframe,
+    with a radius of about the depth there (worked out, not run);
+  - d. log-polar about the point the deeper keyframe looks at: the distance to it eased in log, with
+    the same Bezier-on-log the depth track uses, and the direction turned on the sphere. An orbit, a
+    spiral and a straight dive are then one rule. This is fluid-toy's "solve in log space, then exp
+    back" carried from one number to a position.
+- **Measured for each**: whether a leg enters the solid; speed and turn rate on screen along the leg
+  (largest over smallest, and the jump at a keyframe); position error against a BigInt referee at
+  1e-77; cost per evaluation. Whatever the rule, it is evaluated from the deeper end.
+- **Also settled here**:
+  - which number is "depth" on the track: what the HUD shows (`deep-zoom/depthNow.ts`, what is looked
+    at) or what the speed uses (`deep-zoom/flyPace.ts`). A glance past an edge makes the first jump
+    by decades; judged on how even the pace of a played route is;
+  - rotation between keyframes takes the shortest turn (quaternions built from yaw, pitch and roll);
+  - what one seek costs: `buildRefOrbit` plus `uploadOrbit` timed at the kept places, bulb and box.
+    Flying already rebuilds the orbit every frame, so the expectation is "what flying costs"; no
+    number exists anywhere in the tree;
+  - the pair's fault above, run through the real `evaluatePairedTrack`.
+- **Done when** he has seen the plots and a rule is chosen.
+
+**As measured, 2026-10-10** (`debug/scratch/route-study/`: `study.mts`, `pair-check.mts`, `report.mts`,
+results and the page in `out/`; git-ignored; about 40 s to run). The data is the sample flight: 36.8
+decades in 1,291 exact views. A route is a few of those views kept as keyframes, judged against
+what was flown. The owner has the page; the rule below is recommended and awaits his word.
+
+- **The rule: the straight line made smooth.** A Hermite curve in the leg's clock `m`, where `m` is
+  the share of the leg's integral of depth over time that has passed. On a dive `m` is the pair's
+  linear-in-zoom progress; with the depth flat it is plain time. A key's tangent is its on-screen
+  velocity, and every weight is taken from the deeper key, where it goes to zero.
+- **Each keyframe keeps its heading**: the direction of travel when it was set, which the trail
+  knows. With keyframes 0.2 decades apart the route stays within 0.0025 of the distance to the
+  nearest surface of what was flown (the straight line: 0.55; the average of the two legs as the
+  tangent: 0.074), and its sharpest turn is 25 degrees a second where the flown dive's own is 30.
+  The key's AIM is a bad stand-in for its heading, because he looks around while flying: 240
+  degrees a second. A keyframe with no heading (a pasted place) takes the average of its two legs.
+- **The straight line** turns 4 degrees at a typical keyframe and 26 at the worst with keys a decade
+  apart, 22 and 34 at five decades, and passes within 1.2 % of the room he kept.
+- **Today's module spline** (`pathApplyCR`) does not hold beyond its own spacing: at one decade a leg
+  it is 25 nearest-surface distances off the flown path and puts a sample inside the solid.
+- **The spiral** turns gently (2 to 10 degrees a second) and is exact round a point, but it leaves a
+  5 to 20 degree turn at keys, steps the speed by up to 2.8 times at close spacing, and went 11
+  distances off the flown path there. Not for a route cut from a trail.
+- **Even pace means even speed on screen.** With legs timed by their decades alone the speed varies
+  1.28 times along the 5-decade route and steps 1.17 times at a keyframe. Timed by each leg's
+  distance on screen: 1.00 on the straight line, 1.07 on the smoothed one. Decades per second stays
+  the readout.
+- **Long legs need the warning.** At 12 decades a leg every rule passes within 1 % of the room he
+  kept somewhere, though no sample is inside the solid; at 5 decades, about 20 %.
+- **Other moves.** Round a point in 30-degree steps the smoothed line is 2.1 % off the circle. In,
+  out and in again, it slows through the turn-round (the speed varies 2.2 times) with no corner.
+  Played backwards it retraces the forward path to 1.7e-15 of a depth.
+- **The pair's fault is real.** `evaluatePairedTrack` on one leg from zoom 1 to 1e-30 is 5 % of a
+  view off at 1e-16 and has stopped panning by 1e-17: 0.45 of a view off, the whole pan left. The
+  file is the same on `main`. Marked `@bug PRODUCTION` in `engine/animation/cameraPairRegistry.ts`.
+- **A seek's CPU cost.** The reference orbit takes 0.4 ms at 14 iterations, 2.2 ms at 50 and 5.2 ms
+  at 80 (worst seen 10.7); the GPU upload and the draw are not in that. Working out the position:
+  1.6 microseconds.
+- **Not settled: which number is "depth".** On this dive what is looked at and the nearest surface
+  are equally steady (one and three steps back up of over a tenth of a decade). His power-4 place,
+  where they differ by 22 decades, is not a flown dive. Decide in R3 with a trail from there.
+- **Owed to R2**: the clock for a depth curve that is not a straight line in log (a Bezier). The
+  study's legs are log-linear, where the integral has a closed form.
+
+What this changes below: a key's payload is the exact view AND its heading (R2, R3); Even pace times
+a leg by its distance on screen, not by its decades (R3, R4); the trail hands each keyframe its
+heading, so R4's "pick keyframes from the trail" needs no fitting of tangents.
+
+### R1. Roll, and places slimmed
+
+- **Renderer**: `function basis` takes a roll. A view carries an optional `roll`, 0 when absent, so
+  every stored view, starter, place, link and scene stays valid and draws the same: parity and the
+  direct proof stay green with no line changed. `api.dz.setYawPitch` and `yawPitch` take and return
+  the third number; the telemetry keys do not change (they are frozen).
+- **Shell**: `deep-zoom/flyCamera.ts` stops taking the integrator's turn apart into a turntable
+  (grep `Q AND E ARE DOWN AND UP HERE`) and passes roll through; Q and E leave the up / down list
+  (Space and C stay); `orbitCamera.ts` turns about the camera's own up and right through the pivot;
+  `locations.ts`, `locationParse.ts`, `presetFields.ts`, `share.ts` and `data/*.ts` carry the roll.
+- **Places**: `DzLocationState` keeps the view and the formula, iterations with it. Light, colour,
+  gradient, detail and march settings are no longer written, and are ignored in a place that has
+  them; `jumpTo` stops applying them. This reverses DECISIONS K10's "a saved place carries its
+  gradient" and stage 3's "a location carries its march settings" (answer 1: yes).
+- **Checks touched**: `check:deep-zoom-fly-camera`, `check:deep-zoom-orbit-camera`,
+  `check:deep-zoom-location-parse`, `check:deep-zoom-host`, `check:deep-zoom-module-host`;
+  `smoke:deep-zoom` stage N5 presses the fly keys.
+- **Not planned**: a horizon lock. Flying becomes GMT's. Say if it is wanted.
+
+### R2. Engine: a key can carry app data
+
+Generic, and the one stage with a decision record (it extends ADR-0015). ADR numbers 0131 and 0132
+are taken on the unmerged `audio-perf-overnight` branch; take the next free one at the time.
+
+- **`Keyframe` (`types/animation.ts`) gains an optional payload the engine does not read.** The
+  contract: every operation that keeps a key keeps its payload (move, copy, paste, undo, save, load,
+  `setFps(x, 'match')`). On a track registered as carrying payloads a key's value is locked while its
+  time and handles stay editable, and the tools that invent keys (Simplify, Bake, Pencil, Smooth)
+  refuse. First job: list every site that builds a `Keyframe` (`store/animation/sequenceSlice.ts`,
+  `utils/CurveFitting.ts`, `utils/timelineUtils.ts`, `engine/animation/cameraKeyRegistry.ts`,
+  `engine/algorithms/TrackUtils.ts`) and settle each as carry, lock or refuse.
+- **`registerCameraKeyTracks` entries say whether a track is released while the camera is recorded.**
+  Today playback with Record on stops driving every `camera.*` track (grep `ignoreCamera` in
+  `engine/AnimationEngine.ts`). Default: released, as today, so GMT does not change.
+- **The in-between rule from R0** as a pure module in `engine/animation/`, with a node check that
+  goes red when the rule is evaluated from the shallow end.
+- **The exponential-track tool faults** (the `@bug PRODUCTION` block in `logTrackRegistry.ts`): the
+  Bias handle, the Pencil, the fitter (`fitSamplesToKeys`) and its Douglas-Peucker tolerance work in
+  plain value units, 1.34 decades off on a 24-decade track. A route's depth track spans 20 to 77
+  decades and he will retime with these tools. Fix them, then remove the `@bug`.
+- **The pair's long-leg fault**, if R0 confirms it: evaluate from the deeper end.
+- **The frame rate in a saved scene.** The survey read `getPreset` as writing the sequence and the
+  duration and not the fps; confirm first. If so a route's length in seconds changes on reload, and
+  GMT's does too. Answer 9: fix it, and make the timeline's length undoable in the same stage.
+- **Guards**: `smoke:anim-play`, `smoke:track-binding`, `smoke:fluid-toy` (fluid-toy is the only app
+  with an exponential track and a pair).
+
+### R3. Keyframes as you dive
+
+The first route he can play.
+
+- **The track**: `camera.depth` registered as an exponential track and as the Key Cam track, with a
+  capture function that writes the depth as the value and the exact view as the payload. The unused
+  `camera.u` param goes (`deep-zoom/features/camera.ts`; the feature stays for the depth overlay).
+- **Dropping a keyframe**: `K` adds it after the last one, timed at the default pace (0.5 decades a
+  second), and extends the timeline; pressed while parked on a keyframe it replaces that
+  keyframe.
+- **The evaluator**: a post-scrub hook reads the keys round the frame and the depth at the frame,
+  runs R0's rule and calls `host.setView` once, and only when the view changed, so a parked playhead
+  lets the still gather. `setView` already snaps the depth easing (grep `snapDist`), so a backward
+  scrub draws what forward play draws. Nothing on this route writes iterations, power or phase.
+- **Iterations**: Key Cam also keys `dzFormula.iterations` with the count in effect,
+  and the automatic rule is off while a route drives, so preview and render agree.
+- **Formula params under the timeline**: `deep-zoom/useHostSync.ts` holds them 90 ms
+  (`DZ_ORBIT_PUSH_DELAY_MS`, a trailing wait meant for slider drags), so a keyframed one never
+  arrives during playback. On a scrub they are pushed at once.
+- **The Route tab**: thumbnail (`api.dz.thumbnail`), depth, time; go to, replace with this view,
+  delete, play this leg; a Play button (Space is fly-up in Fly mode and stays so); the pace at the
+  playhead (`decadesPerSecond` in `deep-zoom/components/depthFormat.ts`).
+- **The clip warning**: a leg sampled against `api.dz.freeDistance`, worked out when a keyframe
+  changes, not every frame.
+- **While the timeline drives**: a fly key stops playback and he flies on from there; depth toasts off (`milestones.ts`); the
+  navigation lock covers the engine's timeline, not only the module's own preview
+  (`navigationLocked` in `DeepZoomNavigation.tsx`).
+- **Off the route**: an undo of an older jump, or flying away, leaves the camera somewhere the
+  playhead does not describe. The Route tab says so and offers the way back; the evaluator does not
+  fight it.
+- **Saved** with the scene by the engine: the keys are in the sequence. No document provider.
+
+### R4. The trail
+
+- **The trail**: views with their time and depth, appended from the navigation tick when the camera
+  moved; session memory only, thinned as it grows. A new one starts at a jump to a place, a formula
+  change and a scene load. A jump that would drop a trail more than a few decades deep asks first and
+  offers to make the route (the number is open; 3 suggested).
+- **Route to here**: dead ends and dwelling are cut, and keyframes are picked from the trail's own
+  samples so that the route, under R0's rule, stays within a tolerance on screen of what was flown.
+  The smoothing slider re-picks from the kept trail, so it can be turned back.
+- **Timing**: key times from the trail's clock with the dwelling clipped (As flown), or from the pace
+  (Even). One button each.
+- **Replacing a route** that has hand-set keyframes asks first; either way it is one undo step.
+- **The module's own recorder is not used**: `api.recordToggle` keeps sparse waypoints, throws the
+  timing away (`assignCinematicTime`) and writes no keyframe at stop, so the tail is lost.
+
+### R5. The look pass
+
+- Three plain tracks (names to settle, minding the angle rule in `AnimationEngine.interpolate`, which
+  goes by the substrings `rot`, `phase` and `twist`); the evaluator composes them on the route's
+  rotation.
+- While a route plays, the mouse and Q / E move the offset. With Record on, a key a frame lands on
+  the look tracks, the route still driven (R2's release flag), then thinned with the fitter. The
+  per-frame trigger is GMT-only today (grep `isRecording && recordCamera` in
+  `engine-gmt/navigation/Navigation.tsx`); it moves to where any app's navigation can reach it.
+- An unrecorded turn returns to the route's own aim when playback stops (answer 4).
+
+### R6. Rendering
+
+- **Module**: `api.dz.renderFrame(req)`, the current view and look to pixels or a blob, its waits
+  riding `step`. Built from `renderFrameToBlob`, which is sound (tiles, the GPU watchdog, the active
+  formula and march). It must hold that a frame rendered alone equals the same frame rendered in
+  sequence: today the light rig is blended from the frame before (grep `trackRig`) and `renderPath`
+  returns early from `frame()`, which loses the pole guard. Parity and the direct proof after every
+  `core.js` edit.
+- **Runner**, in the shape of fluid-toy's `runVideoExport`: per frame `animationEngine.scrub(f)`,
+  formula params flushed, `renderFrame`, sink.
+- **Sinks**: PNG frames into a folder the user picks, one file a frame, resumable, with the ffmpeg
+  line (ENGINE-GAPS E24, generic; the folder picker pattern is in GMT's `exportRunner.ts`, grep
+  `showDirectoryPicker`); MP4 / WebM through the engine's dialog (E22 `openRenderPopup()`, E23
+  `encodeCanvas` takes any image source).
+- **Preview video**: the same runner, small and one sample.
+- **The estimate** before the render, from frames this machine rendered.
+- **One render dialog, and GMT gains what is built here** (answer 8: "to use improve gmt's rendering
+  with this option would be ideal"). GMT has its own render popup, whose worker exporter already
+  writes image sequences to a picked folder (`engine-gmt/components/timeline/RenderPopup/`,
+  `engine-gmt/engine/worker/WorkerExporter.ts`); the engine has `installRenderDialog`, used by
+  fluid-toy, whose encoder throws on sequence formats. The first job of R6 is to read both and say
+  how the folder of frames, the resume and the preview video become options of one shared dialog. No
+  dialog private to this app.
+- **The old ZIP route is dropped from the plan**: it has its own easing on top of the
+  timeline's, it skips the per-frame rules, and it holds every PNG in memory until the end.
+- Known: the dialog's default end frame is the duration inclusive, N + 1 frames. Owed: what a
+  cancelled MP4 leaves on disk.
+
+### R7. Tidy
+
+- Host members with no caller go (`setRecording`, `takePath`, `smoothPath`, `seekPath`, `play`,
+  `stopPlay`, `renderPathZip` in `deep-zoom/host/moduleHost.ts`), and the module's path code with
+  them if parity allows.
+- Export filenames say "mandelbulb" whatever the formula.
+- Help text, JSDoc on the new files, the guard row in `.claude/rules/sibling-apps.md`, the context
+  map last.
+
+## What goes from the old plan
+
+`camera.u` as the route; the store field `dzPath` and the document `deep-zoom.path`; the port of
+`deep-zoom-prototype/ui/RecordPanel.tsx` as a whole (918 lines tied to prototype-only state; its curve
+drawing, length parsing, estimate and ffmpeg line are worth lifting); module package M4's
+`seekPath(path, u, ease)`; the ZIP stopgap; DECISIONS D4, D5 and D15.
+
+## Traps found by reading (2026-10-10)
+
+- `pathApplyCR` writes iterations, power and phase into the renderer on every seek and restarts the
+  still each call. The new route does not use it.
+- The feature setter has no equality gate: the evaluator compares before it pushes.
+- A Bezier can overshoot its two keys: clamp the leg's progress.
+- The timeline's length is not undoable (`snapshot()` holds the sequence only) and there is no
+  "rescale the keys" action; `setFps(x, 'match')` is the only retimer.
+- The shortcut dispatcher picks the winning binding first and tests its `when` afterwards, with no
+  fall-through: a failing `when` swallows the key.
+- `loadPreset` order: feature setters, then the sequence, then preset fields (the saved view,
+  `dzView`), then the duration, then documents.
+- A share string carries the sequence by default (`utils/Sharing.ts`, `includeAnimations`); check
+  what `deep-zoom/share.ts` passes (answer 7: a link carries the view, not the route).
+- The Mandelbox has no ray march and no skip table, and in a render its distance scale falls back to
+  a stale value (grep `renderFrameToBlob`).
+- `api.dz.diveTo` overshoots; the shell's `host/dive.ts` does not and rides `step`.
+- The clip check and the trail cut both need rays; they cost up to 10.5 ms a frame at the deepest
+  starter when looking round (ADR-0134), so neither runs every frame.
+
+## Answered by the owner, 2026-10-10
+
+His words: "1-3 yes / 4 returns to route / 5-7 yes / 8 - to use improve gmt's rendering with this
+option would be ideal. / 9. yes good fixes. / all good to go ahead". He answered a list of nine in
+chat; the same calls are numbered here as the stages cite them.
+
+1. **Places**: yes. Light, colour, gradient, detail and march settings all go; camera and formula
+   stay. This reverses "a saved place carries its gradient" (K10, 2026-10-09).
+2. **Dropping a keyframe**: yes. `K` adds a keyframe after the last one; parked on a keyframe, it
+   replaces that one.
+3. **The default pace**: yes, 0.5 decades per second, for a new leg and for Even pace.
+4. **While a route plays**: a fly key stops playback and you fly on from there, and the mouse turns
+   the view on top of the route. An unrecorded turn "returns to route" when playback stops.
+5. **One route a scene** for now: yes. A new one replaces it, with undo.
+6. **Iterations**: yes. Each keyframe records the count in effect as an ordinary key, and the
+   automatic rule is off while a route plays.
+7. **A share link carries the view and not the route**: stated to him as assumed; no objection.
+8. **Rendering**: "to use improve gmt's rendering with this option would be ideal." PNG frames to a
+   folder, the resume and the preview video are built as options of the shared render dialog, so
+   GMT's own rendering gains them; no dialog private to this app. The ZIP route is dropped.
+9. **Two engine fixes GMT will feel**: "yes good fixes" - the frame rate saved in a scene, and the
+   timeline's length made undoable.
+10. **The timeline shows** one Depth track plus three Look tracks, not GMT's six: yes.
+11. **Names on screen**: Trail, Route, Keyframe, and the tab is "Route": stated to him as assumed; no
+    objection. Likewise no horizon lock.

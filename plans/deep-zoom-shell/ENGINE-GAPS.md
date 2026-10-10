@@ -18,6 +18,21 @@ packages in BUILD-PLAN. New section S lists the generic seams the navigation and
 reworks add (`GMT-SYSTEMS.md` section 6), once each, with the ADR each needs. Where a row below
 says "the page", read "the module".
 
+**Updated 2026-10-10** (`ROUTES.md`, DECISIONS K11 to K15). The owner chose to keep the exact camera
+on the timeline, so:
+- **E16's interim no longer holds.** The exact view rides as a payload on the keys of an exponential
+  track (`ROUTES.md` R2). That is a smaller change than E16's string-backed param type and stands in
+  for it in this shell; E16 itself stays in the backlog.
+- **E18's interim stands**: the track is `camera.depth`, which lands in the Camera group.
+- **E24 moves into the build** (`ROUTES.md` R6): PNG frames to a folder are the lossless route now
+  that the module's own ZIP render is dropped from the plan. E22 and E23 move with it.
+- **E37 is still open and bites**: `Space` is a fly key in Fly mode, and a `when` that fails swallows
+  the key instead of letting another binding take it.
+- **New, all in `ROUTES.md` R2**: the camera-key registry says which tracks are released while the
+  camera is recorded (today every `camera.` track is); the exponential-track tool faults (`@bug
+  PRODUCTION` in `engine/animation/logTrackRegistry.ts`); the camera pair evaluated from the deeper
+  end of a leg; the frame rate in a saved scene.
+
 ## A. Gaps this build should close in the engine (small, the interim would be a copy)
 
 | # | Gap, stated generically | Proposed engine change | Interim in the shell | Size | ADR | When |
