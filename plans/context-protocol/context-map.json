@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-09T19:06:30.215Z",
+  "generated_at": "2026-10-10T20:57:34.277Z",
   "repo_root": "H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3874,
-    "bytes": 93229936,
-    "tokens": 14513405,
-    "loadable_tokens": 14381365,
-    "context_worthy_tokens": 6810715,
-    "source_of_truth_tokens": 5562166,
+    "files": 3876,
+    "bytes": 93275755,
+    "tokens": 14525409,
+    "loadable_tokens": 14393369,
+    "context_worthy_tokens": 6821877,
+    "source_of_truth_tokens": 5562458,
     "orientation_tokens": 26484,
-    "architecture_tokens": 1222065,
+    "architecture_tokens": 1232935,
     "reachable_union_files": 1189,
-    "reachable_union_tokens": 3850943,
+    "reachable_union_tokens": 3851235,
     "dead_context_files": 24,
     "dead_context_tokens": 72448
   },
@@ -22,42 +22,42 @@
     "app-gmt": {
       "entry": "app-gmt/main.tsx",
       "files": 882,
-      "tokens": 2826106
+      "tokens": 2826398
     },
     "fluid-toy": {
       "entry": "fluid-toy/main.tsx",
       "files": 593,
-      "tokens": 1621501
+      "tokens": 1621793
     },
     "fractal-toy": {
       "entry": "fractal-toy/main.tsx",
       "files": 360,
-      "tokens": 981151
+      "tokens": 981443
     },
     "mesh-export": {
       "entry": "mesh-export/main.tsx",
       "files": 555,
-      "tokens": 1838231
+      "tokens": 1838523
     },
     "gradient-explorer": {
       "entry": "gradient-explorer/v2/main.tsx",
       "files": 551,
-      "tokens": 1718379
+      "tokens": 1718671
     },
     "gradient-explorer-next": {
       "entry": "gradient-explorer/v2/main.tsx",
       "files": 551,
-      "tokens": 1718379
+      "tokens": 1718671
     },
     "demo": {
       "entry": "index.tsx",
       "files": 383,
-      "tokens": 1049340
+      "tokens": 1049632
     },
     "deep-zoom": {
       "entry": "deep-zoom/main.tsx",
       "files": 547,
-      "tokens": 1661180
+      "tokens": 1661472
     }
   },
   "dead_context": [
@@ -196,8 +196,8 @@
       "files": 259
     },
     "tooling": {
-      "tokens": 5956241,
-      "files": 612
+      "tokens": 5967953,
+      "files": 614
     },
     "demo": {
       "tokens": 8972,
@@ -212,7 +212,7 @@
       "files": 1058
     },
     "engine-core": {
-      "tokens": 463615,
+      "tokens": 463907,
       "files": 172
     },
     "fluid-toy": {
@@ -234,15 +234,15 @@
   },
   "by_context_class": {
     "source": {
-      "tokens": 4028581,
+      "tokens": 4028873,
       "files": 1253
     },
     "architecture": {
-      "tokens": 1222065,
-      "files": 324
+      "tokens": 1232935,
+      "files": 326
     },
     "data": {
-      "tokens": 6310794,
+      "tokens": 6311636,
       "files": 927
     },
     "config": {
@@ -272,15 +272,15 @@
   },
   "by_load_policy": {
     "on-demand": {
-      "tokens": 5562166,
+      "tokens": 5562458,
       "files": 1629
     },
     "read-for-area": {
-      "tokens": 1222065,
-      "files": 324
+      "tokens": 1232935,
+      "files": 326
     },
     "skip": {
-      "tokens": 4772808,
+      "tokens": 4773650,
       "files": 314
     },
     "read-first": {
@@ -312,8 +312,8 @@
     },
     "tooling": {
       "on-demand": 1520466,
-      "skip": 3583289,
-      "read-for-area": 849541,
+      "skip": 3584131,
+      "read-for-area": 860411,
       "read-first": 2945
     },
     "demo": {
@@ -334,7 +334,7 @@
       "read-first": 2277
     },
     "engine-core": {
-      "on-demand": 463615
+      "on-demand": 463907
     },
     "fluid-toy": {
       "read-for-area": 2143,
@@ -521,12 +521,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "plans/deep-zoom-shell/BLUEPRINT.md",
-      "tokens": 20498,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
-    },
-    {
       "path": "debug/bench-shader.mts",
       "tokens": 20387,
       "tier": "tooling",
@@ -543,6 +537,12 @@
       "tokens": 20259,
       "tier": "mesh-export",
       "loadPolicy": "on-demand"
+    },
+    {
+      "path": "plans/deep-zoom-shell/BLUEPRINT.md",
+      "tokens": 20027,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
     },
     {
       "path": "debug/smoke-ge-ground.mts",
@@ -587,16 +587,16 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "plans/deep-zoom-shell/BUILD-PLAN.md",
-      "tokens": 18156,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
-    },
-    {
       "path": "debug/test-gradient-roundtrip.mts",
       "tokens": 17873,
       "tier": "tooling",
       "loadPolicy": "on-demand"
+    },
+    {
+      "path": "plans/deep-zoom-shell/BUILD-PLAN.md",
+      "tokens": 17484,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
     },
     {
       "path": "plans/ge-v2-mock-b.html",
@@ -1487,6 +1487,12 @@
       "loadPolicy": "read-for-area"
     },
     {
+      "path": "plans/deep-zoom-shell/ROUTES.md",
+      "tokens": 7543,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "engine-gmt/utils/uniformSlots.ts",
       "tokens": 7532,
       "tier": "engine-gmt",
@@ -1913,6 +1919,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/deep-zoom-shell/DECISIONS.md",
+      "tokens": 6125,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "debug/smoke-ge-livedrag.mts",
       "tokens": 6109,
       "tier": "tooling",
@@ -2219,6 +2231,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/deep-zoom-shell/ENGINE-GAPS.md",
+      "tokens": 5439,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "engine-gmt/engine/CompileScheduler.ts",
       "tokens": 5436,
       "tier": "engine-gmt",
@@ -2369,12 +2387,6 @@
       "loadPolicy": "read-for-area"
     },
     {
-      "path": "plans/deep-zoom-shell/ENGINE-GAPS.md",
-      "tokens": 5138,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
-    },
-    {
       "path": "palette/core/generatorPipeline.ts",
       "tokens": 5123,
       "tier": "root",
@@ -2471,12 +2483,6 @@
       "loadPolicy": "on-demand"
     },
     {
-      "path": "plans/deep-zoom-shell/DECISIONS.md",
-      "tokens": 4936,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
-    },
-    {
       "path": "debug/smoke-undo.mts",
       "tokens": 4906,
       "tier": "tooling",
@@ -2528,6 +2534,12 @@
       "path": "debug/test-palette-blendspaces.mts",
       "tokens": 4818,
       "tier": "tooling",
+      "loadPolicy": "on-demand"
+    },
+    {
+      "path": "engine/animation/cameraPairRegistry.ts",
+      "tokens": 4817,
+      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -2744,12 +2756,6 @@
       "path": "palette/core/dcc/templates.generated.ts",
       "tokens": 4533,
       "tier": "root",
-      "loadPolicy": "on-demand"
-    },
-    {
-      "path": "engine/animation/cameraPairRegistry.ts",
-      "tokens": 4525,
-      "tier": "engine-core",
       "loadPolicy": "on-demand"
     },
     {
@@ -39851,10 +39857,10 @@
       "loadPolicy": "on-demand",
       "ext": ".ts",
       "reason": "app-source",
-      "bytes": 15686,
-      "lines": 361,
-      "tokens": 4525,
-      "structuralTokens": 4614,
+      "bytes": 16681,
+      "lines": 375,
+      "tokens": 4817,
+      "structuralTokens": 4905,
       "cpt": 3.4,
       "heavy": true,
       "reachableFrom": [
@@ -49883,10 +49889,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1677060,
-      "lines": 66715,
-      "tokens": 578297,
-      "structuralTokens": 553275,
+      "bytes": 1679502,
+      "lines": 66815,
+      "tokens": 579139,
+      "structuralTokens": 554093,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -50198,10 +50204,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 79942,
-      "lines": 861,
-      "tokens": 20498,
-      "structuralTokens": 25989,
+      "bytes": 78106,
+      "lines": 843,
+      "tokens": 20027,
+      "structuralTokens": 25461,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -50213,10 +50219,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 70810,
-      "lines": 723,
-      "tokens": 18156,
-      "structuralTokens": 20983,
+      "bytes": 68184,
+      "lines": 720,
+      "tokens": 17484,
+      "structuralTokens": 20068,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -50228,10 +50234,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 19250,
-      "lines": 305,
-      "tokens": 4936,
-      "structuralTokens": 5463,
+      "bytes": 23885,
+      "lines": 373,
+      "tokens": 6125,
+      "structuralTokens": 6733,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -50243,10 +50249,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 20038,
-      "lines": 107,
-      "tokens": 5138,
-      "structuralTokens": 6039,
+      "bytes": 21211,
+      "lines": 122,
+      "tokens": 5439,
+      "structuralTokens": 6378,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
@@ -50477,6 +50483,21 @@
       "reachableFrom": []
     },
     {
+      "path": "plans/deep-zoom-shell/NEXT.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 11620,
+      "lines": 164,
+      "tokens": 2980,
+      "structuralTokens": 3348,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
       "path": "plans/deep-zoom-shell/research/boot-viewport-topbar.md",
       "tier": "tooling",
       "contextClass": "architecture",
@@ -50682,6 +50703,21 @@
       "lines": 392,
       "tokens": 7690,
       "structuralTokens": 9481,
+      "cpt": 3.9,
+      "heavy": true,
+      "reachableFrom": []
+    },
+    {
+      "path": "plans/deep-zoom-shell/ROUTES.md",
+      "tier": "tooling",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "in-tree-notes",
+      "bytes": 29416,
+      "lines": 403,
+      "tokens": 7543,
+      "structuralTokens": 8581,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
