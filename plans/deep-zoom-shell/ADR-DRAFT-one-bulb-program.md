@@ -43,7 +43,8 @@ is retired and we start in the ray shader immediately"; parity retired and the d
    is created and is what `ready` means. The page's program and the skip-table variants are never
    compiled; the skip table and the J variant are gone from the shader and from the CPU.
 2. Until that program is built the plain single-precision picture is shown and nothing deep is
-   drawn. If it cannot be built that is an error; no other march stands in.
+   drawn. If it cannot be built that is the shell's fatal boot failure, said in plain words with
+   the compiler's own; no other march stands in.
 3. The module no longer equals the frozen page, and the parity smoke is retired. The kernel is held
    by the direct proof (the GPU's values against the CPU's high-precision ones), which runs in the
    ray program: the careful march that finds its hits is that program's measuring mode (bit 8).
@@ -65,6 +66,13 @@ is retired and we start in the ray shader immediately"; parity retired and the d
   names the path.
 - First wait, dev server, cold shader cache, three runs each: the first deep picture came at 13.1 s
   (the page's march) with the ray march's at 33.2 s; it now comes at 20.3 s and is the ray march's.
+  In the production build (nine cold runs): the plain picture at 0.8 to 0.9 s, ready and the first
+  deep picture at 21 to 26 s, the page alive throughout with "ray march: building" on screen.
+- The bulb's iteration count is held at the ray march's ceiling (400), not the page's 160
+  (`63411aa8`): a route's keyed count arrives whole.
+- The page's depth rule for the iteration count stays beside the ray march's margin rule. Measured
+  on 13 views: the margin rule alone settles no lower at power 2 and power 4, and far lower at
+  power 8, where the picture moves (the start view: 32 against 13).
 - The readiness limit of 120 s now bounds the ray shader's build.
 - What the parity smoke also held, and nothing holds now: the module's create / dispose lifecycle,
   its own key listener under a host-owned input, and "roll 0 is the picture from before the roll".

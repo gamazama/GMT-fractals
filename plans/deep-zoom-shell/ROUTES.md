@@ -29,7 +29,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | done; the mediabunny upgrade waits for him | `9d05d00b` |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | done for the deep zoomer; GMT's is read and measured, not built: his calls below | `e99e82ef` |
-| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7a and R7b-1 done (the page's program is retired); the rest: see the section | `e41890c4`, `f9f01e1a` |
+| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7a, R7b-1 and R7b-2 done (the page's program is retired); R7c and R7d: see the section | `e41890c4`, `f9f01e1a`, `63411aa8` |
 
 Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
 the owner, 2026-10-11") and is written into the four stages under "The stages".
@@ -1048,6 +1048,53 @@ shown for the bulb (2 lines), the kernel's estimate 0.5 -> 0.4 (the direct proof
   its own key listener under a host-owned input, "roll 0 is the picture from before the roll".
 - **The ADR is drafted, not filed**: `plans/deep-zoom-shell/ADR-DRAFT-one-bulb-program.md`, with
   the update block for ADR-0135 and every rule and ADR line that now cites something gone.
+
+**R7b-2 as built, 2026-10-11** (`63411aa8`; the same builder: 917 thousand tokens more, 29
+minutes; 17 files, +180 / -157). By the builder: the gates below, the production first wait, the
+depth-rule measurement. By the orchestrator: typecheck, six node checks, the shader compare, the
+direct proof, the whole smoke, the two screenshots. Two deliberate breaks seen red.
+
+- **A ray shader that cannot be built is the boot failure**: the card "The deep renderer did not
+  start / The ray march's shader could not be built on this machine, so the deep picture cannot
+  be drawn." with the compiler's words and Reload (`debug/scratch/r7/ray-fail.png`). R7b-1 had
+  left the app up with a chip and a toast while no control moved anything; his words were "rather
+  an error". The orchestrator's choice between the two: say if the half-alive app was wanted.
+- **The 160 cap is lifted**: `api.setIters` and `api.dz.setView` hold a count under `itersMax()`:
+  400 under the ray march, 500 on the Mandelbox, 160 with ray bits 0. A route's keyed count above
+  160 arrives whole (`route.ts`: the `@assumption` is an `@invariant` now, proven by three new
+  lines of `check:deep-zoom-ray-probe`). Decided by the builder: the store's ceiling for the bulb
+  went to 400 with it (the Iterations slider, the [ and ] keys). One number, if he wants 160 back.
+- **The page's depth rule for iterations STAYS: the margin rule does not hold alone.** One
+  measurement (`debug/scratch/r7/depth-rule.mts`; each view loaded afresh, the count started at
+  4, the picture once settled, 640 x 360, of 230,400 pixels):
+
+  | View | Depth | Power | Both rules | Margin alone | Pixels differing | Largest |
+  |---|---|---|---|---|---|---|
+  | flight 0.10 | 6.2e-7 | 8 | 41 | 36 | 1 | 1 |
+  | flight 0.50 | 3.9e-23 | 8 | 63 | 37 | 2,218 | 53 |
+  | flight 0.75 | 1.3e-31 | 8 | 74 | 46 | 1,515 | 53 |
+  | flight 0.95 | 3.6e-35 | 8 | 79 | 68 | 7 | 39 |
+  | place Power 2, 5e-20 | 5.1e-20 | 2 | 95 | 95 | 0 | 0 |
+  | place Power 2, 1.6e-19 | 1.6e-19 | 2 | 86 | 86 | 0 | 0 |
+  | place Slicing, 2.8e-39 | 2.8e-39 | 8 | 85 | 68 | 282 | 52 |
+  | starter Whole bulb | 1.9e+0 | 8 | 32 | 13 | 9,143 | 105 |
+  | starter Past f64 | 2.0e-3 | 8 | 36 | 13 | 8,224 | 50 |
+  | starter Grain of sand | 1.1e-17 | 8 | 55 | 36 | 1,457 | 50 |
+  | starter Certified edge | 6.6e-35 | 8 | 79 | 68 | 6,234 | 50 |
+  | starter Near the floor | 3.4e-76 | 4 | 160 | 164 | 2 | 1 |
+
+  It holds at power 2 and power 4 and not at power 8, where the depth rule is what sets the
+  count. Why power 8 needs more than the margin gives was not looked into. Nothing was changed;
+  the numbers are in a comment at the rule in `core.js`.
+- **The first wait in the production build** (cold shader cache, nine runs, `dist/` served to the
+  page by the script, `debug/scratch/r7/prod-first-wait.mts`): the plain picture at 0.8 to 0.9 s,
+  the splash gone at 1.3 to 1.4 s, ready and the first deep picture at 21 to 26 s. The page is
+  alive throughout (57 to 61 frames a second) with "ray march: building" and "deep shader
+  compiling" on screen. No fix was needed. The dev server's standstill under React's double
+  mount was there before the retirement too (the page's own 13 s build).
+- **To see** (`debug/scratch/r7/prod-wait-10s.png`): what a visitor looks at for those 21 to 26
+  seconds on a first visit is the plain single-precision picture, which at the start view is
+  coarse speckle. Not touched. A later visit has the shader cached.
 
 For R7c, found and not looked into: **one shell frame did not match** (the power-2 place at
 5e-20: 298 of 230,400 pixels, 292 of them by a level, all in the frame's last row of tiles; a
