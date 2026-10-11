@@ -40,6 +40,14 @@ export const CHANGELOG_TOPICS: Record<string, HelpSection> = {
         content: `
 Every GMT release, newest first.
 
+## Unreleased — Video export fixes
+> October 2026
+
+- **Fixed:** H.265, AV1 and WebM video exports no longer fail with "Unsupported codec type".
+- **Fixed:** a failed export no longer blocks the next one with "Export already in progress".
+
+---
+
 ## 0.9.8.5 — The new Gradient Explorer
 > September 26, 2026
 
