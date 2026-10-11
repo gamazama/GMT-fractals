@@ -77,18 +77,24 @@ const settle = (ctx: DzCtx, n = 24) => ctx.untilHost('host.telemetry().accumN >=
  * at; cold, the browser's main thread stands still for the 20 s the build takes and there is nothing to look
  * at either. So for the program whose fragment shader carries `#define USE_JET`, and for that question alone,
  * the answer is held at "no" for 8 s after the link. Nothing else is changed: the source, the build, the
- * program that is then drawn with. The script also keeps the host's `compile` events and what became of `ready`
- * (`window.__dzHeld`), for the host that is in the holder (StrictMode mounts twice).
+ * program that is then drawn with. THE MANDELBOX'S PROGRAM IS HELD THE SAME WAY, for 6 s after ITS link (the
+ * deep fragment shader with `#define USE_BOX`: it reads `uOrbit`, which the box's small baseline program does
+ * not), so that the loading notice of a switch to that formula is there to be looked at too. The script also
+ * keeps the host's `compile` events and what became of `ready` (`window.__dzHeld`), for the host that is in the
+ * holder (StrictMode mounts twice).
  */
 const heldBuildInit = (hostExpr: string): string => `(() => {
-    const HOLD_MS = 8000, COMPLETION_STATUS_KHR = 0x91B1, P = WebGL2RenderingContext.prototype;
-    const jetShaders = new WeakSet(), linkedAt = new WeakMap();
+    const HOLD_MS = 8000, BOX_HOLD_MS = 6000, COMPLETION_STATUS_KHR = 0x91B1, P = WebGL2RenderingContext.prototype;
+    const heldShaders = new WeakMap(), holdOf = new WeakMap(), linkedAt = new WeakMap();
     const source = P.shaderSource, attach = P.attachShader, link = P.linkProgram, param = P.getProgramParameter;
-    P.shaderSource = function (shader, text) { if (typeof text === 'string' && text.includes('#define USE_JET')) jetShaders.add(shader); return source.call(this, shader, text); };
-    P.attachShader = function (program, shader) { if (jetShaders.has(shader)) linkedAt.set(program, Infinity); return attach.call(this, program, shader); };
+    P.shaderSource = function (shader, text) {
+        if (typeof text === 'string' && text.includes('#define USE_JET')) heldShaders.set(shader, HOLD_MS);
+        else if (typeof text === 'string' && text.includes('#define USE_BOX') && text.includes('uOrbit')) heldShaders.set(shader, BOX_HOLD_MS);
+        return source.call(this, shader, text); };
+    P.attachShader = function (program, shader) { if (heldShaders.has(shader)) { holdOf.set(program, heldShaders.get(shader)); linkedAt.set(program, Infinity); } return attach.call(this, program, shader); };
     P.linkProgram = function (program) { if (linkedAt.has(program)) linkedAt.set(program, performance.now()); return link.call(this, program); };
     P.getProgramParameter = function (program, name) {
-        if (name === COMPLETION_STATUS_KHR && linkedAt.has(program) && performance.now() - linkedAt.get(program) < HOLD_MS) return false;
+        if (name === COMPLETION_STATUS_KHR && linkedAt.has(program) && performance.now() - linkedAt.get(program) < holdOf.get(program)) return false;
         return param.call(this, program, name);
     };
     const H = window.__dzHeld = { host: null, events: [], ready: 'pending' };
@@ -400,36 +406,52 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'the ray march is what draws the bulb: while its shader builds the plain picture is shown and the top bar says so, then the deep picture comes; Step size moves no ray of it',
+            name: 'the ray march is what draws the bulb: while its shader builds the plain picture is shown under the loading notice and the top bar says so, then the deep picture comes; the Mandelbox\'s notice is one line until the view is deep; Step size moves no ray of the bulb',
             owner: 'owner, 2026-10-11 ("only if the pages march is retired and we start in the ray shader immediately"; "rather an error" than another march)',
-            falsified: 'THE STEP BEFORE THIS ONE (2026-10-09 to 2026-10-11) switched a Ray march row off and on and compared the two marches\' pictures; seen red twice on 2026-10-09: the `rayMarch` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out); `rayMarch: true` taken out of `shellOptions` (deep-zoom/host/moduleHost.ts) -> red, "on from the start" false. The switch, the push, the option and the other march are gone. THIS STEP, 2026-10-11: `let rayAsk = 5` made `0` in deep-zoom/renderer/core.js (the module starting with nothing of the ray march in force: the page\'s step rule inside the one program) -> red, 8 lines. The wait has no name ("building null", notice "": the module calls its ray march off), so the step\'s own wait ends at once with ready still pending and the five lines after it are false; and "moves no ray of the bulb" is false: 6.53 % of the pixels differ at Step size 0.3 (the control: 0.00 %). The other 11 steps of the stage stayed green. NOT seen red: "NOTHING DEEP IS DRAWN meanwhile" (it held in that run too), and the Hit refine control.',
+            falsified: 'THE STEP BEFORE THIS ONE (2026-10-09 to 2026-10-11) switched a Ray march row off and on and compared the two marches\' pictures; seen red twice on 2026-10-09: the `rayMarch` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out); `rayMarch: true` taken out of `shellOptions` (deep-zoom/host/moduleHost.ts) -> red, "on from the start" false. The switch, the push, the option and the other march are gone. THIS STEP, 2026-10-11: `let rayAsk = 5` made `0` in deep-zoom/renderer/core.js (the module starting with nothing of the ray march in force: the page\'s step rule inside the one program) -> red, 8 lines. The wait has no name ("building null", notice "": the module calls its ray march off), so the step\'s own wait ends at once with ready still pending and the five lines after it are false; and "moves no ray of the bulb" is false: 6.53 % of the pixels differ at Step size 0.3 (the control: 0.00 %). The other 11 steps of the stage stayed green. NOT seen red: "NOTHING DEEP IS DRAWN meanwhile" (it held in that run too), and the Hit refine control. THE LOADING NOTICE, LATER ON 2026-10-11 (the step gained its notice lines then: the large card at the start view and at the deep one, the Mandelbox\'s one line and where it turns into the card; until then it asserted only that the picture carried the old "deep shader compiling" line): the size made always small in deep-zoom/components/BootCard.tsx (`plainIsTrue ? \'small\' : \'large\'` given `|| true`) -> red, 4 lines: "at the start view the picture carries the LARGE notice" (size "small"), "which says what is being built ..." (the text was "Deep renderer building · 0 s"), "... the LARGE notice at the deep view too" (size "small" at a depth shown of 2.89e-17) and "walked in ... it is the LARGE notice" (size "small" at 0.00101). The other 14 lines stayed green, the Mandelbox\'s SMALL line among them. NOT seen red: that SMALL line (it needs a notice that is always large), and the two "gone" lines.',
             timeoutMs: 180_000,
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 // ── 1. BUILDING, THEN THE DEEP PICTURE. A page of its own in which the ray march's program is HELD as "still
                 // building" for 8 s after it was linked (`heldBuildInit`), so that the wait is there to be looked at whatever the
                 // shader cache holds. Nothing else is touched: the program is the real one and it is drawn with once released.
+                // The same page then switches to the Mandelbox, whose program is held too (6 s): THE LOADING NOTICE'S TWO SIZES.
                 const held = await ctx.context.newPage();
                 try {
                     await held.addInitScript(heldBuildInit(ctx.HOST));
                     await held.goto(ctx.url, { waitUntil: 'domcontentloaded', timeout: 60_000 });
                     const ev = <T,>(body: string) => held.evaluate(body) as Promise<T>;
                     await held.waitForFunction('!!(window.__dzHeld && window.__dzHeld.host) && window.__dzHeld.host.frameCount() > 5', undefined, { timeout: 60_000, polling: 50 });
-                    await ev('window.__dzHeld.host.setView(' + JSON.stringify(DEEP_VIEW) + ')');
-                    await ctx.sleep(700);
-                    const STATE = `(() => { const h = window.__dzHeld.host, t = h.telemetry(), q = (s) => document.querySelector(s);
+                    // `line` is the loading notice over the picture (deep-zoom/components/BootCard.tsx), whatever its size:
+                    // `size` says which, `noticeFor` which program it speaks of, `scrim` whether the picture is dimmed under it.
+                    // `shown` is the depth the app shows (the top bar's), which the size is decided by.
+                    const STATE = `(() => { const h = window.__dzHeld.host, t = h.telemetry(), q = (s) => document.querySelector(s), n = q('[data-dz-boot="compiling"]');
                         return { building: h.building(), ready: window.__dzHeld.ready, boot: h.bootParams() !== null, mode: t.mode, telReady: t.ready, depth: t.depth, error: t.error,
                             notice: q('[data-dz-status-ray]') ? q('[data-dz-status-ray]').getAttribute('data-dz-status-ray') + ' / ' + q('[data-dz-status-ray]').textContent.trim() : '',
-                            badge: q('[data-dz-status-mode]') ? q('[data-dz-status-mode]').textContent.trim() : '', line: !!q('[data-dz-boot="compiling"]'), card: !!q('[data-dz-boot="failed"]'),
+                            badge: q('[data-dz-status-mode]') ? q('[data-dz-status-mode]').textContent.trim() : '', line: !!n, card: !!q('[data-dz-boot="failed"]'),
+                            size: n ? n.getAttribute('data-dz-notice') || '' : '', noticeFor: n ? n.getAttribute('data-dz-notice-for') || '' : '', text: n ? n.innerText.replace(/\\s+/g, ' ').trim() : '',
+                            scrim: !!q('[data-dz-boot="notice"]'), shown: Number((q('[data-dz-status-depth]') || {}).textContent || 0),
                             frames: h.frameCount(), events: window.__dzHeld.events.join() }; })()`;
-                    interface Held { building: string | null; ready: string; boot: boolean; mode: string; telReady: boolean; depth: number; error: string; notice: string; badge: string; line: boolean; card: boolean; frames: number; events: string }
+                    interface Held { building: string | null; ready: string; boot: boolean; mode: string; telReady: boolean; depth: number; error: string; notice: string; badge: string; line: boolean; card: boolean;
+                        size: string; noticeFor: string; text: string; scrim: boolean; shown: number; frames: number; events: string }
+                    const NOTICE_SHOWN = '!!document.querySelector(\'[data-dz-boot="compiling"]\')';
+                    // THE START VIEW FIRST: the bulb's plain picture is speckle at every depth (measured: BootCard.tsx, THE TWO SIZES),
+                    // so its notice is the large card from the page opening on, not a line over a picture that is not one.
+                    const startShown = await held.waitForFunction(NOTICE_SHOWN, undefined, { timeout: 5000, polling: 50 }).then(() => true, () => false);
+                    const start = await ev<Held>(STATE);
+                    ctx.check(startShown && start.size === 'large' && start.noticeFor === 'rayMarch' && start.scrim && start.shown > 1,
+                        'at the start view the picture carries the LARGE notice, dimmed under it (size "' + start.size + '", for ' + start.noticeFor + ', depth shown ' + start.shown + ')');
+                    ctx.check(/deep renderer/.test(start.text) && /first time after the browser starts/.test(start.text) && /half a minute/.test(start.text) && /\d+ s$/.test(start.text) && !/f32|perturbation|shader/i.test(start.text),
+                        'which says what is being built, when it has to be, about how long, and counts the seconds, in plain words ("' + start.text + '")');
+                    await ev('window.__dzHeld.host.setView(' + JSON.stringify(DEEP_VIEW) + ')');
+                    await ctx.sleep(700);
                     const during = await ev<Held>(STATE);
                     ctx.check(during.building === 'rayMarch' && during.ready === 'pending' && !during.boot && !during.telReady,
                         'while the ray march\'s shader builds: host.building() says "rayMarch", ready is pending, bootParams is null (building ' + during.building + ', ready ' + during.ready + ')');
                     ctx.check(during.mode === 'f32' && during.badge === 'f32',
                         'and NOTHING DEEP IS DRAWN meanwhile: sent to a deep view, the picture is the plain one (mode ' + during.mode + ', the top bar\'s badge "' + during.badge + '")');
-                    ctx.check(during.notice === 'building / ray march: building' && during.line && !during.card,
-                        'the top bar says "ray march: building" and the picture carries its compiling line (notice "' + during.notice + '", line ' + during.line + ')');
+                    ctx.check(during.notice === 'building / ray march: building' && during.line && during.size === 'large' && during.shown < 1e-10 && !during.card,
+                        'the top bar says "ray march: building" and the picture carries the LARGE notice at the deep view too (notice "' + during.notice + '", size "' + during.size + '", depth shown ' + during.shown + ')');
                     await ctx.sleep(500);
                     const later = await ev<Held>(STATE);
                     ctx.check(later.frames > during.frames + 5 && later.building === 'rayMarch', 'the plain picture keeps being drawn while it builds (' + (later.frames - during.frames) + ' frames in half a second)');
@@ -440,9 +462,32 @@ export const stage: DzStage = {
                         'then it is there: building() is null, ready resolves, bootParams is set (ready ' + after.ready + ')');
                     ctx.check(after.mode === 'deep' && after.depth < 1e-10 && after.badge === 'perturbation',
                         'and the deep picture comes by itself, at the view that was waiting (mode ' + after.mode + ', depth ' + after.depth.toExponential(2) + ')');
-                    ctx.check(after.notice === '' && !after.line, 'the notice and the compiling line are gone (notice "' + after.notice + '", line ' + after.line + ')');
+                    ctx.check(after.notice === '' && !after.line && !after.scrim, 'the top bar\'s notice and the loading notice are gone (notice "' + after.notice + '", line ' + after.line + ')');
                     ctx.check(after.events.endsWith('rayMarch:ready,deep:ready'),
                         'READINESS IS THAT PROGRAM: the host said compile ready for the ray march and for the deep shader in one poll (' + after.events + ')');
+
+                    // ── THE SMALL NOTICE, AND WHERE IT TURNS LARGE: the Mandelbox's own program, held for 6 s from the switch. Its plain
+                    // picture IS a true one while the view is shallow (the whole box a switch goes to), so the notice there is one
+                    // line and the picture is not dimmed; walked in past the depth where that stops holding, it is the card.
+                    await ev('window.__store.getState().setDzFormula({ kind: 1 })');
+                    const boxShown = await held.waitForFunction(NOTICE_SHOWN, undefined, { timeout: 4000, polling: 50 }).then(() => true, () => false);
+                    await ctx.sleep(300);                                   // one more reading of the depth, at the whole-box view
+                    const whole = await ev<Held>(STATE);
+                    ctx.check(boxShown && whole.building === 'mandelbox' && whole.mode === 'f32' && whole.size === 'small' && whole.noticeFor === 'mandelbox' && !whole.scrim && whole.shown > 1,
+                        'the Mandelbox, its program building, the whole box in view: the picture carries the SMALL notice, one line, not dimmed (size "' + whole.size + '", "' + whole.text + '", depth shown ' + whole.shown + ')');
+                    ctx.check(/Mandelbox/.test(whole.text) && /\d+ s$/.test(whole.text), 'which names the Mandelbox and counts the seconds');
+                    await ev(`(() => { const h = window.__dzHeld.host, v = h.getView(), cp = Math.cos(v.pitch), fwd = [cp * Math.cos(v.yaw), Math.sin(v.pitch), cp * Math.sin(v.yaw)];
+                        let s = h.sense(null, {});
+                        for (let n = 0; n < 400 && s.near > 1.01e-3 && !s.inside; n++) { h.moveAlong(fwd, Math.min(s.near - 1e-3, 0.6 * s.near)); s = h.sense(null, {}); }
+                        return s.near; })()`);
+                    await ctx.sleep(500);
+                    const close = await ev<Held>(STATE);
+                    ctx.check(close.building === 'mandelbox' && close.size === 'large' && close.noticeFor === 'mandelbox' && close.scrim && close.shown < 0.05 && /Mandelbox/.test(close.text) && /a few seconds/.test(close.text),
+                        'walked in to a view its plain picture cannot be trusted with, it is the LARGE notice (size "' + close.size + '", "' + close.text + '", depth shown ' + close.shown + ')');
+                    const boxDone = await held.waitForFunction('window.__dzHeld.host.building() === null', undefined, { timeout: 60_000, polling: 50 }).then(() => true, () => false);
+                    await ctx.sleep(600);
+                    const boxAfter = await ev<Held>(STATE);
+                    ctx.check(boxDone && boxAfter.mode === 'deep' && !boxAfter.line && !boxAfter.scrim, 'and it goes when the Mandelbox\'s program is there (mode ' + boxAfter.mode + ', line ' + boxAfter.line + ')');
                 } finally {
                     await held.close().catch(() => undefined);
                 }
