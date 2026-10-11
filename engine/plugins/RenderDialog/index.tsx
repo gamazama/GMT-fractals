@@ -29,6 +29,12 @@
 //   - `status.setResult(...)`: what to show when the run has ended (a
 //     few lines, a command with a Copy button) instead of the form.
 // And `defaults` may be a function, called each time the dialog opens.
+// A fourth the same day: `presets`, a row of named buttons that patch
+// the form (a "Draft": small and one sample). And an app that opts into
+// `frameFolder` WITHOUT a `formatFilter` lists the video formats beside
+// the folder: its runner then serves both, and the dialog is the folder
+// dialog or the video dialog by the format selected (no bitrate and no
+// encoder probe for the folder; no Resume box for a video).
 // The dialog can also be opened from outside the timeline toolbar:
 // `openRenderPopup()` in engine/animation/renderPopupRegistry.ts.
 
@@ -61,6 +67,7 @@ export type {
     RenderDialogRunner,
     RenderDialogResult,
     RenderDialogExtraFieldsProps,
+    RenderDialogPreset,
     RenderDialogResolutionPreset,
     RenderDialogStartContext,
     InstallRenderDialogOptions,
@@ -338,6 +345,7 @@ function RenderDialogShell<TExtra>(
                     fixedSizes={!!options.fixedSizes}
                     resume={resume}
                     setResume={setResume}
+                    formPresets={options.presets}
                     resolutionPresets={options.resolutionPresets}
                     ExtraFormFields={options.extraFormFields}
                     ExtraInfoRows={options.extraInfoRows}

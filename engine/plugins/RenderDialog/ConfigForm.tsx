@@ -12,6 +12,7 @@ import { VIDEO_FORMATS } from '../../../data/constants';
 import type {
     RenderDialogConfig,
     RenderDialogExtraFieldsProps,
+    RenderDialogPreset,
     RenderDialogResolutionPreset,
 } from './types';
 
@@ -52,6 +53,8 @@ export interface ConfigFormProps<TExtra> {
     fixedSizes:          boolean;
     resume:              boolean;
     setResume:           (on: boolean) => void;
+    /** The install option `presets`: a row of buttons, each patching the form. None: no row. */
+    formPresets?:        RenderDialogPreset[];
 
     ExtraFormFields?: React.FC<RenderDialogExtraFieldsProps<TExtra>>;
     ExtraInfoRows?:   React.FC<{ cfg: RenderDialogConfig; extra: TExtra }>;
@@ -71,7 +74,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
         durationFrames, isFormatSupported, formatSupportError, isDiskMode,
         showSamplesPerFrame, showFrameStep, showBitrate,
         formatFilter, resolutionPresets,
-        frameFolder, fixedSizes, resume, setResume,
+        frameFolder, fixedSizes, resume, setResume, formPresets,
         ExtraFormFields, ExtraInfoRows, ExtraWarning,
         startLabel, isStartDisabled,
         onStart,
@@ -124,6 +127,22 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
             )}
 
             <div className="flex-1 overflow-y-auto custom-scroll p-1.5 space-y-1">
+                {formPresets && formPresets.length > 0 && (
+                    <div className="flex gap-1 mb-1.5">
+                        {formPresets.map((preset) => (
+                            <Button
+                                key={preset.label}
+                                data-render-preset={preset.label}
+                                size="small"
+                                label={preset.label}
+                                title={preset.title}
+                                className="!flex-none"
+                                onClick={() => setCfg(preset.apply(cfg))}
+                            />
+                        ))}
+                    </div>
+                )}
+
                 <Dropdown
                     label="Resolution"
                     value={presetVal}
@@ -232,7 +251,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                     )}
                 </div>
 
-                {showBitrate && (
+                {showBitrate && !folderFormat && (
                     <Slider
                         label="Bitrate (Mbps)"
                         value={cfg.bitrate}

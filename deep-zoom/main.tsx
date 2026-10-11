@@ -17,7 +17,7 @@
  *   - PauseControls, BucketRender: the renderer has no pause yet and keeps its own tiled export.
  *   - Session, tutorial and What's New: later stages, each when a renderer handle stands behind
  *     it. (The palette suite came in stage 5: registerFeatures.ts, setup.ts. The render dialog
- *     came in stage R6a, for PNG frames into a folder: routeRender.tsx.)
+ *     came in stage R6a, for PNG frames into a folder, and video files in R6b: routeRender.tsx.)
  *   - `engine/plugins/camera/presetField`: not imported, with the Camera plugin.
  *
  * The prototype this replaces is still served at deep-zoom-prototype.html (dev only).

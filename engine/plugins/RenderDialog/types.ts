@@ -95,6 +95,18 @@ export interface RenderDialogResolutionPreset {
 export type RenderDialogDefaults<TExtra = Record<string, unknown>> =
     Partial<RenderDialogConfig> & { extra?: TExtra };
 
+/** One named set of form values: a button above the form that patches
+ *  it (the install option `presets`). */
+export interface RenderDialogPreset {
+    /** The button's text. */
+    label:  string;
+    /** Its tooltip: what it sets, in a line. */
+    title?: string;
+    /** The fields to change, given the form as it stands. Called on the
+     *  click, so it may read live state (the sizes on offer now). */
+    apply:  (cfg: RenderDialogConfig) => Partial<RenderDialogConfig>;
+}
+
 export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     /** App-specific per-frame pipeline. Plugin handles UI + form +
      *  flags + status; runner handles encoder lifecycle. */
@@ -122,7 +134,10 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
      *  dialog says so in one line where it cannot). The RUNNER asks for
      *  the folder (`pickFrameFolder`, first thing, inside the click).
      *  Without this option nothing above exists: the dialog is what it
-     *  was. To offer ONLY that format, also pass a `formatFilter`. */
+     *  was. To offer ONLY that format, also pass a `formatFilter`;
+     *  without one the video formats are listed beside it, and for those
+     *  the dialog is the video dialog (the encoder probe, the bitrate,
+     *  Interrupt / Resume / Finish / Discard) - the runner serves both. */
     frameFolder?: boolean;
 
     /** Default false. True: the size is one of `resolutionPresets` and
@@ -133,9 +148,16 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
      *  apart could not both be honoured. */
     fixedSizes?: boolean;
 
+    /** OPT-IN: named sets of form values, each a small button in a row
+     *  above the form ("Draft": a small size and one sample, for a quick
+     *  look before the real render). A click patches the form with what
+     *  `apply` returns and starts nothing. Absent or empty: no row. */
+    presets?: RenderDialogPreset[];
+
     /** Standard form-control visibility. Apps that don't have TSAA
      *  set `showSamplesPerFrame: false`; apps that don't want frame-
-     *  step set `showFrameStep: false`. Defaults: all true. */
+     *  step set `showFrameStep: false`. Defaults: all true. The bitrate
+     *  is never shown for the `frameFolder` format (it has none). */
     showSamplesPerFrame?: boolean;
     showFrameStep?:       boolean;
     showBitrate?:         boolean;

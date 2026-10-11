@@ -175,7 +175,7 @@ export const RoutePanel: React.FC = () => {
                     type="button"
                     data-dz-route-render
                     onClick={openRenderPopup}
-                    title="Render the route as PNG frames into a folder. With no route, the timeline as it is."
+                    title="Render the route: PNG frames into a folder, or a video file. With no route, the timeline as it is."
                     className={`${plainButton} w-[72px]`}
                 >
                     <CheckeredFlagIcon /> Render
