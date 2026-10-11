@@ -11,6 +11,18 @@
   section 3 and `BUILD-PLAN.md` stage N.
 - **Numbering:** 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
 
+> **Update 2026-10-11 (the deep zoomer's camera has a roll; decision unchanged):** the update of
+> 2026-10-08 below ("the second app flies") says `deep-zoom/flyCamera.ts` reads the frame's turn
+> back as a turntable, and that Q and E are remapped to down and up because that renderer has no
+> roll. Both stopped being true with commit `9da85c76`. The renderer's view carries an optional
+> roll (grep `ROLL` in `deep-zoom/renderer/core.js`); the adapter rebuilds the object from yaw,
+> pitch and roll each frame and reads the WHOLE orientation back (the one mapping is
+> `toQuaternion` / `toOrientation` in `deep-zoom/orbitCamera.ts`); Q and E roll as in GMT, geared so
+> the default fly speed there rolls as GMT's default does (grep `DZ_NAV_ROLL_GEAR`). The guard
+> counts quoted in that update are stale as well: the live record is the header of
+> `debug/deep-zoom-checks/fly-camera.mts`. The decision itself - navigation emits displacements and
+> never reads a position back - is untouched.
+>
 > **Update 2026-10-08 (the input hook followed; decision unchanged):** the keys / wheel / drag
 > hook is now `engine/plugins/navigation/useNavigationInput.ts`, renderer-free and store-free, with
 > `engine-gmt/navigation/useInputController.ts` as GMT's wrapper. The third consequence below
