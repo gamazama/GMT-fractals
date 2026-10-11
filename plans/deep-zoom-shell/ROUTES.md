@@ -27,7 +27,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R6a render PNG frames to a folder | done | `736103ad`, `c8ce3ef1`, `8de5616f` |
 | R2b exponential-track curve tools, undoable length | done | `15b419bb` |
 | R5 free look while a route plays | done | `3abf4af2` |
-| R6b routes to MP4 / WebM, a Draft preset | not started | |
+| R6b routes to MP4 / WebM, a Draft preset | done; the mediabunny upgrade waits for him | `9d05d00b` |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | not started | |
 | R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | not started; rewritten with his answers of 2026-10-11 | |
 
@@ -162,7 +162,7 @@ progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, ke
 
 ## The stages
 
-R0 to R5, R2b and R6a are built. Each has an "As built" note below, and those notes are the record
+R0 to R5, R2b, R6a and R6b are built. Each has an "As built" note below, and those notes are the record
 of what the code does and of what was decided on the way. What is left, in the order to build it:
 
 | # | Stage | What he gets |
@@ -738,6 +738,63 @@ Not exercised: a real folder picker and a real disk (an in-memory folder stood i
   (his: "we might want to check for a recent ver or whatever is best"). It only packages the video;
   the encoding is the browser's. Read the changelog between the two first, bump, run GMT's export
   paths (`npm run test:export-naming`, and a real export by hand), one commit.
+
+**R6b as built, 2026-10-11** (`9d05d00b`; one builder: 392 thousand tokens, 74 minutes; 7 files,
++493 / -85). By the builder on the real GPU: a scratch run of the real app
+(`debug/scratch/r6b/video-render.mts`, 50 lines: each video read back with mediabunny's input side
+and played in a `<video>`), the shell smoke 55 of 55, `smoke:fluid-toy`, `smoke:chrome`, a check that
+fluid-toy's and app-gmt's dialog is the one they had (13 lines), the build. By the orchestrator:
+typecheck, five node checks, the diff of the shared encoder and the dialog, the screenshot. One
+deliberate break (the stream setting put back: "0 of 46 MiB reached the stream before the last
+frame"). No `@invariant`: no standing command reaches the runner, the encoder or a dialog's Start.
+
+What is there:
+- The Render dialog lists MP4 (H.264, H.265, AV1) and WebM (VP9) beside "PNG sequence (folder)",
+  which stays the default. A video asks for a file inside the click and is written as it goes: at
+  1920 x 1500, 32 of 46 MiB had reached the stream before the last frame.
+- While a video renders the dialog shows what fluid-toy's shows: Interrupt, then Resume / Finish /
+  Discard. Finish closes a playable file with the frames made; Discard leaves nothing under the
+  picked name; closing the timeline mid-run is a Finish.
+- "Draft" sets 640 px and 1 sample and leaves the format alone. A 48-frame draft took 5 s.
+- One frame loop, two sinks (`FrameSink` in `deep-zoom/routeRender.tsx`). In the shared encoder
+  (`engine/export/videoEncoder.ts`): opt-in `mp4FastStart` and `keyFrameEvery`, `queueSize`. In the
+  shared dialog: opt-in `presets`.
+
+Measured: 0.80 s a frame as video against 0.74 as PNG at 1920 px and 2 samples. At 3840 x 3000
+the probe refuses H.264 and H.265 on this machine and says why; AV1 and VP9 run. 3840 x 2160 was
+not tried.
+
+**The owed check, answered: what a cancelled MP4 leaves on disk.** Until the video is closed the
+picked file is 0 bytes: the browser keeps the bytes in a swap file of its own. Finish: a playable
+file with the frames made. Discard: nothing under the name (an empty file where the browser cannot
+remove it; a file picked to be replaced keeps what it had). So a tab closed mid-run loses the
+video, and a video cannot be continued: the folder of PNG frames stays the safe choice for a long
+render.
+
+Differs from the brief, with the reason:
+- **The pixels still go through a PNG.** `core.js` hands out only a blob; taking the frame without
+  it means a change in the kernel, worth about 170 ms of a 0.80 s frame at 1920 px. Not made.
+- **GMT's worker was no pattern for streaming**: it holds an MP4 in memory with a stream too. The
+  deep zoomer asks for `mp4FastStart: false`; nobody else's output changed.
+- **A repair in the shared encoder that changes fluid-toy**: 'hevc', 'av1' and 'vp9' are not codec
+  strings, and Chrome refused each ("Unsupported codec type"): three of fluid-toy's four formats
+  made no file. They do now; its H.264 file is the same 20,733 bytes before and after.
+- **A keyframe a second for the deep zoomer.** Left alone Chrome made one keyframe in 300 frames,
+  which cannot be scrubbed in an editor. fluid-toy and GMT still make single-keyframe videos.
+
+Found in GMT, not fixed (marked `@bug PRODUCTION` in `engine-gmt/engine/worker/WorkerExporter.ts`,
+`49cfda80`): app-gmt's H.265 export fails with "Unsupported codec type" (AV1 and WebM take the same
+line, not reached); and after a failed export every later one answers "Export already in
+progress" until the page is reloaded.
+
+To know:
+- fluid-toy and GMT hold an MP4 in memory until the end even with a picked file, while the badge
+  says DISK. One line each to change; it moves the file's index to its end, so it is his call.
+- Not exercised: the browser's real file picker and a real disk, Firefox and Safari, a headed
+  window, a route longer than 300 frames, the files opened in After Effects or Premiere.
+- Draft has no way back to the values it replaced.
+- **The mediabunny upgrade is not done.** The worktree has no install of its own: modules resolve
+  from `stable/node_modules`, so a bump means an install in the production checkout. His word first.
 
 **R6c. Existing frames: overwrite, continue or cancel.** His words, 2026-10-11: "rather than a
 checkbox, if it detects existing frames, it should come up with options to overwrite, continue,
