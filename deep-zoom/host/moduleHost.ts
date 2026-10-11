@@ -504,6 +504,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         sense: (axis, opt) => dz.sense(axis, opt),
         freeDistance: (dir, opt) => dz.freeDistance(dir, opt),
         estimateAt: (offset) => dz.estimateAt(offset),
+        estimateAtPoint: (cam, iters) => dz.estimateAtPoint(cam, iters),
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         diveTo(depth) {
             // Not before the deep shader: until then the module flies on its f32 distance, good to

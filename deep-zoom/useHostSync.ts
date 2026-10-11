@@ -21,6 +21,14 @@
  *   - Params whose change rebuilds the reference orbit (class O: power, phase, iterations,
  *     precision) are sent `DZ_ORBIT_PUSH_DELAY_MS` after the last change, so a slider drag at depth
  *     rebuilds once and not once per pixel of travel. Everything else goes at once.
+ *   - THE WAIT IS FOR A HAND ON A SLIDER, NOT FOR THE TIMELINE. A value the timeline writes changes
+ *     every frame, so the trailing wait would never end while it plays. Whoever sets the camera for
+ *     a timeline frame calls `flushHostSync()` first (`deep-zoom/route.ts`): the held values go
+ *     now, and the view lands on the formula it belongs to.
+ *   - `holdAutoIterations(true)` sends `dzFormula.autoIterations` as off whatever the store holds,
+ *     until it is called with false (then the store's value goes again). The route holds it while
+ *     it drives the camera: the renderer's rule only ever raises the count, so a frame's count
+ *     would depend on where the playhead had been before. The store is not written.
  *   - Never write to the store from here. Values the renderer changes by itself (auto iterations,
  *     the effective BLA flag) are shown from telemetry, not written back.
  */
@@ -58,6 +66,28 @@ export function storeParams(): DzParams {
     return all;
 }
 
+const AUTO_ITERATIONS_ID = paramId('dzFormula', 'autoIterations');
+
+/** The sync that is running, for the two calls below. Null before `startHostSync` and after its stop. */
+let running: { flush(): void; resendAuto(): void } | null = null;
+/** True: `dzFormula.autoIterations` goes to the renderer as off (see PITFALLS). */
+let autoHeld = false;
+/** A patch as it is sent: itself, with the automatic iteration rule off while that is held. */
+const outgoing = (patch: DzParams): DzParams =>
+    (autoHeld && AUTO_ITERATIONS_ID in patch ? { ...patch, [AUTO_ITERATIONS_ID]: false } : patch);
+
+/** Send the orbit-rebuilding values that are waiting, now (see PITFALLS). None waiting: nothing is sent. */
+export function flushHostSync(): void {
+    running?.flush();
+}
+
+/** Hold the renderer's own iteration rule off, or (false) hand it back to what the store says. */
+export function holdAutoIterations(held: boolean): void {
+    if (autoHeld === held) return;
+    autoHeld = held;
+    running?.resendAuto();
+}
+
 /** Start the sync. Returns the function that stops it. */
 export function startHostSync(): () => void {
     let stopped = false;
@@ -84,7 +114,7 @@ export function startHostSync(): () => void {
             if (DZ_PARAM_ROW_BY_ID.get(id)?.cls === 'O') { orbitPatch[id] = value; anyOrbit = true; }
             else { now[id] = value; anyNow = true; }
         }
-        if (anyNow) liveHost()?.setParams(now);
+        if (anyNow) liveHost()?.setParams(outgoing(now));
         if (anyOrbit) {
             if (orbitTimer !== null) clearTimeout(orbitTimer);
             orbitTimer = setTimeout(flushOrbit, DZ_ORBIT_PUSH_DELAY_MS);
@@ -97,7 +127,7 @@ export function startHostSync(): () => void {
         void host.ready.then(() => {
             if (stopped || getHost() !== host) return;
             readyHosts.add(host);
-            host.setParams(storeParams());   // the store wins
+            host.setParams(outgoing(storeParams()));   // the store wins
         }, () => undefined);
     };
 
@@ -109,8 +139,15 @@ export function startHostSync(): () => void {
     const unsubHost = subscribeHost(adopt);
     adopt(getHost());
 
+    const mine = {
+        flush: (): void => { if (orbitTimer !== null) { clearTimeout(orbitTimer); flushOrbit(); } },
+        resendAuto: (): void => { liveHost()?.setParams(outgoing({ [AUTO_ITERATIONS_ID]: storeParams()[AUTO_ITERATIONS_ID] })); },
+    };
+    running = mine;
+
     return () => {
         stopped = true;
+        if (running === mine) running = null;
         for (const unsub of unsubs) unsub();
         unsubHost();
         if (orbitTimer !== null) clearTimeout(orbitTimer);

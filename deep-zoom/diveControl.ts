@@ -18,12 +18,17 @@
  *     well short of the target.
  *   - The host can be replaced while a dive is in flight (a context loss): the result is read from
  *     whichever host is mounted when the promise resolves.
+ *   - A dive moves the camera inside the host, where the navigation's own bookkeeping does not see
+ *     it. The route is told here instead (`diveBegan` in deep-zoom/route.ts): at take-off the
+ *     timeline stops and the route lets go of the camera, and on landing the direction flown is
+ *     kept as the heading of a keyframe set next.
  */
 import { create } from 'zustand';
 import { getHost } from './host/current';
 import { showToast } from '../engine/store/toastStore';
 import { FLOOR_DEPTH, formatDepth, validDepth } from './components/depthFormat';
 import { depthNow } from './depthNow';
+import { diveBegan } from './route';
 
 export interface DiveInFlight {
     from: number;
@@ -47,9 +52,13 @@ export async function diveTo(target: number): Promise<void> {
     const mine: DiveInFlight = { from, target: to };
     useDive.setState({ dive: mine });
     host.focus();   // the fly keys that end a dive are heard on the picture
+    // A dive is the hands' as a fly key is: the timeline stops, the route lets the camera go, and
+    // what the dive flew along is the heading of a keyframe set next (deep-zoom/route.ts).
+    const landed = diveBegan();
     try {
         await host.diveTo(to);
     } finally {
+        landed();
         if (useDive.getState().dive === mine) useDive.setState({ dive: null });
         const depth = depthNow();
         if (validDepth(depth)) showToast(`${depth <= to * 10 ? 'Arrived at' : 'Stopped at'} ${formatDepth(depth)}`, 'info');

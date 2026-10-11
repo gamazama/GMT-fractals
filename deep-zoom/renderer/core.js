@@ -5471,6 +5471,14 @@ api.dz = {
      where the move ends. It under-reads the true clearance by 1.4 to 3.6 times on ordinary ground and can over-read
      next to the drawn surface (see the block above), so it is a comfort distance, never the thing that stops a move. */
   estimateAt: (offset) => { const o = pertOrbitJS(probeOrbit(), [+offset[0], +offset[1], +offset[2]], cam.iters); return o.escaped && o.de > 0 ? o.de : 0; },
+  /* the same estimate at ANY exact position - three fixed-point decimal strings, as getView's `cam` - with `iters`
+     iterations (0 or absent: the count in force): the nearest surface in any direction there, 0 inside the solid as it
+     would be drawn with that count. estimateAt cannot say this of a point decades deeper than the camera: its offset is
+     a double, good to 16 digits of the CAMERA's distance. One reference orbit is built for the call and dropped; the
+     camera, the frame's own orbit and the picture are not touched. What a host asks before it sends the camera along
+     a path: does it pass through the solid? (Added 2026-10-11, for the shell's route.) */
+  estimateAtPoint: (pos, iters) => { const n = iters > 0 ? Math.max(4, Math.min(itersMax(), iters|0)) : cam.iters;
+    const o = pertOrbitJS(buildRefOrbit(pos.map(BigInt), n + 2), [0, 0, 0], n); return o.escaped && o.de > 0 ? o.de : 0; },
   getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, ...(cam.roll ? { roll: cam.roll } : {}),   // roll only when there is one: a view without it reads as it always did
     iters: cam.iters, power: nPower,
     phase: [phaseTheta, phasePhi], light: lightMode, falloff: falloffMul, color: colorMode,

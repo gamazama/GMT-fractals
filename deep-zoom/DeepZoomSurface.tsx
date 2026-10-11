@@ -144,8 +144,8 @@ export const DeepZoomSurface: React.FC = () => {
         // PHASE: OVERLAY, the first phase after ANIMATE. The engine's animation tick
         // (`engine.animation`, registered by `installModulation` in
         // engine/animation/modulationTick.ts) runs in ANIMATE and writes the timeline's values
-        // into the store synchronously; a store subscription that moves the camera from them
-        // (the flight's `camera.u`, stage 6a) has therefore run before this tick draws, so a
+        // into the store synchronously; the route's post-scrub hook, which sets the camera for
+        // that frame (deep-zoom/route.ts), has therefore run before this tick draws, so a
         // scrubbed frame is this frame and not the one before. UI-phase ticks (counters,
         // readouts) run after it and see the frame just drawn. Registered at mount, so it is
         // also last among the OVERLAY ticks that registered at boot.

@@ -5,10 +5,15 @@
  * React: `startMilestones()` is called once from main.tsx. A view that is already deep when the first sample arrives (a loaded scene,
  * a jump) marks everything above it as seen without a toast, so only a crossing made by
  * travelling says something. Names and numbers only.
+ *
+ * Silent while the route drives the camera (`routeDrives` in deep-zoom/route.ts): a played or
+ * scrubbed timeline is not travel. Nothing is marked as seen meanwhile, and the first sample after
+ * the user takes the camera back is read as a jump is.
  */
 import { useDzNavigation } from './navigationState';
 import { showToast } from '../engine/store/toastStore';
 import { validDepth } from './components/depthFormat';
+import { routeDrives } from './route';
 
 export const MILESTONES: ReadonlyArray<{ depth: number; text: string }> = [
     { depth: 1e-4, text: 'Perturbation on at 1e-4' },
@@ -27,7 +32,7 @@ export function startMilestones(): () => void {
     const seen = new Set<number>();
     let last: number | null = null;
     return useDzNavigation.subscribe((s) => {
-        if (!validDepth(s.depth)) { last = null; return; }
+        if (!validDepth(s.depth) || routeDrives()) { last = null; return; }
         const depth = s.depth;
         const travelled = last !== null && Math.abs(Math.log10(last / depth)) <= TRAVEL_DECADES;
         for (const m of MILESTONES) {

@@ -65,6 +65,9 @@
  *                         the one-frame limit of a move, the depth readout and the dive go by.
  *     `estimateAt(`       the renderer's own distance estimate at a point beside the camera: the
  *                         nearest surface in any direction, there. Orbit mode's clearance.
+ *     `estimateAtPoint(`  the same estimate at any exact position (camera strings), with a given
+ *                         iteration count: 0 inside the solid. What the route asks along each leg
+ *                         (`deep-zoom/route.ts`); the camera stays where it is.
  *     `snapshot()`        the picture as a 2D canvas, read back by the renderer itself (a saved PNG).
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
@@ -410,6 +413,14 @@ export interface DeepZoomHost {
      * surface - so a move is never trusted to it; `sense` is what stops a move.
      */
     estimateAt(offset: [number, number, number]): number;
+    /**
+     * The same estimate at ANY exact position (three fixed-point decimal strings, as `DzView.cam`),
+     * with `iters` iterations (absent: the count in force): 0 inside the solid as it would be drawn
+     * with that count. For a point the camera is not at: `estimateAt` takes a double, which cannot
+     * reach a point decades deeper than the camera. One reference orbit is built for the call
+     * (milliseconds at depth: not for a render path). Moves nothing and draws nothing.
+     */
+    estimateAtPoint(cam: [string, string, string], iters?: number): number;
     /**
      * The picture as it is on screen now, as a new 2D canvas of the frame's own size; null when it
      * cannot be drawn (no renderer, a render in flight). What a saved PNG is made from. Do not

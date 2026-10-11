@@ -7,8 +7,11 @@
  *                                    week's shapes too). A paste is a jump: one undo step.
  *   Copy link                        `<this page>#s=<share string>`: the engine's share encoder
  *                                    over the scene - the look and the view (`dzView` preset
- *                                    field). It never holds the saved places or the recorded
- *                                    flight: those are documents, and a share string has none.
+ *                                    field). It never holds the saved places (documents, and a
+ *                                    share string has none) nor the route: the timeline is left
+ *                                    out (`includeAnimations: false`), because the encoder rounds
+ *                                    every number to five decimals and a route would arrive
+ *                                    wrong. A scene file carries the route.
  *   loadShareFromUrl()               at boot, a `#s=` link is loaded as a scene.
  *   The `deep-zoom.locations` document  saved places travel in scene files and scene PNGs. On
  *                                    load they are MERGED into the device's list by id - a scene
@@ -77,7 +80,7 @@ export function applyLocationText(text: string): boolean {
 }
 
 export function shareLink(): string {
-    return `${window.location.origin}${window.location.pathname}${SHARE_HASH}${useEngineStore.getState().getShareString()}`;
+    return `${window.location.origin}${window.location.pathname}${SHARE_HASH}${useEngineStore.getState().getShareString({ includeAnimations: false })}`;
 }
 
 export async function copyShareLink(): Promise<void> {

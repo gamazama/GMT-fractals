@@ -74,6 +74,16 @@
  *   A flight - from the first key down to the last key up - or an orbit gesture is one undo step
  *   when it moved the camera (`flightBegan` / `flightEnded` in `deep-zoom/locations.ts`).
  *
+ * THE ROUTE (`deep-zoom/route.ts`: the camera move on the timeline)
+ *   - Every move this file makes is told to the route (`noteMove`: its direction is the heading a
+ *     keyframe set next will carry, and the camera is the hands' again), every turn too (`takeCamera`).
+ *   - A HAND ON THE CONTROLS STOPS A TIMELINE THAT IS PLAYING A ROUTE (`stopRoutePlayback`): a fly
+ *     key or a look drag (the hook's session, its begin and each frame after it), Q / E, an orbit
+ *     press or wheel, and the wheel in Fly mode. The user carries on from where the camera is.
+ *     With no keyframe there is no route, and the timeline plays on while the hands fly.
+ *   - While a route plays no fly step is taken and the turn's ease is dropped: a roll still
+ *     easing out would otherwise turn the camera off the route between two of its frames.
+ *
  * PITFALLS
  *   - Keys are heard on the WINDOW, whatever has focus; only a text field stops them (the hook's
  *     own rule). So no key of the list above may be an engine shortcut in this app: `C` was
@@ -118,6 +128,9 @@
  *   wheel and Tab). The on-screen sticks, a touch layout, invert-Y, the right drag, the middle drag
  *   (it shares the wheel's `zoomBy`), the roll keys in Orbit mode, a look drag or an orbit turn
  *   that starts with a roll, and the lock during a preview are not opened by any test.
+ * @assumption The route's three calls are wired as THE ROUTE says. No standing test opens them: a
+ *   fly key stopping a playing timeline, and the heading of a keyframe set after W, were driven in
+ *   the app on 2026-10-11 (debug/scratch/r3/app-route.mts).
  */
 import React, { useEffect, useRef } from 'react';
 import { registerTick, TICK_PHASE } from '../engine/TickRegistry';
@@ -138,6 +151,7 @@ import { flightBegan, flightEnded } from './locations';
 import { DZ_FLY_SPEED_RANGE, DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf, setFlySpeed, setFlying, setReadings, useDzNavigation } from './navigationState';
 import { orbitDrag, orbitTurn, orbitZoom, viewRay } from './orbitCamera';
 import type { OrbitPivot, V3 } from './orbitCamera';
+import { noteMove, takeCamera, routePlays, routeSetsView, stopRoutePlayback } from './route';
 
 /** The tick that flies the camera. A throwing tick raises no page error: the smoke watches the
  *  console for `[TickRegistry] tick "deepZoom.navigate" threw`. */
@@ -201,8 +215,11 @@ const orbitInputs = (held: FlyInputs['move']): FlyInputs => ({
 });
 // The hook's session (a key or a fly look-drag held). In Orbit mode a held key moves nothing, and
 // its begin must not restart the take-off view of an orbit gesture in the air (see PITFALLS).
-const onFlyBegin = (): void => { if (orbiting()) return; setFlying(true); flightBegan(); };
+// In either mode a hand on the controls stops the timeline (THE ROUTE in the header).
+const onFlyBegin = (): void => { stopRoutePlayback(); if (orbiting()) return; setFlying(true); flightBegan(); };
 const onFlyEnd = (): void => { if (orbiting()) return; setFlying(false); flightEnded(); };
+/** The wheel in Fly mode: the speed, and (as any hand on the controls) the end of a playing route. */
+const setSpeedByWheel = (v: number): void => { stopRoutePlayback(); setFlySpeed(v); };
 
 /** An orbit drag in the air: its pivot, and the pixels the pointer has moved since the last tick.
  *  `turn` is the left button, `zoom` the middle one, `drag` the right one. */
@@ -247,12 +264,13 @@ export const DeepZoomNavigation: React.FC = () => {
         orbitMode: DZ_MODE_ORBIT,
         invertY,
         speed,
-        setSpeed: setFlySpeed,
+        setSpeed: setSpeedByWheel,
         speedRange: DZ_FLY_SPEED_RANGE,
         wheelStep: dzWheelStep,
         isLocked: navigationLocked,
         isSuppressed: keysSuppressed,
         onActivityBegin: onFlyBegin,
+        onActivityPoke: stopRoutePlayback,          // a key already held when Play was pressed
         onActivityEnd: onFlyEnd,
     });
     // The hook's refs are stable, the object it returns is not: the tick reads it through a ref.
@@ -267,13 +285,19 @@ export const DeepZoomNavigation: React.FC = () => {
         const pace = createPace();
         let lastRead = -Infinity;
         let lastPublished = -Infinity;
-        // A jump: the pace of the place just left says nothing about this one.
-        const offViewSet = host.on('viewSet', () => { pace.reset(); lastRead = -Infinity; });
+        // A jump: the pace of the place just left says nothing about this one. (A route sets the
+        // view every frame it plays: the reading keeps its 8 a second then, it is not asked for at once.)
+        const offViewSet = host.on('viewSet', () => { pace.reset(); if (!routeSetsView()) lastRead = -Infinity; });
 
         const translate = (dx: number, dy: number, dz: number): void => {
             if (dx === 0 && dy === 0 && dz === 0) return;
             if (useDive.getState().dive) stopDive();
             host.moveAlong([dx, dy, dz], 1);
+            noteMove(dx, dy, dz);                    // the route's heading, and the camera is the hands' now
+        };
+        const turnTo = (o: DzOrientation): void => {
+            host.setOrientation(o.yaw, o.pitch, o.roll);
+            takeCamera();
         };
 
         // ── Orbit mode: the gestures only gather; the tick below moves ──
@@ -303,6 +327,7 @@ export const DeepZoomNavigation: React.FC = () => {
         };
         const onPointerDown = (e: PointerEvent): void => {
             if (!orbiting() || navigationLocked() || orbit.drag || e.pointerType === 'touch' || e.button < 0 || e.button > 2) return;
+            stopRoutePlayback();
             const picked = pick(e.clientX, e.clientY);
             if (!picked) return;
             orbit.drag = { kind: e.button === 2 ? 'drag' : e.button === 1 ? 'zoom' : 'turn', pivot: picked.pivot, pointerId: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0, log: 0, height: picked.height, held: false };
@@ -328,6 +353,7 @@ export const DeepZoomNavigation: React.FC = () => {
         const onWheel = (e: WheelEvent): void => {
             if (!orbiting() || navigationLocked()) return;
             e.preventDefault();
+            stopRoutePlayback();
             const now = performance.now();
             let wheel = orbit.wheel;
             if (!wheel || now - wheel.at > DZ_WHEEL_REST_MS || Math.hypot(e.clientX - wheel.x, e.clientY - wheel.y) > DZ_WHEEL_PIVOT_PX) {
@@ -413,7 +439,7 @@ export const DeepZoomNavigation: React.FC = () => {
                         }
                         openGesture();
                         translate(turn.move[0], turn.move[1], turn.move[2]);
-                        host.setOrientation(turn.yaw, turn.pitch, turn.roll);
+                        turnTo(turn);
                         break;
                     }
                 } else {
@@ -464,8 +490,12 @@ export const DeepZoomNavigation: React.FC = () => {
             let pivotMark: { pivot: OrbitPivot; height: number; held: boolean } | null = null;
             if (inOrbit && !locked) pivotMark = orbitFrame(now);
             else if (orbit.drag || orbit.wheel || orbit.gesture) { orbit.drag = null; orbit.wheel = null; closeGesture(); }   // locked, or Orbit mode left, with a gesture in the air: it ends here
-            // The fly step, in both modes: in Orbit mode it is handed the roll keys alone.
-            if (!locked) {
+            // The fly step, in both modes: in Orbit mode it is handed the roll keys alone. Not while
+            // a route plays: any hand on the controls has stopped it by now (`inp.frame` above,
+            // the pointer listeners), so what is left is a turn easing out, which would pull the
+            // camera off the route a frame at a time.
+            if (routePlays()) camera.reset();
+            else if (!locked) {
                 const look = host.orientation();
                 const cp = Math.cos(look.pitch);
                 const fwd: V3 = [cp * Math.cos(look.yaw), Math.sin(look.pitch), cp * Math.sin(look.yaw)];
@@ -500,7 +530,7 @@ export const DeepZoomNavigation: React.FC = () => {
                     } : undefined,
                     translate,
                 });
-                if (turned) host.setOrientation(turned.yaw, turned.pitch, turned.roll);
+                if (turned) turnTo(turned);
             }
 
             // The reticle: where a fly look-drag has got to (measured from the picture's centre),

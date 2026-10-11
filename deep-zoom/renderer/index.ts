@@ -261,6 +261,15 @@ export interface DzHostHandle {
      *  ground and can over-read beside the drawn surface), not a limit to trust a move to.
      *  (Added 2026-10-09.) */
     estimateAt(offset: [number, number, number]): number;
+    /** The same estimate at ANY exact position (three fixed-point decimal strings, as a view's
+     *  `cam`), with `iters` iterations (0 or absent: the count in force): 0 inside the solid as it
+     *  would be drawn with that count. `estimateAt` cannot answer for a point decades deeper than
+     *  the camera: its offset is a double. Builds one reference orbit for the call (milliseconds at
+     *  depth); the camera, the frame's orbit and the picture are not touched. (Added 2026-10-11.)
+     *  @assumption It reads what `estimateAt([0, 0, 0])` reads when handed the camera's own strings
+     *  and the count in force, and 0 at the bulb's centre: measured in the app on 2026-10-11
+     *  (debug/scratch/r3/app-route.mts), no standing guard. */
+    estimateAtPoint(position: [string, string, string], iters?: number): number;
 }
 
 /** What a bundle of rays read (`DzHostHandle.sense`). Distances are in world units from the camera. */

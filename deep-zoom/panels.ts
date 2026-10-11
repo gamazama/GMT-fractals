@@ -3,8 +3,8 @@
  *
  * Left dock = where am I and where am I going; right dock = how it looks. A tab appears in the
  * stage that gives it a working row: Formula, Light, Colour, Quality (stage 2); Locations
- * (stage 3); Flight in stage 6a. No `component: 'panel-X'` of our own: a panel is features, sections
- * and registered widgets.
+ * (stage 3); Route (the camera move on the timeline: one widget, `dz-route`). No
+ * `component: 'panel-X'` of our own: a panel is features, sections and registered widgets.
  *
  * Rows deliberately absent:
  *   - `dzQuality.actualPixels`: the renderer has no setter for its 1:1 view yet (host/paramMap.ts).
@@ -25,7 +25,10 @@ export const DeepZoomPanels: PanelManifest = [
         { type: 'separator' },
         { type: 'widget', id: 'dz-location-text' },
     ] },
-    { id: 'Formula', dock: 'left', order: 1, items: [
+    { id: 'Route', dock: 'left', order: 1, items: [
+        { type: 'widget', id: 'dz-route' },
+    ] },
+    { id: 'Formula', dock: 'left', order: 2, items: [
         // One formula's rows at a time: each row carries its own condition on `kind` (features/formula.ts).
         { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation'] },
         { type: 'section', label: 'Iterations' },

@@ -10,7 +10,8 @@
  * the panels follow.
  *
  * `B` is registered twice (`b` and `Shift+b`): Shift is held for speed while flying, and to the
- * dispatcher `Shift+B` is a different key from `B`.
+ * dispatcher `Shift+B` is a different key from `B`. `K` (set a keyframe of the route,
+ * deep-zoom/route.ts) likewise: it is pressed in flight.
  *
  * `Tab` switches the camera mode, Fly and Orbit: GMT's key, writing GMT's store field
  * (`cameraMode`), which the navigation reads every frame and the timeline's Space binding tests.
@@ -23,6 +24,7 @@ import { useEngineStore } from '../store/engineStore';
 import { showToast } from '../engine/store/toastStore';
 import { DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf } from './navigationState';
 import { jumpBack, jumpHome, saveLocationHere } from './locations';
+import { setKeyframe } from './route';
 import { stopDive, useDive } from './diveControl';
 import { colourFromRenderer, colourToRenderer } from './features/colour';
 import { LIGHT_TYPE_OPTIONS } from './features/light';
@@ -82,6 +84,10 @@ export function registerDeepZoomHotkeys(): void {
     add('back', 'Backspace', jumpBack, 'Back to the view before the last jump', 'Locations');
     add('dive', 'j', focusDiveField, 'Go to the "Dive to 1e-" field', 'Locations');
     add('cancel', 'Escape', stopDive, 'Stop the dive in flight', 'Locations', { when: () => useDive.getState().dive !== null });
+
+    const keyframe = (): void => { setKeyframe(); };
+    add('keyframe', 'k', keyframe, 'Add a keyframe to the route, after the last one (with the playhead on an earlier keyframe: that one takes this view)', 'Route');
+    add('keyframe.shift', 'Shift+k', keyframe, 'Add a keyframe to the route (with Shift held for speed)', 'Route');
 
     add('detail-down', 'f', undoable(detail(1 / 1.5)), 'Detail down (divide by 1.5)', 'Look');
     add('detail-up', 'g', undoable(detail(1.5)), 'Detail up (times 1.5)', 'Look');

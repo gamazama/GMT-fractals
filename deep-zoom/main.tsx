@@ -62,6 +62,8 @@ import { installBoxScaleRule } from './boxScale';
 import { registerDeepZoomHotkeys } from './hotkeys';
 import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LocationsPanel } from './components/LocationsPanel';
+import { RoutePanel } from './components/RoutePanel';
+import { installRoute } from './route';
 import { BoxStarters, KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
 import { installSceneIO } from '../engine/plugins/SceneIO';
@@ -179,8 +181,14 @@ try {
     installLocations();
     // The Mandelbox's Scale never rests inside the band the renderer cannot draw (deep-zoom/boxScale.ts).
     installBoxScaleRule();
+    // The route: the camera move on the timeline. Its track is registered here, before
+    // anything below can load a sequence (a key written while the track is unregistered is
+    // not swept afterwards), and so are Key Cam's capture and the hook that sets the camera
+    // for a scrubbed frame (deep-zoom/route.ts).
+    installRoute();
     registerDeepZoomHotkeys();
     componentRegistry.register('dz-locations', LocationsPanel);
+    componentRegistry.register('dz-route', RoutePanel);
     componentRegistry.register('dz-starters', StarterDives);
     componentRegistry.register('dz-box-starters', BoxStarters);
     componentRegistry.register('dz-places', KeptPlaces);
