@@ -472,6 +472,82 @@ To know:
 
 ### R6. Rendering
 
+**Order changed in the overnight run of 2026-10-11.** After R4 the next stage built is **R6a**:
+the renderer's single-frame render, the engine's folder-of-frames sink and `openRenderPopup()`, and
+the deep zoomer rendering its route as PNG frames through the engine's dialog. A route that cannot
+be rendered is half a feature, and the look pass (R5) is optional. Still to come, in this order: R5,
+then **R6b** (MP4 / WebM for the deep zoomer, the preview video), then R2b, then R7. GMT's own
+render popup is not touched unattended; the builder leaves a note on what unifying it would take.
+
+**R6a as built, 2026-10-11** (`736103ad`; one builder: 899 thousand tokens, 183 minutes; +1,288 /
+-68, about 600 lines of product code). By the builder on the real GPU: parity 52 of 52 and the
+direct proof three times with neither script changed, the shell smoke 55 of 55, `smoke:fluid-toy`,
+`smoke:chrome`, a scratch run of the real app (24 lines), a scratch check that fluid-toy's and
+app-gmt's Render button opens the dialog they had, the build. By the orchestrator: typecheck,
+eight node tests and checks, the screenshots (`debug/scratch/r6/`).
+
+What is there: the Route tab's Render button opens the engine's render dialog with a
+"PNG sequence (folder)" format: a size by long edge (1280, 1920, 2560, 3840) at the picture's own
+shape, samples, the range (the route's first to last keyframe), Resume. Files are named by
+timeline frame, five digits, as GMT's are. Cancel keeps what is written; the finished view gives
+the ffmpeg line with Copy. Files: `deep-zoom/routeRender.tsx`, `engine/export/frameFolder.ts`,
+`engine/plugins/RenderDialog/ResultView.tsx`; renderer `api.dz.renderFrame`; `openRenderPopup()`.
+
+Measured: 0.3 s a frame at 1920 x 1500 with 8 samples at the whole object, 0.7 s at 6.6e-35 (79
+iterations). With the window minimised a 0.5 s frame took about 4 s; it does not stall.
+
+**Not met as built: a frame is not always equal to itself.** Smooth frames are equal alone and in
+sequence (0 or 1 level in a pixel or two). On grainy ground, in 5 of 7 sessions where Render was
+pressed 15 to 24 seconds after the renderer was ready, some frames differed from the same frame
+rendered later: up to 297 thousand of 1.28 million pixels, up to 105 levels. After a 75-second wait
+before the run, 0 of 5 sessions differed. The renderer's own stills do the same. All 16 differing
+frames were drawn 1.1 to 4.4 seconds after the ray march's shader arrived, and by that shader.
+
+**Looked into the same morning (the builder again, 378 thousand tokens more), and not found.**
+- Refuted by measurement: an older march drawing the frames (84 frames, every tile by the ray
+  program); the skip-table setting (false before and after all 276 frames of 23 sessions); any
+  host setting or the iteration count changing; a 10-second hold after the shader arrives (1 of 4
+  sessions still differed, 4 of 48 frames).
+- What is known: the other picture is a definite one, not noise (frame 4 came out 282,470 to
+  282,476 pixels off in 8 sessions). Every WebGL command of a differing frame equals its later
+  render's except two things: `uRefE` / `uFarFrom` at set-up (taken from the smoothed distance and
+  set again before every draw; withheld, 4 of 4 sessions still differed) and the G-buffer, which a
+  frame reuses from the frame before unless a live frame ran in between. A G-buffer made anew for
+  every frame: 2 of 48 frames differed, against 36 of 117 with it reused. A chain of twelve frames
+  started 60 seconds after ready: 0 of 12.
+- **A lead for the owner, not built**: one line in `core.js` (`gbufW = gbufH = 0` when a frame is
+  rendered alone) would make the G-buffer anew for each `renderFrame`. It cuts the rate strongly
+  and is not a cure. `core.js`'s `MEASURED 2026-10-11` comment lists the G-buffer as ruled out;
+  these numbers put that in doubt.
+- Until it is understood: wait a minute after the page loads before a render that must repeat
+  (a resumed one, above all).
+
+**A defect found on the way, fixed** (`c8ce3ef1`): pressing Render before the ray march's shader
+was built froze the page inside the first frame until the build ended (4 to 26 seconds), with no
+status line and no Cancel. The runner now waits before each frame while a shader the picture needs
+is building (`host.building()`), says so in the dialog, and Cancel answers within 0.2 seconds. Not
+covered: the skip-table and true-gradient shaders, which a frame needs only with the ray march
+off; the wait has no time limit.
+
+Decided without the owner:
+- The dialog stays the timeline toolbar's child, so Render opens the timeline, and closing the
+  timeline mid-run cancels the run (a toast says what is in the folder).
+- The picture's shape is taken with the timeline open.
+- Resume is off by default; a run without it overwrites files of the same name. A resume into a
+  folder holding frames of another size is refused.
+- During a run the dialog shows one Cancel; the route, K, Key Cam and navigation are held.
+- The automatic iteration rule is held for the whole run, also for a route with no iteration keys.
+
+GMT's own rendering (the builder's read-only note, `debug/scratch/r6/gmt-render-notes.md`): GMT's
+popup IS this dialog, with GMT's runner. It already writes PNG and JPG sequences into a picked
+folder, from the worker, with no resume: every run raises the version in the file name. For GMT
+to resume it needs one name per frame across runs, a skip in `runFramePump`, and frames that do
+not depend on the frame before (the focus lock reads the previous frame's distance). Nothing in
+GMT was changed.
+
+Not exercised: a real folder picker and a real disk (an in-memory folder stood in); inside
+`renderFrame`, the pole guard, the Mandelbox and a lost WebGL context.
+
 - **Module**: `api.dz.renderFrame(req)`, the current view and look to pixels or a blob, its waits
   riding `step`. Built from `renderFrameToBlob`, which is sound (tiles, the GPU watchdog, the active
   formula and march). It must hold that a frame rendered alone equals the same frame rendered in
