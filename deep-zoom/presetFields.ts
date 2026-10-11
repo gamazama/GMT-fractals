@@ -23,10 +23,12 @@
  *     there (the renderer's `setView` also writes iterations, power, phase, light and colour, and
  *     must not disagree with the store).
  *   - This file does not import the store: `deserialize` is given `get`.
+ *   - A loaded view ends the trail (`trailEnds` in deep-zoom/trail.ts), before it is handed over.
  */
 import { presetFieldRegistry } from '../utils/PresetFieldRegistry';
 import { getHost, subscribeHost } from './host/current';
 import { depthNow } from './depthNow';
+import { trailEnds } from './trail';
 import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
@@ -112,6 +114,7 @@ presetFieldRegistry.register({
     deserialize: (preset, _set, get) => {
         const saved = (preset as { dzView?: unknown }).dzView;
         if (!isSavedView(saved)) return;
+        trailEnds();                                    // a loaded scene is not flown to: the trail ends where the camera stands
         parked = viewFromSaved(saved, get() as Slices);
         offer();   // a ready host applies it at once; otherwise the next ready one does
     },

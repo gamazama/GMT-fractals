@@ -21,7 +21,8 @@
  *   - A dive moves the camera inside the host, where the navigation's own bookkeeping does not see
  *     it. The route is told here instead (`diveBegan` in deep-zoom/route.ts): at take-off the
  *     timeline stops and the route lets go of the camera, and on landing the direction flown is
- *     kept as the heading of a keyframe set next.
+ *     kept as the heading of a keyframe set next (what the route falls back on when the trail
+ *     cannot say). The trail itself follows a dive from the navigation tick, frame by frame.
  */
 import { create } from 'zustand';
 import { getHost } from './host/current';

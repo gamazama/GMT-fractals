@@ -26,6 +26,7 @@
     "check:deep-zoom-box-orbit": "tsx debug/deep-zoom-checks/box-orbit.mts",
     "check:deep-zoom-orbit-camera": "tsx debug/deep-zoom-checks/orbit-camera.mts",
     "check:deep-zoom-route": "tsx debug/deep-zoom-checks/route.mts",
+    "check:deep-zoom-trail": "tsx debug/deep-zoom-checks/trail.mts",
     "check:mb3d-decompiler": "node plans/mb3d/decompiler/check-sync.mjs",
     "check:rule-guards": "node debug/check-rule-guards.mjs",
     "check:text-bytes": "node debug/check-text-bytes.mjs",

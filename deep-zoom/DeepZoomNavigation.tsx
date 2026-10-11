@@ -74,9 +74,14 @@
  *   A flight - from the first key down to the last key up - or an orbit gesture is one undo step
  *   when it moved the camera (`flightBegan` / `flightEnded` in `deep-zoom/locations.ts`).
  *
- * THE ROUTE (`deep-zoom/route.ts`: the camera move on the timeline)
- *   - Every move this file makes is told to the route (`noteMove`: its direction is the heading a
- *     keyframe set next will carry, and the camera is the hands' again), every turn too (`takeCamera`).
+ * THE ROUTE (`deep-zoom/route.ts`: the camera move on the timeline) AND THE TRAIL
+ *   - Every move this file makes is told to the route (`noteMove`: the camera is the hands' again),
+ *     every turn too (`noteTurn`). The route passes each on to the trail (`deep-zoom/trail.ts`:
+ *     what the app remembers of how the camera was flown), which takes a sample when the camera has
+ *     moved far enough and none for a turn alone.
+ *   - A DIVE MOVES THE CAMERA INSIDE THE HOST, where neither call sees it: while one is in flight
+ *     this tick asks the trail to follow, every frame (`followTrail`: a camera string read and a
+ *     subtraction, no ray).
  *   - A HAND ON THE CONTROLS STOPS A TIMELINE THAT IS PLAYING A ROUTE (`stopRoutePlayback`): a fly
  *     key or a look drag (the hook's session, its begin and each frame after it), Q / E, an orbit
  *     press or wheel, and the wheel in Fly mode. The user carries on from where the camera is.
@@ -128,9 +133,10 @@
  *   wheel and Tab). The on-screen sticks, a touch layout, invert-Y, the right drag, the middle drag
  *   (it shares the wheel's `zoomBy`), the roll keys in Orbit mode, a look drag or an orbit turn
  *   that starts with a roll, and the lock during a preview are not opened by any test.
- * @assumption The route's three calls are wired as THE ROUTE says. No standing test opens them: a
- *   fly key stopping a playing timeline, and the heading of a keyframe set after W, were driven in
- *   the app on 2026-10-11 (debug/scratch/r3/app-route.mts).
+ * @assumption The route's calls and the trail's are wired as THE ROUTE AND THE TRAIL says. No
+ *   standing test opens them: a fly key stopping a playing timeline, the heading of a keyframe set
+ *   after W, and the trail growing under W and under a dive, were driven in the app on 2026-10-11
+ *   (debug/scratch/r3/app-route.mts, debug/scratch/r4/app-trail.mts).
  */
 import React, { useEffect, useRef } from 'react';
 import { registerTick, TICK_PHASE } from '../engine/TickRegistry';
@@ -151,7 +157,8 @@ import { flightBegan, flightEnded } from './locations';
 import { DZ_FLY_SPEED_RANGE, DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf, setFlySpeed, setFlying, setReadings, useDzNavigation } from './navigationState';
 import { orbitDrag, orbitTurn, orbitZoom, viewRay } from './orbitCamera';
 import type { OrbitPivot, V3 } from './orbitCamera';
-import { noteMove, takeCamera, routePlays, routeSetsView, stopRoutePlayback } from './route';
+import { noteMove, noteTurn, routePlays, routeSetsView, stopRoutePlayback } from './route';
+import { followTrail } from './trail';
 
 /** The tick that flies the camera. A throwing tick raises no page error: the smoke watches the
  *  console for `[TickRegistry] tick "deepZoom.navigate" threw`. */
@@ -293,11 +300,11 @@ export const DeepZoomNavigation: React.FC = () => {
             if (dx === 0 && dy === 0 && dz === 0) return;
             if (useDive.getState().dive) stopDive();
             host.moveAlong([dx, dy, dz], 1);
-            noteMove(dx, dy, dz);                    // the route's heading, and the camera is the hands' now
+            noteMove(dx, dy, dz);                    // the camera is the hands' now, and the trail follows
         };
         const turnTo = (o: DzOrientation): void => {
             host.setOrientation(o.yaw, o.pitch, o.roll);
-            takeCamera();
+            noteTurn();
         };
 
         // ── Orbit mode: the gestures only gather; the tick below moves ──
@@ -532,6 +539,8 @@ export const DeepZoomNavigation: React.FC = () => {
                 });
                 if (turned) turnTo(turned);
             }
+            // A dive moves the camera inside the host: the trail is asked to follow it here.
+            if (useDive.getState().dive) followTrail();
 
             // The reticle: where a fly look-drag has got to (measured from the picture's centre),
             // or the pivot an orbit gesture turns about.

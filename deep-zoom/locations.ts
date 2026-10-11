@@ -61,6 +61,10 @@
  *     write: Ctrl+Z brings back the formula AND the place. A jump sets `jumping` and places the
  *     camera itself; an undo or a scene load passes through here too, and its own view, restored
  *     after the store, is the one that stays.
+ *   - A JUMP AND A SWITCH OF FORMULA END THE TRAIL (`trailEnds` in deep-zoom/trail.ts: what the app
+ *     remembers of how the camera was flown), and both call it BEFORE the view is set: the trail's
+ *     last point is the camera as it stood. An undo calls nothing: the view it puts back is one the
+ *     trail has usually been at, and the trail takes it from there.
  */
 import { useEngineStore } from '../store/engineStore';
 import { installStateLibrary } from '../engine/store/installStateLibrary';
@@ -78,6 +82,7 @@ import type { DeepZoomHost, DzParams } from './host/DeepZoomHost';
 import { formatDepth, validDepth } from './components/depthFormat';
 import { depthNow } from './depthNow';
 import { isFlying } from './navigationState';
+import { trailEnds } from './trail';
 import type { DzFormulaSlice } from './storeTypes';
 import { STARTERS } from './data/starters';
 
@@ -231,6 +236,7 @@ export function jumpTo(target: DzLocationState | DzView, opts: JumpOptions = {})
     const state: DzLocationState = 'view' in target ? target : { view: target, depth: '' };
     const store = useEngineStore.getState();
     if (!opts.noBack) backStack.push({ view: host.getView(), formula: formulaChoiceNow() });
+    trailEnds();                                                     // a jump is not flown: the trail ends where the camera stands
     store.beginParamTransaction();
     jumping = true;
     try {
@@ -468,6 +474,7 @@ export function installLocations(): void {
         const host = getHost();
         if (jumping || kind === was || !host || !host.bootParams()) return;
         backStack.push({ view: host.getView(), formula: { ...formulaChoiceNow(), kind: was ?? FORMULA_BULB } });
+        trailEnds();                                                 // a deep place exists only under the formula it was found with
         pushFormulaNow(host);
         jumpSeq++;                                                   // the open bracket's undo entry takes the view with it
         host.setView(viewForHost(formulaHome(formulaChoiceNow())));

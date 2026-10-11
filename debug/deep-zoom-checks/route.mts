@@ -22,6 +22,10 @@
  *            held off while the route drives; a re-scrub of the same frame leaves a camera the user
  *            took
  *   heading  the last move; cleared by a jump; kept by a keyframe; kept when a keyframe takes a new view
+ *            (SINCE 2026-10-11 the heading is read off the trail when the trail can say, and otherwise from
+ *            the moves counted in depths: debug/deep-zoom-checks/trail.mts, its "heading:" lines. Nothing
+ *            here publishes a depth, so no trail is written and one move is the whole of it: these lines
+ *            hold as they did. What the record below calls `heading` in route.ts is `drift` there now.)
  *   solid    nine points of a leg asked with the count keyed there; a leg through the ball is found
  *   play     a leg played from the Route tab stops on its keyframe; a hand stops the timeline
  *

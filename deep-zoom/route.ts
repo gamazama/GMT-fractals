@@ -21,8 +21,13 @@
  *     track as a payload track and a log track, as the timeline's camera track (held while the
  *     camera is recorded), hands Key Cam its capture function, and registers one post-scrub hook.
  *   - IN: `setKeyframe()` (the K key, "Add keyframe") and `setKeyframe(frame)` (the timeline's Key
- *     Cam). `noteMove` / `takeCamera` / `stopRoutePlayback` from the navigation
+ *     Cam). `noteMove` / `noteTurn` / `stopRoutePlayback` from the navigation
  *     (`deep-zoom/DeepZoomNavigation.tsx`), `diveBegan` from a dive (`deep-zoom/diveControl.ts`).
+ *   - THE OTHER WAY TO MAKE A ROUTE is to cut it from the trail (`deep-zoom/trail.ts`: what the app
+ *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
+ *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
+ *     trail, more or fewer keyframes; `retimeRoute()` moves key times only. This file is told of
+ *     every move, turn and set view, and passes each on to the trail.
  *   - OUT: the post-scrub hook hands the host ONE `setView` for a scrubbed frame, and only when the
  *     view differs from the last one it set - a parked playhead leaves the still to gather. The
  *     path between keyframes is the engine's (`engine/animation/zoomPath.ts`), with time in frames
@@ -55,15 +60,25 @@
  *     it thinks is there.
  *   - NO ITERATION KEYS, NO HOLD: with the iterations track empty the renderer's own rule stays as
  *     the store has it and the count is left alone.
- *   - THE ITERATION KEYS ARE ORDINARY KEYS. Moving a keyframe in time on the timeline does not
- *     move its iteration key; deleting it from the Route tab does delete the one at its frame.
- *   - THE HEADING IS THE LAST MOVE'S DIRECTION, whatever its size, since the last `setView` (the
- *     hook's own included: a keyframe set where the route itself put the camera has none, and the
- *     path then enters it along the mean of its two legs). So a tap of S before a NEW keyframe
- *     gives it a heading that points back the way it came, and the path hooks past it: seen in the
- *     app on 2026-10-11, where that leg was then marked as passing through the solid. A keyframe
- *     that takes a new view (K on it, its row's button, Key Cam on it) keeps the heading it had:
- *     the nudge that framed it is not the way the route goes.
+ *   - THE ITERATION KEYS ARE ORDINARY KEYS, AND EACH STAYS WITH ITS KEYFRAME. When a keyframe is
+ *     moved in time or deleted on the timeline, the iteration key on its frame is moved or deleted
+ *     too, in the same undo step (`installRoute`: grep `follows`). Only an edit of the depth track
+ *     ALONE is followed: an undo, a loaded scene, a drag of both keys together and this file's
+ *     own writes change both tracks at once and are left as they are.
+ *   - THE HEADING IS THE DIRECTION OF TRAVEL, NOT THE LAST MOVE: from where the camera was a
+ *     quarter of the present depth of travel ago to where it is, read off the trail
+ *     (`trailHeadingNow`). Until 2026-10-11 it was the last move's direction, whatever its size: a
+ *     tap of S before a keyframe gave it a heading that pointed back the way it came, and the path
+ *     hooked past it. With the trail switched off, or nothing flown since the last `setView`, it
+ *     comes from the moves themselves, each counted in depths and fading with the travel since
+ *     (`drift`): a tap back of a twentieth of the depth does not turn it, a retreat of a whole depth
+ *     does. A `setView` clears it (the hook's own included: a keyframe set where the route itself
+ *     put the camera has none, and the path then enters it along the mean of its two legs). A
+ *     keyframe that takes a new view (K on it, its row's button, Key Cam on it) keeps the heading
+ *     it had: the nudge that framed it is not the way the route goes.
+ *   - WHAT A CUT ROUTE CAME FROM IS SESSION MEMORY (`made`, by key id): the smoothing slider and
+ *     "As flown" need the trail. After a reload, or for a route from a scene file, every keyframe
+ *     counts as set by hand.
  *   - HANDLES. A keyframe's handles on the depth curve are the timeline's own (auto) until somebody
  *     shapes them. While they are, they are worked out again when the keyframe takes a new view
  *     (it is written as a new key: its id changes) and when a neighbour is deleted; left as they
@@ -71,7 +86,8 @@
  *     touched here.
  *   - `host.thumbnail` restarts the still. It is called when a keyframe is set, never on a timer.
  *   - The solid check asks the renderer for one reference orbit a sample (milliseconds at depth):
- *     it runs a moment after a keyframe changes, a leg a task, never per frame. It reads the
+ *     it runs a moment after a keyframe changes, a leg a task, never per frame, and it waits while
+ *     the hands fly or the timeline plays (a cut route has up to 300 legs). It reads the
  *     formula as the renderer has it THEN: a change of power or phase does not run it again.
  *
  * @invariant K adds a keyframe after the last one, a leg's on-screen length at `ROUTE_PACE` decades
@@ -82,11 +98,19 @@
  *   host each keyframe's stored view at its frame, one `setView` for a frame whose view changed
  *   and none for one that did not, holds the first and the last, sends the values the sync was
  *   holding BEFORE the view, and leaves a camera the user took where it is when the same frame is
- *   scrubbed again. The heading is the last move, is cleared by a jump, and stays with a keyframe
- *   that takes a new view. A leg is asked at `ROUTE_SOLID_SAMPLES` points with the count keyed
- *   there. A leg played from its row stops on its keyframe - proven by: npm run
- *   check:deep-zoom-route (the "set: ...", "leg: ...", "payload: ...", "drive: ...",
- *   "heading: ...", "solid: ...", "play: ..." lines). Falsified 2026-10-11: see the check's header.
+ *   scrubbed again. With no trail to read and no depth known, the heading is the last move; it is
+ *   cleared by a jump, and stays with a keyframe that takes a new view. A leg is asked at
+ *   `ROUTE_SOLID_SAMPLES` points with the count keyed there. A leg played from its row stops on its
+ *   keyframe - proven by: npm run check:deep-zoom-route (the "set: ...", "leg: ...",
+ *   "payload: ...", "drive: ...", "heading: ...", "solid: ...", "play: ..." lines). Falsified
+ *   2026-10-11: see the check's header.
+ * @invariant A route cut from the trail is one undo step, its keyframes are trail samples to the
+ *   digit, each with its iteration key, and every sample lies within the smoothing of the route as
+ *   `routeViewAt` plays it; the smoothing cuts it again from the same trail; "Even pace" and "As
+ *   flown" move key times only; an iteration key follows its keyframe when that is moved or deleted
+ *   on the timeline, and is left alone by an undo - proven by: npm run check:deep-zoom-trail (the
+ *   "route: ...", "exact: ...", "smooth: ...", "time: ...", "follow: ..." lines). Falsified
+ *   2026-10-11: see that check's header.
  * @assumption A keyed count above the renderer's own ceiling for `setView` (160 on the Mandelbulb:
  *   grep `v.iters|0` in deep-zoom/renderer/core.js) is cut to it, while the renderer's own rule can
  *   reach 400 under the ray march. A power-2 route deeper than about 1e-38 therefore plays with too
@@ -94,23 +118,30 @@
  */
 import * as THREE from 'three';
 import { create } from 'zustand';
+import { nanoid } from 'nanoid';
 import { useAnimationStore } from '../store/animationStore';
 import { animationEngine } from '../engine/AnimationEngine';
 import type { ScrubContext } from '../engine/AnimationEngine';
 import { AnimationMath } from '../engine/math/AnimationMath';
 import { registerPayloadTrack } from '../engine/animation/payloadTrackRegistry';
-import { registerLogTrack } from '../engine/animation/logTrackRegistry';
+import { isLogTrack, registerLogTrack } from '../engine/animation/logTrackRegistry';
 import { registerCameraKeyTracks, setCameraKeyCaptureFn } from '../engine/animation/cameraKeyRegistry';
 import { buildZoomPath, zoomLegOnScreen, zoomPathOrientation, zoomPathPosition } from '../engine/animation/zoomPath';
 import type { TurnKey, ZoomKey, ZoomPath } from '../engine/animation/zoomPath';
 import { showToast } from '../engine/store/toastStore';
-import type { Track } from '../types';
+import type { BezierHandle, Keyframe, Track } from '../types';
 import { getHost, subscribeHost } from './host/current';
 import type { DeepZoomHost } from './host/DeepZoomHost';
 import { readDepth } from './depthNow';
 import { validDepth } from './components/depthFormat';
+import { isFlying, useDzNavigation } from './navigationState';
 import { toOrientation, toQuaternion } from './orbitCamera';
 import type { V3 } from './orbitCamera';
+import {
+    FIXED_UNIT, TRAIL_HEADING_TRAVEL, cutDetours, depthCurve, evenFrames, followTrail, pickKeyframes, previousTrail,
+    trailDirections, trailFrames, trailHeadingNow, trailToHere, trailTurned, trailViewSet,
+} from './trail';
+import type { RouteTiming, TrailSample } from './trail';
 import { flushHostSync, holdAutoIterations } from './useHostSync';
 
 /** The route's track: one key a keyframe. */
@@ -119,14 +150,19 @@ export const ROUTE_TRACK = 'camera.depth';
 export const ROUTE_ITERATIONS_TRACK = 'dzFormula.iterations';
 /** The pace a new leg is timed at, in decades a second. */
 export const ROUTE_PACE = 0.5;
-/** A new leg is never shorter than this, nor longer than `ROUTE_MAX_LEG_SECONDS` (two keyframes
- *  at depth that are far apart measure an absurd length on screen). */
+/** A leg set with K is never shorter than this; no leg is longer than `ROUTE_MAX_LEG_SECONDS` (two
+ *  keyframes at depth that are far apart measure an absurd length on screen). */
 export const ROUTE_MIN_LEG_SECONDS = 0.2;
 export const ROUTE_MAX_LEG_SECONDS = 180;
 /** Fixed-point steps in one world unit: the camera's 256 fractional bits. */
-export const ROUTE_UNIT = 2 ** 256;
+export const ROUTE_UNIT = FIXED_UNIT;
 /** How many points of a leg are asked "is this inside the solid". */
 export const ROUTE_SOLID_SAMPLES = 9;
+/** The smoothing a route is cut from a trail with: how far a flown view may lie from the route,
+ *  in depths at that view. "Follow closely" to "smooth glide". */
+export const ROUTE_SMOOTHING = { min: 0.01, max: 0.5, initial: 0.05 } as const;
+/** A route cut from a trail has no more keyframes than this. */
+export const ROUTE_TRAIL_KEYS = 300;
 
 const THUMBNAIL_PX = 96;
 const SOLID_CHECK_DELAY_MS = 250;
@@ -276,8 +312,9 @@ let driving = false;
 let own = false;
 /** The next scrub sets the camera whoever holds it (a row, Return, Play). */
 let forced = false;
-/** The direction of the last move since the last `setView`. */
-let heading: V3 | null = null;
+/** The moves since the last `setView`, each in depths, the older fading with the travel since:
+ *  the heading when the trail cannot say (PITFALLS: THE HEADING). */
+let drift: V3 | null = null;
 /** How many `setView`s there have been (a dive that one of them ended leaves no heading). */
 let jumps = 0;
 
@@ -301,15 +338,33 @@ export const routeSetsView = (): boolean => own;
  *  its other tracks while the hands fly, as it always could. */
 export const routePlays = (): boolean => anim().isPlaying && route().keys.length > 0;
 
-/** The navigation moved the camera by (dx, dy, dz): the heading, and the camera is the hands'. */
+/** The navigation moved the camera by (dx, dy, dz): the camera is the hands', and the trail follows. */
 export function noteMove(dx: number, dy: number, dz: number): void {
     const length = Math.hypot(dx, dy, dz);
-    if (length > 0) heading = [dx / length, dy / length, dz / length];
+    if (length > 0) {
+        // In depths, so a move at 1e-40 weighs what one at 1e-3 does. With no depth read yet: the last move alone.
+        const depth = useDzNavigation.getState().depth, known = validDepth(depth);
+        const keep = drift && known ? Math.exp(-length / (TRAIL_HEADING_TRAVEL * depth)) : 0, per = known ? depth : length;
+        drift = [(drift ? drift[0] * keep : 0) + dx / per, (drift ? drift[1] * keep : 0) + dy / per, (drift ? drift[2] * keep : 0) + dz / per];
+    }
     takeCamera();
+    followTrail();
 }
 
-/** The direction of the last move since the last jump, or null. */
-export const headingNow = (): V3 | null => heading;
+/** The navigation turned the camera: it is the hands', and the trail keeps the latest look at the place it stands at. */
+export function noteTurn(): void {
+    takeCamera();
+    trailTurned();
+}
+
+/** The direction of travel at the camera as it stands: read off the trail when it can say, else
+ *  from the moves since the last jump. Null: the camera has not moved since. */
+export function headingNow(): V3 | null {
+    const flown = trailHeadingNow();
+    if (flown) return flown;
+    const length = drift ? Math.hypot(drift[0], drift[1], drift[2]) : 0;
+    return drift && length > 0 ? [drift[0] / length, drift[1] / length, drift[2] / length] : null;
+}
 
 /** A hand is on the controls: a timeline that is playing a route stops, and the camera is the user's from where it is. */
 export function stopRoutePlayback(): void {
@@ -476,7 +531,7 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
     if (anim().isPlaying) anim().pause();                            // setting a keyframe is not done to a running timeline
     const r = route(), keys = r.keys;
     // A keyframe that takes a new VIEW keeps the heading it had: the nudge that framed it is not the way the route goes.
-    const shot = capture(host, on ? on.heading : heading);
+    const shot = capture(host, on ? on.heading : headingNow());
     if (!shot) { showToast('No depth can be read here: no keyframe was set', 'warning'); return null; }
     if (!skipSnapshot) anim().snapshot();
 
@@ -536,6 +591,138 @@ export function deleteKeyframe(id: string): void {
     bump();
 }
 
+// ── a route cut from the trail ───────────────────────────────────────────────────────────────────
+
+/** By key id, this session: the trail a keyframe was cut from (its dead ends gone), which sample
+ *  of it, and the smoothing asked for. The oldest go past `MADE_KEPT`. */
+const made = new Map<string, { trail: readonly TrailSample[]; sample: number; smoothing: number }>();
+const MADE_KEPT = 4000;
+/** The timing last asked for: a route cut again (the smoothing slider) is timed the same way. */
+let flownTiming = false;
+
+const timing = (): RouteTiming => ({ fps: anim().fps, pace: ROUTE_PACE, maxLegSeconds: ROUTE_MAX_LEG_SECONDS });
+const viewOfSample = (s: TrailSample): RouteView =>
+    ({ cam: [String(s.p[0]), String(s.p[1]), String(s.p[2])], yaw: s.yaw, pitch: s.pitch, ...(s.roll ? { roll: s.roll } : {}) });
+
+/** What the route was cut from: set while every one of its keyframes came from one trail, this session. */
+export function routeSource(): { trail: readonly TrailSample[]; smoothing: number } | null {
+    const keys = route().keys, first = keys.length > 0 ? made.get(keys[0].id) : undefined;
+    return first && keys.every((k) => made.get(k.id)?.trail === first.trail) ? first : null;
+}
+
+/** The route holds a keyframe that no trail made: one set by hand, or from a scene. */
+export const routeHandSet = (): boolean => route().keys.some((k) => !made.has(k.id));
+
+/** Replace the route with the one cut from `trail` (its dead ends gone). One animation-undo step. */
+function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
+    stopAt = null;
+    if (anim().isPlaying) anim().pause();
+    const pick = pickKeyframes(trail, { ...timing(), tolerance: smoothing, cap: ROUTE_TRAIL_KEYS });
+    const frames = flownTiming ? trailFrames(trail, pick.index, timing(), true) : pick.frames;
+    const directions = trailDirections(trail);
+    // The keys the pick measured, as they are: what was measured is what plays.
+    const depthKeys: Keyframe[] = depthCurve(frames, pick.index.map((i) => trail[i].depth)).keys.map((k, j) => {
+        const h = directions[pick.index[j]];
+        const payload: RoutePayload = { view: viewOfSample(trail[pick.index[j]]), ...(h ? { heading: h } : {}) };
+        return { ...k, id: nanoid(), payload };
+    });
+    const countKeys: Keyframe[] = pick.index.map((i, j) =>
+        ({ id: nanoid(), frame: frames[j], value: trail[i].iters, interpolation: 'Linear', autoTangent: false, brokenTangents: false }));
+    anim().snapshot();
+    ensureTrack(ROUTE_TRACK, 'Depth');
+    ensureTrack(ROUTE_ITERATIONS_TRACK, 'Iterations');
+    anim().replaceKeyframes([{ trackId: ROUTE_TRACK, newKeys: depthKeys }, { trackId: ROUTE_ITERATIONS_TRACK, newKeys: countKeys }]);
+    depthKeys.forEach((k, j) => made.set(k.id, { trail, sample: pick.index[j], smoothing }));
+    for (const id of made.keys()) { if (made.size <= MADE_KEPT) break; made.delete(id); }
+
+    const end = frames[frames.length - 1], last = viewOfSample(trail[trail.length - 1]), host = getHost();
+    if (end > anim().durationFrames) anim().setDuration(end);
+    if (host && sameCamera(host.getView(), last)) {
+        // The camera stands on the last keyframe: the scrub brings the timeline's values level and sets no view.
+        anim().seek(end);
+        lastSet = { ...last, iters: itersAt(route(), end) };
+        animationEngine.scrub(end);
+    } else if (driving) animationEngine.scrub(anim().currentFrame);
+    bump();
+    return depthKeys.length;
+}
+
+/**
+ * Cut the route from the trail: from its start to the camera as it stands, or (`previous`) the
+ * trail the last jump ended. At the smoothing first offered and the even pace. It REPLACES the
+ * route (ask first when `routeHandSet()`). One animation-undo step. Returns the keyframes made.
+ */
+export function routeFromTrail(previous = false): number {
+    const flown = previous ? previousTrail() : trailToHere();
+    if (!flown) { showToast(previous ? 'No previous trail is kept' : 'Nothing has been flown yet: there is no trail to make a route from', 'info'); return 0; }
+    flownTiming = false;
+    const count = cutRoute(cutDetours(flown), ROUTE_SMOOTHING.initial);
+    showToast(`Route made from the trail: ${count} keyframes`, 'success');
+    return count;
+}
+
+/** Cut the route again from the trail it came from, with another smoothing. One animation-undo
+ *  step; nothing when the route did not come from a trail, or already has that smoothing. */
+export function setRouteSmoothing(smoothing: number): void {
+    const from = routeSource(), next = Math.min(ROUTE_SMOOTHING.max, Math.max(ROUTE_SMOOTHING.min, smoothing));
+    if (from && next !== from.smoothing) cutRoute(from.trail, next);
+}
+
+/**
+ * Time the route again, key times only. `flown`: by the clock of the trail it came from (nothing
+ * when it did not come from one). Otherwise the even pace, `ROUTE_PACE` decades a second on
+ * screen, which any route can be given: a leg of a route cut from a trail takes the length of the
+ * way that was flown, a leg of any other the length of the straight line between its keyframes.
+ * One animation-undo step; none when no key moves.
+ */
+export function retimeRoute(flown: boolean): void {
+    const r = route(), keys = r.keys, from = routeSource();
+    if (keys.length < 2 || !r.depth || (flown && !from)) return;
+    stopAt = null;
+    if (anim().isPlaying) anim().pause();
+    if (from) flownTiming = flown;
+    const was = keys.map((k) => k.frame);
+    const now = from
+        ? trailFrames(from.trail, keys.map((k) => made.get(k.id)?.sample ?? 0), timing(), flown, was[0])
+        : evenFrames(keys.map(zoomKey), timing(), was);
+    if (now.every((f, i) => f === was[i])) return;
+    /** A frame of the old timing in the new one: a keyframe's exactly, the frames between two in proportion. */
+    const warp = (f: number): number => {
+        const top = was.length - 1;
+        if (f <= was[0]) return f + now[0] - was[0];
+        if (f >= was[top]) return f + now[top] - was[top];
+        let i = 0;
+        while (f > was[i + 1]) i++;
+        return Math.round(now[i] + ((f - was[i]) * (now[i + 1] - now[i])) / (was[i + 1] - was[i]));
+    };
+    const moved = (track: Track): Keyframe[] => {
+        const old = track.keyframes, keysNow = old.map((k) => ({ ...k, frame: warp(k.frame) }));
+        // A shaped handle keeps its rise and takes its side's new length; the timeline's own are worked out again.
+        const side = (h: BezierHandle | undefined, a: number, b: number): BezierHandle | undefined =>
+            (h && a > 0 && b > 0 ? { x: (h.x * b) / a, y: h.y } : h);
+        return keysNow.map((k, i) => {
+            if (k.interpolation !== 'Bezier') return k;
+            if (k.autoTangent) {
+                const { l, r: right } = AnimationMath.calculateTangents(k, keysNow[i - 1], keysNow[i + 1], 'Auto', isLogTrack(track.id));
+                return { ...k, leftTangent: l, rightTangent: right };
+            }
+            return {
+                ...k,
+                leftTangent: i > 0 ? side(k.leftTangent, old[i].frame - old[i - 1].frame, k.frame - keysNow[i - 1].frame) : k.leftTangent,
+                rightTangent: i + 1 < old.length ? side(k.rightTangent, old[i + 1].frame - old[i].frame, keysNow[i + 1].frame - k.frame) : k.rightTangent,
+            };
+        });
+    };
+    anim().snapshot();
+    anim().replaceKeyframes([r.depth, r.iters].filter((t): t is Track => !!t).map((t) => ({ trackId: t.id, newKeys: moved(t) })));
+    const end = now[now.length - 1], at = warp(anim().currentFrame);
+    if (end > anim().durationFrames) anim().setDuration(end);
+    // The playhead goes with its place on the route; a camera the user holds stays where it is.
+    anim().seek(at);
+    if (driving) animationEngine.scrub(at); else lastFrame = at;
+    bump();
+}
+
 // ── does a leg pass through the solid ────────────────────────────────────────────────────────────
 
 /** Does the leg that arrives at keyframe `index` pass through the solid? `ROUTE_SOLID_SAMPLES`
@@ -559,6 +746,8 @@ function checkLegsSoon(): void {
     const step = (index: number): void => {
         const host = getHost(), keys = route().keys;
         if (run !== solidRun || !host || !host.bootParams()) return;   // not ready: `installRoute` asks again at ready
+        // Not while the hands fly or the timeline plays: a leg costs milliseconds at depth, and a cut route has hundreds.
+        if (index < keys.length && (anim().isPlaying || isFlying())) { setTimeout(() => step(index), SOLID_CHECK_DELAY_MS); return; }
         if (index >= keys.length) {
             const was = useRoute.getState().solid;
             const same = Object.keys(was).length === Object.keys(found).length && Object.keys(found).every((id) => was[id] === found[id]);
@@ -591,21 +780,45 @@ export function installRoute(): void {
         offViewSet?.();
         offViewSet = null;
         lastSet = null;                                              // another renderer: nothing set on the old one is on it
-        heading = null;
+        drift = null;
         takeCamera();
         if (!host) return;
         offViewSet = host.on('viewSet', () => {
-            heading = null;
+            drift = null;
             jumps++;
+            trailViewSet();                                          // not flown: the trail keeps the place aside
             if (own) return;
             takeCamera();
             bump();
         });
-        void host.ready.then(() => { if (getHost() === host) checkLegsSoon(); }, () => undefined);
+        // Ready: the view the renderer starts with is where a trail begins.
+        void host.ready.then(() => { if (getHost() === host) { trailViewSet(); checkLegsSoon(); } }, () => undefined);
     };
     subscribeHost(adopt);
     adopt(getHost());
 
     useAnimationStore.subscribe((s) => s.sequence.tracks[ROUTE_TRACK], checkLegsSoon);
     useAnimationStore.subscribe((s) => s.sequence.tracks[ROUTE_ITERATIONS_TRACK], checkLegsSoon);
+
+    // An iteration key stays with its keyframe (PITFALLS). `follows`: which iteration key went with
+    // a keyframe last, for the moment a dragged keyframe shares a frame with another one.
+    const follows = new Map<string, string>();
+    useAnimationStore.subscribe((s) => s.sequence.tracks, (now, was) => {
+        const before = was[ROUTE_TRACK], after = now[ROUTE_TRACK], counts = now[ROUTE_ITERATIONS_TRACK]?.keyframes, countsWere = was[ROUTE_ITERATIONS_TRACK]?.keyframes;
+        // The depth track changed and the iteration keys are the very ones that were there: an edit of the depth track alone.
+        if (!before || !after || before === after || !counts || !countsWere || counts.length !== countsWere.length || counts.some((c, i) => c !== countsWere[i])) return;
+        const frameOf = new Map(after.keyframes.map((k) => [k.id, k.frame]));
+        const moves: Array<{ trackId: string; keyId: string; patch: Partial<Keyframe> }> = [], gone = new Set<string>();
+        for (const k of before.keyframes) {
+            const frame = frameOf.get(k.id);
+            if (frame === k.frame) continue;
+            const here = counts.filter((c) => Math.abs(c.frame - k.frame) < 0.5), mine = here.find((c) => c.id === follows.get(k.id)) ?? here[0];
+            if (!mine) continue;
+            if (frame !== undefined) { moves.push({ trackId: ROUTE_ITERATIONS_TRACK, keyId: mine.id, patch: { frame } }); follows.set(k.id, mine.id); }
+            // Gone, and no keyframe took its frame (one that takes a new view is written as a new key there).
+            else if (!after.keyframes.some((o) => Math.abs(o.frame - k.frame) < 0.5)) gone.add(mine.id);
+        }
+        if (gone.size > 0) anim().replaceKeyframes([{ trackId: ROUTE_ITERATIONS_TRACK, newKeys: counts.filter((c) => !gone.has(c.id)) }]);
+        if (moves.length > 0) anim().updateKeyframes(moves);
+    });
 }

@@ -20,7 +20,9 @@
  *   from the session, `setReadings` from its tick, at most 8 times a second. The two settings are
  *   also written by the Settings panel (`deep-zoom/settings.ts`).
  *   Read by the depth readout, the depth scale, the status chip, the milestones, `locations.ts`
- *   (a slot digit does nothing while flying) and anything that needs `isFlying()`.
+ *   (a slot digit does nothing while flying) and anything that needs `isFlying()`. `depth` is also
+ *   the depth of every sample of the trail (`deep-zoom/trail.ts`) and the scale of the route's
+ *   heading (`deep-zoom/route.ts`): neither marches a ray of its own.
  *
  * PITFALLS
  *   - The range and the default of the speed are the owner's decision of 2026-10-08 (0.01 to 8,
