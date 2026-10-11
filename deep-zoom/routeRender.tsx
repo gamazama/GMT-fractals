@@ -134,9 +134,10 @@
  *     its frames; a video is closed as by FINISH, so what was rendered is kept; a toast says what
  *     is where.
  *   - THE ENCODER LOCKS THE STREAM IT IS HANDED and its `cancel()` does not let go (grep `LOCKS
- *     THE` in videoEncoder.ts). So it gets a stream of this file's own that forwards to the picked
- *     file, and Discard aborts the file itself. Handed the file's stream, a discarded run could
- *     neither close nor abort it.
+ *     THE` in videoEncoder.ts). So it gets a stream that forwards to the picked file, and Discard
+ *     aborts the file itself (`forwardToPickedFile` in engine/export/pickedFile.ts: written here
+ *     first, lifted there on 2026-10-11 when fluid-toy's runner needed the same). Handed the
+ *     file's stream, a discarded run could neither close nor abort it.
  *   - THE ROUTE AND THE PICTURE ARE FREE BEFORE A VIDEO IS CLOSED. Closing a large file takes the
  *     browser a moment ("Writing the video"); `running`, not `routeRendering()`, is what keeps a
  *     second render from starting meanwhile.
@@ -233,6 +234,8 @@ import type { RenderDialogConfig, RenderDialogPreset, RenderDialogQuestion, Rend
 import { lookForFrames, pickFrameFolder, safeFrameName } from '../engine/export/frameFolder';
 import type { FrameFolder } from '../engine/export/frameFolder';
 import { MainThreadEncoder } from '../engine/export/videoEncoder';
+import { forwardToPickedFile } from '../engine/export/pickedFile';
+import type { SaveFileHandle, SaveFilePicker } from '../engine/export/pickedFile';
 import { calcEtaRange, formatTimeWithUnits } from '../components/timeline/exportHelpers';
 import { showToast } from '../engine/store/toastStore';
 import { getHost } from './host/current';
@@ -439,22 +442,6 @@ async function openFolderSink(project: string, fps: number): Promise<FrameSink |
     };
 }
 
-/** The part of the File System Access API's file picker a video uses. (The project's DOM types do not declare it;
- *  the real handle and stream fit these shapes.) */
-interface SaveFileStream {
-    write(chunk: unknown): Promise<void>;
-    close(): Promise<void>;
-    abort(): Promise<void>;
-}
-interface SaveFileHandle {
-    readonly name: string;
-    getFile(): Promise<Blob>;
-    createWritable(): Promise<SaveFileStream>;
-    /** Chromium's own (not in the standard): the file deleted. */
-    remove?(): Promise<void>;
-}
-type SaveFilePicker = (options: { id?: string; suggestedName?: string; types?: Array<{ description: string; accept: Record<string, string[]> }> }) => Promise<SaveFileHandle>;
-
 /**
  * One video file (`cfg.formatIndex`: an MP4 or a WebM of `VIDEO_FORMATS`), through the engine's main-thread encoder.
  * Null: backed out of the picker. THE PICKER IS ITS FIRST AWAIT. With a picked file the video is written into it AS THE
@@ -464,7 +451,10 @@ type SaveFilePicker = (options: { id?: string; suggestedName?: string; types?: A
 async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMode: boolean): Promise<FrameSink | null> {
     const format = VIDEO_FORMATS[cfg.formatIndex];
     const suggested = `${safeFrameName(project)}.${format.ext}`;
-    let handle: SaveFileHandle | null = null, file: SaveFileStream | null = null;
+    let handle: SaveFileHandle | null = null;
+    // The encoder gets a stream OF OURS that forwards to the file, not the file's own: it locks the stream it is
+    // handed and never lets go, and a discarded run has to abort the file itself (engine/export/pickedFile.ts).
+    let disk: ReturnType<typeof forwardToPickedFile> | null = null;
     const pick = isDiskMode ? (window as unknown as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker : undefined;
     if (typeof pick === 'function') {
         try {
@@ -473,33 +463,24 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
                 suggestedName: suggested,
                 types: [{ description: format.label, accept: { [format.mime]: [`.${format.ext}`] } }],
             });
-            file = await handle.createWritable();
+            disk = forwardToPickedFile(handle, await handle.createWritable());
         } catch (err) {
             if (err instanceof Error && err.name === 'AbortError') return null;
             if (!(err instanceof Error && err.name === 'SecurityError')) throw err;
             handle = null;                                               // the picker was refused: in memory, as where there is none
-            file = null;
+            disk = null;
         }
     }
-    const disk = handle && file ? { handle, file } : null;
-    const name = disk ? disk.handle.name : suggested;
+    const picked = handle && disk ? { handle, file: disk } : null;
+    const name = picked ? picked.handle.name : suggested;
     const encoder = new MainThreadEncoder();
-    let count = 0, bytes = 0, kept = false, dropped = false;
-    // The encoder gets a stream OF OURS that forwards to the file, not the file's own: it locks the stream it is
-    // handed and never lets go, and a discarded run has to abort the file itself (grep `LOCKS THE` in videoEncoder.ts).
-    const stream = disk
-        ? new WritableStream<unknown>({ write: (chunk) => (dropped ? undefined : disk.file.write(chunk)), close: () => disk.file.close() })
-        : null;
+    let count = 0, bytes = 0, kept = false;
+    const stream = picked ? picked.file.stream : null;
     /** Nothing of this run stays: the half-written file is dropped (what was in a file picked to be replaced stays as
      *  it was), and the empty file the picker made is taken away where the browser can. */
     const throwAway = async (): Promise<void> => {
-        dropped = true;
         encoder.cancel();
-        if (!disk) return;
-        try {
-            await disk.file.abort();
-            if ((await disk.handle.getFile()).size === 0) await disk.handle.remove?.();
-        } catch { /* closed already, or the file is gone: there is nothing left to take away */ }
+        await picked?.file.discard();
     };
     return {
         name,
@@ -536,7 +517,7 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
                     link.download = name;
                     link.click();
                     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-                } else if (disk) bytes = (await disk.handle.getFile()).size;
+                } else if (picked) bytes = (await picked.handle.getFile()).size;
                 kept = true;
                 return '';
             } catch (err) {
@@ -548,7 +529,7 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
         count: () => (kept ? count : 0),
         report: () => ({
             where: [kept
-                ? `${plural(count, 'frame')} in "${name}" (${(bytes / 1e6).toFixed(bytes < 1e7 ? 2 : 1)} MB)${disk ? '' : ', saved as a download'}.`
+                ? `${plural(count, 'frame')} in "${name}" (${(bytes / 1e6).toFixed(bytes < 1e7 ? 2 : 1)} MB)${picked ? '' : ', saved as a download'}.`
                 : 'No video was written.'],
         }),
     };

@@ -16,6 +16,61 @@
  * has seen; an error that reached it while nothing was waiting is kept there
  * and settles its next request (`_exportFailure`, WorkerProxy).
  *
+ * THE FILE (a video; 2026-10-11)
+ *   - INTO A PICKED FILE (`start` is handed a stream) an MP4 is written AS THE
+ *     RUN GOES: `fastStart: false`, so the frames leave in chunks of 16 MiB and
+ *     the index (`moov`) is written last. Until that day the muxer was told
+ *     `fastStart: 'in-memory'` for a stream too and held the whole MP4 until
+ *     the last frame, while the dialog's badge said DISK. WebM was always
+ *     written as it goes.
+ *   - IN MEMORY (no stream: a download at the end) nothing changed: the index
+ *     at the front.
+ *   - A KEYFRAME A SECOND in both, and in WebM (`keyFrameEvery`). Asked for
+ *     frame 0 alone, as it was, Chrome made ONE keyframe for the whole video:
+ *     a file an editor cannot scrub.
+ *   - NOTHING ELSE OF WHAT THIS FILE DOES BY HAND WAS TOUCHED, and each piece
+ *     is still needed: the timestamps rebuilt from the first chunk's offset
+ *     and the duration fixed at `1/fps` (`handleEncodedChunk`), the codec
+ *     description copied per chunk, the audio encoded in one go at the first
+ *     video frame with its own first-chunk offset (`encodeAudioPcm`,
+ *     `handleEncodedAudioChunk`), the forwarding stream and its abort
+ *     (`start`, `cancel`).
+ *   - THE STREAM MUST TAKE A WRITE AT A POSITION: at the end the muxer comes
+ *     back to the front of the file for the size of the media data. The picked
+ *     file's stream does, through the proxy WorkerProxy.startExport puts in
+ *     front of it (a chunk is `{ type: 'write', position, data }` all the way).
+ *
+ * @assumption THE FILE above was measured in app-gmt's own dialog on
+ *   2026-10-11, Chrome on the real GPU (d3d11, RTX 5070 Ti), the picker stood
+ *   in for by a real File System Access file that records every write
+ *   (debug/scratch/gmt-export/gmt-video.mts, git-ignored):
+ *     - each of the four formats into a picked file and in memory, 75 frames at
+ *       1280 x 720: read back (mediabunny's input side) with the right codec,
+ *       size, frame count and rate, 3 keyframes at 0, 1 and 2 s, the index
+ *       after the media data in a picked file and before it in memory, and
+ *       played to its end by a <video>;
+ *     - H.264 at 1920 x 1080, 300 frames, 51.3 MiB: 48 MiB reach the file
+ *       before the last frame is asked for (16 MiB after frames 109, 200 and
+ *       290, a frame either way from run to run), then the size of the media
+ *       data at byte 28 and the last 3.3 MiB with the index;
+ *     - the same with a 12 s tone on the audio deck: 48 of 51.5 MiB before the
+ *       last frame, AAC stereo at 48 kHz, 10.005 s of sound beside 10.000 s of
+ *       video, both from 0, and a <video> decodes both;
+ *     - Interrupt then Finish: a file of the 13 frames made, which plays;
+ *       Discard: the stream aborted, an empty file left under a new name
+ *       (this worker has no handle to remove it with), a file picked to be
+ *       replaced keeps its bytes.
+ *   BROKEN ON PURPOSE twice: `fastStart: 'in-memory'` for a stream again ->
+ *   all four writes of the 51 MiB file after its last frame, the index at the
+ *   front; a keyframe for frame 0 alone -> one keyframe in each of the four
+ *   formats.
+ *   NO STANDING GUARD for the layout or the keyframes: `npm run
+ *   smoke:export-watchdog` runs on a Chromium with no H.264 encoder and
+ *   renders into memory only. NOT measured: a real disk, Firefox, a file
+ *   beyond 4 GiB (the muxer reserves the large size for it), a strict player
+ *   - the owner opens the files in Windows Media Player
+ *   (debug/scratch/strict-player-test/after-streaming/).
+ *
  * @invariant An EXPORT_ERROR about a session ends that session: the worker is
  *   free for the next EXPORT_START — proven by: npm run smoke:export-watchdog
  *   ("C2 the export after a failed one starts"). Falsified 2026-10-11 by
@@ -25,7 +80,7 @@
  */
 
 import * as THREE from 'three';
-import { exportFrameFileTag } from './exportFrameNaming';
+import { exportFrameFileTag, exportFrameFiles } from './exportFrameNaming';
 import type { FractalEngine } from '../FractalEngine';
 import type { VideoExportConfig, ExportPass } from '../../../engine/codec/VideoExportTypes';
 import type { EngineRenderState } from '../FractalEngine';
@@ -110,6 +165,9 @@ interface ExportSession {
     /** Timestamp (µs) of the first encoded chunk. Subtracted from all subsequent chunk
      *  timestamps to undo Firefox's leading-latency offset (Chrome reports 0 anyway). */
     firstChunkOffsetMicros: number | null;
+    /** Video mode: every this many frames one is forced to be a keyframe — the frames of one
+     *  second at the rate the file plays at (`config.fps`), never less than 1. */
+    keyFrameEvery: number;
 }
 
 export type ExportPostFn = (msg: any, transfer?: Transferable[]) => void;
@@ -232,7 +290,8 @@ export class WorkerExporter {
             ppScene,
             ppCamera,
             internalFrameCounter: 0,
-            firstChunkOffsetMicros: null
+            firstChunkOffsetMicros: null,
+            keyFrameEvery: Math.max(1, Math.round(config.fps))
         };
 
         if (!isImageMode) {
@@ -254,9 +313,16 @@ export class WorkerExporter {
                 target = new Mediabunny.BufferTarget();
             }
 
+            // THE MP4'S LAYOUT (see THE FILE in the header). Into a picked file the frames go to
+            // the stream as they are encoded and the index (`moov`) is written last, so only the
+            // open 16 MiB chunk is held. In memory nothing changed: the index at the front.
+            // The ORDER of the media data is the same in both - mediabunny lays the chunks of
+            // both tracks down in the order they were finished (grep `finalizedChunks` in its
+            // isobmff-muxer) - so the audio, which is encoded in one go at the first video
+            // frame, sits ahead of the video in the file exactly as it did before.
             const format: Mediabunny.OutputFormat = formatDef.container === 'webm'
                 ? new Mediabunny.WebMOutputFormat()
-                : new Mediabunny.Mp4OutputFormat({ fastStart: 'in-memory' });
+                : new Mediabunny.Mp4OutputFormat({ fastStart: stream ? false : 'in-memory' });
 
             session.output = new Mediabunny.Output({ format, target });
             session.packetSource = new Mediabunny.EncodedVideoPacketSource(formatDef.codec as Mediabunny.VideoCodec);
@@ -572,7 +638,9 @@ export class WorkerExporter {
             colorSpace: { primaries: 'bt709', transfer: 'bt709', matrix: 'rgb', fullRange: true }
         });
 
-        const isKey = frameIndex === 0;
+        // A keyframe a second (see THE FILE in the header). Frame 0 is always one: the
+        // first-chunk offset in `handleEncodedChunk` leans on it.
+        const isKey = frameIndex % sess.keyFrameEvery === 0;
         sess.encoder!.encode(frameData, { keyFrame: isKey });
         frameData.close();
 
@@ -671,39 +739,29 @@ export class WorkerExporter {
             const base = sess.config.imageSequenceBaseName || 'frame';
             const ext = sess.formatDef.ext;
             const mime = sess.formatDef.mime;
+            const isPng = sess.formatDef.container === 'png';
 
-            if (sess.formatDef.container === 'png') {
-                // PNG path: if both beauty and alpha are present, merge beauty.rgb + alpha.r
-                // into a single RGBA file; otherwise fall back to whichever pass(es) exist.
-                // Depth is always a separate greyscale file.
-                const beauty = passBuffers.get('beauty');
-                const alphaBuf = passBuffers.get('alpha');
-                const depth = passBuffers.get('depth');
-
-                if (beauty && alphaBuf) {
-                    const merged = new Uint8Array(beauty.length);
-                    for (let i = 0; i < merged.length; i += 4) {
-                        merged[i]     = beauty[i];
-                        merged[i + 1] = beauty[i + 1];
-                        merged[i + 2] = beauty[i + 2];
-                        merged[i + 3] = alphaBuf[i]; // alpha-pass luminance → alpha channel
+            // WHICH files this frame makes, and their names, is `exportFrameFiles`: the one
+            // rule the runner also looks by before a render (frames already in the folder).
+            // Do not spell a name here. PNG: beauty and alpha together are ONE RGBA file,
+            // depth is always its own; JPG cannot carry alpha, so it is one file a pass.
+            const files = exportFrameFiles(base, frameNum, sess.formatDef.container, ext, [...passBuffers.keys()]);
+            for (const file of files) {
+                let pixels: Uint8Array;
+                if (file.from === 'beauty+alpha') {
+                    const beauty = passBuffers.get('beauty')!;
+                    const alphaBuf = passBuffers.get('alpha')!;
+                    pixels = new Uint8Array(beauty.length);
+                    for (let i = 0; i < pixels.length; i += 4) {
+                        pixels[i]     = beauty[i];
+                        pixels[i + 1] = beauty[i + 1];
+                        pixels[i + 2] = beauty[i + 2];
+                        pixels[i + 3] = alphaBuf[i]; // alpha-pass luminance → alpha channel
                     }
-                    await this.writeOneImageFile(sess, merged, `${base}_${frameNum}.${ext}`, mime);
-                } else if (beauty) {
-                    await this.writeOneImageFile(sess, beauty, `${base}_${frameNum}.${ext}`, mime);
-                } else if (alphaBuf) {
-                    await this.writeOneImageFile(sess, alphaBuf, `${base}_alpha_${frameNum}.${ext}`, mime);
+                } else {
+                    pixels = passBuffers.get(file.from)!;
                 }
-                if (depth) {
-                    await this.writeOneImageFile(sess, depth, `${base}_depth_${frameNum}.${ext}`, mime);
-                }
-            } else {
-                // JPG (and any future per-pass image format) — one file per selected pass.
-                // JPG can't carry alpha, so alpha and depth go out as standalone greyscale files.
-                for (const [pass, buf] of passBuffers) {
-                    const name = `${base}_${pass}_${frameNum}.${ext}`;
-                    await this.writeOneImageFile(sess, buf, name, mime, /* jpegQuality */ 0.95);
-                }
+                await this.writeOneImageFile(sess, pixels, file.name, mime, isPng ? undefined : /* jpegQuality */ 0.95);
             }
         } catch (e) {
             console.error('[WorkerExporter] Image write failed for frame', frameIndex, e);

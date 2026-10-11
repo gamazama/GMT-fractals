@@ -30,7 +30,11 @@
  *     `cancel()` does not release it: after a cancel the caller can
  *     neither close nor abort that stream. A caller that has to throw a
  *     half-written file away hands `start` a stream OF ITS OWN that
- *     forwards to the file, and aborts the file itself.
+ *     forwards to the file, and aborts the file itself: that is
+ *     `forwardToPickedFile` in engine/export/pickedFile.ts, which both
+ *     callers that write into a picked file use (the deep zoomer's runner
+ *     and fluid-toy's). Both ask for `mp4FastStart: false` with a picked
+ *     file and for a keyframe a second.
  *
  * @assumption The three pitfalls above, `mp4FastStart: false`,
  *   `keyFrameEvery` and the codec strings (`codecString`) were measured
