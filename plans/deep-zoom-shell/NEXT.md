@@ -9,8 +9,9 @@ behind it.
 
 ## Where it stands
 
-- Branch `deep-zoom-tool` in the worktree `.claude/worktrees/deep-zoom`: 72 commits ahead of `main`,
-  0 behind, never pushed. The owner holds push and merge ("not before stage 4 is green").
+- Branch `deep-zoom-tool` in the worktree `.claude/worktrees/deep-zoom`: 112 commits ahead of
+  `main` on 2026-10-11, 0 behind (`main` was merged in that day), never pushed. The owner holds
+  push and merge ("not before stage 4 is green").
 - Built and flown by the owner: the shell on the engine's plugins (stages 1 to 3, the keys of 4), GMT's
   navigation with speed by rays and Orbit mode (ADR-0133, ADR-0134), gradients (stage 5), the ray march
   as the default march, and since 2026-10-09 a second formula, the Mandelbox with negative scale
@@ -92,8 +93,9 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   which is also the test set of `npm run bench:deep-zoom-march`.
 - Known: power 2 gains nothing from the line-against-the-ball rule; the picture's march can crawl
   beside the pole axis under a theta phase (the navigation's probe was fixed for it in `68718c65`,
-  the picture's march was not); where a step's fixed cost sits is unprofiled; the ray variant and the
-  plain one build one after the other (about 12 s of first wait).
+  the picture's march was not); where a step's fixed cost sits is unprofiled. (The two shaders
+  building one after the other is gone: since `ROUTES.md` R7 the ray program is the only one and
+  builds from page open; what its 21 to 26 s are made of is being measured, 2026-10-11.)
 - Retiring the older marches is `ROUTES.md` R7 now, and it goes further than this line once said:
   the page's own program is retired for the bulb, with the J variant, the skip table and their
   controls (his answers of 2026-10-11 are in that section).
@@ -140,8 +142,9 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 ### 9. Navigation leftovers
 - His calls, a number each: the rise limit (4 decades a second), the clearance share (0.08), whether
   the old speed rule's switch in Settings can go.
-- The rays cost up to 10.5 ms a frame at the deepest starter. Levers: the skip table in the CPU probe,
-  or reading the picture's own depth. Routes lean on the same rays (the clip warning, the trail cut).
+- The rays cost up to 10.5 ms a frame at the deepest starter. Levers: a skip table in the CPU probe
+  (the renderer's own went with the page's program in `ROUTES.md` R7; its build is in the history
+  of `core.js` before `f9f01e1a`, grep `blaBuild`), or reading the picture's own depth. Routes lean on the same rays (the clip warning, the trail cut).
 - Inside the solid: he wants GMT's overlay for it, "camera undo must be ready first". A flight is one
   undo step since ADR-0134; check whether that is the camera undo he meant before starting.
 - Roll is no longer here: it is `ROUTES.md` R1.
@@ -150,7 +153,9 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 - Stage 2: pause controls (module package M5 first), the Diagnostics tab, the `actualPixels` row.
 - Stage 3: Export all (JSON), the scene-file claims, session autosave.
 - Module packages left: M6 (the option seams driven by one test), M1 (params / set / schema), M3
-  (events), M5 (pause). Each is additive and keeps parity. M4 is replaced by `ROUTES.md` R6.
+  (events), M5 (pause). Each is additive. (Parity, which they were to keep, is retired: ADR-0137;
+  the direct proof and the shader compare of `ROUTES.md` R7a stand in.) M4 is replaced by
+  `ROUTES.md` R6.
 
 ### 11. Light Studio
 - `BUILD-PLAN.md` "Stage L" and `GMT-SYSTEMS.md`. L0 (N lights in the module's shading pass) can go
@@ -181,10 +186,13 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   on the last commit of this branch. Builders and every smoke use the working tree's server on port
   3410 (`dz-worktree-dev`). Tell him to reload the moment a stage is COMMITTED, not before.
 - His rules for a build session (2026-10-11): a brief caps deliberate breaks at 3; a stage runs its
-  own smoke stage file, plus parity and the direct proof when `core.js` changes, and the full suite
-  once before the commit; a fault in the renderer goes to him after the first measurement.
-- Browser checks: `DZ_HEADLESS=1`. Parity and the direct proof read `PORT=3410`; the shell smoke reads
-  `ENGINE_URL=http://localhost:3410`. After any edit of `core.js`: parity (52 lines) and the direct proof.
+  own smoke stage file, plus the direct proof when `core.js` changes, and the full suite once
+  before the commit; a fault in the renderer goes to him after the first measurement.
+- Browser checks: `DZ_HEADLESS=1`. The direct proof reads `PORT=3410` (without it, it starts a
+  server of its own on 3478); the shell smoke reads `ENGINE_URL=http://localhost:3410`. After any
+  edit of `core.js`: the direct proof, and for a change meant to leave the picture alone the two
+  scratch tools of `ROUTES.md` R7a (`debug/scratch/r7/shader-diff.mjs <commit>`, `pictures.mts`).
+  Parity is retired (ADR-0137).
 - No new smoke script or step unless he asks (he declined one for the formula switch, 2026-10-10).
 - Rebuild the context map (`npm run context:map`) as the last thing before staging: a file added after
   it makes `context:check` fail.
