@@ -29,8 +29,8 @@ then what lets it ship, then quality, then the large optional pieces.
 
 | # | Session | What he gets | Needs first | Size |
 |---|---|---|---|---|
-| 1 | **Routes** (`ROUTES.md` R0 to R5) | Roll on Q / E; the trail; keyframes as you dive; a route on the timeline that plays and scrubs exactly and retimes by sliding; the look pass | nothing: his answers are in `ROUTES.md` | 8 to 10, guess |
-| 2 | **Rendering** (`ROUTES.md` R6, R7) | A small preview video, PNG frames to a folder, MP4 / WebM with an estimate | 1 | 3 to 4, guess |
+| 1 | **Routes** (`ROUTES.md` R0 to R5) | Roll on Q / E; the trail; keyframes as you dive; a route on the timeline that plays and scrubs exactly and retimes by sliding; the look pass | **built 2026-10-11** (R0 to R4), except the look pass (R5): `ROUTES.md` "Where it stands" | R5: 1, guess |
+| 2 | **Rendering** (`ROUTES.md` R6, R7) | A small preview video, PNG frames to a folder, MP4 / WebM with an estimate | **PNG frames built 2026-10-11** (R6a); video, the preview (R6b) and tidy (R7) are left | 2 to 3, guess |
 | 3 | **Zoom-outs** | A route made from one place without flying it, his kept places first (`e20power2iters85.json`); a route played backwards | 1 | 1, guess |
 | 4 | **Help and the first dive** (the rest of stage 4) | Help topics, the shortcuts page, What's New, lesson 1 | 1 for the route step of the lesson; the rest any time | 1 to 2 |
 | 5 | **The prototype goes** (stage 7) | Nothing new on screen; about 8,500 lines leave the repo; the map page and README | 1 and 2 (the prototype's record panel is the last thing only it has) | 1 |
@@ -151,8 +151,13 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 ## For whoever opens the next session
 
 - `git status` first, in the worktree; another chat may be working there. Name whose changes are whose.
-- The dev server for the worktree is the preview `dz-worktree-dev` on port 3410, hot reload off: the
-  owner reloads the page to see a change. Say so the moment a stage is flyable.
+- Two dev servers since 2026-10-11, both with hot reload off. The owner flies port 3420 (preview
+  `dz-fly`): a detached checkout, `.claude/worktrees/deep-zoom-fly`, that a `post-commit` hook keeps
+  on the last commit of this branch. Builders and every smoke use the working tree's server on port
+  3410 (`dz-worktree-dev`). Tell him to reload the moment a stage is COMMITTED, not before.
+- His rules for a build session (2026-10-11): a brief caps deliberate breaks at 3; a stage runs its
+  own smoke stage file, plus parity and the direct proof when `core.js` changes, and the full suite
+  once before the commit; a fault in the renderer goes to him after the first measurement.
 - Browser checks: `DZ_HEADLESS=1`. Parity and the direct proof read `PORT=3410`; the shell smoke reads
   `ENGINE_URL=http://localhost:3410`. After any edit of `core.js`: parity (52 lines) and the direct proof.
 - No new smoke script or step unless he asks (he declined one for the formula switch, 2026-10-10).

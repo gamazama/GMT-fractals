@@ -4,11 +4,52 @@ Written 2026-10-10 with the owner. This page replaces "Stage 6a" and "Stage 6b" 
 section 8 of `BLUEPRINT.md` and sessions 1 to 3 of `NEXT.md`; their old text is in `git log -p`
 (`NEXT.md` was never committed in its first form). It also supersedes the "Key Cam and camera tracks"
 row of `GMT-SYSTEMS.md` (one float `camera.u` and a side table) and module package M4. His decisions
-are DECISIONS K11 to K15. Nothing here is built. Sizes are in sessions and every one is a guess: no stage has been measured.
+are DECISIONS K11 to K16. The sizes in the stage table were guesses made before anything was
+built; what each stage really cost is in its "As built" note.
 
 What it rests on: three read-only surveys of the engine's timeline, the renderer's path code and the
 shell (2026-10-10), and the two engine files read directly (`engine/animation/logTrackRegistry.ts`,
 `engine/animation/cameraPairRegistry.ts`). Where a line below is worked out and not run, it says so.
+
+## Where it stands (2026-10-11), and how the next session works
+
+Built overnight and committed on `deep-zoom-tool`, local, not pushed. The owner flew it in the
+morning: "this is working great!", and "I'm happy with all your other choices" for everything the
+"As built" notes list as decided without him.
+
+| Stage | State | Commits |
+|---|---|---|
+| R0 the in-between study | done, rule approved | in this file |
+| R1 roll, places slimmed | done | `9da85c76` |
+| R2a engine: payload keys, zoom path, pair fix, fps | done | `80a5916e`, `0672e352` |
+| R3 keyframes as you dive | done | `9addef82` |
+| R4 the trail | done | `c388d092` |
+| R6a render PNG frames to a folder | done | `736103ad`, `c8ce3ef1`, `8de5616f` |
+| R2b exponential-track curve tools, undoable length | see its note below | |
+| R5 the look pass | not started | |
+| R6b video formats, the preview video | not started | |
+| R7 tidy | not started | |
+
+Open, for him: the frames that do not repeat in the first minute after start-up (R6a's note has
+every number; a frame now gets its own G-buffer, which cut it from 36 of 117 frames to 2 of 48,
+and the cause is still not known); whether GMT's own render gets Resume
+(`debug/scratch/r6/gmt-render-notes.md`).
+
+**His rules for the sessions that build the rest** (2026-10-11, his words: "yes"):
+- A brief caps deliberate breaks by number: "at most 3".
+- A stage runs its own smoke stage file (`npm run smoke:deep-zoom -- --stage N`), plus parity and
+  the direct proof when `deep-zoom/renderer/core.js` changes; the full suite once before the commit.
+- A fault in the renderer goes to him after the first measurement: "It is your kernel, and you may
+  know at once what settles in its first minute."
+- A fresh session for the remaining stages, with this file as the brief. He starts it.
+
+**Two dev servers.** He flies `http://localhost:3420/deep-zoom.html` (preview `dz-fly`): the
+detached checkout `.claude/worktrees/deep-zoom-fly`, which a `post-commit` hook
+(`stable/.git/hooks/post-commit`) moves to each new commit of this branch, so a builder's
+half-edited files never reach him. Builders and every smoke use the working tree's server on port
+3410 (`dz-worktree-dev`); a smoke pointed at 3420 would test the last commit, not the edit. Say
+"reload" only after the commit. The fly tree's vite config is git-ignored
+(`debug/scratch/vite.fly.config.mjs` inside it): recreate it if the tree is recreated.
 
 ## Words
 
@@ -529,7 +570,21 @@ is building (`host.building()`), says so in the dialog, and Cancel answers withi
 covered: the skip-table and true-gradient shaders, which a frame needs only with the ray march
 off; the wait has no time limit.
 
-Decided without the owner:
+**The preview during a run, fixed on the owner's first use** (`8de5616f`). He saw "the hires image,
+then the lowres image, then a black frame - quite jarring. users would only like to see each hires
+image, either while converging, or when completed converging." The live picture's buffer is 320
+wide and a rendered frame's is the window's: between two frames a live frame was drawn, and each
+change of size emptied the canvas. A run now holds the live picture from its first frame to its
+end (`host.holdLive`), so the canvas keeps each finished frame until the next replaces it; a frame
+is shown when it is complete, not while it converges (a picture put on the canvas mid-frame
+changed the frame, measured in R6a). With the live picture held nothing else made the G-buffer
+anew, so the lead above was applied with it: a frame of `renderFrame` gets its own. Measured, 25
+frames at 1280 px and 8 samples: no live frame and one canvas size through the run, against 13
+live frames and two sizes with the hold off; 43.5 s against 96.5 s on a machine that was running
+other GPU checks. Parity 52 of 52, the direct proof, the render regression 24 of 24.
+
+Decided without the owner (he approved every such list in this file on 2026-10-11: "I'm happy with
+all your other choices"):
 - The dialog stays the timeline toolbar's child, so Render opens the timeline, and closing the
   timeline mid-run cancels the run (a toast says what is in the folder).
 - The picture's shape is taken with the timeline open.
