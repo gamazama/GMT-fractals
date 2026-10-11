@@ -236,6 +236,14 @@ export class WorkerExporter {
                 }
             });
 
+            // @bug PRODUCTION: a bare codec name ('hevc', 'av1', 'vp9') is not a codec string. Measured
+            // 2026-10-11 in app-gmt (Chrome, real GPU, a six-frame RAM render; debug/scratch/r6b/gmt-formats.mts,
+            // git-ignored): "MP4 (H.265/HEVC)" ends with "Export failed. Error: Unsupported codec type." and
+            // no file. AV1 and WebM take this same line and were not reached in that run. The shared
+            // main-thread encoder had the same line and the same failure in three of fluid-toy's four
+            // formats; its repair is `codecString` in engine/export/videoEncoder.ts. SECOND FAULT, same
+            // run: after that failed export `this.session` is not cleared, so every later export answers
+            // "Export already in progress" until the page is reloaded.
             const encoderConfig: VideoEncoderConfig = {
                 codec: formatDef.codec === 'avc' ? 'avc1.640034' : (formatDef.codec as string),
                 width: safeWidth,
