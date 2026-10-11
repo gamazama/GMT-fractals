@@ -813,15 +813,13 @@ self.onmessage = (e: MessageEvent<MainToWorkerMessage>) => {
 
             case 'EXPORT_RENDER_FRAME':
                 if (exporter?.active) {
-                    try {
-                        exporter.renderFrame(
-                            msg.frameIndex, msg.time,
-                            msg.camera, msg.offset,
-                            msg.renderState, msg.modulations
-                        );
-                    } catch (e) {
-                        postMsg({ type: 'EXPORT_ERROR', message: `Frame render failed: ${e instanceof Error ? e.message : String(e)}` });
-                    }
+                    // A frame that throws ends the session and posts the EXPORT_ERROR itself
+                    // (WorkerExporter `fail`).
+                    exporter.renderFrame(
+                        msg.frameIndex, msg.time,
+                        msg.camera, msg.offset,
+                        msg.renderState, msg.modulations
+                    );
                 }
                 break;
 

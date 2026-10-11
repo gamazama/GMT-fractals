@@ -15,6 +15,9 @@
  *   A4  stallMs: 0 disables the watchdog (the documented escape hatch)
  *   A5  a worker crash mid-frame rejects AND clears the watchdog
  *   A6  no opts → the EXPORT_FRAME_STALL_MS default is what gets armed
+ *   A7  an EXPORT_ERROR that arrives while nothing is waiting (a paused
+ *       render) is kept: the next frame / finish request rejects with it at
+ *       once and is not posted; startExport clears it
  *
  * Part B renders one real export frame on the live worker (`window.__gmtProxy`,
  * headless SwiftShader): PNG sequence into an OPFS directory, 64×64, 8
@@ -24,8 +27,25 @@
  * SwiftShader has no meaningful asynchronous queue; see the @assumption on
  * `renderOnePass`.
  *
+ * Part C fails one video export on the live worker and starts the next. The
+ * render worker's next `VideoEncoder.configure` is handed the bare codec name
+ * 'vp9' — what production handed over for H.265, AV1 and WebM until
+ * 2026-10-11 — and Chrome answers with an encoder error ("Unsupported codec
+ * type"). The frame must reject (C1), the export after it must START (C2: the
+ * worker ends its session on every error it reports, WorkerExporter `fail`),
+ * and that export, a two-frame 64×64 WebM into RAM, must come back as a WebM
+ * (C3). C3 is the only standing check on the codec strings (`codecString`,
+ * engine/export/videoEncoder.ts) and it reaches VP9 alone: the bundled
+ * Chromium has no H.264 or H.265 encoder, so those two and AV1 are measured
+ * by hand in real Chrome.
+ *
  * Falsified 2026-09-02: removing the arm in `renderExportFrame` left A1 and
  * A2 PENDING (red); removing the postMsg in `renderOnePass` gave B 0 beats
+ * (red).
+ * Falsified 2026-10-11, one at a time: `fail()` posting its error without the
+ * cancel gave C2 "Export already in progress" (red); the worker handing the
+ * encoder the bare codec name gave C3 "Unsupported codec type" (red); the
+ * proxy not keeping an unawaited error left A7's frame posted and PENDING
  * (red).
  *
  * Run:  npx tsx debug/smoke-export-watchdog.mts     (dev server on :3400)
@@ -143,6 +163,26 @@ const A = await page.evaluate(`(async function () {
         p._handleWorkerMessage({ type: 'EXPORT_FRAME_DONE', frameIndex: 0, progress: 100, measuredDistance: 1 });
         await fp;
     }
+    // A7 — an error nobody was waiting for is kept for the next request
+    {
+        const p = mkProxy();
+        p._handleWorkerMessage({ type: 'EXPORT_ERROR', message: 'encoder died' });
+        const fp = p.renderExportFrame(0, 0, CAM, OFF, {}, {}, { stallMs: 400 });
+        fp.catch(() => {});
+        out.A7_frame = await race(fp, 200);
+        out.A7_outbox = outboxTypes(p);
+        p._handleWorkerMessage({ type: 'EXPORT_ERROR', message: 'encoder died again' });
+        const ff = p.finishExport();
+        ff.catch(() => {});
+        out.A7_finish = await race(ff, 200);
+        p._handleWorkerMessage({ type: 'EXPORT_ERROR', message: 'left over' });
+        const sp = p.startExport({}, null);
+        p._handleWorkerMessage({ type: 'EXPORT_READY' });
+        await sp;
+        const fp2 = p.renderExportFrame(0, 0, CAM, OFF, {}, {}, { stallMs: 0 });
+        fp2.catch(() => {});
+        out.A7_afterStart = await race(fp2, 200);
+    }
     return out;
 })()`) as any;
 
@@ -174,6 +214,14 @@ if (A.fatal) {
 
     ok(typeof A.A6_const === 'number' && A.A6_armedMs === A.A6_const && A.A6_const >= 30000,
         `A6 default window is EXPORT_FRAME_STALL_MS (${A.A6_const} ms)`);
+
+    ok(A.A7_frame?.state === 'rejected' && A.A7_frame?.message === 'encoder died',
+        `A7 an error nobody was waiting for rejects the next frame at once: ${A.A7_frame?.state} "${A.A7_frame?.message ?? ''}"`);
+    ok(Array.isArray(A.A7_outbox) && !A.A7_outbox.includes('EXPORT_RENDER_FRAME'),
+        `A7 that frame is not posted to the worker (outbox: ${JSON.stringify(A.A7_outbox)})`);
+    ok(A.A7_finish?.state === 'rejected' && A.A7_finish?.message === 'encoder died again',
+        `A7 and the next finish: ${A.A7_finish?.state} "${A.A7_finish?.message ?? ''}"`);
+    ok(A.A7_afterStart?.state === 'pending', `A7 startExport clears it (the frame after it: ${A.A7_afterStart?.state})`);
 }
 
 // ─── Part B: one real export frame on the live worker ────────────────────
@@ -237,6 +285,68 @@ ok(B.finished === true && Array.isArray(B.files) && B.files.length >= 1,
     `B finishExport completed and wrote ${B.files?.length ?? 0} file(s)`);
 ok(B.isExporting === false, 'B isExporting dropped after finish');
 
+// ─── Part C: a failed export ends its session on the live worker ─────────
+console.log('Part C — a failed export frees the worker for the next one');
+const renderWorker = page.workers().find((w) => /renderWorker/.test(w.url()));
+if (!renderWorker) {
+    ok(false, `Part C: no render worker among ${JSON.stringify(page.workers().map((w) => w.url()))}`);
+} else {
+    // One shot: the next configure gets the bare name, then the real method is back.
+    await renderWorker.evaluate(`(function () {
+        const proto = self.VideoEncoder.prototype;
+        const original = proto.configure;
+        proto.configure = function (cfg) {
+            proto.configure = original;
+            return original.call(this, Object.assign({}, cfg, { codec: 'vp9' }));
+        };
+    })()`);
+    const C = await page.evaluate(`(async function () {
+        const p = window.__gmtProxy;
+        const { VIDEO_FORMATS } = await import('/data/constants.ts');
+        const formatIndex = VIDEO_FORMATS.findIndex(f => f.container === 'webm');
+        if (formatIndex < 0) return { error: 'no WebM format' };
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+        const race = (pr, ms) => Promise.race([
+            pr.then(v => ({ state: 'resolved', value: v }), e => ({ state: 'rejected', message: e.message })),
+            sleep(ms).then(() => ({ state: 'pending' })),
+        ]);
+        const cfg = {
+            width: 64, height: 64, fps: 24, bitrate: 1, samples: 1,
+            startFrame: 0, endFrame: 1, frameStep: 1, formatIndex, internalScale: 1, pass: 'beauty',
+        };
+        const CAM = { position: [0, 0, 3], quaternion: [0, 0, 0, 1], fov: 60, aspect: 1 };
+        const OFF = { x: 0, y: 0, z: 0, xL: 0, yL: 0, zL: 0 };
+        const out = {};
+        try {
+            await p.startExport(cfg, null);
+            out.C1 = await race(p.renderExportFrame(0, 0, CAM, OFF, {}, {}), 15000);
+            await sleep(500);
+            out.C1_isExporting = p.isExporting;
+            out.C2 = await race(p.startExport(cfg, null), 15000);
+            if (out.C2.state === 'resolved') {
+                await p.renderExportFrame(0, 0, CAM, OFF, {}, {});
+                await p.renderExportFrame(1, 1 / 24, CAM, OFF, {}, {});
+                const buf = await p.finishExport();
+                out.C3_bytes = buf ? buf.byteLength : 0;
+                out.C3_magic = buf ? Array.from(new Uint8Array(buf, 0, 4)).map(b => b.toString(16).padStart(2, '0')).join('') : '';
+            }
+        } catch (e) {
+            out.error = e && e.message ? e.message : String(e);
+        } finally {
+            try { p.cancelExport(); } catch {}
+        }
+        out.isExporting = p.isExporting;
+        return out;
+    })()`) as any;
+
+    ok(C.C1?.state === 'rejected', `C1 a frame of an export whose encoder fails rejects: ${C.C1?.state} "${C.C1?.message ?? ''}"`);
+    ok(C.C1_isExporting === false, 'C1 isExporting dropped after the failure');
+    ok(C.C2?.state === 'resolved', `C2 the export after a failed one starts: ${C.C2?.state}${C.C2?.message ? ` "${C.C2.message}"` : ''}`);
+    ok(C.C3_bytes > 0 && C.C3_magic === '1a45dfa3',
+        `C3 and comes back as a WebM (${C.C3_bytes ?? 0} bytes, first four ${C.C3_magic || '—'})${C.error ? ` — error: ${C.error}` : ''}`);
+    ok(C.isExporting === false, 'C isExporting dropped at the end');
+}
+
 console.log('\n── Page errors ──');
 console.log(errors.length ? errors.join('\n') : '(none)');
 await browser.close();
@@ -245,5 +355,5 @@ if (failures.length || errors.length) {
     console.log(`\nFAIL — ${failures.length} assertion(s), ${errors.length} page error(s)`);
     process.exit(1);
 }
-console.log('\nOK — export stall watchdog + heartbeat');
+console.log('\nOK — export stall watchdog + heartbeat + a failed export frees the worker');
 process.exit(0);

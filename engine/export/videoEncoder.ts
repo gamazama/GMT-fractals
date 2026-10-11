@@ -110,7 +110,7 @@ export const canEncodeFormat = async (
  *  dialog: three of its four formats). So each says its profile (main,
  *  8 bit) and the level its picture size needs, the highest of that size's
  *  range, high tier: the bitrate then fits whatever the slider says. */
-const codecString = (codec: string, width: number, height: number): string => {
+export const codecString = (codec: string, width: number, height: number): string => {
     const pixels = width * height;
     const step = pixels > 8_912_896 ? 2 : pixels > 2_228_224 ? 1 : 0;   // above 4096x2176 / above 2048x1088 / up to it
     switch (codec) {

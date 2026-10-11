@@ -3,6 +3,25 @@
  *
  * Uses VideoEncoder + Mediabunny for encoding/muxing.
  * Accumulation is done via ping-pong render targets.
+ *
+ * HOW A SESSION ENDS. One session at a time: `start()` refuses while one is
+ * set ('Export already in progress'), so every exit has to clear it.
+ *   - `finish()`  the file is complete: EXPORT_COMPLETE.
+ *   - `cancel()`  the main thread asked (EXPORT_CANCEL): no file, and the
+ *                 picked file's stream is aborted.
+ *   - `fail()`    the session cannot go on (an encoder, muxer or file-write
+ *                 error, a frame that threw): a cancel, then ONE EXPORT_ERROR.
+ * A frame or finish request that finds no session gets no answer
+ * (`renderWorker.ts`). The main thread does not send one after an error it
+ * has seen; an error that reached it while nothing was waiting is kept there
+ * and settles its next request (`_exportFailure`, WorkerProxy).
+ *
+ * @invariant An EXPORT_ERROR about a session ends that session: the worker is
+ *   free for the next EXPORT_START — proven by: npm run smoke:export-watchdog
+ *   ("C2 the export after a failed one starts"). Falsified 2026-10-11 by
+ *   posting the error without the cancel in `fail()`: C2 answered 'Export
+ *   already in progress', which is what production did until that day (any
+ *   encoder error left the worker refusing exports until a reload).
  */
 
 import * as THREE from 'three';
@@ -12,6 +31,7 @@ import type { VideoExportConfig, ExportPass } from '../../../engine/codec/VideoE
 import type { EngineRenderState } from '../FractalEngine';
 import { VIDEO_CONFIG, VIDEO_FORMATS, isSurfaceHit } from '../../../data/constants';
 import * as Mediabunny from 'mediabunny';
+import { codecString } from '../../../engine/export/videoEncoder';
 import { halton } from '../../../engine/codec/halton';
 import { BloomPass } from '../BloomPass';
 import { createFullscreenPass } from '../utils/FullscreenQuad';
@@ -42,6 +62,9 @@ interface ExportSession {
     packetSource?: Mediabunny.EncodedVideoPacketSource;
     encoder?: VideoEncoder;
     muxerChain?: Promise<void>;
+    /** Disk mode: the writer of the stream `start` was handed (the picked file). The session
+     *  keeps it so that an exit without a finished file can abort the file — see `start()`. */
+    fileWriter?: WritableStreamDefaultWriter;
 
     // ─── Audio (video mode only — null when no clips on the timeline) ───
     audioPacketSource?: Mediabunny.EncodedAudioPacketSource;
@@ -216,7 +239,17 @@ export class WorkerExporter {
             // ─── Video path: spin up mediabunny output + WebCodecs VideoEncoder ───
             let target: Mediabunny.Target;
             if (stream) {
-                target = new Mediabunny.StreamTarget(stream as unknown as WritableStream, { chunked: true });
+                // The muxer gets a stream of our own that forwards to the file, and the session
+                // keeps the file's writer. Handed the file's stream itself, mediabunny locks it on
+                // the first packet and its own cancel CLOSES it (a cut-off file under the picked
+                // name), so a session that ends without a finished file could not abort it.
+                const fileWriter = stream.getWriter();
+                session.fileWriter = fileWriter;
+                const forward = new WritableStream({
+                    write: (chunk) => fileWriter.write(chunk),
+                    close: () => fileWriter.close(),
+                });
+                target = new Mediabunny.StreamTarget(forward, { chunked: true });
             } else {
                 target = new Mediabunny.BufferTarget();
             }
@@ -232,20 +265,23 @@ export class WorkerExporter {
                 output: (chunk, meta) => this.handleEncodedChunk(chunk, meta),
                 error: (e) => {
                     console.error('[WorkerExporter] Encoder error:', e);
-                    this.postMsg({ type: 'EXPORT_ERROR', message: e.message });
+                    this.fail(session, e.message);
                 }
             });
 
-            // @bug PRODUCTION: a bare codec name ('hevc', 'av1', 'vp9') is not a codec string. Measured
-            // 2026-10-11 in app-gmt (Chrome, real GPU, a six-frame RAM render; debug/scratch/r6b/gmt-formats.mts,
-            // git-ignored): "MP4 (H.265/HEVC)" ends with "Export failed. Error: Unsupported codec type." and
-            // no file. AV1 and WebM take this same line and were not reached in that run. The shared
-            // main-thread encoder had the same line and the same failure in three of fluid-toy's four
-            // formats; its repair is `codecString` in engine/export/videoEncoder.ts. SECOND FAULT, same
-            // run: after that failed export `this.session` is not cleared, so every later export answers
-            // "Export already in progress" until the page is reloaded.
             const encoderConfig: VideoEncoderConfig = {
-                codec: formatDef.codec === 'avc' ? 'avc1.640034' : (formatDef.codec as string),
+                // One mapping for both encoders (this one and the main-thread one fluid-toy uses).
+                // `formatDef.codec` as it stands ('hevc', 'av1', 'vp9') is not a codec string:
+                // until 2026-10-11 Chrome refused all three here with "Unsupported codec type"
+                // and H.265, AV1 and WebM exports made no file.
+                // @invariant A WebM export from this worker makes a file — proven by: npm run
+                //   smoke:export-watchdog ("C3 and comes back as a WebM"). Falsified 2026-10-11
+                //   by handing over the bare name again: C3 got "Unsupported codec type".
+                // @assumption The H.264, H.265 and AV1 strings work too. Measured 2026-10-11 in
+                //   real Chrome (d3d11, RTX 5070 Ti), six frames each at 1280x720, RAM and disk:
+                //   four readable files. No standing guard: the smoke's Chromium has no H.264
+                //   or H.265 encoder.
+                codec: codecString(formatDef.codec, safeWidth, safeHeight),
                 width: safeWidth,
                 height: safeHeight,
                 // The slider value is a "visible bitrate" target; we scale it up by 2.5× when
@@ -285,7 +321,7 @@ export class WorkerExporter {
                     output: (chunk, meta) => this.handleEncodedAudioChunk(chunk, meta),
                     error: (e) => {
                         console.error('[WorkerExporter] Audio encoder error:', e);
-                        this.postMsg({ type: 'EXPORT_ERROR', message: e.message });
+                        this.fail(session, e.message);
                     }
                 });
                 session.audioEncoder.configure({
@@ -331,15 +367,19 @@ export class WorkerExporter {
         if (!this.session) return;
         const sess = this.session;
 
-        // Per-frame state is set ONCE regardless of how many passes we render. The inner pass
-        // loop (image mode) just flips `uOutputPass` between passes — the camera, offset, and
-        // scene uniforms don't change across passes.
-        this.applyFrameState(cameraData, offset, renderState, modulations, time);
+        try {
+            // Per-frame state is set ONCE regardless of how many passes we render. The inner pass
+            // loop (image mode) just flips `uOutputPass` between passes — the camera, offset, and
+            // scene uniforms don't change across passes.
+            this.applyFrameState(cameraData, offset, renderState, modulations, time);
 
-        if (sess.isImageMode) {
-            this.renderFrameImageSequence(sess, frameIndex);
-        } else {
-            this.renderFrameVideo(sess, frameIndex);
+            if (sess.isImageMode) {
+                this.renderFrameImageSequence(sess, frameIndex);
+            } else {
+                this.renderFrameVideo(sess, frameIndex);
+            }
+        } catch (e) {
+            this.fail(sess, `Frame render failed: ${e instanceof Error ? e.message : String(e)}`);
         }
     }
 
@@ -606,7 +646,9 @@ export class WorkerExporter {
     /**
      * Combine per-pass pixel buffers into the format-appropriate output files and write them to
      * the session's directory handle. Called off the write chain so per-frame GPU work doesn't
-     * block on disk I/O. Errors are logged + surfaced via EXPORT_ERROR but the chain continues.
+     * block on disk I/O. A write that fails ends the session (`fail`): the main thread stops
+     * its frame loop on that EXPORT_ERROR, so a session left open would only block the next
+     * export. Writes already queued behind it still run.
      */
     private async writeFrameFiles(sess: ExportSession, frameIndex: number, passBuffers: Map<ExportPass, Uint8Array>) {
         if (!sess.dirHandle) return;
@@ -665,7 +707,7 @@ export class WorkerExporter {
             }
         } catch (e) {
             console.error('[WorkerExporter] Image write failed for frame', frameIndex, e);
-            this.postMsg({ type: 'EXPORT_ERROR', message: `Image write failed at frame ${frameIndex}: ${e instanceof Error ? e.message : String(e)}` });
+            this.fail(sess, `Image write failed at frame ${frameIndex}: ${e instanceof Error ? e.message : String(e)}`);
         }
     }
 
@@ -826,7 +868,7 @@ export class WorkerExporter {
                 await sess.packetSource!.add(packet, stableMeta as EncodedVideoChunkMetadata | undefined);
             } catch (e) {
                 console.error('[WorkerExporter] Muxing error:', e);
-                this.cancel();
+                this.fail(sess, `Muxing failed: ${e instanceof Error ? e.message : String(e)}`);
             }
         });
     }
@@ -938,8 +980,7 @@ export class WorkerExporter {
             this.postMsg({ type: 'EXPORT_COMPLETE', blob }, blob ? [blob] : []);
         } catch (e) {
             console.error('[WorkerExporter] Finalize error:', e);
-            this.cleanup();
-            this.postMsg({ type: 'EXPORT_ERROR', message: e instanceof Error ? e.message : String(e) });
+            this.fail(sess, e instanceof Error ? e.message : String(e));
         }
     }
 
@@ -952,10 +993,34 @@ export class WorkerExporter {
             try {
                 sess.encoder!.close();
             } catch {}
+            // No finished file is coming: abort the picked file's stream. That reaches the
+            // main thread's FileSystemWritableFileStream (WorkerProxy.startExport forwards it),
+            // which throws away what was written and lets go of the file; whatever was under
+            // the picked name before stays as it was. Left alone, the stream stayed open for
+            // as long as the page did.
+            sess.fileWriter?.abort().catch(() => {});
         }
         // Image mode: any in-flight write is awaited implicitly via the chain in `finish()`;
         // cancel just drops the session — partial files written so far stay on disk.
         this.cleanup();
+    }
+
+    // ─── Fail Export ─────────────────────────────────────────────────
+
+    /**
+     * `sess` cannot go on: end it the way a cancel does, then tell the main thread once.
+     * Every error that is fatal to a session comes through here, because the main thread
+     * stops its frame loop on EXPORT_ERROR and sends nothing more: a session still set after
+     * one stays set, and `start()` refuses every later export.
+     *
+     * Bound to the session it is about. A second error from a session that has already ended
+     * (an encoder error, then the muxer's), or a late one from a write queued by an earlier
+     * session, changes nothing and posts nothing — it must not end the session after it.
+     */
+    private fail(sess: ExportSession, message: string) {
+        if (this.session !== sess) return;
+        this.cancel();
+        this.postMsg({ type: 'EXPORT_ERROR', message });
     }
 
     // ─── Cleanup ────────────────────────────────────────────────────
