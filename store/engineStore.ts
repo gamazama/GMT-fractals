@@ -46,6 +46,71 @@ const _contentHashNoCamera = (s: { getPreset: (o?: { includeScene?: boolean }) =
     for (const k of CAMERA_DIRTY_KEYS) delete clone[k];
     return JSON.stringify(clone);
 };
+
+// ── What a render writes into the scene itself (the export version) ─────────
+// `prepareExport` hands out the version a render's files are named by, and raises
+// it when the scene differs from what it was at the last export. A render can
+// itself write into the scene - a value it measures while it runs and locks a
+// parameter to. That is not the user changing the scene; counted as one, every
+// such render ends "changed", the next gets a new version, and a render that was
+// cancelled can never find its own frames again to go on from.
+//
+// So a plugin DECLARES each place a render writes: a path into the preset
+// (`getPreset`'s shape: 'features.<featureId>.<param>'), and the condition under
+// which the render is the one writing it. While the condition holds, that path
+// is left out of the version's comparison - and only then: with the condition
+// off, a change there is the user's and counts as any other.
+// Engine-core names no feature here; the app's plugin registers its own path at
+// module load (grep `registerRunWrittenPath` for the callers).
+//
+// @assumption A declared path is left out of the comparison exactly while its
+//   condition holds, so a render that only wrote there keeps its version, and
+//   `peekExportVersion()` answers what `prepareExport()` would hand out without
+//   taking it. No standing test reaches this: measured in the app with real
+//   renders on 2026-10-11 (debug/scratch/gmt-export/gmt-sequence.mts,
+//   git-ignored: a focus-locked render cancelled part-way, the version held
+//   still across it, the next run found its frames).
+type RunWrittenPath = { path: string; keys: string[]; when: (state: EngineStoreState & EngineActions) => boolean };
+const _runWrittenPaths: RunWrittenPath[] = [];
+/** Declare a preset path a render writes by itself, and when (see above). Registering
+ *  a path again replaces its condition (a module evaluated twice). */
+export const registerRunWrittenPath = (
+    path: string,
+    when: (state: EngineStoreState & EngineActions) => boolean = () => true,
+): void => {
+    const entry: RunWrittenPath = { path, keys: path.split('.').filter(Boolean), when };
+    const at = _runWrittenPaths.findIndex((p) => p.path === path);
+    if (at >= 0) _runWrittenPaths[at] = entry; else _runWrittenPaths.push(entry);
+};
+/** `obj` without the value at `keys`: copied along the path only, the original untouched.
+ *  A path that is not there changes nothing. */
+const _withoutPath = (obj: Record<string, unknown>, keys: string[]): Record<string, unknown> => {
+    const [head, ...rest] = keys;
+    if (head === undefined || !(head in obj)) return obj;
+    const clone = { ...obj };
+    if (rest.length === 0) { delete clone[head]; return clone; }
+    const child = obj[head];
+    if (!child || typeof child !== 'object' || Array.isArray(child)) return obj;
+    clone[head] = _withoutPath(child as Record<string, unknown>, rest);
+    return clone;
+};
+/** What the export version compares: the preset without its volatile {version, name}
+ *  and without the paths a render is writing by itself just now. */
+const _exportContentHash = (s: EngineStoreState & EngineActions): string => {
+    const { version: _version, name: _name, ...rest } = s.getPreset({ includeScene: true }) as unknown as Record<string, unknown>;
+    let content: Record<string, unknown> = rest;
+    for (const entry of _runWrittenPaths) if (entry.when(s)) content = _withoutPath(content, entry.keys);
+    return JSON.stringify(content);
+};
+/** The version the next export gets, and whether that is a new one. Takes nothing. */
+const _nextExportVersion = (s: EngineStoreState & EngineActions): { version: number; hash: string; raised: boolean } => {
+    const hash = _exportContentHash(s);
+    const version = s.projectSettings.version;
+    if (s.lastSavedHash === null || version === 0) return { version: Math.max(1, version + 1), hash, raised: true };
+    if (s.lastSavedHash !== hash) return { version: version + 1, hash, raised: true };
+    return { version, hash, raised: false };
+};
+
 import { featureRegistry } from '../engine/FeatureSystem';
 import { applyMigrations } from '../engine/migrations';
 import { generateShareStringFromPreset } from '../utils/Sharing';
@@ -231,25 +296,22 @@ const storeFactory: StateCreator<
         return { projectSettings: nextSettings };
     }),
 
+    // The version this export's files are named by. Raised (and the scene as it
+    // stands remembered) when there was no export yet or the scene has changed
+    // since the last one; what a render writes into the scene by itself is not a
+    // change (`registerRunWrittenPath`, above).
     prepareExport: () => {
         const s = get();
-        const p = s.getPreset({ includeScene: true });
-        const { version, name, ...content } = p as any;
-        const currentHash = JSON.stringify(content);
-
-        if (s.lastSavedHash === null || s.projectSettings.version === 0) {
-            const nextVer = Math.max(1, s.projectSettings.version + 1);
-            set({ projectSettings: { ...s.projectSettings, version: nextVer }, lastSavedHash: currentHash });
-            return nextVer;
-        }
-
-        if (s.lastSavedHash !== currentHash) {
-            const nextVer = s.projectSettings.version + 1;
-            set({ projectSettings: { ...s.projectSettings, version: nextVer }, lastSavedHash: currentHash });
-            return nextVer;
-        }
-        return s.projectSettings.version;
+        const next = _nextExportVersion(s);
+        if (next.raised) set({ projectSettings: { ...s.projectSettings, version: next.version }, lastSavedHash: next.hash });
+        return next.version;
     },
+
+    // The version `prepareExport()` would hand out now, WITHOUT taking it: for a
+    // runner that has to know the name its files will get before it is sure there
+    // will be a run at all (it may ask first, and the answer may be "cancel" -
+    // which must not leave a version behind with no file to show for it).
+    peekExportVersion: () => _nextExportVersion(get()).version,
 
     // ── Unsaved-work tracking (H4) ─────────────────────────────────────
     // Hash mirrors prepareExport's: getPreset minus the volatile {version,
@@ -342,9 +404,7 @@ const storeFactory: StateCreator<
         }
 
         setTimeout(() => {
-            const loadedState = get().getPreset({ includeScene: true });
-            const { version, name, ...content } = loadedState as any;
-            set({ lastSavedHash: JSON.stringify(content) });
+            set({ lastSavedHash: _exportContentHash(get()) });   // the one rule `prepareExport` compares by
             _dirtyBaseline = _contentHashNoCamera(get()); // unsaved-work baseline (camera-excluded)
         }, 50);
     },
