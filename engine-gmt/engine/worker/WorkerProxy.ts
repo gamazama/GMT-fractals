@@ -142,6 +142,21 @@ export class WorkerProxy implements AccumulationController {
      */
     private _exportFrameFail: ((msg: string) => void) | null = null;
     /**
+     * An EXPORT_ERROR that arrived while nothing was waiting on the export: a
+     * paused render, where the pump holds no frame in flight. The worker ends
+     * its session on every error it reports (WorkerExporter `fail`) and does
+     * not answer a request that finds none, so the next `renderExportFrame` /
+     * `finishExport` is rejected with this message at once instead of running
+     * into the stall or finish timeout a minute later. Cleared by `startExport`.
+     *
+     * @invariant An export error is never dropped: with nothing waiting it
+     *   settles the next frame or finish request — proven by: npm run
+     *   smoke:export-watchdog ("A7 an error nobody was waiting for rejects
+     *   the next frame at once"). Falsified 2026-10-11 by not keeping it: the
+     *   frame was posted and stayed PENDING.
+     */
+    private _exportFailure: string | null = null;
+    /**
      * Stall watchdog for the in-flight `renderExportFrame` — see
      * EXPORT_FRAME_STALL_MS. Armed when the frame is posted, re-armed on every
      * EXPORT_HEARTBEAT, cleared by whatever settles the frame (FRAME_DONE,
@@ -462,6 +477,7 @@ export class WorkerProxy implements AccumulationController {
                 // hung forever. Probe-confirmed against this class.
                 if (this._exportFrameFail) { const f = this._exportFrameFail; this._exportFrameFail = null; f(msg.message); }
                 else if (this._exportError) { const f = this._exportError; this._exportError = null; f(msg.message); }
+                else this._exportFailure = msg.message; // nobody waiting: keep it for the next request
                 break;
 
             // ─── Bucket Render ───
@@ -1041,6 +1057,7 @@ export class WorkerProxy implements AccumulationController {
         audio?: { pcm: Float32Array; sampleRate: number; numFrames: number; durationSec: number }
     ): Promise<void> {
         this._isExporting = true;
+        this._exportFailure = null;
         return new Promise((resolve, reject) => {
             // Clearing _exportError alongside _exportReady is load-bearing: leaving
             // this settled promise's rejecter in place is what made a later frame
@@ -1051,6 +1068,17 @@ export class WorkerProxy implements AccumulationController {
             // FileSystemWritableFileStream (from File System Access API) is NOT
             // transferable via postMessage, even though it extends WritableStream.
             // Wrap it in a plain WritableStream that proxies writes.
+            //
+            // @bug PRODUCTION: a write to the file that fails HERE can go unseen, and the
+            // export then says it succeeded. The worker's end of a transferred stream
+            // settles a write or a close once the chunk is posted, not once this side has
+            // written it, so the worker finalizes and posts EXPORT_COMPLETE whatever
+            // became of the file. Measured 2026-10-11 in app-gmt (real Chrome, a six-frame
+            // H.264 export into a file whose writes were made to reject): the toast
+            // "Video export complete — saved to disk", a 0-byte file, the stream left
+            // open. The same before and after that day's `fail()` work in WorkerExporter.
+            // Not measured: a real full disk, or a failure part-way through a file of
+            // several chunks (there the worker may still learn of it before it finalizes).
             let transferStream: WritableStream | null = null;
             if (stream) {
                 // Keep the original FSWFS on the main thread; create a transferable proxy
@@ -1108,6 +1136,10 @@ export class WorkerProxy implements AccumulationController {
         opts?: { stallMs?: number }
     ): Promise<{ frameIndex: number; progress: number; measuredDistance: number }> {
         const stallMs = opts?.stallMs ?? EXPORT_FRAME_STALL_MS;
+        if (this._exportFailure !== null) {
+            const msg = this._exportFailure; this._exportFailure = null;
+            return Promise.reject(new Error(msg));
+        }
         return new Promise((resolve, reject) => {
             this._exportFrameDone = (data) => {
                 this._disarmExportFrameWatchdog();
@@ -1170,6 +1202,10 @@ export class WorkerProxy implements AccumulationController {
      * Returns blob ArrayBuffer for RAM mode, null for disk mode.
      */
     finishExport(): Promise<ArrayBuffer | null> {
+        if (this._exportFailure !== null) {
+            const msg = this._exportFailure; this._exportFailure = null;
+            return Promise.reject(new Error(msg));
+        }
         return new Promise((resolve, reject) => {
             this._exportComplete = (blob) => { this._exportComplete = null; resolve(blob); };
             this._exportError = (msg) => { this._exportError = null; reject(new Error(msg)); };

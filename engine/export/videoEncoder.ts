@@ -59,6 +59,26 @@ export const canEncodeFormat = async (
     }
 };
 
+/** The codec string WebCodecs wants for a `VIDEO_FORMATS` codec at a picture
+ *  size. H.264 keeps the fixed High 5.2 string it always had. The bare
+ *  names of the other three ('hevc', 'av1', 'vp9') are NOT codec strings:
+ *  handed over as they are, Chrome answers each with "Unsupported codec
+ *  type" and no file is made (measured 2026-10-11 in fluid-toy's own
+ *  dialog: three of its four formats). So each says its profile (main,
+ *  8 bit) and the level its picture size needs, the highest of that size's
+ *  range, high tier: the bitrate then fits whatever the slider says. */
+export const codecString = (codec: string, width: number, height: number): string => {
+    const pixels = width * height;
+    const step = pixels > 8_912_896 ? 2 : pixels > 2_228_224 ? 1 : 0;   // above 4096x2176 / above 2048x1088 / up to it
+    switch (codec) {
+        case 'avc':  return 'avc1.640034';
+        case 'hevc': return `hev1.1.6.H${[123, 156, 186][step]}.B0`;     // level 4.1 / 5.2 / 6.2
+        case 'av1':  return `av01.0.${['09', '14', '18'][step]}H.08`;    // level 4.1 / 5.2 / 6.2
+        case 'vp9':  return `vp09.00.${[41, 52, 62][step]}.08`;          // level 4.1 / 5.2 / 6.2
+        default:     return codec;
+    }
+};
+
 export class MainThreadEncoder {
     private output: Mediabunny.Output | null              = null;
     private packetSource: Mediabunny.EncodedVideoPacketSource | null = null;
@@ -108,7 +128,7 @@ export class MainThreadEncoder {
         // under-target on smooth gradient content (low motion); the
         // multiplier keeps player-reported bitrate near the user's setting.
         this.encoder.configure({
-            codec:        formatDef.codec === 'avc' ? 'avc1.640034' : (formatDef.codec as string),
+            codec:        codecString(formatDef.codec, cfg.width, cfg.height),
             width:        cfg.width,
             height:       cfg.height,
             bitrate:      cfg.bitrate * VIDEO_CONFIG.BITRATE_MULTIPLIER * 2.5,
