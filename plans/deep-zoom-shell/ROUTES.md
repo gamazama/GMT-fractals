@@ -26,14 +26,13 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R4 the trail | done | `c388d092` |
 | R6a render PNG frames to a folder | done | `736103ad`, `c8ce3ef1`, `8de5616f` |
 | R2b exponential-track curve tools, undoable length | done | `15b419bb` |
-| R5 the look pass | not started | |
-| R6b video formats, the preview video | not started | |
-| R7 tidy | not started | |
+| R5 free look while a route plays | not started | |
+| R6b routes to MP4 / WebM, a Draft preset | not started | |
+| R6c existing frames: overwrite, continue or cancel, for every image-sequence render | not started | |
+| R7 cleanup: the previous-generation marches retired, dead handles, help | not started | |
 
-Open, for him: the frames that do not repeat in the first minute after start-up (R6a's note has
-every number; a frame now gets its own G-buffer, which cut it from 36 of 117 frames to 2 of 48,
-and the cause is still not known); whether GMT's own render gets Resume
-(`debug/scratch/r6/gmt-render-notes.md`).
+Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
+the owner, 2026-10-11") and is written into the four stages under "The stages".
 
 **His rules for the sessions that build the rest** (2026-10-11, his words: "yes"):
 - A brief caps deliberate breaks by number: "at most 3".
@@ -49,7 +48,14 @@ detached checkout `.claude/worktrees/deep-zoom-fly`, which a `post-commit` hook
 half-edited files never reach him. Builders and every smoke use the working tree's server on port
 3410 (`dz-worktree-dev`); a smoke pointed at 3420 would test the last commit, not the edit. Say
 "reload" only after the commit. The fly tree's vite config is git-ignored
-(`debug/scratch/vite.fly.config.mjs` inside it): recreate it if the tree is recreated.
+(`debug/scratch/vite.fly.config.mjs` inside it): recreate it if the tree is recreated. Both
+servers belong to the session that started them: a new session starts `dz-fly` and
+`dz-worktree-dev` (the preview names in `stable/.claude/launch.json`) first.
+
+**How the built stages were run, and it worked**: one builder at a time, the decisions written
+into its brief so it reads source and not plan pages; the orchestrator checks typecheck, the node
+checks and the diff, makes one commit a stage, rebuilds the context map last, then says "reload
+3420". A small fix he asks for while a builder runs on other files is quicker done by hand.
 
 ## Words
 
@@ -57,7 +63,8 @@ half-edited files never reach him. Builders and every smoke use the working tree
 - **Route**: a camera move on the timeline - keyframes, and the timing between them.
 - **Keyframe**: one exact view on the route (position and orientation) at a time.
 - **Leg**: the stretch between two keyframes.
-- **Look pass**: an optional rotation offset laid over a playing route.
+- **Free look**: turning the view over a playing route (his word; the first notes called it "the
+  look pass").
 
 Two words are taken in the code and are not used for the new thing: a "flight" is one hand-flown
 stretch and one undo step (`flightBegan` in `deep-zoom/locations.ts`), and a "dive" is the
@@ -97,12 +104,12 @@ Dive-to-depth action (`deep-zoom/diveControl.ts`).
    flown; a hand-set one has few. Everything after that is shared.
 4. **Timing on the timeline.** Each keyframe is a key: slide it to arrive sooner or later. The depth
    curve between keys is the pace, read in decades per second.
-5. **The look pass.** Play the route and turn the camera on top of it: viewed, or recorded as its own
-   tracks.
+5. **Free look while a route plays.** Turn the camera on top of the route: viewed, or recorded as
+   its own tracks.
 6. **Light and colour** are ordinary tracks. A place and a keyframe carry neither.
 7. **A warning before the render**: a leg that enters the solid shows red.
-8. **A small fast preview video**, then PNG frames to a folder, resumable; MP4 / WebM from the
-   engine's dialog.
+8. **PNG frames to a folder**, picked up again where an earlier run stopped; MP4 / WebM from the
+   same dialog. A draft is that dialog at a small size and one sample.
 
 ## The shape (recommended; the decision record is written in R2)
 
@@ -155,18 +162,18 @@ progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, ke
 
 ## The stages
 
-One line of work, in this order. Each ends with something he can fly or see, except R2.
+R0 to R4, R2b and R6a are built. Each has an "As built" note below, and those notes are the record
+of what the code does and of what was decided on the way. What is left, in the order to build it:
 
-| # | Stage | What he gets | Size |
-|---|---|---|---|
-| R0 | The in-between, studied on the CPU | Plots and numbers for how the camera travels between keyframes, on his own places; one rule recommended | 1 |
-| R1 | Roll, and places slimmed | Q / E roll; flying turns about the camera's own axes as in GMT; a place is camera and formula | 1 to 2 |
-| R2 | Engine: a key can carry app data | Nothing on screen; the decision record | 1 to 2 |
-| R3 | Keyframes as you dive | Drop keyframes, see them on the Route tab, play and scrub the route exactly, retime by sliding | 2 |
-| R4 | The trail | The record switch, "Route to here", as flown or even pace, a smoothing slider | 2 |
-| R5 | The look pass | Turn the camera over a playing route; record it | 1 |
-| R6 | Rendering | Preview video, PNG frames to a folder, MP4 / WebM | 2 to 3 |
-| R7 | Tidy | Dead handles gone, help text, docs | 1 |
+| # | Stage | What he gets |
+|---|---|---|
+| R5 | Free look while a route plays | The mouse and Q / E turn the view over a playing route; with Record on the turn is kept as three tracks |
+| R6b | Routes to MP4 / WebM | Video from the render dialog, written to disk as it goes; a Draft preset |
+| R6c | Existing frames | An image-sequence render that finds its frames already in the folder asks: overwrite, continue or cancel. GMT's renders too |
+| R7 | Cleanup | The previous-generation marches retired, dead handles gone, help text; then the retest of the frames that do not repeat |
+
+What a stage has cost so far: 500 to 900 thousand builder tokens and 50 to 180 minutes. After R7
+comes `NEXT.md` session 3 (zoom-outs).
 
 ### R0. The in-between, studied on the CPU
 
@@ -532,16 +539,33 @@ To know:
   trail at the cap, a 300-keyframe route.
 - The floating Animate button sits over the bottom of a long keyframe list.
 
-### R5. The look pass
+### R5. Free look while a route plays
 
-- Three plain tracks (names to settle, minding the angle rule in `AnimationEngine.interpolate`, which
-  goes by the substrings `rot`, `phase` and `twist`); the evaluator composes them on the route's
-  rotation.
-- While a route plays, the mouse and Q / E move the offset. With Record on, a key a frame lands on
-  the look tracks, the route still driven (R2's release flag), then thinned with the fitter. The
-  per-frame trigger is GMT-only today (grep `isRecording && recordCamera` in
-  `engine-gmt/navigation/Navigation.tsx`); it moves to where any app's navigation can reach it.
-- An unrecorded turn returns to the route's own aim when playback stops (answer 4).
+His words, 2026-10-10 and 2026-10-11: "route first - the camera second - but that part is optional.
+all it means is we can playback the route and record/view a rotation offset ontop of it"; "the look
+pass i.e free look during dive playback - optional for the user, compulsory for us".
+
+- **Today** (R3) any hand on the controls stops a playing route.
+- **Wanted**: while a route plays, the drag-look of Fly mode and Q / E turn the view on top of the
+  route's own rotation. A fly key (W A S D, Space, C, the wheel) still stops playback and hands him
+  the camera; so does an Orbit-mode drag, which moves the camera. (The Orbit half is the
+  orchestrator's choice; say so to him when it is flyable.)
+- **Not recorded**: the turn is an offset that returns to nothing when playback stops ("returns to
+  route").
+- **Recorded**: with the timeline's Record on, the turn is written as keys on three plain tracks
+  (pan, tilt, roll, in radians), a key a frame while it plays, then thinned with the fitter. The
+  route's own track keeps being driven (`camera.depth` is registered with `releaseOnRecord: false`)
+  and only the look tracks are let go. Names: mind `AnimationEngine.interpolate`, which treats an id
+  holding `rot`, `phase` or `twist` as an angle that wraps.
+- **Where**: `drive()` in `deep-zoom/route.ts` is the one place a frame's view is composed before
+  `host.setView`; the offset is composed there, so a render gets it with no further work. The
+  per-frame capture trigger is GMT-only today (grep `isRecording && recordCamera` in
+  `engine-gmt/navigation/Navigation.tsx`): the shell's navigation needs its own, or the trigger
+  moves to where any app can reach it.
+- **The timeline** then shows Camera as Depth plus the three Look tracks (answer 10).
+- **Proof**: `check:deep-zoom-route` extended (the offset is composed on the route's rotation, is
+  gone when playback stops, plays back from its keys, and leaves the route's keys alone), and a
+  scratch run of the real app. No new smoke step.
 
 ### R6. Rendering
 
@@ -551,6 +575,7 @@ the deep zoomer rendering its route as PNG frames through the engine's dialog. A
 be rendered is half a feature, and the look pass (R5) is optional. Still to come, in this order: R5,
 then **R6b** (MP4 / WebM for the deep zoomer, the preview video), then R2b, then R7. GMT's own
 render popup is not touched unattended; the builder leaves a note on what unifying it would take.
+(That was the night's order. R2b is built since; what is left and in what order is "The stages".)
 
 **R6a as built, 2026-10-11** (`736103ad`; one builder: 899 thousand tokens, 183 minutes; +1,288 /
 -68, about 600 lines of product code). By the builder on the real GPU: parity 52 of 52 and the
@@ -635,40 +660,72 @@ GMT was changed.
 Not exercised: a real folder picker and a real disk (an in-memory folder stood in); inside
 `renderFrame`, the pole guard, the Mandelbox and a lost WebGL context.
 
-- **Module**: `api.dz.renderFrame(req)`, the current view and look to pixels or a blob, its waits
-  riding `step`. Built from `renderFrameToBlob`, which is sound (tiles, the GPU watchdog, the active
-  formula and march). It must hold that a frame rendered alone equals the same frame rendered in
-  sequence: today the light rig is blended from the frame before (grep `trackRig`) and `renderPath`
-  returns early from `frame()`, which loses the pole guard. Parity and the direct proof after every
-  `core.js` edit.
-- **Runner**, in the shape of fluid-toy's `runVideoExport`: per frame `animationEngine.scrub(f)`,
-  formula params flushed, `renderFrame`, sink.
-- **Sinks**: PNG frames into a folder the user picks, one file a frame, resumable, with the ffmpeg
-  line (ENGINE-GAPS E24, generic; the folder picker pattern is in GMT's `exportRunner.ts`, grep
-  `showDirectoryPicker`); MP4 / WebM through the engine's dialog (E22 `openRenderPopup()`, E23
-  `encodeCanvas` takes any image source).
-- **Preview video**: the same runner, small and one sample.
-- **The estimate** before the render, from frames this machine rendered.
-- **One render dialog, and GMT gains what is built here** (answer 8: "to use improve gmt's rendering
-  with this option would be ideal"). GMT has its own render popup, whose worker exporter already
-  writes image sequences to a picked folder (`engine-gmt/components/timeline/RenderPopup/`,
-  `engine-gmt/engine/worker/WorkerExporter.ts`); the engine has `installRenderDialog`, used by
-  fluid-toy, whose encoder throws on sequence formats. The first job of R6 is to read both and say
-  how the folder of frames, the resume and the preview video become options of one shared dialog. No
-  dialog private to this app.
-- **The old ZIP route is dropped from the plan**: it has its own easing on top of the
-  timeline's, it skips the per-frame rules, and it holds every PNG in memory until the end.
-- Known: the dialog's default end frame is the duration inclusive, N + 1 frames. Owed: what a
-  cancelled MP4 leaves on disk.
+**R6b. Routes to MP4 / WebM.**
+- The deep zoomer's dialog offers the shared encoder's video formats beside "PNG sequence
+  (folder)". The runner hands each rendered frame to the encoder (`engine/export/videoEncoder.ts`;
+  ENGINE-GAPS E23: `encodeCanvas` is typed for canvases, its body takes any image source).
+- **Written to disk as it goes.** The shared encoder holds a whole MP4 in memory (grep
+  `fastStart: 'in-memory'`); GMT's own runner streams to a file (grep `fileStream` in
+  `engine-gmt/components/timeline/RenderPopup/exportRunner.ts`). A long route must stream: give the
+  shared encoder that, the way GMT's runner does it. No new library.
+- **No preview feature.** He agreed (2026-10-11) that a preview is this same dialog at a small size
+  and one sample: at most a one-click "Draft" preset that sets those two.
+- Owed check: what a cancelled MP4 leaves on disk.
+- **mediabunny, as a step of its own**: 1.40.1 is installed, 1.61.3 was the latest on 2026-10-05
+  (his: "we might want to check for a recent ver or whatever is best"). It only packages the video;
+  the encoding is the browser's. Read the changelog between the two first, bump, run GMT's export
+  paths (`npm run test:export-naming`, and a real export by hand), one commit.
 
-### R7. Tidy
+**R6c. Existing frames: overwrite, continue or cancel.** His words, 2026-10-11: "rather than a
+checkbox, if it detects existing frames, it should come up with options to overwrite, continue,
+cancel. this can be for all the renders".
+- The "Resume" box of R6a goes (`engine/plugins/RenderDialog/ConfigForm.tsx`, `deps.resume`). After
+  the folder is picked, and only if frames of this render are already in it, the dialog asks:
+  **Overwrite** (render every frame, replacing), **Continue** (render only the missing ones),
+  **Cancel**. `engine/export/frameFolder.ts` already answers "is this frame there" and reads a
+  frame's size; where the frames there are another size, Continue is not offered and the dialog
+  says why.
+- The name "Resume" stays what it is in GMT: continuing a run that was interrupted, in the same
+  dialog (Interrupt, then Resume / Finish / Discard). The two are different things.
+- **The deep zoomer first**: its runner already skips what is there.
+- **Then GMT's image sequences** ("for all the renders"). GMT's popup is this same dialog with
+  GMT's runner, and its worker already writes PNG and JPG sequences into a picked folder. The
+  builder's read-only note, `debug/scratch/r6/gmt-render-notes.md`, lists what Continue takes
+  there: one name per frame across runs (today `prepareExport()` raises the version in the file
+  name on every run, so nothing is ever "already there"); the skip in `runFramePump`; every file
+  of a frame present (alpha, depth, the JPG passes); the counts; and frames that do not depend on
+  the frame before (the focus lock reads the previous frame's measured distance, and modulation
+  is carried from frame to frame). First job: read those in the code and tell him in a few lines
+  what Continue would mean for a GMT render that uses the focus lock or audio; then build what is
+  safe. GMT's export is live: its own tests and a real export by hand before the commit.
 
+### R7. Cleanup
+
+- **The previous-generation marches are retired.** His words, 2026-10-11, about the frames that do
+  not repeat: "i havent noticed an issue during operation, but we can retest it after the previous
+  gen shaders are retired, that should be part of cleanup". Until then he had said to keep them "a
+  little while longer". This is his kernel: BEFORE removing anything, tell him in a few lines what
+  goes and what leans on it, and take his word.
+  - What it covers, as the orchestrator reads it: the march the page drew with and its controls
+    (Step size, the True-gradient march, the J variant), leaving the ray march.
+  - The Mandelbox draws with the older march today (grep `rayUse = boxOn() ? 0 : rayAsk` in
+    `deep-zoom/renderer/core.js`): it needs the ray march first, or keeps its own.
+  - The parity proof compares the module's older march with the frozen page, 52 lines. What parity
+    means once the shell never asks for that march is his call (the module can keep the page's path
+    with the shell not using it).
+- **Then the retest of the frames that do not repeat** (R6a's note has every number). One
+  measurement: render the same grainy frame every two seconds from start-up and note when the
+  picture changes. One change that never comes back points at something that settles once; bring
+  him the result, not a second idea.
 - Host members with no caller go (`setRecording`, `takePath`, `smoothPath`, `seekPath`, `play`,
   `stopPlay`, `renderPathZip` in `deep-zoom/host/moduleHost.ts`), and the module's path code with
   them if parity allows.
 - Export filenames say "mandelbulb" whatever the formula.
-- Help text, JSDoc on the new files, the guard row in `.claude/rules/sibling-apps.md`, the context
-  map last.
+- Seen in the screenshots: the floating Animate button sits over the bottom of a long keyframe
+  list; keyframes cut from a trail show a number and no thumbnail.
+- Help text, JSDoc on the new files, the rule rows, the context map last.
+- Left on an exponential track in plain values, if he wants them: Smooth, Bounce, Simplify, a
+  Continue tail (`engine/animation/logTrackRegistry.ts`, the `@assumption` block).
 
 ## What goes from the old plan
 
@@ -718,8 +775,27 @@ chat; the same calls are numbered here as the stages cite them.
 8. **Rendering**: "to use improve gmt's rendering with this option would be ideal." PNG frames to a
    folder, the resume and the preview video are built as options of the shared render dialog, so
    GMT's own rendering gains them; no dialog private to this app. The ZIP route is dropped.
+   (Refined on 2026-10-11, below: no preview feature, and the resume box becomes a question.)
 9. **Two engine fixes GMT will feel**: "yes good fixes" - the frame rate saved in a scene, and the
    timeline's length made undoable.
 10. **The timeline shows** one Depth track plus three Look tracks, not GMT's six: yes.
 11. **Names on screen**: Trail, Route, Keyframe, and the tab is "Route": stated to him as assumed; no
     objection. Likewise no horizon lock.
+
+## Answered by the owner, 2026-10-11
+
+After flying the overnight build: "this is working great!".
+
+- Everything the "As built" notes list as decided without him: "I'm happy with all your other
+  choices".
+- The render's picture: "users would only like to see each hires image, either while converging, or
+  when completed converging" (fixed the same morning, `8de5616f`).
+- His rules for building, and the second dev server: at the top of this file.
+- Free look while a route plays: "optional for the user, compulsory for us". So R5 gets built.
+- A preview video is not a feature: "yep thats right" to it being the same dialog at a small size
+  and one sample.
+- The frames that do not repeat: "i havent noticed an issue during operation, but we can retest it
+  after the previous gen shaders are retired, that should be part of cleanup".
+- Existing frames: "rather than a checkbox, if it detects existing frames, it should come up with
+  options to overwrite, continue, cancel. this can be for all the renders".
+- mediabunny: "we might want to check for a recent ver or whatever is best".
