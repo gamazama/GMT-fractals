@@ -29,8 +29,8 @@ then what lets it ship, then quality, then the large optional pieces.
 
 | # | Session | What he gets | Needs first | Size |
 |---|---|---|---|---|
-| 1 | **Routes** (`ROUTES.md` R0 to R5) | Roll on Q / E; the trail; keyframes as you dive; a route on the timeline that plays and scrubs exactly and retimes by sliding; free look while a route plays | **built 2026-10-11** (R0 to R4), except free look while a route plays (R5): `ROUTES.md` "Where it stands" | R5: 1, guess |
-| 2 | **Rendering** (`ROUTES.md` R6, R7) | PNG frames to a folder, MP4 / WebM, and a question when frames are already there | **PNG frames built 2026-10-11** (R6a); MP4 / WebM (R6b), the existing-frames question for every render (R6c) and cleanup (R7) are left | 3, guess |
+| 1 | **Routes** (`ROUTES.md` R0 to R5) | Roll on Q / E; the trail; keyframes as you dive; a route on the timeline that plays and scrubs exactly and retimes by sliding; free look while a route plays | **built 2026-10-11** (R0 to R5): `ROUTES.md` "Where it stands" | done |
+| 2 | **Rendering** (`ROUTES.md` R6, R7) | PNG frames to a folder, MP4 / WebM, and a question when frames are already there | **built 2026-10-11** (R6a to R6c, R7): frames, video, the question; GMT's half of the question waits for his calls (`ROUTES.md` R6c) | done |
 | 3 | **Zoom-outs** | A route made from one place without flying it, his kept places first (`e20power2iters85.json`); a route played backwards | 1 | 1, guess |
 | 4 | **Help and the first dive** (the rest of stage 4) | Help topics, the shortcuts page, What's New, lesson 1 | 1 for the route step of the lesson; the rest any time | 1 to 2 |
 | 5 | **The prototype goes** (stage 7) | Nothing new on screen; about 8,500 lines leave the repo; the map page and README | 1 and 2 (the prototype's record panel is the last thing only it has) | 1 |

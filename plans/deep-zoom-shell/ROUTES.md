@@ -29,10 +29,35 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | done; the mediabunny upgrade waits for him | `9d05d00b` |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | done for the deep zoomer; GMT's is read and measured, not built: his calls below | `e99e82ef` |
-| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7a, R7b-1 and R7b-2 done (the page's program is retired); R7c and R7d: see the section | `e41890c4`, `f9f01e1a`, `63411aa8` |
+| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7 cleanup: the previous-generation marches retired (the page's program too), the retest, the small things | done | `e41890c4`, `f9f01e1a`, `63411aa8`, `a6d7a2e5` |
 
-Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
-the owner, 2026-10-11") and is written into the four stages under "The stages".
+**Every stage of this page is built** (2026-10-11, the afternoon session: R5, R6b, R6c, R7; local
+commits `3abf4af2` to `a6d7a2e5`, never pushed). After this page comes `NEXT.md` session 3
+(zoom-outs).
+
+**Waiting for him**, each with its place on this page:
+1. **To file, each raises an approval prompt**: the ADR for the one bulb program
+   (`plans/deep-zoom-shell/ADR-DRAFT-one-bulb-program.md`, with ADR-0135's update block); update
+   blocks for ADR-0136 (the free look's tracks) and ADR-0134 (it names BLA);
+   `.claude/rules/sibling-apps.md`, which still cites the retired parity smoke
+   (`npm run check:rule-guards` reports it) and does not yet know the free look, video files or
+   the existing-frames question.
+2. **The frames that do not repeat, retested** (R7c, below): no change that settles once. An odd
+   single render, then the usual picture again. His kernel, his call what to do with it.
+3. **The depth rule for iterations stays** (R7b-2): the margin rule does not hold alone at power 8.
+   The table is there for him.
+4. **A failed ray shader is the boot-failure card** (R7b-2): the orchestrator's reading of "rather
+   an error". And the bulb's Iterations slider now runs to 400.
+5. **A first visit shows the plain picture for 21 to 26 s** while the ray shader builds
+   (`debug/scratch/r7/prod-wait-10s.png`): at the start view it is coarse speckle.
+6. **GMT's image sequences and the existing-frames question** (R6c): read and measured, not
+   built; three calls of his before it is.
+7. **The mediabunny upgrade** (R6b): the changelog is read; an install in `stable/` is his word.
+8. **GMT's H.265 / AV1 / WebM export fails** and a failed export leaves the worker stuck:
+   `@bug PRODUCTION` in `engine-gmt/engine/worker/WorkerExporter.ts`, and a task chip.
+9. Smaller, said in the "As built" notes: no ease back to the route after a free look; Draft has
+   no way back; an Overwrite stopped halfway leaves a mixed folder; the Locations tab's foot sits
+   under the Animate button when its list is long.
 
 **His rules for the sessions that build the rest** (2026-10-11, his words: "yes"):
 - A brief caps deliberate breaks by number: "at most 3".
@@ -162,7 +187,7 @@ progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, ke
 
 ## The stages
 
-R0 to R5, R2b, R6a, R6b and R6c (the deep zoomer's half) are built. Each has an "As built" note below, and those notes are the record
+Every stage is built (R6c for the deep zoomer; GMT's half is read, not built). Each has an "As built" note below, and those notes are the record
 of what the code does and of what was decided on the way. What is left, in the order to build it:
 
 | # | Stage | What he gets |
@@ -1103,6 +1128,46 @@ same tree drew that frame six times; five were the picture from before the retir
 byte, and the one taken after 30 s of live picture was a third picture (1,207 pixels, up to 34
 levels). So the tree still draws the old picture, and that frame does not repeat in the shell.
 The same place through the harness repeats.
+
+**R7c, the retest of the frames that do not repeat, 2026-10-11** (one agent: 410 thousand tokens
+with R7d; a measurement, no code; `debug/scratch/r7c/retest.mts` and a table a session beside it).
+Headless Chrome on the real GPU; a cold session has a fresh browser profile; a render every 2.0 s
+for 150 s from the moment the renderer is ready, set up as the runner sets a frame up.
+
+- **The grainy frame** (R6a's: frame 8 of its route, 1280 x 1000, 2 samples): **no change that
+  settles once.** The usual picture is the same, byte for byte, in all seven sessions, and it is
+  what 374 of 380 renders drew. What is left is a single odd render that is gone at the next:
+  in 5 of 7 sessions the SECOND render, 2.0 s after ready, was another picture (cold: 48 to 386
+  thousand of 1.28 million pixels, up to 157 levels, a different picture each session; warm: 82
+  pixels, the same picture in both warm sessions); one warm session had two more, at exactly 60
+  and 120 s. The first render was never the odd one. The earlier pattern, frames differing 15 to
+  24 s after ready, did not show: all 25 renders in that window were the usual picture.
+- **The kept place Power 2, 5e-20** (640 x 360, 4 samples): the usual picture in 208 of 213
+  renders, the same in all three sessions and the one from before the retirement. Five single
+  odd renders (114 to 1,206 of 230,400 pixels), each gone at the next. One came straight after 30
+  s of live picture, but a session with the live picture held throughout had two, so the pause
+  is not needed for one.
+- **The Mandelbox, Arches**: the usual picture in 150 of 152 renders, the same in both sessions.
+  The two odd ones were the first two renders of the warm session, 0.6 and 2.6 s after the box's
+  shader was built, and never returned. "Three pictures in three sessions, 80 s after open"
+  (R7a's finding) did not show again.
+- **Read with every render**: nothing building, the mode deep, the iteration count and the view
+  the same before and after, for the odd renders too.
+- So, in his terms: not something that settles once. An occasional single render comes out
+  otherwise and the next one is right again, most often the second render after ready. For a
+  route render that means a frame or two in a run can be an odd one; rendering that frame again
+  gives the usual picture. No cause was looked for.
+
+**R7d, the small things, 2026-10-11** (`a6d7a2e5`).
+- A still's file name says `mandelbox_s<scale>` on the Mandelbox where it said `mandelbulb_n<power>`
+  for every formula. No other file name in the shell names a formula.
+- The Route tab keeps room under its list while the timeline is closed: the last keyframe ends
+  13 px above the Animate button, where it sat 35 px under it.
+- Help: nothing added. The app has no list of keys or help topics yet (that is `NEXT.md`
+  session 4); K's description in `deep-zoom/hotkeys.ts` is true and nothing shows it.
+- Left: keyframes cut from a trail still show a number and no thumbnail (a picture needs the
+  camera put on each keyframe); the Locations tab's foot sits under the same button when its
+  list is long; `deep-zoom/hotkeys.ts` still speaks of a Flight tab.
 
 Not in this stage:
 - The Mandelbox's ray step (the math session, `NEXT.md` session 8).
