@@ -101,6 +101,7 @@
  *   (debug/smoke-deep-zoom-parity.mts: 20 pictures, two lines of numbers; falsified 2026-10-07
  *   with the estimate's 0.5 changed to 0.4 -> 24 lines red). The owner retired the page's march
  *   program and that smoke with it; its last run, on the tree before, was 52 of 52.
+ * @see docs/adr/0137-the-deep-zoomers-mandelbulb-has-one-program.md
  * @assumption With `autoStart: false` the frame runs only when `step()` is called, and
  *   create -> dispose -> create leaves one loop, the same 8 listeners and one scaffold. The parity
  *   smoke's "lifecycle ..." lines checked exactly this and passed until that smoke was retired

@@ -97,6 +97,16 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 - Retiring the older marches is `ROUTES.md` R7 now, and it goes further than this line once said:
   the page's own program is retired for the bulb, with the J variant, the skip table and their
   controls (his answers of 2026-10-11 are in that section).
+- **Why power 8 needs more iterations than the ray march's margin rule gives** (measured in
+  `ROUTES.md` R7b-2; the owner, 2026-10-11: "i dont know why"). The page's depth rule
+  (32 + 1.35 a decade) therefore still sets the count at power 8, against his rule of nothing
+  keyed to depth: at the start view the margin rule alone settles at 13 where both give 32, and
+  the picture moves; at power 2 and power 4 it settles no lower. Find what the margin measures
+  that power 8 does not show it, before the depth rule can go.
+- **The odd single render** (`ROUTES.md` R7c): one render in about sixty of a grainy frame comes
+  out as another throw of its grain and the next is the usual picture again, most often the
+  second render after ready. He had not seen one; the sheets are in `debug/scratch/r7c/`
+  (`odd-render-*.png`).
 - Parked by him, do not touch: Detail defaults and Normal detail.
 - The standing rule for this session: a method that responds to what is on screen, never a rule keyed
   to depth or power.

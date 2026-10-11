@@ -15,6 +15,14 @@
   the plan it was built from: `plans/deep-zoom-shell/MANDELBOX.md`.
 - **Numbering:** 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
 
+> **Update 2026-10-11 (the page's program retired for the Mandelbulb; decisions 2 to 4 unchanged):**
+> decision 1's "the module at its defaults still equals the frozen page" and the guard
+> `npm run smoke:deep-zoom-parity` named above are superseded by ADR-0137: the Mandelbulb is drawn
+> by the ray march's program alone and the parity smoke is gone. In decision 3, "the page's march"
+> is now the page's step rule inside the Mandelbox's own program, and "the skip table" and "the
+> Jacobian variant" it names no longer exist. Whether the Mandelbox can take the ray march's step
+> is a math session of its own (`plans/deep-zoom-shell/NEXT.md`, session 8).
+
 ## Context
 
 The deep zoomer drew one formula, the Mandelbulb, and `core.js` was that formula throughout: the

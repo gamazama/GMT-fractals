@@ -21,6 +21,16 @@
   Commits `80a5916e`, `0672e352`, `15b419bb` on `deep-zoom-tool`.
 - **Numbering:** 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
 
+> **Update 2026-10-11 (the first user of "held while the camera is recorded"; decision unchanged):**
+> the deep zoomer's FREE LOOK (`deep-zoom/route.ts`, grep `LOOK_TRACKS`; commit `3abf4af2`). Beside
+> the payload track `camera.depth`, which stays held on record, the route has three plain tracks
+> in radians (`camera.lookPan`, `camera.lookTilt`, `camera.lookRoll`) registered as RELEASED on
+> record. While a route plays, a turn of the view rides on top of the route's own rotation; with
+> Record on it is written to those three tracks, a key a frame from the hand's first turn, and
+> thinned with `fitSamplesToKeys` when the pass ends. A keyframe set under a recorded look stores
+> the rotation that plays back as what was on screen (route = screen x inverse look). Nothing in
+> the engine changed for it. Guard: `npm run check:deep-zoom-route` (the "look: ..." lines).
+
 ## Context
 
 The engine's timeline holds one number per key. The deep zoomer's camera does not fit: a view is

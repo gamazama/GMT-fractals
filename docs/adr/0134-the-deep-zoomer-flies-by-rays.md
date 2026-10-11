@@ -13,6 +13,13 @@
   The study behind it (pure node, its logs and tools): `H:/tmp/dz-nav-study/`.
 - **Numbering:** 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
 
+> **Update 2026-10-11 (the skip table is gone; decision unchanged):** where this record speaks of
+> "skipping iterations in the CPU probe the way the GPU march does (BLA)", the GPU march no longer
+> does: the skip table left the renderer with the page's program (ADR-0137), and the ray march
+> resumes orbits from checkpoints instead. As a lever for the CPU probe's cost the idea stands on
+> its own; the table's build is in the history of `deep-zoom/renderer/core.js` before `f9f01e1a`
+> (grep `blaBuild` there).
+
 > **Update 2026-10-09 (the owner flew it; decision unchanged, one number added):** "fly mode is
 > working pretty great ... i think maybe its 3x too fast overall". A pace is now A THIRD of the
 > distance a bundle reads (`DZ_PACE_SHARE` in `deep-zoom/flyPace.ts`), which is also what the

@@ -35,29 +35,35 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 commits `3abf4af2` to `a6d7a2e5`, never pushed). After this page comes `NEXT.md` session 3
 (zoom-outs).
 
-**Waiting for him**, each with its place on this page:
-1. **To file, each raises an approval prompt**: the ADR for the one bulb program
-   (`plans/deep-zoom-shell/ADR-DRAFT-one-bulb-program.md`, with ADR-0135's update block); update
-   blocks for ADR-0136 (the free look's tracks) and ADR-0134 (it names BLA);
-   `.claude/rules/sibling-apps.md`, which still cites the retired parity smoke
-   (`npm run check:rule-guards` reports it) and does not yet know the free look, video files or
-   the existing-frames question.
-2. **The frames that do not repeat, retested** (R7c, below): no change that settles once. An odd
-   single render, then the usual picture again. His kernel, his call what to do with it.
-3. **The depth rule for iterations stays** (R7b-2): the margin rule does not hold alone at power 8.
-   The table is there for him.
-4. **A failed ray shader is the boot-failure card** (R7b-2): the orchestrator's reading of "rather
-   an error". And the bulb's Iterations slider now runs to 400.
-5. **A first visit shows the plain picture for 21 to 26 s** while the ray shader builds
-   (`debug/scratch/r7/prod-wait-10s.png`): at the start view it is coarse speckle.
-6. **GMT's image sequences and the existing-frames question** (R6c): read and measured, not
-   built; three calls of his before it is.
-7. **The mediabunny upgrade** (R6b): the changelog is read; an install in `stable/` is his word.
-8. **GMT's H.265 / AV1 / WebM export fails** and a failed export leaves the worker stuck:
-   `@bug PRODUCTION` in `engine-gmt/engine/worker/WorkerExporter.ts`, and a task chip.
-9. Smaller, said in the "As built" notes: no ease back to the route after a free look; Draft has
-   no way back; an Overwrite stopped halfway leaves a mixed folder; the Locations tab's foot sits
-   under the Animate button when its list is long.
+**His answers, 2026-10-11, the evening** (his words in quotes; each was put to him as a numbered
+call):
+1. A failed ray shader is the boot-failure card; the bulb's Iterations slider runs to 400; the
+   seven host path members are gone; the ADR and the rule edits are filed: "1-4 yes, go". Done:
+   `docs/adr/0137-the-deep-zoomers-mandelbulb-has-one-program.md`, update blocks on ADR-0134,
+   0135 and 0136, `.claude/rules/sibling-apps.md` (`check:rule-guards` is clean again).
+2. The first visit's 21 to 26 seconds: "yes we can have a 'loading' notice that gets bigger if
+   they navigate to deep view. we should also investigate if we can reduce the loading time."
+3. Free look that ends turned, and the snap back: "will have to fly and see what you mean".
+4. The odd single render: "if you see any of these odd renders, show me them, i havent seen one
+   yet." Shown to him: `debug/scratch/r7c/odd-render-grain-cold.png`, `-grain-warm.png`,
+   `-power2.png` (the usual render, the odd one, their difference). On grainy ground the odd one
+   is the same picture with another throw of its grain.
+5. Why power 8 needs more iterations than the margin rule gives: "i dont know why". It is a
+   question of `NEXT.md` session 7 now.
+6. GMT's image sequences: "Ask Overwrite / Continue / Cancel, agreed with the other points" (the
+   question's words say what Continue cannot know; the locked focus stays out of the version; the
+   question says Continue is not exact).
+7. MP4 written as it goes, and a keyframe a second, for GMT and fluid-toy: "we would have to
+   check, at some stage mediabunny was exporting mp4's that didnt load in strict players like
+   windows mediaplayer/aftereffects. thats why alot of the process was handrolled back then." So
+   nothing changes there before a file of each kind has been opened in those players.
+8. The mediabunny upgrade, with an install in `stable/`: "this is under the same check as above-
+   yeah you have my approval".
+9. The codec fix (`claude/clever-vaughan-e29a9f`): "we can merge to main, no push yet."
+
+**Still open**: the Locations tab's foot under the Animate button; Draft has no way back; an
+Overwrite stopped halfway leaves a mixed folder; no ease back to the route after a free look
+(his to fly first).
 
 **His rules for the sessions that build the rest** (2026-10-11, his words: "yes"):
 - A brief caps deliberate breaks by number: "at most 3".
