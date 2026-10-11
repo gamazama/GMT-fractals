@@ -411,6 +411,54 @@ For the owner to know before he flies it:
 - **The module's own recorder is not used**: `api.recordToggle` keeps sparse waypoints, throws the
   timing away (`assignCinematicTime`) and writes no keyframe at stop, so the tail is lost.
 
+**As built, 2026-10-11** (one builder: 824 thousand tokens, 89 minutes; +1,809 / -61, of which 699
+lines are app code and 533 the node check). By the builder on the real GPU: the shell smoke 55 of
+55 (stage by stage), a scratch run of the real app (40 lines), last stage's app run again, the
+build. By the orchestrator: typecheck, the trail, route and two host checks, the screenshots
+(`debug/scratch/r4/`). `core.js` untouched. Files: `deep-zoom/trail.ts`,
+`debug/deep-zoom-checks/trail.mts`.
+
+On the owner's sample flight, all 1,291 views as the trail (the cut dropped none):
+
+| Smoothing | Keyframes | Worst, depths | Mean, depths | Seconds at Even pace | Pace on screen, decades a second |
+|---|---|---|---|---|---|
+| 0.01 | 43 | 0.0095 | 0.0019 | 89.6 | 0.47 to 0.54 |
+| 0.05 | 30 | 0.040 | 0.0075 | 89.5 | 0.46 to 0.57 |
+| 0.2 | 21 | 0.19 | 0.035 | 89.6 | 0.41 to 0.61 |
+
+Differs from the plan, with the reason:
+- **A leg of a trail-made route at Even pace is timed along the way that was flown**, not by the
+  straight line between its keyframes, and **the pick holds the depth curve within half a decade of
+  the depth flown** before it looks at position. On his dive the depth shown steps a decade in one
+  view (the view slipping past an edge); timed by the straight line, the leg across it took 19
+  seconds for a stretch flown in 3.4. This is R0's unsettled "which number is depth" showing up:
+  handled here, not settled.
+- **No blocking question on a jump.** A trail deeper than 3 decades is kept as the previous trail,
+  with a toast, and the tab offers "Route from the previous trail".
+
+Decided without the owner:
+- "Formula change" ends the trail on the Mandelbulb / Mandelbox switch only; a power or phase
+  change does not.
+- A view set without a jump (an undo, the route's own frames) joins the trail when the trail has
+  been within one depth of it; otherwise the trail ends there. So an undone flight becomes a detour
+  and is cut, and "Route to here" with the camera parked mid-route trims the route to there.
+- The cut: the same place is within half a depth of the shallower of the two, at depths within a
+  factor of 2; a way back counts as a detour when it is 3 times the straight distance.
+- The cap is 4,096 samples; the oldest stretch halves again each time it is reached.
+- Recording switched off and on again continues the same trail.
+- After a reload or a scene load every keyframe counts as hand-set: the question is asked and the
+  slider is hidden.
+- The timeline's length only grows.
+
+To know:
+- Keyframes cut from a trail have no thumbnail (a number instead).
+- The tab's pace readout divides by the depth curve, so on a cut route it can read a little off 0.5.
+- Costs: the cut took 190 ms on 3,767 samples all at one depth (its worst case); the pick 45 to
+  90 ms on 1,291 samples, not measured at the cap.
+- Not driven in the real app: a formula switch or a scene load ending the trail, Orbit mode, a
+  trail at the cap, a 300-keyframe route.
+- The floating Animate button sits over the bottom of a long keyframe list.
+
 ### R5. The look pass
 
 - Three plain tracks (names to settle, minding the angle rule in `AnimationEngine.interpolate`, which
