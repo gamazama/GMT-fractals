@@ -28,6 +28,14 @@
  *            hold as they did. What the record below calls `heading` in route.ts is `drift` there now.)
  *   solid    nine points of a leg asked with the count keyed there; a leg through the ball is found
  *   play     a leg played from the Route tab stops on its keyframe; a hand stops the timeline
+ *   render   while the route is rendered nothing changes it or plays it; the render's own scrub still sets the camera
+ *   look     FREE LOOK (stage R5, 2026-10-11): a turn while the route plays goes on top of the route's rotation, in the
+ *            camera's own frame, and playback goes on; it is gone when playback stops by itself, and kept when a fly key
+ *            stops it; with Record on a pass writes the three look tracks (a key a frame, thinned when it ends, one undo
+ *            step, the route's own keys untouched) and a scrub plays it back; a keyframe set under a recorded look shows
+ *            what was on screen; Clear. The navigation is played by hand here: `lookTurned` with the orientation it
+ *            would have turned to, `stopRoutePlayback` for a fly key. Every rotation a line compares against is put
+ *            together in this file (axis-angle quaternions, Hamilton's product, the renderer's forward and up).
  *
  * FALSIFICATION RECORD, 2026-10-11, one break per run in deep-zoom/route.ts, the file put back
  * byte for byte after each. The break, then what went red:
@@ -68,6 +76,25 @@
  *              replace and a delete change nothing ..." (K answered a key id, 4 keyframes, 2 undo steps) and the two lines after
  *              "render: and nothing plays", which then stand on a changed route. The guards of `deleteKeyframe`, `playSpan`, the
  *              cut from the trail and the two timings were not taken out one by one.
+ *   - look (2026-10-11, stage R5; THREE breaks, the stage's allowance, each in deep-zoom/route.ts and put back byte for byte):
+ *     1. the look multiplied on the OTHER side in `routeShownAt` (`.multiply(look)` -> `.premultiply(look)`: a turn about the
+ *        world's axes, not the camera's own)                                    -> 5 red: "look: a turn while the route plays is shown
+ *        at once ..." (0.16 rad apart), "look: 200 frames on, the view is the route's rotation THERE times the same turn ..."
+ *        (0.17 rad; the line prints that the other order is 6e-16 apart), "look: a scrub shows the route with the recorded turn
+ *        on top ..." (20.26 deg), "look: and the camera counts as on the route where it stands", "look: scrubbed away and back,
+ *        that keyframe shows what was on screen ..." (1.73 rad)
+ *     2. the listener on `isPlaying` in `installRoute` emptied (nothing settles the look when playback stops)
+ *                                                                             -> 3 red: "look: playback stops with no hand on the
+ *        camera ..." (0 setView), "look: a recorded pass writes keys on the three tracks, thinned when it ends ..." (301, 301,
+ *        301 keys), "look: (and redone, it is back)"
+ *     3. `if (looked) takeCamera()` out of `stopRoutePlayback`                 -> 1 red: "look: a fly key during playback stops it
+ *        and the camera keeps its turn ..." (1 setView, kept false, drives true)
+ *     NOT FALSIFIED, green only: every other "look:" line (no look and zero keys to the digit, Record on with no turn, the
+ *     pass as one undo step, the playback within the fitter's tolerance, the route's keys untouched, the second pass, Key Cam
+ *     writing no look key, the keyframe's stored rotation, K in the middle of a free look, Record coming on over a turn and
+ *     going off in the middle, Clear). AFTER break 2 the pass's sampling was changed (a frame is sampled when the next one is
+ *     shown, and the first key is a frame earlier): the "thinned when it ends" line was seen red before that change and
+ *     green after it, and was not broken again.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -81,12 +108,15 @@ import { captureCameraKeyFrame } from '../../engine/animation/cameraKeyRegistry'
 import { setHost } from '../../deep-zoom/host/current';
 import type { DeepZoomHost, DzParams, DzView } from '../../deep-zoom/host/DeepZoomHost';
 import { startHostSync } from '../../deep-zoom/useHostSync';
+import * as THREE from 'three';
+import { toOrientation } from '../../deep-zoom/orbitCamera';
 import {
-    ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
-    cameraOnRoute, deleteKeyframe, headingNow, installRoute, legFrames, legInSolid, noteMove, playLeg, replaceKeyframe,
-    returnToRoute, routeDrives, routeKeys, routeViewAt, scrubRouteTo, setKeyframe, setRouteRendering, stopRoutePlayback, useRoute,
+    LOOK_FIT_TOLERANCE, LOOK_TRACKS, ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
+    cameraOnRoute, clearLook, deleteKeyframe, headingNow, installRoute, legFrames, legInSolid, lookKeyed, lookTurned, noteMove, playLeg, replaceKeyframe,
+    returnToRoute, routeDrives, routeKeys, routeShownAt, routeViewAt, scrubRouteTo, setKeyframe, setRouteRendering, stopRoutePlayback, useRoute,
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
+import type { Keyframe } from '../../types';
 
 let failed = 0;
 function check(ok: boolean, label: string, detail = ''): void {
@@ -111,7 +141,8 @@ const countFor = (depth: number): number => 32 + Math.ceil(1.35 * Math.max(0, -M
 const fromS = (cam: readonly string[]): V3 => [0, 1, 2].map((j) => Number(BigInt(cam[j]) - S[j]) / ROUTE_UNIT) as V3;
 
 // ── the fake host ────────────────────────────────────────────────────────────────────────────────
-type Call = { name: 'setView'; view: DzView } | { name: 'setParams'; patch: DzParams } | { name: 'estimateAtPoint'; cam: string[]; iters: number | undefined };
+type Call = { name: 'setView'; view: DzView } | { name: 'setParams'; patch: DzParams } | { name: 'estimateAtPoint'; cam: string[]; iters: number | undefined }
+    | { name: 'setOrientation' };
 const calls: Call[] = [];
 const viewSetListeners = new Set<() => void>();
 let depthHere = 1;
@@ -131,6 +162,12 @@ const host = {
     },
     setParams: (patch: DzParams): void => { calls.push({ name: 'setParams', patch: { ...patch } }); },
     orientation: () => ({ yaw: view.yaw, pitch: view.pitch, roll: view.roll ?? 0 }),
+    // A turn, as the navigation makes one: the angles only, and no `viewSet`.
+    setOrientation: (yaw: number, pitch: number, roll: number): void => {
+        calls.push({ name: 'setOrientation' });
+        view = { ...view, yaw, pitch };
+        if (roll) view.roll = roll; else delete view.roll;
+    },
     telemetry: () => ({ depth: depthHere, iters: view.iters }),
     sense: () => ({ near: depthHere, second: depthHere, hits: 7, open: 0, inside: false, marched: true }),
     thumbnail: () => `picture of ${view.cam[0].slice(0, 12)}`,
@@ -379,6 +416,243 @@ check(setViews().length === n + 1 && sameCamera(host.getView(), keys[1].view) &&
     'render: the render\'s own scrub still puts the camera on the route');
 setRouteRendering(false);
 check(setKeyframe() !== null && anim().undoStack.length === heldUndo + 1, 'render: when it has ended a keyframe can be set again');
+
+// ── look ─────────────────────────────────────────────────────────────────────────────────────────
+// Free look: a turn on top of the route while it plays. What the navigation does is done here by
+// hand: it reads the orientation on screen, turns it, and tells the route (`lookTurned`); a fly key
+// is `stopRoutePlayback`. Every rotation the lines compare against is put together HERE, from
+// axis-angle quaternions and Hamilton's product, and compared as the two directions the renderer
+// draws with (its forward and its up, by its own formula) - not with route.ts's own arithmetic.
+type Q = [number, number, number, number];
+type Look = { yaw: number; pitch: number; roll?: number };
+const axisQ = (x: number, y: number, z: number, angle: number): Q => { const s = Math.sin(angle / 2); return [x * s, y * s, z * s, Math.cos(angle / 2)]; };
+const mul = (a: Q, b: Q): Q => [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+];
+const conj = (q: Q): Q => [-q[0], -q[1], -q[2], q[3]];
+const turnBy = (q: Q, v: V3): V3 => { const r = mul(mul(q, [v[0], v[1], v[2], 0]), conj(q)); return [r[0], r[1], r[2]]; };
+/** An orientation as a turn of the identity camera (forward -Z, up +Y): yaw about Y, then pitch about X, then roll about Z. */
+const routeQ = (o: Look): Q => mul(mul(axisQ(0, 1, 0, -(o.yaw + Math.PI / 2)), axisQ(1, 0, 0, o.pitch)), axisQ(0, 0, 1, o.roll ?? 0));
+/** A look in the camera's own frame: pan about its up, then tilt about its right, then roll about its view axis. */
+const lookQ = (a: readonly number[]): Q => mul(mul(axisQ(0, 1, 0, -a[0]), axisQ(1, 0, 0, a[1])), axisQ(0, 0, 1, a[2]));
+/** The renderer's forward and up for an orientation (grep `function basis()` in deep-zoom/renderer/core.js). */
+const drawnWith = (o: Look): { fwd: V3; up: V3 } => {
+    const cp = Math.cos(o.pitch), r = o.roll ?? 0;
+    const fwd: V3 = [cp * Math.cos(o.yaw), Math.sin(o.pitch), cp * Math.sin(o.yaw)], right: V3 = [-Math.sin(o.yaw), 0, Math.cos(o.yaw)];
+    const up0: V3 = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    return { fwd, up: [up0[0] * Math.cos(r) - right[0] * Math.sin(r), up0[1] * Math.cos(r) - right[1] * Math.sin(r), up0[2] * Math.cos(r) - right[2] * Math.sin(r)] };
+};
+/** How far, in radians, the picture drawn with `o` is from the one the turn `q` draws. */
+const apart = (o: Look, q: Q): number => {
+    const d = drawnWith(o), f = turnBy(q, [0, 0, -1]), u = turnBy(q, [0, 1, 0]);
+    return Math.max(Math.hypot(d.fwd[0] - f[0], d.fwd[1] - f[1], d.fwd[2] - f[2]), Math.hypot(d.up[0] - u[0], d.up[1] - u[1], d.up[2] - u[2]));
+};
+/** The orientation the navigation would hand over for a turn `q` (the angles nearest the ones on screen). */
+const orientationOf = (q: Q): { yaw: number; pitch: number; roll: number } => toOrientation(new THREE.Quaternion(q[0], q[1], q[2], q[3]), host.orientation().yaw);
+const lookKeys = (): Keyframe[][] => LOOK_TRACKS.map((id) => anim().sequence.tracks[id]?.keyframes ?? []);
+const play = (frames: number): void => { for (let i = 0; i < frames; i++) animationEngine.tick(1 / 30); };
+const sameStrings = (a: readonly string[], b: readonly string[] | undefined): boolean => !!b && a.every((c, i) => c === b[i]);
+const degrees = (radians: number): string => `${(radians * 180 / Math.PI).toFixed(4)} deg`;
+
+anim().deleteAllTracks();
+anim().setDuration(2000);
+flyTo(1, { yaw: -1.2, pitch: 0.3 });
+setKeyframe();
+flyTo(1e-10, { yaw: -1.1, pitch: 0.25 });
+setKeyframe();
+flyTo(1e-20, { yaw: -1.0, pitch: 0.2, roll: 0.25 });
+setKeyframe();
+keys = routeKeys();
+check(keys.length === 3 && keys.map((k) => k.frame).join() === '0,600,1200' && anim().fps === 30, 'look: (a route of three keyframes, 30 frames a second)', `frames ${keys.map((k) => k.frame)}, fps ${anim().fps}`);
+check(apart(keys[2].view, routeQ(keys[2].view)) < 1e-15 && apart({ yaw: 0.4, pitch: -1.1, roll: 2 }, routeQ({ yaw: 0.4, pitch: -1.1, roll: 2 })) < 1e-15,
+    'look: (the turn put together by hand draws with the renderer\'s own forward and up)');
+
+// No look: the route's view as it is.
+check([0, 150.5, 600, 900, 1200, 1500].every((f) => JSON.stringify(routeShownAt(f)) === JSON.stringify(routeViewAt(f))), 'look: with no free look the view shown is the route\'s own, to the digit');
+
+// A turn while the route plays: on top of it, and playback goes on.
+scrubRouteTo(0);
+anim().play();
+play(10);
+const handTurn = lookQ([0.3, -0.2, 0.15]);
+let lookAtFrame = anim().currentFrame;
+n = setViews().length;
+lookTurned(orientationOf(mul(routeQ(host.orientation()), handTurn)));
+check(setViews().length === n && anim().isPlaying && routeDrives() && lookAtFrame === 10
+    && apart(host.orientation(), mul(routeQ(routeViewAt(lookAtFrame) as Look), handTurn)) < 1e-12 && sameStrings(host.getView().cam, routeViewAt(lookAtFrame)?.cam),
+    'look: a turn while the route plays is shown at once, with no setView; the timeline plays on and the position is the route\'s',
+    `${setViews().length - n} setView, playing ${anim().isPlaying}, drives ${routeDrives()}, ${apart(host.orientation(), mul(routeQ(routeViewAt(lookAtFrame) as Look), handTurn))} apart`);
+play(200);
+lookAtFrame = anim().currentFrame;
+const routeThere = routeViewAt(lookAtFrame) as Look & { cam: string[] };
+check(lookAtFrame === 210 && apart(routeThere, routeQ(routeViewAt(10) as Look)) > 1e-3
+    && apart(host.orientation(), mul(routeQ(routeThere), handTurn)) < 1e-12 && sameStrings(host.getView().cam, routeThere.cam),
+    'look: 200 frames on, the view is the route\'s rotation THERE times the same turn in the camera\'s own frame (put together by hand)',
+    `frame ${lookAtFrame}, ${apart(host.orientation(), mul(routeQ(routeThere), handTurn))} apart; the other order is ${apart(host.orientation(), mul(handTurn, routeQ(routeThere)))} apart`);
+n = setViews().length;
+anim().pause();
+check(setViews().length === n + 1 && sameCamera(host.getView(), routeViewAt(lookAtFrame) as Look & { cam: string[] }) && routeDrives() && cameraOnRoute(),
+    'look: playback stops with no hand on the camera: the hand\'s turn is gone and the view is the route\'s again, to the digit, one setView',
+    `${setViews().length - n} setView, drives ${routeDrives()}, on the route ${cameraOnRoute()}`);
+
+// A fly key during playback: it stops, and the camera keeps the turn.
+anim().play();
+play(10);
+lookTurned(orientationOf(mul(routeQ(host.orientation()), handTurn)));
+const turnedOnScreen = host.getView();
+n = setViews().length;
+stopRoutePlayback();                             // what a held W does (DeepZoomNavigation: a move)
+check(!anim().isPlaying && setViews().length === n && sameCamera(host.getView(), turnedOnScreen) && !routeDrives()
+    && !sameCamera(host.getView(), routeViewAt(anim().currentFrame) as Look & { cam: string[] }),
+    'look: a fly key during playback stops it and the camera keeps its turn, exactly as it was on screen; the camera is the user\'s',
+    `playing ${anim().isPlaying}, ${setViews().length - n} setView, kept ${sameCamera(host.getView(), turnedOnScreen)}, drives ${routeDrives()}`);
+returnToRoute();
+check(sameCamera(host.getView(), routeViewAt(anim().currentFrame) as Look & { cam: string[] }), 'look: Return puts it back on the route, the turn forgotten');
+
+// Recorded. Record on and nothing turned: nothing is written.
+const routeHeld = JSON.stringify(depthKeys()), countsHeld = JSON.stringify(countKeys());
+anim().toggleRecording();
+check(anim().isRecording && anim().recordCamera, 'look: (Record is on, and the camera is recorded)');
+scrubRouteTo(0);
+let lookUndo = anim().undoStack.length;
+anim().play();
+play(30);
+anim().pause();
+check(anim().undoStack.length === lookUndo && !lookKeyed() && lookKeys().every((k) => k.length === 0), 'look: Record on and no turn: nothing is written, and no undo step is left',
+    `${anim().undoStack.length - lookUndo} steps, keys ${lookKeys().map((k) => k.length)}`);
+// A pass of 300 frames, ten seconds, in the app's own order: the timeline's tick shows a frame, then
+// the navigation's turns the view. The look on screen with frame n is `turnAt(n)`: a pan that runs
+// past half a turn (4 radians), a tilt up and back, a roll.
+const turnAt = (frame: number): V3 => { const s = Math.min(1, frame / 300), e = s * s * (3 - 2 * s); return [4 * e, 0.6 * Math.sin(Math.PI * s), -0.8 * e * e]; };
+/** One frame of a pass: the timeline moves on a frame, and the hand turns the view to `look(frame)` there. */
+const passFrame = (look: (frame: number) => V3): void => {
+    animationEngine.tick(1 / 30);
+    lookTurned(orientationOf(mul(routeQ(routeViewAt(anim().currentFrame) as Look), lookQ(look(anim().currentFrame)))));
+};
+scrubRouteTo(0);
+lookUndo = anim().undoStack.length;
+anim().play();
+let denseAt150 = 0;
+for (let f = 0; f < 300; f++) {
+    passFrame(turnAt);
+    if (anim().currentFrame === 150) denseAt150 = Math.min(...lookKeys().map((k) => k.length));
+}
+// At frame 150 the frames 0 (the one before the pass began) to 149 are written: a frame is sampled when the next one is shown.
+check(anim().currentFrame === 300 && anim().isPlaying && denseAt150 === 150, 'look: while a pass runs every played frame is a key on each of the three tracks', `frame ${anim().currentFrame}, ${denseAt150} keys at frame 150`);
+anim().pause();
+const thinned = lookKeys().map((k) => k.length);
+check(anim().undoStack.length === lookUndo + 1 && thinned.every((c) => c >= 2 && c < 60),
+    `look: a recorded pass writes keys on the three tracks, thinned when it ends, in one undo step (${thinned.join(', ')} keys for 301 frames, ten seconds)`,
+    `${anim().undoStack.length - lookUndo} steps, keys ${thinned}`);
+check(JSON.stringify(depthKeys()) === routeHeld && JSON.stringify(countKeys()) === countsHeld, 'look: the route\'s own keys, their payloads and the iteration keys are untouched by it');
+let worstTrack = 0;
+for (let f = 0; f <= 300; f++) LOOK_TRACKS.forEach((id, j) => { worstTrack = Math.max(worstTrack, Math.abs(animationEngine.evaluateTrack(anim().sequence.tracks[id], f) - turnAt(f)[j])); });
+check(worstTrack <= LOOK_FIT_TOLERANCE * 1.02 && animationEngine.evaluateTrack(anim().sequence.tracks[LOOK_TRACKS[0]], 300) > Math.PI,
+    `look: the three tracks play the pass back within the fitter's tolerance, the pan running on past half a turn (worst ${degrees(worstTrack)} of ${degrees(LOOK_FIT_TOLERANCE)})`,
+    `worst ${degrees(worstTrack)}`);
+let worstView = 0, onPath = true;
+for (const f of [0, 37, 150, 222.5, 300, 450, 600]) {
+    scrubRouteTo(f);
+    worstView = Math.max(worstView, apart(host.orientation(), mul(routeQ(routeViewAt(f) as Look), lookQ(turnAt(f)))));
+    onPath = onPath && sameStrings(host.getView().cam, routeViewAt(f)?.cam);
+}
+check(worstView < 3 * LOOK_FIT_TOLERANCE && onPath && cameraOnRoute(),
+    `look: a scrub shows the route with the recorded turn on top, and holds it past the pass; the position is the route's (worst ${degrees(worstView)} from the turn put together by hand)`,
+    `worst ${degrees(worstView)}, on the path ${onPath}`);
+anim().undo();
+check(!lookKeyed() && JSON.stringify(depthKeys()) === routeHeld, 'look: that one step undone takes the whole pass away, and nothing of the route');
+anim().redo();
+check(lookKeys().map((k) => k.length).join() === thinned.join(), 'look: (and redone, it is back)');
+
+// A second pass over frames 100 to 160: the keys in its span are replaced, the others stay.
+const outside = (ks: Keyframe[][]): string => JSON.stringify(ks.map((k) => k.filter((key) => key.frame < 100 || key.frame > 160).map((key) => [key.frame, key.value])));
+const before2 = outside(lookKeys());
+scrubRouteTo(100);
+anim().play();
+for (let f = 100; f < 160; f++) passFrame((frame) => { const was = turnAt(frame); return [was[0] + 0.2 * Math.sin(Math.PI * (frame - 100) / 60), was[1], was[2]]; });
+anim().pause();
+const panAt130 = animationEngine.evaluateTrack(anim().sequence.tracks[LOOK_TRACKS[0]], 130);
+check(outside(lookKeys()) === before2 && Math.abs(panAt130 - (turnAt(130)[0] + 0.2)) <= LOOK_FIT_TOLERANCE * 1.02 && JSON.stringify(depthKeys()) === routeHeld,
+    'look: a second pass over part of the first replaces the keys in its span and leaves every key outside it at its frame and value',
+    `outside the same ${outside(lookKeys()) === before2}, pan at 130 ${panAt130} for ${turnAt(130)[0] + 0.2}`);
+
+// A keyframe set over a recorded look: what was on screen is what it shows.
+flyTo(1e-4, { yaw: 0.7, pitch: -0.4, roll: 0.3 });  // the hands take the camera and frame something
+const framed = host.getView(), lookHeld = JSON.stringify(lookKeys());
+const lookThere = LOOK_TRACKS.map((id) => animationEngine.evaluateTrack(anim().sequence.tracks[id], 200));
+captureCameraKeyFrame(200);                         // Key Cam, inside the recorded look
+const keyed = routeKeys().find((k) => k.frame === 200);
+check(JSON.stringify(lookKeys()) === lookHeld, 'look: Key Cam keys the route only: no look key is written or moved');
+check(!!keyed && sameStrings(keyed.view.cam, framed.cam) && apart(keyed.view, mul(routeQ(framed), conj(lookQ(lookThere)))) < 1e-12 && apart(keyed.view, routeQ(framed)) > 0.5,
+    'look: a keyframe set over a recorded look holds the rotation that, with the look on top, is the one on screen (put together by hand)',
+    keyed ? `${apart(keyed.view, mul(routeQ(framed), conj(lookQ(lookThere))))} apart; from the view on screen ${apart(keyed.view, routeQ(framed))}` : 'no keyframe');
+check(cameraOnRoute() && apart(host.orientation(), routeQ(framed)) < 1e-12, 'look: and the camera counts as on the route where it stands');
+scrubRouteTo(0);
+scrubRouteTo(200);
+check(sameStrings(host.getView().cam, framed.cam) && apart(host.orientation(), routeQ(framed)) < 1e-12,
+    'look: scrubbed away and back, that keyframe shows what was on screen when it was set', `${apart(host.orientation(), routeQ(framed))} apart`);
+
+// Clear: the three tracks go, in one step, and a keyframe's frame shows its stored view again.
+lookUndo = anim().undoStack.length;
+clearLook();
+check(!lookKeyed() && LOOK_TRACKS.every((id) => !anim().sequence.tracks[id]) && anim().undoStack.length === lookUndo + 1, 'look: Clear removes the three tracks, in one undo step',
+    `${anim().undoStack.length - lookUndo} steps`);
+// Tracks that hold keys and turn nothing are no look either: the stored view, not one taken through a quaternion.
+useAnimationStore.setState((s) => ({ sequence: { ...s.sequence, tracks: { ...s.sequence.tracks, ...Object.fromEntries(LOOK_TRACKS.map((id) => [id, {
+    id, type: 'float' as const, label: id, keyframes: [0, 1200].map((frame) => ({ id: `${id}-${frame}`, frame, value: 0, interpolation: 'Linear' as const, autoTangent: false, brokenTangents: false })),
+}])) } } }));
+keys = routeKeys();
+let toTheDigit = lookKeyed();
+for (const key of keys) { scrubRouteTo(key.frame); toTheDigit = toTheDigit && sameCamera(host.getView(), key.view); }
+check(toTheDigit, 'look: with look keys that turn nothing, each keyframe\'s frame still hands the host its stored view, to the digit');
+clearLook();
+anim().toggleRecording();
+
+// K in the middle of a free look (Record is off): what is on screen is keyed, the turn included.
+scrubRouteTo(0);
+anim().play();
+play(10);
+lookTurned(orientationOf(mul(routeQ(host.orientation()), handTurn)));
+const seen = host.getView(), keysWere = routeKeys().length;
+setKeyframe();
+const added = routeKeys()[routeKeys().length - 1];
+check(!anim().isPlaying && routeKeys().length === keysWere + 1 && sameCamera(added.view, seen) && sameCamera(host.getView(), seen) && !lookKeyed(),
+    'look: K in the middle of a free look stops the timeline and keys what is on screen, the turn included', `playing ${anim().isPlaying}, ${routeKeys().length - keysWere} added`);
+deleteKeyframe(added.id);
+
+// Record comes on over a turn the hand already holds, the display runs at 1.5 frames a tick, and
+// Record goes off again while the timeline plays. The look on screen with frame f: a pan of
+// 0.3 + 0.004 a frame from frame 5 on.
+const panAt = (frame: number): V3 => [0.3 + 0.004 * (frame - 5), 0, 0];
+scrubRouteTo(0);
+anim().play();
+play(5);
+lookTurned(orientationOf(mul(routeQ(host.orientation()), lookQ(panAt(5)))));
+lookUndo = anim().undoStack.length;
+anim().toggleRecording();
+for (let i = 0; i < 40; i++) {
+    animationEngine.tick(0.05);
+    lookTurned(orientationOf(mul(routeQ(routeViewAt(anim().currentFrame) as Look), lookQ(panAt(anim().currentFrame)))));
+}
+const denseSkipped = lookKeys()[0].map((k) => k.frame);
+anim().toggleRecording();
+let worstSkipped = 0;
+for (let f = 5; f <= 65; f++) worstSkipped = Math.max(worstSkipped, Math.abs(animationEngine.evaluateTrack(anim().sequence.tracks[LOOK_TRACKS[0]], f) - panAt(f)[0]));
+check(anim().currentFrame === 65 && denseSkipped.join() === Array.from({ length: 60 }, (_, i) => i + 4).join() && worstSkipped <= LOOK_FIT_TOLERANCE * 1.02
+    && animationEngine.evaluateTrack(anim().sequence.tracks[LOOK_TRACKS[0]], 4) === 0,
+    'look: Record coming on over a turn already in the hand begins the pass with it, and the whole frames a slow display skips are filled in',
+    `frame ${anim().currentFrame}, keys at ${denseSkipped[0]}..${denseSkipped[denseSkipped.length - 1]} (${denseSkipped.length}), worst ${degrees(worstSkipped)}`);
+const afterOff = lookKeys().map((k) => k.length);
+animationEngine.tick(0.05);
+check(anim().isPlaying && anim().undoStack.length === lookUndo + 1 && afterOff.every((c) => c >= 2 && c < 20)
+    && apart(host.orientation(), mul(routeQ(routeViewAt(anim().currentFrame) as Look), lookQ(panAt(65)))) < 3 * LOOK_FIT_TOLERANCE,
+    `look: Record going off while the timeline plays ends the pass there (thinned to ${afterOff.join(', ')} keys, one undo step), and the timeline plays on with the look it recorded`,
+    `playing ${anim().isPlaying}, ${anim().undoStack.length - lookUndo} steps, keys ${afterOff}`);
+anim().pause();
+clearLook();
 
 stopSync();
 console.log(failed === 0 ? '\nroute: all green' : `\nroute: ${failed} FAILED`);

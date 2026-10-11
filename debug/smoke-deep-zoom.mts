@@ -462,7 +462,10 @@ class StageSession {
     async boot(opts: DzBootOptions = {}, alive: () => void = () => undefined): Promise<DzBoot> {
         const page = this.page;   // this page throughout, even if the session is given another meanwhile
         // Through a blank page: an address that differs only in its hash would not reload.
-        await page.goto('about:blank');
+        // Two minutes, not the default 30 s: a page whose ray march shader is still building does not
+        // let go for 36 to 44 s (measured 2026-10-11 in a fresh Chrome, debug/scratch/r5/goto-timing.mts),
+        // which made the first step of a stage-only run time out here.
+        await page.goto('about:blank', { timeout: 120_000 });
         if (opts.clearStorage) {
             const cdp = await this.context.newCDPSession(page);
             await cdp.send('Storage.clearDataForOrigin', {

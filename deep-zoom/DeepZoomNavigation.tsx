@@ -73,6 +73,12 @@
  *   not held by it: they fly along one ray to the pivot, and the rays keep them off it.
  *   A flight - from the first key down to the last key up - or an orbit gesture is one undo step
  *   when it moved the camera (`flightBegan` / `flightEnded` in `deep-zoom/locations.ts`).
+ *   WHILE A ROUTE PLAYS the looks are a FREE LOOK and the moves take the camera (THE ROUTE, below):
+ *     drag on the picture (Fly mode), the look stick, Q / E (both modes)
+ *                        turn the view on top of the route; the route plays on
+ *     W A S D, Space, C, the move stick, the wheel (all in Fly mode), any press or wheel in Orbit mode
+ *                        stop the route and hand over the camera where it is, turn included
+ *     (in Orbit mode the travel keys move nothing and stop nothing, and Space plays the timeline)
  *
  * THE ROUTE (`deep-zoom/route.ts`: the camera move on the timeline) AND THE TRAIL
  *   - Every move this file makes is told to the route (`noteMove`: the camera is the hands' again),
@@ -82,12 +88,23 @@
  *   - A DIVE MOVES THE CAMERA INSIDE THE HOST, where neither call sees it: while one is in flight
  *     this tick asks the trail to follow, every frame (`followTrail`: a camera string read and a
  *     subtraction, no ray).
- *   - A HAND ON THE CONTROLS STOPS A TIMELINE THAT IS PLAYING A ROUTE (`stopRoutePlayback`): a fly
- *     key or a look drag (the hook's session, its begin and each frame after it), Q / E, an orbit
- *     press or wheel, and the wheel in Fly mode. The user carries on from where the camera is.
+ *   - A MOVE STOPS A TIMELINE THAT IS PLAYING A ROUTE (`stopRoutePlayback`): a fly key that travels
+ *     or the move stick, in Fly mode (`moveHeld`, asked on the hook's session: its begin and each
+ *     frame after it, so a key already held when Play was pressed, or added to a look, counts), an orbit press
+ *     or wheel, and the wheel in Fly mode. The user carries on from where the camera is.
  *     With no keyframe there is no route, and the timeline plays on while the hands fly.
- *   - While a route plays no fly step is taken and the turn's ease is dropped: a roll still
- *     easing out would otherwise turn the camera off the route between two of its frames.
+ *   - A LOOK DOES NOT: WHILE A ROUTE PLAYS IT IS A FREE LOOK (the owner, 2026-10-11: "route first -
+ *     the camera second"). The fly step runs with every move taken out (`lookOnly`) and a sink
+ *     that goes nowhere, and its turn is told to the route (`lookTurned`) instead of set on the
+ *     camera: the route puts it on top of its own rotation, and records it when the timeline's
+ *     Record is on. A free look is no flight: the `flying` flag stays down and no undo step is
+ *     left (`onFlyActive` opens the flight only once nothing plays a route).
+ *   - THE TURN'S EASE IS DROPPED AT BOTH ENDS OF A PLAY. At Play: a roll still easing out from
+ *     before it is not a free look. When playback stops with the camera still the route's (Pause,
+ *     the route's end): a roll still easing out would be a turn by the hands, and take the camera
+ *     off the route a frame at a time. When a hand took the camera, the ease goes on: it is theirs.
+ *   - A LOOK DRAG STILL HELD WHEN THE ROUTE ENDS turns the camera from there on, as a look drag
+ *     does whenever nothing plays; that takes the camera, and opens a flight.
  *
  * PITFALLS
  *   - Keys are heard on the WINDOW, whatever has focus; only a text field stops them (the hook's
@@ -137,6 +154,12 @@
  *   standing test opens them: a fly key stopping a playing timeline, the heading of a keyframe set
  *   after W, and the trail growing under W and under a dive, were driven in the app on 2026-10-11
  *   (debug/scratch/r3/app-route.mts, debug/scratch/r4/app-trail.mts).
+ * @assumption A free look is wired as THE ROUTE AND THE TRAIL says. No standing test opens it: a
+ *   look drag and Q while a route plays (the view turned, the timeline still playing, nothing
+ *   written), Pause (the route's view again, and no ease turning it afterwards), a look drag then
+ *   W (stopped, the turn kept), and a recorded pass were driven in the app on 2026-10-11
+ *   (debug/scratch/r5/app-look.mts). The look stick, the move stick, Q / E in Orbit mode, a key
+ *   held when Play is pressed, and a look drag held past the route's end were not driven.
  */
 import React, { useEffect, useRef } from 'react';
 import { registerTick, TICK_PHASE } from '../engine/TickRegistry';
@@ -157,7 +180,7 @@ import { flightBegan, flightEnded } from './locations';
 import { DZ_FLY_SPEED_RANGE, DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf, setFlySpeed, setFlying, setReadings, useDzNavigation } from './navigationState';
 import { orbitDrag, orbitTurn, orbitZoom, viewRay } from './orbitCamera';
 import type { OrbitPivot, V3 } from './orbitCamera';
-import { noteMove, noteTurn, routePlays, routeRendering, routeSetsView, stopRoutePlayback } from './route';
+import { lookTurned, noteMove, noteTurn, routeDrives, routePlays, routeRendering, routeSetsView, stopRoutePlayback } from './route';
 import { followTrail } from './trail';
 
 /** The tick that flies the camera. A throwing tick raises no page error: the smoke watches the
@@ -222,12 +245,42 @@ const orbitInputs = (held: FlyInputs['move']): FlyInputs => ({
     move: { ...held, forward: false, backward: false, left: false, right: false, up: false, down: false },
     look: { x: 0, y: 0 }, moveJoy: { x: 0, y: 0 }, isDragging: false, dragDelta: { x: 0, y: 0 }, invertY: false,
 });
-// The hook's session (a key or a fly look-drag held). In Orbit mode a held key moves nothing, and
-// its begin must not restart the take-off view of an orbit gesture in the air (see PITFALLS).
-// In either mode a hand on the controls stops the timeline (THE ROUTE in the header).
-const onFlyBegin = (): void => { stopRoutePlayback(); if (orbiting()) return; setFlying(true); flightBegan(); };
-const onFlyEnd = (): void => { if (orbiting()) return; setFlying(false); flightEnded(); };
-/** The wheel in Fly mode: the speed, and (as any hand on the controls) the end of a playing route. */
+/** A MOVE is held, as against a look: a fly key that travels (W A S D, Space, C) or the move stick.
+ *  A look drag, the look stick and Q / E are not moves. In Orbit mode nothing held is a move: the
+ *  travel keys move nothing there, and Space is the timeline's Play (held as a hand holds it, it
+ *  stopped the route it had just started: measured 2026-10-11, debug/scratch/r5/probe-orbit.txt). */
+const moveHeld = (inp: NavigationInput): boolean => {
+    if (orbiting()) return false;
+    const m = inp.moveState.current, stick = inp.joystickMove.current;
+    return m.forward || m.backward || m.left || m.right || m.up || m.down || Math.abs(stick.x) > 0.01 || Math.abs(stick.y) > 0.01;
+};
+/** The fly step's inputs with every move taken out: what is left can only turn the view. */
+const lookOnly = (inputs: FlyInputs): FlyInputs => ({
+    ...inputs,
+    move: { ...inputs.move, forward: false, backward: false, left: false, right: false, up: false, down: false },
+    moveJoy: { x: 0, y: 0 },
+});
+const nowhere = (): void => undefined;
+// The hook's session (a key or a fly look-drag held), each frame of it. A MOVE stops a timeline
+// that is playing a route, in either mode; a look does not (THE ROUTE in the header). The flight -
+// the `flying` flag and the undo step - opens once nothing plays a route: a free look is no flight.
+// In Orbit mode a held key moves nothing, and no flight is opened there: it must not restart the
+// take-off view of an orbit gesture in the air (see PITFALLS).
+const flight = { open: false };
+const onFlyActive = (inp: NavigationInput): void => {
+    if (moveHeld(inp)) stopRoutePlayback();
+    if (flight.open || orbiting() || routePlays()) return;
+    flight.open = true;
+    setFlying(true);
+    flightBegan();
+};
+const onFlyEnd = (): void => {
+    if (!flight.open) return;
+    flight.open = false;
+    setFlying(false);
+    flightEnded();
+};
+/** The wheel in Fly mode: the speed, and (as any hand that takes the controls) the end of a playing route. */
 const setSpeedByWheel = (v: number): void => { stopRoutePlayback(); setFlySpeed(v); };
 
 /** An orbit drag in the air: its pivot, and the pixels the pointer has moved since the last tick.
@@ -265,6 +318,10 @@ export const DeepZoomNavigation: React.FC = () => {
     const mode = useEngineStore(cameraModeOf);
     const speed = useDzNavigation((s) => s.flySpeed);
     const reticle = useRef<HTMLDivElement>(null);
+    // The hook's refs are stable, the object it returns is not: the tick reads it through a ref,
+    // and so does the session's callback, which the hook only calls from the tick's `inp.frame`.
+    const inputRef = useRef<NavigationInput | null>(null);
+    const sessionActive = (): void => { if (inputRef.current) onFlyActive(inputRef.current); };
 
     const input = useNavigationInput({
         element,
@@ -278,12 +335,10 @@ export const DeepZoomNavigation: React.FC = () => {
         wheelStep: dzWheelStep,
         isLocked: navigationLocked,
         isSuppressed: keysSuppressed,
-        onActivityBegin: onFlyBegin,
-        onActivityPoke: stopRoutePlayback,          // a key already held when Play was pressed
+        onActivityBegin: sessionActive,
+        onActivityPoke: sessionActive,              // a key already held when Play was pressed; a move added to a look
         onActivityEnd: onFlyEnd,
     });
-    // The hook's refs are stable, the object it returns is not: the tick reads it through a ref.
-    const inputRef = useRef<NavigationInput>(input);
     inputRef.current = input;
 
     useEffect(() => {
@@ -294,6 +349,8 @@ export const DeepZoomNavigation: React.FC = () => {
         const pace = createPace();
         let lastRead = -Infinity;
         let lastPublished = -Infinity;
+        /** A route was playing at the last tick (the fly step was a free look). */
+        let wasPlaying = false;
         // A jump: the pace of the place just left says nothing about this one. (A route sets the
         // view every frame it plays: the reading keeps its 8 a second then, it is not asked for at once.)
         const offViewSet = host.on('viewSet', () => { pace.reset(); if (!routeSetsView()) lastRead = -Infinity; });
@@ -478,8 +535,8 @@ export const DeepZoomNavigation: React.FC = () => {
         };
 
         const offTick = registerTick(DZ_NAV_TICK_NAME, TICK_PHASE.ANIMATE, (delta) => {
-            if (getHost() !== host) return;
             const inp = inputRef.current;
+            if (getHost() !== host || !inp) return;
             inp.frame(delta);
 
             const dragging = inp.isDraggingRef.current;
@@ -499,27 +556,36 @@ export const DeepZoomNavigation: React.FC = () => {
             let pivotMark: { pivot: OrbitPivot; height: number; held: boolean } | null = null;
             if (inOrbit && !locked) pivotMark = orbitFrame(now);
             else if (orbit.drag || orbit.wheel || orbit.gesture) { orbit.drag = null; orbit.wheel = null; closeGesture(); }   // locked, or Orbit mode left, with a gesture in the air: it ends here
-            // The fly step, in both modes: in Orbit mode it is handed the roll keys alone. Not while
-            // a route plays: any hand on the controls has stopped it by now (`inp.frame` above,
-            // the pointer listeners), so what is left is a turn easing out, which would pull the
-            // camera off the route a frame at a time.
-            if (routePlays()) camera.reset();
-            else if (!locked) {
+            // The fly step, in both modes: in Orbit mode it is handed the roll keys alone.
+            // WHILE A ROUTE PLAYS IT IS A FREE LOOK: any move has stopped the route by now
+            // (`inp.frame` above, the pointer listeners), the step is handed the looks alone and
+            // its turn goes on top of the route (`lookTurned`) instead of to the camera.
+            const playing = routePlays();
+            if (playing !== wasPlaying) {
+                wasPlaying = playing;
+                // Play: a turn still easing out from before it is not a free look. Stopped with
+                // the camera still the route's (Pause, the route's end): a roll still easing out
+                // is dropped, or it would turn into a turn that takes the camera.
+                if (playing || routeDrives()) camera.reset();
+            }
+            if (locked) { if (playing) camera.reset(); }
+            else {
                 const look = host.orientation();
                 const cp = Math.cos(look.pitch);
                 const fwd: V3 = [cp * Math.cos(look.yaw), Math.sin(look.pitch), cp * Math.sin(look.yaw)];
                 const held = inp.moveState.current;
+                const inputs: FlyInputs = inOrbit ? orbitInputs(held) : {
+                    move: held,
+                    look: inp.joystickLook.current,
+                    moveJoy: inp.joystickMove.current,
+                    isDragging: dragging,
+                    dragDelta: { x: dragX, y: dragY },
+                    invertY: inp.invertY,
+                };
                 const turned = camera.step({
                     delta,
                     ...look,
-                    inputs: inOrbit ? orbitInputs(held) : {
-                        move: held,
-                        look: inp.joystickLook.current,
-                        moveJoy: inp.joystickMove.current,
-                        isDragging: dragging,
-                        dragDelta: { x: dragX, y: dragY },
-                        invertY: inp.invertY,
-                    },
+                    inputs: playing ? lookOnly(inputs) : inputs,
                     speed: inp.speedRef.current,
                     distance: host.rawDistance(),
                     sense: nav.followView ? (direction) => {
@@ -537,9 +603,9 @@ export const DeepZoomNavigation: React.FC = () => {
                         });
                         return { pace: value, limit: DZ_NAV_STRIDE_SHARE * ahead.near };
                     } : undefined,
-                    translate,
+                    translate: playing ? nowhere : translate,
                 });
-                if (turned) turnTo(turned);
+                if (turned) { if (playing) lookTurned(turned); else turnTo(turned); }
             }
             // A dive moves the camera inside the host: the trail is asked to follow it here.
             if (useDive.getState().dive) followTrail();

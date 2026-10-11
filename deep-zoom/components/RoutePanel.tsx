@@ -18,7 +18,12 @@
  *   - Smoothing, while the route came from a trail: how closely it follows what was flown. It cuts
  *     the route again when the hand lets go, not while it drags.
  *   - "As flown" and "Even pace": the route's timing, key times only.
- *   - One line of count, length and depths, and the pace at the playhead.
+ *   - One line of count, length and depths, and the pace at the playhead; under them, for a route
+ *     that can play, one line on FREE LOOK (turning the view while the route plays: route.ts,
+ *     FREE LOOK). Pause here is `pauseRoute`: the camera stays the route's, and a free look that
+ *     was not recorded returns to it.
+ *   - Only while a free look is recorded (one of the three look tracks holds a key): one line that
+ *     says so, with "Clear" (`clearLook`: the three tracks go, one animation-undo step).
  * Then one row a keyframe, in the look of a saved location's row: the picture taken when it was
  * set (this session only - a keyframe from a loaded scene or a trail shows its number), its depth,
  * its time. A row goes to its keyframe; its buttons play the leg that arrives at it, replace it
@@ -49,8 +54,8 @@ import { createLogMapping } from '../../components/inputs/primitives/FormatUtils
 import { Modal } from '../../components/ui/Modal';
 import { useDzNavigation } from '../navigationState';
 import {
-    ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, deleteKeyframe, playLeg, playRoute, replaceKeyframe, retimeRoute, returnToRoute, routeFromTrail,
-    routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe, setRouteSmoothing, stopRoutePlayback, useRoute,
+    ROUTE_SMOOTHING, ROUTE_TRACK, cameraOnRoute, clearLook, deleteKeyframe, lookKeyed, pauseRoute, playLeg, playRoute, replaceKeyframe, retimeRoute,
+    returnToRoute, routeFromTrail, routeHandSet, routeKeys, routePaceAt, routeSource, scrubRouteTo, setKeyframe, setRouteSmoothing, useRoute,
 } from '../route';
 import { setTrailOn, useTrail } from '../trail';
 import { formatDepth, formatDepthCompact } from './depthFormat';
@@ -124,6 +129,8 @@ export const RoutePanel: React.FC = () => {
     useAnimationStore((s) => (s.isPlaying ? -1 : Math.round(s.currentFrame)));
     const under = useAnimationStore((s) => routeKeys().findIndex((k) => Math.abs(k.frame - s.currentFrame) < 0.5));
     const pace = useAnimationStore((s) => routePaceAt(s.currentFrame, s.fps).toFixed(2));
+    // A free look is recorded: one of its three tracks holds a key (asked again at every change of the store; a boolean).
+    const looked = useAnimationStore(() => lookKeyed());
     const thumbnails = useRoute((s) => s.thumbnails);
     const solid = useRoute((s) => s.solid);
     const rendering = useRoute((s) => s.rendering);
@@ -158,7 +165,7 @@ export const RoutePanel: React.FC = () => {
                     type="button"
                     data-dz-route-play
                     disabled={keys.length < 2 || rendering}
-                    onClick={playing ? stopRoutePlayback : playRoute}
+                    onClick={playing ? pauseRoute : playRoute}
                     title="Play the route from the playhead to its last keyframe"
                     className={`${plainButton} w-16`}
                 >
@@ -236,6 +243,30 @@ export const RoutePanel: React.FC = () => {
                     <div data-dz-route-pace title="How fast the picture moves at the playhead: the camera's speed over its depth.">
                         pace <span className="font-mono tabular-nums">{pace}</span> decades a second
                     </div>
+                    {keys.length > 1 && (
+                        <div
+                            data-dz-route-look-help
+                            className="pt-1 text-fg-faint"
+                            title="Free look: the view is turned on top of the route, and the route plays on. A fly key, the wheel or Orbit mode still stop it and hand you the camera. Without Record the turn is gone when playback stops; with Record on (the timeline's record button, camera recording enabled) it is kept as three tracks: Look pan, Look tilt, Look roll."
+                        >
+                            Free look: while it plays, turn with a drag (Fly mode) or Q / E. Record on the timeline keeps it.
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {looked && (
+                <div data-dz-route-look className="mx-2 mt-2 px-2 py-1 rounded border border-line/20 flex items-center justify-between gap-2 text-[10px] text-fg-tertiary">
+                    <span>A free look is recorded on this route.</span>
+                    <button
+                        type="button"
+                        data-dz-route-look-clear
+                        onClick={clearLook}
+                        title="Remove the recorded free look (the tracks Look pan, Look tilt and Look roll). One undo on the timeline brings it back."
+                        className="h-5 px-1.5 rounded border border-line/30 text-[10px] hover:text-fg hover:border-line/50"
+                    >
+                        Clear
+                    </button>
                 </div>
             )}
 

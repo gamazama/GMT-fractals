@@ -4,7 +4,9 @@
  * WORDS
  *   A ROUTE is the camera move on the timeline. A KEYFRAME is one exact view on it. A LEG is the
  *   stretch between two keyframes. One route a scene. ("Flight" and "dive" mean other things in
- *   this app: a hand-flown undo step, and the Dive-to-depth action.)
+ *   this app: a hand-flown undo step, and the Dive-to-depth action.) A FREE LOOK is a turn of the
+ *   view on top of the route while it plays: route first, the camera second. A PASS is one
+ *   recording of a free look.
  *
  * WHAT A KEYFRAME IS
  *   One key on the track `camera.depth` (`ROUTE_TRACK`; the param is declared in
@@ -19,10 +21,15 @@
  * THE SEAM
  *   - `installRoute()` once, from main.tsx, before anything can load a sequence: it registers the
  *     track as a payload track and a log track, as the timeline's camera track (held while the
- *     camera is recorded), hands Key Cam its capture function, and registers one post-scrub hook.
+ *     camera is recorded) with the free look's three beside it (let go then), hands Key Cam its
+ *     capture function, and registers one post-scrub hook and two listeners on the timeline's
+ *     Play and Record flags.
  *   - IN: `setKeyframe()` (the K key, "Add keyframe") and `setKeyframe(frame)` (the timeline's Key
- *     Cam). `noteMove` / `noteTurn` / `stopRoutePlayback` from the navigation
- *     (`deep-zoom/DeepZoomNavigation.tsx`), `diveBegan` from a dive (`deep-zoom/diveControl.ts`).
+ *     Cam). From the navigation (`deep-zoom/DeepZoomNavigation.tsx`): `noteMove` / `noteTurn` (the
+ *     hands moved or turned the camera: it is theirs), `stopRoutePlayback` (a hand TAKES the
+ *     controls) and `lookTurned` (a turn while the route plays: a free look, which takes nothing).
+ *     `diveBegan` from a dive (`deep-zoom/diveControl.ts`). `pauseRoute` and `clearLook` from the
+ *     Route tab.
  *   - THE OTHER WAY TO MAKE A ROUTE is to cut it from the trail (`deep-zoom/trail.ts`: what the app
  *     remembers of how the camera was flown). `routeFromTrail()` replaces the route with one whose
  *     keyframes are the trail's own samples; `setRouteSmoothing()` cuts it again from the same
@@ -31,7 +38,9 @@
  *   - OUT: the post-scrub hook hands the host ONE `setView` for a scrubbed frame, and only when the
  *     view differs from the last one it set - a parked playhead leaves the still to gather. The
  *     path between keyframes is the engine's (`engine/animation/zoomPath.ts`), with time in frames
- *     and the scale read off the depth track as the engine eases it.
+ *     and the scale read off the depth track as the engine eases it. `drive()` is the one place a
+ *     frame's view is put together (`routeShownAt`: the route's view, the free look on top). A
+ *     free look's own turn, between two frames of the timeline, is a `host.setOrientation`.
  *   - The Route tab is `deep-zoom/components/RoutePanel.tsx`; it reads `useRoute` and the
  *     animation store.
  *   - RENDERING the route is `deep-zoom/routeRender.tsx`: it puts the camera on each frame with
@@ -48,7 +57,40 @@
  *   depth toasts are silent (`deep-zoom/milestones.ts`). It never takes the camera back by
  *   itself: a scrub of the SAME frame (what the timeline does after an edit) sets nothing while
  *   the user holds the camera. A scrub to another frame, Play, a row of the Route tab and
- *   "Return" do take it.
+ *   "Return" do take it. A FREE LOOK DOES NOT TAKE THE CAMERA: the route goes on driving under it.
+ *
+ * FREE LOOK (the owner, 2026-10-11: "route first - the camera second ... we can playback the route
+ * and record/view a rotation offset ontop of it")
+ *   - WHAT IS SHOWN at a frame is the route's rotation there TIMES THE LOOK, in the camera's own
+ *     frame; the position is the route's, always. The look is three plain numbers in radians: PAN
+ *     about the camera's up, then TILT about the right it has after the pan, then ROLL about the
+ *     view axis it has after both - the order `toQuaternion` builds an orientation in
+ *     (`lookQuaternion`). They are the tracks `camera.lookPan`, `camera.lookTilt`,
+ *     `camera.lookRoll` (`LOOK_TRACKS`), read off the tracks with `evaluateTrack`, never off the
+ *     store. WITH NO LOOK NOTHING CHANGES: the route's view goes to the host as it is, to the digit.
+ *   - THE HAND, while a route plays: a Fly-mode look drag, the look stick and Q / E turn the view on
+ *     top of the route and the tracks, and playback goes on (`lookTurned`: offset = inverse(route's
+ *     rotation x the tracks' look) x the turned orientation). No undo step, no flight, and the
+ *     route still drives. A fly key that travels, the wheel and anything in Orbit mode still stop
+ *     playback and hand over the camera (`stopRoutePlayback`), as they always did.
+ *   - WHEN PLAYBACK STOPS. A hand took the controls: the camera stays as it is on screen, turn
+ *     included, and is the user's. Any other way (Pause, the route's end, a leg's end): the
+ *     hand's turn is dropped and the view goes back to the route with what is recorded, one
+ *     `setView`. Nothing eases it back.
+ *   - RECORDED. With the timeline's Record on and its camera recording enabled (the flags GMT's
+ *     own camera recording tests), a PASS begins at the hand's first turn while the route plays
+ *     and ends when playback stops or Record goes off. From its first turn the tracks are not read
+ *     (the hand holds the look, starting from the tracks' look where it began); every frame shown
+ *     is a plain key on each of the three tracks, over whatever the played span held; angles are
+ *     kept continuous from frame to frame (`lookAngles`). The whole pass is ONE animation-undo
+ *     step. When it ends the span is thinned with the engine's fitter (`fitSamplesToKeys`) to
+ *     `LOOK_FIT_TOLERANCE`, a tenth of a degree a track. With Record on and nothing turned,
+ *     nothing is written and the recorded look plays on as it is. The route's own track is held
+ *     throughout (`releaseOnRecord: false`): its keys and payloads are never touched by a pass.
+ *   - A KEYFRAME SET UNDER A RECORDED LOOK holds the rotation that shows the view on screen with
+ *     the look on top (`underLook`): what you see is what you key. K and Key Cam write no look key.
+ *   - A RENDER gets the recorded look with no code of its own: it sets each frame with
+ *     `scrubRouteTo`, which is `drive()`.
  *
  * PITFALLS
  *   - CAMERA STRINGS never pass through `Number()`. The path's arithmetic is bigint; the strings
@@ -92,6 +134,30 @@
  *     it runs a moment after a keyframe changes, a leg a task, never per frame, and it waits while
  *     the hands fly or the timeline plays (a cut route has up to 300 legs). It reads the
  *     formula as the renderer has it THEN: a change of power or phase does not run it again.
+ *   - A SAMPLE IS WHAT WAS SHOWN. The timeline's tick (`engine.animation`, registered at boot)
+ *     runs before the navigation's (`deepZoom.navigate`, registered when the picture mounts), so
+ *     the picture of frame f is drawn with the turn the navigation made AFTER `drive(f)`. A pass
+ *     therefore samples a frame when the NEXT one is driven, or the pass ends. Measured in the app
+ *     2026-10-11, a look turning at 36 degrees a second: sampled inside `drive(f)` itself the
+ *     recording played back 1.0 degree behind what had been on screen; sampled a frame later, 0.02.
+ *     If the order of those two ticks ever changes, this is a frame early instead.
+ *   - A PASS'S FIRST KEY is the tracks' own value at the whole frame before its first turn: a key
+ *     that changes nothing, there so that the frames before the pass keep what they had (an empty
+ *     track would otherwise hold the first turned value back to frame 0). A turn made with the
+ *     playhead standing on frame 0 is recorded from frame 1.
+ *   - PAST ITS LAST KEY A LOOK TRACK HOLDS ITS VALUE: a pass that ends turned leaves the rest of
+ *     the route turned by as much. Before its first key it holds the first.
+ *   - THE THINNING moves the span by less than `LOOK_FIT_TOLERANCE` a track, so a recorded pass
+ *     comes back a hair from what was on screen when it ends (seen: 0.02 degrees). The two keys
+ *     beside the span keep frame and value; the handle each turns to the span is healed
+ *     (`spliceSpan`), which is what keeps the curve from folding there.
+ *   - WITHIN 4.5e-4 RADIANS OF STRAIGHT UP OR DOWN the three angles of a look are not one
+ *     continuous triple (the same band as in deep-zoom/orbitCamera.ts): a look tilted a quarter
+ *     turn off the route can jump there by the roll it carries. `lookAngles` keeps the two
+ *     branches and the whole turns continuous everywhere else.
+ *   - A LOOK DRAG STILL HELD WHEN THE ROUTE ENDS turns the camera from the route's end on, as any
+ *     look drag does when nothing plays: it takes the camera then.
+ *   - A ROUTE CUT FROM THE TRAIL leaves a recorded look where it is: the look tracks are their own.
  *
  * @invariant K adds a keyframe after the last one, a leg's on-screen length at `ROUTE_PACE` decades
  *   a second later, also with the playhead ON the last one; with the playhead on an earlier
@@ -121,6 +187,37 @@
  * @assumption The same hold on `deleteKeyframe`, on Play and a leg's play, on a route cut from the
  *   trail, on the smoothing and on the two timings: each is one `routeRendering()` test. The check
  *   has a line for the delete and one for a leg's play; none was taken out on its own.
+ * @invariant The view shown is the route's rotation at the frame times the look IN THE CAMERA'S OWN
+ *   FRAME (the hand's turn while it plays, the tracks' when scrubbed, a keyframe set under them),
+ *   at the route's own position - proven by: npm run check:deep-zoom-route ("look: a turn while the
+ *   route plays is shown at once ...", "look: 200 frames on, the view is the route's rotation THERE
+ *   times the same turn ...", "look: a scrub shows the route with the recorded turn on top ...",
+ *   "look: scrubbed away and back, that keyframe shows what was on screen ..."). Falsified
+ *   2026-10-11: the look multiplied on the other side in `routeShownAt` -> 5 red.
+ * @invariant When playback stops and no hand took the camera, the hand's unrecorded turn is gone
+ *   and the view is the route's again, to the digit, in one `setView`; and that is when a recorded
+ *   pass is thinned - proven by: npm run check:deep-zoom-route ("look: playback stops with no hand
+ *   on the camera ...", "look: a recorded pass writes keys on the three tracks, thinned when it
+ *   ends ..."). Falsified 2026-10-11: the listener on `isPlaying` emptied -> 3 red.
+ * @invariant A hand that takes the controls while a free look is on screen stops playback and the
+ *   camera keeps its turn exactly, with no `setView`, and is the user's - proven by: npm run
+ *   check:deep-zoom-route ("look: a fly key during playback stops it and the camera keeps its turn
+ *   ..."). Falsified 2026-10-11: `takeCamera()` out of `stopRoutePlayback` -> 1 red.
+ * @assumption The rest of FREE LOOK has a green line in the same check and was NOT falsified (three
+ *   breaks were the stage's allowance): with no look, and with look keys that turn nothing, the
+ *   stored view goes out to the digit; Record on and no turn writes nothing; a pass is one undo
+ *   step, plays back within `LOOK_FIT_TOLERANCE` a track with a pan past half a turn, and leaves
+ *   the route's keys, payloads and iteration keys alone; a second pass replaces the keys of its
+ *   span only; Key Cam writes no look key; a keyframe set under a look holds the rotation worked
+ *   out by hand; K in the middle of a free look keys what is on screen; Record coming on over a
+ *   turn already in the hand begins the pass with it, and the whole frames a slow display skips
+ *   are filled in; Record going off ends the pass and the timeline plays on; Clear is one undo
+ *   step. NO LINE OPENS a timeline that loops in the middle of a pass, or a look carried over
+ *   the pole.
+ * @assumption The navigation's side of a free look - which inputs are a move and which a look, the
+ *   fly step run with the moves taken out, the roll's ease dropped when playback stops - is wiring
+ *   no node check reaches. Driven in the app on 2026-10-11 (debug/scratch/r5/app-look.mts: a look
+ *   drag and Q while a route plays, Pause, W, a recorded pass, a scene saved and loaded, Clear).
  * @assumption A keyed count above the renderer's own ceiling for `setView` (160 on the Mandelbulb:
  *   grep `v.iters|0` in deep-zoom/renderer/core.js) is cut to it, while the renderer's own rule can
  *   reach 400 under the ray march. A power-2 route deeper than about 1e-38 therefore plays with too
@@ -139,9 +236,10 @@ import { registerCameraKeyTracks, setCameraKeyCaptureFn } from '../engine/animat
 import { buildZoomPath, zoomLegOnScreen, zoomPathOrientation, zoomPathPosition } from '../engine/animation/zoomPath';
 import type { TurnKey, ZoomKey, ZoomPath } from '../engine/animation/zoomPath';
 import { showToast } from '../engine/store/toastStore';
+import { fitSamplesToKeys, spliceSpan } from '../utils/CurveFitting';
 import type { BezierHandle, Keyframe, Track } from '../types';
 import { getHost, subscribeHost } from './host/current';
-import type { DeepZoomHost } from './host/DeepZoomHost';
+import type { DeepZoomHost, DzOrientation } from './host/DeepZoomHost';
 import { readDepth } from './depthNow';
 import { validDepth } from './components/depthFormat';
 import { isFlying, useDzNavigation } from './navigationState';
@@ -173,6 +271,13 @@ export const ROUTE_SOLID_SAMPLES = 9;
 export const ROUTE_SMOOTHING = { min: 0.01, max: 0.5, initial: 0.05 } as const;
 /** A route cut from a trail has no more keyframes than this. */
 export const ROUTE_TRAIL_KEYS = 300;
+/** The free look's three tracks, in radians: pan, tilt, roll (FREE LOOK in the header). The params
+ *  are declared in `deep-zoom/features/camera.ts`, where the rule for these ids is. */
+export const LOOK_TRACKS = ['camera.lookPan', 'camera.lookTilt', 'camera.lookRoll'] as const;
+const LOOK_LABELS = ['Look pan', 'Look tilt', 'Look roll'] as const;
+/** How far a recorded free look may lie from what the hand turned, on each of its three tracks,
+ *  once the pass is thinned: a tenth of a degree. A feel number: the owner's to set. */
+export const LOOK_FIT_TOLERANCE = Math.PI / 1800;
 
 const THUMBNAIL_PX = 96;
 const SOLID_CHECK_DELAY_MS = 250;
@@ -345,8 +450,10 @@ const sameCamera = (a: RouteView, b: RouteView): boolean =>
     a.cam[0] === b.cam[0] && a.cam[1] === b.cam[1] && a.cam[2] === b.cam[2]
     && a.yaw === b.yaw && a.pitch === b.pitch && (a.roll ?? 0) === (b.roll ?? 0);
 
-/** Somebody else moves the camera from here on (the navigation turned it, a dive took off, a jump). */
+/** Somebody else moves the camera from here on (the navigation turned it, a dive took off, a jump).
+ *  A free look is forgotten: what the camera shows is theirs as it stands. */
 export function takeCamera(): void {
+    settleLook();
     if (!driving) return;
     driving = false;
     holdAutoIterations(false);
@@ -389,8 +496,25 @@ export function headingNow(): V3 | null {
     return drift && length > 0 ? [drift[0] / length, drift[1] / length, drift[2] / length] : null;
 }
 
-/** A hand is on the controls: a timeline that is playing a route stops, and the camera is the user's from where it is. */
+/**
+ * A hand TAKES the controls (a fly key, an orbit gesture, the wheel, a dive): a timeline that is
+ * playing a route stops, and the camera is the user's from where it is. A free look on screen
+ * STAYS on screen: the route lets go of the camera there and then, so nothing puts it back.
+ */
 export function stopRoutePlayback(): void {
+    stopAt = null;
+    if (!routePlays()) return;
+    const looked = settleLook();
+    if (looked) takeCamera();
+    anim().pause();
+    // A recorded pass left its tracks unread while it ran: the timeline's values are brought level.
+    // The camera is the user's and the frame counts as the one last shown, so no view is set.
+    if (looked) { lastFrame = anim().currentFrame; animationEngine.scrub(lastFrame); }
+}
+
+/** Pause (the Route tab's button): the timeline stops and the camera stays the route's. An
+ *  unrecorded free look returns to the route (`installRoute`: grep `settleLook() && driving`). */
+export function pauseRoute(): void {
     stopAt = null;
     if (routePlays()) anim().pause();
 }
@@ -412,21 +536,251 @@ export function diveBegan(): () => void {
     };
 }
 
-/** True when the camera stands exactly where the route puts it at the playhead (or there is no route). */
+/** True when the camera stands exactly where the route, with the free look recorded there, puts it
+ *  at the playhead (or there is no route). */
 export function cameraOnRoute(): boolean {
-    const host = getHost(), want = routeViewAt(anim().currentFrame);
+    const host = getHost(), want = routeShownAt(anim().currentFrame);
     return !host || !want || sameCamera(host.getView(), want);
 }
 
-/** One scrubbed frame: the view the route gives there, handed to the host if it is a new one. */
-function drive(frame: number): void {
-    const host = getHost(), r = route(), view = routeViewAt(frame);
-    const sameFrame = frame === lastFrame;
+// ── free look: a turn on top of the route ────────────────────────────────────────────────────────
+
+type Angles = [number, number, number];
+
+/** The hand's turn on top of the route and the look tracks, while a route plays and nothing
+ *  records it. Null: none. Forgotten when playback stops, however it stops. */
+let hand: THREE.Quaternion | null = null;
+
+/** A free look being recorded: from the hand's first turn with Record on, to the end of playback
+ *  (or of Record). While one runs the look tracks are not read: `q` is the look. */
+interface LookPass {
+    /** The look on screen: the tracks' look where the pass began, times every turn since. */
+    q: THREE.Quaternion;
+    /** The whole frame of the first sample, and one sample a whole frame from there, a track. */
+    start: number;
+    samples: [number[], number[], number[]];
+    /** The same samples as the plain keys the timeline shows while the pass runs. */
+    live: [Keyframe[], Keyframe[], Keyframe[]];
+    /** The frame last sampled and the look there as angles: the next sample is unwrapped against
+     *  them, and the whole frames a slow display skipped are filled in from them. */
+    at: number;
+    angles: Angles;
+    /** The frame on screen now. It is sampled when the NEXT one is driven (or the pass ends):
+     *  only then has every turn of its own tick arrived (PITFALLS: A SAMPLE IS WHAT WAS SHOWN). */
+    shown: number;
+    /** The three tracks' keys as they were before the pass wrote any. Null: nothing written yet. */
+    old: [Keyframe[], Keyframe[], Keyframe[]] | null;
+}
+let pass: LookPass | null = null;
+
+const qRoute = new THREE.Quaternion(), qLook = new THREE.Quaternion(), qTurn = new THREE.Quaternion(), lookEuler = new THREE.Euler();
+const TURN = 2 * Math.PI;
+
+/**
+ * A look (pan, tilt, roll) as a turn in the camera's OWN frame: pan about its up, THEN tilt about
+ * the right it has after the pan, THEN roll about the view axis it has after both. That is the
+ * order `toQuaternion` (deep-zoom/orbitCamera.ts) builds an orientation in, so on a route that
+ * looks level along -Z a look of (pan, tilt, roll) IS the yaw, the pitch and the roll added.
+ * Positive pan turns the view to its right, positive tilt up, positive roll as the renderer's.
+ */
+function lookQuaternion(a: Angles, q: THREE.Quaternion): THREE.Quaternion {
+    return q.setFromEuler(lookEuler.set(a[1], -a[0], a[2], 'YXZ'));
+}
+
+/**
+ * The angles of a look, CONTINUOUS with `near`: of the two triples that are one turn - (pan, tilt,
+ * roll) and (pan + pi, pi - tilt, roll + pi) - and their whole turns, the one nearest. So a pass
+ * carried over the top does not flip, and a roll past half a turn does not come back the long way.
+ */
+function lookAngles(q: THREE.Quaternion, near: Angles): Angles {
+    lookEuler.setFromQuaternion(q, 'YXZ');
+    const by = (v: number, n: number): number => v + TURN * Math.round((n - v) / TURN);
+    const a: Angles = [by(-lookEuler.y, near[0]), by(lookEuler.x, near[1]), by(lookEuler.z, near[2])];
+    const b: Angles = [by(Math.PI - lookEuler.y, near[0]), by(Math.PI - lookEuler.x, near[1]), by(lookEuler.z + Math.PI, near[2])];
+    const off = (c: Angles): number => Math.abs(c[0] - near[0]) + Math.abs(c[1] - near[1]) + Math.abs(c[2] - near[2]);
+    return off(a) <= off(b) ? a : b;
+}
+
+/** The look tracks hold keys: a free look is recorded. */
+export function lookKeyed(): boolean {
+    const tracks = anim().sequence.tracks;
+    return LOOK_TRACKS.some((id) => (tracks[id]?.keyframes.length ?? 0) > 0);
+}
+
+/** The three tracks' values at `frame`. Null when they hold no key, or turn nothing there. Read
+ *  off the tracks with no side effect, never off the store. */
+function lookAt(frame: number): Angles | null {
+    const tracks = anim().sequence.tracks, a: Angles = [0, 0, 0];
+    let turned = false;
+    LOOK_TRACKS.forEach((id, j) => {
+        const track = tracks[id];
+        if (!track || track.keyframes.length === 0) return;
+        const v = animationEngine.evaluateTrack(track, frame);
+        if (Number.isFinite(v) && v !== 0) { a[j] = v; turned = true; }
+    });
+    return turned ? a : null;
+}
+
+/** The look on top of the route at `frame`, written into `q`: a pass's own; else the tracks'
+ *  look there times the hand's unrecorded turn. Null: there is none, the route's view stands. */
+function lookOver(frame: number, q: THREE.Quaternion): THREE.Quaternion | null {
+    if (pass) return q.copy(pass.q);
+    const a = lookAt(frame);
+    if (!a && !hand) return null;
+    if (a) lookQuaternion(a, q); else q.identity();
+    return hand ? q.multiply(hand) : q;
+}
+
+const routeQuaternion = (v: RouteView, q: THREE.Quaternion): THREE.Quaternion => toQuaternion({ yaw: v.yaw, pitch: v.pitch, roll: v.roll ?? 0 }, q);
+const turnedView = (base: RouteView, q: THREE.Quaternion): RouteView => {
+    const o = toOrientation(q, base.yaw);
+    return { cam: base.cam, yaw: o.yaw, pitch: o.pitch, ...(o.roll ? { roll: o.roll } : {}) };
+};
+
+/**
+ * The camera SHOWN at `frame`: the route's view there (`routeViewAt`), its rotation times the look
+ * in the camera's own frame. The position is the route's, always. With no look it is the route's
+ * view as it is, to the digit: nothing is taken through a quaternion. Null when there is no
+ * keyframe. Nothing is set.
+ */
+export function routeShownAt(frame: number): RouteView | null {
+    const base = routeViewAt(frame), look = base ? lookOver(frame, qLook) : null;
+    return base && look ? turnedView(base, routeQuaternion(base, qRoute).multiply(look)) : base;
+}
+
+/** A pass begins at `frame`, the frame on screen: its first sample is the tracks' own look at the
+ *  whole frame BEFORE it (a key that changes nothing: the frames before the pass keep what they
+ *  had), and the hand's turn starts from the tracks'. */
+function beginPass(frame: number): void {
+    const start = Math.max(0, Math.ceil(frame) - 1), angles = lookAt(start) ?? [0, 0, 0];
+    const q = lookQuaternion(lookAt(frame) ?? [0, 0, 0], new THREE.Quaternion());
+    if (hand) q.multiply(hand);
+    hand = null;
+    const plain = (value: number): Keyframe => ({ id: nanoid(), frame: start, value, interpolation: 'Linear', autoTangent: false, brokenTangents: false });
+    pass = { q, start, samples: [[angles[0]], [angles[1]], [angles[2]]], live: [[plain(angles[0])], [plain(angles[1])], [plain(angles[2])]], at: start, angles, shown: frame, old: null };
+}
+
+/** The frame that was on screen (`p.shown`) is sampled, its look being `p.q` as it stands: a
+ *  sample for every whole frame reached since the last one, written as plain keys over whatever
+ *  the tracks held in the played span. */
+function samplePass(p: LookPass): void {
+    const frame = p.shown, now = lookAngles(p.q, p.angles), from = p.start + p.samples[0].length;
+    for (let n = from; n <= frame; n++) {
+        const t = (n - p.at) / (frame - p.at);                       // p.at < from <= n <= frame
+        for (let j = 0; j < 3; j++) {
+            const value = p.angles[j] + (now[j] - p.angles[j]) * t;
+            p.samples[j].push(value);
+            p.live[j].push({ id: nanoid(), frame: n, value, interpolation: 'Linear', autoTangent: false, brokenTangents: false });
+        }
+    }
+    p.at = Math.max(p.at, frame);
+    p.angles = now;
+    const end = p.start + p.samples[0].length - 1;
+    if (end < from) return;                                          // no whole frame reached
+    if (!p.old) {
+        anim().snapshot();                                           // the whole pass is this one undo step
+        LOOK_TRACKS.forEach((id, j) => ensureTrack(id, LOOK_LABELS[j]));
+        const tracks = anim().sequence.tracks;
+        p.old = [tracks[LOOK_TRACKS[0]].keyframes, tracks[LOOK_TRACKS[1]].keyframes, tracks[LOOK_TRACKS[2]].keyframes];
+    }
+    const old = p.old;
+    anim().replaceKeyframes(LOOK_TRACKS.map((id, j) =>
+        ({ trackId: id, newKeys: [...old[j].filter((k) => k.frame < p.start), ...p.live[j], ...old[j].filter((k) => k.frame > end)] })));
+}
+
+/**
+ * The pass ends: the span it wrote is thinned with the engine's fitter, to `LOOK_FIT_TOLERANCE` a
+ * track; keys outside the span stay (the handle each of its two neighbours turns to the span is
+ * healed: `spliceSpan`). No undo step of its own: the pass took one when it first wrote.
+ * Returns whether there was a pass.
+ */
+function endPass(): boolean {
+    const p = pass;
+    if (!p) return false;
+    samplePass(p);                                                   // the frame it ends on
+    pass = null;
+    if (!p.old) return true;                                         // a turn that reached no whole frame: nothing was written
+    const old = p.old, end = p.start + p.samples[0].length - 1;
+    anim().replaceKeyframes(LOOK_TRACKS.map((id, j) => {
+        const span = fitSamplesToKeys(p.samples[j], p.start, LOOK_FIT_TOLERANCE, nanoid());
+        return { trackId: id, newKeys: spliceSpan(old[j], p.start, end, span) ?? [...old[j].filter((k) => k.frame < p.start), ...span, ...old[j].filter((k) => k.frame > end)] };
+    }));
+    return true;
+}
+
+/** No look but the tracks' from here: the hand's unrecorded turn is forgotten, a pass is ended.
+ *  Returns whether the camera showed either. */
+function settleLook(): boolean {
+    const had = hand !== null;
+    hand = null;
+    return endPass() || had;
+}
+
+/**
+ * The navigation turned the view while a route plays (a Fly-mode look drag, the look stick, Q / E):
+ * `turned` is the orientation its fly step made of the one on screen. The turn goes on top of the
+ * route - offset = inverse(route's rotation x the tracks' look) x turned - and playback goes on.
+ * With Record on and the camera recorded, this is where a pass begins. The camera shows it at
+ * once, as `drive` will compose it at the next frame. Nothing when no route plays and drives.
+ */
+export function lookTurned(turned: DzOrientation): void {
+    const host = getHost(), was = lastSet, base = driving && was && routePlays() ? routeViewAt(lastFrame) : null;
+    if (!host || !was || !base) return;
+    const recorded = anim().isRecording && anim().recordCamera;
+    if (!pass && recorded) beginPass(lastFrame);
+    routeQuaternion(base, qRoute);
+    if (pass) pass.q.copy(qRoute.invert()).multiply(toQuaternion(turned, qTurn));
+    else {
+        const a = lookAt(lastFrame);
+        if (a) qRoute.multiply(lookQuaternion(a, qLook));
+        hand = (hand ?? new THREE.Quaternion()).copy(qRoute.invert()).multiply(toQuaternion(turned, qTurn));
+    }
+    const shown = routeShownAt(lastFrame);
+    if (!shown) return;
+    host.setOrientation(shown.yaw, shown.pitch, shown.roll ?? 0);
+    lastSet = { ...shown, iters: was.iters };
+}
+
+/** Remove the recorded free look: the three tracks. One animation-undo step. */
+export function clearLook(): void {
+    const tracks = anim().sequence.tracks, ids = LOOK_TRACKS.filter((id) => tracks[id]);
+    if (ids.length === 0 || routeRendering()) return;
+    settleLook();
+    anim().removeTracks(ids);                                        // takes the step itself
+    if (driving) animationEngine.scrub(anim().currentFrame);         // the camera is the route's: it follows the edit
+    bump();
+}
+
+/**
+ * What a keyframe at `frame` must hold for the camera to show `view` there with the recorded free
+ * look on top: `view`'s rotation times the inverse of the tracks' look. With no look recorded
+ * there, `view` itself, untouched.
+ */
+function underLook(view: RouteView, frame: number): RouteView {
+    const a = lookAt(frame);
+    return a ? turnedView(view, routeQuaternion(view, qRoute).multiply(lookQuaternion(a, qLook).invert())) : view;
+}
+
+/** One scrubbed frame: the view shown there - the route's, the free look on top - handed to the
+ *  host if it is a new one. THE one place a frame's view is composed before `host.setView`. */
+function drive(frame: number, ctx: ScrubContext): void {
+    const host = getHost(), r = route();
+    const sameFrame = frame === lastFrame, before = lastFrame;
     lastFrame = frame;
-    if (!host || !view || !host.bootParams()) return;
+    if (!host || r.keys.length === 0 || !r.path || !host.bootParams()) return;
     // A scrub of the frame the playhead is on is the timeline tidying up after an edit, not a move
     // of the playhead: it follows the edit only while the camera is the route's.
     if (sameFrame && !driving && !forced) return;
+    if (!ctx.isPlaying) settleLook();                                // nothing plays: the route and what is recorded
+    else {
+        // Record went off, or the timeline looped or was put back: that pass is over.
+        if (pass && (!ctx.ignoreCamera || frame < pass.shown)) endPass();
+        // Record came on over a turn the hand already holds: the pass begins with it, at the frame it was last shown on.
+        if (!pass && hand && ctx.ignoreCamera) beginPass(Number.isFinite(before) && before < frame ? before : frame);
+        if (pass) { samplePass(pass); pass.shown = frame; }
+    }
+    const view = routeShownAt(frame);
+    if (!view) return;
     flushHostSync();                                                 // what the timeline wrote this frame, before its view
     const next: SetView = { ...view, iters: itersAt(r, frame) };
     if (!forced && lastSet && lastSet.iters === next.iters && sameCamera(lastSet, next)) return;
@@ -452,6 +806,7 @@ function onScrub(ctx: ScrubContext): void {
         else if (ctx.frame >= stopAt || ctx.frame < played) {        // the end, or the timeline looped past it
             const end = stopAt;
             stopAt = null;
+            settleLook();                                            // before the pause: the scrub below is the one that shows the end
             anim().pause();
             anim().seek(end);
             animationEngine.scrub(end);
@@ -459,7 +814,7 @@ function onScrub(ctx: ScrubContext): void {
         }
         played = ctx.frame;
     }
-    drive(ctx.frame);
+    drive(ctx.frame, ctx);
 }
 
 /** Put the playhead on `frame` and the camera on the route there, whoever held it. */
@@ -552,26 +907,31 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
     const host = getHost();
     if (!host || routeRendering()) return null;
     stopAt = null;
-    if (anim().isPlaying) anim().pause();                            // setting a keyframe is not done to a running timeline
+    if (anim().isPlaying) {                                          // setting a keyframe is not done to a running timeline
+        if (settleLook()) takeCamera();                              // a free look on screen is what is keyed: it stays
+        anim().pause();
+    }
     const r = route(), keys = r.keys;
     // A keyframe that takes a new VIEW keeps the heading it had: the nudge that framed it is not the way the route goes.
     const shot = capture(host, on ? on.heading : headingNow());
     if (!shot) { showToast('No depth can be read here: no keyframe was set', 'warning'); return null; }
     if (!skipSnapshot) anim().snapshot();
 
-    let target: number;
+    // A new key goes at `frame`, or a leg after the last one (a leg is measured by positions alone).
+    const target = on ? on.frame : frame !== null ? frame
+        : keys.length === 0 ? 0 : keys[keys.length - 1].frame + legFrames(keys[keys.length - 1], { depth: shot.depth, view: shot.payload.view }, anim().fps);
+    // WHAT YOU SEE IS WHAT YOU KEY: under a recorded free look the keyframe holds the rotation that
+    // shows this view with the look on top. With no look recorded at its frame, the view itself.
+    const payload: RoutePayload = { ...shot.payload, view: underLook(shot.payload.view, target) };
     const shaped = on && r.depth?.keyframes.find((k) => k.id === on.id && !(k.interpolation === 'Bezier' && k.autoTangent));
     if (on && shaped) {
         // Handles somebody shaped stay as they are.
-        target = on.frame;
-        anim().updateKeyframes([{ trackId: ROUTE_TRACK, keyId: on.id, patch: { value: shot.depth, payload: shot.payload } }]);
+        anim().updateKeyframes([{ trackId: ROUTE_TRACK, keyId: on.id, patch: { value: shot.depth, payload } }]);
     } else {
         // A new key; or one whose handles are still the timeline's own, which are worked out again for
         // the new depth (left as they were, a much deeper view would make the curve dip and rise).
-        target = on ? on.frame : frame !== null ? frame
-            : keys.length === 0 ? 0 : keys[keys.length - 1].frame + legFrames(keys[keys.length - 1], { depth: shot.depth, view: shot.payload.view }, anim().fps);
         ensureTrack(ROUTE_TRACK, 'Depth');
-        anim().addKeyframe(ROUTE_TRACK, target, shot.depth, 'Bezier', shot.payload);
+        anim().addKeyframe(ROUTE_TRACK, target, shot.depth, 'Bezier', payload);
     }
     // The count in force, as an ordinary key. Linear: a count has no business overshooting between two keyframes.
     ensureTrack(ROUTE_ITERATIONS_TRACK, 'Iterations');
@@ -586,7 +946,11 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
     if (target > anim().durationFrames) anim().setDuration(target);
     anim().seek(target);
     // The camera already stands on this keyframe: the scrub brings the timeline's values level and sets no view.
-    lastSet = { ...key.view, iters: itersAt(route(), target) };
+    // (Under a recorded look the view shown is put together again from the keyframe and the look, and
+    // comes back in its last digit: the camera is turned onto exactly that, with no `setView`.)
+    const shown = routeShownAt(target) ?? key.view;
+    if (!sameCamera(host.getView(), shown)) host.setOrientation(shown.yaw, shown.pitch, shown.roll ?? 0);
+    lastSet = { ...shown, iters: itersAt(route(), target) };
     animationEngine.scrub(target);
     bump();
     const number = route().keys.indexOf(key) + 1;
@@ -659,7 +1023,8 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
     depthKeys.forEach((k, j) => made.set(k.id, { trail, sample: pick.index[j], smoothing }));
     for (const id of made.keys()) { if (made.size <= MADE_KEPT) break; made.delete(id); }
 
-    const end = frames[frames.length - 1], last = viewOfSample(trail[trail.length - 1]), host = getHost();
+    // (A recorded free look is left as it is: where it turns the last keyframe, the camera does not stand on it.)
+    const end = frames[frames.length - 1], last = routeShownAt(frames[frames.length - 1]) ?? viewOfSample(trail[trail.length - 1]), host = getHost();
     if (end > anim().durationFrames) anim().setDuration(end);
     if (host && sameCamera(host.getView(), last)) {
         // The camera stands on the last keyframe: the scrub brings the timeline's values level and sets no view.
@@ -795,9 +1160,19 @@ export function installRoute(): void {
     installed = true;
     registerPayloadTrack(ROUTE_TRACK);
     registerLogTrack(ROUTE_TRACK);
-    registerCameraKeyTracks([{ id: ROUTE_TRACK, releaseOnRecord: false }]);
+    // The route's track is held while the camera is recorded; the three look tracks are let go
+    // (the default), which is what makes room for a recorded free look. Key Cam keys the route only.
+    registerCameraKeyTracks([{ id: ROUTE_TRACK, releaseOnRecord: false }, ...LOOK_TRACKS]);
     setCameraKeyCaptureFn((frame, _tracks, opts) => { setKeyframe(frame, opts); });
     animationEngine.registerScrubHook('post', onScrub);
+    // Playback stopped, and no hand took the camera (that path settles the look before it pauses):
+    // a recorded pass is thinned, an unrecorded turn is dropped, and the view goes back to the
+    // route with what is recorded - one `setView`, from the scrub of the frame it stopped on.
+    useAnimationStore.subscribe((s) => s.isPlaying, (playing) => {
+        if (!playing && settleLook() && driving) animationEngine.scrub(anim().currentFrame);
+    });
+    // Record, or the camera's share of it, went off while the timeline plays on: the pass ends there.
+    useAnimationStore.subscribe((s) => s.isRecording && s.recordCamera, (on) => { if (!on) endPass(); });
 
     // Every `setView` is a jump as far as the heading goes; one that is not the hook's own also takes the camera.
     let offViewSet: (() => void) | null = null;

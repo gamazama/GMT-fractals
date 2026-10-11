@@ -1,5 +1,6 @@
 /**
- * deep-zoom/features/camera.ts - the route's one track on the timeline, and the depth scale.
+ * deep-zoom/features/camera.ts - the route's track on the timeline, the free look's three, and
+ * the depth scale.
  *
  * WHY THE ID IS `camera` (no `dz` prefix, on purpose). The timeline files tracks into groups by a
  * hardcoded prefix: a track whose id starts `camera.` lands in the Camera group; any other id is
@@ -15,6 +16,15 @@
  * THE PARAM'S OWN VALUE is what the timeline last wrote: the route's depth at the playhead. It is
  * not the camera's depth (that is `deep-zoom/depthNow.ts`), no panel shows it and nothing reads
  * it but the timeline's own "is this frame keyed" marks.
+ *
+ * `lookPan`, `lookTilt`, `lookRoll` are the FREE LOOK: three plain tracks, in radians, that turn
+ * the view on top of the route's own rotation (`camera.lookPan` ... : `LOOK_TRACKS` in
+ * `deep-zoom/route.ts`, which writes them when a free look is recorded and reads them off the
+ * TRACKS, never off these params). They are declared for the same two reasons as `depth`: the
+ * Camera group, and a value the timeline's Key Cam mark can compare with (the store's value is
+ * what the timeline last wrote, so the mark never reads "changed" for them). NO ID MAY CONTAIN
+ * `rot`, `phase` OR `twist`: the engine eases such a track as an angle that wraps (grep
+ * `isRotation` in engine/AnimationEngine.ts), and these run on past a whole turn.
  *
  * The feature also declares the depth scale as its viewport overlay (`overlay-depth-scale`, a DOM
  * overlay), which is how the engine's `<FeatureOverlays />` comes to mount it. The component is
@@ -37,6 +47,24 @@ export const DzCameraFeature = {
             default: 1, min: 1e-77, max: 100, step: 0.001,
             label: 'Depth',
             description: 'The route\'s depth at the playhead: how far the camera is from what it looks at there.',
+        },
+        lookPan: {
+            type: 'float',
+            default: 0, min: -1000, max: 1000, step: 0.001,
+            label: 'Look pan',
+            description: 'Free look at the playhead: the view turned to its right (radians), on top of the route.',
+        },
+        lookTilt: {
+            type: 'float',
+            default: 0, min: -1000, max: 1000, step: 0.001,
+            label: 'Look tilt',
+            description: 'Free look at the playhead: the view turned up (radians), on top of the route.',
+        },
+        lookRoll: {
+            type: 'float',
+            default: 0, min: -1000, max: 1000, step: 0.001,
+            label: 'Look roll',
+            description: 'Free look at the playhead: the view rolled about its own axis (radians), on top of the route.',
         },
     },
 } satisfies FeatureDefinition;
