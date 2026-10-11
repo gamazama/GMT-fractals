@@ -121,6 +121,17 @@
  *   debug/deep-zoom-checks/module-host.mts ("render: renderFrameBlob while a render runs is busy
  *   ...", "render: a disposed host renders no frame"). Falsified 2026-10-11: the `exporting` test
  *   removed -> both red.
+ * @invariant `building()` names the ray march only while `api.rayMarchState()` says 'building' and
+ *   null once that shader is there, has failed or is not asked for - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("input: building() names the ray march while its
+ *   shader builds, and nothing once it is there, has failed or is off"). Falsified 2026-10-11:
+ *   `=== 'building'` made `!== 'on'` -> that line red.
+ * @assumption The rest of `building()` - the Mandelbox answered from `api.formulaState()` alone, a
+ *   disposed host waiting for nothing - is the same file's two other "input: ... building ..." /
+ *   "input: a disposed host ..." lines, which pass and were not broken on purpose. That the real
+ *   module's two state handles say 'building' from the moment a variant is asked for until it is
+ *   there (never 'off' in between, so a wait on this cannot be skipped) was read in core.js (grep
+ *   `api.rayMarchState`, `api.formulaState`) and seen in the app: debug/scratch/r6/first-minute.mts.
  * @assumption The rest of `renderFrameBlob` - the module's own blob handed back with the size in
  *   its PNG header, a cancel and a rejection as results, 'frame' as its progress job - is checked
  *   by the same file's other six "render: ... frame ..." lines, which pass and were not broken
@@ -519,6 +530,13 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         freeDistance: (dir, opt) => dz.freeDistance(dir, opt),
         estimateAt: (offset) => dz.estimateAt(offset),
         estimateAtPoint: (cam, iters) => dz.estimateAtPoint(cam, iters),
+        // The same two questions `poll` asks for the `compile` event, answered now. The box draws with a variant of
+        // its own and the ray march is not in force under it, so one of the two is asked, never both.
+        building() {
+            if (disposed) return null;
+            if (api.formula().kind === 'mandelbox') return api.formulaState() === 'building' ? 'mandelbox' : null;
+            return api.rayMarchState() === 'building' ? 'rayMarch' : null;
+        },
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         diveTo(depth) {
             // Not before the deep shader: until then the module flies on its f32 distance, good to

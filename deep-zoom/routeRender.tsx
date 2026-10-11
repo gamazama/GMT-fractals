@@ -19,6 +19,18 @@
  *     route nothing else sends them), the renderer's own iteration rule held off, then
  *     `host.renderFrameBlob`, then the write. NOTHING IS AWAITED between the scrub and the
  *     render's own start, so no live frame runs in between.
+ *   - THE WAIT. With the frame set up, the host is asked whether a shader the picture needs is
+ *     still building (`host.building()`: the ray march's, or the Mandelbox's). While one is, no
+ *     frame is asked for: the dialog says "Waiting for the ray march's shader", the live picture
+ *     goes on, Cancel works; then the frame is set up again and rendered. A build that FAILED is
+ *     not waited for: the run goes on with what there is, as the live picture does. It is asked
+ *     before every frame, with that frame's own values in force, so a keyed switch that needs
+ *     another shader halfway would be waited for too (not driven: no test route keys one).
+ *     WHY: the renderer builds what a frame needs before it draws it, on the main thread (grep
+ *     `ensureRayVariant(false)` in `dzRenderFrame`, renderer/core.js; that stays, for a direct
+ *     caller). Measured 2026-10-11 without the wait, seven sessions: Start pressed in the first
+ *     half minute after the page opened held the whole page for 4.4 to 26.1 s inside frame 0,
+ *     with no status line and no Cancel.
  *   - While a run lasts `setRouteRendering(true)` (deep-zoom/route.ts) holds the route still, and
  *     the navigation is locked (`routeRendering()` in DeepZoomNavigation.tsx).
  *   - Afterwards the playhead goes back, and the camera with it.
@@ -58,19 +70,42 @@
  *     are driven by a timer, which a hidden tab slows to one a second.
  *   - THE PICTURE SHOWS EACH FINISHED FRAME, not a frame building up: nothing is put on the canvas
  *     while a frame is drawn (grep `NO PICTURE ON THE CANVAS` in renderer/core.js for why).
+ *   - THE WAIT HAS NO TIME LIMIT: it ends when the build does, or with Cancel. And two shaders are
+ *     NOT WAITED FOR - the BLA one and the true-gradient one, which a frame needs only with the
+ *     ray march off. The renderer still builds either inside the frame that first needs it (grep
+ *     `ensureVariant(true, false, false)` and `jacBits()` in `dzRenderFrame`), the page standing
+ *     still meanwhile; the host has no question for them (`building()` knows the two variants the
+ *     `compile` event knows).
  *   - A FRAME WITH GRAIN IS NOT ALWAYS THE SAME FRAME TWICE. A smooth frame is: pixel for pixel,
- *     or a level in a few pixels. A grainy one can come out as another throw of its grain in the
- *     first minute after the page opens and after a pause (grep `MEASURED 2026-10-11` in
- *     renderer/core.js; the renderer's own still export does the same). So a resumed run joins
- *     on without a seam, but its grainy frames are not byte for byte what an unbroken run writes.
+ *     or a level in a few pixels. A grainy one can come out as another throw of its grain (grep
+ *     `MEASURED 2026-10-11` in renderer/core.js; the renderer's own still export does the same).
+ *     So a resumed run joins on without a seam, but its grainy frames are not byte for byte what
+ *     an unbroken run writes. THE CAUSE IS NOT KNOWN, and THE WAIT does not cure it. Measured later
+ *     that day, twelve frames each time against the same frames rendered afterwards:
+ *       frames drawn straight after the ray march's shader arrived   9 of 11 sessions differed, 38 of 132 frames
+ *       Start pressed 10 s after it was there                        1 of 4 sessions, 4 frames, drawn 10.8 to 14.1 s after
+ *       a chain of twelve a minute after ready / a run after 75 s    0 of 12 frames / 0 of 5 sessions
+ *     So no pause of up to 10 s is built in: it would not hold. Ruled out, frame by frame in 276
+ *     frames: another shader program (every frame is drawn by the ray march's own), the BLA flag
+ *     (off before and after every frame), a setting the host changes (none does), a live frame
+ *     drawn inside a frame (none is), and what the page hands WebGL - a frame's commands and their
+ *     values are those of its later render but for two set-up values taken from the live
+ *     picture's smoothed distance (`setPowerUniforms`; `drawDeep` sets both again before every
+ *     draw) and a G-buffer reused from the frame before instead of made anew. Neither is it:
+ *     with the two values withheld 4 of 4 sessions still differed; with the G-buffer made anew
+ *     for every frame 2 of 4 did (2 frames of 48, where a reused one gave 36 of 117).
  *
  * @assumption All of the above was driven in the app, on the real GPU, on 2026-10-11
  *   (debug/scratch/r6/app-render.mts, git-ignored): a twelve-frame run into an in-memory folder,
- *   a cancel after three frames and its resume, the playhead and the camera afterwards. There is
- *   NO STANDING GUARD for the runner - the owner declined a new smoke. What stands: the sink
- *   (`npm run test:frame-folder`), the host member (`npm run check:deep-zoom-module-host`, the
- *   "render: renderFrameBlob ..." lines) and the route's hold (`npm run check:deep-zoom-route`,
- *   the "render: ..." lines).
+ *   a cancel after three frames and its resume, the playhead and the camera afterwards. THE WAIT
+ *   and the grain's numbers: debug/scratch/r6/first-minute.mts (git-ignored) - in 18 sessions with
+ *   Start pressed 15 to 24 s after ready the line showed and the page went on answering (asked
+ *   every 0.15 s through the wait and the run, answered within 0.1 s); a Cancel during the wait
+ *   gave the result 0.2 s later, no frame asked for, the playhead back where it was.
+ *   There is NO STANDING GUARD for the runner - the owner declined a new smoke. What stands: the
+ *   sink (`npm run test:frame-folder`), the host members (`npm run check:deep-zoom-module-host`,
+ *   the "render: renderFrameBlob ..." and "input: building() ..." lines) and the route's hold
+ *   (`npm run check:deep-zoom-route`, the "render: ..." lines).
  */
 import React from 'react';
 import { useAnimationStore } from '../store/animationStore';
@@ -92,6 +127,9 @@ const DEFAULT_LONG_EDGE = 1920;
 const DEFAULT_SAMPLES = 8;
 /** How often the run looks for a cancel and moves the clock and the bar. */
 const TICK_MS = 250;
+/** How often THE WAIT asks whether the shader is there, and what the dialog says meanwhile. */
+const WAIT_MS = 100;
+const WAITING = { rayMarch: 'Waiting for the ray march\'s shader', mandelbox: 'Waiting for the Mandelbox\'s shader' } as const;
 
 const say = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 const megapixelSamples = (w: number, h: number, samples: number): number => (w * h / 1e6) * samples;
@@ -226,16 +264,30 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume }
 
         for (let i = 0; i < frames.length && !cancelled(); i++) {
             if (there[i]) continue;
-            const frame = frames[i], host = getHost();
+            const frame = frames[i];
+            let host = getHost();
+            // The frame is set up, then THE WAIT (see the header): with the frame's own values in force, is a shader
+            // the picture needs still building? After a wait the frame is set up again, so that nothing is awaited
+            // between the last set-up and the render's own start, and nothing can move the view in between.
+            while (host?.renderFrameBlob && !cancelled()) {
+                touched = true;
+                scrubRouteTo(frame);
+                flushHostSync();
+                holdAutoIterations(true);
+                let what = host.building();
+                if (!what) break;
+                while (what && !cancelled()) {
+                    status.setStatusText(WAITING[what]);
+                    await new Promise((resolve) => setTimeout(resolve, WAIT_MS));
+                    host = getHost();
+                    what = host?.building() ?? null;
+                }
+            }
+            if (cancelled()) break;
             if (!host?.renderFrameBlob) { problem = 'The renderer was restarted'; break; }
             status.setStatusText(`Frame ${frame} (${written + 1} of ${toRender})`);
             const t0 = performance.now();
             fraction = 0;
-            // No await from here to the render's own start: nothing can move the view in between.
-            touched = true;
-            scrubRouteTo(frame);
-            flushHostSync();
-            holdAutoIterations(true);
             const r = await host.renderFrameBlob({ longEdge, samples, aspect });
             if (!r.ok) { if (r.reason !== 'cancelled') problem = r.message ?? `The renderer answered "${r.reason}"`; break; }
             if (r.width !== want.w || r.height !== want.h) { problem = `A frame came out ${r.width} x ${r.height}, not ${want.w} x ${want.h}`; break; }

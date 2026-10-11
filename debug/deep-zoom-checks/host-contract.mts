@@ -33,6 +33,9 @@
  *     `setOrientation`, and `DzView` gained `roll?` on both sides. Seen red that day: `roll?` taken
  *     off the contract's `DzView` alone -> 1: [2], on `viewSame` and `pathSame`; `orientation`
  *     taken off the interface -> 1: "every member of BLUEPRINT section 7 is there".
+ *   - The render's wait (2026-10-11) added `building` to the interface and to the list below. It is
+ *     not in BLUEPRINT section 7 as written; the list is what the contract must still have. What
+ *     the member answers is module-host's to prove (its "input: building() ..." lines).
  *   - A field added to the module's `DzView` / `DzTelemetry` / `DzPath` (`deep-zoom/renderer/index.ts`)
  *     must be added to the contract's copy in the same package, or [2] goes red.
  *
@@ -102,7 +105,7 @@ const BLUEPRINT_MEMBERS = [
     'setParam', 'setParams', 'getParams', 'bootParams',
     'telemetry', 'onTelemetry',
     'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail', 'snapshot',
-    'setInputOwner', 'rawDistance', 'orientation', 'setOrientation', 'sense', 'freeDistance', 'estimateAt',
+    'setInputOwner', 'rawDistance', 'orientation', 'setOrientation', 'sense', 'freeDistance', 'estimateAt', 'building',
     'setGradientRamp',
     'setRecording', 'takePath', 'smoothPath', 'seekPath', 'play', 'stopPlay',
     'renderFramePixels', 'renderFrameBlob', 'exportStill', 'cancel',

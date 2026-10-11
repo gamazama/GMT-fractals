@@ -65,6 +65,13 @@
  *                         the one-frame limit of a move, the depth readout and the dive go by.
  *     `estimateAt(`       the renderer's own distance estimate at a point beside the camera: the
  *                         nearest surface in any direction, there. Orbit mode's clearance.
+ *     `building()`        which shader variant the picture is still waiting for, asked NOW (the
+ *                         `compile` event says the same up to 125 ms late): 'rayMarch' or 'mandelbox'
+ *                         while it builds in the background and the older march, or the box's plain
+ *                         picture, is drawn; null once it is there, has failed, or is not asked
+ *                         for. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
+ *                         asked for a frame meanwhile, the renderer holds the whole page until the
+ *                         build is done.
  *     `estimateAtPoint(`  the same estimate at any exact position (camera strings), with a given
  *                         iteration count: 0 inside the solid. What the route asks along each leg
  *                         (`deep-zoom/route.ts`); the camera stays where it is.
@@ -431,6 +438,12 @@ export interface DeepZoomHost {
      * (milliseconds at depth: not for a render path). Moves nothing and draws nothing.
      */
     estimateAtPoint(cam: [string, string, string], iters?: number): number;
+    /**
+     * The shader variant the picture is waiting for, right now: it is being built in the background
+     * and something else is drawn meanwhile. null: none (built, failed, or not asked for). Cheap,
+     * draws nothing, works before `ready` (the deep shader itself is `ready`'s business, not this).
+     */
+    building(): 'rayMarch' | 'mandelbox' | null;
     /**
      * The picture as it is on screen now, as a new 2D canvas of the frame's own size; null when it
      * cannot be drawn (no renderer, a render in flight). What a saved PNG is made from. Do not

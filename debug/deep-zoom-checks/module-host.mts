@@ -17,7 +17,8 @@
  *                  `setPendingView`, `takePath`, `smoothPath`, `seekPath`, `play`, `renderPathZip`.
  *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error`.
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
- *   [5] input      `focus`, and the host-input members straight through to the module.
+ *   [5] input      `focus`, the host-input members straight through to the module, and `building()`
+ *                  (the shader variant the picture waits for, from the module's two state handles).
  *   [6] flight     recording, copies, seek by time, one preview at a time.
  *   [7] render     the result mapping, `progress`, `cancel`, `thumbnail`, and `renderFrameBlob`
  *                  (one frame of the current view; a fake `dz.renderFrame` stands behind it).
@@ -79,6 +80,10 @@
  *       pitch)` -> 1: "input: setOrientation hands the module yaw, pitch, then roll ..."; the same
  *       sent through the module's `setYawPitch` -> 1: that line; `orientation` built from the
  *       module's `yawPitch` with a roll of 0 -> 1: "input: orientation is the module's own three angles"
+ *     (2026-10-11, the render's wait) `building()` asking `rayMarchState() !== 'on'` instead of
+ *       `=== 'building'` -> 1: "input: building() names the ray march while its shader builds, and
+ *       nothing once it is there, has failed or is off". The Mandelbox line and the disposed-host
+ *       line pass and have not been seen red.
  *   flight and render
  *     `setRecording` always toggles -> 3; previews not serialised -> 2: "flight: a second play
  *       stops the preview in flight first ..."; a render that does not stop a preview -> 1;
@@ -811,7 +816,21 @@ console.log('[5] input     focus, and the host-input members');
     check(rig.count('freeDistance') === 1 && rig.calls.freeDistance[0][0] === axis && one.t === 1.25e-9 && one.kind === 'hit',
         'input: freeDistance is the module\'s own ray');
     check(host.estimateAt(axis) === 7.5e-41 && rig.count('estimateAt') === 1 && rig.calls.estimateAt[0][0] === axis, 'input: estimateAt is the module\'s own estimate, at the offset it was given');
+    // building() (2026-10-11): the variant the picture is waiting for, asked now. A render waits on it.
+    const asked = (ray: 'off' | 'building' | 'on' | 'failed', kind: 'mandelbulb' | 'mandelbox', box: 'building' | 'on' | 'failed') => {
+        rig.state.rayState = ray; rig.state.formulaKind = kind; rig.state.formulaState = box;
+        return host.building();
+    };
+    const bulb = [asked('building', 'mandelbulb', 'on'), asked('on', 'mandelbulb', 'on'), asked('failed', 'mandelbulb', 'on'), asked('off', 'mandelbulb', 'building')];
+    check(bulb[0] === 'rayMarch' && bulb[1] === null && bulb[2] === null && bulb[3] === null,
+        'input: building() names the ray march while its shader builds, and nothing once it is there, has failed or is off', bulb.join());
+    const box = [asked('building', 'mandelbox', 'building'), asked('building', 'mandelbox', 'on'), asked('on', 'mandelbox', 'failed')];
+    check(box[0] === 'mandelbox' && box[1] === null && box[2] === null,
+        'input: with the Mandelbox selected building() speaks for its shader alone, whatever the ray march\'s says', box.join());
+    rig.state.rayState = 'building'; rig.state.formulaKind = 'mandelbulb';
     host.dispose();
+    check(host.building() === null, 'input: a disposed host is waiting for nothing');
+    rig.state.rayState = 'off';
 }
 
 // ── [6] flight ───────────────────────────────────────────────────────────────────────────────────
