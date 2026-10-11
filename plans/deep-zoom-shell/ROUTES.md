@@ -28,7 +28,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R2b exponential-track curve tools, undoable length | done | `15b419bb` |
 | R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | done; the mediabunny upgrade waits for him | `9d05d00b` |
-| R6c existing frames: overwrite, continue or cancel, for every image-sequence render | not started | |
+| R6c existing frames: overwrite, continue or cancel, for every image-sequence render | done for the deep zoomer; GMT's is read and measured, not built: his calls below | `e99e82ef` |
 | R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | not started; rewritten with his answers of 2026-10-11 | |
 
 Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
@@ -162,7 +162,7 @@ progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, ke
 
 ## The stages
 
-R0 to R5, R2b, R6a and R6b are built. Each has an "As built" note below, and those notes are the record
+R0 to R5, R2b, R6a, R6b and R6c (the deep zoomer's half) are built. Each has an "As built" note below, and those notes are the record
 of what the code does and of what was decided on the way. What is left, in the order to build it:
 
 | # | Stage | What he gets |
@@ -795,6 +795,17 @@ To know:
 - Draft has no way back to the values it replaced.
 - **The mediabunny upgrade is not done.** The worktree has no install of its own: modules resolve
   from `stable/node_modules`, so a bump means an install in the production checkout. His word first.
+  The changelog was read on 2026-10-11 (GitHub releases, 1.45.1 to 1.61.3; the releases from
+  1.40.2 to 1.45.0 are on a page that was not read). Nothing in it breaks what
+  `engine/export/videoEncoder.ts` and GMT's worker call (`Output`, `Mp4OutputFormat`,
+  `WebMOutputFormat`, `StreamTarget`, `BufferTarget`, `EncodedVideoPacketSource`). What an upgrade
+  brings that touches a written file: partial colour-space information written into MP4 and WebM
+  and a corrected `vpcC` box (1.55.4), the AAC config fixed (1.55.3), a `btrt` box written
+  (1.57.0), a failed `finalize()` leaving the output cancelled (1.57.0), a WebKit workaround for
+  writes to a picked file (1.53.1), a Chromium workaround for the first packet's key flag
+  (1.45.3). `bitrate` fields are deprecated in favour of `quality` since 1.52.0 (they still
+  work). So the files will not be byte for byte what 1.40.1 writes: a real GMT export of each
+  format, with audio, is the check.
 
 **R6c. Existing frames: overwrite, continue or cancel.** His words, 2026-10-11: "rather than a
 checkbox, if it detects existing frames, it should come up with options to overwrite, continue,
@@ -818,6 +829,95 @@ cancel. this can be for all the renders".
   is carried from frame to frame). First job: read those in the code and tell him in a few lines
   what Continue would mean for a GMT render that uses the focus lock or audio; then build what is
   safe. GMT's export is live: its own tests and a real export by hand before the commit.
+
+**R6c as built, 2026-10-11** (`e99e82ef`; the R6b builder carried on: 195 thousand tokens more,
+33 minutes; 7 files, +357 / -96). By the builder on the real GPU: a scratch run of the real app
+(`debug/scratch/r6c/frames-question.mts`, 30 lines), the shell smoke 55 of 55, `smoke:fluid-toy`,
+`smoke:chrome`, the other-apps check again, the build. By the orchestrator: typecheck, three node
+tests, the diff of the dialog and the sink, the screenshot. Three deliberate breaks: two in
+`lookForFrames` (they back its `@invariant`), one in the dialog (an open question not answered
+when the dialog goes: the route stayed held for good).
+
+What is there:
+- A render into a folder that already holds frames of this render asks: **Overwrite** (every
+  frame, each file replaced as its frame is written), **Continue** (the missing ones only),
+  **Cancel** (nothing; back on the form). A fresh folder asks nothing, a video asks nothing.
+- Continue is not offered, and the question says why, when the frames there have another long
+  edge, more than one size, or are all there.
+- The "Resume" box and `deps.resume` are gone. The dialog has a generic question for any runner:
+  `status.ask({ lines, options, cancel })` (`engine/plugins/RenderDialog/QuestionView.tsx`); the
+  sink has `lookForFrames` (`engine/export/frameFolder.ts`).
+
+To know:
+- Frames are recognised by file name only (project name and frame number). Nothing says they
+  were made with this route, look or sample count.
+- An Overwrite stopped halfway leaves new and old frames side by side; the result says how many
+  old ones remain, and the next run can then only offer Overwrite or Cancel.
+- Not exercised: a real folder on a real disk and the browser's real picker, how long looking
+  through thousands of frames takes, the keyboard (no Esc or Enter on the question).
+
+**GMT's image sequences: read and measured, NOT built** (nothing under `engine-gmt/` or `app-gmt/`
+changed; the measuring script is `debug/scratch/r6c/gmt-sequence-names.mts`, git-ignored). His
+words were "this can be for all the renders"; GMT's export is live, and three things below are
+his to decide before it is built.
+
+- **The premise of R6a's note was wrong: GMT does not raise the version on every run.**
+  `prepareExport` (grep it in `store/engineStore.ts`) raises it only when the scene differs from
+  what it was at the last export, load or save. Measured: a fresh scene rendered twice with
+  nothing touched is `v1` both times, the same three file names, and **GMT replaced the files
+  without asking**. A change of field of view made the next run `v2`.
+- **So "the frames of this render" in GMT** are the files under the name the run is about to use:
+  project, content version, size, the range's frame numbers, one file a pass. They exist only when
+  the scene is as it was when the earlier run started.
+- **The focus lock breaks that.** A run with the lock writes the focus distance into the scene,
+  so the scene has changed when it ends: measured, a locked run was `v3` and the same run again,
+  nothing touched, `v4`. A cancelled focus-locked render would not find its own frames.
+- **Not in the name and not in the version**: samples a frame, internal scale, which passes, the
+  depth range (they live in the dialog). Frames "of this render" by name can be a 4-sample test.
+- **Would a continued frame be the frame the first run would have made?**
+  - Any render: the same picture with another throw of the grain. The random seed counts samples
+    since the run started (grep `internalFrameCounter` in `WorkerExporter.ts`); a run that starts
+    at frame K counts from 0. Read, not measured.
+  - Focus lock: frame N is focused on the distance measured in frame N-1. A continued run's first
+    frame has no frame before it and takes whatever focus the scene holds: in the same session,
+    untouched, the distance the cancelled run last locked (measured: it stayed 2.3236); after a
+    reload or a scrub, the focus of another view, off without bound. From the next frame on the
+    lock has caught up to within its 1 % dead band.
+  - Modulation: plain LFOs are a function of the frame's time and continue exactly. An LFO with
+    Smoothing, and a rule's attack / decay, carry a filter from frame to frame: the frames after
+    the join are off for the filter's memory (about 3 frames at smoothing 0.5, about 50 at 0.9).
+    A Noise LFO is seeded once a page load: after a reload it is another curve. Read.
+  - Audio: an image sequence carries no sound. Audio-reactive rules read the LIVE analyser during
+    an export, not the clip at the frame's time, so an audio-driven value in an export is not
+    determined by the scene and two full runs already differ. Read, not measured; it looks like a
+    gap in the export itself, worth its own check.
+- **Every file a frame makes** (measured names; base = `<project>_v<version>_<W>x<H>`): PNG beauty
+  `<base>_<frame>.png`; PNG beauty + alpha the SAME name (RGBA); alpha alone `<base>_alpha_<frame>.png`;
+  depth `<base>_depth_<frame>.png`; JPG one file a pass, `<base>_<pass>_<frame>.jpg`. "This frame
+  is there" has to find every file the ticked passes make, none of them empty (a file is created
+  first and gets its bytes when its stream closes, and a failed write is only reported).
+- **The smallest change** is all in `runImageSequenceExport` (it holds the folder, the base name,
+  the passes and the range before the worker starts): look with the worker's own naming rule, ask
+  with `deps.status.ask` (it reaches GMT's runner unchanged), return on Cancel, today's path on
+  Overwrite, a skip in `runFramePump` on Continue.
+- **His calls before it is built**:
+  1. A scene rendered again unchanged is replaced silently today. With the question he is asked
+     first: one more click for "render it again, better". Wanted?
+  2. Continue keeps frames made with other samples, scale or passes beside the new ones, and the
+     question cannot know. Say so in its words, or withhold Continue when the dialog's settings
+     differ from the last run's?
+  3. The focus lock moves the version, so a locked render could never be continued. Leave the
+     locked focus out of the scene's content while the lock is on, or look for the newest
+     version's frames in the folder?
+  And `prepareExport()` runs before the question would: a Cancel then leaves a version number
+  with no files.
+- **What a real export must show before it ships**: the same range once in one run and once as
+  cancel + Continue, every file there once and none empty, the frames either side of the join
+  compared (plain, focus lock, a smoothed LFO); the cancelled run's last frame complete or absent
+  for every pass; the version holding still across cancel and Continue with keyed tracks; how
+  long looking takes in a folder of thousands of files; PNG and JPG, and a step above 1.
+- Found in passing: a beauty-only PNG run and a beauty + alpha run of the same scene write the
+  same file name with different content.
 
 ### R7. Cleanup
 
