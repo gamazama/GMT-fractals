@@ -750,6 +750,24 @@ console.log('[4] step      the timestamp, frameCount, 8 Hz, context loss');
 
     host.dispose();
     check(getTelemetry().live === false && getTelemetry().depth === 0, 'step: dispose resets the telemetry store');
+
+    // holdLive (2026-10-11): a render run holds the live picture between its frames. Polling goes on.
+    const rig2 = makeRig();
+    const held = createModuleHost(rig2.instance, rig2.canvas);
+    let polled = 0;
+    held.onTelemetry(() => { polled++; }, 1000);
+    run(held, 0, 100, 16);
+    const ran = rig2.count('instance.step'), polledBefore = polled;
+    held.holdLive(true);
+    run(held, 100, 200, 16);
+    const drawnHeld = rig2.count('instance.step') - ran, polledHeld = polled - polledBefore;
+    held.holdLive(false);
+    run(held, 200, 300, 16);
+    const drawnAfter = rig2.count('instance.step') - ran - drawnHeld;
+    check(ran > 0 && drawnHeld === 0 && polledHeld > 0 && drawnAfter > 0,
+        'step: with the live picture held no frame is drawn, telemetry is still polled, and frames come back once released',
+        `${ran} before, ${drawnHeld} drawn and ${polledHeld} polled while held, ${drawnAfter} after`);
+    held.dispose();
     const after = writes;
     const streamedBefore = streamed;
     host.step(5000);

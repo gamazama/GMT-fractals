@@ -355,6 +355,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     const frame = env.frame === undefined ? canvas.parentElement : env.frame;
 
     let disposed = false;
+    let liveHeld = false;   // `holdLive`: `step` polls but does not draw
     let isReady = false;
     let bootFailed = false;
     let boot: DzParams | null = null;
@@ -537,6 +538,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (api.formula().kind === 'mandelbox') return api.formulaState() === 'building' ? 'mandelbox' : null;
             return api.rayMarchState() === 'building' ? 'rayMarch' : null;
         },
+        holdLive(on) { liveHeld = !!on; },
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         diveTo(depth) {
             // Not before the deep shader: until then the module flies on its f32 distance, good to
@@ -650,7 +652,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         step(now) {
             if (disposed) return;
             const before = instance.frameCount;
-            instance.step(now);
+            if (!liveHeld) instance.step(now);   // a render run holds the live picture between its frames (`holdLive`)
             if (instance.frameCount !== before) dive.advance(now);
             if (instance.contextLost) signalContextLost();
             if (disposed) return;   // a listener may have disposed the host

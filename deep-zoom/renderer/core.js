@@ -4712,6 +4712,12 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode, alone)
      for a full-size G-buffer is refused: shaded in strips it would show a seam at every row. */
   const whole = look.mode === 1;
   const pad = !whole && normalMode === 3 ? look.nrmTap : 0;   // normals from depth read the rows above and below
+  /* A FRAME OF api.dz.renderFrame GETS A G-BUFFER OF ITS OWN (2026-10-11). A run now holds the live picture
+     between its frames (the host's holdLive), so nothing else would make one anew, and a frame that reused the
+     G-buffer of the frame before came out as another picture far more often in the first minute after start-up:
+     36 of 117 frames reused, 2 of 48 made anew (measured in the shell, debug/scratch/r6/). Why the old contents
+     matter is not known. */
+  if (alone) gbufW = gbufH = 0;
   if (whole) {
     let ok = W * H <= WHOLE_MAX_PX;
     if (ok) { gl.getError(); ensureGbuf(W, H); gl.bindFramebuffer(gl.FRAMEBUFFER, gbufFbo);
@@ -4722,7 +4728,7 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode, alone)
   const gs = W * H <= GUIDE_MAX_PX ? makeGuideSet(W, H) : null;   // the depth guide, though, is the size of the picture
   // live on-screen preview: show the render building up on the canvas (blit each row below)
   if (loading) loading.style.background = 'transparent';   // let the preview show behind the % box
-  setCanvasSize(Math.max(2,canvas.clientWidth), Math.max(2,canvas.clientHeight));
+  if (!alone) setCanvasSize(Math.max(2,canvas.clientWidth), Math.max(2,canvas.clientHeight));   // `alone` sizes the canvas at its one blit, below: sized here it would show black until the frame is done
   const tilesX = Math.ceil(W/tile), tilesY = Math.ceil(H/tile);
   const total = tilesX*tilesY*samples; let done = 0;
   const raf = alone ? dzYield : () => new Promise(r => requestAnimationFrame(r));
@@ -4767,7 +4773,9 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode, alone)
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, aF);
   const fbuf = new Float32Array(W*H*4);
   gl.readPixels(0,0,W,H,gl.RGBA,gl.FLOAT,fbuf);
-  if (alone) { gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null); gl.blitFramebuffer(0,0,W,H, 0,0,canvas.width,canvas.height, gl.COLOR_BUFFER_BIT, gl.LINEAR); }   // the finished frame, shown once: nothing of this frame is drawn after it
+  if (alone) {   // the finished frame, shown once: nothing of this frame is drawn after it. The canvas takes its size in the same breath, so it never shows empty.
+    setCanvasSize(Math.max(2,canvas.clientWidth), Math.max(2,canvas.clientHeight));
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null); gl.blitFramebuffer(0,0,W,H, 0,0,canvas.width,canvas.height, gl.COLOR_BUFFER_BIT, gl.LINEAR); }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.deleteFramebuffer(aF); gl.deleteTexture(aT);
   const img = new Uint8ClampedArray(W*H*4);

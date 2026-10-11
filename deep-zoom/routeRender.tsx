@@ -276,6 +276,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume }
                 holdAutoIterations(true);
                 let what = host.building();
                 if (!what) break;
+                host.holdLive(false);                                            // a build is noticed only by a frame that runs
                 while (what && !cancelled()) {
                     status.setStatusText(WAITING[what]);
                     await new Promise((resolve) => setTimeout(resolve, WAIT_MS));
@@ -288,6 +289,10 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume }
             status.setStatusText(`Frame ${frame} (${written + 1} of ${toRender})`);
             const t0 = performance.now();
             fraction = 0;
+            // From here to the end of the run the live picture is held: the canvas shows each finished frame until
+            // the next is done, with no low-resolution live frame and no empty canvas in between (the owner,
+            // 2026-10-11: "users would only like to see each hires image").
+            host.holdLive(true);
             const r = await host.renderFrameBlob({ longEdge, samples, aspect });
             if (!r.ok) { if (r.reason !== 'cancelled') problem = r.message ?? `The renderer answered "${r.reason}"`; break; }
             if (r.width !== want.w || r.height !== want.h) { problem = `A frame came out ${r.width} x ${r.height}, not ${want.w} x ${want.h}`; break; }
@@ -306,6 +311,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume }
     } finally {
         clearInterval(tick);
         offProgress();
+        getHost()?.holdLive(false);                                              // the live picture again
         if (touched) {
             // The playhead and every keyed value back; then the camera, if it is not where it was. (Only then: a
             // `setView` is a jump to the trail and the route, and with no route the run never moved the camera.)

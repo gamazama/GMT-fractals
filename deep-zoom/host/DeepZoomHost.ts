@@ -72,6 +72,9 @@
  *                         for. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
  *                         asked for a frame meanwhile, the renderer holds the whole page until the
  *                         build is done.
+ *     `holdLive(on)`      no live frame is drawn while on (`step` still polls), so the canvas keeps
+ *                         the last finished frame of a render run between its frames. Off while a
+ *                         shader builds: only a frame that runs notices a finished build.
  *     `estimateAtPoint(`  the same estimate at any exact position (camera strings), with a given
  *                         iteration count: 0 inside the solid. What the route asks along each leg
  *                         (`deep-zoom/route.ts`); the camera stays where it is.
@@ -444,6 +447,14 @@ export interface DeepZoomHost {
      * draws nothing, works before `ready` (the deep shader itself is `ready`'s business, not this).
      */
     building(): 'rayMarch' | 'mandelbox' | null;
+    /**
+     * Hold the live picture: while on, `step` still polls (telemetry, progress, compile) but the
+     * renderer draws no live frame, so the canvas keeps what was last put on it. A render run
+     * holds it between its frames - otherwise each finished frame is followed by a low-resolution
+     * live one, and by an empty canvas when the next frame starts. Release it to wait on a shader
+     * (a build is only noticed by a frame that runs) and when the run ends.
+     */
+    holdLive(on: boolean): void;
     /**
      * The picture as it is on screen now, as a new 2D canvas of the frame's own size; null when it
      * cannot be drawn (no renderer, a render in flight). What a saved PNG is made from. Do not
