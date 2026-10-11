@@ -1010,12 +1010,14 @@ void main(){
         vec3 p = ro + rd*t;
         d = deMandelbulb(p);
         float eps = max(1e-20, length(p)*uPrecRatio);
-#ifdef USE_BOX
-        /* the box is drawn with three times the bulb's iterations from outside (36 at scale 2), and its surface at
-           that count has detail far below what f32 holds: at the bulb's hit level the baseline is grain. A pixel's
-           own footprint is the level the far-field march uses, and it is clean. */
+        /* THE HIT LEVEL IS A PIXEL'S OWN FOOTPRINT, for both formulas, with the line above as its floor (what f32
+           holds of p). First the box's alone (2026-10-09): the box is drawn with three times the bulb's iterations
+           from outside (36 at scale 2), and its surface at that count has detail far below what f32 holds: at the
+           floor alone the baseline is grain. A pixel's own footprint is the level the far-field march uses, and it
+           is clean. THE BULB'S TOO since 2026-10-11: at the floor alone its picture was grain as well, at one
+           sample a pixel (61 % of the start view's pixels speckle, the surface resolved about 2,600 times finer
+           than a pixel; grep THE TWO SIZES in deep-zoom/components/BootCard.tsx for what it measures now). */
         eps = max(eps, t * uFovScale / uRes.y);
-#endif
         if (d < eps){ hit=true; break; }
 #ifdef USE_BOX
         if (t > uBoxFar) break;
@@ -1028,9 +1030,7 @@ void main(){
     if (hit){
         vec3 p = ro + rd*t;
         float eps = max(1e-20, length(p)*uPrecRatio);
-#ifdef USE_BOX
         eps = max(eps, t * uFovScale / uRes.y);     // the normal's taps a pixel apart, as the hit level above
-#endif
         vec3 n = normal(p, eps*2.0);
         float diff = max(0.0, dot(n, uLightDir));
         float ao = 1.0 - float(steps)/512.0;
@@ -1972,6 +1972,43 @@ function mkProg(fs){
 const prog = mkProg(FRAG);
 const parallelExt = gl.getExtension('KHR_parallel_shader_compile');
 let deepProg = null, deepCompileErr = '', deepReady = false;
+/* KEPT ACROSS A BROWSER RESTART (grep; 2026-10-11): one draw of one pixel with ANOTHER VERTEX FORMAT (signed
+   bytes where the quad is floats), once for each program mkProgAsync has built, the moment it has linked.
+   What for: Chrome keeps a program that was built in the background IN MEMORY ONLY. Measured that day (Chrome
+   155, ANGLE on Direct3D 11, the production build, three profiles, the browser closed and opened again on
+   each): the three small programs, built the blocking way, came off its disk cache at once, and the ray
+   march's was built again in full, 23.1 to 24.7 s from its kick (the Mandelbox's: 4.7 to 4.8 s), the page ready
+   after 23.4 to 25.0 s. With this draw the browser writes the program to its disk as well: after the same
+   restart the ray march's program was there 0.04 to 0.05 s from its kick, the Mandelbox's 0.04 s, and the page
+   ready at 0.38 to 0.39 s. A first visit pays the build as before (ready after 21 to 23 s that day).
+   IT LEANS ON OBSERVED BEHAVIOUR, not on a documented rule. What is thought to happen, and was not looked
+   into: on Direct3D the browser's GL layer builds a second, tiny vertex stage for the new format, and with
+   that it stores the whole program. Measured on that one Chrome only, headless. A browser that does not
+   honour it loses nothing: the draw is one pixel into a target of its own, and the build is simply paid again
+   after a restart.
+   It touches nothing a later draw relies on: the vertex array, buffer, renderbuffer and framebuffer are its
+   own and deleted here; every binding it changes (program, vertex array, array buffer, both framebuffers,
+   renderbuffer, viewport) is put back; no uniform is set, no texture unit touched, nothing read back. The
+   program's samplers all read unit 0 for this one pixel, whatever is bound there. */
+function keepOnDisk(p){
+  const was = { prog: gl.getParameter(gl.CURRENT_PROGRAM), vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING), buf: gl.getParameter(gl.ARRAY_BUFFER_BINDING),
+                draw: gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING), read: gl.getParameter(gl.READ_FRAMEBUFFER_BINDING),
+                rb: gl.getParameter(gl.RENDERBUFFER_BINDING), vp: gl.getParameter(gl.VIEWPORT) };
+  const vao = gl.createVertexArray(), buf = gl.createBuffer(), rb = gl.createRenderbuffer(), fbo = gl.createFramebuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, new Int8Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(p, 'p');
+  gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.BYTE, false, 0, 0);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, rb); gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, 1, 1);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+  gl.viewport(0, 0, 1, 1); gl.useProgram(p);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.useProgram(was.prog); gl.viewport(was.vp[0], was.vp[1], was.vp[2], was.vp[3]);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, was.draw); gl.bindFramebuffer(gl.READ_FRAMEBUFFER, was.read);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, was.rb);
+  gl.bindBuffer(gl.ARRAY_BUFFER, was.buf); gl.bindVertexArray(was.vao);
+  gl.deleteFramebuffer(fbo); gl.deleteRenderbuffer(rb); gl.deleteBuffer(buf); gl.deleteVertexArray(vao);
+}
 /* Compile the heavy deep shader WITHOUT blocking page load (≈15 s on first run — ANGLE caches the
    binary so refreshes are instant). KHR_parallel_shader_compile builds it on a driver worker thread
    while the f32 baseline keeps animating + a loading note shows; falls back to a one-time block if
@@ -1987,6 +2024,7 @@ function mkProgAsync(fs, cb){
     if (done) return; done = true;
     if (!gl.getShaderParameter(fsObj, gl.COMPILE_STATUS)) return cb(null, gl.getShaderInfoLog(fsObj));
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return cb(null, gl.getProgramInfoLog(p));
+    keepOnDisk(p);                               // grep KEPT ACROSS A BROWSER RESTART
     cb(p, '');
   };
   const poll = () => {

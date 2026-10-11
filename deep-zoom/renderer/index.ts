@@ -80,6 +80,17 @@
  *     `api.rayMarchState()` says 'failed': an error for the host to show, not another march
  *     (the owner, 2026-10-11: a machine that cannot build it would not survive the bulb at depth
  *     by another route either).
+ *   - A PROGRAM BUILT IN THE BACKGROUND GETS ONE EXTRA ONE-PIXEL DRAW the moment it links (the ray
+ *     march's and the Mandelbox's; grep KEPT ACROSS A BROWSER RESTART in core.js), so that the
+ *     browser keeps it on disk and a visit after a restart does not pay the build again. It
+ *     leans on what one Chrome on Direct3D was seen to do, not on a rule. The draw goes into a
+ *     target of its own and puts back every binding it changes; a call that blocks on a build
+ *     still in flight (BLOCKING COMPILES above) has it happen inside that call.
+ *   - THE f32 PICTURE HITS AT A PIXEL'S FOOTPRINT, for both formulas since 2026-10-11 (grep "THE
+ *     HIT LEVEL IS A PIXEL'S OWN FOOTPRINT" in core.js; the bulb's hit about 2,600 times finer
+ *     until then and was speckle). It is what is on screen until `ready`, in mode 'f32', in mode
+ *     'auto' while shallower than 1e-4, and what `thumbnail()` and `renderThumbF32` draw when
+ *     nothing deep is active. The deep programs' own far-field march is another thing.
  *
  * @invariant the GPU kernel's distance estimate agrees with a BigInt fixed-point march that shares
  *   no maths with it, to 1e-3, at 11 depths from 1e-5 to 1e-50 and on two 13 x 13 grids of

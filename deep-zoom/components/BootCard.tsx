@@ -11,8 +11,9 @@
  *   2. THE LOADING NOTICE. The renderer draws its plain single-precision picture from the first
  *      frame and builds the deep shader in the background: the ray march's program, the bulb's
  *      only one since 2026-10-11, 21 to 26 s cold; and the Mandelbox's from the first switch to
- *      that formula, about 5 s (4.5 measured). "Cold" is the first visit after the browser was
- *      started, not the first on the machine (see `NOTICE`). Until telemetry says `ready` the
+ *      that formula, about 5 s (4.5 to 4.8 measured). "Cold" is the first visit: the renderer gets
+ *      both programs onto the browser's disk, so a later visit has them at once, also after the
+ *      browser was closed (see `NOTICE`). Until telemetry says `ready` the
  *      picture carries a notice with the seconds counting; nothing is blocked, nothing is clicked,
  *      flying works meanwhile, and it goes at the first sample that says ready. Two sizes, see THE
  *      TWO SIZES.
@@ -34,16 +35,22 @@
  *   assumed (2026-10-11, real GPU, a 600 x 744 picture, the build held back so the plain picture
  *   could be looked at; "speckle" is the share of pixels whose brightness is more than 24 levels
  *   from the mean of their four neighbours, and every deep picture measures 0.0 to 0.2 %):
- *     - THE MANDELBULB'S PLAIN PICTURE IS NOT A PICTURE OF THE VIEW AT ANY DEPTH. It is speckle from
- *       the start view down: 61 % there (and 90 % of its pixels differ from the picture after
- *       ready), 58 % at the starter dives' first view, 58 to 65 % walked in from the start view
- *       down to 3e-4, 43 % at 3e-3. Below what single precision holds it is a smear that shows
- *       nothing of the place (the starter views at 3e-17 and deeper). Nothing the shell sends
- *       changes that: with 32 iterations in place of the 14 it starts with, 61.4 %. The cause is
- *       the baseline's hit level in renderer/core.js (grep `u.prec,5e-7`: the surface is resolved
- *       2,600 times finer than a pixel at the start view, one sample a pixel); with that one
- *       number at a pixel's footprint the same view measures 7.7 % and is a picture. So the bulb's
- *       row below is "at no depth": its notice is LARGE from the page opening to ready.
+ *     - THE MANDELBULB'S PLAIN PICTURE IS A TRUE ONE AT THE START VIEW, AND ON THE LINE A VISITOR
+ *       FLIES FIRST NO DEEPER THAN A DEPTH OF 1. Since 2026-10-11 its baseline hits at a pixel's
+ *       footprint, as the Mandelbox's does (grep "THE HIT LEVEL IS A PIXEL'S OWN FOOTPRINT" in
+ *       renderer/core.js). Until that day it hit about 2,600 times finer than a pixel, at one
+ *       sample a pixel, and was speckle at every depth: 61.0 % at the start view, 58 to 65 %
+ *       walked in from there down to 5e-4. Measured after the change, the same tools: the start
+ *       view 5.9 % (5.2 % as a 1240 x 1024 picture), and it shows the shapes the deep picture
+ *       shows. Walked STRAIGHT AHEAD from there, into the middle of the star, where the surface is
+ *       all fine rays: 9.5 % at a depth of 1, 16 % at 0.5, 28 % at 0.2, 35 % at 0.1, 49 % at 0.02
+ *       (grainy, its lines still the deep picture's), and from 0.01 another picture. With the
+ *       camera turned 14 and 17 degrees before the walk, two other lines: 2 to 5 % all the way
+ *       down to 1e-3 and the deep picture's shapes; from 2e-4 a smooth smear that shows nothing of
+ *       the place (what single precision holds), as the starter views at 3e-17 and deeper are.
+ *       So the bulb's row is the depth down to which it held on EVERY line measured, as the
+ *       Mandelbox's is: 1. Its notice is SMALL at the start view and LARGE from the first steps
+ *       towards the surface.
  *     - THE MANDELBOX'S PLAIN PICTURE IS A TRUE ONE WHILE THE VIEW IS SHALLOW (its baseline hits at
  *       a pixel's footprint: grep "the box is drawn with three times" in core.js): 1.6 % at the
  *       whole-box view a switch of formula goes to, 5 to 9 % down to a depth of 0.05 on two lines
@@ -55,8 +62,11 @@
  *   read by rays on the CPU 8 times a second, so it is there before any deep program is), against
  *   the row of the program that is being built (the host's `compile` events, as the top bar's chip
  *   hears them). No reading yet counts as deep.
- *   A view that waits for ready (a share link, a scene: `presetFields.ts` parks it) needs no test of
- *   its own: it waits for the bulb's program, and that notice is LARGE at any view.
+ *   A VIEW THAT WAITS FOR READY (a share link, a scene: `presetFields.ts` parks it) HAS NO TEST OF
+ *   ITS OWN. It waits for the bulb's program with the camera still at the start view, so since
+ *   2026-10-11 the notice over it is the SMALL line, over the start view's picture, and the
+ *   picture jumps to the view that was asked for at ready. (Until then the bulb's notice was the
+ *   card at any view, which covered that wait.)
  *
  * NOT BEFORE `DZ_NOTICE_AFTER_MS`. With the program still held by the browser (a later visit in
  * the same browser session) `ready` comes one or two telemetry samples after the first frame (0.09
@@ -73,21 +83,25 @@
  * On a phone one more line says that flying needs a keyboard and a mouse (plan decision D10): the
  * picture is shown, the fly controls arrive for touch in a later stage.
  *
- * @invariant While a renderer builds, the notice is the LARGE card for the Mandelbulb, at the start
- *   view and at a deep one, and for the Mandelbox once the camera is deeper than
- *   `DZ_PLAIN_DOWN_TO.mandelbox` - proven by: ENGINE_URL=http://localhost:3410 npm run
- *   smoke:deep-zoom -- --stage 2 --step "ray march is what draws" ("at the start view the picture
- *   carries the LARGE notice ...", "which says what is being built ...", "... the LARGE notice at
- *   the deep view too", "walked in ... it is the LARGE notice"). Falsified 2026-10-11: the size
- *   made always small -> those four lines red, see that step's record.
+ * @invariant While a renderer builds, the Mandelbulb's notice is the SMALL line at its start view,
+ *   over a picture that is not dimmed, and the LARGE card, the picture dimmed, at a deep view; and
+ *   the Mandelbox's is the LARGE card once the camera is deeper than `DZ_PLAIN_DOWN_TO.mandelbox`
+ *   - proven by: ENGINE_URL=http://localhost:3410 npm run smoke:deep-zoom -- --stage 2 --step "ray
+ *   march is what draws" ("at the start view the picture carries the SMALL notice, one line, not
+ *   dimmed ...", "which names the deep renderer ...", "... the LARGE notice at the deep view,
+ *   dimmed under it", "which says what is being built ...", "walked in ... it is the LARGE
+ *   notice"). Falsified 2026-10-11, twice, one run each: `DZ_PLAIN_DOWN_TO.rayMarch` put back to
+ *   `Infinity` -> the first two of those lines red (size "large"), the step's other 17 green; the
+ *   size made always small -> the last three red (size "small" at a depth shown of 2.89e-17 and
+ *   at 0.00101), the other 16 green. See that step's record.
  * @assumption The rest of what that step says of the notice - the Mandelbox's SMALL line at its
  *   whole-box view, undimmed, and the notice gone at ready for either program - passes and was not
  *   broken on purpose.
  * @assumption The speckle figures above and the two rows of `DZ_PLAIN_DOWN_TO` are one day's
- *   measurements on one machine (debug/scratch/load/, git-ignored: plain-picture.mts,
- *   plain-by-depth.mts, box-plain.mts, notice-shots.mts). No standing check measures a plain
- *   picture. If the bulb's baseline is given the box's hit level, its row becomes a depth and the
- *   start view's notice a line.
+ *   measurements on one machine, in a 600 x 744 picture (debug/scratch/load/, git-ignored:
+ *   plain-picture.mts, plain-by-depth.mts, shape-like.mjs, box-plain.mts, notice-shots.mts). No
+ *   standing check measures a plain picture, so none would notice the bulb's baseline back at
+ *   its old hit level: the start view would be speckle again, under a small line.
  * @assumption `DZ_NOTICE_AFTER_MS` hides the notice on a cached start. Measured on the dev server
  *   and in the production build that day (warm-flash.mts, same folder); no standing check opens a
  *   page twice.
@@ -132,7 +146,7 @@ type DzBuilding = 'rayMarch' | 'mandelbox';
  * view; `Infinity`: at no depth. Measured, see THE TWO SIZES in the header. At or above its row the
  * notice is the small line, below it the large card.
  */
-export const DZ_PLAIN_DOWN_TO: Readonly<Record<DzBuilding, number>> = { rayMarch: Infinity, mandelbox: 0.05 };
+export const DZ_PLAIN_DOWN_TO: Readonly<Record<DzBuilding, number>> = { rayMarch: 1, mandelbox: 0.05 };
 
 /** How long a build must have lasted before the notice shows (see the header). */
 export const DZ_NOTICE_AFTER_MS = 400;
@@ -141,25 +155,27 @@ export const DZ_NOTICE_AFTER_MS = 400;
  * What each program's notice says. No renderer's inner names: this is read by someone who has just
  * opened the page.
  *
- * "THE FIRST TIME AFTER THE BROWSER STARTS", NOT "ONCE ON THIS MACHINE" (measured 2026-10-11, Chrome
- * 155 on Direct3D, the production build, one profile, the browser restarted between visits): a
- * program the renderer builds in the background is kept by the browser IN MEMORY ONLY. A later visit
- * in the same browser session has it in 0.04 s; after a restart it is built again in full (21.1 and
- * 20.3 s for the ray march's, where its three small programs, built the blocking way, came off the
- * disk in 0.00 s). If the renderer is made to get these two programs onto the browser's disk (one
- * extra draw did it in that measurement: 0.04 s after a restart), this can say "once on this
- * machine".
+ * "THE FIRST TIME", AND NO MORE THAN THAT. Left to itself the browser keeps a program the renderer
+ * built in the background IN MEMORY ONLY, and the wait came back after every restart of the
+ * browser (measured 2026-10-11, Chrome 155 on Direct3D, the production build, the browser closed
+ * and opened again on three profiles: ready after 23.4 to 25.0 s, as on a first visit; the
+ * Mandelbox's program 4.7 to 4.8 s). Since that day the renderer gets both programs onto the
+ * browser's disk with one extra draw (grep KEPT ACROSS A BROWSER RESTART in renderer/core.js), and
+ * the same restart is ready at 0.38 to 0.39 s, the Mandelbox's program there in 0.04 s. That leans
+ * on how that one Chrome behaves, a release that changes the shader is a new program to any cache,
+ * and when else a browser drops what it kept was not measured. So the card promises neither "once
+ * on this machine" nor "after the browser starts": only that it is the first time that is slow.
  */
 const NOTICE: Readonly<Record<DzBuilding, { line: string; title: string; body: string }>> = {
     rayMarch: {
         line: 'Deep renderer building',
         title: 'Building the deep renderer',
-        body: 'This takes about half a minute the first time after the browser starts. The picture comes by itself when it is ready.',
+        body: 'This takes about half a minute the first time. The picture comes by itself when it is ready.',
     },
     mandelbox: {
         line: 'Mandelbox renderer building',
         title: 'Building the Mandelbox renderer',
-        body: 'This takes a few seconds the first time after the browser starts. The picture comes by itself when it is ready.',
+        body: 'This takes a few seconds the first time. The picture comes by itself when it is ready.',
     },
 };
 
