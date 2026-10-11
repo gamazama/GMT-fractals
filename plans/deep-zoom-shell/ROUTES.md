@@ -29,7 +29,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | not started | |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | not started | |
-| R7 cleanup: the previous-generation marches retired, dead handles, help | not started | |
+| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | not started; rewritten with his answers of 2026-10-11 | |
 
 Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
 the owner, 2026-10-11") and is written into the four stages under "The stages".
@@ -764,29 +764,77 @@ cancel. this can be for all the renders".
 
 ### R7. Cleanup
 
-- **The previous-generation marches are retired.** His words, 2026-10-11, about the frames that do
-  not repeat: "i havent noticed an issue during operation, but we can retest it after the previous
-  gen shaders are retired, that should be part of cleanup". Until then he had said to keep them "a
-  little while longer". This is his kernel: BEFORE removing anything, tell him in a few lines what
-  goes and what leans on it, and take his word.
-  - What it covers, as the orchestrator reads it: the march the page drew with and its controls
-    (Step size, the True-gradient march, the J variant), leaving the ray march.
-  - The Mandelbox draws with the older march today (grep `rayUse = boxOn() ? 0 : rayAsk` in
-    `deep-zoom/renderer/core.js`): it needs the ray march first, or keeps its own.
-  - The parity proof compares the module's older march with the frozen page, 52 lines. What parity
-    means once the shell never asks for that march is his call (the module can keep the page's path
-    with the shell not using it).
-- **Then the retest of the frames that do not repeat** (R6a's note has every number). One
-  measurement: render the same grainy frame every two seconds from start-up and note when the
-  picture changes. One change that never comes back points at something that settles once; bring
-  him the result, not a second idea.
-- Host members with no caller go (`setRecording`, `takePath`, `smoothPath`, `seekPath`, `play`,
-  `stopPlay`, `renderPathZip` in `deep-zoom/host/moduleHost.ts`), and the module's path code with
-  them if parity allows.
-- Export filenames say "mandelbulb" whatever the formula.
-- Seen in the screenshots: the floating Animate button sits over the bottom of a long keyframe
-  list; keyframes cut from a trail show a number and no thumbnail.
-- Help text, JSDoc on the new files, the rule rows, the context map last.
+**Rewritten 2026-10-11 after the owner was told what goes and what leans on it.** Two read-only
+surveys stand behind this section and are the builders' reading: `debug/scratch/r7/march-survey.md`
+(every march path in `core.js`, what leans on what, the shell's controls, the tests) and
+`debug/scratch/r7/ray-march-intent.md` (what the ray march notes said should go, lean by lean,
+with quotes). The stage's earlier text is in `git log -p`.
+
+His words, 2026-10-11:
+- On the first proposal, which removed controls and kept the page's program: "i was hoping for a
+  more thorough removal of uneccesarry parts - and am wondering if the remaining lean on the pages
+  march was supposed to be minimized beyond this."
+- "Normals: Gradient - was superseded by the raymarch too".
+- "If the ray shader fails to build on a machine, that machine is likely gonna die trying to render
+  the mandelbulb at high zoom - so I wouldnt want an alternative based on that, rather an error."
+- To the four calls put to him: the Mandelbox, "add to the plan for a math session to incorporate
+  the mandelbox if possible" (`NEXT.md` session 8); parity retired and the direct proof kept, "yes";
+  a building notice with no deep picture, "no, only if the pages march is retired and we start in
+  the ray shader immediately"; the page's depth rule for iterations dropped if one measurement
+  shows the margin rule holds alone, "yes".
+
+**The end state he approved.**
+- **One bulb program: the ray march.** The plain variant (`P`), the skip-table variants and the J
+  variants are never compiled. The ray shader's build starts at once when the page opens, and
+  readiness is that program. Until it is there the chip says it is building; nothing else draws a
+  deep picture. A failed build is an error, not another march.
+- **Out of `core.js`**: the J variant (`USE_JAC`, Normals: Gradient with it), the skip table (BLA),
+  the CPU twin of the page's march (`pertMarchJS`, `api.marchPop`), the module's path code
+  (recorder, spline, play, ZIP), the 160 cap on the bulb's iterations under the ray march
+  (`api.setIters`, `dz.setView`: it cut a route's iteration keys).
+- **Out of the shell**: True-gradient march, Normals: Gradient, the BLA setting, the Ray march
+  switch, Step size for the bulb, the seven host path members.
+- **Stays, by decision**: the page's ESTIMATE inside the ray program (the hit test, the bisection,
+  hit refine, the probes: measured 1.0 % wrong against 4.4 %); `pullGradJS` (the navigation's own
+  CPU gradient); the Mandelbox on its own program with the page's step rule, Step size shown for it
+  alone, until the math session says whether it can take a ray step.
+- **Parity is retired** (it proved the module equal to the frozen page, whose march is gone). The
+  direct proof stays: the kernel's GPU values against the CPU's high-precision ones. It finds its
+  hits with a careful page-style march, which runs inside the ray shader as a measuring mode
+  (grep `bit 8 (a measuring mode)` in `core.js`). This supersedes ADR-0135's first decision: the
+  ADR is drafted, not filed, while he is away.
+- **The page's depth rule for iterations** (32 + 1.35 a decade) goes for the bulb if one
+  measurement shows the ray march's margin rule holds alone; else it stays and he gets the numbers.
+
+**How it is built**, a commit a step, so each can be taken back:
+1. **R7a, with parity still standing as the net.** The J variant out of `core.js` and the shell;
+   the shell's BLA setting gone and the skip table neither compiled nor built while the ray march
+   is in force; the dead host members and the module's path code out, keeping what parity reads
+   (`api.samplePath`, `api.stopPlay`, the telemetry keys). Proof: parity 52 of 52 and the direct
+   proof untouched, the ray march's pictures the same before and after.
+2. **R7b, the page's program retired.** The ray shader first and only; the error on a failed
+   build; BLA's code and the CPU twin out; Step size for the Mandelbox only; the Ray march switch
+   gone; the 160 cap lifted; the depth rule measured; the direct proof moved onto the measuring
+   mode; parity's script and its frozen-page plumbing retired; the smoke steps and node checks
+   that named the old controls rewritten. Proof: the ray march's and the Mandelbox's pictures the
+   same before and after, the direct proof, the shell smoke; the first wait measured.
+3. **R7c, the retest of the frames that do not repeat** (R6a's note has every number). One
+   measurement: render the same grainy frame every two seconds from start-up and note when the
+   picture changes. One change that never comes back points at something that settles once; bring
+   him the result, not a second idea.
+4. **R7d, the small things.** Export filenames say "mandelbulb" whatever the formula; the floating
+   Animate button sits over the bottom of a long keyframe list; help text, JSDoc on the new files,
+   the rule rows, the context map last.
+
+A fault in the renderer met on the way goes to him after one measurement: the step it was met in
+stops there, uncommitted or reverted, and the next one that does not depend on it goes on.
+
+Not in this stage:
+- The Mandelbox's ray step (the math session, `NEXT.md` session 8).
+- Normal taps from the hit's checkpoints, and the pole-axis crawl of the picture's march (`NEXT.md`
+  session 7): new work, not cleanup.
+- The prototype app and its frozen page copy (`deep-zoom-prototype/`, `public/deep-zoom-prototype-core/`):
+  `NEXT.md` session 5 deletes them.
 - Left on an exponential track in plain values, if he wants them: Smooth, Bounce, Simplify, a
   Continue tail (`engine/animation/logTrackRegistry.ts`, the `@assumption` block).
 

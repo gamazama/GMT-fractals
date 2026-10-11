@@ -36,7 +36,7 @@ then what lets it ship, then quality, then the large optional pieces.
 | 5 | **The prototype goes** (stage 7) | Nothing new on screen; about 8,500 lines leave the repo; the map page and README | 1 and 2 (the prototype's record panel is the last thing only it has) | 1 |
 | 6 | **Ship** | The app on the site | 4 green, his word | his call |
 | 7 | **The march, finished** | Fewer places that crawl or run out of steps; the older marches retired | his places where rays ran out of steps (owed by him) | 1 to 2 |
-| 8 | **Mandelbox, the rest** | Faster flying on the box, cheaper deep frames | nothing | 1 to 2 |
+| 8 | **Mandelbox, the rest** | A math session first: can the box take the ray march's step, so the page's step rule leaves the shader. Then faster flying on the box, cheaper deep frames | `ROUTES.md` R7 (the page's program retired for the bulb) | 1 to 3, guess |
 | 9 | **Navigation leftovers** | Cheaper rays at the deepest places; his numbers for the rise limit and the clearance | his calls | 1 |
 | 10 | **Shell leftovers** | Pause controls, Diagnostics, autosave, Export all | module package M5 for pause | 1 to 2 |
 | 11 | **Light Studio** (stage L) | GMT's light list, orb strip and aim-by-drag lighting the deep zoomer | nothing; the largest piece | 10 to 13 |
@@ -94,14 +94,28 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   beside the pole axis under a theta phase (the navigation's probe was fixed for it in `68718c65`,
   the picture's march was not); where a step's fixed cost sits is unprofiled; the ray variant and the
   plain one build one after the other (about 12 s of first wait).
-- Retiring Step size, True-gradient march and the J variant: he said keep them "a little while
-  longer", and on 2026-10-11 put retiring the previous-generation marches into the routes cleanup
-  (`ROUTES.md` R7), with what goes told to him first.
+- Retiring the older marches is `ROUTES.md` R7 now, and it goes further than this line once said:
+  the page's own program is retired for the bulb, with the J variant, the skip table and their
+  controls (his answers of 2026-10-11 are in that section).
 - Parked by him, do not touch: Detail defaults and Normal detail.
 - The standing rule for this session: a method that responds to what is on screen, never a rule keyed
   to depth or power.
 
 ### 8. Mandelbox, the rest
+- **A math session first** (the owner, 2026-10-11: "add to the plan for a math session to incorporate
+  the mandelbox if possible"). After `ROUTES.md` R7 the Mandelbox is the last thing that marches by
+  the page's step rule (estimate x Step size), on a program of its own (ADR-0135, decision 3). The
+  question, on paper and on the CPU before any shader: can the box take the ray march's step?
+  - What ADR-0135 says against the need: "with equal stretch on every axis the ray estimate says
+    what `dr` says". So the gain is not a better estimate; it is one march for both formulas, no
+    Step size left in the app, and resumed orbits on the box.
+  - What has to be worked out: a jet through the folds (the box fold and the sphere fold are
+    piecewise: a ray that crosses a fold boundary between two samples breaks the linear carry, so
+    a checkpoint's validity has to know the folds crossed); the line-against-the-ball rule's ball
+    for a formula with no Julia-set bound of the bulb's kind; negative scale.
+  - Done when there is a rule with its error bound, tested on rays through the box starters
+    (`deep-zoom/data/boxStarters.ts`) against the careful march, or a written reason why not. If it
+    holds, the build is its own stage and a new ADR over 0135's third decision.
 - The navigation's rays step by half the scalar estimate on the box (`pertOrbitJetJS` returns it):
   with equal stretch on every axis the true ray estimate is close to the scalar one, so measure how
   much of the half can be given back.
