@@ -53,11 +53,16 @@ export const VIDEO_CONFIG = {
  *   gated by the File System Access API (Chrome/Edge only). PNG combines beauty+alpha into RGBA when both
  *   passes are selected; JPG always emits a separate file per pass; depth is a separate file in both.
  */
+// A FORMAT'S INDEX IS ITS IDENTITY (`formatIndex` is stored, compared and sent to the worker):
+// never reorder this array. `listLast` is the order SHOWN: a render dialog lists those formats
+// after the others. H.265 and AV1 are the two: a Windows machine without the HEVC / AV1 video
+// extensions makes no thumbnail of such a file and Windows Media Player does not play it
+// (seen 2026-10-11 on the owner's machine: the H.264 files played, these did not).
 export const VIDEO_FORMATS = [
-    { label: 'MP4 (H.264) - Universal', container: 'mp4', codec: 'avc', ext: 'mp4', mime: 'video/mp4', imageSequence: false },
-    { label: 'MP4 (H.265/HEVC) - High Quality', container: 'mp4', codec: 'hevc', ext: 'mp4', mime: 'video/mp4', imageSequence: false },
-    { label: 'MP4 (AV1) - Best Compression', container: 'mp4', codec: 'av1', ext: 'mp4', mime: 'video/mp4', imageSequence: false },
-    { label: 'WebM (VP9) - Web Standard', container: 'webm', codec: 'vp9', ext: 'webm', mime: 'video/webm', imageSequence: false },
-    { label: 'PNG Sequence (RGBA)', container: 'png', codec: 'png', ext: 'png', mime: 'image/png', imageSequence: true },
-    { label: 'JPG Sequence (per pass)', container: 'jpg', codec: 'jpg', ext: 'jpg', mime: 'image/jpeg', imageSequence: true },
+    { label: 'MP4 (H.264) - Universal', container: 'mp4', codec: 'avc', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: false },
+    { label: 'MP4 (H.265/HEVC) - High Quality', container: 'mp4', codec: 'hevc', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: true },
+    { label: 'MP4 (AV1) - Best Compression', container: 'mp4', codec: 'av1', ext: 'mp4', mime: 'video/mp4', imageSequence: false, listLast: true },
+    { label: 'WebM (VP9) - Web Standard', container: 'webm', codec: 'vp9', ext: 'webm', mime: 'video/webm', imageSequence: false, listLast: false },
+    { label: 'PNG Sequence (RGBA)', container: 'png', codec: 'png', ext: 'png', mime: 'image/png', imageSequence: true, listLast: false },
+    { label: 'JPG Sequence (per pass)', container: 'jpg', codec: 'jpg', ext: 'jpg', mime: 'image/jpeg', imageSequence: true, listLast: false },
 ];

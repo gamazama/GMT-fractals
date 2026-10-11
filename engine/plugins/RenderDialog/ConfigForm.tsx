@@ -86,6 +86,8 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
         .filter(({ formatDef, index }) =>
             formatFilter ? formatFilter(formatDef, index) : (!formatDef.imageSequence || (frameFolder && isFrameFolderFormat(index)))
         )
+        // The order shown, not the index: the formats marked `listLast` (data/constants.ts) go under the others.
+        .sort((a, b) => Number(a.formatDef.listLast) - Number(b.formatDef.listLast))
         .map(({ formatDef, index }) => ({
             label: frameFolder && isFrameFolderFormat(index) ? 'PNG sequence (folder)' : formatDef.label,
             value: index,

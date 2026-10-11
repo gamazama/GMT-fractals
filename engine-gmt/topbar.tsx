@@ -460,6 +460,15 @@ export const registerGmtTopbar = (options: GmtTopbarOptions = {}): void => {
         onSelect: () => window.open('fluid-toy.html', '_blank', 'noopener'),
     });
 
+    menu.registerItem('system', {
+        id: 'deep-zoom',
+        type: 'button',
+        label: 'Open Deep Zoom',
+        title: 'Switch to the deep zoomer: the Mandelbulb and the Mandelbox at depths down to 1e-77.',
+        order: 23,
+        onSelect: () => window.open('deep-zoom.html', '_blank', 'noopener'),
+    });
+
     menu.registerItem('system', { id: 'sys-sep-toggles', type: 'separator', order: 29 });
 
     // Feature toggles number from 30 (plain) and from 50 (`advancedOnly`, inside the
