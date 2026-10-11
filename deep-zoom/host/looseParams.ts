@@ -15,12 +15,16 @@
  *     defaults, so a joint push (colour, light, phase) always has all its values.
  *
  * PITFALLS
- *   - NOTHING HERE SENDS `api.setBla` OR `api.setJacobian` ANY MORE (2026-10-11): the shell's BLA
- *     and True-gradient march settings went with the previous-generation marches, and the module
- *     stays on its own BLA default ('auto', which builds nothing under the ray march). A
- *     `dzQuality.bla` or `dzQuality.trueGradient` from an older scene has no row and is not pushed.
- *     Should a push ever send `setBla(true)` again: it compiles the heavier shader on the main
- *     thread (renderer/index.ts header, BLOCKING COMPILES).
+ *   - NOTHING HERE SENDS `api.setBla`, `api.setJacobian` OR `api.setRayMarch` ANY MORE (2026-10-11):
+ *     the shell's BLA, True-gradient march and Ray march settings went with the previous-generation
+ *     marches (the module has lost the first two setters, and the ray march is its only program
+ *     for the bulb, on from the start with what this file used to send: bits 5, factor 1, floor
+ *     256, line 2 - grep `let rayAsk` in renderer/core.js). A `dzQuality.bla`,
+ *     `dzQuality.trueGradient` or `dzQuality.rayMarch` from an older scene has no row and is not
+ *     pushed.
+ *   - `stepRelax` IS PUSHED WHATEVER THE FORMULA, though its row shows for the Mandelbox only
+ *     (features/quality.ts, `BOX_ONLY`): the bulb's ray march does not read it, and the box must
+ *     find it in force the moment it is selected.
  *   - `setColor(mode, scale)` and `setLight(mode, falloff)` ignore a falsy second argument and
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
@@ -85,10 +89,6 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         nrmTap: () => api.setLook({ nrmTap: depthNormalRadiusToRenderer(num('dzQuality', 'depthNormalRadius')) }),
         land: () => api.setLand(flag('dzQuality', 'hitLanding')),
         hitRefine: () => api.setHitRefine(num('dzQuality', 'hitRefine')),
-        // bits 5 = step by the ray estimate + orbits resumed along the ray; the longer step of THE LINE AGAINST THE
-        // BALL is taken (allowance twice the bend measure); the hit test stays the page's, with a creep floor of
-        // 1/256 of a display pixel (grep both names in renderer/core.js)
-        rayMarch: () => api.setRayMarch(flag('dzQuality', 'rayMarch') ? 5 : 0, { factor: 1, floor: 256, line: 2 }),
         accum: () => api.setAccum(flag('dzQuality', 'accumulate')),
         stepRelax: () => api.setStepRelax(num('dzQuality', 'stepSize')),
         capRelax: () => api.setCapRelax(num('dzQuality', 'resolutionCap')),

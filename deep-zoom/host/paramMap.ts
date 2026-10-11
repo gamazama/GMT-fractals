@@ -49,7 +49,7 @@ export type DzInvalidation = 'O' | 'A' | '-';
 /** The pushes of `looseParams.ts`. `look` rows also name the field of `api.setLook`. */
 export type DzPushGroup =
     | 'formula' | 'power' | 'phase' | 'iters' | 'autoIters'
-    | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'rayMarch' | 'accum'
+    | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'accum'
     | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
 
@@ -122,10 +122,10 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     { feature: 'dzQuality', key: 'depthNormalRadius', cls: 'A', group: 'nrmTap', read: (api) => indexIn(DEPTH_NORMAL_RADIUS_RENDERER_VALUES, api.look.nrmTap) },
     { feature: 'dzQuality', key: 'hitLanding', cls: 'A', group: 'land', read: (api) => api.dz.settings().land },
     { feature: 'dzQuality', key: 'hitRefine', cls: 'A', group: 'hitRefine', read: (api) => api.marchLevers().hitRefine },
-    { feature: 'dzQuality', key: 'rayMarch', cls: 'A', group: 'rayMarch', read: (api) => api.rayMarch().bits !== 0 },
+    // (no `rayMarch` row since 2026-10-11: the switch went, the ray march is the bulb's only program)
     { feature: 'dzQuality', key: 'accumulate', cls: 'A', group: 'accum', read: (api) => api.dz.settings().accum },
     { feature: 'dzQuality', key: 'actualPixels', cls: 'A', group: null, why: 'the module has no setter for its 1:1 view, and the shell has no centring style for it yet' },
-    // The module's raw value 0 means "the default 0.85".
+    // The module's raw value 0 means "the default 0.85". The Mandelbox's march reads it; the bulb's ray march does not.
     { feature: 'dzQuality', key: 'stepSize', cls: 'A', group: 'stepRelax', read: (api) => { const r = api.marchLevers().stepRelax; return r > 0 ? r : 0.85; } },
     { feature: 'dzQuality', key: 'resolutionCap', cls: 'A', group: 'capRelax', read: (api) => api.marchLevers().capRelax },
 

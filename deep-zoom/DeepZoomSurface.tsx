@@ -127,6 +127,8 @@ export const DeepZoomSurface: React.FC = () => {
                     showToast('Graphics context lost. The renderer restarted at its start view.', 'warning', 5000);
                     setMountKey((k) => k + 1);
                 },
+                // A FATAL boot error only (no shader in 120 s, the Mandelbox's shader). A ray march that
+                // could not be built does not come here: the host stays up (see the `error` listener below).
                 onError: (message) => { if (mounted) fail({ title: NOT_STARTED, detail: message }); },
             });
         } catch (err) {
@@ -141,6 +143,13 @@ export const DeepZoomSurface: React.FC = () => {
 
         setHost(host);
 
+        // THE RAY MARCH'S SHADER COULD NOT BE BUILT (2026-10-11): the host says so once, with
+        // `fatal: false` and the line to show (`DZ_RAY_FAILED_TEXT`, host/current.ts). It stays up -
+        // the plain picture goes on, the status chip keeps the notice - and nothing draws a deep
+        // picture in its place. One toast, 15 s (a click closes it sooner); the chip's notice stays
+        // for as long as the host does. A fatal error is `onError` above.
+        const offError = host.on('error', (e) => { if (mounted && !e.fatal) showToast(e.message, 'error', 15_000); });
+
         // PHASE: OVERLAY, the first phase after ANIMATE. The engine's animation tick
         // (`engine.animation`, registered by `installModulation` in
         // engine/animation/modulationTick.ts) runs in ANIMATE and writes the timeline's values
@@ -153,6 +162,7 @@ export const DeepZoomSurface: React.FC = () => {
 
         return () => {
             mounted = false;
+            offError();
             unregisterTick();
             clearHost(host);
             host.dispose();

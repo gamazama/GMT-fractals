@@ -233,7 +233,7 @@ export const dzWheelStep = (current: number, dir: 1 | -1, modifier: number): num
 // renderer is not exporting for a moment - the lock must not open there.
 const navigationLocked = (): boolean => {
     const t = getTelemetry();
-    return t.exporting || t.playing || routeRendering();
+    return t.exporting || routeRendering();
 };
 /** A key that is not a move: the pointer is over the timeline (GMT's rule), or the key comes with
  *  Ctrl / Alt / Cmd - a shortcut (Alt+S saves the scene, Ctrl+Z undoes), never a fly key. */

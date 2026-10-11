@@ -3,8 +3,8 @@
  *
  * Run:   npx tsx debug/deep-zoom-direct-check.mts            (starts Vite on 3478, stops it after)
  *        PORT=3478 npx tsx debug/deep-zoom-direct-check.mts  (use a dev server already running)
- *        BLA=1 ...                                           (same switch as the historical suite)
  *        MANUAL=1 ...                                        (harness with ?manual=1: the host-driven loop)
+ *        (the historical suite's BLA=1 went on 2026-10-11 with the skip table)
  *
  * This is `mandelbulb_deepzoom/direct-check.test.mjs` (repo pinned at 3b65946) with ONE change: the
  * page it opens. The historical suite opens file://.../index.html; this opens /deep-zoom-harness.html,
@@ -35,6 +35,23 @@
  *
  * Real GPU only: headed Chrome through ANGLE/d3d11 (SwiftShader cannot compile this shader in time).
  *
+ * MOVED ONTO THE RAY MARCH'S PROGRAM, 2026-10-11. Until that day the harness page drew the bulb with the page's
+ * own program and every number here was read in it. That program is gone: the bulb has ONE program, the ray
+ * march's (grep "deep program variants" in core.js), and this proof runs in it. WHAT IT REFEREES DID NOT CHANGE:
+ * the same points, the same tolerances, the same lines. The probes behind `__directCheckHP` and `__dive` always
+ * run the page's orbit, whatever the march (grep `gRay is 0 outside the march`). Two things had to be said to
+ * the module, and they are the whole of the change:
+ *   - `__setRayMarch(0)` at the start, held for the whole run. With any ray bit set the module raises the
+ *     iteration count by the ray march's own rule (grep ITERATIONS AS A MARGIN), between frames; the counts this
+ *     script sets, and the views' own, would not be the counts the probes then run, and the points would not
+ *     be the same points. Bits 0 leaves the page's iteration rules in force, as they were.
+ *   - the careful march that FINDS the hits of the grids (`__setReach(2)`, 16384 steps, a step of a tenth of
+ *     the estimate, 8 hit-refine halvings: `__readGbuf`) runs as the ray program's MEASURING MODE, bit 8 with no
+ *     creep floor and no line rule - the jet is carried, the march is the page's - and bits 0 are put back
+ *     after it, inside the same evaluate, so that no frame runs with a ray bit set.
+ * The Mandelbox's grids are untouched: its program is its own.
+ * SEEN RED ON THE RAY PROGRAM, 2026-10-11: see the foot of this header.
+ *
  * THE MANDELBOX SECTION SEEN RED, 2026-10-09 (one break in deep-zoom/renderer/core.js per run, restored after):
  *   - GLSL `boxFoldD`, the reference between the planes and the pixel past +L: `pr == 1 ? -gh` -> `? d`
  *       -> exit 1, the three deep grids FAIL ("scale -1.5, deep ... GPU vs twin: 120 over 1e-3, worst 1.2e+1",
@@ -47,6 +64,15 @@
  *       -> exit 1, both plain deep grids FAIL ("scale -1.5, deep ... escape flags differ 338", "scale 2, deep ...
  *       338 over 1e-3, worst 2.7e+8").
  *   The bulb's 11 depths and 4 grids stayed green through all three.
+ *
+ * THE BULB'S LINES SEEN RED ON THE RAY PROGRAM, 2026-10-11 (one break, restored byte for byte, sha-256):
+ *   - GLSL, the kernel's estimate: `hdrFromFloat(0.5 * rF * log(rF))` -> `0.4 * ...` (the `vec2 de =` line of
+ *       KERNEL_CORE) -> exit 1: 0/11 depths, every one "worst GPUvsHP=2.0e-1 FAIL" (the dive certifies no ray
+ *       either); both gated off-centre grids FAIL ("169 over 1e-3  169 over 1e-2  worst 2.0e-1"). The two gated
+ *       far hand-off lines stay PASS (they read the referee's estimate at the hit, not the GPU's), and so do the
+ *       Mandelbox's five (its kernel is its own).
+ *   Green on the same tree before and after: 11/11, 4/4, 5/5, every printed number equal, to the last digit, to
+ *   the run of the day before in the page's own program (79 lines, one differs: the line that names the path).
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -138,14 +164,13 @@ try {
   page.on('pageerror', (e) => pageErrors.push(String(e)));
   await page.goto(PAGE, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForFunction(() => (window as any).__deepReady !== undefined, null, { timeout: 180000 });
-  // ---- from here to the summary line: the historical suite, unchanged ----
-  // BLA=1 enables the GPU skip-table path (lazily compiles the BLA program, ~40 s once).
-  // The referee (__directCheckHP, BigInt direct) shares ZERO math with the kernel either way.
-  const BLA = process.env.BLA === '1';
-  await page.evaluate(() => { const window = globalThis as any; window.__lockInput(true); window.__setBla(false); });   // explicit: the page's own default is BLA auto
-  if (BLA) { await page.evaluate(() => (window as any).__setBla(true));
-    const e = await page.evaluate(() => (window as any).__blaErr()); if (e) { console.log('BLA COMPILE FAILED:\n' + e); process.exit(1); } }
-  console.log('BLA path:', BLA ? 'ON' : 'off');
+  if (!(await page.evaluate(() => (window as any).__deepReady === true))) { console.log('THE RAY MARCH\'S SHADER DID NOT BUILD:\n' + (await page.evaluate(() => String((window as any).__deepErr)))); process.exit(1); }
+  // ---- from here to the summary line: the historical suite, unchanged but for the two lines below ----
+  // The referee (__directCheckHP, BigInt direct) shares ZERO math with the kernel.
+  // Bits 0, held for the whole run: the iteration count stays the page's (see the header). The historical
+  // suite's line here was `__setBla(false)`, and its BLA=1 switch; the skip table went on 2026-10-11.
+  await page.evaluate(() => { const window = globalThis as any; window.__lockInput(true); window.__setRayMarch(0); });
+  console.log('program: the ray march\'s (the bulb\'s only one); bits 0 between the careful marches, the measuring mode (bit 8) inside them');
   if (ORIGIN) { await page.evaluate('window.__setRebaseOrigin(true)'); console.log('rebase: to the ORIGIN (ORIGIN=1; the default is the page\'s)'); }   // not in the historical suite
   for (const depth of DEPTHS) {
     // base 32: +8 margin over escape time so boundary points don't sit at the budget
@@ -219,7 +244,9 @@ try {
     w.__setRebaseOrigin(${origin}); w.__setFarHandOff(${far}); w.__dz.setView(${JSON.stringify(view)}); w.__setSurf(${rows} / G);   // the hit tolerance of a picture that many rows tall, on 13 rays
     await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(done))));
     w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
+    w.__setRayMarch(8, { floor: 0, line: 0 });                                // the careful march, as the ray program's measuring mode (see the header)
     const g = w.__readGbuf(G);
+    w.__setRayMarch(0);                                                       // before any frame runs
     w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
     const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, refE = Math.floor(Math.log2(dist));
     const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);

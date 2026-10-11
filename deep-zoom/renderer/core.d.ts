@@ -84,15 +84,17 @@ export interface DeepZoomCoreOptions {
      *  otherwise shows a faint second picture (grep `HOLD THE ESTIMATE` in core.js). The Mandelbox
      *  does this whatever the option says. */
     holdEstimate?: boolean;
-    /** Default false (the page's march). True: the renderer starts with THE RAY MARCH on (grep `THE RAY
-     *  ESTIMATE` in core.js) as the shell uses it - steps by the ray estimate and the line rule, orbits
-     *  resumed along the ray, and iterations as a margin (the detail setting applies as ever). Its shader builds in the background (about 20 s; telemetry `rayMarch`
-     *  says `building`), the page's march is drawn meanwhile. `api.setRayMarch` changes it later. */
-    rayMarch?: boolean;
+    /* NO `rayMarch` OPTION SINCE 2026-10-11. It chose between the page's march (the default then) and THE RAY
+     * MARCH (grep `THE RAY ESTIMATE` in core.js). The ray march is now the bulb's only program, on from the
+     * start as the shell had it: steps by the ray estimate and the line rule, orbits resumed along the ray,
+     * iterations as a margin. Its shader builds in the background from the moment the module is created
+     * (about 20 s cold) and IS what `ready` waits for; nothing else draws a deep picture of the bulb meanwhile,
+     * and a build that fails is an error (`api.dz.telemetry().error`), not another march. core.js does not
+     * read the key: a JavaScript caller that still passes it gets the ray march. */
     /** Default 'mandelbulb' (the page). 'mandelbox': start on the Mandelbox (grep `THE FORMULA SEAM` in
-     *  core.js); its deep shader variant starts to build at once, beside the bulb's. The box draws with the
-     *  page's march whatever `rayMarch` or BLA ask for - those stay as asked
-     *  and apply again when the bulb is selected. `api.setFormula` changes it later. */
+     *  core.js); its deep shader variant starts to build at once, beside the bulb's. The box steps by the
+     *  page's rule: the ray march is the bulb's, stays as it was asked and applies again when the bulb is
+     *  selected. `api.setFormula` changes it later. */
     formula?: 'mandelbulb' | 'mandelbox';
     /** The box's parameters from the start (they are kept while the bulb is drawn). */
     formulaParams?: DeepZoomBoxParams;

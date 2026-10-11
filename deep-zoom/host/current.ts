@@ -52,6 +52,14 @@ export const DZ_CANVAS_ID = 'dz-render-canvas';
  *  nothing that way at all; open short of it, the rays only ran out of steps. */
 export const DZ_SENSE_FAR = 8;
 
+/** THE ONE LINE FOR A RAY MARCH THAT COULD NOT BE BUILT (2026-10-11). The bulb has one program; when
+ *  this machine cannot build it there is no deep picture and nothing stands in for it (the owner:
+ *  "If the ray shader fails to build on a machine, that machine is likely gonna die trying to render
+ *  the mandelbulb at high zoom - so I wouldnt want an alternative based on that, rather an error").
+ *  The host's `error` event carries it (`fatal: false`), the surface toasts it once, the status
+ *  chip's notice shows it, and a render refuses to start with it (`deep-zoom/routeRender.tsx`). */
+export const DZ_RAY_FAILED_TEXT = 'The ray march\'s shader could not be built on this machine, so the deep picture cannot be drawn.';
+
 /** The holder itself. Prefer the accessors below; this is exported for `reset()` in tests. */
 export const deepZoomHost = defineAppHandles<DeepZoomHost | null>('deep-zoom.host', null);
 

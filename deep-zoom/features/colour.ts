@@ -40,8 +40,7 @@
  *       the same natural log. The constant differs: renderer `1.5 * log(max(t, 1e-30))`, GMT
  *       `-0.2 * log(max(1e-5, t))` (`logTrap`). The renderer's value is -7.5 times GMT's
  *       (`ORBIT_TRAP_GMT_SCALE_RATIO`): `scale` S here draws what GMT draws at scale -7.5 * S —
- *       bands 7.5 times as dense, the ramp run the other way. The floors differ below t = 1e-5,
- *       and with BLA on the renderer samples the trap only where a BLA run ends.
+ *       bands 7.5 times as dense, the ramp run the other way. The floors differ below t = 1e-5.
  *     renderer 1, iteration = GMT 1. The same idea, a smooth escape count; not the same number.
  *       Renderer: `0.18 * (n + 1 - log(log|z|) / log(power))`, |z| at the first step past radius
  *       2. GMT: `(n + 1 - log2(log2(|z|^2) / log2(escape))) / iterations`, |z| at the DE bailout

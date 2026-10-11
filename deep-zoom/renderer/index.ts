@@ -49,18 +49,17 @@
  *     deep compiles. Create the canvas imperatively inside the effect, pass
  *     `loseContextOnDispose: true`, and remove the canvas in the cleanup. A canvas whose context
  *     was lost that way cannot be used again. (Without the flag, re-creating on the same canvas
- *     works — the parity smoke does it — and leaks until the canvas is collected.)
+ *     works — the parity smoke did it until it was retired, 2026-10-11 — and leaks until the canvas
+ *     is collected.)
  *   - CONTEXT LOSS is not restored. The file's own notes record device resets from large deep
  *     draws. After one, draws are no-ops, `thumbnail()` is black and telemetry still says ready;
  *     `instance.contextLost` / `onContextLost` are the only signal. Dispose and mount fresh.
- *   - BLOCKING COMPILES. `api.setBla(true)` compiles the heavier BLA shader synchronously: in the
- *     caller's stack when the deep shader is ready, otherwise inside the first `step()` after it
- *     lands. A host should only call `setBla('auto')` or `setBla(false)`; for "on", call
- *     `setBla('auto')`, wait until `api.compileMs().PB` is defined, then `setBla(true)` - and with
- *     the ray march in force 'auto' builds no BLA shader at all, so that wait would not end. (The
- *     gmt-shell calls none of them: it has had no BLA setting since 2026-10-11.) The three
- *     small programs compile synchronously inside `createDeepZoom`, and without
- *     KHR_parallel_shader_compile so does the deep shader (about 15 s cold).
+ *   - BLOCKING COMPILES. The three small programs compile synchronously inside `createDeepZoom`,
+ *     and without KHR_parallel_shader_compile so does the deep shader (about 20 s cold). These
+ *     block the caller until a build that is still in flight has finished: `api.setRayMarch(bits,
+ *     opt, true)` and `api.setRayDefs` (the bulb's program), `api.dz.renderFrame` on the Mandelbox
+ *     (its program), `api.stats` and `api.marchProbe` (the counter variants, built on first use).
+ *     (The skip table's `api.setBla(true)` was the other one; it went 2026-10-11 with BLA.)
  *   - SIZE. A size element of 0 x 0 (hidden tab, display:none) renders 2 x 2. The 1:1 view writes
  *     an inline width / height on the canvas, so the size element must not shrink-wrap the canvas.
  *     The size element is captured at create; re-parenting the canvas later is not followed.
@@ -73,31 +72,54 @@
  *     them to numbers; pass them back verbatim.
  *   - A module is strict-mode code, the page's script was not. port.mjs proves the port has no
  *     undeclared names; a later hand edit that assigns to one will throw instead of leaking a global.
- *   - The first `createDeepZoom` compiles the deep shader in the background (about 15 s cold).
- *     `api.dz.telemetry().ready` turns true when it lands; until then the f32 picture is shown.
+ *   - The first `createDeepZoom` compiles the deep shader in the background: THE RAY MARCH's
+ *     program, the bulb's only one since 2026-10-11 (about 20 s cold on the machine it was
+ *     measured on). `api.dz.telemetry().ready` turns true when it lands; until then the f32
+ *     picture is shown and NOTHING draws a deep picture of the bulb. If it cannot be built,
+ *     `telemetry().error` carries the compiler's log, `ready` never turns true and
+ *     `api.rayMarchState()` says 'failed': an error for the host to show, not another march
+ *     (the owner, 2026-10-11: a machine that cannot build it would not survive the bulb at depth
+ *     by another route either).
  *
- * @invariant core.js draws the same picture and returns the same numbers as the historical page at
- *   3b65946 — proven by: npx tsx debug/smoke-deep-zoom-parity.mts ("picture ... harness = historical",
- *   "numbers ... GPU values equal"). Falsified 2026-10-07: with the kernel's distance estimate
- *   changed from `0.5 * rF * log(rF)` to `0.4 * ...` in core.js, 24 lines went red (all 20
- *   pictures, both number lines, the export's mean level, the re-created picture) and
- *   `port.mjs --check` reported the hand edit.
+ * @invariant the GPU kernel's distance estimate agrees with a BigInt fixed-point march that shares
+ *   no maths with it, to 1e-3, at 11 depths from 1e-5 to 1e-50 and on two 13 x 13 grids of
+ *   off-centre rays, IN THE RAY MARCH'S PROGRAM (the only one the bulb has) — proven by: npm run
+ *   smoke:deep-zoom-direct ("N/11 depths ...", the "off-centre rays ... rebase to the origin"
+ *   lines). Falsified 2026-10-11 ON THE RAY PROGRAM: the kernel's estimate changed from
+ *   `0.5 * rF * log(rF)` to `0.4 * ...` in core.js -> exit 1, 0/11 depths (each "worst
+ *   GPUvsHP=2.0e-1 FAIL") and both gated off-centre grids FAIL (169 of 169 rays over 1e-2). The
+ *   far hand-off lines of that proof are another invariant (grep FAR HAND-OFF in core.js; they
+ *   read the referee at the hit and stayed PASS). Green before and after, with every printed
+ *   number equal to the run in the page's own program the day before.
+ * @assumption Retiring the page's march (2026-10-11) moved no picture that the ray march, the
+ *   Mandelbox or the shell draws. Measured at each step of the retirement by a before / after
+ *   comparison of 41 pictures (debug/scratch/r7/pictures.mts, git-ignored), and by the text of
+ *   every kept shader program being what it was (debug/scratch/r7/shader-diff.mjs); there is no
+ *   standing guard. WHAT THIS REPLACES: core.js NO LONGER DRAWS WHAT THE HISTORICAL PAGE DRAWS.
+ *   Until that day this header held "@invariant core.js draws the same picture and returns the
+ *   same numbers as the historical page at 3b65946", proven by the parity smoke
+ *   (debug/smoke-deep-zoom-parity.mts: 20 pictures, two lines of numbers; falsified 2026-10-07
+ *   with the estimate's 0.5 changed to 0.4 -> 24 lines red). The owner retired the page's march
+ *   program and that smoke with it; its last run, on the tree before, was 52 of 52.
  * @assumption With `autoStart: false` the frame runs only when `step()` is called, and
  *   create -> dispose -> create leaves one loop, the same 8 listeners and one scaffold. The parity
- *   smoke's "lifecycle ..." lines check exactly this and pass, but they have not been run against
- *   a deliberately broken wrapper, so this is not yet an @invariant.
+ *   smoke's "lifecycle ..." lines checked exactly this and passed until that smoke was retired
+ *   (2026-10-11); they were never run against a deliberately broken wrapper. NOTHING CHECKS IT NOW
+ *   in the module; the shell's own mount is watched by npm run smoke:deep-zoom ("exactly one
+ *   canvas#dz-render-canvas ... (StrictMode left one)", "host.frameCount() rises while the engine
+ *   loop runs").
  * @assumption A disposed instance publishes nothing on `window`, and `loseContextOnDispose` loses
  *   the old context while a fresh canvas starts clean. The parity smoke's "lifecycle manual: a
- *   disposed instance publishes nothing late" and "lifecycle lose-context ..." lines check this and
- *   pass; they were not run against a wrapper with the fix removed, so not yet an @invariant.
+ *   disposed instance publishes nothing late" and "lifecycle lose-context ..." lines checked this
+ *   until 2026-10-11 (never against a wrapper with the fix removed). Nothing checks it now.
  * @assumption The option seams `keyTarget`, `shortcuts`, `dropTarget`, `pointerLock`,
  *   `resetStillOnResize` and `onContextLost` do what core.d.ts says. They were added after review
- *   by reading; no test drives a key, a drop, a click, a resize or a context loss through them.
- *   The parity smoke proves only that with the defaults nothing changed.
- * @assumption The page differs from itself: two runs of the HISTORICAL page can disagree in up to
+ *   by reading; the shell's smoke drives a key in a text field, a shortcut key and a resize through
+ *   three of them (npm run smoke:deep-zoom, stage 1), nothing drives a drop, a click or a context loss.
+ * @assumption The HISTORICAL page differs from itself: two runs of it can disagree in up to
  *   ~0.7 % of pixels once a setting has been changed away from its default (seen 2026-10-07 at
- *   detail 8; the default picture was identical every time). The smoke prints that floor beside
- *   every picture line. The cause was not investigated in this pass.
+ *   detail 8; the default picture was identical every time). The parity smoke printed that floor
+ *   beside every picture line. The cause was not investigated.
  * @assumption `sizeElement.clientWidth / clientHeight` stand in for the page's `window.innerWidth /
  *   innerHeight`. Equal in the harness (the parent is a full-window body); a shell whose canvas
  *   parent is smaller than the window gets a picture sized to that parent, which is the intent but
@@ -151,15 +173,11 @@ export interface DzTelemetry {
     power: number;
     accumN: number;
     accumMax: number;
-    /** `recording`, `playing` and `pathFrames` are false, false and 0 for good since 2026-10-11 (the
-     *  page's recorder and path preview went: grep `CAMERA PATHS` in core.js). The keys stay: the
-     *  parity smoke compares the frozen page's 16. */
-    recording: boolean;
-    playing: boolean;
+    /** A render owns the context (the page's export, `renderFrame`): the frame loop draws nothing. */
     exporting: boolean;
-    pathFrames: number;
-    /** The skip table is in use (the page's march, below 1e-13 on 'auto'). Never under the ray march. */
-    bla: boolean;
+    // 12 keys. The page had 16: `recording`, `playing`, `pathFrames` (its recorder and path preview:
+    // grep `CAMERA PATHS` in core.js) and `bla` (the skip table) went on 2026-10-11 with the parity
+    // smoke, which had compared the 16.
 }
 
 export interface DzSettings {
@@ -224,8 +242,8 @@ export interface DzHostHandle {
      *  (`api.cancelRender()`). Rejects when it cannot start (not ready, a render already running)
      *  or the picture is too large for the look. `telemetry().exporting` is true while it runs, and
      *  the frame loop draws nothing. Its waits are a message channel, so it goes on in a hidden
-     *  tab. It may block on a shader build (the ray march's, the Mandelbox's) when asked before
-     *  that variant is there.
+     *  tab. It may block on the Mandelbox's shader build when asked before that variant is there
+     *  (the bulb's one program is what "ready" means, so there is nothing to wait for).
      *  @assumption A frame depends on the view and the look and nothing else. BY CONSTRUCTION:
      *  every value the picture is drawn from is worked out from the view inside the call. BY
      *  MEASUREMENT (the app, the real GPU, 2026-10-11; debug/scratch/r6/, git-ignored; numbers in
@@ -241,11 +259,13 @@ export interface DzHostHandle {
      *  'host': the module reads no key and no mouse; the host moves it with `api.moveAlong` and
      *  turns it with `setYawPitch` or `setOrientation`. The distance probe and auto iterations run either way.
      *  (Added 2026-10-08. grep `HOST INPUT` in core.js.)
-     *  @invariant under 'host' a held fly key does not move the camera, and `api.moveAlong` /
-     *  `setYawPitch` still do - proven by: npm run smoke:deep-zoom-parity ("host input: with the
-     *  host owning it, holding W leaves the camera strings unchanged"). Falsified 2026-10-08: the
-     *  owner test removed from the keydown listener -> red. The captured-mouse look under 'host'
-     *  is NOT opened by any test (a pointer lock needs a real gesture). */
+     *  @assumption under 'host' a held fly key does not move the camera, and `api.moveAlong` /
+     *  `setYawPitch` still do. An @invariant until 2026-10-11, proven by the parity smoke ("host
+     *  input: with the host owning it, holding W leaves the camera strings unchanged"; falsified
+     *  2026-10-08: the owner test removed from the keydown listener -> red). That smoke is retired
+     *  and no other guard opens the module's own key listener under 'host': the shell's smoke
+     *  flies with the shell's keys (stage N5). The captured-mouse look under 'host' was never
+     *  opened by any test (a pointer lock needs a real gesture). */
     setInputOwner(owner: 'module' | 'host'): void;
     inputOwner(): 'module' | 'host';
     /** The surface distance of the last frame, UNSMOOTHED (telemetry `depth` is eased when it
@@ -261,9 +281,11 @@ export interface DzHostHandle {
     /** Set the whole orientation. NOTHING IS CLAMPED: a pitch within +-pi/2 is the caller's promise
      *  (the basis is well defined at the poles; beyond them the picture is upside down). Restarts
      *  the still; the reference orbit stays.
-     *  @invariant with the roll at 0 the picture is the page's, pixel for pixel - proven by: npm run
-     *  smoke:deep-zoom-parity (the 20 "picture ..." lines). Falsified 2026-10-10: the camera started
-     *  with a roll of 0.1 in core.js -> 22 lines red (all 20 pictures and the two re-created ones). */
+     *  @assumption with the roll at 0 the picture is what it was before the camera had a roll,
+     *  pixel for pixel. An @invariant until 2026-10-11, proven by the parity smoke's 20 "picture
+     *  ..." lines against the frozen page (falsified 2026-10-10: the camera started with a roll of
+     *  0.1 in core.js -> 22 lines red). That smoke is retired with the page's march; nothing
+     *  compares a roll-free picture with anything now. */
     setOrientation(yaw: number, pitch: number, roll: number): void;
     /** THE FREE DISTANCE ALONG A RAY (added 2026-10-09; grep the name in core.js): seven rays about
      *  `axis` (a unit vector in world axes; null or absent = the view axis), marched on the CPU from
@@ -344,9 +366,8 @@ export interface DeepZoomApi {
     setSurf(mul: number): void;
     setColor(mode: number, scale?: number): void;
     setAccum(on: boolean): void;
-    /** `true` BLOCKS on a shader compile (see BLOCKING COMPILES above); a shell uses 'auto' / false. */
-    setBla(on: boolean | 'auto'): void;
-    /** Compile times in ms by variant key; `PB` is defined once the BLA variant has been built. */
+    /** Compile times in ms by program key: `S` (pass S), `PR` (the bulb's program, the ray march),
+     *  `X` (the Mandelbox), `PTR` / `XT` (their counter variants). A key is defined once built. */
     compileMs(): Record<string, number | undefined>;
     loadGradient(file: File): Promise<unknown>;
     /** One row of RGBA texels as the palette, at once (added 2026-10-09). `width` defaults to the
@@ -372,7 +393,7 @@ export interface DeepZoomApi {
      *  the reference orbit and the still restart. Selecting the box for the first time starts its
      *  shader variant building in the background (4.4 s measured, cold): its plain single-precision picture
      *  is drawn until then, `dz.telemetry().ready` is false and `formulaState()` says 'building'.
-     *  The box always draws with the page's march: the ray march, BLA
+     *  The box always steps by the page's rule, in its own program: the ray march
      *  and the rebase to the origin are the bulb's, stay as they were asked, and apply again when
      *  the bulb is selected (`rayMarch().bits` is the ask; `rayMarchState()` says 'off' meanwhile).
      *  Selecting the box raises the iteration count to the least that draws it; with auto iterations
@@ -443,8 +464,12 @@ export interface DeepZoomApi {
      *  that coarser level - fine geometry, a calmer surface. */
     setNormalDetail(d: number): void;
     normalDetail(): number;
-    /** THE RAY ESTIMATE AND RAY-COHERENT ORBITS (a prototype, added 2026-10-09, 0 = off = the page;
-     *  grep the name in core.js). Bits: 1 = the march steps by 0.5 r ln r / |J v|, the escaping
+    /** THE RAY ESTIMATE AND RAY-COHERENT ORBITS (added 2026-10-09; the bulb's ONLY program since
+     *  2026-10-11, on from the start at bits 5, floor 256, line 2; grep the name in core.js). A
+     *  shell has no reason to call this: the proofs and the bench do. Bits 8 is a measuring mode
+     *  (carry the jet, march as the page does); bits 0 leaves nothing of the ray march in force
+     *  inside the same program (the page's step rule, the page's iteration rules) - it is no longer
+     *  "the page's program". Bits: 1 = the march steps by 0.5 r ln r / |J v|, the escaping
      *  iterate's speed along the ray - a first-order estimate of the distance left along it,
      *  measured safe on the test views (not proven), so no step setting; 2 = a hit is tested by it at a fixed share of a display pixel (`hit`, default
      *  1/64), so no detail setting; 4 = each sample resumes the previous sample's orbit and runs
@@ -456,22 +481,21 @@ export interface DeepZoomApi {
      *  measure as its allowance (0 = off; 2 is the tested value). `detail`: above 0, the hit level is a
      *  display pixel / this whatever `setSurf` says (default 0 = follow `setSurf`). With
      *  auto iterations the cap stands a margin above the camera orbit's own escape (grep ITERATIONS AS A
-     *  MARGIN). The picture switches when the variant has
-     *  compiled, in the background - `rayMarchState()` says when; `now` builds it BLOCKING. While
-     *  it is on, BLA is not used, and on 'auto' is neither compiled nor built. */
+     *  MARGIN). The program is built at load, in the background - `rayMarchState()` says when it
+     *  is there; `now` waits for that build, BLOCKING. */
     setRayMarch(bits: number, opt?: { factor?: number; hit?: number; tol?: number; floor?: number; line?: number; detail?: number }, now?: boolean): void;
+    /** The bulb's program: 'building' from create until it is there ('on'), 'failed' for good if it
+     *  could not be built (`dz.telemetry().error` has the log; nothing else draws the bulb deep).
+     *  'off' while the Mandelbox is drawn, or with bits 0. */
     rayMarchState(): 'off' | 'building' | 'on' | 'failed';
     rayMarch(): { bits: number; factor: number; hit: number; tol: number; floor: number; line: number; detail: number };
     marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number };
-    blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */
     look: DzLook;
     lockInput(locked: boolean): void;
-    /** Put the camera at time `tau` along a recorded path (the sample flight: parity and the march bench
-     *  place their views with it). What is left of the page's path code: grep `CAMERA PATHS` in core.js. */
+    /** Put the camera at time `tau` along a recorded path (the sample flight: the march bench places
+     *  its views with it). What is left of the page's path code: grep `CAMERA PATHS` in core.js. */
     samplePath(path: DzPath, tau: number): number[] | null;
-    /** Does nothing since 2026-10-11 (it ended the page's path preview, which went); kept callable. */
-    stopPlay(): void;
     cancelRender(): void;
     [name: string]: unknown;
 }

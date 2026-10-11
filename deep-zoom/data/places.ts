@@ -11,15 +11,17 @@
  *
  * `state` is a location (`DzLocationState` in deep-zoom/locations.ts): the same object a saved
  * location holds and "Copy location" puts on the clipboard. To add one: go there, Copy location,
- * and append `{ name, note, state: <the pasted object>, march: <the Quality tab's three numbers> }`.
+ * and append `{ name, note, state: <the pasted object> }`.
  *
  * PITFALLS
  *   - The three `cam` values are 256-bit integers as decimal STRINGS. Paste them; never retype them
  *     and never let anything turn them into numbers.
- *   - `march` (step size, hit refine, reach) is TEST DATA, not part of the place: what the owner
- *     drew it with under the page's march, which `npm run bench:deep-zoom-march` marches again as
- *     its "saved" row. No jump applies it: a place brings no march, and a jump keeps whatever the
- *     Quality tab holds.
+ *   - A PLACE BRINGS NO MARCH: a jump keeps whatever the Quality tab holds. Until 2026-10-11 each
+ *     entry also carried `march`, the Step size, Hit refine and Reach the owner drew it with under
+ *     the page's march (0.1 / 2 / full, 0.5 / 4 / relaxed and 0.5 / 3 / relaxed, in the order
+ *     below), which the march bench marched again as its "saved" row. That march and that row are
+ *     gone, nothing read the field any more, and it went. The notes still quote what the page's
+ *     march measured here: that is why these places are the hard ones.
  *   - Each view still carries the renderer's own `light`, `color`, `cscale` and `surf` (detail)
  *     fields: a view has them. A jump does not read them; the bench's `--detail saved` reads `surf`.
  *   - This file was first written by a script from the owner's saved files
@@ -33,8 +35,6 @@ export interface KeptPlace {
     /** Why it is kept, and what was measured there. Shown as the card's tooltip. */
     note: string;
     state: DzLocationState;
-    /** The Quality tab's Step size, Hit refine and Reach the place was drawn with (see PITFALLS). */
-    march: { stepSize: number; hitRefine: number; reach: number };
 }
 
 export const PLACES: KeptPlace[] = [
@@ -72,11 +72,6 @@ export const PLACES: KeptPlace[] = [
                 }
             },
             "depth": "5.0845759552981455e-20"
-        },
-        "march": {
-            "stepSize": 0.1,
-            "hitRefine": 2,
-            "reach": 2
         }
     },
     {
@@ -113,16 +108,11 @@ export const PLACES: KeptPlace[] = [
                 }
             },
             "depth": "1.5686261975430396e-19"
-        },
-        "march": {
-            "stepSize": 0.5,
-            "hitRefine": 4,
-            "reach": 1
         }
     },
     {
         "name": "Slicing · 2.8e-39",
-        "note": "The owner's place where he first saw slicing (2026-10-08). Power 8. At step 0.85, 57 % of the pixels of one sample land behind the right surface; step 0.5 with Hit refine 3 leaves 2.8 %. Saved here with those two.",
+        "note": "The owner's place where he first saw slicing (2026-10-08). Power 8. At step 0.85, 57 % of the pixels of one sample land behind the right surface; step 0.5 with Hit refine 3 leaves 2.8 %.",
         "state": {
             "view": {
                 "cam": [
@@ -154,11 +144,6 @@ export const PLACES: KeptPlace[] = [
                 }
             },
             "depth": "2.7593205824225345e-39"
-        },
-        "march": {
-            "stepSize": 0.5,
-            "hitRefine": 3,
-            "reach": 1
         }
     }
 ];

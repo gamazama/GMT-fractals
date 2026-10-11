@@ -39,8 +39,11 @@
  *
  *   LIVE - required, implemented over a handle the module has today:
  *     `ready`             resolves once the deep shader has compiled (the module's telemetry says
- *                         ready); rejects with a readable message on a compile error or after 120 s
- *                         of running loop (a gap between two steps counts for a second at most).
+ *                         ready). Since 2026-10-11 that shader IS the ray march's program, the only
+ *                         one the bulb has: nothing draws a deep picture before it. Rejects with a
+ *                         readable message when it cannot be built (the `error` event says which
+ *                         kind) or after 120 s of running loop (a gap between two steps counts for a
+ *                         second at most).
  *     `setParam(` `setParams(`   store values by id `<feature>.<key>` (an enum param is its option
  *                         index, colour `mode` is GMT's number). The host converts and calls the
  *                         module's own setters (`host/paramMap.ts`, `host/looseParams.ts`); a value
@@ -67,9 +70,10 @@
  *                         nearest surface in any direction, there. Orbit mode's clearance.
  *     `building()`        which shader variant the picture is still waiting for, asked NOW (the
  *                         `compile` event says the same up to 125 ms late): 'rayMarch' or 'mandelbox'
- *                         while it builds in the background and the older march, or the box's plain
- *                         picture, is drawn; null once it is there, has failed, or is not asked
- *                         for. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
+ *                         while it builds in the background and the plain single-precision picture
+ *                         is drawn; null once it is there, has FAILED, or is not asked for - so a
+ *                         wait on it ends when a build fails, and the waiter then finds
+ *                         `bootParams()` null. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
  *                         asked for a frame meanwhile, the renderer holds the whole page until the
  *                         build is done.
  *     `holdLive(on)`      no live frame is drawn while on (`step` still polls), so the canvas keeps
@@ -91,9 +95,10 @@
  *   the shell ever called (the shell flies, keys and renders a route of its own: `deep-zoom/route.ts`,
  *   `routeRender.tsx`): the recorder's switch, the take and its smoothing, the seek along a path,
  *   the preview with its stop, and the render of a path to ZIP parts - seven members - and the two
- *   shapes only they used (the sequence request and its result). The `recordingChanged` event and
- *   the telemetry fields `recording`, `playing` and `pathFrames` are still declared: the module
- *   keeps those three telemetry keys, which now never change.
+ *   shapes only they used (the sequence request and its result). In a second step the same day,
+ *   with the page's own march program: the `recordingChanged` event, the telemetry fields
+ *   `recording`, `playing`, `pathFrames` and `bla` (the skip table's flag), and the `frame` /
+ *   `total` numbers of a `progress` event, which only the module's path render ever wrote.
  *
  *   OPTIONAL - undefined until the named package. Test before calling (`host.pause?.(true)`) and
  *   show no control for a member that is not there:
@@ -116,14 +121,20 @@
  *
  *   EVENTS (`on(type, fn)`) in stage 1:
  *     `contextLost`       live, from the module's context-loss option.
- *     `error`             live for a failed deep compile (`fatal: true`).
- *     `compile`           live for the deep shader (`what: 'deep'`) and for the two shaders built
- *                         later, in the background (`what: 'variant'`, named by `variant`): the ray
- *                         march's (`compiling` for the 20 or so seconds it builds while the page's
- *                         march is drawn, then `ready`, or `failed`) and the Mandelbox's (about 5 s
- *                         from the first switch to it; its plain picture is drawn meanwhile).
- *     `recordingChanged`  found by comparing telemetry samples, so up to 125 ms late. Never sent
- *                         since 2026-10-11: the module records nothing any more (see GONE above).
+ *     `error`             live, two kinds. `fatal: false`: THE RAY MARCH'S SHADER COULD NOT BE BUILT
+ *                         on this machine (2026-10-11). The host stays up, `ready` rejects, the
+ *                         plain picture goes on and no deep picture is ever drawn: no other march
+ *                         stands in. Sent once; the message is `DZ_RAY_FAILED_TEXT`
+ *                         (`host/current.ts`), ready to show. `fatal: true`: the boot did not
+ *                         finish for any other reason (120 s without a shader, the Mandelbox's
+ *                         shader failing); the surface takes the host down and shows the card.
+ *     `compile`           live for the deep shader (`what: 'deep'`) and by name for the two
+ *                         programs a picture can wait for (`what: 'variant'`, named by `variant`):
+ *                         the ray march's - the same program as 'deep' since 2026-10-11, said under
+ *                         its own name so the shell can say WHAT is building (`compiling` for the
+ *                         20 or so seconds from the first frame, then `ready`, or `failed`) - and
+ *                         the Mandelbox's (about 5 s from the first switch to it; its plain picture
+ *                         is drawn meanwhile).
  *     `progress`          live but read off the module's own status line; `text` is always set,
  *                         the numbers when they can be parsed. Events from the module at M3.
  *     `paramChanged`      never fires in stage 1. From stage 2 by comparing `getParams()`
@@ -148,7 +159,7 @@
  *     ran, so it waits while the engine loop is stopped or a render owns the context.
  *     (`renderFrameBlob` waits on neither the tick nor an animation frame: it goes on in a hidden
  *     tab, where animation frames stop.)
- *   - In stage 1 `ready`, telemetry, `recordingChanged` and `progress` are all read from inside
+ *   - In stage 1 `ready`, telemetry, `compile` and `progress` are all read from inside
  *     `step`. With the engine loop stopped none of them arrives.
  *   - `ready` can reject. The implementation attaches its own empty catch so that a rejection
  *     nobody looked at is not an unhandled rejection (the smoke fails on any page error), but a
@@ -221,9 +232,10 @@ export interface DzPath {
 
 /** One sample of the renderer's live state. Every field is a primitive. */
 export interface DzTelemetry {
-    /** True once the deep shader has compiled. Until then the f32 picture is shown. */
+    /** True once the deep shader of the selected formula is there (the bulb's: the ray march's
+     *  program). Until then the f32 picture is shown, and nothing else draws a deep one. */
     ready: boolean;
-    /** The deep shader's compile error, or ''. */
+    /** That shader's compile error, or ''. Set, with `ready` false, it stays: nothing is retried. */
     error: string;
     mode: 'deep' | 'f32';
     /** Camera distance to the surface = the zoom depth. */
@@ -238,13 +250,8 @@ export interface DzTelemetry {
     /** The still's progress: `accumN` of `accumMax` samples. It drops back when the still restarts. */
     accumN: number;
     accumMax: number;
-    /** `recording`, `playing` and `pathFrames`: false, false and 0 for good since 2026-10-11 (the
-     *  module records and previews no path any more). The module keeps the three keys. */
-    recording: boolean;
-    playing: boolean;
+    /** A render owns the context (`renderFrameBlob`, the module's own export): no live frame is drawn. */
     exporting: boolean;
-    pathFrames: number;
-    bla: boolean;
 }
 
 /** What a bundle of rays read (`DeepZoomHost.sense`). Distances are in world units from the camera. */
@@ -304,8 +311,6 @@ export type DzCompileState = {
 export type DzProgress = {
     /** 'frame': a `renderFrameBlob` in flight. 'still': any other render of the module's. */
     job: 'still' | 'frame';
-    frame?: number;
-    total?: number;
     /** 0..1 within the current frame or still. */
     fraction?: number;
     text?: string;
@@ -314,7 +319,6 @@ export type DzProgress = {
 export interface DzEvents {
     /** The RENDERER changed a parameter by itself (a view jump, playback, auto iterations). */
     paramChanged: { changes: DzParams; cause: 'key' | 'view' | 'path' | 'auto' | 'unknown' };
-    recordingChanged: { recording: boolean; frames: number };
     compile: DzCompileState;
     /** null = the job ended. */
     progress: DzProgress | null;
@@ -323,6 +327,8 @@ export interface DzEvents {
     /** The view was SET (`setView`: a jump to a place, an undo, a loaded scene). Not sent for a
      *  move or a turn. Whoever eases something by the camera's own travel starts afresh on it. */
     viewSet: null;
+    /** `fatal: false`: the ray march's shader could not be built - the host stays, there is no deep
+     *  picture, and `message` is the line to show. `fatal: true`: no renderer; the surface shows the card. */
     error: { message: string; fatal: boolean };
 }
 
@@ -350,7 +356,7 @@ export type DzFrameResult<T> =
 
 /** The file header says, member by member, what each one does in stage 1. */
 export interface DeepZoomHost {
-    /** Resolves when the deep shader has compiled; rejects with a readable message. */
+    /** Resolves when the deep shader (the ray march's program) is built; rejects with a readable message. */
     readonly ready: Promise<void>;
 
     // parameters
@@ -426,9 +432,10 @@ export interface DeepZoomHost {
      */
     estimateAtPoint(cam: [string, string, string], iters?: number): number;
     /**
-     * The shader variant the picture is waiting for, right now: it is being built in the background
-     * and something else is drawn meanwhile. null: none (built, failed, or not asked for). Cheap,
-     * draws nothing, works before `ready` (the deep shader itself is `ready`'s business, not this).
+     * The shader the picture is waiting for, right now: it is being built in the background and the
+     * plain single-precision picture is drawn meanwhile. null: none (built, FAILED, or not asked
+     * for). Cheap, draws nothing, works before `ready`. For the bulb, 'rayMarch' and `ready` wait for
+     * the same program; this one is asked without a promise, and it ends on a failure too.
      */
     building(): 'rayMarch' | 'mandelbox' | null;
     /**

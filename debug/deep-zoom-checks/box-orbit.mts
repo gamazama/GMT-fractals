@@ -91,13 +91,13 @@ function cut(from: string, to: string, keepEnd = false): string {
     return core.slice(a, keepEnd ? b + to.length : b);
 }
 const lib = new Function(`"use strict";
-    let nPower = 8, phaseTheta = 0, phasePhi = 0, bisectMax = 12;
+    let nPower = 8, phaseTheta = 0, phasePhi = 0;
     let curOrbit = null, deepActive = false, orbitDirty = true;
     const cam = { iters: 14, yaw: 0, pitch: 0 };
     let camHP = [0n, 0n, 0n];
     ${cut('const binom = (n) =>', '\n')}
     ${cut('function basis(){', '\n}\n', true)}
-    ${cut('function makeHP(P) {', '/* ════════ BLA table build')}
+    ${cut('function makeHP(P) {', '/* ════════ uniforms set before each deep draw')}
     ${cut('/* ════════ CPU f64 perturbed march', '/* probe FBO: 1×1 RGBA32F readback')}
     return { hp, buildRefOrbit, pertOrbitJS, rayFreeJS, senseBundle, applyFormula, boxFar, formula: () => dzFormula,
         setCam: (c, iters, yaw, pitch) => { camHP = c.slice(); cam.iters = iters; cam.yaw = yaw; cam.pitch = pitch; } };

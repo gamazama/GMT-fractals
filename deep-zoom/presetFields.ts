@@ -18,8 +18,11 @@
  *                   on 4-tap. Until 2026-10-11 there was a fifth option, Gradient (index 4), and a
  *                   scene, a scene PNG or a link saved before may hold it; 4-tap is what it had
  *                   been drawing since the ray march became the default (features/quality.ts,
- *                   `normalsIndex`). The two params that went the same day, `trueGradient` and
- *                   `bla`, need nothing here: the loader reads declared params only.
+ *                   `normalsIndex`). The three params that went the same day, `trueGradient`,
+ *                   `bla` and `rayMarch`, need nothing here: the loader reads declared params
+ *                   only, so a saved `rayMarch: false` is dropped and the bulb is drawn by the
+ *                   ray march. A bulb scene's `stepSize` IS still a param and loads; it shows
+ *                   nowhere and moves nothing until the Mandelbox is the formula.
  *
  * PITFALLS
  *   - Camera values never pass through `Number()`. The depth is a STRING: the share encoder

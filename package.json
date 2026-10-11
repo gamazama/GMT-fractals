@@ -81,7 +81,6 @@
     "smoke:deep-zoom": "tsx debug/smoke-deep-zoom.mts",
     "smoke:deep-zoom-prototype": "tsx debug/smoke-deep-zoom-prototype.mts",
     "sync:deep-zoom-prototype-core": "node scripts/sync-deep-zoom-prototype-core.mjs",
-    "smoke:deep-zoom-parity": "tsx debug/smoke-deep-zoom-parity.mts",
     "smoke:deep-zoom-direct": "tsx debug/deep-zoom-direct-check.mts",
     "bench:deep-zoom-march": "tsx debug/deep-zoom-march-study.mts",
     "smoke:deep-zoom-la": "tsx debug/smoke-deep-zoom-la.mts",

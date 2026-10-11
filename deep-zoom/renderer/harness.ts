@@ -3,8 +3,10 @@
  *
  * PURPOSE
  *   Runs the ported renderer (core.js) the way the historical page ran, with every handle also on
- *   `window.__name`, so (a) debug/smoke-deep-zoom-parity.mts can compare it with the historical
- *   page and (b) the historical suites' evaluate bodies work against it unchanged.
+ *   `window.__name`, so the proofs and tools that drive it by those handles work against it: the
+ *   direct proof (debug/deep-zoom-direct-check.mts), the march bench (debug/deep-zoom-march-study.mts)
+ *   and the historical suites' evaluate bodies. (Until 2026-10-11 also the parity smoke, which
+ *   compared it with the historical page; that went with the page's own march.)
  *
  * QUERY FLAGS
  *   ?manual=1   autoStart off; this file drives `instance.step(now)` from its own
@@ -13,10 +15,12 @@
  *   ?lose=1     loseContextOnDispose on, and create() swaps in a FRESH canvas each time after the
  *               first (the remount path a React shell should use)
  *   ?formula=mandelbox   the create option `formula` (the Mandelbox from the first frame)
- *   ?ray=1      the create option `rayMarch`, as the shell passes it
+ *   ?ray=1      ACCEPTED AND IGNORED since 2026-10-11: it passed the create option `rayMarch`, which
+ *               the module no longer has (the ray march is the bulb's only program, on from the
+ *               start). Old command lines and the pictures tool still carry it.
  *   ?hold=1     the create option `holdEstimate`, as the shell passes it
  *
- * `window.__harness` is the smoke's handle on the lifecycle. Not part of the build: the page is
+ * `window.__harness` is a tool's handle on the lifecycle (create / dispose / recreate, the tick count). Not part of the build: the page is
  * served by the Vite dev server only and is not in vite.config.ts's inputs.
  */
 import { createDeepZoom } from './index';
@@ -27,7 +31,6 @@ const manual = query.get('manual') === '1';
 const embed = query.get('embed') !== '0';
 const lose = query.get('lose') === '1';
 const startOnBox = query.get('formula') === 'mandelbox';
-const rayMarch = query.get('ray') === '1';
 const holdEstimate = query.get('hold') === '1';
 let canvas = document.getElementById('gl') as HTMLCanvasElement;
 let creations = 0;
@@ -52,7 +55,6 @@ function create(): void {
         embed,
         loseContextOnDispose: lose,
         ...(startOnBox ? { formula: 'mandelbox' as const } : {}),
-        ...(rayMarch ? { rayMarch: true } : {}),
         ...(holdEstimate ? { holdEstimate: true } : {}),
         onNotice: (message) => { notices.push(message); console.warn(message); },
     });

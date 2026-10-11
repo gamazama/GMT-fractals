@@ -30,16 +30,22 @@
  *     render's own start, so no live frame runs in between.
  *   - THE WAIT. With the frame set up, the host is asked whether a shader the picture needs is
  *     still building (`host.building()`: the ray march's, or the Mandelbox's). While one is, no
- *     frame is asked for: the dialog says "Waiting for the ray march's shader", the live picture
- *     goes on, Cancel works; then the frame is set up again and rendered. A build that FAILED is
- *     not waited for: the run goes on with what there is, as the live picture does. It is asked
+ *     frame is asked for: the dialog says "Waiting for the Mandelbox's shader", the live picture
+ *     goes on, Cancel works; then the frame is set up again and rendered. It is asked
  *     before every frame, with that frame's own values in force, so a keyed switch that needs
  *     another shader halfway would be waited for too (not driven: no test route keys one).
+ *     SINCE 2026-10-11 THE RAY MARCH'S SHADER IS NEVER WHAT A RUN WAITS FOR: it is the bulb's one
+ *     program and what the renderer's `ready` means, and a run does not start before that
+ *     (`bootParams()`, below). The wait is the Mandelbox's now - a formula switched to moments
+ *     before Start, or keyed halfway.
+ *     A BUILD THAT FAILED IS NOT WAITED FOR, and the wait cannot hang on one: `building()` is null
+ *     then. A ray march that could not be built never lets a run start - Start answers with the
+ *     one line `DZ_RAY_FAILED_TEXT` (host/current.ts), since "not ready yet" would never end.
  *     WHY: the renderer builds what a frame needs before it draws it, on the main thread (grep
- *     `ensureRayVariant(false)` in `dzRenderFrame`, renderer/core.js; that stays, for a direct
- *     caller). Measured 2026-10-11 without the wait, seven sessions: Start pressed in the first
- *     half minute after the page opened held the whole page for 4.4 to 26.1 s inside frame 0,
- *     with no status line and no Cancel.
+ *     `ensureBoxVariant(false)` in `dzRenderFrame`, renderer/core.js; that stays, for a direct
+ *     caller). Measured 2026-10-11 without the wait, seven sessions, when the ray march's shader
+ *     still arrived after `ready`: Start pressed in the first half minute after the page opened
+ *     held the whole page for 4.4 to 26.1 s inside frame 0, with no status line and no Cancel.
  *   - While a run lasts `setRouteRendering(true)` (deep-zoom/route.ts) holds the route still, and
  *     the navigation is locked (`routeRendering()` in DeepZoomNavigation.tsx).
  *   - Afterwards the playhead goes back, and the camera with it.
@@ -148,12 +154,8 @@
  *     are driven by a timer, which a hidden tab slows to one a second.
  *   - THE PICTURE SHOWS EACH FINISHED FRAME, not a frame building up: nothing is put on the canvas
  *     while a frame is drawn (grep `NO PICTURE ON THE CANVAS` in renderer/core.js for why).
- *   - THE WAIT HAS NO TIME LIMIT: it ends when the build does, or with Cancel. And one shader is
- *     NOT WAITED FOR - the BLA one, which a frame needs only with the ray march off (and then only
- *     below a surface distance of 1e-13). The renderer still builds it inside the frame that first
- *     needs it (grep `ensureVariant(true, false)` in `dzRenderFrame`), the page standing
- *     still meanwhile; the host has no question for it (`building()` knows the two variants the
- *     `compile` event knows).
+ *   - THE WAIT HAS NO TIME LIMIT: it ends when the build does - done or failed - or with Cancel.
+ *     `building()` knows the two programs the `compile` event knows, and there is no third.
  *   - A FRAME WITH GRAIN IS NOT ALWAYS THE SAME FRAME TWICE. A smooth frame is: pixel for pixel,
  *     or a level in a few pixels. A grainy one can come out as another throw of its grain (grep
  *     `MEASURED 2026-10-11` in renderer/core.js; the renderer's own still export does the same).
@@ -233,7 +235,7 @@ import type { FrameFolder } from '../engine/export/frameFolder';
 import { MainThreadEncoder } from '../engine/export/videoEncoder';
 import { calcEtaRange, formatTimeWithUnits } from '../components/timeline/exportHelpers';
 import { showToast } from '../engine/store/toastStore';
-import { getHost } from './host/current';
+import { DZ_RAY_FAILED_TEXT, getHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
 import { routeKeys, routeRendering, scrubRouteTo, setRouteRendering } from './route';
 import { flushHostSync, holdAutoIterations } from './useHostSync';
@@ -557,7 +559,13 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
 const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMode }) => {
     const ready = getHost();
     if (running || routeRendering()) { showToast('A render is already running', 'warning'); return; }
-    if (!ready?.renderFrameBlob || !ready.bootParams()) { showToast('The renderer is not ready yet', 'warning'); return; }
+    if (!ready?.renderFrameBlob || !ready.bootParams()) {
+        // A ray march that could not be built never becomes ready: the answer is that line, not "not yet".
+        const failed = !!ready && !ready.building() && ready.telemetry().error !== '';
+        if (failed) showToast(DZ_RAY_FAILED_TEXT, 'error', 8000);
+        else showToast('The renderer is not ready yet', 'warning');
+        return;
+    }
     let sink: FrameSink | null;
     try {
         const project = (useEngineStore.getState() as { projectSettings?: { name?: string } }).projectSettings?.name || 'deep-zoom';

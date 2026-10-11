@@ -43,19 +43,26 @@
  *     `setInputOwner('host')` once per host and from then on moves it with `moveAlong` and turns
  *     it with `setOrientation`; nothing here listens for a pointer lock any more (stage N5).
  *   - `step(now)` forwards a TIMESTAMP in milliseconds. Everything polled here (`ready`, telemetry,
- *     `compile`, `recordingChanged`, `progress`, the dive) runs from `step` and stops with it.
+ *     `compile`, `progress`, the dive) runs from `step` and stops with it.
  *   - The dive advances only after a frame that RAN (`instance.frameCount` rose). While a render
  *     owns the context the module's frame returns early and its distance goes stale.
  *   - THE MODULE'S RECORDER, PATH PREVIEW AND PATH RENDER ARE GONE (2026-10-11), and with them the
  *     seven members that reached them (`setRecording`, `takePath`, `smoothPath`, `seekPath`, `play`,
- *     `stopPlay`, `renderPathZip`): nothing in the shell called one. What is left of that here is
- *     `api.stopPlay()`, still called before a frame render and by `cancel` (the module keeps it
- *     callable; it does nothing), and the `recordingChanged` event, which the module's telemetry
- *     can no longer raise.
+ *     `stopPlay`, `renderPathZip`): nothing in the shell called one. The last of it went the same
+ *     day in a second step: the calls of `api.stopPlay()` before a frame render and in `cancel`
+ *     (the module no longer has it), the `recordingChanged` event, and the "frame N/M" numbers of
+ *     `progress`, which only the module's path render wrote.
  *   - `thumbnail()` draws through the live GL state. It answers '' during a render instead of
  *     drawing into the render's state, and it restarts the still.
- *   - Never send `api.setBla(true)` from here: it blocks on a shader compile (index.ts, BLOCKING
- *     COMPILES). Nothing in the shell sends `setBla` at all since 2026-10-11.
+ *   - A RAY MARCH THAT CANNOT BE BUILT IS AN ERROR THE SHELL STAYS UP WITH, NOT ANOTHER MARCH AND NOT
+ *     A BOOT FAILURE (2026-10-11; grep `failRay`). The bulb has one program. When the module says it
+ *     failed (`api.rayMarchState()` 'failed', telemetry `error` set), `poll` says `compile` failed
+ *     twice (what 'deep', and by name), sends ONE `error` event with `fatal: false` and the line
+ *     `DZ_RAY_FAILED_TEXT`, rejects `ready` with it, and does NOT call the mount's `onError` (which
+ *     would take the host down for the failure card). The readiness clock stops, so the 120 s
+ *     timeout cannot turn it into a fatal error afterwards. `building()` is null from then on.
+ *     What follows from `ready` never resolving: `bootParams()` stays null, the store's values are
+ *     never sent (`useHostSync.ts`), a render refuses to start (`routeRender.tsx`).
  *   - After a lost context nothing is restored and telemetry still says ready. This file only
  *     reports it (`contextLost`, once); the surface disposes and mounts fresh.
  *
@@ -64,10 +71,10 @@
  *     through `host/looseParams.ts` (one table, `host/paramMap.ts`), until M1 gives the module
  *     set-by-id. `getParams` / `bootParams` return the module's own settings keys AND the mapped
  *     params by id (the ids hold a dot, the module's keys do not).
- *   - `ready`, telemetry, `compile`, `recordingChanged`, `progress` are polled at 8 Hz: events
+ *   - `ready`, telemetry, `compile`, `progress` are polled at 8 Hz: events
  *     from the module, M3. `progress` is read off the module's status line in its hidden scaffold
- *     (`statusLineOf`): M3. `compile` sees the deep shader and the two variants built after it
- *     (the ray march's, the Mandelbox's); a BLA compile, which only the page's march asks for, not.
+ *     (`statusLineOf`): M3. `compile` sees the deep shader - the ray march's program, also said
+ *     under that name - and the Mandelbox's, built from the first switch to it.
  *   - `renderFramePixels` and `exportStill` are absent: M4 (the still's blob M4 or M6). `pause` is
  *     absent: M5. `renderFrameBlob` is there for the current view only (stage R6a, 2026-10-11),
  *     over `api.dz.renderFrame`; its width and height are read off the PNG's own header.
@@ -80,12 +87,13 @@
  *   debug/deep-zoom-checks/module-host.mts ("views: ..." lines). Falsified 2026-10-08: the "cam
  *   strings" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
- *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, rayMarch:true, farHandOff:0.5, holdEstimate:true, resetStillOnResize:true, loseContextOnDispose:true` and
+ *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, farHandOff:0.5, holdEstimate:true, resetStillOnResize:true, loseContextOnDispose:true` and
  *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
  *   Falsified 2026-10-08: the "options" group in the check's header, all seven; `rebaseOrigin` the same day
  *   (the line removed from `shellOptions` -> "options: rebaseOrigin is true" FAIL), `farHandOff` likewise, and
- *   `rayMarch` on 2026-10-09 ("options: rayMarch is true" FAIL), and `holdEstimate` the same day (the line removed
- *   -> "options: holdEstimate is true" FAIL and "options: every option core.d.ts declares is set here" FAIL).
+ *   `holdEstimate` on 2026-10-09 (the line removed -> "options: holdEstimate is true" FAIL and "options: every
+ *   option core.d.ts declares is set here" FAIL). (`rayMarch:true` was in this list from 2026-10-09 until the
+ *   module lost the option, 2026-10-11: the ray march is the bulb's only program.)
  * @invariant `dispose()` calls the instance's `dispose` before the canvas is removed; a failed
  *   create leaves no canvas behind; the canvas is in the frame before create runs and carries no
  *   inline width or height - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("dispose:
@@ -121,6 +129,12 @@
  *   debug/deep-zoom-checks/module-host.mts ("input: building() names the ray march while its
  *   shader builds, and nothing once it is there, has failed or is off"). Falsified 2026-10-11:
  *   `=== 'building'` made `!== 'on'` -> that line red.
+ * @assumption A ray march that cannot be built is reported as the PITFALL above says - one `error`
+ *   event with `fatal: false` and `DZ_RAY_FAILED_TEXT`, `ready` rejected with it, the mount's
+ *   `onError` not called, no fatal error when the 120 s have passed, `building()` null - checked by
+ *   debug/deep-zoom-checks/module-host.mts (the "boot: a ray march that cannot be built ..." lines),
+ *   which pass and were not broken on purpose; and seen once in the app with the real module and a
+ *   browser made to refuse that one program (debug/scratch/r7/ray-fail.mts, git-ignored, 2026-10-11).
  * @assumption The rest of `building()` - the Mandelbox answered from `api.formulaState()` alone, a
  *   disposed host waiting for nothing - is the same file's two other "input: ... building ..." /
  *   "input: a disposed host ..." lines, which pass and were not broken on purpose. That the real
@@ -153,7 +167,7 @@ import type {
     DzView,
     Unsubscribe,
 } from './DeepZoomHost';
-import { DZ_CANVAS_ID } from './current';
+import { DZ_CANVAS_ID, DZ_RAY_FAILED_TEXT } from './current';
 import { createDive } from './dive';
 import { createParamPusher } from './looseParams';
 import { readParams } from './paramMap';
@@ -182,8 +196,10 @@ export interface DeepZoomMountHooks {
     onNotice?(message: string): void;
     /** The browser took the WebGL context. Also the host event `contextLost`. Dispose, mount fresh. */
     onContextLost?(): void;
-    /** A boot failure: the deep shader failed to compile or did not land in time. Also the host
-     *  event `error` with `fatal: true`, and the reason `ready` rejects with. */
+    /** A boot failure the host cannot go on from: no shader within 120 s, or a telemetry error that
+     *  is not the ray march's (today: the Mandelbox's shader). Also the host event `error` with
+     *  `fatal: true`, and the reason `ready` rejects with. NOT called when the ray march's shader
+     *  could not be built: the host stays up and says so with `error`, `fatal: false`. */
     onError?(message: string): void;
 }
 
@@ -253,14 +269,10 @@ function statusText(html: string): string {
         .trim();
 }
 
-/** `frame 3/120` and `45%` out of the status line, when they are there. */
+/** `45%` out of the status line, when it is there. (Until 2026-10-11 also `frame 3/120`, which only
+ *  the module's own path render wrote; the shell counts its route's frames itself.) */
 function progressOf(job: DzProgress['job'], text: string): DzProgress {
     const progress: DzProgress = { job, text };
-    const frame = /frame (\d+)\/(\d+)/.exec(text);
-    if (frame) {
-        progress.frame = parseInt(frame[1], 10);
-        progress.total = parseInt(frame[2], 10);
-    }
     const percent = /(\d+)%/.exec(text);
     if (percent) progress.fraction = parseInt(percent[1], 10) / 100;
     return progress;
@@ -350,9 +362,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     let lastStep: number | null = null;
     let waitedMs = 0;
     let compileSaid: 'compiling' | 'ready' | 'failed' | null = null;
-    let raySaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the ray march's shader; nothing is said until it starts to build
+    let raySaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the ray march's shader (the bulb's one program): said from the first poll, while it builds
     let boxSaid: 'compiling' | 'ready' | 'failed' = 'ready';      // the Mandelbox's, likewise: it builds from the first switch to that formula
-    let wasRecording = false;
     let jobShown = false;
     let lastStatus = '';
     /** `renderFrameBlob` calls in flight: tells a frame from a still in `progress`. */
@@ -366,9 +377,21 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         if (!disposed) rejectReady(new Error(message));
     }
 
+    /** THE RAY MARCH'S SHADER COULD NOT BE BUILT (see PITFALLS): said once, not fatal. The host stays up,
+     *  `ready` rejects, and `bootFailed` stops the readiness clock so the 120 s cannot make it fatal later.
+     *  The compiler's own log goes to the console: the line the shell shows is the plain one. */
+    function failRay(log: string): void {
+        if (bootFailed) return;
+        bootFailed = true;
+        console.warn('[deep-zoom] the ray march\'s shader did not build:', log.slice(0, 2000));
+        emit('error', { message: DZ_RAY_FAILED_TEXT, fatal: false });
+        if (!disposed) rejectReady(new Error(DZ_RAY_FAILED_TEXT));
+    }
+
     function poll(t: DzTelemetry): void {
-        // The ray march's shader builds in the background, after the deep one, while the page's march is drawn:
-        // `compile` events with what 'variant' let the shell say so (the owner, 2026-10-09: "it needs some indication").
+        // The ray march's shader is the bulb's one program and builds in the background from the moment the module
+        // is created; the plain picture is drawn until it is there. `compile` events with what 'variant' let the shell
+        // say WHAT is building (the owner, 2026-10-09: "it needs some indication").
         const rayNow = api.rayMarchState();
         const raySay = rayNow === 'building' ? 'compiling' : rayNow === 'failed' ? 'failed' : 'ready';
         if (raySay !== raySaid) { raySaid = raySay; emit('compile', { state: raySay, what: 'variant', variant: 'rayMarch' }); }
@@ -393,7 +416,10 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (compileSaid !== 'failed') {
                 compileSaid = 'failed';
                 emit('compile', { state: 'failed', what: 'deep', error: t.error });
-                failBoot(`The deep renderer failed to compile: ${t.error.slice(0, 400)}`);
+                // The bulb's program before it was ever ready: an error to show, with the host left up (`failRay`).
+                // Anything else (today: the Mandelbox's shader) is the boot failure it always was.
+                if (!isReady && rayNow === 'failed') failRay(t.error);
+                else failBoot(`The deep renderer failed to compile: ${t.error.slice(0, 400)}`);
             }
         } else {
             if (compileSaid === null) {
@@ -401,11 +427,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
                 emit('compile', { state: 'compiling', what: 'deep' });
             }
             if (waitedMs > DZ_READY_TIMEOUT_MS) failBoot('The deep renderer did not finish compiling within 120 s.');
-        }
-
-        if (t.recording !== wasRecording) {
-            wasRecording = t.recording;
-            emit('recordingChanged', { recording: t.recording, frames: t.pathFrames });
         }
 
         if (t.exporting) {
@@ -460,7 +481,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         estimateAt: (offset) => dz.estimateAt(offset),
         estimateAtPoint: (cam, iters) => dz.estimateAtPoint(cam, iters),
         // The same two questions `poll` asks for the `compile` event, answered now. The box draws with a variant of
-        // its own and the ray march is not in force under it, so one of the two is asked, never both.
+        // its own and the ray march is not in force under it, so one of the two is asked, never both. A build that
+        // FAILED answers null: nothing is being waited for, and whoever waited finds `bootParams()` still null.
         building() {
             if (disposed) return null;
             if (api.formula().kind === 'mandelbox') return api.formulaState() === 'building' ? 'mandelbox' : null;
@@ -499,7 +521,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (!isReady) return { ok: false, reason: 'no-deep-orbit' };
             if (dz.telemetry().exporting) return { ok: false, reason: 'busy' };
             dive.cancel();
-            api.stopPlay();
             frames++;
             try {
                 const png = await dz.renderFrame({ longEdge: r.longEdge, samples: r.samples, tile: r.tile, aspect: r.aspect });
@@ -515,7 +536,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         cancel() {
             dive.cancel();
             api.cancelRender();
-            api.stopPlay();
         },
 
         // surface and input
@@ -590,7 +610,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
  */
 export function shellOptions(frame: HTMLElement, hooks: DeepZoomMountHooks = {}, hostContextLost?: DzContextLostRef): DeepZoomOptions {
     return {
-        embed: true,                    // the module's own panels never open; a stopped recording stays in memory
+        embed: true,                    // the module's own panels never open
         autoStart: false,               // the engine tick calls step; the module schedules no frame of its own
         publishOnWindow: false,         // nothing on window
         keyTarget: frame,               // keys reach the module only while the picture has focus
@@ -600,7 +620,7 @@ export function shellOptions(frame: HTMLElement, hooks: DeepZoomMountHooks = {},
         mode: 'deep',                   // the deep path at every depth; f32 only until its shader has compiled
         farLook: true,                  // far ground (all of a shallow view) takes the palette, not the page's grey
         rebaseOrigin: true,             // the kernel's precision repair (grep REBASE TO THE ORIGIN in renderer/core.js); the page's kernel draws grain where orbits pass the origin
-        rayMarch: true,                 // the ray march from the start (grep THE RAY ESTIMATE in renderer/core.js): clean at the page march's speed, no step or detail setting
+        // (no `rayMarch` row since 2026-10-11: the ray march is the bulb's only program and the module no longer has the option)
         farHandOff: 0.5,                // the deep march carries a ray this far before the f32 far-field march takes it (grep FAR HAND-OFF); the page's 1e-3 leaves noisy hits in views shallower than about 1e-2
         holdEstimate: true,             // a count too low for the camera's orbit to escape keeps the last distance instead of reading 0 (grep HOLD THE ESTIMATE in renderer/core.js): without it a still that starts while the count recovers shows a faint second picture
         formula: 'mandelbulb',          // the module starts on its default; the store's choice (dzFormula.kind) is sent with every other value at ready (useHostSync.ts)

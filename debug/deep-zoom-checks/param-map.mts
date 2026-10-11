@@ -12,10 +12,11 @@
  *         phase) always carry all their values.
  *   read  with the fake holding the module's defaults, `readParams` equals the feature defaults for
  *         every row that reads back (the real-module version of this is a stage-2 smoke step).
- *   retired  (2026-10-11) the two params that went with the previous-generation marches,
- *         `trueGradient` and `bla`, have no row and push nothing, and nothing sends `setBla` or
- *         `setJacobian`; a Normals index of 4 (Gradient, an option until that day) reaches the
- *         renderer as 4-tap.
+ *   retired  (2026-10-11) the three params that went with the previous-generation marches,
+ *         `trueGradient`, `bla` and (in a second step that day) the `rayMarch` switch, have no row
+ *         and push nothing, and nothing sends `setBla`, `setJacobian` or `setRayMarch`; a Normals
+ *         index of 4 (Gradient, an option until that day) reaches the renderer as 4-tap; Step size
+ *         is conditioned on the Mandelbox and is still pushed whatever the formula.
  *
  * What it does not pin: the real module (the smoke does), and `deep-zoom/useHostSync.ts`.
  *
@@ -30,11 +31,13 @@
  *   features/quality.ts: `normalsToRenderer` made to hand the index through (`Math.floor(index ?? 2)`)
  *     -> 2 red: "push: Normals index 4 ... reaches the renderer as 4-tap (2) ..." (the fake saw
  *     `setNormalMode(4)`) and "retired: Normals has four options, and an index that names none ...".
- *   NOT seen red: the other two "retired" lines and the `trueGradient` / `bla` push line.
+ *   NOT seen red: the other "retired" lines, the `trueGradient` / `bla` / `rayMarch` push line and
+ *     the Step size push line (the last two as they are since the second step of 2026-10-11, R7b).
  */
 import { DZ_PARAM_ROWS, DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, defaultParams, paramId, readParams } from '../../deep-zoom/host/paramMap.ts';
 import { createParamPusher } from '../../deep-zoom/host/looseParams.ts';
 import { NORMALS_OPTIONS, normalsIndex, normalsToRenderer } from '../../deep-zoom/features/quality.ts';
+import { FORMULA_BOX } from '../../deep-zoom/features/formula.ts';
 import type { DeepZoomApi } from '../../deep-zoom/renderer/index.ts';
 
 let failed = 0;
@@ -53,7 +56,7 @@ function makeApi() {
     };
     const look: Record<string, unknown> = { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 };
     const lever = { stepRelax: 0, capRelax: 1, mode: 'auto' as 'auto' | 'deep' | 'f32', hitRefine: 0 };
-    const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module as the shell creates it (create option `rayMarch`)
+    const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module's own start values (core.js: `let rayAsk`)
     let normalDetail = 0;
     let auto = true;
     const formula = { kind: 'mandelbulb', scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] };   // core.js: `let dzFormula`, `const box = {`
@@ -77,7 +80,8 @@ function makeApi() {
         setLand: (on: boolean) => { note('setLand', on); s.land = on; },
         setAccum: (on: boolean) => { note('setAccum', on); s.accum = on; },
         setMode: (m: 'auto' | 'deep' | 'f32') => { note('setMode', m); lever.mode = m; },
-        // two setters nothing may call any more ([4]): the module still has setBla; setJacobian went with its variant
+        // three setters nothing in the shell may call any more ([4]). The module has lost the first two; it keeps
+        // setRayMarch for the proofs and the bench.
         setBla: (on: boolean | 'auto') => { note('setBla', on); },
         setJacobian: (bits: number) => { note('setJacobian', bits); },
         setStepRelax: (r: number) => { note('setStepRelax', r); lever.stepRelax = r; },
@@ -215,10 +219,17 @@ console.log('[3] push');
         const realWarn = console.warn;
         const named: string[] = [];
         console.warn = (...args: unknown[]) => { named.push(args.map(String).join(' ')); };
-        try { p.push({ 'dzQuality.trueGradient': true, 'dzQuality.bla': 0 }); } finally { console.warn = realWarn; }
-        check(rig.calls.length === 0 && named.length === 2 && named.every((line) => line.includes('no param map row')),
-            'push: a `dzQuality.trueGradient` or `dzQuality.bla` from a scene saved before 2026-10-11 pushes nothing (each id is named once)', JSON.stringify(rig.calls) + ' ' + named.join(' | '));
+        try { p.push({ 'dzQuality.trueGradient': true, 'dzQuality.bla': 0, 'dzQuality.rayMarch': false }); } finally { console.warn = realWarn; }
+        check(rig.calls.length === 0 && named.length === 3 && named.every((line) => line.includes('no param map row')),
+            'push: a `dzQuality.trueGradient`, `dzQuality.bla` or `dzQuality.rayMarch: false` from a scene saved before 2026-10-11 pushes nothing (each id is named once)', JSON.stringify(rig.calls) + ' ' + named.join(' | '));
     }
+    // Step size: the Mandelbox's row, pushed whatever the formula (the bulb's ray march does not read it).
+    rig.clear();
+    p.push({ 'dzFormula.kind': 0 });
+    rig.clear();
+    p.push({ 'dzQuality.stepSize': 0.5 });
+    check(JSON.stringify(rig.of('setStepRelax')) === '[[0.5]]' && rig.calls.length === 1,
+        'push: Step size goes through setStepRelax with the bulb selected too (the box finds it in force when it is selected)', JSON.stringify(rig.calls));
     rig.clear();
     p.push({ 'dzQuality.normals': 4 });
     check(JSON.stringify(rig.of('setNormalMode')) === '[[2]]' && rig.of('setLook').some((a) => Object.keys(a[0] as object).length === 0),
@@ -227,16 +238,20 @@ console.log('[3] push');
 }
 
 // ── [4] retired ──────────────────────────────────────────────────────────────────────────────────
-console.log('[4] retired (2026-10-11): True-gradient march, BLA, Normals: Gradient');
+console.log('[4] retired (2026-10-11): True-gradient march, BLA, the Ray march switch, Normals: Gradient');
 {
-    const quality = DZ_PARAM_FEATURES.dzQuality.params as Record<string, unknown>;
+    const quality = DZ_PARAM_FEATURES.dzQuality.params as Record<string, { condition?: unknown }>;
     const rowIds = DZ_PARAM_ROWS.map((r) => paramId(r.feature, r.key));
-    check(!('trueGradient' in quality) && !('bla' in quality) && !rowIds.includes('dzQuality.trueGradient') && !rowIds.includes('dzQuality.bla'),
-        'retired: neither the feature nor the map has `trueGradient` or `bla`');
+    check(['trueGradient', 'bla', 'rayMarch'].every((key) => !(key in quality) && !rowIds.includes('dzQuality.' + key)),
+        'retired: neither the feature nor the map has `trueGradient`, `bla` or `rayMarch`');
     const rig = makeApi();
     const p = createParamPusher(rig.api);
     p.push(defaultParams());
-    check(rig.calls.length > 15 && rig.of('setBla').length === 0 && rig.of('setJacobian').length === 0, 'retired: a push of every param sends neither setBla nor setJacobian', rig.calls.map(([n]) => n).join(','));
+    check(rig.calls.length > 15 && rig.of('setBla').length === 0 && rig.of('setJacobian').length === 0 && rig.of('setRayMarch').length === 0,
+        'retired: a push of every param sends none of setBla, setJacobian, setRayMarch', rig.calls.map(([n]) => n).join(','));
+    check(JSON.stringify(quality.stepSize?.condition) === JSON.stringify({ param: '$dzFormula.kind', eq: FORMULA_BOX }) && rig.of('setStepRelax').length === 1,
+        'retired: Step size is the Mandelbox\'s row (shown while the formula is the box), and its value was still pushed with the bulb selected',
+        JSON.stringify(quality.stepSize?.condition));
     check(NORMALS_OPTIONS.length === 4 && normalsIndex(4) === 2 && normalsToRenderer(4) === 2 && normalsIndex(3) === 3 && normalsToRenderer(3) === 3 && normalsIndex(undefined) === 2,
         'retired: Normals has four options, and an index that names none (4, Gradient) reads as 4-tap: index 2, renderer mode 2',
         `${NORMALS_OPTIONS.length} options, normalsIndex(4) ${normalsIndex(4)}, normalsToRenderer(4) ${String(normalsToRenderer(4))}`);

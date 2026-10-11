@@ -4,7 +4,7 @@
  * PURPOSE
  *   How the picture is rendered, as opposed to what is drawn or how it is lit: the frame size, how
  *   close and how far rays go, how normals are found, the march, the still's accumulation, and one advanced
- *   lever (the depth caps on the frame size). Thirteen params.
+ *   lever (the depth caps on the frame size). Twelve params.
  *
  * THE SEAM
  *   The engine store OWNS these values. The renderer (`deep-zoom/renderer`) is a sink: it is told,
@@ -19,10 +19,9 @@
  *     depthNormalRadius  api.setLook({ nrmTap })     depthNormalRadiusToRenderer(index): 1, 2, 3
  *     hitLanding         api.setLand(on)
  *     hitRefine          api.setHitRefine(n)
- *     rayMarch           api.setRayMarch(bits, opt)  5 or 0 (host/looseParams.ts has the options)
  *     accumulate         api.setAccum(on)
  *     actualPixels       no handle (`view1to1` is closure state in core.js) until module package M1
- *     stepSize           api.setStepRelax(r)
+ *     stepSize           api.setStepRelax(r)         the Mandelbox's march only (see pitfalls)
  *     resolutionCap      api.setCapRelax(m)          floor 1
  *   ENUMS. An enum param is a float holding the option's INDEX (`engine/defineEnumParam.ts`). The
  *   renderer wants its own value, which is not always the index, so each enum exports, beside its
@@ -46,9 +45,18 @@
  *     keys are ignored (the loader reads declared params only, and the sync sends none else);
  *     Normals 4 loads as 4-tap, which is what it had been drawing since the ray march became the
  *     default: `normalsIndex` below, called on load by `deep-zoom/presetFields.ts`, and
- *     `normalsToRenderer` gives 4-tap for any index that names no option. The renderer itself
- *     keeps its skip table for the page's march (auto, never under the ray march): grep
- *     `NOT UNDER THE RAY MARCH` in renderer/core.js.
+ *     `normalsToRenderer` gives 4-tap for any index that names no option.
+ *   - AND THE RAY MARCH SWITCH, THE SAME DAY (`rayMarch`, a boolean, on by default since
+ *     2026-10-09). The ray march is the bulb's only program now: the renderer has no other march to
+ *     switch to (the owner: "If the ray shader fails to build on a machine ... I wouldnt want an
+ *     alternative based on that, rather an error"), and its skip table went with the page's
+ *     program. A saved `rayMarch: false` is ignored like the keys above - the bulb is drawn by
+ *     the ray march whatever a file says.
+ *   - `stepSize` IS THE MANDELBOX'S ROW. The ray march steps by its own estimate and has no step
+ *     setting, so for the bulb the row would move nothing: it is shown only while the Mandelbox is
+ *     the formula (`BOX_ONLY`, as bulb-only rows are hidden for the box). The value is kept and
+ *     PUSHED whatever the formula, so the box marches by it the moment it is selected; a bulb
+ *     scene's saved step size loads, shows nowhere and changes nothing.
  *   - `actualPixels` IS DECLARED BUT ITS ROW WAITS FOR M1. The id exists now so the slice key and
  *     saved scenes do not change when the handle lands. Until then the manifest keeps the row out
  *     (`excludeParams: ['actualPixels']` on the `dzQuality` item in `panels.ts`) — a row the
@@ -87,7 +95,7 @@
  *     contain `rot`, `phase` or `twist` unless it is an angle (the timeline wraps those at 2 pi).
  *
  * @invariant No key of the `dzQuality` slice is typed `any`: `SliceFromParams` over this feature's
- *   params gives `number` or `boolean` for all thirteen keys — proven by: npm run typecheck ("Type
+ *   params gives `number` or `boolean` for all twelve keys — proven by: npm run typecheck ("Type
  *   '"reach"' does not satisfy the constraint 'never'" on the `SliceIsTyped` line at the foot of
  *   this file). Falsified 2026-10-08: with `type: 'float'` removed from the `reach` entry, tsc
  *   reported exactly that line and key.
@@ -97,8 +105,8 @@
  *   `let view1to1`, `let modeOverride`, `let stepRelax`, `let capRelax`, and the
  *   matching `CTLS` rows). No guard checks it yet; the stage-2 smoke step "every feature default
  *   equals the module's settings read at ready" is the intended proof. `api.dz.settings()` returns
- *   six of the thirteen (frame, detail, reach, normals, land, accum); `api.look.nrmTap`,
- *   `api.normalDetail()`, `api.rayMarch()` and `api.marchLevers()` (hit refine, step, cap) give six
+ *   six of the twelve (frame, detail, reach, normals, land, accum); `api.look.nrmTap`,
+ *   `api.normalDetail()` and `api.marchLevers()` (hit refine, step, cap) give five
  *   more (the rows of `deep-zoom/host/paramMap.ts`); actualPixels has no read-back at all until
  *   module package M1.
  * @invariant A Normals index that names no option (4, the retired Gradient) reaches the renderer
@@ -111,19 +119,27 @@
  *   then shows 4-tap), and its `trueGradient` and `bla` keys never reach the store. Seen once in
  *   the app on 2026-10-11, with a scene file saved by the tree before the removal
  *   (debug/scratch/r7/old-scene.mts --load, git-ignored); no standing guard loads such a scene.
+ * @assumption A loaded scene that holds `rayMarch: false` and a bulb's own `stepSize` draws the bulb
+ *   by the ray march all the same: `rayMarch` never reaches the store, the step size does (it is
+ *   the Mandelbox's param) and moves no pixel of the bulb, and neither row is on the tab. Seen once
+ *   in the app on 2026-10-11 (debug/scratch/r7/old-scene-r7b.mts, git-ignored: that same scene file
+ *   with the two values set by hand; the picture at the saved 0.35 and at 0.85 differ in 0.00 % of
+ *   the pixels). The standing part of it: npm run smoke:deep-zoom, stage 2 ("Step size is NOT shown
+ *   for the Mandelbulb", "and moves no ray of the bulb ...") - which loads no scene.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { SliceFromParams } from '../../engine/typedSlices';
 import { defineEnumParam } from '../../engine/defineEnumParam';
-import { FORMULA_BULB } from './formula';
+import { FORMULA_BOX } from './formula';
 
-/* THE MANDELBOX DOES NOT USE THE RAY MARCH (2026-10-09; grep THE FORMULA SEAM in renderer/core.js): it is
-   built on the bulb's power map. The renderer keeps what was asked and draws the box with its own march, so
-   nothing breaks whatever the switch holds. Its row is shown for the bulb only, so the tab does not offer the
-   box a switch that does nothing. The value is not touched: back on the bulb it applies as it was.
+/* THE MANDELBOX DOES NOT USE THE RAY MARCH (2026-10-09; grep THE FORMULA SEAM in renderer/core.js): that is
+   built on the bulb's power map. The box is drawn by a program of its own that steps by the page's rule, a
+   multiple of the distance estimate - so Step size is the box's row, and the bulb, whose ray march has no step
+   setting, is not offered a slider that does nothing. (Until 2026-10-11 the condition here was the other way
+   round: `BULB_ONLY`, on the Ray march switch, which went that day.) The value is not touched by the formula.
    `$dzFormula.kind` reads the other feature's slice (utils/paramConditions.ts). */
-const BULB_ONLY = { param: '$dzFormula.kind', eq: FORMULA_BULB };
+const BOX_ONLY = { param: '$dzFormula.kind', eq: FORMULA_BOX };
 
 // ── Reach — how far a ray travels. core.js: `const REACH`, default `const march = {` = REACH[1].
 export const REACH_OPTIONS = ['short', 'relaxed', 'full'] as const;
@@ -225,12 +241,15 @@ export const DzQualityFeature = {
             default: 0, min: 0, max: 8, step: 1,
             label: 'Hit refine',
             format: (v) => (Math.round(v) === 0 ? 'off' : `${Math.round(v)}`),
-            description: 'Halves each hit\'s last march step this many times, so the surface lands where it should instead of where the step fell. Removes cuts and terraced slices that show before the still has accumulated. Costs about a third more render time at 3 or 4. Where slices remain, lower Step size to 0.5 as well. Replaces Hit landing while it is on.',
+            description: 'Halves each hit\'s last march step this many times, so the surface lands where it should instead of where the step fell. Removes cuts and terraced slices that show before the still has accumulated. Costs about a third more render time at 3 or 4. On the Mandelbox, where slices remain, lower Step size to 0.5 as well. Replaces Hit landing while it is on.',
         },
         stepSize: {
             type: 'float',
             // NOT advanced (the owner, 2026-10-08: "step size shouldn't be in advanced"). It sits
             // beside Hit refine because the two are used together.
+            // SHOWN FOR THE MANDELBOX ONLY since 2026-10-11 (`BOX_ONLY` above): the bulb's ray march
+            // does not read it. The numbers below were measured on the bulb under the page's march,
+            // which is gone; they are why the range reaches down to 0.1.
             // The page's own control stopped at 0.85 (it was a speed lever). The range goes down to
             // 0.1 here because the distance estimate over-reads in places. Measured 2026-10-08 on
             // the owner's 2.76e-39 view, one sample, against a slow march: at 0.85, 57 % of the
@@ -239,24 +258,16 @@ export const DzQualityFeature = {
             // 2.6x). So the cure is Hit refine first, then this slider to 0.5.
             default: 0.85, min: 0.1, max: 2, step: 0.05,
             label: 'Step size',
+            condition: BOX_ONLY,
             format: (v) => `${v.toFixed(2)}×`,
-            description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. Not used while Ray march is on; the Mandelbox always marches by it.',
+            description: 'The Mandelbox\'s march step, as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. The Mandelbulb has no step setting: its ray march steps by how fast the orbit\'s escaping point moves along the ray.',
         },
-        rayMarch: {
-            type: 'boolean',
-            // A PROTOTYPE, off by default (2026-10-09; grep THE RAY ESTIMATE and THE LINE AGAINST THE BALL
-            // in renderer/core.js, "RESEARCH RESULT" and "ON THE GPU" in the build plan). Measured on
-            // the GPU at Detail 32, 16,384 rays a view, 17 views: rays more than 2 px of depth from a
-            // careful march - 10.2 % with the default step, 2.0 % at Step size 0.42, 1.0 % with this
-            // (the power-2 place at 5e-20: 97.6 / 26.8 / 1.8 %). A 640 x 640 picture with 4-tap
-            // normals, mean of 11 views, BLA on for the first two: 21.8 / 34.3 / 22.6 ms.
-            // THE DEFAULT since 2026-10-09 (the owner, having flown it: "lets make it the default for now, we can aim
-            // to retire the others but lets keep them around a little while longer for reference").
-            default: true,
-            label: 'Ray march',
-            condition: BULB_ONLY,
-            description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size is not used, and iterations follow the orbit; Detail and Hit refine apply as ever. Its shader takes about 20 seconds to build the first time; the top bar says so, and the older march is drawn meanwhile.',
-        },
+        // NO `rayMarch` PARAM SINCE 2026-10-11 (see the header's pitfall). What it measured when it was a switch,
+        // for the record (2026-10-09, the GPU, Detail 32, 16,384 rays a view, 17 views): rays more than 2 px of depth
+        // from a careful march - 10.2 % with the page's default step, 2.0 % at Step size 0.42, 1.0 % with the ray
+        // march (the power-2 place at 5e-20: 97.6 / 26.8 / 1.8 %); a 640 x 640 picture with 4-tap normals, mean of 11
+        // views: 21.8 / 34.3 / 22.6 ms. The owner, having flown it: "lets make it the default for now, we can aim to
+        // retire the others but lets keep them around a little while longer for reference" - and on 2026-10-11 retired them.
         accumulate: {
             type: 'boolean',
             default: true,

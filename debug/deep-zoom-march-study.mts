@@ -1,16 +1,20 @@
 /**
  * debug/deep-zoom-march-study.mts - what share of a deep-zoom view's rays land on the wrong surface
- * under a march setting, and what the setting costs. The measuring tool for the automatic step.
+ * under the ray march, and what it costs. The measuring tool for the march.
  *
- *   npm run bench:deep-zoom-march                                  kept places + sample flight, Detail 32, the ray march's row too
- *   npm run bench:deep-zoom-march -- --views "Power 2" --detail saved --steps 0.85,0.35,0.1 --refine 0,2
+ *   npm run bench:deep-zoom-march                                  kept places + sample flight, Detail 32, the ray march as the shell has it
+ *   npm run bench:deep-zoom-march -- --views places --detail saved --ray 5:1:64:0.05:256:2,7:1
+ *
+ * SINCE 2026-10-11 THE BULB HAS ONE PROGRAM, THE RAY MARCH'S (grep "deep program variants" in core.js), and this
+ * tool follows it. Its REFEREE is still the careful page-style march (a step of a tenth of the page's estimate,
+ * 8 hit-refine halvings, 16384 steps), now run as that program's MEASURING MODE: bit 8, no creep floor, no line
+ * rule - the jet is carried, the march is the page's. The ROWS THAT SWEPT THE PAGE'S OWN MARCH ARE GONE
+ * (`--steps`, `--refine`, `--reach`, `--budget`, and each kept place's "as saved" row): there is no page march
+ * to sweep. What is left is one row per `--ray` setting. Recorded on the day before, with the referee in the
+ * page's program: the ray march's wrong share at the three kept places 1.7 %, 1.7 % and 0.7 %.
  *
  *   --views    places | flight | all (default) | any text: views whose label contains it
  *   --detail   list of Detail values, or `saved` = each view's own            (default 32)
- *   --steps    step sizes                                   (default 0.85,0.7,0.5,0.35,0.2,0.1)
- *   --refine   Hit refine values, crossed with --steps                        (default 0,3)
- *   --reach    0 short / 1 relaxed / 2 full, for every setting                (default 1)
- *   --budget   override the reach's step budget
  *   --rays     the grid is rays x rays                                        (default 128)
  *   --display  the picture height the hit tolerance is taken for              (default 1080)
  *   --ref      the careful march: step,refine,budget                          (default 0.1,8,16384)
@@ -19,8 +23,8 @@
  *   --cones    the older measure, in pixel cones of the Detail in use (a cone = a display pixel / Detail);
  *              given, it replaces --wrongpx. The studies of 2026-10-08 used 4.
  *   --rebase   page (default) | origin: the kernel's rebase (grep REBASE TO THE ORIGIN in core.js)
- *   --ray      settings that march by THE RAY ESTIMATE (grep it in core.js); default 5:1:64:0.05:256:2, the
- *              shell's; `none` for no such row. A list of
+ *   --ray      the settings marched (THE RAY ESTIMATE: grep it in core.js); default 5:1:64:0.05:256:2, the
+ *              module's own and the shell's. A list of
  *              bits:factor[:hit[:tol[:floor]]] - bits 1 = step by it, 2 = hit test by it, 4 = orbits
  *              resumed along the ray; factor = the step as a share of the estimate; hit = the hit
  *              level is a display pixel / this (64); tol = pixels a resumed orbit may be off (0.05);
@@ -55,8 +59,9 @@
  *   cost     kernel passes per ray (`work`): counted by the shader, so the same on a busy GPU.
  *            `ms` is one draw + read on the wall clock, for orientation only; it is not in the JSON.
  * The JSON holds no time and no date: two runs of the same sweep must diff empty.
- * Every run also draws each view once through the picture's own path and compares its G-buffer
- * with the probe's rays; any difference is exit 1 (the probe is a separate shader variant).
+ * Every run also draws each view once through the picture's own path, with the first `--ray` setting, and
+ * compares its G-buffer with the probe's rays; any difference is exit 1 (the probe is a separate shader
+ * variant: PTR, where the picture is PR). Until 2026-10-11 that comparison marched a page setting.
  *
  * NEEDS the worktree's dev server (preview `dz-worktree-dev`; ENGINE_URL, default
  * http://localhost:3410) and Chrome on the real GPU. No window unless DZ_HEADLESS=0. The Chrome
@@ -66,10 +71,10 @@
  * The sample flight is read from the frozen page's repo (DZ_SOURCE_REPO); without it, places only.
  *
  * ONE MEASURE (2026-10-09). Wrong is counted in display pixels of depth, the same distance on screen at
- * every Detail, and the default sweep runs at Detail 32 with the ray march's row in it. The ray march
- * follows --detail like the page's march (for some hours that day it had a fixed level of its own; the
+ * every Detail, and the default sweep runs at Detail 32. The ray march
+ * follows --detail as the page's march did (for some hours that day it had a fixed level of its own; the
  * owner found 32 too rough in many places and Detail applies again). Numbers from before that day were
- * taken at Detail 1 or 8 in cones: `--detail 1 --cones 4 --ray none` is that sweep.
+ * taken at Detail 1 or 8 in cones, of the page's march: that sweep cannot be run any more.
  *
  * PITFALLS
  *   - `--display` is not the grid: 128 rays at --display 1080 march a 1080-row picture's tolerance
@@ -78,8 +83,10 @@
  *     than the picture on screen.
  *   - A pixel cone shrinks with Detail, so the same `wrong` at Detail 8 is an eighth of the distance.
  *   - The in-page function is sent as text. It must not use anything from this file's scope.
- *   - BLA is off, as in every earlier study. Left on its default ('auto') the renderer turns it on
- *     below 1e-13 for the page's march, and never under the ray march.
+ *   - AUTO ITERATIONS ARE OFF for the whole run: every view is marched with its own count. With them on, and a
+ *     ray bit set, the module raises the count between two marches (grep ITERATIONS AS A MARGIN).
+ *   - A result file from before 2026-10-11 has rows this one does not write: the page's step sweep, and
+ *     `saved` on a kept place's own row.
  *   - A `--jac` argument (rows with the true-gradient estimate's bits) went on 2026-10-11 with the
  *     renderer's J variant; a result file from before then has a `jac` key this one does not write.
  */
@@ -99,18 +106,19 @@ const argv = process.argv.slice(2);
 const arg = (name: string, fallback: string): string => { const i = argv.indexOf('--' + name); return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : fallback; };
 const nums = (text: string): number[] => text.split(',').map(Number);
 const RAYS = Number(arg('rays', '128')), DISPLAY = Number(arg('display', '1080')), CONES_ARG = arg('cones', ''), WRONG_PX = Number(arg('wrongpx', '2'));
-const REACH = Number(arg('reach', '1')), BUDGET = Number(arg('budget', '0'));
 const [refStep, refRefine, refBudget] = nums(arg('ref', '0.1,8,16384'));
 const WHICH = arg('views', 'all'), DETAIL = arg('detail', '32'), ORIGIN = arg('rebase', 'page') === 'origin';
 const JSON_OUT = path.resolve(ROOT, arg('json', 'debug/scratch/march-study.json'));
-const RAY_ARG = arg('ray', '5:1:64:0.05:256:2'), RAY = RAY_ARG === 'none' ? '' : RAY_ARG, RAY_BUDGET = Number(arg('raybudget', '512'));
+const RAY = arg('ray', '5:1:64:0.05:256:2'), RAY_BUDGET = Number(arg('raybudget', '512'));
+for (const gone of ['steps', 'refine', 'reach', 'budget']) if (argv.includes('--' + gone)) { console.error(`--${gone} swept the page's own march, which went on 2026-10-11 (see the header)`); process.exit(1); }
 
-interface Setting { step: number; refine: number; reach: number; budget?: number; farRelax?: number; saved?: boolean; ray?: number; hitDiv?: number; tol?: number; floor?: number; line?: number }
-interface Target { label: string; view?: unknown; tau?: number; detail: number; saved?: Setting }
+/** `ray`: the bits of a row. `measure`: the referee - the ray program's measuring mode (bit 8), stepping by `step` of the page's estimate. */
+interface Setting { step: number; refine: number; reach: number; budget?: number; farRelax?: number; measure?: boolean; ray?: number; hitDiv?: number; tol?: number; floor?: number; line?: number }
+interface Target { label: string; view?: unknown; tau?: number; detail: number }
 
 const grid: Setting[] = [];
-for (const step of nums(arg('steps', '0.85,0.7,0.5,0.35,0.2,0.1'))) for (const refine of nums(arg('refine', '0,3'))) grid.push({ step, refine, reach: REACH, ...(BUDGET ? { budget: BUDGET } : {}) });
-for (const item of RAY ? RAY.split(',') : []) { const [bits, factor, hit, tol, floor, line] = item.split(':').map(Number);
+for (const item of RAY.split(',')) { const [bits, factor, hit, tol, floor, line] = item.split(':').map(Number);
+    if (!(bits > 0 && bits < 8)) { console.error(`--ray ${item}: the bits of a row are 1 to 7 (8 is the referee's measuring mode)`); process.exit(1); }
     grid.push({ step: factor || 1, refine: 0, reach: 2, budget: RAY_BUDGET, ray: bits, hitDiv: hit || 64, tol: tol === undefined || Number.isNaN(tol) ? 0.05 : tol, floor: floor || 0, line: line || 0 }); }
 
 let flight: { frames: Array<{ t: number }> } | null = null;
@@ -121,9 +129,7 @@ if (WHICH !== 'places') {
 const targets: Target[] = [];
 const details = (own: number): number[] => DETAIL === 'saved' ? [own] : nums(DETAIL);
 for (const place of PLACES) {
-    const m = place.march;
-    for (const detail of details(place.state.view.surf)) targets.push({ label: place.name, view: place.state.view, detail,
-        saved: m && { step: m.stepSize || 0.85, refine: m.hitRefine, reach: m.reach, saved: true } });
+    for (const detail of details(place.state.view.surf)) targets.push({ label: place.name, view: place.state.view, detail });
 }
 if (flight) { const end = flight.frames[flight.frames.length - 1].t; for (const tau of FLIGHT_TAUS) for (const detail of details(1)) targets.push({ label: 'flight ' + tau.toFixed(2), tau: tau * end, detail }); }
 const chosen = targets.filter((t) => WHICH === 'all' || (WHICH === 'places' ? !!t.view : WHICH === 'flight' ? t.tau !== undefined : t.label.toLowerCase().includes(WHICH.toLowerCase())));
@@ -140,8 +146,11 @@ function study(a: any): any {
         w.__setReach(s.reach);
         if (s.budget) w.__setMarch({ maxSteps: s.budget });
         if (s.farRelax !== undefined) w.__setMarch({ farRelax: s.farRelax });
-        w.__setStepRelax(s.ray ? 0 : s.step); w.__setHitRefine(s.refine);
-        w.__setRayMarch(s.ray || 0, s.ray ? { factor: s.step, hit: s.hitDiv, tol: s.tol, floor: s.floor || 0, line: s.line || 0 } : undefined, true);
+        w.__setStepRelax(s.measure ? s.step : 0); w.__setHitRefine(s.refine);
+        /* the referee: bit 8, the ray program's measuring mode - the jet carried, the march the page's (its step
+           is the step size just set), no creep floor and no line rule. A row: its own bits and options. */
+        if (s.measure) w.__setRayMarch(8, { factor: 1, hit: 64, tol: 0.05, floor: 0, line: 0 }, true);
+        else w.__setRayMarch(s.ray, { factor: s.step, hit: s.hitDiv, tol: s.tol, floor: s.floor || 0, line: s.line || 0 }, true);
         const t = performance.now(), px = w.__marchProbe(a.rays, s.own ? a.rays : a.display);
         return { px, ms: performance.now() - t, budget: w.__march.maxSteps };
     };
@@ -169,8 +178,8 @@ function study(a: any): any {
         const kr = kindOf(r.px, i), kq = kindOf(q.px, i), hr = kr === 1 || kr === 2, hq = kq === 1 || kq === 2;
         return hr !== hq ? (hq ? 1 : -1) : r.px[i * 4] > q.px[i * 4] ? 1 : -1;
     };
-    const careful = { step: a.ref[0], refine: a.ref[1], reach: 2, budget: a.ref[2] };
-    const ref = run(careful), ref2 = run({ step: a.ref[0] / 2, refine: a.ref[1] + 2, reach: 2, budget: a.ref[2] * 2 });
+    const careful = { step: a.ref[0], refine: a.ref[1], reach: 2, budget: a.ref[2], measure: true };
+    const ref = run(careful), ref2 = run({ step: a.ref[0] / 2, refine: a.ref[1] + 2, reach: 2, budget: a.ref[2] * 2, measure: true });
     const settled = new Uint8Array(N); let nSettled = 0;
     for (let i = 0; i < N; i++) if (apart(ref, ref2, i) < 2) { settled[i] = 1; nSettled++; }
     /* the ray settings' own truth: the ray rule at a quarter of the estimate, whole orbits, per hit level */
@@ -189,11 +198,12 @@ function study(a: any): any {
         }
         return row;
     });
-    /* is the probe's march the picture's? The same rays through the picture's own draw (its G-buffer), one setting */
-    const own = run({ step: 0.5, refine: 3, reach: 1, own: true }).px, picture = w.__readGbuf(a.rays);
+    /* is the probe's march the picture's? The same rays through the picture's own draw (its G-buffer), with the
+       first row's setting: the ray march as the picture marches it */
+    const own = run({ ...a.settings[0], own: true }).px, picture = w.__readGbuf(a.rays);
     let unlike = 0;
     for (let i = 0; i < N; i++) if (own[i * 4] !== picture[i * 4] || kindOf(own, i) !== Math.floor(picture[i * 4 + 2] / 256) % 4) unlike++;
-    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0); w.__setRayMarch(0);
+    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0); w.__setRayMarch(5, { factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2 });   // the module's own start values
     return { unlike, depth: tel.depth, power: tel.power, iters: tel.iters, mode: tel.mode,
         ref: { ...careful, ...cost(ref), unsettled: pct(N - nSettled, N) }, settings, ms: performance.now() - t0 };
 }
@@ -211,7 +221,7 @@ const ready = (ms: number) => page.waitForFunction('window.__deepReady === true'
 await ready(1500).catch(async () => { await page.reload(); await ready(180_000); });
 const gpu = await page.evaluate(`(() => { const g = document.createElement('canvas').getContext('webgl2'), e = g.getExtension('WEBGL_debug_renderer_info'); return e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?'; })()`) as string;
 if (/swiftshader|llvmpipe/i.test(gpu)) { console.error('software renderer, not the real GPU: ' + gpu); await context.close(); process.exit(1); }
-await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); })()`);
+await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); })()`);
 if (flight && chosen.some((t) => t.tau !== undefined)) await page.evaluate(`window.__flight = ${JSON.stringify(flight)}`);
 const startupMs = performance.now() - started;
 
@@ -223,15 +233,15 @@ const rows: unknown[] = [];
 let pageMs = 0, unlike = 0;
 const sweepStart = performance.now();
 for (const t of chosen) {
-    const settings = t.saved ? [...grid, t.saved] : grid;
+    const settings = grid;
     const r = await page.evaluate(`(() => { const __name = (f) => f; return (${study.toString()})(${JSON.stringify({ view: t.view, tau: t.tau, detail: t.detail, rays: RAYS, display: DISPLAY, cones: CONES_ARG ? Number(CONES_ARG) : WRONG_PX * t.detail, ref: [refStep, refRefine, refBudget], settings })}); })()`) as any;
     pageMs += r.ms; unlike += r.unlike;
     console.log(`\n${t.label}   depth ${r.depth.toExponential(1)}   power ${r.power}   iters ${r.iters}   detail ${t.detail}` + (r.mode === 'deep' ? '' : '   NOT DEEP'));
-    console.log(`  careful march: ${r.ref.hit} % hit (${r.ref.far} % far ground), ${r.ref.ranOut} % ran out, ${r.ref.steps} steps a ray (most ${r.ref.stepsMax}), work ${r.ref.work}, ${r.ref.ms.toFixed(0)} ms.  UNSETTLED ${r.ref.unsettled} %`);
-    console.log('   step refine reach  wrong %  rough %  ran out %   steps   work   x cost    ms');
+    console.log(`  careful march (the measuring mode): ${r.ref.hit} % hit (${r.ref.far} % far ground), ${r.ref.ranOut} % ran out, ${r.ref.steps} steps a ray (most ${r.ref.stepsMax}), work ${r.ref.work}, ${r.ref.ms.toFixed(0)} ms.  UNSETTLED ${r.ref.unsettled} %`);
+    console.log('   step refine reach  wrong %  rough %  ran out %   steps   work   x cost    ms      (x cost: against the first row)');
     const base = r.settings[0].work;
     for (const s of r.settings) {
-        console.log(pad(s.step, 7) + pad(s.refine, 7) + pad(s.reach, 6) + pad(s.wrong.toFixed(2), 9) + pad(s.rough.toFixed(2), 9) + pad(s.ranOut.toFixed(2), 11) + pad(s.steps, 8) + pad(s.work, 7) + pad((s.work / base).toFixed(2), 9) + pad(s.ms.toFixed(0), 6) + (s.saved ? '   <- as saved' : '')
+        console.log(pad(s.step, 7) + pad(s.refine, 7) + pad(s.reach, 6) + pad(s.wrong.toFixed(2), 9) + pad(s.rough.toFixed(2), 9) + pad(s.ranOut.toFixed(2), 11) + pad(s.steps, 8) + pad(s.work, 7) + pad((s.work / base).toFixed(2), 9) + pad(s.ms.toFixed(0), 6)
             + (s.ray ? `   <- ray ${s.ray}, hit 1/${s.hitDiv} px, tol ${s.tol}, floor ${s.floor ? '1/' + s.floor + ' px' : 'none'}, line ${s.line || 'off'}: of wrong, behind ${s.behind.toFixed(2)} %; against its own careful march passed ${s.passed.toFixed(2)} %, early ${s.early.toFixed(2)} %` : ''));
         delete s.ms;
     }

@@ -29,8 +29,8 @@
  *     until it is called with false (then the store's value goes again). The route holds it while
  *     it drives the camera: the renderer's rule only ever raises the count, so a frame's count
  *     would depend on where the playhead had been before. The store is not written.
- *   - Never write to the store from here. Values the renderer changes by itself (auto iterations,
- *     the effective BLA flag) are shown from telemetry, not written back.
+ *   - Never write to the store from here. A value the renderer changes by itself (the iteration
+ *     count, under auto iterations) is shown from telemetry, not written back.
  */
 import { useEffect } from 'react';
 import { useEngineStore } from '../store/engineStore';

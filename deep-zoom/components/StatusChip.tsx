@@ -7,8 +7,11 @@
  * Stage 1 shows two things, and only while a host is drawing (`live`):
  *   - the engine badge: `perturbation`, or `f32` for the seconds the deep shader takes to compile;
  *   - beside it, for the 20 or so seconds the ray march's shader takes to build, `ray march: building`
- *     (the owner, 2026-10-09: "the 20s switch on is fine except it needs some indication") - the
- *     picture is the page's march until it goes; and `ray march failed` if it could not be built;
+ *     (the owner, 2026-10-09: "the 20s switch on is fine except it needs some indication"). That
+ *     shader is the bulb's ONE program since 2026-10-11: until it is there the picture is the plain
+ *     single-precision one and nothing deep is drawn. And `ray march failed` if it could not be
+ *     built: then there is no deep picture at all, and the notice's text is the one line the
+ *     surface also toasts (`DZ_RAY_FAILED_TEXT`); no other march stands in.
  *   - the depth, compact: `6.40e-53`. Depth is the camera's distance to the surface.
  *   - the same for the Mandelbox's shader, about 5 seconds from the first switch to that formula
  *     (`mandelbox: building`; the box's plain picture is drawn until it is there);
@@ -23,7 +26,7 @@
 
 import React from 'react';
 import { useDzTelemetry } from '../host/telemetry';
-import { useHost } from '../host/current';
+import { DZ_RAY_FAILED_TEXT, useHost } from '../host/current';
 import { formatDepth } from './depthFormat';
 import { useDzNavigation } from '../navigationState';
 
@@ -33,8 +36,10 @@ import { useDzNavigation } from '../navigationState';
  * S2-5 moves this to `components/depthFormat.ts`; keep the two outputs above when it does.
  */
 
-const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, about 20 seconds the first time. The picture is drawn with the older march until it is ready, then changes by itself.';
-const RAY_FAILED_TITLE = 'The ray march\'s shader could not be built on this machine. The older march is drawn instead; Step size applies again.';
+const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, about 20 seconds the first time. Until it is ready the plain single-precision picture is shown and nothing deep is drawn; then the deep picture comes by itself.';
+/** The one line (host/current.ts), as the surface toasts it and a render refuses with it. Before 2026-10-11 this
+ *  title said "The older march is drawn instead; Step size applies again": there is no older march any more. */
+const RAY_FAILED_TITLE = DZ_RAY_FAILED_TEXT;
 const BOX_BUILDING_TITLE = 'The Mandelbox\'s renderer is being built, a few seconds the first time. Its plain single-precision picture is drawn until it is ready, then changes by itself.';
 const BOX_FAILED_TITLE = 'The Mandelbox\'s renderer could not be built on this machine. Its plain single-precision picture is drawn instead, which runs out of precision a few decades in.';
 const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';
@@ -44,8 +49,8 @@ export const StatusChip: React.FC = () => {
     const mode = useDzTelemetry((t) => t.mode);
     const depth = useDzNavigation((s) => formatDepth(s.depth));   // the depth the app shows: what is looked at
     const iters = useDzTelemetry((t) => t.iters);
-    // The ray march's shader: the host's `compile` event with what 'variant' (it is not telemetry - the module's
-    // sample keeps the frozen page's keys). It starts to build seconds after the host mounts, so nothing is missed.
+    // The ray march's shader: the host's `compile` event with what 'variant' (it is not telemetry). It builds from
+    // the moment the host is created and the event is said at the host's first poll, 125 ms on: nothing is missed.
     const host = useHost();
     const [ray, setRay] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
     const [box, setBox] = React.useState<'compiling' | 'ready' | 'failed'>('ready');
@@ -80,8 +85,8 @@ export const StatusChip: React.FC = () => {
                 </span>
             )}
             {ray === 'failed' && (
-                <span data-dz-status-ray="failed" title={RAY_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
-                    ray march failed
+                <span data-dz-status-ray="failed" title={RAY_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-danger/40 text-danger">
+                    ray march could not be built: no deep picture
                 </span>
             )}
             {box === 'compiling' && (

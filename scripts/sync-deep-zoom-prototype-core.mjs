@@ -3,10 +3,9 @@
  * sync-deep-zoom-prototype-core — refresh the vendored deep-zoom renderer.
  *
  * NOT EXPECTED TO RUN AGAIN (2026-10-08): the standalone page is frozen at commit 3b65946 and the
- * embedded-page prototype (`deep-zoom-prototype/`) keeps the copy it has. That copy is also the
- * "historical page" of `npm run smoke:deep-zoom-parity`, which accepts it only while it equals
- * 3b65946 apart from the SYNC_MARK line; syncing from a newer master makes that smoke fall back
- * to its own pinned file. The new shell does not use this copy: it mounts `deep-zoom/renderer`.
+ * embedded-page prototype (`deep-zoom-prototype/`) keeps the copy it has. (Until 2026-10-11 that
+ * copy was also the "historical page" of the parity smoke, retired that day with the page's own
+ * march in `deep-zoom/renderer`.) The new shell does not use this copy: it mounts `deep-zoom/renderer`.
  *
  * The renderer's master copy is one HTML file in the `mandelbulb_deepzoom` repo. The
  * prototype serves a copy from `public/deep-zoom-prototype-core/index.html` (Vite copies `public/`

@@ -1,7 +1,6 @@
 /**
  * deep-zoom/host/telemetry.ts - the renderer's live numbers as a small read-only store beside the
- * host: depth, fps, iterations, frame size, the still's progress, mode, ready, error, recording /
- * playing / exporting.
+ * host: depth, fps, iterations, frame size, the still's progress, mode, ready, error, exporting.
  *
  * PURPOSE
  *   Widgets (the depth readout, the status chip, the top-bar fps) show numbers the renderer
@@ -66,11 +65,7 @@ export const DZ_TELEMETRY_INITIAL: Readonly<DzTelemetryState> = Object.freeze({
     power: 0,
     accumN: 0,
     accumMax: 0,
-    recording: false,
-    playing: false,
     exporting: false,
-    pathFrames: 0,
-    bla: false,
 });
 
 const useTelemetryStore = create<DzTelemetryState>()(() => ({ ...DZ_TELEMETRY_INITIAL }));

@@ -51,7 +51,7 @@
  *   - AUTO ITERATIONS: `iterations` IS THE USER'S FLOOR, NOT THE LIVE COUNT. With auto on, the
  *     renderer raises its own count every frame as the zoom deepens and never lowers it (grep
  *     `auto iteration budget` and `ITERATIONS AS A MARGIN` in core.js: the bulb 32 + 1.35 per decade
- *     up to 160, or a margin above the camera orbit's own escape up to 400 under the ray march; the
+ *     up to 160, and by the ray march's own rule a margin above the camera orbit's escape up to 400; the
  *     box by that margin alone, up to 500). The live number is `api.dz.telemetry().iters` and is
  *     shown beside the slider by a readout widget. It is NEVER written back into this param: a
  *     write-back would turn flying deeper into undo steps and scene-file changes, and a sync that
@@ -210,7 +210,7 @@ export const DzFormulaFeature = {
             type: 'boolean',
             default: true,
             label: 'Auto iterations',
-            description: 'Raises the live iteration count as the zoom deepens, and never lowers it. Mandelbulb: 32 plus 1.35 for each decade, up to 160; with Ray march on it also keeps the count a margin above where the camera\'s own orbit escapes, which is what low powers need. Mandelbox: that margin alone, up to 500.',
+            description: 'Raises the live iteration count as the zoom deepens, and never lowers it. Mandelbulb: 32 plus 1.35 for each decade, up to 160, and never less than a margin above where the camera\'s own orbit escapes, which is what low powers need. Mandelbox: that margin alone, up to 500.',
         },
     },
 } satisfies FeatureDefinition;

@@ -14,11 +14,12 @@
  *                  the two callbacks, and a decision for every option `core.d.ts` declares.
  *   [2] views      three 80-digit `cam` strings byte-identical through `getView`, `setView`,
  *                  `setPendingView`.
- *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error`.
+ *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error` -
+ *                  the fatal kind, and the ray march that cannot be built, which is not.
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
  *   [5] input      `focus`, the host-input members straight through to the module, and `building()`
  *                  (the shader variant the picture waits for, from the module's two state handles).
- *   [6] flight     what is left of it: `recordingChanged`, off the module's telemetry.
+ *   [6] flight     EMPTY since 2026-10-11 (R7b): its last line, `recordingChanged`, went with the event.
  *   [7] render     `progress`, `cancel`, `thumbnail`, and `renderFrameBlob`
  *                  (one frame of the current view; a fake `dz.renderFrame` stands behind it).
  *   [8] dive       `dive.ts` alone, then through the host.
@@ -38,6 +39,15 @@
  * lines of [7] are driven as a still (the job a sequence used to give is gone from the contract),
  * "a newer dive and a frame render each end a dive" takes the place of "... and a path preview",
  * and the missing-handle line of [10] takes away `moveAlong`, the one loose handle left.
+ *
+ * WENT 2026-10-11 (R7b), with the page's own march program: the three `recordingChanged` lines of
+ * [6] and the unsubscribe line's use of that event in [4] (it listens to `viewSet` now), the
+ * "frame N/M" numbers of `progress` in [7] and [10] (only the module's path render wrote them), the
+ * `stopPlay` halves of two [7] lines (the module no longer has it), and `rayMarch: true` from the
+ * options of [1] (the module lost the option: the ray march is the bulb's only program). ADDED the
+ * same day, none of them seen red: the five "boot: a ray march that cannot be built ..." lines of
+ * [3]. The first block of [3] now drives the module as it is since that day - the ray march's
+ * program IS the deep shader, so `compile` says both names together.
  *
  * FALSIFIED 2026-10-08: 54 breaks, each applied alone to `moduleHost.ts` or `dive.ts` (45 are
  * listed here since 2026-10-11: see WENT above). The check
@@ -117,7 +127,7 @@
  *       `estimateAt: () => 1` -> 1: "input: estimateAt is the module's own estimate ..."
  *   seam
  *     `dive.ts` given a type import of the renderer -> 2: both "seam: ..." lines about the tree
- * NOT falsified: every line not named above (among them `recordingChanged`, `compile`'s order,
+ * NOT falsified: every line not named above (among them `compile`'s order, the ray march that cannot be built,
  * the forward vector, and "a module without a handle the host needs"), and every line that was
  * re-driven on 2026-10-11 (see WENT above). They pass; nothing here has shown they can fail.
  * NOT checked at all, by anything in node: what the real module does behind each handle. See the
@@ -128,7 +138,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { DZ_CANVAS_ID } from '../../deep-zoom/host/current';
+import { DZ_CANVAS_ID, DZ_RAY_FAILED_TEXT } from '../../deep-zoom/host/current';
 import { DZ_DIVE_MIN_DEPTH, DZ_DIVE_TIME_LIMIT_MS, createDive } from '../../deep-zoom/host/dive';
 import { DZ_READY_TIMEOUT_MS, createModuleHost, mountDeepZoom, shellOptions } from '../../deep-zoom/host/moduleHost';
 import { getTelemetry, subscribeTelemetry } from '../../deep-zoom/host/telemetry';
@@ -300,8 +310,6 @@ function makeRig() {
         frameRuns: true,
         contextLost: false,
         disposed: false,
-        recording: false,
-        playing: false,
         exporting: false,
         mode: 'auto',
         tick: 0,
@@ -313,9 +321,6 @@ function makeRig() {
             detail: 1, reach: 1, power: 8, phase: [0.25, 0.5] as [number, number], color: 0, cscale: 1, light: 1,
             falloff: 1, normals: 2, land: false, frame: 960, accum: true, lookMode: 1,
         },
-        /** Telemetry's `pathFrames`. The real module reports 0 and `recording` false for good since
-         *  2026-10-11; the fake can still move both, to drive the host's `recordingChanged`. */
-        pathFrames: 0,
         /** What `dz.renderFrame` resolves with (null: cancelled). */
         frameScript: (async () => null) as (req: unknown) => Promise<Blob | null>,
     };
@@ -326,8 +331,7 @@ function makeRig() {
             telemetry: (): DzTelemetry => ({
                 ready: state.ready, error: state.error, mode: 'f32', depth: state.depth, fps: state.tick++,
                 frameW: 960, frameH: 540, iters: 48, power: state.settings.power, accumN: 0, accumMax: 64,
-                recording: state.recording, playing: state.playing, exporting: state.exporting,
-                pathFrames: state.pathFrames, bla: false,
+                exporting: state.exporting,
             }),
             settings: () => ({ ...state.settings, phase: [state.settings.phase[0], state.settings.phase[1]] as [number, number] }),
             getView: (): DzView => ({ ...state.view, cam: [state.view.cam[0], state.view.cam[1], state.view.cam[2]] }),
@@ -364,7 +368,6 @@ function makeRig() {
             estimateAt: (offset: [number, number, number]): number => { note('estimateAt', offset); return 7.5e-41; },
         },
         lockInput: (locked: boolean): void => { note('lockInput', locked); },
-        stopPlay: (): void => { note('stopPlay'); },   // the module keeps it callable; it does nothing
         cancelRender: (): void => { note('cancelRender'); },
         moveAlong: (dir: [number, number, number], dist: number): void => {
             note('moveAlong', dir, dist);
@@ -380,7 +383,7 @@ function makeRig() {
         setMode: (m: string): void => { note('setMode', m); state.mode = m; },
         autoIters: (): boolean => true,
         marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
-        rayMarch: () => ({ bits: 0, factor: 1, hit: 64, tol: 0.05, floor: 0, line: 0, detail: 0 }),
+        rayMarch: () => ({ bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 }),   // the module's own start values since 2026-10-11
         rayMarchState: () => state.rayState,
         formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] }),
         formulaState: () => state.formulaState,
@@ -430,7 +433,7 @@ console.log('[1] options   shellOptions(frame, hooks)');
     );
     const record = options as Record<string, unknown>;
     const want: Array<[keyof DeepZoomOptions, unknown]> = [
-        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'], ['farLook', true], ['rebaseOrigin', true], ['rayMarch', true], ['farHandOff', 0.5], ['holdEstimate', true],
+        ['autoStart', false], ['shortcuts', false], ['dropTarget', null], ['pointerLock', false], ['mode', 'deep'], ['farLook', true], ['rebaseOrigin', true], ['farHandOff', 0.5], ['holdEstimate', true],
         ['resetStillOnResize', true], ['loseContextOnDispose', true], ['embed', true], ['publishOnWindow', false],
     ];
     for (const [name, value] of want) {
@@ -455,6 +458,8 @@ console.log('[1] options   shellOptions(frame, hooks)');
     check(declared.length >= 13 && undecided.length === 0,
         `options: every option core.d.ts declares is set here (${declared.length} options)`,
         `not set: ${undecided.join(', ') || '(the option list was not found in core.d.ts)'}`);
+    check(!declared.includes('rayMarch') && !('rayMarch' in record),
+        'options: there is no rayMarch option any more, in core.d.ts or here (the ray march is the bulb\'s only program since 2026-10-11)');
 }
 
 // ── [2] views ────────────────────────────────────────────────────────────────────────────────────
@@ -492,11 +497,14 @@ console.log('[3] boot      ready, bootParams, compile, error');
     const parked = view(CAM_C, { power: 5 });
     host.setPendingView(view(CAM_B));
     host.setPendingView(parked);   // one slot: the later call replaces the first
+    // The module since 2026-10-11: the deep shader IS the ray march's program, building from create.
+    rig.state.rayState = 'building';
     host.step(0);
-    check(host.bootParams() === null && rig.count('setView') === 0 && compile.join() === 'deep:compiling',
-        'boot: while the deep shader compiles bootParams stays null, the parked view waits, compile says compiling', compile.join());
+    check(host.bootParams() === null && rig.count('setView') === 0 && compile.join() === 'variant:compiling,deep:compiling' && host.building() === 'rayMarch',
+        'boot: while the deep shader - the ray march\'s program - compiles, bootParams stays null, the parked view waits, compile says compiling under both names', compile.join());
     rig.state.settings.detail = 3;
     rig.state.ready = true;
+    rig.state.rayState = 'on';
     host.step(200);
     const boot = host.bootParams();
     check(boot !== null && Object.isFrozen(boot) && Object.isFrozen(boot.phase), 'boot: bootParams is frozen after ready, its arrays too');
@@ -506,8 +514,8 @@ console.log('[3] boot      ready, bootParams, compile, error');
     const applied = rig.calls.setView?.[0]?.[0] as DzView | undefined;
     check(rig.count('setView') === 1 && applied === parked && sameCam(applied?.cam, CAM_C),
         'views: a parked view reaches the module at ready, the last one parked, byte-identical');
-    check(await stateOf(host.ready) === 'resolved' && compile.join() === 'deep:compiling,deep:ready',
-        'boot: ready resolves and compile says ready', compile.join());
+    check(await stateOf(host.ready) === 'resolved' && compile.join() === 'variant:compiling,deep:compiling,variant:ready,deep:ready' && host.building() === null,
+        'boot: ready resolves and compile says ready, under both names', compile.join());
     rig.state.settings.detail = 9;
     check(host.bootParams() === boot && host.bootParams()?.detail === 3, 'boot: a later change in the module does not move the snapshot');
     const params = host.getParams();
@@ -517,18 +525,12 @@ console.log('[3] boot      ready, bootParams, compile, error');
     check(rig.count('setView') === 2 && sameCam((rig.calls.setView[1][0] as DzView).cam, CAM_A),
         'views: a view parked after ready is applied at once, byte-identical');
     run(host, 400, 2000, 200);
-    check(compile.length === 2, 'boot: compile is said once per state', compile.join());
-    // the ray march's shader builds in the background after the deep one: `compile` with what 'variant'
-    rig.state.rayState = 'building';
-    run(host, 400, 3000, 200);
-    check(compile.join() === 'deep:compiling,deep:ready,variant:compiling', 'boot: while the ray march\'s shader builds, compile says variant compiling, once', compile.join());
-    rig.state.rayState = 'on';
-    run(host, 400, 4000, 200);
-    check(compile.join() === 'deep:compiling,deep:ready,variant:compiling,variant:ready', 'boot: and variant ready when it is there', compile.join());
+    check(compile.length === 4, 'boot: compile is said once per state', compile.join());
+    // while the Mandelbox is drawn the ray march is not in force and the module says 'off'
     rig.state.rayState = 'off';
     run(host, 400, 5000, 200);
-    check(compile.length === 4, 'boot: a ray march switched off says nothing more', compile.join());
-    check(variants.join() === 'rayMarch:compiling,rayMarch:ready', 'boot: and those two were named as the ray march\'s', variants.join());
+    check(compile.length === 4, 'boot: a ray march that is not in force says nothing more', compile.join());
+    check(variants.join() === 'rayMarch:compiling,rayMarch:ready', 'boot: and the two variant events were named as the ray march\'s', variants.join());
     // the Mandelbox's shader builds from the first switch to that formula: `compile` with what 'variant', named
     rig.state.formulaState = 'building';
     run(host, 400, 6000, 200);
@@ -545,7 +547,47 @@ console.log('[3] boot      ready, bootParams, compile, error');
     host.dispose();
 }
 {
-    // ready rejects on a compile error, and nobody has to be listening
+    // A RAY MARCH THAT CANNOT BE BUILT (2026-10-11): an error the host stays up with. Not fatal, said once, the
+    // mount's hook not called, `ready` rejected with the one line, and the 120 s cannot make it fatal afterwards.
+    const rig = makeRig();
+    const hookErrors: string[] = [];
+    const host = createModuleHost(rig.instance, rig.canvas, { onError: (m) => { hookErrors.push(m); } });
+    const errors: Array<{ message: string; fatal: boolean }> = [];
+    const compile: string[] = [];
+    host.on('error', (e) => { errors.push(e); });
+    host.on('compile', (e) => { compile.push(`${e.what}${e.variant ? ' ' + e.variant : ''}:${e.state}`); });
+    const realWarn = console.warn;
+    const warned: string[] = [];
+    console.warn = (...a: unknown[]) => { warned.push(a.map(String).join(' ')); };
+    try {
+        rig.state.rayState = 'building';
+        host.step(0);
+        const waiting = host.building();
+        rig.state.rayState = 'failed';
+        rig.state.error = 'ERROR: 0:412: the ray shader';
+        host.step(200);
+        await sleep(20);
+        const message = await rejectionOf(host.ready);
+        check(waiting === 'rayMarch' && compile.join() === 'variant rayMarch:compiling,deep:compiling,variant rayMarch:failed,deep:failed',
+            'boot: a ray march that cannot be built says compile failed under both names', compile.join());
+        check(errors.length === 1 && errors[0].fatal === false && errors[0].message === DZ_RAY_FAILED_TEXT && hookErrors.length === 0,
+            'boot: a ray march that cannot be built is ONE error event, not fatal, with the line to show, and the mount\'s onError hook is not called',
+            `${JSON.stringify(errors)}, ${hookErrors.length} hook calls`);
+        check(message === DZ_RAY_FAILED_TEXT && host.bootParams() === null && unhandled.length === 0,
+            'boot: a ray march that cannot be built rejects ready with that line; bootParams stays null; no unhandled rejection', message);
+        check(host.building() === null, 'boot: a ray march that cannot be built is not waited for: building() is null');
+        run(host, 400, DZ_READY_TIMEOUT_MS + 5000, 100);
+        check(errors.length === 1 && hookErrors.length === 0 && rig.count('instance.step') > 1000 && warned.some((w) => w.includes('ERROR: 0:412')),
+            'boot: a ray march that cannot be built stays that: 120 s of steps later there is no second error and no fatal one, the host still steps, and the compiler\'s log went to the console',
+            `${errors.length} errors, ${hookErrors.length} hook calls, ${rig.count('instance.step')} steps`);
+    } finally {
+        console.warn = realWarn;
+    }
+    host.dispose();
+}
+{
+    // ready rejects on any OTHER compile error (the module's telemetry carries one and the ray march is not what
+    // failed: today the Mandelbox's shader), and nobody has to be listening. That one is fatal.
     const rig = makeRig();
     const hookErrors: string[] = [];
     const host = createModuleHost(rig.instance, rig.canvas, { onError: (m) => { hookErrors.push(m); } });
@@ -705,10 +747,10 @@ console.log('[4] step      the timestamp, frameCount, 8 Hz, context loss');
     check(!escaped && second === 1 && reported === 1 && await stateOf(host.ready) === 'resolved',
         'step: a listener that throws is reported and neither the step, the next listener nor ready is lost',
         `escaped ${escaped}, second ${second}, reported ${reported}`);
-    const unsub = host.on('recordingChanged', () => { second += 100; });
+    const unsub = host.on('viewSet', () => { second += 100; });
     unsub();
     unsub();
-    rig.state.recording = true;
+    host.setView(view(CAM_B));
     host.step(200);
     check(second === 1, 'step: on() returns an unsubscribe that is safe to call twice');
     host.dispose();
@@ -761,26 +803,7 @@ console.log('[5] input     focus, and the host-input members');
 }
 
 // ── [6] flight ───────────────────────────────────────────────────────────────────────────────────
-console.log('[6] flight    what is left: recordingChanged, off the module\'s telemetry');
-{
-    // The module's recorder went on 2026-10-11 and its telemetry now says `recording: false` for
-    // good. The host still turns a change of that flag into the event; the fake moves the flag.
-    const rig = makeRig();
-    const host = createModuleHost(rig.instance, rig.canvas);
-    const rec: string[] = [];
-    host.on('recordingChanged', (e) => { rec.push(`${e.recording}:${e.frames}`); });
-    host.step(0);
-    rig.state.recording = true;
-    check(rec.length === 0, 'flight: recordingChanged is not sent before the next poll');
-    host.step(200);
-    rig.state.pathFrames = 2;
-    host.step(400);
-    check(rec.join() === 'true:0', 'flight: recordingChanged says recording at the next poll, once', rec.join());
-    rig.state.recording = false;
-    host.step(600);
-    check(rec.join() === 'true:0,false:2', 'flight: when it stops, recordingChanged carries the frame count', rec.join());
-    host.dispose();
-}
+console.log('[6] flight    nothing: the module records no path and the host has no event for it (2026-10-11)');
 
 // ── [7] render ───────────────────────────────────────────────────────────────────────────────────
 console.log('[7] render    progress, cancel, thumbnail, and one frame to memory');
@@ -791,8 +814,8 @@ console.log('[7] render    progress, cancel, thumbnail, and one frame to memory'
     const p = pathOf([CAM_A, CAM_B], [0, 2]);
 
     // progress, polled from step. A render the host did not start as a frame is a still (the module's
-    // own export; the status lines below are ones its path render wrote, whose "frame N/M" the
-    // host can still read).
+    // own export). The status line carries a percentage; the "frame N/M" of the module's path render,
+    // which went, is no longer read (2026-10-11): such a line is text and nothing else.
     const progress: Array<DzProgress | null> = [];
     host.on('progress', (e) => { progress.push(e); });
     rig.state.exporting = true;
@@ -801,13 +824,13 @@ console.log('[7] render    progress, cancel, thumbnail, and one frame to memory'
         JSON.stringify(progress));
     status.text = 'rendering path... frame 3/120';
     host.step(200);
-    check(JSON.stringify(progress[1]) === '{"job":"still","text":"rendering path... frame 3/120","frame":3,"total":120}',
-        'render: frame and total are read off the status line', JSON.stringify(progress[1]));
-    status.text = 'frame 4/120 - 1280x720... 45%';
+    check(JSON.stringify(progress[1]) === '{"job":"still","text":"rendering path... frame 3/120"}',
+        'render: a status line is handed on as text; a "frame N/M" in it is not read as numbers any more', JSON.stringify(progress[1]));
+    status.text = 'rendering 1280x720... 45%';
     host.step(400);
     host.step(600);
-    check(progress.length === 3 && progress[2]?.frame === 4 && progress[2]?.total === 120 && progress[2]?.fraction === 0.45,
-        'render: the fraction is read too, and an unchanged line is not sent twice', JSON.stringify(progress.slice(2)));
+    check(progress.length === 3 && progress[2]?.fraction === 0.45,
+        'render: the fraction is read off the status line, and an unchanged line is not sent twice', JSON.stringify(progress.slice(2)));
     rig.state.exporting = false;
     host.step(800);
     host.step(1000);
@@ -829,9 +852,8 @@ console.log('[7] render    progress, cancel, thumbnail, and one frame to memory'
 
     // cancel
     const cancelsBefore = rig.count('cancelRender');
-    const stopsBefore = rig.count('stopPlay');
     host.cancel();
-    check(rig.count('cancelRender') === cancelsBefore + 1 && rig.count('stopPlay') === stopsBefore + 1, 'render: cancel() cancels the module\'s render and calls its stopPlay');
+    check(rig.count('cancelRender') === cancelsBefore + 1, 'render: cancel() cancels the module\'s render');
     host.moveAlong([0, 1, 0], 2.5e-30);
     const move = rig.calls.moveAlong?.[rig.count('moveAlong') - 1] ?? [];
     check(JSON.stringify(move) === '[[0,1,0],2.5e-30]', 'render: moveAlong(dir, distance) goes straight to the module', JSON.stringify(move));
@@ -860,8 +882,8 @@ console.log('[7] render    progress, cancel, thumbnail, and one frame to memory'
     const asked = rig2.calls.renderFrame?.[0]?.[0] as { longEdge?: number; samples?: number; aspect?: number } | undefined;
     check(frame?.ok === true && frame.data === picture && frame.width === 640 && frame.height === 360,
         'render: renderFrameBlob hands back the module\'s own blob, with the size its PNG header says', JSON.stringify(frame));
-    check(asked?.longEdge === 640 && asked.samples === 2 && asked.aspect === 16 / 9 && rig2.count('stopPlay') === 1,
-        'render: renderFrameBlob asks the module for that long edge, sample count and aspect, and calls its stopPlay first', JSON.stringify(asked));
+    check(asked?.longEdge === 640 && asked.samples === 2 && asked.aspect === 16 / 9,
+        'render: renderFrameBlob asks the module for that long edge, sample count and aspect', JSON.stringify(asked));
     rig2.state.frameScript = async () => null;
     const stopped = await frameOf({ longEdge: 640, samples: 2 });
     check(stopped?.ok === false && stopped.reason === 'cancelled', 'render: a cancelled frame is a result that says so', JSON.stringify(stopped));
@@ -1204,12 +1226,12 @@ console.log('[10] mount    the DOM half, with a fake create');
     host.on('progress', (e) => { progress.push(e); });
     rig.frame.loading = {
         style: { display: 'flex' },
-        box: { innerHTML: '<span class="spin">◓</span> rendering path… frame 3/120<br><small style="color:#9ab">1280px ×8 — press Esc to cancel · ZIP downloads when done</small>' },
+        box: { innerHTML: '<span class="spin">◓</span> rendering 640×360… 45%<br><small style="color:#9ab">1280px ×8 — press Esc to cancel</small>' },
     };
     rig.state.exporting = true;
     host.step(400);
-    check(progress[0]?.text === 'rendering path… frame 3/120' && progress[0]?.frame === 3 && progress[0]?.total === 120,
-        'mount: progress reads the first line of the module\'s loading box (frame 3 of 120, not 1201280; the page\'s Esc hint is dropped)',
+    check(progress[0]?.text === 'rendering 640×360… 45%' && progress[0]?.fraction === 0.45,
+        'mount: progress reads the first line of the module\'s loading box (45 %, and the text stops before the page\'s Esc hint)',
         JSON.stringify(progress[0]));
     rig.frame.loading.style.display = 'none';
     host.step(600);

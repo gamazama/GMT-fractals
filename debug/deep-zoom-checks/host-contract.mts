@@ -40,8 +40,10 @@
  *     `play`, `stopPlay` (six of the list below) and `renderPathZip` (never in it), with the module's
  *     recorder, preview and path render behind them; no file of the shell called one. `DzPath` stays
  *     on both sides (a frame request may name a path, and the module still samples one), so [2] is
- *     as it was. The `recordingChanged` event is still in the list of events: it is declared, and can
- *     no longer be raised.
+ *     as it was. In a second step the same day (R7b, with the page's own march program) the
+ *     `recordingChanged` event left the list of events, and `DzTelemetry` lost `recording`,
+ *     `playing`, `pathFrames` and `bla` on both sides (16 keys -> 12): [2] holds the two copies to
+ *     each other, and the sample of [4] has the 12.
  *   - A field added to the module's `DzView` / `DzTelemetry` / `DzPath` (`deep-zoom/renderer/index.ts`)
  *     must be added to the contract's copy in the same package, or [2] goes red.
  *
@@ -118,8 +120,8 @@ const BLUEPRINT_MEMBERS = [
     'step', 'frameCount', 'dispose',
     'on',
 ];
-/** BLUEPRINT section 7's event names, less `captureChanged` (gone at N5). */
-const BLUEPRINT_EVENTS = ['paramChanged', 'recordingChanged', 'compile', 'progress', 'contextLost', 'error', 'viewSet'];
+/** BLUEPRINT section 7's event names, less `captureChanged` (gone at N5) and `recordingChanged` (gone 2026-10-11). */
+const BLUEPRINT_EVENTS = ['paramChanged', 'compile', 'progress', 'contextLost', 'error', 'viewSet'];
 /** The contract may not spell these, anywhere, comments included. */
 const FORBIDDEN_IDENTIFIERS = ['Window', 'Document', 'DeepZoomInstance'];
 /** The two DOM types the contract may name (BLUEPRINT section 7). */
@@ -347,7 +349,7 @@ console.log(`[4] telemetry ${TELEMETRY}`);
 {
     const sample: DzTelemetry = {
         ready: true, error: '', mode: 'deep', depth: 6.4e-53, fps: 31, frameW: 960, frameH: 540, iters: 96, power: 8,
-        accumN: 3, accumMax: 64, recording: false, playing: false, exporting: false, pathFrames: 0, bla: true,
+        accumN: 3, accumMax: 64, exporting: false,
     };
     const same = (x: object, y: object): boolean => JSON.stringify(x) === JSON.stringify(y);
 

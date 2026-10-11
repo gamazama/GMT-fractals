@@ -48,8 +48,10 @@
  *     behaviour): keyTarget, shortcuts, dropTarget, pointerLock, resetStillOnResize,
  *     loseContextOnDispose, onContextLost. See core.d.ts.
  *
- * THE HISTORICAL PAGE STAYS FROZEN at 3b65946. It is the reference this file is tested against
- * (npx tsx debug/smoke-deep-zoom-parity.mts). From 2026-10-07 THIS FILE is the source that gets
+ * THE HISTORICAL PAGE STAYS FROZEN at 3b65946. Until 2026-10-11 it was the reference this file was
+ * tested against (the parity smoke, debug/smoke-deep-zoom-parity.mts, retired that day together with
+ * the page's own march program: this module no longer draws what the page draws, and the standing
+ * proof of its kernel is npm run smoke:deep-zoom-direct). From 2026-10-07 THIS FILE is the source that gets
  * edited; port.mjs is kept as provenance (node deep-zoom/renderer/port/port.mjs --check proves a
  * copy is still "the page plus the transforms" — true only until the first hand edit).
  *
@@ -214,8 +216,7 @@ function dzDispose() {
   dzIntervals.length = 0;
   try { if (document.pointerLockElement === canvas) document.exitPointerLock(); } catch (e) { /* not locked */ }
   /* end the things that would otherwise keep ticking on their own requestAnimationFrame (a render's waits, the
-     module's own dive; stopPlay ended the path preview and is a no-op since that went, 2026-10-11) */
-  try { if (dzApiTarget.stopPlay) dzApiTarget.stopPlay(); } catch (e) { /* not built yet */ }
+     module's own dive) */
   try { if (dzApiTarget.cancelRender) dzApiTarget.cancelRender(); } catch (e) { /* not built yet */ }
   try { dzDive = 0; } catch (e) { /* disposed before the script reached it */ }
   /* options.loseContextOnDispose: drop every GL object this instance made (programs, textures, the
@@ -323,7 +324,7 @@ const BOX_KERNEL = `
    dr is the PIXEL'S OWN derivative, dr' = dr·k'·|scale| + 1, as drM·2^drE (renormalised when the mantissa
    passes 2^20): the bulb's split into a reference part and a delta (Ddr / DR) is not needed, and OrbitOut.Ddr
    carries the whole of it.
-   Not here, and not built with USE_BOX: BLA, the jet and its checkpoints, the rebase to the
+   Not here, and not built with USE_BOX: the jet and its checkpoints, the rebase to the
    origin. The rebase is the page's: δ = z − Z0. */
 uniform vec4  uBoxA;             // scale · |scale| · the folding limit L · 2 L
 uniform vec4  uBoxB;             // minR² · fixedR² · fixedR² / minR² · the escape radius, squared
@@ -463,19 +464,6 @@ vec2 hdrRecip(vec2 h) {
 /* magnitude compare for positive HDR values (mantissa normalized to [1,2)) */
 bool hdrGtPos(vec2 a, vec2 b){ return a.y > b.y || (a.y == b.y && a.x > b.x); }
 struct Hdr3 { vec2 x; vec2 y; vec2 z; };
-/* ════════ BLA (bivariate linear approximation) skip-table runtime ════════
-   A precomputed table of composed linear operators (blaBuild, CPU f64) skips RUNS of perturbation
-   iterations: δ' = A·δ + B·δc, Δdr' = g·δ + a·Δdr + h·δc. The table is an RGBA32F texture
-   (uBlaTab): row = level (1..uBlaMaxLvl), column = runIdx·9 + j — layout in packBlaTexture.
-   #ifdef'd OUT of the plain program so that one compiles fast; the variant that defines USE_BLA
-   is built in the background. */
-#ifdef USE_BLA
-int blaTrailingZeros(int m) {           // levels descend on trailing zeros of m
-  int n = 0;
-  for (int i = 0; i < 24; i++) { if ((m & 1) != 0) break; m >>= 1; n++; }
-  return n;
-}
-#endif
 struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bool escaped; float trap; float escR;
 #ifdef USE_JET
   vec2 rde;                                     // THE RAY ESTIMATE (grep): 0.5·r·ln r / |J·v|, HDR; 0 when the orbit carried no jet
@@ -483,7 +471,7 @@ struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bo
 #endif
 };
 #ifdef USE_JET
-/* ════════ THE RAY ESTIMATE AND RAY-COHERENT ORBITS (the USE_JET variant, 2026-10-09; api.setRayMarch; off = the page) ════════
+/* ════════ THE RAY ESTIMATE AND RAY-COHERENT ORBITS (the USE_JET variant, 2026-10-09; the bulb's one program since 2026-10-11; api.setRayMarch) ════════
    A PROTOTYPE of the research result in plans/deep-zoom-shell/BUILD-PLAN.md ("RESEARCH RESULT,
    2026-10-09"), there proven in f64 on the CPU (debug/scratch/tm-*.mjs). Three parts, one bit each
    of uRayUse:
@@ -524,7 +512,7 @@ struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bo
       writing its checkpoints only when resumed orbits have come to run CK_WR passes more - which
       ran a third more passes and no faster (CK_WR_ > 0 still builds it).
    What is frozen in a resumed orbit and therefore only first-order right: Δdr (so the page's own
-   de, which the ray rule does not use) and trap. Never built together with USE_BLA.
+   de, which the ray rule does not use) and trap.
    gRay is 0 outside the march: the normal taps and the probes run the page's orbit. */
 int   gRay = 0;                  // 0 = the page's orbit · 1 = carry zdot along gRd · 2 = and keep / resume checkpoints
 vec3  gRd = vec3(0.0);           // the ray's direction: the jet's seed
@@ -762,9 +750,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   int nRun = 0;
 #endif
 #endif
-#ifdef USE_BLA
-  float lenC = length(C);                                    // |δc| mantissa (exponent ec) for BLA validity
-#endif
   for (int loop = 0; loop < 512; loop++) {
     if (it >= maxIter) break;
 #if defined(USE_JET) && !defined(NO_CKPT)
@@ -779,50 +764,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       pass++;
     }
 #endif
-    bool applied = false;
+    bool applied = false;                      // always false since the skip table went (2026-10-11): it marked a pass that had applied a table run
 #ifdef USE_STATS
-    gWork++;                                   // one loop pass = one real step OR one BLA skip
-#endif
-#ifdef USE_BLA
-    if (uBla == 1) {
-      /* Descend BLA levels: lvlMax = trailing-zeros(m) (m = 0 ⇒ maxLvl). Apply the deepest run
-         whose validity bound |δ| + rB·|δc| ≤ rA holds (conservative, sound — within it Zhuoran
-         cannot fire and escape cannot cross bailout). The bound is brought onto rA's exponent and
-         tested as one float compare; a run is plain mat3·vec3 arithmetic (table: packBlaTexture). */
-      int lvlMax = (m == 0) ? uBlaMaxLvl : min(uBlaMaxLvl, blaTrailingZeros(m));
-      float lenD = length(D);
-      for (int lvl = lvlMax; lvl >= 1; lvl--) {
-        int span = 1 << lvl;
-        if (m + span > uBlaUsable) continue;
-        if (it + span > maxIter) continue;
-        int x0 = (m >> lvl) * 9;
-        vec4 rr = texelFetch(uBlaTab, ivec2(x0, lvl), 0);        // (rA.m, rA.e, rB.m, rB.e)
-        if (rr.x <= 0.0) continue;                               // rA = 0 ⇒ run invalid (escape-unsafe)
-        float lhs = lenD * exp2(clamp(e - rr.y, -160.0, 120.0))
-                  + rr.z * lenC * exp2(clamp(rr.w + ec - rr.y, -160.0, 120.0));
-        if (lhs > rr.x) continue;                                // |δ| + rB·|δc| > rA ⇒ linearisation not valid
-        vec4 a1 = texelFetch(uBlaTab, ivec2(x0 + 1, lvl), 0);    // A rows (xyz) | eA, eB, eg (w)
-        vec4 a2 = texelFetch(uBlaTab, ivec2(x0 + 2, lvl), 0);
-        vec4 a3 = texelFetch(uBlaTab, ivec2(x0 + 3, lvl), 0);
-        vec4 b1 = texelFetch(uBlaTab, ivec2(x0 + 4, lvl), 0);    // B rows (xyz) | eh, a.m, a.e (w)
-        vec4 b2 = texelFetch(uBlaTab, ivec2(x0 + 5, lvl), 0);
-        vec4 b3 = texelFetch(uBlaTab, ivec2(x0 + 6, lvl), 0);
-        vec3 gv = texelFetch(uBlaTab, ivec2(x0 + 7, lvl), 0).xyz;
-        vec3 hv = texelFetch(uBlaTab, ivec2(x0 + 8, lvl), 0).xyz;
-        /* Δdr ← g·δ + a·Δdr + h·δc   (the OLD δ and the OLD Δdr) */
-        vec2 sdr = sclAdd2(vec2(dot(gv, D), a3.w + e), vec2(b2.w * Ddr.x, b3.w + Ddr.y));
-        Ddr = hdrReduce(sclAdd2(sdr, vec2(dot(hv, C), b1.w + ec)));
-        /* δ ← A·δ + B·δc */
-        vec3 AD = vec3(dot(a1.xyz, D), dot(a2.xyz, D), dot(a3.xyz, D));
-        vec3 BC = vec3(dot(b1.xyz, C), dot(b2.xyz, C), dot(b3.xyz, C));
-        float eAD = a1.w + e, eBC = a2.w + ec;
-        sclAdd(AD, eAD, BC, eBC, D, e);
-        sclNorm(D, e);
-        m += span; it += span;
-        applied = true;
-        break;
-      }
-    }
+    gWork++;                                   // one loop pass = one real step
 #endif
     if (!applied) {
       vec4 t1 = texelFetch(orbit, ivec2(m, 1), 0);           // sin/cos of the reference output angles
@@ -1126,10 +1070,6 @@ uniform float uBinomN[17];       // C(n,1..n)   — (1+u)^n − 1
 uniform float uBinomN1[17];      // C(n-1,1..n-1) — (1+u)^(n-1) − 1
 uniform vec2  uPhase;            // lobe-twist phase (θ, φ) — used by the f32 far-field DE only
 uniform int   uColorMode;        // 0 = plain | 1 = iteration (escape time) | 2 = orbit trap (origin)
-uniform int       uBla;          // 1 = BLA skip-table path on (else exact per-step §3)
-uniform sampler2D uBlaTab;       // BLA run table — row=level, col=runIdx*14+j (RGBA32F)
-uniform int       uBlaMaxLvl;    // deepest level present in the table
-uniform int       uBlaUsable;    // runs must end at orbit index ≤ usable (= orbitLen-1)
 uniform int       uNormalIters;  // PERF LEVER: >0 caps pertOrbit iters on the normal taps (0 = full uIters)
 uniform int       uBisectIters;  // PERF LEVER: >0 caps pertOrbit iters on the bisection midpoint evals (0 = full uIters)
 uniform float     uStepRelax;    // PERF LEVER: march step = relax·de (0 ⇒ shader default 0.85; >1 = over-relaxed sphere tracing)
@@ -1167,8 +1107,8 @@ uniform sampler2D uGuideTex;     // per pixel, over the earlier samples: x = nea
    picture: at camera depths 1.2e-3 and 4.2e-4 (where the hits lie past 1e-3) 68 % and 79 % of
    far-march hits stand more than half off their level, deep-march hits none. The deep march has no
    such floor - the camera and t are exact - so a host moves the hand-off out to where the f32
-   march is good again (the shell: 0.5, where the level is ~3e-4). The probes keep 1e-3: their CPU
-   referee (pertMarchJS) mirrors that march.
+   march is good again (the shell: 0.5, where the level is ~3e-4). The probes keep 1e-3, as the
+   CPU referee that mirrored their march did (pertMarchJS, gone 2026-10-11).
    @invariant with the hand-off at 0.5 the hits of two shallow views stand on their level by the
    BigInt referee - proven by: npm run smoke:deep-zoom-direct ("far hand-off ... at 0.5").
    Falsified 2026-10-08: FAR_SWITCH pinned to 1e-3 in the shader -> those lines FAIL. */
@@ -1393,8 +1333,7 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
       }
 #endif
       if (ratio < pa) {
-        /* HIT LANDING (uLand, off by default — it moves the surface, so the CPU referee
-           pertMarchJS would have to follow before it becomes the default). A hit is accepted
+        /* HIT LANDING (uLand, off by default — it moves the surface). A hit is accepted
            wherever the first step with de < pa·t happens to fall: anywhere in the last step,
            which on a grazing surface is many pixels of depth. That scatter is harmless to a
            normal taken from the distance field and is grain to one taken from depth. Both ends
@@ -1407,8 +1346,7 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
           float g0 = r0 - pa, g1 = (ratio - pa) * (1.0 + u);
           t = hdrMulF(tPrev, 1.0 + u * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0));
         }
-        /* HIT REFINE (uHitRefine, off by default: it moves the surface, so the CPU referee
-           pertMarchJS would have to follow before it becomes the default). The hit above is
+        /* HIT REFINE (uHitRefine, off by default: it moves the surface). The hit above is
            wherever the first step with de < pa·t fell - anywhere in the last step - and the
            steps of neighbouring rays fall in step with each other, so the depth comes out in
            terraces that shading from the depth buffer draws as cuts and contour lines (the
@@ -1536,7 +1474,9 @@ void main(){
     if (uProbe == 3) {
         /* MARCH-POPULATION probe (SLICE 6b): emit the surface position from the SAME march the
            renderer runs (marchNear inlined ONCE) — the user-visible quantity. Output
-           (tHit HDR, hitFlag, steps); the CPU referee (pertMarchJS, same bisection) mirrors it. */
+           (tHit HDR, hitFlag, steps). NOTHING ASKS FOR IT since 2026-10-11: its caller (api.marchPop)
+           and the CPU referee that mirrored it (pertMarchJS, the page's march on the CPU) went with
+           the page's program. The branch stays so that the kept programs compile what they did. */
         o = vec4(hit ? t : vec2(0.0), hit ? 1.0 : 0.0, float(steps));
         return;
     }
@@ -2058,40 +1998,32 @@ function mkProgAsync(fs, cb){
   return { finish };                             // lets a caller that needs the program NOW wait for THIS build
 }
 /* ── deep program variants ────────────────────────────────────────────────────────────────
-   DEEP_FRAG compiles into a few variants, selected by #defines:
-     (plain)  the perturbation kernel, exact per-step path
-     + B      the BLA skip-table path (a heavier compile — the nested skip loop)
-     + T      per-pixel work counters for __stats (diagnostics only)
-   The plain variant is compiled WITHOUT blocking at load (deepProg / ud — the readiness flag
-   everything checks). The others are built on first use: BLA in the background (kickBlaAsync),
-   or blocking when something asks for a variant outright. All gates draw through deepCtx(). */
+   DEEP_FRAG compiles into variants, selected by #defines:
+     USE_JET   the bulb's program: THE RAY MARCH (key PR; PTR with the work counters)
+     USE_BOX   the Mandelbox's program (key X; XT with the work counters)
+     + T       USE_STATS: per-pixel work counters for __stats and the march probe (diagnostics only)
+   THE BULB HAS ONE PROGRAM SINCE 2026-10-11, PR. It is compiled WITHOUT blocking at load (deepProg / ud — the
+   readiness flag everything checks), and nothing else draws a deep picture of the bulb: until it is there
+   the f32 baseline is on screen, and if it cannot be built there is no deep picture at all (deepCompileErr,
+   api.rayMarchState() 'failed': a host says so; no other march stands in - the owner: "If the ray shader
+   fails to build on a machine, that machine is likely gonna die trying to render the mandelbulb at high zoom
+   - so I wouldnt want an alternative based on that, rather an error").
+   GONE that day: the page's own program (the plain variant, key P: this kernel with the page's step rule and
+   no jet), which had been the readiness program and drew while the ray variant built; and the skip-table
+   variants (PB, PBT: BLA, a table of composed linear steps that skipped runs of iterations, 1.3 to 2.4 times
+   faster below 1e-13 under the page's march - the ray march resumes orbits instead). The page's STEP RULE is
+   still in marchNear: the Mandelbox steps by it, and so does the ray program's measuring mode (bit 8).
+   The counter variants are built on first use, blocking. All gates draw through deepCtx(). */
 const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }  (null = failed to build)
-/* THE RAY ESTIMATE (grep; api.setRayMarch). The create option `rayMarch: true` starts with it ON as a host uses it:
-   bits 5 (step by the ray estimate, orbits resumed along the ray), creep floor 1/256 px, the line rule at twice
-   the bend measure. Without the option it is off - the page. */
-const rayOpt = options.rayMarch === true;
-let rayAsk = rayOpt ? 5 : 0;                     // what was asked for; rayUse is what is in force - 0 while the box is drawn (grep THE FORMULA SEAM)
-let rayUse = rayAsk, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = rayOpt ? 256 : 0, rayLine = rayOpt ? 2 : 0, rayDetail = 0;
-const vKey = (b, t) => 'P' + (b ? 'B' : '') + (t ? 'T' : '');
-const vSrc = (b, t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
-  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : ''));
-function ensureVariant(b, t){
-  const key = vKey(b, t);
-  if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();   // a background build is in flight: wait for IT, don't start a second
-  if (variants[key] !== undefined) return variants[key];
-  try {
-    const t0 = performance.now();
-    const p = mkProg(vSrc(b, t));
-    const x = makeUD(p); x.hasBla = !!b;
-    compileMs[key] = performance.now() - t0;
-    variants[key] = { p, x };
-  } catch(e){ variantErr[key] = String(e); variants[key] = null; }
-  return variants[key];
-}
-/* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep; api.setRayMarch; 0 = off = the page). Its variant
-   is DEEP_FRAG with USE_JET, never with BLA (resumed orbits take its place). Keys PR (the picture)
-   and PTR (with the work counters). A picture never waits for it: deepCtx() builds it in the
-   background and draws with the ordinary variant until it is there. */
+const pendingBuild = {};                                     // key → the background build in flight (mkProgAsync's handle): a blocking ask waits for IT instead of starting a second
+/* THE RAY ESTIMATE (grep; api.setRayMarch) is on from the start, as the shell has had it since 2026-10-09: bits 5
+   (step by the ray estimate, orbits resumed along the ray), creep floor 1/256 px, the line rule at twice the bend
+   measure. Until 2026-10-11 the create option `rayMarch` chose between this and the page's march; it is not read
+   any more (a caller that still passes it, true or false, gets the ray march). */
+let rayAsk = 5;                                  // what was asked for; rayUse is what is in force - 0 while the box is drawn (grep THE FORMULA SEAM)
+let rayUse = rayAsk, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = 256, rayLine = 2, rayDetail = 0;
+/* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep; api.setRayMarch). Its variant is DEEP_FRAG with USE_JET.
+   Keys PR (the picture: built at load, see above) and PTR (with the work counters). */
 const BOX_ITER_MAX = 500;                        // the box's ceiling (grep ITERATIONS AS A MARGIN); the kernel's loop runs 512 passes at most
 const RAY_ITER_REACH = 20.7, RAY_ITER_MAX = 400;   // ITERATIONS AS A MARGIN (grep): e^20.7 = 1e9, five decades beyond a 1/32-pixel hit level at 1080 rows
 const rKey = (t) => 'P' + (t ? 'T' : '') + 'R';
@@ -2099,19 +2031,19 @@ let rayDefs = '';                                 // extra #defines for the ray 
 const rSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_JET' + rayDefs);
 function ensureRayVariant(t){
   const key = rKey(t);
-  if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();
+  if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
   if (variants[key] !== undefined) return variants[key];
   try {
     const t0 = performance.now();
     const p = mkProg(rSrc(t));
-    const x = makeUD(p); x.hasBla = false;
+    const x = makeUD(p);
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
   } catch(e){ variantErr[key] = String(e); variants[key] = null; }
   return variants[key];
 }
 
-/* THE MANDELBOX's variant (grep THE FORMULA SEAM): DEEP_FRAG with USE_BOX, never with BLA or the
+/* THE MANDELBOX's variant (grep THE FORMULA SEAM): DEEP_FRAG with USE_BOX, never with the
    jet, whatever was asked for. Keys X (the picture) and XT (with the work counters). A picture never waits
    for it: it builds in the background from the moment the box is selected, and until it is there the frame
    draws the box's f32 baseline (deepNow() is null), as the page draws the bulb's while its deep shader
@@ -2120,12 +2052,12 @@ const xKey = (t) => 'X' + (t ? 'T' : '');
 const xSrc = (t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es' + (t ? '\n#define USE_STATS' : '') + '\n#define USE_BOX');
 function ensureBoxVariant(t){
   const key = xKey(t);
-  if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();
+  if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
   if (variants[key] !== undefined) return variants[key];
   try {
     const t0 = performance.now();
     const p = mkProg(xSrc(t));
-    const x = makeUD(p); x.hasBla = false;
+    const x = makeUD(p);
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
   } catch(e){ variantErr[key] = String(e); variants[key] = null; }
@@ -2133,12 +2065,12 @@ function ensureBoxVariant(t){
 }
 function kickBoxVariantAsync(){                  // without blocking; a no-op once started
   const key = xKey(false);
-  if (variants[key] !== undefined || blaPending[key]) return;
+  if (variants[key] !== undefined || pendingBuild[key]) return;
   const t0 = performance.now();
-  blaPending[key] = mkProgAsync(xSrc(false), (p, err) => {
-    blaPending[key] = null;
+  pendingBuild[key] = mkProgAsync(xSrc(false), (p, err) => {
+    pendingBuild[key] = null;
     if (!p) { variantErr[key] = err; variants[key] = null; return; }
-    const x = makeUD(p); x.hasBla = false;
+    const x = makeUD(p);
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
     accumReset = true;
@@ -2192,8 +2124,6 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             normalMode:g('uNormalMode'), bisectMax:g('uBisectMax'), jitter:g('uJitter'),
             power:g('uPower'), powerI:g('uPowerI'), binomN:g('uBinomN'), binomN1:g('uBinomN1'), phase:g('uPhase'),
             colorMode:g('uColorMode'),
-            bla:g('uBla'), blaTab:g('uBlaTab'), blaMaxLvl:g('uBlaMaxLvl'),
-            blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
             land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
@@ -2239,9 +2169,6 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
               jitters with it
      'fresh'  a still's first sample, a thumbnail, an export: measured now, blocking, taken as
               it is — the same view always gets the same light
-     number   a frame of a rendered flight: measured now and blended in by that fraction, so
-              the light glides from frame to frame (no caller since the module's own path render
-              went, 2026-10-11; a number other than 0 is still taken)
      'alone'  a frame of api.dz.renderFrame: as 'fresh', and a picture with too little surface
               to fit a plane to gets the plane that faces the camera instead of keeping the rig
               it found — the frame's light is this view's own, whatever was drawn before it
@@ -2484,7 +2411,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
   }
   if (look.mode === 1 && S.rig) {                 // the light rig: see THE NEW LOOK for the three ways it is measured
     if (S.rig === 'live' && rig.n) { trackRig(pollRig(), 0.3); requestRig(S.W, S.H, S.fwd, S.right, S.up); }
-    else trackRig(measureRig(S.W, S.H, S.fwd, S.right, S.up, S.rig === 'alone'), typeof S.rig === 'number' ? S.rig : 1);
+    else trackRig(measureRig(S.W, S.H, S.fwd, S.right, S.up, S.rig === 'alone'), 1);
   }
   const newLook = look.mode === 1 && !!rig.n;
   gl.useProgram(shadeProg);
@@ -2533,35 +2460,36 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
   gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0);
   gl.useProgram(D.p);
 }
-/* kick off the non-blocking deep-shader compile (sets deepProg/ud + __deepReady when done).
+/* kick off the non-blocking deep-shader compile (sets deepProg/ud + __deepReady when done): THE RAY MARCH's
+   program, key PR, the bulb's only one since 2026-10-11 (grep "deep program variants"). A build that fails
+   leaves deepProg null for good: deepCompileErr says why and no other program is tried.
    The loading overlay appears ONLY if the compile is actually slow (>300 ms) — a cached refresh is
    near-instant and never flashes it. */
 const loadTimer = setTimeout(() => {
   if (!deepReady && !deepCompileErr) { const l = dzById('loading'); if (l) l.style.display = 'flex'; }
 }, 300);
-mkProgAsync(vSrc(false, false), (p, err) => {
-  clearTimeout(loadTimer);
-  const l = dzById('loading'); if (l) l.style.display = 'none';
-  if (!p) { deepCompileErr = err; api.deepErr = err; api.deepReady = false; return; }
-  deepProg = p; ud = makeUD(p); ud.hasBla = false; deepReady = true;
-  variants[vKey(false, false)] = { p, x: ud };
-  api.deepErr = ''; api.deepReady = true;
-});
-/* pick the active deep program + its uniform set: the BLA variant when BLA is on and it built,
-   else the plain one. Use this everywhere a deep draw is issued. */
+{
+  const key = rKey(false), t0 = performance.now();
+  pendingBuild[key] = mkProgAsync(rSrc(false), (p, err) => {
+    pendingBuild[key] = null;
+    clearTimeout(loadTimer);
+    const l = dzById('loading'); if (l) l.style.display = 'none';
+    if (!p) { variantErr[key] = err; variants[key] = null; deepCompileErr = err; api.deepErr = err; api.deepReady = false; return; }
+    deepProg = p; ud = makeUD(p); deepReady = true;
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x: ud };
+    api.deepErr = ''; api.deepReady = true;
+  });
+}
+/* pick the active deep program + its uniform set: the box's variant while the box is drawn, else the
+   bulb's one program. Use this everywhere a deep draw is issued. */
 function deepCtx(){
   if (boxOn()) return ensureBoxVariant(false) || { p: null, x: ud };   // THE FORMULA SEAM: one variant, whatever else is asked (a frame gets here only once it is built)
-  if (!deepProg) return { p: null, x: ud };
-  if (rayUse) {                                  // THE RAY ESTIMATE's variant; never a blocking build
-    const want = variants[rKey(false)];
-    if (want) return want;
-    kickRayVariantAsync();
-  }
-  const v = (blaEnabled && ensureVariant(true, false)) || ensureVariant(false, false);
-  return v || { p: deepProg, x: ud };
+  return { p: deepProg, x: ud };                 // null until the ray march's program is built (and for good if it could not be)
 }
 compileMs.S = performance.now() - shadeT0;      // pass S, built at load (blocking — it is small)
 api.compileMs = () => compileMs;
+api.variantErr = () => ({ ...variantErr });                  // every variant that failed to build, by key (PR, PTR, X, XT)
 
 /* ════════ [DS-SEAM] BigInt fixed-point camera + reference orbit ════════ */
 /* makeHP ported from hp-orbit.test.mjs (P ≈ 3.4 × target digits; 256 → ~77 digits) */
@@ -2645,7 +2573,7 @@ const hp = makeHP(256);
    accumulation, export, the probes and the navigation's rays.
    WHAT IS ITS OWN: the map (hp.boxParts / boxStep), the orbit rows (buildBoxOrbit), the delta step
    (boxOrbitJS on the CPU, BOX_KERNEL on the GPU), and the three plain-f32 copies (grep USE_BOX).
-   WHAT THE BOX DOES NOT USE, whatever was asked for: the ray march (USE_JET), BLA, the
+   WHAT THE BOX DOES NOT USE, whatever was asked for: the ray march (USE_JET), the
    line-against-the-ball rule and the rebase to the origin - each is built on
    the triplex power. The asks are kept and apply again when the bulb is selected (grep boxOn).
    Why the folds need no approximation: both are continuous and piecewise smooth, so a pixel that
@@ -2793,188 +2721,10 @@ function buildRefOrbit(CHP, lenMax) {
   }
   return { data, len, Vf, Rk, DRk };
 }
-/* ════════ BLA table build (CPU, f64) — ported VERBATIM from bla.test.mjs blaBuild ════════
-   The per-step linear op is the exact §2 Jacobian as a 3×3 + the Δdr channel; runs compose
-   (X then Y) into a binary tree of levels. Validity radii (rA,rB) are baked conservatively so
-   a run applies iff |δ| ≤ rA − rB·|δc| (escape- and Zhuoran-safe). */
-/* BLA linearisation tolerance τ. History: 1e-5 (first build) → 1e-3 (2026-06, bought +25-37% when the
-   original per-number-exponent kernel was the bottleneck) → 1e-4 (2026-10). With the shared-exponent
-   kernel and accurate trig the exact path sits at the f32 floor, which made τ=1e-3 the LARGEST error
-   left: it moves the rendered surface 0.1-1.1 pixel cones at p95 and gets the escape-iteration count
-   wrong at 0.5-4.7% of pixels (kernel-bench.test.mjs) — where τ=1e-4 gives 0.001-0.03 and 0%, for
-   0-11% of the BLA speed. __setBlaTau(1e-3) restores the faster, looser setting. */
-let blaTau = 1e-4;
-const mat3mul=(A,B)=>{ const C=new Array(9); for(let i=0;i<3;i++)for(let j=0;j<3;j++){let s=0;for(let k=0;k<3;k++)s+=A[i*3+k]*B[k*3+j];C[i*3+j]=s;} return C; };
-const rowMat3=(g,A)=>[g[0]*A[0]+g[1]*A[3]+g[2]*A[6], g[0]*A[1]+g[1]*A[4]+g[2]*A[7], g[0]*A[2]+g[1]*A[5]+g[2]*A[8]];
-const frob=A=>{let s=0;for(const x of A)s+=x*x;return Math.sqrt(s);};
-const chebUf=(x,n)=>{ if(n<=0)return 1; let a=1,b=2*x; if(n===1)return b; for(let k=2;k<=n;k++){const u=2*x*b-a;a=b;b=u;} return b; };  // U_n(x)
-function blaBuild(O, tau){       // §2 Jacobian per step, general power n + phase ψ
-  const N=nPower, usable = O.len - 1;       // runs must end at index ≤ len-1
-  const base = [];
-  for (let k = 0; k < usable; k++) {
-    const V=O.Vf[k], R=O.Rk[k], rho=Math.hypot(V[0],V[1]);
-    const cth=V[2]/R, sth=rho/R;
-    let cp=1, sp=0; if (rho>1e-300){ cp=V[0]/rho; sp=V[1]/rho; }
-    const th=Math.acos(Math.max(-1,Math.min(1,cth))), ph=Math.atan2(V[1],V[0]);
-    const a8=N*th+phaseTheta, b8=N*ph+phasePhi;
-    const rhat=[sth*cp,sth*sp,cth], that=[cth*cp,cth*sp,-sth], phat=[-sp,cp,0];
-    const sa=Math.sin(a8),caa=Math.cos(a8),sb=Math.sin(b8),cbb=Math.cos(b8);
-    const rhp=[sa*cbb,sa*sb,caa], thp=[caa*cbb,caa*sb,-sa], php=[-sb,cbb,0];
-    const s = chebUf(cth, N-1);             // sin Nθ/sinθ — exact, pole-safe
-    const Rp=Math.pow(R,N-1), gJ=N*Rp;
-    const A=new Array(9);
-    for(let i=0;i<3;i++)for(let j=0;j<3;j++)
-      A[i*3+j]=gJ*(rhp[i]*rhat[j] + thp[i]*that[j] + s*php[i]*phat[j]);
-    const g = [rhat[0],rhat[1],rhat[2]].map(x=>x*N*(N-1)*Math.pow(R,N-2)*O.DRk[k]);
-    const B=[1,0,0,0,1,0,0,0,1];
-    const rA = R > 1.5 ? 0 : tau*R*Math.min(1,Math.abs(s))/N;
-    base.push({A, B, g, a:gJ, h:[0,0,0], rA, rB:0, nA:frob(A), nB:Math.sqrt(3)});
-  }
-  const lv=[base];
-  let maxLvl=0;
-  for(let l=1; (1<<l)<=usable; l++){
-    const prev=lv[l-1], cur=[];
-    for(let i=0; 2*i+1<prev.length; i++){
-      const X=prev[2*i], Y=prev[2*i+1];     // X first, then Y
-      const A=mat3mul(Y.A,X.A);
-      const B=mat3mul(Y.A,X.B); for(let j=0;j<9;j++)B[j]+=Y.B[j];
-      const g=rowMat3(Y.g,X.A); for(let j=0;j<3;j++)g[j]+=Y.a*X.g[j];
-      const a=Y.a*X.a;
-      const gB=rowMat3(Y.g,X.B);
-      const h=[Y.h[0]+gB[0]+Y.a*X.h[0], Y.h[1]+gB[1]+Y.a*X.h[1], Y.h[2]+gB[2]+Y.a*X.h[2]];
-      const rA = (X.rA<=0||Y.rA<=0) ? 0 : Math.min(X.rA, Y.rA/Math.max(X.nA,1e-300));
-      const rB = Math.max(X.rB, (Y.rB + X.nB)/Math.max(X.nA,1e-300));
-      cur.push({A,B,g,a,h,rA,rB,nA:frob(A),nB:frob(B)});
-    }
-    if(!cur.length) break;
-    lv.push(cur); maxLvl=l;
-  }
-  return {lv, maxLvl, usable};
-}
-/* Pack levels 1..maxLvl into an RGBA32F table (row = level, column = runIdx·9). ONE exponent
-   per matrix / vector rather than one per scalar, so a skip is plain mat3·vec3 arithmetic in the
-   shader. Per run = 9 texels:
-     t0 = (rA.m, rA.e, rB.m, rB.e)        validity radii (HDR pairs; fetched alone for the pre-check)
-     t1 = (A row 0, eA)   t2 = (A row 1, eB)   t3 = (A row 2, eg)
-     t4 = (B row 0, eh)   t5 = (B row 1, a.m)  t6 = (B row 2, a.e)
-     t7 = (g, 0)          t8 = (h, 0)
-   A = Am·2^eA etc.; mantissas are f32, scaled so the largest |entry| of each block lies in [1,2).
-   Mantissas are full f32 — entries of one block would have to differ by 2^126 before the smaller
-   is lost (the composed matrices are scaled rotations: their entries are comparable). */
-function packBlaTexture(T){
-  const {lv, maxLvl, usable} = T;
-  if (maxLvl < 1 || !lv[1].length) return null;
-  const TPR = 9, w = lv[1].length * TPR, h = maxLvl + 1;
-  const data = new Float32Array(w * h * 4);
-  const blk = (arr) => { let m = 0; for (const v of arr) { const a = Math.abs(v); if (isFinite(a) && a > m) m = a; }
-    if (m === 0) return { e: 0, k: 0 };
-    const e = Math.max(-1000, Math.floor(Math.log2(m))); return { e, k: Math.pow(2, -e) }; };
-  for (let lvl = 1; lvl <= maxLvl; lvl++) {
-    const runs = lv[lvl];
-    for (let idx = 0; idx < runs.length; idx++) {
-      const r = runs[idx], b = (lvl * w + idx * TPR) * 4;
-      const hA = hdrSplit(r.rA), hB = hdrSplit(r.rB), ha = hdrSplit(r.a);
-      const sA = blk(r.A), sB = blk(r.B), sg = blk(r.g), sh = blk(r.h);
-      data[b] = hA.m; data[b+1] = hA.e; data[b+2] = hB.m; data[b+3] = hB.e;
-      for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
-        data[b + 4  + i*4 + j] = r.A[i*3+j] * sA.k;
-        data[b + 16 + i*4 + j] = r.B[i*3+j] * sB.k;
-      }
-      data[b+7] = sA.e;  data[b+11] = sB.e; data[b+15] = sg.e;
-      data[b+19] = sh.e; data[b+23] = ha.m; data[b+27] = ha.e;
-      for (let j = 0; j < 3; j++) { data[b + 28 + j] = r.g[j] * sg.k; data[b + 32 + j] = r.h[j] * sh.k; }
-    }
-  }
-  return { data, w, h, maxLvl, usable };
-}
-/* BLA mode. blaEnabled is the EFFECTIVE flag everything downstream reads (table build, variant
-   choice, uniforms); blaMode is what was asked for:
-     'off' / 'on'   explicit (the harness handle __setBla, and the panel)
-     'auto'         (default) on only where it pays. A skip costs more than it saves above
-                    ~1e-13 (0.75-0.87× at 1e-5..1e-12) and wins below (1.3× at 5e-15 → 2.4× at
-                    4e-35) — kernel-bench.test.mjs. Auto also never blocks: the BLA variant is
-                    compiled in the background (kickBlaAsync) and used once it is ready.
-   NOT UNDER THE RAY MARCH (2026-10-11). While the ray march is in force (rayUse) 'auto' neither compiles
-   the BLA variant nor builds the table: the ray variant has no skip loop (resumed orbits take its place),
-   so both were work for nothing - a second heavy shader built beside the ray march's own in every
-   session's first half minute, and a table rebuilt with every reference orbit below 1e-13. What the
-   page's march draws while the ray variant builds, or for good if that build fails, is therefore the
-   plain variant at every depth. An explicit 'on' (a tool's ask: __setBla(true)) is taken as before.
-   @assumption With the ray march in force and BLA on 'auto' no BLA program is built - measured
-   2026-10-11 (debug/scratch/r7/pictures.mts, git-ignored: the harness page with ?ray=1 ends its run
-   with the programs S, PR and X compiled, where it had S, PB, PR and X before). No standing guard. */
-let blaEnabled = false;
-let blaMode = 'auto';
-const BLA_AUTO_ON = 1e-13, BLA_AUTO_OFF = 1e-12;       // hysteresis on the surface distance
-const blaPending = {};
-function kickBlaAsync(){                         // build the BLA picture variant without blocking; a no-op once started
-  if (rayUse) return;                            // NOT UNDER THE RAY MARCH (above)
-  const key = vKey(true, false);
-  if (!deepProg || variants[key] !== undefined || blaPending[key]) return;
-  const t0 = performance.now();
-  blaPending[key] = mkProgAsync(vSrc(true, false), (p, err) => {
-    blaPending[key] = null;
-    if (!p) { variantErr[key] = err; variants[key] = null; return; }
-    const x = makeUD(p); x.hasBla = true;
-    compileMs[key] = performance.now() - t0;
-    variants[key] = { p, x };
-    accumReset = true;                           // the picture's program changed under a still
-  });
-}
-function kickRayVariantAsync(){                  // THE RAY ESTIMATE's picture variant, without blocking; a no-op once started
-  const key = rKey(false);
-  if (!deepProg || variants[key] !== undefined || blaPending[key]) return;
-  const t0 = performance.now();
-  blaPending[key] = mkProgAsync(rSrc(false), (p, err) => {
-    blaPending[key] = null;
-    if (!p) { variantErr[key] = err; variants[key] = null; return; }
-    const x = makeUD(p); x.hasBla = false;
-    compileMs[key] = performance.now() - t0;
-    variants[key] = { p, x };
-    accumReset = true;
-  });
-}
-/* per frame: turn the effective flag on/off for 'auto' (never triggers a blocking compile) */
-function updateBlaAuto(){
-  if (boxOn()) return;                           // the table is the triplex power's (grep THE FORMULA SEAM)
-  if (blaMode !== 'auto') return;
-  if (rayUse) {                                  // NOT UNDER THE RAY MARCH (above): no BLA shader, no table
-    if (blaEnabled) { blaEnabled = false; orbitDirty = true; }
-    return;
-  }
-  kickBlaAsync();
-  const ready = !!variants[vKey(true, false)];
-  const want = ready && deepActive && smoothedDist > 0 && smoothedDist < (blaEnabled ? BLA_AUTO_OFF : BLA_AUTO_ON);
-  if (want !== blaEnabled) { blaEnabled = want; orbitDirty = true; }
-}
-function setBlaMode(m){                                   // 'off' | 'auto' | 'on'
-  blaMode = m;
-  if (boxOn()) { blaEnabled = false; return; }   // kept as asked; in force again when the bulb is selected (setFormulaNow)
-  if (m === 'on') { blaEnabled = true; if (deepProg) ensureVariant(true, false); }
-  else if (m === 'off') blaEnabled = false;
-  orbitDirty = true;
-}
-api.setBla = (on)=>{ setBlaMode(on === 'auto' ? 'auto' : on ? 'on' : 'off'); };   // true / false / 'auto'
-api.blaMode = () => blaMode;
-api.blaErr = () => variantErr[vKey(true, false)] || '';
-api.variantErr = () => ({ ...variantErr });                  // every variant that failed to build, by key (P, PB, PT, PR, X, ...)
-api.setBlaTau = (t)=>{ blaTau = Math.max(1e-9, +t); orbitDirty = true; };   // BLA maturation knob: rebuild table at a new tolerance
-api.getBlaTau = () => blaTau;
-let blaTex = null, curBla = null;
-/* set the BLA uniforms + bind the table (unit 1) on the active deep program (x = its ud).
-   curBla null (shallow orbit, no levels) or BLA program absent ⇒ exact per-step path. */
-function setBlaUniforms(x){
-  if (blaEnabled && curBla && x.hasBla) {       // x.hasBla: this program was built with USE_BLA
-    gl.uniform1i(x.bla, 1);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, blaTex);
-    gl.uniform1i(x.blaTab, 1);
-    gl.uniform1i(x.blaMaxLvl, curBla.maxLvl);
-    gl.uniform1i(x.blaUsable, curBla.usable);
-    gl.activeTexture(gl.TEXTURE0);
-  } else {
-    gl.uniform1i(x.bla, 0);
-  }
-}
+/* ════════ uniforms set before each deep draw, and the orbit texture ════════
+   The skip table (BLA: its CPU build, its texture, its mode and its 'auto' rule) sat here until 2026-10-11.
+   debug/deep-zoom-checks/ray-probe.mts and box-orbit.mts lift this file's text from makeHP to THIS banner:
+   keep it the first thing after buildRefOrbit. */
 /* power n + binomial coeffs + phase + colour mode — set on the active deep program before each deep draw */
 function setPowerUniforms(x){
   gl.uniform1f(x.power, nPower);
@@ -3013,27 +2763,13 @@ function uploadOrbit(O) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  /* BLA table (only when enabled — per-frame ~700 3×3 merges, trivial) */
-  if (blaEnabled && !O.box) {
-    curBla = packBlaTexture(blaBuild(O, blaTau));
-    if (curBla) {
-      if (!blaTex) blaTex = gl.createTexture();
-      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, blaTex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, curBla.w, curBla.h, 0, gl.RGBA, gl.FLOAT, curBla.data);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.activeTexture(gl.TEXTURE0);
-    }
-  } else curBla = null;
 }
 
 /* ════════ Gradient palette loading ════════
    Drop in a gradient and it replaces the built-in cosine palette for the iteration /
    orbit-trap colour modes. Easiest correct path: a PNG (any size) — the top row of
    pixels is resampled to a 256-wide strip; or a text .map / palette (one "R G B" per
-   line, 0–255 or 0–1). Texture lives on unit 2 (0=orbit, 1=BLA). */
+   line, 0–255 or 0–1). Texture lives on unit 2 (0 = the orbit; 1 was the skip table's and is free). */
 let gradientTex = null;
 function uploadStrip(rgba, w){                 // rgba: Uint8Array(w*4), one row
   if (!gradientTex) gradientTex = gl.createTexture();
@@ -3198,40 +2934,6 @@ function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter i
   const V=O.Vf[m], R=O.Rk[m];
   const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,1e-300));
   return { de: 0.5*r2*Math.log(Math.max(r2,1e-300))/(O.DRk[m]+Ddr), escaped, r: r2, it };
-}
-/* CPU referee for the march-population study (probe 3): mirrors the GPU near-field HDR
-   march EXACTLY — capped anti-arm-skip stepping + the [tPrev,t] bisection onto the n-iter
-   boundary — so tHit is comparable ray-for-ray. f64 t (JS doubles reach 1e-308, no HDR
-   needed CPU-side). Returns the surface parameter t, the hit flag, and step count. */
-function pertMarchJS(O, rd, maxIter, pixAng){
-  let t=0, tPrev=0, cap=0, steps=0, hit=false;
-  for(let st=0; st<256; st++){
-    steps=st;
-    const r=pertOrbitJS(O, scl3(rd,t), maxIter);
-    const de=r.de;
-    if(!r.escaped || de<=0){              // inside the n-iter surface — bisect onto the boundary
-      let lo=tPrev, hi=t;                  // lo = escaped side (= GPU tPrev), hi = unescaped (= GPU t)
-      for(let b=0;b<bisectMax;b++){        // match the GPU cap
-        const tm=0.5*(lo+hi);
-        const rm=pertOrbitJS(O, scl3(rd,tm), maxIter);
-        if(!rm.escaped || rm.de<=0) hi=tm; else lo=tm;
-        if((hi-lo)/Math.max(hi,1e-300) < 0.25*pixAng) break;
-      }
-      t=lo; hit=true; break;              // report the escaped-side boundary point (GPU t=tPrev)
-    }
-    if(t>0){
-      if(de/t<pixAng){ hit=true; break; }
-      if(t>1e-3) break;                   // t>T_SWITCH ⇒ far-field/background (miss for this study)
-    }
-    tPrev=t;
-    let step=de*0.85;
-    if(cap===0) cap=de*0.05;
-    const capEff=(t!==0 && t>cap)? t : cap;
-    if(step>capEff) step=capEff;
-    cap*=1.25;
-    t+=step;
-  }
-  return {t, steps, hit};
 }
 
 /* ════════ THE FREE DISTANCE ALONG A RAY (2026-10-09) — what a host's navigation flies by ════════
@@ -3461,7 +3163,7 @@ function gateProbeAt(tval){
   gl.uniform1i(x.iters,cam.iters);
   gl.uniform1i(x.probe,1);
   gl.uniform2f(x.jitter,0,0);
-  setBlaUniforms(x); setPowerUniforms(x);
+  setPowerUniforms(x);
   gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/Math.max(canvas.clientHeight,2));
   const ht=hdrSplit(tval);
   gl.uniform2f(x.probeT, ht.m, ht.e);
@@ -3586,13 +3288,6 @@ const CTLS = [
   {t:'tog', l:'1:1 view', note:'Show the render frame at its true pixel size, centred on a black field, instead of stretching it to fill the window. Crisp (no upscaling) — pair with a smaller frame size for a fast, sharp preview.', g:()=>view1to1, s:v=>{view1to1=v; accumReset=true;}},
   {t:'rng', l:'iters',    g:()=>cam.iters, min:4,max:160,step:1, s:v=>{cam.iters=v; orbitDirty=true;}},
   {t:'tog', l:'auto-iters', g:()=>autoIters, s:v=>{autoIters=v;}},
-  {t:'seg', l:'BLA', note:'Bivariate linear approximation — skips runs of perturbation iterations (accuracy-bounded, tolerance 1e-4). "auto" uses it only where it pays (below about 1e-13; up to 2.4× there) and builds its shader in the background. "on" forces it everywhere and builds the shader right away — a one-time pause of a few seconds.', g:()=>blaMode, opts:[['off','off'],['auto','auto'],['on','on']], s:v=>{
-      const needCompile = v === 'on' && variants[vKey(true, false)] === undefined;   // forcing it on triggers a blocking compile
-      const finish = ()=>{ setBlaMode(v); if(needCompile && loading) loading.style.display='none';
-        if(v === 'on' && api.blaErr()) dzNotice('BLA compile failed:\n'+api.blaErr()); syncControls(); };
-      if(needCompile){ showProg('<span class="spin">◓</span> compiling BLA accelerator…<br><small style="color:#9ab">one-time — heavier shader</small>'); setTimeout(finish, 30); }  // let the overlay paint before the sync compile
-      else finish();
-    }},
   {t:'tog', l:'gate', note:'Live ground-truth check — GPU perturbation vs an independent CPU referee, shown in the HUD (relT ✓/✗). A 1×1 readback per ~0.5 s; turn off for the smoothest flying.', g:()=>gateOn, s:v=>{gateOn=v; if(!v) gate.relT=NaN;}},
   {t:'seg', l:'reach', note:'How far a ray can travel before it gives up (a dark patch where distant ground should be — seen when you look along the surface, most of all with detail turned up). short = 256 steps. relaxed = 512 steps, and longer strides once the ray is well past the near ground: distant ground comes back for about a third more time in such views, and a thin far feature can occasionally be stepped through. full = 1024 steps, no shortcuts: exact, about twice the time in such views. Ordinary views cost the same in all three.', g:()=>reachMode(), opts:[['short',0],['relaxed',1],['full',2]], s:v=>{ api.setReach(v); }},
   {t:'rng', l:'step relax', note:'Over-relaxes the ray-march step (×distance-estimate). 0.85 = safe default, full quality. Higher takes bigger steps → fewer steps → faster deep zoom, but SACRIFICES detail: it can skip thin arms/fine features (watch silhouettes). ~1.3–1.5 is a good speed/quality balance; ≥1.7 visibly drops detail.', g:()=>stepRelax>0?stepRelax:0.85, min:0.85,max:2,step:0.05, fmt:v=>v.toFixed(2)+'×', s:v=>{stepRelax=v; accumReset=true;}},
@@ -3701,7 +3396,7 @@ function setPower(n){
   if (n === nPower) return;
   nPower = n; cam.power = n;
   binomN = binomPad(nPower); binomN1 = binomPad(nPower-1);   // recompute binomial coeffs
-  orbitDirty = true;                                         // the orbit (and BLA table) depend on n
+  orbitDirty = true;                                         // the orbit depends on n
 }
 const TAU = 2*Math.PI;
 function setPhase(dth, dph){
@@ -3913,7 +3608,7 @@ api.popStudy = function(spread, W){
   gl.uniform1i(x.iters,cam.iters);
   gl.uniform1i(x.probe,2);
   gl.uniform2f(x.jitter,0,0);
-  setBlaUniforms(x); setPowerUniforms(x);
+  setPowerUniforms(x);
   const hs = hdrSplit(spread);
   gl.uniform2f(x.spreadT, hs.m, hs.e);
   gl.drawArrays(gl.TRIANGLES,0,3);
@@ -3945,79 +3640,6 @@ api.popStudy = function(spread, W){
   rels.sort((a,b)=>a-b);
   return { W, spread: spreadUsed, flips, flipFrac: flips/(W*W), clusterFrac: flips?clustered/flips:0,
            escFrac: escCount/(W*W), medianRel: rels.length?rels[rels.length>>1]:NaN, worstRel };
-};
-
-/* ════════ MARCH-POPULATION STUDY (SLICE 6b): the decisive shipping metric ════════
-   probe 3 marches the FULL near-field ray per grid pixel on the GPU (real camera rays +
-   pixAng); the CPU referee (pertMarchJS, same capped stepping + bisection) marches the same
-   rays. We report median/p95 of |ΔtHit|/tHit over pixels both sides hit, plus hit-flag
-   disagreement. DECISION: p95 < pixAng ⇒ the rendered surface POSITION agrees within a
-   display pixel ⇒ 1e-50 ships visually (pointwise de noise near the boundary does NOT move
-   the bisected boundary position by a visible amount). */
-api.marchPop = function(W){
-  curOrbit = buildRefOrbit(camHP, cam.iters + 2);
-  uploadOrbit(curOrbit);
-  const {fwd,right,up} = basis();
-  const fovScale = Math.tan(0.5*1.1);
-  const pixAng = fovScale / Math.max(canvas.clientHeight, 2);   // SAME cone the renderer uses
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA32F,W,W,0,gl.RGBA,gl.FLOAT,null);
-  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
-  const fbo = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
-  const D = deepCtx(), x = D.x;
-  gl.useProgram(D.p); bindQuad(D.p);
-  gl.viewport(0,0,W,W);
-  gl.uniform2f(x.res, W, W);
-  gl.uniform3fv(x.fwd,fwd); gl.uniform3fv(x.right,right); gl.uniform3fv(x.up,up);
-  gl.uniform1f(x.fov, fovScale);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,orbitTex);
-  gl.uniform1i(x.orbit,0);
-  gl.uniform1i(x.len,curOrbit.len);
-  gl.uniform1i(x.iters,cam.iters);
-  gl.uniform1i(x.probe,3);
-  gl.uniform1f(x.pixAng, pixAng);
-  gl.uniform1i(x.bisectMax, bisectMax);
-  gl.uniform2f(x.jitter,0,0);
-  setBlaUniforms(x); setPowerUniforms(x);
-  gl.drawArrays(gl.TRIANGLES,0,3);
-  const px = new Float32Array(W*W*4);
-  gl.readPixels(0,0,W,W,gl.RGBA,gl.FLOAT,px);
-  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
-  gl.uniform1i(x.probe,0);
-  gl.deleteFramebuffer(fbo); gl.deleteTexture(tex);
-  let bothHit=0, hitDisagree=0, gHitCount=0, cHitCount=0, dts=[], worst=0;
-  const dtGrid = new Float64Array(W*W).fill(-1);
-  for (let j=0;j<W;j++) for (let i=0;i<W;i++){
-    const uvx=((i+0.5)-0.5*W)/W, uvy=((j+0.5)-0.5*W)/W;
-    const rdv=[fwd[0]+fovScale*(uvx*right[0]+uvy*up[0]),
-               fwd[1]+fovScale*(uvx*right[1]+uvy*up[1]),
-               fwd[2]+fovScale*(uvx*right[2]+uvy*up[2])];
-    const rl=Math.hypot(...rdv), rd=[rdv[0]/rl,rdv[1]/rl,rdv[2]/rl];
-    const cpu = pertMarchJS(curOrbit, rd, cam.iters, pixAng);
-    const o4=(j*W+i)*4, gT=px[o4]*Math.pow(2,px[o4+1]), gHit=px[o4+2]>0.5;
-    if (gHit) gHitCount++; if (cpu.hit) cHitCount++;
-    if (gHit !== cpu.hit){ hitDisagree++; continue; }
-    if (gHit && cpu.hit){
-      bothHit++;
-      const dt = Math.abs(gT - cpu.t) / Math.max(Math.abs(cpu.t), 1e-300);
-      dts.push(dt); dtGrid[j*W+i]=dt; if(dt>worst) worst=dt;
-    }
-  }
-  dts.sort((a,b)=>a-b);
-  const median = dts.length ? dts[dts.length>>1] : NaN;
-  const p95 = dts.length ? dts[Math.min(dts.length-1, Math.floor(0.95*dts.length))] : NaN;
-  // spatial clustering of the SUB-PIXEL-EXCEEDING pixels (structured artifact vs scattered fizz)
-  let bad=0, badClustered=0;
-  const isBad = k => dtGrid[k] >= 0 && dtGrid[k] > pixAng;
-  for (let j=0;j<W;j++) for (let i=0;i<W;i++){ const k=j*W+i; if(!isBad(k)) continue; bad++;
-    if((i>0&&isBad(k-1))||(i<W-1&&isBad(k+1))||(j>0&&isBad(k-W))||(j<W-1&&isBad(k+W))) badClustered++; }
-  return { W, pixAng, bothHit, hitDisagree, hitDisagreeFrac: hitDisagree/(W*W),
-           gHitFrac: gHitCount/(W*W), cHitFrac: cHitCount/(W*W),
-           median, p95, worst, subPixelP95: p95 < pixAng,
-           badFrac: bothHit?bad/bothHit:0, badClusterFrac: bad?badClustered/bad:0 };
 };
 
 /* ════════ COLOUR-INPUT STUDY: are the palette's inputs right at the rendered surface? ════════
@@ -4064,7 +3686,7 @@ api.trapStudy = function(W){
   gl.uniform1i(x.bisectMax, bisectMax);
   gl.uniform1i(x.normalIters, 0); gl.uniform1i(x.bisectIters, 0); gl.uniform1f(x.stepRelax, stepRelax);
   gl.uniform2f(x.jitter,0,0);
-  setBlaUniforms(x); setPowerUniforms(x);
+  setPowerUniforms(x);
   gl.drawArrays(gl.TRIANGLES,0,3);
   const px = new Float32Array(W*W*4);
   gl.readPixels(0,0,W,W,gl.RGBA,gl.FLOAT,px);
@@ -4139,7 +3761,7 @@ function drawSquare(n, fbo, D, probe, acc) {
   gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / (acc && acc.pixH || n) / detailNow());
   const jx = acc ? acc.jitter[0] : 0, jy = acc ? acc.jitter[1] : 0;
   gl.uniform2f(x.jitter, jx, jy);
-  setBlaUniforms(x); setPowerUniforms(x);
+  setPowerUniforms(x);
   if (probe) {                                   // a probe is pass G's raw output
     if (acc && acc.guide) {                      // a probe of a guided sample: the guide's depths are relative to uRefE, as drawDeep sets it
       gl.uniform1f(x.refE, Math.floor(Math.log2(Math.max(smoothedDist, 1e-300))));
@@ -4227,7 +3849,7 @@ api.guideStudy = (n, samples) => {
   let guidable = 0; for (let i = 0; i < N; i++) if (G.dep[i*4] < 1e29) guidable++;
   const med = a => { const c = a.slice().sort((p, q) => p - q); return c[c.length >> 1]; };
   const mu = med(U.ms.slice(1)), mg = med(G.ms.slice(1));
-  return { n, samples, guideK, guideR, guideFirst, bla: blaEnabled, normalMode,
+  return { n, samples, guideK, guideR, guideFirst, normalMode,
     colourMeanDiff: dsum / (N * 3), colourMaxDiff: dmax,
     noiseFloor: fsum / (N * 3),                 // same measure between two UNGUIDED runs whose march step differs by 1%
     cleanHitFrac: guidable / N,                 // pixels every sample hit — the ones that can be guided
@@ -4239,7 +3861,7 @@ api.guideStudy = (n, samples) => {
 /* WORK-COUNT STUDY — where does a frame's GPU time actually go? Renders the current view n×n with
    the counter-instrumented variant (USE_STATS) and summarises, per pixel:
      steps      march steps taken                    orbits   kernel calls during the march
-     work       kernel loop passes — one real perturbation step OR one BLA skip (the unit of cost)
+     work       kernel loop passes — one real perturbation step each (the unit of cost)
      bisect     bisection evaluations                normals  share of all work spent on normal taps
    and how unevenly the work is spread: the GPU shades pixels in lock-step groups, so a group costs
    what its slowest pixel costs. lockLoss[B] = (Σ over B×B blocks of max·area) / Σ work — the factor
@@ -4247,8 +3869,8 @@ api.guideStudy = (n, samples) => {
 api.stats = (n, guideSamples) => {
   if (!deepProg || !curOrbit) return null;
   n = n || 128;
-  const v = boxOn() ? ensureBoxVariant(true) : rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
-  if (!v) return { error: variantErr[boxOn() ? xKey(true) : rayUse ? rKey(true) : vKey(blaEnabled, true)] };
+  const v = boxOn() ? ensureBoxVariant(true) : ensureRayVariant(true);
+  if (!v) return { error: variantErr[boxOn() ? xKey(true) : rKey(true)] };
   const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, n, n, 0, gl.RGBA, gl.FLOAT, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -4281,14 +3903,14 @@ api.stats = (n, guideSamples) => {
     return lock / Math.max(tot, 1); };
   const hitOnly = arr => { const o = []; for (let i = 0; i < N; i++) if (kind[i] === 1) o.push(arr[i]); return o.length ? o : [0]; };
   const sWT = sum(workT), sWM = sum(workM), sOM = sum(orbM), sIt = sum(iters);
-  return { n, iters: cam.iters, bla: blaEnabled, normalMode, guided: !!acc && !guideIsFull(guideSamples),
+  return { n, iters: cam.iters, normalMode, guided: !!acc && !guideIsFull(guideSamples),
     kinds: { hit: frac(1), far: frac(2), exhausted: frac(3), miss: frac(0) },
     steps: desc(steps), stepsHit: desc(hitOnly(steps)), orbitsMarch: desc(orbM), bisect: desc(bis),
     workMarch: desc(workM), workTotal: desc(workT),
-    workPerOrbit: sWM / Math.max(sOM, 1),          // kernel passes per march orbit (≤ iters; lower with BLA / early escape)
+    workPerOrbit: sWM / Math.max(sOM, 1),          // kernel passes per march orbit (≤ iters; lower with early escape)
     normalShare: 1 - sWM / Math.max(sWT, 1),       // fraction of all work spent on the normal taps
     bisectShare: sum(bis) / Math.max(sOM, 1),      // fraction of march orbits that are bisection evaluations
-    skipRatio: 1 - sWT / Math.max(sIt, 1),         // iterations skipped by BLA (0 with BLA off)
+    skipRatio: 1 - sWT / Math.max(sIt, 1),         // 1 − loop passes ÷ iterations reached (gIters); it measured what the skip table saved, until that went (2026-10-11)
     bigAngleShare: sum(big) / Math.max(2 * sWT, 1),// fraction of angle-delta evaluations on the large-angle branch
     lockLoss: { b2: lockLoss(2), b4: lockLoss(4), b8: lockLoss(8), b16: lockLoss(16) } };
 };
@@ -4307,11 +3929,13 @@ api.stats = (n, guideSamples) => {
    @invariant probe 7 marches what the picture marches: the same rays end at the same depth and in
    the same way as in the picture's own G-buffer - proven by: npm run bench:deep-zoom-march
    ("probe = picture: 0 of N rays end elsewhere"). Falsified 2026-10-08: probe 7 taken out of
-   PICTURE_MARCH -> 237998 of 278528 rays differ, exit 1. */
+   PICTURE_MARCH -> 237998 of 278528 rays differ, exit 1. (That break was seen with the comparison
+   marching a setting of the page's march. Since 2026-10-11 it marches the ray march's own setting,
+   PTR against PR: 0 of 49152 rays at the three kept places, and not broken again on purpose.) */
 let marchProbeFbo = null, marchProbeTex = null, marchProbeN = 0;
 api.marchProbe = (n, pixH) => {
   if (!deepProg || !curOrbit) return null;
-  const v = boxOn() ? ensureBoxVariant(true) : rayUse ? ensureRayVariant(true) : ensureVariant(blaEnabled, true);
+  const v = boxOn() ? ensureBoxVariant(true) : ensureRayVariant(true);
   if (!v) return null;
   n = n || 128;
   if (marchProbeN !== n) {
@@ -4427,11 +4051,11 @@ api.setPhase = (th,ph)=>{ phaseTheta=th||0; phasePhi=ph||0; orbitDirty=true; };
 function setFormulaNow(kind, params){
   if (!applyFormula(kind, params)) return;
   rayUse = boxOn() ? 0 : rayAsk;                   // the asks are kept; what is in force follows the formula
-  if (boxOn()) { blaEnabled = false; kickBoxVariantAsync();
+  if (boxOn()) { kickBoxVariantAsync();
     /* the least count that draws the box at all: what a point at the edge of it needs to pass the escape radius
        (|z| grows by |scale| an iteration out there), and 12 more. The bulb's 14 would draw a featureless lump. */
     cam.iters = Math.max(cam.iters, Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(box.scale))) + 12)); }
-  else { setBlaMode(blaMode); cam.iters = Math.min(cam.iters, itersMax()); }
+  else cam.iters = Math.min(cam.iters, itersMax());
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
@@ -4452,27 +4076,39 @@ api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // 
    does and shades them as Detail 8 would. At or above the detail setting it changes nothing. */
 api.setNormalDetail = (d)=>{ normalDetail = Math.max(0, Math.min(256, +d || 0)); accumReset = true; };
 api.normalDetail = ()=>normalDetail;
-/* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep): bits 0 = off (the page) · 1 = the march steps by
-   the ray estimate · 2 = and tests a hit by it · 4 = orbits resume along the ray. opt: factor (the
+/* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep): bits 1 = the march steps by
+   the ray estimate · 2 = and tests a hit by it · 4 = orbits resume along the ray · 8 = a measuring mode (below).
+   The module starts at 5 with floor 256 and line 2 (grep "deep program variants"), and no host sends anything else.
+   BITS 0 IS NO LONGER "THE PAGE": until 2026-10-11 it chose the page's own program; now there is one program
+   and 0 leaves nothing of the ray march in force inside it - it marches by the page's step rule, carries no
+   jet, and the iteration count follows the page's rules again (grep itersMax). A tool's state: the direct
+   proof holds it between its careful marches so that its iteration counts stay the ones it asked for. opt: factor (the
    step as a share of the estimate, default 1), hit (the hit level is a display pixel ÷ this,
    default 64), tol (how far, in display pixels, a resumed orbit's point may stand from the true
    one, default 0.05), floor (with bit 2 off: also a hit once the ray estimate is under a display
    pixel ÷ this; 0 = none, the default), line (THE LINE AGAINST THE BALL - grep: the longer step it
    allows is taken, with this multiple of Q as the allowance for the path's bend; 0 = off, the default),
    detail (above 0: while the ray march is on the hit level is a display pixel ÷ this, whatever the
-   detail setting says; default 0 = follow the detail setting). A picture switches when the variant has built (background); `now` builds it
-   at once, blocking - for a tool that must not measure the old one. */
+   detail setting says; default 0 = follow the detail setting). The program itself is built at load, in the
+   background; `now` waits for that build, blocking - for a tool that must not go on without it. */
 api.setRayMarch = (bits, opt, now)=>{ rayAsk = Math.max(0, Math.min(15, bits|0)); rayUse = boxOn() ? 0 : rayAsk;   // bit 8 (a measuring mode): carry the jet, march as the page does
   if (opt) { if (opt.factor > 0) rayFactor = +opt.factor; if (opt.hit > 0) rayHitDiv = +opt.hit; if (opt.tol >= 0) rayTol = +opt.tol; if (opt.floor >= 0) rayFloorDiv = +opt.floor; if (opt.line >= 0) rayLine = +opt.line; if (opt.detail >= 0) rayDetail = +opt.detail; }
-  if (now && rayUse && deepProg) ensureRayVariant(false);
+  if (now && rayUse) ensureRayVariant(false);
   accumReset = true; };
 api.rayMarchState = ()=>{ if (!rayUse) return 'off';
   const v = variants[rKey(false)];
   return v ? 'on' : v === null ? 'failed' : 'building'; };
 api.rayMarch = ()=>({ bits: rayAsk, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine, detail: rayDetail });
-/* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped */
-api.setRayDefs = (list)=>{ rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
-  for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; } };
+/* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped.
+   The picture's variant IS the bulb's program since 2026-10-11 (deepProg), so it is built again here, BLOCKING,
+   and deepProg / ud follow it: no draw may meet a deleted program. (The load-time build is waited for first.) */
+api.setRayDefs = (list)=>{ if (pendingBuild[rKey(false)]) pendingBuild[rKey(false)].finish();
+  rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
+  for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; }
+  const v = ensureRayVariant(false);
+  deepProg = v ? v.p : null; if (v) ud = v.x;
+  deepReady = !!v; deepCompileErr = v ? '' : (variantErr[rKey(false)] || 'the ray variant did not build'); api.deepReady = deepReady; api.deepErr = deepCompileErr;
+  accumReset = true; };
 api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin, farHandOff });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
@@ -4525,7 +4161,7 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode, alone)
   gl.uniform1i(x.bisectIters, bisectIters);   // PERF LEVER (0 = full uIters)
   gl.uniform1f(x.stepRelax, stepRelax);       // PERF LEVER (0 = default 0.85)
   gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/H/detailNow());
-  setBlaUniforms(x); setPowerUniforms(x);
+  setPowerUniforms(x);
   // headlamp falloff must track THIS frame's depth (setPowerUniforms used the frozen smoothedDist,
   // wrong for a moving path). Derive the surface-distance scale from the reference orbit at the camera.
   let dScale;
@@ -4666,12 +4302,12 @@ api.export = async function(longEdge, samples, tile){
      - THE POLE GUARD (grep) is applied here: frame() returns early during a render, and its own
        nudge is sized by smoothedDist. This one is sized by this view's distance.
      - THE REFERENCE ORBIT is built for the view every time, whatever orbitDirty says.
-     - THE SHADER VARIANT the picture needs is built now, BLOCKING, if it is still building in the
-       background: otherwise the frames of the first seconds are drawn by another march.
-     - BLA on 'auto' goes by this view's distance, not by where the live view's hysteresis stands.
+     - THE SHADER VARIANT the picture needs is there: the bulb's one program is what "ready" means
+       (checked first), and the Mandelbox's is built now, BLOCKING, if it is still building in the
+       background.
      - THE LIGHT RIG is measured from this frame alone (rig mode 'alone'; grep THE NEW LOOK).
      - ITERATIONS are what is set: the automatic rules are frame()'s, and frame() does not run.
-   The live view gets its own rig and BLA flag back afterwards, and rebuilds its orbit.
+   The live view gets its own rig back afterwards, and rebuilds its orbit.
 
    ITS WAITS ARE dzYield, a message channel. requestAnimationFrame stops in a hidden tab and a
    timer is slowed to one a second there; a long render has to go on behind another window.
@@ -4702,7 +4338,7 @@ api.export = async function(longEdge, samples, tile){
        The page's own still export (api.export, untouched here) does the same and more: one grainy
        view twelve times, six different pictures. The cause is not known. Ruled out one by one:
        the G-buffer left by the frame before, a screenshot taken meanwhile, renders at another
-       place first. It is the floor the parity smoke prints beside its pictures. */
+       place first. It is the floor the parity smoke printed beside its pictures (retired 2026-10-11). */
 const dzYieldPort = new MessageChannel(); let dzYieldDone = null;   // one waiter at a time: renders do not overlap (`exporting`)
 dzYieldPort.port1.onmessage = () => { const done = dzYieldDone; dzYieldDone = null; if (done) done(); };
 const dzYield = () => new Promise(res => { dzYieldDone = res; dzYieldPort.port2.postMessage(0); });
@@ -4726,9 +4362,9 @@ async function dzRenderFrame(req){
   if (exporting) throw new Error('A render is already running.');
   const o = req || {};
   exporting = true; cancelRender = false;
-  const keepRig = { n: rig.n, near: rig.near, far: rig.far }, keepBla = blaEnabled;
+  const keepRig = { n: rig.n, near: rig.near, far: rig.far };
   try {
-    if (boxOn()) ensureBoxVariant(false); else if (rayUse) ensureRayVariant(false);
+    if (boxOn()) ensureBoxVariant(false);
     if (!deepNow()) throw new Error('The deep shader of this formula could not be built.');
     let O = buildRefOrbit(camHP, cam.iters + 2);
     if (camHP[0] === 0n && camHP[1] === 0n && !boxOn()) {            // POLE GUARD, by this view's own distance
@@ -4736,14 +4372,13 @@ async function dzRenderFrame(req){
       O = buildRefOrbit(camHP, cam.iters + 2);
     }
     const dist = viewDistance(O);
-    if (blaMode === 'auto' && !boxOn()) blaEnabled = !rayUse && dist < BLA_AUTO_ON && !!ensureVariant(true, false);
     curOrbit = O; uploadOrbit(O);
     const r = await renderFrameToBlob(o.longEdge, o.samples, o.tile, 'rendering', 'alone', { dist, aspect: +o.aspect });
     if (r.error) throw new Error(r.error);
     return r.cancelled ? null : r.blob;
   } finally {
     rig.n = keepRig.n; rig.near = keepRig.near; rig.far = keepRig.far;
-    blaEnabled = keepBla; orbitDirty = true;
+    orbitDirty = true;
     exporting = false; cancelRender = false; if (loading) { loading.style.display='none'; loading.style.background=''; }
   }
 }
@@ -4752,16 +4387,14 @@ async function dzRenderFrame(req){
    A path is the file a recorded flight was saved as: { format:'gmt-mbulb-path', P:256, fovScale, frames },
    each frame a view (camHP kept as P=256 BigInt decimal STRINGS — no precision loss) with its time t.
    api.samplePath puts the camera at a time along one (BigInt-lerped positions → smooth at any depth): the
-   parity smoke and the march bench place their views with it, on the frozen page's sample flight.
+   march bench places its views with it, on the frozen page's sample flight.
    GONE 2026-10-11, never called by the shell, which flies, keys and renders a route of its own
    (deep-zoom/route.ts, routeRender.tsx): the recorder (api.recordToggle and its sparse keyframing,
    api.lastPath, api.recording, api.setKfSpacing), the smoothing (api.smoothPath), the eased arc-length
-   preview (api.playPath), the path files (api.loadPath, api.loadPathFile, api.savePath) and the path
-   render to ZIPs of PNGs (api.renderPath, api.renderPathFile). Telemetry keeps the keys `recording`,
-   `playing` and `pathFrames` with the values they had while nothing recorded or played: they are three
-   of the page's 16 keys, and the parity smoke compares keys and values. */
+   preview (api.playPath, api.stopPlay), the path files (api.loadPath, api.loadPathFile, api.savePath) and
+   the path render to ZIPs of PNGs (api.renderPath, api.renderPathFile); and from telemetry the keys
+   `recording`, `playing` and `pathFrames`, which had outlived them for the parity smoke's sake. */
 function isFlying(){ return !!(keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||keys['KeyE']||keys['KeyQ']) || (inputOwner === 'host' && performance.now() - hostMoveAt < 150); }
-api.stopPlay = () => {};                                  // nothing plays any more; kept callable: a host calls it before a render, on cancel and on dispose
 api.samplePath = (data, tau) => { const ks=(data&&data.frames)||[]; if(!ks.length) return null;
   pathSampleAt(ks, tau); return cam.pos.slice(); };          // scrub a path to time tau → camera pos
 /* CATMULL-ROM interpolation through 4 keyframes (p0..p3, local param u∈[0,1] on segment p1→p2):
@@ -4876,7 +4509,6 @@ function frame(now){
 
   if (boxOn() && !deepNow()) kickBoxVariantAsync();            // THE FORMULA SEAM: the box's variant builds in the background; its f32 baseline is drawn meanwhile
   deepActive = deepNow() && (modeOverride==='deep' || (modeOverride==='auto' && smoothedDist < 1e-4));
-  updateBlaAuto();                              // BLA 'auto': on only below ~1e-13, once its shader is ready
 
   /* auto iteration budget: the n-iter surface needs ~1.35/decade to resolve at depth.
      Base 32 (not 24): boundary points escape at ~the budget edge, and a thin margin
@@ -4887,7 +4519,7 @@ function frame(now){
   }
 
   /* --- deep mode: rebuild reference orbit AT the camera (δro ≡ 0) ONLY when the camera or
-     iteration budget changed. The BigInt rebuild + texture (+ BLA table) upload is heavy at
+     iteration budget changed. The BigInt rebuild + texture upload is heavy at
      depth (iters~86 → 86 BigInt P8 evals/frame); rebuilding every frame while IDLE wasted it
      and masked GPU-side cost. Now idle frames are pure GPU — and stills can accumulate (step 3). */
   if (deepActive && (orbitDirty || forceRebuild || !curOrbit)) {
@@ -5002,7 +4634,7 @@ function frame(now){
     gl.uniform1i(x.len,curOrbit.len);
     gl.uniform1i(x.iters,cam.iters);
     gl.uniform1i(x.probe,0);
-    setBlaUniforms(x); setPowerUniforms(x);
+    setPowerUniforms(x);
     gl.uniform1f(x.pixAng, Math.tan(0.5*1.1)/Math.max(canvas.clientHeight,2)/detailNow());  // DISPLAY pixel ÷ detail
     gl.uniform3fv(x.camF, cam.pos);             // f32 camera for the far-field hybrid segment
     gl.uniform1i(x.normalMode, gNormalMode());  // 0 none (pass S derives it) / 1 3-tap / 2 4-tap (default)
@@ -5080,7 +4712,7 @@ function frame(now){
   const gateOK = gate.relT < 1e-3;
   if (loading && (deepReady || deepCompileErr)) loading.style.display = 'none';  // overlay is shown by the load timer
   hud.innerHTML =
-    `fps        <b>${fps.toFixed(0)}</b>   mode <b>${deepActive?'DEEP (perturbation'+(blaEnabled?' + BLA':'')+')':'f32 baseline'}</b>${deepReady?'':deepCompileErr?' <span class="warn">deep shader failed: '+deepCompileErr.slice(0,80)+'</span>':' <span class="warn">⏳ compiling deep renderer…</span>'}\n`+
+    `fps        <b>${fps.toFixed(0)}</b>   mode <b>${deepActive?'DEEP (perturbation)':'f32 baseline'}</b>${deepReady?'':deepCompileErr?' <span class="warn">deep shader failed: '+deepCompileErr.slice(0,80)+'</span>':' <span class="warn">⏳ compiling deep renderer…</span>'}\n`+
     `surf dist  <b>${smoothedDist.toExponential(2)}</b>\n`+
     (deepActive
       ? `gate       ${!gateOn?'<span style="color:#678">off (V)</span>':isNaN(gate.relT)?'…':`relT <b class="${gateOK?'ok':'warn'}">${gate.relT.toExponential(1)}</b> (GPU ${gate.tGPU.toExponential(3)} vs CPU ${gate.tCPU.toExponential(3)})${gateOK?' <span class="ok">✓</span>':' <span class="warn">✗ MISMATCH</span>'}`}\n`
@@ -5188,8 +4820,7 @@ api.dz = {
   version: 1,
   telemetry: () => ({ ready: !!deepReady && !!deepNow(), error: deepCompileErr || (boxOn() && variantErr[xKey(false)]) || '', mode: deepActive ? 'deep' : 'f32',
     depth: smoothedDist, fps, frameW: canvas.width, frameH: canvas.height, iters: cam.iters, power: nPower,
-    accumN, accumMax: ACCUM_MAX, recording: false, playing: false, exporting,   // recording, playing, pathFrames: nothing records or plays any more (grep CAMERA PATHS); the keys stay
-    pathFrames: 0, bla: !!blaEnabled }),
+    accumN, accumMax: ACCUM_MAX, exporting }),    // 12 keys; `recording`, `playing`, `pathFrames` and `bla` went 2026-10-11 with what they reported (grep CAMERA PATHS, "deep program variants")
   settings: () => ({ detail: surfMul, reach: reachMode(), power: nPower, phase: [phaseTheta, phasePhi],
     color: colorMode, cscale: colorScale, light: lightMode, falloff: falloffMul, normals: normalMode,
     land: !!landMode, frame: frameLong, accum: accumEnabled, lookMode: look.mode }),
