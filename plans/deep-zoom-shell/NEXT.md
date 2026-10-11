@@ -50,6 +50,38 @@ only (`debug/scratch/box-ray-study/`); 12, more formulas, "take cheapest definit
 research on what else is cheap or easy" - so Julia mode is next among formulas, and its plan and a
 ranked survey were started the same evening (`debug/scratch/formula-next/`).
 
+**The kernel work he ordered, 2026-10-11 (the evening): "great lets do 1-4".** Four steps, one at a
+time, each needing `core.js` to itself. His reason for the order: "if we need to do the kernel
+rewrite (option2) and if the gains are so significant, then it would be best to get it out the way
+before we start adding formulas."
+
+1. **The ray program kept across browser restarts, and a plain picture that is a picture.** One
+   extra one-pixel draw after a background build puts the program on the browser's disk (measured:
+   ready 0.04 s after a restart where it was 20 s); the bulb's plain picture gets a pixel-sized
+   hit level, so the start view shows a small line over a real picture while it builds.
+   `ROUTES.md`, "Where the bulb's 21 to 26 seconds go".
+2. **The kernel's single call site.** The build time follows the number of copies of the kernel
+   (7 call sites, about 3 s each; one site: 5.65 s in a sketch). A SPIKE FIRST: the sketch drew
+   nothing that was checked. It goes ahead if the 41 pictures are the same within the floor and
+   the frame time on the march bench is no more than 3 % worse; otherwise the fallback is the
+   small merges (both tap sets in one loop, the two probes through one call: 14.8 s), and the
+   numbers go to him. It comes before the box's ray step because that step would otherwise take
+   the Mandelbox's 4.5 s build toward the bulb's 20.
+3. **The Mandelbox's ray step** (`BOX-RAY-STEP.md`), with a new ADR over ADR-0135's third
+   decision. As recommended to him, and built so unless he says otherwise: today's hit surface
+   kept (the picture does not change; moving the hit test to the ray estimate is a look decision
+   brought to him later as a side by side); far relax left alone until the build, where it stops
+   acting; the step by the whole estimate, as the bulb's, with the one bad view (scale 3, 9e-9,
+   2.4 % of rays behind) traced as the build's first job; the step alone first, resumed orbits
+   second and only if GPU timing shows a gain; the whole-box card's iterations raised to what the
+   margin rule gives (51, not 14).
+4. **Julia mode and the Kleinian card** (`JULIA.md`, `CHEAP-FORMULAS.md`), with its ADR. As
+   recommended: both formulas, the box first; "Julia from this place" is the classic (the point
+   looked at becomes the constant, the whole set seen from outside); no number rows for the
+   constant in the first build, only "from this place" and paste; the bulb below about 1e-10 is
+   looked at on the GPU before anything is promised; Kleinian as a card on the box in the same
+   build. Burning on the bulb waits for the box's fold-crossing test.
+
 Sessions 1 to 5 are one line of work and should run in that order. 7 to 12 are independent of each other
 and of 1 to 5, except that only one session at a time may own `core.js`.
 
