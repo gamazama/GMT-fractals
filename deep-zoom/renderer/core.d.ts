@@ -22,8 +22,7 @@ export interface DeepZoomBoxParams {
 }
 
 export interface DeepZoomCoreOptions {
-    /** Default true. True is the page's `?embed=1`: its own panels never open and stopping a
-     *  recording keeps the path in memory instead of downloading it. */
+    /** Default true. True is the page's `?embed=1`: its own panels never open. */
     embed?: boolean;
     /** Default true: the module runs its own requestAnimationFrame loop. False: the host calls
      *  `instance.step(now)` every frame and the module never schedules itself. */
@@ -92,7 +91,7 @@ export interface DeepZoomCoreOptions {
     rayMarch?: boolean;
     /** Default 'mandelbulb' (the page). 'mandelbox': start on the Mandelbox (grep `THE FORMULA SEAM` in
      *  core.js); its deep shader variant starts to build at once, beside the bulb's. The box draws with the
-     *  page's march whatever `rayMarch`, BLA or the true-gradient settings ask for - those stay as asked
+     *  page's march whatever `rayMarch` or BLA ask for - those stay as asked
      *  and apply again when the bulb is selected. `api.setFormula` changes it later. */
     formula?: 'mandelbulb' | 'mandelbox';
     /** The box's parameters from the start (they are kept while the bulb is drawn). */

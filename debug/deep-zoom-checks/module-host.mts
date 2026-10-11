@@ -6,21 +6,20 @@
  *
  * Everything runs against a FAKE instance (`makeRig` below): an object with the members
  * `createDeepZoom` returns, whose `api` records every call. The fake copies what was read in
- * `deep-zoom/renderer/core.js` on 2026-10-08 (its `api.smoothPath` smooths in place, its
- * `api.lastPath` hands out the live array, its distance is refreshed only by a frame that ran).
+ * `deep-zoom/renderer/core.js` on 2026-10-08 (its distance is refreshed only by a frame that ran).
  * So this proves the ADAPTER, not the module: what the real module does behind each handle is
  * listed as `@assumption` in `moduleHost.ts` and belongs to the stage smoke.
  *
  *   [1] options    `shellOptions`: the six values of the BUILD-PLAN row, `keyTarget === frame`,
  *                  the two callbacks, and a decision for every option `core.d.ts` declares.
  *   [2] views      three 80-digit `cam` strings byte-identical through `getView`, `setView`,
- *                  `setPendingView`, `takePath`, `smoothPath`, `seekPath`, `play`, `renderPathZip`.
+ *                  `setPendingView`.
  *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error`.
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
  *   [5] input      `focus`, the host-input members straight through to the module, and `building()`
  *                  (the shader variant the picture waits for, from the module's two state handles).
- *   [6] flight     recording, copies, seek by time, one preview at a time.
- *   [7] render     the result mapping, `progress`, `cancel`, `thumbnail`, and `renderFrameBlob`
+ *   [6] flight     what is left of it: `recordingChanged`, off the module's telemetry.
+ *   [7] render     `progress`, `cancel`, `thumbnail`, and `renderFrameBlob`
  *                  (one frame of the current view; a fake `dz.renderFrame` stands behind it).
  *   [8] dive       `dive.ts` alone, then through the host.
  *   [9] dispose    the order, twice, listeners gone.
@@ -28,7 +27,20 @@
  *   [11] params    the stage-1 no-op.
  *   [12] seam      who under `deep-zoom/host/` loads the renderer.
  *
- * FALSIFIED 2026-10-08: 54 breaks, each applied alone to `moduleHost.ts` or `dive.ts`. The check
+ * WENT 2026-10-11 (R7a), with the host's seven path members (`setRecording`, `takePath`,
+ * `smoothPath`, `seekPath`, `play`, `stopPlay`, `renderPathZip`) and the module's recorder, preview
+ * and path render behind them: their lines in [2], all of [6] but `recordingChanged`, the result
+ * mapping and "every render stops a path preview first" in [7], and from the record below the nine
+ * breaks of 2026-10-08 that had shown those lines red (six of the cam-strings group: `copyFrame`,
+ * `timedPath`, `play`, `renderPathZip`, `smoothPath` without its copy, `seekPath` a no-op; three
+ * of flight and render: `setRecording` always toggling, previews not serialised, a render that
+ * did not stop a preview). The lines that stayed were moved onto what is left: the `progress`
+ * lines of [7] are driven as a still (the job a sequence used to give is gone from the contract),
+ * "a newer dive and a frame render each end a dive" takes the place of "... and a path preview",
+ * and the missing-handle line of [10] takes away `moveAlong`, the one loose handle left.
+ *
+ * FALSIFIED 2026-10-08: 54 breaks, each applied alone to `moduleHost.ts` or `dive.ts` (45 are
+ * listed here since 2026-10-11: see WENT above). The check
  * exited 1 every time and the file was restored byte for byte afterwards (sha-256 compared). The
  * break, then how many lines went red and which:
  *   cam strings (the build plan's "wrap one in `Number()`")
@@ -36,12 +48,6 @@
  *       cam strings byte-identical", "views: getView after setView ..."
  *     `setView` sends it -> 4: "views: setView hands the module ...", "... getView after setView",
  *       both "views: a parked view ..." / "a view parked after ready ..." lines
- *     `copyFrame` makes it -> 2: "views: takePath returns the take ...", "views: smoothPath hands ..."
- *     `timedPath` makes it -> 1: "views: seekPath on a path without times ..."
- *     `play` / `renderPathZip` hand the module a copy of the path -> 2 / 1: "views: play hands ...",
- *       "views: renderPathZip hands ..."
- *     `smoothPath` without its copy -> 1: "views: smoothPath returns a new path ..."
- *     `seekPath` made a no-op -> 3: the three "views: seekPath ..." lines that sample
  *   options (the build plan's "flip one"; all seven were flipped)
  *     shortcuts true, dropTarget frame, autoStart true, pointerLock true, loseContextOnDispose
  *       false -> 1 each: its own "options: <name> is <value>"
@@ -85,8 +91,6 @@
  *       nothing once it is there, has failed or is off". The Mandelbox line and the disposed-host
  *       line pass and have not been seen red.
  *   flight and render
- *     `setRecording` always toggles -> 3; previews not serialised -> 2: "flight: a second play
- *       stops the preview in flight first ..."; a render that does not stop a preview -> 1;
  *       (2026-10-08) `snapshot: () => null` in moduleHost.ts -> 1: "render: snapshot() is the
  *       module's own canvas, untouched"
  *       `thumbnail` drawn during a render -> 1; the whole loading box instead of its first line
@@ -113,9 +117,9 @@
  *       `estimateAt: () => 1` -> 1: "input: estimateAt is the module's own estimate ..."
  *   seam
  *     `dive.ts` given a type import of the renderer -> 2: both "seam: ..." lines about the tree
- * NOT falsified: every line not named above (among them the result mapping of `renderPathZip`
- * line by line, `recordingChanged`, `compile`'s order, the forward vector, and
- * "a module without a handle the host needs"). They pass; nothing here has shown they can fail.
+ * NOT falsified: every line not named above (among them `recordingChanged`, `compile`'s order,
+ * the forward vector, and "a module without a handle the host needs"), and every line that was
+ * re-driven on 2026-10-11 (see WENT above). They pass; nothing here has shown they can fail.
  * NOT checked at all, by anything in node: what the real module does behind each handle. See the
  * `@assumption` lines in `deep-zoom/host/moduleHost.ts`.
  */
@@ -266,8 +270,6 @@ class FakeFrame extends CountingTarget {
     }
 }
 
-type RenderScript = (data: DzPath, opts: unknown) => Promise<unknown>;
-
 /** One fake instance with its document, frame and canvas. `calls[name]` is every argument list a
  *  handle was called with; `log` is the order of the calls that matter for ordering. */
 function makeRig() {
@@ -311,10 +313,9 @@ function makeRig() {
             detail: 1, reach: 1, power: 8, phase: [0.25, 0.5] as [number, number], color: 0, cscale: 1, light: 1,
             falloff: 1, normals: 2, land: false, frame: 960, accum: true, lookMode: 1,
         },
-        recPath: [] as DzPath['frames'],
-        smoothSaw: [] as string[][],
-        playEnd: null as ((result: unknown) => void) | null,
-        renderScript: (async () => ({ frames: 1, zips: 1, cancelled: false })) as RenderScript,
+        /** Telemetry's `pathFrames`. The real module reports 0 and `recording` false for good since
+         *  2026-10-11; the fake can still move both, to drive the host's `recordingChanged`. */
+        pathFrames: 0,
         /** What `dz.renderFrame` resolves with (null: cancelled). */
         frameScript: (async () => null) as (req: unknown) => Promise<Blob | null>,
     };
@@ -326,7 +327,7 @@ function makeRig() {
                 ready: state.ready, error: state.error, mode: 'f32', depth: state.depth, fps: state.tick++,
                 frameW: 960, frameH: 540, iters: 48, power: state.settings.power, accumN: 0, accumMax: 64,
                 recording: state.recording, playing: state.playing, exporting: state.exporting,
-                pathFrames: state.recPath.length, bla: false,
+                pathFrames: state.pathFrames, bla: false,
             }),
             settings: () => ({ ...state.settings, phase: [state.settings.phase[0], state.settings.phase[1]] as [number, number] }),
             getView: (): DzView => ({ ...state.view, cam: [state.view.cam[0], state.view.cam[1], state.view.cam[2]] }),
@@ -363,40 +364,12 @@ function makeRig() {
             estimateAt: (offset: [number, number, number]): number => { note('estimateAt', offset); return 7.5e-41; },
         },
         lockInput: (locked: boolean): void => { note('lockInput', locked); },
-        samplePath: (data: DzPath, tau: number): number[] | null => { note('samplePath', data, tau); return [0, 0, 0]; },
-        stopPlay: (): void => {
-            note('stopPlay');
-            const end = state.playEnd;
-            state.playEnd = null;
-            state.playing = false;
-            end?.({ frames: 2, stopped: true });
-        },
+        stopPlay: (): void => { note('stopPlay'); },   // the module keeps it callable; it does nothing
         cancelRender: (): void => { note('cancelRender'); },
         moveAlong: (dir: [number, number, number], dist: number): void => {
             note('moveAlong', dir, dist);
             state.trueDepth -= dist;   // a head-on approach: every unit flown is a unit closer
         },
-        recordToggle: (): boolean => {
-            note('recordToggle');
-            state.recording = !state.recording;
-            if (state.recording) state.recPath = [];
-            return state.recording;
-        },
-        recording: (): boolean => state.recording,
-        lastPath: (): DzPath => ({ format: 'gmt-mbulb-path', P: 256, fovScale: 1.1, frames: state.recPath }),
-        smoothPath: (data: DzPath, passes?: number, alpha?: number): DzPath => {
-            note('smoothPath', data, passes, alpha);
-            state.smoothSaw = data.frames.map((f) => [...f.cam]);
-            for (const f of data.frames) f.cam = ['0', '0', '0'];   // in place, as the module
-            return data;
-        },
-        playPath: (data: DzPath, opts?: unknown): Promise<unknown> => {
-            note('playPath', data, opts);
-            if (data.frames.length === 0) return Promise.resolve({ error: 'empty path' });
-            state.playing = true;
-            return new Promise((resolve) => { state.playEnd = resolve; });
-        },
-        renderPath: (data: DzPath, opts: unknown): Promise<unknown> => { note('renderPath', data, opts); return state.renderScript(data, opts); },
         // What host/looseParams.ts pushes through and host/paramMap.ts reads back (stage 2).
         look: { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 } as Record<string, unknown>,
         setLook: (o: Record<string, unknown>): void => { note('setLook', o); Object.assign(api.look, o); },
@@ -412,8 +385,6 @@ function makeRig() {
         formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] }),
         formulaState: () => state.formulaState,
         normalDetail: () => 0,
-        blaMode: (): string => 'auto',
-        compileMs: (): Record<string, number | undefined> => ({}),
     };
 
     const instance = {
@@ -437,13 +408,6 @@ function makeRig() {
         canvas: canvas as unknown as HTMLCanvasElement,
         fakeCanvas: canvas,
         instance: instance as unknown as DeepZoomInstance,
-        /** End the fake's running preview the way the module does when the path is done. */
-        finishPlay(): void {
-            const end = state.playEnd;
-            state.playEnd = null;
-            state.playing = false;
-            end?.({ frames: 2 });
-        },
     };
 }
 
@@ -512,61 +476,6 @@ console.log('[2] views     the cam strings, byte for byte');
     check(rig.count('setView') === 1 && sameCam(got?.cam, CAM_B) && got?.yaw === 0.5,
         'views: setView hands the module the caller\'s three cam strings byte-identical', JSON.stringify(got?.cam));
     check(sameCam(host.getView().cam, CAM_B), 'views: getView after setView returns the same strings');
-
-    // takePath: a copy whose strings are the module's
-    rig.state.recPath = pathOf([CAM_A, CAM_B], [0, 2]).frames;
-    const take = host.takePath();
-    check(take.frames.length === 2 && sameCam(take.frames[0].cam, CAM_A) && sameCam(take.frames[1].cam, CAM_B)
-        && take.format === 'gmt-mbulb-path' && take.P === 256 && take.fovScale === 1.1,
-        'views: takePath returns the take with its cam strings byte-identical');
-    check(take.frames !== rig.state.recPath && take.frames[0] !== rig.state.recPath[0] && take.frames[0].cam !== rig.state.recPath[0].cam,
-        'views: takePath returns a copy (frames, each frame, each cam array)');
-
-    // smoothPath: the module gets a copy with the caller's strings; the caller's path is untouched
-    const src = pathOf([CAM_A, CAM_B, CAM_C], [0, 2, 4]);
-    const smoothed = host.smoothPath(src, 3, 0.5);
-    const smoothArgs = rig.calls.smoothPath?.[0] ?? [];
-    check(rig.state.smoothSaw.length === 3 && sameCam(rig.state.smoothSaw[0], CAM_A) && sameCam(rig.state.smoothSaw[1], CAM_B)
-        && sameCam(rig.state.smoothSaw[2], CAM_C) && smoothArgs[1] === 3 && smoothArgs[2] === 0.5,
-        'views: smoothPath hands the module the cam strings byte-identical, with passes and alpha');
-    check(smoothed !== src && sameCam(src.frames[0].cam, CAM_A) && sameCam(src.frames[1].cam, CAM_B) && sameCam(src.frames[2].cam, CAM_C)
-        && sameCam(smoothed.frames[1].cam, ['0', '0', '0']),
-        'views: smoothPath returns a new path and leaves the caller\'s untouched (the module smooths in place)');
-
-    // seekPath: by time; a path with times goes through as the caller's object
-    host.seekPath(src, 0.5);
-    let seek = rig.calls.samplePath?.[0] ?? [];
-    check(seek[0] === src && seek[1] === 2, 'views: seekPath(p, 0.5) on a timed path samples the caller\'s own path at half its last time',
-        `tau ${String(seek[1])}`);
-    host.seekPath(src, 7);
-    host.seekPath(src, -1);
-    host.seekPath(src, Number.NaN);
-    check(rig.calls.samplePath?.[1]?.[1] === 4 && rig.calls.samplePath?.[2]?.[1] === 0 && rig.calls.samplePath?.[3]?.[1] === 0,
-        'views: seekPath clamps u to 0..1 (7 -> the end, -1 and NaN -> the start)');
-    const untimed = pathOf([CAM_A, CAM_B, CAM_C]);
-    host.seekPath(untimed, 0.5);
-    seek = rig.calls.samplePath?.[4] ?? [];
-    const sampled = seek[0] as DzPath | undefined;
-    check(!!sampled && sampled !== untimed && sampled.frames.length === 3
-        && sameCam(sampled.frames[0].cam, CAM_A) && sameCam(sampled.frames[1].cam, CAM_B) && sameCam(sampled.frames[2].cam, CAM_C)
-        && sampled.frames[2].t === 2.8 && Math.abs((seek[1] as number) - 1.4) < 1e-12 && untimed.frames[2].t === undefined,
-        'views: seekPath on a path without times samples an evenly timed copy with the same cam strings, and leaves the caller\'s untimed');
-    const before = rig.count('samplePath');
-    host.seekPath(pathOf([]), 0.5);
-    check(rig.count('samplePath') === before, 'views: seekPath on an empty path calls nothing');
-
-    // play and renderPathZip: the caller's path object itself
-    const playing = host.play(src, { frames: 90, fps: 30 });
-    await sleep(0);
-    const playArgs = rig.calls.playPath?.[0] ?? [];
-    check(playArgs[0] === src && JSON.stringify(playArgs[1]) === '{"frames":90,"fps":30}', 'views: play hands the module the caller\'s path object and options');
-    rig.finishPlay();
-    await playing;
-    await host.renderPathZip(src, { frames: 4, fps: 24, longEdge: 320, samples: 2, tile: 64 });
-    const renderArgs = rig.calls.renderPath?.[0] ?? [];
-    check(renderArgs[0] === src && JSON.stringify(renderArgs[1]) === '{"frames":4,"fps":24,"longEdge":320,"samples":2,"tile":64}',
-        'views: renderPathZip hands the module the caller\'s path object and frames, fps, longEdge, samples, tile',
-        JSON.stringify(renderArgs[1]));
     host.dispose();
 }
 
@@ -852,92 +761,47 @@ console.log('[5] input     focus, and the host-input members');
 }
 
 // ── [6] flight ───────────────────────────────────────────────────────────────────────────────────
-console.log('[6] flight    recording and the path preview');
+console.log('[6] flight    what is left: recordingChanged, off the module\'s telemetry');
 {
+    // The module's recorder went on 2026-10-11 and its telemetry now says `recording: false` for
+    // good. The host still turns a change of that flag into the event; the fake moves the flag.
     const rig = makeRig();
     const host = createModuleHost(rig.instance, rig.canvas);
     const rec: string[] = [];
     host.on('recordingChanged', (e) => { rec.push(`${e.recording}:${e.frames}`); });
     host.step(0);
-    host.setRecording(false);
-    check(rig.count('recordToggle') === 0, 'flight: setRecording(false) while not recording toggles nothing');
-    host.setRecording(true);
-    host.setRecording(true);
-    check(rig.count('recordToggle') === 1 && rig.state.recording === true, 'flight: setRecording(true) toggles once, however often it is called');
+    rig.state.recording = true;
     check(rec.length === 0, 'flight: recordingChanged is not sent before the next poll');
     host.step(200);
-    rig.state.recPath = pathOf([CAM_A, CAM_B], [0, 2]).frames;
+    rig.state.pathFrames = 2;
     host.step(400);
     check(rec.join() === 'true:0', 'flight: recordingChanged says recording at the next poll, once', rec.join());
-    host.setRecording(false);
+    rig.state.recording = false;
     host.step(600);
-    check(rig.count('recordToggle') === 2 && rec.join() === 'true:0,false:2', 'flight: stopping toggles once and recordingChanged carries the frame count', rec.join());
-
-    // the preview
-    const empty = await host.play(pathOf([]));
-    check(empty.stopped === true && rig.count('playPath') === 0, 'flight: play on an empty path resolves stopped at once and calls nothing');
-    const a = pathOf([CAM_A, CAM_B], [0, 2]);
-    const b = pathOf([CAM_B, CAM_C], [0, 2]);
-    const first = host.play(a);
-    await sleep(0);
-    rig.finishPlay();
-    check((await first).stopped === false, 'flight: a preview that runs to its end resolves stopped false');
-
-    const second = host.play(a);
-    await sleep(0);
-    const third = host.play(b);
-    await sleep(5);
-    check(rig.count('stopPlay') === 1 && (await second).stopped === true && rig.count('playPath') === 3 && rig.calls.playPath[2][0] === b,
-        'flight: a second play stops the preview in flight first, then starts its own',
-        `${rig.count('stopPlay')} stops, ${rig.count('playPath')} starts`);
-    host.stopPlay();
-    check((await third).stopped === true && rig.count('stopPlay') === 2, 'flight: stopPlay ends the preview and play resolves stopped true');
+    check(rec.join() === 'true:0,false:2', 'flight: when it stops, recordingChanged carries the frame count', rec.join());
     host.dispose();
 }
 
 // ── [7] render ───────────────────────────────────────────────────────────────────────────────────
-console.log('[7] render    the path render, progress, cancel, thumbnail');
+console.log('[7] render    progress, cancel, thumbnail, and one frame to memory');
 {
     const rig = makeRig();
     const status = { text: null as string | null };
     const host = createModuleHost(rig.instance, rig.canvas, { statusLine: () => status.text });
     const p = pathOf([CAM_A, CAM_B], [0, 2]);
-    const request = { frames: 12, fps: 30, longEdge: 1280, samples: 8 };
 
-    const none = await host.renderPathZip(pathOf([]), request);
-    check(none.ok === false && none.reason === 'empty-path' && rig.count('renderPath') === 0, 'render: an empty path is refused before the module is called');
-
-    const cases: Array<[string, unknown, string]> = [
-        ['busy', { error: 'not ready / busy' }, '{"ok":false,"reason":"busy","message":"not ready / busy"}'],
-        ['the module\'s empty-path answer', { error: 'empty path' }, '{"ok":false,"reason":"empty-path","message":"empty path"}'],
-        ['another error', { error: '1280x720 is too large' }, '{"ok":false,"reason":"error","message":"1280x720 is too large"}'],
-        ['cancelled before a frame', { cancelled: true, framesRendered: 0 }, '{"ok":false,"reason":"cancelled"}'],
-        ['a finished render', { frames: 12, fps: 30, longEdge: 1280, samples: 8, cancelled: false, zips: 1 }, '{"ok":true,"frames":12,"zips":1,"cancelled":false}'],
-        ['a cancelled render with frames', { frames: 5, fps: 30, longEdge: 1280, samples: 8, cancelled: true, zips: 1 }, '{"ok":true,"frames":5,"zips":1,"cancelled":true}'],
-    ];
-    for (const [name, answer, want] of cases) {
-        rig.state.renderScript = async () => answer;
-        const got = JSON.stringify(await host.renderPathZip(p, request));
-        check(got === want, `render: ${name} maps to ${want}`, got);
-    }
-    rig.state.renderScript = async () => { throw new Error('GL went away'); };
-    const thrown = JSON.stringify(await host.renderPathZip(p, request));
-    check(thrown === '{"ok":false,"reason":"error","message":"GL went away"}', 'render: a throw inside the module becomes a result, not a rejection', thrown);
-    check(rig.count('stopPlay') === rig.count('renderPath'), 'render: every render stops a path preview first', `${rig.count('stopPlay')} of ${rig.count('renderPath')}`);
-
-    // progress, polled from step
+    // progress, polled from step. A render the host did not start as a frame is a still (the module's
+    // own export; the status lines below are ones its path render wrote, whose "frame N/M" the
+    // host can still read).
     const progress: Array<DzProgress | null> = [];
     host.on('progress', (e) => { progress.push(e); });
-    let finish: (r: unknown) => void = () => undefined;
-    rig.state.renderScript = () => new Promise((resolve) => { finish = resolve; });
-    const rendering = host.renderPathZip(p, request);
     rig.state.exporting = true;
     host.step(0);
-    check(JSON.stringify(progress) === '[{"job":"sequence","text":""}]', 'render: a render that shows no status line yet reports progress with an empty text',
+    check(JSON.stringify(progress) === '[{"job":"still","text":""}]', 'render: a render that shows no status line yet reports progress with an empty text',
         JSON.stringify(progress));
     status.text = 'rendering path... frame 3/120';
     host.step(200);
-    check(JSON.stringify(progress[1]) === '{"job":"sequence","text":"rendering path... frame 3/120","frame":3,"total":120}',
+    check(JSON.stringify(progress[1]) === '{"job":"still","text":"rendering path... frame 3/120","frame":3,"total":120}',
         'render: frame and total are read off the status line', JSON.stringify(progress[1]));
     status.text = 'frame 4/120 - 1280x720... 45%';
     host.step(400);
@@ -945,15 +809,13 @@ console.log('[7] render    the path render, progress, cancel, thumbnail');
     check(progress.length === 3 && progress[2]?.frame === 4 && progress[2]?.total === 120 && progress[2]?.fraction === 0.45,
         'render: the fraction is read too, and an unchanged line is not sent twice', JSON.stringify(progress.slice(2)));
     rig.state.exporting = false;
-    finish({ frames: 12, zips: 1, cancelled: false });
-    await rendering;
     host.step(800);
     host.step(1000);
     check(progress.length === 4 && progress[3] === null, 'render: progress null when the job ends, once', JSON.stringify(progress.slice(3)));
     rig.state.exporting = true;
     status.text = 'exporting 2560x1440... 10%';
     host.step(1200);
-    check(progress[4]?.job === 'still' && progress[4]?.fraction === 0.1, 'render: a job the host did not start as a sequence is a still', JSON.stringify(progress[4]));
+    check(progress[4]?.job === 'still' && progress[4]?.fraction === 0.1, 'render: a job the host did not start as a frame is a still', JSON.stringify(progress[4]));
     rig.state.exporting = false;
     host.step(1400);
 
@@ -969,15 +831,11 @@ console.log('[7] render    the path render, progress, cancel, thumbnail');
     const cancelsBefore = rig.count('cancelRender');
     const stopsBefore = rig.count('stopPlay');
     host.cancel();
-    check(rig.count('cancelRender') === cancelsBefore + 1 && rig.count('stopPlay') === stopsBefore + 1, 'render: cancel() ends a render and a path preview');
+    check(rig.count('cancelRender') === cancelsBefore + 1 && rig.count('stopPlay') === stopsBefore + 1, 'render: cancel() cancels the module\'s render and calls its stopPlay');
     host.moveAlong([0, 1, 0], 2.5e-30);
     const move = rig.calls.moveAlong?.[rig.count('moveAlong') - 1] ?? [];
     check(JSON.stringify(move) === '[[0,1,0],2.5e-30]', 'render: moveAlong(dir, distance) goes straight to the module', JSON.stringify(move));
     host.dispose();
-    const late = await host.renderPathZip(p, request);
-    const latePlay = await host.play(p);
-    check(late.ok === false && late.reason === 'cancelled' && latePlay.stopped === true,
-        'render: a disposed host starts neither a render nor a preview');
 
     // renderFrameBlob (stage R6a, 2026-10-11): one frame of the current view, over `api.dz.renderFrame`.
     const rig2 = makeRig();
@@ -1003,7 +861,7 @@ console.log('[7] render    the path render, progress, cancel, thumbnail');
     check(frame?.ok === true && frame.data === picture && frame.width === 640 && frame.height === 360,
         'render: renderFrameBlob hands back the module\'s own blob, with the size its PNG header says', JSON.stringify(frame));
     check(asked?.longEdge === 640 && asked.samples === 2 && asked.aspect === 16 / 9 && rig2.count('stopPlay') === 1,
-        'render: renderFrameBlob asks the module for that long edge, sample count and aspect, and stops a path preview first', JSON.stringify(asked));
+        'render: renderFrameBlob asks the module for that long edge, sample count and aspect, and calls its stopPlay first', JSON.stringify(asked));
     rig2.state.frameScript = async () => null;
     const stopped = await frameOf({ longEdge: 640, samples: 2 });
     check(stopped?.ok === false && stopped.reason === 'cancelled', 'render: a cancelled frame is a result that says so', JSON.stringify(stopped));
@@ -1230,8 +1088,8 @@ console.log('[8] dive      dive.ts alone, then through the host');
     check(await stateOf(fourth, 5) === 'resolved', 'dive: host.cancel() ends a dive');
     const fifth = host.diveTo(1e-9);
     const sixth = host.diveTo(1e-9);
-    void host.play(pathOf([CAM_A, CAM_B], [0, 2]));
-    check(await stateOf(fifth, 5) === 'resolved' && await stateOf(sixth, 5) === 'resolved', 'dive: a newer dive and a path preview each end a dive');
+    void host.renderFrameBlob?.({ longEdge: 64, samples: 1 });
+    check(await stateOf(fifth, 5) === 'resolved' && await stateOf(sixth, 5) === 'resolved', 'dive: a newer dive and a frame render each end a dive');
     // What a dive closes on is what is AHEAD (the rays), not the estimate at the camera (telemetry).
     {
         const r2 = makeRig();
@@ -1383,12 +1241,11 @@ console.log('[10] mount    the DOM half, with a fake create');
     const rig2 = makeRig();
     rig2.log.length = 0;
     rig2.frame.children = [];
-    delete (rig2.api as Record<string, unknown>).recordToggle;
-    delete (rig2.api as Record<string, unknown>).playPath;
+    delete (rig2.api as Record<string, unknown>).moveAlong;
     let named = '';
     const createBroken: Create = () => rig2.instance;
     try { mountDeepZoom(rig2.frame as unknown as HTMLElement, {}, createBroken); } catch (e) { named = (e as Error).message; }
-    check(named.includes('api.recordToggle') && named.includes('api.playPath') && rig2.count('instance.dispose') === 1 && rig2.frame.children.length === 0
+    check(named.includes('api.moveAlong') && rig2.count('instance.dispose') === 1 && rig2.frame.children.length === 0
         && rig2.log.indexOf('instance.dispose') < rig2.log.indexOf('canvas.remove'),
         'mount: a module without a handle the host needs fails with the handle\'s name, disposed and with no canvas left', named);
 }

@@ -46,19 +46,16 @@
  *     `compile`, `recordingChanged`, `progress`, the dive) runs from `step` and stops with it.
  *   - The dive advances only after a frame that RAN (`instance.frameCount` rose). While a render
  *     owns the context the module's frame returns early and its distance goes stale.
- *   - `api.lastPath()` hands out the module's live recording array and `api.smoothPath` smooths in
- *     place: `takePath` and `smoothPath` copy.
- *   - `api.playPath` and `api.renderPath` set the module's precision mode to deep and leave it
- *     there - which is where this shell keeps it anyway (`mode: 'deep'` in `shellOptions`; the
- *     shell has had no Precision control since 2026-10-08). They, and the module's dive, tick on
- *     the browser's own animation frames.
- *   - Two previews at once fight over the camera (the first one's end stops the second), and a
- *     preview running under a render moves the camera between rows. `play` ends the one in flight
- *     first; `renderPathZip` stops a preview.
+ *   - THE MODULE'S RECORDER, PATH PREVIEW AND PATH RENDER ARE GONE (2026-10-11), and with them the
+ *     seven members that reached them (`setRecording`, `takePath`, `smoothPath`, `seekPath`, `play`,
+ *     `stopPlay`, `renderPathZip`): nothing in the shell called one. What is left of that here is
+ *     `api.stopPlay()`, still called before a frame render and by `cancel` (the module keeps it
+ *     callable; it does nothing), and the `recordingChanged` event, which the module's telemetry
+ *     can no longer raise.
  *   - `thumbnail()` draws through the live GL state. It answers '' during a render instead of
  *     drawing into the render's state, and it restarts the still.
  *   - Never send `api.setBla(true)` from here: it blocks on a shader compile (index.ts, BLOCKING
- *     COMPILES). The parameter table of S2-3 owns that wait.
+ *     COMPILES). Nothing in the shell sends `setBla` at all since 2026-10-11.
  *   - After a lost context nothing is restored and telemetry still says ready. This file only
  *     reports it (`contextLost`, once); the surface disposes and mounts fresh.
  *
@@ -69,21 +66,19 @@
  *     params by id (the ids hold a dot, the module's keys do not).
  *   - `ready`, telemetry, `compile`, `recordingChanged`, `progress` are polled at 8 Hz: events
  *     from the module, M3. `progress` is read off the module's status line in its hidden scaffold
- *     (`statusLineOf`): M3. `compile` sees the deep shader only: BLA and variants, M5.
- *   - `seekPath` goes by time (`api.samplePath`) and ignores `ease`: seek by arc, M4.
+ *     (`statusLineOf`): M3. `compile` sees the deep shader and the two variants built after it
+ *     (the ray march's, the Mandelbox's); a BLA compile, which only the page's march asks for, not.
  *   - `renderFramePixels` and `exportStill` are absent: M4 (the still's blob M4 or M6). `pause` is
  *     absent: M5. `renderFrameBlob` is there for the current view only (stage R6a, 2026-10-11),
  *     over `api.dz.renderFrame`; its width and height are read off the PNG's own header.
- *   - `renderPathZip`, `play` and their frame waits run on the browser's animation frames: M4
- *     moves the render path onto `step`.
- *   - `LooseHandles` (`moveAlong` and the recorder) are still untyped in the module: M1.
+ *   - `LooseHandles` (`moveAlong`) is still untyped in the module: M1.
  *   - The 1:1 view has no rule of its own here (the page centred `.fit1to1`): M1, with the
  *     parameter that turns it on.
  *
- * @invariant `getView` returns the module's `cam` strings, and `setView`, `setPendingView`,
- *   `takePath`, `smoothPath`, `seekPath`, `play` and `renderPathZip` hand the module the caller's,
- *   byte for byte - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("views: ..." lines).
- *   Falsified 2026-10-08: the "cam strings" group in the check's header.
+ * @invariant `getView` returns the module's `cam` strings, and `setView` and `setPendingView` hand
+ *   the module the caller's, byte for byte - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("views: ..." lines). Falsified 2026-10-08: the "cam
+ *   strings" group in the check's header.
  * @invariant `shellOptions` returns `autoStart:false, shortcuts:false, dropTarget:null,
  *   pointerLock:false, mode:'deep', farLook:true, rebaseOrigin:true, rayMarch:true, farHandOff:0.5, holdEstimate:true, resetStillOnResize:true, loseContextOnDispose:true` and
  *   `keyTarget === frame` - proven by: npx tsx debug/deep-zoom-checks/module-host.mts ("options: ..." lines).
@@ -140,8 +135,8 @@
  * @assumption The signatures in `LooseHandles`, and what this file expects each `api.*` call to do,
  *   were read from core.js on 2026-10-08. core.js is untyped; only the fake instance of the check
  *   and the stage smoke stand behind them. The stage-1 smoke exercises `ready`, `frameCount`,
- *   `getView`, `getParams`, `telemetry` and the option seams; recording, preview, render, dive,
- *   thumbnail and progress have not met the real module.
+ *   `getView`, `getParams`, `telemetry` and the option seams, and the stage-2 smoke a dive and
+ *   the thumbnail; `progress` has not met the real module in a standing check.
  * @assumption The classes `absolute inset-0 block h-full w-full` exist in the app's stylesheet
  *   (Tailwind scans `deep-zoom/**`), so the canvas fills `#dz-frame`. Not checked in a browser by
  *   this package.
@@ -153,9 +148,7 @@ import type {
     DeepZoomHost,
     DzEvents,
     DzParams,
-    DzPath,
     DzProgress,
-    DzSequenceResult,
     DzTelemetry,
     DzView,
     Unsubscribe,
@@ -182,10 +175,6 @@ const DZ_DIVE_ASKS = 16;
  *  marched afresh, and only one standing where it stood is answered from the kept rays - which is
  *  what lets unfinished rays go on (0 would switch that off too: it means "always march"). */
 const DZ_DIVE_REUSE = 1e-9;
-
-/** Seconds a segment of a path without times is given by `seekPath`: the module's own fallback
- *  (grep `(ks.length-1)*1.4` in core.js). */
-const UNTIMED_SEGMENT_S = 1.4;
 
 /** What `mountDeepZoom` reports to the component that mounted it. All optional. */
 export interface DeepZoomMountHooks {
@@ -220,45 +209,17 @@ export interface ModuleHostEnv {
 
 // ── handles the module assigns and `DeepZoomApi` does not type ───────────────────────────────────
 
-/** What `api.renderPath` resolves with (grep `api.renderPath = ` in core.js): `{ error }` when not
- *  ready, busy, empty or too large; `{ cancelled, framesRendered: 0 }` when cancelled before a
- *  frame finished; otherwise the counts, with `cancelled: true` for a partial ZIP. */
-interface ModuleRenderResult {
-    error?: string;
-    cancelled?: boolean;
-    framesRendered?: number;
-    frames?: number;
-    zips?: number;
-}
-
 /**
  * Signatures read from core.js on 2026-10-08. Each line names its grep target. They sit behind
  * `DeepZoomApi`'s index signature as `unknown`; `looseHandles` proves each is a function.
+ * (Until 2026-10-11 the recorder's six handles were here too; they went with the module's path code.)
  */
 interface LooseHandles {
     /** grep `api.moveAlong = `. Adds `dir[j] * dist` to the fixed-point camera, marks the orbit dirty. */
     moveAlong(dir: [number, number, number], dist: number): void;
-    /** grep `api.recordToggle = `. Flips recording and returns the NEW state. Starting empties the
-     *  take; stopping times and smooths it and, with `embed`, downloads nothing. */
-    recordToggle(): boolean;
-    /** grep `api.recording = `. */
-    recording(): boolean;
-    /** grep `api.lastPath = `. `frames` is the module's LIVE array. */
-    lastPath(): DzPath;
-    /** grep `api.smoothPath = `. Smooths `data.frames` IN PLACE and returns `data`. Defaults: 2
-     *  passes, alpha 0.4. */
-    smoothPath(data: DzPath, passes?: number, alpha?: number): DzPath;
-    /** grep `api.playPath = `. `{ error: 'empty path' }` for no frames; else resolves when the
-     *  preview ends, `stopped: true` when `api.stopPlay()` ended it. Sets the mode to deep. */
-    playPath(data: DzPath, opts?: { frames?: number; fps?: number }): Promise<{ frames?: number; stopped?: boolean; error?: string }>;
-    /** grep `api.renderPath = `. Downloads the ZIP parts itself. Sets the mode to deep. */
-    renderPath(
-        data: DzPath,
-        opts: { frames?: number; fps?: number; longEdge?: number; samples?: number; tile?: number },
-    ): Promise<ModuleRenderResult>;
 }
 
-const LOOSE_NAMES = ['moveAlong', 'recordToggle', 'recording', 'lastPath', 'smoothPath', 'playPath', 'renderPath'] as const;
+const LOOSE_NAMES = ['moveAlong'] as const;
 
 function looseHandles(api: DeepZoomApi): LooseHandles {
     const missing = LOOSE_NAMES.filter((name) => typeof api[name] !== 'function');
@@ -271,24 +232,6 @@ function looseHandles(api: DeepZoomApi): LooseHandles {
 }
 
 // ── small pure helpers ───────────────────────────────────────────────────────────────────────────
-
-type PathFrame = DzPath['frames'][number];
-
-/** A frame of its own. The `cam` strings are the same strings, not re-made. */
-function copyFrame(f: PathFrame): PathFrame {
-    return { ...f, cam: [f.cam[0], f.cam[1], f.cam[2]], phase: [f.phase[0], f.phase[1]] };
-}
-
-function copyPath(p: DzPath): DzPath {
-    return { ...p, frames: p.frames.map(copyFrame) };
-}
-
-/** `p` when its frames carry times (a finished take does), else a copy timed at an even pace. */
-function timedPath(p: DzPath): DzPath {
-    const last = p.frames[p.frames.length - 1]?.t;
-    if (p.frames.length < 2 || (typeof last === 'number' && last > 0)) return p;
-    return { ...p, frames: p.frames.map((f, i) => ({ ...f, t: i * UNTIMED_SEGMENT_S })) };
-}
 
 function frozenParams(p: DzParams): DzParams {
     const out: DzParams = {};
@@ -321,18 +264,6 @@ function progressOf(job: DzProgress['job'], text: string): DzProgress {
     const percent = /(\d+)%/.exec(text);
     if (percent) progress.fraction = parseInt(percent[1], 10) / 100;
     return progress;
-}
-
-function sequenceResult(r: ModuleRenderResult | null | undefined): DzSequenceResult {
-    if (!r) return { ok: false, reason: 'error', message: 'The renderer returned nothing.' };
-    if (typeof r.error === 'string') {
-        if (r.error === 'empty path') return { ok: false, reason: 'empty-path', message: r.error };
-        if (/busy|not ready/.test(r.error)) return { ok: false, reason: 'busy', message: r.error };
-        return { ok: false, reason: 'error', message: r.error };
-    }
-    const frames = r.frames ?? 0;
-    if (!(frames > 0)) return { ok: false, reason: r.cancelled ? 'cancelled' : 'error' };
-    return { ok: true, frames, zips: r.zips ?? 0, cancelled: !!r.cancelled };
 }
 
 function reportThrow(what: string, err: unknown): void {
@@ -424,11 +355,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     let wasRecording = false;
     let jobShown = false;
     let lastStatus = '';
-    /** `renderPathZip` calls in flight: tells a sequence from a still in `progress`. */
-    let sequences = 0;
-    /** `renderFrameBlob` calls in flight: a frame, likewise. */
+    /** `renderFrameBlob` calls in flight: tells a frame from a still in `progress`. */
     let frames = 0;
-    let playRun: Promise<unknown> | null = null;
 
     function failBoot(message: string): void {
         if (bootFailed) return;
@@ -485,7 +413,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (!jobShown || text !== lastStatus) {
                 jobShown = true;
                 lastStatus = text;
-                emit('progress', progressOf(sequences > 0 ? 'sequence' : frames > 0 ? 'frame' : 'still', text));
+                emit('progress', progressOf(frames > 0 ? 'frame' : 'still', text));
             }
         } else if (jobShown) {
             jobShown = false;
@@ -564,44 +492,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             return dz.thumbnail(size);
         },
 
-        // flight
-        setRecording(on) {
-            if (loose.recording() !== on) loose.recordToggle();
-        },
-        takePath: () => copyPath(loose.lastPath()),
-        smoothPath(p, passes, alpha) {
-            const copy = copyPath(p);
-            loose.smoothPath(copy, passes, alpha);
-            return copy;
-        },
-        seekPath(p, u) {
-            if (p.frames.length === 0) return;
-            dive.cancel();
-            const timed = timedPath(p);
-            const end = timed.frames[timed.frames.length - 1].t ?? 0;
-            api.samplePath(timed, (u > 0 ? Math.min(1, u) : 0) * end);
-        },
-        async play(p, o) {
-            if (disposed || p.frames.length === 0) return { stopped: true };
-            dive.cancel();
-            // One preview at a time: the module's loops share one flag (see PITFALLS).
-            while (playRun) {
-                api.stopPlay();
-                await playRun;
-            }
-            if (disposed) return { stopped: true };
-            const run = loose.playPath(p, o);
-            const settled = run.then(() => undefined, () => undefined);
-            playRun = settled;
-            try {
-                const r = await run;
-                return { stopped: !!(r && (r.stopped || r.error)) };
-            } finally {
-                if (playRun === settled) playRun = null;
-            }
-        },
-        stopPlay: () => api.stopPlay(),
-
         // output
         async renderFrameBlob(r) {
             if (disposed) return { ok: false, reason: 'cancelled' };
@@ -620,22 +510,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
                 return { ok: false, reason: 'error', message: err instanceof Error ? err.message : String(err) };
             } finally {
                 frames--;
-            }
-        },
-        async renderPathZip(p, o) {
-            if (disposed) return { ok: false, reason: 'cancelled' };
-            if (p.frames.length === 0) return { ok: false, reason: 'empty-path' };
-            dive.cancel();
-            api.stopPlay();
-            sequences++;
-            try {
-                return sequenceResult(await loose.renderPath(p, {
-                    frames: o.frames, fps: o.fps, longEdge: o.longEdge, samples: o.samples, tile: o.tile,
-                }));
-            } catch (err) {
-                return { ok: false, reason: 'error', message: err instanceof Error ? err.message : String(err) };
-            } finally {
-                sequences--;
             }
         },
         cancel() {

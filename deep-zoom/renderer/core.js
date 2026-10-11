@@ -72,32 +72,17 @@ const DZ_SCAFFOLD_HTML = `<div id="loading"><div class="box"><span class="spin">
   <h2>Keyboard shortcuts</h2>
   <p class="sub">WASD + Q/E fly · Shift boost · mouse look · Esc release &nbsp;·&nbsp; [ ] iters · I auto-iters ·
   P mode · R res · N normals &nbsp;·&nbsp; −/= power · ,/. phase θ · ;/' phase φ &nbsp;·&nbsp;
-  C colour · 9/0 palette · F/G detail · L light · T/Y falloff &nbsp;·&nbsp; V gate · X export · M record · ? about</p>
+  C colour · 9/0 palette · F/G detail · L light · T/Y falloff &nbsp;·&nbsp; V gate · X export · ? about</p>
 </div></div>
 <div id="render" class="modal"><div class="panel">
   <span class="x">✕</span>
   <h1>Render &amp; Export</h1>
-  <p class="sub" id="rstatus">no path yet — Record or Load one</p>
+  <p class="sub" id="rstatus"></p>
   <h2>Still image (PNG)</h2>
   <div class="row"><label>resolution (long edge)</label><input id="r_res" type="number" value="2560" min="256" step="64"></div>
   <div class="row"><label>samples (quality)</label><input id="r_samp" type="number" value="16" min="1" max="128"></div>
   <button class="btn go" id="r_export">Export PNG</button>
-  <h2>Camera path</h2>
-  <button class="btn" id="r_rec">● Record</button>
-  <div class="row"><label>smoothing — passes</label><input id="r_sp" type="number" value="2" min="0" max="12"></div>
-  <div class="row"><label>strength (0–1)</label><input id="r_sa" type="number" value="0.4" min="0" max="1" step="0.05"></div>
-  <button class="btn" id="r_smooth">Smooth path</button>
-  <button class="btn" id="r_play">▶ Preview</button>
-  <button class="btn" id="r_load">Load…</button>
-  <button class="btn" id="r_save">Save</button>
-  <h2>Render path → video frames (.zip)</h2>
-  <div class="row"><label>frames</label><input id="r_frames" type="number" value="180" min="1"></div>
-  <div class="row"><label>resolution (long edge)</label><input id="r_pres" type="number" value="1920" min="256" step="64"></div>
-  <div class="row"><label>samples / frame</label><input id="r_psamp" type="number" value="12" min="1" max="64"></div>
-  <button class="btn go" id="r_render">Render → ZIP</button>
   <button class="btn" id="r_cancel">✖ Cancel</button>
-  <p class="sub">frames = seconds × fps. Cancel still saves the frames done so far; renders over 500&thinsp;MB split into numbered ZIPs.<br>Encode the unzipped PNGs:<br>
-  <code style="color:#9ab">ffmpeg -framerate 30 -i frame_%05d.png -c:v libx264 -pix_fmt yuv420p out.mp4</code></p>
 </div></div>
 <div id="about" class="modal"><div class="panel">
   <span class="x">✕ close (?)</span>
@@ -159,7 +144,7 @@ const DZ_SCAFFOLD_HTML = `<div id="loading"><div class="box"><span class="spin">
   <a href="https://github.com/gamazama/mandelbulb-deepzoom">github.com/gamazama/mandelbulb-deepzoom</a></p>
 </div></div>
 <div id="help"><span id="lockcue">click to capture mouse</span> · WASD + Q/E fly · SHIFT boost · mouse look · ESC release
-<span style="color:#9ab">⚙ controls</span> for all settings + shortcuts · <span style="color:#9ab">🎬 render</span> to export &amp; record</div>
+<span style="color:#9ab">⚙ controls</span> for all settings + shortcuts · <span style="color:#9ab">🎬 render</span> to export</div>
 `;
 
 export function createDeepZoom(canvas, options = {}) {
@@ -228,7 +213,8 @@ function dzDispose() {
   for (const id of dzIntervals) clearInterval(id);
   dzIntervals.length = 0;
   try { if (document.pointerLockElement === canvas) document.exitPointerLock(); } catch (e) { /* not locked */ }
-  /* end the three things that would otherwise keep ticking on their own requestAnimationFrame */
+  /* end the things that would otherwise keep ticking on their own requestAnimationFrame (a render's waits, the
+     module's own dive; stopPlay ended the path preview and is a no-op since that went, 2026-10-11) */
   try { if (dzApiTarget.stopPlay) dzApiTarget.stopPlay(); } catch (e) { /* not built yet */ }
   try { if (dzApiTarget.cancelRender) dzApiTarget.cancelRender(); } catch (e) { /* not built yet */ }
   try { dzDive = 0; } catch (e) { /* disposed before the script reached it */ }
@@ -268,8 +254,7 @@ function dzDispose() {
    ============================================================================= */
 
 /* EMBED MODE (?embed=1): the page runs inside a host's iframe and is driven through api.dz
-   (grep "HOST HANDLE"). Its own chrome is hidden by CSS (body.embed), its panels never open, and
-   stopping a recording keeps the path in memory instead of downloading it — the host owns saving. */
+   (grep "HOST HANDLE"). Its own chrome is hidden by CSS (body.embed) and its panels never open. */
 const EMBED = options.embed !== false;
 /* HOLD THE ESTIMATE (options.holdEstimate, 2026-10-09; off = the page). The distance at the camera is read off the
    camera's own orbit, where that passes radius 2 (grep "distance probe"). An orbit that has NOT escaped within
@@ -338,7 +323,7 @@ const BOX_KERNEL = `
    dr is the PIXEL'S OWN derivative, dr' = dr·k'·|scale| + 1, as drM·2^drE (renormalised when the mantissa
    passes 2^20): the bulb's split into a reference part and a delta (Ddr / DR) is not needed, and OrbitOut.Ddr
    carries the whole of it.
-   Not here, and not built with USE_BOX: BLA, the J twins, the jet and its checkpoints, the rebase to the
+   Not here, and not built with USE_BOX: BLA, the jet and its checkpoints, the rebase to the
    origin. The rebase is the page's: δ = z − Z0. */
 uniform vec4  uBoxA;             // scale · |scale| · the folding limit L · 2 L
 uniform vec4  uBoxB;             // minR² · fixedR² · fixedR² / minR² · the escape radius, squared
@@ -492,61 +477,11 @@ int blaTrailingZeros(int m) {           // levels descend on trailing zeros of m
 }
 #endif
 struct OrbitOut { Hdr3 d; vec2 Dr; vec2 Ddr; vec2 de; int iters; int rebases; bool escaped; float trap; float escR;
-#ifdef USE_JAC
-  vec2 gde; vec3 grad;                          // the true-gradient estimate (HDR) and the unit gradient of |z| (grep TRUE-GRADIENT ESTIMATE)
-#endif
 #ifdef USE_JET
   vec2 rde;                                     // THE RAY ESTIMATE (grep): 0.5·r·ln r / |J·v|, HDR; 0 when the orbit carried no jet
   vec2 rls;                                     // THE LINE AGAINST THE BALL (grep): the step it allows, HDR; 0 when not asked for
 #endif
 };
-#ifdef USE_JAC
-/* ════════ TRUE-GRADIENT ESTIMATE (the USE_JAC variant, 2026-10-08; api.setJacobian; off = the page) ════════
-   The distance estimate is  de = 0.5·r·ln r / dr  with dr the SCALAR running derivative
-   dr' = n·r^(n−1)·dr + 1. That recurrence takes n·r^(n−1) for the stretch of one triplex power
-   step. It is the stretch along r and along the polar angle; around the azimuth the step stretches
-   by n·r^(n−1)·sin(nθ)/sin θ, up to n times more. So dr can UNDER-count how fast r really changes
-   with c, and de then OVER-reads the distance: measured in f64, the estimate falls 1.9 to 3.3
-   times faster than the distance travelled at the owner's power-2 place (5e-20) and 1.6 to 3 times
-   at his 2.8e-39 place (about 0.5 in ordinary views) - which is exactly why those places needed a
-   step of 0.2 to 0.4 instead of 0.85.
-   Here the orbit also carries J = ∂z/∂c, the real 3×3 derivative,
-       J' = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ )·J + I ,   κ = sin(nθ)/sin θ ,
-   (e = the unit frame of z's spherical angles, E = the frame of the output angles nθ, nφ), as the
-   transpose Jᵀ = Jm·2^ej so that Jᵀ·v is one matrix-vector product. A BLA run is J' = A·J + B with
-   the A and B the table already holds. At the end ∇c|z| = Jᵀ·ẑ, and
-       gde = 0.5·r·ln r / |∇c|z||          the estimate with the true gradient in dr's place,
-       grad = ∇c|z| / |∇c|z||              the surface normal, from the hit orbit itself.
-   Used (uJacUse): 1 = the march steps by min(de, gde) - never longer than the page's step, shorter
-   where dr under-counts; the hit test is unchanged, so the surface is the same one. 2 = pass G
-   stores grad as the normal instead of four more orbits - set by NORMAL MODE 4, "gradient"
-   (api.setNormalMode), so stepping and the normal are chosen apart. 4 = the hit test uses
-   min(de, gde) too.
-   gde alone is NOT safe to step by: it spikes where the gradient vanishes. */
-void jacNorm(inout mat3 M, inout float ej) {
-  vec3 a = max(abs(M[0]), max(abs(M[1]), abs(M[2])));
-  float m = max(a.x, max(a.y, a.z));
-  if (m == 0.0) return;
-  float adj = floor(log2(m));
-  M *= exp2(-adj); ej += adj;
-}
-/* one iteration z → zⁿ (+ c) applied to Jᵀ = M·2^ej. (sA, cA), (sB, cB): sin / cos of the OUTPUT
-   angles of this pixel's z; scale = n·|z|^(n−1). */
-void jacStep(inout mat3 M, inout float ej, vec3 z, float sA, float cA, float sB, float cB, float scale) {
-  float rz = length(z), rho = length(z.xy);
-  mat3 N = mat3(0.0);
-  if (rz > 0.0) {
-    float sth = rho / rz, cth = z.z / rz;
-    float cph = rho > 0.0 ? z.x / rho : 1.0, sph = rho > 0.0 ? z.y / rho : 0.0;
-    float kap = sth > 1e-12 ? clamp(sA / sth, -uPower, uPower) : uPower;
-    N = outerProduct(M * vec3(sth * cph, sth * sph, cth), vec3(sA * cB, sA * sB, cA))
-      + outerProduct(M * vec3(cth * cph, cth * sph, -sth), vec3(cA * cB, cA * sB, -sA))
-      + kap * outerProduct(M * vec3(-sph, cph, 0.0), vec3(-sB, cB, 0.0));
-  }
-  M = N * scale + mat3(exp2(max(-ej, -160.0)));
-  jacNorm(M, ej);
-}
-#endif
 #ifdef USE_JET
 /* ════════ THE RAY ESTIMATE AND RAY-COHERENT ORBITS (the USE_JET variant, 2026-10-09; api.setRayMarch; off = the page) ════════
    A PROTOTYPE of the research result in plans/deep-zoom-shell/BUILD-PLAN.md ("RESEARCH RESULT,
@@ -562,8 +497,10 @@ void jacStep(inout mat3 M, inout float ej, vec3 z, float sA, float cA, float sB,
       iterate taken as heading straight at the set at the speed it has here), its worst samples
       read 1.5 to 2.5 times the distance left in three views, and on the CPU it put 1 to 2 of
       5,733 rays through a solid (power 4, 3e-76). zdot is ONE vector carried with the orbit,
-          zdot' = A·zdot + v ,   A = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ )
-      (the frames and κ of jacStep above), as jv·2^ev - three numbers where USE_JAC carries nine.
+          zdot' = A·zdot + v ,   A = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ ) ,   κ = sin(nθ)/sin θ
+      (e = the unit frame of z's spherical angles, E = the frame of the output angles nθ, nφ: one
+      triplex power step stretches by n·r^(n−1) along r and along the polar angle, and by κ times
+      that around the azimuth), as jv·2^ev - three numbers, where the whole derivative J is nine.
    2  THE HIT. A hit when rde is under uRayHit·uPixAng of the ray's length (the host sets 1/64 of a
       display pixel, whatever the detail setting): the same measure, so nothing is keyed to depth.
    4  RAY-COHERENT ORBITS. Every sample of a ray is a point t·v, and the orbit of the sample at
@@ -587,7 +524,7 @@ void jacStep(inout mat3 M, inout float ej, vec3 z, float sA, float cA, float sB,
       writing its checkpoints only when resumed orbits have come to run CK_WR passes more - which
       ran a third more passes and no faster (CK_WR_ > 0 still builds it).
    What is frozen in a resumed orbit and therefore only first-order right: Δdr (so the page's own
-   de, which the ray rule does not use) and trap. Never built together with USE_JAC or USE_BLA.
+   de, which the ray rule does not use) and trap. Never built together with USE_BLA.
    gRay is 0 outside the march: the normal taps and the probes run the page's orbit. */
 int   gRay = 0;                  // 0 = the page's orbit · 1 = carry zdot along gRd · 2 = and keep / resume checkpoints
 vec3  gRd = vec3(0.0);           // the ray's direction: the jet's seed
@@ -618,8 +555,9 @@ int   gCkSince = 0;              // orbits resumed since the last writing orbit
 int   gRunBase = 0;              // kernel passes the first of them ran
 int   gRunPrev = 0;              // kernel passes the previous orbit ran
 /* one iteration z → zⁿ (+ c) applied to zdot = jv·2^ev, and Q (as Qm·2^ev) gathered on the way.
-   Arguments as jacStep; jvs = 2^-ev, kept beside ev. The mantissa is renormalised only when it
-   leaves 2^±20, so most passes pay no log2 / exp2 here. */
+   (sA, cA), (sB, cB): sin / cos of the OUTPUT angles of this pixel's z; scale = n·|z|^(n−1);
+   jvs = 2^-ev, kept beside ev. The mantissa is renormalised only when it leaves 2^±20, so most
+   passes pay no log2 / exp2 here. */
 void jetStep(inout vec3 jv, inout float ev, inout float jvs, inout float Qm, vec3 z, float sA, float cA, float sB, float cB, float scale) {
   float rz = length(z), rho = length(z.xy), irho = 1.0 / max(rho, 1e-30);
   Qm += length(jv) * (uPower - 1.0) * irho;
@@ -787,10 +725,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec4 T00 = texelFetch(orbit, ivec2(0, 0), 0);
   vec2 DR00 = texelFetch(orbit, ivec2(0, 3), 0).xy;
   vec4 cT0 = T00; vec2 cDR = DR00;
-#ifdef USE_JAC
-  mat3 Jm = mat3(1.0); float ej = 0.0;         // Jᵀ = Jm·2^ej; z₀ = c, so J₀ = I
-  vec3 zc = T00.xyz + D * sclPow2(e);          // this pixel's own z at the current index
-#endif
 #ifdef USE_JET
   vec3 jv = gRd; float ev = 0.0, jvs = 1.0, Qm = 0.0, ckErr = 0.0, ckJerr = 0.0;     // zdot_0 = v (z_0 = c); Q = Qm·2^ev; jvs = 2^-ev
   int pass = 0, ckFrom = -1;
@@ -884,13 +818,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         float eAD = a1.w + e, eBC = a2.w + ec;
         sclAdd(AD, eAD, BC, eBC, D, e);
         sclNorm(D, e);
-#ifdef USE_JAC
-        { /* J ← A·J + B, transposed: Jᵀ·Aᵀ + Bᵀ (a1..a3 are A's rows, so they are Aᵀ's columns) */
-          mat3 Mn = Jm * mat3(a1.xyz, a2.xyz, a3.xyz);
-          float eA2 = ej + a1.w, eB2 = a2.w, en2 = max(eA2, eB2);
-          Jm = Mn * sclPow2(eA2 - en2) + mat3(b1.xyz, b2.xyz, b3.xyz) * sclPow2(eB2 - en2); ej = en2;
-          jacNorm(Jm, ej); }
-#endif
         m += span; it += span;
         applied = true;
         break;
@@ -946,9 +873,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       vec3 Dref = vec3(sa * cb, sa * sb, ca);
       vec3 Dn = t2.x * (DD + gN * (Dref + s * DD));
       float en = e + t2.y;
-#ifdef USE_JAC
-      jacStep(Jm, ej, zc, sa + s * dsA, ca + s * dcA, sb + s * dsB, cb + s * dcB, uPower * t2.z * sclPow2(t2.w) * (1.0 + gN1 * s));
-#endif
 #ifdef USE_JET
       if (gRay != 0) { zPv = V + df; jPv = jv; ePv = ev; qPv = Qm; }
       if (gRay != 0) jetStep(jv, ev, jvs, Qm, V + df, sa + s * dsA, ca + s * dcA, sb + s * dsB, cb + s * dcB, uPower * t2.z * sclPow2(t2.w) * (1.0 + gN1 * s));
@@ -996,9 +920,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
           float ph = (rho > 0.0 ? atan2Acc(zf.y, zf.x) : 0.0) * uPower + uPhase.y;
           float sth, cth1, sph, cph1;
           sinCosm1Acc(th, sth, cth1); sinCosm1Acc(ph, sph, cph1);
-#ifdef USE_JAC
-          jacStep(Jm, ej, zf, sth, 1.0 + cth1, sph, 1.0 + cph1, uPower * rn1 * sclPow2((uPower - 1.0) * ez));
-#endif
 #ifdef USE_JET
           if (gRay != 0) { zPv = zf; jPv = jv; ePv = ev; qPv = Qm; }
           if (gRay != 0) jetStep(jv, ev, jvs, Qm, zf, sth, 1.0 + cth1, sph, 1.0 + cph1, uPower * rn1 * sclPow2((uPower - 1.0) * ez));
@@ -1008,9 +929,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
           Ddr = hdrMulF(drFull, uPower * rn1); Ddr.y += (uPower - 1.0) * ez;
         } else {
           D = C; e = ec; Ddr = vec2(0.0);
-#ifdef USE_JAC
-          Jm = mat3(1.0); ej = 0.0;
-#endif
 #ifdef USE_JET
           jv = gRd; ev = 0.0; jvs = 1.0; Qm = 0.0;
 #endif
@@ -1029,9 +947,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         cT0 = T00; cDR = DR00;
       }
     }
-#ifdef USE_JAC
-    zc = zf;
-#endif
   }
   float sE = sclPow2(e);
   float QE = 2.0 * dot(cT0.xyz, D) + sE * dot(D, D);
@@ -1043,13 +958,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
 #ifdef USE_STATS
   gOrbits++; gIters += it;
 #endif
-#ifdef USE_JAC
-  vec3 zE = cT0.xyz + D * sE;
-  vec3 gv = Jm * (zE / max(length(zE), 1e-30));       // ∇c|z| = Jᵀ·ẑ, a mantissa on ej
-  float gn = length(gv);
-  vec2 gde = gn > 0.0 ? hdrMul(hdrFromFloat(0.5 * rF * log(rF)), hdrRecip(hdrReduce(vec2(gn, ej)))) : vec2(0.0);
-  return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2), gde, gn > 0.0 ? gv / gn : vec3(0.0, 0.0, 1.0));
-#else
 #ifdef USE_JET
   vec2 rde = vec2(0.0), rls = vec2(0.0);                // THE RAY ESTIMATE: 0.5·r·ln r / |zdot|
   if (gRay != 0) {
@@ -1078,7 +986,6 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2), rde, rls);
 #else
   return OrbitOut(sclToH3(D, e), Dr, Ddr, de, it, rebases, escaped, sqrt(trap), sqrt(escR2));
-#endif
 #endif
 }
 #endif
@@ -1236,10 +1143,6 @@ uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the
 uniform int       uRebaseOrigin; // 1 = the kernel rebases an orbit onto the origin (grep REBASE TO THE ORIGIN); 0 = the page: onto the reference's first point
 uniform float     uFarSwitch;    // the t at which a ray is handed to the f32 far-field march (grep FAR HAND-OFF); the page: 1e-3
 uniform float     uLookLevel;    // THE LOOK LEVEL (grep): the normal is taken on the level this many times the hit level (1 = the page: on the hit itself)
-#ifdef USE_JAC
-uniform float     uJacFloor;     // the step is never shortened below this share of the page's step (0 = no floor)
-uniform int       uJacUse;       // TRUE-GRADIENT ESTIMATE (grep), bits: 1 = step by min(de, gde) · 2 = the normal is the gradient · 4 = hit test by min(de, gde)
-#endif
 #ifdef USE_JET
 uniform int       uRayUse;       // THE RAY ESTIMATE (grep), bits: 1 = step by it · 2 = hit test by it · 4 = ray-coherent orbits
 uniform float     uRayFactor;    // the step is this share of the ray estimate (1 = the bound itself)
@@ -1477,9 +1380,6 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
           tLook = hdrMulF(tLa, 1.0 + uL * clamp(g0 / max(g0 - g1, 1e-30), 0.0, 1.0)); lookSet = true;
         }
       }
-#ifdef USE_JAC
-      if ((uJacUse & 4) != 0 && oo.gde.x > 0.0) ratio = min(ratio, hdrToFloat(hdrMul(oo.gde, hdrRecip(t))));
-#endif
 #ifdef USE_JET
       if (rayHit) {                                    // THE RAY ESTIMATE as the hit test: its own level, no landing, no refine
         if (oo.rde.x > 0.0 && hdrToFloat(hdrMul(oo.rde, hdrRecip(t))) < uRayHit * pa) { hit = true; break; }
@@ -1550,14 +1450,6 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
        ground and every ordinary view are marched exactly as before. */
     if (uFarRelax.x > 0.0 && PICTURE_MARCH && t.x != 0.0)
       relax = mix(relax, max(relax, uFarRelax.x), clamp((log2(t.x) + (t.y - uRefE) - uFarFrom) / uFarRelax.y, 0.0, 1.0));
-#ifdef USE_JAC
-    vec2 est = de;                                    // TRUE-GRADIENT ESTIMATE: never longer than the page's step
-    if ((uJacUse & 1) != 0 && oo.gde.x > 0.0 && hdrGtPos(de, oo.gde)) {
-      vec2 lowest = hdrMulF(de, uJacFloor);
-      est = (uJacFloor > 0.0 && hdrGtPos(lowest, oo.gde)) ? lowest : oo.gde;
-    }
-    vec2 step = hdrMulF(est, relax);
-#else
 #ifdef USE_JET
     /* THE RAY ESTIMATE as the step: the bound itself (uRayFactor), never relaxed with distance */
     bool rayStep = rayOn && (uRayUse & 1) != 0 && oo.rde.x > 0.0;
@@ -1565,7 +1457,6 @@ vec2 marchNear(vec3 rd, float pa, inout vec2 t0, out bool hit, out int steps, ou
     if (rayStep && oo.rls.x > 0.0 && hdrGtPos(oo.rls, step)) step = oo.rls;   // THE LINE AGAINST THE BALL: the longer of the two
 #else
     vec2 step = hdrMulF(de, relax);
-#endif
 #endif
 #ifdef USE_JET
     /* The page's START CAP (first step 5 % of the estimate, growing a quarter a step: "anti-arm-skip") is there
@@ -1602,14 +1493,6 @@ void main(){
         o = vec4(pde, pesc ? 1.0 : 0.0, 0.0);
         return;
     }
-#ifdef USE_JAC
-    if (uProbe == 8) {
-        /* pointwise read of the TRUE-GRADIENT ESTIMATE at t = uProbeT on the centre ray */
-        bool jesc; OrbitOut joo; deAt(uProbeT, normalize(uFwd), uIters, jesc, joo);
-        o = vec4(joo.gde, octPack(joo.grad), jesc ? 1.0 : 0.0);
-        return;
-    }
-#endif
     if (uProbe == 2) {
         /* POPULATION probe: one pertOrbit per grid pixel at transverse offset
            δc = spread·(uv.x·right + uv.y·up) — measures the near-critical pixel
@@ -1719,10 +1602,6 @@ void main(){
     if (hit) {
         kind = 1.0;
         sPal = paletteParam(hitOrbit);                    // reuse the march's hit orbit — no extra march
-#ifdef USE_JAC
-        if (uNormalMode != 0 && (uJacUse & 2) != 0) nPack = octPack(hitOrbit.grad);   // the hit orbit's own gradient: no extra orbits
-        else
-#endif
         if (uNormalMode != 0) {
             /* DE-gradient normal at offset scale e = 2·pixAng·t (all HDR; de/e ratios are O(1)).
                ESCAPE-AWARE: a tap landing unescaped is inside the surface — its wrapped de is
@@ -2187,29 +2066,22 @@ function mkProgAsync(fs, cb){
    everything checks). The others are built on first use: BLA in the background (kickBlaAsync),
    or blocking when something asks for a variant outright. All gates draw through deepCtx(). */
 const variants = {}, variantErr = {}, compileMs = {};        // key → { p, x }  (null = failed to build)
-/* jacUse != 0 asks for the J twins (grep TRUE-GRADIENT ESTIMATE): bits 1 = step by min(de, gde),
-   2 = the normal is the gradient, 4 = hit test by min(de, gde). A PICTURE never waits for a J
-   twin: deepCtx() builds it in the background (19 s; 36 s with BLA) and draws with the ordinary
-   variant until it is there. The probes and the stats variants build theirs blocking, as before. */
 /* THE RAY ESTIMATE (grep; api.setRayMarch). The create option `rayMarch: true` starts with it ON as a host uses it:
    bits 5 (step by the ray estimate, orbits resumed along the ray), creep floor 1/256 px, the line rule at twice
    the bend measure. Without the option it is off - the page. */
 const rayOpt = options.rayMarch === true;
 let rayAsk = rayOpt ? 5 : 0;                     // what was asked for; rayUse is what is in force - 0 while the box is drawn (grep THE FORMULA SEAM)
 let rayUse = rayAsk, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = rayOpt ? 256 : 0, rayLine = rayOpt ? 2 : 0, rayDetail = 0;
-let jacUse = 0, jacFloor = 0;
-let jacNormal = false;                            // normal mode 4, "gradient" (api.setNormalMode): the J twins are needed for the normal alone
-const jacBits = () => rayUse || boxOn() ? 0 : jacUse | (jacNormal ? 2 : 0);   // what the shader is told, and whether a J twin is wanted at all (never beside the ray variant)
-const vKey = (b, t, j = !!jacBits()) => 'P' + (b ? 'B' : '') + (t ? 'T' : '') + (j ? 'J' : '');
-const vSrc = (b, t, j = !!jacBits()) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
-  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : '') + (j ? '\n#define USE_JAC' : ''));
-function ensureVariant(b, t, j = !!jacBits()){
-  const key = vKey(b, t, j);
+const vKey = (b, t) => 'P' + (b ? 'B' : '') + (t ? 'T' : '');
+const vSrc = (b, t) => DEEP_FRAG.replace('#version 300 es', '#version 300 es'
+  + (b ? '\n#define USE_BLA' : '') + (t ? '\n#define USE_STATS' : ''));
+function ensureVariant(b, t){
+  const key = vKey(b, t);
   if (variants[key] === undefined && blaPending[key]) blaPending[key].finish();   // a background build is in flight: wait for IT, don't start a second
   if (variants[key] !== undefined) return variants[key];
   try {
     const t0 = performance.now();
-    const p = mkProg(vSrc(b, t, j));
+    const p = mkProg(vSrc(b, t));
     const x = makeUD(p); x.hasBla = !!b;
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
@@ -2217,10 +2089,9 @@ function ensureVariant(b, t, j = !!jacBits()){
   return variants[key];
 }
 /* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep; api.setRayMarch; 0 = off = the page). Its variant
-   is DEEP_FRAG with USE_JET: never with BLA (resumed orbits take its place) or with the J twins
-   (while it is on, the true-gradient bits are not asked for). Keys PR (the picture) and PTR (with
-   the work counters). A picture never waits for it: deepCtx() builds it in the background and
-   draws with the ordinary variant until it is there. */
+   is DEEP_FRAG with USE_JET, never with BLA (resumed orbits take its place). Keys PR (the picture)
+   and PTR (with the work counters). A picture never waits for it: deepCtx() builds it in the
+   background and draws with the ordinary variant until it is there. */
 const BOX_ITER_MAX = 500;                        // the box's ceiling (grep ITERATIONS AS A MARGIN); the kernel's loop runs 512 passes at most
 const RAY_ITER_REACH = 20.7, RAY_ITER_MAX = 400;   // ITERATIONS AS A MARGIN (grep): e^20.7 = 1e9, five decades beyond a 1/32-pixel hit level at 1080 rows
 const rKey = (t) => 'P' + (t ? 'T' : '') + 'R';
@@ -2240,7 +2111,7 @@ function ensureRayVariant(t){
   return variants[key];
 }
 
-/* THE MANDELBOX's variant (grep THE FORMULA SEAM): DEEP_FRAG with USE_BOX, never with BLA, the J twins or the
+/* THE MANDELBOX's variant (grep THE FORMULA SEAM): DEEP_FRAG with USE_BOX, never with BLA or the
    jet, whatever was asked for. Keys X (the picture) and XT (with the work counters). A picture never waits
    for it: it builds in the background from the moment the box is selected, and until it is there the frame
    draws the box's f32 baseline (deepNow() is null), as the page draws the bulb's while its deep shader
@@ -2325,7 +2196,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             blaUsable:g('uBlaUsable'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), jacUse:g('uJacUse'), jacFloor:g('uJacFloor'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
             boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') }; }   // the last five: null but in the USE_BOX variant
 let ud = null;
 /* ════════ the two-pass deep draw ════════
@@ -2369,7 +2240,8 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
      'fresh'  a still's first sample, a thumbnail, an export: measured now, blocking, taken as
               it is — the same view always gets the same light
      number   a frame of a rendered flight: measured now and blended in by that fraction, so
-              the light glides from frame to frame
+              the light glides from frame to frame (no caller since the module's own path render
+              went, 2026-10-11; a number other than 0 is still taken)
      'alone'  a frame of api.dz.renderFrame: as 'fresh', and a picture with too little surface
               to fit a plane to gets the plane that faces the camera instead of keeping the rig
               it found — the frame's light is this view's own, whatever was drawn before it
@@ -2667,12 +2539,12 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
 const loadTimer = setTimeout(() => {
   if (!deepReady && !deepCompileErr) { const l = dzById('loading'); if (l) l.style.display = 'flex'; }
 }, 300);
-mkProgAsync(vSrc(false, false, false), (p, err) => {   // j named: the default would ask jacBits(), which reads the formula, and that is declared further down
+mkProgAsync(vSrc(false, false), (p, err) => {
   clearTimeout(loadTimer);
   const l = dzById('loading'); if (l) l.style.display = 'none';
   if (!p) { deepCompileErr = err; api.deepErr = err; api.deepReady = false; return; }
   deepProg = p; ud = makeUD(p); ud.hasBla = false; deepReady = true;
-  variants.P = { p, x: ud };                    // by name: jacUse may have been set while this compiled
+  variants[vKey(false, false)] = { p, x: ud };
   api.deepErr = ''; api.deepReady = true;
 });
 /* pick the active deep program + its uniform set: the BLA variant when BLA is on and it built,
@@ -2685,14 +2557,7 @@ function deepCtx(){
     if (want) return want;
     kickRayVariantAsync();
   }
-  if (jacBits()) {                               // the J twin of what would draw; never a blocking build (grep TRUE-GRADIENT ESTIMATE)
-    const want = variants[vKey(blaEnabled, false, true)];
-    if (want) return want;
-    kickVariantAsync(blaEnabled, true);
-    const plainJ = variants[vKey(false, false, true)];     // the BLA twin is still building: the estimate without BLA meanwhile
-    if (plainJ) return plainJ;
-  }
-  const v = (blaEnabled && ensureVariant(true, false, false)) || ensureVariant(false, false, false);
+  const v = (blaEnabled && ensureVariant(true, false)) || ensureVariant(false, false);
   return v || { p: deepProg, x: ud };
 }
 compileMs.S = performance.now() - shadeT0;      // pass S, built at load (blocking — it is small)
@@ -2780,8 +2645,8 @@ const hp = makeHP(256);
    accumulation, export, the probes and the navigation's rays.
    WHAT IS ITS OWN: the map (hp.boxParts / boxStep), the orbit rows (buildBoxOrbit), the delta step
    (boxOrbitJS on the CPU, BOX_KERNEL on the GPU), and the three plain-f32 copies (grep USE_BOX).
-   WHAT THE BOX DOES NOT USE, whatever was asked for: the ray march (USE_JET), BLA, the true-gradient
-   variant (USE_JAC), the line-against-the-ball rule and the rebase to the origin - each is built on
+   WHAT THE BOX DOES NOT USE, whatever was asked for: the ray march (USE_JET), BLA, the
+   line-against-the-ball rule and the rebase to the origin - each is built on
    the triplex power. The asks are kept and apply again when the bulb is selected (grep boxOn).
    Why the folds need no approximation: both are continuous and piecewise smooth, so a pixel that
    stands on the other side of a fold surface from the reference is handled BY CASES, exactly, from the
@@ -3028,25 +2893,34 @@ function packBlaTexture(T){
      'auto'         (default) on only where it pays. A skip costs more than it saves above
                     ~1e-13 (0.75-0.87× at 1e-5..1e-12) and wins below (1.3× at 5e-15 → 2.4× at
                     4e-35) — kernel-bench.test.mjs. Auto also never blocks: the BLA variant is
-                    compiled in the background (kickBlaAsync) and used once it is ready. */
+                    compiled in the background (kickBlaAsync) and used once it is ready.
+   NOT UNDER THE RAY MARCH (2026-10-11). While the ray march is in force (rayUse) 'auto' neither compiles
+   the BLA variant nor builds the table: the ray variant has no skip loop (resumed orbits take its place),
+   so both were work for nothing - a second heavy shader built beside the ray march's own in every
+   session's first half minute, and a table rebuilt with every reference orbit below 1e-13. What the
+   page's march draws while the ray variant builds, or for good if that build fails, is therefore the
+   plain variant at every depth. An explicit 'on' (a tool's ask: __setBla(true)) is taken as before.
+   @assumption With the ray march in force and BLA on 'auto' no BLA program is built - measured
+   2026-10-11 (debug/scratch/r7/pictures.mts, git-ignored: the harness page with ?ray=1 ends its run
+   with the programs S, PR and X compiled, where it had S, PB, PR and X before). No standing guard. */
 let blaEnabled = false;
 let blaMode = 'auto';
 const BLA_AUTO_ON = 1e-13, BLA_AUTO_OFF = 1e-12;       // hysteresis on the surface distance
 const blaPending = {};
-function kickVariantAsync(b, j){                 // build the picture variant (BLA b, J j) without blocking; a no-op once started
-  const key = vKey(b, false, j);
+function kickBlaAsync(){                         // build the BLA picture variant without blocking; a no-op once started
+  if (rayUse) return;                            // NOT UNDER THE RAY MARCH (above)
+  const key = vKey(true, false);
   if (!deepProg || variants[key] !== undefined || blaPending[key]) return;
   const t0 = performance.now();
-  blaPending[key] = mkProgAsync(vSrc(b, false, j), (p, err) => {
+  blaPending[key] = mkProgAsync(vSrc(true, false), (p, err) => {
     blaPending[key] = null;
     if (!p) { variantErr[key] = err; variants[key] = null; return; }
-    const x = makeUD(p); x.hasBla = b;
+    const x = makeUD(p); x.hasBla = true;
     compileMs[key] = performance.now() - t0;
     variants[key] = { p, x };
     accumReset = true;                           // the picture's program changed under a still
   });
 }
-function kickBlaAsync(){ kickVariantAsync(true, false); }
 function kickRayVariantAsync(){                  // THE RAY ESTIMATE's picture variant, without blocking; a no-op once started
   const key = rKey(false);
   if (!deepProg || variants[key] !== undefined || blaPending[key]) return;
@@ -3064,22 +2938,26 @@ function kickRayVariantAsync(){                  // THE RAY ESTIMATE's picture v
 function updateBlaAuto(){
   if (boxOn()) return;                           // the table is the triplex power's (grep THE FORMULA SEAM)
   if (blaMode !== 'auto') return;
+  if (rayUse) {                                  // NOT UNDER THE RAY MARCH (above): no BLA shader, no table
+    if (blaEnabled) { blaEnabled = false; orbitDirty = true; }
+    return;
+  }
   kickBlaAsync();
-  const ready = !!variants[vKey(true, false, false)];
+  const ready = !!variants[vKey(true, false)];
   const want = ready && deepActive && smoothedDist > 0 && smoothedDist < (blaEnabled ? BLA_AUTO_OFF : BLA_AUTO_ON);
   if (want !== blaEnabled) { blaEnabled = want; orbitDirty = true; }
 }
 function setBlaMode(m){                                   // 'off' | 'auto' | 'on'
   blaMode = m;
   if (boxOn()) { blaEnabled = false; return; }   // kept as asked; in force again when the bulb is selected (setFormulaNow)
-  if (m === 'on') { blaEnabled = true; if (deepProg) ensureVariant(true, false, false); }
+  if (m === 'on') { blaEnabled = true; if (deepProg) ensureVariant(true, false); }
   else if (m === 'off') blaEnabled = false;
   orbitDirty = true;
 }
 api.setBla = (on)=>{ setBlaMode(on === 'auto' ? 'auto' : on ? 'on' : 'off'); };   // true / false / 'auto'
 api.blaMode = () => blaMode;
 api.blaErr = () => variantErr[vKey(true, false)] || '';
-api.variantErr = () => ({ ...variantErr });                  // every variant that failed to build, by key (P, PB, PT, PJ, ...)
+api.variantErr = () => ({ ...variantErr });                  // every variant that failed to build, by key (P, PB, PT, PR, X, ...)
 api.setBlaTau = (t)=>{ blaTau = Math.max(1e-9, +t); orbitDirty = true; };   // BLA maturation knob: rebuild table at a new tolerance
 api.getBlaTau = () => blaTau;
 let blaTex = null, curBla = null;
@@ -3113,7 +2991,6 @@ function setPowerUniforms(x){
   gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
   gl.uniform1f(x.farSwitch, farHandOff);
   gl.uniform1f(x.lookLevel, normalDetail > 0 ? Math.max(1, detailNow() / normalDetail) : 1);   // THE LOOK LEVEL: how many times coarser than the hit level the normal's level is
-  gl.uniform1i(x.jacUse, jacBits()); gl.uniform1f(x.jacFloor, jacFloor);   // null in a variant without USE_JAC: no-ops
   gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
   gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? detailNow() / rayFloorDiv : 0);
@@ -3411,6 +3288,32 @@ function pushJetJS(z, j, v){
   const A=NP*rn1*rd, B=rn*NP*thd, C=rn*NP*phd*sa;
   return [A*sa*cb+B*ca*cb-C*sb+v[0], A*sa*sb+B*ca*sb+C*cb+v[1], A*ca-B*sa+v[2]];
 }
+/* TRUE-GRADIENT ESTIMATE (2026-10-08): what it is, and what is left of it.
+   The distance estimate is  de = 0.5·r·ln r / dr  with dr the SCALAR running derivative dr' = n·r^(n−1)·dr + 1.
+   That recurrence takes n·r^(n−1) for the stretch of one triplex power step. It is the stretch along r and along
+   the polar angle; around the azimuth the step stretches by n·r^(n−1)·sin(nθ)/sin θ, up to n times more. So dr can
+   UNDER-count how fast r really changes with c, and de then OVER-reads the distance: measured in f64, the estimate
+   falls 1.9 to 3.3 times faster than the distance travelled at the owner's power-2 place (5e-20) and 1.6 to 3 times
+   at his 2.8e-39 place (about 0.5 in ordinary views) - which is exactly why those places needed a step of 0.2 to
+   0.4 instead of 0.85 under the page's march.
+   With J = ∂z/∂c, the real 3×3 derivative,
+       J' = n·r^(n−1)·( E_r·e_rᵀ + E_θ·e_θᵀ + κ·E_φ·e_φᵀ )·J + I ,   κ = sin(nθ)/sin θ ,
+   (e = the unit frame of z's spherical angles, E = the frame of the output angles nθ, nφ) the gradient of the
+   escaping radius is ∇c|z| = Jᵀ·ẑ, and
+       gde = 0.5·r·ln r / |∇c|z||          is the estimate with the true gradient in dr's place.
+   WHAT IS LEFT (2026-10-11): the CPU form below. pullGradJS applies Jᵀ one step back, pertOrbitJetJS walks it back
+   over the orbit (its `grad` and `G`), and the navigation's rays step by the larger of G and the ray estimate
+   (grep THE FREE DISTANCE ALONG A RAY for why the two fail apart).
+   WHAT WENT THAT DAY, the ray march having been the default since 2026-10-09: the GPU form - a shader variant
+   (USE_JAC; keys PJ, PBJ, PTJ) that carried Jᵀ with every orbit, api.setJacobian (bits: 1 = the march steps by
+   min(de, gde), 2 = the normal is the gradient, 4 = the hit test by min(de, gde) too), its referees
+   (api.jacProbeAt, api.jacCheck, probe 8) and normal mode 4, the hit orbit's own gradient as the surface normal.
+   The owner: "Normals: Gradient - was superseded by the raymarch too". Under the ray march none of it could be
+   drawn (the variant was never built beside the ray variant). For whoever thinks of it next, what it measured
+   under the page's march: at Detail 8 the default step put 1 to 12 % of an ordinary view's rays on a wrong
+   surface, the true-gradient step 0.3 to 2.2 %, for 1.1 to 2.0 times the picture time (halving the step: 1.45
+   to 1.9); its variant took 19 s to build, 36 s with BLA; and gde alone is NOT safe to step by - it spikes
+   where the gradient vanishes, which is why the step was min(de, gde). */
 /* the TRANSPOSE of that derivative at z, applied to w: one step back of the gradient of |z_k| (TRUE-GRADIENT ESTIMATE) */
 function pullGradJS(z, w){
   const NP=nPower, x=z[0], y=z[1], zz=z[2];
@@ -3582,9 +3485,7 @@ let frameLong = 320;                            // deep-mode ABSOLUTE render lon
 let view1to1 = false;                           // true = show the frame at true pixel size, centred (no stretch)
 let autoIters = true;                           // key I: scale iterations with depth
 let normalMode = 2;                             // key N: 0 screen-space (0 orbits) | 1 3-tap (biased) | 2 4-tap (default) | 3 from depth, edge-aware (0 orbits)
-                                                // 4 = GRADIENT (api.setNormalMode only): the hit orbit's own gradient, from the J variant (grep
-                                                // TRUE-GRADIENT ESTIMATE; 0 extra orbits). Until that variant has built, 4-tap is drawn in its place.
-const gNormalMode = () => look.compare === 1 ? 2 : normalMode === 3 ? 0 : normalMode === 4 ? 2 : normalMode;   // what pass G is told: a packed normal for 1, 2 and 4 (4 = 4-tap unless the J variant swaps in the gradient)
+const gNormalMode = () => look.compare === 1 ? 2 : normalMode === 3 ? 0 : normalMode;   // what pass G is told: only modes 1 and 2 cost it orbits (the normals compare needs the 4-tap one packed)
 /* HOW FAR THE MARCH REACHES. Looking along the surface, distant ground is 10⁴–10⁹ times farther
    than the near ground and rays creep past everything in between; with 256 steps and the detail
    slider up, 9–23 % of such a picture ran out of steps (far-study.mjs). Three settings (the
@@ -3642,7 +3543,7 @@ let inputLocked = false;
    everything else run as before. */
 let inputOwner = 'module';
 let lastRawDist = 1.0;                          // the unsmoothed surface distance of the last frame
-let hostMoveAt = -1e9;                          // when a host last moved the camera (the recorder's 'flying')
+let hostMoveAt = -1e9;                          // when a host last moved the camera (isFlying: a move ends the module's own dive)
 api.lockInput = (b)=>{ inputLocked = !!b; if (inputLocked) for (const k in keys) keys[k] = false; };
 dzListen(dzKeyTarget, 'keydown',e=>{ if (inputLocked || inputOwner === 'host') return; if (e.ctrlKey || e.altKey || e.metaKey) return;   /* a chord is the host's, not a fly key (2026-10-08) */ keys[e.code]=true; if (!dzShortcuts) return;
   if(e.key===']'){ cam.iters=Math.min(160,cam.iters+1); orbitDirty=true; }
@@ -3667,10 +3568,8 @@ dzListen(dzKeyTarget, 'keydown',e=>{ if (inputLocked || inputOwner === 'host') r
   if(e.code==='KeyL'){ lightMode=(lightMode+1)%3; accumReset=true; }              // directional / headlamp / both
   if(e.code==='KeyT'){ falloffMul=Math.max(0.25,falloffMul/1.4); accumReset=true; }  // headlamp tighter
   if(e.code==='KeyY'){ falloffMul=Math.min(64,falloffMul*1.4); accumReset=true; }    // headlamp wider
-  if(e.code==='KeyM') api.recordToggle();                                    // record/stop+save camera path
   if(e.key==='?') toggleAbout();                                                  // About / Credits panel
-  if(e.key==='Escape' && exporting) api.cancelRender();                      // abort an export / path render
-  if(e.key==='Escape' && playingPath) api.stopPlay();                        // stop a path preview
+  if(e.key==='Escape' && exporting) api.cancelRender();                      // abort an export
   if(e.key==='Escape' && aboutEl && aboutEl.style.display==='flex') toggleAbout();
 });
 const aboutEl = dzById('about');
@@ -3694,7 +3593,7 @@ const CTLS = [
       if(needCompile){ showProg('<span class="spin">◓</span> compiling BLA accelerator…<br><small style="color:#9ab">one-time — heavier shader</small>'); setTimeout(finish, 30); }  // let the overlay paint before the sync compile
       else finish();
     }},
-  {t:'tog', l:'gate', note:'Live ground-truth check — GPU perturbation vs an independent CPU referee, shown in the HUD (relT ✓/✗). A 1×1 readback per ~0.5 s; turn off for the smoothest flying/recording.', g:()=>gateOn, s:v=>{gateOn=v; if(!v) gate.relT=NaN;}},
+  {t:'tog', l:'gate', note:'Live ground-truth check — GPU perturbation vs an independent CPU referee, shown in the HUD (relT ✓/✗). A 1×1 readback per ~0.5 s; turn off for the smoothest flying.', g:()=>gateOn, s:v=>{gateOn=v; if(!v) gate.relT=NaN;}},
   {t:'seg', l:'reach', note:'How far a ray can travel before it gives up (a dark patch where distant ground should be — seen when you look along the surface, most of all with detail turned up). short = 256 steps. relaxed = 512 steps, and longer strides once the ray is well past the near ground: distant ground comes back for about a third more time in such views, and a thin far feature can occasionally be stepped through. full = 1024 steps, no shortcuts: exact, about twice the time in such views. Ordinary views cost the same in all three.', g:()=>reachMode(), opts:[['short',0],['relaxed',1],['full',2]], s:v=>{ api.setReach(v); }},
   {t:'rng', l:'step relax', note:'Over-relaxes the ray-march step (×distance-estimate). 0.85 = safe default, full quality. Higher takes bigger steps → fewer steps → faster deep zoom, but SACRIFICES detail: it can skip thin arms/fine features (watch silhouettes). ~1.3–1.5 is a good speed/quality balance; ≥1.7 visibly drops detail.', g:()=>stepRelax>0?stepRelax:0.85, min:0.85,max:2,step:0.05, fmt:v=>v.toFixed(2)+'×', s:v=>{stepRelax=v; accumReset=true;}},
   {t:'rng', l:'res cap', note:'Deep-mode resolution cap (GPU-watchdog safety). 1× = shipped caps that keep extreme-zoom frames under the ~2 s Windows watchdog. Raise to render deep at higher resolution — sharper, and softens the f32→deep transition — but at extreme zoom a too-high cap can freeze the desktop (the watchdog firing). Pair with a higher "frame px".', g:()=>capRelax, min:1,max:8,step:1, fmt:v=>v+'×', s:v=>{capRelax=v; accumReset=true;}},
@@ -3725,8 +3624,6 @@ const CTLS = [
   {t:'sec', l:'Inspect'},
   {t:'seg', l:'view', note:'New look. One ingredient on its own: the surface normals, the depth, the occlusion, or the key light that reaches the surface.', g:()=>look.view, opts:[['picture',0],['normals',2],['depth',3],['occl.',4],['light',5]], s:v=>{look.view=v; accumReset=true;}},
   {t:'seg', l:'compare', note:'New look. Splits the picture at the mouse. normals = 4-tap on the left, from depth on the right. landing = hit landing off on the left, on on the right. Same samples on both sides.', g:()=>look.compare, opts:[['off',0],['normals',1],['landing',2]], s:v=>{look.compare=v; accumReset=true;}},
-  {t:'sec', l:'Recording'},
-  {t:'rng', l:'kf spacing', note:'Recording only — higher = fewer, sparser keyframes (records farther apart as you fly). Sit still to decide; nothing records until you move.', g:()=>kfSpacing, min:0.3,max:5,step:0.1, fmt:v=>v.toFixed(1)+'×', s:v=>{kfSpacing=v;}},
 ];
 (function buildControls(){
   const body = $id('ctlbody');
@@ -3786,32 +3683,18 @@ function openPanel(el){
   if(!wasOpen) el.style.display='flex';
   refreshPanelState();
   if(isOpen(ctlEl)) syncControls();
-  if(el===renderEl && isOpen(renderEl)){ recLabel(); rstat(pathInfo(curPath())); }
 }
 $id('ctlbtn').addEventListener('click', ()=>openPanel(ctlEl));
 ctlEl.addEventListener('click', e=>{ if(e.target.className==='x') closePanels(); });
 dzInterval(()=>{ if(isOpen(ctlEl)) syncControls(); }, 150);    // reflect key-driven changes live (reads the DOM, no mirrored flag)
 
-/* ── render / export panel ── */
-let uiPath=null;
-function curPath(){ return uiPath || api.lastPath(); }
-function pathInfo(p){ const n=p&&p.frames?p.frames.length:0; const last=n?(p.frames[n-1].t||0):0; return n ? `path: ${n} keyframes${last?`, ${last.toFixed(1)} s`:''}` : 'no path yet — Record or Load one'; }
+/* ── render / export panel (the still; its camera-path half went with the recorder, 2026-10-11: grep CAMERA PATHS) ── */
 function rstat(m){ const e=$id('rstatus'); if(e) e.textContent=m; }
-function recLabel(){ $id('r_rec').textContent = (api.recording&&api.recording()) ? '■ Stop & save' : '● Record'; }
 $id('renderbtn').addEventListener('click', ()=>openPanel(renderEl));
 renderEl.addEventListener('click', e=>{ if(e.target.className==='x') closePanels(); });
 $id('r_export').onclick=()=>{ if(!deepActive){ rstat('Export needs deep mode — zoom past 1e-4, or press P to force it'); return; }
   if(exporting){ rstat('busy — a render is already running'); return; }
   closePanels(); api.export(+$id('r_res').value, +$id('r_samp').value); };
-$id('r_rec').onclick=()=>{ const rec=api.recordToggle(); recLabel(); if(!rec){ uiPath=api.lastPath(); rstat(pathInfo(uiPath)); } else rstat('recording — fly, then Stop'); };
-$id('r_load').onclick=async()=>{ const d=await api.loadPath(); if(d){ uiPath=d; rstat('loaded · '+pathInfo(d)); } };
-$id('r_save').onclick=()=>{ const p=curPath(); if(p&&p.frames&&p.frames.length) api.savePath(p); else rstat('nothing to save'); };
-$id('r_play').onclick=()=>{ const p=curPath(); if(p&&p.frames&&p.frames.length){ closePanels(); api.playPath(p, { frames:+$id('r_frames').value, fps:30 }); } else rstat('no path — Record or Load first'); };
-$id('r_smooth').onclick=()=>{ const p=curPath(); if(p&&p.frames&&p.frames.length){ api.smoothPath(p, +$id('r_sp').value, +$id('r_sa').value); uiPath=p; rstat('smoothed · '+pathInfo(p)); } else rstat('no path to smooth'); };
-$id('r_render').onclick=()=>{ const p=curPath(); if(!p||!p.frames||!p.frames.length){ rstat('no path — Record or Load first'); return; }
-  if(!deepReady){ rstat('deep renderer still compiling — try again in a moment'); return; }
-  if(exporting){ rstat('busy — a render is already running'); return; }
-  closePanels(); api.renderPath(p, { frames:+$id('r_frames').value, longEdge:+$id('r_pres').value, samples:+$id('r_psamp').value }); };
 $id('r_cancel').onclick=()=>api.cancelRender();
 function setPower(n){
   n = Math.max(2, Math.min(16, n|0));
@@ -4523,7 +4406,7 @@ api.moveAlong = (dir, dist)=>{               // exact HP move (smoke-test dive)
 };
 api.setDiv = (d)=>{ frameLong = Math.max(2, Math.round(Math.max(dzViewW(),dzViewH())/Math.max(1,d))); };  // perf-matrix handle (divisor → absolute frame; window, not canvas — 1:1 mode resizes the canvas)
 api.setFrame = (px)=>{ frameLong = Math.max(2, px|0); accumReset = true; };  // absolute live frame long-edge
-api.setNormalMode = (m)=>{ normalMode = m; jacNormal = m === 4; };  // 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth / 4 the orbit's gradient
+api.setNormalMode = (m)=>{ normalMode = m; };  // 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth
 api.setLand = (b)=>{ landMode = b ? 1 : 0; accumReset = true; };   // hit landing on / off
 api.setHitRefine = (n)=>{ hitRefine = Math.max(0, Math.min(12, n|0)); accumReset = true; };   // HIT REFINE: halvings per hit (0 = off, the default)
 api.setBisect = (n)=>{ bisectMax = n; };      // bisection iteration cap
@@ -4569,14 +4452,6 @@ api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // 
    does and shades them as Detail 8 would. At or above the detail setting it changes nothing. */
 api.setNormalDetail = (d)=>{ normalDetail = Math.max(0, Math.min(256, +d || 0)); accumReset = true; };
 api.normalDetail = ()=>normalDetail;
-/* TRUE-GRADIENT ESTIMATE: bits 0 = off (the page). A picture switches when the J variant has built
-   (background); `now` builds it at once, blocking - for a tool that must not measure the old one. */
-api.setJacobian = (bits, floor, now)=>{ jacUse = Math.max(0, Math.min(7, bits|0)); if (floor !== undefined) jacFloor = Math.max(0, Math.min(1, +floor || 0));
-  if (now && jacBits() && deepProg) ensureVariant(blaEnabled, false, true);
-  accumReset = true; };
-api.jacobianState = ()=>{ if (!jacBits()) return 'off';
-  const kb = vKey(blaEnabled, false, true), kp = vKey(false, false, true);
-  return variants[kb] || variants[kp] ? 'on' : (variants[kb] === null || variants[kp] === null) ? 'failed' : 'building'; };
 /* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep): bits 0 = off (the page) · 1 = the march steps by
    the ray estimate · 2 = and tests a hit by it · 4 = orbits resume along the ray. opt: factor (the
    step as a share of the estimate, default 1), hit (the hit level is a display pixel ÷ this,
@@ -4598,59 +4473,12 @@ api.rayMarch = ()=>({ bits: rayAsk, factor: rayFactor, hit: rayHitDiv, tol: rayT
 /* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped */
 api.setRayDefs = (list)=>{ rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
   for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; } };
-/* pointwise read on the centre ray at t (needs setJacobian != 0): the page's de, the true-gradient
-   estimate, and the packed unit gradient (octPack) - for a referee. null when it cannot be drawn. */
-api.jacProbeAt = (tval)=>{
-  if (!curOrbit || !deepProg || !jacBits()) return null;
-  const D = ensureVariant(blaEnabled, false, true);      // a referee's read: the J variant itself, built now if need be
-  if (!D) return null;
-  const { fwd, right, up } = basis(), x = D.x, px = new Float32Array(4), ht = hdrSplit(tval), out = { t: tval };
-  gl.useProgram(D.p); bindQuad(D.p);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, probeFbo); gl.viewport(0, 0, 1, 1);
-  gl.uniform2f(x.res, 2, 2);
-  gl.uniform3fv(x.fwd, fwd); gl.uniform3fv(x.right, right); gl.uniform3fv(x.up, up);
-  gl.uniform1f(x.fov, Math.tan(0.5 * 1.1));
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, orbitTex);
-  gl.uniform1i(x.orbit, 0); gl.uniform1i(x.len, curOrbit.len); gl.uniform1i(x.iters, cam.iters);
-  gl.uniform2f(x.jitter, 0, 0);
-  setBlaUniforms(x); setPowerUniforms(x);
-  gl.uniform1f(x.pixAng, Math.tan(0.5 * 1.1) / Math.max(canvas.clientHeight, 2));
-  gl.uniform2f(x.probeT, ht.m, ht.e);
-  for (const probe of [1, 8]) {
-    gl.uniform1i(x.probe, probe); gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, px);
-    if (probe === 1) { out.de = px[0] * Math.pow(2, px[1]); out.escaped = px[2] > 0.5; }
-    else { out.gde = px[0] * Math.pow(2, px[1]); out.gradPacked = px[2]; }
-  }
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.uniform1i(x.probe, 0);
-  return out;
-};
-/* referee for the TRUE-GRADIENT ESTIMATE. At each t on the centre ray: the GPU's gde and gradient,
-   and the same two from CENTRAL DIFFERENCES of |z| through the f64 CPU kernel, every neighbour
-   stopped on the centre point's iteration. The differences share the kernel's perturbation maths
-   (itself refereed against BigInt, __directCheckHP) but nothing of the Jacobian recurrence. */
-api.jacCheck = function(tvals){
-  if (!jacBits()) return null;
-  curOrbit = buildRefOrbit(camHP, cam.iters + 2);
-  uploadOrbit(curOrbit);
-  const { fwd } = basis();
-  return tvals.map(tv => {
-    const g = api.jacProbeAt(tv), dc = scl3(fwd, tv), c = pertOrbitJS(curOrbit, dc, cam.iters);
-    const h = 1e-4 * Math.abs(c.de);
-    const gr = [0, 1, 2].map(j => { const e = [0, 0, 0]; e[j] = h;
-      return (pertOrbitJS(curOrbit, add3(dc, e), c.it, true).r - pertOrbitJS(curOrbit, sub3(dc, e), c.it, true).r) / (2 * h); });
-    const gn = len3(gr), ref = 0.5 * c.r * Math.log(c.r) / gn;
-    return { t: tv, gde: g.gde, ref, rel: Math.abs(g.gde - ref) / Math.abs(ref), de: g.de, escG: g.escaped, escC: c.escaped,
-             gradPacked: g.gradPacked, gradRef: gr.map(v => v / gn) };
-  });
-};
-api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin, farHandOff, jacobian: jacUse, jacobianFloor: jacFloor });
+api.marchLevers = ()=>({ stepRelax, capRelax, mode: modeOverride, hitRefine, rebaseOrigin: !!rebaseOrigin, farHandOff });
 api.power = ()=>nPower;
 api.setColor = (m,s)=>{ colorMode=m|0; if(s) colorScale=s; accumReset=true; };
 api.setSurf = (m)=>{ surfMul=Math.max(0.25,Math.min(256,m||1)); accumReset=true; };  // ray-closeness ÷pixAng
 api.setGate = (b)=>{ gateOn=!!b; if(!gateOn) gate.relT=NaN; };  // live ground-truth gate on/off
 api.setLight = (m,f)=>{ lightMode=m|0; if(f) falloffMul=f; accumReset=true; };  // 0 dir/1 headlamp/2 both
-api.setKfSpacing = (v)=>{ kfSpacing = Math.max(0.2, +v||1.5); };  // recording: keyframe sparsity (higher = fewer)
 let forceRebuild=false;                            // measurement: simulate flight (rebuild every frame)
 api.forceRebuild = (b)=>{ forceRebuild = !!b; };
 api.setAccum = (b)=>{ accumEnabled = !!b; accumReset = true; };  // progressive-still toggle
@@ -4663,11 +4491,11 @@ api.setMode = (m)=>{ modeOverride = m; orbitDirty = true; };     // 'auto' | 'de
    downloads a PNG. Uses the current camera / power / phase / colour / normals. */
 let exporting = false, cancelRender = false;
 api.exporting = () => exporting;
-api.cancelRender = () => { cancelRender = true; };   // abort __export / __renderPath at the next row
+api.cancelRender = () => { cancelRender = true; };   // abort __export or a frame of api.dz.renderFrame at the next row
 function showProg(html){ if(loading){ loading.style.display='flex'; loading.querySelector('.box').innerHTML=html; } }
 /* Render the CURRENT view at an arbitrary resolution by TILING (each tile a small draw ≪ the ~2 s
    watchdog) with `samples` jittered passes (denoise+AA), and return a PNG Blob. Caller owns the
-   `exporting` flag + orbit currency. Shared by __export (one still), __renderPath (frame sequence)
+   `exporting` flag + orbit currency. Shared by __export (one still)
    and api.dz.renderFrame, which alone passes `alone` = { dist, aspect }: the depth scale is then
    that number (the view's own distance), the waits are dzYield, not animation frames, and an
    aspect above 0 is the picture's width over height instead of the canvas's own. */
@@ -4831,7 +4659,7 @@ api.export = async function(longEdge, samples, tile){
 
    A FRAME DEPENDS ON THE VIEW AND THE LOOK AND NOTHING ELSE: the same frame comes out rendered
    alone or in the middle of a sequence, which is what lets a host skip the frames it already has.
-   api.export and api.renderPath share renderFrameToBlob with it and do NOT hold this; each reads
+   api.export shares renderFrameToBlob with it and does NOT hold this; it reads
    something the frames before it left behind. Here:
      - THE DEPTH SCALE is the surface distance of this view (viewDistance), never smoothedDist,
        which is eased, and held from earlier frames while an orbit has not escaped.
@@ -4850,7 +4678,7 @@ api.export = async function(longEdge, samples, tile){
    Pitfall: nothing here locks the view or the look. A host that changes either while a frame is
    being drawn gets a frame of two halves.
 
-   NO PICTURE ON THE CANVAS WHILE A FRAME IS DRAWN. api.export and api.renderPath blit the
+   NO PICTURE ON THE CANVAS WHILE A FRAME IS DRAWN. api.export blits the
    picture so far onto the canvas at every wait. The browser then presents the canvas during the
    wait, and the rows of tiles marched after that are NOT the rows a frame without that blit
    gets: measured on a grainy view (frame 8 of the scratch route) 100 s after start-up, ten
@@ -4908,8 +4736,7 @@ async function dzRenderFrame(req){
       O = buildRefOrbit(camHP, cam.iters + 2);
     }
     const dist = viewDistance(O);
-    if (blaMode === 'auto' && !boxOn()) blaEnabled = !rayUse && dist < BLA_AUTO_ON && !!ensureVariant(true, false, false);
-    if (!rayUse && !boxOn() && jacBits()) ensureVariant(blaEnabled, false, true);
+    if (blaMode === 'auto' && !boxOn()) blaEnabled = !rayUse && dist < BLA_AUTO_ON && !!ensureVariant(true, false);
     curOrbit = O; uploadOrbit(O);
     const r = await renderFrameToBlob(o.longEdge, o.samples, o.tile, 'rendering', 'alone', { dist, aspect: +o.aspect });
     if (r.error) throw new Error(r.error);
@@ -4921,72 +4748,20 @@ async function dzRenderFrame(req){
   }
 }
 
-/* ════════ CAMERA-PATH RECORD / EXPORT / REPLAY ════════
-   Records the full camera + scene state per frame (camHP kept as P=256 BigInt decimal STRINGS — no
-   precision loss), downloads it as JSON, and can replay it (BigInt-lerped positions → smooth at any
-   depth). Pairs with __export for rendering a path to an image sequence. */
-let recording=false, recPath=[], recStart=0;
-/* SPARSE, movement-driven keyframing. A keyframe lands only at a decision point — when you
-   COMMIT to a move (start flying after stopping to look), at depth-relative spacing along a
-   long continuous flight, or on a deliberate stationary pan. Sit still deciding (raise res,
-   look around, pick a direction) and nothing records, so keyframes mark where you chose to go. */
-let kfLastHP=null, kfLastYaw=0, kfLastPitch=0, kfWasFlying=false;
-const KF_MOVE=0.35, KF_ROT=0.30;                 // base: emit after ~1/3 of the surface distance moved, or ~17° pan
-let   kfSpacing=1.5;                             // UI knob (key/slider): higher ⇒ fewer, sparser keyframes
-const SEG_BASE=1.4, SEG_MIN=0.7, SEG_MAX=3.0;    // cinematic seconds per segment (decoupled from real dwell)
+/* ════════ CAMERA PATHS — what is left is the sampler (api.samplePath) ════════
+   A path is the file a recorded flight was saved as: { format:'gmt-mbulb-path', P:256, fovScale, frames },
+   each frame a view (camHP kept as P=256 BigInt decimal STRINGS — no precision loss) with its time t.
+   api.samplePath puts the camera at a time along one (BigInt-lerped positions → smooth at any depth): the
+   parity smoke and the march bench place their views with it, on the frozen page's sample flight.
+   GONE 2026-10-11, never called by the shell, which flies, keys and renders a route of its own
+   (deep-zoom/route.ts, routeRender.tsx): the recorder (api.recordToggle and its sparse keyframing,
+   api.lastPath, api.recording, api.setKfSpacing), the smoothing (api.smoothPath), the eased arc-length
+   preview (api.playPath), the path files (api.loadPath, api.loadPathFile, api.savePath) and the path
+   render to ZIPs of PNGs (api.renderPath, api.renderPathFile). Telemetry keeps the keys `recording`,
+   `playing` and `pathFrames` with the values they had while nothing recorded or played: they are three
+   of the page's 16 keys, and the parity smoke compares keys and values. */
 function isFlying(){ return !!(keys['KeyW']||keys['KeyS']||keys['KeyA']||keys['KeyD']||keys['KeyE']||keys['KeyQ']) || (inputOwner === 'host' && performance.now() - hostMoveAt < 150); }
-function pushKeyframe(move, rot){
-  recPath.push({ cam:camHP.map(String), yaw:cam.yaw, pitch:cam.pitch,
-    iters:cam.iters, power:nPower, phase:[phaseTheta,phasePhi], light:lightMode,
-    falloff:falloffMul, color:colorMode, cscale:colorScale, surf:surfMul, move, rot });
-  kfLastHP = camHP.slice(); kfLastYaw = cam.yaw; kfLastPitch = cam.pitch;
-}
-function capturePathFrame(){
-  const flying = isFlying();
-  if (kfLastHP === null) { pushKeyframe(0,0); kfWasFlying = flying; return; }   // initial viewpoint
-  let s2 = 0; for (let j=0;j<3;j++){ const d = hp.toNum(camHP[j]-kfLastHP[j]); s2 += d*d; }
-  const move = Math.sqrt(s2) / Math.max(smoothedDist, 1e-300);                  // depth-relative distance
-  const rot  = Math.abs(cam.yaw-kfLastYaw) + Math.abs(cam.pitch-kfLastPitch);
-  const mv = KF_MOVE*kfSpacing, rt = KF_ROT*kfSpacing;
-  let emit = false;
-  if (flying && !kfWasFlying && (move > 0.25*mv || rot > 0.4*rt)) emit = true;   // re-commit AFTER a real look-around (not every nudge)
-  else if (move > mv)              emit = true;     // spacing along a long continuous flight
-  else if (!flying && rot > rt)    emit = true;     // deliberate stationary pan
-  if (emit) pushKeyframe(move, rot);
-  kfWasFlying = flying;
-}
-/* cinematic timing: every segment gets eased seconds scaled by its depth-relative move/rotation,
-   independent of how long you dwelled choosing — steady pacing regardless of decision time. */
-function assignCinematicTime(ks){
-  let t = 0;
-  for (let i=0;i<ks.length;i++){
-    if (i===0){ ks[i].t = 0; continue; }
-    const k = ks[i];
-    const dur = Math.min(SEG_MAX, Math.max(SEG_MIN, SEG_BASE*(0.7*(k.move||0)/KF_MOVE + 0.3*(k.rot||0)/KF_ROT)));
-    t += dur; ks[i].t = t;
-  }
-  return ks;
-}
-function downloadJSON(obj, name){
-  const blob = new Blob([JSON.stringify(obj)], { type:'application/json' });
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
-  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
-}
-api.recordToggle = () => {
-  if (!recording) { recording=true; recPath=[]; recStart=performance.now(); kfLastHP=null; kfWasFlying=false; }
-  else { recording=false;
-    assignCinematicTime(recPath);                          // decouple video time from real dwell time
-    smoothPath(recPath);                                   // de-jitter before saving / using
-    if (recPath.length && !EMBED) downloadJSON(             // embedded: the host reads __lastPath() and saves it itself
-{ format:'gmt-mbulb-path', P:256, fovScale:1.1, frames:recPath },
-      `mandelbulb_path_${recPath.length}f_${Date.now()}.json`);
-  }
-  return recording;
-};
-api.lastPath = () => ({ format:'gmt-mbulb-path', P:256, fovScale:1.1, frames:recPath });
-api.recording = () => recording;
-api.smoothPath = (data, passes, alpha) => {           // re-smooth a path object (e.g. a loaded one)
-  smoothPath((data&&data.frames)||[], passes, alpha); return data; };
+api.stopPlay = () => {};                                  // nothing plays any more; kept callable: a host calls it before a render, on cancel and on dispose
 api.samplePath = (data, tau) => { const ks=(data&&data.frames)||[]; if(!ks.length) return null;
   pathSampleAt(ks, tau); return cam.pos.slice(); };          // scrub a path to time tau → camera pos
 /* CATMULL-ROM interpolation through 4 keyframes (p0..p3, local param u∈[0,1] on segment p1→p2):
@@ -5017,162 +4792,6 @@ function pathSampleAt(ks, tau){                            // set the camera/sta
   const u = ks[i+1].t > ks[i].t ? (tau-ks[i].t)/(ks[i+1].t-ks[i].t) : 0;
   pathApplyCR(ks[Math.max(0,i-1)], ks[i], ks[i+1], ks[Math.min(n-1,i+2)], u);
 }
-/* ════════ ARC-LENGTH, FRAME-PACED playback (constant eased speed) ════════
-   The recorded per-segment durations were uneven (clamped), so Catmull-Rom speed = tangent/duration
-   jumped at every keyframe → start-stop. Instead we drive the spline by ARC LENGTH (the depth-relative
-   move + turn stored per keyframe) and step it by OUTPUT-FRAME index, so the preview and the rendered
-   sequence move identically at a constant, gently eased speed — independent of how the path was flown. */
-function pathArc(ks){
-  const n = ks.length, cum = new Float64Array(n); let total = 0, haveMetric = false;
-  for (let i = 1; i < n; i++){
-    const seg = (ks[i].move||0) + 0.6*(ks[i].rot||0);     // depth-relative distance + turn, as "length"
-    if (seg > 0) haveMetric = true;
-    cum[i] = (total += Math.max(seg, 1e-6));
-  }
-  if (!haveMetric){ for (let i=0;i<n;i++) cum[i]=i; total = Math.max(1, n-1); }   // old/loaded path → uniform spacing
-  return { cum, total };
-}
-const easeInOut = p => p<=0 ? 0 : p>=1 ? 1 : p*p*p*(p*(6.0*p-15.0)+10.0);   // smootherstep: gentle ends, flat middle
-function sampleArc(ks, arc, s){                            // place the camera at arc-length s ∈ [0,total]
-  const n = ks.length;
-  if (n === 1){ pathApplyCR(ks[0],ks[0],ks[0],ks[0],0); return; }
-  const cum = arc.cum;
-  s = Math.max(0, Math.min(arc.total, s));
-  let i = 0; while (i < n-2 && cum[i+1] < s) i++;          // segment [i, i+1]
-  const segLen = cum[i+1] - cum[i];
-  const u = segLen > 0 ? (s - cum[i]) / segLen : 0;
-  pathApplyCR(ks[Math.max(0,i-1)], ks[i], ks[i+1], ks[Math.min(n-1,i+2)], u);
-}
-/* light low-pass on the recorded keyframes to take the hand-jitter off the path (position + look
-   direction). Endpoints fixed; a few mild passes — enough to de-jitter without cutting corners. */
-function smoothPath(ks, passes=2, alpha=0.4){
-  if (ks.length < 3) return ks;
-  const A = BigInt(Math.round(alpha*1e6));
-  for (let p=0; p<passes; p++){
-    const cam0 = ks.map(k=>k.cam.map(BigInt)), yaw0 = ks.map(k=>k.yaw), pit0 = ks.map(k=>k.pitch);
-    for (let i=1; i<ks.length-1; i++){
-      ks[i].cam = [0,1,2].map(j=>{ const avg=(cam0[i-1][j]+cam0[i+1][j])/2n;
-        return (cam0[i][j] + A*(avg-cam0[i][j])/1000000n).toString(); });
-      ks[i].yaw   = yaw0[i] + alpha*((yaw0[i-1]+yaw0[i+1])/2 - yaw0[i]);
-      ks[i].pitch = pit0[i] + alpha*((pit0[i-1]+pit0[i+1])/2 - pit0[i]);
-    }
-  }
-  return ks;
-}
-let playingPath = false;
-api.stopPlay = () => { playingPath = false; };               // Esc / button aborts a preview
-api.playPath = async function(data, opts){           // frame-paced arc-length replay (matches the render)
-  const ks = (data && data.frames) || []; if (ks.length < 1) return { error:'empty path' };
-  opts = opts || {};
-  const fps = opts.fps || 30;
-  const nFrames = opts.frames ? Math.max(2, opts.frames|0)
-                              : Math.max(2, Math.round(((ks[ks.length-1].t)||((ks.length-1)*1.4)) * fps));
-  const arc = pathArc(ks), dur = nFrames / fps;            // preview real-time duration = the video's duration
-  modeOverride = 'deep'; const t0 = performance.now(); playingPath = true;
-  return new Promise(res => { const step = () => {
-    if (!playingPath) { res({ frames: ks.length, stopped:true }); return; }   // aborted
-    const p = (performance.now()-t0)/1000 / dur;
-    if (p >= 1) { sampleArc(ks, arc, arc.total); playingPath = false; res({ frames: ks.length }); return; }
-    sampleArc(ks, arc, easeInOut(p) * arc.total); requestAnimationFrame(step);
-  }; step(); });
-};
-api.loadPath = () => new Promise(res => {             // file-picker → RETURN the path object (no play)
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
-  inp.onchange=()=>{ const f=inp.files[0]; if(!f){res(null);return;} const r=new FileReader();
-    r.onload=()=>{ try { res(JSON.parse(r.result)); } catch(e){ console.log('bad path',e); res(null); } };
-    r.readAsText(f); };
-  inp.click();
-});
-api.loadPathFile = () => api.loadPath().then(d => d ? api.playPath(d) : null);  // load → replay
-api.savePath = (data, name) => { if(!data||!data.frames) return;                          // download a path object
-  downloadJSON(data, name || `mandelbulb_path_${data.frames.length}f_${Date.now()}.json`); };
-
-/* ════════ RENDER A PATH → image sequence (ZIP(s) of numbered PNGs, no deps) ════════
-   Resamples the path at `fps` (camera BigInt-interpolated), renders each frame at export quality
-   (tiled, TDR-safe), and packs the PNGs into ZIP(s) — split at ~500 MB. Cancelling (Esc) still
-   downloads the frames completed so far (named `_partial`). Feed the frames to ffmpeg for video. */
-const crcTable=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n;
-  for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; } return t; })();
-function crc32(u8){ let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c=(c>>>8)^crcTable[(c^u8[i])&0xFF]; return (c^0xFFFFFFFF)>>>0; }
-function makeZip(files){                                   // store method (PNGs already compressed)
-  const u16=v=>new Uint8Array([v&255,(v>>8)&255]), u32=v=>new Uint8Array([v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255]);
-  const cat=a=>{ let n=0; for(const z of a) n+=z.length; const o=new Uint8Array(n); let p=0; for(const z of a){o.set(z,p);p+=z.length;} return o; };
-  const enc=new TextEncoder(); const parts=[], central=[]; let off=0;
-  for(const f of files){ const nm=enc.encode(f.name), crc=crc32(f.data), sz=f.data.length;
-    const lfh=cat([u32(0x04034b50),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(nm.length),u16(0),nm]);
-    parts.push(lfh, f.data);
-    central.push(cat([u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(sz),u32(sz),u16(nm.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off),nm]));
-    off += lfh.length + sz; }
-  let cdLen=0; for(const c of central){ parts.push(c); cdLen+=c.length; }
-  parts.push(cat([u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdLen),u32(off),u16(0)]));
-  return new Blob(parts, {type:'application/zip'});
-}
-/* Pack files into ZIP(s) and download. A single sequence can be many GB, so we cap each ZIP at
-   ~500 MB and split across `_partNNofMM` files — this also keeps every archive well under the
-   store-ZIP 32-bit (4 GB) size/offset limit. Downloads are staggered so the browser doesn't
-   collapse the multi-file save into one. Returns the number of ZIPs written. */
-const ZIP_SPLIT_BYTES = 500 * 1024 * 1024;
-async function packAndDownloadZips(files, baseName){
-  if (!files.length) return 0;
-  const parts = []; let cur = [], curBytes = 0;
-  for (const f of files){
-    const fBytes = f.data.length + f.name.length * 2 + 90;          // data + LFH + central-dir overhead (conservative)
-    if (cur.length && curBytes + fBytes > ZIP_SPLIT_BYTES){ parts.push(cur); cur = []; curBytes = 0; }
-    cur.push(f); curBytes += fBytes;
-  }
-  if (cur.length) parts.push(cur);
-  const n = parts.length, pad = String(n).length;
-  for (let i = 0; i < n; i++){
-    const tag = n === 1 ? '' : `_part${String(i+1).padStart(pad,'0')}of${n}`;
-    showProg(`<span class="spin">◓</span> packing ZIP ${i+1}/${n}…`);
-    dlBlob(makeZip(parts[i]), `${baseName}${tag}.zip`);
-    if (i < n-1) await new Promise(r => setTimeout(r, 500));        // stagger so all parts actually download
-  }
-  return n;
-}
-api.renderPath = async function(data, opts){
-  if (!deepReady || exporting) return { error:'not ready / busy' };
-  opts = opts || {};
-  let ks = (data && data.frames) || []; if (ks.length < 1) return { error:'empty path' };
-  if (opts.smooth) {                                       // opts.smooth: passes (number) or {passes,alpha}
-    const s=opts.smooth, passes=(typeof s==='number'?s:s.passes)||2, alpha=(typeof s==='object'&&s.alpha)||0.4;
-    ks = ks.map(k=>({...k, cam:k.cam.slice(), phase:k.phase.slice()})); smoothPath(ks, passes, alpha);  // smooth a COPY
-  }
-  const fps = opts.fps||30, longEdge = opts.longEdge||1280, samples = opts.samples||8, tile = opts.tile||128;
-  const arc = pathArc(ks);
-  // `frames` (total output frames) is the master clock: the path is stepped by ARC LENGTH across exactly
-  // this many frames, so motion speed = path/frames (constant, eased) — more frames = slower, smoother.
-  const nFrames = opts.frames ? Math.max(1, opts.frames|0)
-                              : Math.max(1, Math.round(((ks[ks.length-1].t)||((ks.length-1)*1.4))*fps));
-  modeOverride = 'deep'; exporting = true; cancelRender = false;
-  const files = [];
-  let cancelled = false;
-  try {
-    for (let f = 0; f < nFrames; f++) {
-      sampleArc(ks, arc, nFrames > 1 ? easeInOut(f/(nFrames-1))*arc.total : 0);
-      curOrbit = buildRefOrbit(camHP, cam.iters + 2); uploadOrbit(curOrbit); orbitDirty = false;
-      /* the light rig is measured per frame; blended in by a third from the second frame on, it
-         glides along the flight instead of following every wobble of the fit */
-      const r = await renderFrameToBlob(longEdge, samples, tile, `frame ${f+1}/${nFrames} —`, f === 0 ? 'fresh' : 0.35);
-      if (r.error) { openPanel(renderEl); rstat(r.error); return r; }
-      if (r.cancelled) { cancelled = true; break; }   // stop early — still pack the frames done so far
-      files.push({ name:`frame_${String(f).padStart(5,'0')}.png`, data:new Uint8Array(await r.blob.arrayBuffer()) });
-      showProg(`<span class="spin">◓</span> rendering path… frame ${f+1}/${nFrames}<br><small style="color:#9ab">${longEdge}px ×${samples} — press Esc to cancel · ZIP downloads when done</small>`);
-    }
-    if (!files.length) return { cancelled, framesRendered:0 };   // nothing completed → nothing to save
-    const baseName = `mandelbulb_path_${files.length}f_${fps}fps_${longEdge}px${cancelled?'_partial':''}`;
-    showProg(`<span class="spin">◓</span> packing ${files.length} frame${files.length>1?'s':''}${cancelled?' (cancelled)':''}…`);
-    const zips = await packAndDownloadZips(files, baseName);
-    return { frames:files.length, fps, longEdge, samples, cancelled, zips };
-  } finally { exporting = false; cancelRender = false; if (loading) { loading.style.display='none'; loading.style.background=''; } }
-};
-api.renderPathFile = (opts) => new Promise(res => {   // file-picker → render to ZIP
-  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
-  inp.onchange=()=>{ const f=inp.files[0]; if(!f){res();return;} const r=new FileReader();
-    r.onload=()=>{ try { api.renderPath(JSON.parse(r.result), opts).then(res); } catch(e){ console.log('bad path',e); res(); } };
-    r.readAsText(f); };
-  inp.click();
-});
 
 /* map a long-edge length + aspect (=w/h) to integer (w,h), where the long edge is the longer side.
    Shared by the live frame (frame()) and the tiled export (renderFrameToBlob) so the two can't drift. */
@@ -5342,8 +4961,6 @@ function frame(now){
   if(keys['KeyD']) mv(right,speed);  if(keys['KeyA']) mv(right,-speed);
   if(keys['KeyE']) mv([0,1,0], speed); if(keys['KeyQ']) mv([0,1,0],-speed);
 
-  if (recording) capturePathFrame();             // camera-path recording (sparse, movement-driven)
-
   /* --- render --- */
   /* live render size: ABSOLUTE long-edge (frameLong) in deep mode, native window in f32 baseline.
      CSS scales the frame to the window, so frameLong trades sharpness for speed directly.
@@ -5432,7 +5049,7 @@ function frame(now){
     }
 
     /* --- ground-truth gate, ~2×/s: pointwise de at t=0 (GPU HDR vs CPU f64). The 1×1 readPixels
-       forces a GPU sync (small periodic stall) — key V toggles it off for smooth flying/recording.
+       forces a GPU sync (small periodic stall) — key V toggles it off for smooth flying.
        Skip once the view is CONVERGED (accumN at cap): the camera/orbit are unchanged so the gate
        value is identical, and re-probing a static view would only re-introduce the mid-frame sync —
        which, against the blit-to-canvas of the held still, shows up as an intermittent flash. */
@@ -5468,11 +5085,10 @@ function frame(now){
     (deepActive
       ? `gate       ${!gateOn?'<span style="color:#678">off (V)</span>':isNaN(gate.relT)?'…':`relT <b class="${gateOK?'ok':'warn'}">${gate.relT.toExponential(1)}</b> (GPU ${gate.tGPU.toExponential(3)} vs CPU ${gate.tCPU.toExponential(3)})${gateOK?' <span class="ok">✓</span>':' <span class="warn">✗ MISMATCH</span>'}`}\n`
       : `f32 eps    ${(Math.hypot(...cam.pos)*5e-7).toExponential(2)}\n`)+
-    `<span class="hud-dim">power n    <b>${nPower}</b>   phase <b>${phaseTheta.toFixed(2)},${phasePhi.toFixed(2)}</b>   iters <b>${cam.iters}</b>   orbitLen ${curOrbit?curOrbit.len:'-'}   frame <b>${w}×${h}</b>   normals <b>${['screen','3-tap','4-tap','depth','gradient'][normalMode]}</b>`+
+    `<span class="hud-dim">power n    <b>${nPower}</b>   phase <b>${phaseTheta.toFixed(2)},${phasePhi.toFixed(2)}</b>   iters <b>${cam.iters}</b>   orbitLen ${curOrbit?curOrbit.len:'-'}   frame <b>${w}×${h}</b>   normals <b>${['screen','3-tap','4-tap','depth'][normalMode]}</b>`+
     `   color <b>${['plain','iteration','orbit-trap'][colorMode]}</b>   detail <b>${surfMul.toFixed(2)}×</b>   light <b>${['directional','headlamp','both'][lightMode]}</b></span>`+
     (deepActive&&accumEnabled?`   accum <b class="${accumN>=ACCUM_MAX?'ok':''}">${accumN>=ACCUM_MAX?`${accumN}× ✓`:accumN>0?`${accumN}×…`:'live '+w+'×'+h}</b>`:'')+`\n`+
-    `pos        <span class="hud-dim">${cam.pos.map(v=>v.toFixed(5)).join(', ')}</span>`+
-    (recording?`   <b class="warn">● REC ${recPath.length}f${(!isFlying()&&recPath.length<=1)?' — fly to lay keyframes':''}</b>`:playingPath?`   <b class="ok">▶ PREVIEW · ESC to stop</b>`:'');
+    `pos        <span class="hud-dim">${cam.pos.map(v=>v.toFixed(5)).join(', ')}</span>`;
   dzScheduleFrame();
 }
 const hud=dzById('hud');
@@ -5563,17 +5179,17 @@ api.dive = async function(depth){
    One namespaced object for a page that embeds this one (GMT's deep-zoom tool opens it in an iframe
    with ?embed=1). Read-only summaries of the live state plus the three things the loose __ handles
    do not offer: a whole view in one object, a thumbnail as a PNG, and an animated dive. Additive —
-   every __ handle above works as before. A VIEW has exactly the fields a recorded keyframe has
-   (pushKeyframe), so a bookmark and a path frame are interchangeable - plus `roll` when the camera has
-   one (grep ROLL), which the recorder and the path sampler neither write nor set. */
+   every __ handle above works as before. A VIEW has exactly the fields a keyframe of a recorded path
+   has (the frames api.samplePath reads), so a bookmark and a path frame are interchangeable - plus
+   `roll` when the camera has one (grep ROLL), which the path sampler does not set. */
 let dzDive = 0;                                   // id of the running diveTo (0 = none); bumping it cancels
 const dzThumbCv = document.createElement('canvas');
 api.dz = {
   version: 1,
   telemetry: () => ({ ready: !!deepReady && !!deepNow(), error: deepCompileErr || (boxOn() && variantErr[xKey(false)]) || '', mode: deepActive ? 'deep' : 'f32',
     depth: smoothedDist, fps, frameW: canvas.width, frameH: canvas.height, iters: cam.iters, power: nPower,
-    accumN, accumMax: ACCUM_MAX, recording, playing: playingPath, exporting,
-    pathFrames: recPath.length, bla: !!blaEnabled }),
+    accumN, accumMax: ACCUM_MAX, recording: false, playing: false, exporting,   // recording, playing, pathFrames: nothing records or plays any more (grep CAMERA PATHS); the keys stay
+    pathFrames: 0, bla: !!blaEnabled }),
   settings: () => ({ detail: surfMul, reach: reachMode(), power: nPower, phase: [phaseTheta, phasePhi],
     color: colorMode, cscale: colorScale, light: lightMode, falloff: falloffMul, normals: normalMode,
     land: !!landMode, frame: frameLong, accum: accumEnabled, lookMode: look.mode }),

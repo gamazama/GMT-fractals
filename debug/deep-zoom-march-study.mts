@@ -19,8 +19,6 @@
  *   --cones    the older measure, in pixel cones of the Detail in use (a cone = a display pixel / Detail);
  *              given, it replaces --wrongpx. The studies of 2026-10-08 used 4.
  *   --rebase   page (default) | origin: the kernel's rebase (grep REBASE TO THE ORIGIN in core.js)
- *   --jac      0 (default) .. 7: the true-gradient estimate's bits (grep TRUE-GRADIENT ESTIMATE in core.js):
- *              1 = step by the smaller estimate, 2 = normal from the gradient, 4 = hit test by the smaller
  *   --ray      settings that march by THE RAY ESTIMATE (grep it in core.js); default 5:1:64:0.05:256:2, the
  *              shell's; `none` for no such row. A list of
  *              bits:factor[:hit[:tol[:floor]]] - bits 1 = step by it, 2 = hit test by it, 4 = orbits
@@ -80,7 +78,10 @@
  *     than the picture on screen.
  *   - A pixel cone shrinks with Detail, so the same `wrong` at Detail 8 is an eighth of the distance.
  *   - The in-page function is sent as text. It must not use anything from this file's scope.
- *   - BLA is off, as in every earlier study. The shell turns it on below 1e-13.
+ *   - BLA is off, as in every earlier study. Left on its default ('auto') the renderer turns it on
+ *     below 1e-13 for the page's march, and never under the ray march.
+ *   - A `--jac` argument (rows with the true-gradient estimate's bits) went on 2026-10-11 with the
+ *     renderer's J variant; a result file from before then has a `jac` key this one does not write.
  */
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
@@ -100,7 +101,7 @@ const nums = (text: string): number[] => text.split(',').map(Number);
 const RAYS = Number(arg('rays', '128')), DISPLAY = Number(arg('display', '1080')), CONES_ARG = arg('cones', ''), WRONG_PX = Number(arg('wrongpx', '2'));
 const REACH = Number(arg('reach', '1')), BUDGET = Number(arg('budget', '0'));
 const [refStep, refRefine, refBudget] = nums(arg('ref', '0.1,8,16384'));
-const WHICH = arg('views', 'all'), DETAIL = arg('detail', '32'), ORIGIN = arg('rebase', 'page') === 'origin', JAC = Number(arg('jac', '0'));
+const WHICH = arg('views', 'all'), DETAIL = arg('detail', '32'), ORIGIN = arg('rebase', 'page') === 'origin';
 const JSON_OUT = path.resolve(ROOT, arg('json', 'debug/scratch/march-study.json'));
 const RAY_ARG = arg('ray', '5:1:64:0.05:256:2'), RAY = RAY_ARG === 'none' ? '' : RAY_ARG, RAY_BUDGET = Number(arg('raybudget', '512'));
 
@@ -210,13 +211,13 @@ const ready = (ms: number) => page.waitForFunction('window.__deepReady === true'
 await ready(1500).catch(async () => { await page.reload(); await ready(180_000); });
 const gpu = await page.evaluate(`(() => { const g = document.createElement('canvas').getContext('webgl2'), e = g.getExtension('WEBGL_debug_renderer_info'); return e ? g.getParameter(e.UNMASKED_RENDERER_WEBGL) : '?'; })()`) as string;
 if (/swiftshader|llvmpipe/i.test(gpu)) { console.error('software renderer, not the real GPU: ' + gpu); await context.close(); process.exit(1); }
-await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); window.__setJacobian(${JAC}, 0, true); })()`);
+await page.evaluate(`(() => { window.__harness.pause(); window.__lockInput(true); window.__setMode('deep'); window.__setAccum(false); window.__setBla(false); window.__setGate(false); window.__setAutoIters(false); window.__setFrame(64); window.__setRebaseOrigin(${ORIGIN}); })()`);
 if (flight && chosen.some((t) => t.tau !== undefined)) await page.evaluate(`window.__flight = ${JSON.stringify(flight)}`);
 const startupMs = performance.now() - started;
 
 const MEASURE = CONES_ARG ? `${CONES_ARG} pixel cones` : `${WRONG_PX} display pixels of depth`;
 console.log(`${chosen.length} views x ${grid.length} settings   ${RAYS} x ${RAYS} rays as a ${DISPLAY}-row picture   wrong = more than ${MEASURE} from the careful march, rough = from half a cone up to that (step ${refStep}, refine ${refRefine}, ${refBudget} steps)`);
-console.log(gpu + (ORIGIN ? '   kernel: rebase to the origin' : '') + (JAC ? '   true-gradient estimate: bits ' + JAC : ''));
+console.log(gpu + (ORIGIN ? '   kernel: rebase to the origin' : ''));
 const pad = (v: unknown, n: number) => String(v).padStart(n);
 const rows: unknown[] = [];
 let pageMs = 0, unlike = 0;
@@ -242,6 +243,6 @@ await context.close();
 console.log('');
 console.log(`probe = picture: ${unlike} of ${chosen.length * RAYS * RAYS} rays end elsewhere, or otherwise, in the picture's own G-buffer` + (unlike ? '   <- THE PROBE IS NOT MARCHING WHAT THE PICTURE MARCHES' : ''));
 fs.mkdirSync(path.dirname(JSON_OUT), { recursive: true });
-fs.writeFileSync(JSON_OUT, JSON.stringify({ rays: RAYS, display: DISPLAY, ...(CONES_ARG ? { cones: Number(CONES_ARG) } : { wrongPx: WRONG_PX }), ref: [refStep, refRefine, refBudget], rebase: ORIGIN ? 'origin' : 'page', jac: JAC, rows }, null, 1) + '\n');
+fs.writeFileSync(JSON_OUT, JSON.stringify({ rays: RAYS, display: DISPLAY, ...(CONES_ARG ? { cones: Number(CONES_ARG) } : { wrongPx: WRONG_PX }), ref: [refStep, refRefine, refBudget], rebase: ORIGIN ? 'origin' : 'page', rows }, null, 1) + '\n');
 console.log(`startup ${(startupMs / 1000).toFixed(1)} s   sweep ${(sweepMs / 1000).toFixed(1)} s (${(pageMs / 1000).toFixed(1)} s in the page) for ${chosen.length * (grid.length + 2)} marches   ->  ${path.relative(ROOT, JSON_OUT)}`);
 if (unlike) process.exit(1);

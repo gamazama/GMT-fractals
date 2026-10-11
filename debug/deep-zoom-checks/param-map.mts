@@ -9,21 +9,32 @@
  *         a `look` row names its field; a row without a push says why.
  *   push  a value reaches the module through the setter its row names, converted by the feature's
  *         own converter; an unchanged value is not sent again; the joint pushes (colour, light,
- *         phase) always carry all their values; BLA "On" is never sent before the wait.
+ *         phase) always carry all their values.
  *   read  with the fake holding the module's defaults, `readParams` equals the feature defaults for
  *         every row that reads back (the real-module version of this is a stage-2 smoke step).
+ *   retired  (2026-10-11) the two params that went with the previous-generation marches,
+ *         `trueGradient` and `bla`, have no row and push nothing, and nothing sends `setBla` or
+ *         `setJacobian`; a Normals index of 4 (Gradient, an option until that day) reaches the
+ *         renderer as 4-tap.
  *
  * What it does not pin: the real module (the smoke does), and `deep-zoom/useHostSync.ts`.
  *
  * FALSIFICATION RECORD, 2026-10-08 (each: one break, this check red, restored, green again)
  *   paramMap.ts: the `haze` row deleted -> 2 red ("map: every feature param has a row", the look
  *     push); a key misspelt (`frameSizee`) -> 3 red (both map lines and the read line).
- *   looseParams.ts: `setBla(true)` sent before the wait -> 4 red (the bla lines); `reach` pushed
+ *   looseParams.ts: `reach` pushed
  *     unconverted -> 1 red; the unchanged-value test removed -> 2 red; colour sent with scale 0
- *     -> 3 red.
+ *     -> 3 red. (A fifth break, `setBla(true)` sent before the wait -> 4 red, was of the BLA
+ *     lines: they went on 2026-10-11 with the shell's BLA setting, its wait and section [4].)
+ * 2026-10-11, one break, restored byte for byte (sha-256) and green again:
+ *   features/quality.ts: `normalsToRenderer` made to hand the index through (`Math.floor(index ?? 2)`)
+ *     -> 2 red: "push: Normals index 4 ... reaches the renderer as 4-tap (2) ..." (the fake saw
+ *     `setNormalMode(4)`) and "retired: Normals has four options, and an index that names none ...".
+ *   NOT seen red: the other two "retired" lines and the `trueGradient` / `bla` push line.
  */
 import { DZ_PARAM_ROWS, DZ_PARAM_FEATURES, DZ_PARAM_ROW_BY_ID, defaultParams, paramId, readParams } from '../../deep-zoom/host/paramMap.ts';
-import { createParamPusher, DZ_BLA_WAIT_MS } from '../../deep-zoom/host/looseParams.ts';
+import { createParamPusher } from '../../deep-zoom/host/looseParams.ts';
+import { NORMALS_OPTIONS, normalsIndex, normalsToRenderer } from '../../deep-zoom/features/quality.ts';
 import type { DeepZoomApi } from '../../deep-zoom/renderer/index.ts';
 
 let failed = 0;
@@ -31,7 +42,6 @@ function check(ok: boolean, label: string, detail = ''): void {
     console.log(`${ok ? '  ok  ' : '  FAIL'} ${label}${!ok && detail ? `  [${detail}]` : ''}`);
     if (!ok) failed++;
 }
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ── a fake api holding the module's defaults (read in core.js: `const look = {`, `settings()`) ──
 function makeApi() {
@@ -42,10 +52,8 @@ function makeApi() {
         normals: 2, land: false, frame: 320, accum: true, lookMode: 1,
     };
     const look: Record<string, unknown> = { mode: 1, view: 0, compare: 0, nrmTap: 1, keyElev: 40, keyTurn: 0, tint: 0.5, shadow: 1, ao: 1, sky: 0.3, rough: 0.75, haze: 0 };
-    const lever = { stepRelax: 0, capRelax: 1, mode: 'auto' as 'auto' | 'deep' | 'f32', hitRefine: 0, jacobian: 0 };
+    const lever = { stepRelax: 0, capRelax: 1, mode: 'auto' as 'auto' | 'deep' | 'f32', hitRefine: 0 };
     const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module as the shell creates it (create option `rayMarch`)
-    const compiled: Record<string, number | undefined> = {};
-    let bla: 'off' | 'auto' | 'on' = 'auto';
     let normalDetail = 0;
     let auto = true;
     const formula = { kind: 'mandelbulb', scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] };   // core.js: `let dzFormula`, `const box = {`
@@ -69,12 +77,11 @@ function makeApi() {
         setLand: (on: boolean) => { note('setLand', on); s.land = on; },
         setAccum: (on: boolean) => { note('setAccum', on); s.accum = on; },
         setMode: (m: 'auto' | 'deep' | 'f32') => { note('setMode', m); lever.mode = m; },
-        setBla: (on: boolean | 'auto') => { note('setBla', on); bla = on === 'auto' ? 'auto' : on ? 'on' : 'off'; },
-        blaMode: () => bla,
-        compileMs: () => compiled,
+        // two setters nothing may call any more ([4]): the module still has setBla; setJacobian went with its variant
+        setBla: (on: boolean | 'auto') => { note('setBla', on); },
+        setJacobian: (bits: number) => { note('setJacobian', bits); },
         setStepRelax: (r: number) => { note('setStepRelax', r); lever.stepRelax = r; },
         setHitRefine: (n: number) => { note('setHitRefine', n); lever.hitRefine = n; },
-        setJacobian: (bits: number) => { note('setJacobian', bits); lever.jacobian = bits; },
         setRayMarch: (bits: number, opt?: { factor?: number; floor?: number; line?: number }) => { note('setRayMarch', bits, opt); ray.bits = bits; Object.assign(ray, opt || {}); },
         rayMarch: () => ({ ...ray }),
         setCapRelax: (m: number) => { note('setCapRelax', m); lever.capRelax = m; },
@@ -83,7 +90,7 @@ function makeApi() {
         setColor: (m: number, sc?: number) => { note('setColor', m, sc); s.color = m; if (sc) s.cscale = sc; },
     };
     const of = (name: string): unknown[][] => calls.filter(([n]) => n === name).map(([, a]) => a);
-    return { api: api as unknown as DeepZoomApi, calls, of, compiled, clear: () => { calls.length = 0; } };
+    return { api: api as unknown as DeepZoomApi, calls, of, clear: () => { calls.length = 0; } };
 }
 
 // ── [1] map ──────────────────────────────────────────────────────────────────────────────────────
@@ -201,41 +208,39 @@ console.log('[3] push');
     rig.clear();
     p.push({ 'dzQuality.precision': 1 });
     check(rig.of('setMode').length === 0, 'push: a `dzQuality.precision` from a scene saved before 2026-10-08 pushes nothing', JSON.stringify(rig.calls));
+
+    // What went on 2026-10-11 and may still be in a saved scene or link.
+    rig.clear();
+    {
+        const realWarn = console.warn;
+        const named: string[] = [];
+        console.warn = (...args: unknown[]) => { named.push(args.map(String).join(' ')); };
+        try { p.push({ 'dzQuality.trueGradient': true, 'dzQuality.bla': 0 }); } finally { console.warn = realWarn; }
+        check(rig.calls.length === 0 && named.length === 2 && named.every((line) => line.includes('no param map row')),
+            'push: a `dzQuality.trueGradient` or `dzQuality.bla` from a scene saved before 2026-10-11 pushes nothing (each id is named once)', JSON.stringify(rig.calls) + ' ' + named.join(' | '));
+    }
+    rig.clear();
+    p.push({ 'dzQuality.normals': 4 });
+    check(JSON.stringify(rig.of('setNormalMode')) === '[[2]]' && rig.of('setLook').some((a) => Object.keys(a[0] as object).length === 0),
+        'push: Normals index 4 (Gradient, an option until 2026-10-11) reaches the renderer as 4-tap (2), with the empty setLook after it', JSON.stringify(rig.calls));
     p.dispose();
 }
 
-// ── [4] BLA ──────────────────────────────────────────────────────────────────────────────────────
-console.log('[4] BLA');
+// ── [4] retired ──────────────────────────────────────────────────────────────────────────────────
+console.log('[4] retired (2026-10-11): True-gradient march, BLA, Normals: Gradient');
 {
+    const quality = DZ_PARAM_FEATURES.dzQuality.params as Record<string, unknown>;
+    const rowIds = DZ_PARAM_ROWS.map((r) => paramId(r.feature, r.key));
+    check(!('trueGradient' in quality) && !('bla' in quality) && !rowIds.includes('dzQuality.trueGradient') && !rowIds.includes('dzQuality.bla'),
+        'retired: neither the feature nor the map has `trueGradient` or `bla`');
     const rig = makeApi();
     const p = createParamPusher(rig.api);
-    p.push({ 'dzQuality.bla': 0 });
-    check(JSON.stringify(rig.of('setBla')) === '[[false]]', 'bla: Off is sent as false');
-    rig.clear();
-    p.push({ 'dzQuality.bla': 2 });
-    await sleep(DZ_BLA_WAIT_MS * 2 + 80);
-    check(JSON.stringify(rig.of('setBla')) === '[["auto"]]', 'bla: On sends auto and waits - never true before the variant is compiled', JSON.stringify(rig.of('setBla')));
-    rig.compiled.PB = 5123;
-    await sleep(DZ_BLA_WAIT_MS + 120);
-    check(JSON.stringify(rig.of('setBla')) === '[["auto"],[true]]', 'bla: once compileMs().PB is defined, true is sent', JSON.stringify(rig.of('setBla')));
-
-    const rig2 = makeApi();
-    const p2 = createParamPusher(rig2.api);
-    p2.push({ 'dzQuality.bla': 2 });
-    p2.push({ 'dzQuality.bla': 1 });
-    rig2.compiled.PB = 1;
-    await sleep(DZ_BLA_WAIT_MS + 120);
-    check(!rig2.of('setBla').some((a) => a[0] === true), 'bla: a choice changed during the wait is not overridden', JSON.stringify(rig2.of('setBla')));
-
-    const rig3 = makeApi();
-    const p3 = createParamPusher(rig3.api);
-    p3.push({ 'dzQuality.bla': 2 });
-    p3.dispose();
-    rig3.compiled.PB = 1;
-    await sleep(DZ_BLA_WAIT_MS + 120);
-    check(!rig3.of('setBla').some((a) => a[0] === true), 'bla: dispose stops the wait');
+    p.push(defaultParams());
+    check(rig.calls.length > 15 && rig.of('setBla').length === 0 && rig.of('setJacobian').length === 0, 'retired: a push of every param sends neither setBla nor setJacobian', rig.calls.map(([n]) => n).join(','));
+    check(NORMALS_OPTIONS.length === 4 && normalsIndex(4) === 2 && normalsToRenderer(4) === 2 && normalsIndex(3) === 3 && normalsToRenderer(3) === 3 && normalsIndex(undefined) === 2,
+        'retired: Normals has four options, and an index that names none (4, Gradient) reads as 4-tap: index 2, renderer mode 2',
+        `${NORMALS_OPTIONS.length} options, normalsIndex(4) ${normalsIndex(4)}, normalsToRenderer(4) ${String(normalsToRenderer(4))}`);
     p.dispose();
-    p2.dispose();
 }
 
 console.log(failed === 0 ? 'param-map: all green' : `param-map: ${failed} FAILED`);

@@ -55,14 +55,16 @@
  *     `instance.contextLost` / `onContextLost` are the only signal. Dispose and mount fresh.
  *   - BLOCKING COMPILES. `api.setBla(true)` compiles the heavier BLA shader synchronously: in the
  *     caller's stack when the deep shader is ready, otherwise inside the first `step()` after it
- *     lands. A shell should only call `setBla('auto')` or `setBla(false)`; for "on", call
- *     `setBla('auto')`, wait until `api.compileMs().PB` is defined, then `setBla(true)`. The three
+ *     lands. A host should only call `setBla('auto')` or `setBla(false)`; for "on", call
+ *     `setBla('auto')`, wait until `api.compileMs().PB` is defined, then `setBla(true)` - and with
+ *     the ray march in force 'auto' builds no BLA shader at all, so that wait would not end. (The
+ *     gmt-shell calls none of them: it has had no BLA setting since 2026-10-11.) The three
  *     small programs compile synchronously inside `createDeepZoom`, and without
  *     KHR_parallel_shader_compile so does the deep shader (about 15 s cold).
  *   - SIZE. A size element of 0 x 0 (hidden tab, display:none) renders 2 x 2. The 1:1 view writes
  *     an inline width / height on the canvas, so the size element must not shrink-wrap the canvas.
  *     The size element is captured at create; re-parenting the canvas later is not followed.
- *   - With `autoStart: false` only the frame loop is host-driven. Path preview, the export's frame
+ *   - With `autoStart: false` only the frame loop is host-driven. The export's frame
  *     waits and `diveTo` still tick on the browser's requestAnimationFrame, as in the page.
  *     `api.dz.renderFrame` is the exception: its waits are a message channel (a hidden tab stops
  *     animation frames, and a long render must go on behind another window).
@@ -149,10 +151,14 @@ export interface DzTelemetry {
     power: number;
     accumN: number;
     accumMax: number;
+    /** `recording`, `playing` and `pathFrames` are false, false and 0 for good since 2026-10-11 (the
+     *  page's recorder and path preview went: grep `CAMERA PATHS` in core.js). The keys stay: the
+     *  parity smoke compares the frozen page's 16. */
     recording: boolean;
     playing: boolean;
     exporting: boolean;
     pathFrames: number;
+    /** The skip table is in use (the page's march, below 1e-13 on 'auto'). Never under the ray march. */
     bla: boolean;
 }
 
@@ -366,7 +372,7 @@ export interface DeepZoomApi {
      *  the reference orbit and the still restart. Selecting the box for the first time starts its
      *  shader variant building in the background (4.4 s measured, cold): its plain single-precision picture
      *  is drawn until then, `dz.telemetry().ready` is false and `formulaState()` says 'building'.
-     *  The box always draws with the page's march: the ray march, BLA, the true-gradient estimate
+     *  The box always draws with the page's march: the ray march, BLA
      *  and the rebase to the origin are the bulb's, stay as they were asked, and apply again when
      *  the bulb is selected (`rayMarch().bits` is the ask; `rayMarchState()` says 'off' meanwhile).
      *  Selecting the box raises the iteration count to the least that draws it; with auto iterations
@@ -392,9 +398,8 @@ export interface DeepZoomApi {
     formulaState(): 'building' | 'on' | 'failed';
     setAutoIters(on: boolean): void;
     autoIters(): boolean;
-    /** 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth / 4 the hit orbit's own gradient (added
-     *  2026-10-08: no extra orbits, but it needs the J shader variant - grep `TRUE-GRADIENT
-     *  ESTIMATE` in core.js - which builds in the background; 4-tap is drawn until it is there).
+    /** 0 screen-space / 1 3-tap / 2 4-tap / 3 from depth. (A mode 4, the hit orbit's own gradient,
+     *  went on 2026-10-11 with the shader variant it needed: grep `TRUE-GRADIENT ESTIMATE` in core.js.)
      *  Does NOT restart the still: follow it with `setLook({})`. */
     setNormalMode(mode: number): void;
     setLand(on: boolean): void;
@@ -438,19 +443,6 @@ export interface DeepZoomApi {
      *  that coarser level - fine geometry, a calmer surface. */
     setNormalDetail(d: number): void;
     normalDetail(): number;
-    /** TRUE-GRADIENT ESTIMATE (added 2026-10-08, 0 = off = the page; grep the name in core.js). A
-     *  second distance estimate built on the orbit's real 3x3 derivative. Bits: 1 = the march
-     *  steps by the smaller of the two estimates, so no place needs a hand-set step; 2 = the
-     *  surface normal is that gradient whatever the normal mode (a tool's switch: a host asks
-     *  for the gradient with `setNormalMode(4)`); 4 = the hit test uses the
-     *  smaller estimate too (it moves the surface). The picture switches when the variant has
-     *  compiled, in the background (about 19 s; 36 s with BLA) - `jacobianState()` says when.
-     *  `floor`: never shorten a step below this share of the page's (0 = no floor). `now`: build
-     *  it at once, BLOCKING - for a measuring tool. */
-    setJacobian(bits: number, floor?: number, now?: boolean): void;
-    jacobianState(): 'off' | 'building' | 'on' | 'failed';
-    /** A referee's read of both estimates on the centre ray at `t`; null unless `setJacobian` is on. */
-    jacProbeAt(t: number): { t: number; de: number; escaped: boolean; gde: number; gradPacked: number } | null;
     /** THE RAY ESTIMATE AND RAY-COHERENT ORBITS (a prototype, added 2026-10-09, 0 = off = the page;
      *  grep the name in core.js). Bits: 1 = the march steps by 0.5 r ln r / |J v|, the escaping
      *  iterate's speed along the ray - a first-order estimate of the distance left along it,
@@ -466,16 +458,19 @@ export interface DeepZoomApi {
      *  auto iterations the cap stands a margin above the camera orbit's own escape (grep ITERATIONS AS A
      *  MARGIN). The picture switches when the variant has
      *  compiled, in the background - `rayMarchState()` says when; `now` builds it BLOCKING. While
-     *  it is on, BLA and the true-gradient bits are not used. */
+     *  it is on, BLA is not used, and on 'auto' is neither compiled nor built. */
     setRayMarch(bits: number, opt?: { factor?: number; hit?: number; tol?: number; floor?: number; line?: number; detail?: number }, now?: boolean): void;
     rayMarchState(): 'off' | 'building' | 'on' | 'failed';
     rayMarch(): { bits: number; factor: number; hit: number; tol: number; floor: number; line: number; detail: number };
-    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number; jacobian: number };
+    marchLevers(): { stepRelax: number; capRelax: number; mode: 'auto' | 'deep' | 'f32'; hitRefine: number; rebaseOrigin: boolean; farHandOff: number };
     blaMode(): 'off' | 'auto' | 'on';
     /** The live look record `setLook` writes into. Read only. */
     look: DzLook;
     lockInput(locked: boolean): void;
+    /** Put the camera at time `tau` along a recorded path (the sample flight: parity and the march bench
+     *  place their views with it). What is left of the page's path code: grep `CAMERA PATHS` in core.js. */
     samplePath(path: DzPath, tau: number): number[] | null;
+    /** Does nothing since 2026-10-11 (it ended the page's path preview, which went); kept callable. */
     stopPlay(): void;
     cancelRender(): void;
     [name: string]: unknown;

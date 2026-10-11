@@ -36,6 +36,12 @@
  *   - The render's wait (2026-10-11) added `building` to the interface and to the list below. It is
  *     not in BLUEPRINT section 7 as written; the list is what the contract must still have. What
  *     the member answers is module-host's to prove (its "input: building() ..." lines).
+ *   - The path members went on 2026-10-11 (R7a): `setRecording`, `takePath`, `smoothPath`, `seekPath`,
+ *     `play`, `stopPlay` (six of the list below) and `renderPathZip` (never in it), with the module's
+ *     recorder, preview and path render behind them; no file of the shell called one. `DzPath` stays
+ *     on both sides (a frame request may name a path, and the module still samples one), so [2] is
+ *     as it was. The `recordingChanged` event is still in the list of events: it is declared, and can
+ *     no longer be raised.
  *   - A field added to the module's `DzView` / `DzTelemetry` / `DzPath` (`deep-zoom/renderer/index.ts`)
  *     must be added to the contract's copy in the same package, or [2] goes red.
  *
@@ -99,7 +105,7 @@ const HOLDER = 'deep-zoom/host/current.ts';
 const TELEMETRY = 'deep-zoom/host/telemetry.ts';
 const PROOF_FILE = 'debug/deep-zoom-checks/host-contract-types.ts';
 
-/** BLUEPRINT section 7's member list, as it stands after N5 (see the header). */
+/** BLUEPRINT section 7's member list, as it stands after N5 and without the path members (see the header). */
 const BLUEPRINT_MEMBERS = [
     'ready',
     'setParam', 'setParams', 'getParams', 'bootParams',
@@ -107,7 +113,6 @@ const BLUEPRINT_MEMBERS = [
     'getView', 'setView', 'setPendingView', 'moveAlong', 'diveTo', 'thumbnail', 'snapshot',
     'setInputOwner', 'rawDistance', 'orientation', 'setOrientation', 'sense', 'freeDistance', 'estimateAt', 'building', 'holdLive',
     'setGradientRamp',
-    'setRecording', 'takePath', 'smoothPath', 'seekPath', 'play', 'stopPlay',
     'renderFramePixels', 'renderFrameBlob', 'exportStill', 'cancel',
     'canvas', 'focus', 'pause',
     'step', 'frameCount', 'dispose',

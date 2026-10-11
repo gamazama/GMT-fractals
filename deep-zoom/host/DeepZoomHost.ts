@@ -82,18 +82,18 @@
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
  *     `diveTo(`           the host's own loop (`host/dive.ts`) over `moveAlong`, not the module's dive.
- *     `setRecording(` `takePath()` `smoothPath(` `play(` `stopPlay()`   the module's recorder and
- *                         path preview. `takePath` and `smoothPath` return copies.
- *     `seekPath(`         LIVE BUT BY TIME until module package M4: it places the camera at
- *                         `u x the last frame's t`, which is not the arc fraction that `play` and a
- *                         render use, and `ease` is ignored. Fine to look at; not frame-matched.
- *     `renderPathZip(`    the module's own path render. The one member that downloads: the module
- *                         saves the ZIP parts itself.
- *     `cancel()`          ends a render, a path preview and a dive.
+ *     `cancel()`          ends a render and a dive.
  *     `canvas()` `focus()` `step(` `frameCount()` `dispose()` `on(`
  *   GONE AT N5 (2026-10-08), with the pointer capture: `isCaptured()`, `setInputEnabled(` and the
  *   `captureChanged` event. Nothing locks the pointer; whether the hands are flying is the
  *   shell's own state (`deep-zoom/navigationState.ts`).
+ *   GONE 2026-10-11, with the module's recorder, path preview and path render, which no file of
+ *   the shell ever called (the shell flies, keys and renders a route of its own: `deep-zoom/route.ts`,
+ *   `routeRender.tsx`): the recorder's switch, the take and its smoothing, the seek along a path,
+ *   the preview with its stop, and the render of a path to ZIP parts - seven members - and the two
+ *   shapes only they used (the sequence request and its result). The `recordingChanged` event and
+ *   the telemetry fields `recording`, `playing` and `pathFrames` are still declared: the module
+ *   keeps those three telemetry keys, which now never change.
  *
  *   OPTIONAL - undefined until the named package. Test before calling (`host.pause?.(true)`) and
  *   show no control for a member that is not there:
@@ -121,9 +121,9 @@
  *                         later, in the background (`what: 'variant'`, named by `variant`): the ray
  *                         march's (`compiling` for the 20 or so seconds it builds while the page's
  *                         march is drawn, then `ready`, or `failed`) and the Mandelbox's (about 5 s
- *                         from the first switch to it; its plain picture is drawn meanwhile). BLA
- *                         compiles are not visible until M5.
- *     `recordingChanged`  live, found by comparing telemetry samples, so up to 125 ms late.
+ *                         from the first switch to it; its plain picture is drawn meanwhile).
+ *     `recordingChanged`  found by comparing telemetry samples, so up to 125 ms late. Never sent
+ *                         since 2026-10-11: the module records nothing any more (see GONE above).
  *     `progress`          live but read off the module's own status line; `text` is always set,
  *                         the numbers when they can be parsed. Events from the module at M3.
  *     `paramChanged`      never fires in stage 1. From stage 2 by comparing `getParams()`
@@ -145,20 +145,15 @@
  *   - `step(now)` takes a TIMESTAMP in milliseconds (`performance.now()`). The engine tick hands
  *     its callback a DELTA in seconds: do not forward it.
  *   - The frame and the dive are tick-driven: a dive advances once after each frame the renderer
- *     ran, so it waits while the engine loop is stopped or a render owns the context. A path
- *     preview and a render's frame waits still run on the browser's own animation frames and keep
- *     going while the engine loop is stopped. (`renderFrameBlob` waits on neither: it goes on in
- *     a hidden tab, where animation frames stop.)
+ *     ran, so it waits while the engine loop is stopped or a render owns the context.
+ *     (`renderFrameBlob` waits on neither the tick nor an animation frame: it goes on in a hidden
+ *     tab, where animation frames stop.)
  *   - In stage 1 `ready`, telemetry, `recordingChanged` and `progress` are all read from inside
  *     `step`. With the engine loop stopped none of them arrives.
  *   - `ready` can reject. The implementation attaches its own empty catch so that a rejection
  *     nobody looked at is not an unhandled rejection (the smoke fails on any page error), but a
  *     caller that chains `.then` must add its own `.catch`. A host disposed before it was ready
  *     never settles `ready`.
- *   - `play` and `renderPathZip` force the module's precision mode to deep. That is where this
- *     shell keeps it anyway: the deep path draws at every depth (no Precision control since
- *     2026-10-08), so nothing is put back.
- *   - `setRecording(true)` throws the previous take away. Take it first.
  *   - After `contextLost` nothing is restored and telemetry still says ready. Dispose and mount a
  *     fresh host; do not keep calling the old one.
  *   - `getHost()` is null before the surface mounts, between StrictMode's two mounts and across a
@@ -243,6 +238,8 @@ export interface DzTelemetry {
     /** The still's progress: `accumN` of `accumMax` samples. It drops back when the still restarts. */
     accumN: number;
     accumMax: number;
+    /** `recording`, `playing` and `pathFrames`: false, false and 0 for good since 2026-10-11 (the
+     *  module records and previews no path any more). The module keeps the three keys. */
     recording: boolean;
     playing: boolean;
     exporting: boolean;
@@ -297,7 +294,7 @@ export type DzParams = Partial<Record<DzParamId, DzParamValue>>;
 
 export type DzCompileState = {
     state: 'compiling' | 'ready' | 'failed';
-    what: 'deep' | 'bla' | 'variant';
+    what: 'deep' | 'variant';
     /** With `what: 'variant'`: which one. Absent means the ray march's (the only one until 2026-10-09). */
     variant?: 'rayMarch' | 'mandelbox';
     error?: string;
@@ -305,7 +302,8 @@ export type DzCompileState = {
 
 /** Progress of a long job. `text` is the renderer's own status line as plain text. */
 export type DzProgress = {
-    job: 'still' | 'frame' | 'sequence';
+    /** 'frame': a `renderFrameBlob` in flight. 'still': any other render of the module's. */
+    job: 'still' | 'frame';
     frame?: number;
     total?: number;
     /** 0..1 within the current frame or still. */
@@ -334,7 +332,7 @@ export interface DzFrameRequest {
     path?: DzPath;
     /** Arc fraction 0..1 along `path`. */
     u?: number;
-    /** True = the ease in and out the module's own playback uses. Off whenever the shell drives `u`. */
+    /** True = eased in and out along the path. Off whenever the shell drives `u`. */
     ease?: boolean;
     longEdge: number;
     samples: number;
@@ -347,20 +345,6 @@ export interface DzFrameRequest {
 export type DzFrameResult<T> =
     | { ok: true; data: T; width: number; height: number }
     | { ok: false; reason: 'busy' | 'no-deep-orbit' | 'cancelled' | 'error'; message?: string };
-
-/** The module's own path render: `frames` frames at `fps`, packed into ZIP parts of PNGs. */
-export interface DzSequenceRequest {
-    frames: number;
-    fps: number;
-    longEdge: number;
-    samples: number;
-    tile?: number;
-}
-
-export type DzSequenceResult =
-    /** `cancelled: true` with `frames` above 0 = the finished frames were saved as a partial ZIP. */
-    | { ok: true; frames: number; zips: number; cancelled: boolean }
-    | { ok: false; reason: 'busy' | 'empty-path' | 'cancelled' | 'error'; message?: string };
 
 // ── the interface ────────────────────────────────────────────────────────────────────────────────
 
@@ -399,8 +383,8 @@ export interface DeepZoomHost {
     /**
      * Fly straight ahead until the surface distance is about `depth`. Resolves on arrival, on a fly
      * key or Escape, on a newer dive or `setView`, on `cancel()`, or when it gives up. It does not
-     * say which: compare `telemetry().depth` afterwards. Also ended by `seekPath`, `play`,
-     * `renderPathZip` and `dispose`. Before `ready` it resolves at once and moves nothing.
+     * say which: compare `telemetry().depth` afterwards. Also ended by `renderFrameBlob` and
+     * `dispose`. Before `ready` it resolves at once and moves nothing.
      */
     diveTo(depth: number): Promise<void>;
     /**
@@ -473,22 +457,6 @@ export interface DeepZoomHost {
      */
     setGradientRamp?(rgba: Uint8Array | null, width?: number): Promise<void>;
 
-    // flight
-    /** Turning it on throws the previous take away. */
-    setRecording(on: boolean): void;
-    /** A COPY of the last take (no frames when nothing was recorded). */
-    takePath(): DzPath;
-    /** Returns a NEW smoothed path; `p` is not changed. */
-    smoothPath(p: DzPath, passes?: number, alpha?: number): DzPath;
-    /**
-     * Place the camera at arc fraction `u` (0..1) along `p`. No frame loop, no clock.
-     * Until module package M4 it seeks by TIME and ignores `ease` (see the header).
-     */
-    seekPath(p: DzPath, u: number, o?: { ease?: boolean }): void;
-    /** The module's own eased preview. An empty path resolves at once with `stopped: true`. */
-    play(p: DzPath, o?: { frames?: number; fps?: number }): Promise<{ stopped: boolean }>;
-    stopPlay(): void;
-
     // output
     /** RGBA, top row first. Optional until M4. */
     renderFramePixels?(r: DzFrameRequest): Promise<DzFrameResult<Uint8ClampedArray>>;
@@ -504,12 +472,7 @@ export interface DeepZoomHost {
      * blob. Optional until the module can hand the blob back (see the header).
      */
     exportStill?(o: { longEdge: number; samples: number; tile?: number }): Promise<DzFrameResult<Blob>>;
-    /**
-     * The module's own path render with its own smooth-step timing. THE ONE MEMBER THAT DOWNLOADS:
-     * the module saves the ZIP parts itself, and a cancelled render still saves the finished frames.
-     */
-    renderPathZip(p: DzPath, o: DzSequenceRequest): Promise<DzSequenceResult>;
-    /** Ends a render, a path preview and a dive. */
+    /** Ends a render and a dive. */
     cancel(): void;
 
     // surface and input

@@ -263,7 +263,7 @@ export const stage: DzStage = {
         {
             name: 'Step size and Hit refine are on the Quality tab without advanced mode; the backtick key and the Settings row switch the advanced rows',
             owner: 'owner, 2026-10-08',
-            falsified: '2026-10-08, four breaks, one run each: `isAdvanced: true` put back on `stepSize` in deep-zoom/features/quality.ts -> red, "Step size is shown" false; the backtick binding removed from deep-zoom/hotkeys.ts -> red, "the backtick key turns advanced mode on" false; the Settings row given a `set` that does nothing (deep-zoom/settings.ts) -> red, "switched off there ..." false; `registerDeepZoomSettings()` removed from deep-zoom/main.tsx -> red, "Settings has an Advanced mode row" false. On its first run the step was red for a wrong reason of its own: it looked for the Precision row by `data-help-id`, which option rows do not carry.',
+            falsified: '2026-10-08, four breaks, one run each: `isAdvanced: true` put back on `stepSize` in deep-zoom/features/quality.ts -> red, "Step size is shown" false; the backtick binding removed from deep-zoom/hotkeys.ts -> red, "the backtick key turns advanced mode on" false; the Settings row given a `set` that does nothing (deep-zoom/settings.ts) -> red, "switched off there ..." false; `registerDeepZoomSettings()` removed from deep-zoom/main.tsx -> red, "Settings has an Advanced mode row" false. On its first run the step was red for a wrong reason of its own: it looked for the Precision row by `data-help-id`, which option rows do not carry. 2026-10-11: the BLA row went with the shell\'s BLA setting; Resolution cap is the advanced row the step looks for (it was already looked for beside BLA). Not seen red since.',
             async run(ctx) {
                 await ctx.boot({ clearStorage: true });
                 await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
@@ -272,15 +272,12 @@ export const stage: DzStage = {
                 ctx.check((await ctx.store<boolean>('advancedMode')) === false, 'advanced mode starts off');
                 ctx.check(await has('stepSize'), 'Step size is shown');
                 ctx.check(await has('hitRefine'), 'Hit refine is shown');
-                // A slider row carries its param in `data-help-id`; an option row (BLA) does not, so
-                // that one is looked for by the first words of its description.
-                const labelled = (label: string) => ctx.ev<boolean>(`document.body.innerText.includes(${JSON.stringify(label)})`);
-                ctx.check(!(await has('resolutionCap')) && !(await labelled('Bivariate linear approximation')), 'Resolution cap and BLA (advanced) are hidden');
+                ctx.check(!(await has('resolutionCap')), 'Resolution cap (advanced) is hidden');
                 await ctx.focusPicture();
                 await ctx.page.keyboard.press('Backquote');
                 await ctx.sleep(300);
                 ctx.check((await ctx.store<boolean>('advancedMode')) === true, 'the backtick key turns advanced mode on');
-                ctx.check((await has('resolutionCap')) && (await labelled('Bivariate linear approximation')), 'and Resolution cap and BLA are shown');
+                ctx.check(await has('resolutionCap'), 'and Resolution cap is shown');
                 // The Settings row is the same flag (the panel that draws it is the engine's own).
                 const row = await ctx.ev<{ found: boolean; value: unknown }>(`(async () => {
                     const m = await import('/store/settingsRegistry.ts');
@@ -324,50 +321,6 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'True-gradient march and Normals: Gradient reach the renderer apart; the gradient builds without stopping the picture and changes it; back at 4-tap and off the picture is as it was',
-            owner: 'owner, 2026-10-08 ("yes lets see it in flight") and 2026-10-09 ("im not sure which normals are being shown as there is no option for gradient map normals")',
-            falsified: '2026-10-08: the `jacobian` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and the picture never changed (timed out at 120 s). 2026-10-09, after Gradient became a Normals option: normal mode 4 made to ask for nothing (`jacNormal = false` in `api.setNormalMode`, renderer/core.js) -> red, the picture never changed (timed out at 120 s) although the march switch was on.',
-            async run(ctx) {
-                await ctx.boot({ clearStorage: true });
-                await ctx.page.locator('button[data-gx-mode-tab="Quality"]').click();
-                await ctx.sleep(300);
-                ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('True-gradient march')"), 'the row is shown without advanced mode');
-                if (!(await enterDeepView(ctx))) return;
-                // the ray march is the default and does not use the true-gradient bits: this step is about the page's march
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, trueGradient: false, normals: 2, rayMarch: false })');
-                await ctx.sleep(900);
-                const a = await pixels(ctx);
-                await ctx.sleep(300);
-                const control = shareChanged(a, await pixels(ctx));
-                const frames0 = await ctx.host<number>('frameCount()');
-                await ctx.ev('window.__store.getState().setDzQuality({ trueGradient: true })');
-                await ctx.sleep(700);
-                ctx.check((await ctx.host<boolean>("getParams()['dzQuality.trueGradient']")) === true, 'the renderer holds the march setting');
-                ctx.check((await ctx.host<number>("getParams()['dzQuality.normals']")) === 2, 'and the normals are still 4-tap: the march switch does not change them');
-                // Normals: Gradient is the fifth option. Its variant compiles in the background
-                // (about 20 s here): 4-tap keeps being drawn, then the picture changes.
-                await ctx.ev('window.__store.getState().setDzQuality({ normals: 4 })');
-                await ctx.sleep(700);
-                ctx.check((await ctx.host<number>("getParams()['dzQuality.normals']")) === 4, 'Normals: Gradient reaches the renderer');
-                let moved = 0, waited = 0, stalled = 0, last = await ctx.host<number>('frameCount()');
-                while (waited < 120 && moved <= Math.max(2, control * 4)) {
-                    await ctx.sleep(1000); waited++;
-                    const now = await ctx.host<number>('frameCount()');
-                    if (now === last) stalled++;
-                    last = now;
-                    moved = shareChanged(a, await pixels(ctx));
-                }
-                ctx.check(moved > Math.max(2, control * 4), 'after ' + waited + ' s the picture changed: ' + moved.toFixed(1) + ' % of the pixels (the control: ' + control.toFixed(2) + ' %)');
-                ctx.check(last > frames0 && stalled <= 2, 'the picture kept being drawn while it built (' + stalled + ' of ' + waited + ' seconds without a frame)');
-                await ctx.ev('window.__store.getState().setDzQuality({ trueGradient: false, normals: 2 })');
-                await ctx.sleep(900);
-                ctx.check((await ctx.host<boolean>("getParams()['dzQuality.trueGradient']")) === false, 'switched off, the renderer holds off');
-                const back = shareChanged(a, await pixels(ctx));
-                ctx.check(back <= control + 0.5, 'and the picture is the first one again (' + back.toFixed(2) + ' % differ)');
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: true, rayMarch: true })');
-            },
-        },
-        {
             name: 'Normal detail shades the surface as a lower Detail would; at 0 the picture is Detail\'s own again',
             owner: 'owner, 2026-10-09 ("detail 32 seems too much in many instances, where it just makes the surface very rough")',
             falsified: '2026-10-09: the `normalDetail` push made a no-op in deep-zoom/host/looseParams.ts -> red, "the renderer holds the setting" false and "shaded differently" at 0.0 % of the pixels.',
@@ -406,7 +359,7 @@ export const stage: DzStage = {
                 ctx.check(await ctx.ev<boolean>("document.body.innerText.includes('Ray march')"), 'the row is shown without advanced mode');
                 ctx.check((await ctx.host<boolean>("getParams()['dzQuality.rayMarch']")) === true, 'on from the start: the renderer holds it before anything is pushed');
                 if (!(await enterDeepView(ctx))) return;
-                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, rayMarch: false, trueGradient: false, normals: 2, detail: 8 })');
+                await ctx.ev('window.__store.getState().setDzQuality({ accumulate: false, rayMarch: false, normals: 2, detail: 8 })');
                 await ctx.sleep(1200);
                 ctx.check((await ctx.host<boolean>("getParams()['dzQuality.rayMarch']")) === false, 'switched off, the renderer holds off');
                 const a = await pixels(ctx);

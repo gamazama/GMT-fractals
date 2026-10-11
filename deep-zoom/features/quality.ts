@@ -3,8 +3,8 @@
  *
  * PURPOSE
  *   How the picture is rendered, as opposed to what is drawn or how it is lit: the frame size, how
- *   close and how far rays go, how normals are found, the march step, the still's accumulation, and two advanced
- *   levers (BLA, the depth caps on the frame size). Twelve params.
+ *   close and how far rays go, how normals are found, the march, the still's accumulation, and one advanced
+ *   lever (the depth caps on the frame size). Thirteen params.
  *
  * THE SEAM
  *   The engine store OWNS these values. The renderer (`deep-zoom/renderer`) is a sink: it is told,
@@ -13,13 +13,15 @@
  *   value through these handles of `instance.api` (read in `deep-zoom/renderer/core.js`):
  *     frameSize          api.setFrame(px)            floor 2, truncates
  *     detail             api.setSurf(mul)            clamps to 0.25..256
+ *     normalDetail       api.setNormalDetail(d)      0 = as Detail
  *     reach              api.setReach(k)             k = reachToRenderer(index): 0, 1, 2
- *     normals            api.setNormalMode(m)        m = normalsToRenderer(index): 0..4. See pitfalls
+ *     normals            api.setNormalMode(m)        m = normalsToRenderer(index): 0..3. See pitfalls
  *     depthNormalRadius  api.setLook({ nrmTap })     depthNormalRadiusToRenderer(index): 1, 2, 3
  *     hitLanding         api.setLand(on)
+ *     hitRefine          api.setHitRefine(n)
+ *     rayMarch           api.setRayMarch(bits, opt)  5 or 0 (host/looseParams.ts has the options)
  *     accumulate         api.setAccum(on)
  *     actualPixels       no handle (`view1to1` is closure state in core.js) until module package M1
- *     bla                api.setBla(v)               blaToRenderer(index): false | 'auto' | true
  *     stepSize           api.setStepRelax(r)
  *     resolutionCap      api.setCapRelax(m)          floor 1
  *   ENUMS. An enum param is a float holding the option's INDEX (`engine/defineEnumParam.ts`). The
@@ -34,16 +36,19 @@
  *   places the rows (`panels.ts`).
  *
  * INVALIDATION
- *   Class A (the still restarts; cheap) for every param except two:
- *     bla         O, and C when it goes to On: a blocking shader compile (see pitfalls)
+ *   Class A (the still restarts; cheap) for every param.
  *
  * PITFALLS
- *   - BLA "On" BLOCKS. `api.setBla(true)` compiles the heavier shader synchronously, for seconds.
- *     The sync layer never sends it bare: it follows "BLOCKING COMPILES" in the header of
- *     `deep-zoom/renderer/index.ts` — `setBla('auto')`, wait until `api.compileMs().PB` is defined,
- *     then `setBla(true)`. That is the sync layer's duty, not this param's: do NOT mark the param
- *     `onUpdate: 'compile'`, which is wired to GMT's compiler panel and does not write the store
- *     (grep `onUpdate === 'compile'` in `components/AutoFeaturePanel.tsx`).
+ *   - THREE THINGS WENT ON 2026-10-11, with the previous-generation marches (the owner: "Normals:
+ *     Gradient - was superseded by the raymarch too"): the params `trueGradient` (True-gradient
+ *     march) and `bla` (BLA: Off / Auto / On), and the fifth Normals option, Gradient (index 4).
+ *     A scene, a scene PNG or a share link saved before that day may still carry them. The two
+ *     keys are ignored (the loader reads declared params only, and the sync sends none else);
+ *     Normals 4 loads as 4-tap, which is what it had been drawing since the ray march became the
+ *     default: `normalsIndex` below, called on load by `deep-zoom/presetFields.ts`, and
+ *     `normalsToRenderer` gives 4-tap for any index that names no option. The renderer itself
+ *     keeps its skip table for the page's march (auto, never under the ray march): grep
+ *     `NOT UNDER THE RAY MARCH` in renderer/core.js.
  *   - `actualPixels` IS DECLARED BUT ITS ROW WAITS FOR M1. The id exists now so the slice key and
  *     saved scenes do not change when the handle lands. Until then the manifest keeps the row out
  *     (`excludeParams: ['actualPixels']` on the `dzQuality` item in `panels.ts`) — a row the
@@ -82,34 +87,43 @@
  *     contain `rot`, `phase` or `twist` unless it is an angle (the timeline wraps those at 2 pi).
  *
  * @invariant No key of the `dzQuality` slice is typed `any`: `SliceFromParams` over this feature's
- *   params gives `number` or `boolean` for all twelve keys — proven by: npm run typecheck ("Type
+ *   params gives `number` or `boolean` for all thirteen keys — proven by: npm run typecheck ("Type
  *   '"reach"' does not satisfy the constraint 'never'" on the `SliceIsTyped` line at the foot of
  *   this file). Falsified 2026-10-08: with `type: 'float'` removed from the `reach` entry, tsc
  *   reported exactly that line and key.
  * @assumption Every default, range and step here equals the renderer's own (read 2026-10-08 in
  *   core.js: `let frameLong`, `let surfMul`, `const march = {` against `const REACH`,
  *   `let normalMode`, `nrmTap: 1` in `const look = {`, `let landMode`, `let accumEnabled`,
- *   `let view1to1`, `let modeOverride`, `let blaMode`, `let stepRelax`, `let capRelax`, and the
+ *   `let view1to1`, `let modeOverride`, `let stepRelax`, `let capRelax`, and the
  *   matching `CTLS` rows). No guard checks it yet; the stage-2 smoke step "every feature default
  *   equals the module's settings read at ready" is the intended proof. `api.dz.settings()` returns
- *   six of the twelve (frame, detail, reach, normals, land, accum); `api.look.nrmTap` and
- *   `api.blaMode()` give two more; stepSize, resolutionCap and actualPixels have no
- *   read-back at all until module package M1.
+ *   six of the thirteen (frame, detail, reach, normals, land, accum); `api.look.nrmTap`,
+ *   `api.normalDetail()`, `api.rayMarch()` and `api.marchLevers()` (hit refine, step, cap) give six
+ *   more (the rows of `deep-zoom/host/paramMap.ts`); actualPixels has no read-back at all until
+ *   module package M1.
+ * @invariant A Normals index that names no option (4, the retired Gradient) reaches the renderer
+ *   as 4-tap — proven by: npm run check:deep-zoom-param-map ("push: Normals index 4 (Gradient, an
+ *   option until 2026-10-11) reaches the renderer as 4-tap (2) ...", "retired: Normals has four
+ *   options, and an index that names none ..."). Falsified 2026-10-11: `normalsToRenderer` made
+ *   to hand the index through (`Math.floor(index ?? 2)`) -> those two lines red, the first with
+ *   `setNormalMode(4)`.
+ * @assumption A loaded scene that holds Normals 4 has it put back on 4-tap IN THE STORE (the row
+ *   then shows 4-tap), and its `trueGradient` and `bla` keys never reach the store. Seen once in
+ *   the app on 2026-10-11, with a scene file saved by the tree before the removal
+ *   (debug/scratch/r7/old-scene.mts --load, git-ignored); no standing guard loads such a scene.
  */
 
 import type { FeatureDefinition } from '../../engine/FeatureSystem';
 import type { SliceFromParams } from '../../engine/typedSlices';
 import { defineEnumParam } from '../../engine/defineEnumParam';
-import { FORMULA_BOX, FORMULA_BULB } from './formula';
+import { FORMULA_BULB } from './formula';
 
-/* THE MANDELBOX DOES NOT USE FOUR THINGS ON THIS TAB (2026-10-09; grep THE FORMULA SEAM in renderer/core.js):
-   Ray march, True-gradient march, BLA and the Gradient normal are built on the bulb's power map. The renderer
-   keeps what was asked and draws the box with its own march (and 4-tap where Gradient was chosen), so nothing
-   breaks whatever these hold. Their rows are shown for the bulb only, and Gradient is greyed in the Normals
-   list, so the tab does not offer the box a switch that does nothing. The values are not touched: back on
-   the bulb they apply as they were. `$dzFormula.kind` reads the other feature's slice (utils/paramConditions.ts). */
+/* THE MANDELBOX DOES NOT USE THE RAY MARCH (2026-10-09; grep THE FORMULA SEAM in renderer/core.js): it is
+   built on the bulb's power map. The renderer keeps what was asked and draws the box with its own march, so
+   nothing breaks whatever the switch holds. Its row is shown for the bulb only, so the tab does not offer the
+   box a switch that does nothing. The value is not touched: back on the bulb it applies as it was.
+   `$dzFormula.kind` reads the other feature's slice (utils/paramConditions.ts). */
 const BULB_ONLY = { param: '$dzFormula.kind', eq: FORMULA_BULB };
-const boxDrawn = (state: { dzFormula?: { kind?: number } }): boolean => state?.dzFormula?.kind === FORMULA_BOX;
 
 // ── Reach — how far a ray travels. core.js: `const REACH`, default `const march = {` = REACH[1].
 export const REACH_OPTIONS = ['short', 'relaxed', 'full'] as const;
@@ -119,16 +133,18 @@ const reachParam = defineEnumParam(REACH_OPTIONS, 'Reach', { defaultIndex: 1 });
 export const reachToRenderer = (index: number | undefined) =>
     REACH_RENDERER_VALUES[REACH_OPTIONS.indexOf(reachParam.fromIndex(index))];
 
-// ── Normals — core.js: `let normalMode = 2`.
-export const NORMALS_OPTIONS = ['screen', '3-tap', '4-tap', 'depth', 'gradient'] as const;
+// ── Normals — core.js: `let normalMode = 2`. Until 2026-10-11 there was a fifth option, Gradient (index 4,
+// renderer mode 4): see the header's pitfall. An index that names no option is the default, 4-tap.
+export const NORMALS_OPTIONS = ['screen', '3-tap', '4-tap', 'depth'] as const;
 /** `api.setNormalMode(m)`, in option order. */
-export const NORMALS_RENDERER_VALUES = [0, 1, 2, 3, 4] as const;
+export const NORMALS_RENDERER_VALUES = [0, 1, 2, 3] as const;
 const normalsParam = defineEnumParam(NORMALS_OPTIONS, 'Normals', {
     defaultIndex: 2,
     optionLabels: { '3-tap': '3-tap', '4-tap': '4-tap' },
 });
-export const normalsToRenderer = (index: number | undefined) =>
-    NORMALS_RENDERER_VALUES[NORMALS_OPTIONS.indexOf(normalsParam.fromIndex(index))];
+/** A stored Normals value as the index of an option: itself (floored), or 4-tap's for one that names none. */
+export const normalsIndex = (index: number | undefined): number => NORMALS_OPTIONS.indexOf(normalsParam.fromIndex(index));
+export const normalsToRenderer = (index: number | undefined) => NORMALS_RENDERER_VALUES[normalsIndex(index)];
 /** The slice index of Normals = Depth, for the condition on `depthNormalRadius`. */
 const NORMALS_DEPTH_INDEX = NORMALS_OPTIONS.indexOf('depth');
 
@@ -142,14 +158,6 @@ const depthNormalRadiusParam = defineEnumParam(DEPTH_NORMAL_RADIUS_OPTIONS, 'Dep
 });
 export const depthNormalRadiusToRenderer = (index: number | undefined) =>
     DEPTH_NORMAL_RADIUS_RENDERER_VALUES[DEPTH_NORMAL_RADIUS_OPTIONS.indexOf(depthNormalRadiusParam.fromIndex(index))];
-
-// ── BLA — core.js: `let blaMode = 'auto'`. `api.blaMode()` reads back 'off' | 'auto' | 'on'.
-export const BLA_OPTIONS = ['off', 'auto', 'on'] as const;
-/** `api.setBla(v)`, in option order. `true` BLOCKS on a compile: see the header. */
-export const BLA_RENDERER_VALUES = [false, 'auto', true] as const;
-const blaParam = defineEnumParam(BLA_OPTIONS, 'BLA', { defaultIndex: 1 });
-export const blaToRenderer = (index: number | undefined) =>
-    BLA_RENDERER_VALUES[BLA_OPTIONS.indexOf(blaParam.fromIndex(index))];
 
 export const DzQualityFeature = {
     id: 'dzQuality',
@@ -194,8 +202,7 @@ export const DzQualityFeature = {
         normals: {
             ...normalsParam.config,
             type: 'float',
-            options: normalsParam.config.options?.map((o) => (o.value === NORMALS_OPTIONS.indexOf('gradient') ? { ...o, disabledIf: boxDrawn } : o)),
-            description: 'How the surface direction is found for shading. Screen and Depth read the rendered picture. 3-tap and 4-tap sample the distance estimate around each hit. Gradient takes it from the hit\'s own orbit: smoother, and no extra samples. Gradient takes about 20 seconds to switch on the first time; 4-tap is shown until it is ready.',
+            description: 'How the surface direction is found for shading. Screen and Depth read the rendered picture. 3-tap and 4-tap sample the distance estimate around each hit.',
         },
         depthNormalRadius: {
             ...depthNormalRadiusParam.config,
@@ -235,18 +242,6 @@ export const DzQualityFeature = {
             format: (v) => `${v.toFixed(2)}×`,
             description: 'March step as a multiple of the distance estimate. Lower it to 0.5, with Hit refine on, where the surface shows dark cuts and slices: the estimate over-reads there and 0.85 steps through. Above 0.85 a ray takes fewer, longer steps and can pass through thin features. Not used while Ray march is on; the Mandelbox always marches by it.',
         },
-        trueGradient: {
-            type: 'boolean',
-            // Off by default: the picture changes (the normal) and a frame costs more. Measured
-            // 2026-10-08 (grep TRUE-GRADIENT ESTIMATE in renderer/core.js, and the build plan): at
-            // Detail 8 the default step puts 1 to 12 % of an ordinary view's rays on a wrong
-            // surface, this 0.3 to 2.2 %, for 1.1 to 2.0 times the picture time - what halving the
-            // step costs 1.45 to 1.9 for.
-            default: false,
-            label: 'True-gradient march',
-            condition: BULB_ONLY,
-            description: 'Measures the distance to the surface with the orbit\'s real derivative as well, and steps by the smaller of the two estimates. Removes cuts and wrong surfaces without lowering Step size, most of all at high Detail. It changes where rays land, not how the surface is shaded: for the smoother shading choose Normals: Gradient. Takes about 20 seconds to switch on the first time. Not used while Ray march is on.',
-        },
         rayMarch: {
             type: 'boolean',
             // A PROTOTYPE, off by default (2026-10-09; grep THE RAY ESTIMATE and THE LINE AGAINST THE BALL
@@ -260,7 +255,7 @@ export const DzQualityFeature = {
             default: true,
             label: 'Ray march',
             condition: BULB_ONLY,
-            description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size, True-gradient march and BLA are not used, and iterations follow the orbit; Detail and Hit refine apply as ever. Its shader takes about 20 seconds to build the first time; the top bar says so, and the older march is drawn meanwhile.',
+            description: 'Steps by how fast the orbit\'s escaping point moves along the ray, which estimates the distance left from below (measured safe, not proven), and reuses the previous step\'s orbit instead of running it again. Removes cuts and wrong surfaces at every place and power without lowering Step size. Costs about what the default march costs, and two thirds of what Step size 0.42 does. While it is on, Step size is not used, and iterations follow the orbit; Detail and Hit refine apply as ever. Its shader takes about 20 seconds to build the first time; the top bar says so, and the older march is drawn meanwhile.',
         },
         accumulate: {
             type: 'boolean',
@@ -275,13 +270,6 @@ export const DzQualityFeature = {
             default: false,
             label: 'Actual pixels',
             description: 'Shows the frame at its true pixel size, centred, instead of scaled to fill the view.',
-        },
-        bla: {
-            ...blaParam.config,
-            type: 'float',
-            isAdvanced: true,
-            condition: BULB_ONLY,
-            description: 'Bivariate linear approximation: skips runs of perturbation iterations. Auto uses it below a surface distance of about 1e-13. On uses it at every depth; the first switch to On builds a shader, a pause of a few seconds.',
         },
         resolutionCap: {
             type: 'int',

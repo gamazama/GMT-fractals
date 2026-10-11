@@ -1,7 +1,7 @@
 /**
  * deep-zoom/presetFields.ts - what a scene carries besides the feature slices.
  *
- * Three preset fields, registered at import. MUST be imported before the store is first used (the
+ * Four preset fields, registered at import. MUST be imported before the store is first used (the
  * registry freezes when the store is built): main.tsx imports it right after `./registerFeatures`.
  *
  *   dzView          the camera: three 256-bit decimal STRINGS, yaw, pitch, the roll when there is
@@ -14,6 +14,12 @@
  *   dzInspect reset writes nothing; on load it puts the Inspect channel and compare back to
  *                   Picture / Off. Those two are for looking, not part of a scene, and the engine
  *                   has no "do not save" flag for a param (plan gap E13).
+ *   dzRetiredNormals  writes nothing; on load it puts a Normals value that names no option back
+ *                   on 4-tap. Until 2026-10-11 there was a fifth option, Gradient (index 4), and a
+ *                   scene, a scene PNG or a link saved before may hold it; 4-tap is what it had
+ *                   been drawing since the ray march became the default (features/quality.ts,
+ *                   `normalsIndex`). The two params that went the same day, `trueGradient` and
+ *                   `bla`, need nothing here: the loader reads declared params only.
  *
  * PITFALLS
  *   - Camera values never pass through `Number()`. The depth is a STRING: the share encoder
@@ -32,6 +38,7 @@ import { trailEnds } from './trail';
 import type { DzView } from './host/DeepZoomHost';
 import { lightTypeToRenderer } from './features/light';
 import { colourToRenderer } from './features/colour';
+import { normalsIndex } from './features/quality';
 
 export const DZ_SCENE_VERSION = 1;
 
@@ -132,5 +139,15 @@ presetFieldRegistry.register({
     deserialize: (_preset, set, get) => {
         const inspect = (get() as Slices).dzInspect;
         if (inspect && (inspect.channel !== 0 || inspect.compare !== 0)) set({ dzInspect: { ...inspect, channel: 0, compare: 0 } });
+    },
+});
+
+presetFieldRegistry.register({
+    key: 'dzRetiredNormals',
+    serialize: () => undefined,
+    deserialize: (_preset, set, get) => {
+        const quality = (get() as Slices).dzQuality;
+        const stored = quality?.normals;
+        if (quality && typeof stored === 'number' && normalsIndex(stored) !== stored) set({ dzQuality: { ...quality, normals: normalsIndex(stored) } });
     },
 });

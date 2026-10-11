@@ -38,7 +38,7 @@ export function registerDeepZoomSettings(): void {
         tab: 'Interface',
         section: 'General',
         label: 'Advanced mode',
-        description: 'Shows the advanced rows of each tab (precision, BLA, the resolution cap). The backtick key switches it too.',
+        description: 'Shows the advanced rows of each tab (the resolution cap). The backtick key switches it too.',
         control: { kind: 'boolean' },
         get: () => useEngineStore.getState().advancedMode,
         set: (v) => useEngineStore.getState().setAdvancedMode(!!v),

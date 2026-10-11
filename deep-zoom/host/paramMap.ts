@@ -25,7 +25,8 @@
  *     waits on a module change named in `why`, or (the gradient) it reaches the renderer by
  *     another member of the host, named in `why`. A row that waits must not be in a panel.
  *   - Invalidation class O rebuilds the reference orbit (heavy at depth): the sync holds O pushes
- *     back while a slider is moving. A restarts the still. C can block on a shader compile.
+ *     back while a slider is moving. A restarts the still. (A class C, "can block on a shader
+ *     compile", had one row, `dzQuality.bla`; both went on 2026-10-11.)
  *
  * @invariant Every param of every registered `dz*` feature has exactly one row here, and every row
  *   names a real param - proven by: npx tsx debug/deep-zoom-checks/param-map.mts ("map: every
@@ -37,20 +38,19 @@ import type { DzParamId, DzParamValue, DzParams } from './DeepZoomHost';
 import { DzFormulaFeature, FORMULA_OPTIONS } from '../features/formula';
 import {
     DzQualityFeature, REACH_RENDERER_VALUES, NORMALS_RENDERER_VALUES, DEPTH_NORMAL_RADIUS_RENDERER_VALUES,
-    BLA_OPTIONS,
 } from '../features/quality';
 import { DzInspectFeature, CHANNEL_RENDERER_VALUES, COMPARE_RENDERER_VALUES } from '../features/inspect';
 import { DzLightFeature, SHADING_RENDERER_VALUES, LIGHT_TYPE_RENDERER_VALUES } from '../features/light';
 import { DzColourFeature, colourFromRenderer } from '../features/colour';
 
-/** O orbit rebuild, A the still restarts, C can block on a compile, - nothing in the renderer. */
-export type DzInvalidation = 'O' | 'A' | 'C' | '-';
+/** O orbit rebuild, A the still restarts, - nothing in the renderer. */
+export type DzInvalidation = 'O' | 'A' | '-';
 
 /** The pushes of `looseParams.ts`. `look` rows also name the field of `api.setLook`. */
 export type DzPushGroup =
     | 'formula' | 'power' | 'phase' | 'iters' | 'autoIters'
-    | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'jacobian' | 'rayMarch' | 'accum'
-    | 'bla' | 'stepRelax' | 'capRelax'
+    | 'frame' | 'detail' | 'normalDetail' | 'reach' | 'normals' | 'nrmTap' | 'land' | 'hitRefine' | 'rayMarch' | 'accum'
+    | 'stepRelax' | 'capRelax'
     | 'shading' | 'light' | 'look' | 'colour' | 'channel' | 'compare';
 
 export interface DzParamRow {
@@ -122,11 +122,9 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     { feature: 'dzQuality', key: 'depthNormalRadius', cls: 'A', group: 'nrmTap', read: (api) => indexIn(DEPTH_NORMAL_RADIUS_RENDERER_VALUES, api.look.nrmTap) },
     { feature: 'dzQuality', key: 'hitLanding', cls: 'A', group: 'land', read: (api) => api.dz.settings().land },
     { feature: 'dzQuality', key: 'hitRefine', cls: 'A', group: 'hitRefine', read: (api) => api.marchLevers().hitRefine },
-    { feature: 'dzQuality', key: 'trueGradient', cls: 'A', group: 'jacobian', read: (api) => (api.marchLevers().jacobian & 1) !== 0 },
     { feature: 'dzQuality', key: 'rayMarch', cls: 'A', group: 'rayMarch', read: (api) => api.rayMarch().bits !== 0 },
     { feature: 'dzQuality', key: 'accumulate', cls: 'A', group: 'accum', read: (api) => api.dz.settings().accum },
     { feature: 'dzQuality', key: 'actualPixels', cls: 'A', group: null, why: 'the module has no setter for its 1:1 view, and the shell has no centring style for it yet' },
-    { feature: 'dzQuality', key: 'bla', cls: 'C', group: 'bla', read: (api) => indexIn(BLA_OPTIONS, api.blaMode()) },
     // The module's raw value 0 means "the default 0.85".
     { feature: 'dzQuality', key: 'stepSize', cls: 'A', group: 'stepRelax', read: (api) => { const r = api.marchLevers().stepRelax; return r > 0 ? r : 0.85; } },
     { feature: 'dzQuality', key: 'resolutionCap', cls: 'A', group: 'capRelax', read: (api) => api.marchLevers().capRelax },

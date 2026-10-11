@@ -48,8 +48,8 @@ import './storeTypes';
 // Formula — power, the two phase offsets, the iteration floor.
 featureRegistry.register(DzFormulaFeature);
 
-// Quality — frame size, detail, reach, normals, accumulation, and the
-// advanced BLA / resolution-cap levers.
+// Quality — frame size, detail, reach, normals, the march, accumulation, and the
+// advanced resolution-cap lever.
 featureRegistry.register(DzQualityFeature);
 
 // Inspect — the diagnostic channel and the compare split. Session-only.

@@ -15,11 +15,12 @@
  *     defaults, so a joint push (colour, light, phase) always has all its values.
  *
  * PITFALLS
- *   - NEVER send `api.setBla(true)` without the wait: it compiles the heavier shader on the main
- *     thread (renderer/index.ts header, BLOCKING COMPILES). "On" sends 'auto', waits until
- *     `api.compileMs().PB` is defined, then sends `true` - if the choice is still On by then. In
- *     a view where auto never builds that variant the wait does not end and the module stays on
- *     auto; the wait is a 250 ms timer and `dispose()` stops it.
+ *   - NOTHING HERE SENDS `api.setBla` OR `api.setJacobian` ANY MORE (2026-10-11): the shell's BLA
+ *     and True-gradient march settings went with the previous-generation marches, and the module
+ *     stays on its own BLA default ('auto', which builds nothing under the ray march). A
+ *     `dzQuality.bla` or `dzQuality.trueGradient` from an older scene has no row and is not pushed.
+ *     Should a push ever send `setBla(true)` again: it compiles the heavier shader on the main
+ *     thread (renderer/index.ts header, BLOCKING COMPILES).
  *   - `setColor(mode, scale)` and `setLight(mode, falloff)` ignore a falsy second argument and
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
@@ -38,9 +39,7 @@ import type { DeepZoomApi } from '../renderer';
 import type { DzParamId, DzParamValue, DzParams } from './DeepZoomHost';
 import { DZ_PARAM_ROW_BY_ID, defaultParams, paramId } from './paramMap';
 import type { DzPushGroup } from './paramMap';
-import {
-    reachToRenderer, normalsToRenderer, depthNormalRadiusToRenderer, blaToRenderer,
-} from '../features/quality';
+import { reachToRenderer, normalsToRenderer, depthNormalRadiusToRenderer } from '../features/quality';
 import { channelToRenderer, compareToRenderer } from '../features/inspect';
 import { shadingToRenderer, lightTypeToRenderer } from '../features/light';
 import { colourToRenderer } from '../features/colour';
@@ -54,36 +53,14 @@ export interface ParamPusher {
     dispose(): void;
 }
 
-/** How often the BLA "On" wait looks for the compiled variant. */
-export const DZ_BLA_WAIT_MS = 250;
-
-const BLA_ID = paramId('dzQuality', 'bla');
-
 export function createParamPusher(api: DeepZoomApi): ParamPusher {
     const v = defaultParams();
     const pushed = new Set<DzParamId>();
     const unknownSaid = new Set<DzParamId>();
-    let blaTimer: ReturnType<typeof setInterval> | null = null;
     let disposed = false;
 
     const num = (feature: string, key: string): number => v[paramId(feature, key)] as number;
     const flag = (feature: string, key: string): boolean => !!v[paramId(feature, key)];
-
-    function stopBlaWait(): void {
-        if (blaTimer !== null) { clearInterval(blaTimer); blaTimer = null; }
-    }
-
-    function pushBla(): void {
-        stopBlaWait();
-        const want = blaToRenderer(num('dzQuality', 'bla'));
-        if (want !== true) { api.setBla(want); return; }
-        api.setBla('auto');
-        blaTimer = setInterval(() => {
-            if (api.compileMs().PB === undefined) return;
-            stopBlaWait();
-            if (blaToRenderer(v[BLA_ID] as number) === true) api.setBla(true);
-        }, DZ_BLA_WAIT_MS);
-    }
 
     /** One push per group; `look` is called per field. */
     const PUSH: Record<Exclude<DzPushGroup, 'look'>, () => void> = {
@@ -108,13 +85,11 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         nrmTap: () => api.setLook({ nrmTap: depthNormalRadiusToRenderer(num('dzQuality', 'depthNormalRadius')) }),
         land: () => api.setLand(flag('dzQuality', 'hitLanding')),
         hitRefine: () => api.setHitRefine(num('dzQuality', 'hitRefine')),
-        jacobian: () => api.setJacobian(flag('dzQuality', 'trueGradient') ? 1 : 0),   // 1 = step by the smaller estimate; the gradient NORMAL is Normals: Gradient (setNormalMode 4)
         // bits 5 = step by the ray estimate + orbits resumed along the ray; the longer step of THE LINE AGAINST THE
         // BALL is taken (allowance twice the bend measure); the hit test stays the page's, with a creep floor of
         // 1/256 of a display pixel (grep both names in renderer/core.js)
         rayMarch: () => api.setRayMarch(flag('dzQuality', 'rayMarch') ? 5 : 0, { factor: 1, floor: 256, line: 2 }),
         accum: () => api.setAccum(flag('dzQuality', 'accumulate')),
-        bla: pushBla,
         stepRelax: () => api.setStepRelax(num('dzQuality', 'stepSize')),
         capRelax: () => api.setCapRelax(num('dzQuality', 'resolutionCap')),
         shading: () => api.setLook({ mode: shadingToRenderer(num('dzLight', 'shading')) }),
@@ -151,7 +126,6 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
         values: () => ({ ...v }),
         dispose() {
             disposed = true;
-            stopBlaWait();
         },
     };
 }

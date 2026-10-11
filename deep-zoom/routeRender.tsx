@@ -148,11 +148,11 @@
  *     are driven by a timer, which a hidden tab slows to one a second.
  *   - THE PICTURE SHOWS EACH FINISHED FRAME, not a frame building up: nothing is put on the canvas
  *     while a frame is drawn (grep `NO PICTURE ON THE CANVAS` in renderer/core.js for why).
- *   - THE WAIT HAS NO TIME LIMIT: it ends when the build does, or with Cancel. And two shaders are
- *     NOT WAITED FOR - the BLA one and the true-gradient one, which a frame needs only with the
- *     ray march off. The renderer still builds either inside the frame that first needs it (grep
- *     `ensureVariant(true, false, false)` and `jacBits()` in `dzRenderFrame`), the page standing
- *     still meanwhile; the host has no question for them (`building()` knows the two variants the
+ *   - THE WAIT HAS NO TIME LIMIT: it ends when the build does, or with Cancel. And one shader is
+ *     NOT WAITED FOR - the BLA one, which a frame needs only with the ray march off (and then only
+ *     below a surface distance of 1e-13). The renderer still builds it inside the frame that first
+ *     needs it (grep `ensureVariant(true, false)` in `dzRenderFrame`), the page standing
+ *     still meanwhile; the host has no question for it (`building()` knows the two variants the
  *     `compile` event knows).
  *   - A FRAME WITH GRAIN IS NOT ALWAYS THE SAME FRAME TWICE. A smooth frame is: pixel for pixel,
  *     or a level in a few pixels. A grainy one can come out as another throw of its grain (grep
