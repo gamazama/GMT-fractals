@@ -157,7 +157,7 @@ import { flightBegan, flightEnded } from './locations';
 import { DZ_FLY_SPEED_RANGE, DZ_MODE_FLY, DZ_MODE_ORBIT, cameraModeOf, setFlySpeed, setFlying, setReadings, useDzNavigation } from './navigationState';
 import { orbitDrag, orbitTurn, orbitZoom, viewRay } from './orbitCamera';
 import type { OrbitPivot, V3 } from './orbitCamera';
-import { noteMove, noteTurn, routePlays, routeSetsView, stopRoutePlayback } from './route';
+import { noteMove, noteTurn, routePlays, routeRendering, routeSetsView, stopRoutePlayback } from './route';
 import { followTrail } from './trail';
 
 /** The tick that flies the camera. A throwing tick raises no page error: the smoke watches the
@@ -206,9 +206,11 @@ const DZ_ORBIT_CLEARANCE = 0.08;
  *  0.1 with Alt). The engine's default is three additive steps sized for GMT's 0.001..1 range. */
 export const dzWheelStep = (current: number, dir: 1 | -1, modifier: number): number => current * Math.pow(1.1, dir * modifier);
 
+// `routeRendering()`: a render of the route is a run of many frames, and between two of them the
+// renderer is not exporting for a moment - the lock must not open there.
 const navigationLocked = (): boolean => {
     const t = getTelemetry();
-    return t.exporting || t.playing;
+    return t.exporting || t.playing || routeRendering();
 };
 /** A key that is not a move: the pointer is over the timeline (GMT's rule), or the key comes with
  *  Ctrl / Alt / Cmd - a shortcut (Alt+S saves the scene, Ctrl+Z undoes), never a fly key. */

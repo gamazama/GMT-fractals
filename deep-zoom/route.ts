@@ -34,6 +34,9 @@
  *     and the scale read off the depth track as the engine eases it.
  *   - The Route tab is `deep-zoom/components/RoutePanel.tsx`; it reads `useRoute` and the
  *     animation store.
+ *   - RENDERING the route is `deep-zoom/routeRender.tsx`: it puts the camera on each frame with
+ *     `scrubRouteTo` and, for as long as it runs, holds this file still with `setRouteRendering`
+ *     (no keyframe is set, replaced or deleted, no route is cut or timed again, nothing plays).
  *   - Saving: the sequence travels in a scene file with its payloads (the engine's doing). A share
  *     link carries no route (`deep-zoom/share.ts`).
  *
@@ -111,6 +114,13 @@
  *   on the timeline, and is left alone by an undo - proven by: npm run check:deep-zoom-trail (the
  *   "route: ...", "exact: ...", "smooth: ...", "time: ...", "follow: ..." lines). Falsified
  *   2026-10-11: see that check's header.
+ * @invariant While the route is rendered (`setRouteRendering(true)`) K and a row's replace set
+ *   nothing and leave no undo step, and `scrubRouteTo` still puts the camera on the route -
+ *   proven by: npm run check:deep-zoom-route (the "render: ..." lines). Falsified 2026-10-11: the
+ *   test taken out of `write` -> 3 red.
+ * @assumption The same hold on `deleteKeyframe`, on Play and a leg's play, on a route cut from the
+ *   trail, on the smoothing and on the two timings: each is one `routeRendering()` test. The check
+ *   has a line for the delete and one for a leg's play; none was taken out on its own.
  * @assumption A keyed count above the renderer's own ceiling for `setView` (160 on the Mandelbulb:
  *   grep `v.iters|0` in deep-zoom/renderer/core.js) is cut to it, while the renderer's own rule can
  *   reach 400 under the ray march. A power-2 route deeper than about 1e-38 therefore plays with too
@@ -201,9 +211,22 @@ interface RouteUi {
     thumbnails: Record<string, string>;
     /** By key id: the leg that ARRIVES at this keyframe passes through the solid. */
     solid: Record<string, boolean>;
+    /** The route is being rendered (`deep-zoom/routeRender.tsx`). */
+    rendering: boolean;
 }
-export const useRoute = create<RouteUi>()(() => ({ rev: 0, thumbnails: {}, solid: {} }));
+export const useRoute = create<RouteUi>()(() => ({ rev: 0, thumbnails: {}, solid: {}, rendering: false }));
 const bump = (): void => useRoute.setState((s) => ({ rev: s.rev + 1 }));
+
+/**
+ * A render of the route starts or ends. WHILE ONE RUNS NOTHING HERE CHANGES THE ROUTE OR PLAYS IT:
+ * setting, replacing and deleting a keyframe (K and Key Cam included), a route cut from the trail,
+ * the smoothing, the two timings, Play and a leg's play all do nothing. `scrubRouteTo` still
+ * works: it is what the render itself sets each frame with.
+ */
+export function setRouteRendering(on: boolean): void {
+    if (useRoute.getState().rendering !== on) useRoute.setState({ rendering: on });
+}
+export const routeRendering = (): boolean => useRoute.getState().rendering;
 
 // ── reading the route off the timeline ───────────────────────────────────────────────────────────
 
@@ -452,6 +475,7 @@ export function returnToRoute(): void {
 }
 
 function playSpan(from: number, to: number): void {
+    if (routeRendering()) return;
     anim().pause();
     scrubRouteTo(from);
     stopAt = to;
@@ -526,7 +550,7 @@ export function replaceKeyframe(id: string): void {
 /** `on`: the keyframe that takes the view. Without one: a new keyframe at `frame`, or (null) after the last. */
 function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = false): string | null {
     const host = getHost();
-    if (!host) return null;
+    if (!host || routeRendering()) return null;
     stopAt = null;
     if (anim().isPlaying) anim().pause();                            // setting a keyframe is not done to a running timeline
     const r = route(), keys = r.keys;
@@ -573,7 +597,7 @@ function write(on: RouteKey | undefined, frame: number | null, skipSnapshot = fa
 /** Remove a keyframe, and the iteration key at its frame. One animation-undo step. */
 export function deleteKeyframe(id: string): void {
     const r = route(), key = r.keys.find((k) => k.id === id);
-    if (!key || !r.depth) return;
+    if (!key || !r.depth || routeRendering()) return;
     anim().snapshot();
     const at = r.depth.keyframes.findIndex((k) => k.id === id), left = r.depth.keyframes.filter((k) => k.id !== id);
     // Its two neighbours' handles, where they are still the timeline's own, pointed at it: worked out again.
@@ -653,6 +677,7 @@ function cutRoute(trail: readonly TrailSample[], smoothing: number): number {
  * route (ask first when `routeHandSet()`). One animation-undo step. Returns the keyframes made.
  */
 export function routeFromTrail(previous = false): number {
+    if (routeRendering()) return 0;
     const flown = previous ? previousTrail() : trailToHere();
     if (!flown) { showToast(previous ? 'No previous trail is kept' : 'Nothing has been flown yet: there is no trail to make a route from', 'info'); return 0; }
     flownTiming = false;
@@ -665,7 +690,7 @@ export function routeFromTrail(previous = false): number {
  *  step; nothing when the route did not come from a trail, or already has that smoothing. */
 export function setRouteSmoothing(smoothing: number): void {
     const from = routeSource(), next = Math.min(ROUTE_SMOOTHING.max, Math.max(ROUTE_SMOOTHING.min, smoothing));
-    if (from && next !== from.smoothing) cutRoute(from.trail, next);
+    if (from && next !== from.smoothing && !routeRendering()) cutRoute(from.trail, next);
 }
 
 /**
@@ -677,7 +702,7 @@ export function setRouteSmoothing(smoothing: number): void {
  */
 export function retimeRoute(flown: boolean): void {
     const r = route(), keys = r.keys, from = routeSource();
-    if (keys.length < 2 || !r.depth || (flown && !from)) return;
+    if (keys.length < 2 || !r.depth || (flown && !from) || routeRendering()) return;
     stopAt = null;
     if (anim().isPlaying) anim().pause();
     if (from) flownTiming = flown;

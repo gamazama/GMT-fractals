@@ -15,8 +15,9 @@
  *     engine's animation tick (`engine.animation`, engine/animation/modulationTick.ts). The
  *     timeline does not play without it, LFO panel or not.
  *   - PauseControls, BucketRender: the renderer has no pause yet and keeps its own tiled export.
- *   - Session, tutorial, What's New and the render dialog: later stages, each when a renderer
- *     handle stands behind it. (The palette suite came in stage 5: registerFeatures.ts, setup.ts.)
+ *   - Session, tutorial and What's New: later stages, each when a renderer handle stands behind
+ *     it. (The palette suite came in stage 5: registerFeatures.ts, setup.ts. The render dialog
+ *     came in stage R6a, for PNG frames into a folder: routeRender.tsx.)
  *   - `engine/plugins/camera/presetField`: not imported, with the Camera plugin.
  *
  * The prototype this replaces is still served at deep-zoom-prototype.html (dev only).
@@ -64,6 +65,7 @@ import { componentRegistry } from '../components/registry/ComponentRegistry';
 import { LocationsPanel } from './components/LocationsPanel';
 import { RoutePanel } from './components/RoutePanel';
 import { installRoute } from './route';
+import { installRouteRender } from './routeRender';
 import { BoxStarters, KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
 import { installSceneIO } from '../engine/plugins/SceneIO';
@@ -186,6 +188,9 @@ try {
     // not swept afterwards), and so are Key Cam's capture and the hook that sets the camera
     // for a scrubbed frame (deep-zoom/route.ts).
     installRoute();
+    // The render dialog: the route (or the timeline as it is) as PNG frames into a folder. It
+    // registers the timeline toolbar's Render button; the Route tab has one too.
+    installRouteRender();
     registerDeepZoomHotkeys();
     componentRegistry.register('dz-locations', LocationsPanel);
     componentRegistry.register('dz-route', RoutePanel);

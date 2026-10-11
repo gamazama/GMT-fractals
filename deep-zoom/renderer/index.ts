@@ -64,6 +64,8 @@
  *     The size element is captured at create; re-parenting the canvas later is not followed.
  *   - With `autoStart: false` only the frame loop is host-driven. Path preview, the export's frame
  *     waits and `diveTo` still tick on the browser's requestAnimationFrame, as in the page.
+ *     `api.dz.renderFrame` is the exception: its waits are a message channel (a hidden tab stops
+ *     animation frames, and a long render must go on behind another window).
  *   - `api.dz.thumbnail()` draws through the live GL state and restarts the still's convergence.
  *   - Views carry the camera as BigInt decimal STRINGS (fixed point, P = 256 bits). Never parse
  *     them to numbers; pass them back verbatim.
@@ -209,6 +211,23 @@ export interface DzHostHandle {
      *  read; grep `SNAPSHOT` in core.js for the order that avoids it).
      *  (Added 2026-10-08.) */
     snapshot(): HTMLCanvasElement | null;
+    /** ONE FRAME TO MEMORY (added 2026-10-11; grep the name in core.js): the current view and look
+     *  as a PNG blob, `longEdge` pixels on its long side (both sides made even), `samples` jittered
+     *  samples a pixel, at `aspect` (width over height) or, without one, the canvas's own shape
+     *  now - pass it to hold a sequence's frames to one size while the window may change. Resolves null when cancelled
+     *  (`api.cancelRender()`). Rejects when it cannot start (not ready, a render already running)
+     *  or the picture is too large for the look. `telemetry().exporting` is true while it runs, and
+     *  the frame loop draws nothing. Its waits are a message channel, so it goes on in a hidden
+     *  tab. It may block on a shader build (the ray march's, the Mandelbox's) when asked before
+     *  that variant is there.
+     *  @assumption A frame depends on the view and the look and nothing else. BY CONSTRUCTION:
+     *  every value the picture is drawn from is worked out from the view inside the call. BY
+     *  MEASUREMENT (the app, the real GPU, 2026-10-11; debug/scratch/r6/, git-ignored; numbers in
+     *  core.js under the name above) only where the picture is smooth: there a frame alone and the
+     *  same frame after another are equal pixel for pixel. Where the picture is grain the renderer
+     *  does not draw one view the same twice - its own still export does not either - so equality
+     *  cannot be shown there. No standing guard: the owner declined a new smoke for it. */
+    renderFrame(req: { longEdge: number; samples: number; tile?: number; aspect?: number }): Promise<Blob | null>;
     /** Fly straight ahead until the surface distance is about `depth`; resolves on arrival,
      *  on a fly key / Esc, or after 20 s. */
     diveTo(depth: number): Promise<void>;

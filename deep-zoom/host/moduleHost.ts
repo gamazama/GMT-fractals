@@ -71,8 +71,9 @@
  *     from the module, M3. `progress` is read off the module's status line in its hidden scaffold
  *     (`statusLineOf`): M3. `compile` sees the deep shader only: BLA and variants, M5.
  *   - `seekPath` goes by time (`api.samplePath`) and ignores `ease`: seek by arc, M4.
- *   - `renderFramePixels`, `renderFrameBlob`, `exportStill` are absent: M4 (the still's blob M4 or
- *     M6). `pause` is absent: M5.
+ *   - `renderFramePixels` and `exportStill` are absent: M4 (the still's blob M4 or M6). `pause` is
+ *     absent: M5. `renderFrameBlob` is there for the current view only (stage R6a, 2026-10-11),
+ *     over `api.dz.renderFrame`; its width and height are read off the PNG's own header.
  *   - `renderPathZip`, `play` and their frame waits run on the browser's animation frames: M4
  *     moves the render path onto `step`.
  *   - `LooseHandles` (`moveAlong` and the recorder) are still untyped in the module: M1.
@@ -115,6 +116,16 @@
  *   ahead ...", "dive: unfinished rays ...") and, on the real GPU at the power-4 place,
  *   `npm run smoke:deep-zoom -- --stage N5` ("a dive from there closes on what is ahead").
  *   Falsified 2026-10-09, see the check's header and the step's own record.
+ * @invariant `renderFrameBlob` is refused while another render runs ('busy') without asking the
+ *   module, and a disposed host renders nothing - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("render: renderFrameBlob while a render runs is busy
+ *   ...", "render: a disposed host renders no frame"). Falsified 2026-10-11: the `exporting` test
+ *   removed -> both red.
+ * @assumption The rest of `renderFrameBlob` - the module's own blob handed back with the size in
+ *   its PNG header, a cancel and a rejection as results, 'frame' as its progress job - is checked
+ *   by the same file's other six "render: ... frame ..." lines, which pass and were not broken
+ *   on purpose. What the real `api.dz.renderFrame` draws was measured in the app
+ *   (debug/scratch/r6/, git-ignored).
  * @assumption The signatures in `LooseHandles`, and what this file expects each `api.*` call to do,
  *   were read from core.js on 2026-10-08. core.js is untyped; only the fake instance of the check
  *   and the stage smoke stand behind them. The stage-1 smoke exercises `ready`, `frameCount`,
@@ -124,6 +135,7 @@
  *   (Tailwind scans `deep-zoom/**`), so the canvas fills `#dz-frame`. Not checked in a browser by
  *   this package.
  */
+import { pngSize } from '../../engine/export/frameFolder';
 import { createDeepZoom } from '../renderer';
 import type { DeepZoomApi, DeepZoomInstance, DeepZoomOptions } from '../renderer';
 import type {
@@ -402,6 +414,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
     let lastStatus = '';
     /** `renderPathZip` calls in flight: tells a sequence from a still in `progress`. */
     let sequences = 0;
+    /** `renderFrameBlob` calls in flight: a frame, likewise. */
+    let frames = 0;
     let playRun: Promise<unknown> | null = null;
 
     function failBoot(message: string): void {
@@ -459,7 +473,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (!jobShown || text !== lastStatus) {
                 jobShown = true;
                 lastStatus = text;
-                emit('progress', progressOf(sequences > 0 ? 'sequence' : 'still', text));
+                emit('progress', progressOf(sequences > 0 ? 'sequence' : frames > 0 ? 'frame' : 'still', text));
             }
         } else if (jobShown) {
             jobShown = false;
@@ -569,6 +583,25 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         stopPlay: () => api.stopPlay(),
 
         // output
+        async renderFrameBlob(r) {
+            if (disposed) return { ok: false, reason: 'cancelled' };
+            if (r.path) return { ok: false, reason: 'error', message: 'renderFrameBlob renders the current view only.' };
+            if (!isReady) return { ok: false, reason: 'no-deep-orbit' };
+            if (dz.telemetry().exporting) return { ok: false, reason: 'busy' };
+            dive.cancel();
+            api.stopPlay();
+            frames++;
+            try {
+                const png = await dz.renderFrame({ longEdge: r.longEdge, samples: r.samples, tile: r.tile, aspect: r.aspect });
+                if (!png) return { ok: false, reason: 'cancelled' };
+                const size = await pngSize(png);
+                return { ok: true, data: png, width: size?.width ?? 0, height: size?.height ?? 0 };
+            } catch (err) {
+                return { ok: false, reason: 'error', message: err instanceof Error ? err.message : String(err) };
+            } finally {
+                frames--;
+            }
+        },
         async renderPathZip(p, o) {
             if (disposed) return { ok: false, reason: 'cancelled' };
             if (p.frames.length === 0) return { ok: false, reason: 'empty-path' };

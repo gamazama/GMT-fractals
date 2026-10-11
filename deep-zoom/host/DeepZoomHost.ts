@@ -91,8 +91,13 @@
  *     `setGradientRamp?`     THERE since stage 5 (2026-10-09). Optional in the type only because
  *                            a host without a palette is still a host; `deep-zoom/GradientSync.tsx`
  *                            is its one caller.
- *     `renderFramePixels?`   M4. The module cannot render one frame to memory today.
- *     `renderFrameBlob?`     M4.
+ *     `renderFramePixels?`   M4. Nobody needs the raw pixels yet.
+ *     `renderFrameBlob?`     THERE since stage R6a (2026-10-11), for the CURRENT view: one frame as
+ *                            a PNG blob that depends on the view and the look and nothing else
+ *                            (grep `ONE FRAME TO MEMORY` in renderer/core.js). A request that names
+ *                            a `path` is refused: the shell's route sets the view itself. Optional
+ *                            in the type only so that a fake host in a check need not render.
+ *                            `deep-zoom/routeRender.ts` is its one caller.
  *     `exportStill?`         needs a module change: today the module's still export saves the PNG
  *                            itself and hands no blob back, so "the shell saves the blob" cannot be
  *                            honoured. Present once the module returns the blob (M4 or M6).
@@ -132,7 +137,8 @@
  *   - The frame and the dive are tick-driven: a dive advances once after each frame the renderer
  *     ran, so it waits while the engine loop is stopped or a render owns the context. A path
  *     preview and a render's frame waits still run on the browser's own animation frames and keep
- *     going while the engine loop is stopped.
+ *     going while the engine loop is stopped. (`renderFrameBlob` waits on neither: it goes on in
+ *     a hidden tab, where animation frames stop.)
  *   - In stage 1 `ready`, telemetry, `recordingChanged` and `progress` are all read from inside
  *     `step`. With the engine loop stopped none of them arrives.
  *   - `ready` can reject. The implementation attaches its own empty catch so that a rejection
@@ -312,7 +318,8 @@ export interface DzEvents {
     error: { message: string; fatal: boolean };
 }
 
-/** One frame rendered to memory. Omit `path` and `u` for the current view. */
+/** One frame rendered to memory. Omit `path` and `u` for the current view (the only kind
+ *  `renderFrameBlob` takes today). */
 export interface DzFrameRequest {
     path?: DzPath;
     /** Arc fraction 0..1 along `path`. */
@@ -322,6 +329,9 @@ export interface DzFrameRequest {
     longEdge: number;
     samples: number;
     tile?: number;
+    /** The frame's width over its height. Absent: the picture's own shape at that moment. A
+     *  sequence passes one number for all its frames, so a window resized halfway changes nothing. */
+    aspect?: number;
 }
 
 export type DzFrameResult<T> =
@@ -458,7 +468,12 @@ export interface DeepZoomHost {
     // output
     /** RGBA, top row first. Optional until M4. */
     renderFramePixels?(r: DzFrameRequest): Promise<DzFrameResult<Uint8ClampedArray>>;
-    /** image/png. Optional until M4. */
+    /**
+     * The current view and look as an image/png blob, `longEdge` pixels on its long side at the
+     * picture's own aspect. `reason` 'cancelled' after `cancel()`, 'busy' while another render
+     * runs, 'no-deep-orbit' before `ready`; a request with `path` is an 'error' (see the header).
+     * It never rejects. Telemetry `exporting` is true while it runs, and it does not need `step`.
+     */
     renderFrameBlob?(r: DzFrameRequest): Promise<DzFrameResult<Blob>>;
     /**
      * A still of the current view as a PNG blob. The host never downloads; the shell saves the

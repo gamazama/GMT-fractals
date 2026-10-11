@@ -19,7 +19,8 @@
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
  *   [5] input      `focus`, and the host-input members straight through to the module.
  *   [6] flight     recording, copies, seek by time, one preview at a time.
- *   [7] render     the result mapping, `progress`, `cancel`, `thumbnail`.
+ *   [7] render     the result mapping, `progress`, `cancel`, `thumbnail`, and `renderFrameBlob`
+ *                  (one frame of the current view; a fake `dz.renderFrame` stands behind it).
  *   [8] dive       `dive.ts` alone, then through the host.
  *   [9] dispose    the order, twice, listeners gone.
  *   [10] mount     the DOM half with a fake `create`.
@@ -85,6 +86,10 @@
  *       module's own canvas, untouched"
  *       `thumbnail` drawn during a render -> 1; the whole loading box instead of its first line
  *       -> 1: "mount: progress reads the first line ..."; `setParam` saying so every time -> 1
+ *       (2026-10-11, stage R6a) the `exporting` test taken out of `renderFrameBlob` -> 2: "render:
+ *       renderFrameBlob while a render runs is busy ..." and "render: a disposed host renders no
+ *       frame" (it counts how often the module was asked). The other six `renderFrameBlob` lines
+ *       pass and have not been seen red.
  *   dive
  *     host: advancing without a frame that ran -> 2: "dive: no move while the module's frame does
  *       not run ...", "dive: and it resumes ..."; host: a dive allowed before ready -> 1
@@ -305,6 +310,8 @@ function makeRig() {
         smoothSaw: [] as string[][],
         playEnd: null as ((result: unknown) => void) | null,
         renderScript: (async () => ({ frames: 1, zips: 1, cancelled: false })) as RenderScript,
+        /** What `dz.renderFrame` resolves with (null: cancelled). */
+        frameScript: (async () => null) as (req: unknown) => Promise<Blob | null>,
     };
 
     const api = {
@@ -325,6 +332,7 @@ function makeRig() {
             },
             thumbnail: (size?: number): string => { note('thumbnail', size); return 'data:image/png;base64,AAAA'; },
             snapshot: (): HTMLCanvasElement | null => { note('snapshot'); return SNAPSHOT_CANVAS; },
+            renderFrame: (req: unknown): Promise<Blob | null> => { note('renderFrame', req); return state.frameScript(req); },
             diveTo: (depth: number): Promise<void> => { note('dz.diveTo', depth); return Promise.resolve(); },
             setInputOwner: (owner: 'module' | 'host'): void => { note('setInputOwner', owner); },
             inputOwner: (): 'module' | 'host' => 'module',
@@ -933,6 +941,60 @@ console.log('[7] render    the path render, progress, cancel, thumbnail');
     const latePlay = await host.play(p);
     check(late.ok === false && late.reason === 'cancelled' && latePlay.stopped === true,
         'render: a disposed host starts neither a render nor a preview');
+
+    // renderFrameBlob (stage R6a, 2026-10-11): one frame of the current view, over `api.dz.renderFrame`.
+    const rig2 = makeRig();
+    const status2 = { text: null as string | null };
+    const host2 = createModuleHost(rig2.instance, rig2.canvas, { statusLine: () => status2.text });
+    const frameOf = (r: Parameters<NonNullable<DeepZoomHost['renderFrameBlob']>>[0]) => host2.renderFrameBlob?.(r) ?? Promise.resolve(null);
+    /** A file that begins as a PNG of that size does. */
+    const pngOf = (width: number, height: number): Blob => {
+        const head = new Uint8Array(40);
+        head.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+        new DataView(head.buffer).setUint32(16, width);
+        new DataView(head.buffer).setUint32(20, height);
+        return new Blob([head]);
+    };
+    const early = await frameOf({ longEdge: 640, samples: 2 });
+    check(early?.ok === false && early.reason === 'no-deep-orbit' && rig2.count('renderFrame') === 0, 'render: renderFrameBlob before ready is refused, and the module is not asked');
+    rig2.state.ready = true;
+    host2.step(0);
+    const picture = pngOf(640, 360);
+    rig2.state.frameScript = async () => picture;
+    const frame = await frameOf({ longEdge: 640, samples: 2, aspect: 16 / 9 });
+    const asked = rig2.calls.renderFrame?.[0]?.[0] as { longEdge?: number; samples?: number; aspect?: number } | undefined;
+    check(frame?.ok === true && frame.data === picture && frame.width === 640 && frame.height === 360,
+        'render: renderFrameBlob hands back the module\'s own blob, with the size its PNG header says', JSON.stringify(frame));
+    check(asked?.longEdge === 640 && asked.samples === 2 && asked.aspect === 16 / 9 && rig2.count('stopPlay') === 1,
+        'render: renderFrameBlob asks the module for that long edge, sample count and aspect, and stops a path preview first', JSON.stringify(asked));
+    rig2.state.frameScript = async () => null;
+    const stopped = await frameOf({ longEdge: 640, samples: 2 });
+    check(stopped?.ok === false && stopped.reason === 'cancelled', 'render: a cancelled frame is a result that says so', JSON.stringify(stopped));
+    rig2.state.frameScript = async () => { throw new Error('too large for this look'); };
+    const failed = await frameOf({ longEdge: 64000, samples: 2 });
+    check(JSON.stringify(failed) === '{"ok":false,"reason":"error","message":"too large for this look"}', 'render: a frame the module rejects becomes a result with its message, not a rejection', JSON.stringify(failed));
+    rig2.state.exporting = true;
+    const busy = await frameOf({ longEdge: 640, samples: 2 });
+    rig2.state.exporting = false;
+    const pathed = await frameOf({ path: p, u: 0.5, longEdge: 640, samples: 2 });
+    check(busy?.ok === false && busy.reason === 'busy' && pathed?.ok === false && pathed.reason === 'error' && rig2.count('renderFrame') === 3,
+        'render: renderFrameBlob while a render runs is busy, a request that names a path is refused, and the module is asked for neither',
+        `${JSON.stringify(busy)} ${JSON.stringify(pathed)}, ${rig2.count('renderFrame')} asks`);
+    const said: Array<DzProgress | null> = [];
+    host2.on('progress', (e) => { said.push(e); });
+    let deliver: (b: Blob | null) => void = () => undefined;
+    rig2.state.frameScript = () => new Promise((resolve) => { deliver = resolve; });
+    const flying = frameOf({ longEdge: 640, samples: 2 });
+    rig2.state.exporting = true;
+    status2.text = 'rendering 640x360... 40%';
+    host2.step(1000);
+    check(said[0]?.job === 'frame' && said[0]?.fraction === 0.4, 'render: a frame in flight reports its progress as a frame', JSON.stringify(said[0]));
+    rig2.state.exporting = false;
+    deliver(picture);
+    await flying;
+    host2.dispose();
+    const gone = await frameOf({ longEdge: 640, samples: 2 });
+    check(gone?.ok === false && gone.reason === 'cancelled' && rig2.count('renderFrame') === 4, 'render: a disposed host renders no frame');
 }
 
 // ── [8] dive ─────────────────────────────────────────────────────────────────────────────────────
@@ -1320,8 +1382,8 @@ console.log('[11] params   by id, through host/looseParams.ts (the pushes themse
     const got = a.getParams();
     check(got.detail === 4 && got['dzQuality.detail'] === 4 && got['dzFormula.power'] === 6 && got['dzLight.keyElevation'] === 40,
         'params: getParams holds the keys of the module and the mapped params by id');
-    check(a.pause === undefined && a.renderFramePixels === undefined && a.renderFrameBlob === undefined && a.exportStill === undefined,
-        'params: four optional members are still absent (pause, renderFramePixels, renderFrameBlob, exportStill)');
+    check(a.pause === undefined && a.renderFramePixels === undefined && a.exportStill === undefined && typeof a.renderFrameBlob === 'function',
+        'params: three optional members are still absent (pause, renderFramePixels, exportStill); renderFrameBlob is there');
     // The gradient (stage 5, 2026-10-09): texels go to the module's own strip call, null to its
     // reset; neither touches the colour mode. Seen red that day with the two calls swapped.
     const ramp = new Uint8Array(1024);

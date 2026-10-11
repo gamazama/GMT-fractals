@@ -6,7 +6,10 @@
  * and the rules are, or into `deep-zoom/trail.ts` (the trail: what the app remembers of how the
  * camera was flown). From the top:
  *   - "Add keyframe" (the K key), Play / Pause (to the last keyframe, then stop; the timeline's
- *     own Play is the engine's and loops as the timeline is set to).
+ *     own Play is the engine's and loops as the timeline is set to), and "Render", which opens
+ *     the render dialog (`deep-zoom/routeRender.tsx`; it also brings the timeline up, whose child
+ *     the dialog is). WHILE A RENDER RUNS everything on this tab but that button is off: the
+ *     route's own functions do nothing then (`setRouteRendering` in route.ts), and the tab shows it.
  *   - The trail: its record button (lit while it records) with one line beside it, how deep and
  *     how long the trail is. "Route to here" makes the route from the trail, replacing the one
  *     there; when a jump has ended a deep trail, "Route from the previous trail" is beside it.
@@ -39,7 +42,8 @@
  */
 import React, { useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
-import { PauseIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
+import { CheckeredFlagIcon, PauseIcon, PlayIcon, PlusIcon, SaveIcon, TrashIcon } from '../../components/Icons';
+import { openRenderPopup } from '../../engine/animation/renderPopupRegistry';
 import { BaseSlider } from '../../components/Slider';
 import { createLogMapping } from '../../components/inputs/primitives/FormatUtils';
 import { Modal } from '../../components/ui/Modal';
@@ -122,6 +126,7 @@ export const RoutePanel: React.FC = () => {
     const pace = useAnimationStore((s) => routePaceAt(s.currentFrame, s.fps).toFixed(2));
     const thumbnails = useRoute((s) => s.thumbnails);
     const solid = useRoute((s) => s.solid);
+    const rendering = useRoute((s) => s.rendering);
     useRoute((s) => s.rev);
     useDzNavigation((s) => s.flying);
     const flown = useTrail((s) => s.line !== '');
@@ -142,24 +147,36 @@ export const RoutePanel: React.FC = () => {
                 <button
                     type="button"
                     data-dz-route-add
+                    disabled={rendering}
                     onClick={() => { setKeyframe(); }}
                     title="Add a keyframe from this view, after the last one (K). With the playhead on an earlier keyframe, that keyframe takes this view instead."
-                    className={`${topButton} flex-1 bg-accent-900/40 hover:bg-accent-800 text-accent-300 border-accent-500/30`}
+                    className={`${topButton} flex-1 bg-accent-900/40 hover:bg-accent-800 text-accent-300 border-accent-500/30 disabled:opacity-40`}
                 >
                     <PlusIcon /> Add keyframe
                 </button>
                 <button
                     type="button"
                     data-dz-route-play
-                    disabled={keys.length < 2}
+                    disabled={keys.length < 2 || rendering}
                     onClick={playing ? stopRoutePlayback : playRoute}
                     title="Play the route from the playhead to its last keyframe"
                     className={`${plainButton} w-16`}
                 >
                     {playing ? <PauseIcon /> : <PlayIcon />} {playing ? 'Pause' : 'Play'}
                 </button>
+                <button
+                    type="button"
+                    data-dz-route-render
+                    onClick={openRenderPopup}
+                    title="Render the route as PNG frames into a folder. With no route, the timeline as it is."
+                    className={`${plainButton} w-[72px]`}
+                >
+                    <CheckeredFlagIcon /> Render
+                </button>
             </div>
 
+            {/* Off while a render runs: a disabled fieldset for the keyboard, no pointer events for the mouse. */}
+            <fieldset disabled={rendering} className={`min-w-0 flex flex-col ${rendering ? 'opacity-50 pointer-events-none' : ''}`}>
             <TrailRow />
             <div className="px-2 pt-1 flex gap-1">
                 <button
@@ -294,6 +311,7 @@ export const RoutePanel: React.FC = () => {
                     );
                 })}
             </div>
+            </fieldset>
 
             {asking !== null && (
                 <Modal onClose={() => setAsking(null)}>

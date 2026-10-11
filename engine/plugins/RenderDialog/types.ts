@@ -36,6 +36,18 @@ export interface RenderDialogStatus {
     setStatusText:    (s: string) => void;
     setIsRendering:   (b: boolean) => void;
     setIsStopping:    (b: boolean) => void;
+    /** What the dialog shows once the run has ended, in place of the
+     *  form: a few plain lines and, optionally, a command line with a
+     *  Copy button. A runner that never calls it goes straight back to
+     *  the form, as every runner did before this existed. Call it
+     *  before `setIsRendering(false)`. */
+    setResult:        (r: RenderDialogResult | null) => void;
+}
+
+export interface RenderDialogResult {
+    lines:    string[];
+    /** A line to run elsewhere (an ffmpeg call for a folder of frames). */
+    command?: string;
 }
 
 export interface RenderDialogDeps<TExtra = Record<string, unknown>> {
@@ -47,6 +59,12 @@ export interface RenderDialogDeps<TExtra = Record<string, unknown>> {
     flags:      RenderDialogFlags;
     status:     RenderDialogStatus;
     isDiskMode: boolean;
+    /** The "Resume" box: skip frames already in the folder. The dialog
+     *  always sets it; it is true only when the app installed with
+     *  `frameFolder`, the folder format is selected and the box is
+     *  ticked. (Optional in the type: a runner that re-packs its deps
+     *  into a shape of its own, as GMT's does, need not carry it.) */
+    resume?:    boolean;
 }
 
 export type RenderDialogRunner<TExtra = Record<string, unknown>> =
@@ -74,6 +92,9 @@ export interface RenderDialogResolutionPreset {
     h:     number;
 }
 
+export type RenderDialogDefaults<TExtra = Record<string, unknown>> =
+    Partial<RenderDialogConfig> & { extra?: TExtra };
+
 export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     /** App-specific per-frame pipeline. Plugin handles UI + form +
      *  flags + status; runner handles encoder lifecycle. */
@@ -83,8 +104,34 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
     title?: string;
 
     /** Initial form defaults. Apps override the standard fields here;
-     *  `extra` carries the app-specific bag. */
-    defaults?: Partial<RenderDialogConfig> & { extra?: TExtra };
+     *  `extra` carries the app-specific bag. A FUNCTION is called each
+     *  time the dialog opens, for defaults that depend on what is on the
+     *  timeline then (the deep zoomer: its route's first and last
+     *  keyframe). */
+    defaults?: RenderDialogDefaults<TExtra> | (() => RenderDialogDefaults<TExtra>);
+
+    /** OPT-IN, for an app whose runner makes every frame itself and
+     *  writes one file a frame into a folder the user picks
+     *  (`engine/export/frameFolder.ts`). It adds the format
+     *  "PNG sequence (folder)" to the dropdown - `VIDEO_FORMATS`' PNG
+     *  sequence under that name - and, while that format is selected: a
+     *  "Resume" box (`deps.resume`), the start label "Select output
+     *  folder…", one Cancel button during the run instead of Interrupt /
+     *  Resume / Finish / Discard, and no encoder probe (the format is
+     *  available exactly where the browser can write into a folder; the
+     *  dialog says so in one line where it cannot). The RUNNER asks for
+     *  the folder (`pickFrameFolder`, first thing, inside the click).
+     *  Without this option nothing above exists: the dialog is what it
+     *  was. To offer ONLY that format, also pass a `formatFilter`. */
+    frameFolder?: boolean;
+
+    /** Default false. True: the size is one of `resolutionPresets` and
+     *  nothing else - no Width / Height fields and no "Custom" entry;
+     *  a size that is not in the list (the presets changed under it)
+     *  snaps to the preset with the nearest long edge. For an app whose
+     *  picture has a shape of its own, where a width and a height typed
+     *  apart could not both be honoured. */
+    fixedSizes?: boolean;
 
     /** Standard form-control visibility. Apps that don't have TSAA
      *  set `showSamplesPerFrame: false`; apps that don't want frame-

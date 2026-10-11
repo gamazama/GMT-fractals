@@ -63,6 +63,11 @@
  *              the heading it had ..."
  *   - install: `registerLogTrack(ROUTE_TRACK)` removed                        -> 2 red: "install: ...", "drive: half way along a ten-decade
  *              leg ..." (the depth there reads 1e-10: the track eased in plain values)
+ *   - render (2026-10-11, stage R6a; the four "render: ..." lines, the route held while it is rendered): the `routeRendering()` test
+ *              taken out of `write`                                             -> 3 red: "render: while the route is rendered K, a
+ *              replace and a delete change nothing ..." (K answered a key id, 4 keyframes, 2 undo steps) and the two lines after
+ *              "render: and nothing plays", which then stand on a changed route. The guards of `deleteKeyframe`, `playSpan`, the
+ *              cut from the trail and the two timings were not taken out one by one.
  */
 import { featureRegistry } from '../../engine/FeatureSystem';
 import { DzFormulaFeature } from '../../deep-zoom/features/formula';
@@ -79,7 +84,7 @@ import { startHostSync } from '../../deep-zoom/useHostSync';
 import {
     ROUTE_ITERATIONS_TRACK, ROUTE_MAX_LEG_SECONDS, ROUTE_MIN_LEG_SECONDS, ROUTE_SOLID_SAMPLES, ROUTE_TRACK, ROUTE_UNIT,
     cameraOnRoute, deleteKeyframe, headingNow, installRoute, legFrames, legInSolid, noteMove, playLeg, replaceKeyframe,
-    returnToRoute, routeDrives, routeKeys, routeViewAt, setKeyframe, stopRoutePlayback, useRoute,
+    returnToRoute, routeDrives, routeKeys, routeViewAt, scrubRouteTo, setKeyframe, setRouteRendering, stopRoutePlayback, useRoute,
 } from '../../deep-zoom/route';
 import type { RouteKey, RoutePayload } from '../../deep-zoom/route';
 
@@ -351,6 +356,29 @@ anim().seek(700);
 anim().play();
 stopRoutePlayback();
 check(!anim().isPlaying, 'play: a hand on the controls stops the timeline');
+
+// ── render ───────────────────────────────────────────────────────────────────────────────────────
+// While the route is rendered (deep-zoom/routeRender.tsx) nothing changes it or plays it; the
+// render's own scrub still sets the camera.
+keys = routeKeys();
+const heldKeys = JSON.stringify(keys), heldUndo = anim().undoStack.length;
+setRouteRendering(true);
+flyTo(3e-4, { yaw: 0.4, pitch: -0.1 });
+const refused = setKeyframe();
+replaceKeyframe(keys[1].id);
+deleteKeyframe(keys[0].id);
+check(refused === null && JSON.stringify(routeKeys()) === heldKeys && anim().undoStack.length === heldUndo,
+    'render: while the route is rendered K, a replace and a delete change nothing and leave no undo step',
+    `K answered ${String(refused)}, ${routeKeys().length} keyframes, ${anim().undoStack.length - heldUndo} undo steps`);
+anim().seek(0);
+playLeg(keys[1].id);
+check(!anim().isPlaying, 'render: and nothing plays');
+n = setViews().length;
+scrubRouteTo(keys[1].frame);
+check(setViews().length === n + 1 && sameCamera(host.getView(), keys[1].view) && anim().currentFrame === keys[1].frame,
+    'render: the render\'s own scrub still puts the camera on the route');
+setRouteRendering(false);
+check(setKeyframe() !== null && anim().undoStack.length === heldUndo + 1, 'render: when it has ended a keyframe can be set again');
 
 stopSync();
 console.log(failed === 0 ? '\nroute: all green' : `\nroute: ${failed} FAILED`);

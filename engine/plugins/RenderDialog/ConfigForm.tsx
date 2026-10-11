@@ -15,6 +15,11 @@ import type {
     RenderDialogResolutionPreset,
 } from './types';
 
+/** `VIDEO_FORMATS`' PNG sequence: under the install option `frameFolder` it is the format
+ *  "PNG sequence (folder)" - one PNG a frame, written by the runner into a folder. */
+export const FRAME_FOLDER_FORMAT_INDEX = VIDEO_FORMATS.findIndex((f) => f.imageSequence && f.ext === 'png');
+export const isFrameFolderFormat = (formatIndex: number): boolean => formatIndex === FRAME_FOLDER_FORMAT_INDEX;
+
 const DEFAULT_RES_PRESETS: RenderDialogResolutionPreset[] = [
     { label: '720p HD (16:9)',         w: 1280, h: 720  },
     { label: '1080p FHD (16:9)',       w: 1920, h: 1080 },
@@ -42,6 +47,11 @@ export interface ConfigFormProps<TExtra> {
     showBitrate:         boolean;
     formatFilter?:       (formatDef: typeof VIDEO_FORMATS[number], index: number) => boolean;
     resolutionPresets?:  RenderDialogResolutionPreset[] | (() => RenderDialogResolutionPreset[]);
+    /** The install options of the same names (types.ts). Both false: the form as it always was. */
+    frameFolder:         boolean;
+    fixedSizes:          boolean;
+    resume:              boolean;
+    setResume:           (on: boolean) => void;
 
     ExtraFormFields?: React.FC<RenderDialogExtraFieldsProps<TExtra>>;
     ExtraInfoRows?:   React.FC<{ cfg: RenderDialogConfig; extra: TExtra }>;
@@ -61,18 +71,24 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
         durationFrames, isFormatSupported, formatSupportError, isDiskMode,
         showSamplesPerFrame, showFrameStep, showBitrate,
         formatFilter, resolutionPresets,
+        frameFolder, fixedSizes, resume, setResume,
         ExtraFormFields, ExtraInfoRows, ExtraWarning,
         startLabel, isStartDisabled,
         onStart,
     } = props;
 
     const currentFormat = VIDEO_FORMATS[cfg.formatIndex];
+    // `frameFolder`: the PNG sequence is offered, under the name of what it does here.
+    const folderFormat = frameFolder && isFrameFolderFormat(cfg.formatIndex);
     const formatOptions = VIDEO_FORMATS
         .map((f, i) => ({ formatDef: f, index: i }))
         .filter(({ formatDef, index }) =>
-            formatFilter ? formatFilter(formatDef, index) : !formatDef.imageSequence
+            formatFilter ? formatFilter(formatDef, index) : (!formatDef.imageSequence || (frameFolder && isFrameFolderFormat(index)))
         )
-        .map(({ formatDef, index }) => ({ label: formatDef.label, value: index }));
+        .map(({ formatDef, index }) => ({
+            label: frameFolder && isFrameFolderFormat(index) ? 'PNG sequence (folder)' : formatDef.label,
+            value: index,
+        }));
 
     const presets = typeof resolutionPresets === 'function'
         ? resolutionPresets()
@@ -80,7 +96,8 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
     const presetVal  = `${cfg.width}x${cfg.height}`;
     const presetOpts = [
         ...presets.map((p) => ({ label: `${p.label} (${p.w}x${p.h})`, value: `${p.w}x${p.h}` })),
-        ...(presets.some((p) => p.w === cfg.width && p.h === cfg.height)
+        // `fixedSizes`: no custom size (the shell snaps a size that left the list back onto it).
+        ...(fixedSizes || presets.some((p) => p.w === cfg.width && p.h === cfg.height)
             ? []
             : [{ label: `Custom (${cfg.width}x${cfg.height})`, value: presetVal }]),
     ];
@@ -90,6 +107,11 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
 
     return (
         <div className="flex flex-col h-full">
+            {folderFormat ? (
+                <div className="px-3 py-1 bg-surface-section border-b border-line/5 shrink-0">
+                    <span className="t-label">One PNG a frame, into a folder • {cfg.fps} fps</span>
+                </div>
+            ) : (
             <div className="px-3 py-1 bg-surface-section border-b border-line/5 flex justify-between items-center shrink-0">
                 <span className="t-label">{currentFormat.container.toUpperCase()} • {currentFormat.codec.toUpperCase()} • {cfg.fps} FPS</span>
                 <span
@@ -99,6 +121,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                     {isDiskMode ? 'DISK' : 'RAM'}
                 </span>
             </div>
+            )}
 
             <div className="flex-1 overflow-y-auto custom-scroll p-1.5 space-y-1">
                 <Dropdown
@@ -112,6 +135,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                     className="mb-1.5"
                 />
 
+                {!fixedSizes && (
                 <div className="flex gap-1 mb-1.5">
                     <div className="flex-1">
                         <label className="t-label mb-0.5 block">Width</label>
@@ -136,6 +160,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                         </div>
                     </div>
                 </div>
+                )}
 
                 <Dropdown
                     label="Format"
@@ -150,6 +175,22 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                         <AlertIcon />
                         <span>{formatSupportError ?? 'Format incompatible with browser/GPU.'}</span>
                     </div>
+                )}
+
+                {folderFormat && (
+                    <label
+                        className="flex items-center gap-1.5 px-1 mb-1.5 text-[10px] text-fg-tertiary cursor-pointer select-none"
+                        title="Frames whose file is already in the folder are not rendered again. An empty file counts as missing."
+                    >
+                        <input
+                            type="checkbox"
+                            data-render-resume
+                            checked={resume}
+                            onChange={(e) => setResume(e.target.checked)}
+                            className="accent-cyan-400"
+                        />
+                        <span>Resume <span className="text-fg-dim">(skip frames already in the folder)</span></span>
+                    </label>
                 )}
 
                 {ExtraWarning && <ExtraWarning cfg={cfg} extra={extra} />}
@@ -240,6 +281,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                     label={
                         startLabel
                             ? startLabel({ cfg, extra, isDiskMode, isFormatSupported })
+                            : folderFormat ? 'Select output folder…'
                             : (isDiskMode ? 'Select Output File…' : 'Start RAM Render')
                     }
                     variant="primary"
@@ -248,7 +290,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                         !isFormatSupported ||
                         (isStartDisabled?.({ cfg, extra, isDiskMode, isFormatSupported }) ?? false)
                     }
-                    icon={isDiskMode ? <SaveIcon /> : <PlayIcon />}
+                    icon={isDiskMode || folderFormat ? <SaveIcon /> : <PlayIcon />}
                 />
             </div>
         </div>

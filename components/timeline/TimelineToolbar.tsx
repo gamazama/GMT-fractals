@@ -25,6 +25,9 @@ import {
 import {
     getRenderPopup,
     subscribeRenderPopup,
+    openRenderPopup,
+    closeRenderPopup,
+    isRenderPopupOpen,
 } from '../../engine/animation/renderPopupRegistry';
 import {
     getRenderAdjuncts,
@@ -207,7 +210,9 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     const setDeterministicPlayback = useAnimationStore((s) => s.setDeterministicPlayback);
 
     const handleContextMenu = useHelpContextMenu();
-    const [showRender, setShowRender] = useState(false);
+    // Whether the render dialog is open lives in the registry, so a panel button can open it too
+    // (`openRenderPopup`). The dialog is still drawn here, as this toolbar's child.
+    const showRender = useSyncExternalStore(subscribeRenderPopup, isRenderPopupOpen, isRenderPopupOpen);
     const [showMenu, setShowMenu] = useState(false);
     // 'keep' = key at frame 30 stays at frame 30 (visual time shifts).
     // 'match' = key at 1.0s stays at 1.0s (frame index is remapped).
@@ -394,7 +399,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
 
                 {RenderPopupComponent && (
                     <button
-                        onClick={() => setShowRender(!showRender)}
+                        onClick={() => (showRender ? closeRenderPopup() : openRenderPopup())}
                         className={`flex items-center gap-1.5 px-2 py-0.5 rounded border transition-colors text-[10px] ${showRender ? 'bg-accent-900 border-accent-500 text-fg' : 'bg-transparent border-line/20 text-fg-muted hover:text-fg hover:bg-line/5'}`}
                         title="Render Video"
                         data-help-id="export.video"
@@ -511,7 +516,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 <CloseIcon />
             </button>
 
-            {showRender && RenderPopupComponent && <RenderPopupComponent onClose={() => setShowRender(false)} />}
+            {showRender && RenderPopupComponent && <RenderPopupComponent onClose={closeRenderPopup} />}
 
             {activeAdjunct && <activeAdjunct.Dialog onClose={() => setActiveAdjunct(null)} />}
         </div>

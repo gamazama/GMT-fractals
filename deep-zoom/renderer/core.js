@@ -2370,6 +2370,9 @@ const us = (g => ({ g:g('uG'), origin:g('uOrigin'), res:g('uRes'), right:g('uRig
               it is — the same view always gets the same light
      number   a frame of a rendered flight: measured now and blended in by that fraction, so
               the light glides from frame to frame
+     'alone'  a frame of api.dz.renderFrame: as 'fresh', and a picture with too little surface
+              to fit a plane to gets the plane that faces the camera instead of keeping the rig
+              it found — the frame's light is this view's own, whatever was drawn before it
    and every later sample of a still keeps the rig it started with.
 
    SHADOWS AND OCCLUSION COME FROM THE DEPTH BUFFER (grep SHADOW FROM DEPTH, OCCLUSION FROM
@@ -2423,8 +2426,11 @@ function rigBlit(w, h){
   gl.bindFramebuffer(gl.FRAMEBUFFER, rigFbo);
 }
 /* fit the surface plane and the depth range to such a read-back (px) of a w×h picture seen with
-   this camera basis; null if too little of it is surface */
-function fitRig(px, w, h, fwd, right, up){
+   this camera basis; null if too little of it is surface. `alone` (the rig mode 'alone'): never
+   null — where there is no fit, the plane that faces the camera, at the depths of what surface
+   there is (-1 .. 1, the rig's starting range, with none at all) */
+function fitRig(px, w, h, fwd, right, up, alone){
+  const facing = (near, far) => (alone ? { n: Array.from(fwd, c => -c), near, far } : null);
   const fov = Math.tan(0.5 * 1.1), pts = [];
   for (let j = 0; j < RIG_N; j++) for (let i = 0; i < RIG_N; i++) {
     const o = (j * RIG_N + i) * 4, z0 = px[o + 2], z = z0 >= 1024 ? z0 - 1024 : z0, kind = Math.floor(z / 256), L = px[o];
@@ -2433,8 +2439,9 @@ function fitRig(px, w, h, fwd, right, up){
     const t = Math.pow(2, L) / Math.hypot(1, ux, uy);            // depth along the view axis
     pts.push([ux * t, uy * t, t, L]);
   }
-  if (pts.length < 64) return null;
+  if (pts.length < 64 && !(alone && pts.length)) return facing(-1, 1);
   const Ls = pts.map(q => q[3]).sort((a, b) => a - b), near = Ls[Math.floor(0.05 * Ls.length)], far = Ls[Math.floor(0.95 * Ls.length)];
+  if (pts.length < 64) return facing(near, far);
   pts.scale = Math.pow(2, near);                                    // keeps 1/depth near 1 whatever the zoom
   /* Across the picture a plane is linear in 1/depth: with u = a/c, v = b/c (a right, b up, c
      forward), 1/c = A·u + B·v + C, and (A, B, C) is its normal, pointing away from the camera.
@@ -2446,7 +2453,7 @@ function fitRig(px, w, h, fwd, right, up){
     const u = a / c, v = b / c, w = pts.scale / c;
     suu += u*u; suv += u*v; su += u; svv += v*v; sv += v; n++; suw += u*w; svw += v*w; sw += w; }
   const det = suu*(svv*n - sv*sv) - suv*(suv*n - sv*su) + su*(suv*sv - svv*su);
-  if (!(Math.abs(det) > 1e-30)) return null;
+  if (!(Math.abs(det) > 1e-30)) return facing(near, far);
   const A = (suw*(svv*n - sv*sv) - suv*(svw*n - sv*sw) + su*(svw*sv - svv*sw)) / det;
   const B = (suu*(svw*n - sv*sw) - suw*(suv*n - sv*su) + su*(suv*sw - svw*su)) / det;
   const C = (suu*(svv*sw - sv*svw) - suv*(suv*sw - svw*su) + suw*(suv*sv - svv*su)) / det;
@@ -2455,10 +2462,10 @@ function fitRig(px, w, h, fwd, right, up){
 }
 /* measure now: blocks until the GPU has finished the march. For stills, thumbnails and exports,
    where the picture must not depend on timing. */
-function measureRig(w, h, fwd, right, up){
+function measureRig(w, h, fwd, right, up, alone){
   rigBlit(w, h);
   gl.readPixels(0, 0, RIG_N, RIG_N, gl.RGBA, gl.FLOAT, rigPx);
-  return fitRig(rigPx, w, h, fwd, right, up);
+  return fitRig(rigPx, w, h, fwd, right, up, alone);
 }
 /* measure without blocking, for flying frames: the read-back goes into a pixel buffer behind a
    fence, and pollRig() hands the fit over a frame or two later. One request in flight at a time. */
@@ -2577,7 +2584,8 @@ function ensureGbuf(w, h){
               in one draw: its occlusion and shadows read far more than a row of tiles.
      rig      measure the light rig from this G-buffer before shading (the whole picture must
               be in it): 'fresh' = now, as it is · 'live' = without blocking, smoothed · a
-              number = now, blended in by that fraction. Absent = keep the rig as it stands.
+              number = now, blended in by that fraction · 'alone' = now, and never the rig that
+              was there (grep THE NEW LOOK). Absent = keep the rig as it stands.
      tile     march the rectangle as side-by-side draws this wide (each must stay far below the
               ~2 s GPU watchdog); passes S and U still run once over the whole rectangle.
               Switching program and target for every tile instead made a 1440p export 3x slower.
@@ -2604,7 +2612,7 @@ function drawDeep(D, dst, vx, vy, vw, vh, S){
   }
   if (look.mode === 1 && S.rig) {                 // the light rig: see THE NEW LOOK for the three ways it is measured
     if (S.rig === 'live' && rig.n) { trackRig(pollRig(), 0.3); requestRig(S.W, S.H, S.fwd, S.right, S.up); }
-    else trackRig(measureRig(S.W, S.H, S.fwd, S.right, S.up), typeof S.rig === 'number' ? S.rig : 1);
+    else trackRig(measureRig(S.W, S.H, S.fwd, S.right, S.up, S.rig === 'alone'), typeof S.rig === 'number' ? S.rig : 1);
   }
   const newLook = look.mode === 1 && !!rig.n;
   gl.useProgram(shadeProg);
@@ -4659,10 +4667,13 @@ api.cancelRender = () => { cancelRender = true; };   // abort __export / __rende
 function showProg(html){ if(loading){ loading.style.display='flex'; loading.querySelector('.box').innerHTML=html; } }
 /* Render the CURRENT view at an arbitrary resolution by TILING (each tile a small draw ≪ the ~2 s
    watchdog) with `samples` jittered passes (denoise+AA), and return a PNG Blob. Caller owns the
-   `exporting` flag + orbit currency. Shared by __export (one still) and __renderPath (frame sequence). */
-async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
+   `exporting` flag + orbit currency. Shared by __export (one still), __renderPath (frame sequence)
+   and api.dz.renderFrame, which alone passes `alone` = { dist, aspect }: the depth scale is then
+   that number (the view's own distance), the waits are dzYield, not animation frames, and an
+   aspect above 0 is the picture's width over height instead of the canvas's own. */
+async function renderFrameToBlob(longEdge, samples, tile, label, rigMode, alone){
   longEdge = longEdge || 2560; samples = Math.max(1, samples||16); tile = tile || 128;
-  const cW = Math.max(2,canvas.clientWidth), cH = Math.max(2,canvas.clientHeight), aspect = cW/cH;
+  const cW = Math.max(2,canvas.clientWidth), cH = Math.max(2,canvas.clientHeight), aspect = alone && alone.aspect > 0 ? alone.aspect : cW/cH;
   let { w:W, h:H } = longEdgeToWH(longEdge, aspect);
   W -= W % 2; H -= H % 2;                            // tiling needs even dimensions
   const {fwd,right,up} = basis();
@@ -4690,7 +4701,8 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
   // headlamp falloff must track THIS frame's depth (setPowerUniforms used the frozen smoothedDist,
   // wrong for a moving path). Derive the surface-distance scale from the reference orbit at the camera.
   let dScale;
-  if (curOrbit.box) { const est = boxCamEstimate(curOrbit); dScale = Math.max(1e-300, est > 0 ? est : smoothedDist); }
+  if (alone) dScale = alone.dist;
+  else if (curOrbit.box) { const est = boxCamEstimate(curOrbit); dScale = Math.max(1e-300, est > 0 ? est : smoothedDist); }
   else
   { let ke = curOrbit.len-1; for (let k=0;k<curOrbit.len;k++) if (curOrbit.Rk[k] > 2) { ke=k; break; }
     dScale = Math.max(1e-300, 0.5*curOrbit.Rk[ke]*Math.log(Math.max(curOrbit.Rk[ke],1e-300))/curOrbit.DRk[ke]); }
@@ -4713,7 +4725,7 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
   setCanvasSize(Math.max(2,canvas.clientWidth), Math.max(2,canvas.clientHeight));
   const tilesX = Math.ceil(W/tile), tilesY = Math.ceil(H/tile);
   const total = tilesX*tilesY*samples; let done = 0;
-  const raf = () => new Promise(r => requestAnimationFrame(r));
+  const raf = alone ? dzYield : () => new Promise(r => requestAnimationFrame(r));
   const syncPx = new Float32Array(4); let lastYield = performance.now();
   for (let s = 0; s < samples; s++) {
     const jx = (halton(s+1,2)-0.5)/H, jy = (halton(s+1,3)-0.5)/H;
@@ -4733,10 +4745,15 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
       gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, syncPx);
       const lastRow = ty === tilesY - 1 && s === samples - 1;
       if (performance.now() - lastYield > 80 || lastRow) {
-        // live preview: scale the in-progress float buffer onto the canvas, then restore aF for drawing
+        // live preview: scale the in-progress float buffer onto the canvas, then restore aF for drawing.
+        // NOT for api.dz.renderFrame (`alone`): a picture put on the canvas in the middle of a frame is
+        // presented by the browser during the wait, and the rows marched after that come out
+        // differently from run to run (grep NO PICTURE ON THE CANVAS). It shows its frame once, at the end.
+        if (!alone) {
         gl.bindFramebuffer(gl.READ_FRAMEBUFFER, aF); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
         gl.blitFramebuffer(0,0,W,H, 0,0,canvas.width,canvas.height, gl.COLOR_BUFFER_BIT, gl.LINEAR);
         gl.bindFramebuffer(gl.FRAMEBUFFER, aF);
+        }
         showProg(`<span class="spin">◓</span> ${label} ${W}×${H}… ${Math.round(100*done/total)}%`);
         await raf(); lastYield = performance.now();
         if (cancelRender) { gl.disable(gl.BLEND); gl.deleteFramebuffer(aF); gl.deleteTexture(aT); freeGuideSet(gs); return { cancelled:true }; }
@@ -4750,6 +4767,7 @@ async function renderFrameToBlob(longEdge, samples, tile, label, rigMode){
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, aF);
   const fbuf = new Float32Array(W*H*4);
   gl.readPixels(0,0,W,H,gl.RGBA,gl.FLOAT,fbuf);
+  if (alone) { gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null); gl.blitFramebuffer(0,0,W,H, 0,0,canvas.width,canvas.height, gl.COLOR_BUFFER_BIT, gl.LINEAR); }   // the finished frame, shown once: nothing of this frame is drawn after it
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.deleteFramebuffer(aF); gl.deleteTexture(aT);
   const img = new Uint8ClampedArray(W*H*4);
@@ -4794,6 +4812,106 @@ api.export = async function(longEdge, samples, tile){
     return { W:r.W, H:r.H };
   } finally { exporting = false; cancelRender = false; if (loading) { loading.style.display='none'; loading.style.background=''; } }
 };
+
+/* ════════ ONE FRAME TO MEMORY — api.dz.renderFrame (2026-10-11) ════════
+   The CURRENT view and look as a PNG blob, for a host that renders a sequence one frame at a time
+   and writes each frame itself (the shell's route render). { longEdge, samples, tile?, aspect? }:
+   `aspect` (width over height) holds the frame's shape whatever the window does meanwhile;
+   without it the canvas's own shape now is taken, as api.export does. Resolves null when cancelled
+   (api.cancelRender); rejects when it cannot start — not ready, a render already running — or
+   when the picture is too large for the look (the message says so).
+
+   A FRAME DEPENDS ON THE VIEW AND THE LOOK AND NOTHING ELSE: the same frame comes out rendered
+   alone or in the middle of a sequence, which is what lets a host skip the frames it already has.
+   api.export and api.renderPath share renderFrameToBlob with it and do NOT hold this; each reads
+   something the frames before it left behind. Here:
+     - THE DEPTH SCALE is the surface distance of this view (viewDistance), never smoothedDist,
+       which is eased, and held from earlier frames while an orbit has not escaped.
+     - THE POLE GUARD (grep) is applied here: frame() returns early during a render, and its own
+       nudge is sized by smoothedDist. This one is sized by this view's distance.
+     - THE REFERENCE ORBIT is built for the view every time, whatever orbitDirty says.
+     - THE SHADER VARIANT the picture needs is built now, BLOCKING, if it is still building in the
+       background: otherwise the frames of the first seconds are drawn by another march.
+     - BLA on 'auto' goes by this view's distance, not by where the live view's hysteresis stands.
+     - THE LIGHT RIG is measured from this frame alone (rig mode 'alone'; grep THE NEW LOOK).
+     - ITERATIONS are what is set: the automatic rules are frame()'s, and frame() does not run.
+   The live view gets its own rig and BLA flag back afterwards, and rebuilds its orbit.
+
+   ITS WAITS ARE dzYield, a message channel. requestAnimationFrame stops in a hidden tab and a
+   timer is slowed to one a second there; a long render has to go on behind another window.
+   Pitfall: nothing here locks the view or the look. A host that changes either while a frame is
+   being drawn gets a frame of two halves.
+
+   NO PICTURE ON THE CANVAS WHILE A FRAME IS DRAWN. api.export and api.renderPath blit the
+   picture so far onto the canvas at every wait. The browser then presents the canvas during the
+   wait, and the rows of tiles marched after that are NOT the rows a frame without that blit
+   gets: measured on a grainy view (frame 8 of the scratch route) 100 s after start-up, ten
+   renders with a wait forced after every row gave seven different pictures with the blit, and
+   without it nine times the picture of a frame that never waits. So this function blits once,
+   when the frame is finished and read back. (Why a present disturbs the rows after it is not
+   known: saying the program and the textures again after each wait did not mend it.)
+
+   MEASURED 2026-10-11 (debug/scratch/r6/, git-ignored; real GPU, 1280 px, 2 samples):
+     - WHERE THE PICTURE IS SMOOTH a frame is the same frame every time - alone, straight after
+       another frame, ten times in a row: equal pixel for pixel, or a level in one to six pixels
+       of 1.3 million.
+     - WHERE THE PICTURE IS GRAIN (the speckle a few samples leave on near-critical ground) it is
+       NOT ALWAYS, and what is left is not this function's. Two things remain:
+         in the FIRST MINUTE after the page opens, a grainy frame can come out as another throw
+         of its grain than later (in the app, a run started 30 s after load differed from the
+         same frames rendered afterwards in 3 of 8 sessions, in up to 23 % of the pixels by up
+         to 105 levels; a run started 75 s later did in none of five: a level in two to six pixels);
+         and the first few renders AFTER A PAUSE (live frames in between) can differ from the
+         renders that follow each other closely, which then agree.
+       The page's own still export (api.export, untouched here) does the same and more: one grainy
+       view twelve times, six different pictures. The cause is not known. Ruled out one by one:
+       the G-buffer left by the frame before, a screenshot taken meanwhile, renders at another
+       place first. It is the floor the parity smoke prints beside its pictures. */
+const dzYieldPort = new MessageChannel(); let dzYieldDone = null;   // one waiter at a time: renders do not overlap (`exporting`)
+dzYieldPort.port1.onmessage = () => { const done = dzYieldDone; dzYieldDone = null; if (done) done(); };
+const dzYield = () => new Promise(res => { dzYieldDone = res; dzYieldPort.port2.postMessage(0); });
+/* the surface distance at the camera, from its own orbit: where that first passes the escape
+   radius (what frame() calls rawDist). -1: it does not within the orbit. */
+function orbitEstimate(O){
+  if (O.box) return boxCamEstimate(O);
+  for (let k = 0; k < O.len; k++) if (O.Rk[k] > 2) return Math.max(0, 0.5*O.Rk[k]*Math.log(O.Rk[k])/O.DRk[k]);
+  return -1;
+}
+/* that distance for THIS view alone. A count too low for the camera's orbit to escape says nothing
+   of it: an orbit run to the ceiling is asked instead (a build stops at the escape, so it costs
+   what it needs). 1 when that does not escape either: the camera is in the solid, the picture flat. */
+function viewDistance(O){
+  let d = orbitEstimate(O);
+  if (!(d > 0)) d = orbitEstimate(buildRefOrbit(camHP, itersMax() + 2));
+  return d > 0 ? d : 1;
+}
+async function dzRenderFrame(req){
+  if (!deepReady || dzDisposed) throw new Error('The deep renderer is not ready.');
+  if (exporting) throw new Error('A render is already running.');
+  const o = req || {};
+  exporting = true; cancelRender = false;
+  const keepRig = { n: rig.n, near: rig.near, far: rig.far }, keepBla = blaEnabled;
+  try {
+    if (boxOn()) ensureBoxVariant(false); else if (rayUse) ensureRayVariant(false);
+    if (!deepNow()) throw new Error('The deep shader of this formula could not be built.');
+    let O = buildRefOrbit(camHP, cam.iters + 2);
+    if (camHP[0] === 0n && camHP[1] === 0n && !boxOn()) {            // POLE GUARD, by this view's own distance
+      camHP[0] = hp.fromNum(Math.max(viewDistance(O) * 1e-9, 1e-30)); cam.pos = camHP.map(hp.toNum);
+      O = buildRefOrbit(camHP, cam.iters + 2);
+    }
+    const dist = viewDistance(O);
+    if (blaMode === 'auto' && !boxOn()) blaEnabled = !rayUse && dist < BLA_AUTO_ON && !!ensureVariant(true, false, false);
+    if (!rayUse && !boxOn() && jacBits()) ensureVariant(blaEnabled, false, true);
+    curOrbit = O; uploadOrbit(O);
+    const r = await renderFrameToBlob(o.longEdge, o.samples, o.tile, 'rendering', 'alone', { dist, aspect: +o.aspect });
+    if (r.error) throw new Error(r.error);
+    return r.cancelled ? null : r.blob;
+  } finally {
+    rig.n = keepRig.n; rig.near = keepRig.near; rig.far = keepRig.far;
+    blaEnabled = keepBla; orbitDirty = true;
+    exporting = false; cancelRender = false; if (loading) { loading.style.display='none'; loading.style.background=''; }
+  }
+}
 
 /* ════════ CAMERA-PATH RECORD / EXPORT / REPLAY ════════
    Records the full camera + scene state per frame (camHP kept as P=256 BigInt decimal STRINGS — no
@@ -5546,6 +5664,8 @@ api.dz = {
     c2.putImageData(img, 0, 0);
     return cv;
   },
+  /* the current view and look as a PNG blob, { longEdge, samples }; null when cancelled (grep ONE FRAME TO MEMORY) */
+  renderFrame: dzRenderFrame,
   /* Fly straight ahead (along the CURRENT look direction each frame, so the mouse can still steer)
      until the surface distance is about `depth`. Each frame moves a fraction of the distance
      estimate, which is a lower bound on the way to the surface, so the camera cannot pass through.

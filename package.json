@@ -148,6 +148,7 @@
     "test:frag:catalog-drift": "tsx debug/check-catalog-drift.mts",
     "report:frag:scan": "tsx debug/scan-frag-parse.mts",
     "test:frag:v": "tsx debug/test-frag-importer.mts --verbose",
+    "test:frame-folder": "tsx debug/test-frame-folder.mts",
     "test:gate": "npm run test:interaction && npm run test:interaction:wiring && npm run test:interaction:coverage && npm run test:modulation-coverage && npm run test:param-mapping && npm run test:modulation-parity",
     "test:gmf": "tsx debug/test-gmf-roundtrip.mts",
     "test:eyedropper": "tsx debug/test-eyedropper-active.mts",
