@@ -85,8 +85,13 @@ call):
   playhead where it was.
 - `0767a886`: mediabunny 1.40.1 -> 1.61.3 (installed in `stable/node_modules` with his approval).
   GMT's, fluid-toy's and the deep zoomer's video proofs pass on it.
-- For his own check in Windows Media Player: `debug/scratch/strict-player-test/after-mediabunny-1.61.3/`
-  (24 files, each named for what it is; the names were checked against the files' box order).
+- His own check, the same evening: `debug/scratch/strict-player-test/after-mediabunny-1.61.3/` (24
+  files written by the new mediabunny in the new layout, each named for what it is; the names
+  were checked against the files' box order). His words: "all files thumbnail and codec info and
+  wmp playback successfully (the av1 and webm play fine in vlc)". So the streamed layout (the
+  index at the end), a keyframe a second, the audio track and mediabunny 1.61.3 are cleared for
+  the strict player he named. Not tried: After Effects, a real disk through the browser's own
+  picker.
 
 **Where the bulb's 21 to 26 seconds go** (`debug/scratch/load/`, measured that evening; nothing
 built, it is his kernel):
