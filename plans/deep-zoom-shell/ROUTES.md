@@ -29,7 +29,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | done; the mediabunny upgrade waits for him | `9d05d00b` |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | done for the deep zoomer; GMT's is read and measured, not built: his calls below | `e99e82ef` |
-| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7a done; R7b to R7d: see the section | `e41890c4` |
+| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7a and R7b-1 done (the page's program is retired); the rest: see the section | `e41890c4`, `f9f01e1a` |
 
 Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
 the owner, 2026-10-11") and is written into the four stages under "The stages".
@@ -1011,6 +1011,51 @@ through: 2 lines of the param-map check red).
   sessions on the untouched tree (three shoots, three pictures: 0.24 to 0.60 % of pixels, up to
   29 levels), 80 s or more after page open. Through the harness the same place repeats to the
   byte, and the bulb's shell pictures repeat.
+
+**R7b-1 as built, 2026-10-11** (`f9f01e1a`; the R7a builder carried on: 784 thousand tokens more,
+89 minutes; 35 files, +836 / -1,426; `core.js` 5,335 -> 4,966 lines). By the builder on the real
+GPU: the shader compare, the pictures, the direct proof before and after, the first wait, the
+bench, a failed build driven in the app, the shell smoke 54 of 54, the build. By the orchestrator:
+typecheck, ten node checks, the shader compare, the direct proof, the whole smoke and the build
+again. Three deliberate breaks seen red: the ray bits at 0 (smoke stage 2, 8 lines), Step size
+shown for the bulb (2 lines), the kernel's estimate 0.5 -> 0.4 (the direct proof: 0 of 11 depths).
+
+- **The bulb has one program.** The ray shader is built from the moment the module is created and
+  is what `ready` means. `P`, `PB`, `PT`, `PBT` are never compiled; the skip table is gone from
+  the shader and the CPU, with `pertMarchJS`, `api.marchPop`, `api.stopPlay` and four telemetry
+  keys (16 -> 12). `DEEP_FRAG` is compiled from two places: the ray march's and the Mandelbox's.
+- **`api.setRayMarch` stays as a tool's handle.** Bits 0 no longer selects another program: it
+  leaves nothing of the ray march in force inside the one program (the page's step rule, no jet,
+  the page's iteration rules). The direct proof holds bits 0 for its whole run and switches to
+  bit 8 only around each careful march, so its iteration counts are the counts it always used.
+- **The proofs.** `PR`, `PTR`, `X`, `XT` compile what `e41890c4` compiles less four unused
+  uniform declarations; the f32 baselines and the shade and guide passes the same text. The direct
+  proof's 79 output lines are the same before and after but the one naming the path. Pictures
+  against the tree before the retirement: 37 the same, 3 within the floor, 1 outside it (below).
+  The bench: the ray march wrong on 1.73 %, 1.85 % and 0.75 % of rays at the three kept places
+  (recorded: 1.7, 1.7, 0.7).
+- **The first wait** (dev server, cold shader cache, three runs each, seconds from page open):
+  before, ready and the first deep picture at 13.1 (the page's march), the ray march's at 33.2;
+  after, ready and the first deep picture at 20.3, the ray march's. On the dev server the splash
+  "Loading Deep Zoom..." covers that whole build and the page stands still under it: React's double
+  mount in dev (inferred; with one mount, on the harness page, the renderer is up at 0.8 s and
+  draws 56 frames a second while the program builds). The production build is measured in R7b-2.
+- **Shell**: no Ray march switch; Step size is the Mandelbox's row (`condition: BOX_ONLY`);
+  `KeptPlace.march` is gone. A scene with `rayMarch: false`, a bulb step size, `bla` and
+  `trueGradient` loads and ignores them.
+- **Parity** is gone (the script, the npm line). What cited it in source is an `@assumption` or is
+  re-pointed at the direct proof. What nothing holds now: the module's create / dispose lifecycle,
+  its own key listener under a host-owned input, "roll 0 is the picture from before the roll".
+- **The ADR is drafted, not filed**: `plans/deep-zoom-shell/ADR-DRAFT-one-bulb-program.md`, with
+  the update block for ADR-0135 and every rule and ADR line that now cites something gone.
+
+For R7c, found and not looked into: **one shell frame did not match** (the power-2 place at
+5e-20: 298 of 230,400 pixels, 292 of them by a level, all in the frame's last row of tiles; a
+second run gave the same bytes). One measurement, as his rule allows: in one further session the
+same tree drew that frame six times; five were the picture from before the retirement, to the
+byte, and the one taken after 30 s of live picture was a third picture (1,207 pixels, up to 34
+levels). So the tree still draws the old picture, and that frame does not repeat in the shell.
+The same place through the harness repeats.
 
 Not in this stage:
 - The Mandelbox's ray step (the math session, `NEXT.md` session 8).
