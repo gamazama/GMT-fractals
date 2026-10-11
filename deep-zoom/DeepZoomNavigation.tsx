@@ -21,8 +21,8 @@
  *     for a turn. In: `host.orientation()`, `host.sense(...)`, `host.freeDistance(...)` and
  *     `host.rawDistance()`. No position is ever read back.
  *   - The mode is the engine store's `cameraMode` ('Fly' or 'Orbit'), the field GMT's own Tab key
- *     flips; this app's Tab is in `deep-zoom/hotkeys.ts`. The fly speed, the speed rule's two
- *     settings, the `flying` flag and the readings the readouts show live in `navigationState.ts`.
+ *     flips; this app's Tab is in `deep-zoom/hotkeys.ts`. The fly speed, the speed rule's rise
+ *     limit, the `flying` flag and the readings the readouts show live in `navigationState.ts`.
  *
  * WHAT THE SPEED FOLLOWS (the rule is `deep-zoom/flyPace.ts`, its reasons are there)
  *   The pace - the distance the speed is multiplied by - is the nearer of WHAT IS LOOKED AT and
@@ -31,11 +31,12 @@
  *   and about the move's own direction when that is another one (S, A, D, up, down, a diagonal).
  *   For W alone the two are one bundle. One frame never moves more than half the nearest ray ahead
  *   of the move. The estimate at the camera (`host.rawDistance()`) stands in only when nothing
- *   lies that way at all, and is the whole rule when Settings > "Speed follows the view" is off.
+ *   lies that way at all. There is no other rule and no switch for this one (the owner,
+ *   2026-10-11: the speed follows the view, always).
  *   - While something flies the view's bundle is read every frame; otherwise 8 times a second,
  *     which also feeds the readouts (`setReadings`) and keeps the pace current for the moment a
  *     key goes down. The renderer keeps each bundle: a still camera costs nothing.
- *   - The pace starts afresh on the host's `viewSet` event (a jump) and while the rule is off.
+ *   - The pace starts afresh on the host's `viewSet` event (a jump).
  *
  * WHAT THE HANDS DO
  *   Fly (the mode the app starts in):
@@ -547,7 +548,6 @@ export const DeepZoomNavigation: React.FC = () => {
             const now = performance.now();
             const inOrbit = orbiting();
             const locked = navigationLocked();
-            if (!nav.followView) pace.reset();
             // The view's bundle, at most once a frame, only when something asks for it. (Held in
             // an object: the compiler does not follow an assignment made inside a closure.)
             const got: { read: DepthReading | null; moved: boolean } = { read: null, moved: false };
@@ -588,7 +588,7 @@ export const DeepZoomNavigation: React.FC = () => {
                     inputs: playing ? lookOnly(inputs) : inputs,
                     speed: inp.speedRef.current,
                     distance: host.rawDistance(),
-                    sense: nav.followView ? (direction) => {
+                    sense: (direction) => {
                         got.moved = true;
                         const nearest = host.rawDistance();
                         const looked = view().sense;
@@ -602,7 +602,7 @@ export const DeepZoomNavigation: React.FC = () => {
                             boost: held.boost,
                         });
                         return { pace: value, limit: DZ_NAV_STRIDE_SHARE * ahead.near };
-                    } : undefined,
+                    },
                     translate: playing ? nowhere : translate,
                 });
                 if (turned) { if (playing) lookTurned(turned); else turnTo(turned); }
@@ -633,12 +633,11 @@ export const DeepZoomNavigation: React.FC = () => {
             if (!got.moved && now - lastRead >= DZ_NAV_READ_MS) {
                 const seconds = Number.isFinite(lastRead) ? (now - lastRead) / 1000 : 0;
                 lastRead = now;
-                if (nav.followView) pace.step({ delta: seconds, look: paceReading(view().sense, host.rawDistance()), ahead: NaN, rise: nav.paceRise, boost: false });
-                else view();
+                pace.step({ delta: seconds, look: paceReading(view().sense, host.rawDistance()), ahead: NaN, rise: nav.paceRise, boost: false });
             }
             if (got.read && now - lastPublished >= DZ_NAV_READ_MS) {
                 lastPublished = now;
-                const shown = nav.followView ? pace.value() : host.rawDistance();
+                const shown = pace.value();
                 setReadings(got.read.depth, got.read.isLook, shown > 0 && Number.isFinite(shown) ? shown : 0);
             }
         });

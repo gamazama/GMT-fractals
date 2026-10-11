@@ -12,20 +12,21 @@
  *                    Quality tab could not be reached at all. The key is in hotkeys.ts.
  *   Invert look Y    `store.invertY`, read by the navigation (deep-zoom/DeepZoomNavigation.tsx).
  *
- * And the two numbers of the fly speed's rule (deep-zoom/flyPace.ts), which the owner sets in
- * flight; they live in deep-zoom/navigationState.ts, not in the engine store:
+ * And the one number of the fly speed's rule (deep-zoom/flyPace.ts) the owner sets in flight; it
+ * lives in deep-zoom/navigationState.ts, not in the engine store:
  *
- *   Speed follows the view   on (the default): the speed follows what is in the middle of the
- *                    picture and what lies ahead of the move. Off: the estimate at the camera, the
- *                    rule until 2026-10-09 - there to compare the two in flight.
- *   Speed rise limit         how fast the pace may grow, in decades a second.
+ *   Speed rise limit   how fast the pace may grow, in decades a second.
+ *
+ * There is NO switch for the rule itself: the speed follows the view, always. "Speed follows the
+ * view" was a row here until 2026-10-11 (off: the estimate at the camera, the rule before
+ * 2026-10-09, there to compare the two in flight); the owner let it go.
  *
  * All are per device (localStorage), not per scene. Call once at boot, after `registerCoreSettings`.
  */
 import { registerSetting } from '../store/settingsRegistry';
 import { useEngineStore } from '../store/engineStore';
 import { DZ_PACE_RISE_RANGE } from './flyPace';
-import { setFollowView, setPaceRise, useDzNavigation } from './navigationState';
+import { setPaceRise, useDzNavigation } from './navigationState';
 
 let registered = false;
 
@@ -60,19 +61,6 @@ export function registerDeepZoomSettings(): void {
     });
 
     registerSetting({
-        id: 'deep-zoom.speed-follows-view',
-        tab: 'Interface',
-        section: 'Camera',
-        label: 'Speed follows the view',
-        description: 'The fly speed follows the distance to what is in the middle of the picture, and to what lies ahead of the move. Off: it follows the nearest surface in any direction, as it did before.',
-        control: { kind: 'boolean' },
-        get: () => useDzNavigation.getState().followView,
-        set: (v) => setFollowView(!!v),
-        subscribe: (cb) => useDzNavigation.subscribe(cb),
-        order: 1,
-    });
-
-    registerSetting({
         id: 'deep-zoom.speed-rise-limit',
         tab: 'Interface',
         section: 'Camera',
@@ -82,7 +70,6 @@ export function registerDeepZoomSettings(): void {
         get: () => useDzNavigation.getState().paceRise,
         set: (v) => setPaceRise(Number(v)),
         subscribe: (cb) => useDzNavigation.subscribe(cb),
-        order: 2,
-        when: () => useDzNavigation.getState().followView,
+        order: 1,
     });
 }

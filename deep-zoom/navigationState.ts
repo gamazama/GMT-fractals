@@ -1,14 +1,17 @@
 /**
  * deep-zoom/navigationState.ts - what the shell's navigation keeps besides the camera: the fly
- * speed and the speed rule's two settings (preferences), whether the hands are flying right now,
+ * speed and the speed rule's rise limit (preferences), whether the hands are flying right now,
  * and the two distances the readouts show.
  *
  * PURPOSE
  *   The fly speed is how many paces the camera covers in a second, so it means the same at 1e-3
  *   and at 1e-70. That makes it a preference of the person, not a property of a place: it is NOT
  *   a feature param (a saved location or a scene file must not change how fast you fly), it is
- *   kept in localStorage like the engine's own `invertY`. The same holds for which distance the
- *   speed follows (`followView`) and how fast it may grow (`paceRise`).
+ *   kept in localStorage like the engine's own `invertY`. The same holds for how fast the speed
+ *   may grow (`paceRise`). WHICH distance the speed follows is not a setting: it follows the view,
+ *   always (`deep-zoom/flyPace.ts`). Until 2026-10-11 a switch, `followView`, put the rule before
+ *   it back; the owner let it go, and a `gmt.deepZoom.followView` left in a browser's storage from
+ *   then is simply never read.
  *   `flying` is true from the first frame a fly key, a stick or a look drag is held to the first
  *   frame none is: the balanced session of `engine/plugins/navigation/useNavigationInput.ts`.
  *   `depth` is THE DEPTH THE APP SHOWS: the distance to what is in the middle of the picture (the
@@ -17,8 +20,8 @@
  *
  * THE SEAM
  *   Written by `deep-zoom/DeepZoomNavigation.tsx` only: `setFlySpeed` from the wheel, `setFlying`
- *   from the session, `setReadings` from its tick, at most 8 times a second. The two settings are
- *   also written by the Settings panel (`deep-zoom/settings.ts`).
+ *   from the session, `setReadings` from its tick, at most 8 times a second. The rise limit is
+ *   written by the Settings panel (`deep-zoom/settings.ts`).
  *   Read by the depth readout, the depth scale, the status chip, the milestones, `locations.ts`
  *   (a slot digit does nothing while flying) and anything that needs `isFlying()`. `depth` is also
  *   the depth of every sample of the trail (`deep-zoom/trail.ts`) and the scale of the route's
@@ -26,8 +29,8 @@
  *
  * PITFALLS
  *   - The range and the default of the speed are the owner's decision of 2026-10-08 (0.01 to 8,
- *     default 3.6: the standalone page's `baseSpeed 0.06` a frame at 60 frames a second). Under
- *     the view rule a pace is a third of the distance read (`DZ_PACE_SHARE` in flyPace.ts), which
+ *     default 3.6: the standalone page's `baseSpeed 0.06` a frame at 60 frames a second). A
+ *     pace is a third of the distance read (`DZ_PACE_SHARE` in flyPace.ts), which
  *     is what keeps this number meaning what it meant: he flew the rule at the whole distance and
  *     found it "3x too fast overall".
  *   - The top of the range is NOT what keeps the camera out of the surface. The one-frame limit
@@ -54,7 +57,6 @@ export const DZ_FLY_SPEED_DEFAULT = 3.6;
 export const DZ_FLY_SPEED_RANGE: readonly [number, number] = [0.01, 8];
 
 const STORAGE_KEY = 'gmt.deepZoom.flySpeed';
-const FOLLOW_VIEW_KEY = 'gmt.deepZoom.followView';
 const PACE_RISE_KEY = 'gmt.deepZoom.paceRise';
 
 const clampSpeed = (v: number): number => Math.min(DZ_FLY_SPEED_RANGE[1], Math.max(DZ_FLY_SPEED_RANGE[0], v));
@@ -82,10 +84,6 @@ interface DzNavigationState {
     flySpeed: number;
     /** A fly key, a stick or a look drag is held. */
     flying: boolean;
-    /** True (the default): the speed follows what is looked at and what lies ahead of the move,
-     *  read by rays (`deep-zoom/flyPace.ts`). False: the estimate at the camera, the rule until
-     *  2026-10-09, kept so the two can be compared in flight. */
-    followView: boolean;
     /** Decades a second the pace may rise by, before Shift. */
     paceRise: number;
     /** The depth the app shows: what is looked at, else the nearest surface. 0: no reading yet. */
@@ -99,7 +97,6 @@ interface DzNavigationState {
 export const useDzNavigation = create<DzNavigationState>()(() => ({
     flySpeed: storedSpeed(),
     flying: false,
-    followView: stored(FOLLOW_VIEW_KEY) !== '0',
     paceRise: storedRise(),
     depth: 0,
     depthIsLook: false,
@@ -118,13 +115,6 @@ export function setFlySpeed(v: number): void {
 
 export function setFlying(flying: boolean): void {
     if (useDzNavigation.getState().flying !== flying) useDzNavigation.setState({ flying });
-}
-
-/** Which distance the speed follows, remembered. */
-export function setFollowView(on: boolean): void {
-    if (useDzNavigation.getState().followView === on) return;
-    useDzNavigation.setState({ followView: on });
-    remember(FOLLOW_VIEW_KEY, on ? '1' : '0');
 }
 
 /** How fast the pace may rise, in decades a second (clamped to its range), remembered. */

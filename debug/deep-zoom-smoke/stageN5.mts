@@ -439,11 +439,18 @@ export const stage: DzStage = {
             },
         },
         {
-            name: 'the speed rule is a setting: off, W crawls by the nearest surface; on, it flies by the view; both rows are remembered',
+            // Until 2026-10-11 this step was 'the speed rule is a setting: off, W crawls by the nearest
+            // surface; on, it flies by the view; both rows are remembered'. The switch went (the
+            // owner: the speed follows the view, always), and the step was rewritten for what is
+            // there now. The first half of `falsified` is the old step's record, kept as it was.
+            name: 'the speed rule has no switch: an "off" the old one left in storage is not read; the rise limit row sets how fast the pace climbs, and is remembered',
             owner: 'nav-2026-10-09',
-            falsified: "2026-10-09, two breaks, one run each, both in deep-zoom/navigationState.ts: `setFollowView` only remembering, not switching (its `setState` line removed) -> red, with the switch off the pace read 'pace 2e-67' and two seconds of W moved the camera 2.25e-60 (5.08e-75 by the nearest surface); the rise limit not remembered (`remember(PACE_RISE_KEY, ...)` removed) -> red, 'after a reload the rule is on and the rise limit is 16 (true, 4)'.",
+            falsified: "AS THE OLD STEP (a switch, 'Speed follows the view', and W crawling with it off), 2026-10-09, two breaks, one run each, both in deep-zoom/navigationState.ts: `setFollowView` only remembering, not switching (its `setState` line removed) -> red, with the switch off the pace read 'pace 2e-67' and two seconds of W moved the camera 2.25e-60 (5.08e-75 by the nearest surface); the rise limit not remembered (`remember(PACE_RISE_KEY, ...)` removed) -> red, 'after a reload the rule is on and the rise limit is 16 (true, 4)'. AS REWRITTEN, 2026-10-11, one break, in deep-zoom/DeepZoomNavigation.tsx: the tick's reading at rest handing the pace a fixed rise instead of the row's (`rise: nav.paceRise` made `rise: 4` in the `pace.step` under 'Nothing flew this frame') -> red, two lines: 'back to the scene with the row at 0.5: two seconds later the pace is 3.0e-69, 7.5 decades up (under 2)' and 'with the row at 16: two seconds later it is 1.0e-61, at the scene (above 1e-60)'. The lines about the switch (no row, no state key, W flying with \"off\" in storage) have not been seen red: making them red means putting the removed switch back.",
             async run(ctx) {
+                // What the old switch left in a browser where it was off. Nothing may read it.
                 await ctx.boot({ clearStorage: true });
+                await ctx.ev("(() => { localStorage.setItem('gmt.deepZoom.followView', '0'); return true; })()");
+                await ctx.boot();
                 if (!(await enterWallBehind(ctx))) return;
                 /** A row of the engine's Settings panel, through the registry the panel draws from. */
                 const row = (id: string, write?: string) => ctx.ev<{ found: boolean; value: unknown; shown: boolean; kind: string; min?: number; max?: number }>(`(async () => {
@@ -453,34 +460,45 @@ export const stage: DzStage = {
                     ${write ? `d.set(${write});` : ''}
                     return { found: true, value: d.get(), shown: !d.when || d.when(), kind: d.control.kind, min: d.control.min, max: d.control.max };
                 })()`);
-                const follow = await row('deep-zoom.speed-follows-view');
+                const labels = await ctx.ev<string[]>("(async () => (await import('/store/settingsRegistry.ts')).getSettings().map((x) => x.label))()");
+                const keys = await ctx.ev<string[]>("(async () => Object.keys((await import('/deep-zoom/navigationState.ts')).useDzNavigation.getState()))()");
+                ctx.check(!(await row('deep-zoom.speed-follows-view')).found && !labels.some((l) => /follows the view/i.test(l)) && !keys.includes('followView'),
+                    'Settings has no "Speed follows the view" row, and the navigation keeps no such switch (' + labels.length + ' rows; it keeps ' + keys.join(', ') + ')');
                 const rise = await row('deep-zoom.speed-rise-limit');
-                ctx.check(follow.found && follow.value === true && follow.kind === 'boolean', 'Settings has "Speed follows the view", and it is on');
-                ctx.check(rise.found && rise.value === 4 && rise.shown && rise.kind === 'number' && rise.min === 0.5 && rise.max === 16, 'and "Speed rise limit": 4 decades a second, 0.5 to 16');
-                // Off: the old rule. The pace shown is the nearest surface, and W crawls by it.
-                await row('deep-zoom.speed-follows-view', 'false');
-                await ctx.sleep(400);
-                ctx.check((await ctx.ev<string | null>("localStorage.getItem('gmt.deepZoom.followView')")) === '0' && !(await row('deep-zoom.speed-rise-limit')).shown, 'switched off, it is remembered and the rise limit row is hidden');
-                const paceOff = await readoutText(ctx, 'data-dz-pace');
-                ctx.check(/^pace \de-7[5-7]$/.test(paceOff), 'the pace is then the nearest surface ("' + paceOff + '")');
+                ctx.check(rise.found && rise.value === 4 && rise.shown && rise.kind === 'number' && rise.min === 0.5 && rise.max === 16, '"Speed rise limit" is there and shown: 4 decades a second, 0.5 to 16');
+
+                // THE ROW WORKS: it is how fast the pace climbs. Turn to the wall behind (the pace falls
+                // to it at once), then back to the scene 20 decades farther away: at 0.5 decades a
+                // second the pace has hardly left the wall after two seconds; at 16 it is at the scene.
+                const pace = async (): Promise<number> => Number((await readoutText(ctx, 'data-dz-pace')).replace(/^pace\s*/, ''));
+                const l0 = await look(ctx);
+                await ctx.withHost(`host.setOrientation(${l0.yaw + Math.PI}, ${-l0.pitch}, ${l0.roll}); return true;`);
+                const fell = await ctx.until("/^pace \\de-7[4-7]$/.test((document.querySelector('[data-dz-pace]') || { textContent: '' }).textContent.trim())", 10_000, 50);
+                const atWall = await pace();
+                if (!ctx.check(fell >= 0, 'turned to the wall behind, the pace falls to it (' + atWall.toExponential(1) + (fell >= 0 ? ', after ' + fell + ' ms)' : ', not after 10 s)'))) return;
+                await row('deep-zoom.speed-rise-limit', '0.5');
+                await ctx.withHost(`host.setOrientation(${l0.yaw}, ${l0.pitch}, ${l0.roll}); return true;`);
+                await ctx.sleep(2000);
+                const slow = await pace();
+                ctx.check(slow > 0 && slow < atWall * 100, 'back to the scene with the row at 0.5: two seconds later the pace is ' + slow.toExponential(1) + ', ' + Math.log10(slow / atWall).toFixed(1) + ' decades up (under 2)');
+                await row('deep-zoom.speed-rise-limit', '16');
+                await ctx.sleep(2000);
+                const fast = await pace();
+                ctx.check(fast > 1e-60, 'with the row at 16: two seconds later it is ' + fast.toExponential(1) + ', at the scene (above 1e-60)');
+                ctx.check((await ctx.ev<string | null>("localStorage.getItem('gmt.deepZoom.paceRise')")) === '16', 'and the row wrote 16 to storage');
+
+                // W flies by the view, with "off" still in storage.
                 const c0 = await cam(ctx);
-                await ctx.holdKey('w', 2000);
-                await ctx.sleep(300);
-                const c1 = await cam(ctx);
-                const crawl = moveLength(c0, c1);
-                ctx.check(crawl > 0 && crawl < 1e-70, 'two seconds of W moved the camera ' + crawl.toExponential(2) + ': by the nearest surface, under 1e-70');
-                // On again: the view's rule takes over from where the camera is.
-                await row('deep-zoom.speed-follows-view', 'true');
-                await ctx.sleep(400);
                 await ctx.holdKey('w', 3000);
                 await ctx.sleep(300);
-                const flown = moveLength(c1, await cam(ctx));
-                ctx.check(flown > 1e-66, 'switched on again, three seconds of W moved it ' + flown.toExponential(2) + ' (more than 1e-66)');
-                // Both are remembered across a reload.
-                await row('deep-zoom.speed-rise-limit', '16');
+                const flown = moveLength(c0, await cam(ctx));
+                ctx.check((await ctx.ev<string | null>("localStorage.getItem('gmt.deepZoom.followView')")) === '0' && flown > 1e-66,
+                    'with the old switch\'s "off" still in storage, three seconds of W moved the camera ' + flown.toExponential(2) + ' (more than 1e-66: by the view; by the nearest surface it moves about 1e-74)');
+
+                // The row is remembered across a reload; the switch is still not there.
                 await ctx.boot();
-                const after = [await row('deep-zoom.speed-follows-view'), await row('deep-zoom.speed-rise-limit')];
-                ctx.check(after[0].value === true && after[1].value === 16, 'after a reload the rule is on and the rise limit is 16 (' + after[0].value + ', ' + after[1].value + ')');
+                const after = await row('deep-zoom.speed-rise-limit');
+                ctx.check(after.value === 16 && after.shown && !(await row('deep-zoom.speed-follows-view')).found, 'after a reload the rise limit is 16 and shown (' + after.value + '), and there is still no switch');
                 await ctx.ev("(() => { localStorage.removeItem('gmt.deepZoom.followView'); localStorage.removeItem('gmt.deepZoom.paceRise'); return true; })()");
             },
         },

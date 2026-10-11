@@ -15,14 +15,18 @@
  *          `useNavigationInput`, the fly speed, the distance to the surface, and the sink.
  *     out  the sink is called with the move in the RENDERER'S world axes and units; the return
  *          value is the new orientation when the frame turned the camera, else null.
- *   TWO SPEED RULES, chosen by the caller per frame:
- *     `frame.sense` given (the rule since 2026-10-09)  the integrator is run for a distance of 1,
+ *   TWO SPEED RULES, chosen by the caller per frame. THE APP ALWAYS GIVES `sense`:
+ *     `frame.sense` given (the rule since 2026-10-09, the only one the app flies by since the
+ *          switch between the two went, 2026-10-11)  the integrator is run for a distance of 1,
  *          which gives the move's DIRECTION and its length per unit of pace; `sense(direction)` is
  *          then asked once and answers the pace (eased by its owner, `deep-zoom/flyPace.ts`) and the
  *          most this frame may move (a share of the nearest ray ahead of the move).
- *     `frame.sense` absent (the rule before it, kept to compare in flight)  the speed follows
- *          `frame.distance`, the estimate at the camera, eased by the integrator; one frame is cut
- *          to `DZ_NAV_MAX_STRIDE` of it.
+ *     `frame.sense` absent (the rule before it)  the speed follows `frame.distance`, the estimate
+ *          at the camera, eased by the integrator; one frame is cut to `DZ_NAV_MAX_STRIDE` of it.
+ *          NOTHING IN THE APP CALLS IT THIS WAY ANY MORE. It is kept because the node check flies
+ *          the adapter through it: its "basis:", "size:", "deep:", "delta:", "stride:", "keys:" and
+ *          "turn:" lines hand no `sense`, and two "sense:" lines compare the two rules. Taking it
+ *          out means rewriting those lines for the rule that is left.
  *   The object is rebuilt from the three angles every frame (`toQuaternion` in
  *   deep-zoom/orbitCamera.ts, where the mapping is written out), so a jump, a recalled place or a
  *   preview that turned the camera needs no resync here. Only the integrators' own velocities persist.
@@ -59,7 +63,8 @@
  *   - EACH RULE HAS AN INTEGRATOR OF ITS OWN. The integrator eases the distance it is handed when
  *     it rises (1.2 a second, on the distance itself). The new rule always hands it 1, so that
  *     ease never acts - but only in an integrator the old rule has not left standing at 1e-30:
- *     with one shared, the first frames after switching rules would crawl up from there.
+ *     with one shared, the first frames after switching rules would crawl up from there. (The app
+ *     no longer switches; a caller that hands `sense` on some frames and not on others still may.)
  *
  * @invariant W, D and Space move along the renderer's own forward, right and up for any yaw, pitch
  *   and roll; Q / E turn the camera about its view axis (Q raises the roll) and move nothing; a
@@ -97,7 +102,7 @@ export interface FlyCameraFrame extends DzOrientation {
     /** Surface-distances per second. */
     speed: number;
     /** The distance to the surface this frame, unsmoothed (the integrator eases it itself). The
-     *  speed follows it only when `sense` is absent. */
+     *  speed follows it only when `sense` is absent, which in the app is never. */
     distance: number;
     /**
      * The speed rule since 2026-10-09 (see THE SEAM). Asked once, in a frame that moves, with the

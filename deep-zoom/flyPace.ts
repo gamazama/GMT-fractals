@@ -70,8 +70,9 @@ export const DZ_NAV_STRIDE_SHARE = 0.5;
  * its 3x too fast overall". That is the measurement too: along his recorded flight the estimate at
  * the camera, which the speed followed until then, read 0.24 to 0.51 of the distance to the middle
  * of the picture (the study's nav-signals.log). At a third the same speed setting flies an ordinary
- * dive as it always did, the wheel's range keeps its meaning, and the two rules can be compared in
- * flight at one setting. His to change; it is a feel number.
+ * dive as it always did, the wheel's range keeps its meaning, and the two rules could be compared in
+ * flight at one setting (while there was a switch between them: until 2026-10-11). His to change;
+ * it is a feel number.
  */
 export const DZ_PACE_SHARE = 1 / 3;
 
