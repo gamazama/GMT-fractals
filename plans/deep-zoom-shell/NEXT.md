@@ -35,7 +35,7 @@ then what lets it ship, then quality, then the large optional pieces.
 | 3 | **Zoom-outs** | A route made from one place without flying it, his kept places first (`e20power2iters85.json`); a route played backwards | 1 | 1, guess |
 | 4 | **Help and the first dive** (the rest of stage 4) | Help topics, the shortcuts page, What's New, lesson 1 | 1 for the route step of the lesson; the rest any time | 1 to 2 |
 | 5 | **The prototype goes** (stage 7) | Nothing new on screen; about 8,500 lines leave the repo; the map page and README | 1 and 2 (the prototype's record panel is the last thing only it has) | 1 |
-| 6 | **Ship** | The app on the site | 4 green, his word | his call |
+| 6 | **Ship** | The app on the site, at app.gmt-fractals.com beside GMT | **after every other session of this table** (his word, 2026-10-11) | his call |
 | 7 | **The march, finished** | Fewer places that crawl or run out of steps; the older marches retired | his places where rays ran out of steps (owed by him) | 1 to 2 |
 | 8 | **Mandelbox, the rest** | A math session first: can the box take the ray march's step, so the page's step rule leaves the shader. Then faster flying on the box, cheaper deep frames | `ROUTES.md` R7 (the page's program retired for the bulb) | 1 to 3, guess |
 | 9 | **Navigation leftovers** | Cheaper rays at the deepest places; his numbers for the rise limit and the clearance | his calls | 1 |
@@ -91,6 +91,11 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   it. Nothing is deleted until that table has no empty row.
 
 ### 6. Ship
+- **Not before sessions 1 to 12 are done.** The owner, 2026-10-11: "we push after 1-12. deepzoom
+  will release as a complete app". So nothing of this branch is pushed or merged into `main`
+  until then, and the standalone page's repo (`mandelbulb_deepzoom`, branch `kernel-perf`) is not
+  pushed either. The deep zoomer lives in GMT's repo and ships at app.gmt-fractals.com; GMT's
+  System menu already has "Open Deep Zoom" on this branch (`2edc378b`).
 - Before asking: `main` merged in if it has moved, every gate, `npm run build`, the smokes headless.
 - A push deploys the whole site and can interrupt people mid-session: his word, his timing.
 - ADR numbers 0131 and 0132 are taken on the unmerged `audio-perf-overnight` branch.
