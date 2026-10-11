@@ -361,6 +361,41 @@ The first route he can play.
   fight it.
 - **Saved** with the scene by the engine: the keys are in the sequence. No document provider.
 
+**As built, 2026-10-11** (one builder: 788 thousand tokens, 74 minutes; +1,297 lines, of which 827
+are code and 250 of those the node check). By the builder on the real GPU: parity 52 of 52 and the
+direct proof, the shell smoke 55 of 55, the build, and a scratch run of the real app (45 lines:
+three keyframes, scrub to each and the camera equals it to the digit, play, a fly key stops it,
+replace, delete, undo, a scene saved and loaded byte-identical, a share link without the route).
+By the orchestrator: typecheck, the route check and five other node checks, the renderer diff, the
+screenshots (`debug/scratch/r3/`). Files: `deep-zoom/route.ts`, `components/RoutePanel.tsx`,
+`debug/deep-zoom-checks/route.mts`.
+
+Differs from the plan:
+- **K always adds after the last keyframe**, also with the playhead on the last one: after K the
+  playhead sits there, so "parked on a keyframe replaces" would have replaced the first keyframe
+  for ever. On an EARLIER keyframe K replaces it; the row's save icon and Key Cam replace any.
+- A new leg is capped at 180 seconds; keyframes sit on whole frames.
+- The Route tab's Play runs from the playhead to the last keyframe and stops; the timeline's own
+  Play loops as before.
+- A replace keeps the keyframe's old heading.
+
+For the owner to know before he flies it:
+- **K and Ctrl+Z.** K is one step on the animation's undo, which answers Ctrl+Z only with the
+  pointer over the timeline. Over the picture, Ctrl+Z undoes the flight before the keyframe and
+  the keyframe stays.
+- **A tap back before K hooks the path**: the heading is the last move. R4 takes it from the trail.
+- **Retiming a keyframe does not move its iteration key** (two tracks). R4 ties them.
+- Iterations above 160 on the Mandelbulb are cut by the renderer, so a power-2 route deeper than
+  about 1e-38 plays with too few. The renderer's ceiling was left alone.
+- After a scrub the Iterations slider shows the keyed count. Return and a scrub leave no way back
+  to where he had flown.
+- **The graph editor draws the depth track in plain values**, an L shape: sliding keys in the dope
+  sheet works, shaping the curve does not yet. Engine faults found on the way, all for R2b: the
+  graph editor's Normalize misdraws an exponential track (`getLocalY` in `buildTrackPolyline`,
+  `utils/GraphRendererBuilder.ts`); Key Cam reads "changed" between keys on one
+  (`KeyCamButton.getStatus` calls `evaluateTrackValue` without `isLogTrack`); the iterations track
+  is filed under Shading.
+
 ### R4. The trail
 
 - **The trail**: views with their time and depth, appended from the navigation tick when the camera
