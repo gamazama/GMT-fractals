@@ -31,6 +31,14 @@
  * through the solid.
  * When the camera is not where the playhead says, one line says so and "Return" puts it back.
  *
+ * THE TAB ENDS WITH ROOM FOR THE TIMELINE'S TOGGLE. The engine's round button that opens the
+ * timeline ("Animate" while hints are on; `fixed bottom-4 left-4` in components/TimelineHost.tsx)
+ * lies over the bottom left corner of the left dock while the timeline is closed, and the last row
+ * of a list longer than the dock ended under it. So the tab can be scrolled 48 px further
+ * (`data-dz-route-room`): the last row then ends 64 px above the window's edge, which is where the
+ * HUD's bottom-left slot keeps clear of the same button (grep `bottom-16` in engine/plugins/Hud.tsx;
+ * no dock tab had to before this one). With the timeline shown the button is gone, and so is the room.
+ *
  * Registered as `dz-route` in main.tsx (it reads the stores); panels.ts places it.
  *
  * PITFALLS
@@ -44,6 +52,22 @@
  *     whole frame, the route changing, the camera changing hands (`useRoute`'s `rev`), a flight
  *     landing - and never while the timeline plays.
  *   - The smoothing slider's value is its own while it is held; the route's again on release.
+ *   - THE ROOM FOR THE TOGGLE IS OUT OF FLOW, AND CSS ALONE TAKES IT AWAY. It is an absolute box
+ *     56 px high under the tab's own box (the dock's 8 px of bottom padding lie inside it: 48 px
+ *     more scroll), hidden while the timeline is in the page (`:has` on the timeline's
+ *     `data-help-id="ui.timeline"`: the toggle is there exactly when the timeline is not, and
+ *     TimelineHost keeps that in its own state, which nothing here can read). IN FLOW it would be
+ *     part of the height the dock's `ScrollSpaceReserver` measures, and the reserver keeps a height
+ *     that shrank as an empty spacer until it has been scrolled out of view: opening the timeline
+ *     would leave the very gap this avoids. Should the timeline's help id change, the room simply
+ *     stays when the timeline is open; on the right dock or in a floating window it is 48 px of
+ *     scroll nobody needs.
+ *
+ * @assumption The last row ends clear of the toggle with the timeline closed, and with it open
+ *   the list ends where it did before - measured once, 2026-10-11, in the app at 1280 x 800 with
+ *   14 keyframes (debug/scratch/r7c/animate.mts, git-ignored; before the room was there its
+ *   "the last row ... is clear of the toggle" line was red, the row 35 px under the button). No
+ *   standing guard looks at it.
  */
 import React, { useRef, useState } from 'react';
 import { useAnimationStore } from '../../store/animationStore';
@@ -149,7 +173,7 @@ export const RoutePanel: React.FC = () => {
     const make = (fromPrevious: boolean): void => { if (routeHandSet()) setAsking(fromPrevious); else routeFromTrail(fromPrevious); };
 
     return (
-        <div data-dz-route className="flex flex-col">
+        <div data-dz-route className="relative flex flex-col">
             <div className="px-2 pt-2 flex gap-1">
                 <button
                     type="button"
@@ -343,6 +367,9 @@ export const RoutePanel: React.FC = () => {
                 })}
             </div>
             </fieldset>
+
+            {/* Room under the last row for the timeline's toggle: out of flow, gone while the timeline is shown (see the header). */}
+            <div data-dz-route-room aria-hidden className="absolute left-0 top-full h-14 w-px pointer-events-none [:root:has([data-help-id='ui.timeline'])_&]:hidden" />
 
             {asking !== null && (
                 <Modal onClose={() => setAsking(null)}>

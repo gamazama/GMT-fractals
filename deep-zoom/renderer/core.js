@@ -4280,7 +4280,7 @@ api.export = async function(longEdge, samples, tile){
     const r = await renderFrameToBlob(longEdge, samples, tile, 'exporting');
     if (r.error) { openPanel(renderEl); rstat(r.error); return r; }
     if (r.cancelled) return { cancelled:true };
-    dlBlob(r.blob, `mandelbulb_n${nPower}_d${smoothedDist.toExponential(0)}_${r.W}x${r.H}.png`);
+    dlBlob(r.blob, `${boxOn() ? `mandelbox_s${+box.scale.toFixed(3)}` : `mandelbulb_n${nPower}`}_d${smoothedDist.toExponential(0)}_${r.W}x${r.H}.png`);   // the formula and its one number: the bulb's power, the box's scale
     return { W:r.W, H:r.H };
   } finally { exporting = false; cancelRender = false; if (loading) { loading.style.display='none'; loading.style.background=''; } }
 };
