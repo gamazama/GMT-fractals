@@ -218,10 +218,15 @@
  *   fly step run with the moves taken out, the roll's ease dropped when playback stops - is wiring
  *   no node check reaches. Driven in the app on 2026-10-11 (debug/scratch/r5/app-look.mts: a look
  *   drag and Q while a route plays, Pause, W, a recorded pass, a scene saved and loaded, Clear).
- * @assumption A keyed count above the renderer's own ceiling for `setView` (160 on the Mandelbulb:
- *   grep `v.iters|0` in deep-zoom/renderer/core.js) is cut to it, while the renderer's own rule can
- *   reach 400 under the ray march. A power-2 route deeper than about 1e-38 therefore plays with too
- *   few iterations. Nothing here works around it.
+ * @invariant A keyed count arrives whole up to the renderer's ceiling for the formula in force: 400
+ *   on the Mandelbulb (the ray march's own, `RAY_ITER_MAX`), 500 on the Mandelbox - `api.dz.setView`
+ *   and `api.setIters` hold a count under `itersMax()` and nothing lower - proven by: npm run
+ *   check:deep-zoom-ray-probe ("iterations: under the ray march a view's count and a set count
+ *   arrive whole up to 400 ..."). Falsified 2026-10-11: the 160 put back in `setView`'s line of
+ *   core.js -> that line red ("300,400,160,160,4"). The check lifts the lines as text; what a route
+ *   then plays in the app was seen once (debug/scratch/r7/iters-cap.mts, git-ignored).
+ *   (Until 2026-10-11 both held the Mandelbulb at 160, the page's ceiling, while the ray march's
+ *   rule reached 400: a power-2 route deeper than about 1e-38 played with too few iterations.)
  */
 import * as THREE from 'three';
 import { create } from 'zustand';

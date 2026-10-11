@@ -383,9 +383,11 @@ export interface DeepZoomApi {
     setPower(n: number): void;
     /** Radians, absolute, always both. Rebuilds the reference orbit. */
     setPhase(theta: number, phi: number): void;
-    /** Clamped 4..160 (4..500 while the box is drawn). Rebuilds the reference orbit. With auto
-     *  iterations on this is the floor: the module raises the count with depth and never lowers it.
-     *  (Added 2026-10-08.) */
+    /** Clamped to 4 .. the ceiling in force: 400 for the bulb under the ray march, 500 while the box
+     *  is drawn, the page's 160 with ray bits 0 (grep `const itersMax` in core.js; `dz.setView`
+     *  holds a view's count under the same number). Until 2026-10-11 the bulb was held at 160
+     *  whatever marched it. Rebuilds the reference orbit. With auto iterations on this is the
+     *  floor: the module raises the count with depth and never lowers it. (Added 2026-10-08.) */
     setIters(n: number): void;
     /** THE FORMULA SEAM (added 2026-10-09; grep the name in core.js). 'mandelbulb' is the page;
      *  'mandelbox' is GMT's AmazingBox in Mandelbrot mode, with the parameters given (each optional,

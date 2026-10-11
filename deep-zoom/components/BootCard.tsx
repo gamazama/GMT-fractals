@@ -10,14 +10,15 @@
  *   2. THE COMPILE LINE. The renderer draws its f32 picture from the first frame and compiles the
  *      deep (perturbation) shader in the background: the ray march's program, the bulb's only one
  *      since 2026-10-11, about 20 s cold. Until telemetry says `ready` one line sits over the live
- *      picture; nothing is blocked and flying works meanwhile. The line goes when telemetry
- *      carries an `error` instead: a shader that could not be built is not compiling, and the
- *      status chip and a toast say so (`DZ_RAY_FAILED_TEXT`, host/current.ts).
+ *      picture; nothing is blocked and flying works meanwhile. (Measured in the production build,
+ *      2026-10-11, cold, nine runs: the picture from 0.9 s, 60 frames a second, this line until
+ *      21 to 26 s. On the dev server React mounts twice and the splash covers that wait instead.)
  *   3. THE FAILURE CARD, only when there is no renderer: `mountDeepZoom` threw
- *      (`WebGL2 unavailable`), the host reported a FATAL error (no shader within 120 s, or the
- *      Mandelbox's failed), or the browser took the graphics context twice. The surface has
- *      already disposed the host when it hands a failure in. A ray march that could not be built
- *      is NOT this card: the host stays up (grep `failRay` in host/moduleHost.ts).
+ *      (`WebGL2 unavailable`), the host reported a fatal error (the deep shader could not be
+ *      built, or did not land in 120 s), or the browser took the graphics context twice. The
+ *      surface has already disposed the host when it hands a failure in. A RAY MARCH THAT COULD
+ *      NOT BE BUILT IS THIS CARD: its detail begins with `DZ_RAY_FAILED_TEXT` (host/current.ts).
+ *      The bulb has one program and nothing stands in for it.
  *
  * Mounted by `deep-zoom/DeepZoomSurface.tsx` as a SIBLING of `#dz-frame` inside the engine's
  * viewport frame, never as its child: the render canvas is appended to `#dz-frame` in code, after
@@ -80,7 +81,6 @@ export const BootCard: React.FC<{ failure: DzBootFailure | null }> = ({ failure 
     // One primitive per selector (see the header of host/telemetry.ts).
     const live = useDzTelemetry((t) => t.live);
     const ready = useDzTelemetry((t) => t.ready);
-    const failedBuild = useDzTelemetry((t) => t.error !== '');
     const { isMobile } = useMobileLayout();
 
     if (failure) {
@@ -103,7 +103,7 @@ export const BootCard: React.FC<{ failure: DzBootFailure | null }> = ({ failure 
         );
     }
 
-    const compiling = live && !ready && !failedBuild;   // a build that failed is not compiling (the chip and a toast say what happened)
+    const compiling = live && !ready;
     if (!compiling && !isMobile) return null;
 
     return (

@@ -9,9 +9,9 @@
  *   - beside it, for the 20 or so seconds the ray march's shader takes to build, `ray march: building`
  *     (the owner, 2026-10-09: "the 20s switch on is fine except it needs some indication"). That
  *     shader is the bulb's ONE program since 2026-10-11: until it is there the picture is the plain
- *     single-precision one and nothing deep is drawn. And `ray march failed` if it could not be
- *     built: then there is no deep picture at all, and the notice's text is the one line the
- *     surface also toasts (`DZ_RAY_FAILED_TEXT`); no other march stands in.
+ *     single-precision one and nothing deep is drawn. There is NO notice for a ray march that
+ *     could not be built: that is the app's boot failure (the card of components/BootCard.tsx,
+ *     with `DZ_RAY_FAILED_TEXT`), the host is taken down, and this chip is not on screen then.
  *   - the depth, compact: `6.40e-53`. Depth is the camera's distance to the surface.
  *   - the same for the Mandelbox's shader, about 5 seconds from the first switch to that formula
  *     (`mandelbox: building`; the box's plain picture is drawn until it is there);
@@ -26,7 +26,7 @@
 
 import React from 'react';
 import { useDzTelemetry } from '../host/telemetry';
-import { DZ_RAY_FAILED_TEXT, useHost } from '../host/current';
+import { useHost } from '../host/current';
 import { formatDepth } from './depthFormat';
 import { useDzNavigation } from '../navigationState';
 
@@ -37,9 +37,6 @@ import { useDzNavigation } from '../navigationState';
  */
 
 const RAY_BUILDING_TITLE = 'The ray march\'s shader is being built, about 20 seconds the first time. Until it is ready the plain single-precision picture is shown and nothing deep is drawn; then the deep picture comes by itself.';
-/** The one line (host/current.ts), as the surface toasts it and a render refuses with it. Before 2026-10-11 this
- *  title said "The older march is drawn instead; Step size applies again": there is no older march any more. */
-const RAY_FAILED_TITLE = DZ_RAY_FAILED_TEXT;
 const BOX_BUILDING_TITLE = 'The Mandelbox\'s renderer is being built, a few seconds the first time. Its plain single-precision picture is drawn until it is ready, then changes by itself.';
 const BOX_FAILED_TITLE = 'The Mandelbox\'s renderer could not be built on this machine. Its plain single-precision picture is drawn instead, which runs out of precision a few decades in.';
 const ENGINE_TITLE = 'Perturbation with a 256-bit reference, at every depth. "f32" shows only for the seconds that renderer takes to start.';
@@ -82,11 +79,6 @@ export const StatusChip: React.FC = () => {
             {ray === 'compiling' && (
                 <span data-dz-status-ray="building" title={RAY_BUILDING_TITLE} className="px-1.5 py-0.5 rounded border border-line/15 text-fg-secondary">
                     ray march: building
-                </span>
-            )}
-            {ray === 'failed' && (
-                <span data-dz-status-ray="failed" title={RAY_FAILED_TITLE} className="px-1.5 py-0.5 rounded border border-danger/40 text-danger">
-                    ray march could not be built: no deep picture
                 </span>
             )}
             {box === 'compiling' && (

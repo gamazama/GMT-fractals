@@ -56,8 +56,8 @@ export const DZ_SENSE_FAR = 8;
  *  this machine cannot build it there is no deep picture and nothing stands in for it (the owner:
  *  "If the ray shader fails to build on a machine, that machine is likely gonna die trying to render
  *  the mandelbulb at high zoom - so I wouldnt want an alternative based on that, rather an error").
- *  The host's `error` event carries it (`fatal: false`), the surface toasts it once, the status
- *  chip's notice shows it, and a render refuses to start with it (`deep-zoom/routeRender.tsx`). */
+ *  It is the first line of the app's boot failure: the host's fatal `error` event and the surface's
+ *  failure card begin with it, the compiler's own words under it (grep it in `host/moduleHost.ts`). */
 export const DZ_RAY_FAILED_TEXT = 'The ray march\'s shader could not be built on this machine, so the deep picture cannot be drawn.';
 
 /** The holder itself. Prefer the accessors below; this is exported for `reset()` in tests. */

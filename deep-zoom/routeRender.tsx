@@ -39,8 +39,8 @@
  *     (`bootParams()`, below). The wait is the Mandelbox's now - a formula switched to moments
  *     before Start, or keyed halfway.
  *     A BUILD THAT FAILED IS NOT WAITED FOR, and the wait cannot hang on one: `building()` is null
- *     then. A ray march that could not be built never lets a run start - Start answers with the
- *     one line `DZ_RAY_FAILED_TEXT` (host/current.ts), since "not ready yet" would never end.
+ *     then. A ray march that could not be built is the app's boot failure: there is no host, no
+ *     dialog to start a run from.
  *     WHY: the renderer builds what a frame needs before it draws it, on the main thread (grep
  *     `ensureBoxVariant(false)` in `dzRenderFrame`, renderer/core.js; that stays, for a direct
  *     caller). Measured 2026-10-11 without the wait, seven sessions, when the ray march's shader
@@ -235,7 +235,7 @@ import type { FrameFolder } from '../engine/export/frameFolder';
 import { MainThreadEncoder } from '../engine/export/videoEncoder';
 import { calcEtaRange, formatTimeWithUnits } from '../components/timeline/exportHelpers';
 import { showToast } from '../engine/store/toastStore';
-import { DZ_RAY_FAILED_TEXT, getHost } from './host/current';
+import { getHost } from './host/current';
 import type { DzView } from './host/DeepZoomHost';
 import { routeKeys, routeRendering, scrubRouteTo, setRouteRendering } from './route';
 import { flushHostSync, holdAutoIterations } from './useHostSync';
@@ -559,13 +559,7 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
 const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMode }) => {
     const ready = getHost();
     if (running || routeRendering()) { showToast('A render is already running', 'warning'); return; }
-    if (!ready?.renderFrameBlob || !ready.bootParams()) {
-        // A ray march that could not be built never becomes ready: the answer is that line, not "not yet".
-        const failed = !!ready && !ready.building() && ready.telemetry().error !== '';
-        if (failed) showToast(DZ_RAY_FAILED_TEXT, 'error', 8000);
-        else showToast('The renderer is not ready yet', 'warning');
-        return;
-    }
+    if (!ready?.renderFrameBlob || !ready.bootParams()) { showToast('The renderer is not ready yet', 'warning'); return; }
     let sink: FrameSink | null;
     try {
         const project = (useEngineStore.getState() as { projectSettings?: { name?: string } }).projectSettings?.name || 'deep-zoom';

@@ -36,6 +36,11 @@
  *   - `pullGradJS`: `-kp*y` -> `+kp*y`                                      -> 1 red ("gradient: along the ray it equals ...")
  *   - `senseRead`: `open` counting every open ray (the `r.t <= SENSE_FAR` test removed)
  *                                                                           -> 1 red ("open: away from the bulb ... and finished")
+ * 2026-10-11, the three "iterations: ..." lines at the foot (the iteration ceiling; five one-liners of core.js
+ * lifted as text, nothing to do with the ray probe), one break, restored byte for byte (sha-256):
+ *   - `api.dz.setView`: `Math.min(itersMax(), v.iters|0)` -> `Math.min(boxOn() ? BOX_ITER_MAX : 160, v.iters|0)`
+ *     (as it was until that day)                                            -> 1 red ("iterations: under the ray march ...": 300,400,160,160,4)
+ *   The ray-bits-0 line and the Mandelbox line passed in that run too and were not broken on purpose.
  */
 import { readFileSync } from 'node:fs';
 import { PLACES } from '../../deep-zoom/data/places.ts';
@@ -328,6 +333,36 @@ function jetError(v: View, phase?: [number, number]): number {
     lib.setIters(lib.iters() + 8);
     check(lib.senseBundle(axis, { slot: 'look' }).marched, 'kept: a changed iteration count is marched again (the drawn solid moved)');
     check(lib.senseBundle(axis, { slot: 'look', reuse: 0 }).marched && lib.senseBundle(axis).marched, 'kept: reuse 0, or no slot, always marches');
+}
+
+// ── THE ITERATION CEILING (added 2026-10-11, R7b-2). Not the ray probe's business, but this is the check that
+// lifts core.js as text, and the rule is five one-liners of it: the two ceilings, `itersMax`, `api.setIters` and
+// the line of `api.dz.setView` that takes a view's count. Until that day the last two held the Mandelbulb at
+// the page's 160 whatever marched it, and a route's keyed count above 160 was cut (deep-zoom/route.ts).
+{
+    const it = new Function(`"use strict";
+        const cam = { iters: 14 }, api = {}; let orbitDirty = false, rayUse = 5, dzFormula = 'mandelbulb';
+        ${cut('const boxOn = () =>', '\n')}
+        ${cut('const BOX_ITER_MAX = ', '\n')}
+        ${cut('const RAY_ITER_REACH = ', '\n')}
+        ${cut('const itersMax = ', '\n')}
+        ${cut('api.setIters = ', '\n')}
+        const viewCount = (v) => {
+            ${cut('if (v.iters) cam.iters = ', '\n')}
+        };
+        return { set: (n) => { api.setIters(n); return cam.iters; }, view: (n) => { viewCount({ iters: n }); return cam.iters; }, dirty: () => orbitDirty,
+            state: (bits, formula) => { dzFormula = formula; rayUse = formula === 'mandelbox' ? 0 : bits; } };
+    `)() as { set(n: number): number; view(n: number): number; dirty(): boolean; state(bits: number, formula: string): void };
+    it.state(5, 'mandelbulb');
+    const ray = [it.set(300), it.set(1000), it.view(240), it.view(999), it.set(1)];
+    check(ray.join() === '300,400,240,400,4' && it.dirty(),
+        'iterations: under the ray march a view\'s count and a set count arrive whole up to 400 (300, 240), are held at 400 above it, and at 4 below', ray.join());
+    it.state(0, 'mandelbulb');
+    const page = [it.set(300), it.view(240), it.set(120)];
+    check(page.join() === '160,160,120', 'iterations: with ray bits 0 (the state the direct proof holds) the page\'s 160 still holds', page.join());
+    it.state(5, 'mandelbox');
+    const box = [it.set(450), it.set(999), it.view(450)];
+    check(box.join() === '450,500,450', 'iterations: the Mandelbox takes its own 500, as before', box.join());
 }
 
 console.log(failed === 0 ? 'ray-probe: all green' : `ray-probe: ${failed} FAILED`);

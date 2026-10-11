@@ -54,15 +54,16 @@
  *     `progress`, which only the module's path render wrote.
  *   - `thumbnail()` draws through the live GL state. It answers '' during a render instead of
  *     drawing into the render's state, and it restarts the still.
- *   - A RAY MARCH THAT CANNOT BE BUILT IS AN ERROR THE SHELL STAYS UP WITH, NOT ANOTHER MARCH AND NOT
- *     A BOOT FAILURE (2026-10-11; grep `failRay`). The bulb has one program. When the module says it
- *     failed (`api.rayMarchState()` 'failed', telemetry `error` set), `poll` says `compile` failed
- *     twice (what 'deep', and by name), sends ONE `error` event with `fatal: false` and the line
- *     `DZ_RAY_FAILED_TEXT`, rejects `ready` with it, and does NOT call the mount's `onError` (which
- *     would take the host down for the failure card). The readiness clock stops, so the 120 s
- *     timeout cannot turn it into a fatal error afterwards. `building()` is null from then on.
- *     What follows from `ready` never resolving: `bootParams()` stays null, the store's values are
- *     never sent (`useHostSync.ts`), a render refuses to start (`routeRender.tsx`).
+ *   - A RAY MARCH THAT CANNOT BE BUILT IS THE APP'S BOOT FAILURE, NOT ANOTHER MARCH (2026-10-11; grep
+ *     `DZ_RAY_FAILED_TEXT`). The bulb has one program. When the module says it failed
+ *     (`api.rayMarchState()` 'failed', telemetry `error` set), `poll` says `compile` failed twice
+ *     (by name, and what 'deep') and calls `failBoot` with that line and the compiler's own words
+ *     under it: the fatal `error` event, the mount's `onError` (the surface takes the host down
+ *     and shows its failure card), `ready` rejected. The owner: "If the ray shader fails to build
+ *     on a machine, that machine is likely gonna die trying to render the mandelbulb at high zoom
+ *     - so I wouldnt want an alternative based on that, rather an error". (For some hours that
+ *     day the host was left up instead, with a notice and a toast over the plain picture: `ready`
+ *     never resolved there, so no control moved anything. Do not bring that back.)
  *   - After a lost context nothing is restored and telemetry still says ready. This file only
  *     reports it (`contextLost`, once); the surface disposes and mounts fresh.
  *
@@ -129,12 +130,16 @@
  *   debug/deep-zoom-checks/module-host.mts ("input: building() names the ray march while its
  *   shader builds, and nothing once it is there, has failed or is off"). Falsified 2026-10-11:
  *   `=== 'building'` made `!== 'on'` -> that line red.
- * @assumption A ray march that cannot be built is reported as the PITFALL above says - one `error`
- *   event with `fatal: false` and `DZ_RAY_FAILED_TEXT`, `ready` rejected with it, the mount's
- *   `onError` not called, no fatal error when the 120 s have passed, `building()` null - checked by
- *   debug/deep-zoom-checks/module-host.mts (the "boot: a ray march that cannot be built ..." lines),
- *   which pass and were not broken on purpose; and seen once in the app with the real module and a
- *   browser made to refuse that one program (debug/scratch/r7/ray-fail.mts, git-ignored, 2026-10-11).
+ * @invariant A ray march that cannot be built is the boot failure, said with `DZ_RAY_FAILED_TEXT`:
+ *   one fatal `error` event and one call of the mount's `onError`, both with a message that begins
+ *   with that line, and `ready` rejected with it - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("boot: a ray march that cannot be built is the boot
+ *   failure ...", "... rejects ready with that line ..."). Falsified 2026-10-11: the test
+ *   `!isReady && rayNow === 'failed'` in `poll` made always false (the ray failure worded as any
+ *   other shader's) -> those two lines red, the other 163 green.
+ * @assumption What the user then sees - the failure card with that line, no picture, no chip - was
+ *   seen once in the app with the real module and a browser made to refuse that one program
+ *   (debug/scratch/r7/ray-fail.mts, git-ignored, 2026-10-11). No standing guard opens that page.
  * @assumption The rest of `building()` - the Mandelbox answered from `api.formulaState()` alone, a
  *   disposed host waiting for nothing - is the same file's two other "input: ... building ..." /
  *   "input: a disposed host ..." lines, which pass and were not broken on purpose. That the real
@@ -196,10 +201,9 @@ export interface DeepZoomMountHooks {
     onNotice?(message: string): void;
     /** The browser took the WebGL context. Also the host event `contextLost`. Dispose, mount fresh. */
     onContextLost?(): void;
-    /** A boot failure the host cannot go on from: no shader within 120 s, or a telemetry error that
-     *  is not the ray march's (today: the Mandelbox's shader). Also the host event `error` with
-     *  `fatal: true`, and the reason `ready` rejects with. NOT called when the ray march's shader
-     *  could not be built: the host stays up and says so with `error`, `fatal: false`. */
+    /** A boot failure: the deep shader could not be built (the ray march's program: the message
+     *  begins with `DZ_RAY_FAILED_TEXT`; or the Mandelbox's) or did not land within 120 s. Also the
+     *  host event `error` with `fatal: true`, and the reason `ready` rejects with. */
     onError?(message: string): void;
 }
 
@@ -377,17 +381,6 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         if (!disposed) rejectReady(new Error(message));
     }
 
-    /** THE RAY MARCH'S SHADER COULD NOT BE BUILT (see PITFALLS): said once, not fatal. The host stays up,
-     *  `ready` rejects, and `bootFailed` stops the readiness clock so the 120 s cannot make it fatal later.
-     *  The compiler's own log goes to the console: the line the shell shows is the plain one. */
-    function failRay(log: string): void {
-        if (bootFailed) return;
-        bootFailed = true;
-        console.warn('[deep-zoom] the ray march\'s shader did not build:', log.slice(0, 2000));
-        emit('error', { message: DZ_RAY_FAILED_TEXT, fatal: false });
-        if (!disposed) rejectReady(new Error(DZ_RAY_FAILED_TEXT));
-    }
-
     function poll(t: DzTelemetry): void {
         // The ray march's shader is the bulb's one program and builds in the background from the moment the module
         // is created; the plain picture is drawn until it is there. `compile` events with what 'variant' let the shell
@@ -416,10 +409,12 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             if (compileSaid !== 'failed') {
                 compileSaid = 'failed';
                 emit('compile', { state: 'failed', what: 'deep', error: t.error });
-                // The bulb's program before it was ever ready: an error to show, with the host left up (`failRay`).
-                // Anything else (today: the Mandelbox's shader) is the boot failure it always was.
-                if (!isReady && rayNow === 'failed') failRay(t.error);
-                else failBoot(`The deep renderer failed to compile: ${t.error.slice(0, 400)}`);
+                // The bulb's one program, before it was ever ready: the boot failure, in the line that says what it
+                // means (see PITFALLS), with the compiler's own words under it. Any other telemetry error (today: the
+                // Mandelbox's shader) keeps the wording it always had.
+                failBoot(!isReady && rayNow === 'failed'
+                    ? `${DZ_RAY_FAILED_TEXT}\n\n${t.error.slice(0, 400)}`
+                    : `The deep renderer failed to compile: ${t.error.slice(0, 400)}`);
             }
         } else {
             if (compileSaid === null) {
@@ -482,7 +477,7 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         estimateAtPoint: (cam, iters) => dz.estimateAtPoint(cam, iters),
         // The same two questions `poll` asks for the `compile` event, answered now. The box draws with a variant of
         // its own and the ray march is not in force under it, so one of the two is asked, never both. A build that
-        // FAILED answers null: nothing is being waited for, and whoever waited finds `bootParams()` still null.
+        // FAILED answers null: nothing is being waited for (and the host is about to be taken down).
         building() {
             if (disposed) return null;
             if (api.formula().kind === 'mandelbox') return api.formulaState() === 'building' ? 'mandelbox' : null;

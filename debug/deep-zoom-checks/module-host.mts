@@ -15,7 +15,7 @@
  *   [2] views      three 80-digit `cam` strings byte-identical through `getView`, `setView`,
  *                  `setPendingView`.
  *   [3] boot       `bootParams`, `ready` (resolve, reject, never settle, 120 s), `compile`, `error` -
- *                  the fatal kind, and the ray march that cannot be built, which is not.
+ *                  always fatal; a ray march that cannot be built says so in its own line.
  *   [4] step       the timestamp, `frameCount`, the store at 8 Hz, `onTelemetry`, context loss.
  *   [5] input      `focus`, the host-input members straight through to the module, and `building()`
  *                  (the shader variant the picture waits for, from the module's two state handles).
@@ -45,9 +45,16 @@
  * "frame N/M" numbers of `progress` in [7] and [10] (only the module's path render wrote them), the
  * `stopPlay` halves of two [7] lines (the module no longer has it), and `rayMarch: true` from the
  * options of [1] (the module lost the option: the ray march is the bulb's only program). ADDED the
- * same day, none of them seen red: the five "boot: a ray march that cannot be built ..." lines of
- * [3]. The first block of [3] now drives the module as it is since that day - the ray march's
- * program IS the deep shader, so `compile` says both names together.
+ * same day: the five "boot: a ray march that cannot be built ..." lines of [3] - REWRITTEN hours
+ * later (R7b-2) when that failure became the boot failure instead of an error the host stays up
+ * with; how they were seen red is at RAY FAILURE below. The first block of [3] now drives the
+ * module as it is since that day - the ray march's program IS the deep shader, so `compile` says
+ * both names together.
+ * RAY FAILURE, SEEN RED 2026-10-11 (one break in moduleHost.ts, restored byte for byte, sha-256): the
+ * test `!isReady && rayNow === 'failed'` in `poll` made always false, so a ray march that cannot
+ * be built is worded as any other shader's failure -> 2 red: "boot: a ray march that cannot be
+ * built is the boot failure ..." and "... rejects ready with that line, not with the wording of
+ * another shader's failure ...". The other three lines of that block passed in that run too.
  *
  * FALSIFIED 2026-10-08: 54 breaks, each applied alone to `moduleHost.ts` or `dive.ts` (45 are
  * listed here since 2026-10-11: see WENT above). The check
@@ -127,7 +134,7 @@
  *       `estimateAt: () => 1` -> 1: "input: estimateAt is the module's own estimate ..."
  *   seam
  *     `dive.ts` given a type import of the renderer -> 2: both "seam: ..." lines about the tree
- * NOT falsified: every line not named above (among them `compile`'s order, the ray march that cannot be built,
+ * NOT falsified: every line not named above (among them `compile`'s order,
  * the forward vector, and "a module without a handle the host needs"), and every line that was
  * re-driven on 2026-10-11 (see WENT above). They pass; nothing here has shown they can fail.
  * NOT checked at all, by anything in node: what the real module does behind each handle. See the
@@ -547,8 +554,9 @@ console.log('[3] boot      ready, bootParams, compile, error');
     host.dispose();
 }
 {
-    // A RAY MARCH THAT CANNOT BE BUILT (2026-10-11): an error the host stays up with. Not fatal, said once, the
-    // mount's hook not called, `ready` rejected with the one line, and the 120 s cannot make it fatal afterwards.
+    // A RAY MARCH THAT CANNOT BE BUILT (2026-10-11) IS THE BOOT FAILURE: one fatal error and one call of the mount's
+    // hook, both beginning with the one line and carrying the compiler's words; `ready` rejected with it; said once.
+    // (For some hours that day it was a non-fatal error with the host left up; the five lines here were of that.)
     const rig = makeRig();
     const hookErrors: string[] = [];
     const host = createModuleHost(rig.instance, rig.canvas, { onError: (m) => { hookErrors.push(m); } });
@@ -556,33 +564,26 @@ console.log('[3] boot      ready, bootParams, compile, error');
     const compile: string[] = [];
     host.on('error', (e) => { errors.push(e); });
     host.on('compile', (e) => { compile.push(`${e.what}${e.variant ? ' ' + e.variant : ''}:${e.state}`); });
-    const realWarn = console.warn;
-    const warned: string[] = [];
-    console.warn = (...a: unknown[]) => { warned.push(a.map(String).join(' ')); };
-    try {
-        rig.state.rayState = 'building';
-        host.step(0);
-        const waiting = host.building();
-        rig.state.rayState = 'failed';
-        rig.state.error = 'ERROR: 0:412: the ray shader';
-        host.step(200);
-        await sleep(20);
-        const message = await rejectionOf(host.ready);
-        check(waiting === 'rayMarch' && compile.join() === 'variant rayMarch:compiling,deep:compiling,variant rayMarch:failed,deep:failed',
-            'boot: a ray march that cannot be built says compile failed under both names', compile.join());
-        check(errors.length === 1 && errors[0].fatal === false && errors[0].message === DZ_RAY_FAILED_TEXT && hookErrors.length === 0,
-            'boot: a ray march that cannot be built is ONE error event, not fatal, with the line to show, and the mount\'s onError hook is not called',
-            `${JSON.stringify(errors)}, ${hookErrors.length} hook calls`);
-        check(message === DZ_RAY_FAILED_TEXT && host.bootParams() === null && unhandled.length === 0,
-            'boot: a ray march that cannot be built rejects ready with that line; bootParams stays null; no unhandled rejection', message);
-        check(host.building() === null, 'boot: a ray march that cannot be built is not waited for: building() is null');
-        run(host, 400, DZ_READY_TIMEOUT_MS + 5000, 100);
-        check(errors.length === 1 && hookErrors.length === 0 && rig.count('instance.step') > 1000 && warned.some((w) => w.includes('ERROR: 0:412')),
-            'boot: a ray march that cannot be built stays that: 120 s of steps later there is no second error and no fatal one, the host still steps, and the compiler\'s log went to the console',
-            `${errors.length} errors, ${hookErrors.length} hook calls, ${rig.count('instance.step')} steps`);
-    } finally {
-        console.warn = realWarn;
-    }
+    rig.state.rayState = 'building';
+    host.step(0);
+    const waiting = host.building();
+    rig.state.rayState = 'failed';
+    rig.state.error = 'ERROR: 0:412: the ray shader';
+    host.step(200);
+    await sleep(20);
+    const message = await rejectionOf(host.ready);
+    check(waiting === 'rayMarch' && compile.join() === 'variant rayMarch:compiling,deep:compiling,variant rayMarch:failed,deep:failed',
+        'boot: a ray march that cannot be built says compile failed under both names', compile.join());
+    check(errors.length === 1 && errors[0].fatal === true && errors[0].message.startsWith(DZ_RAY_FAILED_TEXT) && errors[0].message.includes('ERROR: 0:412: the ray shader')
+        && hookErrors.length === 1 && hookErrors[0] === errors[0].message,
+        'boot: a ray march that cannot be built is the boot failure: ONE fatal error event and one call of the mount\'s onError hook, both beginning with the line and carrying the compiler\'s words',
+        `${JSON.stringify(errors)}, ${hookErrors.length} hook calls`);
+    check(message.startsWith(DZ_RAY_FAILED_TEXT) && !message.includes('failed to compile') && host.bootParams() === null && unhandled.length === 0,
+        'boot: a ray march that cannot be built rejects ready with that line, not with the wording of another shader\'s failure; bootParams stays null; no unhandled rejection', message);
+    check(host.building() === null, 'boot: a ray march that cannot be built is not waited for: building() is null');
+    run(host, 400, DZ_READY_TIMEOUT_MS + 5000, 100);
+    check(errors.length === 1 && hookErrors.length === 1, 'boot: a ray march that cannot be built is said once: 120 s of steps later there is no second error and no second hook call',
+        `${errors.length} errors, ${hookErrors.length} hook calls`);
     host.dispose();
 }
 {

@@ -31,8 +31,8 @@
  *   - An id with no row, or a row with `group: null`, is not pushed. Unknown ids are named once.
  *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind and the box's seven numbers, and
  *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
- *     formula IN FORCE (160 for the bulb, 500 for the box), so a box place's 300 iterations sent
- *     ahead of its formula would arrive as 160.
+ *     formula IN FORCE (400 for the bulb, 500 for the box), so a box place's 450 iterations sent
+ *     ahead of its formula would arrive as 400.
  *
  * @invariant A value reaches the module through the setter its row names, converted with the
  *   feature's own converter, and an unchanged value is not sent again - proven by:

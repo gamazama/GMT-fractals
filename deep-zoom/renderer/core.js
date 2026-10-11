@@ -3477,7 +3477,7 @@ function boxCamEstimate(O){
   for (let k = 0; k < O.len; k++) if (O.Rk[k] > BOX_ESC) return Math.max(0, (O.Rk[k] - 1) / O.DRk[k]);
   return -1;
 }
-const itersMax = () => (boxOn() ? BOX_ITER_MAX : rayUse ? RAY_ITER_MAX : 160);   // what the count is held under: the page's 160, the ray march's and the box's own
+const itersMax = () => (boxOn() ? BOX_ITER_MAX : rayUse ? RAY_ITER_MAX : 160);   // what the count is held under: the page's 160 (ray bits 0 only), the ray march's and the box's own. api.setIters and api.dz.setView hold a count under it too (since 2026-10-11; before, they held the bulb at 160)
 function deCPU(px,py,pz, power, N){
     if (boxOn()) return Math.max(0, boxDirectF64([px,py,pz], N).de);
     let zx=px,zy=py,zz=pz, dr=1, r=0;
@@ -4064,7 +4064,7 @@ api.formulaState = ()=>{ if (!boxOn()) return deepProg ? 'on' : deepCompileErr ?
   const v = variants[xKey(false)]; return v ? 'on' : v === null ? 'failed' : 'building'; };
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
 // `auto-iters` control rows and its [ ] I keys do, for a host that owns those values.
-api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(boxOn() ? BOX_ITER_MAX : 160,n|0)); orbitDirty=true; };   // (the box runs longer: grep ITERATIONS AS A MARGIN)
+api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(itersMax(),n|0)); orbitDirty=true; };   // held under the ceiling IN FORCE (grep itersMax): 400 under the ray march, 500 for the box, the page's 160 with ray bits 0. Until 2026-10-11 the bulb was held at 160 here whatever marched it.
 api.setAutoIters = (b)=>{ autoIters=!!b; };
 api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
@@ -4512,7 +4512,14 @@ function frame(now){
 
   /* auto iteration budget: the n-iter surface needs ~1.35/decade to resolve at depth.
      Base 32 (not 24): boundary points escape at ~the budget edge, and a thin margin
-     flips escape flags (measured at 1e-50: iters=92 mismatched, 96+ agreed). */
+     flips escape flags (measured at 1e-50: iters=92 mismatched, 96+ agreed).
+     THIS DEPTH RULE STAYS BESIDE THE RAY MARCH'S OWN (ITERATIONS AS A MARGIN, below). Measured 2026-10-11 whether
+     the margin rule holds alone (13 views, the count started at 4, this rule switched off by a temporary flag;
+     debug/scratch/r7/depth-rule.mts, git-ignored): it does at power 2 and power 4, where it settles no lower
+     (95 / 95, 86 / 86, 160 / 164), and NOT at power 8, where it settles far lower and the picture moves - the
+     start view 32 with both and 13 alone (9,143 of 230,400 pixels differ, up to 105 levels), 1.1e-17: 55 and 36
+     (1,457 pixels), 3.9e-23: 63 and 37 (2,218), 6.6e-35: 79 and 68 (6,234). Why power 8 needs more than the
+     margin gives was not looked into. */
   if (autoIters && deepActive && smoothedDist > 0 && !boxOn()) {   // (the box: by ITERATIONS AS A MARGIN alone, below)
     const rec = Math.min(160, 32 + Math.ceil(1.35 * Math.max(0, -Math.log10(smoothedDist))));
     if (rec > cam.iters) { cam.iters = rec; orbitDirty = true; }
@@ -4861,7 +4868,7 @@ api.dz = {
     dzDive = 0;                                   // a jump ends any dive in progress
     camHP = v.cam.map(BigInt); cam.pos = camHP.map(hp.toNum);
     cam.yaw = +v.yaw; cam.pitch = +v.pitch; cam.roll = +v.roll || 0;
-    if (v.iters) cam.iters = Math.max(4, Math.min(boxOn() ? BOX_ITER_MAX : 160, v.iters|0));
+    if (v.iters) cam.iters = Math.max(4, Math.min(itersMax(), v.iters|0));   // the ceiling in force, as api.setIters: a view's count above 160 arrives whole under the ray march
     if (v.power && v.power !== nPower) api.setPower(v.power);
     if (v.phase) api.setPhase(v.phase[0], v.phase[1]);
     if (v.light !== undefined) lightMode = v.light|0;

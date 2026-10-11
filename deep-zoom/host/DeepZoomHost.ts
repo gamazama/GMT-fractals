@@ -41,9 +41,9 @@
  *     `ready`             resolves once the deep shader has compiled (the module's telemetry says
  *                         ready). Since 2026-10-11 that shader IS the ray march's program, the only
  *                         one the bulb has: nothing draws a deep picture before it. Rejects with a
- *                         readable message when it cannot be built (the `error` event says which
- *                         kind) or after 120 s of running loop (a gap between two steps counts for a
- *                         second at most).
+ *                         readable message when it cannot be built or after 120 s of running loop
+ *                         (a gap between two steps counts for a second at most); either is the
+ *                         app's boot failure.
  *     `setParam(` `setParams(`   store values by id `<feature>.<key>` (an enum param is its option
  *                         index, colour `mode` is GMT's number). The host converts and calls the
  *                         module's own setters (`host/paramMap.ts`, `host/looseParams.ts`); a value
@@ -72,8 +72,7 @@
  *                         `compile` event says the same up to 125 ms late): 'rayMarch' or 'mandelbox'
  *                         while it builds in the background and the plain single-precision picture
  *                         is drawn; null once it is there, has FAILED, or is not asked for - so a
- *                         wait on it ends when a build fails, and the waiter then finds
- *                         `bootParams()` null. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
+ *                         wait on it ends when a build fails. What a render waits on before a frame (`deep-zoom/routeRender.tsx`):
  *                         asked for a frame meanwhile, the renderer holds the whole page until the
  *                         build is done.
  *     `holdLive(on)`      no live frame is drawn while on (`step` still polls), so the canvas keeps
@@ -121,13 +120,12 @@
  *
  *   EVENTS (`on(type, fn)`) in stage 1:
  *     `contextLost`       live, from the module's context-loss option.
- *     `error`             live, two kinds. `fatal: false`: THE RAY MARCH'S SHADER COULD NOT BE BUILT
- *                         on this machine (2026-10-11). The host stays up, `ready` rejects, the
- *                         plain picture goes on and no deep picture is ever drawn: no other march
- *                         stands in. Sent once; the message is `DZ_RAY_FAILED_TEXT`
- *                         (`host/current.ts`), ready to show. `fatal: true`: the boot did not
- *                         finish for any other reason (120 s without a shader, the Mandelbox's
- *                         shader failing); the surface takes the host down and shows the card.
+ *     `error`             live for a failed boot, always `fatal: true`: the surface takes the host
+ *                         down and shows its failure card with the message. Three causes: THE RAY
+ *                         MARCH'S SHADER COULD NOT BE BUILT on this machine (the message begins
+ *                         with `DZ_RAY_FAILED_TEXT`, `host/current.ts`: no other march stands in,
+ *                         so there is no deep picture and no app); 120 s without a shader; the
+ *                         Mandelbox's shader failing.
  *     `compile`           live for the deep shader (`what: 'deep'`) and by name for the two
  *                         programs a picture can wait for (`what: 'variant'`, named by `variant`):
  *                         the ray march's - the same program as 'deep' since 2026-10-11, said under
@@ -327,8 +325,7 @@ export interface DzEvents {
     /** The view was SET (`setView`: a jump to a place, an undo, a loaded scene). Not sent for a
      *  move or a turn. Whoever eases something by the camera's own travel starts afresh on it. */
     viewSet: null;
-    /** `fatal: false`: the ray march's shader could not be built - the host stays, there is no deep
-     *  picture, and `message` is the line to show. `fatal: true`: no renderer; the surface shows the card. */
+    /** A failed boot. `fatal` is always true today: no renderer, the surface shows the card with `message`. */
     error: { message: string; fatal: boolean };
 }
 

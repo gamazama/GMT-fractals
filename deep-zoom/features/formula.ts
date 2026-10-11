@@ -19,7 +19,7 @@
  *     boxScale, boxMinRadius, boxFold, boxFixedRadius, boxRotX / Y / Z
  *                     api.setFormula(kind, { scale, minR, fold, fixedR, rot }) - one call carries
  *                     the kind and all seven (grep THE FORMULA SEAM in core.js)
- *     iterations      api.setIters(n)            clamps to 4..160, or 4..500 while the box is drawn
+ *     iterations      api.setIters(n)            clamps to 4..400, or 4..500 while the box is drawn
  *     autoIterations  api.setAutoIters(on)
  *   This file only declares. The integrator registers the feature (`registerFeatures.ts`), derives
  *   the slice type (`storeTypes.ts`: `SliceFromParams<typeof DzFormulaFeature['params']>`) and
@@ -57,9 +57,14 @@
  *     write-back would turn flying deeper into undo steps and scene-file changes, and a sync that
  *     re-pushed the stored floor on every change would fight the renderer and rebuild the orbit
  *     twice a frame.
- *   - THE ITERATION CEILING FOLLOWS THE FORMULA: 160 for the bulb, 500 for the box (the row's
+ *   - THE ITERATION CEILING FOLLOWS THE FORMULA: 400 for the bulb, 500 for the box (the row's
  *     `dynamicConfig`; `iterationCeiling` below is the one place that says so). Switching to the
- *     bulb brings a higher floor down to 160 in the same store write (`onSet` on `kind`).
+ *     bulb brings a higher floor down to 400 in the same store write (`onSet` on `kind`).
+ *     The bulb's was 160 until 2026-10-11: the page's own ceiling, which `api.setIters` and
+ *     `api.dz.setView` kept applying after the ray march, whose rule reaches 400, had become the
+ *     bulb's only march - a keyed or saved count above 160 was cut. The page's DEPTH rule still
+ *     stops at 160 (grep `auto iteration budget` in core.js); only the margin rule and a count set
+ *     by hand, by a place or by a route go higher.
  *   - A SECOND WRITER. `api.dz.setView(view)` also writes iterations, power and phase, and path
  *     playback writes all three on every frame (grep `function pathApplyCR`). The shell applies a
  *     jump through this feature's setter so the store stays the one owner (BLUEPRINT section 2).
@@ -114,8 +119,9 @@ export const BOX_SCALE_MIN = 1.02;
 export const validBoxScale = (v: number): number =>
     (Math.abs(v) >= BOX_SCALE_MIN ? v : v < 0 ? -BOX_SCALE_MIN : BOX_SCALE_MIN);
 
-/** The highest iteration count the renderer takes for a formula (grep `BOX_ITER_MAX` and `api.setIters` in core.js). */
-export const iterationCeiling = (kind: number | undefined): number => (kind === FORMULA_BOX ? 500 : 160);
+/** The highest iteration count the renderer takes for a formula: its own `BOX_ITER_MAX` and `RAY_ITER_MAX`
+ *  (grep both, and `const itersMax`, in core.js; `api.setIters` and `api.dz.setView` hold a count under them). */
+export const iterationCeiling = (kind: number | undefined): number => (kind === FORMULA_BOX ? 500 : 400);
 
 const onBulb = { param: 'kind', eq: FORMULA_BULB };
 const onBox = { param: 'kind', eq: FORMULA_BOX };
@@ -136,7 +142,7 @@ export const DzFormulaFeature = {
             ...formulaParam.config,
             type: 'float',
             description: 'Which fractal is drawn. The Mandelbox is GMT\'s Amazing Box. Switching shows the whole of the new one from outside; Undo brings back the place you were at. The first switch to the Mandelbox builds its renderer, a few seconds.',
-            // The bulb's ceiling is 160: a higher floor comes down with the switch, in the same write.
+            // The bulb's ceiling is 400: a higher floor comes down with the switch, in the same write.
             onSet: (next: number, slice: { iterations?: number }) =>
                 (next !== FORMULA_BOX && (slice.iterations ?? 0) > iterationCeiling(next) ? { iterations: iterationCeiling(next) } : {}),
         },
@@ -210,7 +216,7 @@ export const DzFormulaFeature = {
             type: 'boolean',
             default: true,
             label: 'Auto iterations',
-            description: 'Raises the live iteration count as the zoom deepens, and never lowers it. Mandelbulb: 32 plus 1.35 for each decade, up to 160, and never less than a margin above where the camera\'s own orbit escapes, which is what low powers need. Mandelbox: that margin alone, up to 500.',
+            description: 'Raises the live iteration count as the zoom deepens, and never lowers it. Mandelbulb: 32 plus 1.35 for each decade, up to 160, and never less than a margin above where the camera\'s own orbit escapes, up to 400, which is what low powers need. Mandelbox: that margin alone, up to 500.',
         },
     },
 } satisfies FeatureDefinition;

@@ -51,7 +51,7 @@
  *     and the box's numbers), a bare view that this file made itself (Back, Home) in `formula`, and
  *     anything with neither - every place, scene and pasted text from before that day - means the
  *     Mandelbulb. Two orders follow, both because the renderer's iteration ceiling is the formula's
- *     (160 or 500) and `setView` cuts a view's count to it: a jump tells the renderer the formula
+ *     (400 or 500) and `setView` cuts a view's count to it: a jump tells the renderer the formula
  *     BEFORE it hands over the view (`pushFormulaNow`), and so does an undo (the history provider's
  *     `restore` runs after the store has been put back, so the store already says which formula).
  *   - A CAMERA OF ONE FORMULA MEANS NOTHING IN THE OTHER. The bulb's start view is inside the
