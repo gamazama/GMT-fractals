@@ -16,6 +16,10 @@
  *     (a test's fake handle; a handle kept from an earlier run).
  *   - `canPickFrameFolder()` says whether this browser has the picker. Where it has not, the
  *     caller shows `FRAME_FOLDER_UNSUPPORTED` and keeps the option off. There is no fallback here.
+ *   - `lookForFrames(folder, indices)` says which of a render's frames are in the folder already
+ *     and of what size (or sizes): what a runner needs to ASK, before it renders, whether to
+ *     replace them, to go on from them, or to leave. The asking is the runner's
+ *     (`status.ask` of the render dialog); this file only looks.
  *   - Who uses it: a runner of the generic render dialog that opted in with `frameFolder`
  *     (`engine/plugins/RenderDialog`); the deep zoomer's (`deep-zoom/routeRender.ts`) is the first.
  *
@@ -31,8 +35,10 @@
  *   - `has(index)` means "the file exists and holds something". A write cut off by a closed tab
  *     can leave an EMPTY file (the entry is created first, the bytes are swapped in when the
  *     stream closes), and that frame has to be rendered again: an empty file is not there.
- *   - `has` cannot tell this render's frame from another render's that used the same name.
- *     Whether to resume is the user's decision; the sink only answers what is in the folder.
+ *   - `has` cannot tell this render's frame from another render's that used the same name, nor
+ *     a frame of the render before from one a cancelled OVERWRITE has already replaced: the same
+ *     name, and (at the same size) nothing in the file to tell them apart. Whether to go on from
+ *     what is there is the user's decision; the sink only answers what is in the folder.
  *     `read(index)` hands back the file itself, for a caller that wants to look (its size, say).
  *   - A failed write REJECTS and reaches the caller: the folder was deleted, the disk is full,
  *     the permission was taken back. Nothing is swallowed and nothing is retried here.
@@ -45,6 +51,17 @@
  *   header; `pickFrameFolder` resolves null when the user backs out and throws the plain line
  *   where there is no picker - proven by: npm run test:frame-folder (the "name: ...", "has: ...",
  *   "write: ...", "png: ...", "pick: ..." lines). Falsified 2026-10-11: see the test's header.
+ * @invariant `lookForFrames` counts exactly the frames asked for that are there (not a missing
+ *   one, not an empty file, not a frame outside the set asked, not another name's file) and lists
+ *   each size they say once - proven by: npm run test:frame-folder ("look: it counts the frames
+ *   there - not an empty file, not a frame outside the range, not another name's", "look: frames of
+ *   one size say that size, once", "look: frames of two sizes say both, each once, in the order
+ *   met"). Falsified 2026-10-11, two breaks: the count taken before the "not there" test -> the
+ *   first of those red, with "look: an empty folder ..." and "look: a frame that is not a PNG
+ *   ..."; a size pushed every time it is met -> the other two red, and the PNG line again.
+ * @assumption The rest of `lookForFrames` - the answers in the order asked, a stop that ends it
+ *   early, that it makes no file - is the same test's other four "look: ..." lines, which pass
+ *   and were not broken on purpose.
  */
 
 /** How many digits a frame's index is padded to: `%05d` in an ffmpeg pattern. */
@@ -129,6 +146,39 @@ export async function pngSize(png: Blob): Promise<{ width: number; height: numbe
     const head = new DataView(await png.slice(0, 24).arrayBuffer());
     if (head.byteLength < 24 || head.getUint32(0) !== 0x89504e47 || head.getUint32(12) !== 0x49484452) return null;
     return { width: head.getUint32(16), height: head.getUint32(20) };
+}
+
+/** What of a set of frames is in the folder (`lookForFrames`). */
+export interface FramesFound {
+    /** One answer a frame, in the order asked: the frame is there, as `has` says it. Shorter than
+     *  what was asked only when the look was stopped. */
+    there: boolean[];
+    /** How many of them are there. */
+    count: number;
+    /** The sizes the frames there say they have (`pngSize`), each size once, in the order met. A
+     *  frame that is not a PNG says none, so this can be empty with frames there. */
+    sizes: Array<{ width: number; height: number }>;
+}
+
+/**
+ * Which of the frames `indices` are in the folder, and of what size: what a caller has to know
+ * before it renders, to ask whether to go on from the frames there or to replace them. It asks for
+ * exactly those frames under the sink's own name - a frame outside `indices`, or another name's
+ * file, is not looked at - and it makes no file. `stop`, asked before each frame, ends the look
+ * early with the answers so far. One read a frame, one after another.
+ */
+export async function lookForFrames(folder: FrameFolder, indices: number[], stop?: () => boolean): Promise<FramesFound> {
+    const found: FramesFound = { there: [], count: 0, sizes: [] };
+    for (const index of indices) {
+        if (stop?.()) break;
+        const file = await folder.read(index);
+        found.there.push(file !== null);
+        if (!file) continue;
+        found.count++;
+        const size = await pngSize(file);
+        if (size && !found.sizes.some((s) => s.width === size.width && s.height === size.height)) found.sizes.push(size);
+    }
+    return found;
 }
 
 type DirectoryPicker = (options?: { id?: string; mode?: 'read' | 'readwrite' }) => Promise<FrameFolderDirectory>;

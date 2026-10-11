@@ -1,5 +1,5 @@
 /**
- * Guard: a folder of frames (`engine/export/frameFolder.ts`) - names, resume, and a failed write.
+ * Guard: a folder of frames (`engine/export/frameFolder.ts`) - names, what is there already, and a failed write.
  *
  * Node only, under a second: the sink runs against a FAKE directory handle (`fakeDir` below), which
  * behaves as the File System Access API does where it matters here - a missing file rejects with
@@ -14,6 +14,10 @@
  *          never closed leaves the frame "not there"; a failing write rejects with the handle's
  *          own error and aborts its stream; a folder that cannot make the file rejects too
  *   png    `pngSize` reads a PNG's width and height off its header and answers null for other bytes
+ *   look   `lookForFrames`: which of a render's frames are in the folder and of what size - what a
+ *          runner asks "overwrite, continue or cancel" from. It counts the frames asked for that
+ *          are there (not an empty file, a frame outside the set, another name's), lists each size
+ *          once, makes no file, and a stop ends it early
  *   pick   `pickFrameFolder` hands back the sink over the folder the picker gave, null when the
  *          user backs out, the picker's own error otherwise, and throws the plain line where there
  *          is no picker (`canPickFrameFolder` says which)
@@ -37,8 +41,17 @@
  *   pick   the AbortError line removed: the picker's own error came out of `pickFrameFolder` and
  *          the run died on it (exit 1). The check has caught the rejection since, so the same
  *          break now prints "pick: null when the user backs out" - that form was not run again.
+ *   look   (stage R6c, the same day; 35 checks by then) two breaks of `lookForFrames`:
+ *          `count++` moved above the "not there" test: 3 red - "look: an empty folder has no frame
+ *          and no size", "look: it counts the frames there - not an empty file, not a frame outside
+ *          the range, not another name's" (5 for 2), "look: a frame that is not a PNG is there and
+ *          says no size".
+ *          a size pushed every time it is met: 3 red - "look: frames of one size say that size,
+ *          once", "look: frames of two sizes say both, each once, in the order met", and the PNG
+ *          line again.
+ *          Not broken on purpose: the order of the answers, the stop, "looking makes no file".
  */
-import { FRAME_FOLDER_UNSUPPORTED, canPickFrameFolder, frameFolder, pickFrameFolder, pngSize, safeFrameName } from '../engine/export/frameFolder';
+import { FRAME_FOLDER_UNSUPPORTED, canPickFrameFolder, frameFolder, lookForFrames, pickFrameFolder, pngSize, safeFrameName } from '../engine/export/frameFolder';
 import type { FrameFolderDirectory } from '../engine/export/frameFolder';
 
 let pass = 0;
@@ -137,6 +150,42 @@ const rejects = async (run: () => Promise<unknown>): Promise<unknown> => { try {
     const size = await pngSize(new Blob([head]));
     ck('png: the size is the one in the file\'s header', size?.width === 1920 && size?.height === 1034, JSON.stringify(size));
     ck('png: bytes that are not a PNG have no size', (await pngSize(bytes(1, 2, 3))) === null && (await pngSize(new Blob([new Uint8Array(64)]))) === null);
+}
+
+// ── look: which of a render's frames are there, and of what size ──
+{
+    const png = (w: number, h: number): Uint8Array => {
+        const head = new Uint8Array(33);
+        head.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+        new DataView(head.buffer).setUint32(16, w);
+        new DataView(head.buffer).setUint32(20, h);
+        return head;
+    };
+    const says = (sizes: Array<{ width: number; height: number }>): string => sizes.map((s) => `${s.width}x${s.height}`).join();
+    const { dir, files } = fakeDir();
+    const f = frameFolder(dir, 'shot');
+    const none = await lookForFrames(f, [1, 2, 3]);
+    ck('look: an empty folder has no frame and no size', none.count === 0 && none.sizes.length === 0 && none.there.join() === 'false,false,false', JSON.stringify(none));
+    files.set('shot_00002.png', png(640, 500));
+    files.set('shot_00003.png', png(640, 500));
+    files.set('shot_00004.png', new Uint8Array(0));        // a write that was cut off
+    files.set('shot_00009.png', png(640, 500));            // a frame outside the range asked
+    files.set('other_00001.png', png(640, 500));           // another render's name
+    const some = await lookForFrames(f, [1, 2, 3, 4, 5]);
+    ck('look: one answer a frame, in the order asked', some.there.join() === 'false,true,true,false,false', some.there.join());
+    ck('look: it counts the frames there - not an empty file, not a frame outside the range, not another name\'s', some.count === 2, String(some.count));
+    ck('look: frames of one size say that size, once', says(some.sizes) === '640x500', says(some.sizes));
+    const back = await lookForFrames(f, [9, 3]);
+    ck('look: the frames asked for are the caller\'s, in any order', back.there.join() === 'true,true' && back.count === 2, JSON.stringify(back));
+    files.set('shot_00005.png', png(1280, 1000));
+    files.set('shot_00001.png', new Uint8Array([1, 2, 3]));   // there, and not a PNG
+    const mixed = await lookForFrames(f, [1, 2, 3, 4, 5]);
+    ck('look: frames of two sizes say both, each once, in the order met', says(mixed.sizes) === '640x500,1280x1000', says(mixed.sizes));
+    ck('look: a frame that is not a PNG is there and says no size', mixed.count === 4 && mixed.there[0] === true && mixed.sizes.length === 2, JSON.stringify(mixed));
+    ck('look: looking makes no file', files.size === 7, [...files.keys()].join());
+    let asked = 0;
+    const part = await lookForFrames(f, [1, 2, 3, 4, 5], () => asked++ >= 2);
+    ck('look: a stop ends it early, with the answers so far', part.there.join() === 'true,true' && part.count === 2, JSON.stringify(part));
 }
 
 // ── pick ──

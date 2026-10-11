@@ -51,8 +51,6 @@ export interface ConfigFormProps<TExtra> {
     /** The install options of the same names (types.ts). Both false: the form as it always was. */
     frameFolder:         boolean;
     fixedSizes:          boolean;
-    resume:              boolean;
-    setResume:           (on: boolean) => void;
     /** The install option `presets`: a row of buttons, each patching the form. None: no row. */
     formPresets?:        RenderDialogPreset[];
 
@@ -74,7 +72,7 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
         durationFrames, isFormatSupported, formatSupportError, isDiskMode,
         showSamplesPerFrame, showFrameStep, showBitrate,
         formatFilter, resolutionPresets,
-        frameFolder, fixedSizes, resume, setResume, formPresets,
+        frameFolder, fixedSizes, formPresets,
         ExtraFormFields, ExtraInfoRows, ExtraWarning,
         startLabel, isStartDisabled,
         onStart,
@@ -194,22 +192,6 @@ export function ConfigForm<TExtra>(props: ConfigFormProps<TExtra>): React.ReactE
                         <AlertIcon />
                         <span>{formatSupportError ?? 'Format incompatible with browser/GPU.'}</span>
                     </div>
-                )}
-
-                {folderFormat && (
-                    <label
-                        className="flex items-center gap-1.5 px-1 mb-1.5 text-[10px] text-fg-tertiary cursor-pointer select-none"
-                        title="Frames whose file is already in the folder are not rendered again. An empty file counts as missing."
-                    >
-                        <input
-                            type="checkbox"
-                            data-render-resume
-                            checked={resume}
-                            onChange={(e) => setResume(e.target.checked)}
-                            className="accent-cyan-400"
-                        />
-                        <span>Resume <span className="text-fg-dim">(skip frames already in the folder)</span></span>
-                    </label>
                 )}
 
                 {ExtraWarning && <ExtraWarning cfg={cfg} extra={extra} />}

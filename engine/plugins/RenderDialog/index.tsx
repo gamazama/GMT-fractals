@@ -22,9 +22,9 @@
 // THREE OPT-INS added 2026-10-11, each off unless asked for (an app
 // that passes none of them gets the dialog as it always was):
 //   - `frameFolder`: for a runner that makes every frame itself. The
-//     format "PNG sequence (folder)", a "Resume" box (`deps.resume`),
-//     one Cancel button during the run. The frames go through
-//     `engine/export/frameFolder.ts`; the RUNNER asks for the folder.
+//     format "PNG sequence (folder)" and one Cancel button during the
+//     run. The frames go through `engine/export/frameFolder.ts`; the
+//     RUNNER asks for the folder, and looks into it.
 //   - `fixedSizes`: the size is one of the presets, nothing typed.
 //   - `status.setResult(...)`: what to show when the run has ended (a
 //     few lines, a command with a Copy button) instead of the form.
@@ -34,7 +34,14 @@
 // `frameFolder` WITHOUT a `formatFilter` lists the video formats beside
 // the folder: its runner then serves both, and the dialog is the folder
 // dialog or the video dialog by the format selected (no bitrate and no
-// encoder probe for the folder; no Resume box for a video).
+// encoder probe for the folder).
+// A QUESTION, since stage R6c the same day: `status.ask({ lines,
+// options, cancel })` shows a few lines and a button an option in place
+// of the form or the progress (QuestionView.tsx) and resolves with the
+// option chosen - or with `cancel` when the dialog is closed under it.
+// The words are the runner's; the dialog knows nothing of what is asked.
+// (Its first user: a runner that finds frames of its render already in
+// the folder asks what to do with them.) Nobody asks, nothing changes.
 // The dialog can also be opened from outside the timeline toolbar:
 // `openRenderPopup()` in engine/animation/renderPopupRegistry.ts.
 
@@ -49,12 +56,14 @@ import { registerRenderPopup } from '../../animation/renderPopupRegistry';
 import { ConfigForm, isFrameFolderFormat } from './ConfigForm';
 import { RenderingView } from './RenderingView';
 import { ResultView } from './ResultView';
+import { QuestionView } from './QuestionView';
 import type {
     InstallRenderDialogOptions,
     RenderDialogConfig,
     RenderDialogFlags,
     RenderDialogStatus,
     RenderDialogDeps,
+    RenderDialogQuestion,
     RenderDialogResult,
 } from './types';
 
@@ -65,6 +74,7 @@ export type {
     RenderDialogStatus,
     RenderDialogDeps,
     RenderDialogRunner,
+    RenderDialogQuestion,
     RenderDialogResult,
     RenderDialogExtraFieldsProps,
     RenderDialogPreset,
@@ -214,8 +224,30 @@ function RenderDialogShell<TExtra>(
     // `frameFolder`: the folder format is the one selected. It needs no encoder: it is there
     // exactly where the browser can write into a folder.
     const folderFormat = !!options.frameFolder && isFrameFolderFormat(cfg.formatIndex);
-    const [resume, setResume] = useState(false);
     const [result, setResult] = useState<RenderDialogResult | null>(null);
+
+    // ─── A question from the runner (`status.ask`) ─────────────────
+    // One at a time. The ref holds the open one's promise, so that it can be
+    // settled from a button and - with its `cancel` - when the dialog goes
+    // away under it: a runner must never be left waiting on a closed dialog.
+    const [question, setQuestion] = useState<RenderDialogQuestion | null>(null);
+    const openQuestion = useRef<{ cancel: string; resolve: (id: string) => void } | null>(null);
+    const answer = (id: string) => {
+        const open = openQuestion.current;
+        openQuestion.current = null;
+        setQuestion(null);
+        open?.resolve(id);
+    };
+    const ask = (asked: RenderDialogQuestion): Promise<string> => new Promise((resolve) => {
+        if (openQuestion.current) answer(openQuestion.current.cancel);   // asked again before the first was answered
+        openQuestion.current = { cancel: asked.cancel, resolve };
+        setQuestion(asked);
+    });
+    useEffect(() => () => {
+        const open = openQuestion.current;
+        openQuestion.current = null;
+        open?.resolve(open.cancel);
+    }, []);
 
     const canEncode = options.canEncode ?? canEncodeFormat;
     useEffect(() => {
@@ -290,8 +322,9 @@ function RenderDialogShell<TExtra>(
             setIsRendering,
             setIsStopping,
             setResult,
+            ask,
         };
-        const deps: RenderDialogDeps<TExtra> = { cfg, extra, flags, status, isDiskMode, resume: folderFormat && resume };
+        const deps: RenderDialogDeps<TExtra> = { cfg, extra, flags, status, isDiskMode };
         options.runner(deps);
     };
 
@@ -300,16 +333,18 @@ function RenderDialogShell<TExtra>(
 
     return (
         <DraggableWindow
-            title={isRendering ? 'Rendering…' : title}
+            title={isRendering && !question ? 'Rendering…' : title}
             onClose={onClose}
             position={winPos}
             onPositionChange={setWinPos}
             size={winSize}
             onSizeChange={setWinSize}
-            disableClose={isRendering}
+            disableClose={isRendering && !question}
             zIndex={z('tool')}
         >
-            {isRendering ? (
+            {question ? (
+                <QuestionView question={question} onAnswer={answer} />
+            ) : isRendering ? (
                 <RenderingView
                     onStop={handleStop}
                     onResume={handleResume}
@@ -343,8 +378,6 @@ function RenderDialogShell<TExtra>(
                     formatFilter={options.formatFilter}
                     frameFolder={!!options.frameFolder}
                     fixedSizes={!!options.fixedSizes}
-                    resume={resume}
-                    setResume={setResume}
                     formPresets={options.presets}
                     resolutionPresets={options.resolutionPresets}
                     ExtraFormFields={options.extraFormFields}

@@ -5,8 +5,9 @@
  *   A zoom video, two ways, from one dialog. Each frame of a range of the timeline is rendered by
  *   itself (`host.renderFrameBlob`: a frame depends on the view and the look and nothing else).
  *   THE LOSSLESS MASTER: every frame written at once into a folder the user picks, under its own
- *   frame number. So a render can be cancelled, or lost to a closed tab, and RESUMED: with
- *   "Resume" ticked the frames already in the folder are not rendered again; ffmpeg makes the
+ *   frame number. So a render can be cancelled, or lost to a closed tab, and CONTINUED: a run that
+ *   finds frames of its own already in the folder asks what to do with them (see FRAMES ALREADY
+ *   IN THE FOLDER), and the frames it goes on from are not rendered again; ffmpeg makes the
  *   video from the frames, and the dialog prints the line for it. A VIDEO FILE (stage R6b,
  *   2026-10-11): the same frames handed to the engine's encoder and written into an MP4 or a WebM
  *   the user picks, as the run goes. A video cannot be resumed. THERE IS NO PREVIEW FEATURE: a
@@ -48,14 +49,42 @@
  *     It opens on the route's first to last keyframe, on the whole timeline when there is no route.
  *   - THE SIZE is a long edge (`DZ_RENDER_LONG_EDGES`: 640 px, the draft's, to 3840) at the
  *     picture's own shape AS THE RUN STARTS, and that shape is handed to every frame: a window
- *     resized halfway changes nothing. A resumed run takes the shape of the frames already in the
- *     folder, and refuses to add frames of another long edge to them.
+ *     resized halfway changes nothing. A run that CONTINUES takes the shape of the frames already
+ *     in the folder; frames of another long edge, or of more than one size, cannot be continued.
  *   - THE FILES of a folder are `<project name>_<timeline frame, five digits>.png` - the frame's
  *     own number, not a count, so a frame keeps its file whatever range is rendered the next time.
  *     A video is offered as `<project name>.mp4` (or `.webm`); the picker lets the user rename it.
  *   - ITERATIONS are the count the route keys for the frame. With no iteration keys they are the
  *     count in force when the run starts, for every frame: the renderer's rule only ever raises
  *     the count, so with it running a frame's count would depend on the frames before it.
+ *
+ * FRAMES ALREADY IN THE FOLDER (stage R6c, 2026-10-11; the owner: "rather than a checkbox, if it
+ * detects existing frames, it should come up with options to overwrite, continue, cancel")
+ *   - THE FRAMES OF THIS RENDER are the range's frames under this project's file name
+ *     (`lookForFrames` in engine/export/frameFolder.ts). A file that is empty is not there;
+ *     another name's file, and a frame outside the range, are not this render's. NONE THERE:
+ *     nothing is asked and the run starts. SOME THERE: before anything is rendered the dialog
+ *     asks (`status.ask`, the render dialog's own question), saying how many of how many are in
+ *     which folder:
+ *       Overwrite   every frame of the range is rendered, each file replaced as its frame is
+ *                   written. Nothing is deleted first.
+ *       Continue    only the missing frames are rendered, at the size of the frames there.
+ *       Cancel      nothing is rendered, nothing written; the dialog is back on its form.
+ *   - CONTINUE IS NOT OFFERED where it could not join on, and the question says why: the frames
+ *     there have another long edge than this render (both sizes are said), or more than one size;
+ *     or every frame of the range is there already (it would render nothing). The same long edge
+ *     at another shape CAN be continued: the run takes their shape, and the question says so.
+ *   - THE RESULT says what happened: on Continue how many were written and how many were already
+ *     there; on Overwrite how many of the written frames replaced one that was there and, when
+ *     the run was stopped, how many from before are still there, not replaced.
+ *   - A VIDEO ASKS NOTHING: a picked file is replaced, and the browser's own picker has asked.
+ *   - Pitfalls. THE FRAMES ARE KNOWN BY NAME ONLY: nothing says a frame under this name was made
+ *     with this route, this look or these samples. AN OVERWRITE STOPPED HALFWAY LEAVES NEW AND OLD
+ *     FRAMES SIDE BY SIDE, and at one size nothing tells them apart: the next run finds every
+ *     frame there and offers Overwrite and Cancel. WHILE THE QUESTION IS OPEN the route is held as
+ *     in a run, nothing has been touched, and the clock has not started ("Time taken" is the
+ *     rendering). THE DIALOG CLOSED UNDER IT (the timeline closed; the window's own X, which
+ *     works while it asks) is the answer Cancel, with no toast: nothing had started.
  *
  * A VIDEO FILE
  *   - THE FORMATS are the four video entries of `VIDEO_FORMATS`: MP4 with H.264, H.265 or AV1, and
@@ -128,8 +157,8 @@
  *   - A FRAME WITH GRAIN IS NOT ALWAYS THE SAME FRAME TWICE. A smooth frame is: pixel for pixel,
  *     or a level in a few pixels. A grainy one can come out as another throw of its grain (grep
  *     `MEASURED 2026-10-11` in renderer/core.js; the renderer's own still export does the same).
- *     So a resumed run joins on without a seam, but its grainy frames are not byte for byte what
- *     an unbroken run writes. THE CAUSE IS NOT KNOWN, and THE WAIT does not cure it. Measured later
+ *     So a continued run joins on without a seam, but its grainy frames are not byte for byte
+ *     what an unbroken run writes. THE CAUSE IS NOT KNOWN, and THE WAIT does not cure it. Measured later
  *     that day, twelve frames each time against the same frames rendered afterwards:
  *       frames drawn straight after the ray march's shader arrived   9 of 11 sessions differed, 38 of 132 frames
  *       Start pressed 10 s after it was there                        1 of 4 sessions, 4 frames, drawn 10.8 to 14.1 s after
@@ -146,7 +175,8 @@
  *
  * @assumption All of the above was driven in the app, on the real GPU, on 2026-10-11
  *   (debug/scratch/r6/app-render.mts, git-ignored): a twelve-frame run into an in-memory folder,
- *   a cancel after three frames and its resume, the playhead and the camera afterwards. THE WAIT
+ *   a cancel after three frames and a second run that went on from them (asked for on the form
+ *   then; since stage R6c by the question, below), the playhead and the camera afterwards. THE WAIT
  *   and the grain's numbers: debug/scratch/r6/first-minute.mts (git-ignored) - in 18 sessions with
  *   Start pressed 15 to 24 s after ready the line showed and the page went on answering (asked
  *   every 0.15 s through the wait and the run, answered within 0.1 s); a Cancel during the wait
@@ -165,21 +195,40 @@
  *   name; an empty file where the handle has no `remove()`; a seeded file of 4,321 bytes kept);
  *   Finish and Discard pressed INSIDE a frame of 5 s (the result a second later, the frame
  *   dropped); the timeline closed mid-run (a file of the 4 frames made); no picker (a download of
- *   6 frames); and the folder cancelled and resumed as before (48 files, each written once).
+ *   6 frames); and the folder cancelled and gone on from, as that stage did it (48 files, each
+ *   written once).
  *   BROKEN ON PURPOSE once: with `mp4FastStart` left at the encoder's default, all three writes of
  *   a 48 MB MP4 came after its last frame (the script's "mp4: ... reached the stream BEFORE the
  *   last frame" line went red, WebM's stayed green); restored, 32 of 46 MiB come before it.
  *   NOT driven: the browser's real picker and a real disk (where the swap file lies there, and
  *   what a tab closed mid-run leaves); Firefox and Safari; a disk that fills up; a codec slower
  *   than the renderer (`MAX_QUEUED`); a route long enough to matter (300 frames was the longest).
+ * @assumption FRAMES ALREADY IN THE FOLDER, all of it, was driven in the app on the real GPU on
+ *   2026-10-11 (debug/scratch/r6c/frames-question.mts, git-ignored; headless Chrome; an in-memory
+ *   folder that records every write; 48 frames at the Draft size): a fresh folder asks nothing,
+ *   also with another name's file and a frame outside the range in it; with 6 of 48 there the
+ *   question, and Cancel (no write, the six files the very ones, the playhead and the camera
+ *   where they were), Continue (42 written, each once, none of the six) and Overwrite (48
+ *   written, each once, the six replaced); all 48 there (no Continue) and an Overwrite cancelled
+ *   after 14 ("14 replaced ... 34 from before are still there", and 34 files are the old ones);
+ *   another size, two sizes (no Continue, the sizes said), 640 x 360 against 640 px (Continue,
+ *   and the 42 new frames are 640 x 360); an empty file (5 of 48); an MP4 into a file that held
+ *   1,234 bytes (no question); the timeline closed, and the window's X pressed, with the question
+ *   open (no write, the route free, the next Start asks again); and 4 s on an open question are
+ *   not in "Time taken". BROKEN ON PURPOSE once: the dialog not answering its open question when
+ *   it is closed (grep `open.cancel` in engine/plugins/RenderDialog/index.tsx) -> the script's
+ *   "the timeline closed under it ..." line red, the route held for good; restored, green.
+ *   What stands behind the looking itself: `npm run test:frame-folder`, the "look: ..." lines.
+ *   NOT driven: a real folder on a real disk (how long looking through thousands of frames
+ *   takes there); a second question asked while one is open (the dialog cancels the first).
  */
 import React from 'react';
 import { useAnimationStore } from '../store/animationStore';
 import { useEngineStore } from '../store/engineStore';
 import { VIDEO_FORMATS } from '../data/constants';
 import { FRAME_FOLDER_FORMAT_INDEX, installRenderDialog } from '../engine/plugins/RenderDialog';
-import type { RenderDialogConfig, RenderDialogPreset, RenderDialogResolutionPreset, RenderDialogRunner } from '../engine/plugins/RenderDialog';
-import { pickFrameFolder, pngSize, safeFrameName } from '../engine/export/frameFolder';
+import type { RenderDialogConfig, RenderDialogPreset, RenderDialogQuestion, RenderDialogResolutionPreset, RenderDialogRunner } from '../engine/plugins/RenderDialog';
+import { lookForFrames, pickFrameFolder, safeFrameName } from '../engine/export/frameFolder';
 import type { FrameFolder } from '../engine/export/frameFolder';
 import { MainThreadEncoder } from '../engine/export/videoEncoder';
 import { calcEtaRange, formatTimeWithUnits } from '../components/timeline/exportHelpers';
@@ -279,8 +328,7 @@ interface RunSummary {
     written: number;
     toRender: number;
     already: number;
-    /** The frames of the range, and the timeline frame the range starts on. */
-    total: number;
+    /** The timeline frame the range starts on. */
     firstFrame: number;
     /** The run ended before its last frame. */
     stopped: boolean;
@@ -295,9 +343,11 @@ interface FrameSink {
     readonly name: string;
     /** What the dialog says while `end` works, when that can take a while. */
     readonly closing: string | null;
-    /** Before the first frame: which of `frames` need no rendering (a resumed folder; none for a video), and the
-     *  shape every frame must have. A rejection stops the run with its line. */
-    begin(run: { frames: number[]; longEdge: number; aspect: number; stop: () => boolean }): Promise<{ there: boolean[]; aspect: number }>;
+    /** Before the first frame: which of `frames` need no rendering (a folder it goes on from; none for a video), and
+     *  the shape every frame must have. A sink that finds something in its way ASKS (`ask`: the dialog's question)
+     *  and answers NULL when the user backs out there: then nothing is rendered and nothing written. A rejection
+     *  stops the run with its line. */
+    begin(run: { frames: number[]; longEdge: number; aspect: number; stop: () => boolean; ask: (question: RenderDialogQuestion) => Promise<string> }): Promise<{ there: boolean[]; aspect: number } | null>;
     /** One finished frame, in the order rendered. A rejection stops the run with its line. */
     put(frame: number, png: Blob): Promise<void>;
     /** After the last frame. `keep` false: the user threw the run away. Never rejects: it answers what went wrong, '' for nothing. */
@@ -315,39 +365,74 @@ interface FrameSink {
 const ffmpegLine = (folder: FrameFolder, fps: number, first: number): string =>
     `ffmpeg -framerate ${fps} ${first > 0 ? `-start_number ${first} ` : ''}-i ${folder.name}_%05d.png -c:v libx264 -pix_fmt yuv420p -crf 16 ${folder.name}.mp4`;
 
-/** One PNG a frame, into a folder the user picks. Null: backed out of the picker. THE PICKER IS ITS FIRST AWAIT. */
-async function openFolderSink(project: string, resume: boolean, fps: number): Promise<FrameSink | null> {
+/**
+ * One PNG a frame, into a folder the user picks. Null: backed out of the picker. THE PICKER IS ITS FIRST AWAIT.
+ * FRAMES OF THIS RENDER ALREADY THERE (the range's frames under this project's file name) are a question before
+ * anything is rendered - Overwrite, Continue or Cancel: see the header, FRAMES ALREADY IN THE FOLDER.
+ */
+async function openFolderSink(project: string, fps: number): Promise<FrameSink | null> {
     const folder = await pickFrameFolder(project);
     if (!folder) return null;
+    /** The frames of this render that were in the folder before the run; how many of those it has replaced so far. */
+    const old = new Set<number>();
+    let overwriting = false, replaced = 0;
+    /** The frames in the folder now: this run's, the ones it went on from, and the older ones an overwrite has not reached. */
+    const inFolder = ({ written, already }: RunSummary): number => written + already + (overwriting ? old.size - replaced : 0);
     return {
         name: folder.folder,
         closing: null,
-        async begin({ frames, longEdge, aspect, stop }) {
-            const there: boolean[] = [];
-            if (resume) for (const frame of frames) { if (stop()) break; there.push(await folder.has(frame)); }
-            const firstThere = there.indexOf(true);
-            if (firstThere >= 0) {
-                // The frames already there say what shape the rest must have.
-                const file = await folder.read(frames[firstThere]), size = file ? await pngSize(file) : null;
-                if (size && Math.max(size.width, size.height) !== longEdge) {
-                    throw new Error(`The frames in that folder are ${size.width} x ${size.height}. Pick that size, or another folder`);
-                }
-                if (size) aspect = size.width / size.height;
-            }
-            return { there, aspect };
+        async begin({ frames, longEdge, aspect, stop, ask }) {
+            const look = await lookForFrames(folder, frames, stop);
+            if (stop()) return null;                                     // cancelled while it looked
+            if (look.count === 0) return { there: [], aspect };          // nothing of this render is there: nothing is asked
+            const total = frames.length, missing = total - look.count, want = renderSize(longEdge, aspect);
+            const one = look.sizes.length === 1 ? look.sizes[0] : null, sized = (s: { width: number; height: number }): string => `${s.width} x ${s.height}`;
+            // A run can go on only from frames it can join: all of one size, and that size's long edge this render's
+            // (their own shape is then the shape of the rest). Frames that say no size are joined as they are.
+            const joinable = look.sizes.length === 0 || (!!one && Math.max(one.width, one.height) === longEdge);
+            const canContinue = joinable && missing > 0;
+            const lines = [missing === 0
+                ? `All ${total} frames of this render are already in "${folder.folder}".`
+                : `${look.count} of the ${total} frames of this render are already in "${folder.folder}".`];
+            if (!joinable) lines.push(one
+                ? `They are ${sized(one)}; this render is ${want.w} x ${want.h}. A render cannot continue frames of another size.`
+                : `They are of ${look.sizes.length} sizes (${look.sizes.map(sized).join(', ')}); this render is ${want.w} x ${want.h}. A render cannot continue frames of more than one size.`);
+            lines.push(`Overwrite renders all ${total}, replacing each file as its frame is done.`
+                + (canContinue ? ` Continue renders the ${missing} that ${missing === 1 ? 'is' : 'are'} missing` + (one && (one.width !== want.w || one.height !== want.h) ? `, at their size (${sized(one)}).` : '.') : ''));
+            const answer = await ask({
+                lines,
+                cancel: 'cancel',
+                options: [
+                    { id: 'overwrite', label: 'Overwrite', title: `Render all ${total} frames. Each file is replaced as its frame is written; nothing is deleted first` },
+                    ...(canContinue ? [{ id: 'continue', label: 'Continue', title: `Render only the ${plural(missing, 'frame')} not in the folder`, primary: true }] : []),
+                    { id: 'cancel', label: 'Cancel', title: 'Render nothing and write nothing' },
+                ],
+            });
+            if (stop() || (answer !== 'overwrite' && answer !== 'continue')) return null;
+            frames.forEach((frame, i) => { if (look.there[i]) old.add(frame); });
+            if (answer === 'continue') return { there: look.there, aspect: one ? one.width / one.height : aspect };
+            overwriting = true;
+            return { there: [], aspect };
         },
-        put: (frame, png) => folder.write(frame, png),
+        async put(frame, png) {
+            await folder.write(frame, png);
+            if (overwriting && old.has(frame)) replaced++;
+        },
         end: async () => '',                                             // every frame is a file already: nothing to close, nothing to throw away
         stopWord: () => 'Cancelled.',
-        count: ({ written, already }) => written + already,
-        report({ written, toRender, already, total, firstFrame, stopped }) {
-            const where = toRender === 0
-                ? [`All ${total} frames are already in "${folder.folder}".`]
-                : [`${stopped ? `${written} of ${toRender}` : written} frame${toRender === 1 ? '' : 's'} written to "${folder.folder}".`
-                    + (already > 0 ? ` ${already} ${already === 1 ? 'was' : 'were'} already there.` : '')];
-            return written + already > 0
-                ? { where, command: { say: 'To make a video of them with ffmpeg, run this in that folder:', line: ffmpegLine(folder, fps, firstFrame) } }
-                : { where };
+        count: inFolder,
+        report(sum) {
+            const { written, toRender, already, firstFrame, stopped } = sum;
+            let line = `${stopped ? `${written} of ${toRender}` : written} frame${toRender === 1 ? '' : 's'} written to "${folder.folder}".`;
+            if (already > 0) line += ` ${already} ${already === 1 ? 'was' : 'were'} already there.`;
+            if (overwriting) {
+                const left = old.size - replaced;
+                line += ` ${replaced} replaced a frame that was there.`;
+                if (left > 0) line += ` ${left} from before ${left === 1 ? 'is' : 'are'} still there, not replaced.`;
+            }
+            return inFolder(sum) > 0
+                ? { where: [line], command: { say: 'To make a video of them with ffmpeg, run this in that folder:', line: ffmpegLine(folder, fps, firstFrame) } }
+                : { where: [line] };
         },
     };
 }
@@ -417,7 +502,7 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
     return {
         name,
         closing: 'Writing the video',
-        async begin({ longEdge, aspect }) {
+        async begin({ longEdge, aspect }) {                              // it asks nothing: a picked file is replaced, and the browser's own picker has asked
             const size = renderSize(longEdge, aspect);
             const fps = cfg.fps / Math.max(1, Math.round(cfg.frameStep)); // the rate the frames PLAY at, as fluid-toy's runner
             await encoder.start({
@@ -469,7 +554,7 @@ async function openVideoSink(project: string, cfg: RenderDialogConfig, isDiskMod
 
 // THE RUN
 
-const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume, isDiskMode }) => {
+const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, isDiskMode }) => {
     const ready = getHost();
     if (running || routeRendering()) { showToast('A render is already running', 'warning'); return; }
     if (!ready?.renderFrameBlob || !ready.bootParams()) { showToast('The renderer is not ready yet', 'warning'); return; }
@@ -478,7 +563,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume, 
         const project = (useEngineStore.getState() as { projectSettings?: { name?: string } }).projectSettings?.name || 'deep-zoom';
         // THE FIRST AWAIT, inside the click: the folder picker, or the file picker.
         sink = cfg.formatIndex === FRAME_FOLDER_FORMAT_INDEX
-            ? await openFolderSink(project, !!resume, cfg.fps)
+            ? await openFolderSink(project, cfg.fps)
             : await openVideoSink(project, cfg, isDiskMode);
     } catch (err) {
         showToast(say(err), 'error', 6000);
@@ -504,19 +589,21 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume, 
     status.setElapsedTime(0);
     status.setEtaRange({ min: 0, max: 0 });
     status.setLastFrameTime(0);
-    status.setStatusText(resume ? 'Looking in the folder' : 'Starting');
+    status.setStatusText(cfg.formatIndex === FRAME_FOLDER_FORMAT_INDEX ? 'Looking in the folder' : 'Starting');
 
     /** The run was thrown away: a folder's Cancel (its frames stay), a video's Discard (no file stays). */
     const thrown = (): boolean => flags.cancelledRef.current;
     /** No further frame: thrown away, a video's Finish, or the dialog gone. */
     const stop = (): boolean => thrown() || flags.finishEarlyRef.current || dialogClosed;
-    const started = performance.now();
+    let started = performance.now();
     const elapsed = (): number => (performance.now() - started) / 1000;
     /** Frames handed to the sink by this run; frames found already there; frames this run has to make. */
     let written = 0, already = 0, toRender = frames.length;
     /** How far the frame in flight is (0..1), the seconds the written frames took, and their megapixel-samples. */
     let fraction = 0, cost = 0, units = 0;
     let problem = '', touched = false;
+    /** The user backed out at the sink's own question (frames already in the folder: Cancel): no run. */
+    let backedOut = false;
 
     const tick = setInterval(() => {
         if (stop()) getHost()?.cancel();                                 // reaches the frame in flight at its next row
@@ -528,13 +615,15 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume, 
     const offProgress = ready.on('progress', (p) => { fraction = p?.fraction ?? 0; });
 
     try {
-        const begun = await sink.begin({ frames, longEdge, aspect: pictureAspect(), stop });
-        const there = begun.there, aspect = begun.aspect;
+        const begun = await sink.begin({ frames, longEdge, aspect: pictureAspect(), stop, ask: status.ask });
+        backedOut = !begun;
+        started = performance.now();                                     // the clock: not while the folder was looked into, or a question stood open
+        const there = begun?.there ?? [], aspect = begun?.aspect ?? 1;
         already = there.filter(Boolean).length;
         toRender = frames.length - already;
         const want = renderSize(longEdge, aspect);
 
-        for (let i = 0; i < frames.length && !stop(); i++) {
+        for (let i = 0; begun && i < frames.length && !stop(); i++) {
             if (there[i]) continue;
             const frame = frames[i];
             // Interrupt (the dialog of a video): the run waits here, between two frames, for Resume, Finish or Discard.
@@ -602,6 +691,14 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume, 
         setRouteRendering(false);
     }
 
+    if (backedOut) {
+        // Nothing was rendered and nothing written: the dialog goes back to its form, with no result to show.
+        await sink.end(false);
+        running = false;
+        status.setIsRendering(false);
+        return;
+    }
+
     // The sink closes: a video's last bytes and its index, or - thrown away - no file. The route and the picture are
     // the user's again meanwhile; only another render has to wait (`running`).
     const wasThrown = thrown();
@@ -610,7 +707,7 @@ const runRouteRender: RenderDialogRunner = async ({ cfg, flags, status, resume, 
     if (closeProblem && !problem) problem = closeProblem;
     running = false;
 
-    const sum: RunSummary = { written, toRender, already, total: frames.length, firstFrame: frames[0], stopped: !!problem || written < toRender };
+    const sum: RunSummary = { written, toRender, already, firstFrame: frames[0], stopped: !!problem || written < toRender };
     const said = sink.report(sum);
     const lines: string[] = [];
     if (problem) lines.push(`Stopped: ${problem}.`);

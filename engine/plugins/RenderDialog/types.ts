@@ -42,12 +42,31 @@ export interface RenderDialogStatus {
      *  the form, as every runner did before this existed. Call it
      *  before `setIsRendering(false)`. */
     setResult:        (r: RenderDialogResult | null) => void;
+    /** Put a question to the user and wait for the answer: the dialog
+     *  shows it in place of the form or the progress, one button an
+     *  option, and resolves with the chosen option's `id`. If the dialog
+     *  goes away while it is open it resolves with `question.cancel`. It
+     *  never rejects. The dialog knows nothing of what is asked: the
+     *  runner writes the words. A runner that never asks never sees it. */
+    ask:              (question: RenderDialogQuestion) => Promise<string>;
 }
 
 export interface RenderDialogResult {
     lines:    string[];
     /** A line to run elsewhere (an ffmpeg call for a folder of frames). */
     command?: string;
+}
+
+/** A question a runner asks while a run is starting (`status.ask`). */
+export interface RenderDialogQuestion {
+    /** What is asked, in a few plain lines. */
+    lines:   string[];
+    /** The answers, a button each, in this order. `primary`: the one the
+     *  dialog draws as the expected answer. */
+    options: Array<{ id: string; label: string; title?: string; primary?: boolean }>;
+    /** The `id` it resolves with when nobody can answer any more (the
+     *  dialog was closed under it). */
+    cancel:  string;
 }
 
 export interface RenderDialogDeps<TExtra = Record<string, unknown>> {
@@ -59,12 +78,6 @@ export interface RenderDialogDeps<TExtra = Record<string, unknown>> {
     flags:      RenderDialogFlags;
     status:     RenderDialogStatus;
     isDiskMode: boolean;
-    /** The "Resume" box: skip frames already in the folder. The dialog
-     *  always sets it; it is true only when the app installed with
-     *  `frameFolder`, the folder format is selected and the box is
-     *  ticked. (Optional in the type: a runner that re-packs its deps
-     *  into a shape of its own, as GMT's does, need not carry it.) */
-    resume?:    boolean;
 }
 
 export type RenderDialogRunner<TExtra = Record<string, unknown>> =
@@ -126,13 +139,15 @@ export interface InstallRenderDialogOptions<TExtra = Record<string, unknown>> {
      *  writes one file a frame into a folder the user picks
      *  (`engine/export/frameFolder.ts`). It adds the format
      *  "PNG sequence (folder)" to the dropdown - `VIDEO_FORMATS`' PNG
-     *  sequence under that name - and, while that format is selected: a
-     *  "Resume" box (`deps.resume`), the start label "Select output
-     *  folder…", one Cancel button during the run instead of Interrupt /
-     *  Resume / Finish / Discard, and no encoder probe (the format is
-     *  available exactly where the browser can write into a folder; the
-     *  dialog says so in one line where it cannot). The RUNNER asks for
-     *  the folder (`pickFrameFolder`, first thing, inside the click).
+     *  sequence under that name - and, while that format is selected:
+     *  the start label "Select output folder…", one Cancel button during
+     *  the run instead of Interrupt / Resume / Finish / Discard, and no
+     *  encoder probe (the format is available exactly where the browser
+     *  can write into a folder; the dialog says so in one line where it
+     *  cannot). The RUNNER asks for the folder (`pickFrameFolder`, first
+     *  thing, inside the click), and it is the runner that looks into it:
+     *  frames found there are a question for `status.ask`, not a box on
+     *  the form.
      *  Without this option nothing above exists: the dialog is what it
      *  was. To offer ONLY that format, also pass a `formatFilter`;
      *  without one the video formats are listed beside it, and for those
