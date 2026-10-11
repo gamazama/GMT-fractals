@@ -43,6 +43,13 @@ then what lets it ship, then quality, then the large optional pieces.
 | 11 | **Light Studio** (stage L) | GMT's light list, orb strip and aim-by-drag lighting the deep zoomer | nothing; the largest piece | 10 to 13 |
 | 12 | **More formulas** | His choice of the next one | his choice | 1 to 4 each |
 
+**His ranking, 2026-10-11 (the evening)**, asked whether the list still stands: "3-5,8-11 still
+important"; "6-7 also waiting on me" (Ship, and the march's ran-out places); 8, the Mandelbox's
+math session, "can run the research of this now (extra agents)" - started that evening, on the CPU
+only (`debug/scratch/box-ray-study/`); 12, more formulas, "take cheapest definitely, and start
+research on what else is cheap or easy" - so Julia mode is next among formulas, and its plan and a
+ranked survey were started the same evening (`debug/scratch/formula-next/`).
+
 Sessions 1 to 5 are one line of work and should run in that order. 7 to 12 are independent of each other
 and of 1 to 5, except that only one session at a time may own `core.js`.
 
@@ -140,8 +147,10 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
   voiced for the bulb ("dives into the more defined areas").
 
 ### 9. Navigation leftovers
-- His calls, a number each: the rise limit (4 decades a second), the clearance share (0.08), whether
-  the old speed rule's switch in Settings can go.
+- Settled by him, 2026-10-11 ("yes on all 3"): the rise limit stays 4 decades a second, the
+  clearance share stays 0.08, and the old speed rule's switch in Settings goes (grep `followView`
+  in `deep-zoom/navigationState.ts`, `settings.ts`, `DeepZoomNavigation.tsx`): the speed follows
+  the view, always.
 - The rays cost up to 10.5 ms a frame at the deepest starter. Levers: a skip table in the CPU probe
   (the renderer's own went with the page's program in `ROUTES.md` R7; its build is in the history
   of `core.js` before `f9f01e1a`, grep `blaBuild`), or reading the picture's own depth. Routes lean on the same rays (the clip warning, the trail cut).
@@ -172,7 +181,9 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 - Measured on the CPU, in `debug/scratch/formula-study/` (git-ignored; do not delete):
   - **KaliBox, the Kleinian family, the generated fold formulas**: reuse the box's two fold pieces.
     Not measured; Kleinian sets are close to self-similar, so depth may show more of the same.
-  - **Julia mode** of either formula: the cheapest addition (same kernel, a constant c). Not measured.
+  - **Julia mode** of either formula: the cheapest addition (same kernel, a constant c). CHOSEN by
+    him as the next formula work (2026-10-11); the plan and its CPU measurements are the study in
+    `debug/scratch/formula-next/JULIA.md`, to be moved here as a plan page once he has read it.
   - **MandelBolic**: planned and parked. Depth is reached only toward its plane; its look is the level
     surface of an estimate and has Burning Mode on. `MANDELBOLIC.md` is complete.
   - **Radiolaria, Mandelorus**: exact delta steps, but they flatten at depth. Not recommended.
