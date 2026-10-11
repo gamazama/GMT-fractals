@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-11T07:26:02.324Z",
+  "generated_at": "2026-10-11T08:01:26.485Z",
   "repo_root": "H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
-    "files": 3891,
-    "bytes": 93742799,
-    "tokens": 14659873,
-    "loadable_tokens": 14527833,
-    "context_worthy_tokens": 6953377,
+    "files": 3892,
+    "bytes": 93762663,
+    "tokens": 14664978,
+    "loadable_tokens": 14532938,
+    "context_worthy_tokens": 6958441,
     "source_of_truth_tokens": 5687279,
     "orientation_tokens": 26484,
-    "architecture_tokens": 1239614,
+    "architecture_tokens": 1244678,
     "reachable_union_files": 1197,
     "reachable_union_tokens": 3919080,
     "dead_context_files": 24,
@@ -196,7 +196,7 @@
       "files": 259
     },
     "tooling": {
-      "tokens": 6033869,
+      "tokens": 6035521,
       "files": 621
     },
     "demo": {
@@ -204,8 +204,8 @@
       "files": 8
     },
     "docs": {
-      "tokens": 1835100,
-      "files": 530
+      "tokens": 1838553,
+      "files": 531
     },
     "engine-gmt": {
       "tokens": 2972110,
@@ -238,11 +238,11 @@
       "files": 1261
     },
     "architecture": {
-      "tokens": 1239614,
-      "files": 326
+      "tokens": 1244678,
+      "files": 327
     },
     "data": {
-      "tokens": 6314600,
+      "tokens": 6314641,
       "files": 927
     },
     "config": {
@@ -276,11 +276,11 @@
       "files": 1644
     },
     "read-for-area": {
-      "tokens": 1239614,
-      "files": 326
+      "tokens": 1244678,
+      "files": 327
     },
     "skip": {
-      "tokens": 4776614,
+      "tokens": 4776655,
       "files": 314
     },
     "read-first": {
@@ -312,8 +312,8 @@
     },
     "tooling": {
       "on-demand": 1577442,
-      "skip": 3587095,
-      "read-for-area": 866387,
+      "skip": 3587136,
+      "read-for-area": 867998,
       "read-first": 2945
     },
     "demo": {
@@ -321,7 +321,7 @@
       "read-first": 1542
     },
     "docs": {
-      "read-for-area": 346920,
+      "read-for-area": 350373,
       "read-first": 4078,
       "reference-only": 1259856,
       "skip": 224246
@@ -671,6 +671,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/deep-zoom-shell/ROUTES.md",
+      "tokens": 14918,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "deep-zoom-prototype/ui/RecordPanel.tsx",
       "tokens": 14732,
       "tier": "root",
@@ -801,12 +807,6 @@
       "tokens": 13404,
       "tier": "gmt-app",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/deep-zoom-shell/ROUTES.md",
-      "tokens": 13359,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "debug/bench-perf-timeline.mts",
@@ -16776,6 +16776,21 @@
       "lines": 86,
       "tokens": 1630,
       "structuralTokens": 1895,
+      "cpt": 3.9,
+      "heavy": false,
+      "reachableFrom": []
+    },
+    {
+      "path": "docs/adr/0136-keys-carry-app-data.md",
+      "tier": "docs",
+      "contextClass": "architecture",
+      "loadPolicy": "read-for-area",
+      "ext": ".md",
+      "reason": "architecture-docs",
+      "bytes": 13464,
+      "lines": 193,
+      "tokens": 3453,
+      "structuralTokens": 3843,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -50221,10 +50236,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1688097,
-      "lines": 67177,
-      "tokens": 582103,
-      "structuralTokens": 556901,
+      "bytes": 1688217,
+      "lines": 67183,
+      "tokens": 582144,
+      "structuralTokens": 556936,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -50821,10 +50836,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 12253,
-      "lines": 169,
-      "tokens": 3142,
-      "structuralTokens": 3539,
+      "bytes": 12454,
+      "lines": 170,
+      "tokens": 3194,
+      "structuralTokens": 3593,
       "cpt": 3.9,
       "heavy": false,
       "reachableFrom": []
@@ -51046,10 +51061,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 52098,
-      "lines": 725,
-      "tokens": 13359,
-      "structuralTokens": 15229,
+      "bytes": 58177,
+      "lines": 801,
+      "tokens": 14918,
+      "structuralTokens": 16893,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []
