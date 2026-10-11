@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-11T20:10:33.039Z",
+  "generated_at": "2026-10-11T20:25:20.563Z",
   "repo_root": "H:/GMT/workspace-gmt/stable/.claude/worktrees/deep-zoom",
   "heavy_token_threshold": 4000,
   "estimator": "char-ratio-per-filetype (see scripts/tokens.mjs)",
   "totals": {
     "files": 3897,
-    "bytes": 93992873,
-    "tokens": 14728218,
-    "loadable_tokens": 14596178,
-    "context_worthy_tokens": 7021328,
+    "bytes": 93988879,
+    "tokens": 14726516,
+    "loadable_tokens": 14598026,
+    "context_worthy_tokens": 7022273,
     "source_of_truth_tokens": 5719877,
     "orientation_tokens": 26484,
-    "architecture_tokens": 1274967,
+    "architecture_tokens": 1275912,
     "reachable_union_files": 1199,
     "reachable_union_tokens": 3944644,
     "dead_context_files": 24,
@@ -184,7 +184,7 @@
   ],
   "by_tier": {
     "root": {
-      "tokens": 1339067,
+      "tokens": 1335517,
       "files": 341
     },
     "app-gmt": {
@@ -196,7 +196,7 @@
       "files": 259
     },
     "tooling": {
-      "tokens": 6070660,
+      "tokens": 6072508,
       "files": 623
     },
     "demo": {
@@ -238,11 +238,11 @@
       "files": 1263
     },
     "architecture": {
-      "tokens": 1274967,
+      "tokens": 1275912,
       "files": 331
     },
     "data": {
-      "tokens": 6314994,
+      "tokens": 6315897,
       "files": 927
     },
     "config": {
@@ -266,7 +266,7 @@
       "files": 358
     },
     "generated": {
-      "tokens": 132040,
+      "tokens": 128490,
       "files": 1
     }
   },
@@ -276,11 +276,11 @@
       "files": 1645
     },
     "read-for-area": {
-      "tokens": 1274967,
+      "tokens": 1275912,
       "files": 331
     },
     "skip": {
-      "tokens": 4777008,
+      "tokens": 4777911,
       "files": 314
     },
     "read-first": {
@@ -288,7 +288,7 @@
       "files": 15
     },
     "never": {
-      "tokens": 132040,
+      "tokens": 128490,
       "files": 621
     },
     "reference-only": {
@@ -312,8 +312,8 @@
     },
     "tooling": {
       "on-demand": 1584324,
-      "skip": 3587489,
-      "read-for-area": 895902,
+      "skip": 3588392,
+      "read-for-area": 896847,
       "read-first": 2945
     },
     "demo": {
@@ -443,6 +443,12 @@
       "loadPolicy": "on-demand"
     },
     {
+      "path": "plans/deep-zoom-shell/ROUTES.md",
+      "tokens": 24946,
+      "tier": "tooling",
+      "loadPolicy": "read-for-area"
+    },
+    {
       "path": "debug/deep-zoom-checks/module-host.mts",
       "tokens": 24772,
       "tier": "tooling",
@@ -465,12 +471,6 @@
       "tokens": 24169,
       "tier": "tooling",
       "loadPolicy": "on-demand"
-    },
-    {
-      "path": "plans/deep-zoom-shell/ROUTES.md",
-      "tokens": 24001,
-      "tier": "tooling",
-      "loadPolicy": "read-for-area"
     },
     {
       "path": "engine-gmt/navigation/Navigation.tsx",
@@ -47215,10 +47215,10 @@
       "loadPolicy": "never",
       "ext": ".json",
       "reason": "generated:artifact",
-      "bytes": 382915,
-      "lines": 10309,
-      "tokens": 132040,
-      "structuralTokens": 137729,
+      "bytes": 372619,
+      "lines": 10310,
+      "tokens": 128490,
+      "structuralTokens": 137733,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -50323,10 +50323,10 @@
       "loadPolicy": "skip",
       "ext": ".json",
       "reason": "data:.json",
-      "bytes": 1689240,
-      "lines": 67224,
-      "tokens": 582497,
-      "structuralTokens": 557271,
+      "bytes": 1691858,
+      "lines": 67330,
+      "tokens": 583400,
+      "structuralTokens": 558146,
       "cpt": 2.9,
       "heavy": true,
       "reachableFrom": []
@@ -51193,10 +51193,10 @@
       "loadPolicy": "read-for-area",
       "ext": ".md",
       "reason": "in-tree-notes",
-      "bytes": 93602,
-      "lines": 1258,
-      "tokens": 24001,
-      "structuralTokens": 27204,
+      "bytes": 97286,
+      "lines": 1306,
+      "tokens": 24946,
+      "structuralTokens": 28270,
       "cpt": 3.9,
       "heavy": true,
       "reachableFrom": []

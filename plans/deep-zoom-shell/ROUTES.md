@@ -61,6 +61,54 @@ call):
    yeah you have my approval".
 9. The codec fix (`claude/clever-vaughan-e29a9f`): "we can merge to main, no push yet."
 
+**Built that evening on his answers** (local commits, never pushed):
+- `2edc378b`: the render dialog lists H.265 and AV1 last, in every app ("just makes sure they are at
+  the bottom of the list": his machine has no HEVC or AV1 extension, so Windows makes no thumbnail
+  of such a file and Windows Media Player does not play it); GMT's System menu has "Open Deep
+  Zoom".
+- `9ef36929`: the loading notice. A card over the dimmed picture while the bulb's program builds,
+  from page open; for the Mandelbox one line while the whole box is in view and the card below a
+  depth of about 0.05. The bulb gets the card even at the start view because its plain picture is
+  not a picture at any depth (61 % of its pixels are speckle at the start view; the cause is the
+  baseline's hit level in `core.js`, measured, not touched).
+- `409ab954`: the old speed rule's switch is gone from Settings; the rise limit (4 decades a
+  second) and the Orbit clearance (0.08) stay ("yes on all 3").
+- `b6f717dc`: GMT's and fluid-toy's videos into a picked file are written as they go, with a
+  keyframe a second, as the deep zoomer's are (he tested the layout in Windows Media Player and
+  took it as a yes). GMT, H.264 1920 x 1080, 300 frames: 48 of 51.3 MiB in the file before the
+  last frame, with an audio track too.
+- `f86273db`: GMT's image sequences ask Overwrite / Continue / Cancel. The join, measured: another
+  grain from the first continued frame on (11.4 % of pixels, mean 0.15 of a level); with Focus
+  lock the first continued frame is focused 20 to 23 % off and the next 8 to 9 %; a smoothed LFO
+  can jump at the join (and two single runs do not agree there either). Known and left: the
+  version also moves with the playhead in a keyed scene, so Continue is offered only with the
+  playhead where it was.
+- `0767a886`: mediabunny 1.40.1 -> 1.61.3 (installed in `stable/node_modules` with his approval).
+  GMT's, fluid-toy's and the deep zoomer's video proofs pass on it.
+- For his own check in Windows Media Player: `debug/scratch/strict-player-test/after-mediabunny-1.61.3/`
+  (24 files, each named for what it is; the names were checked against the files' box order).
+
+**Where the bulb's 21 to 26 seconds go** (`debug/scratch/load/`, measured that evening; nothing
+built, it is his kernel):
+- The wait is paid again after EVERY browser restart, not once a machine: a program built in the
+  background is kept by the browser in memory only (a restart rebuilt it in 20 to 21 s while the
+  three small programs came off disk in 0.00 s).
+- The time is the D3D compiler's (translation to HLSL: 0.02 s) and follows the number of copies
+  of the kernel: `pertOrbit` is called from 7 places, each call is its own copy, each copy costs
+  about 3 s. The march alone builds in 2.3 s, all seven in 20.5. Loop bounds and the ring's size
+  cost nothing.
+- Options, by what they save: (1) one extra one-pixel draw after the build puts the program on
+  the browser's disk: ready 0.04 s after a restart, about 10 lines in `mkProgAsync`, measured on
+  this Chrome only and leaning on behaviour that is not a documented rule; (2) one call site for
+  the kernel: 5.65 s, a rewrite, picture and frame time not measured; (3) both tap sets in one
+  loop and the two probes through one call: 14.8 s; (4) two programs side by side: 12.75 s;
+  (5) kick the ray program before the three small builds: 0.65 s sooner.
+
+**Studies for the next formula work** (plan pages, no app change): `JULIA.md` and
+`CHEAP-FORMULAS.md` (Julia mode measured on the CPU; what else is cheap, ranked) and
+`BOX-RAY-STEP.md` (the Mandelbox can take the ray march's step, with four pieces of its own). Each
+ends with calls for him.
+
 **Still open**: the Locations tab's foot under the Animate button; Draft has no way back; an
 Overwrite stopped halfway leaves a mixed folder; no ease back to the route after a free look
 (his to fly first).
