@@ -26,7 +26,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R4 the trail | done | `c388d092` |
 | R6a render PNG frames to a folder | done | `736103ad`, `c8ce3ef1`, `8de5616f` |
 | R2b exponential-track curve tools, undoable length | done | `15b419bb` |
-| R5 free look while a route plays | not started | |
+| R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | not started | |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | not started | |
 | R7 cleanup: the previous-generation marches retired, dead handles, help | not started | |
@@ -162,7 +162,7 @@ progress. The same quantity taken from the deep end, `(zT - z1) / (z0 - z1)`, ke
 
 ## The stages
 
-R0 to R4, R2b and R6a are built. Each has an "As built" note below, and those notes are the record
+R0 to R5, R2b and R6a are built. Each has an "As built" note below, and those notes are the record
 of what the code does and of what was decided on the way. What is left, in the order to build it:
 
 | # | Stage | What he gets |
@@ -566,6 +566,69 @@ pass i.e free look during dive playback - optional for the user, compulsory for 
 - **Proof**: `check:deep-zoom-route` extended (the offset is composed on the route's rotation, is
   gone when playback stops, plays back from its keys, and leaves the route's keys alone), and a
   scratch run of the real app. No new smoke step.
+
+**As built, 2026-10-11** (`3abf4af2`; one builder: 469 thousand tokens, 50 minutes; 5 files, +839 /
+-69, of which 278 lines are the node check). By the builder on the real GPU: the shell smoke 55 of
+55, a scratch run of the real app (`debug/scratch/r5/app-look.mts`, 31 lines), the build. By the
+orchestrator: typecheck, six node checks, the diff, the two screenshots, the app run and the whole
+smoke again after a one-line fix (below). Three deliberate breaks, as the brief capped them: the
+side the look is multiplied on (5 lines red), the stop listener (3), a fly key's take (1); those
+three are the `@invariant`s, the rest of the free look is `@assumption`. `core.js` and `engine/**`
+untouched. Files: `deep-zoom/route.ts` (`routeShownAt`, `lookTurned`, `pauseRoute`, `clearLook`),
+`DeepZoomNavigation.tsx` (`moveHeld`, `lookOnly`), `features/camera.ts`, `RoutePanel.tsx`.
+
+What is there:
+- While a route plays, a Fly-mode look drag, the look stick and Q / E (both modes) turn the view
+  on top of the route, and it plays on. W A S D, Space, C, the wheel (Fly mode) and any Orbit-mode
+  press stop it and hand over the camera, turn included. Pause, the route's end or a scrub drop
+  an unrecorded turn: one `setView`, back on the route.
+- With Record on the turn is kept on `camera.lookPan` / `lookTilt` / `lookRoll` (radians; "Look
+  pan", "Look tilt", "Look roll" under Camera): a key a frame, one undo step, thinned to 0.1
+  degree a track when the pass ends (`LOOK_FIT_TOLERANCE`). A scrub, and so a render, shows route
+  x look.
+- The look is pan about the camera's up, then tilt, then roll, in the camera's own frame
+  (`Euler(tilt, -pan, roll, 'YXZ')`, the order `toQuaternion` builds an orientation in).
+- The Route tab: one faint help line, and "A free look is recorded on this route." with Clear
+  while a look track holds a key.
+
+Measured: a ten-second smooth pass leaves 41 / 25 / 20 keys and plays back 0.0012 degrees from
+what was turned; 3.6 s by hand in the app, 107 keys a track thinned to 21 / 16 / 24. What plays
+against what was on screen at 36 degrees a second: 0.02 to 0.04 degrees.
+
+Differs from the brief, with the reason:
+- **A pass begins at the hand's first turn, not at Play.** With Record on and no turn nothing is
+  written and a look already recorded plays on. Read to the letter, playing an existing take with
+  Record on would have flattened the played span to one value.
+- **A frame is sampled when the next one is driven**: the timeline's tick runs before the
+  navigation's, so the turn of a frame arrives after its `drive`. Sampled inside `drive` the
+  recording played back 1.0 degree behind the screen.
+- **The three tracks are DDFS params on the `camera` feature**, which keeps Key Cam from reading
+  "changed". Side effect: Key Cam's "delete key" and "delete tracks" also act on the look tracks.
+- **Clear removes the three tracks**, not only their keys.
+- `stopRoutePlayback` is the hands' only; the Route tab's Pause is `pauseRoute`.
+
+Fixed by the orchestrator on the way:
+- **In Orbit mode, Space held as a hand holds it (150 ms) stopped the route it had just
+  started** (a tap played). Older than R5: Space counts as "up", and any held key stopped a
+  route. In Orbit mode nothing held is a move now (`moveHeld`); measured after: playing.
+- **A stage-only smoke run timed out at its first step**, on committed code too: leaving a page
+  whose ray march shader is still building takes 36 to 44 s, and the runner allowed 30. It
+  allows two minutes (`debug/smoke-deep-zoom.mts`, `boot`).
+
+To know:
+- A pass that ends turned leaves the rest of the route turned (a plain track holds its last
+  value). There is no ease back to the route.
+- A look drag still held when the route ends turns the camera from the route's end, and takes it.
+- K in the middle of a free look keys what is on screen, turn included.
+- The thinned keys are denser than the tolerance needs (the fitted curve lands about a hundred
+  times inside it).
+- Key Cam's "delete key at the playhead" is one undo step a track: up to five for a click now.
+- Not driven: a real render of a route with a look, the touch sticks, a timeline that loops in
+  the middle of a pass, a look carried over straight up or down.
+- No ADR yet: ADR-0136 wants an update block for the three look tracks (released on record, the
+  route's track held; a pass begins at the first turn; a keyframe under a look stores route =
+  screen x inverse look). The sibling-apps rule should say the route check now carries the
+  "look: ..." lines.
 
 ### R6. Rendering
 
