@@ -25,7 +25,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R3 keyframes as you dive | done | `9addef82` |
 | R4 the trail | done | `c388d092` |
 | R6a render PNG frames to a folder | done | `736103ad`, `c8ce3ef1`, `8de5616f` |
-| R2b exponential-track curve tools, undoable length | see its note below | |
+| R2b exponential-track curve tools, undoable length | done | `15b419bb` |
 | R5 the look pass | not started | |
 | R6b video formats, the preview video | not started | |
 | R7 tidy | not started | |
@@ -366,9 +366,41 @@ Found, not fixed:
   nothing, and nothing is greyed out.
 - `plans/deep-zoom-shell/gmt-systems/camera-systems.md` still describes the pair's old formula.
 
-Waiting for the owner: the decision record (`ADR-DRAFT-keys-carry-app-data.md` beside this file,
-to be filed as `docs/adr/0136-...`); `.claude/rules/tick-and-animation.md` should cite
-`test:key-payload`, `test:zoom-path` and `test:camera-pair`.
+Done with the owner back, 2026-10-11: the decision record is filed as
+`docs/adr/0136-keys-carry-app-data.md` (R2b's items in it), and
+`.claude/rules/tick-and-animation.md` cites the four node tests.
+
+**R2b as built, 2026-10-11** (`15b419bb`; one builder: 645 thousand tokens, 51 minutes; 20 files,
++437 / -233, of which 213 added lines are code, and a 387-line node test). All seven items done.
+By the builder: typecheck, `test:log-curves` (47 checks), the animation smokes, `smoke:fluid-toy`,
+`smoke:interact`, `smoke:chrome`, `smoke:deep-zoom` (55 of 55), the build, and a scratch proof in
+three apps (`debug/scratch/r2b/`, 41 checks, with screenshots). By the orchestrator: typecheck, the
+seven node tests and checks, the screenshot of the Depth track.
+
+- **The graph editor draws an exponential track through its log**, in both views, with the axis
+  in the value's own units (1, 0.01, 1e-6 ...). The deep zoomer's Depth curve is a curve over its
+  decades, not an L: the value that plays lies within 1.5 px of the drawn line. A key dragged
+  22 px moved 0.77 decades, as the pointer did.
+- **Re-tangenting, the fitter and the Pencil's tolerance work in log there**: 3.6e-15 decades from
+  the by-hand result where they were 0.99 off on a 24-decade track; a fitted stroke within 0.0067
+  decades of its samples where it was 4.22 off.
+- **Key Cam and the key buttons compare by ratio** on such a track: no "changed" between two keys.
+- **A payload track's value is read-only in the inspector**, and a drag moves its key in time only.
+- **The timeline's length is in the undo**: one step per committed change of LEN.
+- Also fixed, found on the way: a key added between two keys of an exponential track was split in
+  plain values (live in fluid-toy).
+
+What GMT feels: a change of LEN can be undone, and Ctrl+Z over the timeline straight after loading
+a scene brings back the previous keys with their previous length (before: with the loaded
+scene's). Nothing else: a plain track's tools give the same output to the bit as at `b2a47674`.
+
+Decided without the owner: on one un-normalised view a plain track sits at its value and an
+exponential one at its exponent, and the axis reads in the units of the tracks in focus (with
+Depth selected and Iterations also shown, the lines beside Iterations read 1e40).
+
+Still in plain values on an exponential track (recorded as assumptions in
+`engine/animation/logTrackRegistry.ts`; none reachable on the route's track): Smooth, Bounce,
+Simplify, a Continue tail, and the inspector's value field dragging in plain steps.
 
 ### R3. Keyframes as you dive
 

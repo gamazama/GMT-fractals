@@ -43,6 +43,7 @@
  *   decades, and the leg ends exactly on its deeper key — proven by: npm run test:zoom-path
  *   ("is … of the scale there off"). The numeric integral is checked against the closed form and
  *   against a brute-force sum on an eased leg; measuring from the shallow key instead reds it.
+ * @see docs/adr/0136-keys-carry-app-data.md
  */
 
 export type Vec3 = readonly [number, number, number];

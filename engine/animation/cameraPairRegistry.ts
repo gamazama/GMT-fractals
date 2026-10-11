@@ -54,6 +54,7 @@
  *   share was measured from the shallow key and a 30-decade segment was 5 % of
  *   a view off at zoom 1e-16 and the whole pan off from 1e-17 on; a segment
  *   shorter than 13 decades moves in its last digits only.
+ * @see docs/adr/0136-keys-carry-app-data.md
  */
 
 import type { AnimationSequence, Keyframe } from '../../types';

@@ -61,6 +61,7 @@
  *   the dope sheet's add-a-key, the selection box's vertical handles, the inspector's read-only
  *   field) are wiring no node test reaches. If one is lost the store still refuses the write;
  *   what comes back is an empty undo step, or a field that looks editable.
+ * @see docs/adr/0136-keys-carry-app-data.md
  */
 
 const payloadTracks = new Set<string>();

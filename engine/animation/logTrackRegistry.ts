@@ -78,6 +78,7 @@
  * @see docs/adr/0015-animation-log-and-camera-pair-value-spaces.md — its
  *   Decision section predates the Bezier-on-log support added in 05eb7849
  *   and still says Bezier is unsupported here; the code is the truth.
+ * @see docs/adr/0136-keys-carry-app-data.md
  */
 
 const logTracks = new Set<string>();
