@@ -6,6 +6,7 @@ import { simplifyTrack } from '../utils/CurveFitting';
 import { Keyframe, AnimationSequence } from '../types';
 import type { GraphDataSource } from '../utils/GraphDataSource';
 import { isPayloadTrack } from '../engine/animation/payloadTrackRegistry';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 
 // Payload tracks are out of every tool in this file: Smooth and the Euler filter move
 // values, Bake and Simplify make keys up, and such a track allows neither. The store
@@ -344,7 +345,7 @@ export const useGraphTools = (
         trackIds.filter(editable).forEach(tid => {
             const track = sequence.tracks[tid];
             if (!track || track.keyframes.length === 0) return;
-            const val = evaluateTrackValue(track.keyframes, frame, isRotationTrack(tid));
+            const val = evaluateTrackValue(track.keyframes, frame, isRotationTrack(tid), isLogTrack(tid));
             const py = v2p(val, tid);
             const dist = Math.abs(my - py);
 

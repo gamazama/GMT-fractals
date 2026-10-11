@@ -29,8 +29,10 @@
  * THE SEAM. The store enforces all of it (`store/animation/sequenceSlice.ts`, grep
  * `isPayloadTrack`), so a new tool is covered without knowing this file exists. The editors
  * check here too, only to leave a refused tool without side effects (no empty undo step, no
- * preview of a stroke that will not land): grep `isPayloadTrack` under `hooks/` and
- * `components/`. An app writes its keys with
+ * preview of a stroke that will not land) and to SHOW the lock: a drag in the graph editor
+ * gives such a key no value, so it moves in time only (`draggedKeyValue` in
+ * `utils/GraphUtils.ts`), and the key inspector's value field is read-only. Grep
+ * `isPayloadTrack` under `hooks/`, `components/` and `utils/`. An app writes its keys with
  * `addKeyframe(trackId, frame, value, interpolation, payload)`, from the capture function it
  * hands to `setCameraKeyCaptureFn` when the track is a camera's.
  *
@@ -51,9 +53,14 @@
  *   proven by: npm run test:key-payload ("the payload is gone", "the value moved", "a key
  *   without a payload arrived").
  *
+ * @invariant A drag in the graph editor gives a payload track's key no value
+ *   (`draggedKeyValue`) — proven by: npm run test:log-curves ("[L] a drag gives a key of a
+ *   payload track no value"). With that taken out the store above still holds the value.
+ *
  * @assumption The editors' own early returns (the Pencil's target, the graph tools' targets,
- *   the dope sheet's add-a-key) are wiring no node test reaches. If one is lost the store still
- *   refuses the write; what comes back is an empty undo step.
+ *   the dope sheet's add-a-key, the selection box's vertical handles, the inspector's read-only
+ *   field) are wiring no node test reaches. If one is lost the store still refuses the write;
+ *   what comes back is an empty undo step, or a field that looks editable.
  */
 
 const payloadTracks = new Set<string>();

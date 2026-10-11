@@ -1,8 +1,9 @@
 
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { useAnimationStore } from '../store/animationStore';
-import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, valueToPixel as v2pH, pixelToValue } from '../utils/GraphUtils';
+import { GraphViewTransform, frameToPixel, valueToPixel, pixelToFrame, valueToPixel as v2pH, pixelToValue, toGraphY, fromGraphY } from '../utils/GraphUtils';
 import { calculateViewBounds } from '../utils/keyframeViewBounds';
+import { strokeTolerance } from '../utils/CurveFitting';
 import { useEngineStore } from '../store/engineStore';
 import { useGraphInteraction } from '../hooks/useGraphInteraction';
 import { useGraphTools } from '../hooks/useGraphTools';
@@ -100,6 +101,8 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
         };
     }, [scrollLeft, frameWidth, viewY, canvasWidth, height]);
 
+    // Each track's range, in GRAPH units (`toGraphY`): a plain track's values, an exponential
+    // track's exponents - so the normalised view spreads its decades evenly.
     const trackRanges = useMemo(() => {
         const ranges: Record<string, { min: number, max: number, span: number }> = {};
         trackIds.forEach(tid => {
@@ -108,26 +111,13 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
                 ranges[tid] = { min: 0, max: 1, span: 1 };
                 return;
             }
+            const isLog = isLogTrack(tid);
             let min = Infinity, max = -Infinity;
             track.keyframes.forEach(k => {
-                if (k.value < min) min = k.value;
-                if (k.value > max) max = k.value;
+                const y = toGraphY(k.value, isLog);
+                if (y < min) min = y;
+                if (y > max) max = y;
             });
-            // Log tracks span many decades (julia.zoom: 1 → 1e-30). A
-            // linear min..max range squashes the curve to a single pixel
-            // at the deep end. Store the range in log space so the
-            // normalized v2p maps the curve across the full y-axis.
-            if (isLogTrack(tid) && min > 0) {
-                const logMin = Math.log(min);
-                const logMax = Math.log(max);
-                const logSpan = logMax - logMin;
-                if (logSpan < 0.00001) {
-                    ranges[tid] = { min: logMin - 0.5, max: logMax + 0.5, span: 1 };
-                } else {
-                    ranges[tid] = { min: logMin, max: logMax, span: logSpan };
-                }
-                return;
-            }
             const span = max - min;
             if (span < 0.00001) { min -= 0.5; max += 0.5; }
             ranges[tid] = { min, max, span: max - min };
@@ -135,39 +125,28 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
         return ranges;
     }, [trackIds, sequence, normalized]);
 
+    // value → pixel-Y and back, through the track's own space in BOTH views. @see toGraphY
     const getLocalY = (val: number, tid: string) => {
-        if (!normalized) return val;
+        const y = toGraphY(val, isLogTrack(tid));
+        if (!normalized) return y;
         const r = trackRanges[tid];
         if (!r) return 0.5;
-        // Log-track ranges store log(min/max). Transform value into the
-        // same space so the normalized [0,1] mapping is meaningful for
-        // values spanning many decades.
-        if (isLogTrack(tid) && val > 0) {
-            return (Math.log(val) - r.min) / r.span;
-        }
-        return (val - r.min) / r.span;
+        return (y - r.min) / r.span;
     };
 
-    const v2p = (val: number, tid: string) => {
-        if (normalized) {
-            const norm = getLocalY(val, tid);
-            return valueToPixel(norm, view);
-        }
-        return valueToPixel(val, view);
-    };
-    
+    const v2p = (val: number, tid: string) => valueToPixel(getLocalY(val, tid), view);
+
     const frameToCanvasPixel = (f: number) => frameToPixel(f, view) + GRAPH_LEFT_GUTTER_WIDTH;
     const canvasPixelToFrame = (px: number) => pixelToFrame(px - GRAPH_LEFT_GUTTER_WIDTH, view);
 
-    // Inverse of v2p (pixel-Y → value), normalised- and log-track-aware — for the
-    // shared selection-box MOVE handle and the Pencil tool.
-    const p2v = (py: number, tid: string) => {
-        const raw = pixelToValue(py, view);
-        if (!normalized) return raw;
-        const r = trackRanges[tid];
-        if (!r) return raw;
-        return isLogTrack(tid) ? Math.exp(r.min + raw * r.span) : r.min + raw * r.span;
+    // Inverse of v2p (pixel-Y → value) — for the shared selection box and the Pencil tool,
+    // which hands in the view it froze at pen-down.
+    const pixelToTrackValue = (py: number, vw: GraphViewTransform, tid: string) => {
+        const raw = pixelToValue(py, vw);
+        const r = normalized ? trackRanges[tid] : undefined;
+        return fromGraphY(r ? r.min + raw * r.span : raw, isLogTrack(tid));
     };
+    const p2v = (py: number, tid: string) => pixelToTrackValue(py, view, tid);
 
     // Pencil-stroke preview overlay (drawn imperatively by usePencilTool).
     const pencilOverlayRef = useRef<HTMLCanvasElement>(null);
@@ -211,20 +190,12 @@ const GraphEditorInner: React.FC<GraphEditorProps> = ({
             const tid = sel.length === 1 ? sel[0] : (displayTrackIds.length === 1 ? displayTrackIds[0] : null);
             // No stroke on a payload track: a drawn key has no payload (the store would drop it anyway).
             if (!tid || isPayloadTrack(tid)) return null;
-            const keys = sequence.tracks[tid]?.keyframes ?? [];
-            let mn = Infinity, mx = -Infinity;
-            keys.forEach(k => { if (k.value < mn) mn = k.value; if (k.value > mx) mx = k.value; });
-            const range = (isFinite(mx - mn) && mx > mn) ? mx - mn : 1;
+            const log = isLogTrack(tid);
             return {
                 trackId: tid,
-                eps: Math.max(1e-6, range * 0.02),
-                toValue: (py: number, vw: GraphViewTransform) => {
-                    const raw = pixelToValue(py, vw);
-                    if (!normalized) return raw;
-                    const r = trackRanges[tid];
-                    if (!r) return raw;
-                    return isLogTrack(tid) ? Math.exp(r.min + raw * r.span) : r.min + raw * r.span;
-                },
+                log,
+                eps: strokeTolerance(sequence.tracks[tid]?.keyframes ?? [], log),
+                toValue: (py: number, vw: GraphViewTransform) => pixelToTrackValue(py, vw, tid),
             };
         },
         getKeys: (tid) => sequence.tracks[tid]?.keyframes ?? [],

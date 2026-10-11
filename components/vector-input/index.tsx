@@ -8,6 +8,7 @@ import { KeyStatus } from '../Icons';
 import { BaseVectorInput } from './BaseVectorInput';
 import { ConnectedVectorInputProps } from './types';
 import { evaluateTrackValue } from '../../utils/timelineUtils';
+import { isLogTrack } from '../../engine/animation/logTrackRegistry';
 import { FractalEvents, FRACTAL_EVENTS } from '../../engine/FractalEvents';
 import { useInteractionGesture } from '../../engine/hooks/useInteractionDrag';
 import { INTERACTION_SOURCES } from '../../engine-gmt/interaction/interactionSources';
@@ -134,7 +135,7 @@ export const Vector2Input: React.FC<Vector2InputProps> = ({
                 if (!tid) return false;
                 const track = sequence.tracks[tid] as Track | undefined;
                 if (!track || track.keyframes.length === 0) return false;
-                const interpolated = evaluateTrackValue(track.keyframes, frame, false);
+                const interpolated = evaluateTrackValue(track.keyframes, frame, false, isLogTrack(tid));
                 return Math.abs(interpolated - lastValueRef.current[axes[i]]) > 0.001;
             });
             return anyInterpolatedDirty ? 'dirty' : 'partial';
@@ -275,7 +276,7 @@ export const Vector3Input: React.FC<Vector3InputProps> = ({
                 if (!tid) return false;
                 const track = sequence.tracks[tid] as Track | undefined;
                 if (!track || track.keyframes.length === 0) return false;
-                const interpolated = evaluateTrackValue(track.keyframes, frame, false);
+                const interpolated = evaluateTrackValue(track.keyframes, frame, false, isLogTrack(tid));
                 return Math.abs(interpolated - lastValueRef.current[axes[i]]) > 0.001;
             });
             return anyInterpolatedDirty ? 'dirty' : 'partial';
@@ -430,7 +431,7 @@ export const Vector4Input: React.FC<Vector4InputProps> = ({
                 if (!tid) return false;
                 const track = sequence.tracks[tid] as Track | undefined;
                 if (!track || track.keyframes.length === 0) return false;
-                const interpolated = evaluateTrackValue(track.keyframes, frame, false);
+                const interpolated = evaluateTrackValue(track.keyframes, frame, false, isLogTrack(tid));
                 return Math.abs(interpolated - lastValueRef.current[axes[i]]) > 0.001;
             });
             return anyInterpolatedDirty ? 'dirty' : 'partial';

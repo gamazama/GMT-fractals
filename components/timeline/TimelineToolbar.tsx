@@ -11,7 +11,7 @@ import { CloseIcon, MenuIcon, KeyStatus, LoopIcon, WaveRecordIcon } from '../Ico
 import { KeyframeButton } from '../KeyframeButton';
 import { z } from '../ui/zIndex';
 import { getLayerHost } from '../ui/layerHost';
-import { getLiveValue, evaluateTrackValue } from '../../utils/timelineUtils';
+import { getLiveValue, cameraKeyStatus } from '../../utils/timelineUtils';
 import {
     PlayIcon, PauseIcon, StopIcon, RecordIcon,
     BarsIcon, CurveIcon, CheckeredFlagIcon, CheckIcon
@@ -103,46 +103,10 @@ const KeyCamButton: React.FC = () => {
         if (ids.length) removeTracks(ids);
     };
 
-    const getStatus = (): KeyStatus => {
-        let hasAnyTrack = false;
-        let hasKeyAtFrame = false;
-        let isDirty = false;
-
-        for (const tid of tracks) {
-            const track = sequence.tracks[tid];
-            if (track) {
-                hasAnyTrack = true;
-                const k = track.keyframes.find(k => Math.abs(k.frame - currentFrame) < 0.1);
-
-                if (k) hasKeyAtFrame = true;
-
-                if (!isPlaying) {
-                    const currentVal = getLiveValue(tid, false, currentFrame, sequence);
-                    let timelineVal = 0;
-
-                    if (k) {
-                        timelineVal = k.value;
-                    } else {
-                        timelineVal = evaluateTrackValue(track.keyframes, currentFrame, tid.includes('rotation'));
-                    }
-
-                    if (Math.abs(timelineVal - currentVal) > 0.001) {
-                        isDirty = true;
-                    }
-                }
-            }
-        }
-
-        if (!hasAnyTrack) return 'none';
-
-        if (hasKeyAtFrame) {
-            return isDirty ? 'keyed-dirty' : 'keyed';
-        } else {
-            return isDirty ? 'dirty' : 'partial';
-        }
-    };
-
-    const status = getStatus();
+    // The reading itself is `cameraKeyStatus` (utils/timelineUtils.ts): each track judged in
+    // its own space, the curve taken as it plays.
+    const status: KeyStatus = cameraKeyStatus(tracks, sequence, currentFrame,
+        isPlaying ? null : (tid) => getLiveValue(tid, false, currentFrame, sequence));
 
     return (
         <div
@@ -290,6 +254,17 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         animationEngine.scrub(f);
     };
 
+    // The length field: ONE undo step per committed change. The field opens a gesture on
+    // pointer-down and again when a typed value is committed (`onDragStart`), and a gesture
+    // may change nothing (a click to type), so the step is taken with the gesture's first
+    // real change: one per drag, one per typed value, none for a click.
+    const lengthStepDue = useRef(false);
+    const changeLength = (frames: number) => {
+        if (frames === useAnimationStore.getState().durationFrames) return;
+        if (lengthStepDue.current) { lengthStepDue.current = false; snapshot(); }
+        setDuration(frames);
+    };
+
     return (
         <div className="h-8 border-b border-line/10 flex items-center px-2 gap-2 bg-line/5 shrink-0 z-50 select-none relative" data-help-id="ui.timeline" onContextMenu={handleContextMenu}>
             <div className="flex items-center gap-1 pr-2 mr-1" data-help-id="anim.transport">
@@ -386,10 +361,11 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                     <div className="w-10 h-5 bg-surface-sunken rounded border border-line/10 relative">
                         <DraggableNumber
                             value={storeDuration}
-                            onChange={setDuration}
+                            onChange={changeLength}
                             step={1} min={10} max={10000}
                             overrideText={storeDuration.toFixed(0)}
-                            onDragStart={snapshot}
+                            onDragStart={() => { lengthStepDue.current = true; }}
+                            onDragEnd={() => { lengthStepDue.current = false; }}
                             sensitivity={0.15}
                         />
                     </div>

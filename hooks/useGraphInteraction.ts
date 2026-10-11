@@ -1,9 +1,10 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { GraphViewTransform, valueToPixel } from '../utils/GraphUtils';
+import { GraphViewTransform, valueToPixel, graphHandleY, tangentGraphY, draggedKeyValue } from '../utils/GraphUtils';
 import { constrainKeyframeHandles, calculateSoftFalloff, scaleKeyframeHandles } from '../utils/timelineUtils';
 import { Keyframe, BezierHandle } from '../types';
 import type { GraphDataSource } from '../utils/GraphDataSource';
+import { isLogTrack } from '../engine/animation/logTrackRegistry';
 
 interface KeyDragStart {
     trackId: string;
@@ -173,10 +174,14 @@ export const useGraphInteraction = (
                 const isSelected = selectedKeyframeIds.includes(`${tid}::${k.id}`);
                 if (!isSelected || k.interpolation !== 'Bezier') continue;
 
+                // Where the renderer drew them: one function for both. @see graphHandleY
+                const range = normalized ? trackRanges[tid] : null;
+                const isLog = isLogTrack(tid);
+
                 // Left Handle
                 if (k.leftTangent) {
                     const hxVal = k.frame + k.leftTangent.x;
-                    const hyVal = normalized && trackRanges[tid] ? (k.value + k.leftTangent.y - trackRanges[tid].min) / trackRanges[tid].span : k.value + k.leftTangent.y;
+                    const hyVal = graphHandleY(k.value, k.leftTangent.y, isLog, range);
                     const hx = frameToCanvasPixel(hxVal);
                     const hy = valueToPixel(hyVal, view);
                     if (Math.hypot(mx - hx, my - hy) < HIT_TOLERANCE) {
@@ -187,7 +192,7 @@ export const useGraphInteraction = (
                 // Right Handle
                 if (k.rightTangent) {
                     const hxVal = k.frame + k.rightTangent.x;
-                    const hyVal = normalized && trackRanges[tid] ? (k.value + k.rightTangent.y - trackRanges[tid].min) / trackRanges[tid].span : k.value + k.rightTangent.y;
+                    const hyVal = graphHandleY(k.value, k.rightTangent.y, isLog, range);
                     const hx = frameToCanvasPixel(hxVal);
                     const hy = valueToPixel(hyVal, view);
                     if (Math.hypot(mx - hx, my - hy) < HIT_TOLERANCE) {
@@ -301,6 +306,9 @@ export const useGraphInteraction = (
             // ((val-min)/span), so a pixel of mouse travel maps to `span` value
             // units — same correction the handle drag applies. Computed per track
             // because a multi-track selection can mix spans.
+            // The delta is in GRAPH units and is applied in the track's own space
+            // (`draggedKeyValue`): decades on an exponential track, and no value at
+            // all on a payload track, whose keys move in time only.
             const valDeltaFor = (tid: string) => {
                 if (props.normalized) {
                     const r = props.trackRanges[tid];
@@ -308,6 +316,8 @@ export const useGraphInteraction = (
                 }
                 return dValRaw;
             };
+            const keyPatch = (frame: number, value: number | undefined): Partial<Keyframe> =>
+                (value === undefined ? { frame } : { frame, value });
             const updates: any[] = [];
 
             // Soft Select Logic
@@ -337,8 +347,7 @@ export const useGraphInteraction = (
                          const directDrag = selectionOnThisTrack.find(dk => dk.keyId === keyId);
                          if (directDrag) {
                              const newFrame = Math.max(0, Math.round(directDrag.startFrame + dFrame));
-                             const newVal = directDrag.startVal + dVal;
-                             updates.push({ trackId: tid, keyId: keyId, patch: { frame: newFrame, value: newVal } });
+                             updates.push({ trackId: tid, keyId: keyId, patch: keyPatch(newFrame, draggedKeyValue(tid, directDrag.startVal, dVal)) });
                              return;
                          }
 
@@ -356,15 +365,11 @@ export const useGraphInteraction = (
 
                          // 3. Apply Update if weight > 0
                          if (maxWeight > 0) {
-                             const neighborNewVal = init.v + (dVal * maxWeight);
                              const neighborNewFrame = Math.max(0, init.f + (dFrame * maxWeight));
                              updates.push({
                                  trackId: tid,
                                  keyId: k.id,
-                                 patch: {
-                                     value: neighborNewVal,
-                                     frame: Math.round(neighborNewFrame * 100) / 100
-                                 }
+                                 patch: keyPatch(Math.round(neighborNewFrame * 100) / 100, draggedKeyValue(tid, init.v, dVal * maxWeight)),
                              });
                          }
                      });
@@ -380,8 +385,7 @@ export const useGraphInteraction = (
 
                 draggedKeysRef.current.forEach(k => {
                     let newFrame = Math.max(0, Math.round(k.startFrame + dFrame));
-                    let newVal = k.startVal + valDeltaFor(k.trackId);
-                    const patch: Partial<Keyframe> = { frame: newFrame, value: newVal };
+                    const patch = keyPatch(newFrame, draggedKeyValue(k.trackId, k.startVal, valDeltaFor(k.trackId)));
 
                     const track = ds.sequence.tracks[k.trackId];
                     if (track) {
@@ -404,7 +408,7 @@ export const useGraphInteraction = (
                              Object.assign(patch, scalePatch);
 
                              // Apply constraints
-                             const movedKey = { ...currentKey, frame: newFrame, value: newVal, ...patch };
+                             const movedKey = { ...currentKey, ...patch };
                              const constraintPatch = constrainKeyframeHandles(movedKey, prev, next);
                              Object.assign(patch, constraintPatch);
                         }
@@ -479,6 +483,8 @@ export const useGraphInteraction = (
                 const r = props.trackRanges[trackId];
                 if (r) valDelta *= r.span;
             }
+            // Graph units → the tangent's own (ln-units on an exponential track).
+            valDelta /= tangentGraphY(isLogTrack(trackId));
 
             // Shift: lock angle (project onto initial vector)
             if (e.shiftKey) {

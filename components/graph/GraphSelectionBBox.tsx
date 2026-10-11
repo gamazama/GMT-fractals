@@ -1,8 +1,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimationSequence, Keyframe, BezierHandle } from '../../types';
-import { GraphViewTransform } from '../../utils/GraphUtils';
+import { GraphViewTransform, toGraphY, fromGraphY, draggedKeyValue } from '../../utils/GraphUtils';
 import { GraphDataSource } from '../../utils/GraphDataSource';
 import { reTangentBezier } from '../../utils/CurveFitting';
+import { isLogTrack } from '../../engine/animation/logTrackRegistry';
+import { isPayloadTrack } from '../../engine/animation/payloadTrackRegistry';
+
+/** The value a box handle gives a key whose pixel went from `fromPy` to `toPy`: the move, read
+ *  back through the host's `p2v`, applied to the value the key started with IN THE TRACK'S OWN
+ *  SPACE (`toGraphY`: a plain difference on a plain track, a ratio on an exponential one, where
+ *  the plain difference of two values decades apart cancels to nothing). Undefined on a payload
+ *  track, whose keys move in time only. */
+const boxValue = (trackId: string, start: number, p2v: (py: number, tid: string) => number, fromPy: number, toPy: number): number | undefined => {
+    const isLog = isLogTrack(trackId);
+    return draggedKeyValue(trackId, start, toGraphY(p2v(toPy, trackId), isLog) - toGraphY(p2v(fromPy, trackId), isLog));
+};
 
 interface GraphSelectionBBoxProps {
     sequence: AnimationSequence;
@@ -35,7 +47,8 @@ type DragType = 'scale_left' | 'scale_right' | 'scale_top' | 'scale_bottom' | 'm
 
 /** Per-track redistribution basis for the Bias drag: the selected keys' frame/value
  *  spans (endpoints stay pinned) plus a clone of the track's original keyframes so each
- *  move recomputes from the unbiased state (idempotent). */
+ *  move recomputes from the unbiased state (idempotent). The value span is in the track's
+ *  own space (`toGraphY`), so an exponential track's keys are spread over its decades. */
 interface BiasTrack {
     trackId: string;
     origKeys: Keyframe[];
@@ -44,6 +57,7 @@ interface BiasTrack {
     spanFrame: number;
     minVal: number;
     spanVal: number;
+    isLog: boolean;
 }
 
 interface DragState {
@@ -227,19 +241,23 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                 if (!t) return;
                 const sel = t.keyframes.filter(k => selIds.has(k.id));
                 if (sel.length < 2) return; // need a span to redistribute
+                const isLog = isLogTrack(tid);
                 let minFrame = Infinity, maxFrame = -Infinity, minVal = Infinity, maxVal = -Infinity;
                 sel.forEach(k => {
+                    const v = toGraphY(k.value, isLog);
                     if (k.frame < minFrame) minFrame = k.frame;
                     if (k.frame > maxFrame) maxFrame = k.frame;
-                    if (k.value < minVal) minVal = k.value;
-                    if (k.value > maxVal) maxVal = k.value;
+                    if (v < minVal) minVal = v;
+                    if (v > maxVal) maxVal = v;
                 });
                 biasTracks!.push({
                     trackId: tid,
                     origKeys: t.keyframes.map(k => ({ ...k, leftTangent: k.leftTangent ? { ...k.leftTangent } : undefined, rightTangent: k.rightTangent ? { ...k.rightTangent } : undefined })),
                     selIds,
                     minFrame, spanFrame: maxFrame - minFrame,
-                    minVal, spanVal: maxVal - minVal,
+                    // A payload track's values are locked: nothing to spread.
+                    minVal, spanVal: isPayloadTrack(tid) ? 0 : maxVal - minVal,
+                    isLog,
                 });
             });
             if (biasTracks.length === 0) return; // nothing to redistribute — no side-effects taken
@@ -311,11 +329,12 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                         if (!bt.selIds.has(k.id)) return k;
                         let frame = k.frame, value = k.value;
                         if (bt.spanFrame > 0) frame = bt.minFrame + bt.spanFrame * biasPow((k.frame - bt.minFrame) / bt.spanFrame, gx);
-                        if (bt.spanVal   > 0) value = bt.minVal   + bt.spanVal   * biasPow((k.value - bt.minVal) / bt.spanVal, gy);
+                        if (bt.spanVal   > 0) value = fromGraphY(bt.minVal + bt.spanVal * biasPow((toGraphY(k.value, bt.isLog) - bt.minVal) / bt.spanVal, gy), bt.isLog);
                         return { ...k, frame: Math.max(0, Math.round(frame)), value };
                     }).sort((a, b) => a.frame - b.frame);
-                    // Keep the biased keys smooth (hand-broken tangents preserved).
-                    reTangentBezier(rebuilt, k => bt.selIds.has(k.id)).forEach(k => {
+                    // Keep the biased keys smooth (hand-broken tangents preserved), in the
+                    // space the track's tangents are evaluated in.
+                    reTangentBezier(rebuilt, k => bt.selIds.has(k.id), bt.isLog).forEach(k => {
                         if (!bt.selIds.has(k.id)) return;
                         updates.push({ trackId: bt.trackId, keyId: k.id, patch: {
                             frame: k.frame, value: k.value,
@@ -336,9 +355,10 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                 const p2vNow = latest.current.p2v;
                 ds.initialKeys.forEach(k => {
                     const patch: Partial<Keyframe> = { frame: Math.max(0, Math.round(k.startFrame + dFrame)) };
-                    patch.value = p2vNow
-                        ? k.startValue + (p2vNow(k.startPy + dy, k.trackId) - p2vNow(k.startPy, k.trackId))
+                    const value = p2vNow
+                        ? boxValue(k.trackId, k.startValue, p2vNow, k.startPy, k.startPy + dy)
                         : k.startValue - dy / v.scaleY;
+                    if (value !== undefined) patch.value = value;
                     updates.push({ trackId: k.trackId, keyId: k.keyId, patch });
                 });
             }
@@ -377,8 +397,9 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                 // edge (or the centre under Alt), and unclamped like the frame axis so a
                 // negative ratio mirrors the selection in value. No tangent-slot swap here: left/right
                 // is a TIME distinction, and `* ratio` already flips each handle's y —
-                // exact wherever pixel→value is affine (both mappings here), an
-                // approximation on a log track.
+                // exact, since pixel→graph Y is affine and a tangent's y is in the units of
+                // its track's own space (an exponential track's included). A payload track's
+                // keys are left out: their values are locked, and the handles alone would bend.
                 const heightPx = Math.max(1, ds.maxPy - ds.minPy);
                 const anchorPy = fromCentre
                     ? (ds.minPy + ds.maxPy) / 2
@@ -397,10 +418,11 @@ export const GraphSelectionBBox: React.FC<GraphSelectionBBoxProps> = ({
                 // number in the only mode that reaches it (non-normalised).
                 const p2vNow = latest.current.p2v;
                 ds.initialKeys.forEach(k => {
+                    if (isPayloadTrack(k.trackId)) return;
                     const newPy = anchorPy + (k.startPy - anchorPy) * ratio;
                     const patch: Partial<Keyframe> = {
                         value: p2vNow
-                            ? k.startValue + (p2vNow(newPy, k.trackId) - p2vNow(k.startPy, k.trackId))
+                            ? boxValue(k.trackId, k.startValue, p2vNow, k.startPy, newPy)
                             : k.startValue + (k.startPy - newPy) / v.scaleY,
                     };
                     if (k.startLeftTan)  patch.leftTangent  = { x: k.startLeftTan.x,  y: k.startLeftTan.y  * ratio };

@@ -43,7 +43,7 @@ const captureInverse = (state: AnimationStore, item: HistoryItem): HistoryItem =
             },
         };
     }
-    return { type: 'SEQUENCE', data: JSON.parse(JSON.stringify(state.sequence)) };
+    return { type: 'SEQUENCE', data: JSON.parse(JSON.stringify(state.sequence)), durationFrames: state.durationFrames };
 };
 
 const applyHistory = (set: (partial: Partial<AnimationStore>) => void, item: HistoryItem) => {
@@ -59,7 +59,7 @@ const applyHistory = (set: (partial: Partial<AnimationStore>) => void, item: His
             ...(item.data.audioClips ? { audioClips: item.data.audioClips } : {}),
         });
     } else {
-        set({ sequence: item.data });
+        set({ sequence: item.data, durationFrames: item.durationFrames });
     }
 };
 
@@ -70,12 +70,23 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
     redoStack: [],
 
     // --- HISTORY ---
+    /**
+     * One step holds the sequence AND the timeline's length (`durationFrames`, the playback
+     * slice's): a tool that grows the timeline is undone whole, and a change of length is a
+     * step of its own when its caller takes this first (`setDuration` takes none).
+     *
+     * @invariant Undo and redo put the length back with the sequence — proven by:
+     *   npm run test:log-curves ("[U] ...").
+     * @assumption That the toolbar's length field takes ONE step a committed change (grep
+     *   `lengthStepDue` in components/timeline/TimelineToolbar.tsx) is wiring no node test
+     *   reaches; measured in app-gmt on 2026-10-11 (a drag: 1 step, a typed value: 1, a click: 0).
+     */
     snapshot: () => {
         const currentSeq = get().sequence;
         const clone = JSON.parse(JSON.stringify(currentSeq));
-        
+
         set(state => {
-            const newUndo: HistoryItem[] = [...state.undoStack, { type: 'SEQUENCE', data: clone }];
+            const newUndo: HistoryItem[] = [...state.undoStack, { type: 'SEQUENCE', data: clone, durationFrames: state.durationFrames }];
             return { undoStack: newUndo.length > 50 ? newUndo.slice(1) : newUndo, redoStack: [] };
         });
     },
@@ -201,10 +212,15 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                     const k2HandleX = next.leftTangent ? next.leftTangent.x : -(next.frame - prev.frame) / 3;
                     const k2HandleY = next.leftTangent ? next.leftTangent.y : 0;
 
-                    const p0x = prev.frame,                p0y = prev.value;
-                    const p1x = prev.frame + k1HandleX,    p1y = prev.value + k1HandleY;
-                    const p2x = next.frame + k2HandleX,    p2y = next.value + k2HandleY;
-                    const p3x = next.frame,                p3y = next.value;
+                    // The segment as it PLAYS: on an exponential track the cubic lives in
+                    // (frame, ln value) and the handles are ln-units, so it is split there.
+                    const inLog = isLogTrack(trackId) && prev.value > 0 && next.value > 0;
+                    const y1 = inLog ? Math.log(prev.value) : prev.value;
+                    const y2 = inLog ? Math.log(next.value) : next.value;
+                    const p0x = prev.frame,                p0y = y1;
+                    const p1x = prev.frame + k1HandleX,    p1y = y1 + k1HandleY;
+                    const p2x = next.frame + k2HandleX,    p2y = y2 + k2HandleY;
+                    const p3x = next.frame,                p3y = y2;
 
                     const t = solveCubicBezierT(frame, p0x, p1x, p2x, p3x);
                     const split = splitCubicBezier(t, p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);
@@ -221,7 +237,7 @@ export const createSequenceSlice: StateCreator<AnimationStore, [["zustand/subscr
                         autoTangent: false,
                         leftTangent: { x: split.rightP2x - p3x, y: split.rightP2y - p3y },
                     };
-                    tempKey.value = split.sy;
+                    tempKey.value = inLog ? Math.exp(split.sy) : split.sy;
                     tempKey.autoTangent = false;
                     tempKey.leftTangent  = { x: split.leftP2x  - split.sx, y: split.leftP2y  - split.sy };
                     tempKey.rightTangent = { x: split.rightP1x - split.sx, y: split.rightP1y - split.sy };

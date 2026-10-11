@@ -5,6 +5,7 @@ import { Keyframe, SoftSelectionType } from '../../types';
 import * as THREE from 'three';
 import { getTangentStats, updateTangentFromStats } from '../../utils/timelineUtils';
 import { GraphDataSource, useAnimationStoreDataSource } from '../../utils/GraphDataSource';
+import { isPayloadTrack } from '../../engine/animation/payloadTrackRegistry';
 import { formatTimelineValue } from '../inputs/primitives/FormatUtils';
 import { TrashIcon, LinkIcon, BrokenIcon, ChevronRight, ChevronLeft } from '../Icons';
 
@@ -143,6 +144,9 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
     const sameInterp = hasSelection && selectedKeys.every(x => x.key!.interpolation === firstKey!.interpolation);
     const sameBroken = hasSelection && selectedKeys.every(x => x.key!.brokenTangents === firstKey!.brokenTangents);
     const sameAuto = hasSelection && selectedKeys.every(x => x.key!.autoTangent === firstKey!.autoTangent);
+    // A payload track's value is its app's to set (the store drops any other write), so the
+    // field shows it and takes no edit. @see engine/animation/payloadTrackRegistry.ts
+    const valueLocked = selectedKeys.some(x => isPayloadTrack(x.tid));
 
     // --- QUICK ACTIONS ---
     const handleQuickAction = (type: 'Linear' | 'Auto' | 'Ease') => {
@@ -371,7 +375,7 @@ export const KeyframeInspector: React.FC<KeyframeInspectorProps> = ({ dataSource
                     <InspectorRow label={isAllRotation ? "Value (Deg)" : "Value"}>
                         <div className="w-20">
                             {sameValue ? (
-                                <DraggableNumber value={displayValue} onChange={handleValueChange} step={isAllRotation ? 1 : 0.01} highlight onDragStart={handleDragStart} onDragEnd={handleDragEnd} overrideText={formatTimelineValue(displayValue, 3)} />
+                                <DraggableNumber value={displayValue} onChange={handleValueChange} step={isAllRotation ? 1 : 0.01} highlight={!valueLocked} disabled={valueLocked} onDragStart={handleDragStart} onDragEnd={handleDragEnd} overrideText={formatTimelineValue(displayValue, 3)} />
                             ) : <div className="text-center text-[10px] text-fg-faint">---</div>}
                         </div>
                     </InspectorRow>

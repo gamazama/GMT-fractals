@@ -165,6 +165,7 @@
     "test:hybrid-adv": "tsx debug/native-config-sweep.mts --mode=hybrid-adv --fresh",
     "test:interaction": "tsx debug/test-interaction-session.mts",
     "test:key-payload": "tsx debug/test-key-payload.mts",
+    "test:log-curves": "tsx debug/test-log-curve-tools.mts",
     "test:interaction:coverage": "tsx debug/test-interaction-coverage.mts",
     "test:interaction:wiring": "tsx debug/test-interaction-wiring.mts",
     "test:liquify": "tsx debug/test-liquify-mesh.mts",

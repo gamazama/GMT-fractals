@@ -153,6 +153,57 @@ export const evaluateTrackValue = (keys: Keyframe[], frame: number, isRotation: 
     return keys[0].value;
 };
 
+// --- IS THIS VALUE KEYED / CHANGED ---
+/**
+ * Does a live value differ from the timeline's, in the track's own space? A plain difference
+ * on a plain track. A RATIO on an exponential one (`logTrackRegistry`): there 1e-12 against
+ * 5e-12 is a five-fold change that a plain difference calls equal, and the status readers
+ * (the key buttons, Key Cam) then refuse to re-key it. `tolerance` is the reader's own; on an
+ * exponential track it is read as a share of the value (0.001 = a tenth of a percent).
+ */
+export const differsOnTrack = (trackId: string, timeline: number, live: number, tolerance: number): boolean =>
+    (isLogTrack(trackId) && timeline > 0 && live > 0
+        ? Math.abs(Math.log(timeline / live)) > tolerance
+        : Math.abs(timeline - live) > tolerance);
+
+/**
+ * Key Cam's status over the tracks that make up the camera: is there a key on this frame, and
+ * does the camera stand where the timeline has it - the key on the frame, else the curve AS IT
+ * PLAYS (an exponential track is eased in log; evaluated plainly, the camera read "changed"
+ * anywhere between two keys). `liveOf` is null while the timeline plays: nothing is compared.
+ *
+ * @invariant Between two keys of an exponential track the status is 'partial' while the live
+ *   value is the curve's and 'dirty' when it is 1 % off; on a key it is 'keyed', and
+ *   'keyed-dirty' at a tenth of the key's value - proven by: npm run test:log-curves
+ *   ("[K] ..."). Falsified two ways: the evaluation without the log flag, and
+ *   `differsOnTrack` comparing plain differences.
+ */
+export const cameraKeyStatus = (
+    tracks: readonly string[],
+    sequence: AnimationSequence,
+    frame: number,
+    liveOf: ((trackId: string) => number) | null,
+): 'none' | 'partial' | 'keyed' | 'dirty' | 'keyed-dirty' => {
+    let hasAnyTrack = false;
+    let hasKeyAtFrame = false;
+    let isDirty = false;
+
+    for (const tid of tracks) {
+        const track = sequence.tracks[tid];
+        if (!track) continue;
+        hasAnyTrack = true;
+        const k = track.keyframes.find(k => Math.abs(k.frame - frame) < 0.1);
+        if (k) hasKeyAtFrame = true;
+        if (!liveOf) continue;
+        const timelineVal = k ? k.value : evaluateTrackValue(track.keyframes, frame, tid.includes('rotation'), isLogTrack(tid));
+        if (differsOnTrack(tid, timelineVal, liveOf(tid), 0.001)) isDirty = true;
+    }
+
+    if (!hasAnyTrack) return 'none';
+    if (hasKeyAtFrame) return isDirty ? 'keyed-dirty' : 'keyed';
+    return isDirty ? 'dirty' : 'partial';
+};
+
 // --- TANGENT MATH HELPERS (Re-exported from AnimationMath for compatibility if needed, or UI specific helpers) ---
 
 export const getTangentStats = (handle: {x: number, y: number} | undefined, timeDist: number | undefined, isLeft: boolean) => {
@@ -360,6 +411,7 @@ export const calculateSmoothingUpdates = (
         if (!track || track.keyframes.length < 2) return;
         
         const isRotation = isRotationTrack(tid);
+        const isLog = isLogTrack(tid);
         const keys = [...track.keyframes].sort((a,b) => a.frame - b.frame);
 
         // BOUNCE LOGIC (Simulated Spring)
@@ -376,7 +428,7 @@ export const calculateSmoothingUpdates = (
             const startFrame = keys[0].frame;
             const endFrame = keys[keys.length - 1].frame;
 
-            const initNext = evaluateTrackValue(keys, startFrame + 1.0, isRotation);
+            const initNext = evaluateTrackValue(keys, startFrame + 1.0, isRotation, isLog);
             let initDiff = initNext - pos;
             if (isRotation) {
                  if (initDiff > Math.PI) initDiff -= Math.PI * 2;
@@ -385,7 +437,7 @@ export const calculateSmoothingUpdates = (
             vel = initDiff;
             
             for (let f = startFrame; f <= endFrame; f++) {
-                let target = evaluateTrackValue(keys, f, isRotation);
+                let target = evaluateTrackValue(keys, f, isRotation, isLog);
                 
                 if (isRotation) {
                      const diff = target - pos;
@@ -411,7 +463,7 @@ export const calculateSmoothingUpdates = (
                         });
                     } else {
                         pos = k.value;
-                        let nextTarget = evaluateTrackValue(keys, f + 1.0, isRotation);
+                        let nextTarget = evaluateTrackValue(keys, f + 1.0, isRotation, isLog);
                         let diff = nextTarget - pos;
                         if (isRotation) {
                             if (diff > Math.PI) diff -= Math.PI * 2;
@@ -501,11 +553,14 @@ export const calculateResampleUpdates = (
         const startFrame = Math.ceil(sortedKeys[0].frame);
         const endFrame = Math.floor(sortedKeys[sortedKeys.length - 1].frame);
         const isRotation = tid.startsWith('camera.rotation');
+        // The curve as it plays: an exponential track is eased in log, and its baked keys
+        // (Linear, a frame apart) are eased in log between them too.
+        const isLog = isLogTrack(tid);
 
         const newKeys: Keyframe[] = [];
 
         for (let f = startFrame; f <= endFrame; f += step) {
-            const val = evaluateTrackValue(sortedKeys, f, isRotation);
+            const val = evaluateTrackValue(sortedKeys, f, isRotation, isLog);
             newKeys.push({
                 id: nanoid(),
                 frame: f,
