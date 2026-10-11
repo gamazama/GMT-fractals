@@ -29,7 +29,7 @@ morning: "this is working great!", and "I'm happy with all your other choices" f
 | R5 free look while a route plays | done | `3abf4af2` |
 | R6b routes to MP4 / WebM, a Draft preset | done; the mediabunny upgrade waits for him | `9d05d00b` |
 | R6c existing frames: overwrite, continue or cancel, for every image-sequence render | done for the deep zoomer; GMT's is read and measured, not built: his calls below | `e99e82ef` |
-| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | not started; rewritten with his answers of 2026-10-11 | |
+| R7 cleanup: the previous-generation marches retired (the page's program too), dead handles, help | R7a done; R7b to R7d: see the section | `e41890c4` |
 
 Nothing is waiting for him. What he settled on 2026-10-11 is at the end of this file ("Answered by
 the owner, 2026-10-11") and is written into the four stages under "The stages".
@@ -985,6 +985,32 @@ His words, 2026-10-11:
 
 A fault in the renderer met on the way goes to him after one measurement: the step it was met in
 stops there, uncommitted or reverted, and the next one that does not depend on it goes on.
+
+**R7a as built, 2026-10-11** (`e41890c4`; one builder: 891 thousand tokens, 54 minutes; 17 files,
++374 / -1,129; `core.js` 5,719 -> 5,335 lines). By the builder on the real GPU: parity 52 of 52
+and the direct proof with neither script changed, the pictures, the shell smoke 54 of 54 (stage 2
+has 12 steps now), the build. By the orchestrator: typecheck, eight node checks, the shader
+compare, parity and the direct proof run again. One deliberate break (Normals index 4 handed
+through: 2 lines of the param-map check red).
+
+- **Gone**: the J variant from `core.js` and the shell (True-gradient march, Normals: Gradient);
+  the shell's BLA setting; the seven host path members; the module's recorder, spline, play and
+  ZIP code. The skip table is neither compiled nor built while the ray march is in force.
+- **Kept for parity until R7b**: `api.samplePath`, an empty `api.stopPlay`, the three telemetry
+  keys, the BLA code itself.
+- **The proof that nothing drawn moved**: the GLSL of all 13 kept programs is token for token
+  what the commit before compiles (`debug/scratch/r7/shader-diff.mjs`, git-ignored, takes a
+  commit); and 41 pictures of the ray march, the Mandelbox and the shell
+  (`debug/scratch/r7/pictures.mts`, each page 75 s past ready) against three shoots of the
+  untouched tree: 40 the same to the byte, 1 within the floor (2 pixels by a level).
+- **A scene saved with the retired settings loads**: True-gradient and BLA are ignored, Normals:
+  Gradient comes back as 4-tap (a preset field, `dzRetiredNormals`).
+- **Measured on the way**: with the skip-table shader no longer compiling in the background, the
+  ray shader arrived 32.8 s after page open against 40.5 to 43.2 s (one run against three).
+- **For R7c, found and not looked into**: the Mandelbox through the SHELL does not repeat between
+  sessions on the untouched tree (three shoots, three pictures: 0.24 to 0.60 % of pixels, up to
+  29 levels), 80 s or more after page open. Through the harness the same place repeats to the
+  byte, and the bulb's shell pictures repeat.
 
 Not in this stage:
 - The Mandelbox's ray step (the math session, `NEXT.md` session 8).
