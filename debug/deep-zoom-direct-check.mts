@@ -122,6 +122,36 @@
  * pixel's c after all, the CPU does not) -> exit 1, all seven gated Julia lines FAIL (the box's deep lines with
  * every escape flag different or every point off, "338 over 1e-3, worst 9.9e-1"; the bulb's "338 over 1e-3,
  * worst 8.1e-1"), and the 74 Mandelbrot-mode lines print as they did.
+ *
+ * ADDED 2026-10-12: FAR VIEWS (grep A VIEW FROM FAR in deep-zoom/renderer/core.js), a last section of five lines.
+ * Every line above stands at or by the surface. The specks the owner saw are a view from OUTSIDE the bulb, where
+ * the camera's reference orbit is no use to a point by the bulb and the march read the kernel's rubbish as hits
+ * (the note above, "NO whole-object line for the bulb", is that fault seen from the kernel's side). These lines do
+ * not referee the kernel: they referee the PICTURE'S MARCH, which from there must not ask it. Each is a 24 x 24
+ * picture marched AS THE SHELL SETS IT (ray bits 5 for the one read, bits 0 again before a frame runs; hand-off
+ * 0.5; the hit level of a 1080-row picture) against a referee that shares nothing with either kernel: the point's
+ * own orbit in f64, marched ray by ray on the CPU, a fifth of its estimate a step, the crossing halved ten times.
+ * Gated, all five: no stray hit (a hit on a ray that the referee keeps more than 2 pixels clear of the bulb: one
+ * that passes nearer is the silhouette's, and is counted beside it), holes in at most 2 % of the rays the referee
+ * hits, at most 5 % of them more than 2 pixels of depth off.
+ *   power 8 from 3.2, 5.2 and 7.2 off the centre   the far field alone (the gate), from the ball
+ *   power 2 from 6.2                               the reference is still good: the deep march, started at the ball
+ *   power 8, Julia mode, from 4.2                  the gate on the Julia reference
+ * The 88 lines above are untouched: the same to the character as before.
+ * First run, all five PASS: stray hits 0 on every line (one hit at power 2 lies on a ray that passes within 2
+ * pixels of the bulb), holes 0, and 4, 0, 0, 3 and 1 hits more than 2 pixels of depth off.
+ * SEEN RED, 2026-10-12, two breaks in deep-zoom/renderer/core.js, one a run, each restored byte for byte (sha-256);
+ * the 88 earlier lines printed as they did in both:
+ *   - `const REF_FAR = 512` -> `1e30` (the gate never taken: the deep march is asked at the ball's surface)
+ *       -> exit 1, three FAIL: "power 8, 3.2 from the centre ... stray hits 1 ... off 7", "power 8, 7.2 ... stray
+ *       hits 12 ... off 7", "Julia mode ... stray hits 116 ... off 180". The 5.2 line and the power-2 line stayed
+ *       PASS (power 2's reference is good there; at 5.2 the kernel happened to give no bad point on the ball).
+ *   - `holdBall` made to answer 0 (`? rho : 0` -> `? 0 : 0`: no start at the ball)
+ *       -> exit 1, two FAIL: "power 8, 7.2 from the centre ... more than 2 pixels of depth off 23" (the far
+ *       field's own first stride lands in the solid from there) and "power 2, 6.2 from the centre ... holes 44
+ *       ... off 95" (the deep march's first stride). The other three stayed PASS.
+ * NOT seen red: the Julia line by the second break, the 3.2 and 5.2 lines by it, and the count of silhouette
+ * rays beside "stray hits".
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -226,9 +256,19 @@ const JULIA_VIEWS: JuliaGridView[] = [
     { name: 'bulb power 8, K = the "Grain of sand" starter as a camera point, deep', kind: 'mandelbulb', power: 8, minRays: 60, gated: false, c: ['-19106688270107545123610310944093228319268234083931764161217485625786859879978', '2056390632353041980388441420253193046898375110266709396020905008395931668174', '106035815535807686550824900054021630250672589610944549407697460964969796977517'], view: { cam: ['24956568696536676362202681661888324705713272581499641389271257262746767458304', '-113250887681945508489524916561555419291406694173423766919163219708080910499840', '40135781507349156550886944262605599021547258228535078774164609086100302987264'], yaw: -2.039865313527242, pitch: 1.2022142226399175, iters: 29 } },
     { name: 'bulb power 8, K = the "Grain of sand" starter as a camera point, deeper', kind: 'mandelbulb', power: 8, minRays: 60, gated: false, c: ['-19106688270107545123610310944093228319268234083931764161217485625786859879978', '2056390632353041980388441420253193046898375110266709396020905008395931668174', '106035815535807686550824900054021630250672589610944549407697460964969796977517'], view: { cam: ['24956568693025588442137350424273187340582356448787877458924250448999537967104', '-113250887661836056998676183822999357604023610669783086123757699411600513957888', '40135781500421135406180615138098238129634792476371660982013466743056334061568'], yaw: -2.039865313527242, pitch: 1.2022142226399175, iters: 102 } },
 ];
+/** FAR VIEWS: the camera `r` from the centre along `dir`, looking at the centre; `c` = a Julia constant (Julia mode). */
+interface FarView { name: string; power: number; r: number; dir: [number, number, number]; c?: [number, number, number]; minHits: number }
+const FAR_DIR: [number, number, number] = [0.31, -0.25, 0.92];
+const FAR_VIEWS: FarView[] = [
+    { name: 'power 8, 3.2 from the centre', power: 8, r: 3.2, dir: FAR_DIR, minHits: 200 },
+    { name: 'power 8, 5.2 from the centre', power: 8, r: 5.2, dir: FAR_DIR, minHits: 100 },
+    { name: 'power 8, 7.2 from the centre', power: 8, r: 7.2, dir: FAR_DIR, minHits: 50 },
+    { name: 'power 2, 6.2 from the centre', power: 2, r: 6.2, dir: FAR_DIR, minHits: 50 },
+    { name: 'power 8, Julia mode, K = (0.25, 0.1, 0.05), 4.2 from the centre', power: 8, r: 4.2, dir: FAR_DIR, c: [0.25, 0.1, 0.05], minHits: 100 },
+];
 const ORIGIN = process.env.ORIGIN === '1';
 
-let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0;
+let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0, farPass = 0, farRan = 0;
 const pageErrors: string[] = [];
 // DZ_HEADLESS=1: no window (same Chrome, same GPU flags).
 const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1',
@@ -465,11 +505,67 @@ try {
       + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}${r.constantBack ? '' : '  THE VIEW DOES NOT CARRY THE CONSTANT'}  ${v.gated === false && r.constantBack ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
   }
   await page.evaluate(`(() => { window.__setFormula('mandelbulb', { julia: false }); window.__setPower(8); window.__setRebaseOrigin(${ORIGIN}); window.__setAutoIters(true); })()`);
+
+  // ---- FAR VIEWS (added 2026-10-12; see the header) ----
+  console.log('\nFAR VIEWS: the picture\'s march from outside the bulb, as the shell sets it, against the direct f64 orbit marched ray by ray on the CPU');
+  const farGrid = (v: FarView): Promise<any> => page.evaluate(`(async () => {
+    const w = window, v = ${JSON.stringify(v)}, G = 24, f = Math.tan(0.55), pa = f / 1080, P = v.power, C = v.c || null;
+    const frames = (n) => new Promise((done) => { const tick = () => (n-- > 0 ? requestAnimationFrame(tick) : done()); tick(); });
+    w.__setFormula('mandelbulb', C ? { julia: true, c: C } : { julia: false }); w.__setPower(P);
+    w.__setMode('deep'); w.__setRebaseOrigin(true); w.__setFarHandOff(0.5);
+    const l = Math.hypot(v.dir[0], v.dir[1], v.dir[2]), cp = v.dir.map((c) => c / l * v.r);
+    w.__setAutoIters(false); w.__setIters(14); w.__setCamHP(cp);
+    w.__cam.yaw = Math.atan2(-v.dir[2], -v.dir[0]); w.__cam.pitch = Math.asin(-v.dir[1] / l);
+    w.__setSurf(1080 / G);                                                  // the hit tolerance of a picture 1080 rows tall, on 24 rays
+    await frames(14);
+    w.__setReach(1); w.__setMarch({ maxSteps: 512 }); w.__setStepRelax(0); w.__setHitRefine(0);
+    w.__setRayMarch(5, { factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2 });   // the march as the shell sets it (grep \`let rayAsk\` in core.js)
+    const g = w.__readGbuf(G);
+    w.__setRayMarch(0);                                                     // before any frame runs
+    const far = w.__farView ? w.__farView() : null;
+    const v0 = w.__dz.getView(), IT = w.__dz.telemetry().iters, refE = Math.floor(Math.log2(Math.max(w.__smoothedDist(), 1e-300)));
+    /* the referee: the point's own orbit in f64, no reference, no delta (the far field's rule: an iterate past radius 2 has escaped) */
+    const DE = (x, y, z) => { let zx = x, zy = y, zz = z, dr = 1, r = 0, esc = false; const cx = C ? C[0] : x, cy = C ? C[1] : y, cz = C ? C[2] : z;
+      for (let i = 0; i < IT; i++) { r = Math.hypot(zx, zy, zz); if (r > 2) { esc = true; break; }
+        const rp = Math.pow(r, P - 1); dr = rp * P * dr + 1; const th = Math.acos(Math.max(-1, Math.min(1, zz / r))) * P, ph = Math.atan2(zy, zx) * P, zr = rp * r;
+        zx = zr * Math.sin(th) * Math.cos(ph) + cx; zy = zr * Math.sin(ph) * Math.sin(th) + cy; zz = zr * Math.cos(th) + cz; }
+      if (!esc) { r = Math.hypot(zx, zy, zz); esc = r > 2; }
+      return esc ? 0.5 * Math.log(r) * r / dr : -1; };
+    const cpi = Math.cos(v0.pitch), spi = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
+    const fwd = [cpi * cy, spi, cpi * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
+    const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    const c = { rays: G * G, real: 0, hits: 0, stray: 0, graze: 0, holes: 0, off: 0, byFar: 0 };
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
+      let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((q) => q / len);
+      const at = (t) => DE(cp[0] + t * d[0], cp[1] + t * d[1], cp[2] + t * d[2]);
+      let t = 0, tp = 0, ref = -1, clear = 1e30;                            // a fifth of the estimate a step, the hit level a pixel, the crossing halved 10 times
+      for (let s = 0; s < 20000; s++) { const e = at(t); if (t > 0) clear = Math.min(clear, e / (pa * t));   // clear: how many pixels the ray stays off the bulb at its nearest
+        if (e < 0 || (t > 0 && e < pa * t)) { let lo = tp, hi = t; for (let h = 0; h < 10; h++) { const m = 0.5 * (lo + hi), em = at(m); if (em < 0 || em < pa * m) hi = m; else lo = m; } ref = hi; break; }
+        if (t > 12) break;
+        tp = t; t += 0.2 * e; }
+      const i = (y * G + x) * 4, kind = Math.floor(g[i + 2] / 256) % 4, hit = kind === 1 || kind === 2;
+      if (ref > 0) c.real++; if (hit) { c.hits++; if (kind === 2) c.byFar++; }
+      if (hit && !(ref > 0)) { if (clear > 2) c.stray++; else c.graze++; } else if (!hit && ref > 0) c.holes++;   // a hit on a ray the referee has within 2 pixels of the bulb is the silhouette's, not a stray
+      else if (hit && Math.abs(Math.pow(2, g[i] + refE) / ref - 1) > 2 * pa) c.off++;
+    }
+    w.__setSurf(1); w.__setFormula('mandelbulb', { julia: false }); w.__setPower(8); w.__setFarHandOff(1e-3); w.__setRebaseOrigin(${ORIGIN}); w.__setAutoIters(true);
+    return { c, far, iters: IT };
+  })()`);
+  for (const v of FAR_VIEWS) {
+    const r = await farGrid(v), c = r.c;
+    farRan++;
+    // a far view is right when nothing is hit beside the bulb, next to none of it is missed, and its hits stand where the referee's do
+    const ok = c.real >= v.minHits && c.stray === 0 && c.holes <= 0.02 * c.real && c.off <= 0.05 * c.real;
+    if (ok) farPass++;
+    console.log(`far view, ${v.name} (${r.far ? `the reference's next point ${r.far.z1.toExponential(1)}: ${r.far.farOnly ? 'the far field alone' : 'the deep march'}, ${r.far.holdR ? 'from the ball' : 'from the camera'}` : 'no far rule in this renderer'}): `
+      + `${c.rays} rays, ${String(c.real).padStart(3)} on the bulb  stray hits ${String(c.stray).padStart(3)}  (and ${c.graze} on a ray that passes within 2 pixels of it)  holes ${String(c.holes).padStart(3)}  more than 2 pixels of depth off ${String(c.off).padStart(3)}  ${ok ? 'PASS' : 'FAIL'}`);
+  }
 } finally { await browser.close(); srv.stop(); }
 
 // The historical suite only prints; as a guard for the port this one also gates.
 if (pageErrors.length) console.log(`page errors (${pageErrors.length}):\n  ` + pageErrors.slice(0, 5).join('\n  '));
 const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRIDS && gridRan === GRIDS
-  && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && juliaPass === JULIA_VIEWS.length && juliaRan === JULIA_VIEWS.length && pageErrors.length === 0;
-if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids and no page errors`);
+  && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && juliaPass === JULIA_VIEWS.length && juliaRan === JULIA_VIEWS.length && farPass === FAR_VIEWS.length && farRan === FAR_VIEWS.length && pageErrors.length === 0;
+if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids, ${FAR_VIEWS.length}/${FAR_VIEWS.length} far views and no page errors`);
 process.exit(allOk ? 0 : 1);

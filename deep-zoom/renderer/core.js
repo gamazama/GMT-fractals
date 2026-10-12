@@ -1121,6 +1121,26 @@ uniform sampler2D uGuideTex;     // per pixel, over the earlier samples: x = nea
    BigInt referee - proven by: npm run smoke:deep-zoom-direct ("far hand-off ... at 0.5").
    Falsified 2026-10-08: FAR_SWITCH pinned to 1e-3 in the shader -> those lines FAIL. */
 #define FAR_SWITCH (PICTURE_MARCH ? uFarSwitch : 1e-3)
+#ifndef USE_BOX
+/* A VIEW FROM FAR (2026-10-12, "the specks from far"; the page's side of it: grep the same words in the JavaScript).
+   Two rules of the picture's march, both for a camera that stands outside the bulb, neither taken at a deep place:
+     uHoldR    the radius of the ball that holds everything drawn, while the camera stands outside it (else 0).
+               A ray's march starts where the ray enters that ball: nothing is nearer, and no estimate is asked
+               from far outside, where 0.5 r ln r reads longer than the way to the surface.
+     uFarOnly  1 = the camera's reference orbit is no use to a point by the bulb (its next point is too large to
+               carry a difference in f32). No sample of the deep kernel is taken on any ray: the whole picture is
+               the f32 far field's, from the ball's surface on.
+   The Mandelbox's program has neither: its far views are right (measured to 200 from the centre). */
+uniform float     uHoldR;
+uniform int       uFarOnly;
+const float FAR_FROM_CAMERA = 1e-6;              // where the far field starts a ray that the ball does not start
+/* the t at which the ray from the camera enters the ball of radius R about the centre; 0 when it does not */
+float ballEntry(vec3 rd, float R) {
+    float b = dot(uCamPosF, rd), disc = b * b - (dot(uCamPosF, uCamPosF) - R * R);
+    float tb = disc > 0.0 ? -b - sqrt(disc) : 0.0;
+    return tb > 0.0 ? tb : 0.0;
+}
+#endif
 ${KERNEL_CORE}
 #ifdef USE_BOX
 /* THE FORMULA SEAM (grep): the far field's two plain-f32 functions for the Mandelbox - the map, the escape
@@ -1387,6 +1407,18 @@ void main(){
         rayHit = rayOn && (uRayUse & 2) != 0;
         gRay = !rayOn ? 0 : (uRayUse & 4) != 0 ? 2 : 1; gRd = rd; gCkTop = 0; gCkLast = 1048576; gCkSince = 0; gRunBase = 0; gRunPrev = 0;
 #endif
+#ifndef USE_BOX
+        /* A VIEW FROM FAR (grep): decided here, before the march, so that loop A is as it was. With uFarOnly it
+           does not run at all - no hit test of the deep kernel, no bisection, no refine, no tap - and the far
+           field is given the ray after it (grep THE FAR FIELD ALONE). Else, with the camera outside the ball, the
+           march starts where the ray enters it. A ray the guide started keeps its start: a guide is made of deep
+           hits, which a camera that far out does not have. */
+        if (PICTURE_MARCH && uFarOnly == 1) { t0 = vec2(0.0); t = t0; tPrev = t0; budget = 0; }
+        else if (PICTURE_MARCH && uHoldR > 0.0 && t0.x == 0.0) {
+            float tb = ballEntry(rd, uHoldR);
+            if (tb > 0.0) { t = hdrFromFloat(tb); tPrev = t; }
+        }
+#endif
     }
     /* LOOP A: THE MARCH. A step: the kernel at t. It leaves by break - on a hit, at the far hand-off, when the budget is
        spent - and where a step lands inside the surface, or on a hit with HIT REFINE on, it says in ph what loop B
@@ -1588,6 +1620,17 @@ void main(){
        camera position error (~1e-7 abs) is sub-cone at these distances. This is also
        what lets grazing/background rays at extreme depth terminate (they exhausted
        the 256-step HDR budget before). */
+#ifndef USE_BOX
+    /* THE FAR FIELD ALONE (A VIEW FROM FAR, grep): no step of the deep march was taken. The far field has the ray
+       from the ball's surface, or from the camera when the ray misses the ball. Set here and not before loop A:
+       tF is then one more thing that lives across the kernel's call, and every deep view pays for it (measured
+       2026-10-12: 1.7 % of a frame at the mean of eight deep views, set before the loop). */
+    if (PICTURE_MARCH && uFarOnly == 1) {
+        float tb = uHoldR > 0.0 ? ballEntry(rd, uHoldR) : 0.0;
+        tF = tb > 0.0 ? tb : FAR_FROM_CAMERA;
+        if (tb > 0.0) t = hdrFromFloat(tb);
+    }
+#endif
     if (!hit && tF > 0.0) {
         vec3 roF = uCamPosF;
         /* HIT REFINE reaches the far field too (2026-10-08): the same halving of the last step, on
@@ -2278,7 +2321,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             colorMode:g('uColorMode'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), holdR:g('uHoldR'), farOnly:g('uFarOnly'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
             boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') }; }   // the last five: null but in the USE_BOX variant
 let ud = null;
 /* ════════ the two-pass deep draw ════════
@@ -2990,6 +3033,96 @@ function buildRefOrbit(CHP, lenMax) {
    The skip table (BLA: its CPU build, its texture, its mode and its 'auto' rule) sat here until 2026-10-11.
    debug/deep-zoom-checks/ray-probe.mts and box-orbit.mts lift this file's text from makeHP to THIS banner:
    keep it the first thing after buildRefOrbit. */
+/* ════════ A VIEW FROM FAR (2026-10-12): "the specks from far" ════════
+   THE FAULT. The deep kernel holds a pixel's orbit as the camera's own orbit plus a difference. With the camera
+   outside the bulb its own orbit is |c|^n after one iteration (at power 8: 622 at 1.0 off the surface, 12,000 at
+   2.0, 103,000 at 3.0), a point by the bulb is 5 to 30 there, and the kernel forms it as the difference of two such
+   numbers in f32. The estimate made from it comes out wrong, then zero or negative, in a shell of empty space round
+   the bulb, and the march reads a non-positive estimate as a hit (grep `if (!esc || de.x <= 0.0)` in loop A - it
+   stands before the far hand-off, which therefore never protected). The owner saw it as specks with a halo.
+   The f64 twin is right at every distance, and so is the plain f32 far-field march, which iterates the point itself.
+   THE FIX IS IN THE MARCH (the owner: "speckle fix - in the march pls"). Two rules, both set here once a frame and
+   read by the shader's set-up of a ray (grep A VIEW FROM FAR in DEEP_FRAG); the kernel and loop A are as they were.
+   1  THE REFERENCE IS NO USE (refFar -> uFarOnly). The gate is the size of the reference orbit's NEXT POINT, |Z1| -
+      what is there, not the camera's distance, a depth or the power. Past REF_FAR no deep sample is taken on any
+      ray of the picture: the far field draws it all.
+      REF_FAR = 512, BY MEASUREMENT (debug/scratch/far-fix/bound.mts, git-ignored: the kernel alone on 65,536 points
+      round the bulb against its f64 twin on the same reference, powers 2, 4, 8, 12 and 16, Mandelbrot and Julia
+      mode). On points that escape within two iterations - no fine structure: nothing is off near the camera - the
+      kernel's estimate leaves the twin's by the square of |Z1|, alike at every power:
+          |Z1|      130     258      514      1,026     1,450     2,050     2,900       4,100         5,800
+          worst   0.2 %   0.7 %   2.0 %    9.3 %     47 %      35 %      67 %     98 %         (the cliff)
+          first                 over 1 %          over 10 %           off by x2   estimate <= 0   en masse
+      So at the gate the kernel is within 2.0 % of its twin, a third of the size at which its first estimate is a
+      tenth out, an eighth of its first non-positive estimate, an eleventh of the cliff; the error grows with the
+      square, so that is 8, 64 and 128 times in error. By distance from the centre the gate stands at 2.18 for
+      power 8 (the first bad points at 2.83, stray hits from about 3.2), 1.68 for power 12, 1.48 for power 16, 22.6
+      for power 2. Handing over early costs nothing: that far out every hit was the far field's already.
+      JULIA MODE: the same gate on the same number - the reference there is the camera's point under z^n + K.
+   2  THE START AT THE BALL (holdBall -> uHoldR). From far outside the estimate itself reads long: a point that has
+      left the escape radius before its first iteration gets 0.5 |c| ln |c|, which passes the true distance from
+      about 3.7 off (4.33 against 4.19 at 4.0 off, 7.16 against 6.19 at 6.0), and a first stride of that length
+      lands in the solid. The deep march took it whole; the far field takes nine tenths of it and fails from 6 off.
+      So while the camera stands outside the ball that holds everything drawn, a ray's march - deep or far - starts
+      where the ray enters that ball. The ball: a point farther than rho from the centre has |z1| >= |z0|^n - |c|
+      > 2, so it has escaped after one iteration, whatever the phase: rho^n - rho = 2 (the point is its own c:
+      1.154 at power 8, 2 at power 2), or rho^n - |K| = 2 in Julia mode. A ray that misses the ball is marched
+      as before; it cannot meet anything.
+   NEITHER IS TAKEN AT A DEEP PLACE. A camera inside the ball has |Z1| <= rho^n + |c| = 2 + 2|c|: at most 6, or
+   2 + 2|K| in Julia mode (under 16 for any constant the app's rows can hold). And the ball's rule asks for a
+   camera a thousandth of the radius outside it, which no place by the surface is.
+   NO SEAM AT THE GATE while the camera is farther from the ball than the far hand-off (the shell: 0.5): on both
+   sides of it a ray is the far field's from the same point of the ball - below the gate after one deep sample
+   there, above it after none. At powers 14 to 16 the gate stands 0.40 to 0.48 from the ball, so just below it
+   the nearest surfaces are still deep hits.
+   MEASURED 2026-10-12 (debug/scratch/far-fix/, git-ignored; RTX 5070 Ti, ANGLE d3d11; the march as the shell sets
+   it, 128 x 128 rays as a 1080-row picture, against the point's own f64 orbit marched ray by ray on the CPU):
+     - THE BULB FROM 1, 2, 3, 4 AND 6 OFF THE SURFACE. Hits beside the bulb, before: 2.7, 21, 32 and 0.2 % of the
+       rays at power 8 from 2 off on, 3 to 39 % at power 12; after: none, at powers 2, 8 and 12. Hits more than 2
+       pixels of depth from the referee's: power 8, 0.40, 69, 55, 66 and 47 % before, 0.38, 0.18, 0.17, 0.21 and
+       0.10 % after; power 12, 24 to 84 % before, 0.11 to 0.40 % after. Julia mode (K = 0.25, 0.1, 0.05) from 2,
+       3 and 4 off: 0.8, 24 and 10 % of rays beside the set before, none after, 0.06 to 0.11 % off in depth.
+     - THE START AT THE BALL. Powers 2, 4 and 8 from 2, 4, 6 and 10 off: of the 1,460 to 16,384 rays that enter
+       the ball, none starts in or on the solid. Before, hits more than 1 % behind the referee's: up to 1,352 of
+       16,384 rays (power 2, 4 off) and 1,497 (power 4, 6 off), and from 10 off powers 2 and 4 drew nothing.
+     - WHAT IS LEFT IS THE FAR FIELD'S OWN, AND WAS THERE BEFORE: at power 2, 78 to 189 rays of 16,384 more than 2
+       pixels off at every distance, nearly all behind the referee's hit (194 and 155 at 1 and 2 off before this
+       change). As a share of the bulb's rays that is 1.1 % at 1 off and 2.5 % at 6 off, because the bulb fills
+       less of the picture. Not looked into: the far field steps by nine tenths of an estimate that reads long
+       at power 2 (grep TRUE-GRADIENT ESTIMATE).
+     - THE GATE'S SEAM, the camera flown across it in steps of 0.02 % of its distance: no ray changes between hit
+       and sky; hits that move more than 2 pixels of depth beyond the camera's own move, 163 of 16,384 across the
+       gate at power 8 against 149 to 161 for the same step on either side, 316 against 282 to 329 at power 16
+       (where a third of the hits below the gate are deep hits).
+     - NOTHING AT A DEEP PLACE: at every starter card's end place, every kept place and every Mandelbox card
+       api.farView() says neither rule; the Mandelbox's program is token for token the text it was; the direct
+       proof's 88 lines are the same to the character; 41 pictures against the tree before, three shoots: the
+       same to the byte or within the recorded floor (the two that do not repeat on an untouched tree, block city
+       and the power-4 starter, came out both ways).
+     - WHAT IT COSTS. A frame at eight deep bulb views (api.timeThumb at 1024, two rounds, turn and turn about
+       with the tree before): +0.3 % at the mean, +1.5 % at the worst, -0.6 % at the best. The ray program
+       builds in 8.06 s where it took 8.03 (three cold builds each). The far-only hand-over is made AFTER loop A
+       for that reason (grep THE FAR FIELD ALONE): made before it, the same frames cost +1.7 % at the mean.
+   @invariant from outside the bulb the picture's march hits nothing beside it, misses next to none of it and
+   puts its hits where the point's own f64 orbit does - proven by: npm run smoke:deep-zoom-direct (the five
+   "far view, ..." lines). Falsified 2026-10-12, two breaks, each restored byte for byte (sha-256):
+   REF_FAR made 1e30 (the gate never taken) -> three of the five FAIL ("power 8, 3.2 from the centre ... stray
+   hits 1", "7.2 ... stray hits 12", "Julia mode ... stray hits 116 ... more than 2 pixels of depth off 180");
+   holdBall made to answer 0 (no start at the ball) -> two FAIL ("power 8, 7.2 from the centre ... more than 2
+   pixels of depth off 23", "power 2, 6.2 from the centre ... holes 44 ... off 95").
+   @assumption REF_FAR = 512 keeps the kernel within 2 % of its twin where the deep march still asks it, and the
+   seam and the deep places are as measured above: the scratch tools named, which no standing check repeats. */
+const REF_FAR = 512;                             // the reference's next point above this: no deep sample (see above)
+const refFar = (O) => !!O && !O.box && O.len > 1 && O.Rk[1] > REF_FAR;
+/* the radius of the ball that holds everything the bulb's programs draw, while the camera stands outside it; else 0 */
+function holdBall(){
+  if (boxOn()) return 0;
+  const C = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : -1; let rho = 2;
+  for (let i = 0; i < 200; i++) rho = Math.pow(2 + (C < 0 ? rho : C), 1 / nPower);
+  if (cam.iters < 2) rho = Math.max(rho, 2);     // the far field tests z1 only from its second pass on
+  rho *= 1.0001;
+  return Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]) > rho * 1.001 ? rho : 0;
+}
 /* power n + binomial coeffs + phase + colour mode — set on the active deep program before each deep draw */
 function setPowerUniforms(x){
   gl.uniform1f(x.power, nPower);
@@ -3006,6 +3139,7 @@ function setPowerUniforms(x){
   gl.uniform1i(x.rebaseOrigin, juliaOn ? 0 : rebaseOrigin);      // JULIA MODE (grep): the rebase to the origin is not valid there
   gl.uniform1f(x.addC, juliaOn ? 0 : 1); gl.uniform3f(x.juliaC, juliaF[0], juliaF[1], juliaF[2]);
   gl.uniform1f(x.farSwitch, farHandOff);
+  gl.uniform1f(x.holdR, holdBall()); gl.uniform1i(x.farOnly, refFar(curOrbit) ? 1 : 0);   // A VIEW FROM FAR (grep); null in the Mandelbox's program: no-ops
   gl.uniform1f(x.lookLevel, normalDetail > 0 ? Math.max(1, detailNow() / normalDetail) : 1);   // THE LOOK LEVEL: how many times coarser than the hit level the normal's level is
   gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
@@ -4391,6 +4525,9 @@ api.autoIters = ()=>autoIters;
 // Read-back of three march settings that had setters only (0 for stepRelax means the default 0.85).
 api.setRebaseOrigin = (b)=>{ rebaseOrigin = b ? 1 : 0; accumReset = true; };   // REBASE TO THE ORIGIN on / off (off = the page's kernel)
 api.setFarHandOff = (t)=>{ farHandOff = farClamp(t); accumReset = true; };   // FAR HAND-OFF distance, 1e-3 (the page) .. 12
+/* referee handle: what A VIEW FROM FAR (grep) decides for the camera as it stands - the size of its reference's next
+   point, whether the picture is the far field's alone, and the radius of the ball a ray starts at (0: from the camera) */
+api.farView = ()=>{ const O = probeOrbit(); return { z1: O && !O.box && O.len > 1 ? O.Rk[1] : 0, farOnly: refFar(O), holdR: holdBall() }; };
 /* THE LOOK LEVEL (grep; an experiment, 0 = off = the page): a detail of its own for the NORMAL. With 4-tap normals
    and a normal detail below the detail setting, a ray still stops where the detail setting says, and its normal is
    taken on the coarser level the normal detail names: Detail 32 with a normal detail of 8 stops rays as Detail 32

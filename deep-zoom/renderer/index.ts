@@ -495,6 +495,12 @@ export interface DeepZoomApi {
      *  `farHandOff` sets it from the start): how far the deep march carries a ray before the plain
      *  f32 far-field march takes it. grep the name in core.js. */
     setFarHandOff(t: number): void;
+    /** A VIEW FROM FAR (added 2026-10-12; grep the name in core.js): what the picture's march decides
+     *  for the camera as it stands. `z1` is the size of the camera's reference orbit after one
+     *  iteration (0 for the Mandelbox); past 512 `farOnly` is true and the whole picture is the f32
+     *  far field's. `holdR` is the radius of the ball a ray's march starts at while the camera
+     *  stands outside it, 0 when it stands inside (every deep place). A referee's handle: read only. */
+    farView(): { z1: number; farOnly: boolean; holdR: number };
     /** THE LOOK LEVEL (an experiment, added 2026-10-09; 0 = off = the page; grep the name in core.js).
      *  The detail setting says both how close a ray stops and how far apart the normal's taps stand.
      *  A normal detail `d` below the detail setting, with 4-tap normals: the ray still stops where the
