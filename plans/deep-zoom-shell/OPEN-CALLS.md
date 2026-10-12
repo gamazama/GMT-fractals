@@ -355,6 +355,26 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
   GMT's own estimator, both worked out on the CPU for the same view
   (`debug/scratch/ao-design/`). What neither can do is see past one depth layer: that is what
   GMT's marched samples do, and it stays the "maybe 4".
+  **THE STUDY IS BACK (scratch only; sheets `1-*-occlusion.png`, `2-*-picture.png`,
+  `3-*-error.png`, `4-*-radius.png`; tables `metrics-*.txt`).** Three shallow views, pixel for
+  pixel against 128 traced rays a pixel, radius 0.12, error as rms:
+  - The horizon variant (H): bulb 0.154 -> 0.126 at 10 taps (0.110 at 32), the two Mandelbox
+    views 0.127 -> 0.068 and 0.129 -> 0.065, at the same cost a tap. Today's draws rings on
+    smooth walls and reads 0.09 to 0.10 too dark on open ground; H does neither.
+  - The thickness mask (M): WORSE than H at thickness 0.25 and 0.5 in all three views, the
+    same picture as H at 1. Dropped.
+  - Grain follows the number of slices, accuracy the steps a side: one slice at 10 taps is 1.6
+    to 2.3 times grainier in one flying frame than today's; 16 taps as 2 slices of 4 a side has
+    about today's grain at 10. So the default would be 16.
+  - Multi-bounce moves white clay by 1 to 3 levels of 255. Radius 0.25 raises the error.
+  - GMT's own estimator, ported to the same views on the CPU, is ANOTHER QUANTITY: far darker
+    everywhere (the bulb's picture has mean 0.47 where true occlusion has 0.81), smooth, without
+    grain, with soft large forms, and it reads what the depth layer hides. It follows true
+    occlusion no better than today's (r 0.75). H is not nearer to GMT's picture than today's
+    is. GMT's default reach reads as about 0.4 of the picture's height (not measured).
+  - Put to him: build H in place of today's (16 taps, radius 0.12, multi-bounce on); and if the
+    look he wants is GMT's panel, that is the marched estimator (4), whose frame time is not
+    measured. Both wait for the kernel file.
 - "routes: we need to provide an option to fix a leg and avoid crossing the solid using the
   shortest smooth path, otherwise a run is ruined by a deleted keyframe." A CPU study proves the
   rule first (an elastic band pulled tight round the solid at a clearance that follows the
