@@ -1,0 +1,124 @@
+# Deep zoom - every call that is open with the owner (2026-10-12, morning)
+
+Written at the end of the session that built `ROUTES.md` R5 to R7 and the kernel work of
+`NEXT.md`, for a fresh session in which he answers them. Each call says what it is, where its
+numbers are, and what the orchestrator recommends. Nothing here is decided. Branch `deep-zoom-tool`,
+local, 140 commits ahead of `main`, never pushed (his rule: "we push after 1-12").
+
+**State of the tree when this was written.** Clean at `b510ae9a` except for the help builder's
+unfinished work (`deep-zoom/help/`, `deep-zoom/tutorial/`, `deep-zoom/version.ts` and edits to
+`DeepZoomApp.tsx`, `StarterDives.tsx`, `hotkeys.ts`, `locations.ts`, `main.tsx`): the session
+that started it verifies and commits it; do not touch those files until `git status` is clean.
+The two dev servers (3410 the working tree, 3420 the fly tree) belong to that session and stop
+with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
+
+## A. The kernel
+
+1. **The Mandelbox's ray step** was built and is NOT in the tree: cleaner at all 92 view-settings
+   (rays on the wrong surface at the starters 0.51 -> 0.04 %), but Arches +39 % and Lace +46 % in
+   frame time, Block city -29 %. `ADR-DRAFT-box-ray-step.md` has the tables.
+   - a. Take it as measured, or leave the box as it is? *Recommended: leave it for now; see b.*
+   - b. Far relax, today's default, causes two thirds of the box's wrong share off the starters
+     (a 56-view sweep: 2.70 % with it, 0.84 % without) and needs no build: one default, at about
+     1.37 times the march's work. Switch it off for the box? *Recommended: yes, after one
+     frame-time table on the starters.*
+   - c. Resumed orbits for the box (stage B) could bring the time back, but only pass counts say
+     so, and pass counts are what misled the study. Spike it? *Recommended: only if he wants Step
+     size gone from the app; otherwise park.*
+2. **Julia mode is in the tree** (`136d867d`); `ADR-DRAFT-julia-mode.md` has the pictures' names.
+   The Mandelbox's half is clean. The bulb's is a grainy body with a halo from outside (cause not
+   known), a clean relief at 1.8e-7, grooves from 1e-10, streaks from 1e-20.
+   - a. Does the bulb's Julia mode stay reachable as it looks? *Recommended: look at
+     `debug/scratch/formula-next/julia-bulb-*.png` first; if the outside view is not acceptable,
+     hide the bulb's switch until b and a look at the outside grain.*
+   - b. Build the second reference (the orbit of the constant)? The GPU says it is what the
+     bulb's four ungated proof lines need. *Recommended: yes.*
+   - c. The row's switch takes the point looked at, as the button does. Or should the switch
+     re-enter with the last constant? *Recommended: the switch re-enters with the last constant
+     when there is one; the button takes the point.*
+   - d. Switching Julia on puts the iteration floor back to 14. *Recommended: keep.*
+   - e. The Kleinian card, whose whole-view proof line is a little over the bar. *Recommended:
+     keep.*
+   - f. Number rows for the constant, so it can be keyframed (a morph). *Recommended: a later
+     stage, after he has flown the mode.*
+3. **The kernel has three call sites** (ready in 8.5 s on a first visit, frame time unchanged). A
+   two-call form builds in 5.8 s and costs the bulb 5.6 % of frame time
+   (`debug/scratch/load/step2/core.v-g2.js.txt`). *Recommended: stay at three.*
+4. **A view that waits for ready** (a link, a scene) now sits under the small loading line over
+   the START view's picture, then jumps. Show the large card whenever a view is parked?
+   *Recommended: yes.*
+5. **What comes after Julia among formulas** (`CHEAP-FORMULAS.md`): Burning on the bulb (it needs
+   the fold-crossing test the box's ray step built), KaliBox (a CPU still first). *Recommended:
+   nothing more until 1 and 2 are settled.*
+6. **The navigation on the Mandelbox** could step its CPU ray by the whole scalar estimate
+   instead of half: half the steps, 0 to 0.8 % of rays more than 5 % past the careful ray.
+   *Recommended: yes, as a small measured change.*
+7. Left open by him, recorded in `NEXT.md` session 7: why power 8 needs the depth rule for
+   iterations; the odd single render (about 2 to 8 % of renders of a grainy frame, by the
+   machine's state; he could not see a difference in the sheets).
+
+## B. Routes, free look, rendering
+
+8. **Free look**: his to fly ("will have to fly and see what you mean"). A pass that ends turned
+   leaves the rest of the route turned; an unrecorded turn snaps back. Ease back, or leave?
+9. **fluid-toy now holds frames back for the codec** (a builder's addition: without it nothing
+   reached the file before the end). *Recommended: keep.*
+10. **GMT's Continue is offered only while the export version holds still**, and in a keyed scene
+    moving the playhead between two runs changes it. Leave what the timeline drives out of the
+    version? It changes versioning for videos and bucket renders too. *Recommended: yes, through
+    the registry that already keeps the locked focus out.*
+11. **A continued GMT render has another grain** because the worker's sample counter restarts
+    with a run. Seeding it from the frame's own number would make a continued plain render exact
+    and leave single runs as they are. *Recommended: yes; it is small.*
+12. **GMT's video path raises the version before the file picker**: backing out of the picker
+    leaves a version number with no file. *Recommended: fix with 10.*
+13. Small, recorded: Draft has no way back; an Overwrite stopped halfway leaves a mixed folder;
+    GMT's Discard leaves a 0-byte file; keyframes cut from a trail show a number and no picture.
+
+## C. The shell (built the night of 2026-10-12; each was decided without him)
+
+14. **Locations as a file**: a duplicate is the same camera strings, Julia constant and formula
+    (the same spot looking another way counts as the same place); a pasted LIST is added and no
+    longer jumps to its first entry; an import is not an undo step. Confirm or change.
+15. **Session autosave** is off by default; on, a reload opens where the app was left; the File
+    menu's Autosave switch and "Restore Last Session" were removed from this app (they were
+    app-gmt's and wrote app-gmt's keys); a session does not hold My locations or My Gradients;
+    Home after a restore is the restored place. Confirm or change. Found beside it: fluid-toy and
+    fractal-toy still show those two app-gmt rows in their File menus.
+16. **The Diagnostics tab**: the renderer's accuracy gate has been on all along (a one-pixel
+    readback twice a second while a still gathers). Should the shell start with it off?
+17. **Help, the shortcuts page, What's New and the first-dive lesson** were still being built when
+    this was written: their words are his to cut. See the commit that lands them.
+18. Found, not fixed: after File > Load Scene the project is named "mandelbulb-deepzoom"; the
+    engine's dock does not notice a `showIf` flip by itself (worked round in `DeepZoomApp.tsx`);
+    smoke stage 3's dive overshot once in 7 runs of one night.
+
+## D. Plans that wait for his yes
+
+19. **Zoom-outs** (`ZOOM-OUTS.md`, session 3): the plan says no code before his yes. Nine calls
+    at its foot; the main ones: "Reverse" replaces the route as one undo step; the buttons "Zoom
+    out from here" / "Zoom in to here"; least turn before most room; the place stays centred on
+    the way out. *Recommended: yes to stages Z1 to Z3 as written.*
+20. **The prototype's removal** (`PROTOTYPE-REMOVAL.md`, session 5): five empty rows block it.
+    Three close with the help work (17). The other two are "a real render finishes" and "its
+    progress can be read", which have no standing test: he declined new smoke steps twice. Rule:
+    a smoke step for a real render after all, or accept the scratch proofs and delete? And three
+    things a prototype user would miss with no drop recorded: still export at a chosen size and
+    samples, a path file's import, a length typed as seconds.
+21. **Sessions still ahead** (`NEXT.md`): 3 zoom-outs, 5 the prototype, 7 the march (his ran-out
+    places are owed), 8 the Mandelbox (the math session is done: `BOX-RAY-STEP.md`), 9 navigation
+    leftovers, 10 pause controls and the 1:1 row (both need a renderer handle), 11 Light Studio,
+    12 more formulas. 6, Ship, comes last.
+
+## E. Paperwork (each raises an approval prompt)
+
+22. File the ADR for Julia mode (`ADR-DRAFT-julia-mode.md`), once 2 is answered. The box's
+    (`ADR-DRAFT-box-ray-step.md`) is filed only if 1a is "take it".
+23. Decisions from the export work that have no ADR yet: a video into a picked file is written as
+    it goes with a keyframe a second (`b6f717dc`); the registry of state a render writes by
+    itself, left out of the export version, with the question asked before a version is taken
+    (`f86273db`); one naming rule for a frame's files. *Recommended: one ADR for the three.*
+24. `.claude/rules/sibling-apps.md` does not yet know Julia mode, the session, the Diagnostics
+    tab, the locations file or the help; and its `deep-zoom/` row still names the prototype.
+25. What's New: GMT's entry for the export fixes is drafted on `main` (`915bebd6`, not pushed);
+    the deep zoomer's own comes with 17.
