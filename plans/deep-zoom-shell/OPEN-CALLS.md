@@ -266,6 +266,33 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
       cliff is 2.95 from the centre at power 8, 2.06 at power 12, 1.72 at power 16. The direct
       proof and the deep pictures must not move. His call which route.
 
+**26 to 31 BUILT, `e28fa8d8`** (one builder; smoke 54 of 54, `smoke:chrome`, the build):
+- 26: "Clear route" on the Route tab, one undo step; the trail is left alone.
+- 27: "Start view" in the readout box, beside Dive: the camera goes to the formula's whole
+  view (`formulaHome`, or the Julia set's), the formula's numbers stay. NOTE: for the bulb that
+  view stands 3.23 from the centre, just past the cliff of 33, so until 33 is fixed it shows
+  specks; the app itself boots 2.60 from the centre, which is clean. Home was reworded to "the
+  view the app started with".
+- 28: click, Ctrl / Cmd-click, Shift-click in the list; "Delete selected (n)" or the Delete key,
+  one undo step.
+- 29, measured (`debug/scratch/route-fixes/app-delete.mts`): a Route-tab delete leaves exactly
+  the route a fresh keying of the remaining keyframes gives (0 of 251 half frames differ). Five
+  keyframes half way round the bulb, the three middle ones deleted: the one leg left passes
+  0.61 from the bulb's centre where the four legs kept 3.03 to 3.17 off; it keeps the summed
+  time (125 frames where K would give 81), so it plays slower; the row turns red, "Leg passes
+  through the solid". That part is the in-between rule joining two views straight: HIS CALL.
+  A real bug was found beside it and fixed: keys deleted ON THE TIMELINE left the neighbours'
+  handles pointing at the deleted key (the depth curve up to 0.048 decades off).
+- 30: a seconds field on every keyframe but the first: the leg that ends on it; later keyframes
+  move by the difference; one undo step.
+- 31: a cut from the trail gets its pictures in one pass (about 1.0 s for 10 keyframes; the
+  camera returns exactly, the still restarts). Keyframes of a LOADED SCENE still show a number.
+- Found beside it, left: a recorded free look is not moved by any retime (Even pace, As flown,
+  the seconds field); the renderer's iteration rule reads the previous place's depth on the
+  first frame after a jump (42 where 32 belongs); `thumbnail()` straight after `setView` draws
+  the old reference orbit; the bulb has two "start views" (the boot's 2.60, `formulaHome`'s
+  3.23).
+
 ## G. The build queue as it stood when the calls of A and B were in (2026-10-12)
 
 - Done: the formula rows follow a drag (`4e5b0016`).
