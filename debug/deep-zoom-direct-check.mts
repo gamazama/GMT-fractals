@@ -152,6 +152,53 @@
  *       ... off 95" (the deep march's first stride). The other three stayed PASS.
  * NOT seen red: the Julia line by the second break, the 3.2 and 5.2 lines by it, and the count of silhouette
  * rays beside "stray hits".
+ *
+ * ADDED 2026-10-12: BURNING (grep BURNING in deep-zoom/renderer/core.js), a last section of twelve lines. GMT's
+ * Burning Mode on the bulb - a fold of every negative coordinate at the top of each iteration, by a factor of
+ * 1 - 2 mix (mix 1: the plain abs) - is a VARIANT of the ray program (USE_BURN): the fold as a delta by cases in
+ * the kernel's pass, with the reference's signed coordinates as mantissa and exponent (two more rows of the orbit
+ * texture), and in the direct pass after a rebase to the origin. The "burning, ..." lines hold that kernel to it
+ * as the Julia lines hold theirs: the same grid - 13 x 13 rays, the careful march's hits, two points a ray - and
+ * at each point the GPU's estimate against the CPU twin (`pertOrbitJS` on a reference built with Burning on,
+ * itself held to an exact orbit by `npm run check:deep-zoom-burning-orbit`) and against `hpDirectDE`, a
+ * fixed-point orbit of the explicit point with the fold in it. The bar is the Mandelbox grids' own. Each line
+ * also checks that the module reads its Burning back as it was told. The rebase to the origin is asked for, as
+ * the shell asks for it. Every view is printed by `BURN_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/burning-orbit.mts`.
+ *   GATED, ten lines (first run: 0 points over 1e-3 on every one, the worst 8.4e-4):
+ *       mix 1      power 8 at 7.8e-11 and 9.6e-61, power 2 at 9.8e-31
+ *       mix 0.5    power 8 at 9.6e-4 and 1.0e-10 (the deepest place the finder has for that mix)
+ *       mix 0.25   power 8 at 2.3e-31
+ *       the camera 1e-40 from the plane x = 0, so that half the rays stand across a fold plane from it at the
+ *                  first iteration: power 8 at mix 1 (2.2e-11) and at mix 0.5 (3.8e-4). The case the
+ *                  reference's signed coordinate has to reach the shader as mantissa and exponent for.
+ *       Julia mode with Burning, mix 1, a constant inside the bulb, at 8.9e-11 and 8.9e-31
+ *   PRINTED AND NOT GATED, two lines, because they do not meet that bar (first run, 2026-10-12):
+ *       power 8, mix 1, at 1.5e-31    63 of 338 points over 1e-3, the worst 1.4
+ *       power 2, mix 1, at 1.8e-11     7 of 338, the worst 1.6e-2
+ *   ONE MEASUREMENT WAS MADE OF THEM AND NO MORE (debug/scratch/burning/nudge.mts, git-ignored): at every point
+ *   of the grid the f64 twin was run again with its input moved by what an f32 holds of it (the ray turned
+ *   1.2e-7 rad, t longer by 1.2e-7 of itself). At the 1.5e-31 place the 63 points the GPU has wrong are the ones
+ *   that nudge moves most - their median moves 1.6e-4, the grid's 4.6e-6, and 13 of them move more than 1e-3 by
+ *   that one nudge alone; at the power-2 place the 7 points' median moves 1.9e-4 against 1.3e-6. They are also the
+ *   two places where the node check counts the most points f64 itself cannot settle (46 and 9 of 1,134, where
+ *   the ten gated places have 0 to 7). So: orbits single precision does not settle, which the kernel rounds at
+ *   every one of its iterations. NOT shown: that the fold adds nothing of its own there. The control - the same
+ *   grid on the PLAIN bulb at six places found the same way, 9.6e-4 to 6.0e-61 - has no point over 1e-3.
+ * What these lines do not hold: the ray march's own step with Burning on, its jet's sides and THE CROSSING TEST
+ * (a grid's hits come from the careful march, as everywhere in this file), the f32 baseline and the far field.
+ * The 100 lines above are untouched: the same to the character as before.
+ * SEEN RED, 2026-10-12 (one break in deep-zoom/renderer/core.js, restored byte for byte, sha-256): the shader's
+ * opposite-side case cut (`burnFoldD`: `return side == fr ? side * d : side * p - fr * zs;` -> `return side * d;`:
+ * a pixel across a fold plane from the reference is folded as if it stood beside it)
+ *   -> exit 1, eight of the ten gated lines FAIL: mix 1 at all three depths ("140 over 1e-3, worst 2.5e+3",
+ *   "169 over 1e-3", "escape flags differ 205"), mix 0.5 at 9.6e-4 ("305 over 1e-3"), both views beside the plane
+ *   ("304 over 1e-3, worst 1.0e+4" and "escape flags differ 5 ... 5 over 1e-3") and both Julia lines ("escape
+ *   flags differ 166" and "292"). Two stayed PASS with every digit as it was - mix 0.5 at 1.0e-10 and mix 0.25
+ *   at 2.3e-31: at those places no pixel of the grid stands across a plane. The 100 earlier lines printed as
+ *   they did.
+ * NOT seen red: the reference's signed coordinates uploaded as plain floats (the view beside the plane is there
+ * for it, as the Mandelbox's fold-plane view is; that break was not spent), the direct pass after a rebase with
+ * the fold left out, and the read-back of Burning beside each line.
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -266,9 +313,27 @@ const FAR_VIEWS: FarView[] = [
     { name: 'power 2, 6.2 from the centre', power: 2, r: 6.2, dir: FAR_DIR, minHits: 50 },
     { name: 'power 8, Julia mode, K = (0.25, 0.1, 0.05), 4.2 from the centre', power: 8, r: 4.2, dir: FAR_DIR, c: [0.25, 0.1, 0.05], minHits: 100 },
 ];
+/** BURNING's views (grep BURNING in deep-zoom/renderer/core.js): the bulb with the fold at a power and a mix, in
+ *  Julia mode when `c` is there, each a deep `view` with its count. Every one is printed by
+ *  `BURN_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/burning-orbit.mts`, found there by a fixed-point referee alone. */
+interface BurnGridView { name: string; power: number; mix: number; minRays: number; gated?: boolean; c?: [string, string, string]; view: { cam: [string, string, string]; yaw: number; pitch: number; iters: number } }
+const BURN_VIEWS: BurnGridView[] = [
+    { name: 'power 8, mix 1, ray 1', power: 8, mix: 1, minRays: 60, view: { cam: ['727332762902078700943890508971084350981752948517633631759489304571599126528', '-58631620484718059471604888322870828785402196326076456709757529312385017315328', '99932852464130365039759685067551044616158558997662991506234531631831558651904'], yaw: -0.9118776416064391, pitch: 0.8336178325273291, iters: 23 } },   // 7.8e-11
+    { name: 'power 8, mix 1, ray 1', power: 8, mix: 1, minRays: 60, gated: false, view: { cam: ['727332768827106494421742678862283005568241954609613382050226453646114029568', '-58631620474059437837843993784005661372228199772831842556087079033423943172096', '99932852456478984903184272711006813345442190027572272191250843290351152660480'], yaw: -0.9118776416064391, pitch: 0.8336178325273291, iters: 76 } },   // 1.5e-31
+    { name: 'power 8, mix 1, ray 2', power: 8, mix: 1, minRays: 60, view: { cam: ['-50476728608545932719199331690135249362119530280246180304933239572552836110572', '-37121921098966729414509411036540425369755911542196517932603855805815820148436', '61506801089987384663224334129087283804193486378372386611226754707297751784940'], yaw: -0.710807449189311, pitch: 0.4132197077542007, iters: 98 } },   // 9.6e-61
+    { name: 'power 2, mix 1, ray 1', power: 2, mix: 1, minRays: 60, gated: false, view: { cam: ['49272363211176065482339681284258673926378373377875508768857419027274608410624', '-67297913977909288506000743828913090012842392064664735546552816151947477254144', '-58252088732044924787510789531338054357291717521923270689113960452545702789120'], yaw: -2.9350256758189497, pitch: 0.6046978248269632, iters: 89 } },   // 1.8e-11
+    { name: 'power 2, mix 1, ray 2', power: 2, mix: 1, minRays: 60, view: { cam: ['38784878211264088095756145932031877482178119161746895212356823602330295336960', '-7720809026605841474007479989639870813090648987689557121172219700276774305792', '49381879960072649649768657405321432494702728398350554838620871343366004015104'], yaw: -3.0386627808160704, pitch: -0.2639905400045149, iters: 166 } },   // 9.8e-31
+    { name: 'power 8, mix 0.5, ray 1', power: 8, mix: 0.5, minRays: 60, view: { cam: ['30312452861475016932445545969964830136533789677192577709381149223223518298112', '88416040783386520724328818170795750591543478000756767842867689358414565081088', '19522515212912735121984277293854255841341606995651738273957195542121397878784'], yaw: -2.2606702933431997, pitch: -1.1119548888595376, iters: 15 } },   // 9.6e-4
+    { name: 'power 8, mix 0.5, ray 1', power: 8, mix: 0.5, minRays: 60, view: { cam: ['30153696677983550176606388076492216373067536490417965346036269804044186288128', '87911100043949495962980515185244822326559112970111520315020552721745921966080', '19330112450603269227728817285375248519319765853092279588167519220844279627776'], yaw: -2.2606702933431997, pitch: -1.1119548888595376, iters: 26 } },   // 1.0e-10
+    { name: 'power 8, mix 0.25, ray 1', power: 8, mix: 0.25, minRays: 60, view: { cam: ['41063348330849448272408277377551346320230958708326862823325011775173534154752', '19237383025529786286698798533013107206928926976906445599428959518278197182464', '70825656901602699393343955737612977408666175137134611023035055538317297713152'], yaw: -2.1991282616111674, pitch: -0.5008097766921208, iters: 116 } },   // 2.3e-31
+    { name: 'power 8, mix 1, 1e-40 from the plane x = 0', power: 8, mix: 1, minRays: 60, view: { cam: ['11579208923731618723624576676593139712', '7541659157635493826332269135534033432246293726295501822100483564229713985536', '89391053456294210598542344432597095275094366641074605754557481423280606806016'], yaw: -1.5707963267948966, pitch: 0.705583279501836, iters: 31 } },   // 2.2e-11
+    { name: 'power 8, mix 0.5, 1e-40 from the plane x = 0', power: 8, mix: 0.5, minRays: 60, view: { cam: ['11579208923731618723624576676593139712', '92425034126609857612577223310813441291160675268653108980321002640538026901504', '59410701738624536318316361483740806696692542157315976945487011189546161274880'], yaw: -1.5707963267948966, pitch: -1.1154716105977134, iters: 17 } },   // 3.8e-4
+    { name: 'power 8, mix 1, Julia mode, K = (0.25, 0.1, 0.05)', power: 8, mix: 1, c: ['28948022309329048855892746252171976963317496166410141009864396001978282409984', '11579208923731620185132316204464901002111835403029097412826955913908447084544', '5789604461865810092566158102232450501055917701514548706413477956954223542272'], minRays: 60, view: { cam: ['94229599180515835181281469026992039421767283178295391478616653449384496726016', '53148940629159321404624787034588271250359280150860773870651306211715156279296', '37691839672206335621225989868048022588324101579525002899703152517684901445632'], yaw: -2.761086276477428, pitch: -0.536326162184031, iters: 22 } },   // 8.9e-11
+    { name: 'power 8, mix 1, Julia mode, K = (0.25, 0.1, 0.05)', power: 8, mix: 1, c: ['28948022309329048855892746252171976963317496166410141009864396001978282409984', '11579208923731620185132316204464901002111835403029097412826955913908447084544', '5789604461865810092566158102232450501055917701514548706413477956954223542272'], minRays: 60, view: { cam: ['94229599157004323183788846110779192509408819354251213571510310628974380711936', '53148940614106342575858515783392668694613532606052368826345057073316598120448', '37691839662801730822228939704192233671973341204315324673124281153706394648576'], yaw: -2.761086276477428, pitch: -0.536326162184031, iters: 46 } },   // 8.9e-31
+];
 const ORIGIN = process.env.ORIGIN === '1';
 
-let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0, farPass = 0, farRan = 0;
+let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0, farPass = 0, farRan = 0, burnPass = 0, burnRan = 0;
 const pageErrors: string[] = [];
 // DZ_HEADLESS=1: no window (same Chrome, same GPU flags).
 const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1',
@@ -561,11 +626,63 @@ try {
     console.log(`far view, ${v.name} (${r.far ? `the reference's next point ${r.far.z1.toExponential(1)}: ${r.far.farOnly ? 'the far field alone' : 'the deep march'}, ${r.far.holdR ? 'from the ball' : 'from the camera'}` : 'no far rule in this renderer'}): `
       + `${c.rays} rays, ${String(c.real).padStart(3)} on the bulb  stray hits ${String(c.stray).padStart(3)}  (and ${c.graze} on a ray that passes within 2 pixels of it)  holes ${String(c.holes).padStart(3)}  more than 2 pixels of depth off ${String(c.off).padStart(3)}  ${ok ? 'PASS' : 'FAIL'}`);
   }
+
+  // ---- BURNING (added 2026-10-12; see the header) ----
+  console.log('\nBURNING: the bulb\'s kernel with the fold (its own variant of the ray program) against its CPU twin and against a fixed-point orbit of the explicit point');
+  const burnGrid = (v: BurnGridView): Promise<any> => page.evaluate(`(async () => {
+    const w = window, v = ${JSON.stringify(v)}, G = 13, f = Math.tan(0.55);
+    const frames = (n) => new Promise((done) => { const tick = () => (n-- > 0 ? requestAnimationFrame(tick) : done()); tick(); });
+    w.__setFormula('mandelbulb', v.c ? { julia: true, c: v.c, burning: true, burnMix: v.mix } : { julia: false, burning: true, burnMix: v.mix }); w.__setPower(v.power);
+    for (let i = 0; i < 1500 && w.__formulaState() === 'building'; i++) await new Promise((r) => setTimeout(r, 40));
+    if (w.__formulaState() !== 'on') return { error: 'the Burning variant did not build: ' + JSON.stringify(w.__variantErr()) };
+    // the rebase to the origin is asked for, as the shell asks for it (in Julia mode the renderer holds it off itself)
+    w.__setMode('deep'); w.__setRebaseOrigin(true); w.__setFarHandOff(0.5);
+    w.__setAutoIters(false); w.__setIters(v.view.iters); w.__dz.setView({ cam: v.view.cam, yaw: v.view.yaw, pitch: v.view.pitch, iters: v.view.iters, power: v.power, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 });
+    w.__setSurf(360 / G);                                                   // the hit tolerance of a picture 360 rows tall, on 13 rays
+    await frames(14);
+    w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
+    const g = w.__readGbuf(G);
+    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
+    const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, iters = w.__dz.telemetry().iters, refE = Math.floor(Math.log2(dist));
+    const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
+    const fwd = [cp * cy, sp, cp * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
+    const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    const pts = []; let rays = 0;
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const i = (y * G + x) * 4, kind = Math.floor(g[i + 2] / 256) % 4;
+      if (kind !== 1 && kind !== 2) continue;
+      rays++;
+      const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
+      let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((c) => c / len);
+      w.__dz.setYawPitch(Math.atan2(d[2], d[0]), Math.asin(d[1]));
+      for (const q of w.__directCheckHP([0.5, 0.97].map((a) => Math.pow(2, g[i] + refE) * a))) pts.push({ gpu: q.gpu, twin: q.pert, direct: q.direct, escG: q.escG, escD: q.escD });
+    }
+    const held = w.__formula(), carried = held.burning === true && held.burnMix === v.mix;   // the module reads back what it was told
+    w.__dz.setView(v0); w.__setSurf(1);
+    return { depth: dist, iters, rays, pts, carried };
+  })()`);
+  for (const v of BURN_VIEWS) {
+    const r = await burnGrid(v);
+    burnRan++;
+    if (r.error) { console.log(`burning, ${v.name}: ${r.error}  FAIL`); continue; }
+    const esc = r.pts.filter((q: any) => q.escG && q.escD), flags = r.pts.length - esc.length;
+    const rel = (a: number, b: number): number => Math.abs(a - b) / Math.abs(b);
+    const twin = esc.map((q: any) => rel(q.gpu, q.twin)), direct = esc.map((q: any) => rel(q.gpu, q.direct));
+    const over = (xs: number[], lim: number): number => xs.filter((x) => !(x <= lim)).length, worst = (xs: number[]): number => xs.reduce((m, x) => (x > m || !(x === x) ? x : m), 0);
+    // the bar of the Mandelbox's grids: none over 1e-2, at most a fiftieth over 1e-3 - against the twin and against the direct orbit
+    const held = r.rays >= v.minRays && flags === 0 && over(twin, 1e-2) === 0 && over(direct, 1e-2) === 0 && over(twin, 1e-3) <= 0.02 * esc.length && over(direct, 1e-3) <= 0.02 * esc.length;
+    const ok = r.carried && (v.gated === false || held);                   // a line marked `gated: false` is printed with its numbers only
+    if (ok) burnPass++;
+    console.log(`burning, ${v.name} (${r.depth.toExponential(1)}, ${r.iters} iterations): ${String(r.rays).padStart(3)} rays, ${r.pts.length} points  escape flags differ ${flags}`
+      + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}${r.carried ? '' : '  THE MODULE DOES NOT READ BACK ITS BURNING'}  ${v.gated === false && r.carried ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
+  }
+  await page.evaluate(`(() => { window.__setFormula('mandelbulb', { julia: false, burning: false, burnMix: 1 }); window.__setPower(8); window.__setRebaseOrigin(${ORIGIN}); window.__setAutoIters(true); })()`);
 } finally { await browser.close(); srv.stop(); }
 
 // The historical suite only prints; as a guard for the port this one also gates.
 if (pageErrors.length) console.log(`page errors (${pageErrors.length}):\n  ` + pageErrors.slice(0, 5).join('\n  '));
 const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRIDS && gridRan === GRIDS
-  && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && juliaPass === JULIA_VIEWS.length && juliaRan === JULIA_VIEWS.length && farPass === FAR_VIEWS.length && farRan === FAR_VIEWS.length && pageErrors.length === 0;
-if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids, ${FAR_VIEWS.length}/${FAR_VIEWS.length} far views and no page errors`);
+  && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && juliaPass === JULIA_VIEWS.length && juliaRan === JULIA_VIEWS.length && farPass === FAR_VIEWS.length && farRan === FAR_VIEWS.length
+  && burnPass === BURN_VIEWS.length && burnRan === BURN_VIEWS.length && pageErrors.length === 0;
+if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids, ${FAR_VIEWS.length}/${FAR_VIEWS.length} far views, ${BURN_VIEWS.length}/${BURN_VIEWS.length} Burning grids and no page errors`);
 process.exit(allOk ? 0 : 1);

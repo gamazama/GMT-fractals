@@ -534,7 +534,7 @@ const float CK_SAFE = CK_SAFE_;
 #ifndef NO_CKPT
 vec4  gCkD[CKN];                 // δ: mantissa (xyz), exponent (w)
 vec4  gCkJ[CKN];                 // zdot: mantissa (xyz), exponent (w)
-vec4  gCkA[CKN];                 // Δdr (HDR, xy) · trap (z)
+vec4  gCkA[CKN];                 // Δdr (HDR, xy) · trap (z) · the gap of THE CROSSING TEST (w; BURNING, grep)
 vec4  gCkB[CKN];                 // the t this checkpoint was made at · inherited position error · relative jet error · pass number
 vec4  gCkC[CKN];                 // Q · m · it      (t, the error and Q in units of 2^uRefE: plain floats)
 #endif
@@ -699,6 +699,25 @@ void sclSinCosm1(float xM, float s, out float sM, out float cM) {
 #ifdef USE_BOX
 ${BOX_KERNEL}
 #else
+#ifdef USE_BURN
+/* BURNING (grep; the USE_BURN variant): one coordinate of the fold x -> (x < 0 ? uBurnNeg x : x) as a DELTA. Z = the reference's signed
+   coordinate, a mantissa and an exponent of its own (rows 4 and 5 of the orbit texture: one that stands 1e-50
+   from the plane must still say which side it is on, and how far); d = the pixel's delta on this axis, a
+   mantissa on e. Brought onto e the coordinate is capped at 2^120, as the Mandelbox's distances are (boxOnE):
+   it then only says "the same side". Returns the folded delta on e:
+       the same side      side · d
+       opposite sides     side · (Z + d) − (the reference's factor) · Z       (|Z| <= |d| there: nothing cancels)
+   side = the factor of the side the PIXEL stands on (what its jet is multiplied by); gap = the pixel's distance
+   to the plane, a mantissa on e (THE CROSSING TEST). The Mandelbox's program does not hold this function. A
+   formula on that kernel which folds by abs can take it as it is: the box's rows 2 to 4, at a folding limit of
+   0, are this Z. */
+float burnFoldD(vec2 Z, float d, float e, out float side, out float gap) {
+  float zs = Z.x * exp2(clamp(Z.y - e, -160.0, 120.0)), p = zs + d;
+  float fr = Z.x < 0.0 ? uBurnNeg : 1.0;
+  side = p < 0.0 ? uBurnNeg : 1.0; gap = abs(p);
+  return side == fr ? side * d : side * p - fr * zs;
+}
+#endif
 OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec3 C; float ec;
   sclFromH3(dc, C, ec);                        // δc = C·2^ec, constant along the orbit
@@ -717,6 +736,15 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec4 cT0 = T00; vec2 cDR = DR00;
 #ifdef USE_JET
   vec3 jv = gRd; float ev = 0.0, jvs = 1.0, Qm = 0.0, ckErr = 0.0, ckJerr = 0.0;     // zdot_0 = v (z_0 = c); Q = Qm·2^ev; jvs = 2^-ev
+  /* THE CROSSING TEST (BURNING, grep; 2026-10-12). A resumed orbit moves a checkpoint to first order, and the fold
+     is linear only on one side of each of its three planes: the move is right while NO iterate before the
+     checkpoint changes side on the way. ckGap is the least, over the passes run so far, of (the iterate's
+     distance to its nearest plane) / |zdot|: how far along the ray the sample may move before one does, in units
+     of 2^uRefE. A checkpoint moved by S is taken only while |S| (1 + its jet error + 3 |S| Q / 2) is under the
+     gap it was written with, and the orbit goes on with the gap less that. One float a checkpoint (gCkA.w). */
+#ifdef USE_BURN
+  float ckGap = 1e30;
+#endif
   int pass = 0, ckFrom = -1;
   bool ckWr = true;                                          // does this orbit write its checkpoints
   vec3 zPv = vec3(0.0), jPv = vec3(0.0); float ePv = 0.0, qPv = 0.0;   // the iterate before the last, its zdot and Q: THE LINE AGAINST THE BALL
@@ -735,6 +763,11 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       float er = kb.y + CK_SAFE * (0.5 * aS * sq + aS * kb.z);
       if (!(er <= gTolN)) continue;                          // too far for this checkpoint: try an earlier one
       vec4 kd = gCkD[cs], kj = gCkJ[cs], ka = gCkA[cs];
+#ifdef USE_BURN
+      float need = aS * (1.0 + kb.z + 1.5 * sq);             // THE CROSSING TEST: what this move takes of the gap
+      if (!(need < ka.w)) continue;                          // an iterate before this checkpoint may change side on the way: try an earlier one
+      ckGap = ka.w - need;
+#endif
       vec3 Dm; float em;
       sclAdd(kd.xyz, kd.w, kj.xyz * S, uRefE + kj.w, Dm, em);
       D = Dm; e = em; sclNorm(D, e);
@@ -762,6 +795,9 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
         gCkD[cs] = vec4(D, e); gCkJ[cs] = vec4(jv, ev); gCkA[cs] = vec4(Ddr, trap, 0.0);
         gCkB[cs] = vec4(gTau, ckErr, ckJerr, float(pass));
         gCkC[cs] = vec4(Qm * exp2(clamp(ev + uRefE, -126.0, 126.0)), float(m), float(it), 0.0);
+#ifdef USE_BURN
+        gCkA[cs].w = ckGap;                                  // THE CROSSING TEST
+#endif
       }
       pass++;
     }
@@ -774,6 +810,24 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
       vec4 t1 = texelFetch(orbit, ivec2(m, 1), 0);           // sin/cos of the reference output angles
       vec4 t2 = texelFetch(orbit, ivec2(m, 2), 0);           // R^n (xy), R^(n-1) (zw) as HDR pairs
       vec3 V = cT0.xyz; float R = cT0.w;
+#ifdef USE_BURN
+      {
+        /* BURNING (grep): the fold, as a delta by cases. The reference's signed coordinates come as mantissa and
+           exponent (rows 4 and 5), the power below is taken at A = fold(Z) with a radius of its own, and the jet
+           takes the side each of the PIXEL's coordinates stands on. */
+        vec4 b4 = texelFetch(orbit, ivec2(m, 4), 0), b5 = texelFetch(orbit, ivec2(m, 5), 0);
+        float fx, fy, fz, gx, gy, gz;
+        D = vec3(burnFoldD(b4.xy, D.x, e, fx, gx), burnFoldD(b4.zw, D.y, e, fy, gy), burnFoldD(b5.xy, D.z, e, fz, gz));
+        V *= vec3(b4.x < 0.0 ? uBurnNeg : 1.0, b4.z < 0.0 ? uBurnNeg : 1.0, b5.x < 0.0 ? uBurnNeg : 1.0); R = b5.z;
+#ifdef USE_JET
+        if (gRay != 0) {
+          float jl = length(jv);
+          if (jl > 0.0) ckGap = min(ckGap, min(gx, min(gy, gz)) / jl * exp2(clamp(e - ev - uRefE, -126.0, 126.0)));   // THE CROSSING TEST
+          jv *= vec3(fx, fy, fz);
+        }
+#endif
+      }
+#endif
       float sa = t1.x, ca = t1.y, sb = t1.z, cb = t1.w;
       float s = sclPow2(e);
       vec3 df = D * s;                                        // δ as plain f32 (0 at depth) — "O(1) + δ" sums only
@@ -857,6 +911,20 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
            Falsified 2026-10-08: this branch switched off in the shader -> that line FAIL. */
         vec2 drFull = hdrAdd(cDR, Ddr);                      // the pixel's own dr at this point
         float rz = sqrt(z2);
+#ifdef USE_BURN
+        {
+          /* BURNING (grep): the direct iteration is of the folded point (fold(0) = 0: the origin's image is still Z0) */
+          vec3 fs = mix(vec3(1.0), vec3(uBurnNeg), lessThan(zf, vec3(0.0)));
+#ifdef USE_JET
+          if (gRay != 0) {
+            float jl = length(jv);
+            if (jl > 0.0) ckGap = min(ckGap, min(abs(zf.x), min(abs(zf.y), abs(zf.z))) / jl * exp2(clamp(-ev - uRefE, -126.0, 126.0)));   // THE CROSSING TEST
+            jv *= fs;
+          }
+#endif
+          zf *= fs; rz = length(zf);
+        }
+#endif
         if (rz > 0.0) {
           float ez = floor(log2(rz)), rm = rz * exp2(-ez);   // |z| = rm·2^ez
           float rn1 = 1.0;
@@ -981,6 +1049,9 @@ float deMandelbulb(vec3 pos){
     return (sqrt(r2) - 1.0) / dr;
 }
 #else
+#ifdef USE_BURN
+uniform float uBurnNeg;          // BURNING (grep): what a negative coordinate is multiplied by at the top of an iteration
+#endif
 float deMandelbulb(vec3 pos){
     vec3 z = pos, c = cOf(pos); float dr = 1.0; float r = 0.0;
     int N = int(uIters);
@@ -988,6 +1059,10 @@ float deMandelbulb(vec3 pos){
         if (i>=N) break;
         r = length(z);
         if (r > 2.0) break;
+#ifdef USE_BURN
+        float rTop = r;              // BURNING (grep): the fold; the step below takes the folded point's radius
+        z *= mix(vec3(1.0), vec3(uBurnNeg), lessThan(z, vec3(0.0))); r = length(z);
+#endif
         float rp1 = pow(r, uPower-1.0);
         dr = rp1*uPower*dr + 1.0;
         float theta = acos(clamp(z.z/r,-1.0,1.0));
@@ -995,6 +1070,9 @@ float deMandelbulb(vec3 pos){
         theta = theta*uPower + uPhase.x; phi = phi*uPower + uPhase.y;
         float zr = rp1*r;
         z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
+#ifdef USE_BURN
+        r = rTop;                    // what is read after the loop is the iterate's own radius, as without the fold
+#endif
     }
     return 0.5*log(max(r,1e-8))*r/max(dr,1e-20);
 }
@@ -1133,6 +1211,9 @@ uniform sampler2D uGuideTex;     // per pixel, over the earlier samples: x = nea
    The Mandelbox's program has neither: its far views are right (measured to 200 from the centre). */
 uniform float     uHoldR;
 uniform int       uFarOnly;
+#ifdef USE_BURN
+uniform float     uBurnNeg;      // BURNING (grep; the USE_BURN variant): what a negative coordinate is multiplied by at the top of an iteration
+#endif
 const float FAR_FROM_CAMERA = 1e-6;              // where the far field starts a ray that the ball does not start
 /* the t at which the ray from the camera enters the ball of radius R about the centre; 0 when it does not */
 float ballEntry(vec3 rd, float R) {
@@ -1191,12 +1272,19 @@ float deF32(vec3 pos){
         if (i >= N) break;
         r = length(z);
         if (r > 2.0) break;
+#ifdef USE_BURN
+        float rTop = r;              // BURNING (grep): the fold; the step below takes the folded point's radius
+        z *= mix(vec3(1.0), vec3(uBurnNeg), lessThan(z, vec3(0.0))); r = length(z);
+#endif
         float rp1 = pow(r, uPower-1.0);
         dr = rp1*uPower*dr + 1.0;
         float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
         float phi = atan(z.y, z.x) * uPower + uPhase.y;
         float zr = rp1*r;
         z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
+#ifdef USE_BURN
+        r = rTop;                    // what is read after the loop is the iterate's own radius, as without the fold
+#endif
     }
     return 0.5*log(max(r,1e-8))*r/max(dr,1e-20);
 }
@@ -1211,6 +1299,9 @@ float paletteF32(vec3 pos){
     int N = int(uIters);
     for (int i = 0; i < 256; i++) {
         if (i >= N || r > 2.0) break;
+#ifdef USE_BURN
+        z *= mix(vec3(1.0), vec3(uBurnNeg), lessThan(z, vec3(0.0))); r = length(z);   // BURNING (grep), as deF32
+#endif
         float rp1 = pow(r, uPower-1.0);
         float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
         float phi = atan(z.y, z.x) * uPower + uPhase.y;
@@ -2217,6 +2308,9 @@ const pendingBuild = {};                                     // key → the back
    any more (a caller that still passes it, true or false, gets the ray march). */
 let rayAsk = 5;                                  // what was asked for; rayUse is what is in force - 0 while the box is drawn (grep THE FORMULA SEAM)
 let rayUse = rayAsk, rayFactor = 1, rayHitDiv = 64, rayTol = 0.05, rayFloorDiv = 256, rayLine = 2, rayDetail = 0;
+/* BURNING (grep) under the ray march: whether orbits are resumed along the ray (bit 4, with THE CROSSING TEST) or
+   run whole, and the line rule's allowance (0 = off: the owner's call 5). api.setBurnMarch, a tool's handle. */
+let burnResume = false, burnLine = 0;
 /* THE RAY ESTIMATE AND RAY-COHERENT ORBITS (grep; api.setRayMarch). Its variant is DEEP_FRAG with USE_JET.
    Keys PR (the picture: built at load, see above) and PTR (with the work counters). */
 const BOX_ITER_MAX = 500;                        // the box's ceiling (grep ITERATIONS AS A MARGIN); the kernel's loop runs 512 passes at most
@@ -2271,9 +2365,53 @@ function kickBoxVariantAsync(){                  // without blocking; a no-op on
     accumReset = true;
   });
 }
+/* BURNING's variant (grep BURNING): the ray march's program with USE_BURN - the fold in the kernel's pass, in its
+   direct pass after a rebase and in the far field, THE CROSSING TEST, and nothing else. Keys PRB (the picture) and
+   PTRB (with the work counters). It is a program of its own and not a uniform in the bulb's one program BECAUSE THE
+   PLAIN BULB MUST NOT MOVE: built as a branch on a uniform (2026-10-12, the first form) the plain bulb's own numbers
+   moved in the seventh digit with Burning off - 27 of the direct proof's 100 lines printed other digits, all still
+   PASS - since the compiler writes the whole pass anew around a branch. With the fold behind USE_BURN the bulb's
+   program is token for token the text it was (debug/scratch/r7/shader-diff.mjs). The MIX stays a uniform in it
+   (uBurnNeg): dragging it compiles nothing. Built like the Mandelbox's: in the background from the moment Burning
+   goes on, the plain single-precision picture (the baseline with the same fold) drawn until it is there; a probe
+   or a study that asks first builds it at once, blocking. burnNeg is 1 without a fold (grep THE FACTOR IS THE WHOLE). */
+const burnActive = () => burnNeg !== 1;
+const bKey = (t) => 'P' + (t ? 'T' : '') + 'RB';
+const bSrc = (t) => rSrc(t).replace('\n#define USE_JET', '\n#define USE_JET\n#define USE_BURN');
+function ensureBurnVariant(t){
+  const key = bKey(t);
+  if (variants[key] === undefined && pendingBuild[key]) pendingBuild[key].finish();
+  if (variants[key] !== undefined) return variants[key];
+  try {
+    const t0 = performance.now();
+    const p = mkProg(bSrc(t));
+    const x = makeUD(p);
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+  } catch(e){ variantErr[key] = String(e); variants[key] = null; }
+  return variants[key];
+}
+function kickBurnVariantAsync(){                 // without blocking; a no-op once started
+  const key = bKey(false);
+  if (variants[key] !== undefined || pendingBuild[key]) return;
+  const t0 = performance.now();
+  pendingBuild[key] = mkProgAsync(bSrc(false), (p, err) => {
+    pendingBuild[key] = null;
+    if (!p) { variantErr[key] = err; variants[key] = null; return; }
+    const x = makeUD(p);
+    compileMs[key] = performance.now() - t0;
+    variants[key] = { p, x };
+    accumReset = true;
+  });
+}
+/* the counter variant of whatever is drawn (api.stats, api.marchProbe) */
+const countVariant = () => (boxOn() ? ensureBoxVariant(true) : burnActive() ? ensureBurnVariant(true) : ensureRayVariant(true));
+const countKey = () => (boxOn() ? xKey(true) : burnActive() ? bKey(true) : rKey(true));
+/* the key of the picture's own program for what is drawn */
+const pictureKey = () => (boxOn() ? xKey(false) : burnActive() ? bKey(false) : rKey(false));
 /* the program a deep PICTURE of the active formula needs, or null while it is not built: what "the deep path
-   is ready" means from here on (for the bulb it is deepProg, as ever) */
-const deepNow = () => (boxOn() ? (variants[xKey(false)] ? variants[xKey(false)].p : null) : deepProg);
+   is ready" means from here on (for the plain bulb it is deepProg, as ever) */
+const deepNow = () => (boxOn() || burnActive() ? (variants[pictureKey()] ? variants[pictureKey()].p : null) : deepProg);
 
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad);
@@ -2289,8 +2427,18 @@ const u = { res:U('uRes'), camPos:U('uCamPos'), right:U('uRight'), up:U('uUp'), 
             light:U('uLightDir'), phase:U('uPhase'), addC:U('uAddC'), juliaC:U('uJuliaC') };
 /* THE FORMULA SEAM (grep): the f32 baseline of the active formula - the page's program for the bulb, FRAG with
    USE_BOX for the box (small: built on first use, blocking, well under a second). */
-let progBox = null, uBox = null;
+let progBox = null, uBox = null, progBurn = null, uBurn = null;
 function baseCtx(){
+  if (!boxOn() && burnActive()) {                // BURNING (grep): FRAG with USE_BURN, built on first use as the box's is
+    if (!progBurn) {
+      progBurn = mkProg(FRAG.replace('#version 300 es', '#version 300 es\n#define USE_BURN'));
+      const g = n => gl.getUniformLocation(progBurn, n);
+      uBurn = { res:g('uRes'), camPos:g('uCamPos'), right:g('uRight'), up:g('uUp'), fwd:g('uFwd'),
+                fov:g('uFovScale'), power:g('uPower'), iters:g('uIters'), prec:g('uPrecRatio'),
+                light:g('uLightDir'), phase:g('uPhase'), addC:g('uAddC'), juliaC:g('uJuliaC'), burnNeg:g('uBurnNeg') };
+    }
+    return { p: progBurn, u: uBurn };
+  }
   if (!boxOn()) return { p: prog, u };
   if (!progBox) {
     progBox = mkProg(FRAG.replace('#version 300 es', '#version 300 es\n#define USE_BOX'));
@@ -2321,7 +2469,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             colorMode:g('uColorMode'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), holdR:g('uHoldR'), farOnly:g('uFarOnly'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), holdR:g('uHoldR'), farOnly:g('uFarOnly'), burnNeg:g('uBurnNeg'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
             boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') }; }   // the last five: null but in the USE_BOX variant
 let ud = null;
 /* ════════ the two-pass deep draw ════════
@@ -2681,6 +2829,7 @@ const loadTimer = setTimeout(() => {
    bulb's one program. Use this everywhere a deep draw is issued. */
 function deepCtx(){
   if (boxOn()) return ensureBoxVariant(false) || { p: null, x: ud };   // THE FORMULA SEAM: one variant, whatever else is asked (a frame gets here only once it is built)
+  if (burnActive()) return ensureBurnVariant(false) || { p: null, x: ud };   // BURNING (grep): its own variant of the ray march's program, the same way
   return { p: deepProg, x: ud };                 // null until the ray march's program is built (and for good if it could not be)
 }
 compileMs.S = performance.now() - shadeT0;      // pass S, built at load (blocking — it is small)
@@ -2915,16 +3064,111 @@ function setJuliaC(c){
   juliaHP = k; juliaF = k.map(hp.toNum);
   return true;
 }
+/* ════════ BURNING (2026-10-12) - the Mandelbulb only; ONE FACTOR on a negative coordinate ════════
+   GMT's Burning Mode (read: engine-gmt/features/geometry/index.ts, `z.xyz = mix(z.xyz, abs(z.xyz),
+   uBurningRuntime * uBurningMix);`, injected at the top of every iteration, before the formula):
+       z <- fold(z) ,  fold(x) = x for x >= 0 ,  (1 - 2 mix) x for x < 0      per coordinate
+       z <- z^n + c                                                           the bulb's own step
+   mix 1 is the plain abs (the factor is -1), mix 0 no fold at all (1), mix 0.5 brings a negative coordinate to 0
+   (to 2^-20 of itself here: grep THE FACTOR IS NEVER 0).
+   THE FACTOR IS THE WHOLE OF IT: burnNeg = 1 - 2 mix, rounded to single precision so that the shader, the CPU
+   orbits and the fixed-point orbits fold by one and the same number. burnNeg = 1 means "no fold" everywhere -
+   Burning off, mix 0, or the Mandelbox selected - and then not one line below runs: the bulb is the page's.
+   THE MATHS (derived; measured before it was built: plans/deep-zoom-shell/BURNING-KALIBOX.md, section 2). The
+   camera at P, a pixel at P + d0, Z = the reference's iterate, d = the pixel's delta, per coordinate:
+       reference   Z' = fold(Z)^n + c. Its rows 1 to 3 (the angles, R^n, the derivative) are those of
+                   A = fold(Z), the point the power is taken of. Row 0 stays the SIGNED iterate: the escape test,
+                   the rebase and the last radius read |Z + d|, and at a mix under 1 |A| is not |Z|.
+       pixel       the fold as a delta, BY CASES (burnDeltaJS, burnFoldD in the shader), fr and fp the factors of
+                   the sides the reference and the pixel stand on:
+                       the same side      e = fp d
+                       opposite sides     e = fp (Z + d) - fr Z        (mix 1: +-(d + 2 Z), by the sign of Z + d)
+                   then the bulb's own delta step at A with e in d's place, then "+ dc". Exact in form: no
+                   difference of two nearly equal numbers (opposite sides means |Z| <= |d|).
+       the row     the opposite-side case adds a multiple of Z to a delta, so Z must be known AT THE DELTA'S
+                   SIZE: at depth a delta is 1e-50, a plain f32 is zero below 1e-45, and a coordinate that small
+                   beside two of order 1 cannot share an exponent with them. Rows 4 and 5 of the orbit texture
+                   are the three signed coordinates, each a mantissa and an exponent of ITS OWN, and |A|
+                   (buildRefOrbit; the Mandelbox's rows 2 to 4 are built so).
+       derivative  dr' = n |fold(z)|^(n-1) dr + 1: GMT's, with the radius of the folded point (at mix 1 it is |z|).
+       jet         j' = (the power's derivative at fold(z)) applied to (fp j): the fold is linear on each side.
+                   The gradient is pulled back through the same factors (pertOrbitJetJS).
+       rebase      both rebases are valid: the plain one (any row is a base for the table), and THE REBASE TO THE
+                   ORIGIN (grep) - fold(0) = 0, so the image of the origin is still Z0 - with the direct
+                   iteration taken of fold(z).
+       resumed     a checkpoint moved along the ray is right only while NO iterate before it crosses a fold
+                   plane on the way: THE CROSSING TEST (grep it in the kernel).
+       the ball    |fold(z)| >= |burnNeg| |z|, so every point farther than rho from the centre has escaped after
+                   one iteration, with (|burnNeg| rho)^n - rho = 2 (holdBall). At mix 1 that is the plain bulb's
+                   ball. Towards mix 0.5 it grows without bound, and at 0.5 there is none: the picture is then
+                   marched from the camera, as at a deep place.
+   JULIA MODE (grep) with Burning: the fold comes before the power in both modes and the constant cancels in a
+   delta as it did, so nothing is its own; the plain rebase is in force there, with its grain.
+   ON THE GPU it is one uniform, uBurnNeg, in the bulb's one program (no variant, no further call of the kernel:
+   grep THREE CALLS OF THE KERNEL), and a branch on it in the kernel's pass - two more texel fetches and the
+   table, taken only while Burning is on. The plain-f32 copies (the baseline, the far field) multiply by the
+   side's factor, which is 1 with Burning off.
+   WHAT THE MIX DOES TO THE OBJECT, for whoever is asked why a mix near 0.5 looks strange (derived, and seen on
+   the CPU): at 0.5 a point with three negative coordinates folds to the origin and is its own next iterate, so
+   the whole negative octant inside the escape radius is solid, with a flat estimate; and thin parts of the set
+   reach far out (power 8: the curve (p, 0, -p^8) is made of fixed points up to p = 2). It is GMT's formula.
+   Pitfalls:
+   - An orbit carries its factor (O.burn, absent without a fold). The CPU kernels read it there, not from
+     burnNeg, so an orbit kept across a switch is iterated as it was built.
+   - THE LINE AGAINST THE BALL (grep) is held off while Burning is on (setPowerUniforms): a fold plane kinks the
+     path that rule takes for straight. Measured after the build, not switched on (the owner's call 5).
+   - This block is lifted as TEXT by the node checks: nothing in it may touch gl, api or options.
+   @invariant the delta step under the fold on the CPU (pertOrbitJS on an orbit built with Burning on) equals a
+   fixed-point orbit of the explicit point under z -> fold(z)^n + c, with pixels across a fold plane from the
+   reference, at mix 1, 0.5 and 0.25, in Julia mode too - proven by: npm run check:deep-zoom-burning-orbit
+   ("burning twin = exact ..." lines). Falsified 2026-10-12: the opposite-side case cut in burnDeltaJS -> 27 red
+   of 58 (the record is in that file's header).
+   @invariant on the GPU the USE_BURN kernel computes what that CPU orbit computes and what a fixed-point orbit
+   of the explicit point gives - proven by: npm run smoke:deep-zoom-direct (the ten gated "burning, ... PASS"
+   lines). Falsified 2026-10-12: the opposite-side case cut in the shader's burnFoldD -> eight of the ten FAIL
+   (the record is in debug/deep-zoom-direct-check.mts).
+   @assumption the kernel is as right at the two places whose lines are printed and not gated (power 8 at 1.5e-31:
+   63 of 338 points over 1e-3; power 2 at 1.8e-11: 7): one measurement says they are the orbits single precision
+   does not settle (that script's header), and no more was looked into.
+   @assumption the jet's sides and the gradient's pull back are right: check:deep-zoom-burning-orbit has a
+   "burning jet" and a "burning gradient" line at mix 1 and 0.5, not broken on purpose. THE CROSSING TEST, the fold
+   in the far field and in the baseline, and the ball's radius under a mix have no standing check: what was
+   measured of them is in plans/deep-zoom-shell/ADR-DRAFT-burning.md. */
+let burnOn = false;                              // Burning: the switch, kept while the Mandelbox is drawn
+let burnMix = 1;                                 // GMT's Burning Mix, 0 to 1
+let burnNeg = 1;                                 // what a negative coordinate is multiplied by, IN FORCE: 1 = no fold
+let burnNegHP = hp.SCALE;                        // the same in fixed point
+/* THE FACTOR IS NEVER 0. At mix 0.5 exactly a point with three negative coordinates would fold onto the origin
+   and one with two onto the pole axis, exactly and for whole regions of space: the bulb's angle step has no
+   azimuth there (grep POLE GUARD: 0 / 0, every orbit NaN) and no delta of a power at radius 0. A factor of
+   2^-20 in its place is a mix of 0.4999995: the triplex power is continuous at the axis and at the origin, so
+   the picture is the one mix 0.5 means, and every number in it is finite. */
+const BURN_NEG_MIN = 9.5367431640625e-7;         // 2^-20
+function burnDerive(){
+  burnNeg = burnOn && dzFormula === 'mandelbulb' ? Math.fround(1 - 2 * burnMix) : 1;
+  if (Math.abs(burnNeg) < BURN_NEG_MIN) burnNeg = BURN_NEG_MIN;
+  burnNegHP = hp.fromNum(burnNeg);
+}
+/* the fold of a point: fixed point, and plain doubles */
+const burnHP = (v) => v.map((x) => (x < 0n ? hp.mul(x, burnNegHP) : x));
+const burnSideJS = (z, neg) => [z[0] < 0 ? neg : 1, z[1] < 0 ? neg : 1, z[2] < 0 ? neg : 1];
+/* the fold as a delta, one coordinate: Z = the reference's signed coordinate, d = the pixel's delta */
+function burnDeltaJS(Z, d, neg){
+  const p = Z + d, fr = Z < 0 ? neg : 1, fp = p < 0 ? neg : 1;
+  return fr === fp ? fp * d : fp * p - fr * Z;
+}
 /* Set the formula. params (all optional): the box's scale (|scale| held at or above 1.02: at 1 the
    orbit of every point is bounded and there is no surface), minR, fold, fixedR, rot [x, y, z] in radians;
-   and, for either formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings, or
-   three numbers - setJuliaC).
+   for either formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings, or
+   three numbers - setJuliaC); and burning (true / false) with burnMix (0 to 1): BURNING (grep), the bulb's.
    Returns true when anything changed. Pure state: the caller restarts the orbit and the still. */
 function applyFormula(kind, params){
-  const was = JSON.stringify([dzFormula, box, juliaOn]);
+  const was = JSON.stringify([dzFormula, box, juliaOn, burnOn, burnMix]);
   dzFormula = kind === 'mandelbox' ? 'mandelbox' : 'mandelbulb';
   const q = params || {}, num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
   if (typeof q.julia === 'boolean') juliaOn = q.julia;
+  if (typeof q.burning === 'boolean') burnOn = q.burning;
+  burnMix = Math.max(0, Math.min(1, num(q.burnMix, burnMix)));
   const newC = q.c !== undefined && setJuliaC(q.c);
   let s = num(q.scale, box.scale); if (Math.abs(s) < 1.02) s = s < 0 ? -1.02 : 1.02;
   box.scale = Math.max(-8, Math.min(8, s));
@@ -2932,8 +3176,8 @@ function applyFormula(kind, params){
   box.fold = Math.max(1e-3, Math.min(8, num(q.fold, box.fold)));
   box.fixedR = Math.max(box.minR, Math.min(8, num(q.fixedR, box.fixedR)));
   if (Array.isArray(q.rot)) box.rot = [0, 1, 2].map(i => num(q.rot[i], 0));
-  if (JSON.stringify([dzFormula, box, juliaOn]) === was && !newC) return false;
-  boxP = boxDerive(); formulaStamp++;
+  if (JSON.stringify([dzFormula, box, juliaOn, burnOn, burnMix]) === was && !newC) return false;
+  boxP = boxDerive(); burnDerive(); formulaStamp++;
   return true;
 }
 /* boxExtent: a radius about the origin that holds the whole box. The set lies in the cube
@@ -3000,6 +3244,7 @@ function hdrSplit(v) {
    in the kernel covers pixels needing more iterations. */
 function buildRefOrbit(CHP, lenMax) {
   if (boxOn()) return buildBoxOrbit(CHP, lenMax);            // THE FORMULA SEAM: the orbit carries its formula from here on (O.box)
+  if (burnNeg !== 1) return buildBurnOrbit(CHP, lenMax);   // BURNING (grep): the orbit of the folded map, with two rows more
   const V = [CHP.slice()], cHP = cOfHP(CHP);     // JULIA MODE (grep): the orbit of the camera's point adds K
   const Vf = [CHP.map(hp.toNum)];
   for (let k = 0; k < lenMax - 1; k++) {
@@ -3028,6 +3273,46 @@ function buildRefOrbit(CHP, lenMax) {
     DR = nPower * Rp * DR + 1;
   }
   return { data, len, Vf, Rk, DRk, julia: juliaOn };
+}
+/* BURNING (grep): the bulb's reference orbit under the fold, and its six rows (grep burnFoldD for how the shader
+   reads the last two):
+     row 0     the SIGNED iterate Z (xyz), |Z|              what the escape test, the rebase and the last radius read
+     rows 1-3  as the plain bulb's, of A = fold(Z): the angles of A^n, |A|^n and |A|^(n-1), the derivative
+     row 4     Zx and Zy, each a mantissa and an exponent (hdrSplit), from the FIXED-POINT iterate
+     row 5     Zz so, and |A|
+   Vf, Rk: the signed iterate and its radius, as on a plain orbit; Af, RAk: the folded point and its radius -
+   what a step of the CPU kernel takes the power of. The plain bulb's builder above is not touched by this. */
+function buildBurnOrbit(CHP, lenMax) {
+  const V = [CHP.slice()], cHP = cOfHP(CHP);
+  const Vf = [CHP.map(hp.toNum)];
+  for (let k = 0; k < lenMax - 1; k++) {
+    const nv = hp.addV(hp.P8(burnHP(V[k])), cHP);
+    V.push(nv);
+    const vf = nv.map(hp.toNum);
+    Vf.push(vf);
+    if (Math.hypot(...vf) > 100) break;
+  }
+  const len = V.length, rows = 6;
+  const data = new Float32Array(len * rows * 4);
+  const Rk = [], DRk = [], Af = [], RAk = [];
+  let DR = 1;
+  for (let k = 0; k < len; k++) {
+    const z = Vf[k], v = burnHP(V[k]).map(hp.toNum), R = Math.hypot(...v) || 1e-300;
+    const th = Math.acos(Math.max(-1, Math.min(1, v[2] / R))), ph = Math.atan2(v[1], v[0]);
+    const a = nPower * th + phaseTheta, b = nPower * ph + phasePhi;
+    const Rp = Math.pow(R, nPower - 1), Rn = Rp * R;
+    const hRn = hdrSplit(Rn), hRp = hdrSplit(Rp), hDR = hdrSplit(DR), hx = hdrSplit(z[0]), hy = hdrSplit(z[1]), hz = hdrSplit(z[2]);
+    const put = (row, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
+    put(0, [z[0], z[1], z[2], Math.hypot(...z) || 1e-300]);
+    put(1, [Math.sin(a), Math.cos(a), Math.sin(b), Math.cos(b)]);
+    put(2, [hRn.m, hRn.e, hRp.m, hRp.e]);
+    put(3, [hDR.m, hDR.e, 0, 0]);
+    put(4, [hx.m, hx.e, hy.m, hy.e]);
+    put(5, [hz.m, hz.e, R, 0]);
+    Rk.push(Math.hypot(...z) || 1e-300); DRk.push(DR); Af.push(v); RAk.push(R);
+    DR = nPower * Rp * DR + 1;
+  }
+  return { data, len, rows, Vf, Rk, DRk, Af, RAk, julia: juliaOn, burn: burnNeg };
 }
 /* ════════ uniforms set before each deep draw, and the orbit texture ════════
    The skip table (BLA: its CPU build, its texture, its mode and its 'auto' rule) sat here until 2026-10-11.
@@ -3118,7 +3403,8 @@ const refFar = (O) => !!O && !O.box && O.len > 1 && O.Rk[1] > REF_FAR;
 function holdBall(){
   if (boxOn()) return 0;
   const C = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : -1; let rho = 2;
-  for (let i = 0; i < 200; i++) rho = Math.pow(2 + (C < 0 ? rho : C), 1 / nPower);
+  const f = Math.abs(burnNeg);                   // BURNING (grep): a fold shortens a point to no less than this share of itself (1 without one, and at mix 1)
+  for (let i = 0; i < 200; i++) rho = Math.pow(2 + (C < 0 ? rho : C), 1 / nPower) / f;
   if (cam.iters < 2) rho = Math.max(rho, 2);     // the far field tests z1 only from its second pass on
   rho *= 1.0001;
   return Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]) > rho * 1.001 ? rho : 0;
@@ -3141,12 +3427,13 @@ function setPowerUniforms(x){
   gl.uniform1f(x.farSwitch, farHandOff);
   gl.uniform1f(x.holdR, holdBall()); gl.uniform1i(x.farOnly, refFar(curOrbit) ? 1 : 0);   // A VIEW FROM FAR (grep); null in the Mandelbox's program: no-ops
   gl.uniform1f(x.lookLevel, normalDetail > 0 ? Math.max(1, detailNow() / normalDetail) : 1);   // THE LOOK LEVEL: how many times coarser than the hit level the normal's level is
-  gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
+  gl.uniform1f(x.burnNeg, burnNeg);              // BURNING (grep): the fold's factor; null but in the USE_BURN variant: a no-op
+  gl.uniform1i(x.rayUse, burnNeg !== 1 && !burnResume ? rayUse & ~4 : rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
   gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? detailNow() / rayFloorDiv : 0);
   { const cl = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above (JULIA MODE: |c| is |K|, exactly)
     for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
-    gl.uniform1f(x.rayLine, rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }
+    gl.uniform1f(x.rayLine, burnNeg !== 1 ? burnLine : rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }   // BURNING (grep): the line rule is held off (burnLine is 0 but for a measurement)
   gl.uniform1i(x.maxSteps, march.maxSteps);
   if (boxOn()) setBoxUniforms(x);                // THE FORMULA SEAM: nothing is set here for the bulb that was not set before
   gl.uniform2f(x.farRelax, march.farRelax, march.farSpan);
@@ -3318,7 +3605,10 @@ function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter i
   if (O.box) return boxOrbitJS(O, dc, maxIter, fixed);
   let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0;
   for(let k=0;k<maxIter;k++){
-    const V=O.Vf[m], R=O.Rk[m];
+    let V=O.Vf[m], R=O.Rk[m];
+    if(O.burn!==undefined){                      // BURNING (grep): the fold's own delta by cases, then the power's at the folded reference
+      d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=O.Af[m]; R=O.RAk[m];
+    }
     const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
     const u=Dr/R, Rp=Math.pow(R,nPower-1);
     const Dp=Rp*powm1N(u,nPower-1);
@@ -3457,9 +3747,14 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
     const o = boxOrbitJS(O, dc, maxIter, fixed);
     return { de: o.de, escaped: o.escaped, r: o.r, it: o.it, z: o.z, jet: [0,0,0], E: o.de, grad: [0,0,0], G: o.de, ray: o.de };
   }
-  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d); const zs=[];
+  let d=dc.slice(), Ddr=0, m=0, escaped=false, it=0, jet=rd.slice(), z=add3(O.Vf[0],d); const zs=[], sides=[];
   for(let k=0;k<maxIter;k++){
-    const V=O.Vf[m], R=O.Rk[m];
+    let V=O.Vf[m], R=O.Rk[m];
+    if(O.burn!==undefined){                      // BURNING (grep): as pertOrbitJS; the jet and the point it is pushed at take the pixel's own side
+      const s=burnSideJS(z,O.burn); sides.push(s);
+      z=[z[0]*s[0],z[1]*s[1],z[2]*s[2]]; jet=[jet[0]*s[0],jet[1]*s[1],jet[2]*s[2]];
+      d=[burnDeltaJS(V[0],d[0],O.burn), burnDeltaJS(V[1],d[1],O.burn), burnDeltaJS(V[2],d[2],O.burn)]; V=O.Af[m]; R=O.RAk[m];
+    }
     const q=2*dot3(V,d)+dot3(d,d), r2=Math.sqrt(Math.max(R*R+q,0)), Dr=q/(r2+R);
     const u=Dr/R, Rp=Math.pow(R,nPower-1);
     const Dp=Rp*powm1N(u,nPower-1);
@@ -3476,7 +3771,8 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
   }
   const r=len3(z), g=0.5*r*Math.log(Math.max(r,1e-300)), speed=len3(jet), de=g/(O.DRk[m]+Ddr);
   let w=r>0 ? [z[0]/r,z[1]/r,z[2]/r] : [0,0,0], grad=[0,0,0];
-  for(let k=zs.length-1;k>=0;k--){ if(!O.julia) grad=add3(grad,w); w=pullGradJS(zs[k],w); }    // z_(k+1) = f(z_k) + c, z_0 = c (JULIA MODE: c is no part of the point, so only the pull back to z_0 counts)
+  for(let k=zs.length-1;k>=0;k--){ if(!O.julia) grad=add3(grad,w); w=pullGradJS(zs[k],w);       // z_(k+1) = f(z_k) + c, z_0 = c (JULIA MODE: c is no part of the point, so only the pull back to z_0 counts)
+    if(O.burn!==undefined){ const s=sides[k]; w=[w[0]*s[0],w[1]*s[1],w[2]*s[2]]; } }             // BURNING (grep): and back through the fold
   grad=add3(grad,w);
   const slope=len3(grad), E=speed>0 ? g/speed : de, G=slope>0 ? g/slope : de;
   return { de, escaped, r, it, z, jet, E, grad, G, ray: Math.max(E, G) };
@@ -3906,12 +4202,14 @@ function deCPU(px,py,pz, power, N){
     for(let i=0;i<N;i++){
         r=Math.hypot(zx,zy,zz);
         if(r>2) break;
-        const rp1=Math.pow(r,power-1);
+        let rb=r;
+        if(burnNeg!==1){ if(zx<0) zx*=burnNeg; if(zy<0) zy*=burnNeg; if(zz<0) zz*=burnNeg; rb=Math.hypot(zx,zy,zz); }   // BURNING (grep): the fold, and the folded point's radius
+        const rp1=Math.pow(rb,power-1);
         dr=rp1*power*dr+1;
-        let theta=Math.acos(Math.max(-1,Math.min(1,zz/r)));
+        let theta=Math.acos(Math.max(-1,Math.min(1,zz/rb)));
         let phi=Math.atan2(zy,zx);
         theta=theta*power+phaseTheta; phi=phi*power+phasePhi;
-        const zr=rp1*r;
+        const zr=rp1*rb;
         zx=zr*Math.sin(theta)*Math.cos(phi)+cx;
         zy=zr*Math.sin(phi)*Math.sin(theta)+cy;
         zz=zr*Math.cos(theta)+cz;
@@ -3928,11 +4226,13 @@ function deCPUesc(px,py,pz, N){
         r=Math.hypot(zx,zy,zz);
         if(r>2){ escaped=true; break; }
         it=i+1;
-        const rp1=Math.pow(r,nPower-1);
+        let rb=r;
+        if(burnNeg!==1){ if(zx<0) zx*=burnNeg; if(zy<0) zy*=burnNeg; if(zz<0) zz*=burnNeg; rb=Math.hypot(zx,zy,zz); }   // BURNING (grep): the fold, and the folded point's radius
+        const rp1=Math.pow(rb,nPower-1);
         dr=rp1*nPower*dr+1;
-        let theta=Math.acos(Math.max(-1,Math.min(1,zz/r)))*nPower+phaseTheta;
+        let theta=Math.acos(Math.max(-1,Math.min(1,zz/rb)))*nPower+phaseTheta;
         let phi=Math.atan2(zy,zx)*nPower+phasePhi;
-        const zr=rp1*r;
+        const zr=rp1*rb;
         zx=zr*Math.sin(theta)*Math.cos(phi)+cx;
         zy=zr*Math.sin(phi)*Math.sin(theta)+cy;
         zz=zr*Math.cos(theta)+cz;
@@ -4005,9 +4305,10 @@ function hpDirectDE(posFp, maxIter){
   for (let i = 0; i < maxIter; i++) {
     r2 = mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2]);
     if (r2 > 4n * SCALE) { escaped = true; break; }
-    const r = fsqrt(r2), rNm1 = ipow(r, nPower - 1);     // r^(n−1); dr = n·r^(n−1)·dr + 1
+    const vb = burnNeg !== 1 ? burnHP(v) : v;            // BURNING (grep): the fold; the derivative takes the folded point's radius
+    const r = fsqrt(burnNeg !== 1 ? mul(vb[0],vb[0]) + mul(vb[1],vb[1]) + mul(vb[2],vb[2]) : r2), rNm1 = ipow(r, nPower - 1);     // r^(n−1); dr = n·r^(n−1)·dr + 1
     dr = Nbig * mul(rNm1, dr) + ONE;
-    v = hp.addV(hp.P8(v), cOfHP(posFp));
+    v = hp.addV(hp.P8(vb), cOfHP(posFp));
   }
   if (!escaped) {
     r2 = mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2]);
@@ -4108,7 +4409,7 @@ function hpDirectTrap(posFp, maxIter){
   const Pb = BigInt(hp.P), SC = Number(hp.SCALE), mul = (a,b) => (a*b) >> Pb;
   let v = posFp.slice(), trap2 = Infinity, it = 0, escaped = false;
   for (let i = 0; i < maxIter; i++) {
-    v = hp.addV(hp.P8(v), cOfHP(posFp)); it++;
+    v = hp.addV(hp.P8(burnNeg !== 1 ? burnHP(v) : v), cOfHP(posFp)); it++;   // BURNING (grep): the fold
     const r2 = Number(mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2])) / SC;
     if (r2 < trap2) trap2 = r2;
     if (r2 > 4) { escaped = true; break; }
@@ -4323,8 +4624,8 @@ api.guideStudy = (n, samples) => {
 api.stats = (n, guideSamples) => {
   if (!deepProg || !curOrbit) return null;
   n = n || 128;
-  const v = boxOn() ? ensureBoxVariant(true) : ensureRayVariant(true);
-  if (!v) return { error: variantErr[boxOn() ? xKey(true) : rKey(true)] };
+  const v = countVariant();
+  if (!v) return { error: variantErr[countKey()] };
   const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, n, n, 0, gl.RGBA, gl.FLOAT, null);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -4389,7 +4690,7 @@ api.stats = (n, guideSamples) => {
 let marchProbeFbo = null, marchProbeTex = null, marchProbeN = 0;
 api.marchProbe = (n, pixH) => {
   if (!deepProg || !curOrbit) return null;
-  const v = boxOn() ? ensureBoxVariant(true) : ensureRayVariant(true);
+  const v = countVariant();
   if (!v) return null;
   n = n || 128;
   if (marchProbeN !== n) {
@@ -4470,6 +4771,7 @@ api.renderThumbF32 = (n) => {
   gl.uniform3fv(bu.light, keyLightDir(right, up, fwd));
   gl.uniform2f(bu.phase, phaseTheta, phasePhi);
   gl.uniform1f(bu.addC, juliaOn ? 0 : 1); gl.uniform3f(bu.juliaC, juliaF[0], juliaF[1], juliaF[2]);   // JULIA MODE (grep)
+  if (bu.burnNeg) gl.uniform1f(bu.burnNeg, burnNeg);   // BURNING (grep): the baseline's USE_BURN variant alone has it
   if (boxOn()) setBoxUniforms(bu);
   gl.bindFramebuffer(gl.FRAMEBUFFER, thumbFbo); gl.viewport(0, 0, n, n);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -4511,12 +4813,13 @@ function setFormulaNow(kind, params){
        (|z| grows by |scale| an iteration out there), and 12 more. The bulb's 14 would draw a featureless lump. */
     cam.iters = Math.max(cam.iters, Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(box.scale))) + 12)); }
   else cam.iters = Math.min(cam.iters, itersMax());
+  if (burnActive()) kickBurnVariantAsync();        // BURNING (grep): its variant builds in the background from the first time it is on
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
-api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice() });   // cNum: the constant as doubles, for a host's number rows
-api.formulaState = ()=>{ if (!boxOn()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
-  const v = variants[xKey(false)]; return v ? 'on' : v === null ? 'failed' : 'building'; };
+api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), julia: juliaOn, c: juliaHP.map(String), cNum: juliaF.slice(), burning: burnOn, burnMix });   // cNum: the constant as doubles, for a host's number rows; burning, burnMix: BURNING (grep), the bulb's, kept while the box is drawn
+api.formulaState = ()=>{ if (!boxOn() && !burnActive()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
+  const v = variants[pictureKey()]; return v ? 'on' : v === null ? 'failed' : 'building'; };   // the Mandelbox's variant, or BURNING's (grep)
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
 // `auto-iters` control rows and its [ ] I keys do, for a host that owns those values.
 api.setIters = (n)=>{ cam.iters=Math.max(4,Math.min(itersMax(),n|0)); orbitDirty=true; };   // held under the ceiling IN FORCE (grep itersMax): 400 under the ray march, 500 for the box, the page's 160 with ray bits 0. Until 2026-10-11 the bulb was held at 160 here whatever marched it.
@@ -4554,15 +4857,20 @@ api.setRayMarch = (bits, opt, now)=>{ rayAsk = Math.max(0, Math.min(15, bits|0))
   if (now && rayUse) ensureRayVariant(false);
   accumReset = true; };
 api.rayMarchState = ()=>{ if (!rayUse) return 'off';
-  const v = variants[rKey(false)];
+  const v = variants[burnActive() ? bKey(false) : rKey(false)];   // with BURNING (grep) on, the ray march's program is that variant
   return v ? 'on' : v === null ? 'failed' : 'building'; };
 api.rayMarch = ()=>({ bits: rayAsk, factor: rayFactor, hit: rayHitDiv, tol: rayTol, floor: rayFloorDiv, line: rayLine, detail: rayDetail });
+/* BURNING (grep), a tool's handle: how the ray march runs while Burning is on. resume (true / false): orbits resumed
+   along the ray, or whole. line: the line rule's allowance under Burning (0 = off, as it ships). Nothing in the
+   shell calls it; it is what the two were measured with. */
+api.setBurnMarch = (o)=>{ const q = o || {}; if (typeof q.resume === 'boolean') burnResume = q.resume; if (q.line >= 0) burnLine = +q.line; accumReset = true; };
+api.burnMarch = ()=>({ resume: burnResume, line: burnLine });
 /* experiments: build the ray variant with extra #defines, e.g. ['CK_WR_ 1'], ['CKN_ 16'] or ['NO_CKPT']; the built variants are dropped.
    The picture's variant IS the bulb's program since 2026-10-11 (deepProg), so it is built again here, BLOCKING,
    and deepProg / ud follow it: no draw may meet a deleted program. (The load-time build is waited for first.) */
 api.setRayDefs = (list)=>{ if (pendingBuild[rKey(false)]) pendingBuild[rKey(false)].finish();
   rayDefs = (list || []).map((d) => '\n#define ' + d).join('');
-  for (const t of [false, true]) { const v = variants[rKey(t)]; if (v) gl.deleteProgram(v.p); delete variants[rKey(t)]; delete variantErr[rKey(t)]; }
+  for (const key of [rKey(false), rKey(true), bKey(false), bKey(true)]) { if (pendingBuild[key]) pendingBuild[key].finish(); const v = variants[key]; if (v) gl.deleteProgram(v.p); delete variants[key]; delete variantErr[key]; }
   const v = ensureRayVariant(false);
   deepProg = v ? v.p : null; if (v) ud = v.x;
   deepReady = !!v; deepCompileErr = v ? '' : (variantErr[rKey(false)] || 'the ray variant did not build'); api.deepReady = deepReady; api.deepErr = deepCompileErr;
@@ -4822,7 +5130,7 @@ async function dzRenderFrame(req){
   exporting = true; cancelRender = false;
   const keepRig = { n: rig.n, near: rig.near, far: rig.far };
   try {
-    if (boxOn()) ensureBoxVariant(false);
+    if (boxOn()) ensureBoxVariant(false); else if (burnActive()) ensureBurnVariant(false);
     if (!deepNow()) throw new Error('The deep shader of this formula could not be built.');
     let O = buildRefOrbit(camHP, cam.iters + 2);
     if (camHP[0] === 0n && camHP[1] === 0n && !boxOn()) {            // POLE GUARD, by this view's own distance
@@ -4966,6 +5274,7 @@ function frame(now){
   const {fwd,right,up}=basis();
 
   if (boxOn() && !deepNow()) kickBoxVariantAsync();            // THE FORMULA SEAM: the box's variant builds in the background; its f32 baseline is drawn meanwhile
+  if (!boxOn() && burnActive() && !deepNow()) kickBurnVariantAsync();   // BURNING (grep): and so does its variant
   deepActive = deepNow() && (modeOverride==='deep' || (modeOverride==='auto' && smoothedDist < 1e-4));
 
   /* auto iteration budget: the n-iter surface needs ~1.35/decade to resolve at depth.
@@ -5171,6 +5480,7 @@ function frame(now){
     gl.uniform3fv(u.light,light);
     gl.uniform2f(u.phase, phaseTheta, phasePhi);
     gl.uniform1f(u.addC, juliaOn ? 0 : 1); gl.uniform3f(u.juliaC, juliaF[0], juliaF[1], juliaF[2]);   // JULIA MODE (grep)
+    if (u.burnNeg) gl.uniform1f(u.burnNeg, burnNeg);   // BURNING (grep): the baseline's USE_BURN variant alone has it
     if (boxOn()) setBoxUniforms(u);
     gl.drawArrays(gl.TRIANGLES,0,3);
   }
@@ -5284,7 +5594,7 @@ let dzDive = 0;                                   // id of the running diveTo (0
 const dzThumbCv = document.createElement('canvas');
 api.dz = {
   version: 1,
-  telemetry: () => ({ ready: !!deepReady && !!deepNow(), error: deepCompileErr || (boxOn() && variantErr[xKey(false)]) || '', mode: deepActive ? 'deep' : 'f32',
+  telemetry: () => ({ ready: !!deepReady && !!deepNow(), error: deepCompileErr || ((boxOn() || burnActive()) && variantErr[pictureKey()]) || '', mode: deepActive ? 'deep' : 'f32',
     depth: smoothedDist, fps, frameW: canvas.width, frameH: canvas.height, iters: cam.iters, power: nPower,
     accumN, accumMax: ACCUM_MAX, exporting }),    // 12 keys; `recording`, `playing`, `pathFrames` and `bla` went 2026-10-11 with what they reported (grep CAMERA PATHS, "deep program variants")
   settings: () => ({ detail: surfMul, reach: reachMode(), power: nPower, phase: [phaseTheta, phasePhi],
