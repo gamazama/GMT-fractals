@@ -362,7 +362,31 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
     0.7 % at two plain ones): not traced. A mix under 1 has little good ground (at 0.5 the
     estimate collapses in one step at many points). No starter card and no What's New line.
   - Stills: `debug/scratch/burning/` (`still-startview-power8-mix1.png` first).
-  KaliBox: a builder has it now.
+  **KALIBOX IS BUILT: `fbfd09de`, `824bd07c`, `e5ef4e03`, `bace1c28`** (`ADR-DRAFT-kalibox.md`
+  has the record; eight things for him under "Not decided here").
+  - A third option of the Formula row, a shader variant on the Mandelbox's kernel (cold build
+    2.0 to 2.2 s). Rows: Scale, MinRad2, Translation (X / Y / Z), Rotation; Step size shows for
+    it; Julia mode and its Constant as for the others. Six cards under a "KaliBox" heading: Tip
+    (the start view, Scale 1.8 with the point added), Holes 9.9e-3, Plates 9.5e-9, Sheets
+    9.6e-31, and GMT's preset in Julia mode twice (the tower from outside, the city inside it).
+  - Proven: a node check of the CPU twin against exact orbits (27 lines), nine GATED lines in
+    the direct proof, all passing, to 9.7e-31; the 105 earlier lines to the character; the
+    other programs token for token.
+  - From far: the preset's tower is right as built. Scale 1.8 with the point added was drawn
+    cut off (22 % of the picture missing from 60 away, 94 % from 400) and is fixed: a ray is
+    followed 8 camera distances (`KALI_REACH`, a number set by hand).
+  - HIS TO KNOW: the study said GMT's preset turns to grain at Detail 16; on the GPU it does
+    not, it is a far finer city (`debug/scratch/kalibox/still-julia-1-1e-2.png` against
+    `still-julia-1-1e-2-detail16.png`). The cards still say "holds these shapes at Detail 1
+    only", as he decided before that was known: his wording. Also his: one preset card or two,
+    the start view, MinRad2 held at 1 (GMT's row goes to 2), the navigation's ray at half the
+    estimate (the whole one not measured for KaliBox).
+- **THE PREVIEW TO SHOW SOMEONE** (his words: "i want to put it up somewhere online to show
+  someone ... if i dont want to deploy to gmtfractals yet"; "yeah set up for a page upload
+  please!"). No push. A folder with the deep zoom page alone, `debug/scratch/dz-preview-site/`
+  (git-ignored; 54 files, 3.1 MiB; rebuilt from `bace1c28` and checked in a real browser: nothing
+  asked for and missing), which HE uploads to a separate Cloudflare Pages project with three
+  wrangler commands. Scripts: `debug/scratch/dz-preview/`.
 - "Pictures for a loaded scene's keyframes" and "GMT's export fixes (10 to 12 and the 0-byte
   file)": the next builder runs after Burning (one builder at a time in this tree).
 - "occlusion - please design me the most suitable estimator you know how". The design put to
