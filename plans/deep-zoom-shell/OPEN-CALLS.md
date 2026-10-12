@@ -389,6 +389,27 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
   wrangler commands. Scripts: `debug/scratch/dz-preview/`.
 - "Pictures for a loaded scene's keyframes" and "GMT's export fixes (10 to 12 and the 0-byte
   file)": the next builder runs after Burning (one builder at a time in this tree).
+  **BUILT, with call 4's card, as three commits** (smoke 54 of 54, `smoke:chrome`, the build):
+  - `546fde1f` any keyframe without a picture gets one from the pass a cut route uses: after
+    File > Load Scene five pictures 0.68 s after the file was picked, the camera the scene's to
+    the digit, no undo step added; a restored session takes none before ready. Where a frame
+    is dear the pass is slow (five keyframes along a dive from the boot view: 8.0 s).
+  - `625932c5` GMT's export, calls 10 to 13: (a) what a keyed track drives is left out of the
+    export version, so the version holds when the playhead moves (1 and 1 where it was 1 then 2)
+    and Continue is offered; (b) a continued render is the unbroken one pixel for pixel, 24 of
+    24 frames (10 of 24 before, the rest 11.38 % of pixels off), and a single run is what it was
+    (36 files hash for hash); (c) backing out of the file picker leaves the version alone;
+    (d) Discard leaves no file. Guard: `test:export-naming`, blocks [11] to [14].
+    HIS TO CONFIRM: the seed is the frame's index IN THE RANGE, not its timeline number (only
+    that keeps a single run what it was); the question's last line was reworded, because
+    "another grain" is no longer true. HIS TO KNOW (10 changes names elsewhere): a video or a
+    bucket still of a keyed scene rendered from another playhead position is now offered the
+    same version and name as the last one.
+  - `3766b453` call 4: while a view waits for the renderer (a link, a scene) the notice is the
+    large card over the dimmed picture, whatever the depth.
+  - Found beside them, left: `lights.<N>.rotation.<axis>` resolves to a field called `ation` in
+    `engine/AnimationEngine.ts`; GMT's list of track-written paths has no standing guard; the
+    `@bug PRODUCTION` in `WorkerProxy.startExport` is untouched.
 - "occlusion - please design me the most suitable estimator you know how". The design put to
   him: read the depth buffer in SLICES through the pixel, with steps that grow geometrically
   (equal taps an octave), find what each slice hides and integrate it with the cosine weight
