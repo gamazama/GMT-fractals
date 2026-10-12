@@ -55,7 +55,9 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
    - c. The row's switch takes the point looked at, as the button does. Or should the switch
      re-enter with the last constant? *Recommended: the switch re-enters with the last constant
      when there is one; the button takes the point.*
-     **ANSWERED 2026-10-12: "2c - yes".** Handed to the builder of the constant's rows.
+     **ANSWERED 2026-10-12: "2c - yes".** **DONE, `a20c5405`**: the switch comes back to the
+     last constant when there is one (the rows not all 0, or the renderer still holding one);
+     with none it takes the point looked at. The button always takes the point.
    - d. Switching Julia on puts the iteration floor back to 14. *Recommended: keep.*
      **NO CHANGE: kept** (see 1b).
    - e. The Kleinian card, whose whole-view proof line is a little over the bar. *Recommended:
@@ -66,7 +68,13 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
      **ANSWERED 2026-10-12: "2f yes"**, to this concept: three rows (X, Y, Z) under the Julia
      switch, shown while it is on; typed or dragged they change the set live, and they can be
      keyframed; a constant taken from a deep place keeps its full precision until a row is
-     touched; the button stays. To build.
+     touched; the button stays. **DONE, `a20c5405`**: one row "Constant" (X, Y, Z) under the
+     Julia switch (`dzFormula.juliaX / Y / Z`), -4 to 4 on the slider and wider when typed; undo
+     of a drag brings the exact strings back. Seen in the app as committed
+     (`debug/scratch/julia-rows/see-row.png`). Found beside it by the builder and left: a scene
+     saved while Julia mode is OFF carries the constant only as the three doubles; and, reasoned
+     and not measured, after a render of a route with a KEYED constant the rows and the renderer
+     may disagree until the next scrub (`routeRender.tsx` puts the saved view back).
      With it: "if possible changing the formula paramters to update live during interaction pls
      instead of on release". **DONE, `4e5b0016`**: the formula rows follow a drag (the sync's
      hold was 90 ms after the last change; it is one frame from the first).
@@ -232,5 +240,7 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 - GMT's export: 10, 11, 12 and the 0-byte file.
 - Formulas (session 12): KaliBox's CPU still, then Burning on the bulb and KaliBox (5).
 - The look: occlusion (32), once he has said what looks wrong.
-- Running when this was written: a builder on the Julia constant's rows, and a CPU-only study
-  that writes `BURNING-KALIBOX.md`.
+- Done since: the Julia constant's row and the switch (2f, 2c: `a20c5405`); the CPU study
+  (`BURNING-KALIBOX.md`, `f9d5bf97`, seven calls at its foot, not yet answered).
+- Running when this was last written: a builder on the routes (26 to 31), and an agent sent by
+  him to find the cause of the specks from far (33; it edits nothing in the tree).
