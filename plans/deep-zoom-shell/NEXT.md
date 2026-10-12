@@ -232,8 +232,23 @@ and of 1 to 5, except that only one session at a time may own `core.js`.
 - Roll is no longer here: it is `ROUTES.md` R1.
 
 ### 10. Shell leftovers
-- Stage 2: pause controls (module package M5 first), the Diagnostics tab, the `actualPixels` row.
-- Stage 3: Export all (JSON), the scene-file claims, session autosave.
+- BUILT 2026-10-12 (the night; no renderer work), three commits:
+  - `a85bd8bb` locations as a file: Export all and Import on the Locations tab; a pasted, opened
+    or dropped LIST is added to My locations (`deep-zoom/claims.ts`), with a toast that counts
+    added / skipped / unreadable; it reads the old prototype's file too.
+  - `82475492` session autosave, OFF by default (`deep-zoom/session.ts`): the engine's session
+    plugin with this app's own keys and the two standard rows under Settings > Files. On, a
+    reload opens where the app was left (the view exact, the route, the look, the formula).
+  - `52adc214` the Diagnostics tab, Advanced mode only (`components/Diagnostics.tsx`): readouts
+    and the developer levers that still exist (accuracy gate, path, rebase, far hand-off, the ray
+    march's bits and numbers). Host calls only.
+  - Decided without him, his to change: a duplicate location is the same camera strings, Julia
+    constant and formula; a pasted list is added and no longer jumps to its first entry; the File
+    menu's Autosave switch and "Restore Last Session" were removed from this app (they were
+    app-gmt's rows and wrote app-gmt's keys); a session does not hold My locations or My
+    Gradients; Home after a restore is the restored place; the labels "Export all", "Import".
+- STILL LEFT, both need a renderer handle that does not exist: pause controls (module package M5)
+  and the `actualPixels` row (M1).
 - Module packages left: M6 (the option seams driven by one test), M1 (params / set / schema), M3
   (events), M5 (pause). Each is additive. (Parity, which they were to keep, is retired: ADR-0137;
   the direct proof and the shader compare of `ROUTES.md` R7a stand in.) M4 is replaced by
