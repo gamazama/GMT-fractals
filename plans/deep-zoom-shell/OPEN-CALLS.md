@@ -343,6 +343,26 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 
 - "lets do burning and kalibox". Burning on the bulb: a builder has it (the plan and his seven
   answers are `BURNING-KALIBOX.md`). KaliBox follows it, as a stage of its own.
+  **BURNING IS BUILT: `cac8fcd8`, `17749028`, `a8986bb3`** (the builder was cut off once by the
+  usage limit and resumed; `ADR-DRAFT-burning.md` has the record and his list). A "Burning"
+  switch and a "Burning mix" row on the Formula tab, the Mandelbulb only.
+  - It is a shader VARIANT of its own, built in the background on the first switch (6.1 s),
+    not uniforms in the bulb's program: as uniforms, with Burning off, 27 of the direct proof's
+    100 lines printed other digits. The mix is a uniform in the variant: a drag compiles nothing.
+  - WHOLE ORBITS WERE KEPT, by milliseconds at the same picture: eight burning places, whole
+    96.5 ms, resumed with the crossing test 104.3 ms (faster at four places, slower at four);
+    0.00 to 0.45 % of rays end more than 2 pixel cones apart between them.
+  - The plain bulb did not move: the proof's 100 earlier lines to the character, 40 of 41
+    pictures to the byte, frame time within noise, the build 8.06 -> about 8.1 s.
+  - Julia mode with Burning works. The line rule stays off (measured: up to 26 % of rays
+    elsewhere at one place).
+  - HIS TO KNOW: two proof lines are printed and not gated (power 8 at 1.5e-31: 63 of 338
+    points over 1e-3; power 2 at 1.8e-11: 7). The GPU march and the navigation's CPU ray end
+    more than 2 ray cones apart on 7.6 % and 19.9 % of rays at two burning places (1.4 % and
+    0.7 % at two plain ones): not traced. A mix under 1 has little good ground (at 0.5 the
+    estimate collapses in one step at many points). No starter card and no What's New line.
+  - Stills: `debug/scratch/burning/` (`still-startview-power8-mix1.png` first).
+  KaliBox: a builder has it now.
 - "Pictures for a loaded scene's keyframes" and "GMT's export fixes (10 to 12 and the 0-byte
   file)": the next builder runs after Burning (one builder at a time in this tree).
 - "occlusion - please design me the most suitable estimator you know how". The design put to
