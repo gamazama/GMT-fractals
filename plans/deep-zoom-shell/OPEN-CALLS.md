@@ -92,6 +92,13 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
    **ANSWERED 2026-10-12: "5 yes burning and kalibox".** Both, for session 12. KaliBox wants its
    CPU still first; Burning leaned on the fold-crossing test of the box's ray step, which is not
    in the tree (1a).
+   The CPU study came back the same day (`BURNING-KALIBOX.md`): both worth building. Its seven
+   calls, **ANSWERED 2026-10-12: "1-7 yes accepted"**: GMT's preset KaliBox ships as a card in
+   Julia mode, saying it holds at Detail 1 only, with no Detail cap tied to the formula; the
+   KaliBox that opens first is Scale 1.8 with the point added; Burning is built with whole
+   orbits first, then the crossing test, and milliseconds at the same picture decide; a mix row
+   in the first build; the longer step off in the first build; Burning before KaliBox; KaliBox
+   with the point added has no whole-object view, its cards are places near the tip.
 6. **The navigation on the Mandelbox** could step its CPU ray by the whole scalar estimate
    instead of half: half the steps, 0 to 0.8 % of rays more than 5 % past the careful ray.
    *Recommended: yes, as a small measured change.*

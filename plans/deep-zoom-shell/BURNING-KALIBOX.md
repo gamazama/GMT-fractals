@@ -149,6 +149,10 @@ in milliseconds is a measurement at stage 3 below, not a result of this page.
 
 ## Calls for the owner
 
+**ANSWERED 2026-10-12, all seven: "calls for me: 1-7 yes accepted".** Every recommendation below
+is taken as written. Nothing is built yet: both formulas wait for the kernel file (`core.js`),
+which the specks from far and the occlusion work are ahead of (`OPEN-CALLS.md`, section G).
+
 1. **Does GMT's preset KaliBox ship as a card?** It only exists at Detail 1. Look at
    `bk-kali-julia-sheet.png`, then `bk-kali-julia-detail-sheet.png`. Recommendation: ship it, in Julia mode,
    with the card saying so, and no cap on Detail keyed to the formula.
