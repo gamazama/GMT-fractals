@@ -9,7 +9,8 @@
  *                    it is on (grep `config.isAdvanced` in components/AutoFeaturePanel.tsx). GMT
  *                    switches it from its System menu and with the backtick key; this shell has no
  *                    System menu, and until 2026-10-08 had neither - the advanced rows of the
- *                    Quality tab could not be reached at all. The key is in hotkeys.ts.
+ *                    Quality tab could not be reached at all. The key is in hotkeys.ts. Since
+ *                    2026-10-12 the same switch shows the Diagnostics tab (panels.ts).
  *   Invert look Y    `store.invertY`, read by the navigation (deep-zoom/DeepZoomNavigation.tsx).
  *
  * And the one number of the fly speed's rule (deep-zoom/flyPace.ts) the owner sets in flight; it
@@ -39,7 +40,7 @@ export function registerDeepZoomSettings(): void {
         tab: 'Interface',
         section: 'General',
         label: 'Advanced mode',
-        description: 'Shows the advanced rows of each tab (the resolution cap). The backtick key switches it too.',
+        description: 'Shows the advanced rows of each tab (the resolution cap) and the Diagnostics tab. The backtick key switches it too.',
         control: { kind: 'boolean' },
         get: () => useEngineStore.getState().advancedMode,
         set: (v) => useEngineStore.getState().setAdvancedMode(!!v),

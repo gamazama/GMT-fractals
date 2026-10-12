@@ -9,6 +9,12 @@
  * Formula also holds the Julia switch (`dzFormula.juliaMode`) and the `dz-julia-here` button; the Julia
  * CONSTANT has no row (it travels with the view: features/formula.ts, JULIA MODE).
  *
+ * Diagnostics (2026-10-12) is the last tab of the right dock and is there in ADVANCED MODE ONLY
+ * (`showIf: 'advancedMode'`, the engine's own switch: this app's Settings row and the backtick
+ * key). One widget, `dz-diagnostics`: the renderer's developer levers, which are no params and are
+ * saved nowhere (components/Diagnostics.tsx). The dock draws its tabs when the app's tree renders,
+ * and the tree does not render for that switch by itself: DeepZoomApp.tsx selects it for this tab.
+ *
  * Rows deliberately absent:
  *   - `dzQuality.actualPixels`: the renderer has no setter for its 1:1 view yet (host/paramMap.ts).
  * The `dz-mode-notice` widget heads the two tabs whose controls act in deep mode only.
@@ -56,5 +62,9 @@ export const DeepZoomPanels: PanelManifest = [
         { type: 'collapsible', label: 'Inspect', defaultOpen: false, items: [
             { type: 'feature', id: 'dzInspect' },
         ] },
+    ] },
+    // Advanced mode only. Order 80: after the three look tabs, before My Gradients (90, setup.ts).
+    { id: 'Diagnostics', dock: 'right', order: 80, showIf: 'advancedMode', items: [
+        { type: 'widget', id: 'dz-diagnostics' },
     ] },
 ];

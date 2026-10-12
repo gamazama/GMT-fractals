@@ -107,6 +107,14 @@
  *       `=== 'building'` -> 1: "input: building() names the ray march while its shader builds, and
  *       nothing once it is there, has failed or is off". The Mandelbox line and the disposed-host
  *       line pass and have not been seen red.
+ *     (2026-10-12, the developer levers: `diagnostics` / `setLevers`, one break a run) the far
+ *       hand-off's line taken out of `setLevers` -> 1: "levers: setLevers hands the module the one
+ *       lever a patch names ..."; a ray patch sent with all six numbers read back from the module
+ *       -> 1: "levers: a ray number goes with the bits in force and no other number ..."; the
+ *       `!gateOn` test taken out of the gate's reading -> 1: "levers: the gate, the path and the
+ *       rebase reach their setters; with the gate off there is no reading". The two read-back
+ *       lines ("levers: diagnostics() reads ...", "levers: the build times ...") pass and have not
+ *       been seen red.
  *   flight and render
  *       (2026-10-08) `snapshot: () => null` in moduleHost.ts -> 1: "render: snapshot() is the
  *       module's own canvas, untouched"
@@ -319,6 +327,9 @@ function makeRig() {
         disposed: false,
         exporting: false,
         mode: 'auto',
+        rebase: true,
+        far: 0.5,
+        ray: { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 },
         tick: 0,
         rayState: 'off' as 'off' | 'building' | 'on' | 'failed',
         formulaKind: 'mandelbulb' as 'mandelbulb' | 'mandelbox',
@@ -391,8 +402,16 @@ function makeRig() {
         setPower: (n: number): void => { note('setPower', n); state.settings.power = n; },
         setMode: (m: string): void => { note('setMode', m); state.mode = m; },
         autoIters: (): boolean => true,
-        marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
-        rayMarch: () => ({ bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 }),   // the module's own start values since 2026-10-11
+        marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode, hitRefine: 0, rebaseOrigin: state.rebase, farHandOff: state.far }),
+        rayMarch: () => ({ ...state.ray }),   // the module's own start values since 2026-10-11
+        // The developer levers (2026-10-12): what host.setLevers reaches and host.diagnostics reads back.
+        setGate: (on: boolean): void => { note('setGate', on); },
+        setRebaseOrigin: (on: boolean): void => { note('setRebaseOrigin', on); state.rebase = on; },
+        setFarHandOff: (t: number): void => { note('setFarHandOff', t); state.far = t; },
+        // as the module: a number it is not given, or that is not valid for it, stays
+        setRayMarch: (bits: number, opt?: Partial<typeof state.ray>): void => { note('setRayMarch', bits, opt); state.ray = { ...state.ray, ...(opt ?? {}), bits }; },
+        compileMs: () => ({ S: 9.5, PR: 8400, X: undefined }),
+        gate: { relT: 1.25e-7, tGPU: 1.244, tCPU: 1.2440001, when: 0 },
         rayMarchState: () => state.rayState,
         formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, c: ['0', '0', '0'] as [string, string, string] }),
         formulaState: () => state.formulaState,
@@ -799,6 +818,26 @@ console.log('[5] input     focus, and the host-input members');
     check(rig.count('lookPoint') === 1 && looked.kind === 'hit' && looked.point.join() === '11,-22,33' && (rig.calls.lookPoint[0][0] as { tol: number }).tol === 0.01,
         'input: lookPoint is the module\'s own ray, its point three strings as the module gave them');
     check(rig.count('wholeObject') === 1 && !!ball && ball.radius === 1.25 && ball.center.join() === '0.1,0.2,0.3', 'input: wholeObject is the module\'s own answer');
+    // THE DEVELOPER LEVERS (2026-10-12): the Diagnostics tab's two members.
+    const d0 = host.diagnostics();
+    check(d0.levers.gate === true && d0.levers.mode === 'auto' && d0.levers.rebaseOrigin === true && d0.levers.farHandOff === 0.5 && JSON.stringify(d0.levers.ray) === JSON.stringify(rig.state.ray) && d0.levers.ray !== rig.state.ray,
+        'levers: diagnostics() reads the module\'s own values back - the gate on, as the module starts - and hands out copies', JSON.stringify(d0.levers));
+    check(JSON.stringify(d0.compileMs) === JSON.stringify({ S: 9.5, PR: 8400 }) && d0.gate?.relT === 1.25e-7 && d0.gate.gpu === 1.244 && d0.gate.cpu === 1.2440001,
+        'levers: the build times are the programs that are built, and the gate\'s reading is the module\'s own record', JSON.stringify([d0.compileMs, d0.gate]));
+    host.setLevers({ farHandOff: 0.125 });
+    check(rig.count('setFarHandOff') === 1 && rig.calls.setFarHandOff[0][0] === 0.125 && rig.count('setGate') + rig.count('setMode') + rig.count('setRebaseOrigin') + rig.count('setRayMarch') === 0
+        && host.diagnostics().levers.farHandOff === 0.125, 'levers: setLevers hands the module the one lever a patch names, by its own setter, and no other');
+    host.setLevers({ gate: false, mode: 'f32', rebaseOrigin: false });
+    const d1 = host.diagnostics();
+    check(rig.count('setGate') === 1 && rig.calls.setGate[0][0] === false && rig.calls.setMode[0][0] === 'f32' && rig.calls.setRebaseOrigin[0][0] === false
+        && d1.levers.gate === false && d1.gate === null && d1.levers.mode === 'f32' && d1.levers.rebaseOrigin === false,
+        'levers: the gate, the path and the rebase reach their setters; with the gate off there is no reading');
+    host.setLevers({ ray: { tol: 0.25 } });
+    host.setLevers({ ray: { bits: 1 } });
+    check(rig.count('setRayMarch') === 2 && rig.calls.setRayMarch[0][0] === 5 && JSON.stringify(rig.calls.setRayMarch[0][1]) === JSON.stringify({ tol: 0.25 })
+        && rig.calls.setRayMarch[1][0] === 1 && JSON.stringify(rig.calls.setRayMarch[1][1]) === '{}' && host.diagnostics().levers.ray.tol === 0.25 && host.diagnostics().levers.ray.bits === 1,
+        'levers: a ray number goes with the bits in force and no other number; the bits go alone', JSON.stringify(rig.calls.setRayMarch));
+    host.setLevers({ gate: true, mode: 'auto', rebaseOrigin: true, farHandOff: 0.5, ray: { bits: 5, tol: 0.05 } });   // as the tab's Reset: the fake is back where the lines below expect it
     // building() (2026-10-11): the variant the picture is waiting for, asked now. A render waits on it.
     const asked = (ray: 'off' | 'building' | 'on' | 'failed', kind: 'mandelbulb' | 'mandelbox', box: 'building' | 'on' | 'failed') => {
         rig.state.rayState = ray; rig.state.formulaKind = kind; rig.state.formulaState = box;

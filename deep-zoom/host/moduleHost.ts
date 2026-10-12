@@ -141,6 +141,21 @@
  *   failure ...", "... rejects ready with that line ..."). Falsified 2026-10-11: the test
  *   `!isReady && rayNow === 'failed'` in `poll` made always false (the ray failure worded as any
  *   other shader's) -> those two lines red, the other 163 green.
+ * @invariant `setLevers` hands the module the levers a patch names and no other, each by the
+ *   module's own setter - a ray number with the bits in force and without the other five numbers -
+ *   and `diagnostics()` gives no gate reading while the gate is off - proven by: npx tsx
+ *   debug/deep-zoom-checks/module-host.mts ("levers: setLevers hands the module the one lever a
+ *   patch names, by its own setter, and no other", "levers: a ray number goes with the bits in
+ *   force and no other number; the bits go alone", "levers: the gate, the path and the rebase reach
+ *   their setters; with the gate off there is no reading"). Falsified 2026-10-12, one break a
+ *   line: the far hand-off's line taken out of `setLevers`; a ray patch sent with all six numbers
+ *   read back; the `!gateOn` test taken out of the reading. 1 red each.
+ * @assumption THE GATE'S SWITCH IS KEPT HERE, AND STARTS ON. The module has `setGate` and no
+ *   read-back, so `diagnostics().levers.gate` is what this host last set, true before it set
+ *   anything - which is what the module starts with (grep `let gateOn` in renderer/core.js, read
+ *   2026-10-12). Should the module's start value change, the Diagnostics tab's switch is wrong
+ *   until it is first clicked. Its reading comes from `api.gate`, a record `DeepZoomApi` does not
+ *   type (grep `api.gate = gate`): three finite numbers or no reading.
  * @assumption What the user then sees - the failure card with that line, no picture, no chip - was
  *   seen once in the app with the real module and a browser made to refuse that one program
  *   (debug/scratch/r7/ray-fail.mts, git-ignored, 2026-10-11). No standing guard opens that page.
@@ -356,6 +371,19 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         keyTarget: frame,
     });
 
+    // ── the developer levers ──
+    // The gate has a setter and no read-back in the module, so its switch is kept here, starting
+    // where the module starts (grep `let gateOn` in renderer/core.js: on). Its last reading is the
+    // module's own record `api.gate` (grep `api.gate = gate`), which `DeepZoomApi` does not type:
+    // read with care, and a reading that is not three finite numbers is no reading.
+    let gateOn = true;
+    const gateReading = (): { relT: number; gpu: number; cpu: number } | null => {
+        if (!gateOn) return null;
+        const g = api.gate as { relT?: unknown; tGPU?: unknown; tCPU?: unknown } | null | undefined;
+        const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+        return g && fin(g.relT) && fin(g.tGPU) && fin(g.tCPU) ? { relT: g.relT, gpu: g.tGPU, cpu: g.tCPU } : null;
+    };
+
     // ── context loss ──
     let lostSent = false;
     const signalContextLost = (): void => {
@@ -490,6 +518,31 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
             return api.rayMarchState() === 'building' ? 'rayMarch' : null;
         },
         holdLive(on) { liveHeld = !!on; },
+        // the developer levers: the module's own typed setters and read-backs, nothing kept here but the gate's switch
+        diagnostics() {
+            const march = api.marchLevers();
+            const compileMs: Record<string, number> = {};
+            for (const [key, ms] of Object.entries(api.compileMs())) if (typeof ms === 'number') compileMs[key] = ms;
+            return {
+                levers: { gate: gateOn, mode: march.mode, rebaseOrigin: march.rebaseOrigin, farHandOff: march.farHandOff, ray: { ...api.rayMarch() } },
+                rayMarch: api.rayMarchState(),
+                formula: api.formulaState(),
+                compileMs,
+                gate: gateReading(),
+            };
+        },
+        setLevers(patch) {
+            if (disposed) return;
+            if (patch.gate !== undefined) { gateOn = !!patch.gate; api.setGate(gateOn); }
+            if (patch.mode !== undefined) api.setMode(patch.mode);
+            if (patch.rebaseOrigin !== undefined) api.setRebaseOrigin(!!patch.rebaseOrigin);
+            if (patch.farHandOff !== undefined) api.setFarHandOff(patch.farHandOff);
+            if (patch.ray) {
+                // One setter takes the bits and, by name, the numbers; a number it is not given stays.
+                const { bits, ...numbers } = patch.ray;
+                api.setRayMarch(bits ?? api.rayMarch().bits, numbers);
+            }
+        },
         moveAlong: (dir, distance) => loose.moveAlong(dir, distance),
         diveTo(depth) {
             // Not before the deep shader: until then the module flies on its f32 distance, good to

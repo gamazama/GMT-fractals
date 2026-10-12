@@ -16,8 +16,25 @@
  * `Tab` switches the camera mode, Fly and Orbit: GMT's key, writing GMT's store field
  * (`cameraMode`), which the navigation reads every frame and the timeline's Space binding tests.
  *
- * Slot digits (1-9 recall, Ctrl+1-9 save) are the state library's own, installed in locations.ts.
- * Not here yet: record (M) and still export (X) arrive with the Flight tab; `/` with Help.
+ * WHAT IS REGISTERED HERE (`registerDeepZoomHotkeys`, the list a reader can check against the code):
+ *   Locations   B / Shift+B save this view; Home the start view; Backspace back; J the Dive field;
+ *               Escape stops a dive (only while one flies).
+ *   Route       K / Shift+K add a keyframe (or give the one under the playhead this view).
+ *   Look        F G detail; [ ] iterations; I auto iterations; - = power; V colouring; L light type;
+ *               O overlays.
+ *   View        ` Advanced mode; Tab Fly / Orbit.
+ * Keys that act in this app and are registered elsewhere: the slot digits (1-9 recall, Ctrl+1-9
+ * save: the state library's own, installed in locations.ts), Alt+S (save a PNG: the engine's scene
+ * plugin), Ctrl+Z / Ctrl+Y (the engine's undo), H (hints: the engine's help), T (the timeline) and,
+ * with the pointer over the timeline, Space (play): the timeline's own.
+ *
+ * DELIBERATELY NOT A KEY (each was one in the old page or in the plan, and the plan's "Flight tab"
+ * they were to arrive with was never built - the Route tab took its place):
+ *   M   the old recorder's key. There is no recorder: the trail remembers how the camera is flown
+ *       by itself, and its one switch is on the Route tab (deep-zoom/trail.ts).
+ *   X   the old still export. A still is File > Save Scene (PNG), Alt+S; frames are the render
+ *       dialog (deep-zoom/routeRender.tsx). The renderer's own tiled export is not reachable.
+ *   /   help topics. This app has none yet (main.tsx installs Help with `hideTopicLinks`).
  */
 import { shortcuts } from '../engine/plugins/Shortcuts';
 import { useEngineStore } from '../store/engineStore';
@@ -102,6 +119,6 @@ export function registerDeepZoomHotkeys(): void {
 
     // GMT's own key for it (grep `gmt.toggleAdvancedMode` in app-gmt/main.tsx). The same flag has
     // a row in Settings (deep-zoom/settings.ts): a key alone is a switch nobody can find.
-    add('advanced-mode', '`', toggleAdvancedMode, 'Advanced mode on / off (shows the advanced rows of each tab)', 'View');
+    add('advanced-mode', '`', toggleAdvancedMode, 'Advanced mode on / off (shows the advanced rows of each tab and the Diagnostics tab)', 'View');
     add('camera-mode', 'Tab', toggleCameraMode, 'Camera mode: Fly / Orbit', 'View');
 }

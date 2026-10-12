@@ -84,6 +84,14 @@
  *     `lookPoint(` `wholeObject()`   for "Julia from this place" (`deep-zoom/locations.ts`): the point
  *                         looked at as three exact strings, and a ball about the whole of the solid
  *                         in force. Both CPU only; nothing is drawn or moved.
+ *     `diagnostics()` `setLevers(`   THE DEVELOPER LEVERS (2026-10-12, for the Diagnostics tab,
+ *                         `deep-zoom/components/Diagnostics.tsx`): the renderer's measuring
+ *                         switches that are no param - the accuracy gate, which path draws, the
+ *                         kernel's rebase, the far hand-off, the ray march's own bits and numbers.
+ *                         `diagnostics()` reads them back with the state of the two programs,
+ *                         their build times and the gate's last reading; `setLevers` sets the
+ *                         ones a patch names. Never saved and never undone: a fresh host stands
+ *                         at the shell's own values again.
  *     `snapshot()`        the picture as a 2D canvas, read back by the renderer itself (a saved PNG).
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
@@ -313,6 +321,68 @@ export type DzCompileState = {
     error?: string;
 };
 
+/** The ray march's own settings: the Mandelbulb's program (grep THE RAY ESTIMATE AND RAY-COHERENT
+ *  ORBITS in renderer/core.js, where each is explained). The shell runs it at bits 5, factor 1, hit
+ *  64, tol 0.05, floor 256, line 2, detail 0. */
+export interface DzRayLevers {
+    /** 1: the march steps by the ray estimate. 2: a hit is tested by it. 4: an orbit resumes the
+     *  previous sample's along the ray. 8: a measuring mode. 0 leaves none of it in force - and
+     *  the iteration ceiling is then the old 160, whatever the Formula tab says. */
+    bits: number;
+    /** The step as a share of the estimate. */
+    factor: number;
+    /** With bit 2: the hit level is a display pixel divided by this. */
+    hit: number;
+    /** With bit 4: how far, in display pixels, a resumed orbit's point may stand from the true one. */
+    tol: number;
+    /** Without bit 2: also a hit once the ray estimate is under a display pixel divided by this. 0: none. */
+    floor: number;
+    /** THE LINE AGAINST THE BALL: the allowance for the path's bend, as a multiple of the bend measure. 0: off. */
+    line: number;
+    /** Above 0: the hit level is a display pixel divided by this, whatever the Detail setting says. */
+    detail: number;
+}
+
+/** The developer levers: measuring switches of the renderer that are no parameter (see the header). */
+export interface DzLevers {
+    /** The live accuracy gate: twice a second while the still gathers, one pixel of the picture is
+     *  read back and held against an independent CPU referee. On in the renderer from the start. */
+    gate: boolean;
+    /** Which path draws: 'deep' (the shell's: the deep path at every depth), 'auto' (the plain
+     *  single-precision picture while shallower than 1e-4) or 'f32' (the plain picture always). */
+    mode: 'auto' | 'deep' | 'f32';
+    /** REBASE TO THE ORIGIN, the kernel's precision repair. On in the shell. */
+    rebaseOrigin: boolean;
+    /** FAR HAND-OFF: how far the deep march carries a ray before the plain far-field march takes
+     *  it, 1e-3 .. 12. 0.5 in the shell. */
+    farHandOff: number;
+    ray: DzRayLevers;
+}
+
+/** The levers to set; one that is not named stays as it is. */
+export interface DzLeverPatch {
+    gate?: boolean;
+    mode?: 'auto' | 'deep' | 'f32';
+    rebaseOrigin?: boolean;
+    farHandOff?: number;
+    ray?: Partial<DzRayLevers>;
+}
+
+/** What the Diagnostics tab reads besides telemetry. Every field is a copy. */
+export interface DzDiagnostics {
+    levers: DzLevers;
+    /** The Mandelbulb's program: 'off' while the Mandelbox is drawn or with ray bits 0. */
+    rayMarch: 'off' | 'building' | 'on' | 'failed';
+    /** The deep program of the formula that is selected. */
+    formula: 'building' | 'on' | 'failed';
+    /** Build times in milliseconds by the renderer's own program key (`S` the small shading pass,
+     *  `PR` the Mandelbulb's, `X` the Mandelbox's); a key is there once its program is built. */
+    compileMs: Record<string, number>;
+    /** The accuracy gate's last reading: the relative difference of the two distances (under 1e-3
+     *  is a pass) and the distances themselves. null with the gate off or before its first reading. */
+    gate: { relT: number; gpu: number; cpu: number } | null;
+}
+
 /** Progress of a long job. `text` is the renderer's own status line as plain text. */
 export type DzProgress = {
     /** 'frame': a `renderFrameBlob` in flight. 'still': any other render of the module's. */
@@ -464,6 +534,13 @@ export interface DeepZoomHost {
      * (a build is only noticed by a frame that runs) and when the run ends.
      */
     holdLive(on: boolean): void;
+    /** The developer levers as they stand, the state of the two programs, their build times and
+     *  the gate's last reading. Cheap; draws nothing. For a panel that asks a few times a second. */
+    diagnostics(): DzDiagnostics;
+    /** Set the levers the patch names (every one but the gate restarts the still or the orbit).
+     *  None is a parameter: nothing is saved, nothing is undone, and a fresh host stands at the
+     *  shell's own values again. */
+    setLevers(patch: DzLeverPatch): void;
     /**
      * The picture as it is on screen now, as a new 2D canvas of the frame's own size; null when it
      * cannot be drawn (no renderer, a render in flight). What a saved PNG is made from. Do not

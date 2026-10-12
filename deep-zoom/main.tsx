@@ -15,9 +15,13 @@
  *     engine's animation tick (`engine.animation`, engine/animation/modulationTick.ts). The
  *     timeline does not play without it, LFO panel or not.
  *   - PauseControls, BucketRender: the renderer has no pause yet and keeps its own tiled export.
- *   - Session, tutorial and What's New: later stages, each when a renderer handle stands behind
+ *   - The tutorial and What's New: later stages, each when a renderer handle stands behind
  *     it. (The palette suite came in stage 5: registerFeatures.ts, setup.ts. The render dialog
- *     came in stage R6a, for PNG frames into a folder, and video files in R6b: routeRender.tsx.)
+ *     came in stage R6a, for PNG frames into a folder, and video files in R6b: routeRender.tsx.
+ *     The session - the scene kept across a reload while Settings > Files > Autosave is on -
+ *     came 2026-10-12: session.ts, the last call of the chain below.)
+ *   - The File menu's two autosave rows ("Autosave", "Restore Last Session"): they are app-gmt's,
+ *     reading and writing app-gmt's keys, and are taken off this app's menu below.
  *   - `engine/plugins/camera/presetField`: not imported, with the Camera plugin.
  *
  * The prototype this replaces is still served at deep-zoom-prototype.html (dev only).
@@ -47,7 +51,7 @@ import { SettingsButton } from '../components/SettingsAccess';
 import { installPwaUpdate } from '../engine/plugins/PwaUpdate';
 import { installShortcuts } from '../engine/plugins/Shortcuts';
 import { installUndo } from '../engine/plugins/Undo';
-import { installMenu } from '../engine/plugins/Menu';
+import { installMenu, menu } from '../engine/plugins/Menu';
 import { installHud } from '../engine/plugins/Hud';
 import { installHelp } from '../engine/plugins/Help';
 import { setHelpTopicsLoader } from '../data/help/registry';
@@ -71,6 +75,9 @@ import { LocationText } from './components/LocationText';
 import { JuliaHere } from './components/JuliaHere';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShare, loadShareFromUrl, sceneCanvas } from './share';
+import { installLocationsFileClaim } from './claims';
+import { DZ_AUTOSAVE_TEXT, dzAutosaveSettings, installDzSession } from './session';
+import { Diagnostics } from './components/Diagnostics';
 import { dismissBootSplash } from './components/BootCard';
 import { FavientsToggleButton } from '../palette/components/FavientsToggleButton';
 import { installGradientFileClaim } from '../palette/installGradientFileClaim';
@@ -110,11 +117,12 @@ try {
 
     // Settings — colour scheme + accent hues (shared across all GMT apps). The
     // gear opens the floating Settings panel (SettingsHost is mounted in
-    // DeepZoomApp). No autosave rows yet: autosave is per app, and the default
+    // DeepZoomApp). The two Files > Autosave rows are given THIS app's autosave
+    // store (its own keys, off until switched on): the same store the session
+    // reads at the end of this chain (deep-zoom/session.ts). Without one the
     // rows would write app-gmt's keys and do nothing here. THIS FUNCTION RUNS
-    // ONCE: stage 3 replaces this line with the call that passes the app's own
-    // autosave store, it does not add a second call (a second call is ignored).
-    registerCoreSettings({ autosave: null });
+    // ONCE (a second call is ignored).
+    registerCoreSettings({ autosave: { store: dzAutosaveSettings, ...DZ_AUTOSAVE_TEXT } });
     // This app's own rows in the same panel: Advanced mode, Invert look Y.
     registerDeepZoomSettings();
     topbar.register({ id: 'settings', slot: 'right', order: 100, component: SettingsButton });
@@ -143,6 +151,13 @@ try {
     // PNG), Alt+S. The canvas getter must be passed at this first call or the PNG rows never
     // appear; `sceneCanvas` draws a frame and copies it at save time.
     installSceneIO({ getCanvas: sceneCanvas });
+    // Its two autosave rows are app-gmt's mechanism: the "Autosave" switch writes app-gmt's
+    // preference (`gmt-autosave-enabled`) and nothing in this app reads it, and "Restore Last
+    // Session" would load whatever scene app-gmt left in its recovery slot. This app's autosave
+    // is the Settings row above and restores by itself (deep-zoom/session.ts).
+    menu.unregisterItem('file', 'autosave-settings');
+    menu.unregisterItem('file', 'restore-autosave');
+    menu.unregisterItem('file', 'file-sep-autosave');
 
     // @engine/hud — slot-based overlay host. <HudHost /> is mounted inside
     // DeepZoomApp's ViewportFrame. The depth readout is the instrument on the
@@ -200,9 +215,15 @@ try {
     componentRegistry.register('dz-places', KeptPlaces);
     componentRegistry.register('dz-location-text', LocationText);
     componentRegistry.register('dz-julia-here', JuliaHere);
+    // The Diagnostics tab's one widget: the renderer's developer levers, host calls only, no
+    // store state. The tab itself shows in Advanced mode only (panels.ts).
+    componentRegistry.register('dz-diagnostics', Diagnostics);
 
     // Scenes carry the saved places as a document; a share link carries the look and the view.
     installShare();
+    // A FILE of locations dropped on the app or picked in File > Load Scene is added to My
+    // locations instead of being read as a scene (deep-zoom/claims.ts).
+    installLocationsFileClaim();
 
     // My Gradients in the top bar (the panel itself is an entry of the manifest, setup.ts), and
     // a gradient FILE dropped on the app or picked in File > Load Scene goes to My Gradients
@@ -215,7 +236,11 @@ try {
     setupDeepZoom();
 
     // A `#s=` link opens as a scene. Its view is parked until the renderer is mounted and ready.
-    loadShareFromUrl();
+    const linkOpened = loadShareFromUrl();
+    // The session, last: with Settings > Files > Autosave on, the scene as it was left comes
+    // back here - unless a link just opened, which is what was asked for on this load - and is
+    // kept from here on. Off (the default) this restores nothing and writes nothing.
+    installDzSession({ preempted: linkOpened });
 } catch (err) {
     console.error('[deep-zoom] The app failed to start, before the first render.', err);
     bootError = err;
