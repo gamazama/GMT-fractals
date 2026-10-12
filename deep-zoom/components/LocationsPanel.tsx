@@ -26,9 +26,18 @@ const byDepth = (a: DzLocation, b: DzLocation): number => {
     return db - da;
 };
 
+/** The depth, and "Julia" for a place saved in Julia mode: such a place is of another object than the
+ *  formula's own, and its row says so before it is clicked. */
 const depthLine = (snap: DzLocation): React.ReactNode => {
     const d = locationDepth(snap);
-    return Number.isNaN(d) ? null : <span data-dz-location-depth className="font-mono tabular-nums">{formatDepth(d)}</span>;
+    const julia = snap.state?.look?.dzFormula?.juliaMode === true;
+    if (Number.isNaN(d) && !julia) return null;
+    return (
+        <span className="font-mono tabular-nums">
+            {Number.isNaN(d) ? null : <span data-dz-location-depth>{formatDepth(d)}</span>}
+            {julia ? <span data-dz-location-julia className="font-sans text-fg-faint">{Number.isNaN(d) ? 'Julia' : ' · Julia'}</span> : null}
+        </span>
+    );
 };
 
 export const LocationsPanel: React.FC = () => {

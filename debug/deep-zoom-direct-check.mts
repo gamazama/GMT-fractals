@@ -73,6 +73,55 @@
  *       Mandelbox's five (its kernel is its own).
  *   Green on the same tree before and after: 11/11, 4/4, 5/5, every printed number equal, to the last digit, to
  *   the run of the day before in the page's own program (79 lines, one differs: the line that names the path).
+ *
+ * THE KLEINIAN CARD'S NUMBERS (added 2026-10-12; deep-zoom/data/boxStarters.ts). GMT's "Kleinian" is the Mandelbox
+ * with no inner radius: scale 1.8, fixed radius sqrt(1.2), min radius at the renderer's floor, so the sphere fold's
+ * inner factor is 1.2e9 where the box's own lines have 4. Two more Mandelbox lines, the last two of that list:
+ *   deep (9.3e-31, a place box-orbit.mts finds), GATED: 0 of 338 points over 1e-3, worst 2.3e-4.
+ *   the whole box from outside, PRINTED AND NOT GATED: 16 of 338 points more than 1e-3 off the twin, the worst
+ *   3.2e-3, from 22 units out; 43 of 154 (worst 3.6e-3) from the card's own 45 units (one measurement,
+ *   2026-10-12). None is over 1e-2 and the picture shows nothing of it, but it is over the grids' bar of a
+ *   fiftieth, and the standard box's whole view reads 0 over 1e-3 (worst 3.7e-4) in the same run. The farther
+ *   the camera, the more points: single-precision rounding of a far reference, carried through a fold that
+ *   can multiply by 1.2e9. Not looked into further; the CPU twin is exact at these numbers
+ *   (check:deep-zoom-box-orbit, three lines).
+ *
+ * JULIA MODE (added 2026-10-12; deep-zoom/renderer/core.js, grep JULIA MODE). In Julia mode c is one constant K
+ * and the point looked at starts the orbit: on the GPU a factor of 0 on the vector both kernels add each
+ * iteration (`C *= uAddC`) and on the jet's "+ v". The "julia, ..." lines hold both kernels to it: the same
+ * grid as the Mandelbox's - 13 x 13 rays, the careful march's hits, two points a ray - and at each point the
+ * GPU's estimate against the CPU twin (`pertOrbitJS` / `boxOrbitJS` on a reference built in Julia mode) and
+ * against `hpDirectDE` / `boxDirectHP`, a fixed-point orbit of the explicit point that adds K. The bar is the
+ * Mandelbox grids' own. Each line also checks that a view read in Julia mode carries the constant string for
+ * string. THE REBASE TO THE ORIGIN IS ASKED FOR in these lines, as the shell asks for it: in Julia mode the
+ * renderer must hold it off itself (grep `juliaOn ? 0 : rebaseOrigin`). Every deep view and its constant is
+ * printed by `JULIA_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/julia-orbit.mts`.
+ *   THE BOX, six GATED lines: at scale 2 (K inside the set) and at scale -1.5 (K = the "Arches" card's camera, a
+ *   deep place of the box) the whole Julia set from outside, 1e-10 and 1e-30. First run: 0 points over 1e-3 on
+ *   every line, the worst 1.5e-4.
+ *   THE BULB, one GATED line: a constant INSIDE the bulb at 1e-10 (0 of 338 over 1e-3, worst 8.2e-5).
+ *   THE BULB, four lines PRINTED AND NOT GATED, because they do not meet that bar (first run, 2026-10-12):
+ *       the constant inside the bulb at 1e-30                 113 of 338 points over 1e-3, the worst 5.9e-3
+ *       a constant ON the bulb's surface (the "Grain of sand" starter's camera point) at 1e-3
+ *                                                              25 of 338, the worst 1.8e-2
+ *       the same at 1e-10                                      12 of 338, the worst 4.8e-3
+ *       the same at 1e-30                                     131 of 338, the worst 1e22 (noise)
+ *   It is the grain of the PLAIN REBASE, the only valid one in Julia mode: the same kernel in Mandelbrot
+ *   mode with the plain rebase reads 23 and 37 of 169 rays over 1e-3 at the two flight views ("the page's
+ *   kernel ... (not gated)", above) and 0 with the rebase to the origin. The Julia form of that repair is a
+ *   second reference, the orbit of K itself; it is not built. (The CPU study's 24-bit emulation had put its
+ *   gain at a fifth; on the GPU the rebase to the origin takes the Mandelbrot lines from 14 and 22 % to 0.)
+ *   There is NO whole-object line for the bulb: from outside its set every hit is the f32 far field's and
+ *   the kernel is not what draws there (a first try read garbage against the twin at 5.6 units: the first
+ *   step of a delta from a camera that far is all cancellation, in either mode).
+ * What these lines do not hold: the ray march's own step in Julia mode (a grid's hits come from the careful
+ * march, as everywhere in this file), the f32 baseline and the far field (`cOf` in the shaders), any picture.
+ * The Mandelbrot-mode lines above are untouched: 74 printed lines, the same to the character as before.
+ * SEEN RED, 2026-10-12 (one break, restored byte for byte, sha-256): the factor left at 1 in Julia mode
+ * (`gl.uniform1f(x.addC, juliaOn ? 0 : 1)` -> `gl.uniform1f(x.addC, 1)` in setPowerUniforms: the GPU adds the
+ * pixel's c after all, the CPU does not) -> exit 1, all seven gated Julia lines FAIL (the box's deep lines with
+ * every escape flag different or every point off, "338 over 1e-3, worst 9.9e-1"; the bulb's "338 over 1e-3,
+ * worst 8.1e-1"), and the 74 Mandelbrot-mode lines print as they did.
  */
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -144,17 +193,42 @@ const GRIDS = GRID_VIEWS.length + SHALLOW_VIEWS.length;
  *  Sources: the scale -1.5 deep view is the CPU study's third still (debug/scratch/formula-study/box-still.mjs
  *  dive -1.5, 1e-58); the scale 2 deep view is the shell's "Block city" card (deep-zoom/data/boxStarters.ts);
  *  the fold-plane view is printed by `BOX_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/box-orbit.mts`. */
-interface BoxGridView { name: string; scale: number; minRays: number; at?: [number, number, number]; view?: { cam: [string, string, string]; yaw: number; pitch: number; iters: number } }
+interface BoxGridView { name: string; scale: number; minR?: number; fixedR?: number; minRays: number; gated?: boolean; at?: [number, number, number]; view?: { cam: [string, string, string]; yaw: number; pitch: number; iters: number } }
 const BOX_VIEWS: BoxGridView[] = [
     { name: 'scale 2, the whole box from outside', scale: 2, minRays: 100, at: [21.4, 13.9, 16.3] },
     { name: 'scale -1.5, the whole box from outside', scale: -1.5, minRays: 60, at: [9.2, 6.0, 7.0] },
     { name: 'scale -1.5, deep', scale: -1.5, minRays: 100, view: { cam: ['231340084820589872264388682860465312343363597714993760880392389129696058445824', '-115505690266144237118182651262838104948196147110281983144364981469154730405568', '-224938163884098067862185448294517667743563675066854994226828080189985687099904'], yaw: 2.8862143657279002, pitch: 0.0013931332160032532, iters: 294 } },
     { name: 'scale 2, deep', scale: 2, minRays: 100, view: { cam: ['667951163547858345227662796364357847661243279945297544068252618814681339920384', '-517624135418796263310132574026070401466220011117613386313111658529175032037376', '-616403708235521093231712781108458524603977757626083392057256071077627630190592'], yaw: 2.652738625702473, pitch: 0.9092279035626659, iters: 175 } },
     { name: 'scale 2, 0.3 of its depth from the fold plane x = L', scale: 2, minRays: 100, view: { cam: ['115792089237316195423570985008687907853269984665640911415725295956502046048256', '684268342233395210033453236002781633172082314627674986642572796134748896362496', '551713594688047412232560182166680140904148522016028729629067015228366381907968'], yaw: -1.5707963267948966, pitch: -0.8462983716754363, iters: 209 } },
+    // THE KLEINIAN CARD's numbers (deep-zoom/data/boxStarters.ts, 2026-10-12): the box with no inner radius - GMT's "Kleinian".
+    // The last two of the list, so the five lines above print as they always did. Places: BOX_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/box-orbit.mts.
+    { name: 'the Kleinian card\'s numbers (scale 1.8, min radius 3.1623e-5, fixed radius 1.0954), the whole box from outside', scale: 1.8, minR: 3.1623e-5, fixedR: 1.0954451150103321, minRays: 100, gated: false, at: [14.7, 9.6, 13.6] },
+    { name: 'the Kleinian card\'s numbers, deep', scale: 1.8, minR: 3.1623e-5, fixedR: 1.0954451150103321, minRays: 100, view: { cam: ['788072726516279883012006933276407507453137152198061818225240135795927383277568', '604674356441839265869099570002805128393873172986988055031863833518089550430208', '471345509366772405144724121080975964553536705466804893088322570618897510170624'], yaw: -2.5535900500422257, pitch: -0.5688274275078773, iters: 166 } },
+];
+/** JULIA MODE's views (grep JULIA MODE in deep-zoom/renderer/core.js): a formula, a constant K (three 256-bit
+ *  strings) and either `whole` - the camera is put outside the ball `__dz.wholeObject()` finds, looking at its
+ *  centre, auto iterations picking the count - or a deep `view` with its count. Every deep view and its constant
+ *  is printed by `JULIA_PRINT_PLACES=1 npx tsx debug/deep-zoom-checks/julia-orbit.mts`, found there by a
+ *  fixed-point referee alone. The constants: one inside each formula's set, and two deep places of the app's own
+ *  data taken AS constants (the Mandelbox card "Arches", 1.2e-20 from the box; the starter "Grain of sand",
+ *  1.1e-17 from the bulb). */
+interface JuliaGridView { name: string; kind: 'mandelbox' | 'mandelbulb'; scale?: number; power?: number; minRays: number; gated?: boolean; c: [string, string, string]; whole?: boolean; view?: { cam: [string, string, string]; yaw: number; pitch: number; iters: number } }
+const JULIA_VIEWS: JuliaGridView[] = [
+    { name: 'box scale 2, K = (0.1, 0.2, 0.1), the whole set from outside', kind: 'mandelbox', scale: 2, minRays: 60, c: ['11579208923731620185132316204464901002111835403029097412826955913908447084544', '23158417847463240370264632408929802004223670806058194825653911827816894169088', '11579208923731620185132316204464901002111835403029097412826955913908447084544'], whole: true },
+    { name: 'box scale 2, K = (0.1, 0.2, 0.1), deep', kind: 'mandelbox', scale: 2, minRays: 100, c: ['11579208923731620185132316204464901002111835403029097412826955913908447084544', '23158417847463240370264632408929802004223670806058194825653911827816894169088', '11579208923731620185132316204464901002111835403029097412826955913908447084544'], view: { cam: ['467028093280172783619957061215632266807316310232808403554726197505655163584512', '277436568428139190977687696843458275562717692782740999039263723961906685280256', '186811237312069126507272219434897816097105649153757750113045149525207681073152'], yaw: -2.761086276477428, pitch: -0.5146462982364081, iters: 75 } },
+    { name: 'box scale 2, K = (0.1, 0.2, 0.1), deeper', kind: 'mandelbox', scale: 2, minRays: 100, c: ['11579208923731620185132316204464901002111835403029097412826955913908447084544', '23158417847463240370264632408929802004223670806058194825653911827816894169088', '11579208923731620185132316204464901002111835403029097412826955913908447084544'], view: { cam: ['467028093257175321755994712103122701636739863386073215487624304594006579347456', '277436568414132934380721301884502643433079116220822334635452229605641273999360', '186811237302870141761687282035751700175622277750705199674451852088111353823232'], yaw: -2.761086276477428, pitch: -0.5146462982364081, iters: 141 } },
+    { name: 'box scale -1.5, K = the "Arches" card\'s camera, the whole set from outside', kind: 'mandelbox', scale: -1.5, minRays: 30, c: ['105133227900455499701300868468310676970769101121820030482997042997629227630592', '224205250848645760082472614631644373655887713607800908119944522723394800582656', '231582939326469722564091680479486627488378211150615742408566556672015225323520'], whole: true },
+    { name: 'box scale -1.5, K = the "Arches" card\'s camera, deep', kind: 'mandelbox', scale: -1.5, minRays: 100, c: ['105133227900455499701300868468310676970769101121820030482997042997629227630592', '224205250848645760082472614631644373655887713607800908119944522723394800582656', '231582939326469722564091680479486627488378211150615742408566556672015225323520'], view: { cam: ['416059908618045569116845885703603977433272668760460648529942860549365283422208', '244317976923260027858574011539986447874429838578404726230039019730075910144000', '166423963447218126284446201615733137834104028537938514140540841798839346135040'], yaw: -2.761086276477428, pitch: -0.5110772271837977, iters: 80 } },
+    { name: 'box scale -1.5, K = the "Arches" card\'s camera, deeper', kind: 'mandelbox', scale: -1.5, minRays: 100, c: ['105133227900455499701300868468310676970769101121820030482997042997629227630592', '224205250848645760082472614631644373655887713607800908119944522723394800582656', '231582939326469722564091680479486627488378211150615742408566556672015225323520'], view: { cam: ['416059908574415760838204871050103769041559140873614878607882786590685319397376', '244317976896908849178871229195543843215189999428438012946828777330997339357184', '166423963429766202972989791196533419741906059537039269175867911958605655441408'], yaw: -2.761086276477428, pitch: -0.5110772271837977, iters: 120 } },
+    { name: 'bulb power 8, K = (0.25, 0.1, 0.05) inside the bulb, deep', kind: 'mandelbulb', power: 8, minRays: 60, c: ['28948022309329048855892746252171976963317496166410141009864396001978282409984', '11579208923731620185132316204464901002111835403029097412826955913908447084544', '5789604461865810092566158102232450501055917701514548706413477956954223542272'], view: { cam: ['93769811716764352987926902245866735853152071410209762860715199978661480497152', '52854566921576359436630791228694317582481567623519787716344383728339919044608', '37507924686705742725300860363379165082292873426758411251601463493877506768896'], yaw: -2.761086276477428, pitch: -0.536326162184031, iters: 23 } },
+    { name: 'bulb power 8, K = (0.25, 0.1, 0.05) inside the bulb, deeper', kind: 'mandelbulb', power: 8, minRays: 60, gated: false, c: ['28948022309329048855892746252171976963317496166410141009864396001978282409984', '11579208923731620185132316204464901002111835403029097412826955913908447084544', '5789604461865810092566158102232450501055917701514548706413477956954223542272'], view: { cam: ['93769811696824970039053191523226710163539833028447744510177005116344376492032', '52854566908810395707030234817996626729023831842167359732828098086682440499200', '37507924678729989545751375089629521494369642692148802951356552112186266222592'], yaw: -2.761086276477428, pitch: -0.536326162184031, iters: 47 } },
+    { name: 'bulb power 8, K = the "Grain of sand" starter as a camera point, from just outside', kind: 'mandelbulb', power: 8, minRays: 60, gated: false, c: ['-19106688270107545123610310944093228319268234083931764161217485625786859879978', '2056390632353041980388441420253193046898375110266709396020905008395931668174', '106035815535807686550824900054021630250672589610944549407697460964969796977517'], view: { cam: ['24993834202170599708882831589874292610352664032906371070899623762682743619584', '-113464322632846250297569921178950955972777021330078525082493988117265661296640', '40209313192364663045422933169569012270039840783146637393933960148239043788800'], yaw: -2.039865313527242, pitch: 1.2022142226399175, iters: 15 } },
+    { name: 'bulb power 8, K = the "Grain of sand" starter as a camera point, deep', kind: 'mandelbulb', power: 8, minRays: 60, gated: false, c: ['-19106688270107545123610310944093228319268234083931764161217485625786859879978', '2056390632353041980388441420253193046898375110266709396020905008395931668174', '106035815535807686550824900054021630250672589610944549407697460964969796977517'], view: { cam: ['24956568696536676362202681661888324705713272581499641389271257262746767458304', '-113250887681945508489524916561555419291406694173423766919163219708080910499840', '40135781507349156550886944262605599021547258228535078774164609086100302987264'], yaw: -2.039865313527242, pitch: 1.2022142226399175, iters: 29 } },
+    { name: 'bulb power 8, K = the "Grain of sand" starter as a camera point, deeper', kind: 'mandelbulb', power: 8, minRays: 60, gated: false, c: ['-19106688270107545123610310944093228319268234083931764161217485625786859879978', '2056390632353041980388441420253193046898375110266709396020905008395931668174', '106035815535807686550824900054021630250672589610944549407697460964969796977517'], view: { cam: ['24956568693025588442137350424273187340582356448787877458924250448999537967104', '-113250887661836056998676183822999357604023610669783086123757699411600513957888', '40135781500421135406180615138098238129634792476371660982013466743056334061568'], yaw: -2.039865313527242, pitch: 1.2022142226399175, iters: 102 } },
 ];
 const ORIGIN = process.env.ORIGIN === '1';
 
-let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0;
+let pass = 0, ran = 0, gridPass = 0, gridRan = 0, boxPass = 0, boxRan = 0, juliaPass = 0, juliaRan = 0;
 const pageErrors: string[] = [];
 // DZ_HEADLESS=1: no window (same Chrome, same GPU flags).
 const browser = await chromium.launch({ channel: 'chrome', headless: process.env.DZ_HEADLESS === '1',
@@ -289,7 +363,7 @@ try {
   const boxGrid = (v: BoxGridView): Promise<any> => page.evaluate(`(async () => {
     const w = window, v = ${JSON.stringify(v)}, G = 13, f = Math.tan(0.55);
     const frames = (n) => new Promise((done) => { const tick = () => (n-- > 0 ? requestAnimationFrame(tick) : done()); tick(); });
-    w.__setFormula('mandelbox', { scale: v.scale, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] });
+    w.__setFormula('mandelbox', { scale: v.scale, minR: v.minR === undefined ? 0.5 : v.minR, fold: 1, fixedR: v.fixedR === undefined ? 1 : v.fixedR, rot: [0, 0, 0] });
     for (let i = 0; i < 1500 && w.__formulaState() === 'building'; i++) await new Promise((r) => setTimeout(r, 40));
     if (w.__formulaState() !== 'on') return { error: 'the Mandelbox variant did not build: ' + JSON.stringify(w.__variantErr()) };
     w.__setMode('deep'); w.__setRebaseOrigin(false); w.__setFarHandOff(0.5);
@@ -326,17 +400,76 @@ try {
     const twin = esc.map((q: any) => rel(q.gpu, q.twin)), direct = esc.map((q: any) => rel(q.gpu, q.direct));
     const over = (xs: number[], lim: number): number => xs.filter((x) => !(x <= lim)).length, worst = (xs: number[]): number => xs.reduce((m, x) => (x > m || !(x === x) ? x : m), 0);
     // the bulb's own bar for a grid: none over 1e-2, at most a fiftieth over 1e-3 - against the twin and against the direct orbit
-    const ok = r.rays >= v.minRays && flags === 0 && over(twin, 1e-2) === 0 && over(direct, 1e-2) === 0 && over(twin, 1e-3) <= 0.02 * esc.length && over(direct, 1e-3) <= 0.02 * esc.length;
+    const held = r.rays >= v.minRays && flags === 0 && over(twin, 1e-2) === 0 && over(direct, 1e-2) === 0 && over(twin, 1e-3) <= 0.02 * esc.length && over(direct, 1e-3) <= 0.02 * esc.length;
+    const ok = v.gated === false || held;                                  // a view marked `gated: false` is printed with its numbers only (the Kleinian card's whole view: see the header)
     if (ok) boxPass++;
     console.log(`mandelbox, ${v.name} (${r.depth.toExponential(1)}, ${r.iters} iterations): ${String(r.rays).padStart(3)} rays, ${r.pts.length} points  escape flags differ ${flags}`
-      + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}  ${ok ? 'PASS' : 'FAIL'}`);
+      + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}  ${v.gated === false ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
   }
   await page.evaluate(`(() => { window.__setFormula('mandelbulb'); window.__setAutoIters(true); })()`);
+
+  // ---- JULIA MODE (added 2026-10-12; see the header) ----
+  console.log('\nJULIA MODE: the GPU kernels against their CPU twins and against a fixed-point orbit of the explicit point under z -> f(z) + K');
+  const juliaGrid = (v: JuliaGridView): Promise<any> => page.evaluate(`(async () => {
+    const w = window, v = ${JSON.stringify(v)}, G = 13, f = Math.tan(0.55);
+    const frames = (n) => new Promise((done) => { const tick = () => (n-- > 0 ? requestAnimationFrame(tick) : done()); tick(); });
+    if (v.kind === 'mandelbox') w.__setFormula('mandelbox', { scale: v.scale, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0], julia: true, c: v.c });
+    else { w.__setFormula('mandelbulb', { julia: true, c: v.c }); w.__setPower(v.power); }
+    for (let i = 0; i < 1500 && w.__formulaState() === 'building'; i++) await new Promise((r) => setTimeout(r, 40));
+    if (w.__formulaState() !== 'on') return { error: 'the program did not build: ' + JSON.stringify(w.__variantErr()) };
+    // the rebase to the origin is ASKED FOR, as the shell asks for it: in Julia mode the renderer must hold it off itself
+    w.__setMode('deep'); w.__setRebaseOrigin(true); w.__setFarHandOff(0.5);
+    if (v.whole) {
+      const b = w.__dz.wholeObject();
+      if (!b) return { error: 'the renderer found no solid for this constant' };
+      const dir = [0.66, 0.43, 0.61], l = Math.hypot(dir[0], dir[1], dir[2]), d = 2.4 * b.radius;
+      w.__setAutoIters(true); w.__setIters(4); w.__setCamHP(b.center.map((c, j) => c + dir[j] / l * d));
+      w.__cam.yaw = Math.atan2(-dir[2], -dir[0]); w.__cam.pitch = Math.asin(-dir[1] / l);
+    } else { w.__setAutoIters(false); w.__setIters(v.view.iters); w.__dz.setView({ cam: v.view.cam, yaw: v.view.yaw, pitch: v.view.pitch, iters: v.view.iters, power: v.power || 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1 }); }
+    w.__setSurf(360 / G);                                                   // the hit tolerance of a picture 360 rows tall, on 13 rays
+    await frames(14);
+    w.__setReach(2); w.__setMarch({ maxSteps: 16384 }); w.__setStepRelax(0.1); w.__setHitRefine(8);
+    const g = w.__readGbuf(G);
+    w.__setReach(1); w.__setStepRelax(0); w.__setHitRefine(0);
+    const v0 = w.__dz.getView(), dist = w.__dz.telemetry().depth, iters = w.__dz.telemetry().iters, refE = Math.floor(Math.log2(dist));
+    const cp = Math.cos(v0.pitch), sp = Math.sin(v0.pitch), cy = Math.cos(v0.yaw), sy = Math.sin(v0.yaw);
+    const fwd = [cp * cy, sp, cp * sy], right = [Math.cos(v0.yaw + Math.PI / 2), 0, Math.sin(v0.yaw + Math.PI / 2)];
+    const up = [right[1] * fwd[2] - right[2] * fwd[1], right[2] * fwd[0] - right[0] * fwd[2], right[0] * fwd[1] - right[1] * fwd[0]];
+    const pts = []; let rays = 0;
+    for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+      const i = (y * G + x) * 4, kind = Math.floor(g[i + 2] / 256) % 4;
+      if (kind !== 1 && kind !== 2) continue;
+      rays++;
+      const ux = (x + 0.5 - G / 2) / G, uy = (y + 0.5 - G / 2) / G;
+      let d = [0, 1, 2].map((j) => fwd[j] + f * (ux * right[j] + uy * up[j])); const len = Math.hypot(d[0], d[1], d[2]); d = d.map((c) => c / len);
+      w.__dz.setYawPitch(Math.atan2(d[2], d[0]), Math.asin(d[1]));
+      for (const q of w.__directCheckHP([0.5, 0.97].map((a) => Math.pow(2, g[i] + refE) * a))) pts.push({ gpu: q.gpu, twin: q.pert, direct: q.direct, escG: q.escG, escD: q.escD });
+    }
+    const constantBack = (v0.julia || []).join() === v.c.join();          // a view read in Julia mode carries the constant, string for string
+    w.__dz.setView(v0); w.__setSurf(1);
+    return { depth: dist, iters, rays, pts, constantBack };
+  })()`);
+  for (const v of JULIA_VIEWS) {
+    const r = await juliaGrid(v);
+    juliaRan++;
+    if (r.error) { console.log(`julia, ${v.name}: ${r.error}  FAIL`); continue; }
+    const esc = r.pts.filter((q: any) => q.escG && q.escD), flags = r.pts.length - esc.length;
+    const rel = (a: number, b: number): number => Math.abs(a - b) / Math.abs(b);
+    const twin = esc.map((q: any) => rel(q.gpu, q.twin)), direct = esc.map((q: any) => rel(q.gpu, q.direct));
+    const over = (xs: number[], lim: number): number => xs.filter((x) => !(x <= lim)).length, worst = (xs: number[]): number => xs.reduce((m, x) => (x > m || !(x === x) ? x : m), 0);
+    // the bar of the Mandelbox's grids: none over 1e-2, at most a fiftieth over 1e-3 - against the twin and against the direct orbit
+    const held = r.rays >= v.minRays && flags === 0 && over(twin, 1e-2) === 0 && over(direct, 1e-2) === 0 && over(twin, 1e-3) <= 0.02 * esc.length && over(direct, 1e-3) <= 0.02 * esc.length;
+    const ok = r.constantBack && (v.gated === false || held);              // a line marked `gated: false` is printed with its numbers and held only to carrying its constant
+    if (ok) juliaPass++;
+    console.log(`julia, ${v.name} (${r.depth.toExponential(1)}, ${r.iters} iterations): ${String(r.rays).padStart(3)} rays, ${r.pts.length} points  escape flags differ ${flags}`
+      + `  GPU vs twin: ${String(over(twin, 1e-3)).padStart(3)} over 1e-3, worst ${worst(twin).toExponential(1)}  GPU vs direct: ${String(over(direct, 1e-3)).padStart(3)} over 1e-3, worst ${worst(direct).toExponential(1)}${r.constantBack ? '' : '  THE VIEW DOES NOT CARRY THE CONSTANT'}  ${v.gated === false && r.constantBack ? '(not gated)' : ok ? 'PASS' : 'FAIL'}`);
+  }
+  await page.evaluate(`(() => { window.__setFormula('mandelbulb', { julia: false }); window.__setPower(8); window.__setRebaseOrigin(${ORIGIN}); window.__setAutoIters(true); })()`);
 } finally { await browser.close(); srv.stop(); }
 
 // The historical suite only prints; as a guard for the port this one also gates.
 if (pageErrors.length) console.log(`page errors (${pageErrors.length}):\n  ` + pageErrors.slice(0, 5).join('\n  '));
 const allOk = pass === DEPTHS.length && ran === DEPTHS.length && gridPass === GRIDS && gridRan === GRIDS
-  && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && pageErrors.length === 0;
-if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids and no page errors`);
+  && boxPass === BOX_VIEWS.length && boxRan === BOX_VIEWS.length && juliaPass === JULIA_VIEWS.length && juliaRan === JULIA_VIEWS.length && pageErrors.length === 0;
+if (!allOk) console.log(`FAIL: expected ${DEPTHS.length}/${DEPTHS.length} depths, ${GRIDS}/${GRIDS} off-centre grids, ${BOX_VIEWS.length}/${BOX_VIEWS.length} Mandelbox grids, ${JULIA_VIEWS.length}/${JULIA_VIEWS.length} Julia grids and no page errors`);
 process.exit(allOk ? 0 : 1);

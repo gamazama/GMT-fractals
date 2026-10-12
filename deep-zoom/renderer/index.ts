@@ -162,6 +162,11 @@ export interface DzView {
     /** A turn about the view axis, in radians (grep `ROLL` in core.js). `getView` leaves it out when it
      *  is 0, and `setView` reads a view without it as 0: every view from before the roll is as it was. */
     roll?: number;
+    /** JULIA MODE's constant (grep the name in renderer/core.js): three fixed-point decimal STRINGS, as
+     *  `cam`. `getView` gives it only while Julia mode is on; `setView` takes it when it is there (it
+     *  sets the constant, never the mode: the mode is the formula's). Never a number: with the constant
+     *  as a double a deep Julia place opens 1e-18 from a surface, whatever depth it was saved at. */
+    julia?: [string, string, string];
     iters: number;
     power: number;
     phase: [number, number];
@@ -329,6 +334,15 @@ export interface DzHostHandle {
      *  and the count in force, and 0 at the bulb's centre: measured in the app on 2026-10-11
      *  (debug/scratch/r3/app-route.mts), no standing guard. */
     estimateAtPoint(position: [string, string, string], iters?: number): number;
+    /** THE POINT LOOKED AT (for a host's "Julia from this place"; grep JULIA MODE in core.js): where the view
+     *  axis meets the drawn solid, by the same CPU ray as `freeDistance`, as three fixed-point decimal strings
+     *  exact in the camera's arithmetic. `kind` 'hit'; 'open' = nothing is looked at within the steps (the
+     *  point is where the ray stopped); 'inside' = the camera stands in the solid. Draws and moves nothing. */
+    lookPoint(opt?: { tol?: number; maxSteps?: number }): { kind: 'hit' | 'open' | 'inside'; t: number; point: [string, string, string] };
+    /** A ball about the whole of the solid the formula in force draws, from a coarse scan on the CPU (grep
+     *  THE WHOLE OBJECT in core.js), or null when the scan finds none (a Julia constant with no set). Rough
+     *  on purpose: what a host places a from-outside camera by. About 24,000 short orbits: a button, not a frame. */
+    wholeObject(): { center: [number, number, number]; radius: number } | null;
 }
 
 /** What a bundle of rays read (`DzHostHandle.sense`). Distances are in world units from the camera. */
@@ -427,8 +441,13 @@ export interface DeepZoomApi {
      *  lines FAIL), the sphere fold's shell case (two FAIL), and the fold distances uploaded as plain
      *  floats (only the fold-plane line FAILS). The record is in that script's header. */
     setFormula(kind: DzFormulaKind, params?: DeepZoomBoxParams): void;
-    /** What is selected, and the box's parameters as they are held (after the limits). */
-    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number] };
+    /** What is selected, and the box's parameters as they are held (after the limits); `julia` and `c`: JULIA
+     *  MODE (grep the name in core.js) and its constant, for either formula.
+     *  @invariant in Julia mode both GPU kernels compute what the CPU orbits compute, and what a fixed-point
+     *  orbit of the explicit point under z -> f(z) + K gives - proven by: npm run smoke:deep-zoom-direct (the
+     *  seven gated "julia, ..." lines) and npm run check:deep-zoom-julia-orbit. Falsification records in
+     *  debug/deep-zoom-direct-check.mts and debug/deep-zoom-checks/julia-orbit.mts. */
+    formula(): { kind: DzFormulaKind; scale: number; minR: number; fold: number; fixedR: number; rot: [number, number, number]; julia: boolean; c: [string, string, string] };
     /** Whether the deep shader of the SELECTED formula is there. */
     formulaState(): 'building' | 'on' | 'failed';
     setAutoIters(on: boolean): void;

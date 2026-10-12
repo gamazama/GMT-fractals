@@ -59,10 +59,10 @@ function makeApi() {
     const ray = { bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 };   // the module's own start values (core.js: `let rayAsk`)
     let normalDetail = 0;
     let auto = true;
-    const formula = { kind: 'mandelbulb', scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] };   // core.js: `let dzFormula`, `const box = {`
+    const formula = { kind: 'mandelbulb', scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, c: ['0', '0', '0'] as [string, string, string] };   // core.js: `let dzFormula`, `const box = {`, `let juliaOn`, `let juliaHP`
     const api = {
-        setFormula: (kind: string, p?: { scale?: number; minR?: number; fold?: number; fixedR?: number; rot?: [number, number, number] }) => { note('setFormula', kind, p); formula.kind = kind; Object.assign(formula, p || {}); },
-        formula: () => ({ ...formula, rot: [...formula.rot] as [number, number, number] }),
+        setFormula: (kind: string, p?: { scale?: number; minR?: number; fold?: number; fixedR?: number; rot?: [number, number, number]; julia?: boolean }) => { note('setFormula', kind, p); formula.kind = kind; Object.assign(formula, p || {}); },
+        formula: () => ({ ...formula, rot: [...formula.rot] as [number, number, number], c: [...formula.c] as [string, string, string] }),
         dz: { settings: () => ({ ...s, phase: [s.phase[0], s.phase[1]] as [number, number] }) },
         look,
         setLook: (o: Record<string, unknown>) => { note('setLook', o); Object.assign(look, o); if (typeof o.mode === 'number') s.lookMode = o.mode; },
@@ -147,7 +147,7 @@ console.log('[3] push');
     p.push(defaultParams());
     check(rig.calls.length > 15 && rig.of('setSurf').length === 1 && rig.of('setColor').length === 1 && rig.of('setLight').length === 1 && rig.of('setPhase').length === 1 && rig.of('setFormula').length === 1,
         'push: a first push of every param sends each group once (the joint groups once, not once per key)', rig.calls.map(([n]) => n).join(','));
-    check(rig.calls[0][0] === 'setFormula' && JSON.stringify(rig.calls[0][1]) === '["mandelbulb",{"scale":2,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0]}]',
+    check(rig.calls[0][0] === 'setFormula' && JSON.stringify(rig.calls[0][1]) === '["mandelbulb",{"scale":2,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0],"julia":false}]',
         'push: the formula is the FIRST call of a whole push, with the kind by name and the box\'s seven numbers', JSON.stringify(rig.calls[0]));
     rig.clear();
     p.push(defaultParams());
@@ -188,11 +188,20 @@ console.log('[3] push');
     // the formula: one call for the kind and the box's numbers, always ahead of the iteration count
     rig.clear();
     p.push({ 'dzFormula.iterations': 300, 'dzFormula.kind': 1, 'dzFormula.boxScale': -1.5 });
-    check(rig.calls.map(([n]) => n).join() === 'setFormula,setIters' && JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0]}]]',
+    check(rig.calls.map(([n]) => n).join() === 'setFormula,setIters' && JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0,0],"julia":false}]]',
         'push: the Mandelbox goes as setFormula("mandelbox", ...) BEFORE the iteration count sent with it (the ceiling is the formula\'s)', JSON.stringify(rig.calls));
     rig.clear();
     p.push({ 'dzFormula.boxRotY': 0.5 });
-    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0]}]]', 'push: one of the box\'s numbers sends the kind and all seven', JSON.stringify(rig.of('setFormula')));
+    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0],"julia":false}]]', 'push: one of the box\'s numbers sends the kind and all seven', JSON.stringify(rig.of('setFormula')));
+    rig.clear();
+    // JULIA MODE (2026-10-12): the switch rides in the formula's own call; its constant is no param (it is the view's)
+    p.push({ 'dzFormula.juliaMode': true });
+    check(JSON.stringify(rig.of('setFormula')) === '[["mandelbox",{"scale":-1.5,"minR":0.5,"fold":1,"fixedR":1,"rot":[0,0.5,0],"julia":true}]]' && rig.calls.length === 1,
+        'push: the Julia switch goes as setFormula(kind, { ..., julia: true }), one call and nothing else', JSON.stringify(rig.calls));
+    check(readParams(rig.api)['dzFormula.juliaMode'] === true, 'read-back: the Julia switch is read from the module\'s formula()');
+    rig.clear();
+    p.push({ 'dzFormula.juliaMode': false });
+    check(JSON.stringify((rig.of('setFormula')[0] as [string, { julia: boolean }])[1].julia) === 'false', 'push: and off again');
     rig.clear();
     p.push({ 'dzFormula.boxScale': 0.3 });
     check(JSON.stringify((rig.of('setFormula')[0] as [string, { scale: number }])[1].scale) === '1.02', 'push: a scale inside the band the renderer cannot draw goes as the nearer end (0.3 -> 1.02)', JSON.stringify(rig.of('setFormula')));

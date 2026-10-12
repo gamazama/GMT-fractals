@@ -15,6 +15,9 @@
  * look with no formula in it ..."; the roll line taken out of `viewOf` -> "a view with a roll reads
  * back with it"; the roll written whatever it is -> "a view without a roll ... has no roll key".
  * (The line of 2026-10-09 about a pasted gradient went with the gradient a place no longer holds.)
+ * 2026-10-12, a view may carry a Julia constant (one break, restored byte for byte): the `julia` line taken out
+ * of `viewOf` -> 1 red ("a Julia place reads back with its constant, three strings byte-identical, and its
+ * mode"). The refusal of a mangled constant was not broken on purpose.
  */
 import { locationToText, parseLocationText } from '../../deep-zoom/locationParse.ts';
 
@@ -91,6 +94,16 @@ const sameCam = (c: unknown): boolean => Array.isArray(c) && c.length === 3 && c
     const junk = parseLocationText(JSON.stringify({ view: { ...VIEW, roll: 'sideways' } }));
     check(level.ok && !('roll' in level.locations[0].view) && zero.ok && !('roll' in zero.locations[0].view) && junk.ok && !('roll' in junk.locations[0].view),
         'a view without a roll, with a roll of 0 or with one that is not a number has no roll key (it reads as 0)');
+
+    // JULIA MODE (2026-10-12): the constant travels with the view as three more strings; the mode with the formula.
+    const K: [string, string, string] = [CAM[1], '-' + CAM[2].replace('-', ''), CAM[0]];
+    const julia = parseLocationText(locationToText({ view: { ...VIEW, julia: K } as never, look: { dzFormula: { power: 8, phaseTheta: 0, phasePhi: 0, iterations: 56, autoIterations: true, kind: 0, juliaMode: true } } as never, depth: '4.2e+0' }));
+    check(julia.ok && julia.locations[0].view.julia?.join() === K.join() && (julia.locations[0].look?.dzFormula as { juliaMode?: boolean }).juliaMode === true,
+        'a Julia place reads back with its constant, three strings byte-identical, and its mode');
+    const plain = parseLocationText(JSON.stringify({ view: VIEW }));
+    check(plain.ok && !('julia' in plain.locations[0].view), 'a view without a Julia constant has no such key');
+    const mangled = [{ ...VIEW, julia: [0.25, 0.1, 0.05] }, { ...VIEW, julia: [K[0], K[1]] }, { ...VIEW, julia: [K[0], K[1], '1.5e77'] }].map((v) => parseLocationText(JSON.stringify({ view: v })));
+    check(mangled.every((r) => !r.ok && /julia/.test(r.reason)), 'a Julia constant of numbers, of two strings or with a number-mangled string is refused with a reason (never a wrong Julia set)');
 }
 
 console.log(failed === 0 ? 'location-parse: all green' : `location-parse: ${failed} FAILED`);

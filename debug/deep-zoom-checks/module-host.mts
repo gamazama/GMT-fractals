@@ -373,6 +373,8 @@ function makeRig() {
                 return { t: 1.25e-9, kind: 'hit' as const };
             },
             estimateAt: (offset: [number, number, number]): number => { note('estimateAt', offset); return 7.5e-41; },
+            lookPoint: (opt?: { tol?: number; maxSteps?: number }) => { note('lookPoint', opt); return { kind: 'hit' as const, t: 3.5e-40, point: ['11', '-22', '33'] as [string, string, string] }; },
+            wholeObject: () => { note('wholeObject'); return { center: [0.1, 0.2, 0.3] as [number, number, number], radius: 1.25 }; },
         },
         lockInput: (locked: boolean): void => { note('lockInput', locked); },
         cancelRender: (): void => { note('cancelRender'); },
@@ -392,7 +394,7 @@ function makeRig() {
         marchLevers: () => ({ stepRelax: 0, capRelax: 1, mode: state.mode }),
         rayMarch: () => ({ bits: 5, factor: 1, hit: 64, tol: 0.05, floor: 256, line: 2, detail: 0 }),   // the module's own start values since 2026-10-11
         rayMarchState: () => state.rayState,
-        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number] }),
+        formula: () => ({ kind: state.formulaKind, scale: 2, minR: 0.5, fold: 1, fixedR: 1, rot: [0, 0, 0] as [number, number, number], julia: false, c: ['0', '0', '0'] as [string, string, string] }),
         formulaState: () => state.formulaState,
         normalDetail: () => 0,
     };
@@ -488,6 +490,13 @@ console.log('[2] views     the cam strings, byte for byte');
     check(rig.count('setView') === 1 && sameCam(got?.cam, CAM_B) && got?.yaw === 0.5,
         'views: setView hands the module the caller\'s three cam strings byte-identical', JSON.stringify(got?.cam));
     check(sameCam(host.getView().cam, CAM_B), 'views: getView after setView returns the same strings');
+    // JULIA MODE (2026-10-12): a view carries the Julia constant as three more strings, and the host hands it through untouched
+    const K: [string, string, string] = [CAM_A[2], CAM_B[0], '-' + CAM_A[1].replace('-', '')];
+    host.setView(view(CAM_A, { julia: K }));
+    const sent = rig.calls.setView?.[1]?.[0] as DzView | undefined;
+    check(sameCam(sent?.julia, K) && sameCam(host.getView().julia, K), 'views: a view\'s Julia constant reaches the module and comes back, three strings byte-identical', JSON.stringify(sent?.julia));
+    host.setView(view(CAM_B));
+    check(!('julia' in host.getView()), 'views: a view without a Julia constant has no such key');
     host.dispose();
 }
 
@@ -786,6 +795,10 @@ console.log('[5] input     focus, and the host-input members');
     check(rig.count('freeDistance') === 1 && rig.calls.freeDistance[0][0] === axis && one.t === 1.25e-9 && one.kind === 'hit',
         'input: freeDistance is the module\'s own ray');
     check(host.estimateAt(axis) === 7.5e-41 && rig.count('estimateAt') === 1 && rig.calls.estimateAt[0][0] === axis, 'input: estimateAt is the module\'s own estimate, at the offset it was given');
+    const looked = host.lookPoint({ tol: 0.01 }), ball = host.wholeObject();
+    check(rig.count('lookPoint') === 1 && looked.kind === 'hit' && looked.point.join() === '11,-22,33' && (rig.calls.lookPoint[0][0] as { tol: number }).tol === 0.01,
+        'input: lookPoint is the module\'s own ray, its point three strings as the module gave them');
+    check(rig.count('wholeObject') === 1 && !!ball && ball.radius === 1.25 && ball.center.join() === '0.1,0.2,0.3', 'input: wholeObject is the module\'s own answer');
     // building() (2026-10-11): the variant the picture is waiting for, asked now. A render waits on it.
     const asked = (ray: 'off' | 'building' | 'on' | 'failed', kind: 'mandelbulb' | 'mandelbox', box: 'building' | 'on' | 'failed') => {
         rig.state.rayState = ray; rig.state.formulaKind = kind; rig.state.formulaState = box;

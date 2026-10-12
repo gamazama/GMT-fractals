@@ -112,6 +112,10 @@
  *   run", "dive: before ready ...", "input: ..." lines). Falsified 2026-10-08: the "input" group
  *   and the two "host:" lines of the "dive" group in the check's header; `sense` / `freeDistance`
  *   on 2026-10-09 and `setOrientation` on 2026-10-10 (the same group).
+ * @assumption `lookPoint` and `wholeObject` (2026-10-12, for "Julia from this place") reach the
+ *   module's own handles unchanged, and a view's `julia` strings pass through `setView` /
+ *   `getView` byte for byte. The check has lines for all three ("input: lookPoint ...", "input:
+ *   wholeObject ...", "views: a view's Julia constant ..."); none was broken on purpose.
  * @invariant A dive closes on the free distance AHEAD (the nearest of seven rays about the view
  *   axis), not on the estimate at the camera: with a wall close behind and the surface ahead far
  *   away it flies; inside the solid, or with nothing ahead at all, it ends at once; rays that ran
@@ -475,6 +479,8 @@ export function createModuleHost(instance: DeepZoomInstance, canvas: HTMLCanvasE
         freeDistance: (dir, opt) => dz.freeDistance(dir, opt),
         estimateAt: (offset) => dz.estimateAt(offset),
         estimateAtPoint: (cam, iters) => dz.estimateAtPoint(cam, iters),
+        lookPoint: (opt) => dz.lookPoint(opt),
+        wholeObject: () => dz.wholeObject(),
         // The same two questions `poll` asks for the `compile` event, answered now. The box draws with a variant of
         // its own and the ray march is not in force under it, so one of the two is asked, never both. A build that
         // FAILED answers null: nothing is being waited for (and the host is about to be taken down).

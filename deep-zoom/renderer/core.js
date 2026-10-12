@@ -348,6 +348,7 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec3 C; float ec;
   sclFromH3(dc, C, ec);                        // δc = C·2^ec, constant along the orbit
   vec3 D = C; float e = ec;                    // δ  = D·2^e
+  C *= uAddC;                                  // JULIA MODE (grep): the offset starts the delta and is not added again
   float drM = 1.0, drE = 0.0;                  // dr = drM·2^drE
   int m = 0, rebases = 0, it = 0;
   bool escaped = false;
@@ -558,7 +559,7 @@ void jetStep(inout vec3 jv, inout float ev, inout float jvs, inout float Qm, vec
        + dot(jv, vec3(cth * cph, cth * sph, -sth)) * vec3(cA * cB, cA * sB, -sA)
        + kap * dot(jv, vec3(-sph, cph, 0.0)) * vec3(-sB, cB, 0.0);
   }
-  jv = nj * scale + gRd * jvs;
+  jv = nj * scale + gRd * (jvs * uAddC);        // "+ v" is the "+ c" term's own: none in JULIA MODE (grep), where the jet is the true derivative of the start point
   float mx = max(abs(jv.x), max(abs(jv.y), abs(jv.z)));
   if (mx > 1048576.0 || (mx < 9.5367e-7 && mx > 0.0)) { float adj = floor(log2(mx)), k = exp2(-adj); jv *= k; Qm *= k; ev += adj; jvs = exp2(max(-ev, -160.0)); }
 }
@@ -702,6 +703,7 @@ OrbitOut pertOrbit(sampler2D orbit, int orbitLen, Hdr3 dc, int maxIter) {
   vec3 C; float ec;
   sclFromH3(dc, C, ec);                        // δc = C·2^ec, constant along the orbit
   vec3 D = C; float e = ec;                    // δ  = D·2^e
+  C *= uAddC;                                  // JULIA MODE (grep): the offset starts the delta and is not added again
   vec2 Ddr = vec2(0.0);
   int m = 0, rebases = 0, it = 0;
   bool escaped = false;
@@ -951,6 +953,9 @@ uniform float uIters;
 uniform float uPrecRatio;
 uniform vec3  uLightDir;
 uniform vec2  uPhase;
+uniform float uAddC;             // JULIA MODE (grep): 1 = c is the point; 0 = c is uJuliaC
+uniform vec3  uJuliaC;
+vec3 cOf(vec3 pos) { return uAddC > 0.5 ? pos : uJuliaC; }
 #ifdef USE_BOX
 /* THE FORMULA SEAM (grep): the f32 baseline of the Mandelbox - drawn while its deep variant compiles and
    when the mode says f32. The map and the estimate of BOX_KERNEL on plain floats; it keeps the bulb's
@@ -961,14 +966,14 @@ uniform mat3  uBoxRot;
 uniform int   uBoxHasRot;
 uniform float uBoxFar;
 float deMandelbulb(vec3 pos){
-    vec3 z = pos; float dr = 1.0; float r2 = 0.0;
+    vec3 z = pos, c = cOf(pos); float dr = 1.0; float r2 = 0.0;
     int N = int(uIters);
     for (int i=0;i<512;i++){
         if (i>=N) break;
         if (uBoxHasRot == 1) z = uBoxRot * z;
         z = clamp(z, -uBoxA.z, uBoxA.z) * 2.0 - z;
         float k = clamp(uBoxB.y / max(dot(z,z), 1e-30), 1.0, uBoxB.z);
-        z = z * (k * uBoxA.x) + pos;
+        z = z * (k * uBoxA.x) + c;
         dr = dr * k * uBoxA.y + 1.0;
         r2 = dot(z,z);
         if (r2 > uBoxB.w) break;
@@ -977,7 +982,7 @@ float deMandelbulb(vec3 pos){
 }
 #else
 float deMandelbulb(vec3 pos){
-    vec3 z = pos; float dr = 1.0; float r = 0.0;
+    vec3 z = pos, c = cOf(pos); float dr = 1.0; float r = 0.0;
     int N = int(uIters);
     for (int i=0;i<256;i++){
         if (i>=N) break;
@@ -989,7 +994,7 @@ float deMandelbulb(vec3 pos){
         float phi   = atan(z.y, z.x);
         theta = theta*uPower + uPhase.x; phi = phi*uPower + uPhase.y;
         float zr = rp1*r;
-        z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + pos;
+        z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
     }
     return 0.5*log(max(r,1e-8))*r/max(dr,1e-20);
 }
@@ -1081,6 +1086,9 @@ uniform float     uLandSplit;    // compare view: the divider's framebuffer x
 uniform int       uFarLook;      // 1 = a far-field hit carries a palette parameter, as a near hit does (grep FAR LOOK); 0 = the page
 uniform int       uHitRefine;    // n > 0: bisect the last step n times onto the level de = pa·t (grep HIT REFINE); n < 0: |n| times, only right of uLandSplit
 uniform int       uRebaseOrigin; // 1 = the kernel rebases an orbit onto the origin (grep REBASE TO THE ORIGIN); 0 = the page: onto the reference's first point
+uniform float     uAddC;         // JULIA MODE (grep): 1 = the point's own offset is added every iteration (c is the point); 0 = Julia mode (c is one constant)
+uniform vec3      uJuliaC;       // the Julia constant as plain floats: the f32 far field's c in Julia mode (the kernel needs none: a constant cancels in a delta)
+vec3 cOf(vec3 pos) { return uAddC > 0.5 ? pos : uJuliaC; }   // what an f32 orbit of the point pos adds each iteration
 uniform float     uFarSwitch;    // the t at which a ray is handed to the f32 far-field march (grep FAR HAND-OFF); the page: 1e-3
 uniform float     uLookLevel;    // THE LOOK LEVEL (grep): the normal is taken on the level this many times the hit level (1 = the page: on the hit itself)
 #ifdef USE_JET
@@ -1129,11 +1137,11 @@ void boxStepF32(inout vec3 z, inout float dr, vec3 c) {
 }
 float boxMu(float iters, float r) { return iters + 1.0 - 0.5 * log(max(r * r / uBoxB.w, 1.0)) / log(uBoxA.y); }
 float deF32(vec3 pos){
-    vec3 z = pos; float dr = 1.0, r2 = 0.0;
+    vec3 z = pos, c = cOf(pos); float dr = 1.0, r2 = 0.0;
     int N = int(uIters);
     for (int i = 0; i < 512; i++) {
         if (i >= N) break;
-        boxStepF32(z, dr, pos);
+        boxStepF32(z, dr, c);
         r2 = dot(z, z);
         if (r2 > uBoxB.w) break;
     }
@@ -1141,11 +1149,11 @@ float deF32(vec3 pos){
 }
 float paletteF32(vec3 pos){
     if (uColorMode == 0) return 0.0;
-    vec3 z = pos; float dr = 1.0, r2 = 0.0, trap2 = 1e30; int it = 0;
+    vec3 z = pos, c = cOf(pos); float dr = 1.0, r2 = 0.0, trap2 = 1e30; int it = 0;
     int N = int(uIters);
     for (int i = 0; i < 512; i++) {
         if (i >= N) break;
-        boxStepF32(z, dr, pos);
+        boxStepF32(z, dr, c);
         r2 = dot(z, z); it++;
         trap2 = min(trap2, r2);
         if (r2 > uBoxB.w) break;
@@ -1157,7 +1165,7 @@ float paletteF32(vec3 pos){
 /* plain f32 DE for the far-field hybrid segment (t > T_SWITCH the features are
    f32-resolvable; identical to the baseline shader's deMandelbulb, power n + phase) */
 float deF32(vec3 pos){
-    vec3 z = pos; float dr = 1.0, r = 0.0;
+    vec3 z = pos, c = cOf(pos); float dr = 1.0, r = 0.0;
     int N = int(uIters);
     for (int i = 0; i < 256; i++) {
         if (i >= N) break;
@@ -1168,7 +1176,7 @@ float deF32(vec3 pos){
         float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
         float phi = atan(z.y, z.x) * uPower + uPhase.y;
         float zr = rp1*r;
-        z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + pos;
+        z = zr*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
     }
     return 0.5*log(max(r,1e-8))*r/max(dr,1e-20);
 }
@@ -1179,14 +1187,14 @@ float deF32(vec3 pos){
    hit is a far hit - stays grey whatever the Colour tab says. */
 float paletteF32(vec3 pos){
     if (uColorMode == 0) return 0.0;
-    vec3 z = pos; float r = length(z), trap2 = 1e30; int it = 0;
+    vec3 z = pos, c = cOf(pos); float r = length(z), trap2 = 1e30; int it = 0;
     int N = int(uIters);
     for (int i = 0; i < 256; i++) {
         if (i >= N || r > 2.0) break;
         float rp1 = pow(r, uPower-1.0);
         float theta = acos(clamp(z.z/r, -1.0, 1.0)) * uPower + uPhase.x;
         float phi = atan(z.y, z.x) * uPower + uPhase.y;
-        z = rp1*r*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + pos;
+        z = rp1*r*vec3(sin(theta)*cos(phi), sin(phi)*sin(theta), cos(theta)) + c;
         r = length(z); it++;
         trap2 = min(trap2, r*r);
     }
@@ -2210,7 +2218,7 @@ function bindQuad(p){
 const U  = n => gl.getUniformLocation(prog,n);
 const u = { res:U('uRes'), camPos:U('uCamPos'), right:U('uRight'), up:U('uUp'), fwd:U('uFwd'),
             fov:U('uFovScale'), power:U('uPower'), iters:U('uIters'), prec:U('uPrecRatio'),
-            light:U('uLightDir'), phase:U('uPhase') };
+            light:U('uLightDir'), phase:U('uPhase'), addC:U('uAddC'), juliaC:U('uJuliaC') };
 /* THE FORMULA SEAM (grep): the f32 baseline of the active formula - the page's program for the bulb, FRAG with
    USE_BOX for the box (small: built on first use, blocking, well under a second). */
 let progBox = null, uBox = null;
@@ -2221,7 +2229,7 @@ function baseCtx(){
     const g = n => gl.getUniformLocation(progBox, n);
     uBox = { res:g('uRes'), camPos:g('uCamPos'), right:g('uRight'), up:g('uUp'), fwd:g('uFwd'),
              fov:g('uFovScale'), power:g('uPower'), iters:g('uIters'), prec:g('uPrecRatio'),
-             light:g('uLightDir'), phase:g('uPhase'),
+             light:g('uLightDir'), phase:g('uPhase'), addC:g('uAddC'), juliaC:g('uJuliaC'),
              boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') };
   }
   return { p: progBox, u: uBox };
@@ -2245,7 +2253,7 @@ function makeUD(p){ const g = n => gl.getUniformLocation(p,n);
             colorMode:g('uColorMode'),
             normalIters:g('uNormalIters'), bisectIters:g('uBisectIters'), stepRelax:g('uStepRelax'),
             maxSteps:g('uMaxSteps'), farRelax:g('uFarRelax'), farFrom:g('uFarFrom'),
-            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
+            land:g('uLand'), landSplit:g('uLandSplit'), hitRefine:g('uHitRefine'), rebaseOrigin:g('uRebaseOrigin'), addC:g('uAddC'), juliaC:g('uJuliaC'), farSwitch:g('uFarSwitch'), lookLevel:g('uLookLevel'), rayUse:g('uRayUse'), rayFactor:g('uRayFactor'), rayHit:g('uRayHit'), rayTol:g('uRayTol'), rayFloor:g('uRayFloor'), rayLine:g('uRayLine'), rayBall:g('uRayBall'), farLook:g('uFarLook'), guide:g('uGuide'), guideK:g('uGuideK'), guideR:g('uGuideR'), guideTex:g('uGuideTex'),
             boxA:g('uBoxA'), boxB:g('uBoxB'), boxRot:g('uBoxRot'), boxHasRot:g('uBoxHasRot'), boxFar:g('uBoxFar') }; }   // the last five: null but in the USE_BOX variant
 let ud = null;
 /* ════════ the two-pass deep draw ════════
@@ -2732,28 +2740,129 @@ function boxDerive(){
   return p;
 }
 let boxP = boxDerive();
-/* Set the formula. params (all optional, the box only): scale (|scale| held at or above 1.02: at 1 the
-   orbit of every point is bounded and there is no surface), minR, fold, fixedR, rot [x, y, z] in radians.
+/* ════════ JULIA MODE (2026-10-12) - both formulas; ONE FACTOR on the vector added each iteration ════════
+   GMT's own Julia mode (read: engine-gmt/shaders/chunks/de.ts, `vec4 c = mix(z, vec4(uJulia, uParamA),
+   step(0.5, uJuliaMode));`): the point looked at STARTS the orbit in both modes, and what is added every
+   iteration is the point itself (Mandelbrot mode) or one constant K for the whole picture (Julia mode).
+   K is held as the camera is: three 256-bit fixed-point numbers (juliaHP). It travels as three decimal
+   STRINGS (dz.getView's `julia`, api.setFormula's `c`), never as numbers.
+   THE MATHS (derived). The camera at P, a pixel at P + d0:
+       reference   Z0 = P,  Z' = f(Z) + K              the camera's own orbit; only the added vector changes
+       pixel       d0 = the pixel's offset,  d' = (the delta step of f at Z, d)     no "+ dc": K is the same for
+                   the pixel and for the reference, and a constant cancels in a difference
+       derivative  GMT's, as it stands: the "+ 1" of dr STAYS in Julia mode (read: engine-gmt/formulas/
+                   Mandelbulb.ts and AmazingBox.ts, one text for both modes). So the DR rows, the delta of dr
+                   and both estimates are untouched, and the estimate reads a little short of the
+                   true-derivative one (measured: it moves the bulb's over-read from 23 to 21 at 1e-30).
+       jet         j0 = the ray's direction v,  j' = A j    no "+ v": that term is the "+ c" term's own. The jet
+                   must be the TRUE derivative of the iterate along the ray - a resumed orbit moves a
+                   checkpoint by S j - so the "+ 1" does not stay HERE.
+       gradient    J^T z^ pulled back to z0 alone (pertOrbitJetJS): no sum over the iterations
+       the ball    rho^n - |K| = rho: exact, one ball for every ray and every camera (in Mandelbrot mode |c|
+                   is read at the camera and stands for every pixel's)
+       rebase      d = z - Z0 onto index 0: valid, the recurrence does not depend on the index.
+                   THE REBASE TO THE ORIGIN IS NOT VALID HERE and is held off (setPowerUniforms). It lands on
+                   Z0 as the image of the origin: true of a Mandelbrot reference (Z0 = c), false of a Julia
+                   one (Z0 = the camera; the image of the origin is K). Left on, 38.8 % of 20,300 points
+                   came out wrong on the CPU, half of them in iteration count; the plain rebase: 0.57 %
+                   (measured, debug/scratch/formula-next/julia-trap.mts). Its Julia form would be a second
+                   reference, the orbit of K itself. NOT BUILT: in a 24-bit emulation it took the share of
+                   points more than 1e-3 off from 9.4 % to 7.4 % (julia-rebase.mts).
+   ON THE GPU it is one uniform, uAddC (1 or 0): a factor on the kernel's added vector C in both kernels and on
+   the jet's "+ v". No branch, no new program, no further call of the kernel (grep THREE CALLS OF THE KERNEL).
+   The plain-f32 copies (the baseline, the far field) take c from cOf(pos): the point, or uJuliaC.
+   WHAT WAS MEASURED BEFORE IT WAS BUILT (2026-10-11, node only; debug/scratch/formula-next/, git-ignored; run
+   with the true derivative, i.e. without the "+ 1"):
+     - the Mandelbox: the delta step exact at 54 places (6 constants, scale 2 and -1.5, 1e-10 / 1e-30 / 1e-60),
+       0 of 52,062 points off by more than 1e-6, worst 1.2e-9; space stretched alike in every direction
+       (widest / narrowest 1.00 at 36 places; Mandelbrot mode at its starters: 1.17 to 1.31);
+     - the Mandelbulb: the step exact (of 67,337 points 0 differ in kind, 3 in iteration count); 219 estimates
+       off by more than 1e-6, all at constants ON the bulb's surface, where the orbit itself is
+       ill-conditioned (two f64 writings of the step disagree there by as much); iterations 1.2 to 2.8 a
+       decade at power 8;
+     - the bulb's Julia sets FLATTEN along a straight dive (widest / middle stretch, median of 12 places: 5.2 at
+       1e-10, 127 at 1e-30, 2,000 at 1e-60) and the scalar estimate over-reads the ray estimate 4.3 / 72 /
+       1.5e4 times there. A straight dive in Mandelbrot mode flattens as much (13 / 987 / 3.1e5); the places
+       people fly to do not (1.2 to 6.2). Nothing in the app's words promises depth in the bulb's Julia mode;
+     - the constant must be exact: with K as a double the camera of the 6.6e-35 starter stands 6e-19 from the
+       surface, with K to 5 decimals 9e-8. A whole object needs no more than a double.
+   WHAT THE GPU MEASURED WHEN IT WAS BUILT (2026-10-12, RTX 5070 Ti; the direct proof's "julia, ..." lines, 13 x 13
+   rays, two points a ray, against the CPU twin and a fixed-point orbit):
+     - the Mandelbox: 0 points more than 1e-3 off on all six lines (the whole set, 1e-10 and 1e-30, scale 2 and
+       -1.5), the worst 1.5e-4. Its pictures are clean and intricate at 2.8e-31;
+     - the Mandelbulb, a constant INSIDE the bulb: 0 of 338 over 1e-3 at 1e-10 (worst 8.2e-5); 113 of 338 at
+       1e-30, none over 1e-2 (worst 5.9e-3);
+     - the Mandelbulb, a constant ON the bulb's surface: 25 of 338 over 1e-3 at 1e-3 (worst 1.8e-2), 12 at 1e-10
+       (worst 4.8e-3), 131 at 1e-30 with values that are plain noise.
+     THAT IS THE PLAIN REBASE'S GRAIN, not the factor: in Mandelbrot mode the same kernel with the plain rebase reads
+     23 and 37 of 169 rays over 1e-3 at the proof's two flight views, and 0 with the rebase to the origin. So the
+     second reference is worth far more on the GPU than the 24-bit emulation said, and the bulb's Julia lines at
+     depth are printed, not gated, until it exists.
+     - what the bulb's Julia sets LOOK like (the kept place "Slicing" as the constant; debug/scratch/formula-next/
+       julia-bulb-*.png): from outside a rough, grainy body with a thin halo of stray specks, the same at 8, 16 and
+       32 iterations and for a constant inside the bulb too - it is the estimate's own level at a pixel's size, in
+       the f32 far field that draws every whole object; why that level is rough where the Mandelbrot bulb's is
+       smooth was not looked into. At 1.8e-7 a folded relief, clean; at 2.8e-11 half relief and half parallel
+       grooves; at 2e-21 and 1e-30 parallel streaks only, with grain in patches. The flattening is the CPU
+       study's, on screen.
+   THE BOX'S JULIA SET IS LARGER THAN THE BOX (derived; and seen: at scale -1.5 with a small K a start 6 units
+   out was inside the solid). Every bounded orbit stays inside |z| <= (2 sqrt(3) L |s| + |K|) / (|s| - 1): a
+   box fold shortens a vector by at most 2 sqrt(3) L, and outside the fixed radius the sphere fold does
+   nothing, so beyond that radius |z| grows every iteration (boxExtent).
+   Pitfalls:
+   - An orbit carries its mode (O.julia). The CPU kernels read it there, not from juliaOn, so an orbit kept
+     across a switch is iterated as it was built.
+   - A constant with nothing bounded (far outside the set) draws an empty picture: there is no surface.
+   - This block is lifted as TEXT by the node checks: nothing in it may touch gl, api or options.
+   @invariant the Julia delta step of both formulas on the CPU (pertOrbitJS and boxOrbitJS on an orbit built in
+   Julia mode) equals a fixed-point orbit of the explicit point under z -> f(z) + K - proven by: npm run
+   check:deep-zoom-julia-orbit ("julia twin = exact ..." lines). Falsification record in that file's header.
+   @invariant on the GPU, in Julia mode, the Mandelbox's kernel (the whole set, 1e-10, 1e-30) and the bulb's kernel
+   at a constant inside the bulb (1e-10) compute what the CPU orbits compute - proven by: npm run
+   smoke:deep-zoom-direct (the seven "julia, ... PASS" lines). Falsified 2026-10-12: the factor left at 1 in
+   Julia mode -> all seven FAIL (the record is in debug/deep-zoom-direct-check.mts).
+   @assumption the bulb's kernel in Julia mode is as right at a constant ON the bulb's surface: the four lines
+   that would say so are printed and not gated (the plain rebase's grain, above). */
+let juliaOn = false;                             // Julia mode: c is the constant K, not the point
+let juliaHP = [0n, 0n, 0n];                      // K, 256-bit fixed point, as the camera
+let juliaF = [0, 0, 0];                          // K as doubles: the f32 copies' uniform, the ball, the box's extent
+const cOfHP = (P) => (juliaOn ? juliaHP : P);    // what a fixed-point orbit of the point P adds each iteration
+/* K from three fixed-point decimal strings (as dz.getView's `cam`). Returns true when it changed; anything that
+   is not three whole numbers written as text is refused and changes nothing. */
+function setJuliaC(c){
+  if (!Array.isArray(c) || c.length !== 3 || !c.every((v) => typeof v === 'string' && /^-?\d+$/.test(v))) return false;
+  const k = c.map(BigInt);
+  if (k[0] === juliaHP[0] && k[1] === juliaHP[1] && k[2] === juliaHP[2]) return false;
+  juliaHP = k; juliaF = k.map(hp.toNum);
+  return true;
+}
+/* Set the formula. params (all optional): the box's scale (|scale| held at or above 1.02: at 1 the
+   orbit of every point is bounded and there is no surface), minR, fold, fixedR, rot [x, y, z] in radians;
+   and, for either formula, julia (true / false: JULIA MODE, grep) and c (its constant: three strings).
    Returns true when anything changed. Pure state: the caller restarts the orbit and the still. */
 function applyFormula(kind, params){
-  const was = JSON.stringify([dzFormula, box]);
+  const was = JSON.stringify([dzFormula, box, juliaOn]);
   dzFormula = kind === 'mandelbox' ? 'mandelbox' : 'mandelbulb';
   const q = params || {}, num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+  if (typeof q.julia === 'boolean') juliaOn = q.julia;
+  const newC = q.c !== undefined && setJuliaC(q.c);
   let s = num(q.scale, box.scale); if (Math.abs(s) < 1.02) s = s < 0 ? -1.02 : 1.02;
   box.scale = Math.max(-8, Math.min(8, s));
   box.minR = Math.max(3.1623e-5, Math.min(8, num(q.minR, box.minR)));
   box.fold = Math.max(1e-3, Math.min(8, num(q.fold, box.fold)));
   box.fixedR = Math.max(box.minR, Math.min(8, num(q.fixedR, box.fixedR)));
   if (Array.isArray(q.rot)) box.rot = [0, 1, 2].map(i => num(q.rot[i], 0));
-  if (JSON.stringify([dzFormula, box]) === was) return false;
+  if (JSON.stringify([dzFormula, box, juliaOn]) === was && !newC) return false;
   boxP = boxDerive(); formulaStamp++;
   return true;
 }
 /* boxExtent: a radius about the origin that holds the whole box. The set lies in the cube
    |x| <= 2 L (|s| + 1) / (|s| - 1) for a positive scale (the classic bound; for a negative scale it is smaller).
+   In JULIA MODE (grep) the set is another and can be larger: the ball derived there, and a tenth more.
    boxFar: the distance from the CAMERA beyond which a ray has left the box for good. */
 function boxExtent(){
   const aS = Math.abs(box.scale);
+  if (juliaOn) return 1.1 * (2 * Math.sqrt(3) * box.fold * aS + Math.hypot(juliaF[0], juliaF[1], juliaF[2])) / (aS - 1);
   return 1.8 * (2 * box.fold * (aS + 1) / (aS - 1) + box.fixedR);
 }
 function boxFar(){
@@ -2770,16 +2879,16 @@ function boxFar(){
    The same numbers in f64 (GH, GL, Wf, R2, GM, GF, REG) are what the CPU kernel reads; Rk and DRk are
    the reference's own radius and derivative, for the estimate at the camera. */
 function buildBoxOrbit(CHP, lenMax) {
-  const p = boxP, B = p.fixed, Vs = [], Qs = [];
+  const p = boxP, B = p.fixed, Vs = [], Qs = [], cHP = cOfHP(CHP);   // JULIA MODE (grep): the orbit of the camera's point adds K
   let v = CHP.slice();
   for (let k = 0; k < lenMax; k++) {
     const q = hp.boxParts(v, B);
     Vs.push(v); Qs.push(q);
     if (k > 0 && hp.toNum(hp.norm2(v)) > BOX_REF_MAX2) break;   // never one entry alone: a step needs the index after it, however far out the camera is
-    v = hp.boxStep(q, CHP, B);
+    v = hp.boxStep(q, cHP, B);
   }
   const len = Vs.length, rows = 6, data = new Float32Array(len * rows * 4), A = () => new Float64Array(len);
-  const O = { box: p, len, rows, data, Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
+  const O = { box: p, julia: juliaOn, len, rows, data, Vf: [], Wf: [], Rk: [], DRk: [], GH: [A(), A(), A()], GL: [A(), A(), A()], R2: A(), GM: A(), GF: A(), REG: new Int8Array(len) };
   const put = (row, k, vals) => { for (let j = 0; j < 4; j++) data[(row * len + k) * 4 + j] = vals[j]; };
   let DR = 1;
   for (let k = 0; k < len; k++) {
@@ -2811,10 +2920,10 @@ function hdrSplit(v) {
    in the kernel covers pixels needing more iterations. */
 function buildRefOrbit(CHP, lenMax) {
   if (boxOn()) return buildBoxOrbit(CHP, lenMax);            // THE FORMULA SEAM: the orbit carries its formula from here on (O.box)
-  const V = [CHP.slice()];
+  const V = [CHP.slice()], cHP = cOfHP(CHP);     // JULIA MODE (grep): the orbit of the camera's point adds K
   const Vf = [CHP.map(hp.toNum)];
   for (let k = 0; k < lenMax - 1; k++) {
-    const nv = hp.addV(hp.P8(V[k]), CHP);
+    const nv = hp.addV(hp.P8(V[k]), cHP);
     V.push(nv);
     const vf = nv.map(hp.toNum);
     Vf.push(vf);
@@ -2838,7 +2947,7 @@ function buildRefOrbit(CHP, lenMax) {
     Rk.push(R); DRk.push(DR);
     DR = nPower * Rp * DR + 1;
   }
-  return { data, len, Vf, Rk, DRk };
+  return { data, len, Vf, Rk, DRk, julia: juliaOn };
 }
 /* ════════ uniforms set before each deep draw, and the orbit texture ════════
    The skip table (BLA: its CPU build, its texture, its mode and its 'auto' rule) sat here until 2026-10-11.
@@ -2857,13 +2966,14 @@ function setPowerUniforms(x){
   gl.uniform1i(x.land, look.compare === 2 ? 2 : landMode);
   gl.uniform1i(x.hitRefine, look.compare === 3 ? -(hitRefine || 4) : hitRefine);   // compare 3: refined on the right of the divider only
   gl.uniform1i(x.farLook, dzFarLook);
-  gl.uniform1i(x.rebaseOrigin, rebaseOrigin);
+  gl.uniform1i(x.rebaseOrigin, juliaOn ? 0 : rebaseOrigin);      // JULIA MODE (grep): the rebase to the origin is not valid there
+  gl.uniform1f(x.addC, juliaOn ? 0 : 1); gl.uniform3f(x.juliaC, juliaF[0], juliaF[1], juliaF[2]);
   gl.uniform1f(x.farSwitch, farHandOff);
   gl.uniform1f(x.lookLevel, normalDetail > 0 ? Math.max(1, detailNow() / normalDetail) : 1);   // THE LOOK LEVEL: how many times coarser than the hit level the normal's level is
   gl.uniform1i(x.rayUse, rayUse); gl.uniform1f(x.rayFactor, rayFactor);    // THE RAY ESTIMATE; null in a variant without USE_JET: no-ops
   gl.uniform1f(x.rayHit, detailNow() / rayHitDiv); gl.uniform1f(x.rayTol, rayTol * detailNow());   // both as multiples of uPixAng, which is a display pixel ÷ detail
   gl.uniform1f(x.rayFloor, rayFloorDiv > 0 ? detailNow() / rayFloorDiv : 0);
-  { const cl = Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above
+  { const cl = juliaOn ? Math.hypot(juliaF[0], juliaF[1], juliaF[2]) : Math.hypot(cam.pos[0], cam.pos[1], cam.pos[2]); let rho = 2;       // THE LINE AGAINST THE BALL: rho^n - |c| = rho, from above (JULIA MODE: |c| is |K|, exactly)
     for (let i = 0; i < 80; i++) rho = Math.pow(rho + cl, 1 / nPower);
     gl.uniform1f(x.rayLine, rayLine); gl.uniform1f(x.rayBall, rho * 1.0001); }
   gl.uniform1i(x.maxSteps, march.maxSteps);
@@ -2963,7 +3073,7 @@ dzListen(dzDropTarget, 'drop', e => {
    Independent implementation path: plain f64 δ (JS doubles reach 1e-308, so no HDR
    needed CPU-side) + the SAME cancellation-free §3/§8.1 math. Disagreement with
    the GPU HDR march = a bug, not a zoom. */
-const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], len3=a=>Math.hypot(a[0],a[1],a[2]);
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2], len3=a=>Math.hypot(a[0],a[1],a[2]), ZERO3=[0,0,0];
 const add3=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], sub3=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], scl3=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
 const powm1N = (u,n) => { const c=binom(n); let p=c[n-1]; for(let k=n-2;k>=0;k--) p=p*u+c[k]; return u*p; };  // (1+u)^n−1
 function stableDeltaJS(V,d){                       // §3, residual forms (precision-ladder)
@@ -3007,7 +3117,7 @@ function boxFoldJS(gh, gl, d, L2){
 }
 function boxOrbitJS(O, dc, maxIter, fixed){
   const p = O.box, S = p.scale, aS = Math.abs(S), m2 = p.m2, F2 = p.F2, kA = p.kA, L2 = 2 * p.fold, R = p.hasRot ? p.R : null;
-  const V0 = O.Vf[0], GH = O.GH, GL = O.GL;
+  const V0 = O.Vf[0], GH = O.GH, GL = O.GL, cx = O.julia ? 0 : dc[0], cy = O.julia ? 0 : dc[1], cz = O.julia ? 0 : dc[2];   // JULIA MODE (grep): nothing is added after the start
   let dx = dc[0], dy = dc[1], dz = dc[2], m = 0, it = 0, dr = 1, escaped = false, trap2 = Infinity;
   let zx = V0[0] + dx, zy = V0[1] + dy, zz = V0[2] + dz;
   while (it < maxIter) {
@@ -3021,7 +3131,7 @@ function boxOrbitJS(O, dc, maxIter, fixed){
     else if (reg === 0) dk = pr === 1 ? -F2 * pm / (r2p * m2) : 1 - kA;
     else if (reg === 1) dk = pr === 0 ? F2 * gm / (m2 * r2) : gF / r2;
     else dk = pr === 1 ? -pF / r2p : kA - 1;
-    dx = S * (kp * ex + dk * W[0]) + dc[0]; dy = S * (kp * ey + dk * W[1]) + dc[1]; dz = S * (kp * ez + dk * W[2]) + dc[2];
+    dx = S * (kp * ex + dk * W[0]) + cx; dy = S * (kp * ey + dk * W[1]) + cy; dz = S * (kp * ez + dk * W[2]) + cz;
     dr = dr * kp * aS + 1; m++; it++;
     const V = O.Vf[m];
     zx = V[0] + dx; zy = V[1] + dy; zz = V[2] + dz;
@@ -3043,7 +3153,7 @@ function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter i
     const Dp=Rp*powm1N(u,nPower-1);
     Ddr=nPower*(Dp*O.DRk[m]+(Rp+Dp)*Ddr);
     const sd=stableDeltaJS(V,d);
-    d=add3(sd,dc);
+    d=O.julia?sd:add3(sd,dc);                    // JULIA MODE (grep): the offset starts the delta and is not added again
     m++;
     const z=add3(O.Vf[m],d);
     it=k+1;
@@ -3164,9 +3274,9 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
     const u=Dr/R, Rp=Math.pow(R,nPower-1);
     const Dp=Rp*powm1N(u,nPower-1);
     Ddr=nPower*(Dp*O.DRk[m]+(Rp+Dp)*Ddr);
-    jet=pushJetJS(z,jet,rd);
+    jet=pushJetJS(z,jet,O.julia?ZERO3:rd);       // JULIA MODE (grep): no "+ v", the true derivative of the start point
     zs.push(z);
-    d=add3(stableDeltaJS(V,d),dc);
+    d=O.julia?stableDeltaJS(V,d):add3(stableDeltaJS(V,d),dc);
     m++;
     z=add3(O.Vf[m],d);
     it=k+1;
@@ -3176,7 +3286,7 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
   }
   const r=len3(z), g=0.5*r*Math.log(Math.max(r,1e-300)), speed=len3(jet), de=g/(O.DRk[m]+Ddr);
   let w=r>0 ? [z[0]/r,z[1]/r,z[2]/r] : [0,0,0], grad=[0,0,0];
-  for(let k=zs.length-1;k>=0;k--){ grad=add3(grad,w); w=pullGradJS(zs[k],w); }    // z_(k+1) = f(z_k) + c, z_0 = c
+  for(let k=zs.length-1;k>=0;k--){ if(!O.julia) grad=add3(grad,w); w=pullGradJS(zs[k],w); }    // z_(k+1) = f(z_k) + c, z_0 = c (JULIA MODE: c is no part of the point, so only the pull back to z_0 counts)
   grad=add3(grad,w);
   const slope=len3(grad), E=speed>0 ? g/speed : de, G=slope>0 ? g/slope : de;
   return { de, escaped, r, it, z, jet, E, grad, G, ray: Math.max(E, G) };
@@ -3566,12 +3676,12 @@ function keyLightDir(right, up, fwd){
    deCPU, deCPUesc, hpDirectDE and hpDirectTrap are for the bulb, and reached through them. No reference orbit,
    no delta: the direct referees of the probes. An iteration is tested after its step, as the kernel tests it. */
 function boxDirectF64(pos, N){
-  const p = boxP, R = p.hasRot ? p.R : null, aS = Math.abs(p.scale);
+  const p = boxP, R = p.hasRot ? p.R : null, aS = Math.abs(p.scale), c = juliaOn ? juliaF : pos;   // JULIA MODE (grep)
   let z = pos.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
   for (let i = 0; i < N; i++) {
     const u = R ? R.map(r => r[0]*z[0] + r[1]*z[1] + r[2]*z[2]) : z, w = u.map(x => Math.max(-p.fold, Math.min(p.fold, x)) * 2 - x);
     const k = Math.max(1, Math.min(p.kA, p.F2 / Math.max(w[0]*w[0] + w[1]*w[1] + w[2]*w[2], 1e-300)));
-    z = w.map((x, j) => x * k * p.scale + pos[j]); dr = dr * k * aS + 1; it++;
+    z = w.map((x, j) => x * k * p.scale + c[j]); dr = dr * k * aS + 1; it++;
     r2 = z[0]*z[0] + z[1]*z[1] + z[2]*z[2];
     if (r2 < trap2) trap2 = r2;
     if (r2 > BOX_ESC2) { escaped = true; break; }
@@ -3583,7 +3693,7 @@ function boxDirectHP(posFp, maxIter){
   let v = posFp.slice(), dr = 1, r2 = 0, escaped = false, it = 0, trap2 = Infinity;
   for (let i = 0; i < maxIter; i++) {
     const q = hp.boxParts(v, B);
-    v = hp.boxStep(q, posFp, B); dr = dr * (Number(q.k) / SC) * aS + 1; it++;
+    v = hp.boxStep(q, cOfHP(posFp), B); dr = dr * (Number(q.k) / SC) * aS + 1; it++;
     r2 = Number(hp.norm2(v)) / SC;
     if (r2 < trap2) trap2 = r2;
     if (r2 > BOX_ESC2) { escaped = true; break; }
@@ -3599,6 +3709,7 @@ function boxCamEstimate(O){
 const itersMax = () => (boxOn() ? BOX_ITER_MAX : rayUse ? RAY_ITER_MAX : 160);   // what the count is held under: the page's 160 (ray bits 0 only), the ray march's and the box's own. api.setIters and api.dz.setView hold a count under it too (since 2026-10-11; before, they held the bulb at 160)
 function deCPU(px,py,pz, power, N){
     if (boxOn()) return Math.max(0, boxDirectF64([px,py,pz], N).de);
+    const cx=juliaOn?juliaF[0]:px, cy=juliaOn?juliaF[1]:py, cz=juliaOn?juliaF[2]:pz;   // JULIA MODE (grep): what is added each iteration
     let zx=px,zy=py,zz=pz, dr=1, r=0;
     for(let i=0;i<N;i++){
         r=Math.hypot(zx,zy,zz);
@@ -3609,9 +3720,9 @@ function deCPU(px,py,pz, power, N){
         let phi=Math.atan2(zy,zx);
         theta=theta*power+phaseTheta; phi=phi*power+phasePhi;
         const zr=rp1*r;
-        zx=zr*Math.sin(theta)*Math.cos(phi)+px;
-        zy=zr*Math.sin(phi)*Math.sin(theta)+py;
-        zz=zr*Math.cos(theta)+pz;
+        zx=zr*Math.sin(theta)*Math.cos(phi)+cx;
+        zy=zr*Math.sin(phi)*Math.sin(theta)+cy;
+        zz=zr*Math.cos(theta)+cz;
     }
     return 0.5*Math.log(Math.max(r,1e-8))*r/Math.max(dr,1e-20);
 }
@@ -3619,6 +3730,7 @@ function deCPU(px,py,pz, power, N){
 /* deCPU with escape semantics matching the kernel (for the INDEPENDENT direct check) */
 function deCPUesc(px,py,pz, N){
     if (boxOn()) return boxDirectF64([px,py,pz], N);
+    const cx=juliaOn?juliaF[0]:px, cy=juliaOn?juliaF[1]:py, cz=juliaOn?juliaF[2]:pz;   // JULIA MODE (grep): what is added each iteration
     let zx=px,zy=py,zz=pz, dr=1, r=0, escaped=false, it=0;
     for(let i=0;i<N;i++){
         r=Math.hypot(zx,zy,zz);
@@ -3629,12 +3741,43 @@ function deCPUesc(px,py,pz, N){
         let theta=Math.acos(Math.max(-1,Math.min(1,zz/r)))*nPower+phaseTheta;
         let phi=Math.atan2(zy,zx)*nPower+phasePhi;
         const zr=rp1*r;
-        zx=zr*Math.sin(theta)*Math.cos(phi)+px;
-        zy=zr*Math.sin(phi)*Math.sin(theta)+py;
-        zz=zr*Math.cos(theta)+pz;
+        zx=zr*Math.sin(theta)*Math.cos(phi)+cx;
+        zy=zr*Math.sin(phi)*Math.sin(theta)+cy;
+        zz=zr*Math.cos(theta)+cz;
     }
     if(!escaped){ r=Math.hypot(zx,zy,zz); escaped = r>2; }
     return { de: 0.5*Math.log(Math.max(r,1e-300))*r/dr, escaped, iters: it };
+}
+/* THE WHOLE OBJECT, roughly (2026-10-12; for JULIA MODE - grep - whose sets nobody has placed a camera for).
+   A ball about the solid, from three coarse scans on the CPU in plain f64 (deCPUesc: the direct orbit the probes
+   are refereed by). A scan is 20^3 points of a cube; a point counts when its orbit has not escaped within a
+   whole-object count of iterations, or when its estimate is under HALF the cell's diagonal; the next scan is the
+   cube about what counted, half a cell wider. null when nothing counts: there is no solid (a Julia constant far
+   outside its set). Half the diagonal, because the box's estimate reads a third to two thirds of the true
+   distance: with the whole diagonal every point of the first cube counted at the Kleinian numbers and the ball
+   came out 29 units wide for a set of 12 (seen 2026-10-12).
+   A rough answer on purpose: it places a camera, it draws nothing. */
+function wholeObjectJS(){
+  const G = 20, N = boxOn() ? Math.min(BOX_ITER_MAX, Math.ceil(Math.log(BOX_ESC) / Math.log(Math.abs(box.scale))) + 12) : 12;
+  const R = boxOn() ? boxExtent() : 2.2;
+  let lo = [-R, -R, -R], hi = [R, R, R], found = false;
+  for (let pass = 0; pass < 3; pass++) {
+    const cell = [0, 1, 2].map((a) => (hi[a] - lo[a]) / G), size = Math.hypot(cell[0], cell[1], cell[2]);
+    const mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+    let any = false;
+    for (let i = 0; i < G; i++) for (let j = 0; j < G; j++) for (let k = 0; k < G; k++) {
+      const p = [lo[0] + (i + 0.5) * cell[0], lo[1] + (j + 0.5) * cell[1], lo[2] + (k + 0.5) * cell[2]];
+      const o = deCPUesc(p[0], p[1], p[2], N);
+      if (o.escaped && !(o.de < 0.5 * size)) continue;
+      any = true;
+      for (let a = 0; a < 3; a++) { if (p[a] < mn[a]) mn[a] = p[a]; if (p[a] > mx[a]) mx[a] = p[a]; }
+    }
+    if (!any) break;
+    found = true;
+    lo = mn.map((v, a) => v - 0.5 * cell[a]); hi = mx.map((v, a) => v + 0.5 * cell[a]);
+  }
+  if (!found) return null;
+  return { center: [0, 1, 2].map((a) => 0.5 * (lo[a] + hi[a])), radius: 0.5 * Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) };
 }
 /* INDEPENDENT cross-check: GPU perturbed de vs DIRECT f64 evaluation at the explicit
    position (no reference orbit, no §3, no HDR — nothing shared with the kernel).
@@ -3672,7 +3815,7 @@ function hpDirectDE(posFp, maxIter){
     if (r2 > 4n * SCALE) { escaped = true; break; }
     const r = fsqrt(r2), rNm1 = ipow(r, nPower - 1);     // r^(n−1); dr = n·r^(n−1)·dr + 1
     dr = Nbig * mul(rNm1, dr) + ONE;
-    v = hp.addV(hp.P8(v), posFp);
+    v = hp.addV(hp.P8(v), cOfHP(posFp));
   }
   if (!escaped) {
     r2 = mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2]);
@@ -3773,7 +3916,7 @@ function hpDirectTrap(posFp, maxIter){
   const Pb = BigInt(hp.P), SC = Number(hp.SCALE), mul = (a,b) => (a*b) >> Pb;
   let v = posFp.slice(), trap2 = Infinity, it = 0, escaped = false;
   for (let i = 0; i < maxIter; i++) {
-    v = hp.addV(hp.P8(v), posFp); it++;
+    v = hp.addV(hp.P8(v), cOfHP(posFp)); it++;
     const r2 = Number(mul(v[0],v[0]) + mul(v[1],v[1]) + mul(v[2],v[2])) / SC;
     if (r2 < trap2) trap2 = r2;
     if (r2 > 4) { escaped = true; break; }
@@ -4134,6 +4277,7 @@ api.renderThumbF32 = (n) => {
   gl.uniform1f(bu.prec, 5e-7);
   gl.uniform3fv(bu.light, keyLightDir(right, up, fwd));
   gl.uniform2f(bu.phase, phaseTheta, phasePhi);
+  gl.uniform1f(bu.addC, juliaOn ? 0 : 1); gl.uniform3f(bu.juliaC, juliaF[0], juliaF[1], juliaF[2]);   // JULIA MODE (grep)
   if (boxOn()) setBoxUniforms(bu);
   gl.bindFramebuffer(gl.FRAMEBUFFER, thumbFbo); gl.viewport(0, 0, n, n);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -4178,7 +4322,7 @@ function setFormulaNow(kind, params){
   orbitDirty = true; accumReset = true; snapDist = true;
 }
 api.setFormula = setFormulaNow;
-api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice() });
+api.formula = ()=>({ kind: dzFormula, scale: box.scale, minR: box.minR, fold: box.fold, fixedR: box.fixedR, rot: box.rot.slice(), julia: juliaOn, c: juliaHP.map(String) });
 api.formulaState = ()=>{ if (!boxOn()) return deepProg ? 'on' : deepCompileErr ? 'failed' : 'building';
   const v = variants[xKey(false)]; return v ? 'on' : v === null ? 'failed' : 'building'; };
 // Shell setters (not in the historical page, added 2026-10-08): what the page's `iters` and
@@ -4831,6 +4975,7 @@ function frame(now){
     gl.uniform1f(u.prec,5e-7);
     gl.uniform3fv(u.light,light);
     gl.uniform2f(u.phase, phaseTheta, phasePhi);
+    gl.uniform1f(u.addC, juliaOn ? 0 : 1); gl.uniform3f(u.juliaC, juliaF[0], juliaF[1], juliaF[2]);   // JULIA MODE (grep)
     if (boxOn()) setBoxUniforms(u);
     gl.drawArrays(gl.TRIANGLES,0,3);
   }
@@ -4978,7 +5123,17 @@ api.dz = {
      a path: does it pass through the solid? (Added 2026-10-11, for the shell's route.) */
   estimateAtPoint: (pos, iters) => { const n = iters > 0 ? Math.max(4, Math.min(itersMax(), iters|0)) : cam.iters;
     const o = pertOrbitJS(buildRefOrbit(pos.map(BigInt), n + 2), [0, 0, 0], n); return o.escaped && o.de > 0 ? o.de : 0; },
-  getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, ...(cam.roll ? { roll: cam.roll } : {}),   // roll only when there is one: a view without it reads as it always did
+  /* JULIA MODE (grep), for a host's "Julia from this place". lookPoint: THE POINT LOOKED AT - where the view axis
+     meets the drawn solid, by the navigation's CPU ray (opt.tol: the share of its distance it may stop short by,
+     default 0.005) - as three fixed-point decimal strings, exact in the camera's own arithmetic. kind 'hit'; else
+     'open' (nothing is looked at within the steps; the point is where the ray stopped) or 'inside' (the camera
+     stands in the solid; the point is the camera's own). */
+  lookPoint: (opt) => { const o = opt || {}, f = basis().fwd, r = rayFreeJS(probeOrbit(), f, cam.iters, o.tol > 0 ? +o.tol : 0.005, o.maxSteps > 0 ? (o.maxSteps|0) : 2000);
+    return { kind: r.kind === 1 ? 'hit' : r.kind === 2 ? 'inside' : 'open', t: r.t, point: camHP.map((c, j) => String(c + hp.fromNum(r.t * f[j]))) }; },
+  /* a ball about the whole of the solid as the formula in force draws it: { center, radius }, or null when a
+     coarse scan finds none (grep THE WHOLE OBJECT). What a host builds a from-outside view of a Julia set from. */
+  wholeObject: () => wholeObjectJS(),
+  getView: () => ({ cam: camHP.map(String), yaw: cam.yaw, pitch: cam.pitch, ...(cam.roll ? { roll: cam.roll } : {}), ...(juliaOn ? { julia: juliaHP.map(String) } : {}),   // julia (the constant, JULIA MODE - grep) only while that mode is on;   // roll only when there is one: a view without it reads as it always did
     iters: cam.iters, power: nPower,
     phase: [phaseTheta, phasePhi], light: lightMode, falloff: falloffMul, color: colorMode,
     cscale: colorScale, surf: surfMul }),
@@ -4987,6 +5142,7 @@ api.dz = {
     dzDive = 0;                                   // a jump ends any dive in progress
     camHP = v.cam.map(BigInt); cam.pos = camHP.map(hp.toNum);
     cam.yaw = +v.yaw; cam.pitch = +v.pitch; cam.roll = +v.roll || 0;
+    if (v.julia !== undefined && setJuliaC(v.julia)) formulaStamp++;   // JULIA MODE (grep): a view carries the CONSTANT; the mode is the formula's (api.setFormula)
     if (v.iters) cam.iters = Math.max(4, Math.min(itersMax(), v.iters|0));   // the ceiling in force, as api.setIters: a view's count above 160 arrives whole under the ray march
     if (v.power && v.power !== nPower) api.setPower(v.power);
     if (v.phase) api.setPhase(v.phase[0], v.phase[1]);

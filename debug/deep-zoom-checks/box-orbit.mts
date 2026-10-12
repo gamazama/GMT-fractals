@@ -222,6 +222,8 @@ for (const [name, p, camPos] of [
     ['scale 2', { scale: 2 }, [15.3, 11.6, 9.9]],
     ['scale -1.5', { scale: -1.5 }, [6.56, 4.99, 4.27]],
     ['scale 2.566 with GMT\'s default pre-rotation', { scale: 2.566, minR: 1.026, fold: 1.445, fixedR: 1.637, rot: [3.14, 0, 1.57] }, [9.5, 7.3, 6.1]],
+    // THE KLEINIAN CARD (deep-zoom/data/boxStarters.ts, 2026-10-12): the box with no inner radius - the sphere fold's inner factor is 1.2e9, not 4
+    ['the Kleinian card\'s numbers (scale 1.8, min radius 3.1623e-5, fixed radius 1.0954)', { scale: 1.8, minR: 3.1623e-5, fixedR: 1.0954451150103321 }, [18.1, 13.9, 11.6]],
 ] as Array<[string, BoxParams, number[]]>) {
     const { F } = enter(p), camFix = camPos.map(fix), fwd = unit(camPos.map((x) => -x)), dist = Math.hypot(camPos[0], camPos[1], camPos[2]);
     const O = lib.buildRefOrbit(camFix, 62), T = compare(O, camFix, fwd, 1.6 * dist, 60, F, 0.02 * dist);
@@ -248,6 +250,8 @@ const deep: Array<[string, BoxParams, number[], number[], number, number]> = [
     ['scale -1.5', { scale: -1.5 }, [6.56, 4.99, 4.27], [0.2, 0.1, -0.1], 1e-58, 44],
     ['scale -1.7, min radius 0.35, fold 0.9, fixed radius 1.2', { scale: -1.7, minR: 0.35, fold: 0.9, fixedR: 1.2 }, [5.1, -4.2, 3.3], [0.1, 0.2, 0.1], 1e-30, 40],
     ['scale 2.566 with GMT\'s default pre-rotation', { scale: 2.566, minR: 1.026, fold: 1.445, fixedR: 1.637, rot: [3.14, 0, 1.57] }, [9.5, 7.3, 6.1], [0.3, -0.2, 0.4], 1e-25, 24],
+    ['the Kleinian card\'s numbers (scale 1.8, min radius 3.1623e-5, fixed radius 1.0954)', { scale: 1.8, minR: 3.1623e-5, fixedR: 1.0954451150103321 }, [18.1, 13.9, 11.6], [0.4, 0.3, -0.2], 1e-10, 30],
+    ['the Kleinian card\'s numbers (scale 1.8, min radius 3.1623e-5, fixed radius 1.0954)', { scale: 1.8, minR: 3.1623e-5, fixedR: 1.0954451150103321 }, [18.1, 13.9, 11.6], [0.4, 0.3, -0.2], 1e-30, 30],
 ];
 let lastDeep: { place: Place; F: Fixed } | null = null;
 for (const [name, p, from, aim, depth, margin] of deep) {
@@ -255,6 +259,7 @@ for (const [name, p, from, aim, depth, margin] of deep) {
     if (!place) { check(false, `twin = exact, ${name}, at depth ${depth.toExponential(0)}: no place found`); continue; }
     const O = lib.buildRefOrbit(place.cam, place.cap + 2), T = compare(O, place.cam, place.fwd, 8 * place.D, place.cap, F, 0.01 * place.D);
     check(good(T), `twin = exact, ${name}, ${place.D.toExponential(1)} from the surface (own orbit escapes on ${place.ownEscape}, cap ${place.cap}): ${say(T)}`);
+    if (process.env.BOX_PRINT_PLACES && name.includes('Kleinian')) console.log('PLACE ' + JSON.stringify({ name, cam: place.cam.map(String), yaw: Math.atan2(place.fwd[2], place.fwd[0]), pitch: Math.asin(place.fwd[1]), iters: place.cap, depth: place.D }));
     if (name === 'scale -1.5' && depth < 1e-50) lastDeep = { place, F };
 }
 

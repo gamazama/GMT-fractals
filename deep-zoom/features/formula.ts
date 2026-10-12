@@ -13,6 +13,7 @@
  *   the shell's host sync (`deep-zoom/host/paramMap.ts`, `host/looseParams.ts`) pushes a changed
  *   value through these handles of `instance.api` (read in `deep-zoom/renderer/core.js`):
  *     kind            api.setFormula(kind, params)   'mandelbulb' | 'mandelbox' (formulaToRenderer)
+ *     juliaMode       api.setFormula(kind, { julia })   in the same call as the kind (see JULIA MODE)
  *     power           api.setPower(n)            clamps to 2..16 and truncates (`n|0`)
  *     phaseTheta      api.setPhase(theta, phi)   ABSOLUTE, always both arguments, theta first
  *     phasePhi        api.setPhase(theta, phi)   (the page's own panel lists phi first)
@@ -39,6 +40,18 @@
  *   Pre-Rotation is one row over three scalars (`composeFrom`, as GMT's geometry feature does it).
  *   Anything saved before this day has no `kind` and means the Mandelbulb (a scene load fills a
  *   missing key with its default; `deep-zoom/locations.ts` does the same for a place).
+ *
+ * JULIA MODE (2026-10-12)
+ *   `juliaMode` is a switch for either formula: on, one constant is added every iteration and the
+ *   point looked at starts the orbit (grep JULIA MODE in renderer/core.js). THE CONSTANT IS NOT A
+ *   PARAM (the owner: no number rows for it in this build). It is taken from the place looked at
+ *   ("Julia from this place", `juliaFromThisPlace` in `deep-zoom/locations.ts`) or comes with a
+ *   pasted or loaded view, lives in the renderer as the camera does, and travels with the VIEW as
+ *   three 256-bit decimal strings (`DzView.julia`): a place, a scene, a link and pasted text carry
+ *   it there, never as numbers. So this slice says only WHETHER the mode is on. Switching it by
+ *   its row takes the point at the centre of the view as the constant and moves the camera to the
+ *   whole set, in the same undo step (`deep-zoom/locations.ts`, the `juliaMode` subscription).
+ *   Anything saved before this day has no `juliaMode` and is in Mandelbrot mode.
  *
  * INVALIDATION
  *   Every param here is class O: the renderer rebuilds its reference orbit (grep `orbitDirty` in
@@ -174,7 +187,9 @@ export const DzFormulaFeature = {
         },
         boxMinRadius: {
             type: 'float',
-            default: 0.5, min: 0.001, max: 1.5, step: 0.001,
+            // The least the renderer takes (grep `3.1623e-5` in renderer/core.js: GMT floors the square at 1e-9).
+            // 0.001 until 2026-10-12; the Kleinian card (data/boxStarters.ts) is the box with no inner radius.
+            default: 0.5, min: 3.1623e-5, max: 1.5, step: 0.001,
             label: 'Min Radius',
             condition: onBox,
             dynamicConfig: (slice: { boxFixedRadius?: number }) => ({ max: Math.min(1.5, slice.boxFixedRadius ?? 1.5) }),
@@ -205,6 +220,18 @@ export const DzFormulaFeature = {
             condition: onBox,
             description: 'Turns space about x, then y, then z before every fold.',
         },
+        // ── Julia mode, either formula (see JULIA MODE in the header) ──
+        juliaMode: {
+            type: 'boolean',
+            default: false,
+            label: 'Julia mode',
+            // Switched ON by itself (its row, "Julia from this place"), the floor goes back to the whole-object
+            // count: the camera is about to stand outside a whole set, and a deep place's count (98 at the kept
+            // place "Slicing") draws that set as a ball of grain - seen 2026-10-12. A write that carries its own
+            // `iterations` (a place, a scene, a link) keeps it: `onSet` never overrides a value given with it.
+            onSet: (next: boolean, slice: { juliaMode?: boolean }) => (next && !slice.juliaMode ? { iterations: 14 } : {}),
+            description: 'On: one constant is added every iteration and the point you look at starts the orbit - the Julia set of that constant. Switching it on takes the point at the centre of the view as the constant and shows the whole set from outside. Undo, or Back, brings back the place you were at.',
+        },
         iterations: {
             type: 'int',
             default: 14, min: 4, max: 500, step: 1,
@@ -221,10 +248,15 @@ export const DzFormulaFeature = {
     },
 } satisfies FeatureDefinition;
 
-/** The keys that say WHICH formula a place is of, and the box's parameters. A place, a jump and the
- *  renderer's `setFormula` all carry exactly these. */
-export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ'] as const;
-export type DzFormulaChoice = Pick<SliceFromParams<typeof DzFormulaFeature['params']>, (typeof FORMULA_CHOICE_KEYS)[number]>;
+/** The keys that say WHICH formula a place is of, the box's parameters, and whether it is a Julia set.
+ *  A place, a jump and the renderer's `setFormula` all carry exactly these. (The Julia CONSTANT is not
+ *  among them: it is part of the view. See JULIA MODE in the header.) */
+export const FORMULA_CHOICE_KEYS = ['kind', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotX', 'boxRotY', 'boxRotZ', 'juliaMode'] as const;
+type DzFormulaChoiceKey = (typeof FORMULA_CHOICE_KEYS)[number];
+/** `juliaMode` may be left out (every choice written before 2026-10-12): it then means off. */
+export type DzFormulaChoice =
+    Pick<SliceFromParams<typeof DzFormulaFeature['params']>, Exclude<DzFormulaChoiceKey, 'juliaMode'>>
+    & Partial<Pick<SliceFromParams<typeof DzFormulaFeature['params']>, 'juliaMode'>>;
 
 /* Compile-time guard for the @invariant in the header. `AnyKeys` is the union of the slice keys
    typed `any` (never when there are none); `MustBeNever` refuses anything else, so tsc names the

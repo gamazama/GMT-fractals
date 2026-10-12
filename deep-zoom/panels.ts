@@ -6,6 +6,9 @@
  * (stage 3); Route (the camera move on the timeline: one widget, `dz-route`). No
  * `component: 'panel-X'` of our own: a panel is features, sections and registered widgets.
  *
+ * Formula also holds the Julia switch (`dzFormula.juliaMode`) and the `dz-julia-here` button; the Julia
+ * CONSTANT has no row (it travels with the view: features/formula.ts, JULIA MODE).
+ *
  * Rows deliberately absent:
  *   - `dzQuality.actualPixels`: the renderer has no setter for its 1:1 view yet (host/paramMap.ts).
  * The `dz-mode-notice` widget heads the two tabs whose controls act in deep mode only.
@@ -31,6 +34,10 @@ export const DeepZoomPanels: PanelManifest = [
     { id: 'Formula', dock: 'left', order: 2, items: [
         // One formula's rows at a time: each row carries its own condition on `kind` (features/formula.ts).
         { type: 'feature', id: 'dzFormula', whitelistParams: ['kind', 'power', 'phaseTheta', 'phasePhi', 'boxScale', 'boxMinRadius', 'boxFold', 'boxFixedRadius', 'boxRotation'] },
+        // Julia mode, for either formula: the switch, and the button that takes the constant from the place looked at.
+        { type: 'section', label: 'Julia' },
+        { type: 'feature', id: 'dzFormula', whitelistParams: ['juliaMode'] },
+        { type: 'widget', id: 'dz-julia-here' },
         { type: 'section', label: 'Iterations' },
         { type: 'widget', id: 'dz-iteration-readout' },
         { type: 'feature', id: 'dzFormula', whitelistParams: ['iterations', 'autoIterations'] },

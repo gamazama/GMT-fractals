@@ -1,7 +1,8 @@
 /**
  * deep-zoom/share.ts - a place as text, a scene as a link, and the saved places inside a scene file.
  *
- *   Copy location / Paste location   one place as JSON on the clipboard: the camera and the
+ *   Copy location / Paste location   one place as JSON on the clipboard: the camera (in Julia
+ *                                    mode with its Julia constant: three more strings) and the
  *                                    formula, as a saved place holds them (`captureLocation` in
  *                                    locations.ts; `locationParse.ts` reads it back, and last
  *                                    week's shapes too). A paste is a jump: one undo step.

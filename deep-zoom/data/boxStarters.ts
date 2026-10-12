@@ -31,9 +31,22 @@
  * (debug/deep-zoom-checks/ray-probe.mts, the stage smokes' "six starter cards"). A Mandelbox view
  * in either would be marched as a Mandelbulb's.
  *
+ * THE KLEINIAN CARD (2026-10-12). GMT's formula "Kleinian" (`engine-gmt/formulas/Kleinian.ts`: the box fold,
+ * `float k = max(uParamC / r2, 1.0);`, `z3 = z3 * uParamA + uVec3A + c.xyz;`) IS the Mandelbox with no inner
+ * radius: its sphere fold has the fixed radius sqrt(K Factor) and nothing to stop the inversion near the
+ * centre. So the card is this formula's rows at GMT's Kleinian defaults - Scale 1.8, Folding Limit 1, Fixed
+ * Radius sqrt(1.2) - with Min Radius at the least the renderer takes (3.1623e-5, where GMT floors |z|² at
+ * 1e-10, i.e. 1e-5), and the view `formulaHome` builds for those rows. GMT's Offset row has no row here (it is
+ * 0 by default). No kernel line was added for it. Proof at these numbers, where the sphere fold's inner factor
+ * is 1.2e9 against the box's 4: `npm run check:deep-zoom-box-orbit` ("... the Kleinian card's numbers ...") and
+ * the "mandelbox, the Kleinian card's numbers, ..." lines of `npm run smoke:deep-zoom-direct`.
+ * IT IS THE LAST CARD ON PURPOSE: the picture and frame-time tools read cards 0, 1 and 3 by position
+ * (debug/scratch/r7/pictures.mts, debug/scratch/load/step2/frame-time.mts).
+ *
  * Camera values are 256-bit decimal STRINGS: never parse them.
  *
- * @assumption each card draws what its name says in this shell. Looked at once, 2026-10-09, in the
+ * @assumption each card draws what its name says in this shell. The Kleinian card was looked at on
+ *   2026-10-12 (debug/scratch/formula-next/kleinian-0-whole.png, a perforated cube); the others once, 2026-10-09, in the
  *   dev harness (the pictures above) and through the shell by debug/scratch/formula-study/shell-box.mjs;
  *   no check opens them.
  */
@@ -72,5 +85,13 @@ export const BOX_STARTERS: Starter[] = [
         startDepth: 8.731715881273556e-42,
         formula: { kind: FORMULA_BOX, boxScale: 2, boxMinRadius: 0.5, boxFold: 1, boxFixedRadius: 1, boxRotX: 0, boxRotY: 0, boxRotZ: 0 },
         view: {"cam":["667951163547858345227662796364357847661243279945297544068252618814681339920384","-517624135418796263310132574026070401466220011117613386313111658529175032037376","-616403708235521093231712781108458524603977757626083392057256071077627630190592"],"yaw":2.652738625702473,"pitch":0.9092279035626659,"iters":175,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
+    },
+    {
+        name: "Kleinian · scale 1.8",
+        blurb: "GMT's Kleinian: the Mandelbox with no inner radius (scale 1.8, fixed radius 1.095), from outside. A perforated cube.",
+        depth: 9.6,
+        startDepth: 9.6,
+        formula: { kind: FORMULA_BOX, boxScale: 1.8, boxMinRadius: 3.1623e-5, boxFold: 1, boxFixedRadius: 1.0954451150103321, boxRotX: 0, boxRotY: 0, boxRotZ: 0 },
+        view: {"cam":["3490174062875602191658474692207665371871682230338781915924152083206205335404544","2273901283388641934543273772409032142429453296248576180443356618671372088901632","3225766936900102788082705061165042205104113386974950133361961382838629891571712"],"yaw":-2.3955442465809504,"pitch":-0.4462656061462504,"iters":39,"power":8,"phase":[0,0],"light":0,"falloff":4,"color":0,"cscale":1,"surf":1},
     },
 ];

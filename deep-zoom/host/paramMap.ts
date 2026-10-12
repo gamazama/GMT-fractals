@@ -18,7 +18,7 @@
  *   - Some values travel together because the module's setter takes them together: colour
  *     (`plain`, `mode`, `scale` -> one `setColor`), light type and lamp falloff (one `setLight`),
  *     the two phase angles (one `setPhase`). A row's `group` says which push carries it.
- *   - The formula and the box's seven numbers are ONE push (`group: 'formula'`, one `setFormula`),
+ *   - The formula, the Julia switch and the box's seven numbers are ONE push (`group: 'formula'`, one `setFormula`),
  *     and that push goes before every other push of the same patch: the renderer's iteration ceiling
  *     follows the formula (400 or 500), so an iteration count sent first would be cut to the old one.
  *   - `group: null` means no push of `looseParams.ts` carries the value: it is shell-only, it
@@ -104,6 +104,8 @@ export const DZ_PARAM_ROWS: readonly DzParamRow[] = [
     box('boxRotX', (f) => f.rot[0]),
     box('boxRotY', (f) => f.rot[1]),
     box('boxRotZ', (f) => f.rot[2]),
+    // The Julia switch rides in the same call. Its CONSTANT is no param: it travels with the view (features/formula.ts, JULIA MODE).
+    box('juliaMode', (f) => f.julia),
     { feature: 'dzFormula', key: 'boxRotation', cls: '-', group: null, why: 'a composed row with no state of its own: boxRotX, boxRotY and boxRotZ carry the value' },
     { feature: 'dzFormula', key: 'power', cls: 'O', group: 'power', read: (api) => api.dz.settings().power },
     { feature: 'dzFormula', key: 'phaseTheta', cls: 'O', group: 'phase', read: (api) => api.dz.settings().phase[0] },

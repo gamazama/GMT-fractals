@@ -19,6 +19,11 @@ export interface DeepZoomBoxParams {
     fixedR?: number;
     /** Pre-rotation about x, y, z in radians, applied in that order every iteration. */
     rot?: [number, number, number];
+    /** JULIA MODE (grep the name in core.js), for EITHER formula: true = c is one constant and the point looked
+     *  at starts the orbit; false = c is the point itself. Kept from call to call. */
+    julia?: boolean;
+    /** The Julia constant: three fixed-point decimal strings, as a view's `cam`. Anything else is refused. */
+    c?: [string, string, string];
 }
 
 export interface DeepZoomCoreOptions {

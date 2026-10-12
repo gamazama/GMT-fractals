@@ -13,7 +13,9 @@
  * `debug/deep-zoom-checks/location-parse.mts`.
  *
  * Camera values are decimal STRINGS of whole numbers and are never converted; a `cam` that is not
- * three such strings is refused, so a number-mangled copy cannot become a wrong place.
+ * three such strings is refused, so a number-mangled copy cannot become a wrong place. The same goes
+ * for a view's `julia` (the Julia constant, since 2026-10-12): kept string for string when it is
+ * three such strings, and the text is refused when it is there and is not.
  *
  * Of a pasted `look` only the formula is kept (`look.dzFormula`): that is all a place holds. Text
  * copied before 2026-10-10 also carries the light, the colour with its gradient, the detail and
@@ -35,12 +37,14 @@ function viewOf(o: Record<string, unknown>): DzView | string {
     if (!Array.isArray(o.cam)) return 'it has no "cam"';
     if (!isCam(o.cam)) return '"cam" is not three whole numbers written as text';
     if (!isNum(o.yaw) || !isNum(o.pitch)) return 'it has no yaw and pitch';
+    if (o.julia !== undefined && !isCam(o.julia)) return '"julia" is not three whole numbers written as text';
     const phase = Array.isArray(o.phase) && isNum(o.phase[0]) && isNum(o.phase[1]) ? [o.phase[0], o.phase[1]] as [number, number] : [0, 0] as [number, number];
     return {
         cam: o.cam,
         yaw: o.yaw,
         pitch: o.pitch,
         ...(isNum(o.roll) && o.roll !== 0 ? { roll: o.roll } : {}),
+        ...(isCam(o.julia) ? { julia: o.julia } : {}),
         iters: isNum(o.iters) ? o.iters : 14,
         power: isNum(o.power) ? o.power : 8,
         phase,

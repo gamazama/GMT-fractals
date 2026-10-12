@@ -68,6 +68,7 @@ import { installRoute } from './route';
 import { installRouteRender } from './routeRender';
 import { BoxStarters, KeptPlaces, StarterDives } from './components/StarterDives';
 import { LocationText } from './components/LocationText';
+import { JuliaHere } from './components/JuliaHere';
 import { installSceneIO } from '../engine/plugins/SceneIO';
 import { installShare, loadShareFromUrl, sceneCanvas } from './share';
 import { dismissBootSplash } from './components/BootCard';
@@ -198,6 +199,7 @@ try {
     componentRegistry.register('dz-box-starters', BoxStarters);
     componentRegistry.register('dz-places', KeptPlaces);
     componentRegistry.register('dz-location-text', LocationText);
+    componentRegistry.register('dz-julia-here', JuliaHere);
 
     // Scenes carry the saved places as a document; a share link carries the look and the view.
     installShare();

@@ -5,7 +5,8 @@
  * registry freezes when the store is built): main.tsx imports it right after `./registerFeatures`.
  *
  *   dzView          the camera: three 256-bit decimal STRINGS, yaw, pitch, the roll when there is
- *                   one, and the depth as text.
+ *                   one, the depth as text, and in Julia mode the Julia constant (`julia`: three
+ *                   more strings; the mode itself is the `dzFormula` slice's `juliaMode`).
  *                   A scene file, a scene PNG and a share link all carry it. `serialize` reads the
  *                   renderer (the camera is never in the store); `deserialize` hands the view to
  *                   the host, or parks it until one is mounted and ready.
@@ -57,7 +58,13 @@ export interface DzSavedView {
     roll?: string | number;
     /** Depth when saved, as text; '' when unknown. For display and sorting only. */
     depth: string;
+    /** The Julia constant, written only while Julia mode is on: three strings like `cam`. */
+    julia?: [string, string, string];
 }
+
+/** Three whole numbers written as text: a camera, or a Julia constant. */
+const isTriple = (c: unknown): c is [string, string, string] =>
+    Array.isArray(c) && c.length === 3 && c.every((v) => typeof v === 'string' && /^-?\d+$/.test(v));
 
 export function isSavedView(x: unknown): x is DzSavedView {
     const s = x as DzSavedView | null;
@@ -80,6 +87,7 @@ function viewFromSaved(saved: DzSavedView, state: Slices): DzView {
         yaw: Number(saved.yaw),
         pitch: Number(saved.pitch),
         ...(Number.isFinite(roll) && roll !== 0 ? { roll } : {}),
+        ...(isTriple(saved.julia) ? { julia: saved.julia } : {}),     // a mangled constant is dropped, never guessed at
         iters: num(f.iterations, 14),
         power: num(f.power, 8),
         phase: [num(f.phaseTheta, 0), num(f.phasePhi, 0)],
@@ -118,6 +126,7 @@ presetFieldRegistry.register({
         const saved: DzSavedView = {
             v: 1, cam: view.cam, yaw: String(view.yaw), pitch: String(view.pitch), ...(view.roll ? { roll: String(view.roll) } : {}),
             depth: depth > 0 && Number.isFinite(depth) ? String(depth) : '',
+            ...(view.julia ? { julia: view.julia } : {}),
         };
         return saved;
     },

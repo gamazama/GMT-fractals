@@ -29,7 +29,7 @@
  *     `setLight` reads a missing first one as Direct: both are always called with both values.
  *   - `setNormalMode` does not restart the still; the empty `setLook({})` after it does.
  *   - An id with no row, or a row with `group: null`, is not pushed. Unknown ids are named once.
- *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind and the box's seven numbers, and
+ *   - THE FORMULA GOES FIRST. One `setFormula` carries the kind, the Julia switch and the box's seven numbers, and
  *     it is sent before any other push of the same patch: `setIters` clamps to the ceiling of the
  *     formula IN FORCE (400 for the bulb, 500 for the box), so a box place's 450 iterations sent
  *     ahead of its formula would arrive as 400.
@@ -76,6 +76,7 @@ export function createParamPusher(api: DeepZoomApi): ParamPusher {
             fold: num('dzFormula', 'boxFold'),
             fixedR: num('dzFormula', 'boxFixedRadius'),
             rot: [num('dzFormula', 'boxRotX'), num('dzFormula', 'boxRotY'), num('dzFormula', 'boxRotZ')],
+            julia: flag('dzFormula', 'juliaMode'),     // the mode only: the constant is the view's (host.setView)
         }),
         power: () => api.setPower(num('dzFormula', 'power')),
         phase: () => api.setPhase(num('dzFormula', 'phaseTheta'), num('dzFormula', 'phasePhi')),

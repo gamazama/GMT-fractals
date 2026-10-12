@@ -61,7 +61,19 @@
  *     write: Ctrl+Z brings back the formula AND the place. A jump sets `jumping` and places the
  *     camera itself; an undo or a scene load passes through here too, and its own view, restored
  *     after the store, is the one that stays.
- *   - A JUMP AND A SWITCH OF FORMULA END THE TRAIL (`trailEnds` in deep-zoom/trail.ts: what the app
+ *   - JULIA MODE (2026-10-12; grep the name in renderer/core.js). The MODE is the formula's
+ *     (`dzFormula.juliaMode`, one of `FORMULA_CHOICE_KEYS`: a place, Back and Home carry it, and a
+ *     place without it is in Mandelbrot mode). The CONSTANT is the view's (`DzView.julia`, three
+ *     strings like `cam`): `host.getView()` gives it while the mode is on, `host.setView` takes
+ *     it, and `viewForHost` hands it through untouched - so a saved place, an undo entry, a scene
+ *     and a pasted text all hold it string for string. A place of one mode is nowhere in the
+ *     other, as with the two formulas: a jump sets the mode before it hands over the view, and a
+ *     switch of mode that is not a jump moves the camera - on: to the whole Julia set of the point
+ *     that was looked at (`juliaHome`); off: to the formula's whole-object view - in the same undo
+ *     bracket as the row's own write. "Julia from this place" (`juliaFromThisPlace`) is that jump
+ *     as a button. THE POINT IS LOOKED AT BEFORE THE MODE IS PUSHED: afterwards the renderer
+ *     would march the ray through the Julia set, not through the picture the user was looking at.
+ *   - A JUMP AND A SWITCH OF FORMULA OR OF MODE END THE TRAIL (`trailEnds` in deep-zoom/trail.ts: what the app
  *     remembers of how the camera was flown), and both call it BEFORE the view is set: the trail's
  *     last point is the camera as it stood. An undo calls nothing: the view it puts back is one the
  *     trail has usually been at, and the trail takes it from there.
@@ -140,7 +152,7 @@ const THUMBNAIL_PX = 128;
 /** Which formula the store says is drawn, with the box's numbers. */
 function formulaChoiceNow(): DzFormulaChoice {
     const f = useEngineStore.getState().dzFormula;
-    const out = {} as Record<string, number>;
+    const out = {} as Record<string, number | boolean>;
     for (const key of FORMULA_CHOICE_KEYS) out[key] = f[key];
     return out as DzFormulaChoice;
 }
@@ -163,6 +175,7 @@ function applyFormula(state: DzLocationState): void {
     const v = state.view;
     useEngineStore.getState().setDzFormula({
         kind: FORMULA_BULB,
+        juliaMode: false,                                            // every place from before Julia mode, and every card
         ...(state.look ? state.look.dzFormula : { ...state.formula, power: v.power, phaseTheta: v.phase[0], phasePhi: v.phase[1], iterations: v.iters }),
     });
 }
@@ -176,6 +189,7 @@ export function viewForHost(view: DzView): DzView {
         yaw: view.yaw,
         pitch: view.pitch,
         ...(view.roll ? { roll: view.roll } : {}),
+        ...(view.julia ? { julia: view.julia } : {}),                // the Julia constant: three strings, untouched
         // The store holds the user's FLOOR; with auto iterations on the renderer raises its own
         // count with depth and a saved view carries the count it was drawn with. Handing the
         // floor here redrew a place saved at 98 iterations with 85 (seen 2026-10-08).
@@ -217,6 +231,64 @@ function formulaHome(choice: DzFormulaChoice): DzView {
         iters: 14, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1,
     };
 }
+/**
+ * The whole of the Julia set IN FORCE, from outside: the camera 2 radii from the centre of the ball
+ * the renderer finds about the solid (`host.wholeObject()`, a coarse scan on the CPU), along the
+ * diagonal `formulaHome` uses, looking at that centre. Two radii: the picture's half-height is 31.5
+ * degrees, and a ball is inside it from 1.91 radii out. Null when the renderer finds no solid: the
+ * constant has no Julia set at a whole-object iteration count.
+ */
+function juliaHome(host: DeepZoomHost): DzView | null {
+    const ball = host.wholeObject();
+    if (!ball) return null;
+    const dir = [0.66, 0.43, 0.61], len = Math.hypot(dir[0], dir[1], dir[2]), d = 2 * ball.radius / len;
+    return {
+        cam: [fixed(ball.center[0] + dir[0] * d), fixed(ball.center[1] + dir[1] * d), fixed(ball.center[2] + dir[2] * d)],
+        yaw: Math.atan2(-dir[2], -dir[0]), pitch: Math.asin(-dir[1] / len),
+        iters: 14, power: 8, phase: [0, 0], light: 0, falloff: 4, color: 0, cscale: 1, surf: 1,
+    };
+}
+
+/** Put the constant in force and the camera where the whole of its Julia set is seen (the renderer is
+ *  already in Julia mode). False when the constant has no set: the camera then stays where it was. */
+function showJuliaSet(host: DeepZoomHost, constant: [string, string, string] | undefined): boolean {
+    const here = viewForHost(host.getView());
+    const julia = constant ? { julia: constant } : {};
+    host.setView({ ...here, ...julia });                             // the constant first: the renderer says where ITS set is
+    const home = juliaHome(host);
+    if (home) host.setView({ ...viewForHost(home), ...julia });
+    return !!home;
+}
+
+/**
+ * "Julia from this place": the point at the centre of the view becomes the Julia constant, Julia mode
+ * goes on and the camera goes to where the whole of that Julia set is seen from outside. One undo
+ * step; the trail ends; Back returns to the place. Says why when it cannot. Returns whether it did.
+ */
+export function juliaFromThisPlace(): boolean {
+    const host = getHost();
+    if (!host || !host.bootParams()) return false;
+    const look = host.lookPoint();                                   // BEFORE the mode is pushed: see PITFALLS, JULIA MODE
+    if (look.kind !== 'hit') {
+        showToast(look.kind === 'inside' ? 'The camera is inside the solid: fly out of it first' : 'Nothing is at the centre of the view: aim it at a surface', 'warning', 5000);
+        return false;
+    }
+    backStack.push({ view: host.getView(), formula: formulaChoiceNow() });
+    trailEnds();                                                     // a Julia set is another object: the trail ends where the camera stands
+    useEngineStore.getState().beginParamTransaction();
+    jumping = true;
+    try {
+        jumpSeq++;
+        useEngineStore.getState().setDzFormula({ juliaMode: true });
+        pushFormulaNow(host);
+        if (!showJuliaSet(host, look.point)) showToast('That point has no Julia set to show: the picture is empty', 'warning', 6000);
+    } finally {
+        jumping = false;
+        useEngineStore.getState().endParamTransaction();
+    }
+    return true;
+}
+
 /** A view with the formula it is a view of (the view alone does not say). */
 interface FormulaView { view: DzView; formula: DzFormulaChoice }
 /** Views to go back to, oldest first. Session only. */
@@ -477,7 +549,24 @@ export function installLocations(): void {
         trailEnds();                                                 // a deep place exists only under the formula it was found with
         pushFormulaNow(host);
         jumpSeq++;                                                   // the open bracket's undo entry takes the view with it
-        host.setView(viewForHost(formulaHome(formulaChoiceNow())));
+        // in Julia mode the other formula's set of the SAME constant is shown; without one, its Mandelbrot-mode view
+        if (!(formulaChoiceNow().juliaMode && showJuliaSet(host, undefined))) host.setView(viewForHost(formulaHome(formulaChoiceNow())));
+    });
+
+    // A switch of Julia mode by its row (PITFALLS: JULIA MODE). On: the point looked at becomes the constant - when
+    // nothing is looked at, the constant the renderer holds stays - and the whole of its set is shown. Off: the whole
+    // of the formula's own object. No toast here: an undo and a scene load pass through too, and their own view,
+    // restored after the store, is the one that stays.
+    useEngineStore.subscribe((s) => s.dzFormula?.juliaMode, (on, was) => {
+        const host = getHost();
+        if (jumping || !!on === !!was || !host || !host.bootParams()) return;
+        const look = on ? host.lookPoint({ maxSteps: 600 }) : null;  // before the push: the picture as the user sees it
+        backStack.push({ view: host.getView(), formula: { ...formulaChoiceNow(), juliaMode: !!was } });
+        trailEnds();
+        pushFormulaNow(host);
+        jumpSeq++;
+        if (on) showJuliaSet(host, look && look.kind === 'hit' ? look.point : undefined);
+        else host.setView(viewForHost(formulaHome(formulaChoiceNow())));
     });
 
     // Home is the view the renderer started with, read once at the first ready.

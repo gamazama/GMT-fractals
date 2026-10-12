@@ -24,6 +24,7 @@
     "check:deep-zoom-fly-camera": "tsx debug/deep-zoom-checks/fly-camera.mts",
     "check:deep-zoom-ray-probe": "tsx debug/deep-zoom-checks/ray-probe.mts",
     "check:deep-zoom-box-orbit": "tsx debug/deep-zoom-checks/box-orbit.mts",
+    "check:deep-zoom-julia-orbit": "tsx debug/deep-zoom-checks/julia-orbit.mts",
     "check:deep-zoom-orbit-camera": "tsx debug/deep-zoom-checks/orbit-camera.mts",
     "check:deep-zoom-route": "tsx debug/deep-zoom-checks/route.mts",
     "check:deep-zoom-trail": "tsx debug/deep-zoom-checks/trail.mts",

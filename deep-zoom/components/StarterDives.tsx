@@ -10,6 +10,9 @@
  * usual toast, and pressing it again continues from where it stopped only if the view is kept -
  * a second press starts over from the card's own start view.
  *
+ * Every card here is a place in MANDELBROT mode: pressed while Julia mode is on it switches that off
+ * in the same jump, as a Mandelbox card pressed from the bulb switches the formula (`jumpTo`).
+ *
  * Registered as `dz-starters` in main.tsx; panels.ts places it at the top of Locations.
  */
 import React from 'react';

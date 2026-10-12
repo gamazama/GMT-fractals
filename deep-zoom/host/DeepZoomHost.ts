@@ -81,6 +81,9 @@
  *     `estimateAtPoint(`  the same estimate at any exact position (camera strings), with a given
  *                         iteration count: 0 inside the solid. What the route asks along each leg
  *                         (`deep-zoom/route.ts`); the camera stays where it is.
+ *     `lookPoint(` `wholeObject()`   for "Julia from this place" (`deep-zoom/locations.ts`): the point
+ *                         looked at as three exact strings, and a ball about the whole of the solid
+ *                         in force. Both CPU only; nothing is drawn or moved.
  *     `snapshot()`        the picture as a 2D canvas, read back by the renderer itself (a saved PNG).
  *     `setPendingView(`   one parked view, applied by `setView` when `ready` resolves (at once if
  *                         it already has).
@@ -202,6 +205,11 @@ export interface DzView {
     /** A turn about the view axis, in radians. Left out when it is 0, and read as 0 when it is not
      *  there, so every view from before the roll is as it was. */
     roll?: number;
+    /** JULIA MODE's constant (grep the name in renderer/core.js): three fixed-point decimal STRINGS, as
+     *  `cam`. `getView` gives it only while Julia mode is on; `setView` takes it when it is there (it
+     *  sets the constant, never the mode: the mode is the formula's). Never a number: with the constant
+     *  as a double a deep Julia place opens 1e-18 from a surface, whatever depth it was saved at. */
+    julia?: [string, string, string];
     iters: number;
     power: number;
     phase: [number, number];
@@ -428,6 +436,19 @@ export interface DeepZoomHost {
      * (milliseconds at depth: not for a render path). Moves nothing and draws nothing.
      */
     estimateAtPoint(cam: [string, string, string], iters?: number): number;
+    /**
+     * The point looked at: where the view axis meets the drawn solid, as three fixed-point decimal
+     * strings (as `DzView.cam`), exact in the camera's own arithmetic. `kind` 'open': nothing is
+     * looked at within the steps; 'inside': the camera stands in the solid. What "Julia from this
+     * place" takes as its constant. One CPU ray; moves nothing and draws nothing.
+     */
+    lookPoint(opt?: { tol?: number; maxSteps?: number }): { kind: 'hit' | 'open' | 'inside'; t: number; point: [string, string, string] };
+    /**
+     * A ball about the whole of the solid the formula in force draws, or null when a coarse scan
+     * finds none (a Julia constant with no set). Rough: it places a from-outside camera. A few tens
+     * of milliseconds on the CPU; moves nothing and draws nothing.
+     */
+    wholeObject(): { center: [number, number, number]; radius: number } | null;
     /**
      * The shader the picture is waiting for, right now: it is being built in the background and the
      * plain single-precision picture is drawn meanwhile. null: none (built, FAILED, or not asked
