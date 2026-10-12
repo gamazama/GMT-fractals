@@ -99,6 +99,9 @@ before we start adding formulas."
    leave the box; the aim; far relax, which needs no build and causes two thirds of today's wrong
    share off the starters; resumed orbits). Step size therefore stays in the app for the
    Mandelbox. Done regardless: the whole-box card saves 51 iterations, not 14.
+   **His call, 2026-10-12 (later that morning): leave it.** The gate had timed the build against
+   the rough default; timed at the same picture it is faster than Step size 0.5 and 21 to 30 %
+   slower than Hit refine 4 at the scale -1.5 starters (the draft's last section has the table).
 4. **Julia mode and the Kleinian card** (`JULIA.md`, `CHEAP-FORMULAS.md`). BUILT 2026-10-12,
    `136d867d`; the ADR is drafted, not filed (`ADR-DRAFT-julia-mode.md`, with his five calls). One
    uniform in both kernels, no new program and no new call of the kernel; the constant travels as

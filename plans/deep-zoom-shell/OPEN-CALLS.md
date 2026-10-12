@@ -2,8 +2,10 @@
 
 Written at the end of the session that built `ROUTES.md` R5 to R7 and the kernel work of
 `NEXT.md`, for a fresh session in which he answers them. Each call says what it is, where its
-numbers are, and what the orchestrator recommends. Nothing here is decided. Branch `deep-zoom-tool`,
-local, 140 commits ahead of `main`, never pushed (his rule: "we push after 1-12").
+numbers are, and what the orchestrator recommends. Nothing here was decided when it was written;
+his answers are marked **ANSWERED** under each call as he gives them (from 2026-10-12, later the
+same morning). Branch `deep-zoom-tool`, local, 140 commits ahead of `main`, never pushed (his rule:
+"we push after 1-12").
 
 **State of the tree.** Clean: the help work that was unfinished when this page was first written
 is verified and committed (see call 17). The two dev servers (3410 the working tree, 3420 the fly tree) belong to that session and stop
@@ -15,10 +17,21 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
    (rays on the wrong surface at the starters 0.51 -> 0.04 %), but Arches +39 % and Lace +46 % in
    frame time, Block city -29 %. `ADR-DRAFT-box-ray-step.md` has the tables.
    - a. Take it as measured, or leave the box as it is? *Recommended: leave it for now; see b.*
+     **ANSWERED 2026-10-12: leave it.** He asked first whether the build was timed "against a
+     step size that matches the clean view", or whether it was "just a test that says low quality
+     is faster". It was the second: the gate timed it against the rough default. It was then
+     timed at the same picture (`ADR-DRAFT-box-ray-step.md`, the last section): faster than Step
+     size 0.5 at every starter, 21 to 30 % slower than Hit refine 4 at Arches and Lace. He looked
+     at three split pictures and said: "it seems from the evidence that we made the right choice
+     here. to leave it."
    - b. Far relax, today's default, causes two thirds of the box's wrong share off the starters
      (a 56-view sweep: 2.70 % with it, 0.84 % without) and needs no build: one default, at about
      1.37 times the march's work. Switch it off for the box? *Recommended: yes, after one
      frame-time table on the starters.*
+     NOT ANSWERED. The table is in (the same run, 2026-10-12): Reach "Full" (far relax off, 1024
+     steps) changes nothing at Arches or Lace; at Block city it costs 24 % at Detail 1 and 38 % at
+     Detail 32, for 0.24 -> 0.16 % and 1.91 -> 0.78 % of rays on the wrong surface. On the
+     starters it is a cost; the gain is at scales above 2.5.
    - c. Resumed orbits for the box (stage B) could bring the time back, but only pass counts say
      so, and pass counts are what misled the study. Spike it? *Recommended: only if he wants Step
      size gone from the app; otherwise park.*
@@ -28,6 +41,8 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
    - a. Does the bulb's Julia mode stay reachable as it looks? *Recommended: look at
      `debug/scratch/formula-next/julia-bulb-*.png` first; if the outside view is not acceptable,
      hide the bulb's switch until b and a look at the outside grain.*
+     **ANSWERED 2026-10-12: it stays.** He flew it: "flying through it seems good and reachable."
+     With it he raised f: "I dont see how to set the julia constant's coordinate."
    - b. Build the second reference (the orbit of the constant)? The GPU says it is what the
      bulb's four ungated proof lines need. *Recommended: yes.*
    - c. The row's switch takes the point looked at, as the button does. Or should the switch
@@ -41,15 +56,18 @@ with it: a new session starts `dz-worktree-dev` and `dz-fly` itself.
 3. **The kernel has three call sites** (ready in 8.5 s on a first visit, frame time unchanged). A
    two-call form builds in 5.8 s and costs the bulb 5.6 % of frame time
    (`debug/scratch/load/step2/core.v-g2.js.txt`). *Recommended: stay at three.*
+   **ANSWERED 2026-10-12: stay at three.**
 4. **A view that waits for ready** (a link, a scene) now sits under the small loading line over
    the START view's picture, then jumps. Show the large card whenever a view is parked?
    *Recommended: yes.*
+   **ANSWERED 2026-10-12: yes.** To build.
 5. **What comes after Julia among formulas** (`CHEAP-FORMULAS.md`): Burning on the bulb (it needs
    the fold-crossing test the box's ray step built), KaliBox (a CPU still first). *Recommended:
    nothing more until 1 and 2 are settled.*
 6. **The navigation on the Mandelbox** could step its CPU ray by the whole scalar estimate
    instead of half: half the steps, 0 to 0.8 % of rays more than 5 % past the careful ray.
    *Recommended: yes, as a small measured change.*
+   **ANSWERED 2026-10-12: yes.** To build.
 7. Left open by him, recorded in `NEXT.md` session 7: why power 8 needs the depth rule for
    iterations; the odd single render (about 2 to 8 % of renders of a grainy frame, by the
    machine's state; he could not see a difference in the sheets).
