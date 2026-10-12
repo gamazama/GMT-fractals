@@ -3214,7 +3214,8 @@ function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter i
    So navigation asks a different question: how far is it free ALONG A RAY, from the camera as it is now, to the solid
    as it is drawn. The answer is a march on the CPU in f64, on the same reference orbit and kernel maths as the
    referee above:
-     step  half of the larger of two first-order estimates, and never more than 8 scalar estimates:
+     step  half of the larger of two first-order estimates (the Mandelbox: the whole of its one estimate, see the
+           end of this entry), and never more than 8 scalar estimates:
              - THE RAY ESTIMATE (grep it): 0.5 r ln r / |J rd|, the escaping iterate's speed along the ray, carried
                with the orbit as one vector (pertOrbitJetJS). The study measured it safe at a whole estimate; a
                scalar-estimate step at 0.3 once reached 0.82 of the free distance.
@@ -3229,6 +3230,23 @@ function pertOrbitJS(O, dc, maxIter, fixed){     // fixed: run exactly maxIter i
            2026-10-09, "going extremely slowly") it read 5.7e-7 sideways where the solid is 0.53 away and 7.9e-5
            ahead where it is 2.3e-4 away, in 165 to 340 steps a ray; the larger of the two reads 0.38 and 1.9e-4
            in 67 and 12. At the starter views the two rules agree within 3 %, the larger in fewer steps.
+           THE MANDELBOX STEPS BY THE WHOLE ESTIMATE (2026-10-12, the owner's yes). The box has one estimate, the
+           scalar one (pertOrbitJetJS hands it back as the ray estimate too: grep "the box carries no jet"), and its
+           map stretches space nearly alike on every axis, so the half that guards the bulb's ray buys the box little.
+           Measured with this function lifted as text at both states (debug/scratch/box-nav/nav-rerun.mts, git-ignored;
+           the box ray study's 09-nav run again): 13 views x 256 rays - the five starters, and dives at scale 2 and
+           -1.5 to 1e-2 and 1e-8, looking ahead and aside - against the same ray marched at a tenth of the estimate.
+           Rays ending more than 5 % past it: 0 to 0.39 % at half (1 ray of 256, at two views), 0 to 0.78 % at the
+           whole (2 rays, at three views). Steps a ray: 6.3 to 72.6 at half, 2.4 to 37.1 at the whole (0.38 to 0.52
+           of them). In the app at the three deep box starters (1280 x 800, 4 s a case, two runs): 0.04 to 0.79 ms
+           in rays a frame at half, 0.03 to 0.44 at the whole; the most is a look held while flying at "Block city".
+           The bulb's ray is as it was: half.
+           @invariant at the whole estimate the box's ray still ends on the drawn solid - proven by: npm run
+           check:deep-zoom-box-orbit ("ray: half way there the exact orbit is outside and not yet within tolerance").
+           Falsified 2026-10-12: the box's share made 8 -> that line red (the ray read 6.2e-58 where the solid stands
+           at 1.39e-58; the exact estimate half way along it was 2.3e-76).
+           @assumption a ray at the whole estimate is past the careful one in under 1 % of rays: the measurement
+           above, which no standing check repeats.
      end   the scalar estimate under tol x t (a hit, to a share tol of its distance), or the ray estimate under an
            eighth of that (a ray creeping along a surface); or a sample INSIDE the drawn solid - the last step is then
            halved back onto the boundary, so the answer is the drawn surface and not the estimate's idea of it; or
@@ -3300,7 +3318,8 @@ function pertOrbitJetJS(O, dc, rd, maxIter, fixed){
   if (O.box) {
     /* THE FORMULA SEAM: the box carries no jet. Its map stretches space alike on all three axes (widest over
        narrowest 1.2 to 1.8 from 1e-3 to 1e-40, the bulb's 40 to 100: debug/scratch/formula-study/dz-shape-check.mjs),
-       so the ray estimate says what the scalar one says, and a ray steps by the scalar estimate. */
+       so the ray estimate says what the scalar one says, and a ray steps by the scalar estimate: the WHOLE of it
+       since 2026-10-12 (rayFreeJS; grep THE MANDELBOX STEPS BY THE WHOLE ESTIMATE). */
     const o = boxOrbitJS(O, dc, maxIter, fixed);
     return { de: o.de, escaped: o.escaped, r: o.r, it: o.it, z: o.z, jet: [0,0,0], E: o.de, grad: [0,0,0], G: o.de, ray: o.de };
   }
@@ -3347,7 +3366,7 @@ function rayFreeJS(O, rd, maxIter, tol, maxSteps, t0, prev0){
     if(t>0 && (o.de<tol*t || o.ray<tol*0.125*t)) return { t, prev:t, kind:1, steps };
     if(t>far) return { t, prev:t, kind:0, steps };
     tPrev=t;
-    t+=Math.max(Math.min(o.ray,8*o.de)*0.5, t*1e-7);
+    t+=Math.max(Math.min(o.ray,8*o.de)*(O.box?1:0.5), t*1e-7);   // the bulb: half; the box: the whole (grep THE MANDELBOX STEPS BY THE WHOLE ESTIMATE)
   }
   return { t, prev:tPrev, kind:0, steps };
 }

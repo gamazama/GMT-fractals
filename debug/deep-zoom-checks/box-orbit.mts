@@ -56,6 +56,14 @@
  *   The counts above are from the first pass. All 19 were run again after section 4b moved to 1e-50 (the same places
  *   then serve the GPU's proof, debug/deep-zoom-direct-check.mts): 19 red again, most with two or three lines more
  *   (the three places of 4b cross folds too).
+ * 2026-10-12, THE NAVIGATION'S RAY ON THE BOX (section 5; `rayFreeJS` steps the box by the whole scalar estimate
+ *   since that day, the bulb by half), one break in deep-zoom/renderer/core.js, restored byte for byte (sha-256):
+ *     - the box's share of the estimate made 8 (`(O.box?1:0.5)` -> `(O.box?8:0.5)`)  -> 1 red ("ray: half way there
+ *       the exact orbit is outside and not yet within tolerance": the ray read 6.20e-58 in 1 step where the solid
+ *       stands at 1.39e-58, and the exact estimate half way along it was 2.33e-76). The two lines beside it stayed
+ *       green: 6.2e-58 is still "of the size of the depth" by that line's own bounds, and the end test passes for a
+ *       point past the surface that the exact orbit calls inside.
+ *   At the whole estimate the three "ray:" lines pass: 1.39e-58 at depth 7.7e-59, in 4 steps.
  */
 import { readFileSync } from 'node:fs';
 
